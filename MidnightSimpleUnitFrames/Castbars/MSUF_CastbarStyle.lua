@@ -33,6 +33,9 @@ local function NormalizeUnit(unit)
     if unit:match("^boss") then
         return "boss"
     end
+    if unit:match("^arena") then
+        return "arena"
+    end
 
     return unit
 end
@@ -291,6 +294,16 @@ function Style:ApplyCastbarOutlineToAll(force)
         end
     end
 
+    for arenaIndex = 1, 3 do
+        frames[#frames + 1] = _G["MSUF_ArenaCastbarPreview" .. arenaIndex]
+    end
+    local arenaCastbars = _G.MSUF_ArenaCastbars
+    if type(arenaCastbars) == "table" then
+        for index = 1, #arenaCastbars do
+            frames[#frames + 1] = arenaCastbars[index]
+        end
+    end
+
     for index = 1, #frames do
         if frames[index] then
             self:ApplyCastbarOutline(frames[index], force)
@@ -319,6 +332,10 @@ local function IsCastTimeEnabled(frame, unit, general)
         return general.showBossCastTime ~= false
     end
 
+    if unit == "arena" then
+        return general.showArenaCastTime ~= false
+    end
+
     return true
 end
 
@@ -335,6 +352,11 @@ local function TimeOffsets(general, unit)
     if unit == "boss" then
         offsetX = general.bossCastTimeOffsetX
         offsetY = general.bossCastTimeOffsetY
+    end
+
+    if unit == "arena" then
+        offsetX = general.arenaCastTimeOffsetX
+        offsetY = general.arenaCastTimeOffsetY
     end
 
     if offsetX == nil then
@@ -479,12 +501,20 @@ local function UpdateCastbarFillDirection()
         end
     end
 
+    local arenaCastbars = _G.MSUF_ArenaCastbars
+    if type(arenaCastbars) == "table" then
+        for index = 1, #arenaCastbars do
+            Apply(arenaCastbars[index])
+        end
+    end
+
     local applyUnit = _G.MSUF_ApplyCastbarVisualsForUnit
     if type(applyUnit) == "function" then
         applyUnit("player")
         applyUnit("target")
         applyUnit("focus")
         applyUnit("boss")
+        applyUnit("arena")
     elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
         _G.MSUF_UpdateCastbarVisuals()
     end

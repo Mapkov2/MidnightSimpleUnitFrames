@@ -39,6 +39,7 @@ local UNIT_CASTBAR = {
     target = { w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", detached = "castbarTargetDetached", match = "castbarTargetMatchWidth", enable = "enableTargetCastbar", dx = 65, dy = -15 },
     focus  = { w = "castbarFocusBarWidth",  h = "castbarFocusBarHeight",  x = "castbarFocusOffsetX",  y = "castbarFocusOffsetY",  detached = "castbarFocusDetached",  match = "castbarFocusMatchWidth",  enable = "enableFocusCastbar",  dx = 65, dy = -15 },
     boss   = { w = "bossCastbarWidth",       h = "bossCastbarHeight",      x = "bossCastbarOffsetX",   y = "bossCastbarOffsetY",   detached = "bossCastbarDetached",   match = "bossCastbarMatchWidth",   enable = "enableBossCastbar",   dx = 0,  dy = 0   },
+    arena  = { w = "arenaCastbarWidth",      h = "arenaCastbarHeight",     x = "arenaCastbarOffsetX",  y = "arenaCastbarOffsetY",  detached = "arenaCastbarDetached",  match = "arenaCastbarMatchWidth",  enable = "enableArenaCastbar",  dx = 0,  dy = 0   },
 }
 
 -- Valid width-source kinds.
@@ -49,7 +50,7 @@ local COOLDOWN_VIEWER_KINDS = {
 }
 
 -- Units that participate in width-source sync.
-local CASTBAR_UNITS = { "player", "target", "focus", "boss" }
+local CASTBAR_UNITS = { "player", "target", "focus", "boss", "arena" }
 
 -- Backoff delays (seconds) for retrying width-source hook installation at login.
 local WIDTH_SOURCE_RETRY_DELAYS = { 0.05, 0.15, 0.35, 0.75, 1.5, 3.0, 5.0, 7.0 }
@@ -60,7 +61,7 @@ local hookedWidthSourceFrames = setmetatable({}, { __mode = "k" })
 -- Current frame -> castbar-unit ownership. A per-unit generation invalidates
 -- retired dependencies without walking frames whose WoW hooks cannot be removed.
 local widthSourceFrameDependents = setmetatable({}, { __mode = "k" })
-local widthSourceDependencyGeneration = { player = 0, target = 0, focus = 0, boss = 0 }
+local widthSourceDependencyGeneration = { player = 0, target = 0, focus = 0, boss = 0, arena = 0 }
 
 -- Per-unit reusable numeric source snapshots. Avoid building transient strings
 -- on every source Show/Hide/Size event.
@@ -120,10 +121,13 @@ local function InCombat()
         or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
 end
 
--- "boss", "boss1".."boss5" -> "boss"; everything else unchanged.
+-- "boss", "boss1".."boss5" -> "boss"; "arena", "arena1".."arena3" -> "arena";
+-- everything else unchanged.
 local function NormalizeUnit(unit)
     unit = tostring(unit or "")
-    return unit:match("^boss%d*$") and "boss" or unit
+    if unit:match("^boss%d*$") then return "boss" end
+    if unit:match("^arena%d*$") then return "arena" end
+    return unit
 end
 
 local function NormalizeWidthSourceKind(kind)
@@ -189,9 +193,14 @@ end
 
 local function GetUnitframe(unit)
     unit = tostring(unit or "")
-    local index = tonumber(unit:match("^boss(%d+)$")) or 1
-    if NormalizeUnit(unit) == "boss" then
+    local normalized = NormalizeUnit(unit)
+    if normalized == "boss" then
+        local index = tonumber(unit:match("^boss(%d+)$")) or 1
         return GetCoreUnitframe("boss" .. index) or GetCoreUnitframe("boss1")
+    end
+    if normalized == "arena" then
+        local index = tonumber(unit:match("^arena(%d+)$")) or 1
+        return GetCoreUnitframe("arena" .. index) or GetCoreUnitframe("arena1")
     end
     return GetCoreUnitframe(unit)
 end
@@ -521,11 +530,16 @@ local function WidthSourceNeedsReanchor(g, unit)
     local offset = 1
 
     if matchSrc == "unitframe" then
-        local count = unit == "boss" and 5 or 1
+        local count = (unit == "boss" and 5) or (unit == "arena" and 3) or 1
         if state.count ~= count then changed = true end
         state.count = count
         for i = 1, count do
-            local sourceUnit = unit == "boss" and ("boss" .. i) or unit
+            local sourceUnit = unit
+            if unit == "boss" then
+                sourceUnit = "boss" .. i
+            elseif unit == "arena" then
+                sourceUnit = "arena" .. i
+            end
             local frame = GetUnitframe(sourceUnit)
             local source = GetUnitframeWidthSourceFromFrame(frame)
             local sliceChanged
@@ -669,9 +683,14 @@ local function EnsureWidthSourceHooks(g, unit)
 
     if matchSrc == "unitframe" then
         local found = false
-        local count = unit == "boss" and 5 or 1
+        local count = (unit == "boss" and 5) or (unit == "arena" and 3) or 1
         for i = 1, count do
-            local sourceUnit = unit == "boss" and ("boss" .. i) or unit
+            local sourceUnit = unit
+            if unit == "boss" then
+                sourceUnit = "boss" .. i
+            elseif unit == "arena" then
+                sourceUnit = "arena" .. i
+            end
             local frame = GetUnitframe(sourceUnit)
             found = HookWidthSourceFrame(frame, unit, generation) or found
             found = HookWidthSourceFrame(GetUnitframeWidthSourceFromFrame(frame), unit, generation) or found
@@ -1099,6 +1118,27 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
         return applied
     end
 
+    if unit == "arena" then
+        local applied = false
+        for i = 1, 3 do
+            local frame = (_G.MSUF_ArenaCastbars and _G.MSUF_ArenaCastbars[i]) or _G["MSUF_ArenaCastbar" .. i]
+            if frame then
+                local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
+                local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
+                local w, h = MSUF_GetCastbarDesiredSize("arena" .. i, g, frame, fallbackW, fallbackH)
+                if SetOuterSize(frame, w, h) then
+                    applied = true
+                    if frame.ApplyLayout then frame:ApplyLayout() end
+                end
+            end
+        end
+        if _G.MSUF_UnitEditModeActive == true and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+            _G.MSUF_UpdateArenaCastbarPreview()
+            applied = true
+        end
+        return applied
+    end
+
     return false
 end
 
@@ -1293,6 +1333,18 @@ function MSUF_ReanchorBossCastBar()
     end
 end
 
+function MSUF_ReanchorArenaCastBar()
+    if type(_G.MSUF_ApplyArenaCastbarPositionSetting) == "function" then
+        _G.MSUF_ApplyArenaCastbarPositionSetting(false, true)
+    end
+    if not InCombat() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+        _G.MSUF_UpdateArenaCastbarPreview()
+    end
+    if type(MSUF_SyncCastbarPositionPopup) == "function" then
+        MSUF_SyncCastbarPositionPopup("arena")
+    end
+end
+
 ------------------------------------------------------------------------
 -- _G exports
 ------------------------------------------------------------------------
@@ -1321,3 +1373,4 @@ ExportPublic("MSUF_ApplyPlayerCastbarIconLayout", MSUF_ApplyPlayerCastbarIconLay
 ExportPublic("MSUF_ReanchorPlayerCastBar", MSUF_ReanchorPlayerCastBar)
 ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)
 ExportPublic("MSUF_ReanchorBossCastBar", MSUF_ReanchorBossCastBar)
+ExportPublic("MSUF_ReanchorArenaCastBar", MSUF_ReanchorArenaCastBar)

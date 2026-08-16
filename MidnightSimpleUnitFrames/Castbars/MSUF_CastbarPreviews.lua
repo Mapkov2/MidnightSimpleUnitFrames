@@ -23,6 +23,7 @@ local PREVIEW_LABELS = {
     target = "Target castbar preview",
     focus = "Focus castbar preview",
     boss = "Celestial Ruin",
+    arena = "Greater Pyroblast",
     test = "Test Cast",
 }
 
@@ -466,6 +467,46 @@ end
 
 ExportPublic("MSUF_SetBossCastbarTestMode", SetBossCastbarTestMode)
 
+local function ForEachArenaPreview(callback)
+    for index = 1, 3 do
+        local frame = _G["MSUF_ArenaCastbarPreview" .. index]
+        if frame then callback(frame, index) end
+    end
+end
+
+local function SetArenaCastbarTestMode(enabled, transient)
+    local general = EnsureGeneralDB()
+    if enabled and IsInCombat() then enabled = false end
+    if not transient then
+        general.arenaCastbarTestMode = enabled and true or false
+    end
+
+    local active = _G.MSUF_UnitEditModeActive == true
+        and (transient and enabled == true or general.arenaCastbarTestMode == true)
+    if active then
+        local createArenaPreview = _G.MSUF_CreateArenaCastbarPreview
+        if type(createArenaPreview) == "function" then
+            for index = 1, 3 do createArenaPreview(index) end
+        end
+    end
+    if not IsInCombat() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+        _G.MSUF_UpdateArenaCastbarPreview()
+    end
+
+    ForEachArenaPreview(function(frame)
+        if active then
+            frame.unit = "arena"
+            frame._msufTestShowTime = general.showArenaCastTime ~= false
+            StartPreviewTest(frame)
+        else
+            ClearPreviewTest(frame, "arena")
+            HideBossPreviewFill(frame)
+        end
+    end)
+end
+
+ExportPublic("MSUF_SetArenaCastbarTestMode", SetArenaCastbarTestMode)
+
 local function EditModeCastbarPreviewActive()
     return _G.MSUF_UnitEditModeActive == true
 end
@@ -482,6 +523,18 @@ local function ShouldShowBossPreview()
         or general.enableBossCastbar ~= false
 end
 
+local function ShouldShowArenaPreview()
+    local general = EnsureGeneralDB()
+    if not EditModeCastbarPreviewActive() or not general.castbarPlayerPreviewEnabled then return false end
+
+    local db = _G.MSUF_DB
+    if db and db.arena and db.arena.enabled == false then return false end
+
+    local shouldUseMSUF = _G.MSUF_ShouldUseMSUFCastbar
+    return type(shouldUseMSUF) == "function" and shouldUseMSUF("arena", general) == true
+        or general.enableArenaCastbar ~= false
+end
+
 local bossPreviewPending = false
 
 local function RefreshBossPreview()
@@ -492,6 +545,9 @@ local function RefreshBossPreview()
 
     if ShouldShowBossPreview() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
         _G.MSUF_UpdateBossCastbarPreview()
+    end
+    if ShouldShowArenaPreview() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+        _G.MSUF_UpdateArenaCastbarPreview()
     end
 end
 
@@ -517,6 +573,9 @@ local function InstallBossPreviewEventDriver()
         "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
         "ENCOUNTER_START",
         "ENCOUNTER_END",
+        "ARENA_OPPONENT_UPDATE",
+        "ARENA_PREP_OPPONENT_SPECIALIZATIONS",
+        "PVP_MATCH_STATE_CHANGED",
         "PLAYER_ENTERING_WORLD",
         "GROUP_ROSTER_UPDATE",
     }
@@ -537,6 +596,20 @@ local function SetupBossCastbarPreviewEditMode()
         HideBossPreviewFill(frame)
         if type(_G.MSUF_SetupCastbarPreviewEditHandlers) == "function" then
             _G.MSUF_SetupCastbarPreviewEditHandlers(frame, "boss")
+        end
+    end)
+end
+
+local function SetupArenaCastbarPreviewEditMode()
+    if IsInCombat() or not ShouldShowArenaPreview() then return end
+    if type(_G.MSUF_UpdateArenaCastbarPreview) == "function" and not _G.MSUF_ArenaCastbarPreview then
+        _G.MSUF_UpdateArenaCastbarPreview()
+    end
+
+    ForEachArenaPreview(function(frame)
+        HideBossPreviewFill(frame)
+        if type(_G.MSUF_SetupCastbarPreviewEditHandlers) == "function" then
+            _G.MSUF_SetupCastbarPreviewEditHandlers(frame, "arena")
         end
     end)
 end
@@ -571,6 +644,12 @@ local function UpdatePlayerCastbarPreview()
             _G.MSUF_SetBossCastbarTestMode(false, true)
         end
         if _G.MSUF_BossCastbarPreview then _G.MSUF_BossCastbarPreview:Hide() end
+        if type(_G.MSUF_SetArenaCastbarTestMode) == "function" then
+            _G.MSUF_SetArenaCastbarTestMode(false, true)
+        end
+        if type(_G.MSUF_HideAllArenaCastbarPreviews) == "function" then
+            _G.MSUF_HideAllArenaCastbarPreviews()
+        end
         return
     end
 
@@ -588,14 +667,20 @@ local function UpdatePlayerCastbarPreview()
         _G.MSUF_UpdateBossCastbarPreview()
         SetupBossCastbarPreviewEditMode()
     end
+    if not IsInCombat() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+        _G.MSUF_UpdateArenaCastbarPreview()
+        SetupArenaCastbarPreviewEditMode()
+    end
     if type(refreshFrame) ~= "function" then
         local applyUnit = _G.MSUF_ApplyCastbarVisualsForUnit
         if type(applyUnit) == "function" then
             for unit in pairs(PREVIEW_UNITS) do applyUnit(unit) end
             applyUnit("boss")
+            applyUnit("arena")
         elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
             for unit in pairs(PREVIEW_UNITS) do _G.MSUF_UpdateCastbarVisuals(unit) end
             _G.MSUF_UpdateCastbarVisuals("boss")
+            _G.MSUF_UpdateCastbarVisuals("arena")
         end
     end
     if type(_G.MSUF_UpdateCastbarTextures) == "function" then _G.MSUF_UpdateCastbarTextures() end
@@ -629,6 +714,24 @@ local function PositionCastbarPreviewUnit(unit)
         if positioned then return true end
         if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
             _G.MSUF_UpdateBossCastbarPreview()
+            return true
+        end
+    end
+
+    if (unit == "arena" or tostring(unit):match("^arena%d*$"))
+        and not IsInCombat()
+    then
+        local positioned = false
+        local positionArena = _G.MSUF_PositionArenaCastbarPreview
+        if type(positionArena) == "function" then
+            ForEachArenaPreview(function(frame, index)
+                positionArena(frame, index)
+                positioned = true
+            end)
+        end
+        if positioned then return true end
+        if type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+            _G.MSUF_UpdateArenaCastbarPreview()
             return true
         end
     end
@@ -667,6 +770,7 @@ ExportPublic("MSUF_PositionFocusCastbarPreview", PositionFocusCastbarPreview)
 ExportPublic("MSUF_PositionCastbarPreviewUnit", PositionCastbarPreviewUnit)
 ExportPublic("MSUF_UpdatePlayerCastbarPreview", UpdatePlayerCastbarPreview)
 ExportPublic("MSUF_SetupBossCastbarPreviewEditMode", SetupBossCastbarPreviewEditMode)
+ExportPublic("MSUF_SetupArenaCastbarPreviewEditMode", SetupArenaCastbarPreviewEditMode)
 ExportPublic("MSUF_SyncBossCastbarSliders", SyncBossCastbarSliders)
 
 InstallBossPreviewEventDriver()

@@ -47,12 +47,14 @@ local function GetBackend(unit)
     end
 
     unit = type(unit) == "string" and unit:match("^boss%d*$") and "boss" or unit
+    unit = type(unit) == "string" and unit:match("^arena%d*$") and "arena" or unit
 
     local enableKey =
         unit == "player" and "enablePlayerCastbar"
         or unit == "target" and "enableTargetCastbar"
         or unit == "focus" and "enableFocusCastbar"
         or unit == "boss" and "enableBossCastbar"
+        or unit == "arena" and "enableArenaCastbar"
 
     if not enableKey then
         return nil

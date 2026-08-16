@@ -409,7 +409,9 @@ ExportPublic("MSUF_BumpCastTimeRev", BumpCastTimeRev)
 local function CastTimeUnitKey(frame, unit)
     unit = tostring(unit or ""):lower()
     if frame and frame._msufIsBossCastbar then return "boss" end
+    if frame and frame._msufIsArenaCastbar then return "arena" end
     if unit:match("^boss%d+$") then return "boss" end
+    if unit:match("^arena%d+$") then return "arena" end
     return unit
 end
 
@@ -438,6 +440,8 @@ local function RefreshCastTimeEnabled(frame)
         enabled = general.showFocusCastTime ~= false
     elseif frame._msufIsBossCastbar or tostring(unit or ""):match("^boss%d+$") then
         enabled = general.showBossCastTime ~= false
+    elseif frame._msufIsArenaCastbar or tostring(unit or ""):match("^arena%d+$") then
+        enabled = general.showArenaCastTime ~= false
     end
 
     local previousFormat = frame._msufCastTimeFormat
@@ -521,6 +525,8 @@ local function StopCastbarIfUnitMissing(frame)
 
     if frame._msufIsBossCastbar and type(_G.MSUF_BossCastbar_Stop) == "function" then
         _G.MSUF_BossCastbar_Stop(frame)
+    elseif frame._msufIsArenaCastbar and type(_G.MSUF_ArenaCastbar_Stop) == "function" then
+        _G.MSUF_ArenaCastbar_Stop(frame)
     elseif type(_G.MSUF_CB_ResetStateOnStop) == "function" then
         _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
     else

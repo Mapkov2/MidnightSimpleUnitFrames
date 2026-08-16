@@ -92,6 +92,15 @@ ExportPublic("MSUF_CastbarUnitInfo", _G.MSUF_CastbarUnitInfo or {
         showTimeKey = "showBossCastTime",
         isBoss = true,
     },
+    arena = {
+        label = "Arena Castbar",
+        prefix = nil,
+        defaultX = 0,
+        defaultY = 0,
+        showTimeKey = "showArenaCastTime",
+        isBoss = false,
+        isArena = true,
+    },
 })
 
 local function GetCastbarUnitInfo(unit)
@@ -106,9 +115,16 @@ local function IsBossCastbarUnit(unit)
 end
 ExportPublic("MSUF_IsBossCastbarUnit", IsBossCastbarUnit)
 
+local function IsArenaCastbarUnit(unit)
+    local info = GetCastbarUnitInfo(unit)
+    return (info and info.isArena) and true or false
+end
+ExportPublic("MSUF_IsArenaCastbarUnit", IsArenaCastbarUnit)
+
 local function NormalizeCastbarUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit:match("^boss") then return "boss" end
+    if unit:match("^arena") then return "arena" end
     return GetCastbarUnitInfo(unit) and unit or nil
 end
 
@@ -162,6 +178,20 @@ local function ApplyCastbarUnitAndSync(unit)
         end
         if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo("boss") end
         if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup("boss") end
+        return
+    end
+
+    if IsArenaCastbarUnit(unit) then
+        if _G.MSUF_ApplyArenaCastbarPositionSetting then
+            _G.MSUF_ApplyArenaCastbarPositionSetting(nil, true, true)
+        end
+        if ApplyCastbarVisualsForUnit then
+            ApplyCastbarVisualsForUnit("arena")
+        elseif _G.MSUF_UpdateCastbarVisuals then
+            _G.MSUF_UpdateCastbarVisuals("arena")
+        end
+        if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo("arena") end
+        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup("arena") end
         return
     end
 
@@ -489,6 +519,13 @@ local function UpdateCastbarTextures()
             UpdateTextureForFrame(bossCastbars[index], texture, bgTexture, revision)
         end
     end
+
+    local arenaCastbars = _G.MSUF_ArenaCastbars
+    if type(arenaCastbars) == "table" then
+        for index = 1, #arenaCastbars do
+            UpdateTextureForFrame(arenaCastbars[index], texture, bgTexture, revision)
+        end
+    end
 end
 ExportPublic("MSUF_UpdateCastbarTextures", UpdateCastbarTextures)
 ExportPublic("MSUF_UpdateCastbarTextures_Immediate", UpdateCastbarTextures)
@@ -664,7 +701,7 @@ local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
         -- and overwrites the boss-specific geometry from the preceding anchor
         -- pass. Auto Width only masks the width half of that bug. Resolve both
         -- dimensions from the real boss settings in every width-source mode.
-        if unit == "boss" and type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+        if (unit == "boss" or unit == "arena") and type(_G.MSUF_GetCastbarDesiredSize) == "function" then
             local desiredWidth, desiredHeight = _G.MSUF_GetCastbarDesiredSize(
                 unit, general, frame, width, height)
             if desiredWidth and desiredWidth > 0 then width = desiredWidth end
@@ -683,6 +720,7 @@ local CASTBAR_FRAME_LEVEL_KEYS = {
     target = "castbarTargetFrameLevelOffset",
     focus = "castbarFocusFrameLevelOffset",
     boss = "bossCastFrameLevelOffset",
+    arena = "arenaCastFrameLevelOffset",
 }
 
 local function GetCastbarFrameLevelOffset(unit, general)
@@ -700,6 +738,9 @@ local function CastbarAnchorFrame(frame, unit)
     local frameUnit = frame and tostring(frame.unit or "") or ""
     if unit == "boss" and not frameUnit:match("^boss%d+$") then
         frameUnit = "boss" .. tostring(tonumber(frame and frame._msufBossIndex) or 1)
+    end
+    if unit == "arena" and not frameUnit:match("^arena%d+$") then
+        frameUnit = "arena" .. tostring(tonumber(frame and frame._msufArenaIndex) or 1)
     end
     if frameUnit == "" then frameUnit = unit end
 
@@ -726,7 +767,7 @@ local function SyncCastbarFrameStrata(frame, anchor, unit)
     -- The owning Unit Frame and castbar must share one strata. Otherwise WoW's
     -- strata ordering always wins and the 0-30 frame-level control cannot move
     -- the castbar behind or in front of Unit Frame content.
-    local wanted = anchorStrata or (unit == "boss" and "HIGH" or "MEDIUM")
+    local wanted = anchorStrata or ((unit == "boss" or unit == "arena") and "HIGH" or "MEDIUM")
     local currentStrata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
     if wanted and wanted ~= "" and wanted ~= currentStrata then frame:SetFrameStrata(wanted) end
 end
@@ -736,6 +777,7 @@ local CASTBAR_ICON_LAYER_KEYS = {
     target = "castbarTargetIconFrameLevelOffset",
     focus = "castbarFocusIconFrameLevelOffset",
     boss = "bossCastIconFrameLevelOffset",
+    arena = "arenaCastIconFrameLevelOffset",
 }
 
 --- Returns the manual icon frame level (1-30) or nil for 0/unset, which means
@@ -862,8 +904,44 @@ local function RefreshBossPreviews(general)
     return ApplyExistingBossPreviewVisuals(general)
 end
 
+local function ApplyArenaRuntimeVisuals(general)
+    local did = false
+    local arenaCastbars = _G.MSUF_ArenaCastbars
+    for index = 1, 3 do
+        local frame = (arenaCastbars and arenaCastbars[index])
+            or _G["MSUF_ArenaCastbar" .. index]
+            or _G["MSUF_arena" .. index .. "CastBar"]
+        did = ApplyCastbarVisualFrameCold(frame, general, "arena") or did
+    end
+    return did
+end
+
+local function RefreshArenaPreviews(general)
+    if IsInCombat() then return false end
+
+    local updatePreview = _G.MSUF_UpdateArenaCastbarPreview
+    if type(updatePreview) == "function" and not _G.MSUF_ArenaPreviewRefreshLock then
+        ExportPublic("MSUF_ArenaPreviewRefreshLock", true)
+        updatePreview()
+        ExportPublic("MSUF_ArenaPreviewRefreshLock", false)
+        return true
+    end
+
+    local did = false
+    for index = 1, 3 do
+        did = ApplyCastbarVisualFrameCold(_G["MSUF_ArenaCastbarPreview" .. index], general, "arena") or did
+    end
+    return did
+end
+
 ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general)
-    unit = IsBossCastbarUnit(unit) and "boss" or tostring(unit or "")
+    if IsBossCastbarUnit(unit) then
+        unit = "boss"
+    elseif IsArenaCastbarUnit(unit) then
+        unit = "arena"
+    else
+        unit = tostring(unit or "")
+    end
     if not revisionsReady then BumpCastbarVisualRevisions() end
     general = general or EnsureDB().general or {}
     local did = false
@@ -879,6 +957,9 @@ ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general)
     elseif unit == "boss" then
         did = ApplyBossRuntimeVisuals(general) or did
         did = RefreshBossPreviews(general) or did
+    elseif unit == "arena" then
+        did = ApplyArenaRuntimeVisuals(general) or did
+        did = RefreshArenaPreviews(general) or did
     end
     return did
 end
@@ -897,6 +978,8 @@ local function ApplyAllCastbarVisuals(general)
 
     ApplyBossRuntimeVisuals(general)
     RefreshBossPreviews(general)
+    ApplyArenaRuntimeVisuals(general)
+    RefreshArenaPreviews(general)
 end
 
 local function UpdateCastbarVisuals(unit)
@@ -919,7 +1002,7 @@ end
 ExportPublic("MSUF_UpdateCastbarVisuals", UpdateCastbarVisuals)
 ExportPublic("MSUF_UpdateCastbarVisuals_Immediate", UpdateCastbarVisuals)
 
-local CASTBAR_SYNC_UNITS = { "player", "target", "focus", "boss" }
+local CASTBAR_SYNC_UNITS = { "player", "target", "focus", "boss", "arena" }
 
 local function ApplyAllCastbarsAndSync()
     local general = EnsureDB().general or {}
@@ -928,6 +1011,9 @@ local function ApplyAllCastbarsAndSync()
     if type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then _G.MSUF_ReanchorFocusCastBarBase() end
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
         _G.MSUF_ApplyBossCastbarPositionSetting(nil, true, true)
+    end
+    if type(_G.MSUF_ApplyArenaCastbarPositionSetting) == "function" then
+        _G.MSUF_ApplyArenaCastbarPositionSetting(nil, true, true)
     end
 
     BumpCastbarVisualRevisions()

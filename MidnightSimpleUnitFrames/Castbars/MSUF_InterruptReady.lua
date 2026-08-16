@@ -373,6 +373,10 @@ local function ShouldShow(general, unit)
         return general.kickReadyShowBoss == true
     end
 
+    if unit == "arena" or (type(unit) == "string" and unit:match("^arena%d+$")) then
+        return general.kickReadyShowArena == true
+    end
+
     return false
 end
 
@@ -388,7 +392,8 @@ local function FeatureEnabled(general)
     local focus = (general.kickReadyShowFocus == true or general.enableFocusKickIcon == true)
         and CastbarFeatureActive(general, "focus", "enableFocusCastbar")
     local boss = general.kickReadyShowBoss == true and CastbarFeatureActive(general, "boss", "enableBossCastbar")
-    return target or focus or boss
+    local arena = general.kickReadyShowArena == true and CastbarFeatureActive(general, "arena", "enableArenaCastbar")
+    return target or focus or boss or arena
 end
 
 local function UnitSupportsFillStyle(general, unit)
@@ -402,6 +407,10 @@ local function UnitSupportsFillStyle(general, unit)
 
     if unit == "boss" or (type(unit) == "string" and unit:match("^boss%d+$")) then
         return general.kickReadyShowBoss == true
+    end
+
+    if unit == "arena" or (type(unit) == "string" and unit:match("^arena%d+$")) then
+        return general.kickReadyShowArena == true
     end
 
     return false
@@ -828,6 +837,13 @@ local function RefreshAll(updateFillColor)
     if type(bossCastbars) == "table" then
         for index = 1, #bossCastbars do
             RefreshFrame(bossCastbars[index], nil, status, general, updateFillColor)
+        end
+    end
+
+    local arenaCastbars = _G.MSUF_ArenaCastbars
+    if type(arenaCastbars) == "table" then
+        for index = 1, #arenaCastbars do
+            RefreshFrame(arenaCastbars[index], nil, status, general, updateFillColor)
         end
     end
 

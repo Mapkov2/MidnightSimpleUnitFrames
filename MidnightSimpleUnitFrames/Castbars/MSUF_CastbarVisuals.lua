@@ -41,6 +41,7 @@ end
 local function NormalizeUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit:match("^boss") then return "boss" end
+    if unit:match("^arena") then return "arena" end
     if unit == "player" or unit == "target" or unit == "focus" then return unit end
     return nil
 end
@@ -52,12 +53,15 @@ local function UnitFromFrame(frame)
     unit = NormalizeUnit(unit)
     if unit then return unit end
     if frame._msufIsBossCastbar then return "boss" end
+    if frame._msufIsArenaCastbar then return "arena" end
     unit = NormalizeUnit(frame.unit or frame.MSUF_unit or frame._msufUnit)
     if unit then return unit end
     if frame == _G.MSUF_BossCastbarPreview or frame == _G.MSUF_BossCastbarPreview1 then return "boss" end
+    if frame == _G.MSUF_ArenaCastbarPreview or frame == _G.MSUF_ArenaCastbarPreview1 then return "arena" end
     local name = frame.GetName and frame:GetName() or nil
     if type(name) == "string" then
         if name:find("Boss", 1, true) or name:find("boss", 1, true) then return "boss" end
+        if name:find("Arena", 1, true) or name:find("arena", 1, true) then return "arena" end
         if name:find("Player", 1, true) then return "player" end
         if name:find("Target", 1, true) then return "target" end
         if name:find("Focus", 1, true) then return "focus" end
@@ -70,6 +74,7 @@ local function PrefixForUnit(unit)
     if unit == "target" then return "castbarTarget" end
     if unit == "focus" then return "castbarFocus" end
     if unit == "boss" then return "bossCast" end
+    if unit == "arena" then return "arenaCast" end
     return nil
 end
 
