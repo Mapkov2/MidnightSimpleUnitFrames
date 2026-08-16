@@ -80,7 +80,8 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["temp_max_health.enabled"] = { "general.tempMaxHealthEnabled" },
     ["temp_max_health.texture"] = { "general.tempMaxHealthTexture" },
     ["temp_max_health.color"] = {
-        "general.tempMaxHealthColorR", "general.tempMaxHealthColorG", "general.tempMaxHealthColorB",
+        "general.tempMaxHealthColor", "general.tempMaxHealthColorR",
+        "general.tempMaxHealthColorG", "general.tempMaxHealthColorB",
     },
     ["temp_max_health.opacity"] = { "general.tempMaxHealthOpacity" },
     ["temp_max_health.background_opacity"] = { "general.tempMaxHealthBackgroundOpacity" },
@@ -187,6 +188,10 @@ local BAR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
     ["absorb.positive.enabled"] = {
         "^barScope%.[%w_]+%.enableAbsorbBar$",
         "^barScope%.[%w_]+%.absorbTextMode$",
+    },
+    ["temp_max_health.color"] = {
+        "^barScope%.[%w_]+%.tempMaxHealthColor$",
+        "^barScope%.[%w_]+%.tempMaxHealthColor[RGB]$",
     },
 }
 local function IsDynamicBarPath(path)

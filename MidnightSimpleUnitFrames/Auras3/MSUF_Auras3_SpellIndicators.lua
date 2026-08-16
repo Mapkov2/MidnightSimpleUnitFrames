@@ -236,8 +236,7 @@ local function SlotStructuralSignature(slot)
     -- The public 12.1 AuraSlot filter setter reparses assignments without
     -- recreating the access-restricted AuraButton. Only slot topology and
     -- initializeFrame-owned visuals remain structural.
-    return tostring(slot.slotKey) .. "\030" .. tostring(slot.nativeFilter)
-        .. "\030" .. tostring(slot.identityCandidateMode)
+    return tostring(slot.slotKey) .. "\030" .. tostring(slot.identityCandidateMode)
         .. "\030" .. tostring(SlotLayoutSignature(slot))
 end
 

@@ -31,6 +31,7 @@
 
 ### Fixes & Performance
 
+- Updated Spell Indicator filters in place through Blizzard's public AuraSlot setter, avoiding unnecessary restricted AuraButton and container rebuilds when only a friendly/hostile filter changes.
 - Fixed custom MSUF Dispel symbols becoming black or incorrectly multiplied after recoloring. Custom overrides now use tint-neutral, alpha-identical companions, while unchanged colors continue using the original assets.
 - Fixed Group Frame absorb overlays ignoring the configured opacity.
 - Fixed aura icon zoom scaling when a Debuff border is active, including runtime and preview rendering.
@@ -44,7 +45,7 @@
 - Fixed Arena Group Frames using Raid instead of Party configuration across runtime, Blizzard-frame ownership, Edit Mode, and previews.
 - Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.
 - Limited PvP indicator runtime to Arenas, Battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.
-- Fixed the **See New Features** hover outline passing its texture sublevel as an inherited template instead of the correct draw-sublevel argument.
+
 
 ## 6.08-Beta2 - 2026-08-15
 

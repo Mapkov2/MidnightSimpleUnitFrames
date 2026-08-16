@@ -200,7 +200,8 @@ local COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
         "^[%a]+%.levelIndicatorColor$", "^[%a]+%.raceIndicatorColor$",
         "^[%a]+%.classTextIndicatorColor$", "^[%a]+%.raidGroupNameColor$",
         "^[%a]+%.statusTextColor$", "^[%a]+%.statusGhostTextColor$",
-        "^[%a]+%.statusAFKTextColor$", "^[%a]+%.statusDNDTextColor$",
+        "^[%a]+%.statusAFKTextColor$", "^[%a]+%.statusAFKTimerColor$",
+        "^[%a]+%.statusDNDTextColor$",
     },
 }
 local function ColorReviewedDisposition(path)

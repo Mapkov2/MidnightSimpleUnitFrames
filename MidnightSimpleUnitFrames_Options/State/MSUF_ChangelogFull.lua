@@ -8,11 +8,11 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "A5250F7571C2AA23E2943CDEBF411EE3CDB2C5EC61440E535C9C3615BAADDF7C",
+    sourceSha256 = "300A48F843417767EF38712D12AB0997368E02FAE8B41B108CC80CB842E44F44",
     currentVersion = "6.08",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.08",
+    previousVersion = "6.07",
+    rangeLabel = "6.07 -> 6.08",
     entries = {
         {
             version = "6.08",
@@ -116,6 +116,7 @@ local data = {
                 {
                     title = "Fixes & Performance",
                     bullets = {
+                        "Updated Spell Indicator filters in place through Blizzard's public AuraSlot setter, avoiding unnecessary restricted AuraButton and container rebuilds when only a friendly/hostile filter changes.",
                         "Fixed custom MSUF Dispel symbols becoming black or incorrectly multiplied after recoloring. Custom overrides now use tint-neutral, alpha-identical companions, while unchanged colors continue using the original assets.",
                         "Fixed Group Frame absorb overlays ignoring the configured opacity.",
                         "Fixed aura icon zoom scaling when a Debuff border is active, including runtime and preview rendering.",

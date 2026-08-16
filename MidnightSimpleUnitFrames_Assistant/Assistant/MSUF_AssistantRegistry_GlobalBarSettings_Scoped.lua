@@ -316,6 +316,9 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
                 },
                 apply = ApplyBarGradients,
                 reason = "MSUF_ASSISTANT_SCOPED_POWER_GRADIENT_DIRECTION",
+                menuControlDisposition = "standalone",
+                menuControlDispositionReason = "Menu2 exposes power-gradient direction as four independent toggle actions; this scoped Assistant enum is their atomic single-direction controller.",
+                menuControlDispositionEvidence = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua BuildDirectionPad",
             })
         RegisterScopedSetting("barScope", scope, "barOutlineLayer", "layer", "Bar Outline Layer", "number", 0, GlobalScopeAliases(scope, {
             "bar outline strata", "bar outline layer", "frame outline strata", "frame outline layer",
