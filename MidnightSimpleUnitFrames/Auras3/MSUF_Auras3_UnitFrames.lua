@@ -8489,6 +8489,24 @@ A3._EnsureDirectIdentityRefreshFrame = function()
             end
             local units = A3._directIdentityEventUnits[event]
             if not units then return end
+            if event == "ARENA_OPPONENT_UPDATE" then
+                -- Opponent updates flap in bursts at gate-open (stealth
+                -- openers flip seen/unseen many times per second) and a
+                -- synchronous UpdateAllAuras per event per unit re-walks
+                -- secret data three times per flap. Honor the event's own
+                -- unit token and drain through the deduped next-frame
+                -- coalescer instead.
+                local issecret = _G.issecretvalue
+                if type(unit) == "string" and (not issecret or issecret(unit) ~= true)
+                    and A3._directIdentityRefreshUnits[unit] == true then
+                    A3._ScheduleDirectIdentityEventRefresh(unit)
+                else
+                    for i = 1, #units do
+                        A3._ScheduleDirectIdentityEventRefresh(units[i])
+                    end
+                end
+                return
+            end
             for i = 1, #units do
                 A3._DirectIdentityRefreshUnit(units[i])
             end

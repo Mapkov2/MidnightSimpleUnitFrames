@@ -534,8 +534,11 @@ local function HandleArenaPoolLifecycle(event, eventUnit)
 
     if event == "ARENA_OPPONENT_UPDATE" then
         -- Per-unit payload: seen/unseen/destroyed/cleared and Solo Shuffle
-        -- round rebinds. Refresh only the owning bar immediately.
-        if type(eventUnit) == "string" then
+        -- round rebinds. Refresh only the owning bar immediately. A secret
+        -- token must not reach string.match - fall through to the queued
+        -- pool pass instead of erroring once per burst event.
+        local issecret = _G.issecretvalue
+        if type(eventUnit) == "string" and (not issecret or issecret(eventUnit) ~= true) then
             local index = tonumber(eventUnit:match("^arena(%d+)$"))
             local frame = index and arenaCastbars[index]
             if frame and frame.unit == eventUnit then

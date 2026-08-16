@@ -34,8 +34,10 @@ Check(core:find('if ARENA_UNITS[unit] then return "arena" end', 1, true),
     "ConfigKeyForUnit does not collapse arenaN to the arena scope")
 Check(core:find('return "ARENA_OPPONENT_UPDATE"', 1, true),
     "arena frames lost their OnShow identity follow-up event")
-Check(core:find('AddEventHandler(frame, "ARENA_OPPONENT_UPDATE", IdentityEventUpdate, true)', 1, true),
+Check(core:find('AddEventHandler(frame, "ARENA_OPPONENT_UPDATE", ArenaOpponentIdentityUpdate, false)', 1, true),
     "arena identity lifecycle no longer listens to ARENA_OPPONENT_UPDATE")
+Check(core:find("QueueDependentIdentity(frame, event)", 1, true),
+    "arena opponent updates lost their burst coalescer")
 
 -- 2) State seeding -----------------------------------------------------------
 local defaults = Read("MidnightSimpleUnitFrames/State/MSUF_Defaults.lua")

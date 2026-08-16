@@ -2192,6 +2192,19 @@ local function IsArenaUnit(unit)
   return unit == "arena1" or unit == "arena2" or unit == "arena3"
 end
 
+local function ArenaOpponentIdentityUpdate(frame, event, unit)
+  -- The non-unitless route hands through the event's own unit token. Stealth
+  -- openers flap seen/unseen many times per second at gate-open; without the
+  -- slot filter and the coalescer every flap paid a full identity reseed on
+  -- all three arena frames, which pegged the CPU when matches started.
+  local issecret = _G.issecretvalue
+  if type(unit) == "string" and (not issecret or issecret(unit) ~= true)
+    and IsArenaUnit(unit) and unit ~= frame.MSUFUnitKey then
+    return
+  end
+  QueueDependentIdentity(frame, event)
+end
+
 local function AddIdentityLifecycleHandlers(frame)
   if not FrameNeedsIdentityLifecycle(frame) then return end
   local unit = frame.MSUFUnitKey
@@ -2212,9 +2225,10 @@ local function AddIdentityLifecycleHandlers(frame)
     AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", IdentityEventUpdate, true)
   elseif IsArenaUnit(unit) then
     -- Fires with (unitToken, updateReason) on seen/unseen/destroyed/cleared and
-    -- on every Solo Shuffle round rebind; unitless registration, each arena
-    -- frame reseeds its own token like the boss engage route.
-    AddEventHandler(frame, "ARENA_OPPONENT_UPDATE", IdentityEventUpdate, true)
+    -- on every Solo Shuffle round rebind. Registered non-unitless so the route
+    -- forwards the payload token: the handler drops other slots' updates and
+    -- coalesces the burst instead of reseeding per event.
+    AddEventHandler(frame, "ARENA_OPPONENT_UPDATE", ArenaOpponentIdentityUpdate, false)
   end
 end
 

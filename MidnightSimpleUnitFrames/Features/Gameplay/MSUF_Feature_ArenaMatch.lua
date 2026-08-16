@@ -348,7 +348,13 @@ local function UpdateTrinketCooldown(holder, index)
     end
 end
 
-local function SyncTrinketIcons()
+-- One request per slot per match segment. The CC response events
+-- (ARENA_CROWD_CONTROL_SPELL_UPDATE / ARENA_COOLDOWNS_UPDATE) must NEVER
+-- re-request: request -> response event -> request would self-sustain and
+-- fan out 1:3 per round-trip, which pegs the CPU the moment gates open.
+local ccRequested = {}
+
+local function SyncTrinketIcons(allowRequest)
     local active = ArenaEnabled() and ShowTrinketEnabled() and InArenaMatch()
     for index = 1, MAX_ARENA do
         local unit = "arena" .. index
@@ -358,12 +364,18 @@ local function SyncTrinketIcons()
             holder = EnsureTrinketIcon(index)
             if holder and PositionTrinketIcon(holder, index) then
                 holder:Show()
-                local request = _G.C_PvP and _G.C_PvP.RequestCrowdControlSpell
-                if type(request) == "function" then request(unit) end
+                if allowRequest and not ccRequested[index] then
+                    local request = _G.C_PvP and _G.C_PvP.RequestCrowdControlSpell
+                    if type(request) == "function" then
+                        ccRequested[index] = true
+                        request(unit)
+                    end
+                end
                 UpdateTrinketCooldown(holder, index)
             end
-        elseif holder then
-            holder:Hide()
+        else
+            ccRequested[index] = nil
+            if holder then holder:Hide() end
         end
     end
 end
@@ -380,7 +392,7 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
     if event == "PVP_MATCH_STATE_CHANGED" then
         SyncPrepDisplay()
         SyncStealthOverlays()
-        SyncTrinketIcons()
+        SyncTrinketIcons(true)
         return
     end
     if event == "ARENA_OPPONENT_UPDATE" then
@@ -395,18 +407,23 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
         end
         if prepActive then SyncPrepDisplay() end
         SyncStealthOverlays()
-        SyncTrinketIcons()
+        SyncTrinketIcons(true)
         return
     end
     if event == "ARENA_CROWD_CONTROL_SPELL_UPDATE" or event == "ARENA_COOLDOWNS_UPDATE" then
-        SyncTrinketIcons()
+        -- Response events refresh from the delivered data only; re-requesting
+        -- here would close the request/response feedback loop.
+        SyncTrinketIcons(false)
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
-        for index = 1, MAX_ARENA do unseenSlots[index] = nil end
+        for index = 1, MAX_ARENA do
+            unseenSlots[index] = nil
+            ccRequested[index] = nil
+        end
         SyncPrepDisplay()
         SyncStealthOverlays()
-        SyncTrinketIcons()
+        SyncTrinketIcons(true)
         return
     end
     if event == "PLAYER_REGEN_ENABLED" then
@@ -446,4 +463,4 @@ WireEvents()
 
 ExportPublic("MSUF_ArenaMatch_SyncPrepDisplay", SyncPrepDisplay)
 ExportPublic("MSUF_ArenaMatch_SyncStealthOverlays", SyncStealthOverlays)
-ExportPublic("MSUF_ArenaMatch_SyncTrinketIcons", SyncTrinketIcons)
+ExportPublic("MSUF_ArenaMatch_SyncTrinketIcons", function() SyncTrinketIcons(true) end)
