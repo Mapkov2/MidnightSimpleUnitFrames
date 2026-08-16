@@ -35,6 +35,8 @@ end
 
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local BOSS_LOOKUP = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
+local ARENA_UNITS = { "arena1", "arena2", "arena3" }
+local ARENA_LOOKUP = { arena1=true, arena2=true, arena3=true }
 local UNIT_FLAG = {
     player = "showPlayer",
     target = "showTarget",
@@ -45,6 +47,10 @@ local UNIT_FLAG = {
     boss3 = "showBoss",
     boss4 = "showBoss",
     boss5 = "showBoss",
+    arena = "showArena",
+    arena1 = "showArena",
+    arena2 = "showArena",
+    arena3 = "showArena",
 }
 
 local PUBLIC_UNITS = {
@@ -52,6 +58,7 @@ local PUBLIC_UNITS = {
     { value = "target", text = "Target" },
     { value = "focus", text = "Focus" },
     { value = "boss", text = "Boss" },
+    { value = "arena", text = "Arena" },
 }
 
 local STYLE_SCOPES = {
@@ -60,6 +67,7 @@ local STYLE_SCOPES = {
     { value = "target", text = "Target" },
     { value = "focus", text = "Focus" },
     { value = "boss", text = "Boss" },
+    { value = "arena", text = "Arena" },
 }
 
 local GROWTH_VALUES = {
@@ -911,6 +919,7 @@ end
 local function NormalizeUnit(unit)
     unit = tostring(unit or "player")
     if unit == "boss" or BOSS_LOOKUP[unit] then return "boss" end
+    if unit == "arena" or ARENA_LOOKUP[unit] then return "arena" end
     if unit == "target" or unit == "focus" then return unit end
     return "player"
 end
@@ -918,14 +927,19 @@ end
 local function RuntimeUnit(unit)
     unit = tostring(unit or "player")
     if BOSS_LOOKUP[unit] then return unit end
+    if ARENA_LOOKUP[unit] then return unit end
     unit = NormalizeUnit(unit)
-    return unit == "boss" and "boss1" or unit
+    if unit == "boss" then return "boss1" end
+    if unit == "arena" then return "arena1" end
+    return unit
 end
 
 local function EachRuntimeUnit(unit, fn)
     unit = NormalizeUnit(unit)
     if unit == "boss" then
         for i = 1, #BOSS_UNITS do fn(BOSS_UNITS[i]) end
+    elseif unit == "arena" then
+        for i = 1, #ARENA_UNITS do fn(ARENA_UNITS[i]) end
     else
         fn(unit)
     end
@@ -1765,12 +1779,14 @@ function Model.ScopeLabel(scope)
     if scope == "player" then return "Player" end
     if scope == "target" then return "Target" end
     if scope == "focus" then return "Focus" end
+    if scope == "arena" then return "Arena" end
     return "Boss"
 end
 
 function Model.UnitSupported(unit)
     unit = NormalizeUnit(unit)
     return unit == "player" or unit == "target" or unit == "focus" or unit == "boss"
+        or unit == "arena"
 end
 
 function Model.UnitEnabled(unit)
@@ -4043,6 +4059,7 @@ function Model.Apply(unit, reason)
         Refresh("target")
         Refresh("focus")
         for i = 1, #BOSS_UNITS do Refresh(BOSS_UNITS[i]) end
+        for i = 1, #ARENA_UNITS do Refresh(ARENA_UNITS[i]) end
         RefreshGroup("group")
     end
     if type(A3._NotifyAuraColdpathPreview) == "function" then

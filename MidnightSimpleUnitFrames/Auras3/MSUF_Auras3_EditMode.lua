@@ -54,15 +54,25 @@ local SPELL_FRAME_EFFECT_BASE_OFFSET = tonumber(FrameLayers.SPELL_FRAME_EFFECT_B
 
 local AURA_DRAG_RUNTIME_INTERVAL = 0.05
 local AURA_PENDING_DRAG_THRESHOLD = 3
-local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5",
+    "arena1", "arena2", "arena3" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
+local ARENA_UNITS = { arena1=true, arena2=true, arena3=true }
 local function IsBossScope(unit)
     return tostring(unit or ""):lower() == "boss"
+end
+local function IsArenaScope(unit)
+    return tostring(unit or ""):lower() == "arena"
 end
 
 local function ForEachBossUnit(fn)
     if type(fn) ~= "function" then return end
     for i = 1, 5 do fn("boss" .. i) end
+end
+
+local function ForEachArenaUnit(fn)
+    if type(fn) ~= "function" then return end
+    for i = 1, 3 do fn("arena" .. i) end
 end
 
 local GROUPS = {
@@ -262,9 +272,17 @@ local function BossPageAuraPreviewActive()
     return rawget(_G, "MSUF2_BossPageAuraPreviewActive") == true
 end
 
+--- Menu2's arena page mirrors the boss-page flag for its own preview lane.
+local function ArenaPageAuraPreviewActive()
+    return rawget(_G, "MSUF2_ArenaPageAuraPreviewActive") == true
+end
+
 local function UnitPreviewActive(unit)
     if EditPreviewActive() then return true end
-    if unit == nil then return BossPageAuraPreviewActive() end
+    if unit == nil then return BossPageAuraPreviewActive() or ArenaPageAuraPreviewActive() end
+    if (ARENA_UNITS[unit] == true or IsArenaScope(unit)) and ArenaPageAuraPreviewActive() then
+        return true
+    end
     return (BOSS_UNITS[unit] == true or IsBossScope(unit)) and BossPageAuraPreviewActive() or false
 end
 
@@ -338,6 +356,7 @@ local function UnitLabel(unit)
     if unit == "target" then return "Target" end
     if unit == "focus" then return "Focus" end
     if BOSS_UNITS[unit] then return "Boss " .. tostring(unit):match("%d+") end
+    if ARENA_UNITS[unit] then return "Arena " .. tostring(unit):match("%d+") end
     return tostring(unit or "")
 end
 
@@ -369,6 +388,7 @@ local function UnitEnabled(auras, unit)
     if unit == "target" then return auras.showTarget == true end
     if unit == "focus" then return auras.showFocus == true end
     if BOSS_UNITS[unit] then return auras.showBoss == true end
+    if ARENA_UNITS[unit] then return auras.showArena == true end
     return false
 end
 
@@ -855,6 +875,10 @@ local function RefreshAffectedRuntimeUnits(unit, shared)
         for i = 1, 5 do
             A3.RefreshUnit("boss" .. i)
         end
+    elseif ARENA_UNITS[unit] and shared and shared.arenaEditTogether ~= false then
+        for i = 1, 3 do
+            A3.RefreshUnit("arena" .. i)
+        end
     elseif unit then
         A3.RefreshUnit(unit)
     end
@@ -906,6 +930,10 @@ local function ApplyDragDelta(self, dx, dy, elapsed)
     if BOSS_UNITS[baseUnit] and shared.bossEditTogether ~= false then
         for i = 1, 5 do
             ApplyDragUnit(auras, "boss" .. i, moverKind, x, y)
+        end
+    elseif ARENA_UNITS[baseUnit] and shared.arenaEditTogether ~= false then
+        for i = 1, 3 do
+            ApplyDragUnit(auras, "arena" .. i, moverKind, x, y)
         end
     elseif baseUnit then
         ApplyDragUnit(auras, baseUnit, moverKind, x, y)
@@ -1932,6 +1960,10 @@ function EM.HideUnit(unit)
         ForEachBossUnit(EM.HideUnit)
         return
     end
+    if IsArenaScope(unit) then
+        ForEachArenaUnit(EM.HideUnit)
+        return
+    end
     local byUnit = EM.groups and EM.groups[unit]
     SetRuntimeAuraHidden(unit, false)
     if not byUnit then return end
@@ -1947,6 +1979,10 @@ function EM.RefreshUnit(unit)
     if not unit then return end
     if IsBossScope(unit) then
         ForEachBossUnit(EM.RefreshUnit)
+        return
+    end
+    if IsArenaScope(unit) then
+        ForEachArenaUnit(EM.RefreshUnit)
         return
     end
     if not UnitPreviewActive(unit) then
@@ -2182,6 +2218,10 @@ function A3.RefreshUnit(unit)
             ForEachBossUnit(function(bossUnit)
                 PromoteRuntimeLayout(bossUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
             end)
+        elseif IsArenaScope(unit) then
+            ForEachArenaUnit(function(arenaUnit)
+                PromoteRuntimeLayout(arenaUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+            end)
         else
             PromoteRuntimeLayout(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
         end
@@ -2208,6 +2248,15 @@ function A3.UpdateUnitAnchor(unit)
             end)
         end
         EM.RefreshUnit("boss")
+        return
+    end
+    if IsArenaScope(unit) then
+        if IsEditModeActive() then
+            ForEachArenaUnit(function(arenaUnit)
+                PromoteRuntimeLayout(arenaUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+            end)
+        end
+        EM.RefreshUnit("arena")
         return
     end
     if IsEditModeActive() then
@@ -2237,6 +2286,13 @@ function A3.RefreshEditPreviewAnimation(unit, elapsed)
         local any = false
         ForEachBossUnit(function(bossUnit)
             any = A3.RefreshEditPreviewAnimation(bossUnit, elapsed) or any
+        end)
+        return any
+    end
+    if IsArenaScope(unit) then
+        local any = false
+        ForEachArenaUnit(function(arenaUnit)
+            any = A3.RefreshEditPreviewAnimation(arenaUnit, elapsed) or any
         end)
         return any
     end

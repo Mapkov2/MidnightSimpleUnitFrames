@@ -606,13 +606,16 @@ local NormalizeAuraSortMethod, AuraSortEnums, AuraSortSignature
 local MANAGED_UNITS = {
     player = true, target = true, focus = true,
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
+    arena1 = true, arena2 = true, arena3 = true,
 }
 
 -- The menu exposes one Boss filter scope, while layout remains frame-local for
 -- boss1..boss5. Keep boss1 as the persisted token/blacklist rule owner so an
 -- older profile with absent or stale siblings cannot compile different filters.
+-- Arena mirrors the same owner-collapse pattern onto arena1.
 local BOSS_FILTER_SCOPE_OWNER = {
     boss1 = "boss1", boss2 = "boss1", boss3 = "boss1", boss4 = "boss1", boss5 = "boss1",
+    arena1 = "arena1", arena2 = "arena1", arena3 = "arena1",
 }
 
 local UNIT_FLAG = {
@@ -624,6 +627,9 @@ local UNIT_FLAG = {
     boss3 = "showBoss",
     boss4 = "showBoss",
     boss5 = "showBoss",
+    arena1 = "showArena",
+    arena2 = "showArena",
+    arena3 = "showArena",
 }
 
 local DEFAULT_SHARED = {
@@ -1416,6 +1422,7 @@ end
 local function NormalizeRuntimeUnit(unit)
     unit = tostring(unit or "")
     if unit == "boss" then return "boss1" end
+    if unit == "arena" then return "arena1" end
     if MANAGED_UNITS[unit] then return unit end
     return nil
 end
@@ -6626,6 +6633,9 @@ A3._directIdentityRefreshUnits = A3._directIdentityRefreshUnits or {
     boss3 = true,
     boss4 = true,
     boss5 = true,
+    arena1 = true,
+    arena2 = true,
+    arena3 = true,
 }
 
 A3._directIdentityRefreshAllEvents = A3._directIdentityRefreshAllEvents or {
@@ -6638,6 +6648,7 @@ A3._directIdentityEventUnits = A3._directIdentityEventUnits or {
     PLAYER_TARGET_CHANGED = { "target" },
     PLAYER_FOCUS_CHANGED = { "focus" },
     INSTANCE_ENCOUNTER_ENGAGE_UNIT = { "boss1", "boss2", "boss3", "boss4", "boss5" },
+    ARENA_OPPONENT_UPDATE = { "arena1", "arena2", "arena3" },
 }
 
 A3._HasDirectIdentityRefreshContainers = function()
@@ -8187,6 +8198,10 @@ local function DirectIdentityBossUnit(unit)
         or unit == "boss4" or unit == "boss5"
 end
 
+local function DirectIdentityArenaUnit(unit)
+    return unit == "arena1" or unit == "arena2" or unit == "arena3"
+end
+
 local function SetDirectIdentityRefreshEvent(frame, event, enabled, unit)
     local desiredMode = enabled == true and (unit and ("unit:" .. unit) or "global") or nil
     local currentMode = directIdentityRefreshRegisteredEvents[event]
@@ -8212,6 +8227,7 @@ end
 local function SyncDirectIdentityRefreshEvents(frame)
     local byUnit = A3._directIdentityAuraContainers
     local hasAny, hasGroup, hasPlayer, hasTarget, hasFocus, hasBoss = false, false, false, false, false, false
+    local hasArena = false
     local hasGroupAssist = A3._HasGroupAuraAssistOwners()
     hasGroup = (A3._directIdentityGroupOwnerCount or 0) > 0
     if byUnit then
@@ -8227,6 +8243,8 @@ local function SyncDirectIdentityRefreshEvents(frame)
                         hasFocus = true
                     elseif DirectIdentityBossUnit(unit) then
                         hasBoss = true
+                    elseif DirectIdentityArenaUnit(unit) then
+                        hasArena = true
                     end
                 end
             else
@@ -8272,6 +8290,7 @@ local function SyncDirectIdentityRefreshEvents(frame)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_TARGET_CHANGED", hasTarget)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
     SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
+    SetDirectIdentityRefreshEvent(frame, "ARENA_OPPONENT_UPDATE", hasArena)
     return true
 end
 
@@ -8306,6 +8325,9 @@ local function DirectIdentityRefreshEventsAlreadyCover(unit)
     end
     if DirectIdentityBossUnit(unit) then
         return directIdentityRefreshRegisteredEvents.INSTANCE_ENCOUNTER_ENGAGE_UNIT ~= nil
+    end
+    if DirectIdentityArenaUnit(unit) then
+        return directIdentityRefreshRegisteredEvents.ARENA_OPPONENT_UPDATE ~= nil
     end
     return true
 end
@@ -9711,12 +9733,18 @@ A3._RequestUnitNow = function(unit)
         didWork = A3._ApplyRuntimeUnit("target") or didWork
         didWork = A3._ApplyRuntimeUnit("focus") or didWork
         for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
+        for i = 1, 3 do didWork = A3._ApplyRuntimeUnit("arena" .. i) or didWork end
         didWork = A3._RequestGroupKindNow(nil) or didWork
         return didWork
     end
     if unit == "boss" then
         local didWork = false
         for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
+        return didWork
+    end
+    if unit == "arena" then
+        local didWork = false
+        for i = 1, 3 do didWork = A3._ApplyRuntimeUnit("arena" .. i) or didWork end
         return didWork
     end
     if unit == "group" or unit == "groups" then return A3._RequestGroupKindNow(nil) end
@@ -9798,7 +9826,7 @@ function A3.RefreshAll()
 end
 
 A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
-    player = true, target = true, focus = true, boss = true,
+    player = true, target = true, focus = true, boss = true, arena = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
     group = true, groups = true,
@@ -9810,6 +9838,7 @@ A3._LooksLikeApplyScope = function(value)
     if value == "" then return false end
     if A3._requestApplyScopeKeys[value] then return true end
     return value:match("^boss%d+$") ~= nil
+        or value:match("^arena%d+$") ~= nil
         or value:match("^party%d+$") ~= nil
         or value:match("^raid%d+$") ~= nil
 end
@@ -9844,6 +9873,10 @@ function A3.RefreshUnit(unit)
     if unit == "boss" then
         for i = 1, 5 do InvalidateUnitRuntimeConfig("boss" .. i) end
         return A3.RequestUnit("boss")
+    end
+    if unit == "arena" then
+        for i = 1, 3 do InvalidateUnitRuntimeConfig("arena" .. i) end
+        return A3.RequestUnit("arena")
     end
     local runtimeUnit = InvalidateUnitRuntimeConfig(unit)
     if runtimeUnit then return A3.RequestUnit(runtimeUnit) end
