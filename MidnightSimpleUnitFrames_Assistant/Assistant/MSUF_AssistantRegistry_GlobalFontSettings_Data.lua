@@ -13,7 +13,7 @@ M.Assistant = A
 local FontData = A.GlobalFontSettingsRegistryData or {}
 A.GlobalFontSettingsRegistryData = FontData
 
-FontData.SCOPED_FONT_CONTROL_SCOPES = { "shared", "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "gf_party", "gf_raid" }
+FontData.SCOPED_FONT_CONTROL_SCOPES = { "shared", "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena", "gf_party", "gf_raid" }
 
 FontData.FONT_OUTLINE_VALUES = { "OUTLINE", "THICKOUTLINE", "NONE" }
 FontData.FONT_OUTLINE_ALIASES = {

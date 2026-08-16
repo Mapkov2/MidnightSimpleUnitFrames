@@ -32,7 +32,7 @@ A.AutoCoverage = Auto
 
 local UNIT_SCOPES = {
     player = true, target = true, targettarget = true, focustarget = true,
-    focus = true, pet = true, boss = true,
+    focus = true, pet = true, boss = true, arena = true,
 }
 local GROUP_SCOPES = {
     gf_party = "party",
@@ -587,6 +587,7 @@ local function CastbarUnitForKey(key)
     if lkey:find("targetcast", 1, true) or lkey:find("castbartarget", 1, true) then return "target" end
     if lkey:find("focuscast", 1, true) or lkey:find("castbarfocus", 1, true) or lkey:find("focuskick", 1, true) then return "focus" end
     if lkey:find("bosscast", 1, true) or lkey:find("castbarboss", 1, true) then return "boss" end
+    if lkey:find("arenacast", 1, true) or lkey:find("castbararena", 1, true) then return "arena" end
     return nil
 end
 

@@ -19,8 +19,8 @@ local RegisterUnitNumber = C.RegisterUnitNumber
 local UnitDefaultPower = C.UnitDefaultPower
 if type(AddAliasesForUnit) ~= "function" or type(RegisterUnitBoolean) ~= "function" or type(RegisterUnitNumber) ~= "function" or type(UnitDefaultPower) ~= "function" then return end
 
-local UNIT_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
-local RANGE_FADE_UNITS = { target = true, targettarget = true, focus = true, focustarget = true, pet = true, boss = true }
+local UNIT_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
+local RANGE_FADE_UNITS = { target = true, targettarget = true, focus = true, focustarget = true, pet = true, boss = true, arena = true }
 
 for i = 1, #UNIT_KEYS do
     local unit = UNIT_KEYS[i]
@@ -49,14 +49,14 @@ for i = 1, #UNIT_KEYS do
     AddAliasesForUnit(aliases, unit, "width", "breite")
     AddAliasesForUnit(aliases, unit, "frame width", "frame breite")
     RegisterUnitNumber(unit, "width", "width", "Width",
-        unit == "boss" and 180 or (unit == "focus" and 180 or 275),
+        (unit == "boss" or unit == "arena") and 180 or (unit == "focus" and 180 or 275),
         40, 900, aliases, { category = "Frame", reason = "MSUF_ASSISTANT_WIDTH" })
 
     aliases = {}
     AddAliasesForUnit(aliases, unit, "height", "hoehe")
     AddAliasesForUnit(aliases, unit, "frame height", "frame hoehe")
     RegisterUnitNumber(unit, "height", "height", "Height",
-        unit == "boss" and 30 or (unit == "focus" and 30 or 40),
+        (unit == "boss" or unit == "arena") and 30 or (unit == "focus" and 30 or 40),
         10, 180, aliases, { category = "Frame", reason = "MSUF_ASSISTANT_HEIGHT" })
 
     aliases = {}

@@ -121,7 +121,7 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
             RegisterUnitTextureLayerSettings(ctx.UnitTextureLayerSettings, unit)
         end
 
-        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then
             RegisterUnitBooleanSetting(unit, "showInterrupt", "showInterrupt", "Show Castbar Interrupt", true,
                 MakeAliases(unit, "show interrupt", "castbar interrupt", "castbar show interrupt"), {
                 category = "Cast Bar",

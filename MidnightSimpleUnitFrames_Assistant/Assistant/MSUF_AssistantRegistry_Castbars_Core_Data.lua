@@ -17,6 +17,7 @@ A.CastbarsRegistry.CASTBAR_KEYS = {
     target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", memory = "castbarTargetBackendBeforeHide", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", match = "castbarTargetMatchWidth" },
     focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", memory = "castbarFocusBackendBeforeHide", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", x = "castbarFocusOffsetX", y = "castbarFocusOffsetY", match = "castbarFocusMatchWidth" },
     boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", memory = "bossCastbarBackendBeforeHide", w = "bossCastbarWidth", h = "bossCastbarHeight", x = "bossCastbarOffsetX", y = "bossCastbarOffsetY", match = "bossCastbarMatchWidth" },
+    arena = { enable = "enableArenaCastbar", backend = "arenaCastbarBackend", memory = "arenaCastbarBackendBeforeHide", w = "arenaCastbarWidth", h = "arenaCastbarHeight", x = "arenaCastbarOffsetX", y = "arenaCastbarOffsetY", match = "arenaCastbarMatchWidth" },
 }
 
 A.CastbarsRegistry.CASTBAR_DETAIL_FIELDS = {
@@ -24,4 +25,5 @@ A.CastbarsRegistry.CASTBAR_DETAIL_FIELDS = {
     target = { time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName", timeFormat = "castbarTargetTimeFormat" },
     focus = { time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName", timeFormat = "castbarFocusTimeFormat" },
     boss = { time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat" },
+    arena = { time = "showArenaCastTime", icon = "showArenaCastIcon", text = "showArenaCastName", targetName = "showArenaCastTargetName", timeFormat = "arenaCastTimeFormat" },
 }

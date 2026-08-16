@@ -266,7 +266,7 @@ local function NoMatchTags(text)
     if NoMatchHasAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then add("aura") end
     if NoMatchHasAny(text, { "copy", "same", "import", "export", "profile", "preset" }) then add("action") end
     if NoMatchHasAny(text, { "anchor", "attach", "cooldownmanager", "cooldown manager", "cdm", "essentialcooldown" }) then add("anchor") end
-    if NoMatchHasAny(text, { "player", "target", "focus", "pet", "boss", "party", "raid", "mythic" }) then add("scope") end
+    if NoMatchHasAny(text, { "player", "target", "focus", "pet", "boss", "arena", "party", "raid", "mythic" }) then add("scope") end
     if NoMatchHasAny(text, { "x offset", "y offset" })
         or NoMatchHasToken(text, { "move", "left", "right", "up", "down", "width", "height", "size", "scale", "bigger", "smaller", "wider", "narrower", "taller", "shorter", "x", "y" }) then add("geometry") end
     if NoMatchHasAny(text, { "color", "colour", "red", "green", "blue", "class color", "texture", "font", "sound", "icon" }) then add("media") end
@@ -2981,6 +2981,7 @@ local PENDING_PAGE_LABEL_OVERRIDES = {
     uf_focus = "Focus",
     uf_pet = "Pet",
     uf_boss = "Boss",
+    uf_arena = "Arena",
     uf_targettarget = "Target of Target",
     uf_focustarget = "Focus Target",
 }
@@ -3100,6 +3101,7 @@ local function PendingSettingPage(setting)
         local unit = tostring(setting and setting.unit or "target"):lower()
         if unit == "party" or unit == "raid" or unit == "mythicraid" or unit:match("^gf_") then return "gf_auras" end
         if unit:match("^boss") then return "uf_boss" end
+        if unit:match("^arena") then return "uf_arena" end
         if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
         return "uf_target"
     end
@@ -8237,7 +8239,7 @@ function AP.HasExplicitBatchScope(text)    local parser = A.Parser or {}
     if type(parser.DetectUnits) == "function" and #(parser.DetectUnits(text) or {}) > 0 then return true end
     if type(parser.DetectGroups) == "function" and #(parser.DetectGroups(text) or {}) > 0 then return true end
     return AP.BatchContainsAny(text, {
-        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
+        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss", "arena",
         "party", "raid", "party frames", "raid frames", "group frames",
     })
 end

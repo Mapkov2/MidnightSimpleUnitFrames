@@ -57,7 +57,7 @@ function A.CastbarsRegistry.RegisterUnitSettings(ctx)
         local aliases = {}
         AddAliasesForUnit(aliases, unit, "castbar width", "castbar breite")
         AddAliasesForUnit(aliases, unit, "cast bar width", "zauberleiste breite")
-        RegisterGeneralNumber(keys.w, unit, "castbar", "width", "Castbar Width", unit == "boss" and 176 or (unit == "focus" and 175 or 272), 40, 900, aliases)
+        RegisterGeneralNumber(keys.w, unit, "castbar", "width", "Castbar Width", (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272), 40, 900, aliases)
 
         if keys.match then
             aliases = {}
@@ -73,7 +73,7 @@ function A.CastbarsRegistry.RegisterUnitSettings(ctx)
         aliases = {}
         AddAliasesForUnit(aliases, unit, "castbar height", "castbar hoehe")
         AddAliasesForUnit(aliases, unit, "cast bar height", "zauberleiste hoehe")
-        RegisterGeneralNumber(keys.h, unit, "castbar", "height", "Castbar Height", unit == "boss" and 12 or 18, 6, 80, aliases)
+        RegisterGeneralNumber(keys.h, unit, "castbar", "height", "Castbar Height", (unit == "boss" or unit == "arena") and 12 or 18, 6, 80, aliases)
 
         aliases = {}
         AddAliasesForUnit(aliases, unit, "castbar x", "castbar x")
