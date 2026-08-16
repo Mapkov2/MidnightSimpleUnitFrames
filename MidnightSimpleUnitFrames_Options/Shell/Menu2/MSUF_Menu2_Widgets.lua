@@ -252,6 +252,24 @@ local function MenuStateTable(field)
     return M[field]
 end
 local function GetCollapseHintClickState() return MenuStateTable("collapseHintClickState") end
+--- Focus-section pages (unit/group frames) show exactly one section at a time;
+--- the persisted table remembers the active section id per page key.
+local function GetFocusSectionState() return MenuStateTable("focusSectionState") end
+--- User-dragged preview height for resizable fixed previews. 0 = built-in default.
+function M.GetFixedPreviewUserHeight()
+    local height = tonumber(M.fixedPreviewUserHeight) or 0
+    if height <= 0 then return nil end
+    return height
+end
+function M.SetFixedPreviewUserHeight(height)
+    height = tonumber(height) or 0
+    if height <= 0 then height = 0 else height = math.floor(height + 0.5) end
+    if type(M.SetMenuStateValue) == "function" then
+        M.SetMenuStateValue("fixedPreviewUserHeight", height)
+    else
+        M.fixedPreviewUserHeight = height
+    end
+end
 local function RefreshCollapseHintSuppression(entry)
     local hint = entry and entry.hint
     if not hint then return end
@@ -379,6 +397,11 @@ function W.FocusCollapsibleSection(section, opts)
     for i = 1, #chain do
         local current = chain[i]
         local wasOpen = current.open == true
+        if current.focusMode and not wasOpen and current.builder and current.builder.SetFocusSection then
+            -- Nested deep-link targets reach their focus-mode ancestor here;
+            -- exclusive activation must close the previously active section.
+            current.builder:SetFocusSection(current.sectionId, { noScroll = true })
+        end
         current._msuf2MotionSerial = (current._msuf2MotionSerial or 0) + 1
         current._msuf2MotionActive = nil
         current.open = true
@@ -386,7 +409,10 @@ function W.FocusCollapsibleSection(section, opts)
         if opts.persist == true then
             current._msuf2AutoOpened = nil
             if M.accordionState and current.stateKey then M.accordionState[current.stateKey] = true end
-        elseif not wasOpen or current._msuf2AutoOpened == true then
+        elseif not current.focusMode and (not wasOpen or current._msuf2AutoOpened == true) then
+            -- Focus-mode activation is already the real, persisted selection;
+            -- marking it auto-opened would let CloseAutoFocusedSections strand
+            -- the page on its fallback section later.
             current._msuf2AutoOpened = true
         end
         if current.body then
@@ -536,6 +562,165 @@ function W.RegisterGuidedRegion(ctx, frame, title, stableId)
     return RegisterGuidedTourRegion(ctx, frame, title, stableId)
 end
 
+--- Focus-section mode: a page shows exactly one CollapsibleSection at a time.
+--- The section headers collapse into one wrapping chip bar; chips, search
+--- routing, the guided tour and the assistant all change the active section
+--- through SetFocusSection. Helpers live in one table so the file and the
+--- PageBuilder function stay clear of the 200-local ceiling.
+local FocusUI = { CHIP_HEIGHT = 24, CHIP_GAP = 8, CHIP_ROW_STEP = 30, STRIP_PAD_TOP = 8, STRIP_PAD_BOTTOM = 4 }
+function FocusUI.Enable(b)
+    if b.focusSectionMode then return end
+    b.focusSectionMode = true
+    b.focusChips = {}
+    -- Page-level handle so preview element clicks (and other cross-module
+    -- surfaces) can switch the active section without holding the builder.
+    local ctx = b.ctx
+    if ctx and ctx.entry then ctx.entry._msuf2FocusBuilder = b end
+end
+--- Cross-module entry: switch the active focus section of a built page.
+--- Returns false when the page is not cached, not in focus mode, or the
+--- section id does not exist on that page.
+function M.SetPageFocusSection(pageKey, sectionId, opts)
+    local entry = M.cache and M.cache[pageKey or M.activeKey]
+    local b = entry and entry._msuf2FocusBuilder
+    if not (b and b.SetFocusSection) then return false end
+    return b:SetFocusSection(sectionId, opts)
+end
+function FocusUI.PageKey(b)
+    local ctx = b and b.ctx
+    return tostring(ctx and ctx.key or "page")
+end
+function FocusUI.ChipWidth(chip)
+    local label = chip.button and chip.button.GetFontString and chip.button:GetFontString()
+    local measured = (label and label.GetStringWidth and label:GetStringWidth()) or 0
+    local text = tostring(chip.text or "")
+    return max(56, floor(max(measured + 26, 24 + #text * 7) + 0.5))
+end
+function FocusUI.Reflow(b)
+    local strip = b.focusStrip
+    if not strip then return end
+    local startX, maxRight = 12, b.width - 12
+    local x, y, rows = startX, -FocusUI.STRIP_PAD_TOP, 1
+    for i = 1, #b.focusChips do
+        local chip = b.focusChips[i]
+        local width = FocusUI.ChipWidth(chip)
+        if x > startX and x + width > maxRight then
+            x = startX
+            y = y - FocusUI.CHIP_ROW_STEP
+            rows = rows + 1
+        end
+        chip.button:SetSize(width, FocusUI.CHIP_HEIGHT)
+        chip.button:ClearAllPoints()
+        chip.button:SetPoint("TOPLEFT", strip, "TOPLEFT", x, y)
+        x = x + width + FocusUI.CHIP_GAP
+    end
+    local height = FocusUI.STRIP_PAD_TOP + rows * FocusUI.CHIP_ROW_STEP + FocusUI.STRIP_PAD_BOTTOM
+    if b.focusStripEntry then b.focusStripEntry.height = height end
+    strip:SetHeight(height)
+    b:RequestRelayoutCollapsibles()
+end
+function FocusUI.RefreshChips(b)
+    local chips = b.focusChips
+    if type(chips) ~= "table" then return end
+    for i = 1, #chips do
+        local chip = chips[i]
+        local entry = chip.entry
+        local isActive = entry and entry.open == true or false
+        if chip._msuf2ActiveState ~= isActive then
+            chip._msuf2ActiveState = isActive
+            if chip.button.SetActive then chip.button:SetActive(isActive) end
+        end
+    end
+end
+function FocusUI.EnsureStrip(b)
+    if b.focusStrip then return b.focusStrip end
+    if not b._collapsibleStartY then b._collapsibleStartY = b.y end
+    local strip = CreateFrame("Frame", nil, b.parent)
+    strip._msuf2NoPanelNeon = true
+    strip:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
+    local initialHeight = FocusUI.STRIP_PAD_TOP + FocusUI.CHIP_ROW_STEP + FocusUI.STRIP_PAD_BOTTOM
+    strip:SetSize(b.width, initialHeight)
+    b.focusStrip = strip
+    b.focusStripEntry = { kind = "section", frame = strip, height = initialHeight, gap = 10 }
+    b.layoutEntries[#b.layoutEntries + 1] = b.focusStripEntry
+    b.y = b.y - initialHeight - 10
+    return strip
+end
+function FocusUI.AddChip(b, entry, title)
+    local strip = FocusUI.EnsureStrip(b)
+    local text = Tr(title or entry.sectionId)
+    local btn = T.Button(strip, text, 80, FocusUI.CHIP_HEIGHT)
+    T.CenterButtonLabel(btn)
+    if btn.RefreshVisual then btn:RefreshVisual() end
+    btn._msuf2ControlKind = "button"
+    btn._msuf2SkipHistoryCheckpoint = true
+    -- The hidden section header keeps the search/catalog identity for this
+    -- section; the chip is only its visible face.
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, entry.header)
+    else btn._msuf2ControlPartOf = entry.header end
+    local chip = { button = btn, entry = entry, sectionId = entry.sectionId, text = text }
+    b.focusChips[#b.focusChips + 1] = chip
+    btn:SetScript("OnClick", function()
+        b:SetFocusSection(entry.sectionId)
+    end)
+    FocusUI.Reflow(b)
+    return chip
+end
+function FocusUI.SetSection(b, sectionId, opts)
+    sectionId = tostring(sectionId or "")
+    if sectionId == "" then return false end
+    local changed, found = false, false
+    for i = 1, #b.collapsibles do
+        local entry = b.collapsibles[i]
+        if entry.focusMode then
+            local wantOpen = entry.sectionId == sectionId
+            if wantOpen then found = true end
+            if (entry.open == true) ~= wantOpen then
+                entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
+                entry._msuf2MotionActive = nil
+                entry._msuf2Closing = nil
+                entry.open = wantOpen
+                if entry.body and entry.body.SetAlpha then entry.body:SetAlpha(1) end
+                changed = true
+            end
+        end
+    end
+    if not found then return false end
+    GetFocusSectionState()[FocusUI.PageKey(b)] = sectionId
+    if changed then b:RelayoutCollapsibles() end
+    FocusUI.RefreshChips(b)
+    if changed and not (opts and opts.noScroll) and M.scrollFrame and M.scrollFrame.SetVerticalScroll then
+        M.scrollFrame:SetVerticalScroll(0)
+    end
+    return true
+end
+--- Resolve which section a focus-mode page should show for this build.
+--- Priority: a pending search-route mark (consumed here and persisted),
+--- then the persisted per-page selection, then the first built section.
+function FocusUI.ResolveBuildOpen(b, stateKey, sectionId)
+    local pageKey = FocusUI.PageKey(b)
+    local focusState = GetFocusSectionState()
+    local routeMarks = M._msuf2SearchRouteOpenSections
+    local routeActivated = false
+    if type(routeMarks) == "table" and routeMarks[stateKey] == true then
+        routeMarks[stateKey] = nil
+        routeActivated = true
+        focusState[pageKey] = sectionId
+        -- An earlier section of this build may have opened as the default
+        -- active one before the route mark was reached; exclusivity wins.
+        for i = 1, #b.collapsibles do
+            local other = b.collapsibles[i]
+            if other.focusMode and other.open then other.open = false end
+        end
+    end
+    local active = focusState[pageKey]
+    if active == nil and b.focusChips and #b.focusChips == 0 then
+        -- Nothing persisted yet: the first section of the page becomes active.
+        active = sectionId
+    end
+    return active == sectionId, routeActivated
+end
+
 function W.PageBuilder(ctx, opts)
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     opts = type(opts) == "table" and opts or {}
@@ -562,6 +747,8 @@ function W.PageBuilder(ctx, opts)
         ctx._msuf2PageBuilders = ctx._msuf2PageBuilders or {}
         ctx._msuf2PageBuilders[#ctx._msuf2PageBuilders + 1] = b
     end
+    b.EnableFocusSectionMode = FocusUI.Enable
+    b.SetFocusSection = FocusUI.SetSection
     function b:RequestRelayoutCollapsibles()
         if ctx and ctx._msuf2Building then
             self._msuf2RelayoutPending = true
@@ -573,6 +760,25 @@ function W.PageBuilder(ctx, opts)
         opts = type(opts) == "table" and opts or nil
         self._msuf2RelayoutPending = nil
         if not self._collapsibleStartY then return false end
+        if self.focusSectionMode then
+            -- A stale persisted selection (renamed/removed section) must never
+            -- leave a focus page with zero visible sections.
+            local anyOpen, firstFocus
+            for i = 1, #self.collapsibles do
+                local focusEntry = self.collapsibles[i]
+                if focusEntry.focusMode then
+                    firstFocus = firstFocus or focusEntry
+                    if focusEntry.open then
+                        anyOpen = true
+                        break
+                    end
+                end
+            end
+            if not anyOpen and firstFocus then
+                firstFocus.open = true
+                FocusUI.RefreshChips(self)
+            end
+        end
         local y = self._collapsibleStartY
         local layoutChanged = false
         local entries = (#self.layoutEntries > 0) and self.layoutEntries or self.collapsibles
@@ -597,10 +803,16 @@ function W.PageBuilder(ctx, opts)
                 local open = entry.open and true or false
                 local openChanged = entry._msuf2RelayoutOpen ~= open
                 entry._msuf2RelayoutOpen = open
-                local outerH = entry.headerHeight + (open and entry.contentHeight or 0)
+                local entryHeaderH = entry.focusMode and 0 or entry.headerHeight
+                local outerH = entryHeaderH + (open and entry.contentHeight or 0)
+                if entry.focusMode and entry._msuf2OuterShownState ~= open then
+                    entry._msuf2OuterShownState = open
+                    entry.outer:SetShown(open)
+                    layoutChanged = true
+                end
                 local key = tostring(self.parent) .. "\030" .. tostring(self.x) .. "\030" .. tostring(y)
                     .. "\030" .. tostring(outerH) .. "\030" .. tostring(open)
-                if entry._msuf2RelayoutKey ~= key then
+                if (not entry.focusMode or open) and entry._msuf2RelayoutKey ~= key then
                     entry._msuf2RelayoutKey = key
                     entry.outer:ClearAllPoints()
                     entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
@@ -629,7 +841,11 @@ function W.PageBuilder(ctx, opts)
                 then
                     refreshState(entry)
                 end
-                y = y - entry.outer:GetHeight() - 8
+                if entry.focusMode then
+                    y = y - (open and (outerH + 8) or 0)
+                else
+                    y = y - entry.outer:GetHeight() - 8
+                end
             end
         end
         if self.y ~= y then
@@ -682,6 +898,14 @@ function W.PageBuilder(ctx, opts)
         local stateKey = tostring(ctx.key or "page") .. ":" .. sectionId
         local saved = M.accordionState[stateKey]
         local open = (saved == nil) and (defaultOpen and true or false) or (saved and true or false)
+        local focusMode = self.focusSectionMode == true
+        local focusRouteActivated = false
+        if focusMode then
+            -- Focus pages ignore per-section accordion state: exactly one
+            -- section is open, resolved from route marks or the persisted
+            -- per-page selection.
+            open, focusRouteActivated = FocusUI.ResolveBuildOpen(self, stateKey, sectionId)
+        end
         local headerH = 28
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
         -- The wrapper must stay visually empty. A full card surface here sits
@@ -691,10 +915,15 @@ function W.PageBuilder(ctx, opts)
         SetSearchTitle(outer, title)
         RegisterSearchObject(outer, title, "section")
         outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
-        outer:SetSize(self.width, headerH + (open and (height or 120) or 0))
+        -- Focus mode hides the header row entirely; the body starts at the top
+        -- of the wrapper and closed sections collapse to nothing.
+        local visualHeaderH = focusMode and 0 or headerH
+        outer:SetSize(self.width, focusMode and (open and (height or 120) or 1)
+            or (headerH + (open and (height or 120) or 0)))
         local bodySurface = T.Panel(outer, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
         T.ApplySurface(bodySurface, "card")
-        bodySurface:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -(headerH + ACCORDION_OPEN_CORNER_SIZE))
+        bodySurface:SetPoint("TOPLEFT", outer, "TOPLEFT", 0,
+            focusMode and 0 or -(headerH + ACCORDION_OPEN_CORNER_SIZE))
         -- Match the header's scrollbar clearance. Extending the open surface to
         -- the full wrapper width puts its right border underneath the viewport
         -- edge, where it is visibly clipped while scrolling.
@@ -732,7 +961,7 @@ function W.PageBuilder(ctx, opts)
         local contentW = math.min(self.width, M.formContentMaxWidth or 980)
         local body = CreateFrame("Frame", nil, outer)
         SetSearchTitle(body, title)
-        body:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -headerH)
+        body:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -visualHeaderH)
         body:SetSize(contentW, height or 120)
         body._msuf2CursorY = -40
         body._msuf2ContentX = 16
@@ -759,7 +988,9 @@ function W.PageBuilder(ctx, opts)
             openHighlightEnabled = openHighlightEnabled,
             guidedOrder = NextGuidedTourOrder(ctx),
             ancestorEntry = self.ancestorEntry,
+            focusMode = focusMode,
         }
+        entry._msuf2SearchRouteActivated = focusRouteActivated
         RefreshCollapseHintSuppression(entry)
         local function RefreshHeaderLayout()
             local headerW = (header.GetWidth and header:GetWidth()) or self.width or 240
@@ -880,6 +1111,12 @@ function W.PageBuilder(ctx, opts)
         entry._msuf2RefreshHeaderTone = RefreshHeaderTone
         entry.kind = "collapsible"
         header:SetScript("OnClick", function()
+            if entry.focusMode then
+                -- Focus pages: header clicks (search deep links, guided tour)
+                -- switch the exclusive active section instead of toggling.
+                self:SetFocusSection(sectionId, { noScroll = true })
+                return
+            end
             if entry._msuf2MotionActive then return end
             local nextOpen = not entry.open
             M.accordionState[stateKey] = nextOpen
@@ -954,6 +1191,13 @@ function W.PageBuilder(ctx, opts)
             local function SetSectionOpenImmediate(value)
                 local wanted = value == true or value == 1
                     or type(value) == "string" and (value:lower() == "true" or value:lower() == "on" or value == "1")
+                if entry.focusMode then
+                    -- Focus pages keep exactly one section open. "Expand" makes
+                    -- this section the active one; "collapse" has no meaning
+                    -- for the active section and stays a safe no-op.
+                    if wanted then return self:SetFocusSection(sectionId, { noScroll = true }) end
+                    return entry.open ~= true
+                end
                 if entry.open == wanted and not entry._msuf2MotionActive then return true end
                 entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
                 entry._msuf2MotionActive = nil
@@ -988,11 +1232,24 @@ function W.PageBuilder(ctx, opts)
                 },
             })
         end
-        self.y = self.y - outer:GetHeight() - 8
+        if focusMode then
+            -- The chip bar is the visible face of focus sections. The header
+            -- stays functional for Click()-driven activation but never renders.
+            header:Hide()
+            entry._msuf2EnsureVisible = function()
+                self:SetFocusSection(sectionId, { noScroll = true })
+            end
+            FocusUI.AddChip(self, entry, title)
+            outer:SetShown(open)
+            self.y = self.y - (open and (outer:GetHeight() + 8) or 0)
+        else
+            self.y = self.y - outer:GetHeight() - 8
+        end
         RefreshHeaderLayout()
         RefreshHeaderTone(false)
         self.layoutEntries[#self.layoutEntries + 1] = entry
         self:RequestRelayoutCollapsibles()
+        if focusMode then FocusUI.RefreshChips(self) end
         local focusReq = MenuFocusRequestMatches(ctx.key, sectionId)
         if focusReq then
             ExportPublic("MSUF_EM2_MenuFocusSection", body)
@@ -1061,7 +1318,8 @@ function W.PageBuilder(ctx, opts)
             entry.contentHeight = height
             if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
             if entry.outer and entry.outer.SetHeight then
-                entry.outer:SetHeight(entry.headerHeight + (entry.open and height or 0))
+                local finishHeaderH = entry.focusMode and 0 or entry.headerHeight
+                entry.outer:SetHeight(finishHeaderH + (entry.open and height or 0))
             end
             local owner = entry.builder or self
             if owner.RequestRelayoutCollapsibles then
@@ -1561,7 +1819,7 @@ local LAYER_SHORTCUT_DOTS = {
     { 1, 1, 1 },
 }
 
-local function AddThreeDotShortcutTextures(shortcut, colors)
+local function AddThreeDotShortcutTextures(shortcut, colors, shape)
     if not (shortcut and shortcut.CreateTexture and type(colors) == "table") then return end
     if shortcut._msuf2Label and shortcut._msuf2Label.Hide then
         shortcut._msuf2Label:Hide()
@@ -1576,8 +1834,16 @@ local function AddThreeDotShortcutTextures(shortcut, colors)
         local color = colors[i] or LAYER_SHORTCUT_DOTS[i]
         local dot = shortcut:CreateTexture(nil, "ARTWORK", nil, 4)
         dot:SetTexture(THREE_DOT_SHORTCUT_TEXTURE)
-        dot:SetSize(5, 5)
-        dot:SetPoint("CENTER", shortcut, "CENTER", (i - 2) * 7, 0)
+        if shape == "bars" then
+            -- Three stacked bars: the "layers" glyph. Shape (not color) is what
+            -- separates this shortcut from the colored dots, so the difference
+            -- survives color blindness.
+            dot:SetSize(12, 2.5)
+            dot:SetPoint("CENTER", shortcut, "CENTER", 0, (2 - i) * 4)
+        else
+            dot:SetSize(5, 5)
+            dot:SetPoint("CENTER", shortcut, "CENTER", (i - 2) * 7, 0)
+        end
         dot:SetVertexColor(color[1], color[2], color[3], 1)
         dots[i] = dot
     end
@@ -1726,10 +1992,12 @@ function W.AttachContextColorShortcut(card, opts)
     shortcut:ClearAllPoints()
     shortcut:SetPoint("TOPRIGHT", card, "TOPRIGHT", tonumber(opts.offsetX) or -12, tonumber(opts.offsetY) or -10)
     shortcut:SetFrameLevel((card.GetFrameLevel and card:GetFrameLevel() or 1) + 3)
-    shortcut:SetAlpha(0.58)
+    -- Resting alpha keeps the shortcut readable as a button; the old 0.58 made
+    -- the entry point effectively invisible until an accidental hover.
+    shortcut:SetAlpha(0.85)
     AddThreeDotShortcutTextures(shortcut, COLOR_SHORTCUT_DOTS)
-    shortcut:HookScript("OnEnter", function(self) self:SetAlpha(0.96) end)
-    shortcut:HookScript("OnLeave", function(self) self:SetAlpha(0.58) end)
+    shortcut:HookScript("OnEnter", function(self) self:SetAlpha(1) end)
+    shortcut:HookScript("OnLeave", function(self) self:SetAlpha(0.85) end)
     function shortcut:_msuf2RefreshContextColorVisibility()
         local options = self._msuf2ContextColorOptions or {}
         local relevant = ResolveContextColorOption(options.isRelevant, true) ~= false
@@ -2823,7 +3091,9 @@ function W.SetControlShown(control, shown)
 end
 local function SetEnabledState(frame, enabled)
     if not frame then return end
-    local mouseEnabled = enabled and not frame._msuf2UseProxyMouse
+    -- Controls with a disabled-reason keep their mouse: the reason tooltip is
+    -- the only way the user learns which toggle unlocks them.
+    local mouseEnabled = (enabled or frame._msuf2DisabledReason ~= nil) and not frame._msuf2UseProxyMouse
     if frame._msuf2EnabledStateApplied == enabled
         and frame._msuf2MouseEnabledStateApplied == mouseEnabled
         and (not frame.IsEnabled or ((frame:IsEnabled() and true or false) == enabled))
@@ -2865,6 +3135,43 @@ local function HasDisableGate(control)
         if disabled then return true end
     end
     return false
+end
+--- Stores a human explanation for why a control is gate-disabled and shows it
+--- as a tooltip while the control stays disabled. While enabled, the hooks
+--- no-op, so the control's normal tooltip (if any) is untouched.
+function W.SetControlDisabledReason(control, reason)
+    if not control then return end
+    reason = tostring(reason or "")
+    if reason == "" then
+        control._msuf2DisabledReason = nil
+        return
+    end
+    control._msuf2DisabledReason = reason
+    if control._msuf2DisabledReasonWired then return end
+    control._msuf2DisabledReasonWired = true
+    -- Disabled Buttons swallow motion scripts unless asked not to.
+    if control.SetMotionScriptsWhileDisabled then control:SetMotionScriptsWhileDisabled(true) end
+    local function ShowReason(owner)
+        if not HasDisableGate(control) then return end
+        local text = control._msuf2DisabledReason
+        if not text or not _G.GameTooltip then return end
+        local title = control._msuf2Title or control._msuf2Label
+        local titleText = title and title.GetText and title:GetText()
+        _G.GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+        _G.GameTooltip:SetText((titleText and titleText ~= "") and titleText or Tr("Why is this disabled?"), 1, 1, 1)
+        _G.GameTooltip:AddLine(Tr(reason), 1.0, 0.82, 0.35, true)
+        _G.GameTooltip:Show()
+    end
+    local function HideReason()
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+    end
+    local function Wire(target)
+        if not (target and target.HookScript) then return end
+        target:HookScript("OnEnter", function() ShowReason(target) end)
+        target:HookScript("OnLeave", HideReason)
+    end
+    Wire(control)
+    if control._msuf2LabelHit and control._msuf2LabelHit ~= control then Wire(control._msuf2LabelHit) end
 end
 local function ApplyEnabledVisuals(control, enabled)
     SetEnabledState(control, enabled)
@@ -3264,6 +3571,9 @@ end
 -- accordion without moving the preview into scrolling content.
 local FIXED_PREVIEW_MAX_HEIGHT = 180
 W.FIXED_PREVIEW_MAX_HEIGHT = FIXED_PREVIEW_MAX_HEIGHT
+-- Bounds for the user-dragged (splitter) height of resizable fixed previews.
+W.FIXED_PREVIEW_USER_MIN = 160
+W.FIXED_PREVIEW_USER_MAX = 640
 
 -- Full/Max is the presentation default for a fresh session and after resets.
 -- This remains deliberately profile-independent: only an explicit Compact
@@ -3351,10 +3661,24 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
     local compactHeight = max(1, tonumber(opts.compactHeight)
         or tonumber(previewBox.GetHeight and previewBox:GetHeight()) or 132)
     local compactTop = tonumber(opts.compactTop) or -40
-    local expandedHeight = max(1, tonumber(opts.expandedHeight) or 358)
+    local baseExpandedHeight = max(1, tonumber(opts.expandedHeight) or 358)
     local expandedTop = tonumber(opts.expandedTop) or compactTop
-    local expandedSectionHeight = max(compactSectionHeight,
-        tonumber(opts.expandedSectionHeight) or (math.abs(expandedTop) + expandedHeight + 8))
+    local resizable = opts.resizable == true
+    --- Resizable previews (unit/group pages) honor the user-dragged height;
+    --- everything else keeps its fixed opts geometry.
+    local function CurrentExpandedHeight()
+        if resizable then
+            local user = type(M.GetFixedPreviewUserHeight) == "function" and M.GetFixedPreviewUserHeight() or nil
+            if user then return max(W.FIXED_PREVIEW_USER_MIN or 160, min(W.FIXED_PREVIEW_USER_MAX or 640, user)) end
+        end
+        return baseExpandedHeight
+    end
+    local function CurrentExpandedSectionHeight()
+        local override = tonumber(opts.expandedSectionHeight)
+        if override and not resizable then return max(compactSectionHeight, override) end
+        return max(compactSectionHeight, math.abs(expandedTop) + CurrentExpandedHeight() + 8)
+    end
+    local expandedSectionHeight = CurrentExpandedSectionHeight()
     local pageKey = opts.pageKey
     local pageWrapper = opts.wrapper
     local button = T.Button(toolbar, Tr("Expand"), tonumber(opts.buttonWidth) or 88, 20)
@@ -3378,7 +3702,7 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
         fixedHeaderRecord = fixedHeaderRecord,
         compactHeight = compactHeight,
         compactSectionHeight = compactSectionHeight,
-        preferredExpandedHeight = expandedHeight,
+        preferredExpandedHeight = CurrentExpandedHeight(),
         preferredExpandedSectionHeight = expandedSectionHeight,
     }
     local function OwnsPreviewBox()
@@ -3454,7 +3778,7 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
         end
         local chromeHeight = max(0, tonumber(fixedHeaderRecord.headerTopInset) or 0)
             + max(0, tonumber(fixedHeaderRecord.stickyGap) or 0)
-        local requiredHeight = otherHeight + chromeHeight + expandedSectionHeight
+        local requiredHeight = otherHeight + chromeHeight + CurrentExpandedSectionHeight()
         local availableSpan
         if type(M.GetPageHeaderAvailableHeight) == "function" then
             availableSpan = tonumber(M.GetPageHeaderAvailableHeight())
@@ -3476,7 +3800,9 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
     end
     function record:Relayout(reason)
         if self.disposed or not self.expanded or not OwnsPreviewBox() then return false end
-        local activeBoxHeight, activeSectionHeight = expandedHeight, expandedSectionHeight
+        local activeBoxHeight, activeSectionHeight = CurrentExpandedHeight(), CurrentExpandedSectionHeight()
+        self.preferredExpandedHeight = activeBoxHeight
+        self.preferredExpandedSectionHeight = activeSectionHeight
         previewBox._msuf2PinnedFloating = true
         previewBox:ClearAllPoints()
         previewBox:SetPoint("TOPLEFT", section, "TOPLEFT", horizontalInset, expandedTop)
@@ -3588,6 +3914,96 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
         end
     end
 
+    if resizable then
+        --- Splitter grip on the preview's bottom edge: dragging resizes the
+        --- expanded preview live, releasing persists the height, double-click
+        --- restores the built-in default. Dragging a compact preview expands
+        --- it first, so the grip is always an entry point into resizing.
+        local sizeGrip = CreateFrame("Button", nil, section)
+        sizeGrip:SetPoint("BOTTOMLEFT", section, "BOTTOMLEFT", 12, -2)
+        sizeGrip:SetPoint("BOTTOMRIGHT", section, "BOTTOMRIGHT", -12, -2)
+        sizeGrip:SetHeight(10)
+        if sizeGrip.SetFrameLevel and section.GetFrameLevel then
+            sizeGrip:SetFrameLevel((section:GetFrameLevel() or 1) + 6)
+        end
+        local gripBar = sizeGrip:CreateTexture(nil, "OVERLAY")
+        gripBar:SetTexture(WHITE8)
+        gripBar:SetSize(56, 4)
+        gripBar:SetPoint("CENTER", sizeGrip, "CENTER", 0, 0)
+        local gripIdle = ThemeColor("borderSoft", { 1, 1, 1, 1 })
+        local gripHot = ThemeColor("accent", { 0.36, 0.58, 0.98, 1 })
+        gripBar:SetVertexColor(gripIdle[1], gripIdle[2], gripIdle[3], 0.55)
+        local dragActive = false
+        local dragStartY, dragStartHeight = 0, 0
+        local function DragMaxHeight()
+            local userMax = W.FIXED_PREVIEW_USER_MAX or 640
+            local availableSpan
+            if type(M.GetPageHeaderAvailableHeight) == "function" then
+                availableSpan = tonumber(M.GetPageHeaderAvailableHeight())
+            end
+            if not availableSpan then return userMax end
+            local list = M.scrollFrame and M.scrollFrame._msuf2StickyPageHeaders
+            local otherHeight = 0
+            if type(list) == "table" then
+                for i = 1, #list do
+                    local candidate = list[i]
+                    if candidate and candidate ~= fixedHeaderRecord and candidate.active and not candidate.disposed then
+                        otherHeight = otherHeight + max(0, tonumber(candidate.hostHeight) or 0)
+                    end
+                end
+            end
+            -- Keep a usable settings viewport (~280px) below the header stack.
+            local budget = availableSpan - otherHeight - 280 - math.abs(expandedTop) - 8
+            return max(W.FIXED_PREVIEW_USER_MIN or 160, min(userMax, budget))
+        end
+        sizeGrip:SetScript("OnMouseDown", function(self)
+            if record.disposed then return end
+            if not record.expanded then record:Open("FIXED_PREVIEW_SPLITTER") end
+            if not record.expanded then return end
+            dragActive = true
+            local _, cursorY = _G.GetCursorPosition()
+            dragStartY = tonumber(cursorY) or 0
+            dragStartHeight = CurrentExpandedHeight()
+            gripBar:SetVertexColor(gripHot[1], gripHot[2], gripHot[3], 0.9)
+            self:SetScript("OnUpdate", function()
+                if not dragActive then return end
+                local _, nowY = _G.GetCursorPosition()
+                nowY = tonumber(nowY) or dragStartY
+                local scale = (section.GetEffectiveScale and section:GetEffectiveScale()) or 1
+                if scale <= 0 then scale = 1 end
+                local newHeight = floor(dragStartHeight + (dragStartY - nowY) / scale + 0.5)
+                newHeight = max(W.FIXED_PREVIEW_USER_MIN or 160, min(DragMaxHeight(), newHeight))
+                if newHeight ~= CurrentExpandedHeight() then
+                    M.fixedPreviewUserHeight = newHeight
+                    record:Relayout("FIXED_PREVIEW_SPLITTER")
+                end
+            end)
+        end)
+        sizeGrip:SetScript("OnMouseUp", function(self)
+            if not dragActive then return end
+            dragActive = false
+            self:SetScript("OnUpdate", nil)
+            gripBar:SetVertexColor(gripIdle[1], gripIdle[2], gripIdle[3], 0.55)
+            if type(M.SetFixedPreviewUserHeight) == "function" then
+                M.SetFixedPreviewUserHeight(CurrentExpandedHeight())
+            end
+        end)
+        sizeGrip:SetScript("OnDoubleClick", function()
+            if type(M.SetFixedPreviewUserHeight) == "function" then M.SetFixedPreviewUserHeight(0) end
+            if record.expanded then record:Relayout("FIXED_PREVIEW_SPLITTER_RESET") end
+        end)
+        sizeGrip:SetScript("OnEnter", function()
+            if not dragActive then gripBar:SetVertexColor(gripHot[1], gripHot[2], gripHot[3], 0.7) end
+        end)
+        sizeGrip:SetScript("OnLeave", function()
+            if not dragActive then gripBar:SetVertexColor(gripIdle[1], gripIdle[2], gripIdle[3], 0.55) end
+        end)
+        if M.AddTooltip then
+            M.AddTooltip(sizeGrip, "Preview height",
+                "Drag to resize the preview. Double-click resets the default height.", { hook = true })
+        end
+        record.sizeGrip = sizeGrip
+    end
     button:SetScript("OnClick", function() record:Toggle() end)
     button._msuf2CommandAction = {
         kind = "toggle",
@@ -3892,16 +4308,18 @@ local function AttachLayerOverviewButton(section, slider, title, label, minValue
     if not (section and slider and title and IsNumericLayerControl(label, minValue, maxValue)) then return nil end
     local shortcut = T.Button(section, LAYER_OVERVIEW_SHORTCUT_TEXT, 34, 20, { noSearch = true })
     shortcut:SetPoint("TOPRIGHT", title, "TOPRIGHT", 0, 2)
-    shortcut:SetAlpha(0.58)
+    shortcut:SetAlpha(0.85)
     shortcut._msuf2SkipHistoryCheckpoint = true
     shortcut._msuf2LayerOverviewButton = true
-    AddThreeDotShortcutTextures(shortcut, LAYER_SHORTCUT_DOTS)
+    -- Stacked bars, not dots: shape separates this from the color shortcut so
+    -- the two "..." affordances stay distinguishable for colorblind users.
+    AddThreeDotShortcutTextures(shortcut, LAYER_SHORTCUT_DOTS, "bars")
     if shortcut.SetFrameLevel and slider.GetFrameLevel then shortcut:SetFrameLevel(slider:GetFrameLevel() + 4) end
     if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(shortcut, slider)
     else shortcut._msuf2ControlPartOf = slider end
     if shortcut.HookScript then
-        shortcut:HookScript("OnEnter", function(self) self:SetAlpha(0.96) end)
-        shortcut:HookScript("OnLeave", function(self) self:SetAlpha(0.58) end)
+        shortcut:HookScript("OnEnter", function(self) self:SetAlpha(1) end)
+        shortcut:HookScript("OnLeave", function(self) self:SetAlpha(0.85) end)
     end
     shortcut:SetScript("OnClick", function(self)
         local show = M.ShowLayerOverview or _G.MSUF_ShowLayerOverview
@@ -3959,6 +4377,11 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     if slider.SetStepsPerPage then slider:SetStepsPerPage(0) end
     slider._msuf2CursorDrag = true
     slider._msuf2Step = step or 1
+    -- Fractional 0..1 sliders are opacity/strength-style values: display them
+    -- as percent instead of raw fractions ("75%" rather than "0.75"). An
+    -- explicit SetValueFormatter always overrides this default.
+    slider._msuf2PercentDisplay = ((minVal or 0) >= 0 and (maxVal or 1) <= 1
+        and (step or 1) < 1) or nil
     slider._msuf2RequestedWidth = width
     slider._msuf2MinRowWidth = compactMinTrackW
     HideSliderTemplateParts(slider)
@@ -4037,6 +4460,9 @@ function W.Slider(section, label, minVal, maxVal, step, width)
             local text = slider._msuf2ValueFormatter(value, slider)
             if text ~= nil then return tostring(text) end
         end
+        if slider._msuf2PercentDisplay then
+            return tostring(floor((tonumber(value) or 0) * 100 + 0.5)) .. "%"
+        end
         local st = step or 1
         if st < 1 then return string.format("%.2f", value) end
         return tostring(floor(value + 0.5))
@@ -4071,6 +4497,15 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local v
         if type(slider._msuf2ValueParser) == "function" then
             v = tonumber(slider._msuf2ValueParser(text, slider))
+        end
+        if v == nil and slider._msuf2PercentDisplay then
+            -- Percent sliders accept both notations: "75" (and "75%") mean
+            -- 0.75, while "0.75" stays a fraction.
+            local raw = tonumber((tostring(text or ""):gsub("%%", "")))
+            if raw ~= nil then
+                if raw > 1 then raw = raw / 100 end
+                v = raw
+            end
         end
         if v == nil then v = tonumber(text) end
         if v ~= nil then slider:SetValue(v) end

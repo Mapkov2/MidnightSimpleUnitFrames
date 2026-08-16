@@ -773,6 +773,8 @@ local function BuildGFLayout(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
+    -- Group pages run in focus-section mode: chip bar + one visible section.
+    if b.EnableFocusSectionMode then b:EnableFocusSectionMode() end
     local buildLazy = M.UnitPage and M.UnitPage.BuildSectionLazy
     for i = 1, #GROUP_LAYOUT_SECTION_SPECS do
         local spec = GROUP_LAYOUT_SECTION_SPECS[i]

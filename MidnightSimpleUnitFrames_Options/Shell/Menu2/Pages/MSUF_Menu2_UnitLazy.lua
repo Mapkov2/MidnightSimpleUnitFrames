@@ -146,6 +146,12 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
         searchRouteOpen = true
         pendingSearchSections[shellEntry.stateKey] = nil
     end
+    -- Focus-mode pages consume the route mark inside CollapsibleSection (it
+    -- decides the active section there); the entry flag carries the immediate
+    -- build request through to this layer.
+    if shellEntry and shellEntry._msuf2SearchRouteActivated == true then
+        searchRouteOpen = true
+    end
     local shellRefresh
     local built = false
     local building = false

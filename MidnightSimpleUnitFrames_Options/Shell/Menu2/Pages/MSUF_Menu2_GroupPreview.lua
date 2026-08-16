@@ -247,6 +247,7 @@ local function AddGFPreview(ctx, builder)
             compactHeight = GF_PREVIEW_BOX_HEIGHT,
             compactTop = GF_PREVIEW_BOX_Y,
             expandedHeight = GF_PREVIEW_EXPANDED_HEIGHT,
+            resizable = true,
             refreshPreview = function(target, reason)
                 RequestPreviewRefresh(target, reason or "GROUP_PREVIEW_SIZE")
             end,

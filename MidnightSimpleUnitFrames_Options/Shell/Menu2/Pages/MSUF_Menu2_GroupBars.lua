@@ -1108,6 +1108,8 @@ local function BuildGFBars(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
+    -- Group pages run in focus-section mode: chip bar + one visible section.
+    if b.EnableFocusSectionMode then b:EnableFocusSectionMode() end
     BuildDispelOverlaySection(ctx, b)
     BuildGFDispelSymbolSection(ctx, b)
     BuildGFDebuffStripeSection(ctx, b)

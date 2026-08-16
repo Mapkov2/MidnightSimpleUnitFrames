@@ -253,6 +253,7 @@ local function ForEachPageControl(parent, callback)
         ForEachPageControl(child, callback)
     end
 end
+local UNIT_FRAME_GATE_REASON = "This UnitFrame is disabled. Turn on its Enable toggle in Frame Basics first."
 local function ApplyUnitFrameEnabledGate(ctx, unit)
     local wrapper = ctx and ctx.wrapper
     if not wrapper then return end
@@ -262,6 +263,7 @@ local function ApplyUnitFrameEnabledGate(ctx, unit)
         ControlGates.Apply(wrapper, gateKey, enabled, {
             alwaysEnabledFlag = "_msuf2UnitFrameGateAlwaysEnabled",
             exclusivePrefix = "unitFrameEnabled:",
+            reason = UNIT_FRAME_GATE_REASON,
         })
         return
     end
@@ -269,6 +271,9 @@ local function ApplyUnitFrameEnabledGate(ctx, unit)
     wrapper._msuf2UnitFrameGateKey = gateKey
     wrapper._msuf2UnitFrameGateEnabled = enabled
     ForEachPageControl(wrapper, function(control)
+        if not enabled and W.SetControlDisabledReason then
+            W.SetControlDisabledReason(control, UNIT_FRAME_GATE_REASON)
+        end
         W.SetControlGateEnabled(control, gateKey, enabled)
     end)
 end
@@ -458,6 +463,7 @@ local function BuildPreview(ctx, builder, unit)
             compactHeight = UNIT_PREVIEW_BOX_HEIGHT,
             compactTop = UNIT_PREVIEW_TOP_OFFSET,
             expandedHeight = UNIT_PREVIEW_EXPANDED_HEIGHT,
+            resizable = true,
             refreshPreview = function(target, reason)
                 RefreshPreviewBox(target, reason or "MSUF2_UNIT_PREVIEW_SIZE")
             end,
@@ -592,6 +598,22 @@ local function BuildTopActions(ctx, builder, unit, label)
     -- in onRun below, where a blocked click can produce visible feedback.
     copy._msuf2AllowCombatClick = true
     copy._msuf2SkipHistoryCheckpoint = true
+    -- Direct path into frame placement: positioning lives in MSUF Edit Mode,
+    -- and this page is exactly where users look for a "move this frame"
+    -- control. The status-bar toggle stays; this is the discoverable entry.
+    local editMode = (W.RoleButton and W.RoleButton(sec, M.Tr("Edit Mode"), "normal", 96, 24))
+        or W.TopButton(sec, M.Tr("Edit Mode"), 96, 24, nil, false)
+    editMode:SetPoint("TOPRIGHT", copy, "TOPLEFT", -8, 0)
+    editMode._msuf2SkipHistoryCheckpoint = true
+    editMode:SetScript("OnClick", function()
+        if M.BlockCombatAction and M.BlockCombatAction() then return end
+        M.CallIf(M.SetMSUFEditModeActive, true, unit)
+    end)
+    RegisterControl(editMode, ctx, "edit_mode.open", "Edit Mode", "button", "ephemeral")
+    if M.AddTooltip then
+        M.AddTooltip(editMode, "Edit Mode",
+            "Move and place MSUF frames on screen. Opens MSUF Edit Mode for this frame.", { hook = true })
+    end
     local function DefaultScopes()
         if type(NewCopyScopeDefaults) == "function" then return NewCopyScopeDefaults() end
         local t = {}
@@ -1670,6 +1692,9 @@ local function BuildUnitPage(info)
         local builder = W.PageBuilder(ctx)
         BuildTopActions(ctx, builder, info.unit, info.label)
         BuildPreview(ctx, builder, info.unit)
+        -- Unit pages run in focus-section mode: one section visible at a time,
+        -- selected through the chip bar that replaces the accordion headers.
+        if builder.EnableFocusSectionMode then builder:EnableFocusSectionMode() end
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, function(lazyCtx, lazyBuilder, lazyUnit)
             return BuildBasics(lazyCtx, lazyBuilder, lazyUnit, info.label)
         end, {

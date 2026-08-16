@@ -288,6 +288,8 @@ local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
+    -- Group pages run in focus-section mode: chip bar + one visible section.
+    if b.EnableFocusSectionMode then b:EnableFocusSectionMode() end
     local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
     local function CombatLocked()
         if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end

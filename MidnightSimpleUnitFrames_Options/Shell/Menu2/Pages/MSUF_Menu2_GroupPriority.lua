@@ -327,6 +327,8 @@ end
 local function BuildPriorityPage(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b, { priorityMode = true })
+    -- Group pages run in focus-section mode: chip bar + one visible section.
+    if b.EnableFocusSectionMode then b:EnableFocusSectionMode() end
 
     -- Snapshot first in the page refresher list. Overview and the pooled pin
     -- rows then consume the same roster resolution instead of each scanning

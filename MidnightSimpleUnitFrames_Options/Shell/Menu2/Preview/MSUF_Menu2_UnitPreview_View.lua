@@ -903,6 +903,24 @@ local function StorePreviewTextSelection(menu, unitKey, kind, slot)
         menu.unitTextSlotSelection[unitKey][kind] = slot
     end
 end
+--- Maps a preview element to the unit-page focus section that owns its
+--- settings, so clicking an element in the preview opens the right section.
+--- Unknown keys return nil and change nothing. Lives on the Preview table:
+--- this file sits at the 200-local ceiling.
+function Preview.FocusSectionForHandle(handle)
+    local key = tostring(handle and handle._key or ""):lower()
+    if key == "" then return nil end
+    local fields = handle._fields or {}
+    if fields.statusRefresh then return "status_icons" end
+    if PreviewTextKindSlotForKey(handle._key) then return "text" end
+    if key:find("cast", 1, true) then return "castbar" end
+    if key:find("portrait", 1, true) then return "portrait" end
+    if key:find("tex", 1, true) then return "texture_layer" end
+    if key:find("power", 1, true) then return "power_bar" end
+    if key:find("buff", 1, true) or key:find("aura", 1, true) then return "auras" end
+    if key:find("dispel", 1, true) then return "unit_dispel_overlay" end
+    return nil
+end
 SelectPreviewHandle = function(handle, skipSectionOpen)
     local box = handle and handle._preview or Preview.active
     if not box then return end
@@ -929,6 +947,14 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
             if type(focus) == "function" then
                 local kind, slot = PreviewTextKindSlotForKey(handle._key)
                 if kind then focus(box.key or "player", kind, slot, { source = "unit-preview", clearHover = true }) end
+            end
+        end
+        if not skipSectionOpen then
+            -- Clicking a preview element also opens the section that owns its
+            -- settings; the preview becomes the page's primary navigation.
+            local sectionId = Preview.FocusSectionForHandle(handle)
+            if sectionId and menu and type(menu.SetPageFocusSection) == "function" then
+                menu.SetPageFocusSection("uf_" .. tostring(box.key or "player"), sectionId, { noScroll = true })
             end
         end
         FocusPreviewKeyboardTarget(box, handle, true)

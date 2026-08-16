@@ -2328,6 +2328,8 @@ local function BuildGFIndicators(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
+    -- Group pages run in focus-section mode: chip bar + one visible section.
+    if b.EnableFocusSectionMode then b:EnableFocusSectionMode() end
     local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
     BuildIndicatorsSection(ctx, b)
     BuildStatusIconsSection(ctx, b, RefreshPage)
