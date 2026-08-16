@@ -24,6 +24,7 @@ local BACKEND_KEYS = {
     target = "castbarTargetBackend",
     focus = "castbarFocusBackend",
     boss = "bossCastbarBackend",
+    arena = "arenaCastbarBackend",
 }
 
 local LEGACY_ENABLE_KEYS = {
@@ -31,6 +32,7 @@ local LEGACY_ENABLE_KEYS = {
     target = "enableTargetCastbar",
     focus = "enableFocusCastbar",
     boss = "enableBossCastbar",
+    arena = "enableArenaCastbar",
 }
 
 local BLIZZARD_SUPPORTED_UNITS = {
@@ -47,6 +49,10 @@ local function NormalizeUnit(unit)
     unit = unit:lower()
     if unit:match("^boss%d*$") or unit == "bosscastbar" or unit == "msuf_bosscastbar" then
         return "boss"
+    end
+
+    if unit:match("^arena%d*$") or unit == "arenacastbar" or unit == "msuf_arenacastbar" then
+        return "arena"
     end
 
     if unit == "playercastbar" or unit == "msuf_playercastbar" then
