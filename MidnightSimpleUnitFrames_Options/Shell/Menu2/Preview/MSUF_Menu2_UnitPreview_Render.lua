@@ -1759,32 +1759,20 @@ function Preview.Refresh(box, reason)
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
     local classPowerSegCount = PreviewClassPowerSegmentCount(classPowerPreviewSpec, 10)
     box._runtimeClassPowerW = classPowerOn and PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount) or 0
+    -- Augmentation no longer builds a composite surface: Ebon Might is rendered
+    -- by the ordinary Player Power bar and Essence stays an ordinary Class
+    -- Resource, so there is no second class row and no shared geometry. Only the
+    -- power bar's *content* changes, which the render pass reads from
+    -- _runtimePowerEbonMight below.
     box._runtimeClassPowerSecondarySpec = classPowerPreviewSpec and classPowerPreviewSpec.secondaryTimer
-    box._runtimeClassPowerSecondaryOn = classPowerOn
+    box._runtimeClassPowerSecondaryOn = false
+    box._runtimeClassPowerSecondaryH = 0
+    box._runtimeAugCompositePreview = false
+    box._runtimePowerEbonMight = key == "player"
+        and classPowerOn
         and type(box._runtimeClassPowerSecondarySpec) == "table"
         and bars.showEbonMight ~= false
-    box._runtimeClassPowerSecondaryH = box._runtimeClassPowerSecondaryOn
-        and PreviewSecondaryClassTimerHeight(runtimePower, conf) or 0
-    box._runtimeAugCompositePreview = box._runtimeClassPowerSecondaryOn == true
         and classPowerPreviewSpec and classPowerPreviewSpec.key == "evoker_augmentation_ebon" or false
-    if box._runtimeAugCompositePreview == true then
-        -- Runtime keeps the ordinary Player Power StatusBar as an invisible
-        -- geometry carrier even when the user disabled its Mana surface.  The
-        -- composite must therefore keep following detached/embed settings;
-        -- only the ordinary Power visuals and events disappear.
-        detachedPower = CanDetachPowerBarKey(key) and (
-            (runtimePower and runtimePower.detached == true)
-            or (runtimePower == nil and conf.powerBarDetached == true)
-        )
-        box._runtimePowerEmbedded = not detachedPower and (
-            (runtimePower and runtimePower.embed ~= false)
-            or (runtimePower == nil and conf.embedPowerBarIntoHealth == true)
-            or (runtimePower == nil and conf.embedPowerBarIntoHealth == nil and bars.embedPowerBarIntoHealth ~= false)
-        ) or false
-        box._runtimePowerAttached = not detachedPower and box._runtimePowerEmbedded ~= true
-        box._runtimeHealthPowerInset = box._runtimePowerEmbedded == true
-            and (cpH + 2 + box._runtimeClassPowerSecondaryH) or 0
-    end
     box._runtimeDetachedPowerSyncClass = key == "player" and ((runtimePower and runtimePower.detachedSyncClass == true) or (runtimePower == nil and conf.detachedPowerBarSyncClassPower ~= false)) or false
     box._runtimeDetachedPowerX = tonumber(runtimePower and runtimePower.detachedX) or tonumber(conf.detachedPowerBarOffsetX) or 0
     box._runtimeDetachedPowerY = tonumber(runtimePower and runtimePower.detachedY) or tonumber(conf.detachedPowerBarOffsetY) or -4
@@ -2928,7 +2916,9 @@ function Preview.Refresh(box, reason)
     local hpTextOn = conf.showHP ~= false
     if runtimeSpec then hpTextOn = runtimeSpec.showHealthText ~= false end
     local powerTextOn = PreviewPowerTextShown(runtimeSpec, conf)
-    if box._runtimeAugCompositePreview == true then powerTextOn = false end
+    -- Ebon Might's native duration binding owns the text on this bar, so the
+    -- ordinary power slots are dropped exactly as the config compiler does.
+    if box._runtimePowerEbonMight == true then powerTextOn = false end
     if detachedPowerManagedByClassPreview and box._runtimeDetachedPowerTextOnBar then powerTextOn = false end
     mock.nameText:SetShown(showNamePreview)
     local raidGroupCfg = runtimeStatus and runtimeStatus.raidGroup

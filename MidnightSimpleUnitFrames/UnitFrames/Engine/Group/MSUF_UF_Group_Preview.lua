@@ -67,6 +67,27 @@ local VALID_POINTS = {
   TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true,
 }
 
+--- The menu's LAYERS rail is the one place a user switches preview elements on
+--- and off, so the in-world dummies read the same switches as the docked
+--- preview instead of answering a different question about the same profile.
+--- Both nil means no menu has spoken yet: everything the settings enable draws.
+--- Solo (Shift-click) is exclusive here rather than the menu's 0.15 dimming --
+--- these are live frames whose region alpha belongs to the Alpha element.
+local previewLayerVisible, previewLayerSolo
+
+--- Guides and Bounds are drag-handle chrome that exists only inside the docked
+--- preview. Soloing one of those must not blank the in-world dummies, so a solo
+--- on a key the dummies do not own is dropped rather than applied.
+local PREVIEW_LAYER_KEYS = {
+  text = true, power = true, status = true, si = true, auraText = true,
+  buff = true, trackedBuff = true, debuff = true, external = true,
+}
+
+local function PreviewLayerOn(key)
+  if previewLayerSolo ~= nil then return previewLayerSolo == key end
+  return not (previewLayerVisible and previewLayerVisible[key] == false)
+end
+
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
@@ -530,7 +551,8 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     swipe:Show()
   end
 
-  if lane.showCooldownText == true then
+  local auraTextOn = PreviewLayerOn("auraText")
+  if lane.showCooldownText == true and auraTextOn then
     timer = EnsurePreviewFontString(visual, "_timer")
     SetPreviewFont(timer, lane.cooldownSize or 8)
     timer:SetText(sampleIndex == 1 and "12" or "8")
@@ -539,7 +561,7 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     timer:Show()
   end
 
-  if lane.showStacks == true then
+  if lane.showStacks == true and auraTextOn then
     stack = EnsurePreviewFontString(visual, "_stack")
     SetPreviewFont(stack, lane.stackSize or 10)
     stack:SetText("2")
@@ -643,7 +665,7 @@ function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiled
     local lane = lanes[descriptor.key]
     local maxCount = max(0, floor((tonumber(lane and lane.max) or 0) + 0.5))
     local host = EnsureFrameAuraLaneHost(frame, descriptor.key)
-    if lane and lane.enabled == true and maxCount > 0 then
+    if lane and lane.enabled == true and maxCount > 0 and PreviewLayerOn(descriptor.key) then
       local anchor = tostring(lane.anchor or "CENTER"):upper()
       if not VALID_POINTS[anchor] then anchor = "CENTER" end
       host:ClearAllPoints()
@@ -1014,7 +1036,7 @@ function GF.PreviewSpellIndicators(frame, kind, compiledSpec)
     and A3.ResolveAuraPreviewConfig(frame, frame and frame.MSUFUnitKey, compiledSpec) or nil
   local root = runtimeConfig and runtimeConfig.spellIndicators
   local slots = root and root.slots
-  if not (root and root.enabled == true and type(slots) == "table") then
+  if not (root and root.enabled == true and type(slots) == "table") or not PreviewLayerOn("si") then
     GF.HideSpellIndicators(frame)
     return false
   end
@@ -1069,6 +1091,17 @@ function GF.RefreshPreviewSpellIndicators(kind)
     end
   end
   return refreshed
+end
+
+--- A raid subgroup is always five roster slots, and the preserved-group layout
+--- blocks the preview by exactly that (SetPreservedPreviewPoint derives its
+--- block from floor((index - 1) / 5)). Deriving the label from the same term is
+--- what keeps the printed number on the block the geometry actually drew; the
+--- roster position inside the group is not the group. Clamp at the eight groups
+--- a raid can hold so an oversized preview count cannot print a fake "(9)".
+local function PreviewSubgroup(index)
+  local subgroup = floor((index - 1) / 5) + 1
+  return subgroup > 8 and 8 or subgroup
 end
 
 --- Format a fake subgroup label exactly like the live raid-group indicator, so
@@ -1147,6 +1180,18 @@ local function PercentFactory(pct)
   return function() return pct end
 end
 
+--- Name, health and power text are one layer chip. Blanking the strings rather
+--- than hiding them keeps the runtime's own show/hide state untouched, so the
+--- chip going back on restores exactly the slots the settings ask for.
+local PREVIEW_TEXT_REGIONS = {
+  "nameText", "hpTextLeft", "hpTextCenter", "hpTextRight",
+  "powerTextLeft", "powerTextCenter", "powerTextRight",
+}
+
+local function ClearPreviewTexts(frame)
+  for i = 1, #PREVIEW_TEXT_REGIONS do SetText(frame[PREVIEW_TEXT_REGIONS[i]], "") end
+end
+
 local function ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
   local text = MSUF and MSUF.UFText
   local rt = frame and frame._msufTextRuntime
@@ -1192,7 +1237,28 @@ local function ApplyLeaderIcon(frame, kind, assist)
   tex:Show()
 end
 
+--- Every region this seeds belongs to the Status layer, so one gate at the top
+--- is the whole chip: hiding them all is exactly what ClearPreviewData does.
+local function HidePreviewStatus(frame)
+  SetShown(frame.roleIcon, false)
+  SetShown(frame.leaderIcon, false)
+  SetShown(frame.assistIcon, false)
+  SetShown(frame.raidIcon, false)
+  SetShown(frame.readyCheckIcon, false)
+  SetShown(frame.resurrectIcon or frame.incomingResIndicatorIcon, false)
+  SetShown(frame.pvpIcon or frame.pvpIndicatorIcon, false)
+  SetShown(frame.phaseIcon, false)
+  SetShown(frame.raidGroupNameText, false)
+  SetShown(frame.combatStateIndicatorIcon, false)
+  SetShown(frame.statusIndicatorText, false)
+  SetShown(frame.statusAFKTimerText, false)
+end
+
 local function ApplyPreviewStatus(frame, kind, index, role)
+  if not PreviewLayerOn("status") then
+    HidePreviewStatus(frame)
+    return
+  end
   ApplyRoleIcon(frame, kind, role)
   if index == 1 then ApplyLeaderIcon(frame, kind, false) else SetShown(frame.leaderIcon, false) end
   if index == 2 then ApplyLeaderIcon(frame, kind, true) else SetShown(frame.assistIcon, false) end
@@ -1238,7 +1304,7 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   --- the setting was switched off.
   local raidGroupCfg = frame.MSUFSpec and frame.MSUFSpec.status and frame.MSUFSpec.status.raidGroup
   if frame.raidGroupNameText and raidGroupCfg and raidGroupCfg.enabled == true then
-    frame.raidGroupNameText:SetText(RaidGroupPreviewText(raidGroupCfg.style, ((index - 1) % 5) + 1))
+    frame.raidGroupNameText:SetText(RaidGroupPreviewText(raidGroupCfg.style, PreviewSubgroup(index)))
     frame.raidGroupNameText:Show()
   else
     SetShown(frame.raidGroupNameText, false)
@@ -1268,7 +1334,8 @@ local function ApplyPreviewData(frame, index, kind)
   frame._msufIsGroupFrame = true
   frame._msufGFKind = kind
 
-  if frame.nameText and frame.nameText:IsShown() then
+  local textLayerOn = PreviewLayerOn("text")
+  if frame.nameText and frame.nameText:IsShown() and textLayerOn then
     frame.nameText:SetText(ShortName(name or "Preview", frame))
     local r, g, b = PreviewNameColor(kind, class)
     local a = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
@@ -1293,13 +1360,23 @@ local function ApplyPreviewData(frame, index, kind)
     power = min(powerMax, max(0, floor((tonumber(animState.powerPct) or (power / powerMax)) * powerMax + 0.5)))
   end
   local powerBar = frame.targetPowerBar or frame.powerBar or frame.Power or frame.power
+  -- The layer only hides the drawn bar; the health geometry keeps following the
+  -- settings, so switching the chip never fakes a layout change on the dummies.
   if powerBar and (not powerBar.IsShown or powerBar:IsShown()) then
-    SetBar(powerBar, power, powerMax, true, 0.10, 0.45, 0.95, 1)
+    if PreviewLayerOn("power") then
+      SetBar(powerBar, power, powerMax, true, 0.10, 0.45, 0.95, 1)
+    elseif powerBar.Hide then
+      powerBar:Hide()
+    end
   end
 
-  ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
+  if textLayerOn then
+    ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
+  else
+    ClearPreviewTexts(frame)
+  end
   ApplyPreviewStatus(frame, kind, index, role)
-  if animState and frame.combatStateIndicatorIcon then
+  if animState and frame.combatStateIndicatorIcon and PreviewLayerOn("status") then
     if frame.combatStateIndicatorIcon.SetAlpha then frame.combatStateIndicatorIcon:SetAlpha(0.55 + ((animState.pulse or 0) * 0.45)) end
     frame.combatStateIndicatorIcon:Show()
   end
@@ -1307,6 +1384,49 @@ local function ApplyPreviewData(frame, index, kind)
   if GF.PreviewFrameAuras then GF.PreviewFrameAuras(frame, kind, index) end
   frame:Show()
   return true
+end
+
+--- Menu -> engine bridge for the LAYERS rail. The menu owns the switches; this
+--- only mirrors them onto the in-world dummies and re-seeds the frames already
+--- on screen. Callers push on every preview refresh, so the signature compare
+--- is what keeps that from re-seeding forty frames per mouse-over.
+function GF.SetPreviewLayerFilter(visible, solo)
+  if type(visible) ~= "table" then visible = nil end
+  if type(solo) ~= "string" or PREVIEW_LAYER_KEYS[solo] ~= true then solo = nil end
+  previewLayerVisible, previewLayerSolo = visible, solo
+  -- Combat bails before the signature walk, not after it. Previews are already
+  -- force-hidden for the fight, so there is nothing the comparison could decide
+  -- -- and recording a signature we never acted on would let the first
+  -- out-of-combat push match it and skip the re-seed the frames still need.
+  if InCombat() then
+    GF._previewLayerSignature = nil
+    return false
+  end
+  local signature = tostring(solo or "-")
+  if visible then
+    -- Only the off switches carry information; a key that is on is the default.
+    for key, value in pairs(visible) do
+      if value == false then signature = signature .. "\030" .. tostring(key) end
+    end
+  end
+  if GF._previewLayerSignature == signature then return false end
+  GF._previewLayerSignature = signature
+
+  local reseeded = false
+  for i = 1, #PREVIEW_KINDS do
+    local kind = PREVIEW_KINDS[i]
+    if GF._previewActive[kind] == true then
+      local frames = GF._previewFrames[kind]
+      for index = 1, #(frames or {}) do
+        local frame = frames[index]
+        if frame and frame._msufGFPreviewActive then
+          ApplyPreviewData(frame, index, kind)
+          reseeded = true
+        end
+      end
+    end
+  end
+  return reseeded
 end
 
 local function ClearPreviewData(frame)
