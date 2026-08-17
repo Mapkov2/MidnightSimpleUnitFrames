@@ -36,7 +36,7 @@ A3.TargetDotData = {
         { 164812, "Moonfire" }, { 164815, "Sunfire" },
         { 192090, "Thrash" }, { 202347, "Stellar Flare" },
         { 274838, "Feral Frenzy" }, { 325733, "Adaptive Swarm" },
-        { 429532, "Atmospheric Exposure" },
+        { 430589, "Atmospheric Exposure" },
         { 439531, "Bloodseeker Vines" }, { 1244079, "Frantic Frenzy" },
         { 1263250, "Astral Smolder" }, { 1270292, "Lunar Beam" },
     },
