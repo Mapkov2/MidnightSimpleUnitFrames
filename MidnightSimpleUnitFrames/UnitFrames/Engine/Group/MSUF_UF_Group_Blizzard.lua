@@ -412,8 +412,9 @@ end
 local function PartyScopeActive()
   local party = GF.GetConf and GF.GetConf("party") or nil
   if not (party and party.enabled == true) then return false end
-  if LiveGroupKind() == "party" then return true end
-  return party.showSolo == true and party.showPlayer ~= false
+  local kind = LiveGroupKind()
+  if kind == "party" then return true end
+  return kind == nil and party.showSolo == true and party.showPlayer ~= false
 end
 
 local function RaidScopeActive()

@@ -210,8 +210,11 @@ end
 local function WantParty()
   local conf = Conf("party")
   if not (conf and conf.enabled == true) then return false end
-  if LiveGroupKind() == "party" then return true end
-  return conf.showSolo == true
+  local kind = LiveGroupKind()
+  if kind == "party" then return true end
+  -- "Show while solo" means solo only: a live raid scope must never surface
+  -- the party header next to the raid frames.
+  return kind == nil and conf.showSolo == true
 end
 
 local function WantRaid()
