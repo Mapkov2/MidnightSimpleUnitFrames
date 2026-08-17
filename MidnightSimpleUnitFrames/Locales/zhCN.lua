@@ -5728,6 +5728,8 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "计时器和驱散颜色由实际单位、队伍光环及所有预览共享。图标边框和阴影颜色位于外观 > 光环中，并按光环类型设置。"
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "冷却计时器紧急度、全局驱散类型以及图标边框和阴影颜色。"
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "安全、警告、紧急、魔法、诅咒、疾病、中毒、流血、图标边框和图标阴影。"
+L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "位置未锁定时，进入/离开战斗文字会作为可拖动的手柄一直显示在屏幕上。可用鼠标拖动，或用方向键微调。锁定位置后，文字只在进入或离开战斗时出现。"
+L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "位置未锁定时，战斗计时器在脱战状态下也会以可移动的 0:00 占位显示。可用鼠标拖动，或用方向键微调；启用点击穿透后按住 ALT 拖动。锁定位置即可固定。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

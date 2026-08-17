@@ -5559,6 +5559,8 @@ L["%d tracked DoTs"] = "%d überwachte DoTs"
 L[" - clear Search to reorder"] = " - Suche leeren, um neu zu sortieren"
 L[" - dynamic priority active"] = " - dynamische Priorität aktiv"
 L[" - choose Custom Priority under Ordering to use this order"] = " - unter Sortierung Feste Priorität wählen, um diese Reihenfolge zu verwenden"
+L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "Solange die Position entsperrt ist, wird der Kampf-Betreten/Verlassen-Text dauerhaft als verschiebbarer Anfasser angezeigt. Ziehe ihn mit der Maus oder verschiebe ihn mit den Pfeiltasten. Sperre die Position, damit der Text nur beim Betreten oder Verlassen des Kampfes erscheint."
+L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "Solange die Position entsperrt ist, bleibt der Kampf-Timer außerhalb des Kampfes als verschiebbarer 0:00-Platzhalter sichtbar. Ziehe ihn mit der Maus oder verschiebe ihn mit den Pfeiltasten – bei aktiviertem Durchklicken halte ALT zum Ziehen. Sperre die Position, um sie einzufrieren."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

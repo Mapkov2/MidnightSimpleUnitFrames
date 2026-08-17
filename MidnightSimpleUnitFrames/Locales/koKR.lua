@@ -5088,6 +5088,8 @@ L["Optional global overrides for harmful Magic, Curse, Disease, Poison and Bleed
 L["Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type."] = "타이머와 해제 색상은 실제 유닛 및 그룹 오라와 모든 미리보기에 공통으로 적용됩니다. 아이콘 테두리와 그림자 색상은 외형 > 오라에서 오라 유형별로 설정합니다."
 L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "재사용 대기시간 긴급도, 전역 해제 유형, 아이콘 테두리 및 그림자 색상입니다."
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "안전, 경고, 긴급, 마법, 저주, 질병, 독, 출혈, 아이콘 테두리 및 아이콘 그림자."
+L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "위치가 잠금 해제되어 있는 동안에는 전투 시작/종료 텍스트가 이동 가능한 손잡이로 항상 표시됩니다. 마우스로 드래그하거나 화살표 키로 미세 조정하세요. 위치를 잠그면 전투를 시작하거나 종료할 때만 텍스트가 나타납니다."
+L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "위치가 잠금 해제되어 있는 동안에는 전투 타이머가 전투 밖에서도 이동 가능한 0:00 자리 표시자로 계속 표시됩니다. 마우스로 드래그하거나 화살표 키로 미세 조정하세요. 클릭 통과가 켜져 있으면 ALT를 누른 채 드래그하세요. 위치를 잠그면 고정됩니다."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end
