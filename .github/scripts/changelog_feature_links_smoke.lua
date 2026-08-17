@@ -101,6 +101,12 @@ local window = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Win
 Require(window, 'T.Button(status, "See New Features", 132, 24)', "toolbar label was not replaced")
 Require(window, 'M.SelectPage("changelog")', "toolbar does not route to the changelog page")
 assert(not window:find('T.Button(status, "New Task"', 1, true), "obsolete New Task toolbar button remains")
+Require(window, 'CreateFrame("Frame", nil, toolbarFeatures, "NewFeatureLabelTemplate")',
+    "unseen-release badge does not reuse Blizzard's NEW feature label")
+Require(window, 'badge:SetPoint("BOTTOMRIGHT", label, "LEFT", 16, -10)',
+    "unseen-release badge does not use Blizzard's game-menu anchor")
+Require(window, "M.RefreshSeeNewFeaturesBadge = RefreshSeeNewFeaturesBadge",
+    "unseen-release badge cannot be refreshed after the changelog is opened")
 
 local page = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Changelog.lua")
 Require(page, 'M.RegisterPage("changelog"', "dedicated changelog page is not registered")
@@ -110,6 +116,9 @@ Require(page, "bridge.OpenSearchTarget(", "highlight links bypass exact Menu sea
 Require(page, "sectionId = sectionId,", "highlight links do not pass their exact section to runtime routing")
 Require(page, "focused == true and exact == true", "highlight links accept an inexact navigation result")
 Require(page, 'M.OpenChangelogMenuLink = OpenMenuLink', "Dashboard cannot reuse changelog links")
+Require(page, "function M.HasUnseenChangelog", "changelog owns no unseen-release state for the NEW badge")
+Require(page, "store.seenChangelogVersion = version", "the unseen-release marker is never persisted")
+Require(page, "M.MarkChangelogSeen()", "opening See New Features does not clear the NEW badge")
 Require(page, 'local button = CreateFrame("Button", nil, root)', "full changelog highlight text is not clickable")
 Require(page, "fs:SetWidth(linkWidth)", "full changelog link text does not reserve its wrapped height")
 Require(page, "T.colors.accent2 or T.colors.warning", "full changelog links are not yellow")

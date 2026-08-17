@@ -2480,6 +2480,43 @@ local function BuildWindowToolbar(state)
             historyMode = "none", help = "Opens the full changelog with direct links to highlighted features.",
         })
     end
+    -- Blizzard calls out unseen options with NewFeatureLabelTemplate
+    -- (Blizzard_SharedXML/NewFeatureLabel.xml) and anchors it left of the game
+    -- menu's Options label. The template owns the localized NEW_CAPS text, the
+    -- collections-newglow atlas and the pulse, so reusing it - including
+    -- Blizzard's scale and offsets - makes the toolbar badge identical to the
+    -- one players already know instead of an MSUF lookalike.
+    local FEATURES_BADGE_ROOM = 38
+    local function RefreshSeeNewFeaturesBadge()
+        local unseen = type(M.HasUnseenChangelog) == "function" and M.HasUnseenChangelog() == true
+        local badge = toolbarFeatures._msuf2NewBadge
+        if unseen and not badge and type(_G.NewFeatureLabelMixin) == "table" then
+            badge = CreateFrame("Frame", nil, toolbarFeatures, "NewFeatureLabelTemplate")
+            badge:SetScale(0.8)
+            badge:SetFrameLevel(toolbarFeatures:GetFrameLevel() + 5)
+            toolbarFeatures._msuf2NewBadge = badge
+        end
+        local label = toolbarFeatures._msuf2Label
+        local shown = (unseen and badge and label) and true or false
+        -- The badge needs room left of the label, which localized labels have
+        -- already eaten at the authored 132: measure first, then reserve.
+        local measured = label and label.GetStringWidth and label:GetStringWidth() or 0
+        local width = max(132, (type(measured) == "number" and measured > 0) and (measured + 24) or 0)
+        toolbarFeatures:SetWidth(shown and (width + FEATURES_BADGE_ROOM) or width)
+        if label then
+            label:ClearAllPoints()
+            label:SetPoint("CENTER", toolbarFeatures, "CENTER", shown and (FEATURES_BADGE_ROOM * 0.5) or 0, 0)
+        end
+        if badge then
+            badge:SetShown(shown)
+            if shown then
+                badge:ClearAllPoints()
+                badge:SetPoint("BOTTOMRIGHT", label, "LEFT", 16, -10)
+            end
+        end
+    end
+    M.RefreshSeeNewFeaturesBadge = RefreshSeeNewFeaturesBadge
+    RefreshSeeNewFeaturesBadge()
     local toolbarReset = T.Button(status, "Reset page", 88, 24)
     toolbarReset:SetPoint("RIGHT", toolbarFeatures, "LEFT", -12, 0)
     T.CenterButtonLabel(toolbarReset)
@@ -2558,6 +2595,7 @@ local function InstallWindowStatusRuntime(state)
     local sbProfile, sbEdit = status.profileText, status.editText
     local sbCombat, sbVersion = status.combatText, status.versionText
     local RefreshToolbarPageReset = M.RefreshToolbarPageReset
+    local RefreshSeeNewFeaturesBadge = M.RefreshSeeNewFeaturesBadge
     function f:RefreshStatus()
         local profile = tostring(_G.MSUF_ActiveProfile or "Default")
         local profileText = "|cff4a90d9" .. L_PROFILE .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r"
@@ -2576,6 +2614,7 @@ local function InstallWindowStatusRuntime(state)
         SetCachedText(status, "_msuf2VersionText", sbVersion, versionText)
         RefreshDashboardEditModeButton()
         RefreshToolbarPageReset()
+        if RefreshSeeNewFeaturesBadge then RefreshSeeNewFeaturesBadge() end
     end
     local STATUS_EVENTS = {
         "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE",
