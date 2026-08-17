@@ -933,7 +933,9 @@ function Page:BuildClassBehavior()
         { "rune", "toggle", "Show rune time (per rune)", "runeShowTime", true, group = "cp" },
         { "reverse", "toggle", "Fill right-to-left", "classPowerFillReverse", false, group = "cp" },
         { "ele", "toggle", "Show Maelstrom bar (Ele)", "showEleMaelstrom", false, group = "cp" },
-        { "ebon", "toggle", "Show Ebon Might duration (Aug)", "showEbonMight", true, group = "cp" },
+        { "ebon", "toggle", "Show Ebon Might duration (Aug)", "showEbonMight", true, group = "cp",
+            helpTitle = "Ebon Might On Player Power",
+            help = "Augmentation Evoker only. The Player power bar shows the remaining Ebon Might duration instead of Mana, and uses the Player Power settings below for width, height, position, textures and text. Essence stays an ordinary Class Resource, and Mana is available through Alternative Mana. Turn this off to get a normal Mana bar back." },
         { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false, group = "cp" },
         { "ironfur", "toggle", "Show Ironfur tracker (Guardian)", "showGuardianIronfur", false, group = "cp",
             helpTitle = "Guardian Ironfur Tracker", help = "In Bear Form, replaces the empty Guardian class-resource slot with an estimated Ironfur lifetime bar. Each successful cast adds one moving marker; Ursoc's Endurance and Guardian of Elune are included." },
@@ -1067,7 +1069,7 @@ function Page:BuildDetachedPower()
     local values = VT("layout", "Layout", "textures", "Textures", "text", "Text")
     RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerDetachedPowerTab", label = "Power area", values = values,
         width = min(520, max(320, width - 64)), frames = frames, defaultTab = "layout", x = 32, y = -44 }), "detached_power.workspace_tab", values)
-    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources.", 14, -38, cardW, twoColumns and 482 or 760)
+    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 482 or 760)
     self.dpbUse = W.SwitchAt(layout, "Detached player power", 32, -104, controlW)
     M.BindBoolWidget(self.ctx, self.dpbUse, function() return Player().powerBarDetached == true end,
         function(value)
@@ -1098,7 +1100,7 @@ function Page:BuildDetachedPower()
         { "height", "slider", "Power height", 2, 80, 1, 300, "detachedPowerBarHeight", 6, group = "detachedPlayer" },
         { "layer", "slider", "Player Power layer", 0, 30, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
     })
-    AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width.")
+    AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width. For Augmentation Evoker this bar shows Ebon Might, so these settings size and place the Ebon Might bar.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
     AddTooltip(self.dpb.layer, "Player Power Layer", "Orders only the normal Player Power bar. It does not control Class Resource pips or their text.")

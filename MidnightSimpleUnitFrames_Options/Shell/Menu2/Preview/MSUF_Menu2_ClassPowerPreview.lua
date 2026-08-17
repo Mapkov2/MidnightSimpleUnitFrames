@@ -1251,44 +1251,11 @@ local function IsAugCompositePreviewSpec(spec)
         and type(spec.secondaryTimer) == "table"
 end
 
---- Mirrors the invisible Player Power carrier used by the Augmentation
---- runtime. Normal Mana visibility is intentionally not part of this contract:
---- disabled Power still contributes its embed/detach geometry.
-local function ResolveAugCompositeCarrier(preview, bars, player, spec)
-    if not (IsAugCompositePreviewSpec(spec) and bars.showEbonMight ~= false) then
-        return false
-    end
-    player = player or {}
-    local essenceHeight = Clamp(bars.classPowerHeight, 4, 2, 30)
-    local ebonHeight = Clamp(player.powerBarHeight or bars.powerBarHeight, 3, 1, 30)
-    local totalHeight = essenceHeight + 2 + ebonHeight
-    local detached = player.powerBarDetached == true
-    local embedded = not detached and (
-        player.embedPowerBarIntoHealth == true
-        or (player.embedPowerBarIntoHealth == nil and bars.embedPowerBarIntoHealth ~= false)
-    ) or false
-    local width = tonumber(preview and preview.playerW) or 275
-    if detached then
-        local resolveWidth = CPPreview.ResolveDetachedPowerWidth
-        if type(resolveWidth) == "function" then
-            width = resolveWidth({
-                -- Replacement geometry ignores ORB size and ClassPower width
-                -- sync because this carrier is the owner ClassPower follows.
-                shape = "BAR",
-                syncClass = false,
-                widthMode = bars.detachedPowerBarWidthMode,
-                manualWidth = player.detachedPowerBarWidth,
-                explicitWidth = player.detachedPowerBarWidth,
-                frameWidth = width,
-            })
-        else
-            width = Clamp(player.detachedPowerBarWidth, width, 20, 800)
-        end
-    end
-    return true, detached, embedded, width, totalHeight,
-        floor((tonumber(player.detachedPowerBarOffsetX) or 0) + 0.5),
-        floor((tonumber(player.detachedPowerBarOffsetY) or -4) + 0.5),
-        tostring(player.detachedPowerBarAnchorMode or "CENTER"):upper()
+--- True while the Player Power bar renders Ebon Might instead of Mana. Ordinary
+--- Power visibility still decides whether that bar exists at all, exactly as it
+--- does at runtime.
+local function PowerShowsEbonMight(bars, spec)
+    return IsAugCompositePreviewSpec(spec) and bars.showEbonMight ~= false
 end
 
 local function ClassPowerPreviewState(bars, spec)
@@ -1320,29 +1287,15 @@ local function RenderClassPower(preview, bars, player, spec)
     end
     local h = Clamp(bars.classPowerHeight, 4, 2, 30)
     local count = SegmentCount(spec)
-    local composite, detached, embedded, carrierW, totalHeight, carrierX, carrierY, anchorMode =
-        ResolveAugCompositeCarrier(preview, bars, player, spec)
-    local w = composite and carrierW
-        or ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72)
+    -- Augmentation is no longer special here: Ebon Might lives on the Player
+    -- Power bar, so Essence is an ordinary Class Resource with its own width,
+    -- offsets and anchor.
+    local w = ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72)
     local x = 2 + (tonumber(bars.classPowerOffsetX) or 0)
     local y = 4 + (tonumber(bars.classPowerOffsetY) or 0)
     frame:SetSize(w, h)
     frame:ClearAllPoints()
-    if composite then
-        if detached then
-            if anchorMode == "LEGACY_TOPLEFT" then
-                frame:SetPoint("TOPLEFT", preview.playerRef, "BOTTOMLEFT", carrierX, carrierY)
-            else
-                frame:SetPoint("TOP", preview.playerRef, "BOTTOM", carrierX, carrierY)
-            end
-        elseif embedded then
-            frame:SetPoint("TOPLEFT", preview.playerRef, "BOTTOMLEFT", 0, totalHeight)
-        else
-            frame:SetPoint("TOPLEFT", preview.playerRef, "BOTTOMLEFT", 0, -1)
-        end
-    else
-        frame:SetPoint("BOTTOMLEFT", preview.playerRef, "TOPLEFT", x, y)
-    end
+    frame:SetPoint("BOTTOMLEFT", preview.playerRef, "TOPLEFT", x, y)
     frame:Show()
     local shape = NormalizeClassShape(bars.classPowerShape)
     local shapeInfo = CP_SHAPES[shape]
@@ -1553,72 +1506,11 @@ local function HideSecondaryClassTimer(preview)
     return nil
 end
 
---- Augmentation keeps the normal Essence pips and adds Ebon Might beneath
---- them. This child row has no independent drag owner, matching runtime where
---- the Player Power carrier owns the complete composite footprint.
-local function RenderSecondaryClassTimer(preview, bars, player, spec, classFrame)
-    local timerSpec = spec and spec.secondaryTimer
-    if not (classFrame and type(timerSpec) == "table" and bars.showEbonMight ~= false) then
-        return HideSecondaryClassTimer(preview)
-    end
-
-    local frame = EnsureMeter(preview, "ebonTimer", true)
-    ApplyClassTextOwnerLevel(frame.textOwner, bars)
-    local width = max(1, floor(tonumber(classFrame:GetWidth()) or 1))
-    local height = tonumber(player and player.powerBarHeight) or tonumber(bars.powerBarHeight) or 3
-    if height < 1 then height = 1 elseif height > 30 then height = 30 end
-    local animatedValue = AnimationEnabled(preview) and CPPreview.AnimatedValue
-        and CPPreview.AnimatedValue(timerSpec, PreviewElapsed(preview)) or nil
-    local fraction = tonumber(animatedValue)
-    if fraction == nil then fraction = tonumber(timerSpec.value) or 0.6 end
-    if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
-
-    local r, g, b = CPBaseColor(timerSpec, bars, 0.40, 0.80, 0.60)
-    local bgR, bgG, bgB = CPBgColor(CPToken(timerSpec))
-    local filledAlpha = Alpha(bars.classPowerFilledAlpha, 1)
-    local fgTex = ResolveTexture(bars.classPowerTexture)
-    local bgTex = ResolveTexture(bars.classPowerBgTexture, fgTex)
-    RenderMeter(frame, nil, {
-        width = width,
-        height = height,
-        fraction = fraction,
-        outline = 0,
-        texture = fgTex,
-        bgTexture = bgTex,
-        r = r, g = g, b = b,
-        bgR = bgR, bgG = bgG, bgB = bgB,
-        bgA = Alpha(bars.classPowerBgAlpha, 0.30),
-    })
-    frame.fill:SetVertexColor(r, g, b, filledAlpha)
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT", classFrame, "BOTTOMLEFT", 0, -2)
-
-    frame.left:Hide()
-    frame.right:Hide()
-    local showText = timerSpec.nativeDurationText == true or bars.classPowerShowText == true
-    if showText then
-        local textR, textG, textB = CPTextColor(1, 1, 1)
-        ApplyFont(frame.center, Clamp(bars.classPowerFontSize, 16, 6, 48))
-        frame.center:SetText(CPPreview.TextForValue
-            and CPPreview.TextForValue(timerSpec, animatedValue)
-            or tostring(timerSpec.previewText or "12.0"))
-        frame.center:SetTextColor(textR, textG, textB, CPTextAlpha())
-        frame.center:ClearAllPoints()
-        frame.center:SetPoint("CENTER", frame, "CENTER",
-            tonumber(bars.classPowerTextOffsetX) or 0,
-            tonumber(bars.classPowerTextOffsetY) or 0)
-        frame.center:Show()
-    else
-        frame.center:Hide()
-    end
-
-    frame._msufCPPreviewActive = true
-    frame._msufCPPreviewTimerAnim = {
-        spec = timerSpec,
-        showText = showText,
-    }
-    frame:Show()
-    return frame
+--- Ebon Might is rendered by the Player Power bar itself, so this dedicated row
+--- no longer exists. The stub stays because the surrounding preview plumbing
+--- (bounds, zoom fit, HP anchoring) still threads an optional second class row.
+local function RenderSecondaryClassTimer(preview)
+    return HideSecondaryClassTimer(preview)
 end
 
 local function DetachedPowerShown(player)
@@ -1702,8 +1594,7 @@ end
 --- it can attach to ClassPower, but no live player power events are involved.
 local function RenderDetachedPower(preview, bars, player, classFrame, spec)
     local frame = EnsureMeter(preview, "detachedPower")
-    if (IsAugCompositePreviewSpec(spec) and bars.showEbonMight ~= false)
-        or not DetachedPowerShown(player) then
+    if not DetachedPowerShown(player) then
         SetRoundedPowerPreview(frame, false)
         frame:Hide()
         HideBarOutline(frame)
@@ -1711,6 +1602,10 @@ local function RenderDetachedPower(preview, bars, player, classFrame, spec)
         preview.handlePowerText:Hide()
         return nil
     end
+    -- Augmentation: this bar renders Ebon Might's remaining duration instead of
+    -- Mana. Geometry, media and outline stay the ordinary Player Power settings.
+    local ebonSpec = PowerShowsEbonMight(bars, spec) and spec.secondaryTimer or nil
+    if type(ebonSpec) ~= "table" then ebonSpec = nil end
     local width, shape = DetachedPowerWidth(preview, bars, player, classFrame)
     local shapeInfo = POWER_SHAPES[shape]
     local height = shape == "ORB" and width or Clamp(player.detachedPowerBarHeight, 6, 2, 80)
@@ -1732,6 +1627,14 @@ local function RenderDetachedPower(preview, bars, player, classFrame, spec)
     -- including the rectangular bar.
     local outline = PreviewOutline(preview, bars.detachedPowerBarOutline, 1)
     local fraction = AnimatedMeterFraction(preview, 0.72, 0.46, 0.08, 0.96)
+    local ebonAnimated
+    if ebonSpec then
+        pr, pg, pb = CPBaseColor(ebonSpec, bars, 0.40, 0.80, 0.60)
+        ebonAnimated = AnimationEnabled(preview) and CPPreview.AnimatedValue
+            and CPPreview.AnimatedValue(ebonSpec, PreviewElapsed(preview)) or nil
+        fraction = tonumber(ebonAnimated) or tonumber(ebonSpec.value) or 0.6
+        if fraction < 0 then fraction = 0 elseif fraction > 1 then fraction = 1 end
+    end
     frame:ClearAllPoints()
     if classFrame and classFrame.IsShown and classFrame:IsShown() then
         frame:SetPoint("TOP", classFrame, "BOTTOM", x, y)
@@ -1757,6 +1660,34 @@ local function RenderDetachedPower(preview, bars, player, classFrame, spec)
     })
     SetRoundedPowerPreview(frame, shapeInfo == nil, outline)
     frame:Show()
+    if ebonSpec then
+        -- The native duration binding always writes this text, independently of
+        -- the ordinary power-text slots, which are dropped for this bar.
+        frame.left:Hide()
+        frame.right:Hide()
+        local showText = ebonSpec.nativeDurationText == true or PlayerPowerTextShown(player)
+        if showText then
+            local textR, textG, textB = CPTextColor(1, 1, 1)
+            ApplyFont(frame.center, Clamp(player.powerFontSize, 14, 6, 48))
+            frame.center:SetText(CPPreview.TextForValue
+                and CPPreview.TextForValue(ebonSpec, ebonAnimated)
+                or tostring(ebonSpec.previewText or "12.0"))
+            frame.center:SetTextColor(textR, textG, textB, CPTextAlpha())
+            frame.center:ClearAllPoints()
+            frame.center:SetPoint("CENTER", frame, "CENTER",
+                tonumber(player.powerOffsetX) or 0,
+                tonumber(player.powerOffsetY) or 0)
+            frame.center:Show()
+            PlaceTextHandle(preview.handlePowerText, PreviewParent(preview), { frame.center })
+        else
+            frame.center:Hide()
+            preview.handlePowerText:Hide()
+        end
+        frame._msufCPPreviewTimerAnim = { spec = ebonSpec, showText = showText }
+        PlaceHandle(preview.handlePower, frame, 5)
+        return frame
+    end
+    frame._msufCPPreviewTimerAnim = nil
     if PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true then
         local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
         local centerMode = tostring(player.powerTextCenter or "NONE"):upper()
@@ -1957,7 +1888,9 @@ local function UpdateClassPowerAnimation(preview, frame)
     end
     return true
 end
-local function UpdateSecondaryClassTimerAnimation(preview, frame)
+--- Drives a native duration meter. Ebon Might now runs on the Player Power bar,
+--- so its text follows the Power text layer rather than the Class Resource one.
+local function UpdateSecondaryClassTimerAnimation(preview, frame, textLayerKey)
     local state = frame and frame._msufCPPreviewTimerAnim
     local spec = state and state.spec
     if not (preview and frame and spec) then return false end
@@ -1969,13 +1902,19 @@ local function UpdateSecondaryClassTimerAnimation(preview, frame)
         frame.center:SetText(CPPreview.TextForValue
             and CPPreview.TextForValue(spec, value)
             or tostring(spec.previewText or "12.0"))
-        if LayerOn(preview, "classText") then frame.center:Show() end
+        if LayerOn(preview, textLayerKey or "classText") then frame.center:Show() end
     end
     return true
 end
 local function UpdateDetachedPowerAnimation(preview, frame, bars, player)
     if not (preview and frame and bars and player) then return false end
     if frame.IsShown and not frame:IsShown() then return true end
+    -- Augmentation drives this bar from the Ebon Might duration instead of a
+    -- power fraction, and its native duration text replaces the power slots.
+    local ebonState = frame._msufCPPreviewTimerAnim
+    if ebonState and ebonState.spec then
+        return UpdateSecondaryClassTimerAnimation(preview, frame, "powerText")
+    end
     local fraction = AnimatedMeterFraction(preview, 0.72, 0.46, 0.08, 0.96)
     UpdateMeterFill(frame, fraction)
     if PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true then
@@ -2019,18 +1958,15 @@ local function PaintPlayerReference(preview, spec, bars, playerDB)
     local parent = PreviewParent(preview)
     local pr, pg, pb = PowerColor()
     local hr, hg, hb = ClassColor(0.20, 0.78, 0.26, spec)
-    local composite, _, embedded, _, totalHeight = ResolveAugCompositeCarrier(
-        preview, bars, playerDB, spec)
     player:SetSize(preview.playerW, preview.playerH)
     player:ClearAllPoints()
     player:SetPoint("CENTER", parent, "CENTER", 0, -34)
     player.health:ClearAllPoints()
     player.health:SetPoint("TOPLEFT", player, "TOPLEFT", 0, 0)
-    player.health:SetPoint("BOTTOMRIGHT", player, "BOTTOMRIGHT", 0,
-        composite and embedded and totalHeight or (composite and 0 or 6))
+    player.health:SetPoint("BOTTOMRIGHT", player, "BOTTOMRIGHT", 0, 6)
     player.health:SetColorTexture(hr, hg, hb, 0.16)
     player.power:SetColorTexture(pr, pg, pb, 0.16)
-    player.power:SetShown(not composite)
+    player.power:SetShown(true)
     player.outline:SetBackdropBorderColor(0.55, 0.62, 0.78, 0.34)
 end
 local function CreatePlayerReference(preview)
@@ -2684,7 +2620,7 @@ function Preview.Create(ctx, builder)
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
         PaintPlayerReference(box, spec, bars, player)
         local classFrame, classDisabledReason = RenderClassPower(box, bars, player, spec)
-        local ebonFrame = RenderSecondaryClassTimer(box, bars, player, spec, classFrame)
+        local ebonFrame = RenderSecondaryClassTimer(box)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then
             box.noResource:Hide()
         else

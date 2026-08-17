@@ -304,12 +304,6 @@ builders.LAYOUT = function(E)
 
         local h = height
         local b = _cpDB.bars or {}
-        local augPowerBar = CP.augCompositeActive == true
-            and playerFrame._msufAugPowerReplacementActive == true
-            and playerFrame.targetPowerBar or nil
-        if augPowerBar then
-            h = tonumber(playerFrame._msufAugPowerReplacementEssenceHeight) or h
-        end
         local layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
@@ -356,13 +350,8 @@ builders.LAYOUT = function(E)
         --- Width can follow the player frame, explicit settings, or supported
         --- cooldown frames. Cooldown widths are cached so entering combat does
         --- not force protected anchor/measurement work.
-        local cdmName = not augPowerBar and CPConst.CDM_FRAMES[widthMode] or nil
-        if augPowerBar and augPowerBar.GetWidth then
-            userW = augPowerBar:GetWidth()
-            if not userW or userW < 1 then
-                userW = (playerFrame.GetWidth and playerFrame:GetWidth()) or playerSpecW
-            end
-        elseif shapeMode and widthMode == "auto_pips" then
+        local cdmName = CPConst.CDM_FRAMES[widthMode]
+        if shapeMode and widthMode == "auto_pips" then
             local slot = tonumber(h) or 1
             if slot < 1 then slot = 1 end
             if type(snap) == "function" then slot = snap(CP.container, slot) or slot end
@@ -404,7 +393,7 @@ builders.LAYOUT = function(E)
             end
             userW = userW - 4
         end
-        if not augPowerBar and type(snap) == "function" then
+        if type(snap) == "function" then
             userW = snap(CP.container, userW)
         end
         if not userW or userW < 1 then userW = 1 end
@@ -420,7 +409,7 @@ builders.LAYOUT = function(E)
         local positionFrozen = inLockdown
         local positionDeferred = false
         CP.container:SetSize(userW, h)
-        if not augPowerBar and inLockdown and CP.container._msufPositionInitialized ~= true
+        if inLockdown and CP.container._msufPositionInitialized ~= true
             and b.classPowerAnchorToCooldown == true then
             if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                 and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
@@ -439,13 +428,7 @@ builders.LAYOUT = function(E)
         end
 
         if not positionFrozen then CP.container:ClearAllPoints() end
-        if augPowerBar and not positionFrozen then
-            CP.container:SetPoint("TOPLEFT", augPowerBar, "TOPLEFT", 0, 0)
-            CP.container:SetPoint("TOPRIGHT", augPowerBar, "TOPRIGHT", 0, 0)
-            CP.container._msufDirectCooldownAnchor = nil
-            CP.container._msufHardLockPoint = nil
-            CP.container._msufStableExternalAnchor = nil
-        elseif b.classPowerAnchorToCooldown == true and not positionFrozen then
+        if b.classPowerAnchorToCooldown == true and not positionFrozen then
             local ecv = not inLockdown and (
                 (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
                 or _G["EssentialCooldownViewer"]
