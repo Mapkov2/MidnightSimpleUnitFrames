@@ -2133,6 +2133,10 @@ local function EnforcePlayerDefensiveContainer(item, canonicalAuraModel)
     item.filters.externalDefensive = false
     item.filters.bigDefensive = false
     item.filters.exclusive = "none"
+    -- Pre-preset custom4 profiles may carry a DEBUFF-era duration ceiling;
+    -- since 6.09 compiles maxDuration for every lane it would silently hide
+    -- long or permanent defensives, so the pin clears it like other filters.
+    item.filters.maxDuration = nil
     return item
 end
 
@@ -2175,6 +2179,11 @@ local function EnforceTargetDotContainer(item)
     item.placed.pandemicBorderAlpha = ClampNumber(item.placed.pandemicBorderAlpha, 1, 0.05, 1)
     item.placed.pandemicTintAlpha = ClampNumber(item.placed.pandemicTintAlpha, 0.22, 0.05, 1)
     item.placed.pandemicBlend = tostring(item.placed.pandemicBlend or "ADD"):upper() == "BLEND" and "BLEND" or "ADD"
+    item.frame = type(item.frame) == "table" and item.frame or {
+        type = "none", color = { 0.69, 0.50, 0.88, 0.80 },
+        priority = 5, thickness = 2, layer = 0, strata = "AUTO",
+    }
+    item.frame.onlyInPandemicWindow = item.frame.onlyInPandemicWindow == true
     item.filters = type(item.filters) == "table" and item.filters or {}
     item.filters.enabled = true
     item.filters.onlyMine = true
@@ -2228,6 +2237,7 @@ local function NewCustomContainer(index, unit)
         frame = {
             type = "none", color = { 0.69, 0.50, 0.88, 0.80 },
             priority = 5, thickness = 2, layer = 0, strata = "AUTO",
+            onlyInPandemicWindow = false,
         },
     }
     if index == PLAYER_DEFENSIVE_CONTAINER_INDEX and NormalizeScope(unit) == "player" then
@@ -2471,9 +2481,12 @@ function Model.ApplyUnitStyleSnapshot(destinationUnit, snapshot)
                 and destinationProduct ~= nil
                 and sourceStyle.product ~= destinationProduct
             local destinationProductStyle
+            local destinationPandemicFrameCondition
             if preserveDestinationProductStyle then
                 destinationProductStyle = SelectedCopy(
                     destinationItem.placed, INCOMPATIBLE_CUSTOM4_DESTINATION_STYLE_KEYS)
+                destinationPandemicFrameCondition = type(destinationItem.frame) == "table"
+                    and destinationItem.frame.onlyInPandemicWindow == true or false
             end
             ClearKeys(destinationItem.placed, Model.CustomContainerStylePlacedKeys)
             for key, value in pairs(sourceStyle.placed or {}) do destinationItem.placed[key] = DeepCopy(value) end
@@ -2485,6 +2498,9 @@ function Model.ApplyUnitStyleSnapshot(destinationUnit, snapshot)
                 end
             end
             destinationItem.frame = type(sourceStyle.frame) == "table" and DeepCopy(sourceStyle.frame) or nil
+            if preserveDestinationProductStyle and type(destinationItem.frame) == "table" then
+                destinationItem.frame.onlyInPandemicWindow = destinationPandemicFrameCondition
+            end
             destinationItem._msufA3LocalStyleFromShared_v1 = true
             -- Re-apply the product invariants without replacing copied Style.
             Model.CustomContainer(destinationUnit, index, true)
@@ -2535,6 +2551,90 @@ local function WriteCustomContainerSpellSet(item, set)
     item.spellIDs = table.concat(ids, ", ")
 end
 
+local function ReconcileCustomContainerSpellPriority(item, create)
+    local set = CustomContainerSpellSet(item)
+    local raw = item and item.prioritySpellIDs
+    local ordered, seen = {}, {}
+    local function Add(value)
+        local spellID = tonumber(value)
+        if spellID then spellID = math_floor(spellID + 0.5) end
+        if spellID and spellID > 0 and set[spellID] == true and not seen[spellID] then
+            seen[spellID] = true
+            ordered[#ordered + 1] = spellID
+        end
+    end
+    if type(raw) == "string" then
+        for token in raw:gmatch("%d+") do Add(token) end
+    elseif type(raw) == "table" then
+        for i = 1, #raw do Add(raw[i]) end
+        for key, value in pairs(raw) do
+            if type(key) ~= "number" or key < 1 or key > #raw or key % 1 ~= 0 then
+                Add((type(value) == "number" or type(value) == "string") and value or key)
+            end
+        end
+    end
+    if create == true then
+        local missing = {}
+        for spellID in pairs(set) do
+            if not seen[spellID] then
+                local _, name = SpellInfo(spellID)
+                missing[#missing + 1] = {
+                    spellID = spellID,
+                    key = tostring(name or ""):lower() .. "\030" .. tostring(spellID),
+                }
+            end
+        end
+        table_sort(missing, function(a, b) return a.key < b.key end)
+        for i = 1, #missing do ordered[#ordered + 1] = missing[i].spellID end
+    end
+    if create == true or raw ~= nil then item.prioritySpellIDs = ordered end
+    return ordered
+end
+
+function Model.EnableCustomContainerSpellPriority(unit, index)
+    local item = Model.CustomContainer(unit, index, true)
+    if not item then return false end
+    ReconcileCustomContainerSpellPriority(item, true)
+    item.placed = type(item.placed) == "table" and item.placed or {}
+    item.placed.sortMethod = "CUSTOM_PRIORITY"
+    item.placed.sortReverse = false
+    return true
+end
+
+function Model.MoveCustomContainerSpell(unit, index, value, direction)
+    local spellID = SpellIDFromInput(value)
+    local item = Model.CustomContainer(unit, index, true)
+    if not (spellID and item) then return false, "invalid" end
+    local ordered = ReconcileCustomContainerSpellPriority(item, true)
+    local from
+    for i = 1, #ordered do
+        if ordered[i] == spellID then from = i; break end
+    end
+    direction = tonumber(direction) or 0
+    local to = from and (direction < 0 and from - 1 or direction > 0 and from + 1 or from)
+    if not (from and to and to >= 1 and to <= #ordered and to ~= from) then return false, "unchanged" end
+    ordered[from], ordered[to] = ordered[to], ordered[from]
+    item.prioritySpellIDs = ordered
+    return true
+end
+
+function Model.MoveCustomContainerSpellToIndex(unit, index, value, targetIndex)
+    local spellID = SpellIDFromInput(value)
+    local item = Model.CustomContainer(unit, index, true)
+    if not (spellID and item) then return false, "invalid" end
+    local ordered = ReconcileCustomContainerSpellPriority(item, true)
+    local from
+    for i = 1, #ordered do
+        if ordered[i] == spellID then from = i; break end
+    end
+    local to = math_floor(tonumber(targetIndex) or 0)
+    if not from or to < 1 or to > #ordered or to == from then return false, "unchanged" end
+    table.remove(ordered, from)
+    table.insert(ordered, to, spellID)
+    item.prioritySpellIDs = ordered
+    return true
+end
+
 function Model.AddCustomContainerSpell(unit, index, value, allowCustomID)
     unit = NormalizeScope(unit)
     if unit == "shared" then unit = "player" end
@@ -2570,6 +2670,7 @@ function Model.AddCustomContainerSpell(unit, index, value, allowCustomID)
     end
     set[spellID] = true
     WriteCustomContainerSpellSet(item, set)
+    if item.prioritySpellIDs ~= nil then ReconcileCustomContainerSpellPriority(item, true) end
     return true
 end
 
@@ -2582,6 +2683,7 @@ function Model.RemoveCustomContainerSpell(unit, index, value)
     set[spellID] = nil
     if type(item.customSpellIDs) == "table" then item.customSpellIDs[spellID] = nil end
     WriteCustomContainerSpellSet(item, set)
+    if item.prioritySpellIDs ~= nil then ReconcileCustomContainerSpellPriority(item, false) end
     return true
 end
 
@@ -2594,23 +2696,39 @@ function Model.ClearCustomContainerSpells(unit, index)
     end
     if count > 0 then WriteCustomContainerSpellSet(item, {}) end
     item.customSpellIDs = nil
+    item.prioritySpellIDs = nil
     return count
 end
 
 function Model.CustomContainerSpellEntries(unit, index)
     local item = Model.CustomContainer(unit, index, false)
     local customSpellIDs = type(item and item.customSpellIDs) == "table" and item.customSpellIDs or nil
-    local out = {}
+    local out, bySpellID = {}, {}
     for spellID in pairs(CustomContainerSpellSet(item)) do
         local id, name, icon = SpellInfo(spellID)
         id = id or spellID
-        out[#out + 1] = {
+        local entry = {
             value = tostring(id), spellID = id, icon = icon,
             text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
             customID = customSpellIDs and customSpellIDs[id] == true or false,
         }
+        out[#out + 1] = entry
+        bySpellID[id] = entry
     end
     table_sort(out, function(a, b) return tostring(a.text) < tostring(b.text) end)
+    local priority = ReconcileCustomContainerSpellPriority(item, false)
+    if #priority > 0 then
+        local prioritized, used = {}, {}
+        for i = 1, #priority do
+            local entry = bySpellID[priority[i]]
+            if entry then prioritized[#prioritized + 1] = entry; used[entry] = true end
+        end
+        for i = 1, #out do
+            if not used[out[i]] then prioritized[#prioritized + 1] = out[i] end
+        end
+        out = prioritized
+    end
+    for i = 1, #out do out[i].priority = i end
     return out
 end
 
@@ -3264,6 +3382,149 @@ local function ForEachFrameBlacklist(scope, create, kind, callback)
     EachRuntimeUnit(scope, function(runtimeUnit)
         callback(EnsureRuntimeBlacklist(auras, runtimeUnit, create, kind))
     end)
+end
+
+--- Expose the manual-entry resolver so blacklist UIs can inspect what an
+--- input resolves to (a typed name resolves to the player's cast SpellID,
+--- which is not always the SpellID of the aura left on the unit).
+function Model.ResolveSpellInputID(value)
+    return SpellIDFromInput(value)
+end
+
+local function LiveAuraSecretHelpers()
+    local Secrets = type(MSUF.Secrets) == "table" and MSUF.Secrets or nil
+    local SafeNumber = Secrets and Secrets.SafeNumber or tonumber
+    local NotSecret = Secrets and Secrets.NotSecret or function(_) return true end
+    return SafeNumber, NotSecret, Secrets
+end
+
+--- Tainted aura queries hard-error under Blizzard's addon restrictions. The
+--- observed denial contexts are encounters, Mythic+ (challenge restrictions),
+--- PvP matches, and instanced combat while aura secrecy is active; plain
+--- open-world combat keeps the query callable with per-field secrets.
+local function LiveAuraAccessRestricted()
+    local IsEncounterInProgress = _G.IsEncounterInProgress
+    if type(IsEncounterInProgress) == "function" and IsEncounterInProgress() then return true end
+    local ChallengeMode = _G.C_ChallengeMode
+    if type(ChallengeMode) == "table" and type(ChallengeMode.IsChallengeModeActive) == "function"
+        and ChallengeMode.IsChallengeModeActive() then return true end
+    local PartyInfo = _G.C_PartyInfo
+    if type(PartyInfo) == "table" and type(PartyInfo.ChallengeModeRestrictionsActive) == "function"
+        and PartyInfo.ChallengeModeRestrictionsActive() then return true end
+    local PvP = _G.C_PvP
+    if type(PvP) == "table" and type(PvP.IsMatchActive) == "function"
+        and PvP.IsMatchActive() then return true end
+    local SecretsAPI = _G.C_Secrets
+    if type(SecretsAPI) == "table" and type(SecretsAPI.ShouldAurasBeSecret) == "function"
+        and SecretsAPI.ShouldAurasBeSecret() == true then
+        local IsInInstance = _G.IsInInstance
+        if type(IsInInstance) == "function" then
+            local inInstance = IsInInstance()
+            if inInstance == true or inInstance == 1 then return true end
+        end
+    end
+    return false
+end
+
+--- Walk every readable aura on the live unit(s) behind a menu scope. Secret
+--- aura fields are the callback's problem to skip; this only guards the unit
+--- and API surface. Returns walked, accessBlockedCount (non-zero when the
+--- restricted context above forbids querying at all); the callback may
+--- return false to stop the walk early.
+local function ForEachLiveUnitAura(scope, kind, callback)
+    local CUA = _G.C_UnitAuras
+    local UnitExists = _G.UnitExists
+    if type(UnitExists) ~= "function" or type(CUA) ~= "table" then return false, 0 end
+    local GetByIndex = type(CUA.GetAuraDataByIndex) == "function" and CUA.GetAuraDataByIndex or nil
+    if not GetByIndex then return false, 0 end
+    scope = NormalizeScope(scope)
+    if scope == "shared" then return false, 0 end
+    if LiveAuraAccessRestricted() then return false, 1 end
+    local _, _, Secrets = LiveAuraSecretHelpers()
+    local UnitThere = Secrets and Secrets.UnitExistsPlain
+        or function(unit) local exists = UnitExists(unit) return exists == true or exists == 1 end
+    local filter = NormalizeKind(kind) == "debuff" and "HARMFUL" or "HELPFUL"
+    local stop = false
+    EachRuntimeUnit(scope, function(runtimeUnit)
+        if stop or not UnitThere(runtimeUnit) then return end
+        for i = 1, 80 do
+            local aura = GetByIndex(runtimeUnit, i, filter)
+            if type(aura) ~= "table" then break end
+            if callback(aura) == false then stop = true return end
+        end
+    end)
+    return true, 0
+end
+
+--- Coldpath check for the manual blacklist inputs: report whether the entered
+--- SpellID is visible on the live unit right now, or whether only a same-named
+--- aura with a different SpellID is (the cast-ID vs aura-ID trap). Secret aura
+--- fields are skipped, never compared; unreadable data yields no verdict.
+function Model.FindLiveBlacklistAura(scope, spellID, kind)
+    spellID = tonumber(spellID)
+    if not spellID then return nil end
+    local SafeNumber, NotSecret = LiveAuraSecretHelpers()
+    local wantedName
+    if C_Spell and type(C_Spell.GetSpellInfo) == "function" then
+        local info = C_Spell.GetSpellInfo(spellID)
+        if type(info) == "table" and type(info.name) == "string" and info.name ~= "" then
+            wantedName = info.name
+        end
+    end
+    local active, suggestion
+    local walked = ForEachLiveUnitAura(scope, kind, function(aura)
+        local auraID = SafeNumber(aura.spellId)
+        if not auraID then return end
+        if auraID == spellID then active = true return false end
+        if wantedName and not suggestion then
+            local auraName = aura.name
+            if NotSecret(auraName) and type(auraName) == "string" and auraName == wantedName then
+                suggestion = { spellID = auraID, name = auraName }
+            end
+        end
+    end)
+    if not walked then return nil end
+    if active then return { status = "active", spellID = spellID, name = wantedName } end
+    if suggestion then
+        return { status = "mismatch", spellID = spellID, name = wantedName,
+            suggestID = suggestion.spellID, suggestName = suggestion.name }
+    end
+    return nil
+end
+
+--- Values list for the live-aura blacklist dropdown: every aura whose SpellID
+--- is readable on the unit(s) right now, carrying the exact ID the aura uses.
+--- Auras with secret IDs cannot be listed (and could not be matched anyway).
+function Model.LiveBlacklistAuraValues(scope, kind)
+    local values = {}
+    local SafeNumber, NotSecret = LiveAuraSecretHelpers()
+    local seen = {}
+    local unreadable = 0
+    local _, secretSkipped = ForEachLiveUnitAura(scope, kind, function(aura)
+        local auraID = SafeNumber(aura.spellId)
+        if not auraID then unreadable = unreadable + 1 return end
+        if seen[auraID] then return end
+        seen[auraID] = true
+        local name = aura.name
+        if not (NotSecret(name) and type(name) == "string" and name ~= "") then name = nil end
+        local icon = aura.icon
+        if not (NotSecret(icon) and (type(icon) == "number" or type(icon) == "string")) then icon = nil end
+        if not name or not icon then
+            local _, staticName, staticIcon = SpellInfo(auraID)
+            name = name or staticName
+            icon = icon or staticIcon
+        end
+        local text = (type(name) == "string" and name ~= "" and name or "Spell")
+            .. " (#" .. tostring(auraID) .. ")"
+        values[#values + 1] = { value = auraID, text = text, name = name, icon = icon }
+    end)
+    table_sort(values, function(a, b) return tostring(a.text) < tostring(b.text) end)
+    -- The second return reports auras hidden by secret data (secret index or
+    -- secret SpellID), so scan UIs can say "hidden" instead of under-counting.
+    -- The third reports that Blizzard denies aura access entirely right now:
+    -- under restrictions every index probes secret, so nothing is readable.
+    unreadable = unreadable + (tonumber(secretSkipped) or 0)
+    return values, unreadable, (#values == 0 and (tonumber(secretSkipped) or 0) > 0)
 end
 
 function Model.AddBlacklistSpell(scope, value, kind)

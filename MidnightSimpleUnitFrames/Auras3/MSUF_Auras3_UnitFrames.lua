@@ -293,10 +293,19 @@ function A3.BindPandemicRegion(button, lane)
     then
         return false
     end
-    local region = A3.ApplyPandemicVisual(button, lane, false)
-    if not region then return false end
-    button:AddPandemicRegion(region)
-    return true
+    local bound = false
+    if lane.pandemicVisualEnabled ~= false then
+        local region = A3.ApplyPandemicVisual(button, lane, false)
+        if region then
+            button:AddPandemicRegion(region)
+            bound = true
+        end
+    end
+    local bindFrameEffect = SpellIndicatorsRuntime.BindPandemicFrameEffect
+    if type(lane.pandemicFrameEffect) == "table" and type(bindFrameEffect) == "function" then
+        bound = bindFrameEffect(button, lane.pandemicFrameEffect, button._msufA3ParentFrame) or bound
+    end
+    return bound
 end
 
 function A3.NormalizeStealableStyle(value)
@@ -973,6 +982,7 @@ local GROUP_LANE_SPECS = {
         alphaKey = "buffAlpha",
         blacklistHashKey = "buffBlacklistHash",
         hidePermanentKey = "buffHidePermanent",
+        maxDurationKey = "buffMaxDuration",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse", tooltipKey = "buffShowTooltip",
         sortMethodKey = "buffSortMethod", sortReverseKey = "buffSortReverse",
@@ -999,6 +1009,7 @@ local GROUP_LANE_SPECS = {
         alphaKey = "trackedBuffAlpha",
         blacklistHashKey = "trackedBuffBlacklistHash", includeHashKey = "trackedBuffIncludeHash",
         hidePermanentKey = "trackedBuffHidePermanent",
+        maxDurationKey = "trackedBuffMaxDuration",
         showTextKey = "trackedBuffShowCooldown", showStackKey = "trackedBuffShowStacks", swipeKey = "trackedBuffShowCooldownSwipe",
         swipeReverseKey = "trackedBuffCooldownSwipeReverse", tooltipKey = "trackedBuffShowTooltip",
         sortMethodKey = "trackedBuffSortMethod", sortReverseKey = "trackedBuffSortReverse",
@@ -1057,6 +1068,7 @@ local GROUP_LANE_SPECS = {
         alphaKey = "externalAlpha",
         blacklistHashKey = "externalBlacklistHash",
         hidePermanentKey = "externalHidePermanent",
+        maxDurationKey = "externalMaxDuration",
         showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
         swipeReverseKey = "externalCooldownSwipeReverse", tooltipKey = "externalShowTooltip",
         sortMethodKey = "externalSortMethod", sortReverseKey = "externalSortReverse",
@@ -2466,6 +2478,36 @@ local function CustomSpellIDHash(value)
     return count > 0 and out or nil
 end
 
+function A3._CustomPrioritySpellIDs(value, allowed)
+    if type(allowed) ~= "table" then return nil end
+    local ordered, seen = {}, {}
+    local function Add(raw)
+        local spellID = tonumber(type(raw) == "number" and raw or tostring(raw or ""):match("%d+"))
+        if spellID then spellID = math_floor(spellID + 0.5) end
+        if spellID and spellID > 0 and allowed[spellID] == true and not seen[spellID] then
+            seen[spellID] = true
+            ordered[#ordered + 1] = spellID
+        end
+    end
+    if type(value) == "string" then
+        for token in value:gmatch("%d+") do Add(token) end
+    elseif type(value) == "table" then
+        for i = 1, #value do Add(value[i]) end
+        for key, child in pairs(value) do
+            if type(key) ~= "number" or key < 1 or key > #value or key % 1 ~= 0 then
+                Add((type(child) == "number" or type(child) == "string") and child or key)
+            end
+        end
+    end
+    local missing = {}
+    for spellID in pairs(allowed) do
+        if not seen[spellID] then missing[#missing + 1] = spellID end
+    end
+    table_sort(missing)
+    for i = 1, #missing do ordered[#ordered + 1] = missing[i] end
+    return #ordered > 0 and ordered or nil
+end
+
 A3._PlayerDefensiveTrackedSpellIDHash = function(entry)
     if type(entry) ~= "table" then return nil end
     local disabled = CustomSpellIDHash(entry.disabledPredefinedSpellIDs)
@@ -2838,6 +2880,14 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local layoutPlaced = type(entry.placed) == "table" and entry.placed or {}
     local placed, styleFrame = A3._ResolveSpecialCustomStyle(auras, unit, index, entry)
+    -- Player Defensive Buffs combines a curated class list with custom IDs and
+    -- therefore keeps ordinary AuraKit sorting. Every exact-ID custom lane,
+    -- including Dots on target, can use the same native one-group-per-spell
+    -- priority path without inspecting aura payloads in Lua.
+    local customPriority = not playerDefensives
+        and tostring(placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
+    local customPrioritySpellIDs = customPriority
+        and A3._CustomPrioritySpellIDs(entry.prioritySpellIDs, includeSpellIDs) or nil
     lanePadding = ClampNumber((type(placed) == "table" and placed.stylePadding)
         or layoutPlaced.stylePadding, 0, 0, 16)
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
@@ -2845,7 +2895,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local helpful = not targetDots and tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
     candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
         candidateFilters, candidateFilterSignature,
-        not helpful and filters.maxDuration or nil, filters.hidePermanent == true)
+        filters.maxDuration, filters.hidePermanent == true)
     local size = ClampNumber(layoutPlaced.size, 24, 1, 128)
     local spacing = ClampNumber(layoutPlaced.spacing, 2, 0, 64)
     local perRow = ClampNumber(layoutPlaced.perRow, 4, 1, 40)
@@ -2858,6 +2908,13 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local iconShape, requestedIconShape = Shape.Resolve(
         iconShapeSource, frameSpec and frameSpec.portrait and frameSpec.portrait.shape)
     lanePadding = Round(ClampNumber(lanePadding, 0, 0, 16))
+    local pandemicVisualEnabled = targetDots == true and placed.pandemicEnabled == true
+    local pandemicFrameEffect
+    if targetDots == true and type(styleFrame) == "table" and styleFrame.onlyInPandemicWindow == true then
+        local normalizeFrameEffect = SpellIndicatorsRuntime.NormalizeFrameEffect
+        pandemicFrameEffect = type(normalizeFrameEffect) == "function"
+            and normalizeFrameEffect(styleFrame) or styleFrame
+    end
     local lane = FinalizeLane({
         kind = "custom" .. tostring(index),
         appearanceKind = appearanceKind,
@@ -2904,8 +2961,16 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         showCooldownText = placed.showCooldown ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
-        sortMethod = NormalizeAuraSortMethod(placed.sortMethod),
-        sortReverse = placed.sortReverse == true,
+        -- CUSTOM_PRIORITY is an MSUF-owned ordered-group mode, not a Blizzard
+        -- AuraContainerSortMethod enum. Each one-frame AuraGroup is natively
+        -- filtered to one configured Spell ID and assigned a layoutIndex, so
+        -- Blizzard can compact active custom auras in priority order without
+        -- exposing their restricted payload or visibility to addon Lua.
+        sortMethod = customPriority and "DEFAULT" or NormalizeAuraSortMethod(placed.sortMethod),
+        sortReverse = customPriority and false or placed.sortReverse == true,
+        customPriority = customPriority == true,
+        customPrioritySpellIDs = customPrioritySpellIDs,
+        customPrioritySignature = customPrioritySpellIDs and table_concat(customPrioritySpellIDs, ",") or nil,
         showDurationBar = placed.showDurationBar == true,
         durationBarHeight = ClampNumber(placed.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
         durationBarDisplay = NormalizeDurationBarDisplay(placed.durationBarDisplay, DEFAULT_SHARED.durationBarDisplay),
@@ -2925,7 +2990,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         stackX = ClampNumber(placed.stackX, 0, -2000, 2000),
         stackY = ClampNumber(placed.stackY, 0, -2000, 2000),
         targetDots = targetDots == true,
-        pandemicEnabled = targetDots == true and placed.pandemicEnabled == true,
+        pandemicEnabled = pandemicVisualEnabled or pandemicFrameEffect ~= nil,
+        pandemicVisualEnabled = pandemicVisualEnabled,
+        pandemicFrameEffect = pandemicFrameEffect,
         pandemicStyle = A3.NormalizePandemicStyle(placed.pandemicStyle),
         pandemicColor = type(placed.pandemicColor) == "table" and placed.pandemicColor or A3.DEFAULT_PANDEMIC_COLOR,
         pandemicThickness = ClampNumber(placed.pandemicThickness, 2, 1, 12),
@@ -2946,9 +3013,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     -- off, fall back to the normal bar instead of silently losing tracked auras.
     local barEnabled = portraitLane == nil
     local effect
-    -- Full-frame effects are independent aura sensors. Portrait mode replaces
-    -- only the icon lane and must not suppress the selected frame effect.
-    if type(styleFrame) == "table" and styleFrame.type and styleFrame.type ~= "none" then
+    -- Unconditional Full-Frame effects remain independent aura sensors in portrait mode.
+    -- Pandemic-only effects live on every visible DoT AuraButton and need no duplicate sensor.
+    if pandemicFrameEffect == nil and type(styleFrame) == "table" and styleFrame.type and styleFrame.type ~= "none" then
         effect = {
             key = "ufcustom_effect:" .. tostring(index),
             display = entry.name or ("Custom " .. tostring(index)),
@@ -4155,6 +4222,9 @@ LaneStructuralSignature = function(lane)
     return tostring(lane.kind) .. "\030" .. tostring(lane.identityCandidateMode)
         .. "\030" .. tostring(LaneLayoutSignature(lane))
         .. "\030" .. tostring(lane.weaponEnchants)
+        .. "\030" .. tostring(lane.customPriority)
+        .. "\030" .. tostring(lane.customPrioritySignature)
+        .. "\030" .. tostring(lane.customPriority and lane.candidateFilterSignature or nil)
 end
 
 LaneLayoutSignature = function(lane)
@@ -4183,13 +4253,24 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.auraTooltipAnchor)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
         .. "\030" .. tostring(lane.showStealableMarker) .. "\030" .. tostring(lane.stealableStyle)
-        .. "\030" .. tostring(lane.pandemicEnabled) .. "\030" .. tostring(lane.pandemicStyle)
+        .. "\030" .. tostring(lane.pandemicEnabled) .. "\030" .. tostring(lane.pandemicVisualEnabled)
+        .. "\030" .. tostring(lane.pandemicStyle)
         .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[1] or lane.pandemicColor.r))
         .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[2] or lane.pandemicColor.g))
         .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[3] or lane.pandemicColor.b))
         .. "\030" .. tostring(lane.pandemicThickness) .. "\030" .. tostring(lane.pandemicPadding)
         .. "\030" .. tostring(lane.pandemicBorderAlpha) .. "\030" .. tostring(lane.pandemicTintAlpha)
         .. "\030" .. tostring(lane.pandemicBlend)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.type)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.priority)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.thickness)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.layer)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.tintAlpha)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.strata)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[1])
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[2])
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[3])
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[4])
         .. "\030" .. tostring(lane.alpha)
         .. "\030" .. tostring(lane.padding)
         .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
@@ -5876,6 +5957,99 @@ local function CreateNativeAuraContainer(root, parentOverride)
     -- AURA_DATA_PROVIDER_SWITCH subscription entirely Blizzard-owned; addon
     -- calls to RegisterEvent/UnregisterEvent on this object taint execution.
     container._msufA3Root = root
+    return container
+end
+
+local function PriorityAuraCandidateFilters(container, lane, spellID)
+    local cache = container._msufA3PriorityCandidateFilters
+    if not cache then
+        cache = {}
+        container._msufA3PriorityCandidateFilters = cache
+    end
+    local key = tonumber(spellID) or 0
+    local filters = cache[key]
+    if filters then return filters end
+    filters = {}
+    for name, value in pairs(type(lane.candidateFilters) == "table" and lane.candidateFilters or {}) do
+        if name ~= "includeSpellIDs" then filters[name] = value end
+    end
+    local included = {}
+    if key > 0 then
+        if type(A3.AddAuraSpellIDAndAliases) == "function" then
+            A3.AddAuraSpellIDAndAliases(included, key)
+        else
+            included[key] = true
+        end
+    end
+    filters.includeSpellIDs = included
+    cache[key] = filters
+    return filters
+end
+
+local function PriorityAuraGroupKey(lane, index)
+    return ManagedAuraKey(lane) .. "_priority_" .. tostring(index)
+end
+
+local function BuildManagedPriorityAuraGroupOptions(container, lane, index, spellID)
+    local sortMethod, sortDirection = AuraSortEnums(lane)
+    return {
+        maxFrameCount = 1,
+        candidateFilters = PriorityAuraCandidateFilters(container, lane, spellID),
+        sortMethod = sortMethod,
+        sortDirection = sortDirection,
+        initializeFrame = function(button)
+            button._msufA3ManagedAuraButton = true
+            button._msufA3ParentFrame = container._msufA3ParentFrame
+            container[index] = button
+            PrepareAuraButton(button, lane, index)
+        end,
+    }
+end
+
+local function ManagedPriorityAuraGroupLayoutOptions(lane, index)
+    local size = lane.size or DEFAULT_SHARED.iconSize
+    local spacing = lane.spacing or DEFAULT_SHARED.spacing
+    return {
+        -- Each priority entry owns one native AuraGroup. Empty groups contribute
+        -- no spacing, while non-empty groups are packed by Blizzard in ascending
+        -- layoutIndex order. elementSpacing must stay zero here: the distance
+        -- between these one-frame groups is owned by groupSpacing.
+        elementWidth = lane.buttonWidth or size,
+        elementHeight = lane.buttonHeight or size,
+        elementSpacing = 0,
+        lineSpacing = spacing,
+        groupSpacing = spacing,
+        groupLineSpacing = spacing,
+        layoutIndex = index,
+    }
+end
+
+local function CreateManagedPriorityNativeLane(container, lane, parentFrame)
+    if not container then return nil end
+    A3.nativeAuraRuntimeAvailable = true
+    ConfigureContainer(container, lane, parentFrame)
+    container._msufA3ManagedAuraGroups = true
+    container._msufA3PriorityAuraGroups = true
+    container._msufA3PriorityGroupKeys = {}
+    ConfigureNativeAuraContainer(container, lane.unit)
+
+    local priority = lane.customPrioritySpellIDs or {}
+    local groupCount = math_min(lane.max or 0, #priority)
+    for i = 1, groupCount do
+        local groupKey = PriorityAuraGroupKey(lane, i)
+        container._msufA3PriorityGroupKeys[i] = groupKey
+        container:AddAuraGroup(groupKey, lane.nativeFilter,
+            BuildManagedPriorityAuraGroupOptions(container, lane, i, priority[i]))
+        container:SetAuraGroupLayout(groupKey, ManagedPriorityAuraGroupLayoutOptions(lane, i))
+    end
+    container.createdButtons = groupCount
+    container._msufA3MaxFrameCount = groupCount
+    if not RegisterNativeContainer(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    container:Show()
+    A3.nativeAuraRuntimeError = nil
     return container
 end
 
@@ -8882,6 +9056,9 @@ A3._CreateNativeLane = function(root, lane, parentFrame)
     end
     container._msufA3LayoutHost = host
     container._msufA3HostParented = true
+    if lane and lane.customPriority == true then
+        return CreateManagedPriorityNativeLane(container, lane, parentFrame)
+    end
     return CreateManagedNativeLane(container, lane, parentFrame)
 end
 
@@ -8956,6 +9133,15 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, lane.unit)
+        if current._msufA3PriorityAuraGroups == true then
+            SyncContainerGeometry(current, lane, parentFrame)
+            current:Show()
+            if not RegisterNativeContainer(current) then return nil end
+            current._msufA3TrackingSignature = trackingSignature
+            current._msufA3StructuralSignature = structuralSignature
+            current._msufA3LayoutSignature = layoutSignature
+            return current
+        end
         local refresh = false
         local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
         UpdateAuraGroupEffectiveFilters(current, lane)

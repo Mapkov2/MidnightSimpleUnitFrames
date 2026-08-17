@@ -209,9 +209,56 @@ local function BuildFullChangelog(ctx)
     ctx:SetContentHeight(math.abs(y) + 36)
 end
 
+local function CurrentChangelogVersion()
+    local data = ChangelogData()
+    if type(data) ~= "table" then return "" end
+    local version = tostring(data.currentVersion or "")
+    if version ~= "" then return version end
+    local first = type(data.entries) == "table" and data.entries[1] or nil
+    return type(first) == "table" and tostring(first.version or "") or ""
+end
+
+-- Account-wide on purpose: a profile switch must not resurrect release notes
+-- the player has already read. Re-resolved on every call because profile repair
+-- and a full reset replace the SavedVariables root (see MSUF_UpgradeHighlights).
+local function SeenStore(create)
+    local gdb = _G.MSUF_GlobalDB
+    if type(gdb) ~= "table" then
+        if not create then return nil end
+        gdb = {}
+        _G.MSUF_GlobalDB = gdb
+    end
+    if type(gdb.global) ~= "table" then
+        if not create then return nil end
+        gdb.global = {}
+    end
+    return gdb.global
+end
+
+--- True while the bundled release has never been opened through the toolbar.
+--- Drives the Blizzard NEW badge on the See New Features button.
+function M.HasUnseenChangelog()
+    local version = CurrentChangelogVersion()
+    if version == "" then return false end
+    local store = SeenStore(false)
+    return tostring(store and store.seenChangelogVersion or "") ~= version
+end
+
+function M.MarkChangelogSeen()
+    local version = CurrentChangelogVersion()
+    if version == "" then return false end
+    local store = SeenStore(true)
+    if type(store) ~= "table" then return false end
+    if tostring(store.seenChangelogVersion or "") == version then return false end
+    store.seenChangelogVersion = version
+    if type(M.RefreshSeeNewFeaturesBadge) == "function" then M.RefreshSeeNewFeaturesBadge() end
+    return true
+end
+
 function M.OpenSeeNewFeatures()
     local data = ChangelogData()
     if data and data.currentVersion then M.changelogSelectedVersion = tostring(data.currentVersion) end
+    M.MarkChangelogSeen()
     if type(M.SelectPage) == "function" then return M.SelectPage("changelog") end
     return false
 end

@@ -178,7 +178,7 @@ ExportPublic("MSUF_NormalizePortraitRenderDB", MSUF_Defaults_NormalizePortraitRe
 local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena" }
 local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_DEFAULTS_STATUS_PREFIXES = {
-    "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
+    "leaderIcon", "raidMarker", "levelIndicator", "bossNumberIndicator", "eliteIcon", "statusText",
     "statusGhostText", "statusAFKText", "statusAFKTimer", "statusAFKTimerText", "statusDNDText",
     "combatStateIndicator", "restedStateIndicator", "restingStateIndicator",
     "incomingResIndicator", "pvpIndicator", "stanceIndicator", "raidGroupName",
@@ -2528,6 +2528,12 @@ end
 --- Login greeting in chat (Runtime/MSUF_WelcomeMessage.lua)
 if g.showWelcomeMessage == nil then
     g.showWelcomeMessage = true
+end
+--- Native 12.1 "spell IDs in aura tooltips" CVar, re-applied at login because
+--- the client resets it every session (Runtime/MSUF_TooltipSpellIDs.lua).
+--- Off by default: MSUF must not touch the CVar unless the user opts in here.
+if g.tooltipShowAuraSpellIDs == nil then
+    g.tooltipShowAuraSpellIDs = false
 end
 --- EllesmereUI may own the visible Unlock Mode shell while MSUF keeps its own
 --- profile geometry and preview transaction. Users can opt out only when the

@@ -509,7 +509,7 @@ local function BuildMisc(ctx)
     BindGroupTargetSwitch(targetCard, "Party frames", "party", 18, -78, targetColumnW - 42)
     BindGroupTargetSwitch(targetCard, "Raid frames", "raid", 18 + targetColumnW, -78, targetColumnW - 42)
     BindGroupTargetSwitch(targetCard, "Mythic Raid frames", "mythicraid", 18 + (targetColumnW * 2), -78, targetColumnW - 42)
-    local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 236, false)
+    local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 290, false)
     local tooltipW = tooltips._msuf2Width or ctx.width or 720
     local tooltipLeftX = 30
     local tooltipRightX = max(tooltipLeftX + 300, floor(tooltipW * 0.52))
@@ -541,6 +541,16 @@ local function BuildMisc(ctx)
     M.TrackRefresh(ctx, RefreshTooltipControls)
     local tooltipHelp = W.Text(tooltips, "Visibility modes apply only to unit and group frames. Aura tooltips use their own Show Tooltip switches; even Never does not override them. Auras only reuse the selected Blizzard/MSUF look and cursor placement.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted)
     if tooltipHelp.SetWordWrap then tooltipHelp:SetWordWrap(true) end
+    local tooltipSpellIDs = BindMiscToggle(tooltips, "Show spell IDs in aura tooltips", "tooltipShowAuraSpellIDs", false,
+        "MSUF2_TOOLTIP_SPELL_IDS", 14, -226, 360, PREVIEW_FALSE,
+        function(v)
+            if type(_G.MSUF_ApplyTooltipSpellIDs) == "function" then
+                _G.MSUF_ApplyTooltipSpellIDs(v and true or false)
+            end
+        end)
+    M.AddTooltip(tooltipSpellIDs, "Aura tooltip spell IDs",
+        "On: aura tooltips show the numeric spell ID through the game's own 12.1 option, and MSUF re-enables that option after every login because the game forgets it between sessions. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; turning this switch off clears the option once.",
+        { hook = true })
     --- Blizzard frame ownership is per unit ("Force Blizzard frame on" in each
     --- unit's Frame Basics), so this section only carries the remaining
     --- Blizzard-adjacent chrome toggles.

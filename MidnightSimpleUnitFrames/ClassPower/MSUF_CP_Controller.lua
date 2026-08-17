@@ -936,11 +936,7 @@ local CP = {
     slotR       = {},      --- persistent compiled per-slot colors (no refresh allocations)
     slotG       = {},
     slotB       = {},
-    augCompositeActive = false, --- Aug Essence + native Ebon replacement surface
-    augCompositeHeight = nil,
-    augEssenceHeight = nil,
-    augEbonHeight = nil,
-    augCompositeGap = nil,
+    augCompositeActive = false, --- Ebon Might owns the Player Power bar
     ebonSensorDesired = false,
     ebonTextLayerRetryPending = false,
     augLifecycleRetryPending = false,
@@ -951,44 +947,9 @@ local CP = {
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
 }
 
---- Cold-path geometry contract consumed by the Player Power element. The
---- ordinary Power StatusBar remains the positioning/width carrier while its
---- own Mana visuals and events are disabled for the Augmentation composite.
-function CP.GetAugPowerReplacementMetrics(frame)
-    if CP.augCompositeActive ~= true then return false end
-    if frame and frame.MSUFUnitKey and frame.MSUFUnitKey ~= "player" then return false end
-    local essenceHeight = CP.augEssenceHeight
-    local gap = CP.augCompositeGap
-    local ebonHeight = CP.augEbonHeight
-    local powerSpec = frame and frame.MSUFSpec and frame.MSUFSpec.power or nil
-    local liveEbonHeight = tonumber(powerSpec and powerSpec.height)
-    if liveEbonHeight then
-        if liveEbonHeight < 1 then liveEbonHeight = 1 elseif liveEbonHeight > 30 then liveEbonHeight = 30 end
-        if liveEbonHeight ~= ebonHeight then
-            ebonHeight = liveEbonHeight
-            CP.augEbonHeight = liveEbonHeight
-            CP.augCompositeHeight = (tonumber(essenceHeight) or 4) + (tonumber(gap) or 2) + liveEbonHeight
-            if CP.ebonHost and CP.ebonHost.SetHeight then
-                CP.ebonHost:SetHeight(liveEbonHeight)
-            end
-        end
-    end
-    return true,
-        CP.augCompositeHeight,
-        essenceHeight,
-        gap,
-        ebonHeight,
-        true
-end
-ExportPublic("MSUF_GetAugPowerReplacementMetrics", CP.GetAugPowerReplacementMetrics)
-
 local function CP_ClearAugCompositeState()
     local wasActive = CP.augCompositeActive == true or _G.MSUF_AugEvokerActive == true
     CP.augCompositeActive = false
-    CP.augCompositeHeight = nil
-    CP.augEssenceHeight = nil
-    CP.augEbonHeight = nil
-    CP.augCompositeGap = nil
     CP.ebonSensorDesired = false
     CP.ebonSensorRetryPending = nil
     CP.ebonTextLayerRetryPending = nil
@@ -1612,84 +1573,96 @@ do
 end
 ExportPublic("MSUF_CDM_GetScaledWidth", CDM_GetScaledWidth)
 
-local function CP_EnsureEbonHost()
-    if CP.ebonHost then return CP.ebonHost end
-    local container = CP.container
-    if not container then return nil end
-    local host = CreateFrame("Frame", nil, container)
-    if host.EnableMouse then host:EnableMouse(false) end
-    local bg = host:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(host)
-    CP.ebonHostBG = bg
-    host:Hide()
-    CP.ebonHost = host
-    return host
-end
-
-local function CP_LayoutEbonHost()
-    local host = CP_EnsureEbonHost()
-    if not (host and CP.container and CP.augCompositeActive == true) then return host end
-    local h = tonumber(CP.augEbonHeight) or 3
-    local gap = tonumber(CP.augCompositeGap) or 2
-    host:ClearAllPoints()
-    host:SetPoint("TOPLEFT", CP.container, "BOTTOMLEFT", 0, -gap)
-    host:SetPoint("TOPRIGHT", CP.container, "BOTTOMRIGHT", 0, -gap)
-    host:SetHeight(h)
-    if host.SetFrameLevel and CP.container.GetFrameLevel then
-        host:SetFrameLevel((CP.container:GetFrameLevel() or 0) + 1)
-    end
-    local bg = CP.ebonHostBG
-    if bg then
-        local b = _cpDB.bars or {}
-        local bgPath = CP_ResolveTexture(b.classPowerBgTexture or b.classPowerTexture)
-        local r, g, blue = ResolveClassPowerBgColor("EBON_MIGHT")
-        bg:SetTexture(bgPath)
-        bg:SetVertexColor(tonumber(r) or 0, tonumber(g) or 0, tonumber(blue) or 0,
-            tonumber(b.classPowerBgAlpha) or 0.3)
-    end
-    return host
+--- Ebon Might lives on the Player Power bar itself: Essence keeps the ordinary
+--- Class Resource surface and Mana moves to the Alternative Mana bar. The bar is
+--- owned by the Power element, which sizes, anchors, layers and skins it from
+--- the ordinary Player Power settings; ClassPower only mounts the native
+--- AuraContainer on top of it.
+local function CP_ResolveEbonHost()
+    local playerFrame = CP._pf or (CoreUnitFrame and CoreUnitFrame("player")) or _G.MSUF_player
+    local bar = playerFrame and playerFrame.targetPowerBar or nil
+    if bar then CP.ebonHost = bar end
+    return bar or CP.ebonHost
 end
 
 function CP.GetEbonTextLevel()
-    local b = _cpDB.bars or {}
-    local textLayer = tonumber(b.classPowerTextLayer) or 5
+    local host = CP.ebonHost
+    local p = MSUF_DB and MSUF_DB.player or nil
+    local textLayer = tonumber(p and p.powerTextLayer) or 2
     if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
     textLayer = math_floor(textLayer + 0.5)
+    if host and host.GetFrameLevel then
+        return (host:GetFrameLevel() or 0) + 1 + textLayer
+    end
     local layers = MSUF.UF and MSUF.UF.Layers
     return layers and layers.TextLevel and layers.TextLevel(CP.container, textLayer, 5)
         or (layers and layers.ElementLevel and layers.ElementLevel(textLayer, 5, 8))
         or ((CP.container and CP.container.GetFrameLevel and CP.container:GetFrameLevel() or 0) + 10)
 end
 
+--- Ebon Might is the Player Power bar's content, so its media, alpha and text
+--- style come from the ordinary Player Power configuration. Only the fill colour
+--- still resolves through the EBON_MIGHT token, because that is where every
+--- other class-resource colour lives on the Colors page.
 local function CP_GetEbonStyle()
+    local playerFrame = CP._pf or CoreUnitFrame("player") or _G.MSUF_player
+    local powerSpec = playerFrame and playerFrame.MSUFSpec and playerFrame.MSUFSpec.power or nil
+    local p = MSUF_DB and MSUF_DB.player or nil
+    local general = MSUF_DB and MSUF_DB.general or nil
     local b = _cpDB.bars or {}
+
     local r, g, blue = 1, 1, 1
     if _cpDB.colorByType ~= false then
         r, g, blue = ResolveClassPowerColor("EBON_MIGHT")
     end
-    local style = {
-        texture = CP_ResolveTexture(b.classPowerTexture),
-        barR = r, barG = g, barB = blue, barA = _filledAlpha,
-        textLevel = CP.GetEbonTextLevel(),
-        textOffsetX = tonumber(b.classPowerTextOffsetX) or 0,
-        textOffsetY = tonumber(b.classPowerTextOffsetY) or 0,
-    }
-    local source = CP.text
-    if source then
-        if type(source.GetFont) == "function" then
-            style.fontPath, style.fontSize, style.fontFlags = source:GetFont()
-        end
-        if type(source.GetTextColor) == "function" then
-            style.textR, style.textG, style.textB, style.textA = source:GetTextColor()
-        end
-        if type(source.GetShadowColor) == "function" then
-            style.shadowR, style.shadowG, style.shadowB, style.shadowA = source:GetShadowColor()
-        end
-        if type(source.GetShadowOffset) == "function" then
-            style.shadowX, style.shadowY = source:GetShadowOffset()
+
+    local fontPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or nil
+    local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or nil
+    if not fontPath or fontPath == "" then fontPath = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF" end
+    if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
+    local fontSize = tonumber(p and p.powerFontSize) or tonumber(general and general.powerFontSize) or 14
+    if fontSize < 6 then fontSize = 6 elseif fontSize > 48 then fontSize = 48 end
+    local resolveSafe = _G.MSUF_ResolveSafeFontPath
+    if type(resolveSafe) == "function" then
+        fontPath = resolveSafe(fontPath, fontSize, fontFlags, general and general.fontKey) or fontPath
+    end
+
+    --- Same precedence the Text element uses for ordinary power slots: a frame
+    --- font override may flip colour-by-type, otherwise the shared Fonts scope
+    --- decides. Colour-by-type on this bar means the Ebon Might colour.
+    local colorByType = general ~= nil and general.colorPowerTextByType == true
+    if p and p.fontOverride == true then
+        if p.powerTextColorByType ~= nil then
+            colorByType = p.powerTextColorByType == true
+        elseif p.colorPowerTextByType ~= nil then
+            colorByType = p.colorPowerTextByType == true
         end
     end
-    return style
+    local textR, textG, textB, textA = 1, 1, 1, 1
+    if colorByType then
+        textR, textG, textB = r, g, blue
+    else
+        local getColor = _G.MSUF_GetConfiguredFontColor
+        if type(getColor) == "function" then
+            local cr, cg, cb, ca = getColor()
+            textR = tonumber(cr) or 1
+            textG = tonumber(cg) or 1
+            textB = tonumber(cb) or 1
+            textA = tonumber(ca) or 1
+        end
+    end
+
+    return {
+        texture = CP_ResolveTexture(powerSpec and powerSpec.texture
+            or b.powerBarTexture or b.classPowerTexture),
+        barR = r, barG = g, barB = blue,
+        barA = tonumber(powerSpec and powerSpec.alpha) or 1,
+        fontPath = fontPath, fontSize = fontSize, fontFlags = fontFlags,
+        textR = textR, textG = textG, textB = textB, textA = textA,
+        textLevel = CP.GetEbonTextLevel(),
+        textOffsetX = tonumber(p and p.powerOffsetX) or 0,
+        textOffsetY = tonumber(p and p.powerOffsetY) or 0,
+    }
 end
 
 CP.ebonNative = CP_CallBuilder(CPCoreBuilders.EBON_MIGHT, {
@@ -1697,10 +1670,22 @@ CP.ebonNative = CP_CallBuilder(CPCoreBuilders.EBON_MIGHT, {
     EBON = EBON,
     _cpDB = _cpDB,
     CreateFrame = CreateFrame,
-    GetHost = CP_LayoutEbonHost,
+    GetHost = CP_ResolveEbonHost,
     GetStyle = CP_GetEbonStyle,
     GetTextLevel = CP.GetEbonTextLevel,
 })
+
+--- The Power element calls this once its bar is laid out and skinned, which is
+--- also the only moment the host is guaranteed to exist. Creating the native
+--- container is a restricted operation, so a combat-time call just arms the
+--- existing PLAYER_REGEN retry instead of failing.
+local function CP_MountEbonMight(bar)
+    if bar then CP.ebonHost = bar end
+    if CP.augCompositeActive ~= true then return false end
+    if type(CP.SetEbonSensorActive) ~= "function" then return false end
+    return CP.SetEbonSensorActive(true) == true
+end
+ExportPublic("MSUF_ClassPower_MountEbonMight", CP_MountEbonMight)
 
 --- Legacy color-only refresh / texture refresh now live in
 --- ClassPower presentation helpers.
@@ -2193,21 +2178,11 @@ local function FullRefresh()
         and PLAYER_CLASS == "EVOKER"
         and GetSpec and GetSpec() == CPK.SPEC.EVOKER_AUG
         and b.showEbonMight ~= false) or false
-    local powerSpec = playerFrame.MSUFSpec and playerFrame.MSUFSpec.power or nil
-    local ebonHeight = tonumber(powerSpec and powerSpec.height) or 3
-    if ebonHeight < 1 then ebonHeight = 1 elseif ebonHeight > 30 then ebonHeight = 30 end
-    local compositeGap = 2
-    local compositeHeight = cpHeight + compositeGap + ebonHeight
     local wasAugComposite = CP.augCompositeActive == true
-    local wasAugGlobal = _G.MSUF_AugEvokerActive == true
-    local oldCompositeHeight = CP.augCompositeHeight
-    local oldEssenceHeight = CP.augEssenceHeight
-    local oldEbonHeight = CP.augEbonHeight
-    local oldCompositeGap = CP.augCompositeGap
 
-    --- Power.Apply and CP_Layout both defer/freeze geometry in lockdown. Keep
-    --- entry and exit atomic by retaining the old complete surface until one
-    --- PLAYER_REGEN_ENABLED refresh can perform both sides of the hand-off.
+    --- Creating the native AuraContainer is restricted work, and the Power
+    --- element cannot re-skin or re-anchor its bar during lockdown either. Keep
+    --- both sides of the hand-off on one PLAYER_REGEN_ENABLED pass.
     local augTransition = wasAugComposite ~= wantsAugComposite
     if augTransition and InCombatLockdown and InCombatLockdown() then
         CP.augLifecycleRetryPending = true
@@ -2232,52 +2207,48 @@ local function FullRefresh()
         CP.augLifecycleTarget = nil
     end
 
-    --- Resolve the native Ebon owner before replacing the ordinary Player
-    --- Power surface. If Blizzard_AuraContainer cannot load (notably when the
-    --- UI starts in combat), Essence and normal Power keep their usual layout
-    --- while the existing event driver waits for one PLAYER_REGEN retry.
+    --- Publish the intent before the Power element re-applies: it reads the
+    --- public flag to decide whether this bar renders Ebon Might or ordinary
+    --- Mana, and calls back into MSUF_ClassPower_MountEbonMight once its bar is
+    --- laid out - which is the first moment the host is guaranteed to exist.
     if wantsAugComposite or not wasAugComposite then
         CP.ebonSensorDesired = wantsAugComposite
     end
-    local ebonReady = false
+    local augChanged = wantsAugComposite ~= wasAugComposite
+        or wantsAugComposite ~= (_G.MSUF_AugEvokerActive == true)
     if wantsAugComposite then
-        CP.augCompositeActive = true
-        CP.augCompositeHeight = compositeHeight
-        CP.augEssenceHeight = cpHeight
-        CP.augEbonHeight = ebonHeight
-        CP.augCompositeGap = compositeGap
-        CP_Create(playerFrame)
-        if CP_EnsureMainText then CP_EnsureMainText() end
-        CP_ApplyFont()
-        CP_LayoutEbonHost()
-        ebonReady = CP.SetEbonSensorActive(true) == true
-    elseif not wasAugComposite then
-        CP.SetEbonSensorActive(false)
-    end
-    local isAugComposite = wantsAugComposite and ebonReady
-    local augChanged = isAugComposite ~= wasAugGlobal
-    local augGeometryChanged = wasAugComposite ~= isAugComposite
-        or (isAugComposite and (oldCompositeHeight ~= compositeHeight
-            or oldEssenceHeight ~= cpHeight
-            or oldEbonHeight ~= ebonHeight
-            or oldCompositeGap ~= compositeGap))
-    local refreshAugPowerAfterClassLayout = wasAugComposite and not isAugComposite
-        and (augChanged or augGeometryChanged)
-    if refreshAugPowerAfterClassLayout then
-        --- CP_Core uses this internal bit to select its carrier anchor. Leave
-        --- the public state, sensor, and geometry intact until normal CP_Layout
-        --- has severed that anchor below.
-        CP.augCompositeActive = false
+        --- Entry order is state -> Power -> sensor: the element reads the public
+        --- flag to decide whether this bar renders Ebon Might or Mana, and calls
+        --- back into MSUF_ClassPower_MountEbonMight once its bar is laid out,
+        --- which is the first moment the host is guaranteed to exist.
+        if augChanged then
+            CP.augCompositeActive = true
+            ExportPublic("MSUF_AugEvokerActive", true)
+            if _G.MSUF_RefreshPlayerPowerBar then
+                _G.MSUF_RefreshPlayerPowerBar()
+            end
+        end
+        CP.SetEbonSensorActive(true)
+        if CP.ebonSensor == nil then
+            --- Blizzard_AuraContainer could not be created (notably a UI start
+            --- in combat). Fall back to an ordinary Mana bar instead of leaving
+            --- an empty one behind; the event driver retries after regen.
+            CP.augCompositeActive = false
+            ExportPublic("MSUF_AugEvokerActive", false)
+            if _G.MSUF_RefreshPlayerPowerBar then
+                _G.MSUF_RefreshPlayerPowerBar()
+            end
+        end
     else
-        CP.augCompositeActive = isAugComposite
-        CP.augCompositeHeight = isAugComposite and compositeHeight or nil
-        CP.augEssenceHeight = isAugComposite and cpHeight or nil
-        CP.augEbonHeight = isAugComposite and ebonHeight or nil
-        CP.augCompositeGap = isAugComposite and compositeGap or nil
-        ExportPublic("MSUF_AugEvokerActive", isAugComposite)
-    end
-    if (augChanged or augGeometryChanged) and not refreshAugPowerAfterClassLayout then
-        if _G.MSUF_RefreshPlayerPowerBar then
+        --- Exit order is state -> sensor -> Power, matching CP.DisableNow: the
+        --- flag has to be down before the element re-applies, or the bar would
+        --- immediately re-enter Ebon mode.
+        if augChanged then
+            CP.augCompositeActive = false
+            ExportPublic("MSUF_AugEvokerActive", false)
+        end
+        CP.SetEbonSensorActive(false)
+        if augChanged and _G.MSUF_RefreshPlayerPowerBar then
             _G.MSUF_RefreshPlayerPowerBar()
         end
     end
@@ -2412,7 +2383,8 @@ local function FullRefresh()
         CP.container._msufAnchorOnly = nil
         CP.container:Show()
         if CP.augCompositeActive == true then
-            CP_LayoutEbonHost()
+            --- Keep-alive only. The host is the Player Power bar, so its
+            --- geometry and visibility belong to the Power element.
             CP.SetEbonSensorActive(true)
         end
         --- The container is measurable only now, so a synced detached Power bar
@@ -3286,6 +3258,7 @@ CP.ApplyFontsPublic = function()
         _cpFontRev = 0  --- force re-apply
         CP_ApplyFont()
         CP.SetEbonSensorActive(CP.augCompositeActive == true)
+        if CP.RefreshEbonStyle then CP.RefreshEbonStyle() end
         CP.ApplyEbonTextStyle()
     end
     if PHP.visible then
@@ -3303,6 +3276,7 @@ CP.RefreshVisualsPublic = function()
         if CP_RefreshTexture then CP_RefreshTexture() end
         if CP_ApplyFont then CP_ApplyFont() end
         if CP_ApplyColors then CP_ApplyColors(CP.powerType) end
+        if CP.RefreshEbonStyle then CP.RefreshEbonStyle() end
         CP.ApplyEbonTextStyle()
         if CP.powerType == "IRONFUR" and CP.ironfur and CP.ironfur.RefreshVisual then
             CP.ironfur.RefreshVisual()
@@ -3442,10 +3416,9 @@ end
 ExportPublic("MSUF_SmoothPowerBar_Apply", CP.SmoothPowerBarApply)
 
 --- Complete the ClassPower module teardown. Active Aug is never routed here in
---- combat: Disable() retains the old composite and the event driver calls this
---- once on PLAYER_REGEN_ENABLED. The normal CP anchor must be restored before
---- the public replacement state disappears, otherwise detached Player Power
---- can resolve an anchor cycle when it comes back.
+--- combat: Disable() retains the live surface and the event driver calls this
+--- once on PLAYER_REGEN_ENABLED. Clearing the public flag below makes the Power
+--- element rebuild its bar as an ordinary Mana bar on the refresh at the end.
 function CP.DisableNow()
     _CP_RefreshConfig()
     CP.augLifecycleRetryPending = false
@@ -3453,18 +3426,6 @@ function CP.DisableNow()
     CP.augLifecycleTarget = nil
 
     local augWasActive = CP.augCompositeActive == true or _G.MSUF_AugEvokerActive == true
-    if augWasActive and CP.augCompositeActive == true
-        and not (InCombatLockdown and InCombatLockdown())
-    then
-        local playerFrame = GetPlayerFrame()
-        if playerFrame and CP.container and CP_Layout then
-            local maxP = tonumber(CP.currentMax) or 5
-            if maxP < 1 then maxP = 1 end
-            if maxP > CPConst.MAX_CLASS_POWER then maxP = CPConst.MAX_CLASS_POWER end
-            CP.augCompositeActive = false
-            CP_Layout(playerFrame, maxP, tonumber(CP._layoutH) or 4, CP.powerType or PT.Essence)
-        end
-    end
 
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(false)

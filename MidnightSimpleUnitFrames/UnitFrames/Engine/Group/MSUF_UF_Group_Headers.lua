@@ -672,7 +672,7 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf)
       for i = 1, 4 do
         AddNameListEntry(entries, "party" .. i, i, conf)
       end
-    elseif conf.showSolo == true and conf.showPlayer ~= false then
+    elseif liveKind == nil and conf.showSolo == true and conf.showPlayer ~= false then
       AddNameListEntry(entries, "player", 0, conf)
     end
   else
@@ -973,7 +973,7 @@ local function GroupBorderScopeActive(anchorKind, conf)
   local liveKind = LiveGroupKind()
   if anchorKind == "party" then
     if liveKind == "party" then return true end
-    return conf.showSolo == true
+    return liveKind == nil and conf.showSolo == true
   end
   if anchorKind == "raid" or anchorKind == "mythicraid" then
     return liveKind == anchorKind

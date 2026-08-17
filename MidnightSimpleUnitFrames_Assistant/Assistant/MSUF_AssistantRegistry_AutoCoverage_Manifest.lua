@@ -22,8 +22,8 @@ A.AutoCoverageManifest = Manifest
 -- Defaults generated offline on 2026-08-15 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 5086 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 5086
+-- 5087 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 5087
 Manifest.requiredScopes = {
     "arena", "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -2130,6 +2130,7 @@ Manifest.defaults = {
         tempMaxHealthTexture = "Solid",
         textBackdrop = true,
         tipCycleIndex = 9,
+        tooltipShowAuraSpellIDs = false,
         unifiedBarB = 0.29411765933036799,
         unifiedBarG = 0.090196080505847931,
         unifiedBarR = 0.90196084976196289,

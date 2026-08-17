@@ -1,5 +1,34 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha4 - 2026-08-17
+
+### Highlights
+
+- Added dedicated **Arena Frames** for arena1-3 with their own castbars, auras, Edit Mode movers, options page and Assistant coverage, including match preparation, stealth and trinket tracking.
+- Added the **MidnightSkin theme bridge** so the MSUF menu and the Edit Mode popup chrome follow the active UI theme.
+- Synchronized the unified Mainline, Vanilla, Mists and TBC package with the MSUF 6.08 and 6.09 feature and fix set while retaining every client-specific API owner.
+- Added dynamic **Custom Priority** ordering for Dots on target and the Custom 1-3 aura containers, keeping the configured spell order compact as tracked auras appear or expire.
+- Added a **combat aura scanner** to the blacklist workspace: it keeps capturing every blockable aura during combat and reopens the menu with the collected list.
+
+### Changes
+
+- Reworked the menu UX round: focus-section chips on unit and group pages, a dashboard jump hub, search ranking and palette fixes, guarded destructive actions and explanations for disabled controls, with menu strings in all twelve locales.
+- Moved aura ordering into dedicated, scope-aware **Ordering** workspaces for Unit Frames, Group Frames, custom aura containers and external defensives.
+- Extended the **Maximum duration** filter to every aura lane on unit and group frames, including Buffs, Tracked Buffs and External Defensives.
+- Added an optional **Boss Number** status indicator for boss frames.
+- Separated the Augmentation Evoker resources so Ebon Might renders on the Player power bar, Essence stays an ordinary Class Resource and Mana moves to Alternative Mana.
+- Added the **Show spell IDs in aura tooltips** toggle. Its runtime stays Mainline-only because the underlying client option does not exist on Vanilla, Mists or TBC, where the switch is an inert no-op.
+
+### Fixes & Performance
+
+- Fixed the CPU spike when an arena match starts.
+- Group frames preserve raid groups without overwriting the configured sort mode.
+- Fixed external-defensive aura filters on Classic clients and kept only-mine auras filtered out of range checks.
+- Isolated the Classic aura backend load graph from the Mainline manifest.
+- Reused the cached absorb protection state and prebuilt alias scan lists on the prediction and aura hot paths.
+- Fixed gameplay mover offsets drifting on scaled anchors and the combat timer not being movable while its position was unlocked.
+- Aura scanning respects Blizzard's instanced-content restrictions instead of erroring, and reports how many auras the client hides as secret.
+
 ## 6.5-alpha3 - 2026-08-13
 
 ### Highlights

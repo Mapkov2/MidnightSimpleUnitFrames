@@ -155,22 +155,37 @@ local function SyncGameplayPanel(method)
     local panel = _G.MSUF_GameplayPanel
     local fn = panel and panel[method]
     if fn then fn(panel) end
+    -- Menu2 replaced the legacy gameplay panel, so mover drags/nudges must repaint the visible
+    -- X/Y offset sliders through the Menu2 sync path (same one Edit Mode position drags use).
+    local m2 = _G.MSUF2
+    if m2 and type(m2.RefreshVisibleSliders) == "function" then m2.RefreshVisibleSliders("GAMEPLAY_MOVER_POSITION_CHANGED") end
 end
 
 local function StoreCenteredOffset(frame, db, xKey, yKey, anchor, roundValues)
     local x, y = frame:GetCenter()
     if not (x and y) then return end
 
+    -- GetCenter reports each region in its own effective-scale space. Anchoring to a scaled
+    -- unit frame therefore needs both centers converted through screen pixels into the moving
+    -- frame's space (the space SetPoint offsets are applied in), or the stored offsets drift
+    -- and the next re-anchor jumps the frame.
+    local frameScale = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
+    if not frameScale or frameScale <= 0 then frameScale = 1 end
+
     local ax, ay = UIParent:GetCenter()
+    local anchorScale = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or frameScale
     if anchor and anchor.GetCenter then
         local tx, ty = anchor:GetCenter()
         if tx and ty then
             ax, ay = tx, ty
+            anchorScale = (anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or anchorScale
         end
     end
     if not (ax and ay) then return end
+    if not anchorScale or anchorScale <= 0 then anchorScale = frameScale end
 
-    local dx, dy = x - ax, y - ay
+    local dx = ((x * frameScale) - (ax * anchorScale)) / frameScale
+    local dy = ((y * frameScale) - (ay * anchorScale)) / frameScale
     if roundValues ~= false then
         dx, dy = RoundInt(dx), RoundInt(dy)
     end
@@ -405,6 +420,12 @@ local function CombatStateClearTimerFired()
     if stateText and g and g.enableCombatStateText then
         ClearCombatStateText()
         SetCombatStateClickThrough(false)
+        if not g.lockCombatState then
+            -- Unlocked text stays visible as the movable handle; without this the handle
+            -- vanishes after every combat transition until the next menu apply.
+            local er, eg, eb = MSUF_GetCombatStateColors(g)
+            ShowCombatStateText("enter", TextOrDefault(g.combatStateEnterText, "+Combat"), er, eg, eb, false)
+        end
     end
 end
 
@@ -551,6 +572,7 @@ EnsureCombatStateText = function()
                 self:SetPoint("CENTER", UIParent, "CENTER", db.combatStateOffsetX, db.combatStateOffsetY)
                 self._msufAppliedPositionX = db.combatStateOffsetX
                 self._msufAppliedPositionY = db.combatStateOffsetY
+                SyncGameplayPanel("MSUF_SyncCombatStateOffsetSliders")
                 CheckpointHistory("Combat enter/leave position", "gameplay:combatState:position")
                 return true
             end,
@@ -562,14 +584,23 @@ EnsureCombatStateText = function()
         stateFrame:SetScript("OnDragStart", function(self)
             local gd = GameplayDefaults()
             if gd.lockCombatState then return end
-            SelectNudgeFrame(self, true)
-            BeginHistory(self, "Combat enter/leave position", "gameplay:combatState:position")
-            self:StartMoving()
+            BeginGameplayDrag(self, "Combat enter/leave position", "gameplay:combatState:position")
         end)
 
         stateFrame:SetScript("OnDragStop", function(self)
             self:StopMovingOrSizing()
-            StoreCenteredOffset(self, GameplayDefaults(), "combatStateOffsetX", "combatStateOffsetY", nil, false)
+            self._msufDragging = nil
+
+            local db = GameplayDefaults()
+            StoreCenteredOffset(self, db, "combatStateOffsetX", "combatStateOffsetY")
+            -- Re-anchor to the stored (rounded) offsets and sync the applied cache, otherwise the
+            -- next ApplyCombatStatePosition sees stale values and snaps the frame back.
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "CENTER", tonumber(db.combatStateOffsetX) or 0, tonumber(db.combatStateOffsetY) or 80)
+            self._msufAppliedPositionX = tonumber(db.combatStateOffsetX) or 0
+            self._msufAppliedPositionY = tonumber(db.combatStateOffsetY) or 80
+
+            SyncGameplayPanel("MSUF_SyncCombatStateOffsetSliders")
             SelectNudgeFrame(self, true)
             CommitHistory(self)
         end)
@@ -874,7 +905,15 @@ local function CreateCombatTimerFrame()
         self._msufDragging = nil
 
         local db = GameplayDefaults()
-        StoreCenteredOffset(self, db, "combatOffsetX", "combatOffsetY", GetCombatTimerAnchorFrame(db))
+        local anchorFrame = GetCombatTimerAnchorFrame(db)
+        StoreCenteredOffset(self, db, "combatOffsetX", "combatOffsetY", anchorFrame)
+        -- Re-anchor to the stored offsets and sync the applied cache so the next apply does not
+        -- re-anchor (and visibly jump) from stale cached values.
+        self:ClearAllPoints()
+        self:SetPoint("CENTER", anchorFrame, "CENTER", tonumber(db.combatOffsetX) or 0, tonumber(db.combatOffsetY) or 0)
+        self._msufAppliedAnchor = anchorFrame
+        self._msufAppliedPositionX = tonumber(db.combatOffsetX) or 0
+        self._msufAppliedPositionY = tonumber(db.combatOffsetY) or 0
 
         SyncGameplayPanel("MSUF_SyncCombatTimerOffsetSliders")
 
@@ -1179,6 +1218,10 @@ ApplyGameplayNow = function()
             lastTimerText = ""
             TickCombatTimer()
             _StartCombatTimerTick()
+        else
+            -- Out of combat the tick never runs on its own, so enabling or unlocking the timer
+            -- from the menu would leave it invisible; the tick paints the movable 0:00 placeholder.
+            TickCombatTimer()
         end
     else
         combatStartTime = nil

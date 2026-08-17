@@ -376,10 +376,6 @@ local function MSUF_GetPowerBarColor(powerType, powerToken)
     local g = G.MSUF_DB.general
     local ov = g and g.powerColorOverrides
     local c = ov and ov[powerToken] or nil
-    if type(c) ~= "table" and G.MSUF_AugEvokerActive and powerToken == "ESSENCE" then
-        local cpOv = g and g.classPowerColorOverrides
-        c = cpOv and cpOv[powerToken] or nil
-    end
     if type(c) ~= "table" then
         return nil
     end

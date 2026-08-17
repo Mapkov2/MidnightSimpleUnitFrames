@@ -290,24 +290,25 @@ local function FinalizeSlot(slot)
     return slot
 end
 
+local function NormalizeFrameEffect(raw)
+    if type(raw) ~= "table" or raw.type == nil or raw.type == "" or raw.type == "none" then return nil end
+    local color = type(raw.color) == "table" and raw.color or nil
+    return {
+        type = raw.type,
+        color = color,
+        priority = Round(ClampNumber(raw.priority, 5, 1, 10)),
+        tintAlpha = Clamp01(raw.tintAlpha or raw.alpha or (color and color[4]), 0.20),
+        thickness = ClampNumber(raw.thickness, 2, 1, 32),
+        layer = Round(ClampNumber(raw.layer, 0, 0, 30)),
+        strata = NormalizeFrameStrata(raw.strata, "AUTO"),
+    }
+end
+Runtime.NormalizeFrameEffect = NormalizeFrameEffect
+
 local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fallbackIconZoom, spellIconStyle)
     if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
     local placed = type(item.placed) == "table" and item.placed or nil
-    local frameEffect = type(item.frame) == "table" and item.frame or nil
-    if frameEffect and (frameEffect.type == nil or frameEffect.type == "" or frameEffect.type == "none") then frameEffect = nil end
-    if frameEffect then
-        local raw = frameEffect
-        local color = type(raw.color) == "table" and raw.color or nil
-        frameEffect = {
-            type = raw.type,
-            color = color,
-            priority = Round(ClampNumber(raw.priority, 5, 1, 10)),
-            tintAlpha = Clamp01(raw.tintAlpha or raw.alpha or (color and color[4]), 0.20),
-            thickness = ClampNumber(raw.thickness, 2, 1, 32),
-            layer = Round(ClampNumber(raw.layer, 0, 0, 30)),
-            strata = NormalizeFrameStrata(raw.strata, "AUTO"),
-        }
-    end
+    local frameEffect = NormalizeFrameEffect(item.frame)
     if not placed and not frameEffect then return nil end
     local candidateFilters = item.candidateFilters
     local candidateFilterSignature = item.candidateFilterSignature
@@ -1124,6 +1125,24 @@ local function ApplyAlwaysButtonFrameEffect(button, slot, parentFrame)
     -- visibility, Group presence, range and identity alpha all flow through the
     -- existing ancestor chain without Lua lifecycle hooks.
     return ApplyButtonFrameEffect(button, slot, parentFrame)
+end
+
+--- Installs a full-frame effect as one of Blizzard's native Pandemic regions.
+--- The region is a descendant of the AuraButton, so the protected Shown aspect
+--- is owned entirely by CustomAuraButtonMixin. No MSUF event, ticker, aura-data
+--- read, or Lua OnUpdate participates in the visibility transition.
+function Runtime.BindPandemicFrameEffect(button, effect, parentFrame)
+    if not (button and type(button.AddPandemicRegion) == "function" and parentFrame) then return false end
+    effect = NormalizeFrameEffect(effect)
+    if not effect then return false end
+    if button._msufA3PandemicFrameEffectRegion then return true end
+    if not ApplyButtonFrameEffect(button, { frameEffect = effect, strata = effect.strata }, parentFrame) then return false end
+    local region = button._msufA3SpellIndicatorEffectRoot
+    if not region then return false end
+    region:Hide()
+    button:AddPandemicRegion(region)
+    button._msufA3PandemicFrameEffectRegion = region
+    return true
 end
 
 local function ApplyButtonIconEffect(button, slot, parentFrame)

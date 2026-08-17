@@ -192,6 +192,18 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "welcome message", "startup welcome", "start message", "show welcome message", "login welcome message", "startup message", "willkommensnachricht",
         "willkommens nachricht", "willkommens meldung", "willkommen nachricht", "login nachricht", "start meldung",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_WELCOME" })
+    RegisterGeneralBoolean("tooltipShowAuraSpellIDs", "tooltipShowAuraSpellIDs", "Aura Tooltip Spell IDs", false, {
+        "aura tooltip spell ids", "spell ids in aura tooltips", "spell ids in tooltips", "tooltip spell ids",
+        "spell id in tooltip", "spell id in tooltips", "aura spell ids", "show spell ids in aura tooltips",
+        "hide spell ids in aura tooltips", "zauber id im tooltip", "zauber ids in tooltips",
+        "zauber ids in aura tooltips", "spell id im tooltip", "spell ids anzeigen",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_TOOLTIP_SPELL_IDS",
+        apply = function()
+            local fn = _G.MSUF_ApplyTooltipSpellIDs
+            if type(fn) == "function" then fn() end
+        end,
+    })
     RegisterGeneralBoolean("nsrtNicknameIntegration", "nsrtNicknameIntegration", "NSRT Nickname Integration", true, {
         "nsrt nicknames", "nsrt nickname integration", "northern sky raid tools nicknames", "use nsrt nicknames",
         "disable nsrt nicknames", "show character names instead of nsrt nicknames", "nsrt spitznamen", "nsrt namen deaktivieren",

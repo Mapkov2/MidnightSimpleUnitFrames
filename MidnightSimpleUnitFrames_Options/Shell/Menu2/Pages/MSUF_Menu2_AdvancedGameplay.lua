@@ -172,6 +172,10 @@ local function BuildGameplay(ctx)
         })
         LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, -312, min(520, timerW - 60), "GameFontDisableSmall", T.colors.muted)
     end
+    -- timerControls[3] is the timer's "Lock position" toggle in both layout branches above.
+    if type(M.AddTooltip) == "function" and timerControls[3] then
+        M.AddTooltip(timerControls[3], "Lock position", "While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position.", { hook = true, labelHit = true })
+    end
     local stateStacked = GameplayStacked()
     local state = b:CollapsibleSection("gameplay_state", "Combat Enter/Leave", stateStacked and 580 or 340, false)
     if W.AttachContextColorShortcut then
@@ -220,6 +224,10 @@ local function BuildGameplay(ctx)
             { "slider", "X offset", stateLeftX, -238, -800, 800, 1, stateColW, "combatStateOffsetX", 0 },
             { "slider", "Y offset", stateRightX, -238, -800, 800, 1, stateColW, "combatStateOffsetY", 80 },
         })
+    end
+    -- stateControls[1] is the "Lock position" toggle in both layout branches above.
+    if type(M.AddTooltip) == "function" and stateControls[1] then
+        M.AddTooltip(stateControls[1], "Lock position", "While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat.", { hook = true, labelHit = true })
     end
     AddGameplayTextInput(stateControls, enterInput, "combatStateEnterText", "+Combat")
     AddGameplayTextInput(stateControls, leaveInput, "combatStateLeaveText", "-Combat")

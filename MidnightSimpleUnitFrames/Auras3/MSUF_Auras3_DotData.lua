@@ -5,9 +5,9 @@
 ---   Retail 12.0.7.68453 (2026-07-18 hotfix data)
 ---   PTR    12.1.0.68745 (2026-07-16 hotfix data)
 --- Aura IDs were cross-checked against Blizzard CDN spell data via the
---- SimulationCraft SpellDataDump generator. Channels and non-damaging marks
---- are intentionally excluded; this list contains target-visible periodic
---- damage auras only.
+--- SimulationCraft SpellDataDump generator. Channels are intentionally
+--- excluded; alongside target-visible periodic damage auras, the list may
+--- include explicitly tracked gameplay marks that share the same display.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 
@@ -36,6 +36,7 @@ A3.TargetDotData = {
         { 164812, "Moonfire" }, { 164815, "Sunfire" },
         { 192090, "Thrash" }, { 202347, "Stellar Flare" },
         { 274838, "Feral Frenzy" }, { 325733, "Adaptive Swarm" },
+        { 430589, "Atmospheric Exposure" },
         { 439531, "Bloodseeker Vines" }, { 1244079, "Frantic Frenzy" },
         { 1263250, "Astral Smolder" }, { 1270292, "Lunar Beam" },
     },
@@ -80,6 +81,7 @@ A3.TargetDotData = {
         { 324073, "Serrated Bone Spike" }, { 360194, "Deathmark" },
         { 381628, "Internal Bleeding" }, { 385627, "Kingsbane" },
         { 409604, "Soulrip" }, { 424493, "Shadow Rupture" },
+        { 457129, "Deathstalker's Mark" },
     },
     SHAMAN = {
         { 188389, "Flame Shock" }, { 305484, "Lightning Lasso" },

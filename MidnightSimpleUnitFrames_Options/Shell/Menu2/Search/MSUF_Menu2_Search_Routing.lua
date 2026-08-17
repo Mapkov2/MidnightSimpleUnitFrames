@@ -878,7 +878,7 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         "status icons|status icon|indicator|level|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez")
     SearchRouteUnitStatusSelection(route, unit, normalized)
     local auraQuery = SearchRouteHasAny(normalized,
-        "aura|auras|buff|buffs|debuff|debuffs|defensive|defensives|dot|dots|blacklist|whitelist|filter|custom display|custom aura|spell id|style|appearance|pandemic|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect")
+        "aura|auras|buff|buffs|debuff|debuffs|defensive|defensives|dot|dots|blacklist|whitelist|filter|custom display|custom aura|spell id|style|appearance|pandemic|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect|ordering|sort by|custom priority|fixed priority|dynamic priority")
     if auraQuery then
         local container
         if SearchRouteHasAny(normalized, "dots on target|target dots|dot tracker") then container = "custom4" end
@@ -903,6 +903,9 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
             elseif SearchRouteHasAny(normalized, "layout|position|anchor|offset|size|strata")
                 or SearchRouteHasWord(normalized, "layer")
             then tool = "layout"
+            elseif SearchRouteHasAny(normalized,
+                "ordering|sort by|sort order|custom priority|fixed priority|dynamic priority")
+            then tool = "behavior"
             elseif unit == "player" and SearchRouteHasAny(normalized,
                 "defensive|defensives|spell|track|list")
             then tool = "defensives"
@@ -912,6 +915,7 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
             if SearchRouteHasAny(normalized,
                 "style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect")
             then tool = "style"
+            elseif SearchRouteHasAny(normalized, "ordering|sort by|sort order") then tool = "behavior"
             elseif SearchRouteHasAny(normalized, "whitelist|allow list|allowlist") then tool = "whitelist"
             elseif SearchRouteHasAny(normalized, "filter|only mine|hide permanent") then tool = "filters"
             -- `layer` must be a whole word: substring matching also finds it in
@@ -924,6 +928,7 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
         else
             if SearchRouteHasAny(normalized, "blacklist|ignore list|block list") then tool = "blacklist"
             elseif SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") then tool = "filters"
+            elseif SearchRouteHasAny(normalized, "ordering|sort by|sort order") then tool = "behavior"
             elseif SearchRouteHasAny(normalized,
                 "style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|full frame|effect")
             then tool = "style"
@@ -954,24 +959,26 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
         local cornerSlot = SearchFirstMatch(normalized, CORNER_SLOT_TERMS)
         if cornerSlot then SearchRouteSetState(route, "gfCornerSlotSelection", cornerSlot) end
     elseif pageKey == "gf_auras" and SearchRouteHasAny(normalized,
-        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size|external defensive|external defensives|externals|layer|style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe")
+        "aura|auras|buff|buffs|debuff|debuffs|blacklist|filter|layout|position|anchor|growth|icon size|external defensive|external defensives|externals|layer|style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe|ordering|sort by|sort order")
     then
         local activeScope = scope or M.gfScope or "party"
         local lane = SearchRouteHasAny(normalized, "external defensives|external defensive|externals") and "externals"
             or (SearchRouteHasAny(normalized, "debuff|debuffs") and "debuff"
             or (SearchRouteHasAny(normalized, "buff|buffs") and "buff" or nil))
         lane = lane or (type(M.gfAuraLaneSelection) == "table" and M.gfAuraLaneSelection[activeScope]) or "buff"
-        -- "Auto-blacklist from Buffs" is the External Defensive duplicate
-        -- handling toggle on Layout, not an entry in the lane's blacklist.
-        local externalAutoBlacklist = lane == "externals"
-            and SearchRouteHasAny(normalized, "auto-blacklist from buffs|autoblacklist from buffs")
-        local tool = not externalAutoBlacklist
-            and SearchRouteHasAny(normalized, "blacklist|ignore list|block list") and "blacklist"
-            or (SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") and "filters" or "layout")
-        if tool == "layout" and SearchRouteHasAny(normalized,
+        local orderingQuery = SearchRouteHasAny(normalized, "ordering|sort by|sort order")
+        local styleQuery = SearchRouteHasAny(normalized,
             "style|appearance|stack|cooldown|timer|duration|tooltip|opacity|icon zoom|icon shape|swipe")
-        then
-            tool = "style"
+        local tool
+        if lane == "externals" then
+            -- External Defensives deliberately expose only Layout, Ordering
+            -- and Style. Duplicate handling such as Auto-blacklist from Buffs
+            -- remains part of Layout.
+            tool = orderingQuery and "behavior" or (styleQuery and "style" or "layout")
+        else
+            tool = SearchRouteHasAny(normalized, "blacklist|ignore list|block list") and "blacklist"
+                or (SearchRouteHasAny(normalized, "filter|only mine|dispellable|stealable|boss aura|hide permanent|no timer|no duration") and "filters"
+                or (orderingQuery and "behavior" or (styleQuery and "style" or "layout")))
         end
         SearchRouteSetTable(route, "gfAuraLaneSelection", activeScope, lane)
         SearchRouteSetNestedTable(route, "gfAuraToolSelection", activeScope, lane, tool)
@@ -1193,6 +1200,23 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, e
     if not SearchCombatLocked() and C_Timer and C_Timer.After then C_Timer.After(0.05, finish) end
     return true
 end
+-- Deep links (changelog highlights) pass an explicit accordion route and skip
+-- the query heuristics, so an exact target whose prepareKind selects a
+-- structurally rebuilt view - currently the unit aura workspace - must inject
+-- its tab/tool state into the route. The page then builds directly in the
+-- linked view and the widget's prepare hook only confirms the selection;
+-- rebuilding from inside the prepare hook instead would re-register the
+-- control mid-resolution and orphan the anchor widget.
+local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
+    if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitAuraWorkspace" then return route end
+    local unit = SEARCH_UNIT_BY_PAGE[pageKey]
+    local tab, tool = tostring(exactTarget.prepareValue or ""):match("^(%w+)_(%w+)$")
+    if not unit or not tab then return route end
+    route = type(route) == "table" and route or {}
+    SearchRouteSetTable(route, "unitAuraTabSelection", unit, tab)
+    SearchRouteSetNestedTable(route, "unitAuraToolSelection", unit, tab, tool)
+    return route
+end
 local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
     local routingFallback = fallback
@@ -1200,6 +1224,7 @@ local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route
         routingFallback = tostring(fallback or "") .. " " .. exactTarget.settingKey
     end
     route = route or SearchRouteForTarget(pageKey, query, routingFallback)
+    route = SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     local routeChanged = ApplySearchRoute(pageKey, route)
     if routeChanged then preferredAnchor = nil end
     local selected = M.SelectPage(pageKey)

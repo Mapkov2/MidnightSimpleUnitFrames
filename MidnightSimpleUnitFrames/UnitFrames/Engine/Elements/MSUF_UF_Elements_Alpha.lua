@@ -170,6 +170,7 @@ end
 local TEXT_ALPHA_FIELDS = {
   "nameText",
   "levelText",
+  "bossNumberText",
   "hpTextLeft",
   "hpTextCenter",
   "hpTextRight",

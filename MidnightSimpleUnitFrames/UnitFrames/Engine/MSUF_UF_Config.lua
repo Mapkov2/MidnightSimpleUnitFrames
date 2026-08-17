@@ -1165,6 +1165,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("assist", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "assistIconStyle", "BLIZZARD", "leaderIconStyle" }, nil, { "assistIconCustomIcon", "" }),
   PrefixedStatusDef("raidMarker", "showRaidMarker", true, "raidMarker", 18, "TOPLEFT", 16, 3, 7, nil, nil, { "raidMarkerCustomIcon", "" }),
   PrefixedStatusDef("level", "showLevelIndicator", true, "levelIndicator", 14, "NAMERIGHT", 0, 0, 7),
+  PrefixedStatusDef("bossNumber", "showBossNumberIndicator", false, "bossNumberIndicator", 14, "TOPLEFT", 4, -4, 7),
   PrefixedStatusDef("race", "showRaceIndicator", false, "raceIndicator", 14, "NAMERIGHT", 0, 0, 7),
   PrefixedStatusDef("classText", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", 0, 0, 7),
   StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
@@ -1703,7 +1704,7 @@ local function CompileUnitStatus(out, conf, general, key)
     local def = UNIT_STATUS_ENTRY_DEFS[i]
     local id = def[1]
     local fallbackSize = statusTextSize
-    if id == "level" or id == "race" or id == "classText" or id == "stance" then
+    if id == "level" or id == "bossNumber" or id == "race" or id == "classText" or id == "stance" then
       fallbackSize = levelSize
     elseif id == "raidGroup" then
       fallbackSize = raidGroupSize
@@ -1891,6 +1892,13 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.powerLeft = NormalizePowerTextMode(conf.powerTextLeft, "NONE")
   text.powerCenter = NormalizePowerTextMode(conf.powerTextCenter, "NONE")
   text.powerRight = NormalizePowerTextMode(conf.powerTextRight or conf.powerTextMode or general.powerTextMode, "CURPERCENT")
+  -- Augmentation Evoker hands the Player Power bar to Ebon Might, whose remaining
+  -- duration is written by Blizzard's native duration binding. Power value slots
+  -- would keep whatever the last Mana update left behind, so drop them entirely
+  -- and let the native text own the bar.
+  if key == "player" and _G.MSUF_AugEvokerActive == true then
+    text.powerLeft, text.powerCenter, text.powerRight = "NONE", "NONE", "NONE"
+  end
   text.powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")
   text.powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol")
   text.powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol")
