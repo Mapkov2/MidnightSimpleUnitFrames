@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "4C23F9AEA09895D421A71FA93CE6B8C1E2517160B73AA0F0A059683917AC1875",
+    sourceSha256 = "14CF71C8A2CD836DE3A190FF1728958B0B2B7BA20E92FD49791392928B776C85",
     currentVersion = "6.09",
     historyFromVersion = "6.02",
     previousVersion = "6.08",
@@ -96,6 +96,8 @@ local data = {
                 {
                     title = "Fixes & Performance",
                     bullets = {
+                        "Fixed the combat timer not being movable while its position was unlocked.",
+                        "Added a tooltip to the combat timer's Lock position toggle explaining how positioning works.",
                         "Scanning respects Blizzard's instanced-content restrictions: encounter, Mythic+, and PvP lockdowns show a clear notice pointing to the curated presets and resume automatically instead of erroring.",
                         "Scan results state how many auras Blizzard hides as secret; hidden auras cannot be identified or blocked by any addon, so everything blockable is always captured.",
                         "Fixed Edit Mode arrow-key nudging for Custom 1-4 aura containers, including shared boss-frame positioning.",

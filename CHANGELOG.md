@@ -26,6 +26,8 @@
 
 ### Fixes & Performance
 
+- Fixed the combat timer not being movable while its position was unlocked.
+- Added a tooltip to the combat timer's **Lock position** toggle explaining how positioning works.
 - Scanning respects Blizzard's instanced-content restrictions: encounter, Mythic+, and PvP lockdowns show a clear notice pointing to the curated presets and resume automatically instead of erroring.
 - Scan results state how many auras Blizzard hides as secret; hidden auras cannot be identified or blocked by any addon, so everything blockable is always captured.
 - Fixed Edit Mode arrow-key nudging for Custom 1-4 aura containers, including shared boss-frame positioning.
