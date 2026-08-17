@@ -3378,19 +3378,48 @@ local function LiveAuraSecretHelpers()
     return SafeNumber, NotSecret, Secrets
 end
 
+--- Tainted aura queries hard-error under Blizzard's addon restrictions. The
+--- observed denial contexts are encounters, Mythic+ (challenge restrictions),
+--- PvP matches, and instanced combat while aura secrecy is active; plain
+--- open-world combat keeps the query callable with per-field secrets.
+local function LiveAuraAccessRestricted()
+    local IsEncounterInProgress = _G.IsEncounterInProgress
+    if type(IsEncounterInProgress) == "function" and IsEncounterInProgress() then return true end
+    local ChallengeMode = _G.C_ChallengeMode
+    if type(ChallengeMode) == "table" and type(ChallengeMode.IsChallengeModeActive) == "function"
+        and ChallengeMode.IsChallengeModeActive() then return true end
+    local PartyInfo = _G.C_PartyInfo
+    if type(PartyInfo) == "table" and type(PartyInfo.ChallengeModeRestrictionsActive) == "function"
+        and PartyInfo.ChallengeModeRestrictionsActive() then return true end
+    local PvP = _G.C_PvP
+    if type(PvP) == "table" and type(PvP.IsMatchActive) == "function"
+        and PvP.IsMatchActive() then return true end
+    local SecretsAPI = _G.C_Secrets
+    if type(SecretsAPI) == "table" and type(SecretsAPI.ShouldAurasBeSecret) == "function"
+        and SecretsAPI.ShouldAurasBeSecret() == true then
+        local IsInInstance = _G.IsInInstance
+        if type(IsInInstance) == "function" then
+            local inInstance = IsInInstance()
+            if inInstance == true or inInstance == 1 then return true end
+        end
+    end
+    return false
+end
+
 --- Walk every readable aura on the live unit(s) behind a menu scope. Secret
 --- aura fields are the callback's problem to skip; this only guards the unit
---- and API surface. Returns false when nothing could be enumerated at all.
---- The callback may return false to stop the walk early.
+--- and API surface. Returns walked, accessBlockedCount (non-zero when the
+--- restricted context above forbids querying at all); the callback may
+--- return false to stop the walk early.
 local function ForEachLiveUnitAura(scope, kind, callback)
     local CUA = _G.C_UnitAuras
     local UnitExists = _G.UnitExists
-    if type(UnitExists) ~= "function" or type(CUA) ~= "table" then return false end
-    local GetAll = type(CUA.GetUnitAuras) == "function" and CUA.GetUnitAuras or nil
+    if type(UnitExists) ~= "function" or type(CUA) ~= "table" then return false, 0 end
     local GetByIndex = type(CUA.GetAuraDataByIndex) == "function" and CUA.GetAuraDataByIndex or nil
-    if not GetAll and not GetByIndex then return false end
+    if not GetByIndex then return false, 0 end
     scope = NormalizeScope(scope)
-    if scope == "shared" then return false end
+    if scope == "shared" then return false, 0 end
+    if LiveAuraAccessRestricted() then return false, 1 end
     local _, _, Secrets = LiveAuraSecretHelpers()
     local UnitThere = Secrets and Secrets.UnitExistsPlain
         or function(unit) local exists = UnitExists(unit) return exists == true or exists == 1 end
@@ -3398,24 +3427,13 @@ local function ForEachLiveUnitAura(scope, kind, callback)
     local stop = false
     EachRuntimeUnit(scope, function(runtimeUnit)
         if stop or not UnitThere(runtimeUnit) then return end
-        if GetAll then
-            local auras = GetAll(runtimeUnit, filter)
-            if type(auras) == "table" then
-                for i = 1, #auras do
-                    if type(auras[i]) == "table" and callback(auras[i]) == false then stop = true return end
-                end
-                return
-            end
-        end
-        if GetByIndex then
-            for i = 1, 80 do
-                local aura = GetByIndex(runtimeUnit, i, filter)
-                if type(aura) ~= "table" then break end
-                if callback(aura) == false then stop = true return end
-            end
+        for i = 1, 80 do
+            local aura = GetByIndex(runtimeUnit, i, filter)
+            if type(aura) ~= "table" then break end
+            if callback(aura) == false then stop = true return end
         end
     end)
-    return true
+    return true, 0
 end
 
 --- Coldpath check for the manual blacklist inputs: report whether the entered
@@ -3462,7 +3480,7 @@ function Model.LiveBlacklistAuraValues(scope, kind)
     local SafeNumber, NotSecret = LiveAuraSecretHelpers()
     local seen = {}
     local unreadable = 0
-    ForEachLiveUnitAura(scope, kind, function(aura)
+    local _, secretSkipped = ForEachLiveUnitAura(scope, kind, function(aura)
         local auraID = SafeNumber(aura.spellId)
         if not auraID then unreadable = unreadable + 1 return end
         if seen[auraID] then return end
@@ -3481,9 +3499,12 @@ function Model.LiveBlacklistAuraValues(scope, kind)
         values[#values + 1] = { value = auraID, text = text, name = name, icon = icon }
     end)
     table_sort(values, function(a, b) return tostring(a.text) < tostring(b.text) end)
-    -- The second return reports auras that were present but carried a secret
-    -- SpellID, so scan UIs can say "hidden" instead of silently under-counting.
-    return values, unreadable
+    -- The second return reports auras hidden by secret data (secret index or
+    -- secret SpellID), so scan UIs can say "hidden" instead of under-counting.
+    -- The third reports that Blizzard denies aura access entirely right now:
+    -- under restrictions every index probes secret, so nothing is readable.
+    unreadable = unreadable + (tonumber(secretSkipped) or 0)
+    return values, unreadable, (#values == 0 and (tonumber(secretSkipped) or 0) > 0)
 end
 
 function Model.AddBlacklistSpell(scope, value, kind)

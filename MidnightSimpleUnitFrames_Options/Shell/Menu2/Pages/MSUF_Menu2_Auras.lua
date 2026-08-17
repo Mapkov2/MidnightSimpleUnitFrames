@@ -3717,6 +3717,10 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             local mine = state and state.unit == unit and state.lane == lane and state or nil
             if not mine then
                 verifyText:SetText("")
+            elseif mine.status == "scan" and mine.blocked then
+                local c = T.colors.accent2 or T.colors.accent
+                if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
+                verifyText:SetText(Tr("Blizzard is blocking aura scanning right now (encounter, Mythic+, or PvP match). Use the curated presets - they cover everything blockable in instanced content."))
             elseif mine.status == "scan" then
                 local c = T.colors.accent
                 if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
@@ -3778,9 +3782,9 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         -- last scan, so an open menu never scans the unit on its own.
         local liveScanCache
         local function LiveAuraValues()
-            local values, unreadable
+            local values, unreadable, blocked
             if type(Model.LiveBlacklistAuraValues) == "function" then
-                values, unreadable = Model.LiveBlacklistAuraValues(unit, lane)
+                values, unreadable, blocked = Model.LiveBlacklistAuraValues(unit, lane)
             end
             values = values or {}
             -- Every scan also feeds the session capture list, so short-lived
@@ -3815,7 +3819,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                 values = { { value = nil, text = Tr("No readable auras right now") } }
             end
             liveScanCache = values
-            return values, tonumber(unreadable) or 0
+            return values, tonumber(unreadable) or 0, blocked == true
         end
         local function CachedAuraValues()
             if liveScanCache then return liveScanCache end
@@ -3902,7 +3906,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                 CapturedAuras(true)
             end
             M.auraBlacklistLiveSpell = nil
-            local values, secretCount = LiveAuraValues()
+            local values, secretCount, blocked = LiveAuraValues()
             local liveCount = 0
             for i = 1, #values do
                 if values[i].value ~= nil and not values[i].captured then liveCount = liveCount + 1 end
@@ -3910,7 +3914,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             local sessionCount = 0
             for _ in pairs(CapturedAuras(false)) do sessionCount = sessionCount + 1 end
             M.auraBlacklistVerify = {
-                unit = unit, lane = lane, status = "scan",
+                unit = unit, lane = lane, status = "scan", blocked = blocked or nil,
                 liveCount = liveCount, sessionCount = sessionCount, secretCount = secretCount,
             }
             if liveDrop.SetValue then liveDrop:SetValue(CurrentLiveAura()) end
@@ -3986,9 +3990,18 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                     self._accum = (self._accum or 0) + (tonumber(elapsed) or 0)
                     if self._accum < 0.4 then return end
                     self._accum = 0
-                    local live, unreadable
+                    local live, unreadable, blocked
                     if type(Model.LiveBlacklistAuraValues) == "function" then
-                        live, unreadable = Model.LiveBlacklistAuraValues(self._scope, self._lane)
+                        live, unreadable, blocked = Model.LiveBlacklistAuraValues(self._scope, self._lane)
+                    end
+                    if blocked then
+                        -- Access denial is temporary (encounter/M+/PvP); keep
+                        -- ticking cheaply so the scan resumes on its own.
+                        self._dots = ((self._dots or 0) % 3) + 1
+                        self.title:SetText(Tr("Scanning auras - creating a list") .. string.rep(".", self._dots))
+                        self.hint:SetText(Tr("Blocked by Blizzard during this fight - resumes automatically. In instances, use the curated presets."))
+                        self.hint:Show()
+                        return
                     end
                     live = live or {}
                     self._lastLive = #live
