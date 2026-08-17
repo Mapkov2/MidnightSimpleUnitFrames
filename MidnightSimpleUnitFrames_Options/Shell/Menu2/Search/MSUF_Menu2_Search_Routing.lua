@@ -1200,6 +1200,23 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, e
     if not SearchCombatLocked() and C_Timer and C_Timer.After then C_Timer.After(0.05, finish) end
     return true
 end
+-- Deep links (changelog highlights) pass an explicit accordion route and skip
+-- the query heuristics, so an exact target whose prepareKind selects a
+-- structurally rebuilt view - currently the unit aura workspace - must inject
+-- its tab/tool state into the route. The page then builds directly in the
+-- linked view and the widget's prepare hook only confirms the selection;
+-- rebuilding from inside the prepare hook instead would re-register the
+-- control mid-resolution and orphan the anchor widget.
+local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
+    if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitAuraWorkspace" then return route end
+    local unit = SEARCH_UNIT_BY_PAGE[pageKey]
+    local tab, tool = tostring(exactTarget.prepareValue or ""):match("^(%w+)_(%w+)$")
+    if not unit or not tab then return route end
+    route = type(route) == "table" and route or {}
+    SearchRouteSetTable(route, "unitAuraTabSelection", unit, tab)
+    SearchRouteSetNestedTable(route, "unitAuraToolSelection", unit, tab, tool)
+    return route
+end
 local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
     local routingFallback = fallback
@@ -1207,6 +1224,7 @@ local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route
         routingFallback = tostring(fallback or "") .. " " .. exactTarget.settingKey
     end
     route = route or SearchRouteForTarget(pageKey, query, routingFallback)
+    route = SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     local routeChanged = ApplySearchRoute(pageKey, route)
     if routeChanged then preferredAnchor = nil end
     local selected = M.SelectPage(pageKey)
