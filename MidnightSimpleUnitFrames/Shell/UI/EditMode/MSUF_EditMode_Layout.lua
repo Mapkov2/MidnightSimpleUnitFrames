@@ -1081,7 +1081,9 @@ local function NudgeTarget(dx, dy, exactDelta)
                     debuff  = { "debuffGroupOffsetX", "debuffGroupOffsetY" },
                     private = { "privateOffsetX",     "privateOffsetY"     },
                 }
+                local CUSTOM_GROUP_INDEX = { custom1 = 1, custom2 = 2, custom3 = 3, custom4 = 4 }
                 local pair = GROUP_KEYS[auraGroup]
+                local customIndex = CUSTOM_GROUP_INDEX[auraGroup]
                 if pair then
                     local kx, ky = pair[1], pair[2]
                     local shared = a2.shared or {}
@@ -1099,6 +1101,25 @@ local function NudgeTarget(dx, dy, exactDelta)
                         local cy = (lay[ky] ~= nil) and lay[ky] or (shared[ky] or 0)
                         lay[kx] = floor(((tonumber(cx) or 0) + ndx) + 0.5)
                         lay[ky] = floor(((tonumber(cy) or 0) + ndy) + 0.5)
+                    end
+                elseif customIndex then
+                    --- Custom containers persist position as placed.x/y on the
+                    --- menu-model item, and the model collapses boss1-5 into a
+                    --- single "boss" record - dedupe by item so a together-edit
+                    --- does not add the delta once per boss key.
+                    local model = MSUF and MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
+                    if model and type(model.CustomContainer) == "function" then
+                        local seen = {}
+                        for _, k in ipairs(applyKeys) do
+                            local item = model.CustomContainer(k, customIndex, true)
+                            if item and not seen[item] then
+                                seen[item] = true
+                                if type(item.placed) ~= "table" then item.placed = {} end
+                                local placed = item.placed
+                                placed.x = floor(((tonumber(placed.x) or 0) + ndx) + 0.5)
+                                placed.y = floor(((tonumber(placed.y) or 0) + ndy) + 0.5)
+                            end
+                        end
                     end
                 end
                 local a3 = MSUF and MSUF.MSUF_Auras3
