@@ -772,6 +772,78 @@ local function Utf8Truncate(text, maxChars)
     return string_sub(text, 1, index - 1), true
 end
 
+--- Measures a candidate string in the spell text's own font. Mirrors
+--- ApproxNameWidth in MSUF_UF_Text_Layout: a hidden, never-anchored FontString
+--- keeps the measurement out of the live region, so no anchoring aspect can
+--- turn GetStringWidth secret on it.
+local measureFS
+--- Points the shared ruler at the source FontString's face. Returns it ready to
+--- measure, or nil when the font cannot be resolved. Hoisted out of the
+--- measuring loop so a fit pays one GetFont, not one per search step.
+local function PrepareRuler(sourceFS)
+    if not (sourceFS and sourceFS.GetFont) then return nil end
+    local font, size, flags = sourceFS:GetFont()
+    if not (font and size) then return nil end
+
+    if not measureFS then
+        local parent = _G.UIParent
+        if not (parent and parent.CreateFontString) then return nil end
+        measureFS = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        if not measureFS then return nil end
+        measureFS:Hide()
+        if measureFS.SetWordWrap then measureFS:SetWordWrap(false) end
+    end
+    if measureFS._msufFont ~= font or measureFS._msufSize ~= size or measureFS._msufFlags ~= flags then
+        -- SetFont reports false for a font file that cannot be loaded; measuring
+        -- against the previous face would silently mis-size the budget.
+        if measureFS:SetFont(font, size, flags) == false then return nil end
+        measureFS._msufFont, measureFS._msufSize, measureFS._msufFlags = font, size, flags
+    end
+    return measureFS
+end
+
+local function RulerWidth(ruler, text)
+    ruler:SetText(text)
+    local width = ruler:GetStringWidth()
+    if type(width) ~= "number" then return nil end
+    return width
+end
+
+--- Warm companion to the cold pixel budget, called after the character cap has
+--- already been applied. WoW truncates a bounded one-line FontString silently
+--- and at a glyph-dependent position, which is what made a 23-character name
+--- disappear under a 25-character setting (GitHub #121). Measuring the real
+--- string instead cuts in Lua, always on a character boundary and always with
+--- visible dots. Never reached for secret cast names - the caller returns those
+--- untouched before this runs.
+local function FitToBoxWidth(fs, text, fitWidth)
+    local ruler = PrepareRuler(fs)
+    if not ruler then return text, false end
+    local full = RulerWidth(ruler, text)
+    -- The overwhelmingly common case is a name that already fits: one measure,
+    -- no allocation, done.
+    if not full or full <= fitWidth then return text, false end
+
+    -- Binary search the longest character prefix whose rendered width, dots
+    -- included, still fits. #text is a safe upper bound: Utf8Truncate clamps to
+    -- the real character count, so multi-byte names just converge a step later.
+    local low, high, best = 0, #text, nil
+    while low <= high do
+        local mid = math_floor((low + high) / 2)
+        local candidate = (Utf8Truncate(text, mid)) .. "..."
+        local width = RulerWidth(ruler, candidate)
+        if not width then return text, false end
+        if width <= fitWidth then
+            best = candidate
+            low = mid + 1
+        else
+            high = mid - 1
+        end
+    end
+    if best == nil then return text, false end
+    return best, true
+end
+
 local function GetSpellNameShorteningConfig(frame)
     if not frame then return false end
 
@@ -780,9 +852,12 @@ local function GetSpellNameShorteningConfig(frame)
     if not general then return false end
 
     local unit = GetCastbarUnitKey(frame)
+    -- This runs on every castbar text write, so resolve "is this a boss bar"
+    -- once with a plain prefix compare instead of two tostring+pattern passes.
+    local isBoss = unit ~= nil and string_sub(tostring(unit), 1, 4) == "boss"
     local modeValue = general.castbarSpellNameShortening
     local mode = tonumber(modeValue) or (modeValue == true and 1 or 0)
-    if unit and tostring(unit):match("^boss") and general.bossCastSpellNameShortening ~= nil then
+    if isBoss and general.bossCastSpellNameShortening ~= nil then
         local bossMode = general.bossCastSpellNameShortening
         mode = tonumber(bossMode) or (bossMode == true and 1 or bossMode == false and 0 or mode)
     end
@@ -790,7 +865,7 @@ local function GetSpellNameShorteningConfig(frame)
 
     local maxLen = tonumber(general.castbarSpellNameMaxLen) or 30
     local reserved = tonumber(general.castbarSpellNameReservedSpace) or 8
-    if unit and tostring(unit):match("^boss") then
+    if isBoss then
         local bossMax = tonumber(general.bossCastSpellNameMaxLen or general.bossCastSpellNameMaxChars or general.bossSpellNameMaxLen)
         local bossReserved = tonumber(
             general.bossCastSpellNameReservedSpace
@@ -806,7 +881,21 @@ local function GetSpellNameShorteningConfig(frame)
     reserved = math_floor((tonumber(reserved) or 0) + 0.5)
     if reserved < 0 then reserved = 0 elseif reserved > 160 then reserved = 160 end
 
-    local cacheKey = (_G.MSUF_CastbarStyleRevision or 1) .. ":" .. mode .. ":" .. maxLen .. ":" .. reserved
+    -- The pixel box the cold layout handed this frame is part of the verdict:
+    -- an Edit Mode resize changes it without bumping the style revision, and a
+    -- stale cache would replay a fit computed for the old width.
+    local fitWidth = tonumber(frame._msufSpellTextFitWidth) or 0
+    if fitWidth < 0 then fitWidth = 0 elseif fitWidth > 4000 then fitWidth = 4000 end
+    -- Packed as a number rather than a concatenated string: that concatenation
+    -- was the one allocation every text write paid before the cache could even
+    -- be consulted. Every field is clamped below its factor (mode < 4,
+    -- maxLen <= 80 < 128, reserved <= 160 < 256, fitWidth <= 4000 < 4096) so no
+    -- two configurations can pack to the same number. mode only ever decides
+    -- on/off above, so folding 4+ onto 3 costs nothing.
+    local modeKey = mode > 3 and 3 or mode
+    local revision = tonumber(_G.MSUF_CastbarStyleRevision) or 1
+    local cacheKey = (((revision * 4 + modeKey) * 128 + maxLen) * 256 + reserved)
+        * 4096 + math_floor(fitWidth + 0.5)
     return true, maxLen, reserved, cacheKey
 end
 ExportPublic("MSUF_GetCastbarSpellNameShorteningConfig", GetSpellNameShorteningConfig)
@@ -849,6 +938,16 @@ local function ShortenCastbarSpellName(frame, text)
 
     local truncated, wasTruncated = Utf8Truncate(rawText, maxLen)
     local out = wasTruncated and (truncated .. "...") or rawText
+
+    -- The character cap is only half the budget - the cold layout also bounded
+    -- this FontString in pixels. Fitting here, where the text is known to be a
+    -- plain string, keeps the cut on a character boundary with visible dots
+    -- instead of wherever the renderer silently clips (GitHub #121).
+    local fitWidth = frame and tonumber(frame._msufSpellTextFitWidth)
+    if fitWidth and fitWidth > 0 and frame.castText then
+        out = (FitToBoxWidth(frame.castText, out, fitWidth))
+    end
+
     if frame then
         frame._msufRawCastText = rawText
         frame._msufShortCastText = out
