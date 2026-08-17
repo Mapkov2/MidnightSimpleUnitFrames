@@ -8,12 +8,57 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "FDE14528EDCAA61AD6F09D0A6FF6E8682987E3D3105B26284CB65DCE31F9F4A8",
-    currentVersion = "6.09",
-    historyFromVersion = "6.08-Beta1",
-    previousVersion = "6.08",
-    rangeLabel = "6.08 -> 6.09",
+    sourceSha256 = "C76EB5009D90318D4873C88727E00812AABA30EDE5F35FFBE2AA312DED213446",
+    currentVersion = "6.1-Beta1",
+    historyFromVersion = "6.08-Beta2",
+    previousVersion = "6.09",
+    rangeLabel = "6.09 -> 6.1-Beta1",
     entries = {
+        {
+            version = "6.1-Beta1",
+            date = "2026-08-18",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Separated the Augmentation Evoker resources: Ebon Might now renders on the Player power bar, Essence is an ordinary Class Resource, and Mana moves to Alternative Mana. The Ebon Might bar takes its height, position, texture, background, border and text from the Player Power settings; only its fill colour still comes from the Ebon Might colour entry.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "ebon might",
+                                label = "Ebon Might",
+                                sectionId = "classpower_behavior",
+                                controlId = "menu2.classpower.advanced.behavior.ebon",
+                                settingKey = "bars.showEbonMight",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Class Resource width, offsets, pixel snapping and cooldown anchoring finally apply to an Augmentation Evoker's Essence bar; it used to silently copy the power bar's width and anchor and ignore those settings.",
+                        "Turning the Player Power bar off now also turns off the Ebon Might display instead of leaving an empty bar behind.",
+                        "Ebon Might's bar and duration text follow live setting changes instead of freezing at the values they had when the native aura slot was first created.",
+                        "The group preview LAYERS chips now apply to the preview frames drawn on screen as well as to the preview box in the menu, and Shift-click solo shows only that one element on them.",
+                        "Cooldown and stack numbers on the preview's aura icons follow the CD/Stack chip, and the chip is greyed out when no enabled aura lane prints a timer or stack count.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed a raid frame block not staying where it was placed in Edit Mode: the saved position was converted between two internal formats with mismatched roster counts and drifted by up to 162 pixels, and a click that never moved could permanently lock the conversion out.",
+                        "Long castbar spell names are now shortened with a visible ellipsis that respects the bar width instead of being clipped by the renderer at an unpredictable spot; a name could previously disappear completely even when it was shorter than the configured limit.",
+                        "Turning off a castbar's cast time hands those pixels back to the spell name instead of leaving the gap reserved, so names truncate far less often.",
+                        "Fixed an Augmentation Evoker's player health bar shrinking by the extra composite height, and the power bar showing frozen Mana numbers under the Ebon Might duration text.",
+                        "If the UI starts in combat and the native aura container cannot be created, an Augmentation Evoker's power bar falls back to a normal Mana bar and retries after combat instead of showing an empty bar.",
+                        "The raid preview shows the correct group number on each preview frame instead of numbering members 1-5 within every group.",
+                        "The power colour swatch on the Global Fonts page shows an Augmentation Evoker's real power token instead of a hard-coded Essence colour.",
+                        "The castbar name shortening no longer builds a cache key string on every text write.",
+                    },
+                },
+            },
+        },
         {
             version = "6.09",
             date = "2026-08-17",
@@ -316,26 +361,6 @@ local data = {
                         "Fixed Arena Group Frames using raid instead of party configuration, including runtime, Blizzard-frame ownership, Edit Mode, and previews.",
                         "Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.",
                         "Limited PvP indicator runtime to arenas, battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.08-Beta1",
-            date = "2026-08-15",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added an optional Slug font rendering mode for clearer, more consistent text across Unit and Group Frames.",
-                        "Added configurable AFK timers to Unit and Group Frame status text.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Group Frame absorb overlays ignoring the configured opacity.",
-                        "Fixed aura icon zoom scaling when a debuff border is active.",
                     },
                 },
             },

@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.1-Beta1 - 2026-08-18
+
+### Highlights
+
+- Separated the **Augmentation Evoker** resources: Ebon Might now renders on the Player power bar, Essence is an ordinary Class Resource, and Mana moves to Alternative Mana. The Ebon Might bar takes its height, position, texture, background, border and text from the Player Power settings; only its fill colour still comes from the Ebon Might colour entry.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_behavior","controlId":"menu2.classpower.advanced.behavior.ebon","settingKey":"bars.showEbonMight","query":"ebon might","label":"Ebon Might"} -->
+
+### Changes
+
+- Class Resource width, offsets, pixel snapping and cooldown anchoring finally apply to an Augmentation Evoker's Essence bar; it used to silently copy the power bar's width and anchor and ignore those settings.
+- Turning the Player Power bar off now also turns off the Ebon Might display instead of leaving an empty bar behind.
+- Ebon Might's bar and duration text follow live setting changes instead of freezing at the values they had when the native aura slot was first created.
+- The group preview **LAYERS** chips now apply to the preview frames drawn on screen as well as to the preview box in the menu, and Shift-click solo shows only that one element on them.
+- Cooldown and stack numbers on the preview's aura icons follow the CD/Stack chip, and the chip is greyed out when no enabled aura lane prints a timer or stack count.
+
+### Fixes & Performance
+
+- Fixed a raid frame block not staying where it was placed in Edit Mode: the saved position was converted between two internal formats with mismatched roster counts and drifted by up to 162 pixels, and a click that never moved could permanently lock the conversion out.
+- Long castbar spell names are now shortened with a visible ellipsis that respects the bar width instead of being clipped by the renderer at an unpredictable spot; a name could previously disappear completely even when it was shorter than the configured limit.
+- Turning off a castbar's cast time hands those pixels back to the spell name instead of leaving the gap reserved, so names truncate far less often.
+- Fixed an Augmentation Evoker's player health bar shrinking by the extra composite height, and the power bar showing frozen Mana numbers under the Ebon Might duration text.
+- If the UI starts in combat and the native aura container cannot be created, an Augmentation Evoker's power bar falls back to a normal Mana bar and retries after combat instead of showing an empty bar.
+- The raid preview shows the correct group number on each preview frame instead of numbering members 1-5 within every group.
+- The power colour swatch on the Global Fonts page shows an Augmentation Evoker's real power token instead of a hard-coded Essence colour.
+- The castbar name shortening no longer builds a cache key string on every text write.
+
 ## 6.09 - 2026-08-17
 
 ### Highlights
