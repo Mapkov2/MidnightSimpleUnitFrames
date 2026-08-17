@@ -2117,6 +2117,10 @@ local function EnforcePlayerDefensiveContainer(item, canonicalAuraModel)
     item.filters.externalDefensive = false
     item.filters.bigDefensive = false
     item.filters.exclusive = "none"
+    -- Pre-preset custom4 profiles may carry a DEBUFF-era duration ceiling;
+    -- since 6.09 compiles maxDuration for every lane it would silently hide
+    -- long or permanent defensives, so the pin clears it like other filters.
+    item.filters.maxDuration = nil
     return item
 end
 

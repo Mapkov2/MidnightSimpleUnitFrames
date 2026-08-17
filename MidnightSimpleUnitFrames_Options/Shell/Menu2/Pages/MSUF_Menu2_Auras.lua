@@ -4698,23 +4698,32 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     }), workspaceTabs, "unit-workspace.container-selector", customContainerContract)
     if containerBar and unit ~= "player" then
         local exactKind = "unitAuraWorkspace"
-        local exactValue = "custom4_behavior"
-        local exactSettingKey = "auras3." .. tostring(unit) .. ".custom4.placed.sortMethod"
+        -- prepareValue -> { tab, tool, representative settingKey }. Changelog
+        -- highlights and search deep-links use these to open the exact
+        -- workspace view instead of flashing an unrelated control.
+        local exactViews = {
+            custom4_behavior = { tab = "custom4", tool = "behavior",
+                settingKey = "auras3." .. tostring(unit) .. ".custom4.placed.sortMethod" },
+            debuff_blacklist = { tab = "debuff", tool = "blacklist",
+                settingKey = "auras3." .. tostring(unit) .. ".debuff.blacklist.hidePermanent" },
+        }
+        local exactContracts = {}
+        for value, view in pairs(exactViews) do exactContracts[value] = view.settingKey end
         containerBar._msuf2ExactTargetKinds = { [exactKind] = true }
         containerBar._msuf2ExactTargetContracts = {
-            [exactKind] = { [exactValue] = exactSettingKey },
+            [exactKind] = exactContracts,
         }
         containerBar._msuf2PrepareExactSearchTarget = function(_, exactTarget)
-            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= exactKind
-                or tostring(exactTarget.prepareValue or "") ~= exactValue
-            then
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= exactKind then
                 return false
             end
-            local alreadySelected = M.unitAuraTabSelection[unit] == "custom4"
-                and CurrentUnitAuraTool(unit, "custom4") == "behavior"
+            local view = exactViews[tostring(exactTarget.prepareValue or "")]
+            if not view then return false end
+            local alreadySelected = M.unitAuraTabSelection[unit] == view.tab
+                and CurrentUnitAuraTool(unit, view.tab) == view.tool
             if not alreadySelected then
-                M.unitAuraTabSelection[unit] = "custom4"
-                SetUnitAuraTool(unit, "custom4", "behavior")
+                M.unitAuraTabSelection[unit] = view.tab
+                SetUnitAuraTool(unit, view.tab, view.tool)
             end
             return true
         end
@@ -6067,7 +6076,19 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         false, AuraControlMeta(ctx, "custom-container.setup.name"))
     BindDropdown(ctx, section, "Aura type", fieldX + nameW + fieldGap, fieldY, CUSTOM_AURA_TYPES, typeW,
         function() return item.auraType == "DEBUFF" and "DEBUFF" or "BUFF" end,
-        function(value) item.auraType = value == "DEBUFF" and "DEBUFF" or "BUFF"; Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true); Rebuild(ctx) end,
+        function(value)
+            local nextType = value == "DEBUFF" and "DEBUFF" or "BUFF"
+            local prevType = item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
+            -- A duration ceiling configured for one aura type must not survive
+            -- the switch: since 6.09 it compiles for every lane and would
+            -- silently hide long or permanent auras of the other type.
+            if nextType ~= prevType and type(item.filters) == "table" then
+                item.filters.maxDuration = nil
+            end
+            item.auraType = nextType
+            Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true)
+            Rebuild(ctx)
+        end,
         AuraControlMeta(ctx, "custom-container.setup.aura-type"))
     local count = #Model.CustomContainerSpellEntries(unit, index)
     W.Text(section, count == 1 and Tr("1 whitelisted spell · style remains live in Menu Preview and Edit Mode.")

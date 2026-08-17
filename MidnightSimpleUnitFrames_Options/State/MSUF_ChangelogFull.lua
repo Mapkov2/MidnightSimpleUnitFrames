@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "14CF71C8A2CD836DE3A190FF1728958B0B2B7BA20E92FD49791392928B776C85",
+    sourceSha256 = "7C967F4171BFE0D6D338C8FA33B8627ECC7548DA97589EE9956C0723EC6519AE",
     currentVersion = "6.09",
     historyFromVersion = "6.02",
     previousVersion = "6.08",
@@ -38,22 +38,26 @@ local data = {
                             text = "Added a combat aura scanner to the Unitframe blacklist workspace: one click closes the menu, keeps capturing every blockable aura with its icon until combat ends, then reopens the menu with the collected list, ready to block.",
                             link = {
                                 pageKey = "uf_target",
-                                query = "blacklist",
+                                query = "target debuff blacklist",
                                 label = "Combat scan",
                                 sectionId = "auras",
-                                controlId = "menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible",
-                                settingKey = "auras3.target.buff.visible",
+                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.target.debuff.blacklist.hidePermanent",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "debuff_blacklist",
                             },
                         },
                         {
                             text = "Manual blacklist entries are now verified by Spell ID against the live unit: when your cast's ID differs from the aura's actual ID, MSUF warns and offers to block the real aura ID instead.",
                             link = {
                                 pageKey = "uf_target",
-                                query = "blacklist",
+                                query = "target debuff blacklist",
                                 label = "Blacklist",
                                 sectionId = "auras",
-                                controlId = "menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible",
-                                settingKey = "auras3.target.buff.visible",
+                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.target.debuff.blacklist.hidePermanent",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "debuff_blacklist",
                             },
                         },
                         {
