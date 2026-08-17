@@ -1,5 +1,26 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.09-Beta3 - 2026-08-17
+
+### Highlights
+
+- Added a **combat aura scanner** to the Unitframe blacklist workspace: one click closes the menu, keeps capturing every blockable aura with its icon until combat ends, then reopens the menu with the collected list.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.target.buff.visible","query":"blacklist","label":"Combat scan"} -->
+- Added an optional **Show spell IDs in aura tooltips** toggle that keeps the native 12.1 tooltip option enabled across logins.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_tooltips","controlId":"menu2.opt.misc.global.setting.tooltip.show.aura.spell.ids","settingKey":"general.tooltipShowAuraSpellIDs","query":"spell ids","label":"Aura tooltip spell IDs"} -->
+
+### Changes
+
+- Extended the **Maximum duration** filter to every aura lane on unit and group frames, including Buffs, Tracked Buffs, and External Defensives.
+- Added a live **Active auras on this frame** dropdown to the blacklist with one-click blocking, a Rescan button, and a session capture list; scans run only on click.
+- Manual blacklist entries are now verified against the live unit: when your cast's Spell ID differs from the aura's actual ID, MSUF warns and offers to block the real aura ID instead.
+- Reworked pandemic-window Full-Frame effects for tracked DoTs to bind to the visible aura buttons themselves, including portrait mode.
+
+### Fixes & Performance
+
+- Scan results state how many auras Blizzard hides as secret; hidden auras cannot be identified or blocked by any addon, so everything blockable is always captured.
+- Blacklist scanning stays fully click-driven: an open menu never scans on its own and nothing was added to combat hotpaths.
+
 ## 6.09-Beta2 - 2026-08-17
 
 ### Highlights
