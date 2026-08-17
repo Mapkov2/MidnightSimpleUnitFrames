@@ -1,5 +1,24 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.09-Beta2 - 2026-08-17
+
+### Highlights
+
+- Added an optional **Boss Number** status indicator so boss frames can show their encounter index directly on the frame.
+<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"status_icons","controlId":"menu2.uf_boss.unit.status.selected.enabled","settingKey":"boss.showBossNumberIndicator","prepareKind":"unitStatus","prepareValue":"bossNumber","query":"boss number","label":"Boss Number"} -->
+
+### Changes
+
+- Extended dynamic **Custom Priority** runtime ordering to Custom 1-3 aura containers as well as Dots on target.
+- Made tracked DoT and custom-aura rows draggable across their full free row area, with the row following the cursor and snapping to its new priority slot.
+- Replaced Aura list scrollbars with the consistent MSUF scrollbar style and exposed Ordering options directly without a redundant accordion.
+- Corrected the Balance Druid presets for Moonfire (`164812`), Sunfire (`164815`), and Atmospheric Exposure (`430589`).
+
+### Fixes & Performance
+
+- Fixed Edit Mode arrow-key nudging for Custom 1-4 aura containers, including shared boss-frame positioning.
+- Kept custom priority ordering event-driven without polling or recurring runtime work.
+
 ## 6.09-Beta1 - 2026-08-17
 
 ### Highlights

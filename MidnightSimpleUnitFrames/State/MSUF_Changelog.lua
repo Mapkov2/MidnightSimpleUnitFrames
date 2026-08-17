@@ -8,12 +8,52 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "31C3AB7247B9DE2F1D8DF9878DAB5D2F39777EFC26AE8173A136B7738959FFC2",
-    currentVersion = "6.09-Beta1",
-    historyFromVersion = "6.08-Beta1",
-    previousVersion = "6.08",
-    rangeLabel = "6.08 -> 6.09-Beta1",
+    sourceSha256 = "CA1CFB852340DA9E52434F28D35487EB1F1AEE7551FD95019EEF9D12EB599559",
+    currentVersion = "6.09-Beta2",
+    historyFromVersion = "6.08-Beta2",
+    previousVersion = "6.09-Beta1",
+    rangeLabel = "6.09-Beta1 -> 6.09-Beta2",
     entries = {
+        {
+            version = "6.09-Beta2",
+            date = "2026-08-17",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Added an optional Boss Number status indicator so boss frames can show their encounter index directly on the frame.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "boss number",
+                                label = "Boss Number",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_boss.unit.status.selected.enabled",
+                                settingKey = "boss.showBossNumberIndicator",
+                                prepareKind = "unitStatus",
+                                prepareValue = "bossNumber",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Extended dynamic Custom Priority runtime ordering to Custom 1-3 aura containers as well as Dots on target.",
+                        "Made tracked DoT and custom-aura rows draggable across their full free row area, with the row following the cursor and snapping to its new priority slot.",
+                        "Replaced Aura list scrollbars with the consistent MSUF scrollbar style and exposed Ordering options directly without a redundant accordion.",
+                        "Corrected the Balance Druid presets for Moonfire (164812), Sunfire (164815), and Atmospheric Exposure (430589).",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Edit Mode arrow-key nudging for Custom 1-4 aura containers, including shared boss-frame positioning.",
+                        "Kept custom priority ordering event-driven without polling or recurring runtime work.",
+                    },
+                },
+            },
+        },
         {
             version = "6.09-Beta1",
             date = "2026-08-17",
@@ -255,26 +295,6 @@ local data = {
                         "Fixed Arena Group Frames using raid instead of party configuration, including runtime, Blizzard-frame ownership, Edit Mode, and previews.",
                         "Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.",
                         "Limited PvP indicator runtime to arenas, battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.08-Beta1",
-            date = "2026-08-15",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added an optional Slug font rendering mode for clearer, more consistent text across Unit and Group Frames.",
-                        "Added configurable AFK timers to Unit and Group Frame status text.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Group Frame absorb overlays ignoring the configured opacity.",
-                        "Fixed aura icon zoom scaling when a debuff border is active.",
                     },
                 },
             },
