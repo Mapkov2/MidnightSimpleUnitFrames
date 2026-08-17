@@ -15,6 +15,9 @@ local CreateFrame = _G.CreateFrame
 local C_Spell = _G.C_Spell
 local C_Timer = _G.C_Timer
 local C_UnitAuras = _G.C_UnitAuras
+local GetAuraDataBySpellName = C_UnitAuras
+    and type(C_UnitAuras.GetAuraDataBySpellName) == "function"
+    and C_UnitAuras.GetAuraDataBySpellName or nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local canaccesstable = _G.canaccesstable
 
@@ -115,13 +118,15 @@ local function ResolveAuraData(container, auraData)
 end
 
 local function ScanContainer(container)
-    if not (container and C_UnitAuras and type(C_UnitAuras.GetAuraDataBySpellName) == "function") then return false end
+    if not (container and GetAuraDataBySpellName) then return false end
     local lane = container._msufA3NativeLaneConfig
     local names = container._msufA3AuraAliasNames
-    if not (lane and names) then return false end
+    local scanNames = container._msufA3AuraAliasScanNames
+    if not (lane and names and scanNames) then return false end
     local changed = false
-    for name in pairs(names) do
-        local ok, auraData = pcall(C_UnitAuras.GetAuraDataBySpellName, container.unit, name, lane.nativeFilter)
+    local unit, nativeFilter = container.unit, lane.nativeFilter
+    for i = 1, #scanNames do
+        local ok, auraData = pcall(GetAuraDataBySpellName, unit, scanNames[i], nativeFilter)
         if ok and auraData then changed = ResolveAuraData(container, auraData) or changed end
     end
     return changed
@@ -164,6 +169,7 @@ function Resolver.UnregisterContainer(container)
     end
     container._msufA3AuraAliasUnit = nil
     container._msufA3AuraAliasNames = nil
+    container._msufA3AuraAliasScanNames = nil
 end
 
 function Resolver.SyncContainer(container)
@@ -180,6 +186,12 @@ function Resolver.SyncContainer(container)
         end
     end
     if not next(names) then return false end
+    -- Compile the hash keys once. Secret/full UNIT_AURA fallbacks are the hot
+    -- raid path; numeric iteration avoids rebuilding a generic pairs iterator
+    -- for every event while the name->source map remains available to the
+    -- public incremental resolver.
+    local scanNames = {}
+    for name in pairs(names) do scanNames[#scanNames + 1] = name end
     local unit = container.unit
     if type(unit) ~= "string" or unit == "" then return false end
     local containers = containersByUnit[unit]
@@ -190,6 +202,7 @@ function Resolver.SyncContainer(container)
     containers[container] = true
     container._msufA3AuraAliasUnit = unit
     container._msufA3AuraAliasNames = names
+    container._msufA3AuraAliasScanNames = scanNames
     local frame = framesByUnit[unit]
     if not frame then
         frame = CreateFrame("Frame")
