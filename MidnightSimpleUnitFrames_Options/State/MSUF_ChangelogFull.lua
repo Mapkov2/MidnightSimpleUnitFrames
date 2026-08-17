@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "7C967F4171BFE0D6D338C8FA33B8627ECC7548DA97589EE9956C0723EC6519AE",
+    sourceSha256 = "FDE14528EDCAA61AD6F09D0A6FF6E8682987E3D3105B26284CB65DCE31F9F4A8",
     currentVersion = "6.09",
     historyFromVersion = "6.02",
     previousVersion = "6.08",
@@ -94,6 +94,7 @@ local data = {
                         "Extended the Maximum duration filter to every aura lane on unit and group frames, including Buffs, Tracked Buffs, and External Defensives.",
                         "Reworked pandemic-window Full-Frame effects for tracked DoTs to bind to the visible aura buttons themselves, including portrait mode.",
                         "Replaced Aura list scrollbars with the consistent MSUF scrollbar style and exposed Ordering options directly without a redundant accordion.",
+                        "Added Blizzard's NEW badge to the See New Features button, shown until the bundled release notes have been opened.",
                         "Added Deathstalker's Mark for Rogues and Atmospheric Exposure for Druids to the tracked target-effect presets, and corrected the Balance Druid presets for Moonfire (164812), Sunfire (164815), and Atmospheric Exposure (430589).",
                     },
                 },
@@ -102,6 +103,8 @@ local data = {
                     bullets = {
                         "Fixed the combat timer not being movable while its position was unlocked.",
                         "Added a tooltip to the combat timer's Lock position toggle explaining how positioning works.",
+                        "Fixed the Combat Enter/Leave text vanishing after every combat transition while unlocked; it now stays visible as its movable handle.",
+                        "Fixed gameplay mover offsets drifting when the moved element was anchored to a scaled frame, and dragging a mover now repaints its X/Y sliders live.",
                         "Scanning respects Blizzard's instanced-content restrictions: encounter, Mythic+, and PvP lockdowns show a clear notice pointing to the curated presets and resume automatically instead of erroring.",
                         "Scan results state how many auras Blizzard hides as secret; hidden auras cannot be identified or blocked by any addon, so everything blockable is always captured.",
                         "Fixed Edit Mode arrow-key nudging for Custom 1-4 aura containers, including shared boss-frame positioning.",
