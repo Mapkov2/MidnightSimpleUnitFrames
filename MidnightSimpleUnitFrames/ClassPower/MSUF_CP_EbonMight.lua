@@ -39,6 +39,17 @@ builders.EBON_MIGHT = function(E)
         return CP.ebonHost
     end
 
+    local function SetHostShown(host, shown)
+        if not host then return end
+        if type(host.SetShown) == "function" then
+            host:SetShown(shown)
+        elseif shown then
+            host:Show()
+        else
+            host:Hide()
+        end
+    end
+
     --- Capture a plain, immutable-by-convention style snapshot before the
     --- native slot is created. Every write to the restricted slot subtree then
     --- happens inside initializeFrame; later activation only toggles owners.
@@ -70,6 +81,23 @@ builders.EBON_MIGHT = function(E)
             textOffsetY = supplied and supplied.textOffsetY,
         }
 
+        local source = CP.text
+        if source then
+            if style.fontPath == nil and type(source.GetFont) == "function" then
+                style.fontPath, style.fontSize, style.fontFlags = source:GetFont()
+            end
+            if style.textR == nil and type(source.GetTextColor) == "function" then
+                style.textR, style.textG, style.textB, style.textA = source:GetTextColor()
+            end
+            if style.shadowR == nil and type(source.GetShadowColor) == "function" then
+                style.shadowR, style.shadowG, style.shadowB, style.shadowA = source:GetShadowColor()
+            end
+            if style.shadowX == nil and type(source.GetShadowOffset) == "function" then
+                style.shadowX, style.shadowY = source:GetShadowOffset()
+            end
+        end
+
+        local bars = _cpDB and _cpDB.bars or {}
         style.texture = style.texture or "Interface\\Buttons\\WHITE8x8"
         style.barR = tonumber(style.barR) or 1
         style.barG = tonumber(style.barG) or 1
@@ -85,11 +113,18 @@ builders.EBON_MIGHT = function(E)
         style.shadowA = tonumber(style.shadowA) or 1
         style.shadowX = tonumber(style.shadowX) or 1
         style.shadowY = tonumber(style.shadowY) or -1
+        local textLayer = tonumber(bars.classPowerTextLayer) or 5
+        if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
+        textLayer = math.floor(textLayer + 0.5)
+        local layers = MSUF.UF and MSUF.UF.Layers
         style.textLevel = tonumber(style.textLevel)
-            or (type(GetTextLevel) == "function" and tonumber(GetTextLevel()))
-            or 1
-        style.textOffsetX = tonumber(style.textOffsetX) or 0
-        style.textOffsetY = tonumber(style.textOffsetY) or 0
+            or (layers and layers.TextLevel and layers.TextLevel(CP.container, textLayer, 5))
+            or (layers and layers.ElementLevel and layers.ElementLevel(textLayer, 5, 8))
+            or ((CP.container and CP.container.GetFrameLevel and CP.container:GetFrameLevel() or 0) + 10)
+        style.textOffsetX = tonumber(style.textOffsetX)
+            or tonumber(bars.classPowerTextOffsetX) or 0
+        style.textOffsetY = tonumber(style.textOffsetY)
+            or tonumber(bars.classPowerTextOffsetY) or 0
         return style
     end
 
@@ -164,51 +199,19 @@ builders.EBON_MIGHT = function(E)
         return true
     end
 
-    --- The registered bar and FontString are plain addon-owned regions inside
-    --- the restricted slot subtree, so re-styling them later is legal and does
-    --- not touch the aura data itself. Without this every media, colour, font
-    --- and offset change would stay invisible until the next /reload, because
-    --- the slot is created exactly once per session.
-    local function RefreshStyle()
-        local bar, text = CP.ebonNativeBar, CP.ebonNativeText
-        if not (bar or text) then return false end
-        local style = CaptureStyle()
-        if bar then
-            bar:SetStatusBarTexture(style.texture)
-            bar:SetStatusBarColor(style.barR, style.barG, style.barB, style.barA)
-        end
-        if text then
-            if style.fontPath and style.fontSize then
-                text:SetFont(style.fontPath, style.fontSize, style.fontFlags or "")
-            end
-            text:SetTextColor(style.textR, style.textG, style.textB, style.textA)
-            text:SetShadowColor(style.shadowR, style.shadowG, style.shadowB, style.shadowA)
-            text:SetShadowOffset(style.shadowX, style.shadowY)
-            local owner = CP.ebonTextFrame
-            if owner then
-                text:ClearAllPoints()
-                text:SetPoint("CENTER", owner, "CENTER", style.textOffsetX, style.textOffsetY)
-            end
-        end
-        return true
-    end
-
     local function SetActive(active)
         active = active == true
         if not active and CP.ebonSensorDesired ~= true then
             CP.ebonSensorRetryPending = nil
             CP.ebonTextLayerRetryPending = nil
         end
-        --- The host is the Player Power bar, which the Power element may only
-        --- have created on a later apply. Re-resolve every activation instead of
-        --- trusting the first answer.
-        local host = active and ResolveHost() or (CP.ebonSensorHost or CP.ebonHost)
-        if not host then
-            if active then
-                CP.ebonSensorRetryPending = true
-            end
-            return false
+        local host = CP.ebonSensorHost
+        if active and not host then
+            host = ResolveHost()
+        elseif not host then
+            host = CP.ebonHost
         end
+        if not host then return false end
 
         if active and not CP.ebonSensor then
             local A3 = _G.MSUF_Auras3
@@ -276,34 +279,18 @@ builders.EBON_MIGHT = function(E)
         local sensor = CP.ebonSensor
         if sensor then
             CP.ebonSensorRetryPending = nil
-            --- The Power element owns the bar for the whole session, but a
-            --- re-parent would silently orphan the sensor. Re-point it instead
-            --- of rendering into a frame nobody lays out any more.
-            if active and CP.ebonSensorHost ~= host then
-                CP.ebonSensorHost = host
-                sensor:SetParent(host)
-                sensor:ClearAllPoints()
-                sensor:SetAllPoints(host)
-                CP.ebonTextFrameLevel = nil
-            end
             if type(sensor.SetEnabled) == "function" then sensor:SetEnabled(active) end
             sensor:SetShown(active)
-            if active then
-                if sensor.SetFrameLevel and host.GetFrameLevel then
-                    sensor:SetFrameLevel(host:GetFrameLevel() or 0)
-                end
-                RefreshStyle()
-                ApplyTextStyle()
-            end
+            if active then ApplyTextStyle() end
         elseif active then
             local inCombat = _G.InCombatLockdown
             CP.ebonSensorRetryPending = type(inCombat) == "function" and inCombat() == true or nil
         end
+        SetHostShown(host, active and sensor ~= nil)
         return sensor ~= nil
     end
 
     CP.ApplyEbonTextStyle = ApplyTextStyle
-    CP.RefreshEbonStyle = RefreshStyle
     CP.SetEbonSensorActive = SetActive
-    return { ApplyTextStyle = ApplyTextStyle, RefreshStyle = RefreshStyle, SetActive = SetActive }
+    return { ApplyTextStyle = ApplyTextStyle, SetActive = SetActive }
 end

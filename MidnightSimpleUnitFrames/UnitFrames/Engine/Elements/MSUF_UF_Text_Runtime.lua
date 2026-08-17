@@ -1850,15 +1850,12 @@ UF.RegisterElement("HealthText", HealthText)
 local PowerText = {}
 
 function PowerText.IsEnabled(frame, spec)
-  -- Ebon Might writes its own native duration text on this bar, and the config
-  -- compiler already drops every power slot for that case. Keep the runtime
-  -- guard too: it survives a stale spec between the flag flip and the recompile.
-  if frame and frame._msufPowerEbonMight == true then return false end
+  if frame and frame._msufAugPowerReplacementActive == true then return false end
   return PowerTextEnabled(spec)
 end
 
 function PowerText.GetEvents(frame, spec)
-  if frame and frame._msufPowerEbonMight == true then
+  if frame and frame._msufAugPowerReplacementActive == true then
     return EMPTY_EVENTS
   end
   if not PowerTextEnabled(spec) then

@@ -1892,13 +1892,6 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.powerLeft = NormalizePowerTextMode(conf.powerTextLeft, "NONE")
   text.powerCenter = NormalizePowerTextMode(conf.powerTextCenter, "NONE")
   text.powerRight = NormalizePowerTextMode(conf.powerTextRight or conf.powerTextMode or general.powerTextMode, "CURPERCENT")
-  -- Augmentation Evoker hands the Player Power bar to Ebon Might, whose remaining
-  -- duration is written by Blizzard's native duration binding. Power value slots
-  -- would keep whatever the last Mana update left behind, so drop them entirely
-  -- and let the native text own the bar.
-  if key == "player" and _G.MSUF_AugEvokerActive == true then
-    text.powerLeft, text.powerCenter, text.powerRight = "NONE", "NONE", "NONE"
-  end
   text.powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")
   text.powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol")
   text.powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol")
