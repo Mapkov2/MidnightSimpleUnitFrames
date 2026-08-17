@@ -1,5 +1,17 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.09-Beta4 - 2026-08-17
+
+### Highlights
+
+- Hardened the **combat aura scanner** against Blizzard's instanced-content restrictions: scans now detect encounter, Mythic+, and PvP lockdowns, show a clear notice pointing to the curated presets, and resume automatically instead of erroring.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"auras","controlId":"menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.target.buff.visible","query":"blacklist","label":"Combat scan"} -->
+
+### Fixes & Performance
+
+- Fixed hard "Auras cannot be accessed" errors when the aura scanner ran during encounters, Mythic+, or PvP matches.
+- Open-world combat scanning keeps capturing readable auras; auras Blizzard hides are counted as hidden instead of failing the scan.
+
 ## 6.09-Beta3 - 2026-08-17
 
 ### Highlights

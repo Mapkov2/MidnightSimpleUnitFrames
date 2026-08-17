@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "C75272393104709EA4EAE81C77FAEA6AEF3CC3775B1EE8D0B304CC06A91CB91E",
-    currentVersion = "6.09-Beta3",
+    sourceSha256 = "D038F94ED173B15A7E18310D1566D9F90BAD0E2A742CEA9719CF702885B2FA17",
+    currentVersion = "6.09-Beta4",
     historyFromVersion = "6.02",
-    previousVersion = "6.09-Beta2",
-    rangeLabel = "6.09-Beta2 -> 6.09-Beta3",
+    previousVersion = "6.09-Beta3",
+    rangeLabel = "6.09-Beta3 -> 6.09-Beta4",
     entries = {
+        {
+            version = "6.09-Beta4",
+            date = "2026-08-17",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Hardened the combat aura scanner against Blizzard's instanced-content restrictions: scans now detect encounter, Mythic+, and PvP lockdowns, show a clear notice pointing to the curated presets, and resume automatically instead of erroring.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "blacklist",
+                                label = "Combat scan",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible",
+                                settingKey = "auras3.target.buff.visible",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed hard \"Auras cannot be accessed\" errors when the aura scanner ran during encounters, Mythic+, or PvP matches.",
+                        "Open-world combat scanning keeps capturing readable auras; auras Blizzard hides are counted as hidden instead of failing the scan.",
+                    },
+                },
+            },
+        },
         {
             version = "6.09-Beta3",
             date = "2026-08-17",

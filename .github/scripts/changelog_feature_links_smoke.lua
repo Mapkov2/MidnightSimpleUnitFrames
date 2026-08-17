@@ -39,7 +39,7 @@ local full = assert(Load("MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogF
     "full Options changelog payload missing")
 assert(type(compact.entries) == "table" and #compact.entries == 4,
     "compact core changelog must retain four releases")
-assert(type(full.entries) == "table" and #full.entries == 16
+assert(type(full.entries) == "table" and #full.entries == 17
     and full.historyFromVersion == "6.02" and full.entries[#full.entries].version == "6.02",
     "full LoD changelog must contain only releases from 6.02 through current")
 assert(type(compact.sourceSha256) == "string" and compact.sourceSha256 == full.sourceSha256,
