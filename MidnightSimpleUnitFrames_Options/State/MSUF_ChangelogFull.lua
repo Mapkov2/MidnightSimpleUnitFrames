@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "542A427CA67C754616C10B210DF670AC01D616659669F44ED50F7C946B81AB83",
+    sourceSha256 = "4C23F9AEA09895D421A71FA93CE6B8C1E2517160B73AA0F0A059683917AC1875",
     currentVersion = "6.09",
     historyFromVersion = "6.02",
     previousVersion = "6.08",
@@ -22,6 +22,19 @@ local data = {
                     title = "Highlights",
                     bullets = {
                         {
+                            text = "Added dynamic Custom Priority ordering for Dots on target and Custom 1-3 aura containers, keeping the configured spell order compact and stable as tracked auras appear or expire.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "dots on target custom priority",
+                                label = "Custom Priority",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.target.custom4.placed.sortMethod",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "custom4_behavior",
+                            },
+                        },
+                        {
                             text = "Added a combat aura scanner to the Unitframe blacklist workspace: one click closes the menu, keeps capturing every blockable aura with its icon until combat ends, then reopens the menu with the collected list, ready to block.",
                             link = {
                                 pageKey = "uf_target",
@@ -33,16 +46,25 @@ local data = {
                             },
                         },
                         {
-                            text = "Added dynamic Custom Priority ordering for Dots on target and Custom 1-3 aura containers, keeping the configured spell order compact and stable as tracked auras appear or expire.",
+                            text = "Manual blacklist entries are now verified by Spell ID against the live unit: when your cast's ID differs from the aura's actual ID, MSUF warns and offers to block the real aura ID instead.",
                             link = {
                                 pageKey = "uf_target",
-                                query = "dots on target custom priority",
-                                label = "Custom Priority",
+                                query = "blacklist",
+                                label = "Blacklist",
                                 sectionId = "auras",
-                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
-                                settingKey = "auras3.target.custom4.placed.sortMethod",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "custom4_behavior",
+                                controlId = "menu2.uf_target.auras.unit-workspace.lane.buff.layout.visible",
+                                settingKey = "auras3.target.buff.visible",
+                            },
+                        },
+                        {
+                            text = "Added an optional Show spell IDs in aura tooltips toggle that keeps the native 12.1 tooltip option enabled across logins.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "spell ids",
+                                label = "Aura tooltip spell IDs",
+                                sectionId = "misc_tooltips",
+                                controlId = "menu2.opt.misc.global.setting.tooltip.show.aura.spell.ids",
+                                settingKey = "general.tooltipShowAuraSpellIDs",
                             },
                         },
                         {
@@ -58,17 +80,6 @@ local data = {
                                 prepareValue = "bossNumber",
                             },
                         },
-                        {
-                            text = "Added an optional Show spell IDs in aura tooltips toggle that keeps the native 12.1 tooltip option enabled across logins.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "spell ids",
-                                label = "Aura tooltip spell IDs",
-                                sectionId = "misc_tooltips",
-                                controlId = "menu2.opt.misc.global.setting.tooltip.show.aura.spell.ids",
-                                settingKey = "general.tooltipShowAuraSpellIDs",
-                            },
-                        },
                     },
                 },
                 {
@@ -76,7 +87,6 @@ local data = {
                     bullets = {
                         "Moved aura ordering out of Style into dedicated, scope-aware Ordering workspaces for Unit Frames, Group Frames, custom aura containers, and external defensives, with draggable priority rows that snap to their new slot.",
                         "Added a live Active auras on this frame dropdown to the blacklist with one-click blocking, a Rescan button, and a session capture list; scans run only on click.",
-                        "Manual blacklist entries are now verified against the live unit: when your cast's Spell ID differs from the aura's actual ID, MSUF warns and offers to block the real aura ID instead.",
                         "Extended the Maximum duration filter to every aura lane on unit and group frames, including Buffs, Tracked Buffs, and External Defensives.",
                         "Reworked pandemic-window Full-Frame effects for tracked DoTs to bind to the visible aura buttons themselves, including portrait mode.",
                         "Replaced Aura list scrollbars with the consistent MSUF scrollbar style and exposed Ordering options directly without a redundant accordion.",
