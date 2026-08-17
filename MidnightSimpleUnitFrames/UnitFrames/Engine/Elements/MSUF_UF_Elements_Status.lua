@@ -45,6 +45,7 @@ local floor = math.floor
 local find = string.find
 local setmetatable = setmetatable
 local Secrets = MSUF.Secrets or {}
+local GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
 
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local function BoolTrue(value)
@@ -187,6 +188,7 @@ local STATUS_REFRESH = {
   "RaidMarkerIndicator",
   "LeaderIndicator",
   "LevelIndicator",
+  "BossNumberIndicator",
   "RaidGroupIndicator",
   "EliteIndicator",
   "StatusTextIndicator",
@@ -875,6 +877,7 @@ local CONFIGURED_REGION_DEFS = {
   { "leader", "LeaderIndicator", "leaderIcon", { "leaderIcon", "LeaderIndicator" }, { "LeaderIndicator", "leaderIcon" } },
   { "assist", "assistIcon" },
   { "level", "levelText", nil, nil, nil, nil, true },
+  { "bossNumber", "bossNumberText", nil, nil, nil, nil, true },
   { "race", "raceText", nil, nil, nil, nil, true },
   { "classText", "classStatusText", nil, nil, nil, nil, true },
   { "raidGroup", "raidGroupNameText", nil, nil, nil, nil, true },
@@ -892,6 +895,7 @@ local CONFIGURED_REGION_DEFS = {
 
 local NAME_FONT_STATUS = {
   level = true,
+  bossNumber = true,
   race = true,
   classText = true,
   raidGroup = true,
@@ -1476,6 +1480,19 @@ local function UpdateIdentityTexts(frame, status)
   if showLevel then ShowIdentityText(frame.levelText, levelText, levelPresent) else SetShown(frame.levelText, false) end
   if showRace then ShowIdentityText(frame.raceText, raceText, racePresent) else SetShown(frame.raceText, false) end
   if showClass then ShowIdentityText(frame.classStatusText, classText, classPresent) else SetShown(frame.classStatusText, false) end
+end
+
+local function UpdateBossNumber(frame, status)
+  local cfg = status and status.bossNumber
+  local fs = frame and frame.bossNumberText
+  local unit = frame and frame.MSUFUnitKey
+  local index = type(GetBossIndexFromToken) == "function" and GetBossIndexFromToken(unit) or nil
+  if not (cfg and cfg.enabled == true and fs and index) then
+    SetShown(fs, false)
+    return
+  end
+  SetText(fs, tostring(index))
+  SetShown(fs, true)
 end
 
 local function RaidGroupText(style, subgroup)
@@ -2278,6 +2295,7 @@ local STATUS_INDICATOR_DEFS = {
   { "RaidMarkerIndicator", "raidMarker", nil, RAID_MARKER_EVENTS, UpdateRaidMarker, "raidTargetIcon", true },
   { "LeaderIndicator", "leader", nil, LEADER_EVENTS, UpdateLeaderPair, { "LeaderIndicator", "leaderIcon", "assistIcon" }, true },
   { "LevelIndicator", "identityText", nil, nil, UpdateIdentityTexts, { "levelText", "raceText", "classStatusText" }, nil, nil, IdentityTextEvents, IdentityTextUnitlessEvents },
+  { "BossNumberIndicator", "bossNumber", nil, nil, UpdateBossNumber, "bossNumberText", true },
   { "RaidGroupIndicator", "raidGroup", nil, RAID_GROUP_EVENTS, UpdateRaidGroup, "raidGroupNameText", true },
   { "EliteIndicator", "elite", ELITE_EVENTS, nil, UpdateElite, "eliteIcon" },
   { "StatusTextIndicator", "statusText", nil, nil, UpdateStatusText, "statusIndicatorText", true, nil, StatusTextEvents, StatusTextUnitlessEvents, nil, true },

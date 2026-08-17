@@ -178,7 +178,7 @@ ExportPublic("MSUF_NormalizePortraitRenderDB", MSUF_Defaults_NormalizePortraitRe
 local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }
 local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_DEFAULTS_STATUS_PREFIXES = {
-    "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
+    "leaderIcon", "raidMarker", "levelIndicator", "bossNumberIndicator", "eliteIcon", "statusText",
     "statusGhostText", "statusAFKText", "statusAFKTimer", "statusAFKTimerText", "statusDNDText",
     "combatStateIndicator", "restedStateIndicator", "restingStateIndicator",
     "incomingResIndicator", "pvpIndicator", "stanceIndicator", "raidGroupName",

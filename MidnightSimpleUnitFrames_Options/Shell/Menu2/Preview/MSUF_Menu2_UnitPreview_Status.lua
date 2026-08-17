@@ -39,7 +39,7 @@ local Status = MSUF.UFPreviewStatus or {}
 MSUF.UFPreviewStatus = Status
 -- stance renders through the identity-text preview path: name-font sizing and
 -- a plain text glyph, without joining the Dead/Ghost status-text state family.
-local IDENTITY_TEXT_IDS = { level = true, raceText = true, classText = true, stance = true }
+local IDENTITY_TEXT_IDS = { level = true, bossNumber = true, raceText = true, classText = true, stance = true }
 local STATUS_TEXT_STATE_IDS = {
     statusText = "DEAD",
     statusGhostText = "GHOST",
@@ -172,6 +172,7 @@ function Status.IdentityPreviewText(spec, data)
     local id = type(spec) == "table" and spec.id or spec
     data = data or {}
     if id == "level" then return tostring(data.level or "80") end
+    if id == "bossNumber" then return "1" end
     if id == "raceText" then return data.race or "Tauren" end
     if id == "classText" then return data.className or data.class or "Warrior" end
     if id == "stance" then

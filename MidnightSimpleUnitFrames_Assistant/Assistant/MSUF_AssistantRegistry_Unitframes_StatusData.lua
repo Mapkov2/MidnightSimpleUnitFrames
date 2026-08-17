@@ -75,6 +75,16 @@ Data.STATUS_CONTROL_SPECS = {
         aliases = { "level", "level indicator", "level text" },
     },
     {
+        value = "bossNumber", label = "Boss Number", show = "showBossNumberIndicator",
+        defaultShow = false, size = "bossNumberIndicatorSize", defaultSize = 14,
+        anchor = "bossNumberIndicatorAnchor", defaultAnchor = "TOPLEFT",
+        x = "bossNumberIndicatorOffsetX", defaultX = 4,
+        y = "bossNumberIndicatorOffsetY", defaultY = -4,
+        layer = "bossNumberIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RefreshStatusIndicators", units = { boss = true },
+        aliases = { "boss number", "boss index", "boss frame number", "boss number text" },
+    },
+    {
         value = "raidgroupname", label = "Raid Group Name", show = "showRaidGroupInName",
         defaultShow = false, size = "nameFontSize", defaultSize = 14,
         anchor = "raidGroupNameAnchor", defaultAnchor = "NAMERIGHT",

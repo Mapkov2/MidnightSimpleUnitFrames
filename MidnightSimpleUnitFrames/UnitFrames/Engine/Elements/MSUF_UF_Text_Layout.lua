@@ -1065,7 +1065,7 @@ local FONT_EPOCH_TEXT_FIELDS = {
   "nameText", "_msufNameAnchorText", "raidGroupNameText", "totInlineSep", "totInlineText",
   "hpTextLeft", "hpTextCenter", "hpTextRight",
   "powerTextLeft", "powerTextCenter", "powerTextRight",
-  "levelText", "classificationIndicatorText", "statusIndicatorText", "statusIndicatorOverlayText", "statusAFKTimerText",
+  "levelText", "bossNumberText", "classificationIndicatorText", "statusIndicatorText", "statusIndicatorOverlayText", "statusAFKTimerText",
   "_msufInlineDotsFS",
 }
 

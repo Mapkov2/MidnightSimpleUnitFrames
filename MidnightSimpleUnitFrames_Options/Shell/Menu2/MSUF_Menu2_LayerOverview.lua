@@ -85,6 +85,7 @@ local FALLBACK_UNIT_STATUS_SPECS = {
     { text = "Leader / Assist Icons", show = "showLeaderIcon", defaultShow = true, layer = "leaderIconLayer", defaultLayer = 7, units = "player target" },
     { text = "Raid Marker", show = "showRaidMarker", defaultShow = true, layer = "raidMarkerLayer", defaultLayer = 7 },
     { text = "Level", show = "showLevelIndicator", defaultShow = true, layer = "levelIndicatorLayer", defaultLayer = 7 },
+    { text = "Boss Number", show = "showBossNumberIndicator", defaultShow = false, layer = "bossNumberIndicatorLayer", defaultLayer = 7, units = "boss" },
     { text = "Raid Group", show = "showRaidGroupInName", defaultShow = false, layer = "raidGroupNameLayer", legacyLayer = "nameTextLayer", defaultLayer = 5, units = "player target targettarget focustarget focus" },
     { text = "Elite / Rare", show = "showEliteIcon", defaultShow = true, layer = "eliteIconLayer", defaultLayer = 7, units = "target focus targettarget focustarget boss" },
     { text = "Dead / Offline Text", show = "statusDeadTextEnabled", defaultShow = true, layer = "statusTextLayer", defaultLayer = 7 },
