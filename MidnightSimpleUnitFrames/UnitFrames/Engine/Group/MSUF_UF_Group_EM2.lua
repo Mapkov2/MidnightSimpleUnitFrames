@@ -850,6 +850,18 @@ local function BeginGroupDrag(frame, kind, source)
   if frame._msufGFEM2Dragging then return true end
   if BlockConfigLocked() then return end
   frame._msufGFEM2Dragging = true
+  -- Dragging writes bounds-relative offsets, so a still-legacy conf must be
+  -- converted before the first drag tick stamps GRID_BOUNDS_V2 onto legacy
+  -- numbers and locks EnsureStableGridPosition out for good. Ahead of the undo
+  -- snapshot on purpose: the conversion is a lossless representation change,
+  -- not a user edit, and undo must restore a self-consistent conf.
+  if kind ~= "priority" then
+    local dragConf = GetConf(kind)
+    local dragGF = GF()
+    if dragConf and dragGF and type(dragGF.EnsureStableGridPosition) == "function" then
+      dragGF.EnsureStableGridPosition(kind, GetPositionCount(kind), dragConf)
+    end
+  end
   if EM2.Focus and EM2.Focus.SetSelection then
     EM2.Focus.SetSelection(key, kind == "priority" and "placement" or nil, nil, { source = source or "group-drag" })
   end
@@ -1556,6 +1568,15 @@ local function BuildGFPopup(mode)
       _G.MSUF_EM_UndoBeforeChange("gf", mode)
     end
 
+    -- Convert before reading the current offsets: they feed TranslateFramePosition
+    -- below, so reading them in legacy semantics and stamping V2 afterwards would
+    -- persist the legacy numbers under the converted label.
+    if mode ~= "priority" then
+      local applyGF = GF()
+      if applyGF and type(applyGF.EnsureStableGridPosition) == "function" then
+        applyGF.EnsureStableGridPosition(mode, GetPositionCount(mode), conf)
+      end
+    end
     local currentX = San(conf.offsetX, 0)
     local currentY = San(conf.offsetY, 0)
     local displayX = popup.xBox and tonumber(popup.xBox:GetText())

@@ -1760,8 +1760,11 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
     if changed then
         d.conf.offsetX = nextX
         d.conf.offsetY = nextY
+        -- Only the write earns the stamp. A click that never moved would
+        -- otherwise label untouched legacy offsets as already converted, and
+        -- GF.EnsureStableGridPosition refuses to convert them ever after.
+        d.conf.positionMode = "GRID_BOUNDS_V2"
     end
-    d.conf.positionMode = "GRID_BOUNDS_V2"
     return true
 end
 

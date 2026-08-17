@@ -532,7 +532,7 @@ end
 --- three scopes by construction (see SetSyncedValue), so copying it would only ever be
 --- a no-op that pretends the value is per scope.
 local GF_COPY_EXCLUDE = M.KeySetFromWords [[
-    offsetX offsetY point positionMode _hlMigrated
+    offsetX offsetY point positionMode positionMigrationCount _hlMigrated
     anchorMode anchorPoint anchorToFrame customAnchorFrame attachGap attachOffset
     raidManagerMode
 ]]
