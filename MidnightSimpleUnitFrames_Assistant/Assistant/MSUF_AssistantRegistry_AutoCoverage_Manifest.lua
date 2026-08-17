@@ -1857,6 +1857,7 @@ Manifest.defaults = {
         tempMaxHealthTexture = "Solid",
         textBackdrop = true,
         tipCycleIndex = 9,
+        tooltipShowAuraSpellIDs = false,
         unifiedBarB = 0.29411765933036799,
         unifiedBarG = 0.090196080505847931,
         unifiedBarR = 0.90196084976196289,

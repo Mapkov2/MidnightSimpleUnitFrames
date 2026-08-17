@@ -293,10 +293,19 @@ function A3.BindPandemicRegion(button, lane)
     then
         return false
     end
-    local region = A3.ApplyPandemicVisual(button, lane, false)
-    if not region then return false end
-    button:AddPandemicRegion(region)
-    return true
+    local bound = false
+    if lane.pandemicVisualEnabled ~= false then
+        local region = A3.ApplyPandemicVisual(button, lane, false)
+        if region then
+            button:AddPandemicRegion(region)
+            bound = true
+        end
+    end
+    local bindFrameEffect = SpellIndicatorsRuntime.BindPandemicFrameEffect
+    if type(lane.pandemicFrameEffect) == "table" and type(bindFrameEffect) == "function" then
+        bound = bindFrameEffect(button, lane.pandemicFrameEffect, button._msufA3ParentFrame) or bound
+    end
+    return bound
 end
 
 function A3.NormalizeStealableStyle(value)
@@ -967,6 +976,7 @@ local GROUP_LANE_SPECS = {
         alphaKey = "buffAlpha",
         blacklistHashKey = "buffBlacklistHash",
         hidePermanentKey = "buffHidePermanent",
+        maxDurationKey = "buffMaxDuration",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse", tooltipKey = "buffShowTooltip",
         sortMethodKey = "buffSortMethod", sortReverseKey = "buffSortReverse",
@@ -993,6 +1003,7 @@ local GROUP_LANE_SPECS = {
         alphaKey = "trackedBuffAlpha",
         blacklistHashKey = "trackedBuffBlacklistHash", includeHashKey = "trackedBuffIncludeHash",
         hidePermanentKey = "trackedBuffHidePermanent",
+        maxDurationKey = "trackedBuffMaxDuration",
         showTextKey = "trackedBuffShowCooldown", showStackKey = "trackedBuffShowStacks", swipeKey = "trackedBuffShowCooldownSwipe",
         swipeReverseKey = "trackedBuffCooldownSwipeReverse", tooltipKey = "trackedBuffShowTooltip",
         sortMethodKey = "trackedBuffSortMethod", sortReverseKey = "trackedBuffSortReverse",
@@ -1051,6 +1062,7 @@ local GROUP_LANE_SPECS = {
         alphaKey = "externalAlpha",
         blacklistHashKey = "externalBlacklistHash",
         hidePermanentKey = "externalHidePermanent",
+        maxDurationKey = "externalMaxDuration",
         showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
         swipeReverseKey = "externalCooldownSwipeReverse", tooltipKey = "externalShowTooltip",
         sortMethodKey = "externalSortMethod", sortReverseKey = "externalSortReverse",
@@ -2876,7 +2888,7 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local helpful = not targetDots and tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
     candidateFilters, candidateFilterSignature = AddMaxDurationCandidateFilter(
         candidateFilters, candidateFilterSignature,
-        not helpful and filters.maxDuration or nil, filters.hidePermanent == true)
+        filters.maxDuration, filters.hidePermanent == true)
     local size = ClampNumber(layoutPlaced.size, 24, 1, 128)
     local spacing = ClampNumber(layoutPlaced.spacing, 2, 0, 64)
     local perRow = ClampNumber(layoutPlaced.perRow, 4, 1, 40)
@@ -2889,6 +2901,13 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local iconShape, requestedIconShape = Shape.Resolve(
         iconShapeSource, frameSpec and frameSpec.portrait and frameSpec.portrait.shape)
     lanePadding = Round(ClampNumber(lanePadding, 0, 0, 16))
+    local pandemicVisualEnabled = targetDots == true and placed.pandemicEnabled == true
+    local pandemicFrameEffect
+    if targetDots == true and type(styleFrame) == "table" and styleFrame.onlyInPandemicWindow == true then
+        local normalizeFrameEffect = SpellIndicatorsRuntime.NormalizeFrameEffect
+        pandemicFrameEffect = type(normalizeFrameEffect) == "function"
+            and normalizeFrameEffect(styleFrame) or styleFrame
+    end
     local lane = FinalizeLane({
         kind = "custom" .. tostring(index),
         appearanceKind = appearanceKind,
@@ -2964,7 +2983,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         stackX = ClampNumber(placed.stackX, 0, -2000, 2000),
         stackY = ClampNumber(placed.stackY, 0, -2000, 2000),
         targetDots = targetDots == true,
-        pandemicEnabled = targetDots == true and placed.pandemicEnabled == true,
+        pandemicEnabled = pandemicVisualEnabled or pandemicFrameEffect ~= nil,
+        pandemicVisualEnabled = pandemicVisualEnabled,
+        pandemicFrameEffect = pandemicFrameEffect,
         pandemicStyle = A3.NormalizePandemicStyle(placed.pandemicStyle),
         pandemicColor = type(placed.pandemicColor) == "table" and placed.pandemicColor or A3.DEFAULT_PANDEMIC_COLOR,
         pandemicThickness = ClampNumber(placed.pandemicThickness, 2, 1, 12),
@@ -2985,9 +3006,9 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     -- off, fall back to the normal bar instead of silently losing tracked auras.
     local barEnabled = portraitLane == nil
     local effect
-    -- Full-frame effects are independent aura sensors. Portrait mode replaces
-    -- only the icon lane and must not suppress the selected frame effect.
-    if type(styleFrame) == "table" and styleFrame.type and styleFrame.type ~= "none" then
+    -- Unconditional Full-Frame effects remain independent aura sensors in portrait mode.
+    -- Pandemic-only effects live on every visible DoT AuraButton and need no duplicate sensor.
+    if pandemicFrameEffect == nil and type(styleFrame) == "table" and styleFrame.type and styleFrame.type ~= "none" then
         effect = {
             key = "ufcustom_effect:" .. tostring(index),
             display = entry.name or ("Custom " .. tostring(index)),
@@ -4225,13 +4246,24 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.auraTooltipAnchor)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
         .. "\030" .. tostring(lane.showStealableMarker) .. "\030" .. tostring(lane.stealableStyle)
-        .. "\030" .. tostring(lane.pandemicEnabled) .. "\030" .. tostring(lane.pandemicStyle)
+        .. "\030" .. tostring(lane.pandemicEnabled) .. "\030" .. tostring(lane.pandemicVisualEnabled)
+        .. "\030" .. tostring(lane.pandemicStyle)
         .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[1] or lane.pandemicColor.r))
         .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[2] or lane.pandemicColor.g))
         .. "\030" .. tostring(lane.pandemicColor and (lane.pandemicColor[3] or lane.pandemicColor.b))
         .. "\030" .. tostring(lane.pandemicThickness) .. "\030" .. tostring(lane.pandemicPadding)
         .. "\030" .. tostring(lane.pandemicBorderAlpha) .. "\030" .. tostring(lane.pandemicTintAlpha)
         .. "\030" .. tostring(lane.pandemicBlend)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.type)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.priority)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.thickness)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.layer)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.tintAlpha)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.strata)
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[1])
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[2])
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[3])
+        .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[4])
         .. "\030" .. tostring(lane.alpha)
         .. "\030" .. tostring(lane.padding)
         .. "\030" .. tostring(lane.portraitPositionWhenDisabled)

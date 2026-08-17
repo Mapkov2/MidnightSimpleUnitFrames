@@ -377,7 +377,7 @@ end
 
 local CUSTOM_DEBUFF_BLACKLIST_INFO_SEEN_KEY = "auraEnemyDebuffBlacklistInfoSeen"
 local CUSTOM_DEBUFF_BLACKLIST_INFO_TITLE = "UnitFrame Debuff blacklist"
-local CUSTOM_DEBUFF_BLACKLIST_INFO_BODY = "You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID."
+local CUSTOM_DEBUFF_BLACKLIST_INFO_BODY = "You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID. The debuff on the unit can carry a different Spell ID than the spell you cast - use the ID from the debuff itself."
 
 local function CustomDebuffBlacklistInfoSeen()
     local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
@@ -634,8 +634,8 @@ local function ConfigureMaxDurationSlider(slider)
             return tonumber(value:match("%d+"))
         end)
     end
-    AddTooltip(slider, "Maximum debuff duration",
-        "Off shows debuffs of any duration. Otherwise, debuffs whose total duration exceeds this number of seconds are hidden.")
+    AddTooltip(slider, "Maximum duration",
+        "Off shows auras of any duration. Otherwise, auras whose total duration exceeds this number of seconds are hidden.")
     return slider
 end
 local UNIT_AURA_WORKSPACE_TAB_STYLE = {
@@ -3127,7 +3127,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local half = ceil(#meta / 2)
     local categoryHeight = max(356, 180 + half * 30)
     local originY = embedded and (tonumber(opts.originY) or -400) or 0
-    local blacklistY = showFilter and (originY - (laneKey == "debuff" and 362 or 304)) or (originY - 42)
+    local blacklistY = showFilter and (originY - 362) or (originY - 42)
     local directY = blacklistY - categoryHeight - 24
     local standaloneHeight = max(930, abs(directY) + (laneKey == "debuff" and 270 or 324))
     local section = opts.parent or b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", standaloneHeight, false)
@@ -3165,7 +3165,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         W.LabelAt(section, "Blizzard Filters & Lists", 24, originY - 24, w - 48, "GameFontNormal", T.colors.accent)
     end
     if showFilter then
-        local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)), M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, lane == "debuff" and 296 or 234)
+        local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)), M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, 296)
         W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or Tr("Filter Type"), 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
         if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
         local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
@@ -3175,10 +3175,10 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             ReadHidePermanent, WriteHidePermanent,
             AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".hide-permanent"))
         AddHidePermanentTooltip(hidePermanent)
-        if lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
+        if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
             ConfigureMaxDurationSlider(BindSlider(ctx, filter, "Maximum duration", 16, -230, 0, 180, 1, filterW - 32,
                 ReadMaxDuration, WriteMaxDuration,
-                AuraControlMeta(ctx, "group-filter.lane.debuff.max-duration", nil, {
+                AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".max-duration", nil, {
                     assistantDisposition = "compound",
                     assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
                 })))
@@ -3380,12 +3380,12 @@ local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debu
 M._unitAuraWorkspaceTabsPlayer = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensives", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|behavior=Ordering|filters=Filters|blacklist=Blacklist|style=Style", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|whitelist=Whitelist|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|dots=Dots|style=Style", UNIT_AURA_CHOICE_WIDTH)
-M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|defensives=Defensives|style=Style", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|dots=Dots|style=Style", UNIT_AURA_CHOICE_WIDTH)
+M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|defensives=Defensives|style=Style", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, behavior = true, filters = true, blacklist = true, style = true }
 local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, behavior = true, whitelist = true, filters = true, layout = true, style = true }
-local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, behavior = true, dots = true, style = true }
-M._unitAuraPlayerDefensiveToolOK = { setup = true, layout = true, behavior = true, defensives = true, style = true }
+local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, behavior = true, filters = true, dots = true, style = true }
+M._unitAuraPlayerDefensiveToolOK = { setup = true, layout = true, behavior = true, filters = true, defensives = true, style = true }
 
 local function CurrentUnitAuraTool(unit, container)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
@@ -3516,7 +3516,7 @@ end
 
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters",
-        M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or (lane == "debuff" and 256 or 182))
+        M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or 256)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -3581,7 +3581,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
             "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration, even when Blizzard token filters are disabled.")
     local maxDuration
-    if lane == "debuff" then
+    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
         maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -174, 0, 180, 1, inner,
             function()
                 return type(Model.ReadBlacklistMaxDuration) == "function"
@@ -3590,10 +3590,10 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
             function(value)
                 if type(Model.WriteBlacklistMaxDuration) == "function"
                     and Model.WriteBlacklistMaxDuration(unit, lane, value) then
-                    ApplyUnit(ctx, unit, "AURAS3_DEBUFF_MAX_DURATION", true)
+                    ApplyUnit(ctx, unit, "AURAS3_" .. tostring(lane):upper() .. "_MAX_DURATION", true)
                 end
             end,
-            AuraControlMeta(ctx, "unit-workspace.lane.debuff.filters.max-duration", nil, {
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {
                 assistantDisposition = "compound",
                 assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
             })))
@@ -3687,9 +3687,9 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local showPresets = not isDebuff or type(Model.UnitBlacklistPresetValues) ~= "function"
         or #Model.UnitBlacklistPresetValues(unit, lane) > 0
     local combinedManualAndPresets = (not isDebuff or enemyDebuff) and showPresets
-    local refreshList
+    local refreshList, renderVerify, refreshLiveBlock, nonPresetHint
     local section = b:Section(laneTitle .. " Blacklist",
-        combinedManualAndPresets and 528 or 446)
+        combinedManualAndPresets and 620 or ((not isDebuff or enemyDebuff) and 538 or 446))
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     if not isDebuff or enemyDebuff then
@@ -3702,15 +3702,375 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             function() return inputValue end, function(value) inputValue = value or "" end,
             false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
         if enemyDebuff then CreateCustomDebuffBlacklistInfoButton(section, input, unit) end
+        AddTooltip(input, "Spell ID vs. aura ID",
+            "The aura on the unit can use a different Spell ID than the spell you cast. Enter the ID shown on the aura itself. After adding, MSUF checks the live unit and warns when only a same-named aura with a different ID is active.")
         local add = ActionButton(section, addLabel, enemyDebuff and 132 or 118, "primary")
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
-        add:SetScript("OnClick", function()
-            local value = input and input.GetText and input:GetText() or inputValue
-            local changed = Model.AddBlacklistSpell(unit, value, lane)
+        local verifyText = W.Text(section, "", 24, -92, inner - 214, T.colors.muted)
+        if verifyText.SetMaxLines then verifyText:SetMaxLines(2) end
+        local swapBtn = ActionButton(section, "", 180, "primary")
+        swapBtn:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -86)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(swapBtn, input) end
+        swapBtn:Hide()
+        renderVerify = function()
+            local state = M.auraBlacklistVerify
+            local mine = state and state.unit == unit and state.lane == lane and state or nil
+            if not mine then
+                verifyText:SetText("")
+            elseif mine.status == "scan" then
+                local c = T.colors.accent
+                if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
+                if (mine.secretCount or 0) > 0 then
+                    verifyText:SetText(M.Format("Scan complete: %d auras readable right now, %d captured this session. %d more are hidden by Blizzard and cannot be blocked by any addon.",
+                        mine.liveCount or 0, mine.sessionCount or 0, mine.secretCount))
+                else
+                    verifyText:SetText(M.Format("Scan complete: %d auras readable right now, %d captured this session.",
+                        mine.liveCount or 0, mine.sessionCount or 0))
+                end
+            elseif mine.status == "active" then
+                local c = T.colors.accent
+                if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
+                verifyText:SetText(M.Format("%s (#%d) is active on this frame right now - blacklist entry verified.",
+                    tostring(mine.name or "Spell"), mine.enteredID or 0))
+            else
+                local c = T.colors.accent2 or T.colors.accent
+                if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
+                verifyText:SetText(M.Format("#%d is not active on this frame, but %s is currently active as #%d. The aura's ID can differ from your cast's Spell ID.",
+                    mine.enteredID or 0, tostring(mine.suggestName or "Spell"), mine.suggestID or 0))
+            end
+            local showSwap = mine ~= nil and mine.status == "mismatch" and mine.suggestID ~= nil
+            if showSwap and swapBtn._msuf2Label and swapBtn._msuf2Label.SetText then
+                swapBtn._msuf2Label:SetText(M.Format("Block #%d instead", mine.suggestID))
+            end
+            swapBtn:SetShown(showSwap)
+            if nonPresetHint then nonPresetHint:SetShown(mine == nil) end
+        end
+        swapBtn:SetScript("OnClick", function()
+            local state = M.auraBlacklistVerify
+            local mine = state and state.unit == unit and state.lane == lane and state or nil
+            if not (mine and mine.suggestID) then return false end
+            if mine.enteredID and mine.enteredID ~= mine.suggestID then
+                Model.RemoveBlacklistSpell(unit, mine.enteredID, lane)
+            end
+            Model.AddBlacklistSpell(unit, mine.suggestID, lane)
+            M.auraBlacklistVerify = {
+                unit = unit, lane = lane, status = "active",
+                enteredID = mine.suggestID, name = mine.suggestName,
+            }
+            ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true)
+            if refreshList then refreshList() end
+            QueueAurasPageRefresh(ctx, "aura-blacklist-swap-suggested")
+            return true
+        end)
+        local liveY = showPresets and -122 or -134
+        local liveW = max(140, min(floor(inner * 0.62), inner - 266))
+        local captureKey = unit .. "|" .. lane
+        local function CapturedAuras(wipeStore)
+            local store = M.auraBlacklistCaptured
+            if type(store) ~= "table" then store = {} M.auraBlacklistCaptured = store end
+            if wipeStore then store[captureKey] = nil end
+            local captured = store[captureKey]
+            if type(captured) ~= "table" then captured = {} store[captureKey] = captured end
+            return captured
+        end
+        -- Scanning is strictly click-driven: only the Rescan/Block handlers
+        -- call LiveAuraValues. Refreshes and the dropdown read the cached
+        -- last scan, so an open menu never scans the unit on its own.
+        local liveScanCache
+        local function LiveAuraValues()
+            local values, unreadable
+            if type(Model.LiveBlacklistAuraValues) == "function" then
+                values, unreadable = Model.LiveBlacklistAuraValues(unit, lane)
+            end
+            values = values or {}
+            -- Every scan also feeds the session capture list, so short-lived
+            -- combat debuffs stay pickable after they expire or combat ends.
+            local captured = CapturedAuras(false)
+            local liveSeen = {}
+            for i = 1, #values do
+                local entry = values[i]
+                liveSeen[entry.value] = true
+                local cap = captured[entry.value]
+                if type(cap) ~= "table" then
+                    cap = { name = type(cap) == "string" and cap or nil }
+                    captured[entry.value] = cap
+                end
+                if type(entry.name) == "string" then cap.name = entry.name end
+                if entry.icon ~= nil and cap.icon == nil then cap.icon = entry.icon end
+            end
+            local capturedOnly = {}
+            for id, cap in pairs(captured) do
+                if not liveSeen[id] then
+                    local capName = type(cap) == "table" and cap.name or (type(cap) == "string" and cap or nil)
+                    local label = (capName or "Spell") .. " (#" .. tostring(id) .. ")"
+                    capturedOnly[#capturedOnly + 1] = {
+                        value = id, name = capName, icon = type(cap) == "table" and cap.icon or nil,
+                        text = M.Format("%s - captured", label), captured = true,
+                    }
+                end
+            end
+            table.sort(capturedOnly, function(a, b) return tostring(a.text) < tostring(b.text) end)
+            for i = 1, #capturedOnly do values[#values + 1] = capturedOnly[i] end
+            if #values == 0 then
+                values = { { value = nil, text = Tr("No readable auras right now") } }
+            end
+            liveScanCache = values
+            return values, tonumber(unreadable) or 0
+        end
+        local function CachedAuraValues()
+            if liveScanCache then return liveScanCache end
+            -- No scan ran in this menu session yet: show the session capture
+            -- store as-is (a plain table read - no unit scan happens here).
+            local captured = CapturedAuras(false)
+            local values = {}
+            for id, cap in pairs(captured) do
+                local capName = type(cap) == "table" and cap.name or (type(cap) == "string" and cap or nil)
+                local label = (capName or "Spell") .. " (#" .. tostring(id) .. ")"
+                values[#values + 1] = {
+                    value = id, name = capName, icon = type(cap) == "table" and cap.icon or nil,
+                    text = M.Format("%s - captured", label), captured = true,
+                }
+            end
+            if #values == 0 then
+                return { { value = nil, text = Tr("No scan yet - click Rescan") } }
+            end
+            table.sort(values, function(a, b) return tostring(a.text) < tostring(b.text) end)
+            return values
+        end
+        local function CurrentLiveAura()
+            local values = CachedAuraValues()
+            local selected = M.auraBlacklistLiveSpell
+            for i = 1, #values do if values[i].value ~= nil and values[i].value == selected then return selected end end
+            for i = 1, #values do if values[i].value ~= nil then return values[i].value end end
+            return nil
+        end
+        local liveDrop = W.Dropdown(section, "Active auras on this frame", CachedAuraValues, liveW)
+        W.MoveWidget(liveDrop, section, 24, liveY, liveW)
+        M.BindDropdownWidget(ctx, liveDrop, CurrentLiveAura,
+            function(value) M.auraBlacklistLiveSpell = value end)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(liveDrop, input) end
+        AddTooltip(liveDrop, "Active auras on this frame",
+            "Shows the result of the last scan: every readable aura with the exact ID it carried, plus everything captured earlier this session. Press Rescan to scan the current unit - blocking from this list always uses the aura's own ID. Secret auras cannot be listed.")
+        local blockLive = ActionButton(section, "Block selected aura", 150, "primary")
+        blockLive:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + liveW, liveY - 24)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(blockLive, input) end
+        AddTooltip(blockLive, "Block selected aura",
+            "Blocks the selected aura using the exact ID it carries right now.")
+        blockLive:SetScript("OnClick", function()
+            local spellID = CurrentLiveAura()
+            if not spellID then return false end
+            local auraName, liveNow
+            local liveValues = type(Model.LiveBlacklistAuraValues) == "function"
+                and Model.LiveBlacklistAuraValues(unit, lane) or {}
+            for i = 1, #liveValues do
+                if liveValues[i].value == spellID then liveNow = true auraName = liveValues[i].name break end
+            end
+            if not auraName then
+                local values = LiveAuraValues()
+                for i = 1, #values do if values[i].value == spellID then auraName = values[i].name break end end
+            end
+            local changed = Model.AddBlacklistSpell(unit, spellID, lane)
+            M.auraBlacklistLiveSpell = nil
+            -- Captured entries may no longer be on the unit; only claim the
+            -- live-verified state when the aura is actually visible right now.
+            M.auraBlacklistVerify = liveNow
+                and { unit = unit, lane = lane, status = "active", enteredID = spellID, name = auraName } or nil
             if changed then
                 ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true)
                 if refreshList then refreshList() end
+                QueueAurasPageRefresh(ctx, "aura-blacklist-live-added")
+            else
+                renderVerify()
+            end
+            return changed and true or false
+        end)
+        refreshLiveBlock = function(blocked)
+            local liveSel = CurrentLiveAura()
+            W.SetControlEnabled(blockLive, liveSel ~= nil and not blocked[tostring(liveSel)])
+        end
+        local rescan = ActionButton(section, "Rescan", 96)
+        rescan:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + liveW + 158, liveY - 24)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(rescan, input) end
+        rescan._msuf2SkipHistoryCheckpoint = true
+        -- Scanning only reads C_UnitAuras and repaints plain menu widgets, so
+        -- this click is safe during combat lockdown; blocking stays gated.
+        rescan._msuf2AllowCombatClick = true
+        AddTooltip(rescan, "Rescan",
+            "Re-reads the auras on the current unit and adds everything it sees to this session's captured list - works in combat too. Shift-click clears the captured list.")
+        rescan:SetScript("OnClick", function()
+            if type(_G.IsShiftKeyDown) == "function" and _G.IsShiftKeyDown() then
+                CapturedAuras(true)
+            end
+            M.auraBlacklistLiveSpell = nil
+            local values, secretCount = LiveAuraValues()
+            local liveCount = 0
+            for i = 1, #values do
+                if values[i].value ~= nil and not values[i].captured then liveCount = liveCount + 1 end
+            end
+            local sessionCount = 0
+            for _ in pairs(CapturedAuras(false)) do sessionCount = sessionCount + 1 end
+            M.auraBlacklistVerify = {
+                unit = unit, lane = lane, status = "scan",
+                liveCount = liveCount, sessionCount = sessionCount, secretCount = secretCount,
+            }
+            if liveDrop.SetValue then liveDrop:SetValue(CurrentLiveAura()) end
+            if refreshList then refreshList() end
+            return true
+        end)
+        local startScan = ActionButton(section, "Start combat scan", 170)
+        startScan:SetPoint("TOPLEFT", section, "TOPLEFT", 24, liveY - 54)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(startScan, input) end
+        startScan._msuf2SkipHistoryCheckpoint = true
+        startScan._msuf2AllowCombatClick = true
+        AddTooltip(startScan, "Start combat scan",
+            "Closes the menu and keeps scanning this frame's auras until combat ends or you press Stop. Every aura an addon can block is captured with its icon - auras Blizzard keeps secret cannot be blocked by any addon.")
+        startScan:SetScript("OnClick", function()
+            -- The scanner overlay is a shared singleton parked on M (this file
+            -- sits at the 200-upvalue ceiling, so no new file-scope locals).
+            local s = M._auraCombatScanner
+            if not s then
+                s = CreateFrame("Frame", nil, _G.UIParent)
+                M._auraCombatScanner = s
+                s:SetSize(372, 100)
+                s:SetPoint("TOP", _G.UIParent, "TOP", 0, -160)
+                s:SetFrameStrata("DIALOG")
+                s:SetMovable(true)
+                s:EnableMouse(true)
+                s:RegisterForDrag("LeftButton")
+                s:SetScript("OnDragStart", function(self) self:StartMoving() end)
+                s:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+                s:SetClampedToScreen(true)
+                if T.ApplyBackdrop then T.ApplyBackdrop(s, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+                s.title = T.Font(s, "GameFontHighlightSmall", "", T.colors.accent)
+                s.title:SetPoint("TOPLEFT", s, "TOPLEFT", 12, -10)
+                s.count = T.Font(s, "GameFontDisableSmall", "", T.colors.muted)
+                s.count:SetPoint("TOPLEFT", s, "TOPLEFT", 12, -28)
+                s.hint = T.Font(s, "GameFontDisableSmall", "", T.colors.muted)
+                s.hint:SetPoint("TOPLEFT", s, "TOPLEFT", 12, -42)
+                s.hint:SetPoint("TOPRIGHT", s, "TOPRIGHT", -12, -42)
+                s.hint:SetJustifyH("LEFT")
+                s.hint:Hide()
+                s.icons = {}
+                for i = 1, 12 do
+                    local tex = s:CreateTexture(nil, "ARTWORK")
+                    tex:SetSize(20, 20)
+                    tex:SetPoint("BOTTOMLEFT", s, "BOTTOMLEFT", 12 + (i - 1) * 24, 10)
+                    tex:Hide()
+                    s.icons[i] = tex
+                end
+                s.stopBtn = ActionButton(s, "Stop scan", 96)
+                s.stopBtn:SetPoint("TOPRIGHT", s, "TOPRIGHT", -10, -10)
+                s.stopBtn._msuf2AllowCombatClick = true
+                s.stopBtn._msuf2SkipHistoryCheckpoint = true
+                s.Finish = function(reopen)
+                    if not s:IsShown() then return end
+                    s:Hide()
+                    M.auraBlacklistVerify = {
+                        unit = s._scope, lane = s._lane, status = "scan",
+                        liveCount = s._lastLive or 0, sessionCount = s._count or 0,
+                        secretCount = s._unreadable or 0,
+                    }
+                    if reopen and not (M.BlockCombatAction and M.BlockCombatAction()) then
+                        M.CallIf(M.Open, s._returnPage)
+                    end
+                end
+                s.stopBtn:SetScript("OnClick", function()
+                    s.Finish(not (M.BlockCombatAction and M.BlockCombatAction()))
+                    return true
+                end)
+                s:RegisterEvent("PLAYER_REGEN_ENABLED")
+                s:SetScript("OnEvent", function(self)
+                    if self:IsShown() then self.Finish(true) end
+                end)
+                s:SetScript("OnUpdate", function(self, elapsed)
+                    self._accum = (self._accum or 0) + (tonumber(elapsed) or 0)
+                    if self._accum < 0.4 then return end
+                    self._accum = 0
+                    local live, unreadable
+                    if type(Model.LiveBlacklistAuraValues) == "function" then
+                        live, unreadable = Model.LiveBlacklistAuraValues(self._scope, self._lane)
+                    end
+                    live = live or {}
+                    self._lastLive = #live
+                    self._unreadable = tonumber(unreadable) or 0
+                    local store = M.auraBlacklistCaptured
+                    if type(store) ~= "table" then store = {} M.auraBlacklistCaptured = store end
+                    local capKey = tostring(self._scope) .. "|" .. tostring(self._lane)
+                    local captured = store[capKey]
+                    if type(captured) ~= "table" then captured = {} store[capKey] = captured end
+                    for i = 1, #live do
+                        local entry = live[i]
+                        local cap = captured[entry.value]
+                        if type(cap) ~= "table" then
+                            cap = { name = type(cap) == "string" and cap or nil }
+                            captured[entry.value] = cap
+                            self._count = (self._count or 0) + 1
+                            self._recent[#self._recent + 1] = entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark"
+                        end
+                        if type(entry.name) == "string" then cap.name = entry.name end
+                        if entry.icon ~= nil and cap.icon == nil then cap.icon = entry.icon end
+                    end
+                    local total = #self._recent
+                    for i = 1, #self.icons do
+                        local tex = self.icons[i]
+                        local icon = self._recent[total - i + 1]
+                        if icon then tex:SetTexture(icon) tex:Show() else tex:Hide() end
+                    end
+                    self._dots = ((self._dots or 0) % 3) + 1
+                    self.title:SetText(Tr("Scanning auras - creating a list") .. string.rep(".", self._dots))
+                    if (self._unreadable or 0) > 0 then
+                        self.count:SetText(M.Format("%d captured so far - %d hidden by Blizzard",
+                            self._count or 0, self._unreadable))
+                        self.hint:SetText(Tr("Hidden auras are Blizzard-secret - no addon can block them. Everything blockable was captured."))
+                        self.hint:Show()
+                    else
+                        self.count:SetText(M.Format("%d captured so far", self._count or 0))
+                        self.hint:Hide()
+                    end
+                end)
+            end
+            s._scope, s._lane = unit, lane
+            s._returnPage = M.activeKey
+            s._recent = {}
+            s._accum = 1
+            s._dots = 0
+            s._lastLive = 0
+            local sessionCount = 0
+            for _ in pairs(CapturedAuras(false)) do sessionCount = sessionCount + 1 end
+            s._count = sessionCount
+            s.title:SetText(Tr("Scanning auras - creating a list"))
+            s.count:SetText(M.Format("%d captured so far", sessionCount))
+            if s.hint then s.hint:Hide() end
+            for i = 1, #s.icons do s.icons[i]:Hide() end
+            s:Show()
+            M.CallIf(M.HideSlashMenuAndMinibar, M.frame)
+            return true
+        end)
+        add:SetScript("OnClick", function()
+            local value = input and input.GetText and input:GetText() or inputValue
+            local spellID = type(Model.ResolveSpellInputID) == "function" and Model.ResolveSpellInputID(value) or nil
+            local changed = Model.AddBlacklistSpell(unit, value, lane)
+            if changed then
+                ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true)
+            end
+            -- The aura left on the unit can carry a different SpellID than the
+            -- cast the entry resolved to; compare against the live unit so the
+            -- mismatch surfaces immediately instead of failing silently.
+            M.auraBlacklistVerify = nil
+            local verdict = spellID and type(Model.FindLiveBlacklistAura) == "function"
+                and Model.FindLiveBlacklistAura(unit, spellID, lane) or nil
+            if verdict then
+                M.auraBlacklistVerify = {
+                    unit = unit, lane = lane, status = verdict.status,
+                    enteredID = spellID, name = verdict.name,
+                    suggestID = verdict.suggestID, suggestName = verdict.suggestName,
+                }
+            end
+            if changed then
+                if refreshList then refreshList() end
                 QueueAurasPageRefresh(ctx, "aura-blacklist-manual-added")
+            else
+                renderVerify()
             end
             if input and input.SetText then input:SetText("") end
             inputValue = ""
@@ -3727,7 +4087,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             AddTooltip(add, "Add custom buff", "Adds one exact buff to this frame's blacklist.")
         end
     end
-    local curatedOffset = combinedManualAndPresets and -82 or 0
+    local curatedOffset = combinedManualAndPresets and -174 or 0
     local presetW = max(130, min(floor(inner * 0.62), inner - 138))
     local spellW = max(160, min(floor(inner * 0.68), inner - 108))
     local function PresetValues()
@@ -3809,11 +4169,11 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         })
         AddTooltip(addSpell, "Add spell", "Blocks only the selected aura from the curated set.")
     else
-        W.Text(section,
+        nonPresetHint = W.Text(section,
             "Enemy debuffs: hide only exact noisy SpellIDs. Selected Dots on target are handled automatically by that scope's Auto-blacklist toggle.",
             24, -104, inner, T.colors.muted)
     end
-    local listOffset = showPresets and curatedOffset or 44
+    local listOffset = showPresets and curatedOffset or (enemyDebuff and -48 or 44)
     local prepared = W.Text(section, "", 24, -186 + listOffset, inner, T.colors.accent)
     local searchValue = ""
     local searchInput = BindTextInput(ctx, section, "Search", 24, -210 + listOffset, inner,
@@ -3875,6 +4235,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         local entries = Model.BlacklistEntries(unit, lane)
         local blocked = {}
         for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        if refreshLiveBlock then refreshLiveBlock(blocked) end
         if showPresets then
             local setSpells = type(Model.UnitBlacklistSpellValues) == "function"
                 and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
@@ -3915,6 +4276,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                 row:Show()
             elseif row then row._spellID = nil; row:Hide() end
         end
+        if renderVerify then renderVerify() end
     end
     M.TrackRefresh(ctx, refreshList)
 end
@@ -3924,7 +4286,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local values = GroupFilterValues(lane)
     local optionRows = max(1, ceil(#values / 4))
     local sectionHeight = max(150, 104 + optionRows * 32)
-        + (lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true and 58 or 0)
+        + (M.CLASSIC_AURA_FILTERS_REDUCED ~= true and 58 or 0)
     local section = b:Section(laneTitle .. " Filters", sectionHeight)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
@@ -3975,7 +4337,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 } or nil))
         AddTooltip(control, item.text or item.value, "Only one filter can be active.")
     end
-    if lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
+    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
         ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1, inner,
             function()
                 return type(Model.ReadGroupBlacklistMaxDuration) == "function"
@@ -3987,7 +4349,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                     QueueGroupScope(scope, "visual")
                 end
             end,
-            AuraControlMeta(ctx, "group-workspace.lane.debuff.filters.max-duration", nil, {
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {
                 assistantDisposition = "compound",
                 assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
             })))
@@ -4945,7 +5307,48 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "filters" then
-        local section = b:Section(containerLabel .. " Filters", item.auraType == "DEBUFF" and 224 or 182)
+        if isPlayerDefensives or isTargetDots then
+            local section = b:Section(containerLabel .. " Filters", 160)
+            local w = section._msuf2Width or b.width or 720
+            local inner = w - 48
+            local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24, -40, inner,
+                function() return item.filters.hidePermanent == true end,
+                function(value)
+                    item.filters.hidePermanent = value == true
+                    Apply("AURAS3_CUSTOM_HIDE_PERMANENT", true)
+                end,
+                AuraControlMeta(ctx, "custom-container.filters.hide-permanent"))
+            AddTooltip(hidePermanent, "Hide permanent auras",
+                "Always excludes auras without a duration.")
+            local maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration",
+                24, -92, 0, 180, 1, inner,
+                function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
+                function(value)
+                    item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
+                    Apply("AURAS3_CUSTOM_MAX_DURATION", true)
+                end,
+                AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
+                    assistantDisposition = "compound",
+                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
+                })))
+            M.TrackRefresh(ctx, function()
+                W.SetControlEnabled(hidePermanent, true)
+                W.SetControlEnabled(maxDuration, true)
+            end)
+            return
+        end
+        local specs = item.auraType == "DEBUFF" and {
+            { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
+            { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
+        } or {
+            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
+            { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
+            { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
+        }
+        local optionRows = max(1, ceil(#specs / 4))
+        local section = b:Section(containerLabel .. " Filters", 160 + optionRows * 32)
         local w = section._msuf2Width or b.width or 720
         local colW, gap = Grid(w, 4)
         local controls = {}
@@ -4958,16 +5361,6 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function(value) item.filters.hidePermanent = value == true; Apply("AURAS3_CUSTOM_HIDE_PERMANENT", true) end,
             AuraControlMeta(ctx, "custom-container.filters.hide-permanent"))
         AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration. It remains active when token filters are disabled.")
-        local specs = item.auraType == "DEBUFF" and {
-            { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
-            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
-            { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
-        } or {
-            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
-            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
-            { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
-            { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
-        }
         for i = 1, #specs do
             local spec = specs[i]
             local col = (i - 1) % 4
@@ -4987,19 +5380,17 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 AuraControlMeta(ctx, "custom-container.filters." .. AuraCatalogToken(spec[2])))
             controls[#controls + 1] = control
         end
-        local maxDuration
-        if item.auraType == "DEBUFF" then
-            maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -140, 0, 180, 1, w - 48,
-                function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
-                function(value)
-                    item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
-                    Apply("AURAS3_CUSTOM_DEBUFF_MAX_DURATION", true)
-                end,
-                AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
-                    assistantDisposition = "compound",
-                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-                })))
-        end
+        local maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24,
+            -76 - optionRows * 32, 0, 180, 1, w - 48,
+            function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
+            function(value)
+                item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
+                Apply("AURAS3_CUSTOM_MAX_DURATION", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
+                assistantDisposition = "compound",
+                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
+            })))
         M.TrackRefresh(ctx, function()
             W.SetControlEnabled(master, true)
             W.SetControlEnabled(hidePermanent, true)
@@ -5410,13 +5801,28 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function() return tonumber(item.frame.priority) or 5 end,
             function(value) item.frame.priority = tonumber(value) or 5; Apply("AURAS3_CUSTOM_EFFECT_PRIORITY") end,
             AuraControlMeta(ctx, "custom-container.effect.priority"))
+        if isTargetDots then
+            local pandemicOnly = BindSwitch(ctx, section, "Only during Pandemic window", 24 + col3 + gap, -150,
+                col3 * 2 + gap, function() return item.frame.onlyInPandemicWindow == true end,
+                function(value)
+                    item.frame.onlyInPandemicWindow = value == true
+                    Apply("AURAS3_TARGET_DOT_EFFECT_PANDEMIC_ONLY", true)
+                end,
+                AuraControlMeta(ctx, "custom-container.effect.only-during-pandemic-window"))
+            AddTooltip(pandemicOnly, "Pandemic-only Full-Frame effect",
+                "Shows this effect only while a tracked DoT is in its native Pandemic window. Multiple DoTs in Pandemic can intensify the same effect. Blizzard may run an OnUpdate on each visible aura button while its Pandemic timing is available.")
+        end
         if W.SetCollapsibleBadges then
             M.TrackRefresh(ctx, function()
                 local effectType = tostring(item.frame.type or "none")
-                W.SetCollapsibleBadges(section, {{
+                local badges = {{
                     text = ChoiceLabel(CUSTOM_FRAME_EFFECTS, effectType, effectType),
                     kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
-                }})
+                }}
+                if isTargetDots and item.frame.onlyInPandemicWindow == true then
+                    badges[#badges + 1] = { text = "Pandemic only", kind = "info", showWhenClosed = true }
+                end
+                W.SetCollapsibleBadges(section, badges)
             end)
         end
         return

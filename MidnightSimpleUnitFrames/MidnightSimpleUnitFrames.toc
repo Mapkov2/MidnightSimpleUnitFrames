@@ -3,7 +3,7 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.09-Beta2
+## Version: 6.09-Beta3
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI, EllesmereUI, Grid2, Details
@@ -178,6 +178,7 @@ Integrations\MSUF_Integration_EllesmereUnlock.lua
 # that already apply before the menu opens stay in the main addon.
 Runtime\MSUF_UIScaleRuntime.lua
 Runtime\MSUF_WelcomeMessage.lua
+Runtime\MSUF_TooltipSpellIDs.lua
 Kernel\MSUF_OptionsLoader.lua
 
 # ---------------------------------------------------------------

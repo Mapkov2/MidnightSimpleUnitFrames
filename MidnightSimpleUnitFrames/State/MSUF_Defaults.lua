@@ -2497,6 +2497,12 @@ end
 if g.showWelcomeMessage == nil then
     g.showWelcomeMessage = true
 end
+--- Native 12.1 "spell IDs in aura tooltips" CVar, re-applied at login because
+--- the client resets it every session (Runtime/MSUF_TooltipSpellIDs.lua).
+--- Off by default: MSUF must not touch the CVar unless the user opts in here.
+if g.tooltipShowAuraSpellIDs == nil then
+    g.tooltipShowAuraSpellIDs = false
+end
 --- EllesmereUI may own the visible Unlock Mode shell while MSUF keeps its own
 --- profile geometry and preview transaction. Users can opt out only when the
 --- EllesmereUI integration is actually available.
