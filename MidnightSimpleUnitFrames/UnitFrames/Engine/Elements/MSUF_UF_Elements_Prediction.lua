@@ -618,7 +618,7 @@ local function ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
 end
 
 local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refreshFullHealthAlpha,
-  writeAbsorbValue)
+  writeAbsorbValue, knownAbsorbSecret)
   if frame and refreshFullHealthAlpha == true then
     frame._msufPredictionFullHealthAlphaDirty = true
   end
@@ -628,6 +628,14 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     HideOverAbsorbGlow(frame)
     return
   end
+  -- Absorb is immutable for this render pass. Determine its protection state
+  -- once instead of re-entering issecretvalue at every native-gate branch.
+  -- The steady UNIT_HEALTH follower can pass the plain classification cached
+  -- by the absorb-data owner, including false as a meaningful known value.
+  local absorbSecret = knownAbsorbSecret
+  if absorbSecret == nil then
+    absorbSecret = issecretvalue(absorb) == true
+  end
   local reverse = frame._msufPredictionHpReverse == true
   local hpBar = frame.hpBar or frame.Health
   local holder = frame.overAbsorbGlowBar
@@ -635,7 +643,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     if not holder then holder = PositionOverAbsorbGlow(frame, reverse) end
     if holder then
       local payload = absorb
-      local payloadSecret = issecretvalue(payload) == true
+      local payloadSecret = absorbSecret
       if not payloadSecret
         and (type(payload) ~= "number" or payload <= 0) then
         payload = 0
@@ -662,7 +670,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
   if not fullHealthStripeEnabled then
     if issecretvalue(hp) == true
       or issecretvalue(maxHP) == true
-      or issecretvalue(absorb) == true
+      or absorbSecret
       or type(absorb) ~= "number"
       or absorb <= 0 then
       HideOverAbsorbGlow(frame)
@@ -671,7 +679,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
   end
   if fullHealthStripeEnabled then
     local knownZero = writeAbsorbValue == true
-      and issecretvalue(absorb) ~= true
+      and not absorbSecret
       and (type(absorb) ~= "number" or absorb <= 0)
     if not knownZero and writeAbsorbValue ~= true
       and holder and holder._msufOverAbsorbValuePlain == true then
@@ -689,7 +697,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     -- Once both gates are warm, an absorb-data event needs no UnitHealth/
     -- UnitHealthMax recovery at all.
     if writeAbsorbValue == true
-      and issecretvalue(absorb) == true
+      and absorbSecret
       and holder and hpBar
       and holder._msufOverAbsorbReverse == reverse
       and holder._msufOverAbsorbAnchor == hpBar
@@ -714,7 +722,6 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     and holder and hpBar
     and holder._msufOverAbsorbReverse == reverse
     and holder._msufOverAbsorbAnchor == hpBar then
-    local absorbSecret = issecretvalue(absorb) == true
     if writeAbsorbValue == true
       and not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
       HideOverAbsorbGlow(frame)
@@ -743,7 +750,6 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
 
   local hpSecret, maxSecret
   hp, maxHP, hpSecret, maxSecret = ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
-  local absorbSecret = issecretvalue(absorb) == true
   if not (fullHealthStripeEnabled and writeAbsorbValue ~= true)
     and not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
     HideOverAbsorbGlow(frame)
@@ -1451,6 +1457,7 @@ local function ClearPredictionCache(frame)
   frame._msufPredictionCacheCfg = nil
   frame._msufPredictionIncoming = nil
   frame._msufPredictionAbsorb = nil
+  frame._msufPredictionAbsorbSecret = nil
   frame._msufPredictionHealAbsorb = nil
   frame._msufPredictionHealthVisualActive = nil
   frame._msufPredictionPartialGlowHealthActive = nil
@@ -1985,7 +1992,8 @@ function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
     return UpdateMixedFollowHealthValue(frame, unit, cfg, seedHP, seedMaxHP)
   end
   return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP,
-    frame._msufPredictionAbsorb, true)
+    frame._msufPredictionAbsorb, true, nil,
+    frame._msufPredictionAbsorbSecret == true)
 end
 
 -- Core has already C-filtered UNIT_HEALTH. The common route only updates the
@@ -2063,7 +2071,10 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
   -- do not repeat secret/type/value inspection. Full-health stripe is
   -- different: its native value/alpha gates intentionally consume protected
   -- payloads.
-  local absorbSecret = issecretvalue(absorb) == true
+  -- The absorb-data owner already classified this payload when it populated
+  -- the cache. Reuse that plain boolean on every UNIT_HEALTH follower tick;
+  -- the protected payload itself remains opaque and is never compared.
+  local absorbSecret = frame._msufPredictionAbsorbSecret == true
   if not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
     return
   end
@@ -2098,7 +2109,8 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
     and UpdateWarmFullHealthStripe(frame, unit) then
     return
   end
-  return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true)
+  return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true,
+    nil, absorbSecret)
 end
 
 UpdateMixedFollowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
@@ -2219,6 +2231,7 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
     local absorb = readAbsorb(frame, unit)
     frame._msufPredictionAbsorb = absorb
     local absorbSecret = issecretvalue(absorb) == true
+    frame._msufPredictionAbsorbSecret = absorbSecret and true or nil
     local absorbPositive = not absorbSecret and type(absorb) == "number" and absorb > 0
     frame._msufPredictionHealthVisualActive = (absorbPositive
       or (absorbSecret and frame._msufPredictionFullHealthStripe == true)) and true or nil
