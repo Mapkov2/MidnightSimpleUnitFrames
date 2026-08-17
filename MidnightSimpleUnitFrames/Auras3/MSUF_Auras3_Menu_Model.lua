@@ -2586,6 +2586,23 @@ function Model.MoveCustomContainerSpell(unit, index, value, direction)
     return true
 end
 
+function Model.MoveCustomContainerSpellToIndex(unit, index, value, targetIndex)
+    local spellID = SpellIDFromInput(value)
+    local item = Model.CustomContainer(unit, index, true)
+    if not (spellID and item) then return false, "invalid" end
+    local ordered = ReconcileCustomContainerSpellPriority(item, true)
+    local from
+    for i = 1, #ordered do
+        if ordered[i] == spellID then from = i; break end
+    end
+    local to = math_floor(tonumber(targetIndex) or 0)
+    if not from or to < 1 or to > #ordered or to == from then return false, "unchanged" end
+    table.remove(ordered, from)
+    table.insert(ordered, to, spellID)
+    item.prioritySpellIDs = ordered
+    return true
+end
+
 function Model.AddCustomContainerSpell(unit, index, value, allowCustomID)
     unit = NormalizeScope(unit)
     if unit == "shared" then unit = "player" end

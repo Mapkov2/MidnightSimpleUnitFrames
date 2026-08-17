@@ -2861,7 +2861,12 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local layoutPlaced = type(entry.placed) == "table" and entry.placed or {}
     local placed, styleFrame = A3._ResolveSpecialCustomStyle(auras, unit, index, entry)
-    local customPriority = targetDots and tostring(placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
+    -- Player Defensive Buffs combines a curated class list with custom IDs and
+    -- therefore keeps ordinary AuraKit sorting. Every exact-ID custom lane,
+    -- including Dots on target, can use the same native one-group-per-spell
+    -- priority path without inspecting aura payloads in Lua.
+    local customPriority = not playerDefensives
+        and tostring(placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
     local customPrioritySpellIDs = customPriority
         and A3._CustomPrioritySpellIDs(entry.prioritySpellIDs, includeSpellIDs) or nil
     lanePadding = ClampNumber((type(placed) == "table" and placed.stylePadding)
@@ -2933,8 +2938,8 @@ local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec,
         -- CUSTOM_PRIORITY is an MSUF-owned ordered-group mode, not a Blizzard
         -- AuraContainerSortMethod enum. Each one-frame AuraGroup is natively
         -- filtered to one configured Spell ID and assigned a layoutIndex, so
-        -- Blizzard can compact active Target/Focus/Boss auras in priority order
-        -- without exposing their restricted payload or visibility to addon Lua.
+        -- Blizzard can compact active custom auras in priority order without
+        -- exposing their restricted payload or visibility to addon Lua.
         sortMethod = customPriority and "DEFAULT" or NormalizeAuraSortMethod(placed.sortMethod),
         sortReverse = customPriority and false or placed.sortReverse == true,
         customPriority = customPriority == true,

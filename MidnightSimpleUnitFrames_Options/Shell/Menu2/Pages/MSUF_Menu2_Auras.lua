@@ -65,7 +65,7 @@ M.AURA_PANDEMIC_BLEND_VALUES = M.AURA_PANDEMIC_BLEND_VALUES or VTP "ADD=Additive
 local AURA_SORT_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reversed"
 local BUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|BIG_DEFENSIVE=Other Defensives First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
 local DEBUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
-local TARGET_DOT_AURA_SORT_METHOD_VALUES = VTP "CUSTOM_PRIORITY=Custom Priority|DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
+local CUSTOM_PRIORITY_AURA_SORT_METHOD_VALUES = VTP "CUSTOM_PRIORITY=Custom Priority|DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
 local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
 local DURATION_BAR_POSITION_VALUES = VTP "BOTTOM=Bottom|TOP=Top"
 local DURATION_BAR_DIRECTION_VALUES = VTP "REMAINING=Remaining|ELAPSED=Elapsed"
@@ -116,7 +116,7 @@ end
 local BUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, BIG_DEFENSIVE=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
 local DEBUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, UNIT_FRAME_DEBUFF=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
 local function AuraSortMethodValues(lane, allowCustomPriority)
-    if allowCustomPriority == true then return TARGET_DOT_AURA_SORT_METHOD_VALUES end
+    if allowCustomPriority == true then return CUSTOM_PRIORITY_AURA_SORT_METHOD_VALUES end
     return lane == "debuff" and DEBUFF_AURA_SORT_METHOD_VALUES or BUFF_AURA_SORT_METHOD_VALUES
 end
 local function ChoiceLabel(values, value, fallback)
@@ -491,12 +491,13 @@ local function HandleNestedScrollWheel(scrollFrame, delta, step)
     local leavingTop = delta > 0 and current <= 0.01
     local leavingBottom = delta < 0 and current >= range - 0.01
     if range <= 0 or leavingTop or leavingBottom then
-        if scrollFrame.SetPropagateMouseWheel then
+        local main = M.scrollFrame
+        local handler = main and main.GetScript and main:GetScript("OnMouseWheel")
+        if type(handler) == "function" and main ~= scrollFrame then
+            if scrollFrame.SetPropagateMouseWheel then scrollFrame:SetPropagateMouseWheel(false) end
+            handler(main, delta)
+        elseif scrollFrame.SetPropagateMouseWheel then
             scrollFrame:SetPropagateMouseWheel(true)
-        else
-            local main = M.scrollFrame
-            local handler = main and main.GetScript and main:GetScript("OnMouseWheel")
-            if type(handler) == "function" then handler(main, delta) end
         end
         return
     end
@@ -504,6 +505,88 @@ local function HandleNestedScrollWheel(scrollFrame, delta, step)
     local value = current - (delta * (tonumber(step) or 42))
     if value < 0 then value = 0 elseif value > range then value = range end
     if scrollFrame.SetVerticalScroll then scrollFrame:SetVerticalScroll(value) end
+end
+
+function M._StyleNestedAuraScrollFrame(scrollFrame, anchor, step)
+    if not scrollFrame then return end
+    if scrollFrame.SetPropagateMouseWheel then scrollFrame:SetPropagateMouseWheel(false) end
+    if type(T.StyleScrollFrame) == "function" then T.StyleScrollFrame(scrollFrame, anchor) end
+    local function OnMouseWheel(_, delta)
+        HandleNestedScrollWheel(scrollFrame, delta, step)
+    end
+    if scrollFrame.EnableMouseWheel then scrollFrame:EnableMouseWheel(true) end
+    scrollFrame:SetScript("OnMouseWheel", OnMouseWheel)
+    local child = scrollFrame.GetScrollChild and scrollFrame:GetScrollChild()
+    if child and child.EnableMouseWheel then
+        child:EnableMouseWheel(true)
+        child:SetScript("OnMouseWheel", OnMouseWheel)
+    end
+    local bar = scrollFrame._msuf2ScrollBar
+    if bar and bar.EnableMouseWheel then
+        bar:EnableMouseWheel(true)
+        bar:SetScript("OnMouseWheel", OnMouseWheel)
+    end
+end
+
+local function ConfigureAuraSpellPriorityDrag(row, handle, listChild, rowHeight, onDrop)
+    if not (row and handle and listChild) then return end
+    rowHeight = max(1, tonumber(rowHeight) or 1)
+    row:SetMovable(true)
+    handle:RegisterForDrag("LeftButton")
+    handle:EnableMouse(true)
+    local function SnapRow()
+        local slot = max(1, tonumber(row._displayIndex) or 1)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((slot - 1) * rowHeight))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((slot - 1) * rowHeight))
+    end
+    local function ClearDragState(shouldSnap)
+        if row.StopMovingOrSizing then row:StopMovingOrSizing() end
+        if row.SetFrameStrata and row._msufA3OldStrata then row:SetFrameStrata(row._msufA3OldStrata) end
+        row._msufA3OldStrata = nil
+        row._msufA3Dragging = nil
+        if shouldSnap == true then SnapRow() end
+    end
+    handle:HookScript("OnEnter", function()
+        if row._dragEnabled ~= true or not row.SetBackdropBorderColor then return end
+        local c = (T.colors and T.colors.coreBlue) or { 0.095, 0.360, 0.560, 0.95 }
+        row:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
+    end)
+    handle:HookScript("OnLeave", function()
+        if not row.SetBackdropBorderColor then return end
+        local c = (T.colors and (T.colors.cardBorder or T.colors.borderSoft)) or { 0.210, 0.230, 0.300, 0.78 }
+        row:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
+    end)
+    handle:SetScript("OnDragStart", function()
+        if row._dragEnabled ~= true or not row._spellID then return end
+        if GameTooltip then GameTooltip:Hide() end
+        row._msufA3Dragging = true
+        row._msufA3OldStrata = row.GetFrameStrata and row:GetFrameStrata() or nil
+        if row.SetFrameStrata then row:SetFrameStrata("TOOLTIP") end
+        row:StartMoving()
+    end)
+    handle:SetScript("OnDragStop", function()
+        if row._msufA3Dragging ~= true then return end
+        if row.StopMovingOrSizing then row:StopMovingOrSizing() end
+        local _, centerY = row:GetCenter()
+        local top = listChild.GetTop and listChild:GetTop()
+        local count = max(1, tonumber(row._entryCount) or 1)
+        local source = max(1, min(count, tonumber(row._displayIndex) or 1))
+        local target, bestDistance = source, math.huge
+        if centerY and top then
+            local rowHalf = (row.GetHeight and row:GetHeight() or rowHeight) * 0.5
+            for slot = 1, count do
+                local distance = math.abs(centerY - (top - ((slot - 1) * rowHeight) - rowHalf))
+                if distance < bestDistance then
+                    target, bestDistance = slot, distance
+                end
+            end
+        end
+        local spellID = row._spellID
+        ClearDragState(true)
+        if spellID and target ~= source and type(onDrop) == "function" then onDrop(spellID, target) end
+    end)
+    row:HookScript("OnHide", function() ClearDragState(false) end)
 end
 local function QueueAurasPageRefresh(ctx, reason)
     if AurasMenuCombatLocked() then return false end
@@ -2670,8 +2753,7 @@ end
 
 local function BuildUnitOrdering(ctx, b, unit, lane)
     lane = lane == "debuff" and "debuff" or "buff"
-    local baseId = "aura_style_" .. tostring(unit or "unit") .. "_" .. lane
-    local section = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 156, false)
+    local section = b:Section("Ordering", 156)
     local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
     local function ReadSortMethod()
         local value = type(Model.ReadLaneStyleString) == "function"
@@ -2725,16 +2807,6 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
             "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_DIRECTION"),
             "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction"))
     AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-    if W.SetCollapsibleBadges then
-        M.TrackRefresh(ctx, function()
-            local sortKey = ReadSortMethod()
-            W.SetCollapsibleBadges(section, {{
-                text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / "
-                    .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, ReadSortDirection(), "Normal"),
-                kind = "info", showWhenClosed = true,
-            }})
-        end)
-    end
 end
 
 local function BuildGroupStyle(ctx, b, scope, options)
@@ -2954,8 +3026,7 @@ end
 
 local function BuildGroupOrdering(ctx, b, scope, lane)
     lane = lane == "externals" and "externals" or (lane == "debuff" and "debuff" or "buff")
-    local baseId = "aura_style_group_" .. tostring(scope or "group") .. "_" .. lane
-    local section = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 156, false)
+    local section = b:Section("Ordering", 156)
     local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
     local groupSortMethod = BindGroupDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(lane), width - 48,
         scope, lane, "sortMethod", "DEFAULT", "visual", nil,
@@ -2975,17 +3046,6 @@ local function BuildGroupOrdering(ctx, b, scope, lane)
             "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction",
             "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction"))
     AddTooltip(groupSortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-    if W.SetCollapsibleBadges then
-        M.TrackRefresh(ctx, function()
-            local group = GFReadGroup(scope, lane)
-            local sortKey = NormalizeAuraSortMethodForLane(lane, group.sortMethod or "DEFAULT")
-            W.SetCollapsibleBadges(section, {{
-                text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / "
-                    .. (group.sortReverse == true and "Reversed" or "Normal"),
-                kind = "info", showWhenClosed = true,
-            }})
-        end)
-    end
 end
 local function CustomStyleSectionId(index, suffix)
     return "aura_style_custom_" .. tostring(index or 1) .. "_" .. tostring(suffix or "section")
@@ -3253,15 +3313,13 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local prepared = W.Text(direct, "", 16, directPresetY - 84, w - 80, T.colors.accent)
     local empty = W.Text(direct, lane == "debuff" and "No blacklisted spells. Add one from the presets above."
         or "No blacklisted spells. Add one above or use a preset.", 16, directPresetY - 120, w - 80, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, direct, "UIPanelScrollFrameTemplate")
+    local listScroll = CreateFrame("ScrollFrame", nil, direct)
     listScroll:SetPoint("TOPLEFT", direct, "TOPLEFT", 16, directPresetY - 110)
     listScroll:SetSize(w - 108, 48)
-    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(w - 130, 48)
     listScroll:SetScrollChild(listChild)
-    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 28) end)
+    M._StyleNestedAuraScrollFrame(listScroll, direct, 28)
     local rows = {}
     local function EnsureRow(index)
         local row = rows[index]
@@ -3777,15 +3835,13 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         or (isDebuff and "No blocked spells. Add one from the allowed presets above."
         or "No blocked spells. Add one above or use a preset.")
     local empty = W.Text(section, emptyText, 24, -284 + listOffset, inner, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+    local listScroll = CreateFrame("ScrollFrame", nil, section)
     listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + listOffset)
     listScroll:SetSize(inner - 20, 150)
-    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(inner - 44, 150)
     listScroll:SetScrollChild(listChild)
-    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
+    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
     local rows = {}
     local function EnsureRow(i)
         local row = rows[i]
@@ -4065,15 +4121,13 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local emptyText = isDebuff and "No blocked spells. Add one from the presets above."
         or "No blocked spells. Add one above or use a preset."
     local empty = W.Text(section, emptyText, 24, -284 + curatedOffset, inner, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+    local listScroll = CreateFrame("ScrollFrame", nil, section)
     listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + curatedOffset)
     listScroll:SetSize(inner - 20, 150)
-    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(inner - 44, 150)
     listScroll:SetScrollChild(listChild)
-    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
+    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
     local rows = {}
     local function EnsureRow(i)
         local row = rows[i]
@@ -4404,15 +4458,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if refreshCustom then refreshCustom() end
             end)
         end
-        local predefinedScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        local predefinedScroll = CreateFrame("ScrollFrame", nil, section)
         predefinedScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -108)
         predefinedScroll:SetSize(inner - 20, 184)
-        if predefinedScroll.EnableMouseWheel then predefinedScroll:EnableMouseWheel(true) end
         local predefinedChild = CreateFrame("Frame", nil, predefinedScroll)
         predefinedChild:SetSize(inner - 44, max(184, #predefined * 30))
         predefinedScroll:SetScrollChild(predefinedChild)
-        if predefinedScroll.SetPropagateMouseWheel then predefinedScroll:SetPropagateMouseWheel(false) end
-        predefinedScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 30) end)
+        M._StyleNestedAuraScrollFrame(predefinedScroll, section, 30)
         local predefinedSwitches = {}
         local predefinedIcons = {}
         RefreshPredefined = function()
@@ -4495,15 +4547,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             "Enter a Spell ID, paste a spell link, or type a spell name. The visible helpful aura is matched even when its buff ID differs from the cast Spell ID.")
         local status = W.Text(section, "", 24, -392, inner, T.colors.accent)
         local empty = W.Text(section, "No custom buffs added.", 24, -442, inner, T.colors.muted)
-        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        local listScroll = CreateFrame("ScrollFrame", nil, section)
         listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -418)
         listScroll:SetSize(inner - 20, 118)
-        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
         listChild:SetSize(inner - 44, 104)
         listScroll:SetScrollChild(listChild)
-        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+        M._StyleNestedAuraScrollFrame(listScroll, section, 32)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
@@ -4631,15 +4681,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             end)
         end
         local empty = W.Text(section, "No DoT selected. Choose one above or add a custom Spell ID.", 24, -288, inner, T.colors.muted)
-        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        local listScroll = CreateFrame("ScrollFrame", nil, section)
         listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -236)
         listScroll:SetSize(inner - 20, 164)
-        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
         listChild:SetSize(inner - 44, 164)
         listScroll:SetScrollChild(listChild)
-        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+        M._StyleNestedAuraScrollFrame(listScroll, section, 32)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
@@ -4685,6 +4733,14 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             AddTooltip(row.up, "Move up", "Raises this DoT in the fixed priority order.")
             AddTooltip(row.down, "Move down", "Lowers this DoT in the fixed priority order.")
             AddTooltip(row.remove, "Remove DoT", "Stops tracking this DoT.")
+            AddTooltip(row, "Drag to reorder", "Drag this row to a new position. Reordering activates Custom Priority.")
+            ConfigureAuraSpellPriorityDrag(row, row, listChild, 34, function(spellID, target)
+                if Model.MoveCustomContainerSpellToIndex(unit, index, spellID, target) then
+                    Model.EnableCustomContainerSpellPriority(unit, index)
+                    Apply("AURAS3_TARGET_DOT_PRIORITY", true)
+                    Rebuild(ctx)
+                end
+            end)
             rows[i] = row
             return row
         end
@@ -4701,7 +4757,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             status:SetText(M.Format("%d tracked DoTs", #entries)
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
                     or customPriority and Tr(" - dynamic priority active")
-                    or Tr(" - choose Custom Priority under Ordering to use this order"))
+                    or Tr(" - drag to set Custom Priority"))
                 .. MatchSuffix(query, #visible))
             empty:SetText(#entries == 0 and Tr("No DoT selected. Choose one above or add a custom Spell ID.")
                 or M.Format(Tr("No results for \"%s\"."), query))
@@ -4726,8 +4782,11 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                         W.SetControlsEnabled({ row.up }, customPriority and query == "" and (entry.priority or i) > 1)
                         W.SetControlsEnabled({ row.down }, customPriority and query == "" and (entry.priority or i) < #entries)
                     end
+                    row._entryCount = #entries
+                    row._displayIndex = i
+                    row._dragEnabled = query == "" and #entries > 1
                     row:Show()
-                elseif row then row._spellID = nil; row:Hide() end
+                elseif row then row._spellID = nil; row._displayIndex = nil; row._dragEnabled = nil; row:Hide() end
             end
         end
         M.TrackRefresh(ctx, refreshList)
@@ -4795,15 +4854,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if refreshList then refreshList() end
             end)
         end
-        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        local listScroll = CreateFrame("ScrollFrame", nil, section)
         listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -214)
         listScroll:SetSize(inner - 20, 190)
-        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
         listChild:SetSize(inner - 44, 190)
         listScroll:SetScrollChild(listChild)
-        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
+        M._StyleNestedAuraScrollFrame(listScroll, section, 44)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
@@ -4813,8 +4870,11 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
             row:SetHeight(40)
             if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+            row.rank = T.Font(row, "GameFontDisableSmall", "", T.colors.accent)
+            row.rank:SetPoint("LEFT", row, "LEFT", 7, 0)
+            row.rank:SetWidth(24)
             row.icon = row:CreateTexture(nil, "ARTWORK")
-            row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
+            row.icon:SetPoint("LEFT", row.rank, "RIGHT", 3, 0)
             row.icon:SetSize(28, 28)
             row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
@@ -4822,6 +4882,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
             row.remove = ActionButton(row, "Remove", 80)
             row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+            row.name:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
             row.remove:SetScript("OnClick", function()
                 if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
@@ -4829,12 +4890,21 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 end
             end)
             AddTooltip(row.remove, "Remove from whitelist", removeBody)
+            AddTooltip(row, "Drag to reorder", "Drag this row to a new position. Reordering activates Custom Priority.")
+            ConfigureAuraSpellPriorityDrag(row, row, listChild, 44, function(spellID, target)
+                if Model.MoveCustomContainerSpellToIndex(unit, index, spellID, target) then
+                    Model.EnableCustomContainerSpellPriority(unit, index)
+                    Apply("AURAS3_CUSTOM_PRIORITY", true)
+                    Rebuild(ctx)
+                end
+            end)
             rows[i] = row
             return row
         end
         refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
             local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
             local visible = {}
             for i = 1, #entries do
                 local entry = entries[i]
@@ -4842,7 +4912,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
             status:SetText(tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
-                .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+                .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
+                    or customPriority and Tr(" - dynamic priority active")
+                    or Tr(" - drag to set Custom Priority"))
+                .. MatchSuffix(query, #visible))
             empty:SetText(#entries == 0 and Tr("No spells tracked. Add up to 40 exact SpellIDs.")
                 or M.Format(Tr("No results for \"%s\"."), query))
             empty:SetShown(#visible == 0)
@@ -4853,14 +4926,18 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
+                    row.rank:SetText("#" .. tostring(entry.priority or i))
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                     local name = tostring(entry.text or entry.spellID or "Spell"):gsub("%s*%(#%d+%)$", "")
                     row.name:SetText(name)
                     row.id:SetText(tostring("Spell ID ") .. tostring(entry.spellID))
                     RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
                         customActionPath .. ".whitelist.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
+                    row._entryCount = #entries
+                    row._displayIndex = i
+                    row._dragEnabled = query == "" and #entries > 1
                     row:Show()
-                elseif row then row._spellID = nil; row:Hide() end
+                elseif row then row._spellID = nil; row._displayIndex = nil; row._dragEnabled = nil; row:Hide() end
             end
         end
         M.TrackRefresh(ctx, refreshList)
@@ -5347,30 +5424,31 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
 
     if tool == "behavior" then
         local sortLane = (isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF") and "debuff" or "buff"
-        local section = b:CollapsibleSection(CustomStyleSectionId(index, "behavior"), "Ordering", 156, false)
+        local supportsCustomPriority = not isPlayerDefensives
+        local section = b:Section("Ordering", 156)
         local w = section._msuf2Width or b.width or 720
-        -- Keep every custom container's identity separate. Dots on target has
-        -- the additional CUSTOM_PRIORITY value, while Custom 1-3 can each
-        -- point at a different persisted container in the same UnitFrame.
+        -- Keep every custom container's identity separate. Exact-ID custom
+        -- containers can each persist their own CUSTOM_PRIORITY or ordinary
+        -- sort mode without sharing a lane preset.
         local orderingPath = customActionPath .. ".ordering"
         local visibleOrderingPath = isTargetDots and "custom-container.dots-on-target.ordering"
             or (isPlayerDefensives and "custom-container.defensive-buffs.ordering" or orderingPath)
-        local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(sortLane, isTargetDots), w - 48,
-            function() return NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, isTargetDots) end,
+        local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(sortLane, supportsCustomPriority), w - 48,
+            function() return NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, supportsCustomPriority) end,
             function(value)
-                if isTargetDots and value == "CUSTOM_PRIORITY"
+                if supportsCustomPriority and value == "CUSTOM_PRIORITY"
                     and type(Model.EnableCustomContainerSpellPriority) == "function" then
                     Model.EnableCustomContainerSpellPriority(unit, index)
                 else
                     item.placed.sortMethod = value or "DEFAULT"
                 end
-                Apply("AURAS3_CUSTOM_SORT_METHOD", isTargetDots)
+                Apply("AURAS3_CUSTOM_SORT_METHOD", supportsCustomPriority)
             end,
             AuraControlMetaAtVisiblePath(ctx,
                 orderingPath .. "." .. sortLane .. "-sort-method",
                 visibleOrderingPath .. "." .. sortLane .. "-sort-method"))
-        AddTooltip(sortMethod, "Aura sorting", isTargetDots
-            and "Custom Priority packs active tracked DoTs into the configured order. Inactive entries leave no gap; when A appears after B, the display automatically changes from B to A-B."
+        AddTooltip(sortMethod, "Aura sorting", supportsCustomPriority
+            and "Custom Priority packs active tracked auras into the configured order. Inactive entries leave no gap; drag the spell rows in Setup to change their priority."
             or "Only relevant sorting methods are shown for buffs and debuffs.")
         local sortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, w - 48,
             function() return item.placed.sortReverse == true and "REVERSE" or "NORMAL" end,
@@ -5379,21 +5457,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 orderingPath .. ".sort-direction",
                 visibleOrderingPath .. ".sort-direction"))
         AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-        if isTargetDots and type(W.SetControlsEnabled) == "function" then
+        if supportsCustomPriority and type(W.SetControlsEnabled) == "function" then
             M.TrackRefresh(ctx, function()
                 W.SetControlsEnabled({ sortDirection },
-                    NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, true) ~= "CUSTOM_PRIORITY")
-            end)
-        end
-        if W.SetCollapsibleBadges then
-            M.TrackRefresh(ctx, function()
-                local sortKey = NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, isTargetDots)
-                local suffix = sortKey == "CUSTOM_PRIORITY" and "" or " / "
-                    .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, item.placed.sortReverse == true and "REVERSE" or "NORMAL", "Normal")
-                W.SetCollapsibleBadges(section, {{
-                    text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. suffix,
-                    kind = "info", showWhenClosed = true,
-                }})
+                    NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, supportsCustomPriority) ~= "CUSTOM_PRIORITY")
             end)
         end
         return

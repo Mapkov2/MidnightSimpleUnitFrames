@@ -3021,6 +3021,11 @@ function T.StyleScrollFrame(scroll, anchor)
         EnsureSmoothScrollDriver():Show()
     end
     local function Refresh()
+        if scroll.IsShown and not scroll:IsShown() then
+            StopSmoothScroll()
+            if bar.Hide and bar:IsShown() then bar:Hide() end
+            return
+        end
         local child = scroll.GetScrollChild and scroll:GetScrollChild()
         local childH = (child and child.GetHeight and child:GetHeight()) or 0
         local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
@@ -3139,7 +3144,9 @@ function T.StyleScrollFrame(scroll, anchor)
     scroll:HookScript("OnHide", function()
         StopSmoothScroll()
         StopBarDrag()
+        if bar.Hide then bar:Hide() end
     end)
+    scroll:HookScript("OnShow", Refresh)
     if bar.HookScript then
         bar:HookScript("OnHide", StopBarDrag)
         bar:HookScript("OnShow", function() Paint(bar._msuf2Hover) end)
