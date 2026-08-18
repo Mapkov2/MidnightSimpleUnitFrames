@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "08376DEA0B309E27AAF5BD027EBB3ECA6A03747A700AA513959563EDFED78B1E"
-Search.StaticIndexRecordCount = 2833
+Search.StaticIndexSourceSha256 = "46BE9E195504FA210AA470896B8EDDE9C5B514D611A3B9207EB2D3BFBB1B5C5D"
+Search.StaticIndexRecordCount = 2834
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -110,6 +110,7 @@ classpower	Power bar outline	slider	bars.detachedPowerBarOutline		Power > Textur
 classpower	Power height	slider	player.detachedPowerBarHeight		Power > Layout	power height	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Elayout%2Eheight	classpower_detached_power			power height power layout classpower advanced detached power layout height classpower slider player detachedpowerbarheight
 classpower	Power text on bar	toggle	player.detachedPowerBarTextOnBar		Text > On	power text on bar	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Etext%2Eon%2Ebar	classpower_detached_power			power text on bar text on classpower advanced detached power text on bar classpower toggle player detachedpowerbartextonbar
 classpower	Power text size	slider	player.powerFontSize		Power > Text	power text size	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Etext%2Esize	classpower_detached_power			power text size power text classpower advanced detached power text size classpower slider player powerfontsize
+classpower	Power width	slider	player.detachedPowerBarWidth		Power > Layout	power width	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Elayout%2Ewidth	classpower_detached_power			power width power layout classpower advanced detached power layout width classpower slider player detachedpowerbarwidth
 classpower	Powerbar shape (independent)	dropdown	player.detachedPowerBarShape		Independent > Powerbar	powerbar shape independent	idclasspowermenu2%2Eclasspower%2Eadvanced%2Elayout%2Eindependent%2Epowerbar%2Eshape	classpower_display			powerbar shape independent independent powerbar classpower advanced layout independent powerbar shape classpower dropdown player detachedpowerbarshape
 classpower	Quick Setup: Class Bar	button		class_power_quick_setup	Setup > Class	quick setup class bar	idclasspowermenu2%2Eclasspower%2Eadvanced%2Equick%2Esetup%2Eclass%2Ebar				quick setup class bar setup class classpower advanced quick setup class bar classpower button class power quick setup
 classpower	Resource color	dropdown	bars.classPowerComboPointColorMode		Resources > Combo	resource color	idclasspowermenu2%2Eclasspower%2Eadvanced%2Estyle%2Eresources%2Ecombo%2Ecolor	classpower_visuals			resource color resources combo classpower advanced style resources combo color classpower dropdown bars classpowercombopointcolormode

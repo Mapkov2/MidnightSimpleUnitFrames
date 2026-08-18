@@ -43,6 +43,7 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["detached_power.layout.orbSize"] = "player.detachedPowerOrbSize",
     ["detached_power.layout.smooth_fill"] = "player.powerSmoothFill",
     ["detached_power.layout.sync"] = "player.detachedPowerBarSyncClassPower",
+    ["detached_power.layout.width"] = "player.detachedPowerBarWidth",
     ["detached_power.layout.x"] = "player.detachedPowerBarOffsetX",
     ["detached_power.layout.y"] = "player.detachedPowerBarOffsetY",
     ["detached_power.text.center"] = "player.powerTextCenter",
@@ -391,6 +392,14 @@ local function Player()
     local db = M.EnsureDB()
     db.player = db.player or {}
     return db.player
+end
+--- An unset detached width falls through to the Player frame width at runtime
+--- (see the Power element's width precedence), so the slider has to show that
+--- rather than a constant, or it would advertise a width the bar never had.
+local function PlayerFrameWidth()
+    local width = tonumber(Player().width)
+    if not width or width < 20 then width = 250 elseif width > 800 then width = 800 end
+    return floor(width + 0.5)
 end
 local function PlayerPowerOutline()
     local outline = tonumber(Bars().detachedPowerBarOutline)
@@ -801,6 +810,33 @@ function Page:CreateControlKinds()
         alpha = function(_, parent, _, apply, spec)
             return BindBarsAlphaPercent(self.ctx, parent, spec[3], spec[4], spec[5], spec[6] or apply, spec[7], spec.meta)
         end,
+        detachedPowerWidth = function(_, parent, source, apply, spec)
+            local control = W.Slider(parent, spec[3], spec[4], spec[5], spec[6], spec[7])
+            local key = spec[8]
+            local setApply = spec[10] or apply
+            -- Mirror the ordinary slider binding so this one snaps to whole
+            -- pixels like every other geometry slider on the page.
+            local opts = {}
+            if type(spec.meta) == "table" then
+                for metaKey, metaValue in pairs(spec.meta) do opts[metaKey] = metaValue end
+            end
+            opts.step, opts.roundStep = spec[6], true
+            M.BindNumberWidget(self.ctx, control,
+                function()
+                    local player = source()
+                    return tonumber(player[key]) or PlayerFrameWidth()
+                end,
+                function(value)
+                    local player = source()
+                    -- Width sync outranks an explicit width, so an untouched
+                    -- profile would swallow this drag. Release the sync the same
+                    -- way the unit page does; the toggle above repaints with it.
+                    player.detachedPowerBarSyncClassPower = false
+                    SetValue(player, key, value, setApply)
+                end,
+                nil, opts)
+            return control
+        end,
         nilDefaultDropdown = function(_, parent, source, apply, spec)
             local control, key, default = W.Dropdown(parent, spec[3], spec[4], spec[5]), spec[6], spec[7]
             apply = spec[8] or apply
@@ -1055,7 +1091,7 @@ function Page:BuildClassVisibility()
 end
 
 local function DetachedPowerSectionHeight(width)
-    return width < 680 and 1000 or 780
+    return width < 680 and 1060 or 834
 end
 
 function Page:BuildDetachedPower()
@@ -1069,7 +1105,7 @@ function Page:BuildDetachedPower()
     local values = VT("layout", "Layout", "textures", "Textures", "text", "Text")
     RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerDetachedPowerTab", label = "Power area", values = values,
         width = min(520, max(320, width - 64)), frames = frames, defaultTab = "layout", x = 32, y = -44 }), "detached_power.workspace_tab", values)
-    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 482 or 760)
+    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 536 or 814)
     self.dpbUse = W.SwitchAt(layout, "Detached player power", 32, -104, controlW)
     M.BindBoolWidget(self.ctx, self.dpbUse, function() return Player().powerBarDetached == true end,
         function(value)
@@ -1094,6 +1130,7 @@ function Page:BuildDetachedPower()
     self.dpb = self:Controls(layout, Player, ApplyDetachedPowerBar, "detached_power.layout", {
         { "anchor", "toggle", "Anchor to Class Resource", "detachedPowerBarAnchorToClassPower", false, group = "detachedPlayer" },
         { "sync", "toggle", "Sync width to Class Resource", "detachedPowerBarSyncClassPower", true, ApplyDetachedPowerSource, group = "detachedPlayer" },
+        { "width", "detachedPowerWidth", "Power width", 20, 800, 1, 300, "detachedPowerBarWidth", 0, self:WithRefresh(ApplyDetachedPowerSource), group = "detachedPlayer" },
         { "orbSize", "slider", "Orb size", 20, 160, 1, 300, "detachedPowerOrbSize", 54, group = "detachedPlayer" },
         { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0, group = "detachedPlayer" },
         { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4, group = "detachedPlayer" },
@@ -1102,6 +1139,7 @@ function Page:BuildDetachedPower()
     })
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width. For Augmentation Evoker this bar shows Ebon Might, so these settings size and place the Ebon Might bar.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
+    AddTooltip(self.dpb.width, "Power Width", "Manual width for the detached Player power bar. Available while Width mode is Manual; dragging it releases Sync width to Class Resource, because that sync would otherwise win. Unset, the bar inherits the Player frame width.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
     AddTooltip(self.dpb.layer, "Player Power Layer", "Orders only the normal Player Power bar. It does not control Class Resource pips or their text.")
     local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 850)
@@ -1198,8 +1236,8 @@ function Page:BuildDetachedPower()
     })
     self.dpbTextures = texture
     AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of every detached Player power shape, including Bar, Round, Crystal and Orb. 0 disables only that edge.")
-    PlaceColumn(layout, 32, twoColumns and -154 or -188, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.orbSize, self.dpb.height)
-    PlaceColumn(layout, rightX, twoColumns and -154 or -520, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
+    PlaceColumn(layout, 32, twoColumns and -154 or -188, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.width, self.dpb.orbSize, self.dpb.height)
+    PlaceColumn(layout, rightX, twoColumns and -154 or -574, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.outline)
     PlaceColumn(text, 32, -104, 54, controlW, "LEFT", self.dpbText.onBar, self.dpbText.preset, self.dpbText.right)
     for i, control in ipairs({ self.dpbHide[1], self.dpbText.left, self.dpbHide[2], self.dpbText.center, self.dpbHide[3], self.dpbText.sep }) do
@@ -1397,6 +1435,11 @@ function Page:RefreshControlState()
     if self.dpb then
         SetControlEnabled(self.dpb.orbSize, playerDetached and playerShape == "ORB")
         SetControlEnabled(self.dpb.height, playerDetached and playerShape ~= "ORB")
+        -- Orb derives both axes from its own size, and a Cooldown Viewer width
+        -- mode names the source frame instead, so a manual width only decides
+        -- anything for a non-Orb bar left on "Manual".
+        SetControlEnabled(self.dpb.width, playerDetached and playerShape ~= "ORB"
+            and tostring(bars.detachedPowerBarWidthMode or "manual"):lower() == "manual")
     end
     if self.dpbTextures then
         SetControlEnabled(self.dpbTextures.outline, playerDetached)
