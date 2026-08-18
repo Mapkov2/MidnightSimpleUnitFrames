@@ -280,6 +280,11 @@ local function RequestGeneral(reason, opts)
 end
 
 local function ApplyColors()
+    -- The painter's Resources strip paints straight from these DB values and
+    -- has no writer of its own, so both apply paths poke it. Kept inline: this
+    -- file rides the 200 active-local ceiling.
+    local painter = M.ColorPainter
+    if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()
     if apply and type(apply.RequestColors) == "function" then
         return apply.RequestColors("MSUF2_COLORS")
@@ -389,6 +394,11 @@ function M._SetDispelTypeColorEnabled(dispelType, enabled)
     return true
 end
 local function ApplyClassPowerColors()
+    -- The painter's Resources strip paints straight from these DB values and
+    -- has no writer of its own, so both apply paths poke it. Kept inline: this
+    -- file rides the 200 active-local ceiling.
+    local painter = M.ColorPainter
+    if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()
     if apply and type(apply.RequestClassPower) == "function" then
         return apply.RequestClassPower("MSUF2_CLASSPOWER_COLORS", { colors = true, playerHP = true }, { preview = true, applyAll = false, colors = true, colorScope = "player" })
