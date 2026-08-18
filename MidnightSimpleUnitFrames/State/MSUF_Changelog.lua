@@ -8,12 +8,47 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "C76EB5009D90318D4873C88727E00812AABA30EDE5F35FFBE2AA312DED213446",
-    currentVersion = "6.1-Beta1",
-    historyFromVersion = "6.08-Beta2",
-    previousVersion = "6.09",
-    rangeLabel = "6.09 -> 6.1-Beta1",
+    sourceSha256 = "BFC5489E3CD3761BD5570A9D9D59D5129EF45D95D5FBF703F9C1D930136A9CCC",
+    currentVersion = "6.1-Beta2",
+    historyFromVersion = "6.08",
+    previousVersion = "6.1-Beta1",
+    rangeLabel = "6.1-Beta1 -> 6.1-Beta2",
     entries = {
+        {
+            version = "6.1-Beta2",
+            date = "2026-08-18",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Added a Power width slider to the Class Resources > Player Power card, where Width mode \"Manual\" previously had no width to set. Dragging it releases *Sync width to Class Resource*, because that sync outranks an explicit width.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "power width",
+                                label = "Power width",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.width",
+                                settingKey = "player.detachedPowerBarWidth",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Switching the Active profile now offers a UI reload: frames re-apply at once, but settings that are only read at load time otherwise keep the old profile's values until the next reload.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Colour changes on the Colors page now repaint the Resources strip in the preview immediately instead of leaving it on the previous colours until the tab was rebuilt.",
+                        "Changing a spell indicator's Display as shape now re-gates that section right away; controls belonging to the previous shape, such as Icon Effect, could stay visible until an unrelated click refreshed the page.",
+                    },
+                },
+            },
+        },
         {
             version = "6.1-Beta1",
             date = "2026-08-18",
@@ -275,92 +310,6 @@ local data = {
                         "Fixed Arena Group Frames using Raid instead of Party configuration across runtime, Blizzard-frame ownership, Edit Mode, and previews.",
                         "Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.",
                         "Limited PvP indicator runtime to Arenas, Battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.08-Beta2",
-            date = "2026-08-15",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Added an optional, class-colored interrupter name beside the castbar's interrupted state.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "show interrupter name",
-                                label = "Show interrupter name",
-                                sectionId = "castbar",
-                                controlId = "menu2.uf_target.unit.castbar.show_interrupt_source",
-                                settingKey = "target.showInterruptSource",
-                                prepareKind = "unitCastbarTab",
-                                prepareValue = "general",
-                            },
-                        },
-                        {
-                            text = "Added an optional Player Frame Stance text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "stance",
-                                label = "Stance",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.selected.enabled",
-                                settingKey = "player.showStanceIndicator",
-                                prepareKind = "unitStatus",
-                                prepareValue = "stance",
-                            },
-                        },
-                        {
-                            text = "Added explicit Uniform and Width & height portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "portrait size mode",
-                                label = "Size mode",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitsizemode",
-                                settingKey = "player.portraitSizeMode",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "geometry",
-                            },
-                        },
-                        {
-                            text = "Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "portrait edge softness",
-                                label = "Portrait edge softness",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitedgesoftness",
-                                settingKey = "player.portraitEdgeSoftness",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "border",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Replaced the toolbar's New Task action with a dedicated See New Features changelog page whose highlighted change sentences link directly to their matching MSUF menu settings.",
-                        "Localized the new stance, portrait sizing, and portrait edge-softness controls across all 12 supported locales.",
-                        "Updated Assistant registrations, generated coverage data, search routing, and static search data for the new status and portrait controls.",
-                        "Corrected the bundled release history so features added after Beta 1 are listed under Beta 2 instead of the already-published Beta 1 package.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the Castbar General tab height after adding the interrupter-name option.",
-                        "Changed Target and Focus castbar identity refreshes from deferred callbacks to direct synchronous updates.",
-                        "Cleared the castbar driver's unused OnUpdate script once during construction instead of repeating the native transition on target swaps.",
-                        "Fixed player Unit Frames showing the fallback blue or another incorrect health color for identity-restricted PvP targets by routing every player class through Blizzard's native secret-safe class-color pipeline.",
-                        "Streamlined Unit Frame identity refreshes across bars, portraits, status text, regular text, and range fading so unchanged identity state avoids redundant work.",
-                        "Skipped player-only nickname-provider APIs for NPC units while retaining supported NPC nickname sources.",
-                        "Fixed Arena Group Frames using raid instead of party configuration, including runtime, Blizzard-frame ownership, Edit Mode, and previews.",
-                        "Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.",
-                        "Limited PvP indicator runtime to arenas, battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.",
                     },
                 },
             },

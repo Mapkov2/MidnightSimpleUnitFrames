@@ -1,5 +1,21 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.1-Beta2 - 2026-08-18
+
+### Highlights
+
+- Added a **Power width** slider to the Class Resources > Player Power card, where Width mode "Manual" previously had no width to set. Dragging it releases *Sync width to Class Resource*, because that sync outranks an explicit width.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.width","settingKey":"player.detachedPowerBarWidth","query":"power width","label":"Power width"} -->
+
+### Changes
+
+- Switching the **Active profile** now offers a UI reload: frames re-apply at once, but settings that are only read at load time otherwise keep the old profile's values until the next reload.
+
+### Fixes & Performance
+
+- Colour changes on the Colors page now repaint the Resources strip in the preview immediately instead of leaving it on the previous colours until the tab was rebuilt.
+- Changing a spell indicator's **Display as** shape now re-gates that section right away; controls belonging to the previous shape, such as Icon Effect, could stay visible until an unrelated click refreshed the page.
+
 ## 6.1-Beta1 - 2026-08-18
 
 ### Highlights
