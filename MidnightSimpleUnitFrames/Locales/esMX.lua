@@ -5268,6 +5268,11 @@ L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "U
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Seguro, Advertencia, Urgente, Magia, Maldición, Enfermedad, Veneno, Sangrado, borde y sombra del icono."
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "Mientras la posición esté desbloqueada, el texto de entrar/salir de combate se muestra permanentemente como un control móvil. Arrástralo con el mouse o muévelo con las teclas de flecha. Bloquea la posición para que el texto solo aparezca al entrar o salir de combate."
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "Mientras la posición esté desbloqueada, el temporizador de combate permanece visible fuera de combate como un marcador 0:00 móvil. Arrástralo con el mouse o muévelo con las teclas de flecha; con clic a través activado, mantén ALT para arrastrar. Bloquea la posición para fijarla."
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "Se cambió al perfil «%s».\n\nSe requiere recargar la interfaz para aplicar completamente este perfil.\n\n¿Recargar ahora?"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "Se cambió al perfil «%s». Recarga tras el combate con /reload."
+L["Switched to profile '%s'. Reload the UI with /reload."] = "Se cambió al perfil «%s». Recarga la interfaz con /reload."
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "No se puede recargar la interfaz en combate. Sal del combate y escribe /reload."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

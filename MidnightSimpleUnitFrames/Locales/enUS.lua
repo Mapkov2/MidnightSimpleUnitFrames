@@ -3928,6 +3928,11 @@ L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "C
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "Switched to profile '%s'. Reload after combat with /reload."
+L["Switched to profile '%s'. Reload the UI with /reload."] = "Switched to profile '%s'. Reload the UI with /reload."
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "Can't reload the UI in combat. Leave combat, then type /reload."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

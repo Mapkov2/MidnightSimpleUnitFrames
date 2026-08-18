@@ -5034,6 +5034,11 @@ L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "U
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Seguro, Aviso, Urgente, Magia, Maldição, Doença, Veneno, Sangramento, borda e sombra do ícone."
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "Enquanto a posição estiver desbloqueada, o texto de entrar/sair de combate fica visível permanentemente como uma alça móvel. Arraste-a com o mouse ou ajuste-a com as setas do teclado. Bloqueie a posição para que o texto apareça apenas ao entrar ou sair de combate."
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "Enquanto a posição estiver desbloqueada, o cronômetro de combate permanece visível fora de combate como um marcador 0:00 móvel. Arraste-o com o mouse ou ajuste-o com as setas do teclado; com clique através ativado, segure ALT para arrastar. Bloqueie a posição para fixá-la."
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "Alterado para o perfil “%s”.\n\nÉ necessário recarregar a UI para aplicar totalmente este perfil.\n\nRecarregar agora?"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "Alterado para o perfil “%s”. Recarregue após o combate com /reload."
+L["Switched to profile '%s'. Reload the UI with /reload."] = "Alterado para o perfil “%s”. Recarregue a UI com /reload."
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "Não é possível recarregar a UI em combate. Saia do combate e digite /reload."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

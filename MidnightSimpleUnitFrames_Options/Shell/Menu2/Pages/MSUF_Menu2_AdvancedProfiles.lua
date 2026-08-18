@@ -215,6 +215,18 @@ local function EnsureProfilePopups()
             if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
         end,
     })
+    InstallProfilePopup("MSUF2_PROFILE_SWITCH_RELOAD", {
+        text = M.Tr("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"),
+        button1 = YES or M.Tr("Yes"),
+        button2 = NO or M.Tr("No"),
+        OnAccept = function()
+            if _G.InCombatLockdown and _G.InCombatLockdown() then
+                PrintProfileMessage("|cffffd700", "Can't reload the UI in combat. Leave combat, then type /reload.")
+                return
+            end
+            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+        end,
+    })
     InstallProfilePopup("MSUF2_CONFIRM_RESET_PROFILE", {
         text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
         button1 = YES or M.Tr("Yes"),
@@ -256,6 +268,20 @@ local function ShowImportReloadPrompt()
     else
         PrintProfileMessage("|cffffd700", "Profile imported. Reload the UI with /reload.")
     end
+end
+-- A profile switch swaps the whole DB under a live UI. Frames re-apply, but anything baked
+-- at load time (group headers, module gating) only settles after a reload, so offer one.
+local function ShowProfileSwitchReloadPrompt(profileName)
+    local name = tostring(profileName or ActiveProfileName())
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        PrintProfileMessage("|cffffd700", M.Format("Switched to profile '%s'. Reload after combat with /reload.", name))
+        return
+    end
+    if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_PROFILE_SWITCH_RELOAD then
+        _G.StaticPopup_Show("MSUF2_PROFILE_SWITCH_RELOAD", name)
+        return
+    end
+    PrintProfileMessage("|cffffd700", M.Format("Switched to profile '%s'. Reload the UI with /reload.", name))
 end
 local function ReloadAfterNewProfileImport(profileName)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
@@ -524,9 +550,12 @@ local function BuildProfiles(ctx)
             profileDrop:SetValue(ActiveProfileName())
             return
         end
-        if value and value ~= "" and value ~= _G.MSUF_ActiveProfile and CallMSUF("MSUF_SwitchProfile", value) then ClearProfileHistory() end
+        local wanted = value and value ~= "" and value ~= _G.MSUF_ActiveProfile and value or nil
+        if wanted and CallMSUF("MSUF_SwitchProfile", wanted) then ClearProfileHistory() end
         M.RequestGeneralApply("MSUF2_PROFILE_SWITCH", { preview = true, applyAll = false, notify = false })
         RefreshAfterProfileChange(ctx)
+        -- CallMSUF only reports that the global ran; MSUF_ActiveProfile is the switch's own receipt.
+        if wanted and _G.MSUF_ActiveProfile == wanted then ShowProfileSwitchReloadPrompt(wanted) end
     end)
     M.TrackRefresh(ctx, function()
         RefreshProfileValues()

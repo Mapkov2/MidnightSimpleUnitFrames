@@ -5561,6 +5561,11 @@ L[" - dynamic priority active"] = " - dynamische Priorität aktiv"
 L[" - choose Custom Priority under Ordering to use this order"] = " - unter Sortierung Feste Priorität wählen, um diese Reihenfolge zu verwenden"
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "Solange die Position entsperrt ist, wird der Kampf-Betreten/Verlassen-Text dauerhaft als verschiebbarer Anfasser angezeigt. Ziehe ihn mit der Maus oder verschiebe ihn mit den Pfeiltasten. Sperre die Position, damit der Text nur beim Betreten oder Verlassen des Kampfes erscheint."
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "Solange die Position entsperrt ist, bleibt der Kampf-Timer außerhalb des Kampfes als verschiebbarer 0:00-Platzhalter sichtbar. Ziehe ihn mit der Maus oder verschiebe ihn mit den Pfeiltasten – bei aktiviertem Durchklicken halte ALT zum Ziehen. Sperre die Position, um sie einzufrieren."
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "Zu Profil „%s“ gewechselt.\n\nEin UI-Neuladen ist erforderlich, um dieses Profil vollständig anzuwenden.\n\nJetzt neu laden?"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "Zu Profil „%s“ gewechselt. Nach dem Kampf mit /reload neu laden."
+L["Switched to profile '%s'. Reload the UI with /reload."] = "Zu Profil „%s“ gewechselt. UI mit /reload neu laden."
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "UI kann im Kampf nicht neu geladen werden. Verlasse den Kampf und gib dann /reload ein."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

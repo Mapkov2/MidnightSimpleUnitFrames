@@ -5090,6 +5090,11 @@ L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "�
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "안전, 경고, 긴급, 마법, 저주, 질병, 독, 출혈, 아이콘 테두리 및 아이콘 그림자."
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "위치가 잠금 해제되어 있는 동안에는 전투 시작/종료 텍스트가 이동 가능한 손잡이로 항상 표시됩니다. 마우스로 드래그하거나 화살표 키로 미세 조정하세요. 위치를 잠그면 전투를 시작하거나 종료할 때만 텍스트가 나타납니다."
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "위치가 잠금 해제되어 있는 동안에는 전투 타이머가 전투 밖에서도 이동 가능한 0:00 자리 표시자로 계속 표시됩니다. 마우스로 드래그하거나 화살표 키로 미세 조정하세요. 클릭 통과가 켜져 있으면 ALT를 누른 채 드래그하세요. 위치를 잠그면 고정됩니다."
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "'%s' 프로필로 전환했습니다.\n\n이 프로필을 완전히 적용하려면 UI를 다시 불러와야 합니다.\n\n지금 다시 불러올까요?"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "'%s' 프로필로 전환했습니다. 전투 후 /reload로 다시 불러오세요."
+L["Switched to profile '%s'. Reload the UI with /reload."] = "'%s' 프로필로 전환했습니다. /reload로 UI를 다시 불러오세요."
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "전투 중에는 UI를 다시 불러올 수 없습니다. 전투를 마친 뒤 /reload를 입력하세요."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

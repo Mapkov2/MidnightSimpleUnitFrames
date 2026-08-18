@@ -5730,6 +5730,11 @@ L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "�
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "安全、警告、紧急、魔法、诅咒、疾病、中毒、流血、图标边框和图标阴影。"
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "位置未锁定时，进入/离开战斗文字会作为可拖动的手柄一直显示在屏幕上。可用鼠标拖动，或用方向键微调。锁定位置后，文字只在进入或离开战斗时出现。"
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "位置未锁定时，战斗计时器在脱战状态下也会以可移动的 0:00 占位显示。可用鼠标拖动，或用方向键微调；启用点击穿透后按住 ALT 拖动。锁定位置即可固定。"
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "已切换到配置文件“%s”。\n\n需要重新加载 UI 才能完全应用此配置文件。\n\n立即重新加载吗？"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "已切换到配置文件“%s”。战斗结束后使用/reload重载。"
+L["Switched to profile '%s'. Reload the UI with /reload."] = "已切换到配置文件“%s”。使用/reload重新加载 UI。"
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "战斗中无法重新加载 UI。脱离战斗后输入/reload。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

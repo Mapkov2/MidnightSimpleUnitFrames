@@ -5128,6 +5128,11 @@ L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "�
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Безопасно, Предупреждение, Срочно, Магия, Проклятие, Болезнь, Яд, Кровотечение, рамка и тень значка."
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "Пока позиция не заблокирована, текст входа/выхода из боя постоянно отображается как перемещаемый элемент. Перетащите его мышью или сдвигайте клавишами со стрелками. Заблокируйте позицию, чтобы текст появлялся только при входе в бой или выходе из него."
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "Пока позиция не заблокирована, таймер боя остаётся видимым вне боя в виде перемещаемой заглушки 0:00. Перетащите его мышью или сдвигайте клавишами со стрелками; при включённом сквозном клике удерживайте ALT для перетаскивания. Заблокируйте позицию, чтобы зафиксировать её."
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "Выполнен переход к профилю «%s».\n\nДля полного применения этого профиля требуется перезагрузка интерфейса.\n\nПерезагрузить сейчас?"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "Выполнен переход к профилю «%s». После боя выполните /reload."
+L["Switched to profile '%s'. Reload the UI with /reload."] = "Выполнен переход к профилю «%s». Перезагрузите интерфейс командой /reload."
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "Нельзя перезагрузить интерфейс в бою. Выйдите из боя и введите /reload."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

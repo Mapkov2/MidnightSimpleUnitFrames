@@ -5509,6 +5509,11 @@ L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "U
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sûr, Avertissement, Urgent, Magie, Malédiction, Maladie, Poison, Saignement, bordure et ombre d'icône."
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "Tant que la position est déverrouillée, le texte d'entrée/sortie de combat reste affiché en permanence comme poignée déplaçable. Faites-la glisser avec la souris ou déplacez-la avec les touches fléchées. Verrouillez la position pour que le texte n'apparaisse qu'en entrant ou en sortant de combat."
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "Tant que la position est déverrouillée, le minuteur de combat reste visible hors combat sous forme d'espace réservé 0:00 déplaçable. Faites-le glisser avec la souris ou déplacez-le avec les touches fléchées – si le clic à travers est activé, maintenez ALT pour le faire glisser. Verrouillez la position pour la figer."
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "Basculé vers le profil « %s ».\n\nUn rechargement de l'interface est nécessaire pour appliquer entièrement ce profil.\n\nRecharger maintenant ?"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "Basculé vers le profil « %s ». Rechargez après le combat avec /reload."
+L["Switched to profile '%s'. Reload the UI with /reload."] = "Basculé vers le profil « %s ». Rechargez l'interface avec /reload."
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "Impossible de recharger l'interface en combat. Quittez le combat, puis tapez /reload."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

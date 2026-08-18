@@ -5109,6 +5109,11 @@ L["Cooldown timer urgency, global Dispel types, icon borders and shadows."] = "U
 L["Safe, Warning, Urgent, Magic, Curse, Disease, Poison, Bleed, icon border and icon shadow."] = "Sicuro, Avviso, Urgente, Magia, Maledizione, Malattia, Veleno, Sanguinamento, bordo e ombra dell'icona."
 L["While unlocked, the Combat Enter/Leave text is shown permanently as a movable handle. Drag it with the mouse or nudge it with the arrow keys. Lock it so the text only appears when entering or leaving combat."] = "Finché la posizione è sbloccata, il testo di entrata/uscita dal combattimento resta visibile in modo permanente come maniglia spostabile. Trascinala con il mouse o spostala con i tasti freccia. Blocca la posizione affinché il testo appaia solo entrando o uscendo dal combattimento."
 L["While unlocked, the Combat Timer stays visible out of combat as a movable 0:00 placeholder. Drag it with the mouse or nudge it with the arrow keys - with click-through enabled, hold ALT to drag. Lock it to freeze the position."] = "Finché la posizione è sbloccata, il timer di combattimento resta visibile fuori dal combattimento come segnaposto 0:00 spostabile. Trascinalo con il mouse o spostalo con i tasti freccia; con il clic passante attivo, tieni premuto ALT per trascinare. Blocca la posizione per fissarla."
+
+L["Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"] = "Passato al profilo «%s».\n\nÈ necessario ricaricare l'interfaccia per applicare completamente questo profilo.\n\nRicaricare ora?"
+L["Switched to profile '%s'. Reload after combat with /reload."] = "Passato al profilo «%s». Ricarica dopo il combattimento con /reload."
+L["Switched to profile '%s'. Reload the UI with /reload."] = "Passato al profilo «%s». Ricarica l'interfaccia con /reload."
+L["Can't reload the UI in combat. Leave combat, then type /reload."] = "Impossibile ricaricare l'interfaccia in combattimento. Esci dal combattimento, poi digita /reload."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end
