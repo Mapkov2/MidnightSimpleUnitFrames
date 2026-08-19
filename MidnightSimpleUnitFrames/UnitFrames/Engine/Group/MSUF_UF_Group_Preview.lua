@@ -59,7 +59,13 @@ local PREVIEW_CLASSES = {
   "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID",
   "DEMONHUNTER", "EVOKER",
 }
-local PREVIEW_NAMES = { "Mapko", "Jaina", "Thrall", "Tyrande", "Anduin" }
+--- Index 1 always draws the real player name, so entry 1 only surfaces on a
+--- wrap deep inside a raid preview. The lore names keep the party preview as
+--- it was; the crew below fills the extra raid rows.
+local PREVIEW_NAMES = {
+  "Mapko", "Jaina", "Thrall", "Tyrande", "Anduin",
+  "Aur0r4", "Dun", "Sif", "Jayee", "Kev", "Slickrock", "Uplift", "Zaazu", "Sha",
+}
 local PREVIEW_ROLES = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "HEALER" }
 
 local VALID_POINTS = {

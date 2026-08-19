@@ -1163,7 +1163,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("bossNumber", "showBossNumberIndicator", false, "bossNumberIndicator", 14, "TOPLEFT", 4, -4, 7),
   PrefixedStatusDef("race", "showRaceIndicator", false, "raceIndicator", 14, "NAMERIGHT", 0, 0, 7),
   PrefixedStatusDef("classText", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", 0, 0, 7),
-  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
+  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "raidGroupNameSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
   PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
   PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("resting", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", -40, 50, 25, { "restedStateIndicatorIconStyle", "BLIZZARD" }, { "restedStateIndicatorSymbol", "rested_blizzard_animated", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
@@ -1693,6 +1693,9 @@ local function CompileUnitStatus(out, conf, general, key)
   status.useMidnight = StatusBool(conf, general, "statusIconsUseMidnightStyle", false)
 
   local levelSize = Number(conf.nameFontSize or general.nameFontSize, out.nameFontSize)
+  -- raidGroupNameSize ships unseeded on purpose: an untouched profile keeps
+  -- the inline group number at the frame's name font size, exactly as it looked
+  -- while the two shared one key.
   local raidGroupSize = out.nameFontSize
   local statusTextSize = out.nameFontSize + 2
   for i = 1, #UNIT_STATUS_ENTRY_DEFS do

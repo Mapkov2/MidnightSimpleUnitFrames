@@ -388,7 +388,10 @@ local function NameRightReservation(frame, spec)
   local reserved = 0
   local raidGroup = status.raidGroup
   if raidGroup and raidGroup.enabled == true and raidGroup.anchor == "NAMERIGHT" then
-    reserved = reserved + 24
+    -- 24 was tuned for "(40)" at the 14pt default. The group number now carries
+    -- its own size, so scale the gap with it or a large number overlaps the name.
+    local raidGroupSize = tonumber(raidGroup.size) or 14
+    reserved = reserved + (raidGroupSize > 14 and floor(((24 * raidGroupSize) / 14) + 0.5) or 24)
   end
   local level = status.level
   if level and level.enabled == true and level.anchor == "NAMERIGHT" then
