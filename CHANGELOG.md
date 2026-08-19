@@ -1,5 +1,17 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.1-Beta4 - 2026-08-19
+
+### Highlights
+
+- **Power text** on the Target, Focus, Pet and Boss frames follows the unit you are actually on again. With *Colour power text by type* enabled the colour was resolved once and then kept across every target change, so a Focus or Rage target could stay on the previous target's colour, or sit on Mana blue for the rest of the session (#125). Frames with the power bar switched off were affected the most, because they had no bar to take fresh resource data from.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"text","controlId":"menu2.uf_target.unit.text.power.show","settingKey":"target.showPowerText","query":"show power text","label":"Show Power Text"} -->
+
+### Fixes & Performance
+
+- Power text no longer falls back to the Mana colour when a unit reports no resource at all. It renders the configured text colour instead, which is what those slots show with colour by power type switched off.
+- The range fade check now retires completely once nothing is left to sample. Only units MSUF has no range event for keep the timer running, so a state without such a unit costs nothing while idle instead of waking up every 0.75 to 2 seconds.
+
 ## 6.1-Beta3 - 2026-08-19
 
 ### Highlights

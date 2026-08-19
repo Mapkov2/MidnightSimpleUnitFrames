@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "B9E8528AC3B64E6B7A3D8CEE082A0413BB8DB42C6D5B67A9BD9C2A22AB98C71F",
-    currentVersion = "6.1-Beta3",
+    sourceSha256 = "067B0789F828801EA9E1EEAD391D29ABC3EA006BCF729121C4EB1007F83F50F9",
+    currentVersion = "6.1-Beta4",
     historyFromVersion = "6.02",
-    previousVersion = "6.1-Beta2",
-    rangeLabel = "6.1-Beta2 -> 6.1-Beta3",
+    previousVersion = "6.1-Beta3",
+    rangeLabel = "6.1-Beta3 -> 6.1-Beta4",
     entries = {
+        {
+            version = "6.1-Beta4",
+            date = "2026-08-19",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Power text on the Target, Focus, Pet and Boss frames follows the unit you are actually on again. With *Colour power text by type* enabled the colour was resolved once and then kept across every target change, so a Focus or Rage target could stay on the previous target's colour, or sit on Mana blue for the rest of the session (#125). Frames with the power bar switched off were affected the most, because they had no bar to take fresh resource data from.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "show power text",
+                                label = "Show Power Text",
+                                sectionId = "text",
+                                controlId = "menu2.uf_target.unit.text.power.show",
+                                settingKey = "target.showPowerText",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Power text no longer falls back to the Mana colour when a unit reports no resource at all. It renders the configured text colour instead, which is what those slots show with colour by power type switched off.",
+                        "The range fade check now retires completely once nothing is left to sample. Only units MSUF has no range event for keep the timer running, so a state without such a unit costs nothing while idle instead of waking up every 0.75 to 2 seconds.",
+                    },
+                },
+            },
+        },
         {
             version = "6.1-Beta3",
             date = "2026-08-19",
