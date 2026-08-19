@@ -1146,6 +1146,9 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   local identityChanged = not animate and POWER_IDENTITY_EVENTS[event] == true
+  -- One client read per dispatch: an identity or tick refresh below already
+  -- asked, and a second ask in the same event returns the same answer.
+  local powerTypeReread = false
   if identityChanged then
     frame._msufTextPowerMax = nil
     frame._msufTextPowerMaxUnit = nil
@@ -1164,6 +1167,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       frame._msufTextPowerTypeUnit = nil
       if rt.powerColorByType == true then
         RefreshCachedPowerType(frame, unit)
+        powerTypeReread = true
       end
     end
   elseif not (powerMetaChanged == false
@@ -1192,6 +1196,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     local typeUnitMatches = typeUnit == unit
     if frame._msufTextPowerTypeKnown ~= true or not typeUnitMatches then
       RefreshCachedPowerType(frame, unit)
+      powerTypeReread = true
     end
   end
   local typeUnit = frame._msufTextPowerTypeUnit
@@ -1212,23 +1217,34 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     -- returns nothing for a restricted unit token, and PowerColor trusts the
     -- known flag and settles on Mana. Retry here, where the gate already only
     -- opens on colour events, never on a value tick.
-    if frame._msufTextPowerTypeKnown ~= true
-      or not typeUnitMatches
-      or (frame._msufTextPowerType == nil and frame._msufTextPowerToken == nil) then
+    if not powerTypeReread
+      and (frame._msufTextPowerTypeKnown ~= true
+        or not typeUnitMatches
+        or (frame._msufTextPowerType == nil and frame._msufTextPowerToken == nil)) then
       RefreshCachedPowerType(frame, unit)
       typeUnit = frame._msufTextPowerTypeUnit
       typeUnitMatches = typeUnit == unit
     end
-    local metaKnown = frame._msufTextPowerTypeKnown == true and typeUnitMatches
-    local r, g, b = PowerColor(
-      frame, unit,
-      frame._msufTextPowerType, frame._msufTextPowerToken,
-      metaKnown
-    )
-    SetPowerTextColor(frame, r, g, b, rt.textColorA or 1)
+    local cachedType = frame._msufTextPowerType
+    local cachedToken = frame._msufTextPowerToken
+    -- Same contract the power bar applies (MSUF_UF_Elements_Power.lua SetColor):
+    -- metadata counts as known only once a read actually produced a resource.
+    -- The flag alone means "already asked", and PowerColor answers a known but
+    -- empty pair with Mana, claiming a resource this unit never reported.
+    local metaKnown = frame._msufTextPowerTypeKnown == true
+      and typeUnitMatches
+      and (cachedType ~= nil or cachedToken ~= nil)
+    if metaKnown then
+      local r, g, b = PowerColor(frame, unit, cachedType, cachedToken, true)
+      SetPowerTextColor(frame, r, g, b, rt.textColorA or 1)
+    else
+      -- Nothing to colour by, so render the configured text colour instead of
+      -- guessing: what these slots show with colour-by-type switched off.
+      SetPowerTextColor(frame, rt.textColorR or 1, rt.textColorG or 1, rt.textColorB or 1, rt.textColorA or 1)
+    end
     frame._msufPowerTextColorInitialized = true
-    frame._msufPowerTextColorType = frame._msufTextPowerType
-    frame._msufPowerTextColorToken = frame._msufTextPowerToken
+    frame._msufPowerTextColorType = cachedType
+    frame._msufPowerTextColorToken = cachedToken
   elseif rt.powerColorByType == false
     and (powerTextColorEvent
       or frame._msufPowerTextColorInitialized ~= true
