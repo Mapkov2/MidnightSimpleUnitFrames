@@ -148,6 +148,7 @@ local TARGET_FRIENDLY_SPELLS = {
 
 local activeUnits = {}
 local pollUnits = {}
+local pollCovered = {}
 local targetRegistered = {}
 local targetWanted = {}
 local targetStates = {}
@@ -158,6 +159,7 @@ local targetEventUnits = {}
 local enemySpell, friendlySpell, resSpell, targetFriendlySpell
 local activeCount = 0
 local pollCount = 0
+local pollBlindCount = 0
 local pollQueued = false
 local pollNextAt
 local pollTimer
@@ -655,10 +657,22 @@ local pollSettlePending = false -- run one final eval after movement stops
 -- "in range with the current target", and UNIT_IN_RANGE_UPDATE/UnitInRange are
 -- group-only APIs -- so a combat-blocked poller froze every boss frame at the
 -- alpha it happened to have when the encounter engaged.
--- Cost is bounded instead: the sweep only runs when something actually moved,
--- and an idle tick is pollCount+1 GetUnitSpeed reads.
+-- Cost is bounded by scope instead of by combat: only units MSUF has to sample
+-- keep a timer alive at all (see UnitRangeIsBlind), so every state without such
+-- a unit stays at exactly zero idle work.
 local POLL_INTERVAL_MOVING = 0.75
 local POLL_INTERVAL_IDLE = 2.00
+
+-- "Blind" = MSUF has no event telling it this unit's range changed, so the only
+-- way to notice is to sample. The current target is the one exception: the
+-- client fires SPELL_RANGE_CHECK_UPDATE for every armed spell whenever its range
+-- to the target changes, including range changes the target itself caused. With
+-- no armed spell there is nothing to hear and the target falls back to sampling.
+local function UnitRangeIsBlind(unit)
+  if unit ~= "target" then return true end
+  if not EnableSpellRangeCheck then return true end
+  return next(targetRegistered) == nil
+end
 
 local function MarkPollSetDirty()
   pollSetDirty = true
@@ -674,7 +688,8 @@ end
 local function RangeCanChange()
   if not GetUnitSpeed then return true end
   if UnitMoving("player") then return true end
-  for i = 1, pollCount do
+  -- Blind units are stored first, so this stops before the covered tail.
+  for i = 1, pollBlindCount do
     if UnitMoving(pollUnits[i]) then return true end
   end
   return false
@@ -714,36 +729,51 @@ local function SchedulePoll(delay)
   pollTimer = NewTimer(delay, PollTimerCallback)
 end
 
--- A unit can leave range without the player moving -- a boss walking away is
--- the common case -- so the heartbeat stays armed while the poll set is not
--- empty instead of retiring on PLAYER_STOPPED_MOVING. RangeCanChange still
--- decides whether the expensive IsSpellInRange sweep runs at all.
-local function RearmPoll(delay)
-  if pollCount <= 0 then
+-- A blind unit can leave range without the player moving -- a boss walking away
+-- is the common case -- so the heartbeat stays armed for as long as the poll set
+-- holds one, instead of retiring on PLAYER_STOPPED_MOVING. With no blind unit
+-- there is nothing a wake-up could discover that an event will not deliver, so
+-- the timer retires completely and idle cost returns to zero.
+-- The fast cadence exists for sampling too: when every poll unit is covered the
+-- sweep is only a fallback and does not need to run four times as often.
+local function RearmPoll(moving)
+  if pollCount <= 0 or (not moving and pollBlindCount <= 0) then
     CancelPollTimer()
     return
   end
   if pollTimer then CancelPollTimer() end
-  SchedulePoll(delay)
+  SchedulePoll((moving and pollBlindCount > 0) and POLL_INTERVAL_MOVING or POLL_INTERVAL_IDLE)
 end
 
 local function RebuildPollSet()
   pollSetDirty = false
-  pollCount = 0
+  -- Blind units land in pollUnits[1..pollBlindCount], covered ones after them.
+  -- A covered unit stays in the set so a movement edge still runs its full
+  -- check -- including the CheckInteractDistance fallback that only the poll
+  -- reaches -- it just never keeps the timer alive on its own.
+  local coveredCount = 0
+  pollBlindCount = 0
   for unit in pairs(activeUnits) do
     if UnitNeedsPoll(unit) then
-      pollCount = pollCount + 1
-      pollUnits[pollCount] = unit
+      if UnitRangeIsBlind(unit) then
+        pollBlindCount = pollBlindCount + 1
+        pollUnits[pollBlindCount] = unit
+      else
+        coveredCount = coveredCount + 1
+        pollCovered[coveredCount] = unit
+      end
     end
+  end
+  pollCount = pollBlindCount
+  for i = 1, coveredCount do
+    pollCount = pollCount + 1
+    pollUnits[pollCount] = pollCovered[i]
+    pollCovered[i] = nil
   end
   for i = pollCount + 1, #pollUnits do
     pollUnits[i] = nil
   end
-  if pollCount <= 0 then
-    CancelPollTimer()
-    return
-  end
-  SchedulePoll()
+  RearmPoll(pollSettlePending)
 end
 
 local driver
@@ -878,8 +908,8 @@ PollNow = function()
     return
   end
   -- PollTimerCallback already retired the fired timer, so this re-arm is the
-  -- only one. An empty poll set retires the heartbeat inside RearmPoll.
-  RearmPoll(moving and POLL_INTERVAL_MOVING or POLL_INTERVAL_IDLE)
+  -- only one. A set with nothing left to sample retires inside RearmPoll.
+  RearmPoll(moving)
 end
 
 local driverRegistered = false
@@ -966,10 +996,10 @@ local function DriverOnEvent(source, event, unit, a, b, c)
     end
     if event == "PLAYER_STARTED_MOVING" then
       pollSettlePending = true
-      RearmPoll(POLL_INTERVAL_MOVING)
+      RearmPoll(true)
     else
       pollSettlePending = false
-      RearmPoll(POLL_INTERVAL_IDLE)
+      RearmPoll(false)
     end
     return
   end
@@ -1206,8 +1236,8 @@ SyncRuntime = function()
     SyncTargetSpells()
     if pollSetDirty == true then
       RebuildPollSet()
-    else
-      SchedulePoll()
+    elseif not pollQueued then
+      RearmPoll(pollSettlePending)
     end
     return
   end
@@ -1220,6 +1250,7 @@ SyncRuntime = function()
   spellsBuilt = false
   MarkTargetSpellSyncDirty()
   pollCount = 0
+  pollBlindCount = 0
   CancelPollTimer()
   pollSettlePending = false
   UnregisterDriver()
