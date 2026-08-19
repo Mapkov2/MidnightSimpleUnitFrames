@@ -185,7 +185,13 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
             end
             RegisterUnitNumberSetting(unit, spec.value .. "Size", spec.size, spec.label .. " Size", spec.defaultSize, 8, 64, aliases, StatusIconOpts(spec, {
                 keySuffix = spec.size,
-                get = function(unitKey) return tonumber(UnitDB(unitKey)[spec.size]) or tonumber(GeneralDB()[spec.size]) or spec.defaultSize end,
+                get = function(unitKey)
+                    return tonumber(UnitDB(unitKey)[spec.size])
+                        or tonumber(GeneralDB()[spec.size])
+                        or (spec.sizeFallback and (tonumber(UnitDB(unitKey)[spec.sizeFallback])
+                            or tonumber(GeneralDB()[spec.sizeFallback])))
+                        or spec.defaultSize
+                end,
             }))
 
             aliases = {}

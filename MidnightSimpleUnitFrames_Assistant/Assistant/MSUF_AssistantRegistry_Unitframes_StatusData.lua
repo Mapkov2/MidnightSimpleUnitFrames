@@ -86,11 +86,14 @@ Data.STATUS_CONTROL_SPECS = {
     },
     {
         value = "raidgroupname", label = "Raid Group Name", show = "showRaidGroupInName",
-        defaultShow = false, size = "nameFontSize", defaultSize = 14,
+        defaultShow = false, size = "raidGroupNameSize", defaultSize = 14,
         anchor = "raidGroupNameAnchor", defaultAnchor = "NAMERIGHT",
         x = "raidGroupNameOffsetX", defaultX = 3, y = "raidGroupNameOffsetY", defaultY = 0,
         layer = "raidGroupNameLayer", defaultLayer = 5, legacyLayer = "nameTextLayer",
         refresh = "MSUF_RefreshRaidGroupNameFrames", inlineName = true, nameAnchors = true,
+        -- Unwritten raidGroupNameSize renders at the frame's name font size, so
+        -- report that rather than a bare default nobody is looking at.
+        sizeFallback = "nameFontSize",
         units = { player = true, target = true, targettarget = true, focustarget = true, focus = true },
         aliases = {
             "raid group name", "raid group", "group number in name",
