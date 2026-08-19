@@ -649,9 +649,16 @@ local PollNow
 
 local pollSettlePending = false -- run one final eval after movement stops
 
-local function RangePollCombatBlocked()
-  return InCombatLockdown and InCombatLockdown()
-end
+-- Range fade output is alpha only (see UF.ApplyRangeModifier); nothing on this
+-- path is protected, so the poll must NOT be disabled in combat. Bosses have no
+-- range event source at all -- SPELL_RANGE_CHECK_UPDATE is documented as
+-- "in range with the current target", and UNIT_IN_RANGE_UPDATE/UnitInRange are
+-- group-only APIs -- so a combat-blocked poller froze every boss frame at the
+-- alpha it happened to have when the encounter engaged.
+-- Cost is bounded instead: the sweep only runs when something actually moved,
+-- and an idle tick is pollCount+1 GetUnitSpeed reads.
+local POLL_INTERVAL_MOVING = 0.75
+local POLL_INTERVAL_IDLE = 2.00
 
 local function MarkPollSetDirty()
   pollSetDirty = true
@@ -665,7 +672,6 @@ local function UnitMoving(unit)
 end
 
 local function RangeCanChange()
-  if RangePollCombatBlocked() then return false end
   if not GetUnitSpeed then return true end
   if UnitMoving("player") then return true end
   for i = 1, pollCount do
@@ -675,7 +681,7 @@ local function RangeCanChange()
 end
 
 local function PollInterval()
-  return 2.00
+  return POLL_INTERVAL_IDLE
 end
 
 local function CancelPollTimer()
@@ -690,11 +696,6 @@ end
 local function PollTimerCallback()
   pollTimer = nil
   if not pollQueued then return end
-  if RangePollCombatBlocked() then
-    CancelPollTimer()
-    pollSettlePending = false
-    return
-  end
   local now = GetTime and GetTime() or 0
   if pollNextAt and now < pollNextAt then
     pollTimer = NewTimer(pollNextAt - now, PollTimerCallback)
@@ -707,24 +708,28 @@ end
 
 local function SchedulePoll(delay)
   if pollQueued or pollCount <= 0 then return end
-  if RangePollCombatBlocked() then return end
   pollQueued = true
   delay = delay or PollInterval()
   pollNextAt = (GetTime and GetTime() or 0) + delay
   pollTimer = NewTimer(delay, PollTimerCallback)
 end
 
+-- A unit can leave range without the player moving -- a boss walking away is
+-- the common case -- so the heartbeat stays armed while the poll set is not
+-- empty instead of retiring on PLAYER_STOPPED_MOVING. RangeCanChange still
+-- decides whether the expensive IsSpellInRange sweep runs at all.
+local function RearmPoll(delay)
+  if pollCount <= 0 then
+    CancelPollTimer()
+    return
+  end
+  if pollTimer then CancelPollTimer() end
+  SchedulePoll(delay)
+end
+
 local function RebuildPollSet()
   pollSetDirty = false
   pollCount = 0
-  if RangePollCombatBlocked() then
-    for i = 1, #pollUnits do
-      pollUnits[i] = nil
-    end
-    CancelPollTimer()
-    pollSettlePending = false
-    return
-  end
   for unit in pairs(activeUnits) do
     if UnitNeedsPoll(unit) then
       pollCount = pollCount + 1
@@ -860,12 +865,6 @@ local function HookFrameVisibility(frame)
 end
 
 PollNow = function()
-  if RangePollCombatBlocked() then
-    pollQueued = false
-    pollNextAt = nil
-    pollSettlePending = false
-    return
-  end
   local settlePending = pollSettlePending
   local moving = RangeCanChange()
   if moving or settlePending then
@@ -876,12 +875,11 @@ PollNow = function()
   pollSettlePending = moving
   if pollSetDirty then
     RebuildPollSet()
-  elseif moving then
-    SchedulePoll()
-  else
-    pollQueued = false
-    pollNextAt = nil
+    return
   end
+  -- PollTimerCallback already retired the fired timer, so this re-arm is the
+  -- only one. An empty poll set retires the heartbeat inside RearmPoll.
+  RearmPoll(moving and POLL_INTERVAL_MOVING or POLL_INTERVAL_IDLE)
 end
 
 local driverRegistered = false
@@ -956,26 +954,22 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   end
 
   if event == "PLAYER_STARTED_MOVING" or event == "PLAYER_STOPPED_MOVING" then
-    if RangePollCombatBlocked() then return end
     MarkPollSetDirty()
     RebuildPollSet()
     if pollCount <= 0 then return end
 
-    -- Evaluate immediately at both edges. While movement continues the
-    -- existing sparse timer remains armed; stopping performs the final settle
-    -- and lets at most the already queued callback retire itself.
+    -- Evaluate immediately at both edges, then re-arm at the cadence that
+    -- matches the new state. Stopping is the player's final settled value but
+    -- not the unit's, so the heartbeat stays armed at the idle interval.
     for i = 1, pollCount do
       EvaluateUnit(pollUnits[i])
     end
     if event == "PLAYER_STARTED_MOVING" then
       pollSettlePending = true
-      SchedulePoll()
+      RearmPoll(POLL_INTERVAL_MOVING)
     else
       pollSettlePending = false
-      -- The edge evaluation above is the final settled value. Native
-      -- NewTimer handles let the sparse movement poll disappear immediately
-      -- instead of waking once more after movement has stopped.
-      if pollTimer then CancelPollTimer() end
+      RearmPoll(POLL_INTERVAL_IDLE)
     end
     return
   end

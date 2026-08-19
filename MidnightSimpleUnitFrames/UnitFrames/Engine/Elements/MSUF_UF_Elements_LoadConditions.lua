@@ -558,6 +558,17 @@ local function ClearBossPreviewFrameForRuntime(frame, restoreVisuals)
   return true
 end
 
+-- The handoff above forces every boss frame back to full opacity. That is the
+-- correct starting point, not the answer: without a real re-evaluation the
+-- frames keep mul = 1 until something else moves the range runtime, which for
+-- boss units can be the rest of the encounter.
+local function RequestBossRangeRefresh()
+  local refresh = (UF.Range and UF.Range.Refresh) or _G.MSUF_UF_RangeFade_Refresh
+  if type(refresh) == "function" then
+    refresh()
+  end
+end
+
 local function ClearBossPreviewFramesForCombat()
   _G.MSUF2_BossUnitframePreviewActive = nil
   local cleared = false
@@ -565,13 +576,17 @@ local function ClearBossPreviewFramesForCombat()
     local frame = UF.frames and UF.frames["boss" .. i]
     if ClearBossPreviewFrameForRuntime(frame, true) then cleared = true end
   end
-  if cleared then bossPreviewCombatCleanupPending = true end
+  if cleared then
+    bossPreviewCombatCleanupPending = true
+    RequestBossRangeRefresh()
+  end
   return cleared
 end
 UF.ClearBossPreviewFramesForCombat = ClearBossPreviewFramesForCombat
 ExportPublic("MSUF_ClearBossUnitframePreviewForCombat", ClearBossPreviewFramesForCombat)
 
 local function ApplyBossPreviewFrames(active)
+  local cleared = false
   for i = 1, 5 do
     local frame = UF.frames and UF.frames["boss" .. i]
     local unit = "boss" .. i
@@ -581,8 +596,11 @@ local function ApplyBossPreviewFrames(active)
       if frame.EnableMouse then frame:EnableMouse(true) end
       ApplyBossPreviewFrameData(frame, i)
     elseif frame then
-      ClearBossPreviewFrameForRuntime(frame, true)
+      if ClearBossPreviewFrameForRuntime(frame, true) then cleared = true end
     end
+  end
+  if cleared then
+    RequestBossRangeRefresh()
   end
 end
 
