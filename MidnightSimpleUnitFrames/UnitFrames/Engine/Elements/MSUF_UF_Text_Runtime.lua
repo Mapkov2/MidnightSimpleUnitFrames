@@ -69,6 +69,25 @@ local POWER_IDENTITY_EVENTS = {
   MSUF_UNIT_IDENTITY_SOFT_FAST = true,
   MSUF_GF_UNIT_IDENTITY = true,
   MSUF_GF_UNIT_STRUCTURE = true,
+  -- Single-unit frames never see the synthetic MSUF_UNIT_IDENTITY reasons:
+  -- AddIdentityLifecycleHandlers routes their swaps into the identity path
+  -- under the raw Blizzard event name. Without these the cached power type
+  -- outlives the unit it was read for, and a frame whose power bar is disabled
+  -- has no bar-fed seed to correct it.
+  PLAYER_ENTERING_WORLD = true,
+  PLAYER_TARGET_CHANGED = true,
+  PLAYER_FOCUS_CHANGED = true,
+  UNIT_PET = true,
+  UNIT_TARGET = true,
+  INSTANCE_ENCOUNTER_ENGAGE_UNIT = true,
+  MSUF_DEPENDENT_IDENTITY = true,
+  MSUF_UF_ONSHOW = true,
+  -- The displayed resource itself changed. A frame with a power bar re-seeds
+  -- from the bar payload here, but a text-only frame is handed no metadata at
+  -- all, so without these it would keep painting the previous resource.
+  UNIT_DISPLAYPOWER = true,
+  UNIT_POWER_BAR_SHOW = true,
+  UNIT_POWER_BAR_HIDE = true,
 }
 
 -- Match oUF's 250 ms text cadence with one shared, combat-window ticker. The
@@ -1128,15 +1147,24 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   local identityChanged = not animate and POWER_IDENTITY_EVENTS[event] == true
   if identityChanged then
-    frame._msufTextPowerType = nil
-    frame._msufTextPowerToken = nil
-    frame._msufTextPowerTypeKnown = nil
-    frame._msufTextPowerTypeUnit = nil
     frame._msufTextPowerMax = nil
     frame._msufTextPowerMaxUnit = nil
-    local seededPowerType = SeedCachedPowerType(frame, unit, powerType, powerToken)
-    if rt.powerColorByType == true and seededPowerType ~= true then
-      RefreshCachedPowerType(frame, unit)
+    -- A bar-fed identity event already carries authoritative metadata for the
+    -- new unit, so seeding it over the old values is enough. Only a frame with
+    -- no power bar arrives here empty-handed, and for it the cached type still
+    -- belongs to the previous unit behind this token: drop it and read once.
+    if (powerType ~= nil or powerToken ~= nil)
+      and issecretvalue(powerType) ~= true
+      and issecretvalue(powerToken) ~= true then
+      SeedCachedPowerType(frame, unit, powerType, powerToken)
+    else
+      frame._msufTextPowerType = nil
+      frame._msufTextPowerToken = nil
+      frame._msufTextPowerTypeKnown = nil
+      frame._msufTextPowerTypeUnit = nil
+      if rt.powerColorByType == true then
+        RefreshCachedPowerType(frame, unit)
+      end
     end
   elseif not (powerMetaChanged == false
       and animate
@@ -1180,7 +1208,13 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       or not typeUnitMatches
       or frame._msufPowerTextColorType ~= frame._msufTextPowerType
       or frame._msufPowerTextColorToken ~= frame._msufTextPowerToken) then
-    if frame._msufTextPowerTypeKnown ~= true or not typeUnitMatches then
+    -- "Known" with nothing cached is a failed read, not knowledge: UnitPowerType
+    -- returns nothing for a restricted unit token, and PowerColor trusts the
+    -- known flag and settles on Mana. Retry here, where the gate already only
+    -- opens on colour events, never on a value tick.
+    if frame._msufTextPowerTypeKnown ~= true
+      or not typeUnitMatches
+      or (frame._msufTextPowerType == nil and frame._msufTextPowerToken == nil) then
       RefreshCachedPowerType(frame, unit)
       typeUnit = frame._msufTextPowerTypeUnit
       typeUnitMatches = typeUnit == unit
