@@ -3851,7 +3851,8 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         local liveDrop = W.Dropdown(section, "Active auras on this frame", CachedAuraValues, liveW)
         W.MoveWidget(liveDrop, section, 24, liveY, liveW)
         M.BindDropdownWidget(ctx, liveDrop, CurrentLiveAura,
-            function(value) M.auraBlacklistLiveSpell = value end)
+            function(value) M.auraBlacklistLiveSpell = value end,
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.live-aura-selection", "ephemeral"))
         if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(liveDrop, input) end
         AddTooltip(liveDrop, "Active auras on this frame",
             "Shows the result of the last scan: every readable aura with the exact ID it carried, plus everything captured earlier this session. Press Rescan to scan the current unit - blocking from this list always uses the aura's own ID. Secret auras cannot be listed.")
