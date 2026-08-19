@@ -2778,7 +2778,10 @@ function Preview.Refresh(box, reason)
     box._fontPreviewBaselineOffset = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
     if box._fontPreviewBaselineOffset < -4 then box._fontPreviewBaselineOffset = -4 elseif box._fontPreviewBaselineOffset > 4 then box._fontPreviewBaselineOffset = 4 end
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.nameText, nameRawSize, "name")
-    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.raidGroupNameText, nameRawSize, "name")
+    -- The inline group number carries its own size and only falls back to the
+    -- name font while raidGroupNameSize is unwritten. No local for the resolved
+    -- value: this Refresh function sits at Lua's 200 active-local limit.
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.raidGroupNameText, tonumber(runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.size) or tonumber(conf.raidGroupNameSize) or nameRawSize, "name")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.totInlineSep, nameRawSize, "name")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.totInlineText, nameRawSize, "name")
     -- Reverse order renders the configured Right slot on the physical left

@@ -295,31 +295,38 @@ local function BuildStatus(ctx, builder, unit)
         "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
         "enable level", "disable level", "turn level on", "turn level off",
     }, nil, nil, "status.selected.enabled", nil, selectedStatusContract)
-    enabled._msuf2ExactTargetKinds = { unitStatus = true }
-    local exactStatusContracts = {}
-    for _, value in ipairs(StatusValues(unit)) do
-        local spec = FindStatusSpec(unit, value.value)
-        if spec and spec.value == value.value then
-            exactStatusContracts[spec.value] = tostring(unit) .. "." .. tostring(spec.show)
+    --- Exact navigation into this shared editor has to name both the indicator to
+    --- select and the key it edits, so every control the selector re-targets
+    --- publishes its own value -> setting-key contract under the same kind.
+    local function AttachStatusExactTarget(control, field)
+        if not control then return end
+        local contracts = {}
+        for _, value in ipairs(StatusValues(unit)) do
+            local spec = FindStatusSpec(unit, value.value)
+            if spec and spec.value == value.value and spec[field] then
+                contracts[spec.value] = tostring(unit) .. "." .. tostring(spec[field])
+            end
+        end
+        control._msuf2ExactTargetKinds = { unitStatus = true }
+        control._msuf2ExactTargetContracts = { unitStatus = contracts }
+        control._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitStatus" then return false end
+            local spec = FindStatusSpec(unit, tostring(exactTarget.prepareValue or ""))
+            if not spec or spec.value ~= tostring(exactTarget.prepareValue or "")
+                or tostring(exactTarget.settingKey or "") ~= tostring(unit) .. "." .. tostring(spec[field] or "")
+            then
+                return false
+            end
+            M.unitStatusSelection = M.unitStatusSelection or {}
+            M.unitStatusSelection[unit] = spec.value
+            if sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab("basic") == false then return false end
+            if selector and selector.SetValue then selector:SetValue(spec.value) end
+            Call("MSUF_UFPreview_SelectStatusIcon", spec.value)
+            if RefreshStatusSectionState then RefreshStatusSectionState() end
+            return CurrentStatusSpec(unit) == spec
         end
     end
-    enabled._msuf2ExactTargetContracts = { unitStatus = exactStatusContracts }
-    enabled._msuf2PrepareExactSearchTarget = function(_, exactTarget)
-        if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitStatus" then return false end
-        local spec = FindStatusSpec(unit, tostring(exactTarget.prepareValue or ""))
-        if not spec or spec.value ~= tostring(exactTarget.prepareValue or "")
-            or tostring(exactTarget.settingKey or "") ~= tostring(unit) .. "." .. tostring(spec.show)
-        then
-            return false
-        end
-        M.unitStatusSelection = M.unitStatusSelection or {}
-        M.unitStatusSelection[unit] = spec.value
-        if sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab("basic") == false then return false end
-        if selector and selector.SetValue then selector:SetValue(spec.value) end
-        Call("MSUF_UFPreview_SelectStatusIcon", spec.value)
-        if RefreshStatusSectionState then RefreshStatusSectionState() end
-        return CurrentStatusSpec(unit) == spec
-    end
+    AttachStatusExactTarget(enabled, "show")
     local identityRestrictionWarning = W.Text(selectedCard, IDENTITY_RESTRICTION_WARNING,
         16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR)
     if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end
@@ -537,7 +544,10 @@ local function BuildStatus(ctx, builder, unit)
             local spec = CurrentStatusSpec(unit)
             if not spec then return 14 end
             local fallback = spec.defaultSize
-            if spec.textIndicator then fallback = ReadStatusNumber(unit, "nameFontSize", fallback or 14) end
+            -- Text indicators and the inline group number inherit the frame's name
+            -- font size until their own size key is written, so the slider has to
+            -- open on the size the player actually sees.
+            if spec.textIndicator or spec.inlineName then fallback = ReadStatusNumber(unit, "nameFontSize", fallback or 14) end
             return ReadStatusNumber(unit, spec.size, fallback, spec.legacySize)
         end,
         function(value)
@@ -549,7 +559,9 @@ local function BuildStatus(ctx, builder, unit)
         14, { step = 1, roundStep = true })
     RegisterStatusSearch(size, "Status indicator size", {
         "level size", "level text size", "indicator size", "icon size", "font size",
+        "raid group size", "raid group name size", "group number size",
     }, nil, nil, "status.selected.size", nil, selectedStatusContract)
+    AttachStatusExactTarget(size, "size")
     local function CurrentStatusAnchorValues()
         local spec = CurrentStatusSpec(unit)
         local values = (spec and spec.anchors) or STATUS_ANCHORS
@@ -580,7 +592,8 @@ local function BuildStatus(ctx, builder, unit)
         local function ResetSelectedStatus()
             local conf = GetConf(unit)
             if spec.inlineName then
-                conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.layer], conf.raidGroupNameStyle = nil, nil, nil, nil, nil
+                conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.layer] = nil, nil, nil, nil
+                conf[spec.size], conf.raidGroupNameStyle = nil, nil
             else
                 conf[spec.x], conf[spec.y], conf[spec.anchor], conf[spec.size], conf[spec.layer] = nil, nil, nil, nil, nil
                 if spec.symbol then conf[spec.symbol] = nil end
@@ -682,8 +695,7 @@ local function BuildStatus(ctx, builder, unit)
     advanced.all = StatusPreviewButton(advanced.card, "Show all", placeRightX, -178, min(112, placeRightW), "all", "Advanced show all status indicators", {
         "advanced show all", "status icon advanced preview all",
     }, "status.preview.advanced.all")
-    local statusEnabledControls = { anchor, layer, advanced.layer }
-    local statusDetachedControls = { size }
+    local statusEnabledControls = { size, anchor, layer, advanced.layer }
     local function LayoutSelectedControls(hasSymbol, hasIconPack, hasCustomIcon)
         local y = -106
         if hasSymbol then
@@ -699,17 +711,16 @@ local function BuildStatus(ctx, builder, unit)
         end
     end
     local function LayoutStatusControls(inlineName)
-        if inlineName then
-            Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
-            Shared.PlaceDropdown(placementCard, anchor, placeLeftX, -54, placeLeftW)
-            Shared.PlaceSlider(placementCard, layer, placeLeftX, -116, placeLeftW)
-            PlaceButton(reset, placementCard, placeRightX, -116, min(220, placeRightW))
-            return
-        end
         Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
         Shared.PlaceSlider(placementCard, size, placeLeftX, -54, placeLeftW)
         Shared.PlaceDropdown(placementCard, anchor, placeLeftX, -116, placeLeftW)
         Shared.PlaceSlider(placementCard, layer, placeLeftX, -178, placeLeftW)
+        -- The raid-group style dropdown owns the first right row whenever it is
+        -- shown, so Reset drops one row instead of sitting under it.
+        if inlineName then
+            PlaceButton(reset, placementCard, placeRightX, -116, min(220, placeRightW))
+            return
+        end
         PlaceButton(reset, placementCard, placeRightX, -54, 150)
     end
     local function ShowControl(control, shown)
@@ -750,8 +761,8 @@ local function BuildStatus(ctx, builder, unit)
         ShowControl(identityRestrictionWarning, isIdentityText and isEnabled)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
-        ShowControls(true, anchor, layer, advanced.layer)
-        ShowControls(not inlineName, size, previewLabel, current, all, previewCard, advanced.current, advanced.all)
+        ShowControls(true, size, anchor, layer, advanced.layer)
+        ShowControls(not inlineName, previewLabel, current, all, previewCard, advanced.current, advanced.all)
         ShowControls(spec ~= nil, reset, advanced.reset)
         ShowControl(advanced.test, showTestMode and not inlineName)
         SetPreviewCurrentVisual(current, isEnabled)
@@ -761,7 +772,6 @@ local function BuildStatus(ctx, builder, unit)
         SetControlEnabled(customIcon, hasCustomIcon and isEnabled)
         SetControlEnabled(raidGroupStyle, inlineName and isEnabled)
         SetControlsEnabled(statusEnabledControls, isEnabled)
-        SetControlsEnabled(statusDetachedControls, (not inlineName) and isEnabled)
         SetControlEnabled(reset, spec ~= nil)
         SetControlEnabled(advanced.reset, spec ~= nil)
         SetControlEnabled(advanced.test, showTestMode and isEnabled)
