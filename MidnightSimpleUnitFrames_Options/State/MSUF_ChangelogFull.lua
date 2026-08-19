@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "BFC5489E3CD3761BD5570A9D9D59D5129EF45D95D5FBF703F9C1D930136A9CCC",
-    currentVersion = "6.1-Beta2",
+    sourceSha256 = "B9E8528AC3B64E6B7A3D8CEE082A0413BB8DB42C6D5B67A9BD9C2A22AB98C71F",
+    currentVersion = "6.1-Beta3",
     historyFromVersion = "6.02",
-    previousVersion = "6.1-Beta1",
-    rangeLabel = "6.1-Beta1 -> 6.1-Beta2",
+    previousVersion = "6.1-Beta2",
+    rangeLabel = "6.1-Beta2 -> 6.1-Beta3",
     entries = {
+        {
+            version = "6.1-Beta3",
+            date = "2026-08-19",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Boss frames no longer freeze at the range fade they happened to have when the pull started. Boss units have no range event of their own, so the periodic check behind *Enable Range Fade* now keeps running in combat instead of stopping at the encounter start.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "enable range fade",
+                                label = "Enable Range Fade",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_boss.unit.range_fade.enabled",
+                                settingKey = "boss.rangeFadeEnabled",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed a spell indicator's health-bar highlight covering the player name and the aura icons on live Group Frames, while the menu preview drew the same effect correctly underneath (#123). The effect rode along whenever its native aura container was re-levelled, so opening the settings or changing zone could flip the order either way; it now keeps the Layer it was configured with.",
+                        "Full-Frame effect previews in the Group preview and in Edit Mode now paint through the same renderer the frames use, so Glow shows its real halo instead of four flat edges and Pulse animates with its live opacity.",
+                    },
+                },
+            },
+        },
         {
             version = "6.1-Beta2",
             date = "2026-08-18",

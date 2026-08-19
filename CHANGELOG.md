@@ -2,6 +2,11 @@
 
 ## 6.1-Beta3 - 2026-08-19
 
+### Highlights
+
+- **Boss frames** no longer freeze at the range fade they happened to have when the pull started. Boss units have no range event of their own, so the periodic check behind *Enable Range Fade* now keeps running in combat instead of stopping at the encounter start.
+<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"range_fade","controlId":"menu2.uf_boss.unit.range_fade.enabled","settingKey":"boss.rangeFadeEnabled","query":"enable range fade","label":"Enable Range Fade"} -->
+
 ### Fixes & Performance
 
 - Fixed a spell indicator's health-bar highlight covering the player name and the aura icons on live Group Frames, while the menu preview drew the same effect correctly underneath (#123). The effect rode along whenever its native aura container was re-levelled, so opening the settings or changing zone could flip the order either way; it now keeps the Layer it was configured with.
