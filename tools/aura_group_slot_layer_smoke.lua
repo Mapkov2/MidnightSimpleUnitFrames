@@ -170,10 +170,18 @@ local editModeEffectSource = Read("Auras3/MSUF_Auras3_EditMode.lua")
 local groupPreviewEffectSource = Read("UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
 assert(spellEffectSource:find("FrameLayers.AuraEffectLevel", 1, true),
     "live Aura effects do not use the visible target floor")
-assert(editModeEffectSource:find("FrameLayers.AuraEffectLevel", 1, true),
-    "Edit Mode Aura effects do not use the visible target floor")
-assert(groupPreviewEffectSource:find("layers.AuraEffectLevel", 1, true),
-    "Group preview Aura effects do not use the visible target floor")
+-- Edit Mode and the Group preview no longer compute a level of their own: both
+-- paint through the live renderer, which is where the visible target floor
+-- lives. aura_frame_effect_level_smoke pins that parity.
+assert(editModeEffectSource:find("runtime.ApplyPreviewFrameEffect(owner, effect, frame)", 1, true)
+    and not editModeEffectSource:find("FrameLayers.AuraEffectLevel", 1, true),
+    "Edit Mode Aura effects do not use the live renderer's target floor")
+-- The Group preview no longer computes a level of its own: it paints through
+-- the live renderer, which is where the visible target floor lives. See
+-- aura_frame_effect_level_smoke for the preview/runtime parity assertion.
+assert(groupPreviewEffectSource:find("runtime.ApplyPreviewFrameEffect", 1, true)
+    and not groupPreviewEffectSource:find("layers.AuraEffectLevel", 1, true),
+    "Group preview Aura effects do not use the live renderer's target floor")
 
 local updateSource = runtimeSource:sub(initializerEnd,
     assert(runtimeSource:find("\nlocal function UpdateGroupFlowLane", initializerEnd, true)) - 1)

@@ -859,6 +859,7 @@ end
 
 local function HideButtonFrameEffect(button)
     if not button then return end
+    button._msufA3FrameEffectApplied = nil
     local root = button._msufA3SpellIndicatorEffectRoot
     if root then
         StopPulse(root)
@@ -983,21 +984,41 @@ local function HideEffectRegions(button)
     UnregisterNameOverlay(button)
 end
 
+--- Absolute frame level of one full-frame effect surface on the shared 0..30
+--- scale. Kept as its own function because the live apply and the post-sync
+--- re-stamp below must never compute a different number for the same effect.
+local function FrameEffectLevel(effect, kind, parentFrame, healthBar)
+    -- Saved priorities use 1 as the strongest effect.
+    local priority = effect.priority or 5
+    -- Layer is a cold-compiled 0..30 local offset. Zero preserves the
+    -- established priority band exactly; no SavedVariables reads occur here.
+    local layer = effect.layer or 0
+    local targetOwner = healthBar
+    if kind == "namecolor" then
+        local nameSource = NameFontString(parentFrame)
+        targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or parentFrame
+    end
+    return FrameLayers.AuraEffectLevel and FrameLayers.AuraEffectLevel(layer, priority, targetOwner)
+        or FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
+        or ((parentFrame:GetFrameLevel() or 0) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer)
+end
+
+local function ForgetButtonFrameEffect(button, parentFrame)
+    local buttons = parentFrame and parentFrame._msufA3SpellIndicatorEffectButtons
+    if buttons then buttons[button] = nil end
+    HideButtonFrameEffect(button)
+    return false
+end
+
 local function ApplyButtonFrameEffect(button, slot, parentFrame)
     if not (button and slot and parentFrame) then return false end
     local effect = slot.frameEffect
     if type(effect) ~= "table" then
-        local buttons = parentFrame._msufA3SpellIndicatorEffectButtons
-        if buttons then buttons[button] = nil end
-        HideButtonFrameEffect(button)
-        return false
+        return ForgetButtonFrameEffect(button, parentFrame)
     end
     local kind = tostring(effect.type or "none"):lower()
     if kind ~= "healthtint" and kind ~= "border" and kind ~= "glow" and kind ~= "pulse" and kind ~= "namecolor" then
-        local buttons = parentFrame._msufA3SpellIndicatorEffectButtons
-        if buttons then buttons[button] = nil end
-        HideButtonFrameEffect(button)
-        return false
+        return ForgetButtonFrameEffect(button, parentFrame)
     end
 
     -- Visible frame effects must follow the C-side StatusBar fill. The owning
@@ -1014,20 +1035,11 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame)
     root:SetAllPoints(healthBar)
     SyncFrameStrata(root, ResolveFrameStrata(parentFrame, effect.strata or slot.strata))
     if root.SetFrameLevel then
-        -- Saved priorities use 1 as the strongest effect.
-        local priority = effect.priority or 5
-        -- Layer is a cold-compiled 0..30 local offset. Zero preserves the
-        -- established priority band exactly; no SavedVariables reads occur here.
-        local layer = effect.layer or 0
-        local targetOwner = healthBar
-        if kind == "namecolor" then
-            local nameSource = NameFontString(parentFrame)
-            targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or parentFrame
-        end
-        root:SetFrameLevel(FrameLayers.AuraEffectLevel and FrameLayers.AuraEffectLevel(layer, priority, targetOwner)
-            or FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
-            or ((parentFrame:GetFrameLevel() or 0) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer))
+        root:SetFrameLevel(FrameEffectLevel(effect, kind, parentFrame, healthBar))
     end
+    -- Retained so Runtime.RefreshFrameEffects can recompute this exact level
+    -- after the owning native container has moved (see that function).
+    button._msufA3FrameEffectApplied = effect
     StopPulse(root)
     HideEffectRegions(button)
 
@@ -1246,10 +1258,48 @@ function Runtime.ApplyGroupPresenceGate(parentFrame, present)
     return any
 end
 
+--- PTR 7 seals a native AuraButton and everything below it right after
+--- initializeFrame returns. Writing to such a descendant is refused outright,
+--- so ask before touching one. The return itself can be secret on a restricted
+--- object; anything but a plain true fails closed.
+local function CanWriteEffectSurface(root)
+    local canAccess = root and root.CanBeAccessedInContext
+    if type(canAccess) ~= "function" then return true end
+    local allowed = canAccess(root)
+    if issecretvalue(allowed) == true then return false end
+    return allowed == true
+end
+
+--- Re-stamps the absolute frame level of every reachable full-frame effect
+--- surface. Effect descendants inherit native AuraSlot visibility directly, so
+--- this needs no aura scan and never reads AuraSlot:IsShown() -- it only
+--- re-asserts layout data on MSUF-owned frames.
+---
+--- The roots are children of native AuraSlot buttons inside a shared
+--- AuraContainer, and the client shifts every descendant when a container's own
+--- level changes -- which is how a configured Layer could end up above the very
+--- Name text it must render below. The geometry guards keep a container that
+--- already owns buttons from moving at all; this pass repairs the surfaces that
+--- are still writable, which is every menu-preview owner and every button that
+--- has not been sealed yet. A sealed one stays where it is instead of erroring.
 function Runtime.RefreshFrameEffects(parentFrame)
-    -- Effect descendants inherit native AuraSlot visibility directly. Refreshing
-    -- needs no aura scan and never reads AuraSlot:IsShown().
-    return parentFrame ~= nil
+    if not parentFrame then return false end
+    local buttons = parentFrame._msufA3SpellIndicatorEffectButtons
+    if type(buttons) ~= "table" then return false end
+    local healthBar = SpellIndicatorHealthBar(parentFrame)
+    if not healthBar then return false end
+    local any = false
+    for button in pairs(buttons) do
+        local effect = button and button._msufA3FrameEffectApplied
+        local root = button and button._msufA3SpellIndicatorEffectRoot
+        if type(effect) == "table" and root and root.SetFrameLevel
+            and CanWriteEffectSurface(root) then
+            root:SetFrameLevel(FrameEffectLevel(effect,
+                tostring(effect.type or "none"):lower(), parentFrame, healthBar))
+            any = true
+        end
+    end
+    return any
 end
 
 function Runtime.ReleaseContainerEffects(container, parentFrame)
@@ -1479,7 +1529,29 @@ local function SlotOptions(container, slot, buttonIndex)
     }
 end
 
-function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry)
+local function HasLiveNativeButton(container)
+    local slots = container and container._msufA3SpellIndicatorButtonSlots
+    if type(slots) ~= "table" then return false end
+    for i = 1, #slots do
+        if slots[i] and container[i] then return true end
+    end
+    return false
+end
+
+--- The container level is a birth property once native AuraButtons exist below
+--- it: moving it moves every one of them plus their effect surfaces, and a
+--- sealed AuraButton descendant cannot be written back afterwards. So the
+--- fixed-slot base is written only while the container is still empty. A real
+--- change reaches the frames through the recreate path, which builds fresh
+--- buttons under the new level.
+---
+--- `sharedLevelOwner` is set by the group-slot owner when a flowing AuraGroup
+--- shares this container. That lane is the container's layering authority --
+--- its buttons spawn at container + 1 and follow it -- so writing the
+--- fixed-slot base here as well moved the container twice per sync, down to the
+--- frame base and straight back up, dragging every already levelled AuraButton
+--- and effect surface along.
+function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry, sharedLevelOwner)
     if not (container and Runtime.IsRoot(slotRoot)) then return false end
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     if not parentFrame then return false end
@@ -1492,7 +1564,14 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry)
         container:SetAllPoints(root)
     end
     SyncFrameStrata(container, ResolveFrameStrata(parentFrame, slotRoot.strata))
-    if container.SetFrameLevel then container:SetFrameLevel(parentFrame:GetFrameLevel() or 0) end
+    if container.SetFrameLevel and sharedLevelOwner ~= true then
+        local level = parentFrame:GetFrameLevel() or 0
+        local current = container.GetFrameLevel and container:GetFrameLevel()
+        if issecretvalue(current) == true then current = nil end
+        if current ~= level and not HasLiveNativeButton(container) then
+            container:SetFrameLevel(level)
+        end
+    end
     local slots = container._msufA3SpellIndicatorButtonSlots
     -- Initialized AuraButtons can be forbidden while aura data is secret. This
     -- path updates only addon-owned geometry; a force request with live native
@@ -1515,7 +1594,9 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry)
             if not (slots and slots[i]) then SyncMissingFrame(parentFrame, slot, nil, container) end
         end
     end
-    Runtime.RefreshFrameEffects(parentFrame)
+    -- With a shared owner the container level is written after this call, so
+    -- re-stamping here would be undone again; that owner runs the refresh last.
+    if sharedLevelOwner ~= true then Runtime.RefreshFrameEffects(parentFrame) end
     if forceGeometry == true and not requiresRecreate then container._msufA3ForceSpellIndicatorGeometry = nil end
     return true
 end

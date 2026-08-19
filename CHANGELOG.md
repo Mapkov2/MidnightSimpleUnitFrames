@@ -1,5 +1,12 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.1-Beta3 - 2026-08-19
+
+### Fixes & Performance
+
+- Fixed a spell indicator's health-bar highlight covering the player name and the aura icons on live Group Frames, while the menu preview drew the same effect correctly underneath (#123). The effect rode along whenever its native aura container was re-levelled, so opening the settings or changing zone could flip the order either way; it now keeps the Layer it was configured with.
+- Full-Frame effect previews in the Group preview and in Edit Mode now paint through the same renderer the frames use, so Glow shows its real halo instead of four flat edges and Pulse animates with its live opacity.
+
 ## 6.1-Beta2 - 2026-08-18
 
 ### Highlights

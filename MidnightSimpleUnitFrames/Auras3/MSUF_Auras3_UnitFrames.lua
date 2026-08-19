@@ -4911,6 +4911,10 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
         end
     end
     container._msufA3ButtonFrameStrata = resolvedStrata
+    -- The container level above moves every descendant with it, including the
+    -- Pandemic full-frame effect surfaces bound to this lane's AuraButtons. Put
+    -- them back on their configured absolute Layer.
+    if parentFrame then SpellIndicatorsRuntime.RefreshFrameEffects(parentFrame) end
     if forceGeometry == true then container._msufA3ForceManagedAuraGeometry = nil end
     return true
 end
@@ -6474,7 +6478,9 @@ local function SyncGroupSlotsGeometry(container, groupSlots, parentFrame, forceG
         ok = SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame, forceGeometry) and ok
     end
     if spellRoot then
-        ok = SpellIndicatorsRuntime.SyncGeometry(container, spellRoot, parentFrame, forceGeometry) and ok
+        -- A flowing lane in the same container owns its level; see SyncGeometry.
+        ok = SpellIndicatorsRuntime.SyncGeometry(container, spellRoot, parentFrame, forceGeometry,
+            flowLane ~= nil) and ok
     end
     if flowLane then
         if spellRoot then container._msufA3GeomSig = nil end
@@ -6493,6 +6499,10 @@ local function SyncGroupSlotsGeometry(container, groupSlots, parentFrame, forceG
         container.createdButtons = container._msufA3FixedButtonCount
             + (flowLane and flowLane.max or 0)
     end
+    -- Last container-level write is done: re-assert the absolute level of every
+    -- full-frame effect surface so a moved container cannot carry it out of its
+    -- configured 0..30 slot.
+    SpellIndicatorsRuntime.RefreshFrameEffects(parentFrame)
     return ok
 end
 

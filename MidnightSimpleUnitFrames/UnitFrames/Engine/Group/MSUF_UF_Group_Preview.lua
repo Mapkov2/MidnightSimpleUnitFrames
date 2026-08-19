@@ -732,6 +732,17 @@ function GF.RefreshPreviewAuras(kind)
   return refreshed
 end
 
+local function HideSpellFrameEffectPreview(visual)
+  local owner = visual and visual._frameEffectOwner
+  if not owner then return false end
+  local runtime = MSUF and MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.SpellIndicators
+  if runtime and type(runtime.HidePreviewFrameEffect) == "function" then
+    return runtime.HidePreviewFrameEffect(owner) == true
+  end
+  owner:Hide()
+  return true
+end
+
 local function HideSpellIndicatorPreview(visual)
   if not visual then return end
   visual:Hide()
@@ -741,130 +752,48 @@ local function HideSpellIndicatorPreview(visual)
   if visual._timer then visual._timer:Hide() end
   if visual._stack then visual._stack:Hide() end
   if visual._durationBar then visual._durationBar:Hide() end
-  local effectRoot = visual._frameEffectRoot
-  if effectRoot then
-    if effectRoot._tint then effectRoot._tint:Hide() end
-    if effectRoot._name then effectRoot._name:Hide() end
-    for i = 1, #(effectRoot._edges or {}) do effectRoot._edges[i]:Hide() end
-    effectRoot:Hide()
-  end
+  HideSpellFrameEffectPreview(visual)
   local A3 = MSUF and MSUF.MSUF_Auras3
   if A3 and type(A3.ApplyIconStylePreview) == "function" then
     A3.ApplyIconStylePreview(visual, nil)
   end
 end
 
-local function EnsureSpellFrameEffectPreview(visual, frame)
-  local root = visual._frameEffectRoot
-  if root then return root end
-  root = CreateFrame("Frame", nil, frame)
-  root:EnableMouse(false)
-  if root.SetMouseMotionEnabled then root:SetMouseMotionEnabled(false) end
-  root._tint = root:CreateTexture(nil, "OVERLAY")
-  root._tint:SetTexture(PREVIEW_WHITE)
-  root._edges = {}
-  for i = 1, 4 do
-    root._edges[i] = root:CreateTexture(nil, "OVERLAY")
-    root._edges[i]:SetTexture(PREVIEW_WHITE)
+--- Full-Frame effect surfaces for the Group preview.  The owner is a child of
+--- the preview frame rather than of the icon host, because an effect-only slot
+--- (Display as: none) hides that host while the effect must stay visible.
+local function EnsureSpellFrameEffectOwner(visual, frame)
+  local owner = visual._frameEffectOwner
+  if not owner then
+    owner = CreateFrame("Frame", nil, frame)
+    owner:EnableMouse(false)
+    if owner.SetMouseMotionEnabled then owner:SetMouseMotionEnabled(false) end
+    visual._frameEffectOwner = owner
+  elseif owner:GetParent() ~= frame then
+    owner:SetParent(frame)
   end
-  root._name = root:CreateFontString(nil, "OVERLAY")
-  visual._frameEffectRoot = root
-  return root
+  owner:ClearAllPoints()
+  owner:SetAllPoints(frame)
+  return owner
 end
 
+--- Previews paint through the live renderer, exactly like the UnitFrame preview
+--- does.  A second preview-only implementation had already drifted -- it drew
+--- Glow as four edges instead of the runtime's radial halo and used its own
+--- Pulse alpha and blend modes -- and only one of the two could ever match the
+--- frames.  Layer, priority, thickness and colors now come from the single
+--- owner, so preview and runtime cannot disagree again.
 local function ApplySpellFrameEffectPreview(visual, frame, slot)
+  local runtime = MSUF and MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.SpellIndicators
   local effect = slot and slot.frameEffect
-  local effectKind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
-  if effectKind ~= "healthtint" and effectKind ~= "border" and effectKind ~= "glow"
-    and effectKind ~= "pulse" and effectKind ~= "namecolor" then
-    local root = visual._frameEffectRoot
-    if root then
-      if root._tint then root._tint:Hide() end
-      if root._name then root._name:Hide() end
-      for i = 1, #(root._edges or {}) do root._edges[i]:Hide() end
-      root:Hide()
-    end
-    return false
-  end
-
   local health = frame and (frame.hpBar or frame.Health or frame.health)
-  local target = health and health.GetStatusBarTexture and health:GetStatusBarTexture()
-  local nameSource = frame and (frame.Name or frame.name or frame.NameText or frame.nameText or frame._nameFS)
-  if (effectKind == "namecolor" and not nameSource)
-    or (effectKind ~= "namecolor" and not (health and target)) then
+  if not (visual and frame and health and type(effect) == "table"
+    and runtime and type(runtime.ApplyPreviewFrameEffect) == "function") then
+    HideSpellFrameEffectPreview(visual)
     return false
   end
-
-  local root = EnsureSpellFrameEffectPreview(visual, frame)
-  root:ClearAllPoints()
-  root:SetAllPoints(health or frame)
-  local layers = MSUF and MSUF.UF and MSUF.UF.Layers or {}
-  if root.SetFrameLevel and frame.GetFrameLevel then
-    local priority = max(1, min(10, tonumber(effect.priority) or 5))
-    local targetOwner = health
-    if effectKind == "namecolor" then
-      targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or frame
-    end
-    root:SetFrameLevel(layers.AuraEffectLevel and layers.AuraEffectLevel(effect.layer, priority, targetOwner)
-      or layers.ElementLevel and layers.ElementLevel(effect.layer, 0,
-      11 - priority)
-      or ((frame:GetFrameLevel() or 0)
-        + (tonumber(layers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1)
-        + (11 - priority)
-        + max(0, min(30, tonumber(effect.layer) or 0))))
-  end
-  root._tint:Hide()
-  root._name:Hide()
-  for i = 1, #root._edges do root._edges[i]:Hide() end
-
-  local color = type(effect.color) == "table" and effect.color or {}
-  local r, g, b, a = tonumber(color[1]) or 1, tonumber(color[2]) or 1,
-    tonumber(color[3]) or 1, tonumber(color[4]) or 1
-  if effectKind == "healthtint" then
-    root._tint:ClearAllPoints()
-    root._tint:SetAllPoints(target)
-    if root._tint.SetBlendMode then root._tint:SetBlendMode("BLEND") end
-    root._tint:SetVertexColor(r, g, b, tonumber(effect.tintAlpha) or a)
-    root._tint:Show()
-  elseif effectKind == "namecolor" then
-    local name = root._name
-    local font, fontSize, flags
-    if nameSource.GetFont then font, fontSize, flags = nameSource:GetFont() end
-    if font and fontSize then name:SetFont(font, fontSize, flags) end
-    name:ClearAllPoints()
-    name:SetAllPoints(nameSource)
-    name:SetText(nameSource.GetText and nameSource:GetText() or "")
-    name:SetTextColor(r, g, b, a)
-    name:Show()
-  else
-    local thickness = max(1, min(32, tonumber(effect.thickness) or (effectKind == "glow" and 3 or 2)))
-    if effectKind == "glow" then thickness = thickness + 2 end
-    local top, bottom, left, right = root._edges[1], root._edges[2], root._edges[3], root._edges[4]
-    top:ClearAllPoints()
-    top:SetPoint("TOPLEFT", target, "TOPLEFT", -thickness, thickness)
-    top:SetPoint("TOPRIGHT", target, "TOPRIGHT", thickness, thickness)
-    top:SetHeight(thickness)
-    bottom:ClearAllPoints()
-    bottom:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -thickness, -thickness)
-    bottom:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", thickness, -thickness)
-    bottom:SetHeight(thickness)
-    left:ClearAllPoints()
-    left:SetPoint("TOPLEFT", top, "BOTTOMLEFT")
-    left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT")
-    left:SetWidth(thickness)
-    right:ClearAllPoints()
-    right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT")
-    right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT")
-    right:SetWidth(thickness)
-    local edgeAlpha = effectKind == "glow" and min(1, a + 0.16)
-      or (effectKind == "pulse" and a * 0.72 or a)
-    for i = 1, 4 do
-      root._edges[i]:SetVertexColor(r, g, b, edgeAlpha)
-      root._edges[i]:Show()
-    end
-  end
-  root:Show()
-  return true
+  return runtime.ApplyPreviewFrameEffect(EnsureSpellFrameEffectOwner(visual, frame),
+    effect, frame) == true
 end
 
 local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
