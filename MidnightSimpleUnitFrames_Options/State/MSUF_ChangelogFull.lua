@@ -8,86 +8,30 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "067B0789F828801EA9E1EEAD391D29ABC3EA006BCF729121C4EB1007F83F50F9",
-    currentVersion = "6.1-Beta4",
+    sourceSha256 = "1FC3AF7D8B63EAFE744EDE16CB19A9840058790F92D55E2C0C367EC93A42C2B1",
+    currentVersion = "6.1",
     historyFromVersion = "6.02",
-    previousVersion = "6.1-Beta3",
-    rangeLabel = "6.1-Beta3 -> 6.1-Beta4",
+    previousVersion = "6.09",
+    rangeLabel = "6.09 -> 6.1",
     entries = {
         {
-            version = "6.1-Beta4",
+            version = "6.1",
             date = "2026-08-19",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Power text on the Target, Focus, Pet and Boss frames follows the unit you are actually on again. With *Colour power text by type* enabled the colour was resolved once and then kept across every target change, so a Focus or Rage target could stay on the previous target's colour, or sit on Mana blue for the rest of the session (#125). Frames with the power bar switched off were affected the most, because they had no bar to take fresh resource data from.",
+                            text = "The Raid Group indicator now has its own Size slider in Status icons, on every frame that can show it. It used to render at the frame's name font size with no way to change it; an untouched profile keeps that size, so nothing moves until you drag the slider.",
                             link = {
-                                pageKey = "uf_target",
-                                query = "show power text",
-                                label = "Show Power Text",
-                                sectionId = "text",
-                                controlId = "menu2.uf_target.unit.text.power.show",
-                                settingKey = "target.showPowerText",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Power text no longer falls back to the Mana colour when a unit reports no resource at all. It renders the configured text colour instead, which is what those slots show with colour by power type switched off.",
-                        "The range fade check now retires completely once nothing is left to sample. Only units MSUF has no range event for keep the timer running, so a state without such a unit costs nothing while idle instead of waking up every 0.75 to 2 seconds.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.1-Beta3",
-            date = "2026-08-19",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Boss frames no longer freeze at the range fade they happened to have when the pull started. Boss units have no range event of their own, so the periodic check behind *Enable Range Fade* now keeps running in combat instead of stopping at the encounter start.",
-                            link = {
-                                pageKey = "uf_boss",
-                                query = "enable range fade",
-                                label = "Enable Range Fade",
-                                sectionId = "range_fade",
-                                controlId = "menu2.uf_boss.unit.range_fade.enabled",
-                                settingKey = "boss.rangeFadeEnabled",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed a spell indicator's health-bar highlight covering the player name and the aura icons on live Group Frames, while the menu preview drew the same effect correctly underneath (#123). The effect rode along whenever its native aura container was re-levelled, so opening the settings or changing zone could flip the order either way; it now keeps the Layer it was configured with.",
-                        "Full-Frame effect previews in the Group preview and in Edit Mode now paint through the same renderer the frames use, so Glow shows its real halo instead of four flat edges and Pulse animates with its live opacity.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.1-Beta2",
-            date = "2026-08-18",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Added a Power width slider to the Class Resources > Player Power card, where Width mode \"Manual\" previously had no width to set. Dragging it releases *Sync width to Class Resource*, because that sync outranks an explicit width.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "power width",
-                                label = "Power width",
-                                sectionId = "classpower_detached_power",
-                                controlId = "menu2.classpower.advanced.detached.power.layout.width",
-                                settingKey = "player.detachedPowerBarWidth",
+                                pageKey = "uf_player",
+                                query = "raid group size",
+                                label = "Size",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_player.unit.status.selected.size",
+                                settingKey = "player.raidGroupNameSize",
+                                prepareKind = "unitStatus",
+                                prepareValue = "raidgroupname",
                             },
                         },
                     },
@@ -95,44 +39,12 @@ local data = {
                 {
                     title = "Changes",
                     bullets = {
-                        "Switching the Active profile now offers a UI reload: frames re-apply at once, but settings that are only read at load time otherwise keep the old profile's values until the next reload.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Colour changes on the Colors page now repaint the Resources strip in the preview immediately instead of leaving it on the previous colours until the tab was rebuilt.",
-                        "Changing a spell indicator's Display as shape now re-gates that section right away; controls belonging to the previous shape, such as Icon Effect, could stay visible until an unrelated click refreshed the page.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.1-Beta1",
-            date = "2026-08-18",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Separated the Augmentation Evoker resources: Ebon Might now renders on the Player power bar, Essence is an ordinary Class Resource, and Mana moves to Alternative Mana. The Ebon Might bar takes its height, position, texture, background, border and text from the Player Power settings; only its fill colour still comes from the Ebon Might colour entry.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "ebon might",
-                                label = "Ebon Might",
-                                sectionId = "classpower_behavior",
-                                controlId = "menu2.classpower.advanced.behavior.ebon",
-                                settingKey = "bars.showEbonMight",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
+                        "Separated the Augmentation Evoker resources: Ebon Might now renders on the Player power bar, Essence is an ordinary Class Resource, and Mana moves to Alternative Mana. The Ebon Might bar takes its height, position, texture, background, border and text from the Player Power settings; only its fill colour still comes from the Ebon Might colour entry.",
                         "Class Resource width, offsets, pixel snapping and cooldown anchoring finally apply to an Augmentation Evoker's Essence bar; it used to silently copy the power bar's width and anchor and ignore those settings.",
                         "Turning the Player Power bar off now also turns off the Ebon Might display instead of leaving an empty bar behind.",
                         "Ebon Might's bar and duration text follow live setting changes instead of freezing at the values they had when the native aura slot was first created.",
+                        "Added a Power width slider to the Class Resources > Player Power card, where Width mode \"Manual\" previously had no width to set. Dragging it releases *Sync width to Class Resource*, because that sync outranks an explicit width.",
+                        "Switching the Active profile now offers a UI reload: frames re-apply at once, but settings that are only read at load time otherwise keep the old profile's values until the next reload.",
                         "The group preview LAYERS chips now apply to the preview frames drawn on screen as well as to the preview box in the menu, and Shift-click solo shows only that one element on them.",
                         "Cooldown and stack numbers on the preview's aura icons follow the CD/Stack chip, and the chip is greyed out when no enabled aura lane prints a timer or stack count.",
                     },
@@ -140,8 +52,20 @@ local data = {
                 {
                     title = "Fixes & Performance",
                     bullets = {
+                        "Power text on the Target, Focus, Pet and Boss frames follows the unit you are actually on again. With *Colour power text by type* enabled the colour was resolved once and then kept across every target change, so a Focus or Rage target could stay on the previous target's colour, or sit on Mana blue for the rest of the session (#125). Frames with the power bar switched off were affected the most, because they had no bar to take fresh resource data from.",
+                        "Power text no longer falls back to the Mana colour when a unit reports no resource at all. It renders the configured text colour instead, which is what those slots show with colour by power type switched off.",
+                        "Boss frames no longer freeze at the range fade they happened to have when the pull started. Boss units have no range event of their own, so the periodic check behind *Enable Range Fade* now keeps running in combat instead of stopping at the encounter start.",
+                        "The range fade check now retires completely once nothing is left to sample. Only units MSUF has no range event for keep the timer running, so a state without such a unit costs nothing while idle instead of waking up every 0.75 to 2 seconds.",
+                        "The Assistant can see and set the Power width slider again. Its generated control schema had not been rebuilt since the slider landed, so the one control added this cycle was missing from everything the Assistant can reach by name.",
+                        "The Assistant can now drive the Active auras on this frame dropdown in the blacklist workspace. It was the only control in that section it could not see, so a live scan could be started and blocked by hand but not by request.",
+                        "Aura name resolution compiles its alias list once per container instead of rebuilding an iterator on every event, which is the hot path whenever the client falls back to a full aura update in a raid.",
+                        "The over-absorb glow decides once per render pass whether the absorb value is protected, instead of re-checking it at every branch that writes to the bar.",
+                        "Fixed a spell indicator's health-bar highlight covering the player name and the aura icons on live Group Frames, while the menu preview drew the same effect correctly underneath (#123). The effect rode along whenever its native aura container was re-levelled, so opening the settings or changing zone could flip the order either way; it now keeps the Layer it was configured with.",
+                        "Full-Frame effect previews in the Group preview and in Edit Mode now paint through the same renderer the frames use, so Glow shows its real halo instead of four flat edges and Pulse animates with its live opacity.",
+                        "Changing a spell indicator's Display as shape now re-gates that section right away; controls belonging to the previous shape, such as Icon Effect, could stay visible until an unrelated click refreshed the page.",
+                        "Colour changes on the Colors page now repaint the Resources strip in the preview immediately instead of leaving it on the previous colours until the tab was rebuilt.",
                         "Fixed a raid frame block not staying where it was placed in Edit Mode: the saved position was converted between two internal formats with mismatched roster counts and drifted by up to 162 pixels, and a click that never moved could permanently lock the conversion out.",
-                        "Long castbar spell names are now shortened with a visible ellipsis that respects the bar width instead of being clipped by the renderer at an unpredictable spot; a name could previously disappear completely even when it was shorter than the configured limit.",
+                        "Long castbar spell names are now shortened with a visible ellipsis that respects the bar width instead of being clipped by the renderer at an unpredictable spot (#121); a 23-character name could previously disappear completely under a 25-character limit, because the client cuts a bounded line at a glyph-dependent position.",
                         "Turning off a castbar's cast time hands those pixels back to the spell name instead of leaving the gap reserved, so names truncate far less often.",
                         "Fixed an Augmentation Evoker's player health bar shrinking by the extra composite height, and the power bar showing frozen Mana numbers under the Ebon Might duration text.",
                         "If the UI starts in combat and the native aura container cannot be created, an Augmentation Evoker's power bar falls back to a normal Mana bar and retries after combat instead of showing an empty bar.",
@@ -373,112 +297,6 @@ local data = {
             },
         },
         {
-            version = "6.08-Beta2",
-            date = "2026-08-15",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Added an optional, class-colored interrupter name beside the castbar's interrupted state.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "show interrupter name",
-                                label = "Show interrupter name",
-                                sectionId = "castbar",
-                                controlId = "menu2.uf_target.unit.castbar.show_interrupt_source",
-                                settingKey = "target.showInterruptSource",
-                                prepareKind = "unitCastbarTab",
-                                prepareValue = "general",
-                            },
-                        },
-                        {
-                            text = "Added an optional Player Frame Stance text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "stance",
-                                label = "Stance",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.selected.enabled",
-                                settingKey = "player.showStanceIndicator",
-                                prepareKind = "unitStatus",
-                                prepareValue = "stance",
-                            },
-                        },
-                        {
-                            text = "Added explicit Uniform and Width & height portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "portrait size mode",
-                                label = "Size mode",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitsizemode",
-                                settingKey = "player.portraitSizeMode",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "geometry",
-                            },
-                        },
-                        {
-                            text = "Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "portrait edge softness",
-                                label = "Portrait edge softness",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitedgesoftness",
-                                settingKey = "player.portraitEdgeSoftness",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "border",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Replaced the toolbar's New Task action with a dedicated See New Features changelog page whose highlighted change sentences link directly to their matching MSUF menu settings.",
-                        "Localized the new stance, portrait sizing, and portrait edge-softness controls across all 12 supported locales.",
-                        "Updated Assistant registrations, generated coverage data, search routing, and static search data for the new status and portrait controls.",
-                        "Corrected the bundled release history so features added after Beta 1 are listed under Beta 2 instead of the already-published Beta 1 package.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the Castbar General tab height after adding the interrupter-name option.",
-                        "Changed Target and Focus castbar identity refreshes from deferred callbacks to direct synchronous updates.",
-                        "Cleared the castbar driver's unused OnUpdate script once during construction instead of repeating the native transition on target swaps.",
-                        "Fixed player Unit Frames showing the fallback blue or another incorrect health color for identity-restricted PvP targets by routing every player class through Blizzard's native secret-safe class-color pipeline.",
-                        "Streamlined Unit Frame identity refreshes across bars, portraits, status text, regular text, and range fading so unchanged identity state avoids redundant work.",
-                        "Skipped player-only nickname-provider APIs for NPC units while retaining supported NPC nickname sources.",
-                        "Fixed Arena Group Frames using raid instead of party configuration, including runtime, Blizzard-frame ownership, Edit Mode, and previews.",
-                        "Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.",
-                        "Limited PvP indicator runtime to arenas, battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.08-Beta1",
-            date = "2026-08-15",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added an optional Slug font rendering mode for clearer, more consistent text across Unit and Group Frames.",
-                        "Added configurable AFK timers to Unit and Group Frame status text.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Group Frame absorb overlays ignoring the configured opacity.",
-                        "Fixed aura icon zoom scaling when a debuff border is active.",
-                    },
-                },
-            },
-        },
-        {
             version = "6.07",
             date = "2026-08-15",
             sections = {
@@ -509,84 +327,6 @@ local data = {
                         "Fixed Level, Race, Class, and other name-relative status text drifting away from shortened or repositioned Unit Frame names.",
                         "Fixed stale Player portraits, Unit Aura settings writing to the wrong lane, and Objective Tracker state leaking through MSUF's Edit Mode bridge.",
                         "Fixed Class Resource preview text handles becoming trapped behind higher-layer bar visuals.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.07-Beta4",
-            date = "2026-08-14",
-            sections = {
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Level, Race, and Class text with Left to name / Right to name anchors floating away from shortened names. The text now follows the rendered name edge and only snaps to the shortening cut while the name actually overflows its configured width.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.07-Beta3",
-            date = "2026-08-14",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added direct Edit Mode popup controls for Custom Aura 1-4, Dots on target, and Player Defensive Buffs. Each lane can now adjust position, size, and spacing with reset, undo, Boss synchronization, Menu focus, and Assistant parity.",
-                        "Restored Spell Indicator Display as: Bar with Blizzard's native C-side aura-duration StatusBar. Bars keep their configured geometry, color, alpha and layer while adding Growth-controlled fill direction, optional native smoothing and movable native timer text without Lua polling.",
-                        "Increased the Back and Forward navigation buttons for easier Menu navigation.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Class Resource preview text handles becoming stuck behind higher-layer bar visuals.",
-                        "Fixed Group Frame Spell Indicator glow previews differing from runtime effects. The preview now uses the shared runtime renderer and cleans up its effect owners when suspended.",
-                        "Fixed Unit Aura handles losing their first-click selection when opening a lane rebuilt its settings page. Selection is now restored only onto the newly created Preview handle.",
-                        "Fixed Spell Indicator full-frame effect opacity and layer ordering against render targets, Aura names, and other text. Persistent effects remain visible while editing, and the selected Group Frame Name Overlay stays above its source text.",
-                        "Fixed name-relative Unit Frame status text ignoring the configured Name anchor and offsets.",
-                        "Fixed Assistant questions and navigation requests applying settings, including enum values that were never stated. Pure small talk now keeps its conversation context without entering a settings lane.",
-                        "Fixed Assistant requests about borders, Auras, text, colors, and other frame details falling through to whole-frame toggles or unrelated position controls. Scoped Highlight Borders now control their Aggro, Dispel, and Purge outlines together.",
-                        "Fixed narrow Group Frame position phrases matching unrelated horizontal or vertical layout controls.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.07-Beta2",
-            date = "2026-08-14",
-            sections = {
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Texture Layer controls writing to the wrong texture after switching slots or opening another texture from the preview. Each control now remains bound to its own slot, and protected HP-driven alpha values are no longer cached or compared from Lua.",
-                        "Fixed Spell Indicator icons and full-frame effects competing for AuraSlot ownership. Both styles now share one native Blizzard assignment while retaining independent element layers. Unsupported expiration-timed full-frame effects now fall back to the active-aura effect without secret-value hooks or polling.",
-                        "Improved Assistant handling for conversational bar dimensions, rounded-frame requests, no-target load conditions, Raid filters versus Raid frame scope, Aura lane attributes, and outline layer wording.",
-                        "Fixed narrow Assistant navigation, reset, and profile-copy requests being interpreted as broader setting changes.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.07-Beta1",
-            date = "2026-08-14",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Texture Layers are now three fully configurable, HP-reactive decoration slots. Each texture can follow the shared low/mid/high HP gradient, switch to class or custom colors above a threshold, change opacity or appear only at low health, and combine current-target and combat-state rules. The reorganized setup adds quick Text Background and Highlight presets plus runtime-faithful previews, while HP reactions reuse the existing Health update path without polling.",
-                        "Added Chunked Health and Power Loss for Unit and Group Frames. The live bar updates immediately while a short, configurable loss trail shows what was just spent or lost; Smooth and Chunked modes are mutually exclusive and share runtime-faithful previews, rounded-frame support, copy controls, and dedicated loss colors.",
-                        "Added independent profile-wide switches for Blizzard's player Buff Frame and normal Debuff icons near the minimap. Private Auras and Deadly Debuff warnings remain visible, and the feature stays passive with no polling or recurring MSUF work.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Group Aura lanes and Spell Indicators remaining visible for members who are offline, phased, on another map, or inside a different instance group. Presence now composes with helpful/hostile assistability and fails closed through coalesced lifecycle events. Identity, phase, and connection changes remain combat-live, while cold map and instance reconciliation is deferred into one post-combat pass.",
-                        "Removed the Objective Tracker from MSUF's Blizzard Edit Mode bridge to avoid propagating dirty layout state into combat-secret UI paths. The tracker remains fully Blizzard-owned, and Group Edit Mode now relies on its single shared state listener.",
-                        "Fixed native Player portraits occasionally remaining stale or blank after login or world entry.",
-                        "Fixed several Unit Aura layout settings writing to the wrong scope, including lane visibility and separate Buff/Debuff style padding.",
-                        "Improved Assistant handling for natural highlight on/off requests, texture names without connector words, border styles and opacity, outline layers, absorb height, gradient intensity, and how-to navigation. Unmatched navigation requests now offer the closest controls without changing settings.",
                     },
                 },
             },
