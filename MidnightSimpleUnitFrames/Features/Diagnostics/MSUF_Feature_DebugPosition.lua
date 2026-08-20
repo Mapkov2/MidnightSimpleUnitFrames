@@ -36,9 +36,11 @@ local function Fmt(n)
 end
 
 local function GetECV()
-    return (type(_G.MSUF_GetEffectiveCooldownFrame) == "function"
+    local frame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function"
         and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
         or _G["EssentialCooldownViewer"]
+    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+    return type(getSize) == "function" and getSize(frame) ~= nil and frame or nil
 end
 
 local function ECVLine()

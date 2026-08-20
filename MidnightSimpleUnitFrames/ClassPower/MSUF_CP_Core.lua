@@ -25,10 +25,8 @@ local function CoreUnitFrame(unit)
 end
 
 local function CP_IsUsableCooldownAnchorFrame(frame)
-    if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true then return false end
-    if frame.IsShown and not frame:IsShown() then return false end
-    local width = frame:GetWidth()
-    return type(width) == "number" and width > 0
+    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+    return type(getSize) == "function" and getSize(frame) ~= nil
 end
 
 local builders = _G.MSUF_CP_CORE_BUILDERS
@@ -363,11 +361,9 @@ builders.LAYOUT = function(E)
                 userW = cachedW
             else
                 local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
-                if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() then
-                    local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
-                    if type(cdmWidthFn) == "function" then
-                        userW = cdmWidthFn(cdmFrame, CP.container)
-                    end
+                local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
+                if type(cdmWidthFn) == "function" then
+                    userW = cdmWidthFn(cdmFrame, CP.container)
                 end
             end
             if not userW or userW < 30 then
@@ -730,15 +726,9 @@ builders.PRESENTATION = function(E)
     local _cpFontRev = 0
 
     local function CDM_GetScaledWidth(cdmFrame, targetFrame)
-        if not cdmFrame or not cdmFrame.GetWidth then return nil end
-        local w = cdmFrame:GetWidth()
-        if not w or w < 1 then return nil end
-        local cdmScale = (cdmFrame.GetEffectiveScale and cdmFrame:GetEffectiveScale()) or 1
-        local tgtScale = (targetFrame and targetFrame.GetEffectiveScale and targetFrame:GetEffectiveScale()) or 1
-        if cdmScale <= 0 then cdmScale = 1 end
-        if tgtScale <= 0 then tgtScale = 1 end
-        if cdmScale == tgtScale then return math_floor(w + 0.5) end
-        return math_floor(w * cdmScale / tgtScale + 0.5)
+        local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
+        local width = type(getScaledWidth) == "function" and getScaledWidth(cdmFrame, targetFrame) or nil
+        return width and math_floor(width + 0.5) or nil
     end
 
     local function CP_ApplyTextOffset()

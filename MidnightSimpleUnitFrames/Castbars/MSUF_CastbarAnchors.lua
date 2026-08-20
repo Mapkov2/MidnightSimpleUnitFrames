@@ -313,23 +313,24 @@ local function EffectiveCooldownViewer(viewerKey)
         and (_G.MSUF_GetEffectiveCooldownFrame and _G.MSUF_GetEffectiveCooldownFrame(viewerKey) or _G[viewerKey])
 end
 
-local function IsUsableCooldownWidthFrame(frame)
-    if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true then return false end
-    if frame.IsShown and not frame:IsShown() then return false end
-    local width = frame:GetWidth()
-    return type(width) == "number" and width > 0
+local function CooldownWidthFrameWidth(frame)
+    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+    return type(getSize) == "function" and getSize(frame) or nil
 end
 
 local function CooldownWidthSourceFrame(kind)
     local containerKey, viewerKey = WidthSourceNames(kind)
     local container = containerKey and _G[containerKey] or nil
-    if IsUsableCooldownWidthFrame(container) then return container end
+    local width = CooldownWidthFrameWidth(container)
+    if width then return container, width end
 
     local viewer = EffectiveCooldownViewer(viewerKey)
-    if IsUsableCooldownWidthFrame(viewer) then return viewer end
+    width = CooldownWidthFrameWidth(viewer)
+    if width then return viewer, width end
 
     local rawViewer = viewerKey and _G[viewerKey] or nil
-    if rawViewer ~= viewer and IsUsableCooldownWidthFrame(rawViewer) then return rawViewer end
+    width = rawViewer ~= viewer and CooldownWidthFrameWidth(rawViewer) or nil
+    if width then return rawViewer, width end
     return nil
 end
 
@@ -349,7 +350,11 @@ local function WidthFromSource(unit, kind, targetFrame)
         return UnitframeVisibleWidth(unit, targetFrame)
     end
 
-    return ScaledWidth(CooldownWidthSourceFrame(kind), targetFrame)
+    local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
+    local frame, width = CooldownWidthSourceFrame(kind)
+    return type(getScaledWidth) == "function"
+        and getScaledWidth(frame, targetFrame, width)
+        or nil
 end
 
 -- The configured (and validated) width-source kind for a unit, or nil.
@@ -496,6 +501,18 @@ local function StoreFrameSignature(state, offset, frame)
     return offset + 5, changed
 end
 
+-- Cooldown providers are foreign frames whose raw geometry may become secret.
+-- Their validated width plus one protected scale probe is the only signature
+-- needed by width-sync; height changes cannot alter the receiving castbar width.
+local function StoreCooldownFrameSignature(state, offset, frame, width)
+    local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
+    local scaledWidth = type(getScaledWidth) == "function" and getScaledWidth(frame, nil, width) or nil
+    scaledWidth = scaledWidth and Round(scaledWidth * 100) or 0
+    local changed = state[offset] ~= frame or state[offset + 1] ~= scaledWidth
+    state[offset], state[offset + 1] = frame, scaledWidth
+    return offset + 2, changed
+end
+
 -- Compare and update a unit's numeric width-source snapshot.
 local function WidthSourceNeedsReanchor(g, unit)
     unit = NormalizeUnit(unit)
@@ -541,8 +558,9 @@ local function WidthSourceNeedsReanchor(g, unit)
     else
         if state.count ~= 1 then changed = true end
         state.count = 1
+        local frame, width = CooldownWidthSourceFrame(matchSrc)
         local sliceChanged
-        offset, sliceChanged = StoreFrameSignature(state, offset, CooldownWidthSourceFrame(matchSrc))
+        offset, sliceChanged = StoreCooldownFrameSignature(state, offset, frame, width)
         changed = sliceChanged or changed
     end
 

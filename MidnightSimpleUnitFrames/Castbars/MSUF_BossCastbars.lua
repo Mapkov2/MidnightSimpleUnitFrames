@@ -491,6 +491,69 @@ end
 local bossPoolRefreshQueued = false
 local bossPoolRefreshGeneration = 0
 local bossPoolRefreshPendingGeneration
+local bossPoolPrewarmQueued = false
+local bossPoolPrewarmGeneration = 0
+local bossPoolPrewarmPendingGeneration
+local bossPoolPrewarmIndex
+
+local FlushBossPoolPrewarm
+
+local function ScheduleBossPoolPrewarmStep()
+    if bossPoolPrewarmQueued then return true end
+    local scheduleOnce = _G.MSUF_ScheduleOnce
+    if type(scheduleOnce) == "function" then
+        bossPoolPrewarmQueued = true
+        scheduleOnce("MSUF_BOSS_POOL_PREWARM", FlushBossPoolPrewarm)
+        return true
+    end
+    if C_Timer and C_Timer.After then
+        bossPoolPrewarmQueued = true
+        C_Timer.After(0, FlushBossPoolPrewarm)
+        return true
+    end
+    -- The prewarm is optional; without a real frame boundary, leave the
+    -- authoritative PrepareForCast validation in charge instead of moving all
+    -- hidden-bar layout work into one synchronous burst.
+    return false
+end
+
+FlushBossPoolPrewarm = function()
+    bossPoolPrewarmQueued = false
+    local generation = bossPoolPrewarmPendingGeneration
+    if generation == nil or generation ~= bossPoolPrewarmGeneration then
+        bossPoolPrewarmPendingGeneration = nil
+        bossPoolPrewarmIndex = nil
+        return
+    end
+
+    local bossCastbars = _G.MSUF_BossCastbars
+    local index = bossPoolPrewarmIndex or 1
+    local frame = bossCastbars and bossCastbars[index]
+    if frame and not BossUnitUnavailable(frame.unit) and frame.UpdateAnchor then
+        -- At most one provider/size/layout validation per rendered frame. A
+        -- later real cast still calls PrepareForCast, so provider changes or a
+        -- cast racing this queue cannot expose stale geometry.
+        frame:UpdateAnchor(false)
+    end
+
+    index = index + 1
+    if bossCastbars and index <= #bossCastbars then
+        bossPoolPrewarmIndex = index
+        if ScheduleBossPoolPrewarmStep() then return end
+    end
+    bossPoolPrewarmPendingGeneration = nil
+    bossPoolPrewarmIndex = nil
+end
+
+local function QueueBossPoolPrewarm()
+    bossPoolPrewarmGeneration = bossPoolPrewarmGeneration + 1
+    bossPoolPrewarmPendingGeneration = bossPoolPrewarmGeneration
+    bossPoolPrewarmIndex = 1
+    if not ScheduleBossPoolPrewarmStep() then
+        bossPoolPrewarmPendingGeneration = nil
+        bossPoolPrewarmIndex = nil
+    end
+end
 
 local function FlushBossPoolLifecycle()
     bossPoolRefreshQueued = false
@@ -523,6 +586,9 @@ end
 local function CancelBossPoolLifecycle()
     bossPoolRefreshGeneration = bossPoolRefreshGeneration + 1
     bossPoolRefreshPendingGeneration = nil
+    bossPoolPrewarmGeneration = bossPoolPrewarmGeneration + 1
+    bossPoolPrewarmPendingGeneration = nil
+    bossPoolPrewarmIndex = nil
 end
 
 local function HandleBossPoolLifecycle(event, eventUnit)
@@ -564,6 +630,9 @@ local function HandleBossPoolLifecycle(event, eventUnit)
         -- Targetability stays immediate and unit-specific; ENCOUNTER_END stays
         -- immediate and invalidates this queued work.
         QueueBossPoolLifecycle()
+        if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" or event == "ENCOUNTER_START" then
+            QueueBossPoolPrewarm()
+        end
     end
 end
 

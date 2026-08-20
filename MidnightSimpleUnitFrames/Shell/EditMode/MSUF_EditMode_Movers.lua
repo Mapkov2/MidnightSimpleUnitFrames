@@ -848,7 +848,8 @@ local function MSUF_GetAnchorFrame()
         or g.anchorToCooldown == true
     if cooldownAnchorEnabled then
         local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
-        if ecv then return ecv end
+        local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+        if type(getSize) == "function" and getSize(ecv) ~= nil then return ecv end
         return UIParent
     end
     local anchorName = g.anchorName

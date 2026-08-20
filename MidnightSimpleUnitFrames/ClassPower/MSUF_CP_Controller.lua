@@ -793,20 +793,37 @@ ExportPublic("MSUF_ClassPower_InvalidateColors", MSUF_ClassPower_InvalidateColor
 
 --- Charged / Empowered Combo Points (Echoing Reprimand, Supercharged CP, etc.)
 --- GetUnitChargedPowerPoints("player") returns a table of 1-based indices
---- that represent which combo point slots are "charged". These are non-secret
---- in WoW 12.0 builds.
+--- that represent which combo point slots are "charged". The result is
+--- SecretWhenUnitPowerRestricted in Midnight, so inaccessible combat data must
+--- fail closed and be re-read on PLAYER_REGEN_ENABLED.
 local _chargedMap = {}    --- reused [index] = true map
 local _chargedAny = false
 
 local function RefreshChargedPoints()
+    if type(GetUnitChargedPowerPoints) ~= "function" then
+        for index in pairs(_chargedMap) do
+            _chargedMap[index] = nil
+        end
+        _chargedAny = false
+        return true
+    end
+
+    local indices = GetUnitChargedPowerPoints("player")
+    if not CanAccessOptionalTableValue(indices) then
+        --- Never retain a readable pre-combat slot map as current combat state.
+        --- The active Rogue binding guarantees a fresh read after combat ends.
+        for index in pairs(_chargedMap) do
+            _chargedMap[index] = nil
+        end
+        _chargedAny = false
+        return false
+    end
+
     for index in pairs(_chargedMap) do
         _chargedMap[index] = nil
     end
     _chargedAny = false
-    if type(GetUnitChargedPowerPoints) ~= "function" then return end
-
-    local indices = GetUnitChargedPowerPoints("player")
-    if not CanAccessTableValue(indices) or #indices == 0 then return end
+    if indices == nil then return true end
 
     for i = 1, #indices do
         local idx = indices[i]
@@ -815,6 +832,7 @@ local function RefreshChargedPoints()
             _chargedAny = true
         end
     end
+    return true
 end
 
 --- Charged/empowered color resolution
@@ -2157,12 +2175,13 @@ local function FullRefresh()
         end)
     end
 
-    --- Ele Shaman: main power bar ALWAYS shows Mana (Maelstrom is UnitPowerType default).
-    --- showEleMaelstrom only controls whether the class resource bar displays Maelstrom.
-    --- Flag is unconditional for Ele spec -> all hot paths (UnitframeCore, Text) override pType to Mana.
-    local isEleShaman = (cpEnabled and PLAYER_CLASS == "SHAMAN" and GetSpec and GetSpec() == CPK.SPEC.SHAMAN_ELEMENTAL)
-    local eleMaelChanged = ((isEleShaman or false) ~= (_G.MSUF_EleMaelstromActive == true))
-    ExportPublic("MSUF_EleMaelstromActive", isEleShaman or false)
+    --- Elemental: only move Player Power to Mana while Maelstrom actually owns
+    --- the Class Resource row. If that opt-in row is disabled (or a vehicle
+    --- replaces it), keep the primary Maelstrom resource visible on Player.
+    local isEleMaelstrom = (cpEnabled and PLAYER_CLASS == "SHAMAN"
+        and powerType == PT.Maelstrom and renderMode == CPK.MODE.CONTINUOUS) or false
+    local eleMaelChanged = (isEleMaelstrom ~= (_G.MSUF_EleMaelstromActive == true))
+    ExportPublic("MSUF_EleMaelstromActive", isEleMaelstrom)
     --- Force player power bar refresh so it immediately switches Mana ↔ Maelstrom
     if eleMaelChanged then
         if _G.MSUF_RefreshPlayerPowerBar then
@@ -2255,10 +2274,10 @@ local function FullRefresh()
 
     --- Shadow Priest: when showShadowMana is ON, main power bar shows Mana
     --- instead of Insanity. Insanity moves to CP class resource (CONTINUOUS).
-    local isShadowMana = (cpEnabled and PLAYER_CLASS == "PRIEST" and GetSpec and GetSpec() == CPK.SPEC.PRIEST_SHADOW
-        and b.showShadowMana == true)
-    local shadowChanged = ((isShadowMana or false) ~= (_G.MSUF_ShadowManaActive == true))
-    ExportPublic("MSUF_ShadowManaActive", isShadowMana or false)
+    local isShadowMana = (cpEnabled and PLAYER_CLASS == "PRIEST"
+        and powerType == PT.Insanity and renderMode == CPK.MODE.CONTINUOUS) or false
+    local shadowChanged = (isShadowMana ~= (_G.MSUF_ShadowManaActive == true))
+    ExportPublic("MSUF_ShadowManaActive", isShadowMana)
     if shadowChanged then
         if _G.MSUF_RefreshPlayerPowerBar then
             _G.MSUF_RefreshPlayerPowerBar()
@@ -2679,10 +2698,8 @@ end
 
 function CP.CDMWidthFrameUsable(frameName)
     local cdm = CP_CDMWidthResolveFrame(frameName)
-    if not (cdm and cdm.GetWidth) or cdm._msufLegacyCooldownAnchor == true then return false end
-    if cdm.IsShown and not cdm:IsShown() then return false end
-    local w = cdm:GetWidth()
-    return type(w) == "number" and w >= 1
+    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+    return type(getSize) == "function" and getSize(cdm) ~= nil
 end
 
 function CP.CDMWidthGetNames()
@@ -2699,12 +2716,9 @@ end
 
 function CP.CDMWidthReadSig(frameName)
     local cdm = CP_CDMWidthResolveFrame(frameName)
-    if not cdm or not cdm.GetWidth or (cdm.IsShown and not cdm:IsShown()) then return 0 end
-    local w = cdm:GetWidth()
-    if not w or w < 1 then return 0 end
-    local s = (cdm.GetEffectiveScale and cdm:GetEffectiveScale()) or 1
-    if s <= 0 then s = 1 end
-    return math_floor((w * s) + 0.5)
+    local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
+    local width = type(getScaledWidth) == "function" and getScaledWidth(cdm) or nil
+    return width and math_floor(width + 0.5) or 0
 end
 
 function CP.CDMWidthMarkChanged(tag, frameName, force)
@@ -2838,7 +2852,11 @@ CP_RefreshEventBindings = function()
     local wantRune = CP.visible and profile.rune == true
     local wantHealth = (CP.visible and profile.health == true) or PHP.visible
     local wantMaxHealth = (CP.visible and profile.health == true) or PHP.visible
-    local wantPointCharge = CP.visible and profile.pointCharge == true
+    local wantPointCharge = CP.visible
+        and profile.pointCharge == true
+        and CP.powerType == PT.ComboPoints
+        and CP.visual ~= nil
+        and CP.visual.showCharged == true
     local wantWarlockPred = CP.visible and profile.warlockPred == true
     local wantSpellSucceeded = CP.visible and profile.spellSucceeded == true
     local wantDisplayPower = CP.visible or AM.visible
@@ -2865,7 +2883,9 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_INTERRUPTED", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", wantSpellSucceeded, "player")
-    CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantRegen)
+    --- Charged point indices become readable again after combat. Keep only the
+    --- exit event for this repair; combat entry remains an auto-hide concern.
+    CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantRegen or wantPointCharge)
     CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantRegen)
     CP_SetEventBound(eventFrame, "PLAYER_DEAD", wantDeadAlive)
     CP_SetEventBound(eventFrame, "PLAYER_ALIVE", wantDeadAlive)
@@ -2971,12 +2991,13 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     if event == "UNIT_POWER_POINT_CHARGE" then
         if arg1 == "player" then
-            --- Only relevant for standard segmented mode (CP/HP)
-            if CP.renderMode == CPK.MODE.SEGMENTED then
+            --- Only Rogue Combo Points consume charged slot indices.
+            if CP.visible and CP.renderMode == CPK.MODE.SEGMENTED
+                and CP.powerType == PT.ComboPoints
+                and CP.visual and CP.visual.showCharged == true
+            then
                 RefreshChargedPoints()
-                if CP.visible and CP.powerType then
-                    CP_UpdateValues(CP.powerType, CP.currentMax)
-                end
+                CP_UpdateValues(CP.powerType, CP.currentMax)
             end
         end
         return
@@ -3029,6 +3050,10 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     --- Combat state change: re-evaluate auto-hide (OOC toggle)
     if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+        local refreshCharged = event == "PLAYER_REGEN_ENABLED"
+            and CP.visible and CP.renderMode == CPK.MODE.SEGMENTED
+            and CP.powerType == PT.ComboPoints
+            and CP.visual and CP.visual.showCharged == true
         if event == "PLAYER_REGEN_ENABLED" then
             if CP.augLifecycleDisablePending == true and CP.DisableNow then
                 CP.DisableNow()
@@ -3043,13 +3068,17 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
                 FullRefresh()
                 return
             end
+            if refreshCharged then
+                RefreshChargedPoints()
+            end
         end
         CP_RefreshEventBindings()
         if event == "PLAYER_REGEN_ENABLED" then
             CP.CDMWidthSyncLayouts(true)
         end
-        if _autoHideActive and CP.visible and CP.container then
-            --- Re-run the current mode's update to trigger CP_CheckAutoHide
+        if CP.visible and CP.container and (refreshCharged or _autoHideActive) then
+            --- Repaint the newly readable charged slots and/or re-evaluate the
+            --- current mode's auto-hide rules in the same targeted update.
             CP_RunActiveUpdate(CP.powerType, CP.currentMax)
         end
         return
@@ -3417,8 +3446,8 @@ ExportPublic("MSUF_SmoothPowerBar_Apply", CP.SmoothPowerBarApply)
 
 --- Complete the ClassPower module teardown. Active Aug is never routed here in
 --- combat: Disable() retains the live surface and the event driver calls this
---- once on PLAYER_REGEN_ENABLED. Clearing the public flag below makes the Power
---- element rebuild its bar as an ordinary Mana bar on the refresh at the end.
+--- once on PLAYER_REGEN_ENABLED. Clear every Player-power ownership flag before
+--- the refresh so no class-resource identity survives module shutdown.
 function CP.DisableNow()
     _CP_RefreshConfig()
     CP.augLifecycleRetryPending = false
@@ -3426,6 +3455,10 @@ function CP.DisableNow()
     CP.augLifecycleTarget = nil
 
     local augWasActive = CP.augCompositeActive == true or _G.MSUF_AugEvokerActive == true
+    local displayPowerWasOverridden = _G.MSUF_EleMaelstromActive == true
+        or _G.MSUF_ShadowManaActive == true
+    ExportPublic("MSUF_EleMaelstromActive", false)
+    ExportPublic("MSUF_ShadowManaActive", false)
 
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(false)
@@ -3436,7 +3469,7 @@ function CP.DisableNow()
     if AM.container then AM.container:Hide() end
     if PHP.container then PHP.container:Hide() end
     CP.visible, AM.visible, PHP.visible = false, false, false
-    if augWasActive and _G.MSUF_RefreshPlayerPowerBar then
+    if (augWasActive or displayPowerWasOverridden) and _G.MSUF_RefreshPlayerPowerBar then
         _G.MSUF_RefreshPlayerPowerBar()
     end
 end

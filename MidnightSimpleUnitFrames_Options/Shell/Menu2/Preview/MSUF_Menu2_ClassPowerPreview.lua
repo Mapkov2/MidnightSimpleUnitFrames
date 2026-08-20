@@ -1337,12 +1337,14 @@ local function RenderClassPower(preview, bars, player, spec)
     local elapsed = PreviewElapsed(preview)
     local animated = AnimationEnabled(preview)
     local animatedValue = animated and CPPreview.AnimatedValue and CPPreview.AnimatedValue(spec, elapsed) or nil
-    local isFull = CPPreview.IsFull and CPPreview.IsFull(spec, animatedValue) or false
+    local fullEnabled = false
     local fullR, fullG, fullB = r, g, b
     if CPPreview.ResolveFullColor then
-        local _, fr, fg, fb = CPPreview.ResolveFullColor(bars, token, r, g, b)
+        local enabled, fr, fg, fb = CPPreview.ResolveFullColor(bars, token, r, g, b)
+        fullEnabled = enabled == true
         fullR, fullG, fullB = fr, fg, fb
     end
+    local isFull = fullEnabled and CPPreview.IsFull and CPPreview.IsFull(spec, animatedValue) or false
     local runeOrder = spec.mode == "rune" and CPPreview.BuildRuneOrder and CPPreview.BuildRuneOrder({}, bars, spec, elapsed, animated) or nil
     local textColorR, textColorG, textColorB = CPTextColor(1, 1, 1)
     local textAlpha = CPTextAlpha()
@@ -1375,10 +1377,10 @@ local function RenderClassPower(preview, bars, player, spec)
             bg:SetVertexColor(bgr or 0, bgg or 0, bgb or 0, bgA)
             bg:Show()
             local sr, sg, sb = r, g, b
-            if isFull then
-                sr, sg, sb = fullR, fullG, fullB
-            elseif CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
+            if CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
                 sr, sg, sb = CPColor("CHARGED", 0.60, 0.20, 0.80)
+            elseif isFull then
+                sr, sg, sb = fullR, fullG, fullB
             elseif CPPreview.ResolveSlotColor then
                 sr, sg, sb = CPPreview.ResolveSlotColor(bars, token, i, r, g, b)
             end
@@ -1469,6 +1471,7 @@ local function RenderClassPower(preview, bars, player, spec)
         fullR = fullR,
         fullG = fullG,
         fullB = fullB,
+        fullEnabled = fullEnabled,
         filledA = filledA,
         emptyA = emptyA,
         textColorR = textColorR,
@@ -1839,7 +1842,8 @@ local function UpdateClassPowerAnimation(preview, frame)
     if frame.IsShown and not frame:IsShown() then return true end
     local elapsed = PreviewElapsed(preview)
     local animatedValue = CPPreview.AnimatedValue and CPPreview.AnimatedValue(spec, elapsed) or nil
-    local isFull = CPPreview.IsFull and CPPreview.IsFull(spec, animatedValue) or false
+    local isFull = state.fullEnabled == true
+        and CPPreview.IsFull and CPPreview.IsFull(spec, animatedValue) or false
     local runeOrder = spec.mode == "rune" and CPPreview.BuildRuneOrder and CPPreview.BuildRuneOrder({}, bars, spec, elapsed, true) or nil
     for i = 1, state.count or 0 do
         local fill = frame.segments and frame.segments[i]
@@ -1850,10 +1854,10 @@ local function UpdateClassPowerAnimation(preview, frame)
                     or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
             if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
             local sr, sg, sb = state.r, state.g, state.b
-            if isFull then
-                sr, sg, sb = state.fullR, state.fullG, state.fullB
-            elseif CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
+            if CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
                 sr, sg, sb = CPColor("CHARGED", 0.60, 0.20, 0.80)
+            elseif isFull then
+                sr, sg, sb = state.fullR, state.fullG, state.fullB
             elseif CPPreview.ResolveSlotColor then
                 sr, sg, sb = CPPreview.ResolveSlotColor(bars, state.token, i, sr, sg, sb)
             end

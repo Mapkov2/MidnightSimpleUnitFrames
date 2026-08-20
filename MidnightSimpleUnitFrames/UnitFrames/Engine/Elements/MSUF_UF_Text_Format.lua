@@ -11,6 +11,7 @@ if not Text then return end
 local Apply = MSUF.Apply or {}
 local luaType = type
 local UnitPowerType = Text.UnitPowerType
+local ResolveDisplayedPowerIdentity = Text.ResolveDisplayedPowerIdentity
 local UnitHealthPercent = Text.UnitHealthPercent
 local UnitPowerPercent = Text.UnitPowerPercent
 local AbbreviateShortNumber = Text.AbbreviateNumbers or _G.AbbreviateNumbers
@@ -190,7 +191,13 @@ local function PowerPercent(unit)
   if not UnitPowerPercent or not SCALE_100 or type(unit) ~= "string" or unit == "" then
     return nil
   end
-  local powerType = UnitPowerType and UnitPowerType(unit) or nil
+  local powerType, _, displayMana
+  if unit == "player" and ResolveDisplayedPowerIdentity then
+    powerType, _, displayMana = ResolveDisplayedPowerIdentity(unit)
+  end
+  if displayMana ~= true then
+    powerType = UnitPowerType and UnitPowerType(unit) or nil
+  end
   if issecretvalue(powerType) == true then powerType = nil end
   local pct = UnitPowerPercent(unit, powerType, false, SCALE_100)
   if issecretvalue(pct) == true then
@@ -1282,6 +1289,7 @@ local function CompileTextRuntime(frame, spec, text)
   frame._msufTextPowerToken = nil
   frame._msufTextPowerTypeKnown = nil
   frame._msufTextPowerTypeUnit = nil
+  frame._msufTextPowerDisplayMana = nil
   frame._msufTextPowerMax = nil
   frame._msufTextPowerMaxUnit = nil
   local hot = Text.RuntimeHotFunctions

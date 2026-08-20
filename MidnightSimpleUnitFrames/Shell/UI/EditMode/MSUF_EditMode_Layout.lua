@@ -1349,7 +1349,9 @@ local function ResolveNamedEditAnchor(name)
     if type(name) ~= "string" or name == "" then return nil end
     if EDIT_COOLDOWN_ANCHORS[name] then
         local cooldownFrame = type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(name) or nil
-        return cooldownFrame or _G[name]
+        cooldownFrame = cooldownFrame or _G[name]
+        local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+        return type(getSize) == "function" and getSize(cooldownFrame) ~= nil and cooldownFrame or nil
     end
     local UF = MSUF and MSUF.UF
     if UF and type(UF.GetFrame) == "function" then

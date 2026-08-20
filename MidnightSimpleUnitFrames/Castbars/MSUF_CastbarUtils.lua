@@ -106,7 +106,8 @@ local function GetAnchorFrame()
         local getCooldown = _G.MSUF_GetEffectiveCooldownFrame
         local cooldown = (type(getCooldown) == "function" and getCooldown("EssentialCooldownViewer"))
             or _G.EssentialCooldownViewer
-        if cooldown and cooldown.IsShown and cooldown:IsShown() then
+        local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+        if type(getSize) == "function" and getSize(cooldown) ~= nil then
             return cooldown
         end
         return _G.UIParent

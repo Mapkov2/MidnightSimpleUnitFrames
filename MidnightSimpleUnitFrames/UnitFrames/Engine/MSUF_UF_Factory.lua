@@ -126,10 +126,8 @@ local function ResolveCooldownViewerAnchor(name)
 end
 
 local function IsCooldownViewerAnchorFrameUsable(frame)
-  if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true then return false end
-  if frame.IsShown and not frame:IsShown() then return false end
-  local width = frame:GetWidth()
-  return type(width) == "number" and width > 0
+  local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+  return type(getSize) == "function" and getSize(frame) ~= nil
 end
 
 local function IsCooldownViewerAnchorUsable(name)
@@ -271,18 +269,25 @@ end
 -- sever that link for the duration of a fight. Callers position the frame
 -- logically first, so old profile priorities, offsets, scaling and clamping
 -- remain authoritative.
-local function SnapshotFrameToUIParent(frame)
+local function SnapshotFrameToUIParent(frame, preserveSize)
   if not (frame and frame.GetCenter and UIParent and UIParent.GetCenter) or InCombat() then return false end
   local frameX, frameY = frame:GetCenter()
   local parentX, parentY = UIParent:GetCenter()
-  if not (frameX and frameY and parentX and parentY) then return false end
+  local width = preserveSize == true and frame.GetWidth and frame:GetWidth() or nil
+  local height = preserveSize == true and frame.GetHeight and frame:GetHeight() or nil
   local frameScale = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
   local parentScale = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+  if issecretvalue and (issecretvalue(frameX) or issecretvalue(frameY)
+    or issecretvalue(parentX) or issecretvalue(parentY)
+    or issecretvalue(width) or issecretvalue(height)
+    or issecretvalue(frameScale) or issecretvalue(parentScale)) then return false end
+  if frameX == nil or frameY == nil or parentX == nil or parentY == nil then return false end
   if frameScale == 0 then frameScale = 1 end
   if parentScale == 0 then parentScale = 1 end
   local stableX = ((frameX * frameScale) - (parentX * parentScale)) / frameScale
   local stableY = ((frameY * frameScale) - (parentY * parentScale)) / frameScale
   frame:ClearAllPoints()
+  if width and height and frame.SetSize then frame:SetSize(width, height) end
   frame:SetPoint("CENTER", UIParent, "CENTER", stableX, stableY)
   return true
 end
@@ -292,6 +297,94 @@ local function IsMSUFOwnedAnchor(anchor)
   local readable, owned = GetAnchorMember(anchor, "_msufOwnedAnchorRoot")
   return readable and owned == true or false
 end
+
+-- Unitframes that share one foreign provider also share one MSUF-owned proxy.
+-- The proxy follows the provider natively out of combat (no polling or Lua
+-- callbacks), while every protected unit root remains attached to the stable
+-- MSUF-owned frame. At the combat edge only this one rectangle has to be
+-- materialized on UIParent, regardless of the number of unit consumers.
+local unitExternalAnchorProxies = {}
+
+local function AnchorHasResolvedCenter(anchor)
+  local readable, getCenter = GetAnchorMember(anchor, "GetCenter")
+  if not readable or type(getCenter) ~= "function" then return false end
+  local ok, x, y = CallAnchorMethod(getCenter, anchor)
+  if not ok or x == nil or y == nil then return false end
+  if issecretvalue and (issecretvalue(x) or issecretvalue(y)) then return false end
+  return true
+end
+
+local function UnitExternalAnchorProxyKey(requestedAnchor, anchor)
+  if type(requestedAnchor) == "string" and requestedAnchor ~= "" then return requestedAnchor end
+  return anchor
+end
+
+local function AttachUnitExternalAnchorProxy(proxy, source)
+  if not (proxy and source) or InCombat() or not AnchorHasResolvedCenter(source) then return false end
+  proxy:ClearAllPoints()
+  proxy:SetAllPoints(source)
+  proxy._msufStableExternalAnchor = source
+  proxy._msufExternalAnchorSource = source
+  proxy._msufExternalAnchorFrozen = nil
+  proxy._msufHasStableExternalRect = true
+  if proxy.Show then proxy:Show() end
+  return true
+end
+
+local function EnsureUnitExternalAnchorProxy(requestedAnchor, source)
+  if not source then return nil end
+  local key = UnitExternalAnchorProxyKey(requestedAnchor, source)
+  local proxy = unitExternalAnchorProxies[key]
+  if not proxy then
+    proxy = CreateFrame("Frame", nil, UIParent)
+    proxy._msufOwnedAnchorRoot = true
+    proxy._msufUnitExternalAnchorProxy = true
+    proxy._msufExternalAnchorProxyKey = key
+    proxy._msufUnitConsumerCount = 0
+    if proxy.EnableMouse then proxy:EnableMouse(false) end
+    unitExternalAnchorProxies[key] = proxy
+  end
+
+  local sourceChanged = proxy._msufExternalAnchorSource ~= source
+  if sourceChanged and proxy._msufHasStableExternalRect and not proxy._msufExternalAnchorFrozen then
+    -- Provider identity transitions are cold. Detach the proxy from the old
+    -- foreign frame first so a temporarily unresolved replacement cannot keep
+    -- dragging the protected unitframe chain.
+    if SnapshotFrameToUIParent(proxy, true) then proxy._msufExternalAnchorFrozen = true end
+  end
+  proxy._msufExternalAnchorSource = source
+  if sourceChanged or proxy._msufExternalAnchorFrozen or not proxy._msufHasStableExternalRect then
+    if not AttachUnitExternalAnchorProxy(proxy, source) then
+      return proxy._msufHasStableExternalRect and proxy or nil
+    end
+  end
+  return proxy
+end
+
+local function SetFrameUnitExternalAnchorProxy(frame, proxy)
+  if not frame then return end
+  local previous = frame._msufUnitExternalAnchorProxy
+  if previous == proxy then return end
+  if previous then
+    previous._msufUnitConsumerCount = math.max(0, (previous._msufUnitConsumerCount or 1) - 1)
+  end
+  frame._msufUnitExternalAnchorProxy = proxy
+  if proxy then proxy._msufUnitConsumerCount = (proxy._msufUnitConsumerCount or 0) + 1 end
+end
+
+local function UpdateAllUnitExternalAnchorProxies()
+  if InCombat() then return false end
+  local updated = false
+  for _, proxy in pairs(unitExternalAnchorProxies) do
+    if (proxy._msufUnitConsumerCount or 0) > 0 then
+      updated = AttachUnitExternalAnchorProxy(proxy, proxy._msufExternalAnchorSource) or updated
+    end
+  end
+  return updated
+end
+
+Factory.UpdateAllExternalAnchorProxies = UpdateAllUnitExternalAnchorProxies
+ExportPublic("MSUF_UpdateAllExternalAnchorProxies", UpdateAllUnitExternalAnchorProxies)
 
 -- Shared by unit frames, group frames, Edit Mode, and the anchor picker. Keep
 -- named custom anchors logical; only reject targets that would make SetPoint
@@ -405,6 +498,7 @@ local function ApplyPosition(frame, spec)
   local y = tonumber(spec.y) or 0
   local anchor, missingAnchorName, requestedAnchor = ResolveAnchor(spec, frame)
   local key = ScreenCacheKey(spec, frame)
+  frame._msufRequestedAnchorName = requestedAnchor
 
   if missingAnchorName then
     local missingCooldownAnchor = IsCooldownViewerAnchor(requestedAnchor)
@@ -413,6 +507,8 @@ local function ApplyPosition(frame, spec)
     end
     local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
     if type(applyCached) == "function" and applyCached(layout, key, frame.MSUFUnitKey) then
+      SetFrameUnitExternalAnchorProxy(frame, nil)
+      frame._msufStableExternalAnchor = nil
       return true
     end
     if frame._msufPositionInitialized == true then return true end
@@ -424,6 +520,8 @@ local function ApplyPosition(frame, spec)
   end
 
   local externalAnchor = not IsMSUFOwnedAnchor(anchor)
+  local externalProxy = externalAnchor and EnsureUnitExternalAnchorProxy(requestedAnchor, anchor) or nil
+  if externalProxy then anchor = externalProxy end
   if layout._msufPoint ~= point
     or layout._msufAnchor ~= anchor
     or layout._msufRelativePoint ~= relativePoint
@@ -439,6 +537,7 @@ local function ApplyPosition(frame, spec)
       externalAnchor = false
       local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
       if type(applyCached) == "function" and applyCached(layout, key, frame.MSUFUnitKey) then
+        SetFrameUnitExternalAnchorProxy(frame, nil)
         frame._msufStableExternalAnchor = nil
         return true
       end
@@ -450,6 +549,7 @@ local function ApplyPosition(frame, spec)
       -- Record the actual fallback target so the next apply retries the
       -- provider instead of memo-skipping into a stale fallback.
       anchor = UIParent
+      externalProxy = nil
     end
     layout._msufPoint = point
     layout._msufAnchor = anchor
@@ -463,8 +563,8 @@ local function ApplyPosition(frame, spec)
   end
 
   frame._msufPositionInitialized = true
-  frame._msufStableExternalAnchor = externalAnchor and anchor or nil
-  frame._msufRequestedAnchorName = requestedAnchor
+  SetFrameUnitExternalAnchorProxy(frame, externalProxy)
+  frame._msufStableExternalAnchor = externalAnchor and not externalProxy and anchor or nil
   if not missingAnchorName
     and ShouldCacheScreenPosition(spec, requestedAnchor)
     and type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
@@ -1106,24 +1206,26 @@ local function FlushScheduledExternalAnchorRefresh()
   end
 end
 
--- Out of combat every external consumer keeps a live SetPoint link, so a
--- provider that moves (ArcUI, Skiron, Coolinator, Blizzard Edit Mode) drags
--- MSUF along natively with zero recurring work. PLAYER_REGEN_DISABLED
--- delivers before lockdown: sever those links there so nothing can passively
--- move a protected chain mid-fight, then restore them once on the existing
--- post-combat driver. If the event ever arrived post-lockdown, freezing is
--- skipped and the frames simply stay live (the pre-freeze behaviour).
-local frozenUnitFrames = false
+-- Out of combat external providers move one shared unitframe proxy, plus the
+-- independent Group/ClassPower consumers, natively with zero recurring work.
+-- PLAYER_REGEN_DISABLED delivers before lockdown: sever those links there so
+-- nothing can passively move a protected chain mid-fight, then restore them
+-- once on the existing post-combat driver. If the event ever arrived after
+-- lockdown, freezing is skipped and the frames simply stay live.
+local frozenUnitAnchorProxies = false
+local frozenDirectUnitFrames = false
 local frozenGroupAnchors = false
 local frozenClassPower = false
 
-local function FreezeExternalAnchorConsumer(frame, cacheKey, cacheUnit)
+local function FreezeExternalAnchorConsumer(frame, cacheKey, cacheUnit, preserveSize)
   if not (frame and frame._msufStableExternalAnchor) then return false end
-  if SnapshotFrameToUIParent(frame) then
+  if SnapshotFrameToUIParent(frame, preserveSize) then
     frame._msufExternalAnchorFrozen = true
-    frame._msufHardLockedToUIParent = true
-    frame._msufHardLockPoint = "CENTER"
-    InvalidateFramePositionCache(frame)
+    if preserveSize ~= true then
+      frame._msufHardLockedToUIParent = true
+      frame._msufHardLockPoint = "CENTER"
+      InvalidateFramePositionCache(frame)
+    end
     return true
   end
   -- A provider that lost its rect right at the combat edge cannot be
@@ -1141,12 +1243,23 @@ end
 local function FreezeExternalAnchorsForCombat()
   if InCombat() then return false end
   local froze = false
+  for _, proxy in pairs(unitExternalAnchorProxies) do
+    if (proxy._msufUnitConsumerCount or 0) > 0
+      and FreezeExternalAnchorConsumer(proxy, nil, nil, true) then
+      frozenUnitAnchorProxies = true
+      froze = true
+    end
+  end
+  -- A provider can exist before it exposes a readable rectangle. ApplyPosition
+  -- deliberately preserves the legacy direct link in that rare state. If the
+  -- rectangle becomes readable by the combat edge, retain the old per-frame
+  -- freeze contract for only those consumers that could not acquire a proxy.
   if UF.frames then
     for i = 1, #UF.unitOrder do
       local frame = UF.frames[UF.unitOrder[i]]
-      if frame and frame._msufStableExternalAnchor
+      if frame and not frame._msufUnitExternalAnchorProxy and frame._msufStableExternalAnchor
         and FreezeExternalAnchorConsumer(frame, ScreenCacheKey(frame.MSUFSpec, frame), frame.MSUFUnitKey) then
-        frozenUnitFrames = true
+        frozenDirectUnitFrames = true
         froze = true
       end
     end
@@ -1172,14 +1285,22 @@ end
 local function ThawFrozenExternalAnchors()
   if InCombat() then return false end
   local did = false
-  if frozenUnitFrames then
-    frozenUnitFrames = false
+  if frozenUnitAnchorProxies then
+    frozenUnitAnchorProxies = false
+    for _, proxy in pairs(unitExternalAnchorProxies) do
+      if proxy._msufExternalAnchorFrozen and (proxy._msufUnitConsumerCount or 0) > 0 then
+        -- Reattach the one shared rectangle. Unit roots never changed their
+        -- own points, so thawing performs zero per-unit geometry writes.
+        did = AttachUnitExternalAnchorProxy(proxy, proxy._msufExternalAnchorSource) or did
+      end
+    end
+  end
+  if frozenDirectUnitFrames then
+    frozenDirectUnitFrames = false
     for i = 1, #UF.unitOrder do
       local frame = UF.frames and UF.frames[UF.unitOrder[i]]
       if frame and frame._msufExternalAnchorFrozen then
         frame._msufExternalAnchorFrozen = nil
-        -- The queued post-combat provider replay re-applies this consumer
-        -- anyway; thaw only covers frames the replay would not reach.
         local queuedName = frame._msufRequestedAnchorName
         if not (queuedName and externalAnchorRefreshAfterCombat[queuedName]) then
           local spec = frame.MSUFSpec
@@ -1636,7 +1757,7 @@ local function OnCooldownWidthSourceChanged(frame)
 end
 
 local function ObserveCooldownWidthFrame(frame, sourceBit, castbarOnly)
-  if not (frame and frame.HookScript) then return false end
+  if not IsCooldownViewerAnchorFrameUsable(frame) or not frame.HookScript then return false end
   if not cooldownWidthHooked[frame] then
     if InCombat() and frame.IsProtected and frame:IsProtected() then
       cooldownWidthObserverAfterCombat = true
@@ -1705,9 +1826,9 @@ ExportPublic("MSUF_ScheduleCooldownWidthRefresh", ScheduleCooldownWidthRefresh)
 ExportPublic("MSUF_EnsureCooldownWidthObservers", EnsureCooldownWidthObservers)
 
 -- Rebind consumers after a supported provider changes while out of combat.
--- ApplyPosition leaves a live link to the provider, so plain provider movement
--- needs no rebind at all; this handles identity/usability transitions. During
--- combat the request is queued and replayed once after regen.
+-- Unitframes keep their points on a stable shared proxy, so an identity change
+-- only reattaches that proxy; Group/ClassPower retain their own direct links.
+-- During combat the request is queued and replayed once after regen.
 function Factory.RefreshExternalAnchor(frameName)
   if not IsCooldownViewerAnchor(frameName) then return false end
   if InCombat() then
@@ -1722,7 +1843,6 @@ function Factory.RefreshExternalAnchor(frameName)
       local frame = UF.frames and UF.frames[UF.unitOrder[i]]
       local spec = frame and frame.MSUFSpec
       if spec and (frame._msufRequestedAnchorName == frameName or spec.anchorFrameName == frameName) then
-        InvalidateFramePositionCache(frame)
         ApplyPosition(frame, spec)
         refreshed = true
       end
