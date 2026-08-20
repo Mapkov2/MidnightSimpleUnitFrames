@@ -8,12 +8,56 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "1FC3AF7D8B63EAFE744EDE16CB19A9840058790F92D55E2C0C367EC93A42C2B1",
-    currentVersion = "6.1",
+    sourceSha256 = "DC41B7D5CF1A54EC32767FCD41B11E95B46FAF3EA803FAC8A08E18614B25A8CB",
+    currentVersion = "6.11",
     historyFromVersion = "6.02",
-    previousVersion = "6.09",
-    rangeLabel = "6.09 -> 6.1",
+    previousVersion = "6.1",
+    rangeLabel = "6.1 -> 6.11",
     entries = {
+        {
+            version = "6.11",
+            date = "2026-08-21",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Expanded Buff Tracking is back for Custom 1-3 aura containers. Every whitelisted spell keeps a fixed slot, missing buffs show as dimmed placeholders, and the same slots can securely cast spells or use bound items when clicked.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "buff reminder fixed slots",
+                                label = "Buff Reminder",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_player.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.player.custom1.placed.reminderEnabled",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "custom1_reminder",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Buff Reminder accepts Spell IDs, spell links, item links, and separate tracked-spell/item-action pairs. Player reminders can also track Main Hand and Off Hand temporary enchants, filter out spells the current character cannot apply, and pin shared consumables with Always show.",
+                        "Reminder slots follow whitelist order, preserve their positions as auras appear or expire, and keep their secure click bindings fixed outside combat without polling or recurring aura reads.",
+                        "Localized the complete Buff Reminder setup, whitelist actions, weapon-enchant controls, status text, and tooltips across all 12 supported locales.",
+                        "The Assistant can now execute explicit multi-control requests clause by clause, including comma-separated and shared-scope commands, while continuing to fail closed for questions, planning requests, incomplete values, and ambiguous fragments.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed Elemental Shamans seeing Maelstrom on both resource bars. While Maelstrom owns the Class Resource row, the Player power bar now consistently displays Mana across fill, current value, maximum, percentage, text color, and event filtering; disabling that row or entering a vehicle restores the primary resource.",
+                        "Applied the same resource-ownership transition to Shadow Priest Mana/Insanity and cleared both overrides when the Class Resource module shuts down.",
+                        "Made third-party cooldown-viewer and external-frame anchoring safe when 12.1 returns protected geometry. MSUF validates foreign frames once, shares one stable proxy between Unit Frames, and freezes that proxy at the combat edge instead of repeatedly touching every consumer.",
+                        "Boss castbars now prewarm at most one hidden bar per rendered frame when an encounter starts, avoiding one large synchronous layout burst while retaining authoritative validation when a real cast begins.",
+                        "Charged Rogue Combo Points fail closed when their slot table becomes restricted, refresh after combat, and keep their charged color ahead of the optional full-resource color in the Menu preview.",
+                        "Aura-name fallback scans are coalesced to one frame and permanently retire each resolved alias until the container configuration changes, removing repeated name lookups from unrelated full aura updates.",
+                    },
+                },
+            },
+        },
         {
             version = "6.1",
             date = "2026-08-19",

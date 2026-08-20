@@ -1,5 +1,28 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.11 - 2026-08-21
+
+### Highlights
+
+- **Expanded Buff Tracking is back for Custom 1-3 aura containers.** Every whitelisted spell keeps a fixed slot, missing buffs show as dimmed placeholders, and the same slots can securely cast spells or use bound items when clicked.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.container-selector","settingKey":"auras3.player.custom1.placed.reminderEnabled","prepareKind":"unitAuraWorkspace","prepareValue":"custom1_reminder","query":"buff reminder fixed slots","label":"Buff Reminder"} -->
+
+### Changes
+
+- Buff Reminder accepts Spell IDs, spell links, item links, and separate tracked-spell/item-action pairs. Player reminders can also track Main Hand and Off Hand temporary enchants, filter out spells the current character cannot apply, and pin shared consumables with **Always show**.
+- Reminder slots follow whitelist order, preserve their positions as auras appear or expire, and keep their secure click bindings fixed outside combat without polling or recurring aura reads.
+- Localized the complete Buff Reminder setup, whitelist actions, weapon-enchant controls, status text, and tooltips across all 12 supported locales.
+- The Assistant can now execute explicit multi-control requests clause by clause, including comma-separated and shared-scope commands, while continuing to fail closed for questions, planning requests, incomplete values, and ambiguous fragments.
+
+### Fixes & Performance
+
+- Fixed Elemental Shamans seeing Maelstrom on both resource bars. While Maelstrom owns the Class Resource row, the Player power bar now consistently displays Mana across fill, current value, maximum, percentage, text color, and event filtering; disabling that row or entering a vehicle restores the primary resource.
+- Applied the same resource-ownership transition to Shadow Priest Mana/Insanity and cleared both overrides when the Class Resource module shuts down.
+- Made third-party cooldown-viewer and external-frame anchoring safe when 12.1 returns protected geometry. MSUF validates foreign frames once, shares one stable proxy between Unit Frames, and freezes that proxy at the combat edge instead of repeatedly touching every consumer.
+- Boss castbars now prewarm at most one hidden bar per rendered frame when an encounter starts, avoiding one large synchronous layout burst while retaining authoritative validation when a real cast begins.
+- Charged Rogue Combo Points fail closed when their slot table becomes restricted, refresh after combat, and keep their charged color ahead of the optional full-resource color in the Menu preview.
+- Aura-name fallback scans are coalesced to one frame and permanently retire each resolved alias until the container configuration changes, removing repeated name lookups from unrelated full aura updates.
+
 ## 6.1 - 2026-08-19
 
 ### Highlights
@@ -267,4 +290,3 @@
 - Fixed Manual Detached Power width losing authority to a synchronized width source in Edit Mode and Menu controls.
 - Fixed Boss portrait refreshes missing frames that had not yet been seeded into the Edit Mode registry.
 - Fixed rounded mouseover edges retaining their previous color until the next hover transition.
-
