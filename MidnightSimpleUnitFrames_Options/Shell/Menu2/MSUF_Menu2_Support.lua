@@ -239,7 +239,16 @@ local function AddTooltip(widget, title, body, opts)
         end
     end
     Wire(widget)
-    if opts.labelHit and widget._msuf2LabelHit and widget._msuf2LabelHit ~= widget then Wire(widget._msuf2LabelHit) end
+    if opts.labelHit and widget._msuf2LabelHit and widget._msuf2LabelHit ~= widget then
+        if opts.labelHitWhenDisabled then
+            widget._msuf2KeepLabelHitMouseWhenDisabled = true
+            if widget._msuf2LabelHit.EnableMouse then
+                widget._msuf2LabelHit._msuf2MouseEnabledStateApplied = true
+                widget._msuf2LabelHit:EnableMouse(true)
+            end
+        end
+        Wire(widget._msuf2LabelHit)
+    end
     return widget
 end
 ExportPublic("MSUF_AddTooltip", _G.MSUF_AddTooltip or AddTooltip)

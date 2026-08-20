@@ -20,6 +20,7 @@ local SPELL_FRAME_EFFECT_BASE_OFFSET = tonumber(FrameLayers.SPELL_FRAME_EFFECT_B
 local SPELL_ICON_BASE_OFFSET = tonumber(FrameLayers.SPELL_ICON_BASE_OFFSET) or 64
 local UNIT_SPELL_BASE_OFFSET = tonumber(FrameLayers.UNIT_AURA_BASE_OFFSET) or 10
 local CreateFrame = _G.CreateFrame
+local InCombat = _G.InCombatLockdown or function() return false end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local MAX_FINITE_AURA_DURATION = 2147483647
 local ICON_ALERT_TEXTURE = [[Interface\SpellActivationOverlay\IconAlert]]
@@ -255,6 +256,7 @@ SlotLayoutSignature = function(slot)
     local frame = slot.frameEffect
     local color = slot.color or {}
     local effectColor = frame and frame.color or {}
+    local reminderColor = slot.reminderColor or {}
     return tostring(slot.visual) .. "\030" .. tostring(slot.hiddenVisual)
         .. "\030" .. tostring(slot.anchor) .. "\030" .. tostring(slot.x) .. "\030" .. tostring(slot.y)
         .. "\030" .. tostring(slot.size) .. "\030" .. tostring(slot.width) .. "\030" .. tostring(slot.height)
@@ -280,6 +282,15 @@ SlotLayoutSignature = function(slot)
         .. "\030" .. tostring(frame and frame.tintAlpha) .. "\030" .. tostring(frame and frame.strata)
         .. "\030" .. tostring(effectColor[1]) .. "\030" .. tostring(effectColor[2]) .. "\030" .. tostring(effectColor[3])
         .. "\030" .. tostring(effectColor[4]) .. "\030" .. tostring(A3._nativeVisualGen or 0)
+        .. "\030" .. tostring(slot.showWhenMissing)
+        .. "\030" .. tostring(slot.reminderAlpha)
+        .. "\030" .. tostring(slot.reminderDesaturate)
+        .. "\030" .. tostring(reminderColor[1])
+        .. "\030" .. tostring(reminderColor[2])
+        .. "\030" .. tostring(reminderColor[3])
+        .. "\030" .. tostring(slot.castSpellID) .. "\030" .. tostring(slot.castUnit)
+        .. "\030" .. tostring(slot.castItem) .. "\030" .. tostring(slot.castItemID)
+        .. "\030" .. tostring(slot.enchantSlot) .. "\030" .. tostring(slot.enchantInventorySlot)
 end
 
 local function FinalizeSlot(slot)
@@ -315,7 +326,10 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
     if candidateFilters == nil then
         candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(item.includeSpellIDs, "includeSpellIDs")
     end
-    if not candidateFilters and item.allowAnyAura ~= true then return nil end
+    -- A temporary weapon enchant is not an aura at all -- Blizzard keeps them
+    -- out of aura parsing, groups and slots entirely -- so an enchant reminder
+    -- legitimately has nothing to filter on.
+    if not candidateFilters and item.allowAnyAura ~= true and item.enchantSlot == nil then return nil end
     candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
         candidateFilters, candidateFilterSignature, item.hidePermanent == true)
 
@@ -359,7 +373,31 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         identityCandidateMode = IdentityCandidateMode(nativeFilter, candidateFilters),
         visual = visual,
         hiddenVisual = hiddenVisual == true,
-        showWhenMissing = false,
+        -- Buff Reminder. The placeholder is an MSUF-owned frame one level
+        -- BELOW the native AuraSlot and is never toggled by aura state: the
+        -- secret AuraButton simply covers it while the aura is up. Blizzard
+        -- pre-allocates every slot's frame batch precisely so the zero and
+        -- non-zero transition stays unobservable, so covering the placeholder
+        -- is the only honest way to render a missing aura.
+        showWhenMissing = item.showWhenMissing == true,
+        reminderAlpha = Clamp01(item.reminderAlpha, 0.45),
+        reminderDesaturate = item.reminderDesaturate ~= false,
+        reminderColor = {
+            Clamp01(item.reminderColor and item.reminderColor[1], 1),
+            Clamp01(item.reminderColor and item.reminderColor[2], 1),
+            Clamp01(item.reminderColor and item.reminderColor[3], 1),
+        },
+        -- Click-to-cast target for this slot. Purely configuration: the
+        -- spell is the one the user whitelisted, so nothing about the live
+        -- aura is read to decide it.
+        castSpellID = tonumber(item.castSpellID),
+        -- A bound item wins over the spell: consumables such as flasks,
+        -- runes or oils have to be used, not cast.
+        castItem = type(item.castItem) == "string" and item.castItem or nil,
+        castItemID = tonumber(item.castItemID),
+        enchantSlot = type(item.enchantSlot) == "string" and item.enchantSlot or nil,
+        enchantInventorySlot = tonumber(item.enchantInventorySlot),
+        castUnit = type(item.castUnit) == "string" and item.castUnit or nil,
         icon = item.icon,
         color = {
             Clamp01(color and color[1], 0.69),
@@ -371,12 +409,16 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         -- appearance is shared with normal Auras. Preview and runtime consume
         -- the same slot, so no surface can silently fall back to Buff Style.
         iconStyle = appearance and appearance.iconStyle or nil,
-        iconShape = appearance and appearance.iconShape or "RECTANGLE",
-        requestedIconShape = appearance and appearance.requestedIconShape or "RECTANGLE",
+        -- Group scopes own their look through the shared Spell Icon Style.
+        -- Unit-side items (Buff Reminder slots) carry their container's own
+        -- resolved shape and zoom instead, since no style object applies.
+        iconShape = (appearance and appearance.iconShape) or item.iconShape or "RECTANGLE",
+        requestedIconShape = (appearance and appearance.requestedIconShape)
+            or item.requestedIconShape or "RECTANGLE",
         iconEffect = iconEffect,
         frameEffect = frameEffect,
         size = size,
-        iconZoom = ClampNumber(fallbackIconZoom, 100, 100, 200),
+        iconZoom = ClampNumber(item.iconZoom or fallbackIconZoom, 100, 100, 200),
         width = width,
         height = size,
         growth = growth,
@@ -900,15 +942,34 @@ function Runtime.HideMissing(parentFrame)
     local missing = parentFrame._msufA3SpellIndicatorMissingFrames
     if missing then
         for _, frame in pairs(missing) do
-            if frame then frame:Hide() end
+            if frame then
+                ForgetReminderEnchantPlaceholder(frame)
+                frame:Hide()
+            end
         end
     end
+end
+
+--- Retire every click-to-cast button on this frame regardless of root. The
+--- buttons are protected, so combat leaves them in place; they are children
+--- of the UnitFrame and follow its visibility until the next apply.
+function Runtime.HideReminderCastButtons(parentFrame)
+    local store = parentFrame and parentFrame._msufA3ReminderCastButtons
+    if not store then return false end
+    if InCombat() then return true end
+    for _, button in pairs(store) do
+        button._msufA3CastOwnerKey = nil
+        button:Hide()
+    end
+    parentFrame._msufA3ReminderCastSignatures = nil
+    return false
 end
 
 function Runtime.HideAll(parentFrame)
     Runtime.HideFrameEffects(parentFrame)
     Runtime.HideIconEffects(parentFrame)
     Runtime.HideMissing(parentFrame)
+    return Runtime.HideReminderCastButtons(parentFrame)
 end
 
 function Runtime.HideRootMissing(parentFrame, slotRoot, ownerContainer)
@@ -925,6 +986,181 @@ function Runtime.HideRootMissing(parentFrame, slotRoot, ownerContainer)
         end
     end
     return any
+end
+
+--- Buff Reminder click-to-cast.
+---
+--- One SecureActionButton per reminder slot, written once and then left
+--- alone: no OnUpdate, no event registration and no aura read. A click just
+--- casts the spell the slot was configured with, which is why it keeps
+--- working while the aura is up (re-applying a poison or flask) as well as
+--- while it is missing.
+---
+--- Everything here is protected-frame work, so it runs strictly out of
+--- combat; the caller re-queues an apply for PLAYER_REGEN_ENABLED instead.
+--- The buttons are children of the UnitFrame, never of an AuraButton: that
+--- tree is access-restricted while auras are secret and forbids scripts.
+--- The cast button covers the AuraButton, so it also swallows the mouse
+--- motion that would raise Blizzard's aura tooltip. Show the slot's own
+--- spell instead -- that is plain catalog data, readable under every secret
+--- restriction, and it names the very spell the click will cast. Scripts run
+--- on hover only; nothing here is registered, polled or timed.
+local function ReminderCastButtonOnEnter(self)
+    local tooltip = _G.GameTooltip
+    if not (self._msufA3CastTooltip and tooltip) then return end
+    local itemID = self._msufA3CastItemID
+    if itemID and type(tooltip.SetItemByID) == "function" then
+        tooltip:SetOwner(self, "ANCHOR_RIGHT")
+        tooltip:SetItemByID(itemID)
+        tooltip:Show()
+        return
+    end
+    local spellID = self._msufA3CastSpellID
+    if not (spellID and type(tooltip.SetSpellByID) == "function") then return end
+    tooltip:SetOwner(self, "ANCHOR_RIGHT")
+    tooltip:SetSpellByID(spellID)
+    tooltip:Show()
+end
+
+local function ReminderCastButtonOnLeave()
+    local tooltip = _G.GameTooltip
+    if tooltip and tooltip.Hide then tooltip:Hide() end
+end
+
+local function EnsureReminderCastButton(store, parentFrame, slot)
+    local button = store[slot.slotKey]
+    if not button then
+        button = CreateFrame("Button", nil, parentFrame, "SecureActionButtonTemplate")
+        -- Both edges, exactly like Blizzard's action buttons: the secure
+        -- handler itself decides which one fires from ActionButtonUseKeyDown,
+        -- so registering only one would drop the click for half the users.
+        button:RegisterForClicks("AnyUp", "AnyDown")
+        button:SetScript("OnEnter", ReminderCastButtonOnEnter)
+        button:SetScript("OnLeave", ReminderCastButtonOnLeave)
+        store[slot.slotKey] = button
+    end
+    return button
+end
+
+--- Returns true when combat blocked the work and the caller must retry.
+function Runtime.SyncReminderCastButtons(parentFrame, slotRoot)
+    if not (parentFrame and type(slotRoot) == "table") then return false end
+    local rootKey = slotRoot.rootKey or "SpellIndicators"
+    local signatures = parentFrame._msufA3ReminderCastSignatures
+    local wanted = slotRoot._msufA3StructuralSignature
+    -- Hot-path exit. The root's structural signature already folds every
+    -- slot's spell, unit, anchor, offset and size, so one string compare
+    -- decides whether any secure work is needed at all.
+    if signatures and signatures[rootKey] == wanted then return false end
+    local store = parentFrame._msufA3ReminderCastButtons
+    local slots = type(slotRoot.slots) == "table" and slotRoot.slots or nil
+    local wantsCast = false
+    if slots then
+        for i = 1, #slots do
+            local candidate = slots[i]
+            if candidate and (candidate.castSpellID or candidate.castItem) then
+                wantsCast = true
+                break
+            end
+        end
+    end
+    if not (store or wantsCast) then
+        signatures = signatures or {}
+        parentFrame._msufA3ReminderCastSignatures = signatures
+        signatures[rootKey] = wanted
+        return false
+    end
+    if InCombat() then return true end
+    if not store then
+        store = {}
+        parentFrame._msufA3ReminderCastButtons = store
+    end
+    -- Mark this root's current buttons for retirement, then un-mark the ones
+    -- the new slot list still wants. A shrunk whitelist must not leave an
+    -- invisible click target sitting on the frame.
+    for _, button in pairs(store) do
+        if button._msufA3CastOwnerKey == rootKey then button._msufA3CastRetire = true end
+    end
+    for i = 1, (slots and #slots or 0) do
+        local slot = slots[i]
+        local spellID = slot and slot.castSpellID
+        local castItem = slot and slot.castItem
+        if spellID or castItem then
+            local button = EnsureReminderCastButton(store, parentFrame, slot)
+            button._msufA3CastRetire = nil
+            button._msufA3CastOwnerKey = rootKey
+            button:ClearAllPoints()
+            button:SetSize(slot.width or slot.size or 1, slot.height or slot.size or 1)
+            button:SetPoint(slot.anchor or "TOPLEFT", parentFrame, slot.anchor or "TOPLEFT",
+                slot.x or 0, slot.y or 0)
+            SyncFrameStrata(button, ResolveFrameStrata(parentFrame, slot.strata))
+            -- Detail 2 sits one step above the AuraButton (1) and the
+            -- placeholder (0) inside the same 32-wide Layer band, so the
+            -- click target is always the topmost of the three.
+            button:SetFrameLevel(FrameLayers.ElementLevel and FrameLayers.ElementLevel(slot.layer, 9, 2)
+                or ((parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9) + 1))
+            -- Exactly one action type may be live on a secure button, so the
+            -- unused attribute is cleared rather than left behind.
+            button:SetAttribute("type", castItem and "item" or "spell")
+            button:SetAttribute("spell", not castItem and spellID or nil)
+            button:SetAttribute("item", castItem)
+            button:SetAttribute("unit", slot.castUnit)
+            button._msufA3CastSpellID = not castItem and spellID or nil
+            button._msufA3CastItemID = slot.castItemID
+            button._msufA3CastTooltip = slot.showTooltip ~= false
+            button:Show()
+        end
+    end
+    for _, button in pairs(store) do
+        if button._msufA3CastRetire then
+            button._msufA3CastRetire = nil
+            button._msufA3CastOwnerKey = nil
+            button:Hide()
+        end
+    end
+    signatures = signatures or {}
+    parentFrame._msufA3ReminderCastSignatures = signatures
+    signatures[rootKey] = wanted
+    return false
+end
+
+--- Retire every addon-owned surface belonging to one Spell Indicator root:
+--- the reminder placeholders (keyed by their owning container) and the
+--- click-to-cast buttons (keyed by root). A3._HideLane alone cannot reach
+--- either -- both are UnitFrame siblings, not container children -- so a
+--- root that stops existing while the frame stays visible would otherwise
+--- leave a dimmed icon and an invisible click target behind.
+---
+--- Returns `deferred`: true when combat blocked the protected Hide and the
+--- caller has to re-run this after PLAYER_REGEN_ENABLED.
+function Runtime.RetireRoot(parentFrame, rootKey, ownerContainer)
+    if not parentFrame then return false end
+    local missing = parentFrame._msufA3SpellIndicatorMissingFrames
+    if missing and ownerContainer then
+        for _, frame in pairs(missing) do
+            if frame._msufA3MissingOwnerContainer == ownerContainer then
+                ForgetReminderEnchantPlaceholder(frame)
+                frame:Hide()
+            end
+        end
+    end
+    local store = parentFrame._msufA3ReminderCastButtons
+    if not store then return false end
+    rootKey = rootKey or "SpellIndicators"
+    local pending = false
+    for _, button in pairs(store) do
+        if button._msufA3CastOwnerKey == rootKey then
+            if InCombat() then
+                pending = true
+            else
+                button._msufA3CastOwnerKey = nil
+                button:Hide()
+            end
+        end
+    end
+    local signatures = parentFrame._msufA3ReminderCastSignatures
+    if signatures and not pending then signatures[rootKey] = nil end
+    return pending
 end
 
 local function LayoutEdges(button, parentFrame, target, effect)
@@ -1314,6 +1550,92 @@ function Runtime.ReleaseContainerEffects(container, parentFrame)
     end
 end
 
+local EMPTY_REMINDER_COLOR = {}
+
+local function SetTextureDesaturated(tex, desaturated)
+    if not (tex and tex.SetDesaturated) then return end
+    tex:SetDesaturated(desaturated == true)
+end
+
+--- Temporary weapon enchants (oils, stones, poisons applied to a weapon) are
+--- not auras: they never reach an AuraContainer's parse, groups or slots, so
+--- no AuraButton can ever cover an enchant placeholder. Their state is plain
+--- data though -- C_PaperDollInfo carries no secret annotation at all -- so
+--- the placeholder can simply carry the state itself, in every kind of
+--- content. Read on demand only; WEAPON_ENCHANT_CHANGED drives the refresh,
+--- so nothing here polls.
+local function ReminderEnchantActive(slot)
+    local invSlot = slot and slot.enchantInventorySlot
+    local api = _G.C_PaperDollInfo
+    if not (invSlot and type(api) == "table"
+        and type(api.GetTemporaryEnchantmentInfo) == "function") then return false end
+    return api.GetTemporaryEnchantmentInfo(invSlot) ~= nil
+end
+
+--- Every live enchant placeholder in the UI, keyed by the surface itself.
+--- WEAPON_ENCHANT_CHANGED can fire mid-fight (an oil or imbue running out),
+--- so the handler must touch exactly these one or two textures and nothing
+--- else -- no frame walk, no slot scan.
+local enchantPlaceholders, enchantDriver
+
+--- Lit while the enchant runs, dimmed to the reminder look while it is
+--- missing. Same two states a covered aura placeholder produces, just driven
+--- by a readable value instead of by occlusion.
+---
+--- Unchanged state paints nothing: an enchant event that does not affect this
+--- slot costs one API read and one comparison, which is the whole in-combat
+--- budget of the feature.
+local function ApplyEnchantPlaceholderState(frame, slot, force)
+    local tex = frame and frame._tex
+    if not tex then return false end
+    local active = ReminderEnchantActive(slot)
+    if force ~= true and frame._msufA3EnchantActive == active then return active end
+    frame._msufA3EnchantActive = active
+    local tint = slot.reminderColor or EMPTY_REMINDER_COLOR
+    if active then
+        SetTextureDesaturated(tex, false)
+        tex:SetVertexColor(1, 1, 1, 1)
+    else
+        SetTextureDesaturated(tex, slot.reminderDesaturate ~= false)
+        tex:SetVertexColor(tint[1] or 1, tint[2] or 1, tint[3] or 1, slot.reminderAlpha or 0.45)
+    end
+    return active
+end
+
+--- One shared, lazily created event owner. A profile without enchant
+--- reminders never builds it and never registers the event at all.
+local function TrackReminderEnchantPlaceholder(frame, slot)
+    if not frame then return end
+    enchantPlaceholders = enchantPlaceholders or {}
+    enchantPlaceholders[frame] = slot
+    if enchantDriver then return end
+    enchantDriver = CreateFrame("Frame")
+    enchantDriver:SetScript("OnEvent", function()
+        for placeholder, tracked in pairs(enchantPlaceholders) do
+            ApplyEnchantPlaceholderState(placeholder, tracked)
+        end
+    end)
+    enchantDriver:RegisterEvent("WEAPON_ENCHANT_CHANGED")
+    -- The enchant state survives a reload, but no change event announces it.
+    enchantDriver:RegisterEvent("PLAYER_ENTERING_WORLD")
+end
+
+local function ForgetReminderEnchantPlaceholder(frame)
+    if enchantPlaceholders and frame then enchantPlaceholders[frame] = nil end
+end
+
+--- Mirror the slot's icon shape onto the reminder placeholder. Without the
+--- same mask a circular or diamond aura icon leaves the placeholder's square
+--- corners uncovered, which reads as a permanent artefact around a running
+--- aura. A rectangular slot clears the mask again.
+local function ApplyMissingShape(frame, tex, shape)
+    local deps = D()
+    local Shape = deps and deps.IconShape
+    if type(Shape) ~= "table" or type(Shape.ApplyMask) ~= "function" then return end
+    local mask = shape and type(Shape.EnsureMask) == "function" and Shape.EnsureMask(frame, shape) or nil
+    if mask then Shape.ApplyMask(tex, mask) else Shape.ClearMask(tex) end
+end
+
 local function EnsureMissingFrame(parentFrame, slot)
     if not (parentFrame and slot and slot.showWhenMissing == true) then return nil end
     parentFrame._msufA3SpellIndicatorMissingFrames = parentFrame._msufA3SpellIndicatorMissingFrames or {}
@@ -1340,6 +1662,7 @@ local function SyncMissingFrame(parentFrame, slot, button, ownerContainer)
         return
     end
     frame._msufA3MissingOwnerContainer = ownerContainer
+    frame._msufA3ReminderSlot = slot
     frame:ClearAllPoints()
     frame:SetSize(slot.width or slot.size or 1, slot.height or slot.size or 1)
     frame:SetPoint(slot.anchor or "TOPLEFT", parentFrame, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
@@ -1348,28 +1671,56 @@ local function SyncMissingFrame(parentFrame, slot, button, ownerContainer)
         or ((parentFrame:GetFrameLevel() or 0) + SpellIconBaseOffset(parentFrame) + (slot.layer or 9) - 1))
     local tex = frame._tex
     local label = frame._label
+    local alpha = slot.reminderAlpha or 0.45
+    local tint = slot.reminderColor or EMPTY_REMINDER_COLOR
+    local r, g, b = tint[1] or 1, tint[2] or 1, tint[3] or 1
     if slot.visual == "square" or slot.visual == "bar" then
+        ApplyMissingShape(frame, tex, nil)
         tex:SetTexture("Interface\\Buttons\\WHITE8X8")
         tex:SetTexCoord(0, 1, 0, 1)
-        tex:SetVertexColor(slot.color[1] or 1, slot.color[2] or 1, slot.color[3] or 1, math_min(slot.color[4] or 1, 0.45))
+        SetTextureDesaturated(tex, false)
+        tex:SetVertexColor(r, g, b, alpha)
         tex:Show()
         label:Hide()
     elseif slot.visual == "number" then
+        ApplyMissingShape(frame, tex, nil)
         tex:Hide()
         label:SetText("0")
-        label:SetTextColor(slot.color[1] or 1, slot.color[2] or 1, slot.color[3] or 1, 0.65)
+        label:SetTextColor(r, g, b, alpha)
         label:Show()
     elseif slot.visual == "icon" then
+        -- The placeholder must occupy the AuraButton's rect exactly and carry
+        -- the same icon shape: a live aura covers it pixel for pixel, so any
+        -- size or mask mismatch would leak a bright rim around a running aura.
+        ApplyMissingShape(frame, tex, slot.iconShape)
         tex:SetTexture(slot.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-        tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        tex:SetVertexColor(0.35, 0.35, 0.35, 0.55)
+        -- Match the live AuraButton crop exactly. PrepareAuraButton derives
+        -- the icon TexCoord from the same zoom, so a fixed crop here would
+        -- reframe the art the moment the aura came up.
+        local inset = (1 - (100 / ClampNumber(slot.iconZoom, 100, 100, 200))) * 0.5
+        tex:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
+        if slot.enchantSlot then
+            -- No AuraButton can ever cover an enchant placeholder, so the icon
+            -- carries both states itself and joins the shared event owner.
+            TrackReminderEnchantPlaceholder(frame, slot)
+            ApplyEnchantPlaceholderState(frame, slot, true)
+        else
+            ForgetReminderEnchantPlaceholder(frame)
+            SetTextureDesaturated(tex, slot.reminderDesaturate ~= false)
+            tex:SetVertexColor(r, g, b, alpha)
+        end
         tex:Show()
         label:Hide()
     else
+        ApplyMissingShape(frame, tex, nil)
         tex:Hide()
         label:Hide()
     end
-    frame:SetShown(slot.showWhenMissing == true and button == nil)
+    -- Deliberately NOT gated on `button`: a slot's AuraButton is allocated
+    -- up front and merely hidden while its aura is absent, so button ~= nil
+    -- says nothing about the aura. The placeholder stays visible and lets the
+    -- native button occlude it.
+    frame:SetShown(slot.showWhenMissing == true)
 end
 
 local function SyncButtonGeometry(button, slot, parentFrame, forceGeometry)
@@ -1579,11 +1930,19 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry, s
     local requiresRecreate = false
     if slots then
         for i = 1, #slots do
-            if slots[i] then
+            local slot = slots[i]
+            if slot then
                 if container[i] then
                     requiresRecreate = forceGeometry == true or requiresRecreate
+                    -- Reminder placeholders are MSUF-owned frames and stay
+                    -- writable while the slot's AuraButton is access
+                    -- restricted, so keep them on the current geometry
+                    -- instead of waiting for the deferred recreate.
+                    if slot.showWhenMissing == true then
+                        SyncMissingFrame(parentFrame, slot, container[i], container)
+                    end
                 else
-                    SyncMissingFrame(parentFrame, slots[i], nil, container)
+                    SyncMissingFrame(parentFrame, slot, nil, container)
                 end
             end
         end
@@ -1593,6 +1952,14 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame, forceGeometry, s
             local slot = slotRoot.slots[i]
             if not (slots and slots[i]) then SyncMissingFrame(parentFrame, slot, nil, container) end
         end
+    end
+    -- Click-to-cast is protected-frame work on a strictly cold path. When
+    -- combat blocks it the signature stays unwritten, so the next apply --
+    -- which the Aura runtime queues for PLAYER_REGEN_ENABLED -- redoes it.
+    if Runtime.SyncReminderCastButtons(parentFrame, slotRoot) == true
+        and type(A3._QueueDeferredAuraRuntime) == "function"
+    then
+        A3._QueueDeferredAuraRuntime(slotRoot.unit, "AURAS3_REMINDER_CLICK_CAST")
     end
     -- With a shared owner the container level is written after this call, so
     -- re-stamping here would be undone again; that owner runs the refresh last.
@@ -1616,10 +1983,15 @@ function Runtime.AttachSlots(container, slotRoot)
     container._msufA3SpellIndicatorSlotCandidateFilterSignatures = {}
     for i = 1, #slotRoot.slots do
         local slot = slotRoot.slots[i]
+        -- The index mapping stays dense either way: container[i] simply
+        -- remains nil for an enchant slot, which is exactly what makes the
+        -- geometry pass treat it as a placeholder-only surface.
         container._msufA3SpellIndicatorButtonSlots[i] = slot
-        container:AddAuraSlot(slot.slotKey, slot.nativeFilter, SlotOptions(container, slot, i))
-        container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] = slot.nativeFilter
-        container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
+        if not slot.enchantSlot then
+            container:AddAuraSlot(slot.slotKey, slot.nativeFilter, SlotOptions(container, slot, i))
+            container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] = slot.nativeFilter
+            container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
+        end
     end
     return #slotRoot.slots
 end
@@ -1659,13 +2031,18 @@ local function UpdateSlots(container, slotRoot)
     for i = 1, #slotRoot.slots do
         local slot = slotRoot.slots[i]
         container._msufA3SpellIndicatorButtonSlots[i] = slot
-        if container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] ~= slot.nativeFilter then
-            container:SetAuraSlotFilterString(slot.slotKey, slot.nativeFilter)
-            container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] = slot.nativeFilter
-        end
-        if container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] ~= slot.candidateFilterSignature then
-            container:SetAuraSlotCandidateFilters(slot.slotKey, slot.candidateFilters)
-            container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
+        -- Nothing native backs an enchant slot, so neither setter may be
+        -- reached with its key: Blizzard asserts on an unknown aura slot.
+        -- Its placeholder is the whole surface and the geometry pass owns it.
+        if not slot.enchantSlot then
+            if container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] ~= slot.nativeFilter then
+                container:SetAuraSlotFilterString(slot.slotKey, slot.nativeFilter)
+                container._msufA3SpellIndicatorSlotFilterStrings[slot.slotKey] = slot.nativeFilter
+            end
+            if container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] ~= slot.candidateFilterSignature then
+                container:SetAuraSlotCandidateFilters(slot.slotKey, slot.candidateFilters)
+                container._msufA3SpellIndicatorSlotCandidateFilterSignatures[slot.slotKey] = slot.candidateFilterSignature
+            end
         end
         -- Runtime.SyncGeometry performs the single visual/geometry pass after
         -- every slot has been rebound. Doing it here as well configured each

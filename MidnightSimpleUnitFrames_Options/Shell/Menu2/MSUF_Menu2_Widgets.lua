@@ -2876,9 +2876,10 @@ local function ApplyEnabledVisuals(control, enabled)
     SetTextEnabledColor(control._msuf2Label, enabled)
     if control._msuf2RefreshSwitchVisual then control:_msuf2RefreshSwitchVisual() end
     if control._msuf2RefreshToggleFeedback then control:_msuf2RefreshToggleFeedback() end
-    if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse and control._msuf2LabelHit._msuf2MouseEnabledStateApplied ~= enabled then
-        control._msuf2LabelHit._msuf2MouseEnabledStateApplied = enabled
-        control._msuf2LabelHit:EnableMouse(enabled)
+    local labelMouseEnabled = enabled or control._msuf2KeepLabelHitMouseWhenDisabled == true
+    if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse and control._msuf2LabelHit._msuf2MouseEnabledStateApplied ~= labelMouseEnabled then
+        control._msuf2LabelHit._msuf2MouseEnabledStateApplied = labelMouseEnabled
+        control._msuf2LabelHit:EnableMouse(labelMouseEnabled)
     end
     local edit = control.editBox or control.__MSUF_valueBox
     if edit then

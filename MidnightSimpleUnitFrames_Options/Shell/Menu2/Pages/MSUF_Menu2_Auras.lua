@@ -262,6 +262,9 @@ M._customContainerAssistantSuffixes = {
     "filters.bigDefensive", "filters.crowdControl", "placed.anchor", "placed.growth",
     "placed.x", "placed.y", "placed.max", "placed.size", "placed.perRow", "placed.spacing",
     "placed.showStacks", "placed.showCooldown", "placed.showCooldownSwipe",
+    "placed.reminderEnabled", "placed.reminderAlpha", "placed.reminderDesaturate",
+    "placed.reminderClickCast", "placed.reminderOnlyCastable",
+    "reminderEnchantMainHand", "reminderEnchantOffHand",
 }
 local function AuraControlMeta(ctx, path, classification, assistantContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
@@ -361,7 +364,12 @@ local function NormalizeDebuffTypeBorderMode(value, fallback)
     return fallback or "OFF"
 end
 local function AddTooltip(widget, title, body)
-    return M.AddTooltip(widget, title, body, { hook = true, titleAsLine = true })
+    return M.AddTooltip(widget, title, body, {
+        hook = true,
+        titleAsLine = true,
+        labelHit = true,
+        labelHitWhenDisabled = true,
+    })
 end
 local function AddAuraTooltipHelp(widget)
     return AddTooltip(widget, "Aura tooltip",
@@ -4697,17 +4705,21 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
             Rebuild(ctx)
         end,
     }), workspaceTabs, "unit-workspace.container-selector", customContainerContract)
-    if containerBar and unit ~= "player" then
+    if containerBar then
         local exactKind = "unitAuraWorkspace"
         -- prepareValue -> { tab, tool, representative settingKey }. Changelog
         -- highlights and search deep-links use these to open the exact
         -- workspace view instead of flashing an unrelated control.
         local exactViews = {
-            custom4_behavior = { tab = "custom4", tool = "behavior",
-                settingKey = "auras3." .. tostring(unit) .. ".custom4.placed.sortMethod" },
-            debuff_blacklist = { tab = "debuff", tool = "blacklist",
-                settingKey = "auras3." .. tostring(unit) .. ".debuff.blacklist.hidePermanent" },
+            custom1_reminder = { tab = "custom1", tool = "setup",
+                settingKey = "auras3." .. tostring(unit) .. ".custom1.placed.reminderEnabled" },
         }
+        if unit ~= "player" then
+            exactViews.custom4_behavior = { tab = "custom4", tool = "behavior",
+                settingKey = "auras3." .. tostring(unit) .. ".custom4.placed.sortMethod" }
+            exactViews.debuff_blacklist = { tab = "debuff", tool = "blacklist",
+                settingKey = "auras3." .. tostring(unit) .. ".debuff.blacklist.hidePermanent" }
+        end
         local exactContracts = {}
         for value, view in pairs(exactViews) do exactContracts[value] = view.settingKey end
         containerBar._msuf2ExactTargetKinds = { [exactKind] = true }
@@ -4780,6 +4792,10 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
 end
 
 local CUSTOM_AURA_TYPES = VTP "BUFF=Buff|DEBUFF=Debuff"
+-- Reminder is the container's operating mode, not a styling detail: it turns
+-- a compacting list into one fixed slot per whitelisted entry. It belongs
+-- next to Aura type, where the other structural decision already lives.
+local CUSTOM_DISPLAY_MODES = VTP "active=Only active auras|reminder=Fixed slots (reminder)"
 --- Compact, task-focused Custom Aura editor used inside UnitFrame > Auras.
 --- Only one tool is rendered at a time; all values still write to the same
 --- native Custom Container record consumed by runtime and previews.
@@ -5189,8 +5205,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         -- German and Russian. `auraNoun` itself stays raw - it feeds Assistant action ids.
         local isDebuff = auraType == "DEBUFF"
         local addLabel = isDebuff and Tr("Add debuff") or Tr("Add buff")
-        local trackHint = isDebuff and Tr("Track a debuff - Spell ID, link, or name")
-            or Tr("Track a buff - Spell ID, link, or name")
+        local trackHint = isDebuff and Tr("Add a debuff - Spell ID, spell link or item link")
+            or Tr("Add a buff - Spell ID, spell link or item link")
         local addBody = isDebuff and Tr("Adds this exact debuff to the custom container.")
             or Tr("Adds this exact buff to the custom container.")
         local removeBody = isDebuff and Tr("Stops tracking this debuff in the custom container.")
@@ -5219,7 +5235,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             actionKey = "aura_custom_whitelist_add_spell", actionFixedArgs = { scope = unit, index = index }, actionInputArg = "value",
         })
         AddTooltip(input, "Exact aura tracking",
-            "Enter a Spell ID, paste a spell link, or type a spell name. This whitelist tracks exact Spell IDs.")
+            "Enter a Spell ID, paste a spell link, or type a spell name. This whitelist tracks exact Spell IDs. Paste an item link instead to track the buff that item applies and offer the item itself on click - flasks, runes, stones and potions all work that way. If the item's buff differs from its use effect, put both on one line: the Spell ID decides what is tracked, the item what a click uses.")
         AddTooltip(add, addLabel, addBody)
         local status = W.Text(section, "", 24, -136, floor(inner * 0.52), T.colors.accent)
         local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.",
@@ -5267,7 +5283,38 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
             row.remove = ActionButton(row, "Remove", 80)
             row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+            -- Two static buttons instead of one relabelled one: the styled
+            -- action button has no guaranteed text setter, and a fixed label
+            -- always states what the click will do.
+            row.keepOn = ActionButton(row, "Always show", 96)
+            row.keepOn:SetPoint("RIGHT", row.remove, "LEFT", -6, 0)
+            row.keepOff = ActionButton(row, "Filter again", 96)
+            row.keepOff:SetPoint("RIGHT", row.remove, "LEFT", -6, 0)
+            row.keepOn:Hide()
+            row.keepOff:Hide()
+            row.keepOn:SetScript("OnClick", function()
+                if row._spellID and Model.ToggleCustomContainerKeepSpell(unit, index, row._spellID, true) then
+                    Apply("AURAS3_CUSTOM_REMINDER_KEEP", true)
+                    Rebuild(ctx)
+                end
+            end)
+            row.keepOff:SetScript("OnClick", function()
+                if row._spellID and Model.ToggleCustomContainerKeepSpell(unit, index, row._spellID, false) then
+                    Apply("AURAS3_CUSTOM_REMINDER_KEEP", true)
+                    Rebuild(ctx)
+                end
+            end)
+            AddTooltip(row.keepOn, "Always show",
+                "Pins this entry so the self-cast filter never hides it. Use it for anything that is not a class ability - a flask, food, a rune, a buff someone else casts on you. MSUF cannot tell those apart from another class's spell on its own: nothing reports which class owns a Spell ID.")
+            AddTooltip(row.keepOff, "Filter again",
+                "Lets the self-cast filter decide about this entry again. It will be hidden on characters that cannot cast it.")
             row.name:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
+            -- The second line carries the Spell ID and what a click does, so it
+            -- needs the same right edge as the name. Without it the text runs
+            -- straight under the Remove button on a narrow menu.
+            row.id:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
+            row.id:SetJustifyH("LEFT")
+            row.id:SetWordWrap(false)
             row.remove:SetScript("OnClick", function()
                 if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
@@ -5315,7 +5362,38 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                     local name = tostring(entry.text or entry.spellID or "Spell"):gsub("%s*%(#%d+%)$", "")
                     row.name:SetText(name)
-                    row.id:SetText(tostring("Spell ID ") .. tostring(entry.spellID))
+                    -- Say plainly what a click on this row will do. A tracked
+                    -- aura the player cannot apply has no click action, and a
+                    -- silently dead button is worse than a visible hint.
+                    local clickNote = entry.clickAction == "item" and Tr("Click uses this item")
+                        or entry.clickAction == "spell" and Tr("Click casts this")
+                        or Tr("No click action \194\183 paste an item")
+                    -- The self-cast filter is the only thing that can make a
+                    -- whitelisted row disappear, so the row has to say so itself
+                    -- rather than letting it vanish without explanation.
+                    local filtering = item.placed.reminderEnabled == true
+                        and item.placed.reminderOnlyCastable == true
+                    local exempt = entry.keep == true
+                    local stateNote = ""
+                    if filtering and exempt then
+                        stateNote = " \194\183 " .. Tr("always shown")
+                    elseif filtering and not entry.clickAction then
+                        stateNote = " \194\183 " .. Tr("hidden on this character")
+                    end
+                    row.id:SetText(tostring("Spell ID ") .. tostring(entry.spellID)
+                        .. " \194\183 " .. clickNote .. stateNote)
+                    -- Only offered where it changes anything: with the filter off,
+                    -- or on a row a bound item already protects, it is noise.
+                    local offerKeep = filtering and entry.itemID == nil
+                    row.keepOn:SetShown(offerKeep and not entry.keepExplicit)
+                    row.keepOff:SetShown(offerKeep and entry.keepExplicit == true)
+                    if offerKeep then
+                        row.name:SetPoint("RIGHT", row.keepOn, "LEFT", -8, 0)
+                        row.id:SetPoint("RIGHT", row.keepOn, "LEFT", -8, 0)
+                    else
+                        row.name:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
+                        row.id:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
+                    end
                     RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
                         customActionPath .. ".whitelist.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
                     row._entryCount = #entries
@@ -5326,6 +5404,90 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             end
         end
         M.TrackRefresh(ctx, refreshList)
+
+        -- Temporary weapon enchants are not auras at all -- Blizzard keeps them
+        -- out of aura parsing, groups and slots -- so they cannot ride the list
+        -- above. They still belong on this tab: "what is tracked" should be one
+        -- question with one answer, not two places to look.
+        if unit == "player" then
+            local ench = b:CollapsibleSection("aura_reminder_enchants_" .. tostring(index),
+                "Weapon enchants", 218, false)
+            local ew = ench._msuf2Width or b.width or 720
+            local eInner = ew - 48
+            local ecol, egap = Grid(ew, 2)
+            local enchantMain = BindSwitch(ctx, ench, "Track the Main Hand enchant", 24, -46, ecol,
+                function() return item.reminderEnchantMainHand == true end,
+                function(value)
+                    item.reminderEnchantMainHand = value == true
+                    Apply("AURAS3_CUSTOM_REMINDER_ENCHANT", true)
+                    Rebuild(ctx)
+                end,
+                AuraControlMeta(ctx, "custom-container.reminder.enchant-main-hand"))
+            AddTooltip(enchantMain, "Track the Main Hand enchant",
+                "Adds a reminder slot for the temporary enchant on your main hand - a weapon oil, a stone or a weapon-applied poison. Unlike an aura this state is plainly readable, so the icon lights up while the enchant runs and dims when it is gone, in every kind of content.")
+            local enchantOff = BindSwitch(ctx, ench, "Track the Off Hand enchant", 24 + ecol + egap, -46, ecol,
+                function() return item.reminderEnchantOffHand == true end,
+                function(value)
+                    item.reminderEnchantOffHand = value == true
+                    Apply("AURAS3_CUSTOM_REMINDER_ENCHANT", true)
+                    Rebuild(ctx)
+                end,
+                AuraControlMeta(ctx, "custom-container.reminder.enchant-off-hand"))
+            AddTooltip(enchantOff, "Track the Off Hand enchant",
+                "Same slot for your off hand. Both hands share the consumable set below, which is what you normally want.")
+            local enchantInputValue = ""
+            local enchantInputW = max(140, min(floor(eInner * 0.62), eInner - 132))
+            local enchantInput = BindTextInput(ctx, ench, "Oil or stone - item link or ID", 24, -96, enchantInputW,
+                function() return enchantInputValue end,
+                function(value) enchantInputValue = value or "" end,
+                false, AuraControlMeta(ctx, "custom-container.reminder.enchant-item", "ephemeral"))
+            local enchantSet = ActionButton(ench, "Bind item", 118, "primary")
+            enchantSet:SetPoint("TOPLEFT", ench, "TOPLEFT", 36 + enchantInputW, -120)
+            enchantSet:SetScript("OnClick", function()
+                local value = enchantInput and enchantInput.GetText and enchantInput:GetText() or enchantInputValue
+                local changed = Model.SetCustomContainerReminderEnchantItem(unit, index, value)
+                if changed then
+                    if enchantInput and enchantInput.SetText then enchantInput:SetText("") end
+                    enchantInputValue = ""
+                    Apply("AURAS3_CUSTOM_REMINDER_ENCHANT_ITEM", true)
+                    Rebuild(ctx)
+                end
+                return changed and true or false
+            end)
+            RegisterAuraTextAction(ctx, enchantSet, enchantInput, "Bind item",
+                customActionPath .. ".reminder.enchant-item.set", {
+                    actionKey = "aura_custom_reminder_enchant_item",
+                    actionFixedArgs = { scope = unit, index = index }, actionInputArg = "value",
+                })
+            AddTooltip(enchantInput, "Oil or stone",
+                "Paste the consumable these slots should offer on click. A weapon enchant cannot be cast, so only an item makes them clickable. Leave it empty to keep them as pure indicators.")
+            local enchantStatus = W.Text(ench, "", 24, -160, eInner, T.colors.muted)
+            M.TrackRefresh(ctx, function()
+                local reminder = item.placed.reminderEnabled == true
+                local tracked = (item.reminderEnchantMainHand == true and 1 or 0)
+                    + (item.reminderEnchantOffHand == true and 1 or 0)
+                local itemID, itemName = Model.CustomContainerReminderEnchantItem(unit, index)
+                if type(W.SetControlsEnabled) == "function" then
+                    W.SetControlsEnabled({ enchantMain, enchantOff }, reminder)
+                    W.SetControlsEnabled({ enchantInput, enchantSet }, reminder and tracked > 0)
+                end
+                if not reminder then
+                    enchantStatus:SetText(Tr("Needs Display set to Fixed slots in Setup · enchants have no aura to show otherwise."))
+                elseif tracked == 0 then
+                    enchantStatus:SetText(Tr("No weapon slot tracked."))
+                elseif itemID then
+                    enchantStatus:SetText(M.Format("Click uses %s.", tostring(itemName or ("item:" .. tostring(itemID)))))
+                else
+                    enchantStatus:SetText(Tr("No item bound · these slots only indicate."))
+                end
+                if W.SetCollapsibleBadges then
+                    W.SetCollapsibleBadges(ench, {{
+                        text = tracked > 0 and M.Format("%d tracked", tracked) or Tr("Off"),
+                        kind = tracked > 0 and "accent" or "muted", showWhenClosed = true,
+                    }})
+                end
+            end)
+        end
         return
     end
 
@@ -5697,21 +5859,30 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 AuraControlMeta(ctx, "custom-container.appearance.swipe-direction")),
         })
 
-        local durationBar = b:CollapsibleSection(CustomStyleSectionId(index, "duration_bar"), "Duration Bar", 130, false)
+        local durationBar = b:CollapsibleSection(CustomStyleSectionId(index, "duration_bar"), "Duration Bar", 156, false)
         local barCol, barX, BarNumber = StyleGrid(durationBar)
-        local durationBarControls
+        local durationBarControls, durationBarSwitch
+        local durationBarNote = W.Text(durationBar, "", 24, -116, (durationBar._msuf2Width or b.width or 720) - 48, T.colors.muted)
         local function RefreshCustomDurationBarState()
             local placed = item.placed
-            local enabled = placed.showDurationBar == true
+            -- Reminder slots are placed AuraSlots without a duration surface, so
+            -- this whole group has nothing to drive while that mode is on.
+            local reminder = placed.reminderEnabled == true
+            local enabled = placed.showDurationBar == true and not reminder
+            if durationBarSwitch then W.SetControlEnabled(durationBarSwitch, not reminder) end
             if durationBarControls then W.SetControlsEnabled(durationBarControls, enabled) end
+            durationBarNote:SetText(reminder
+                and Tr("Reminder slots do not draw a duration bar.") or "")
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(durationBar, {{
-                    text = enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off",
+                    text = reminder and Tr("Unavailable")
+                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
                     kind = enabled and "accent" or "muted", showWhenClosed = true,
                 }})
             end
         end
-        BindSwitch(ctx, durationBar, "Duration bar", barX(1), -42, barCol, function() return item.placed.showDurationBar == true end,
+        M.TrackRefresh(ctx, RefreshCustomDurationBarState)
+        durationBarSwitch = BindSwitch(ctx, durationBar, "Duration bar", barX(1), -42, barCol, function() return item.placed.showDurationBar == true end,
             function(value)
                 item.placed.showDurationBar = value == true
                 Apply("AURAS3_CUSTOM_DURATION_BAR")
@@ -5854,7 +6025,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     if tool == "behavior" then
         local sortLane = (isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF") and "debuff" or "buff"
         local supportsCustomPriority = not isPlayerDefensives
-        local section = b:Section("Ordering", 156)
+        local section = b:Section("Ordering", 190)
         local w = section._msuf2Width or b.width or 720
         -- Keep every custom container's identity separate. Exact-ID custom
         -- containers can each persist their own CUSTOM_PRIORITY or ordinary
@@ -5886,12 +6057,22 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 orderingPath .. ".sort-direction",
                 visibleOrderingPath .. ".sort-direction"))
         AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-        if supportsCustomPriority and type(W.SetControlsEnabled) == "function" then
-            M.TrackRefresh(ctx, function()
-                W.SetControlsEnabled({ sortDirection },
-                    NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, supportsCustomPriority) ~= "CUSTOM_PRIORITY")
-            end)
-        end
+        -- Fixed reminder slots take their order from the Whitelist, so nothing
+        -- on this tab can influence them. Leaving the controls live would let
+        -- the page promise something the runtime ignores.
+        local orderingNote = W.Text(section, "", 24, -156, w - 48, T.colors.muted)
+        M.TrackRefresh(ctx, function()
+            local reminder = item.placed.reminderEnabled == true
+            if type(W.SetControlsEnabled) == "function" then
+                W.SetControlsEnabled({ sortMethod }, not reminder)
+                W.SetControlsEnabled({ sortDirection }, not reminder
+                    and (not supportsCustomPriority
+                        or NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, supportsCustomPriority) ~= "CUSTOM_PRIORITY"))
+            end
+            orderingNote:SetText(reminder
+                and Tr("Sorting is off while this container shows fixed reminder slots \194\183 their order comes from the Whitelist.")
+                or "")
+        end)
         return
     end
 
@@ -6046,7 +6227,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
 
     local setupW = b.width or 720
     local compactSetup = setupW < 680
-    local section = b:Section(containerLabel .. " Setup", compactSetup and 184 or 132)
+    local section = b:Section(containerLabel .. " Setup", compactSetup and 262 or 210)
     local w = section._msuf2Width or setupW
     local inner = w - 48
     local enabled = BindSwitch(ctx, section, "Enabled", 24, compactSetup and -52 or -62, 106,
@@ -6091,10 +6272,161 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             Rebuild(ctx)
         end,
         AuraControlMeta(ctx, "custom-container.setup.aura-type"))
+    local modeY = (compactSetup and -82 or -34) - 70
+    BindDropdown(ctx, section, "Display", 24, modeY, CUSTOM_DISPLAY_MODES, max(200, min(320, floor(inner * 0.42))),
+        function() return item.placed.reminderEnabled == true and "reminder" or "active" end,
+        function(value)
+            item.placed.reminderEnabled = value == "reminder"
+            Apply("AURAS3_CUSTOM_REMINDER", true)
+            Rebuild(ctx)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.enabled"))
+    local modeNote = W.Text(section, "", 24, modeY - 44, inner, T.colors.muted)
     local count = #Model.CustomContainerSpellEntries(unit, index)
     W.Text(section, count == 1 and Tr("1 whitelisted spell · style remains live in Menu Preview and Edit Mode.")
-        or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count), 24, compactSetup and -156 or -104, inner, T.colors.muted)
-    M.TrackRefresh(ctx, function() W.SetControlEnabled(enabled, true) end)
+        or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count), 24, modeY - 66, inner, T.colors.muted)
+    M.TrackRefresh(ctx, function()
+        modeNote:SetText(item.placed.reminderEnabled == true
+            and Tr("Every whitelisted entry keeps its own place. A dimmed icon means that entry is missing.")
+            or Tr("Only auras that are currently active are shown, packed together."))
+    end)
+
+    -- Buff Reminder. Exact Spell ID whitelists are the only aura source that
+    -- can carry one fixed slot per spell, so the mode belongs to Custom 1-3.
+    -- It is never state driven: MSUF cannot read whether an aura is present
+    -- on 12.1, so the placeholder is simply drawn beneath the native icon.
+    local reminderSection = b:CollapsibleSection("aura_reminder_custom_" .. tostring(index),
+        "Buff Reminder", 258, false)
+    local rw = reminderSection._msuf2Width or setupW
+    local rInner = rw - 48
+    local rcol, rgap = Grid(rw, 2)
+    -- The mode itself lives in Setup next to Aura type; this section owns only
+    -- how the reminder looks and what a click on it does.
+    local reminderAlpha = BindSlider(ctx, reminderSection, "Placeholder opacity", 24, -46, 10, 100, 5, rcol,
+        function() return floor(((tonumber(item.placed.reminderAlpha) or 0.45) * 100) + 0.5) end,
+        function(value)
+            item.placed.reminderAlpha = max(0.1, min(1, (tonumber(value) or 45) / 100))
+            Apply("AURAS3_CUSTOM_REMINDER_ALPHA", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.opacity"))
+    AddTooltip(reminderAlpha, "Placeholder opacity",
+        "How strongly a missing aura's placeholder is drawn. Lower values keep the frame calm; the running aura always covers it completely either way.")
+    local reminderDesaturate = BindSwitch(ctx, reminderSection, "Grey out placeholders", 24 + rcol + rgap, -46, rcol,
+        function() return item.placed.reminderDesaturate ~= false end,
+        function(value)
+            item.placed.reminderDesaturate = value == true
+            Apply("AURAS3_CUSTOM_REMINDER_DESATURATE", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.desaturate"))
+    AddTooltip(reminderDesaturate, "Grey out placeholders",
+        "Draws the placeholder without colour so a missing aura reads at a glance. Turn this off to keep the spell's own colours and separate the two states by opacity or tint alone.")
+    local reminderColor = W.Color(reminderSection, "Placeholder tint")
+    M.BindColor(ctx, reminderColor,
+        function()
+            local c = type(item.placed.reminderColor) == "table" and item.placed.reminderColor or nil
+            return c and c[1] or 1, c and c[2] or 1, c and c[3] or 1
+        end,
+        function(r, g, blue)
+            item.placed.reminderColor = { r, g, blue }
+            Apply("AURAS3_CUSTOM_REMINDER_COLOR", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.color"))
+    reminderColor:Hide()
+    if reminderColor._msuf2Title then
+        reminderColor._msuf2Title:Hide()
+        reminderColor._msuf2Title._msuf2AlwaysHidden = true
+    end
+    local reminderClick = BindSwitch(ctx, reminderSection, "Click the icon to cast the spell", 24, -96, rInner,
+        function() return item.placed.reminderClickCast ~= false end,
+        function(value)
+            item.placed.reminderClickCast = value == true
+            Apply("AURAS3_CUSTOM_REMINDER_CLICK_CAST", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.click-cast"))
+    AddTooltip(reminderClick, "Click the icon to cast the spell",
+        "Turns every reminder slot into a cast button: clicking it casts that slot's spell at this frame's unit, whether the aura is missing or already running, so re-applying a poison or flask works. The binding is written once outside combat and never changes afterwards, so this costs no timer, no event and no aura read. Only spells work; food, flasks and other items cannot be triggered this way.")
+    -- One whitelist for every character: with this on, a Mage's reminder row
+    -- keeps Arcane Intellect and drops the Rogue poisons from the same profile.
+    -- Rows with a bound item stay either way -- an item is class agnostic.
+    local reminderSelfOnly = BindSwitch(ctx, reminderSection, "Only show what I can apply myself", 24, -142, rInner,
+        function() return item.placed.reminderOnlyCastable == true end,
+        function(value)
+            item.placed.reminderOnlyCastable = value == true
+            Apply("AURAS3_CUSTOM_REMINDER_SELF_ONLY", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.only-castable"))
+    AddTooltip(reminderSelfOnly, "Only show what I can apply myself",
+        "Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat.")
+    local reminderStatus = W.Text(reminderSection, "", 24, -190, rInner, T.colors.muted)
+    M.TrackRefresh(ctx, function()
+        W.SetControlEnabled(enabled, true)
+        local on = item.placed.reminderEnabled == true
+        if type(W.SetControlsEnabled) == "function" then
+            W.SetControlsEnabled({ reminderAlpha, reminderDesaturate, reminderClick, reminderSelfOnly }, on)
+        end
+        local cap = max(0, floor(tonumber(item.placed.max) or 8))
+        local allEntries = Model.CustomContainerSpellEntries(unit, index)
+        -- A filtered row is not a slot, so it must not be counted as one.
+        local selfOnly = item.placed.reminderOnlyCastable == true
+        local hidden, slots = 0, 0
+        for i = 1, #allEntries do
+            local entry = allEntries[i]
+            if selfOnly and not entry.clickAction and entry.keep ~= true then
+                hidden = hidden + 1
+            elseif slots < cap then
+                slots = slots + 1
+            end
+        end
+        if unit == "player" then
+            if item.reminderEnchantMainHand == true and slots < cap then slots = slots + 1 end
+            if item.reminderEnchantOffHand == true and slots < cap then slots = slots + 1 end
+        end
+        -- One line, three facts: how many slots, how many of them react to a
+        -- click, and where their order comes from.
+        if not on then
+            reminderStatus:SetText(Tr("Off · switch Display to Fixed slots in Setup to use this."))
+        else
+            local clickable, counted = 0, 0
+            for i = 1, #allEntries do
+                local entry = allEntries[i]
+                if not (selfOnly and not entry.clickAction and entry.keep ~= true) and counted < cap then
+                    counted = counted + 1
+                    if entry.clickAction then clickable = clickable + 1 end
+                end
+            end
+            if unit == "player" then
+                local hasItem = Model.CustomContainerReminderEnchantItem(unit, index) ~= nil
+                if item.reminderEnchantMainHand == true and counted < cap then
+                    counted = counted + 1
+                    if hasItem then clickable = clickable + 1 end
+                end
+                if item.reminderEnchantOffHand == true and counted < cap then
+                    counted = counted + 1
+                    if hasItem then clickable = clickable + 1 end
+                end
+            end
+            local base = item.placed.reminderClickCast == false
+                and M.Format("%d fixed slots · order comes from the Whitelist.", slots)
+                or M.Format("%d fixed slots · %d clickable · order comes from the Whitelist.",
+                    slots, clickable)
+            -- Say it out loud when the filter is swallowing rows, otherwise a
+            -- whitelisted entry would just be missing with no explanation.
+            if hidden > 0 then
+                base = base .. " " .. M.Format("%d hidden: not castable by this character.", hidden)
+            end
+            reminderStatus:SetText(base)
+        end
+        if W.SetCollapsibleBadges then
+            local badges = {{
+                text = on and Tr("Reminder on") or Tr("Reminder off"),
+                kind = on and "accent" or "muted", showWhenClosed = true,
+            }}
+            if on and item.placed.reminderClickCast ~= false then
+                badges[#badges + 1] = { text = Tr("Click-cast"), kind = "info", showWhenClosed = true }
+            end
+            W.SetCollapsibleBadges(reminderSection, badges)
+        end
+    end)
 end
 
 local function BuildMovedAuraPage(ctx)

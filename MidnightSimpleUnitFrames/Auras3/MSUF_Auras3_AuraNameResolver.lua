@@ -25,6 +25,10 @@ local containersByUnit = {}
 local framesByUnit = {}
 local pendingScopes = {}
 local refreshPending = false
+local fallbackUnitsA, fallbackUnitsB = {}, {}
+local pendingFallbackUnits = fallbackUnitsA
+local fallbackDriver
+local fallbackDriverArmed = false
 
 local function FlushScopes()
     refreshPending = false
@@ -99,22 +103,41 @@ local function ApplyAlias(container, sourceSpellID, auraSpellID)
     return true
 end
 
+local function RemoveScanName(container, name)
+    local scanNames = container and container._msufA3AuraAliasScanNames
+    if not (scanNames and name) then return false end
+    for i = 1, #scanNames do
+        if scanNames[i] == name then
+            local last = #scanNames
+            scanNames[i] = scanNames[last]
+            scanNames[last] = nil
+            return true
+        end
+    end
+    return false
+end
+
 local function ResolveAuraData(container, auraData)
     local names = container and container._msufA3AuraAliasNames
     if not (names and auraData) or issecretvalue(auraData)
         or (canaccesstable and canaccesstable(auraData) == false)
     then
-        return false
+        return false, nil
     end
     local name = PublicAuraField(auraData.name)
-    local auraSpellID = PublicAuraField(auraData.spellId)
+    local auraSpellID = tonumber(PublicAuraField(auraData.spellId))
     local sources = type(name) == "string" and names[name] or nil
-    if not (sources and auraSpellID) then return false end
+    if not (sources and auraSpellID and auraSpellID > 0) then return false, nil end
     local changed = false
     for sourceSpellID in pairs(sources) do
         changed = ApplyAlias(container, sourceSpellID, auraSpellID) or changed
     end
-    return changed
+    -- A successful name lookup has now resolved this compiled source name to
+    -- the visible aura spell ID. The native candidate filter owns all future
+    -- display updates, so retaining the name in the secret/full fallback list
+    -- would only rebuild the same AuraData table on every unrelated UNIT_AURA.
+    -- SyncContainer rebuilds the list on every lane/config lifecycle refresh.
+    return changed, name
 end
 
 local function ScanContainer(container)
@@ -125,11 +148,74 @@ local function ScanContainer(container)
     if not (lane and names and scanNames) then return false end
     local changed = false
     local unit, nativeFilter = container.unit, lane.nativeFilter
-    for i = 1, #scanNames do
-        local ok, auraData = pcall(GetAuraDataBySpellName, unit, scanNames[i], nativeFilter)
-        if ok and auraData then changed = ResolveAuraData(container, auraData) or changed end
+    local i = 1
+    while i <= #scanNames do
+        local scanName = scanNames[i]
+        local ok, auraData = pcall(GetAuraDataBySpellName, unit, scanName, nativeFilter)
+        local aliasChanged, resolvedName
+        if ok and auraData then
+            aliasChanged, resolvedName = ResolveAuraData(container, auraData)
+            changed = aliasChanged or changed
+        end
+        if resolvedName then
+            -- This lookup queried scanNames[i] itself, so removing the resolved
+            -- entry needs no second linear name search. Fill the current slot
+            -- from the tail and inspect it before advancing.
+            local last = #scanNames
+            scanNames[i] = scanNames[last]
+            scanNames[last] = nil
+        else
+            i = i + 1
+        end
     end
     return changed
+end
+
+local function FlushFallbackScans()
+    if fallbackDriver and fallbackDriver.SetScript then
+        fallbackDriver:SetScript("OnUpdate", nil)
+    end
+    fallbackDriverArmed = false
+
+    local batch = pendingFallbackUnits
+    pendingFallbackUnits = batch == fallbackUnitsA and fallbackUnitsB or fallbackUnitsA
+    for unit in pairs(batch) do
+        batch[unit] = nil
+        local containers = containersByUnit[unit]
+        if containers then
+            for container in pairs(containers) do
+                local scanNames = container._msufA3AuraAliasScanNames
+                if scanNames and scanNames[1] then ScanContainer(container) end
+            end
+        end
+    end
+end
+
+local function QueueFallbackScan(unit, containers)
+    containers = containers or containersByUnit[unit]
+    local hasWork = false
+    if containers then
+        for container in pairs(containers) do
+            local scanNames = container._msufA3AuraAliasScanNames
+            if scanNames and scanNames[1] then
+                hasWork = true
+                break
+            end
+        end
+    end
+    if not hasWork then return end
+    pendingFallbackUnits[unit] = true
+    if fallbackDriverArmed then return end
+    if not fallbackDriver and CreateFrame then fallbackDriver = CreateFrame("Frame") end
+    if not (fallbackDriver and fallbackDriver.SetScript) then
+        pendingFallbackUnits[unit] = nil
+        if containers then
+            for container in pairs(containers) do ScanContainer(container) end
+        end
+        return
+    end
+    fallbackDriverArmed = true
+    fallbackDriver:SetScript("OnUpdate", FlushFallbackScans)
 end
 
 local function OnEvent(_, _, unit, updateInfo)
@@ -137,7 +223,7 @@ local function OnEvent(_, _, unit, updateInfo)
     if not containers then return end
     if issecretvalue(updateInfo) or type(updateInfo) ~= "table"
         or (canaccesstable and canaccesstable(updateInfo) == false) then
-        for container in pairs(containers) do ScanContainer(container) end
+        QueueFallbackScan(unit, containers)
         return
     end
 
@@ -146,11 +232,14 @@ local function OnEvent(_, _, unit, updateInfo)
     if issecretvalue(isFullUpdate) or isFullUpdate == true
         or issecretvalue(added) or type(added) ~= "table"
         or (canaccesstable and canaccesstable(added) == false) then
-        for container in pairs(containers) do ScanContainer(container) end
+        QueueFallbackScan(unit, containers)
         return
     end
     for i = 1, #added do
-        for container in pairs(containers) do ResolveAuraData(container, added[i]) end
+        for container in pairs(containers) do
+            local _, resolvedName = ResolveAuraData(container, added[i])
+            if resolvedName then RemoveScanName(container, resolvedName) end
+        end
     end
 end
 
@@ -162,6 +251,9 @@ function Resolver.UnregisterContainer(container)
         containers[container] = nil
         if not next(containers) then
             containersByUnit[unit] = nil
+            pendingFallbackUnits[unit] = nil
+            fallbackUnitsA[unit] = nil
+            fallbackUnitsB[unit] = nil
             local frame = framesByUnit[unit]
             if frame then frame:UnregisterAllEvents() end
             framesByUnit[unit] = nil
