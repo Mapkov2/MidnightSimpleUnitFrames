@@ -2159,6 +2159,19 @@ local function PriorityFramesAnswer(norm)
     then
         return nil
     end
+    -- "Setting changes" above meant more than the polarity verbs: the plainest
+    -- form of all is "set <control> to <value>", and without it "set Priority
+    -- Frames Include Tanks Automatically to off" was answered with co-tank
+    -- help. Single commands survived only because the Router's exact-label
+    -- lane rescued them downstream -- a compound sentence has no such rescue,
+    -- so nothing was applied at all. A value tail is required so that "set up
+    -- priority frames" stays a how-to question.
+    if (norm:match("^set%s+") or norm:match("^change%s+") or norm:match("^make%s+")
+        or norm:match("^adjust%s+") or norm:match("^setze%s+") or norm:match("^stelle%s+"))
+        and (norm:find("%f[%a]to%f[%A]") or norm:find("=", 1, true))
+    then
+        return nil
+    end
 
     local hasPriority = ContainsAny(norm, PRIORITY_FRAME_TERMS)
     local hasCoTank = ContainsAny(norm, PRIORITY_CO_TANK_TERMS)

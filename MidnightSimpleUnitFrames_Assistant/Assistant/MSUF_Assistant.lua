@@ -7988,6 +7988,16 @@ function A.HandleInput(text, handleOpts)
     local result
     local routed, routeResult
     local semanticBarOutlineColor = AP.BarOutlineColorSemanticPlan(text)
+    -- That lane also returns a fail-closed notice for a bar-outline colour
+    -- stated alongside another change ("set Focus Bar Outline Color to red and
+    -- Focus Bar Outline Opacity to 50%"). It exists so a clause is never
+    -- dropped, which was right while nothing could plan the whole sentence --
+    -- the compound planner now can, so only a real change plan may skip the
+    -- Router here. The notice is still reachable through A.Parse when the
+    -- sentence genuinely cannot be planned.
+    if type(semanticBarOutlineColor) == "table" and semanticBarOutlineColor.kind ~= "changes" then
+        semanticBarOutlineColor = nil
+    end
     local function RunRoute()
         if semanticBarOutlineColor then
             return AP.ExecuteBarOutlineColorSemanticPlan(semanticBarOutlineColor)
@@ -8474,6 +8484,37 @@ function AP.LongInputResult(text)    text = tostring(text or "")
     }
 end
 
+-- Replace a plan with the one the command's exact visible LABEL names, when a
+-- label matches and points somewhere else. Returns the original plan unchanged
+-- otherwise, so callers can wrap a parse result unconditionally.
+function AP.PreferExactLabelPlan(text, parsed)
+    local router = A.RouterPrivate
+    local parser = A.Parser or {}
+    if not (router and type(router.ExactRegistrySettingForCommand) == "function"
+        and type(parser.PlanForExactRegistrySetting) == "function")
+    then
+        return parsed
+    end
+    local currentKey = type(parsed) == "table" and parsed.kind == "changes"
+        and type(parsed.changes) == "table" and parsed.changes[1]
+        and parsed.changes[1].setting and tostring(parsed.changes[1].setting.key or "") or nil
+    local okSetting, setting = pcall(router.ExactRegistrySettingForCommand, text)
+    -- Deliberately no fallback to the parser's exact-ALIAS index here. It does
+    -- resolve subjects the label lane declines ("shared health text color
+    -- mode"), but as a blanket fallback it also re-reads parts the ordinary
+    -- parse already had right: arity-3 "and" went from 0 real misses to 32.
+    if not okSetting or not setting then return parsed end
+    if tostring(setting.key or "") == (currentKey or "") then return parsed end
+    local okPlan, labelPlan = pcall(parser.PlanForExactRegistrySetting,
+        setting, parser.Normalize(text), text)
+    if okPlan and type(labelPlan) == "table" and labelPlan.kind == "changes"
+        and type(labelPlan.changes) == "table" and #labelPlan.changes > 0
+    then
+        return labelPlan
+    end
+    return parsed
+end
+
 function AP.BuildAtomicSettingBatch(parts)
     if type(parts) ~= "table" or #parts < 2 or type(A.Parse) ~= "function" then return nil end
     local combined = {}
@@ -8482,6 +8523,14 @@ function AP.BuildAtomicSettingBatch(parts)
     local bulkSafe = true
     for i = 1, #parts do
         local parsed = A.Parse(parts[i])
+        -- A part is resolved as if it were the whole message, which loses the
+        -- Router's label lane: on its own "set Boss Castbar Target Name Color
+        -- to red" resolves to the SHARED Cast Target Name Color, and the batch
+        -- applied that instead of the Boss control the player named. The label
+        -- is what they read on screen, so it outranks the topical pick here
+        -- too. One lookup per part, and only on an already-warm index -- see
+        -- R.ExactRegistrySettingForCommand for why that guard matters.
+        parsed = AP.PreferExactLabelPlan(parts[i], parsed)
         if type(parsed) ~= "table" or parsed.kind ~= "changes" or type(parsed.changes) ~= "table" or #parsed.changes == 0 then
             return nil
         end
@@ -8583,6 +8632,25 @@ function AP.TrySubmitBatch(text, preSplitParts, opts)    local parts = preSplitP
             result.summary = atomicPlan.summary
         end
         return result
+    end
+    -- The splitter plans clause by clause. When one clause cannot stand alone
+    -- but A.Parse can plan the WHOLE sentence, what failed was the split, not
+    -- the request -- the compound parser carries scope between clauses and
+    -- resolves each by its visible label. Only reached once the split has
+    -- already failed, so the extra parse never lands on the common path (doing
+    -- it unconditionally cost 9ms -> 590ms on the cold compound callback).
+    if type(text) == "string" and text ~= "" and type(A.Parse) == "function" then
+        local okParsed, parsed = pcall(A.Parse, text)
+        if okParsed and type(parsed) == "table" and parsed.kind == "changes"
+            and type(parsed.changes) == "table" and #parsed.changes >= #parts
+        then
+            local whole = A.ExecutePlan(parsed)
+            if type(whole) == "table"
+                and AP.IsSuccessfulResultStatus(whole.status or whole.result)
+            then
+                return whole
+            end
+        end
     end
     return AP.BatchPlanFailure(parts)
 end
@@ -8881,6 +8949,18 @@ function AP.TryImmediateMutationResult(text, opts)
     -- owners. Let the Router explain the relationship (or offer the correct
     -- frame) before an exact boolean alias can toggle only the first phrase.
     if AP.RequiresCrossFrameTextRouting(text) then return nil end
+    -- Every shortcut in this lane resolves ONE control and returns, so a
+    -- sentence naming several changes ("set Boss Buff Spacing to 6 and Boss
+    -- Buff Stack Count Anchor to topleft") applied only its first item and
+    -- reported success. A.Parse owns multi-change planning; hand the whole
+    -- sentence over rather than answering half of it. The test is the parser's
+    -- own cheap string scan -- no index build, so the preflight budget that
+    -- assistant_cold_compound_callback_perf_smoke pins is untouched.
+    if type(parser.ShouldTryEarlyCompound) == "function"
+        and parser.ShouldTryEarlyCompound(normalized, text)
+    then
+        return nil
+    end
     -- Concrete directional movement and typed cast-bar icon placement have
     -- reviewed O(1) owners. Bypass exact label detection before it can lazily
     -- build the broad registry indices; value-only commands such as "set

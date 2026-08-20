@@ -1860,7 +1860,16 @@ local function NonMutatingIntent(text)
 
     -- Subjective labels describe a desired policy, not one concrete toggle.
     -- This intentionally wins over an imperative prefix ("hide useless buffs").
+    -- A stated VALUE is the exception, and a different thing from a bare
+    -- imperative: "set Priority Frames Alignment Offset to -100" leaves
+    -- nothing to guess, yet the area word ("frames") and an action word were
+    -- enough to file it as a vague readability wish and change nothing.
+    local statesExplicitValue = normalized:find("%f[%a]to%f[%A]%s+%S") ~= nil
+        and (normalized:match("^set%s+") or normalized:match("^change%s+")
+            or normalized:match("^adjust%s+") or normalized:match("^make%s+")
+            or normalized:match("^setze%s+") or normalized:match("^stelle%s+")) ~= nil
     if not explicitImportantAuraFilter
+        and not statesExplicitValue
         and HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_TERMS)
         and HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_AREAS)
         and HasAnyExactPhrase(actionable, SUBJECTIVE_ACTION_TERMS)

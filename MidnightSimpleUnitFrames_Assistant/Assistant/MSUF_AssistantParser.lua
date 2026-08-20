@@ -5562,8 +5562,15 @@ local function ParseHumanSafetyGuidanceShortcut(normalized)
 end
 A._ParseHumanSafetyGuidanceShortcut = ParseHumanSafetyGuidanceShortcut
 
-function P.ShouldTryEarlyCompound(text)
+-- `raw` is optional but matters: Normalize STRIPS punctuation, so by the time
+-- the normalized form arrives, "set A to 21, B to off" reads as one run-on
+-- clause with no joiner at all and the whole comma phrasing was never treated
+-- as compound. Callers that still hold the user's text pass it here.
+function P.ShouldTryEarlyCompound(text, raw)
     text = tostring(text or "")
+    local rawText = tostring(raw or "")
+    local punctuationJoin = rawText:find(",", 1, true) ~= nil
+        or rawText:find(";", 1, true) ~= nil
     local numberCount = 0
     for _ in text:gmatch("[-+]?%d+%.?%d*") do
         numberCount = numberCount + 1
@@ -5678,6 +5685,72 @@ function P.ShouldTryEarlyCompound(text)
         if hasBoolean and itemCount >= 1 then
             local scopeCount = #(DetectUnits(text) or {}) + #(DetectGroups(text) or {})
             if scopeCount >= 2 then return true end
+        end
+    end
+
+    -- Two "<control> to <value>" clauses joined by "and" or a comma is the
+    -- plainest multi-change sentence there is, and the one players type when
+    -- they know both control names ("set Boss Buff Spacing to 6 and Boss Buff
+    -- Stack Count Anchor to topleft"). Without this the exact-alias pre-pass
+    -- swallows the whole tail as one value and only the first control changes.
+    -- An enum value can itself contain "to" ("bottom to top"), so the joiner is
+    -- required as well; ParseCompound rejects anything it cannot actually split.
+    do
+        local toCount = 0
+        for _ in text:gmatch("%f[%a]to%f[%A]") do toCount = toCount + 1 end
+        if toCount >= 2 and (text:find(" and ", 1, true) or text:find(" und ", 1, true)
+            or text:find(",", 1, true) or punctuationJoin
+            or text:find("%f[%a]then%f[%A]")) then
+            return true
+        end
+    end
+
+    -- The unpunctuated run: "set Boss Buff Icons Per Row 21 Boss Buff Show
+    -- Cooldown Swipe off" -- no joiner and no "to", so every shape test above
+    -- misses it and only the first control was ever changed. Recognising the
+    -- SHAPE is pure string work; the label scan that actually finds the clause
+    -- boundaries runs later (BareLabelValueRun) and only for sentences like
+    -- this one. That scan is itself gated on the label index already being
+    -- warm, so a cold path pays nothing for this.
+    do
+        local hasValueConnector = text:find("%f[%a]to%f[%A]") ~= nil
+        local hasJoiner = text:find(" and ", 1, true) or text:find(" und ", 1, true)
+            or text:find(",", 1, true) or punctuationJoin
+        if not hasValueConnector and not hasJoiner then
+            local tokens = {}
+            for word in text:gmatch("%S+") do tokens[#tokens + 1] = word end
+            local SET_VERBS = {
+                set = true, change = true, make = true, adjust = true,
+                setze = true, stelle = true,
+            }
+            -- Two controls each carrying a value need a long sentence; a bare
+            -- single command ("set boss buff icon size 45") is shorter and the
+            -- scan rejects it anyway when it finds only one control.
+            if #tokens >= 7 and SET_VERBS[tokens[1]] then return true end
+        end
+    end
+
+    -- Two scopes plus an attribute noun spoken twice is a per-scope sentence
+    -- ("set player portrait shape rounded target portrait shape circle").
+    -- Without this the single-setting lanes read one shape word and apply it
+    -- to both frames, so the second scope silently gets the first value.
+    do
+        local scopeCount = #(DetectUnits(text) or {}) + #(DetectGroups(text) or {})
+        if scopeCount >= 2 then
+            local ignored = {
+                player = true, target = true, focus = true, pet = true, boss = true,
+                targettarget = true, focustarget = true, party = true, raid = true,
+                arena = true, frame = true, frames = true, unit = true, units = true,
+                that = true, this = true, with = true, from = true, into = true,
+                also = true, then_ = true, them = true, both = true, each = true,
+            }
+            local counts = {}
+            for word in text:gmatch("%a%a%a%a+") do
+                if not ignored[word] then
+                    counts[word] = (counts[word] or 0) + 1
+                    if counts[word] >= 2 then return true end
+                end
+            end
         end
     end
     return false
@@ -5817,6 +5890,38 @@ function A.Parse(text, ctxOverride)
     local normalized = P.Normalize(raw)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return { kind = "empty" } end
+    -- Every topical fast path below resolves ONE control and returns, so a
+    -- sentence naming several changes loses everything after the first item.
+    -- ProvenCompoundPlan is the shared veto: it answers only when the compound
+    -- parser genuinely produces more than one change, so ordinary one-setting
+    -- commands keep their existing precedence. ParseCompound is the expensive
+    -- part, so the result is memoised for the whole A.Parse call.
+    local compoundPlanComputed, compoundPlan
+    local function ProvenCompoundPlan()
+        if not compoundPlanComputed then
+            compoundPlanComputed = true
+            if type(P.ParseCompound) == "function"
+                and P.ShouldTryEarlyCompound and P.ShouldTryEarlyCompound(normalized, raw)
+            then
+                local plan = P.ParseCompound(normalized, raw, nil)
+                if plan and plan.changes and #plan.changes > 1 then
+                    plan.raw = raw
+                    plan.normalized = normalized
+                    compoundPlan = plan
+                end
+            end
+        end
+        return compoundPlan
+    end
+    -- A sentence whose clauses each named their own control and value is not
+    -- open to interpretation, so it outranks every fast path below -- including
+    -- the aura and colour specialists, which otherwise recognise one fragment
+    -- and answer for the whole request. Keyword-assembled compound plans do NOT
+    -- get this precedence; they are weighed against the specialists further down.
+    do
+        local explicitPlan = ProvenCompoundPlan()
+        if explicitPlan and explicitPlan.explicitClauses then return explicitPlan end
+    end
     local semanticBarOutlineColor = A._ParseScopedBarOutlineColorFastShortcut
         and A._ParseScopedBarOutlineColorFastShortcut(normalized, raw)
     if semanticBarOutlineColor then
@@ -5880,6 +5985,10 @@ function A.Parse(text, ctxOverride)
             and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true }))
     if normalized:find(" text anchor ", 1, true) and not normalized:find("custom value", 1, true) then exactFullAlias = nil end
     if exactFullAlias then
+        if not exactFullAlias.changes or #exactFullAlias.changes <= 1 then
+            local widerCompound = ProvenCompoundPlan()
+            if widerCompound then return widerCompound end
+        end
         exactFullAlias.raw = raw
         exactFullAlias.normalized = normalized
         return exactFullAlias
@@ -6368,7 +6477,17 @@ function A.Parse(text, ctxOverride)
     -- Menu selectors change editing context; they must win over an exact
     -- setting alias for the selected dropdown (for example, "select player
     -- HP left slot" is not a request to choose an HP text format yet).
-    local shouldTryEarlyCompound = P.ShouldTryEarlyCompound and P.ShouldTryEarlyCompound(normalized)
+    local shouldTryEarlyCompound = P.ShouldTryEarlyCompound and P.ShouldTryEarlyCompound(normalized, raw)
+    -- The lanes from here to the compound stage below are all single-setting
+    -- topical shortcuts. Three of them already stand down for a compound-looking
+    -- sentence; the rest (name/human anchor, castbar position and fill) did not,
+    -- so "set Boss Buff Spacing to 6 and Boss Buff Stack Count Anchor to topleft"
+    -- was answered by the anchor lane with one unrelated change. A plan that
+    -- provably holds more than one change pre-empts all of them at once.
+    do
+        local provenCompound = ProvenCompoundPlan()
+        if provenCompound then return provenCompound end
+    end
     local menuSelectorPriorityParsed = P.ParseMenuSelectorState and P.ParseMenuSelectorState(normalized)
     if menuSelectorPriorityParsed then
         menuSelectorPriorityParsed.raw = raw
@@ -6461,6 +6580,10 @@ function A.Parse(text, ctxOverride)
         or (not colorResetIntent and P.ParseRegistryExactAliasShortcut
             and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true }))
     if exactAliasPriorityParsed then
+        if not exactAliasPriorityParsed.changes or #exactAliasPriorityParsed.changes <= 1 then
+            local widerCompound = ProvenCompoundPlan()
+            if widerCompound then return widerCompound end
+        end
         exactAliasPriorityParsed.raw = raw
         exactAliasPriorityParsed.normalized = normalized
         return exactAliasPriorityParsed
