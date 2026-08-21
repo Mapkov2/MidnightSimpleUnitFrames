@@ -1,18 +1,5 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.11-beta2 - 2026-08-21
-
-### Highlights
-
-- **Friendly Target Range Fade now remains accurate in instanced combat.** Moving farther out of range no longer makes the Target Frame appear in range again when Blizzard temporarily stops returning a fresh range result.
-<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"range_fade","controlId":"menu2.uf_target.unit.range_fade.enabled","settingKey":"target.rangeFadeEnabled","prepareKind":"","prepareValue":"","query":"target range fade","label":"Enable Range Fade"} -->
-
-### Fixes & Performance
-
-- Target Range Fade now keeps the last authoritative friendly-target result until a native range event or a real target change supplies a replacement, without adding polling, timers, or an open-world fallback path.
-- Castbars reuse unchanged manager topology and boss-frame geometry validation, resolve cast activity once per update, and share the player's plain interrupt-cooldown status across same-frame Target, Focus, and Boss refreshes.
-- Player-first role-sorted Party Frames now wait for a complete Arena roster before publishing their secure name list and refresh on Arena match-state and unit-name transitions; the additional listeners remain disabled in PvE.
-
 ## 6.11 - 2026-08-21
 
 ### Highlights
@@ -23,18 +10,24 @@
 ### Changes
 
 - Buff Reminder accepts Spell IDs, spell links, item links, and separate tracked-spell/item-action pairs. Player reminders can also track Main Hand and Off Hand temporary enchants, filter out spells the current character cannot apply, and pin shared consumables with **Always show**.
+- Main Hand and Off Hand enchant reminders now show their remaining time and a shaped cooldown swipe. A configurable 5-240 minute duration keeps the swipe proportional after login or reload, while the native duration binding updates without polling.
 - Reminder slots follow whitelist order, preserve their positions as auras appear or expire, and keep their secure click bindings fixed outside combat without polling or recurring aura reads.
 - Localized the complete Buff Reminder setup, whitelist actions, weapon-enchant controls, status text, and tooltips across all 12 supported locales.
 - The Assistant can now execute explicit multi-control requests clause by clause, including comma-separated and shared-scope commands, while continuing to fail closed for questions, planning requests, incomplete values, and ambiguous fragments.
+- Menu pages, accordion sections, and Back/Forward navigation now switch immediately without transition fades or a recurring discovery pulse.
 
 ### Fixes & Performance
 
+- Fixed Friendly Target Range Fade becoming inaccurate in instanced combat when Blizzard temporarily stops returning a fresh range result. MSUF now keeps the last authoritative result until a native range event or a real target change supplies a replacement, without adding polling, timers, or an open-world fallback path.
+- Castbars reuse unchanged manager topology and boss-frame geometry validation, resolve cast activity once per update, and share the player's plain interrupt-cooldown status across same-frame Target, Focus, and Boss refreshes.
+- Player-first role-sorted Party Frames now wait for a complete Arena roster before publishing their secure name list and refresh on Arena match-state and unit-name transitions; the additional listeners remain disabled in PvE.
 - Fixed Elemental Shamans seeing Maelstrom on both resource bars. While Maelstrom owns the Class Resource row, the Player power bar now consistently displays Mana across fill, current value, maximum, percentage, text color, and event filtering; disabling that row or entering a vehicle restores the primary resource.
 - Applied the same resource-ownership transition to Shadow Priest Mana/Insanity and cleared both overrides when the Class Resource module shuts down.
 - Made third-party cooldown-viewer and external-frame anchoring safe when 12.1 returns protected geometry. MSUF validates foreign frames once, shares one stable proxy between Unit Frames, and freezes that proxy at the combat edge instead of repeatedly touching every consumer.
 - Boss castbars now prewarm at most one hidden bar per rendered frame when an encounter starts, avoiding one large synchronous layout burst while retaining authoritative validation when a real cast begins.
-- Charged Rogue Combo Points fail closed when their slot table becomes restricted, refresh after combat, and keep their charged color ahead of the optional full-resource color in the Menu preview.
 - Aura-name fallback scans are coalesced to one frame and permanently retire each resolved alias until the container configuration changes, removing repeated name lookups from unrelated full aura updates.
+- Rounded Unit Frames no longer read the protected parent of Blizzard-owned dispel-overlay textures; the safe owner is captured before the region becomes forbidden and reused when masks are applied.
+- Group Frame previews keep their generated character names when ordinary player-unit events refresh the dummy frames outside Edit Mode.
 
 ## 6.1 - 2026-08-19
 
