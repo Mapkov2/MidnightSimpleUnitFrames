@@ -1,0 +1,75 @@
+name: Correct CurseForge file metadata
+run-name: Correct CurseForge file ${{ inputs.file_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      file_id:
+        description: Existing CurseForge file ID
+        required: true
+        type: string
+      version:
+        description: Version used for the MSUF_<version> display name
+        required: true
+        type: string
+      release_type:
+        description: CurseForge release channel
+        required: true
+        type: choice
+        options:
+          - release
+          - beta
+          - alpha
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate and update CurseForge metadata
+        shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
+          CF_FILE_ID: ${{ inputs.file_id }}
+          CF_VERSION: ${{ inputs.version }}
+          CF_RELEASE_TYPE: ${{ inputs.release_type }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
+            throw "Missing release publishing config: secret CF_API_KEY"
+          }
+          if ($env:CF_FILE_ID -notmatch '^\d+$') {
+            throw "CurseForge file ID must be numeric."
+          }
+
+          $version = $env:CF_VERSION.Trim()
+          $version = $version -replace '^refs/tags/', ''
+          $version = $version -replace '(?i)^MSUF[\s._-]*', ''
+          $version = $version -replace '^v(?=\d)', ''
+          if ($version -notmatch '^[0-9][0-9A-Za-z._-]*$') {
+            throw "Cannot derive a safe CurseForge display version from '$($env:CF_VERSION)'."
+          }
+
+          $releaseType = $env:CF_RELEASE_TYPE.Trim().ToLowerInvariant()
+          if ($releaseType -notin @('release', 'beta', 'alpha')) {
+            throw "Unsupported CurseForge release type '$releaseType'."
+          }
+
+          $displayName = "MSUF_$version"
+          $metadata = [ordered]@{
+            fileID = [long]$env:CF_FILE_ID
+            displayName = $displayName
+            releaseType = $releaseType
+          } | ConvertTo-Json -Depth 3 -Compress
+          $headers = @{
+            "X-Api-Token" = $env:CF_API_KEY
+            Accept = "application/json"
+          }
+          $form = @{ metadata = $metadata }
+          $result = Invoke-RestMethod -Method Post -Uri "https://wow.curseforge.com/api/projects/1384660/update-file" -Headers $headers -Form $form
+          if (-not $result -or [string]$result.id -ne [string]$env:CF_FILE_ID) {
+            throw "CurseForge did not confirm metadata update for file $($env:CF_FILE_ID)."
+          }
+          Write-Host "Updated CurseForge file $($result.id) to '$displayName' ($releaseType)."

@@ -296,6 +296,15 @@ jobs:
           }
           $releaseName = ($releaseName -replace '[\r\n]+', ' ').Trim()
 
+          # CurseForge file labels follow the compact project convention and
+          # must never inherit a descriptive annotated-tag subject. Stability
+          # is carried separately by CF_RELEASE_TYPE.
+          $curseForgeVersion = Normalize-ReleaseInput $tag
+          if ($curseForgeVersion -notmatch '^[0-9][0-9A-Za-z._-]*$') {
+            throw "Cannot derive a safe CurseForge display version from tag '$tag'."
+          }
+          $curseForgeDisplayName = "MSUF_$curseForgeVersion"
+
           $versionFileValue = Get-FileFirstLine "VERSION"
           $tocVersionValue = Get-TocVersion "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
           $releaseSignals = @($tag, $releaseName, $versionFileValue, $tocVersionValue)
@@ -318,10 +327,12 @@ jobs:
           "WAGO_STABILITY=$wagoStability" >> $env:GITHUB_ENV
           "CF_RELEASE_TYPE=$curseForgeType" >> $env:GITHUB_ENV
           "RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
+          "CURSEFORGE_DISPLAY_NAME=$curseForgeDisplayName" >> $env:GITHUB_ENV
           "release_is_prerelease=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "github_make_latest=$(if ($isPrerelease) { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
-          Write-Host "Release $tag uses name '$releaseName', Wago stability '$wagoStability', and CurseForge type '$curseForgeType' (CurseForge beta override=$tagRequestsCurseForgeBeta)."
+          "curseforge_display_name=$curseForgeDisplayName" >> $env:GITHUB_OUTPUT
+          Write-Host "Release $tag uses name '$releaseName', CurseForge name '$curseForgeDisplayName', Wago stability '$wagoStability', and CurseForge type '$curseForgeType' (CurseForge beta override=$tagRequestsCurseForgeBeta)."
 
       - name: Enforce prerelease channels for prerelease tags
         shell: pwsh
@@ -791,7 +802,7 @@ jobs:
           $metadata = [ordered]@{
             changelog = Get-Content -LiteralPath $changelogPath -Raw
             changelogType = $changelogType
-            displayName = $env:RELEASE_NAME
+            displayName = $env:CURSEFORGE_DISPLAY_NAME
             gameVersionNames = @($retailPatch)
             releaseType = $env:CF_RELEASE_TYPE
           } | ConvertTo-Json -Depth 5 -Compress
@@ -806,4 +817,4 @@ jobs:
           }
           $result = Invoke-RestMethod -Method Post -Uri "https://wow.curseforge.com/api/projects/$projectId/upload-file" -Headers $headers -Form $form
           $fileId = if ($result -and $result.id) { $result.id } else { "(unknown file id)" }
-          Write-Host "Uploaded $($zip.FullName) to CurseForge project $projectId as $env:RELEASE_NAME / $env:RELEASE_VERSION ($env:CF_RELEASE_TYPE, retail $retailPatch, file $fileId)."
+          Write-Host "Uploaded $($zip.FullName) to CurseForge project $projectId as $env:CURSEFORGE_DISPLAY_NAME / $env:RELEASE_VERSION ($env:CF_RELEASE_TYPE, retail $retailPatch, file $fileId)."
