@@ -61,12 +61,24 @@ local cooldownSnapshot
 local cooldownSnapshotSpellID
 local cooldownSnapshotFrameStamp
 local cooldownSnapshotKnown = false
+local statusSnapshotFrameStamp
+local statusSnapshotSpellID
+local statusSnapshotReady
+local statusSnapshotRemaining
+local statusSnapshotCooldown
+local statusSnapshotKnown = false
 
 local function InvalidateCooldownSnapshot()
     cooldownSnapshot = nil
     cooldownSnapshotSpellID = nil
     cooldownSnapshotFrameStamp = nil
     cooldownSnapshotKnown = false
+    statusSnapshotFrameStamp = nil
+    statusSnapshotSpellID = nil
+    statusSnapshotReady = nil
+    statusSnapshotRemaining = nil
+    statusSnapshotCooldown = nil
+    statusSnapshotKnown = false
 end
 
 local function GeneralDB()
@@ -239,6 +251,17 @@ local function CooldownReadyValue(cooldown, remaining)
 end
 
 local function InterruptStatus(cooldown, cooldownResolved)
+    local useSnapshot = cooldownResolved ~= true
+    local frameStamp = useSnapshot and _G.GetTime and _G.GetTime() or nil
+    local spellID = useSnapshot and (state.spellID or ResolveInterruptSpellID()) or nil
+    if frameStamp ~= nil
+        and statusSnapshotKnown == true
+        and statusSnapshotFrameStamp == frameStamp
+        and statusSnapshotSpellID == spellID
+    then
+        return statusSnapshotReady, statusSnapshotRemaining, statusSnapshotCooldown
+    end
+
     if cooldownResolved ~= true then
         cooldown = InterruptCooldown()
     end
@@ -247,6 +270,19 @@ local function InterruptStatus(cooldown, cooldownResolved)
 
     if not HasKnownValue(ready) then
         ready = false
+    end
+
+    -- The player's own interrupt cooldown is normally plain. Share that
+    -- resolved status across the target/focus/boss start burst, but never
+    -- retain a secret boolean in Lua; secret readiness still flows directly
+    -- from the native Duration object to its supported sinks on every caller.
+    if frameStamp ~= nil and plainIsSecret(ready) ~= true then
+        statusSnapshotFrameStamp = frameStamp
+        statusSnapshotSpellID = spellID
+        statusSnapshotReady = ready
+        statusSnapshotRemaining = remaining
+        statusSnapshotCooldown = cooldown
+        statusSnapshotKnown = true
     end
 
     return ready, remaining, cooldown
@@ -276,12 +312,8 @@ local function InterruptReady()
 end
 
 local function InterruptReadyBoolForTint()
-    local cooldown = InterruptCooldown()
-    if cooldown and cooldown.IsZero then
-        return cooldown:IsZero()
-    end
-
-    return InterruptReady()
+    local ready = InterruptStatus()
+    return ready
 end
 
 local function ColorFromDB(general, key, defaultR, defaultG, defaultB)

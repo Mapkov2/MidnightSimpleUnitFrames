@@ -792,38 +792,20 @@ end
 ExportPublic("MSUF_ClassPower_InvalidateColors", MSUF_ClassPower_InvalidateColors)
 
 --- Charged / Empowered Combo Points (Echoing Reprimand, Supercharged CP, etc.)
---- GetUnitChargedPowerPoints("player") returns a table of 1-based indices
---- that represent which combo point slots are "charged". The result is
---- SecretWhenUnitPowerRestricted in Midnight, so inaccessible combat data must
---- fail closed and be re-read on PLAYER_REGEN_ENABLED.
-local _chargedMap = {}    --- reused [index] = true map
+--- v6.1 behavior: rebuild the reused 1-based slot map when the charged-point
+--- event or a segmented structural refresh requests it.
+local _chargedMap = {}
 local _chargedAny = false
 
 local function RefreshChargedPoints()
-    if type(GetUnitChargedPowerPoints) ~= "function" then
-        for index in pairs(_chargedMap) do
-            _chargedMap[index] = nil
-        end
-        _chargedAny = false
-        return true
-    end
-
-    local indices = GetUnitChargedPowerPoints("player")
-    if not CanAccessOptionalTableValue(indices) then
-        --- Never retain a readable pre-combat slot map as current combat state.
-        --- The active Rogue binding guarantees a fresh read after combat ends.
-        for index in pairs(_chargedMap) do
-            _chargedMap[index] = nil
-        end
-        _chargedAny = false
-        return false
-    end
-
     for index in pairs(_chargedMap) do
         _chargedMap[index] = nil
     end
     _chargedAny = false
-    if indices == nil then return true end
+    if type(GetUnitChargedPowerPoints) ~= "function" then return end
+
+    local indices = GetUnitChargedPowerPoints("player")
+    if not CanAccessTableValue(indices) or #indices == 0 then return end
 
     for i = 1, #indices do
         local idx = indices[i]
@@ -832,7 +814,6 @@ local function RefreshChargedPoints()
             _chargedAny = true
         end
     end
-    return true
 end
 
 --- Charged/empowered color resolution
@@ -2362,8 +2343,11 @@ local function FullRefresh()
         CP.modeProfile = CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
         CP_CompileVisual(powerType, renderMode, maxP)
 
-        --- Charged points only for standard segmented (CP/HP)
-        if renderMode == CPK.MODE.SEGMENTED then
+        --- Seed the v6.1 charged map only for active Rogue Combo Points.
+        if PLAYER_CLASS == "ROGUE" and renderMode == CPK.MODE.SEGMENTED
+            and powerType == PT.ComboPoints
+            and CP.visual and CP.visual.showCharged == true
+        then
             RefreshChargedPoints()
         end
 
@@ -2854,6 +2838,7 @@ CP_RefreshEventBindings = function()
     local wantMaxHealth = (CP.visible and profile.health == true) or PHP.visible
     local wantPointCharge = CP.visible
         and profile.pointCharge == true
+        and PLAYER_CLASS == "ROGUE"
         and CP.powerType == PT.ComboPoints
         and CP.visual ~= nil
         and CP.visual.showCharged == true
@@ -2883,9 +2868,7 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_INTERRUPTED", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", wantSpellSucceeded, "player")
-    --- Charged point indices become readable again after combat. Keep only the
-    --- exit event for this repair; combat entry remains an auto-hide concern.
-    CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantRegen or wantPointCharge)
+    CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantRegen)
     CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantRegen)
     CP_SetEventBound(eventFrame, "PLAYER_DEAD", wantDeadAlive)
     CP_SetEventBound(eventFrame, "PLAYER_ALIVE", wantDeadAlive)
@@ -2991,8 +2974,9 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     if event == "UNIT_POWER_POINT_CHARGE" then
         if arg1 == "player" then
-            --- Only Rogue Combo Points consume charged slot indices.
+            --- Rebuild the v6.1 charged map on the dedicated Rogue point event.
             if CP.visible and CP.renderMode == CPK.MODE.SEGMENTED
+                and PLAYER_CLASS == "ROGUE"
                 and CP.powerType == PT.ComboPoints
                 and CP.visual and CP.visual.showCharged == true
             then
@@ -3050,10 +3034,6 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     --- Combat state change: re-evaluate auto-hide (OOC toggle)
     if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
-        local refreshCharged = event == "PLAYER_REGEN_ENABLED"
-            and CP.visible and CP.renderMode == CPK.MODE.SEGMENTED
-            and CP.powerType == PT.ComboPoints
-            and CP.visual and CP.visual.showCharged == true
         if event == "PLAYER_REGEN_ENABLED" then
             if CP.augLifecycleDisablePending == true and CP.DisableNow then
                 CP.DisableNow()
@@ -3068,17 +3048,13 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
                 FullRefresh()
                 return
             end
-            if refreshCharged then
-                RefreshChargedPoints()
-            end
         end
         CP_RefreshEventBindings()
         if event == "PLAYER_REGEN_ENABLED" then
             CP.CDMWidthSyncLayouts(true)
         end
-        if CP.visible and CP.container and (refreshCharged or _autoHideActive) then
-            --- Repaint the newly readable charged slots and/or re-evaluate the
-            --- current mode's auto-hide rules in the same targeted update.
+        if _autoHideActive and CP.visible and CP.container then
+            --- Re-run the current mode's update to trigger CP_CheckAutoHide
             CP_RunActiveUpdate(CP.powerType, CP.currentMax)
         end
         return

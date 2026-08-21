@@ -1662,7 +1662,14 @@ function P.GroupScaleBreakpointAttrForText(text)
     return "scaleOver25", number
 end
 
-function P.GroupScaleValueForText(text, playerCount)
+local GROUP_SCALE_BREAKPOINT_LABELS = {
+    scaleAt10 = "1-10 players",
+    scaleAt20 = "11-20 players",
+    scaleAt25 = "21-25 players",
+    scaleOver25 = "26+ players",
+}
+
+function P.GroupScaleValueForText(text, playerCount, attr)
     local norm = Normalize(text)
     local value =
         norm:match("scale%s+to%s+(%d+%.?%d*)")
@@ -1679,6 +1686,11 @@ function P.GroupScaleValueForText(text, playerCount)
     value = P.GroupScaleWordValueForText(text)
     if value ~= nil then return value end
     if P.GroupScaleRelativeDeltaForText and P.GroupScaleRelativeDeltaForText(text) ~= nil then return nil end
+    local breakpointLabel = GROUP_SCALE_BREAKPOINT_LABELS and GROUP_SCALE_BREAKPOINT_LABELS[attr]
+    local exactLabel = breakpointLabel and ("Scale " .. breakpointLabel) or nil
+    if exactLabel and Normalize(text):find(Normalize(exactLabel), 1, true) and A._NumberValueForText then
+        return A._NumberValueForText({ key = attr, label = exactLabel }, text)
+    end
     local fallback
     for token in norm:gmatch("%d+%.?%d*") do
         local number = tonumber(token)
@@ -1713,13 +1725,6 @@ function P.GroupScaleRelativeDeltaForText(text)
     return direction * math.abs(amount)
 end
 
-local GROUP_SCALE_BREAKPOINT_LABELS = {
-    scaleAt10 = "1-10 players",
-    scaleAt20 = "11-20 players",
-    scaleAt25 = "21-25 players",
-    scaleOver25 = "26+ players",
-}
-
 local function GroupScaleMissingValueAnswer(groups, attr, playerCount)
     local scope = groups and groups[1] or nil
     local label = (P.FrameResizeGroupLabel and P.FrameResizeGroupLabel(scope)) or tostring(scope or "Group")
@@ -1745,7 +1750,7 @@ function P.ParseGroupScaleBreakpointShortcut(text)
     local groups = DetectGroups(text)
     if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
     if #groups == 0 then return nil end
-    local value = P.GroupScaleValueForText(text, playerCount)
+    local value = P.GroupScaleValueForText(text, playerCount, attr)
     local relativeDelta
     if value == nil then
         relativeDelta = P.GroupScaleRelativeDeltaForText(text)

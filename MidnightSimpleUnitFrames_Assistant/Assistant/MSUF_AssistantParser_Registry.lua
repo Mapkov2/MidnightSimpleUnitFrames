@@ -905,6 +905,7 @@ local function StringValueForText(setting, text, raw)
         for i = 1, #(setting.aliases or {}) do addPrefix(setting.aliases[i]) end
         if setting.matchLabel ~= false then addPrefix(setting.label) end
     end
+    table.sort(prefixes, function(left, right) return #left > #right end)
     for i = 1, #(prefixes or {}) do
         local prefix = Normalize(prefixes[i])
         if prefix ~= "" then
@@ -915,6 +916,7 @@ local function StringValueForText(setting, text, raw)
                 value = value:gsub("^%s*[Aa][Uu][Ff]%s+", ""):gsub("^%s*[Zz][Uu]%s+", ""):gsub("^%s*[Aa][Ll][Ss]%s+", "")
                 value = Trim(value)
                 if value ~= "" then return value end
+                return nil
             end
             local startPos, endPos = (" " .. text .. " "):find(" " .. prefix .. " ", 1, true)
             if startPos then
@@ -923,6 +925,7 @@ local function StringValueForText(setting, text, raw)
                 value = value:gsub("^auf%s+", ""):gsub("^zu%s+", ""):gsub("^als%s+", "")
                 value = Trim(value)
                 if value ~= "" then return value end
+                return nil
             end
         end
     end

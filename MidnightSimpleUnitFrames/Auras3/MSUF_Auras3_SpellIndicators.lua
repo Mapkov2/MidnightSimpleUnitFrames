@@ -20,6 +20,7 @@ local SPELL_FRAME_EFFECT_BASE_OFFSET = tonumber(FrameLayers.SPELL_FRAME_EFFECT_B
 local SPELL_ICON_BASE_OFFSET = tonumber(FrameLayers.SPELL_ICON_BASE_OFFSET) or 64
 local UNIT_SPELL_BASE_OFFSET = tonumber(FrameLayers.UNIT_AURA_BASE_OFFSET) or 10
 local CreateFrame = _G.CreateFrame
+local GetTime = _G.GetTime or function() return 0 end
 local InCombat = _G.InCombatLockdown or function() return false end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local MAX_FINITE_AURA_DURATION = 2147483647
@@ -291,6 +292,7 @@ SlotLayoutSignature = function(slot)
         .. "\030" .. tostring(slot.castSpellID) .. "\030" .. tostring(slot.castUnit)
         .. "\030" .. tostring(slot.castItem) .. "\030" .. tostring(slot.castItemID)
         .. "\030" .. tostring(slot.enchantSlot) .. "\030" .. tostring(slot.enchantInventorySlot)
+        .. "\030" .. tostring(slot.enchantDurationSeconds)
 end
 
 local function FinalizeSlot(slot)
@@ -397,6 +399,8 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         castItemID = tonumber(item.castItemID),
         enchantSlot = type(item.enchantSlot) == "string" and item.enchantSlot or nil,
         enchantInventorySlot = tonumber(item.enchantInventorySlot),
+        enchantDurationSeconds = item.enchantSlot
+            and ClampNumber(item.enchantDurationSeconds, 60 * 60, 5 * 60, 240 * 60) or nil,
         castUnit = type(item.castUnit) == "string" and item.castUnit or nil,
         icon = item.icon,
         color = {
@@ -437,7 +441,8 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         showCooldownText = showBarTimer
             or ((appearance and appearance.showCooldownText ~= false or (not appearance and placed and placed.showCooldown ~= false)) and visual == "icon"),
         showCooldownSwipe = (appearance and appearance.showCooldownSwipe ~= false or (not appearance and placed and placed.showCooldownSwipe ~= false)) and visual == "icon",
-        cooldownSwipeReverse = appearance and appearance.cooldownSwipeReverse == true or false,
+        cooldownSwipeReverse = appearance and appearance.cooldownSwipeReverse == true
+            or (not appearance and placed and placed.cooldownSwipeReverse == true) or false,
         -- A placed Bar is the aura duration itself, not a static color swatch.
         -- The shared AuraButton preparer binds its full-size StatusBar to
         -- Blizzard's C-side duration object through SetDurationBar().
@@ -456,12 +461,16 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata, fal
         showAuraSymbol = false,
         cooldownSize = ClampNumber(appearance and appearance.cooldownSize or (placed and placed.cooldownSize), DEFAULT_SHARED.cooldownTextSize, 6, 40),
         cooldownAnchor = showBarTimer and SpellIndicatorAnchor(placed and placed.barTimerAnchor, "CENTER")
-            or SpellIndicatorAnchor(appearance and appearance.cooldownAnchor, "CENTER"),
+            or SpellIndicatorAnchor((appearance and appearance.cooldownAnchor)
+                or (placed and placed.cooldownAnchor), "CENTER"),
         cooldownX = showBarTimer and ClampNumber(placed and placed.barTimerX, 0, -2000, 2000)
-            or ClampNumber(appearance and appearance.cooldownX, 0, -2000, 2000),
+            or ClampNumber((appearance and appearance.cooldownX)
+                or (placed and placed.cooldownX), 0, -2000, 2000),
         cooldownY = showBarTimer and ClampNumber(placed and placed.barTimerY, 0, -2000, 2000)
-            or ClampNumber(appearance and appearance.cooldownY, 0, -2000, 2000),
-        cooldownDecimalSeconds = ClampNumber(appearance and appearance.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
+            or ClampNumber((appearance and appearance.cooldownY)
+                or (placed and placed.cooldownY), 0, -2000, 2000),
+        cooldownDecimalSeconds = ClampNumber((appearance and appearance.cooldownDecimalSeconds)
+            or (placed and placed.cooldownDecimalSeconds), DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
         stackAnchor = SpellIndicatorAnchor(appearance and appearance.stackAnchor, "BOTTOMRIGHT"),
         stackSize = ClampNumber(appearance and appearance.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ClampNumber(appearance and appearance.stackX, 0, -2000, 2000),
@@ -936,6 +945,8 @@ function Runtime.HideIconEffects(parentFrame)
     if not parentFrame then return end
     parentFrame._msufA3SpellIndicatorIconEffectButtons = nil
 end
+
+local ForgetReminderEnchantPlaceholder
 
 function Runtime.HideMissing(parentFrame)
     if not parentFrame then return end
@@ -1564,12 +1575,12 @@ end
 --- the placeholder can simply carry the state itself, in every kind of
 --- content. Read on demand only; WEAPON_ENCHANT_CHANGED drives the refresh,
 --- so nothing here polls.
-local function ReminderEnchantActive(slot)
+local function ReminderEnchantInfo(slot)
     local invSlot = slot and slot.enchantInventorySlot
     local api = _G.C_PaperDollInfo
     if not (invSlot and type(api) == "table"
-        and type(api.GetTemporaryEnchantmentInfo) == "function") then return false end
-    return api.GetTemporaryEnchantmentInfo(invSlot) ~= nil
+        and type(api.GetTemporaryEnchantmentInfo) == "function") then return nil end
+    return api.GetTemporaryEnchantmentInfo(invSlot)
 end
 
 --- Every live enchant placeholder in the UI, keyed by the surface itself.
@@ -1577,6 +1588,134 @@ end
 --- so the handler must touch exactly these one or two textures and nothing
 --- else -- no frame walk, no slot scan.
 local enchantPlaceholders, enchantDriver
+
+local function EnsureEnchantPlaceholderDuration(frame)
+    local duration = frame and frame._msufA3EnchantDuration
+    if duration then return duration end
+    local durationUtil = _G.C_DurationUtil
+    local createDuration = durationUtil and durationUtil.CreateDuration
+    if not (frame and type(createDuration) == "function") then return nil end
+    duration = createDuration()
+    if not (duration
+        and type(duration.SetTimeFromEnd) == "function"
+        and type(duration.SetTimeSpan) == "function") then
+        return nil
+    end
+    frame._msufA3EnchantDuration = duration
+    return duration
+end
+
+local function SyncEnchantPlaceholderCooldown(frame, slot, duration, enabled)
+    local cooldown = frame and frame._msufA3EnchantCooldown
+    if enabled ~= true or not (frame and duration) then
+        if cooldown then
+            if type(cooldown.Clear) == "function" then cooldown:Clear() end
+            cooldown:Hide()
+        end
+        return false
+    end
+    if not cooldown then
+        cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+        if not (cooldown and type(cooldown.SetCooldownFromDurationObject) == "function") then
+            return false
+        end
+        cooldown:SetAllPoints(frame)
+        if type(cooldown.SetDrawSwipe) == "function" then cooldown:SetDrawSwipe(true) end
+        if type(cooldown.SetSwipeColor) == "function" then cooldown:SetSwipeColor(0, 0, 0, 0.58) end
+        if type(cooldown.SetHideCountdownNumbers) == "function" then cooldown:SetHideCountdownNumbers(true) end
+        if type(cooldown.SetDrawBling) == "function" then cooldown:SetDrawBling(false) end
+        if type(cooldown.SetDrawEdge) == "function" then cooldown:SetDrawEdge(false) end
+        if type(cooldown.SetFrameLevel) == "function" and type(frame.GetFrameLevel) == "function" then
+            cooldown:SetFrameLevel((frame:GetFrameLevel() or 0) + 1)
+        end
+        frame._msufA3EnchantCooldown = cooldown
+    end
+    if type(cooldown.SetReverse) == "function" then
+        cooldown:SetReverse(slot and slot.cooldownSwipeReverse == true)
+    end
+    local deps = D()
+    local shape = deps and deps.IconShape
+    local shapeKey = slot and slot.iconShape
+    if cooldown._msufA3EnchantShape ~= shapeKey
+        and type(shape) == "table" and type(shape.ApplyCooldownShape) == "function" then
+        local mask = type(shape.EnsureMask) == "function" and shape.EnsureMask(frame, shapeKey) or nil
+        shape.ApplyCooldownShape(cooldown, shapeKey, mask)
+        cooldown._msufA3EnchantShape = shapeKey
+    end
+    cooldown:SetCooldownFromDurationObject(duration, true)
+    cooldown:Show()
+    return true
+end
+
+local function ClearEnchantPlaceholderDuration(frame, slot)
+    if not frame then return false end
+    local duration = frame._msufA3EnchantDuration
+    if duration then duration:SetTimeSpan(0, 0) end
+    local deps = D()
+    if deps and type(deps.ConfigureStandaloneAuraDurationText) == "function" then
+        deps.ConfigureStandaloneAuraDurationText(frame, frame._label, slot, duration, false)
+    elseif frame._label then
+        frame._label:SetText("")
+        frame._label:Hide()
+    end
+    SyncEnchantPlaceholderCooldown(frame, slot, duration, false)
+    frame._msufA3EnchantTimerVisible = nil
+    frame._msufA3EnchantTimerID = nil
+    frame._msufA3EnchantTimerRemainingMs = nil
+    frame._msufA3EnchantTimerTotalSeconds = nil
+    frame._msufA3EnchantTimerConfiguredSeconds = nil
+    return false
+end
+
+--- Convert one event snapshot into a stable native Duration. Blizzard exposes
+--- only remaining time, not the enchant's base duration, so mirror its manager:
+--- combine its exact remaining value with the configured Oil/stone total and
+--- preserve that denominator while the remaining value counts down. Text stays
+--- exact after login while the swipe immediately reflects elapsed time.
+local function SyncEnchantPlaceholderDuration(frame, slot, enchantInfo)
+    local wantsText = slot and slot.showCooldownText == true
+    local wantsSwipe = slot and slot.showCooldownSwipe == true
+    local remainingMs = enchantInfo and enchantInfo.hasExpirationTime == true
+        and tonumber(enchantInfo.remainingTimeMs) or nil
+    if not (remainingMs and remainingMs > 0 and (wantsText or wantsSwipe)) then
+        return ClearEnchantPlaceholderDuration(frame, slot)
+    end
+
+    local duration = EnsureEnchantPlaceholderDuration(frame)
+    if not duration then return ClearEnchantPlaceholderDuration(frame, slot) end
+    local enchantID = tonumber(enchantInfo.enchantID)
+    local previousRemainingMs = frame._msufA3EnchantTimerRemainingMs
+    local configuredSeconds = tonumber(slot.enchantDurationSeconds) or (60 * 60)
+    local resetTotal = frame._msufA3EnchantTimerID ~= enchantID
+        or previousRemainingMs == nil or remainingMs > previousRemainingMs
+        or frame._msufA3EnchantTimerConfiguredSeconds ~= configuredSeconds
+    local remainingSeconds = remainingMs / 1000
+    local totalSeconds = frame._msufA3EnchantTimerTotalSeconds
+    if resetTotal or not totalSeconds then
+        -- Blizzard provides no original enchant duration. Use the configured
+        -- Oil/stone duration as the denominator, but never make the total
+        -- shorter than the readable remaining value.
+        totalSeconds = math_max(configuredSeconds, remainingSeconds)
+    end
+    duration:SetTimeFromEnd(GetTime() + remainingSeconds, totalSeconds)
+    frame._msufA3EnchantTimerID = enchantID
+    frame._msufA3EnchantTimerRemainingMs = remainingMs
+    frame._msufA3EnchantTimerTotalSeconds = totalSeconds
+    frame._msufA3EnchantTimerConfiguredSeconds = configuredSeconds
+
+    local deps = D()
+    local textVisible = false
+    if deps and type(deps.ConfigureStandaloneAuraDurationText) == "function" then
+        textVisible = deps.ConfigureStandaloneAuraDurationText(
+            frame, frame._label, slot, duration, wantsText) == true
+    elseif frame._label then
+        frame._label:SetText("")
+        frame._label:Hide()
+    end
+    SyncEnchantPlaceholderCooldown(frame, slot, duration, wantsSwipe)
+    frame._msufA3EnchantTimerVisible = textVisible or nil
+    return textVisible
+end
 
 --- Lit while the enchant runs, dimmed to the reminder look while it is
 --- missing. Same two states a covered aura placeholder produces, just driven
@@ -1588,7 +1727,11 @@ local enchantPlaceholders, enchantDriver
 local function ApplyEnchantPlaceholderState(frame, slot, force)
     local tex = frame and frame._tex
     if not tex then return false end
-    local active = ReminderEnchantActive(slot)
+    local enchantInfo = ReminderEnchantInfo(slot)
+    local active = enchantInfo ~= nil
+    -- Duration must refresh even when the boolean active state is unchanged:
+    -- reapplying the same oil raises WEAPON_ENCHANT_CHANGED with active=true.
+    SyncEnchantPlaceholderDuration(frame, slot, enchantInfo)
     if force ~= true and frame._msufA3EnchantActive == active then return active end
     frame._msufA3EnchantActive = active
     local tint = slot.reminderColor or EMPTY_REMINDER_COLOR
@@ -1601,6 +1744,7 @@ local function ApplyEnchantPlaceholderState(frame, slot, force)
     end
     return active
 end
+Runtime._ApplyEnchantPlaceholderState = ApplyEnchantPlaceholderState
 
 --- One shared, lazily created event owner. A profile without enchant
 --- reminders never builds it and never registers the event at all.
@@ -1616,12 +1760,15 @@ local function TrackReminderEnchantPlaceholder(frame, slot)
         end
     end)
     enchantDriver:RegisterEvent("WEAPON_ENCHANT_CHANGED")
+    enchantDriver:RegisterEvent("WEAPON_SLOT_CHANGED")
     -- The enchant state survives a reload, but no change event announces it.
     enchantDriver:RegisterEvent("PLAYER_ENTERING_WORLD")
 end
 
-local function ForgetReminderEnchantPlaceholder(frame)
-    if enchantPlaceholders and frame then enchantPlaceholders[frame] = nil end
+ForgetReminderEnchantPlaceholder = function(frame)
+    if not frame then return end
+    if enchantPlaceholders then enchantPlaceholders[frame] = nil end
+    ClearEnchantPlaceholderDuration(frame, frame._msufA3ReminderSlot)
 end
 
 --- Mirror the slot's icon shape onto the reminder placeholder. Without the
@@ -1710,7 +1857,7 @@ local function SyncMissingFrame(parentFrame, slot, button, ownerContainer)
             tex:SetVertexColor(r, g, b, alpha)
         end
         tex:Show()
-        label:Hide()
+        if not (slot.enchantSlot and frame._msufA3EnchantTimerVisible == true) then label:Hide() end
     else
         ApplyMissingShape(frame, tex, nil)
         tex:Hide()

@@ -3034,12 +3034,14 @@ function A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
                     size = lane.size,
                     showCooldown = lane.showCooldownText,
                     showCooldownSwipe = lane.showCooldownSwipe,
+                    cooldownSwipeReverse = lane.cooldownSwipeReverse,
                     showStacks = lane.showStacks,
                     showTooltip = lane.showTooltip,
                     cooldownSize = lane.cooldownSize,
                     cooldownAnchor = lane.cooldownAnchor,
                     cooldownX = lane.cooldownX,
                     cooldownY = lane.cooldownY,
+                    cooldownDecimalSeconds = lane.cooldownDecimalSeconds,
                 },
             }
         end
@@ -3056,6 +3058,8 @@ function A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
                 -- One consumable covers both weapons in practice, so the
                 -- item is shared rather than duplicated per hand.
                 local itemID = tonumber(entry.reminderEnchantItem)
+                local durationSeconds = ClampNumber(
+                    entry.reminderEnchantDurationMinutes, 60, 5, 240) * 60
                 local slotX, slotY = GridOffset(position)
                 items[#items + 1] = {
                     key = "reminderench_" .. tostring(index) .. "_" .. spec.key,
@@ -3064,6 +3068,7 @@ function A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
                     unit = lane.unit,
                     enchantSlot = spec.token,
                     enchantInventorySlot = spec.inventorySlot,
+                    enchantDurationSeconds = durationSeconds,
                     icon = A3._ReminderItemIcon(itemID),
                     showWhenMissing = true,
                     reminderAlpha = alpha,
@@ -3084,10 +3089,17 @@ function A3._CompileCustomReminderItems(lane, entry, index, placed, filters)
                         y = slotY,
                         size = lane.size,
                         showTooltip = lane.showTooltip,
-                        -- No native button backs an enchant slot, so the
-                        -- cooldown and stack surfaces have nothing to bind.
-                        showCooldown = false,
-                        showCooldownSwipe = false,
+                        -- Enchant slots have no AuraButton, but their plain
+                        -- remainingTimeMs feeds an MSUF-owned native Duration
+                        -- object on the persistent reminder placeholder.
+                        showCooldown = lane.showCooldownText,
+                        showCooldownSwipe = lane.showCooldownSwipe,
+                        cooldownSwipeReverse = lane.cooldownSwipeReverse,
+                        cooldownSize = lane.cooldownSize,
+                        cooldownAnchor = lane.cooldownAnchor,
+                        cooldownX = lane.cooldownX,
+                        cooldownY = lane.cooldownY,
+                        cooldownDecimalSeconds = lane.cooldownDecimalSeconds,
                         showStacks = false,
                     },
                 }
@@ -4329,6 +4341,67 @@ local function PlaceCooldownText(fs, owner, lane)
     else
         fs:SetJustifyV("MIDDLE")
     end
+end
+
+--- Bind a plain MSUF-owned FontString to the same native duration style used
+--- by CustomAuraButtons. Buff Reminder weapon-enchant placeholders are not
+--- AuraButtons, but C_PaperDollInfo exposes their remaining time as ordinary
+--- data, so they can still use a C-side DurationTextBinding without polling.
+---
+--- The owner retains one binding for its lifetime. Visual setup runs only when
+--- the compiled slot signature changes; enchant events update only the native
+--- Duration reference and enablement.
+local function ConfigureStandaloneAuraDurationText(owner, fs, lane, duration, enabled)
+    if not owner then return false end
+    local binding = owner._msufA3StandaloneDurationBinding
+    if enabled ~= true or not (fs and lane and duration) then
+        if binding and type(binding.SetEnabled) == "function" then binding:SetEnabled(false) end
+        if fs then
+            fs:SetText("")
+            fs:Hide()
+        end
+        return false
+    end
+
+    local style = BuildAuraDurationStyle(lane)
+    local template = style and style.binding
+    local durationUtil = _G.C_DurationUtil
+    local createBinding = durationUtil and durationUtil.CreateDurationTextBinding
+    if not (template and type(createBinding) == "function") then return false end
+
+    if not binding then
+        binding = createBinding()
+        if not (binding
+            and type(binding.Assign) == "function"
+            and type(binding.SetFontString) == "function"
+            and type(binding.SetDuration) == "function"
+            and type(binding.SetEnabled) == "function")
+        then
+            return false
+        end
+        owner._msufA3StandaloneDurationBinding = binding
+    end
+
+    local signature = lane._msufA3LayoutSignature or lane._msufA3StructuralSignature or lane
+    if owner._msufA3StandaloneDurationSignature ~= signature
+        or owner._msufA3StandaloneDurationFontString ~= fs
+        or owner._msufA3StandaloneDurationStyle ~= style then
+        binding:Assign(template)
+        binding:SetFontString(fs)
+        ApplyFont(fs, lane.cooldownSize)
+        if type(fs.SetDrawLayer) == "function" then
+            fs:SetDrawLayer("OVERLAY", FrameLayers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
+        end
+        PlaceCooldownText(fs, owner, lane)
+        owner._msufA3StandaloneDurationSignature = signature
+        owner._msufA3StandaloneDurationFontString = fs
+        owner._msufA3StandaloneDurationStyle = style
+    end
+
+    binding:SetDuration(duration)
+    binding:SetEnabled(true)
+    fs:Show()
+    return true
 end
 
 local NATIVE_AURA_CONTAINER_METHODS = {
@@ -5700,10 +5773,13 @@ end
 
 -- Rounded frames are optional and loaded outside Auras3. Keep weak references
 -- to the native overlay textures on their owning unit frame so a later rounded
--- enable/apply can discover them without walking AuraButtons. Registration is
--- initialize/preview-only; aura events never cross this bridge.
-local function RegisterRoundedDispelOverlayRegion(parentFrame, region)
-    if not (parentFrame and region) then return end
+-- enable/apply can discover them without walking AuraButtons. Preserve the
+-- already-known texture owner as well: AddDispelTypeTexture makes the region's
+-- parent relationship forbidden to addon code, so RoundedFrames must never
+-- rediscover it through region:GetParent(). Registration is initialize/preview-
+-- only; aura events never cross this bridge.
+local function RegisterRoundedDispelOverlayRegion(parentFrame, region, owner)
+    if not (parentFrame and region and owner) then return end
     local key = IsGroupFrame(parentFrame) and "_msufGFDispelOverlays" or "_msufUFDispelOverlays"
     local regions = parentFrame[key]
     if type(regions) ~= "table" then
@@ -5711,6 +5787,12 @@ local function RegisterRoundedDispelOverlayRegion(parentFrame, region)
         parentFrame[key] = regions
     end
     regions[region] = true
+    local owners = parentFrame._msufRoundedMaskOwners
+    if type(owners) ~= "table" then
+        owners = setmetatable({}, { __mode = "k" })
+        parentFrame._msufRoundedMaskOwners = owners
+    end
+    owners[region] = owner
     local callback = _G.MSUF_RoundedUF_OnDispelOverlayChanged
     if type(callback) == "function" then
         callback(parentFrame, region)
@@ -5808,7 +5890,7 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region:SetAlpha(1)
         button:SetAlpha(Clamp01(sensor.alpha, 0.35))
         button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
-        RegisterRoundedDispelOverlayRegion(parentFrame, region)
+        RegisterRoundedDispelOverlayRegion(parentFrame, region, button)
     elseif sensor.visual == "purge" then
         region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         region:SetAlpha(1)
@@ -5898,7 +5980,7 @@ A3._ApplyDispelOverlayPreview = function(frame)
     if not LayoutDispelSensorOverlay(region, host, sensor, DispelSensorTarget(frame, sensor)) then
         return A3._HideDispelOverlayPreview(frame)
     end
-    RegisterRoundedDispelOverlayRegion(frame, region)
+    RegisterRoundedDispelOverlayRegion(frame, region, host)
     A3.SetDispelColorTexture(region, A3.GetDispelColorPreviewType(), true, 1)
     region:SetAlpha(Clamp01(sensor.alpha, 0.35))
     region:Show()
@@ -9592,6 +9674,7 @@ SpellIndicatorsRuntime.Install({
     SetAssistAlpha = SetAssistAlpha,
     ValidateAuraButton = ValidateNativeAuraButtonContract,
     PrepareAuraButton = PrepareAuraButton,
+    ConfigureStandaloneAuraDurationText = ConfigureStandaloneAuraDurationText,
     -- Buff Reminder placeholders reuse the shared aura icon shape module so
     -- a masked slot cannot leave uncovered placeholder corners.
     IconShape = Shape,

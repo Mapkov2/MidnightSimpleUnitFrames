@@ -33,6 +33,8 @@ local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
+local GetNumArenaOpponentSpecs = GetNumArenaOpponentSpecs
+local GetNumArenaOpponents = GetNumArenaOpponents
 local GetRaidRosterInfo = GetRaidRosterInfo
 local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
@@ -658,6 +660,44 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex)
   return true
 end
 
+--- Arena teams can replace party unit identities between rounds while the
+--- opponent/team size is already stable. Use Blizzard's arena-size signals as
+--- a lower bound so a transient GetNumSubgroupMembers() value cannot make a
+--- partial NAMELIST look complete. Nil means normal non-Arena Party behavior;
+--- false means Arena scope without a readable count, which must fail open to
+--- SecureGroupHeader's native roster path.
+local function ArenaPartyExpectedCompanionCount()
+  if type(GF.IsArenaPartyContext) ~= "function" or GF.IsArenaPartyContext() ~= true then
+    return nil
+  end
+
+  local known = false
+  local count = GetNumSubgroupMembers and GetNumSubgroupMembers() or nil
+  if issecretvalue(count) ~= true and type(count) == "number" then
+    count = floor(count + 0.5)
+    if count < 0 then count = 0 elseif count > 4 then count = 4 end
+    known = true
+  else
+    count = 0
+  end
+
+  local arenaSize = GetNumArenaOpponentSpecs and GetNumArenaOpponentSpecs() or nil
+  if issecretvalue(arenaSize) == true or type(arenaSize) ~= "number" or arenaSize < 1 then
+    arenaSize = GetNumArenaOpponents and GetNumArenaOpponents() or nil
+  end
+  if issecretvalue(arenaSize) ~= true and type(arenaSize) == "number" then
+    arenaSize = floor(arenaSize + 0.5)
+    if arenaSize > 0 then
+      local companions = arenaSize - 1
+      if companions > 4 then companions = 4 end
+      if companions > count then count = companions end
+      known = true
+    end
+  end
+
+  return known and count or false
+end
+
 local function BuildPlayerFirstRoleNameList(key, kind, conf)
   if conf.playerFirstInRole ~= true then
     return nil
@@ -666,12 +706,24 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf)
   if kind == "party" then
     local liveKind = LiveGroupKind()
     if liveKind == "party" then
+      local expectedCompanions = ArenaPartyExpectedCompanionCount()
+      if expectedCompanions == false then return nil end
+      local arenaRosterComplete = true
       if conf.showPlayer ~= false then
-        AddNameListEntry(entries, "player", 0, conf)
+        if AddNameListEntry(entries, "player", 0, conf) ~= true then
+          arenaRosterComplete = false
+        end
       end
-      for i = 1, 4 do
-        AddNameListEntry(entries, "party" .. i, i, conf)
+      local companionLimit = expectedCompanions ~= nil and expectedCompanions or 4
+      for i = 1, companionLimit do
+        if AddNameListEntry(entries, "party" .. i, i, conf) ~= true then
+          arenaRosterComplete = false
+        end
       end
+      -- In Arena only, never publish a partial list: Blizzard treats nameList
+      -- as a hard filter and would hide the newly assigned Shuffle teammate.
+      -- PvE keeps its established four-token scan byte-for-byte in behavior.
+      if expectedCompanions ~= nil and arenaRosterComplete ~= true then return nil end
     elseif liveKind == nil and conf.showSolo == true and conf.showPlayer ~= false then
       AddNameListEntry(entries, "player", 0, conf)
     end

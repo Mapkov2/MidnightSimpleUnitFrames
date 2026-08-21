@@ -1053,7 +1053,11 @@ builders.RUNTIME = function(env)
             end
         end
 
-        if CP.renderMode == CPK.MODE.SEGMENTED then
+        if PLAYER_CLASS == "ROGUE"
+            and CP.renderMode == CPK.MODE.SEGMENTED
+            and CP.powerType == PT.ComboPoints
+            and CP.visual and CP.visual.showCharged == true
+        then
             RefreshChargedPoints()
         end
 

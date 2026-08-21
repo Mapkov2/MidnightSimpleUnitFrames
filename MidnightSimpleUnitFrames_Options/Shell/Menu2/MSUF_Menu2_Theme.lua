@@ -2287,32 +2287,6 @@ StopNavPillGlowPulse = function(art)
     if art.glow and art.glow.SetAlpha then art.glow:SetAlpha(1) end
     if art.sheen and art.sheen.SetAlpha then art.sheen:SetAlpha(1) end
 end
-local function StartNavPillGlowPulse(art)
-    if not (art and art.glow and art.glow.CreateAnimationGroup) then return end
-    if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
-        StopNavPillGlowPulse(art)
-        return
-    end
-    if not art._pulse then
-        local group = art.glow:CreateAnimationGroup()
-        T.TrackMenuAnimationGroup(group)
-        if group.SetLooping then group:SetLooping("REPEAT") end
-        local fadeIn = group:CreateAnimation("Alpha")
-        if fadeIn.SetFromAlpha then fadeIn:SetFromAlpha(0.78) end
-        if fadeIn.SetToAlpha then fadeIn:SetToAlpha(1.00) end
-        if fadeIn.SetDuration then fadeIn:SetDuration(1.45) end
-        if fadeIn.SetSmoothing then fadeIn:SetSmoothing("IN_OUT") end
-        if fadeIn.SetOrder then fadeIn:SetOrder(1) end
-        local fadeOut = group:CreateAnimation("Alpha")
-        if fadeOut.SetFromAlpha then fadeOut:SetFromAlpha(1.00) end
-        if fadeOut.SetToAlpha then fadeOut:SetToAlpha(0.80) end
-        if fadeOut.SetDuration then fadeOut:SetDuration(1.85) end
-        if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN_OUT") end
-        if fadeOut.SetOrder then fadeOut:SetOrder(2) end
-        art._pulse = group
-    end
-    if art._pulse and art._pulse.Play and (not art._pulse.IsPlaying or not art._pulse:IsPlaying()) then art._pulse:Play() end
-end
 local function PaintNavPillGlowArt(art, path, state)
     if not art then return end
     local active = state == "active"
@@ -2370,11 +2344,9 @@ local function PaintNavPillGlowArt(art, path, state)
             true)
         art.sheen:Show()
     end
-    if active then
-        StartNavPillGlowPulse(art)
-    else
-        StopNavPillGlowPulse(art)
-    end
+    -- Page selection is a direct state change. Keep the active treatment
+    -- static so navigation never reads as an in-progress transition.
+    StopNavPillGlowPulse(art)
 end
 local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alphaMul)
     -- Midnight owns the authored blue paint. Non-midnight themes use the

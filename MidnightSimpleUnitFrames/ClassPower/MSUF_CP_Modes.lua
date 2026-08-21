@@ -666,9 +666,10 @@ modeBuilders.SEGMENTED = function(E)
                 CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
                 CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
                 local isCharged = showCharged and chargedMap and chargedMap[i]
-                --- Charged is semantic slot state and must remain identifiable
-                --- even when the complete resource uses its full-state color.
-                if isCharged then
+                if isFull then
+                    CP_StampStatusBarColor(bar, visual.fullR, visual.fullG, visual.fullB, 1)
+                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                elseif isCharged then
                     CP_StampStatusBarColor(bar, chargedR, chargedG, chargedB, 1)
                     if isFilled then
                         CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
@@ -678,9 +679,6 @@ modeBuilders.SEGMENTED = function(E)
                         local dB = chargedB * 0.45; if dB < 0.05 then dB = 0.05 end
                         CP_StampVertexColor(bar._bg, dR, dG, dB, 1)
                     end
-                elseif isFull then
-                    CP_StampStatusBarColor(bar, visual.fullR, visual.fullG, visual.fullB, 1)
-                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                 elseif useSlotColors then
                     local slotR, slotG, slotB = visual.slotR and visual.slotR[i], visual.slotG and visual.slotG[i], visual.slotB and visual.slotB[i]
                     if slotR then

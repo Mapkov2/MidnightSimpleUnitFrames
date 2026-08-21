@@ -1420,18 +1420,15 @@ local function ParseGroupScalingFastShortcut(normalized)
         attr = "frameScaleEnabled"
         value = DetectBoolean(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, P.RootPhrases[201]) then
-        attr = "scaleOver25"
-        value = NumberAfterLastConnector(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[202]) then
-        attr = "scaleAt25"
-        value = NumberAfterLastConnector(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[203]) then
-        attr = "scaleAt20"
-        value = NumberAfterLastConnector(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[204]) then
-        attr = "scaleAt10"
-        value = NumberAfterLastConnector(normalized)
+    elseif ContainsAny(normalized, P.RootPhrases[201])
+        or ContainsAny(normalized, P.RootPhrases[202])
+        or ContainsAny(normalized, P.RootPhrases[203])
+        or ContainsAny(normalized, P.RootPhrases[204])
+    then
+        -- The dedicated breakpoint parser owns player-count labels, absolute
+        -- values, and relative changes. Keeping a second fast path here makes
+        -- the range digits themselves look like the requested scale.
+        return nil
     elseif ContainsAny(normalized, P.RootPhrases[205]) then
         attr = "frameScaleManual"
         value = NumberAfterLastConnector(normalized)

@@ -1396,15 +1396,11 @@ function M.GoBackPage()
     local current = M.activeKey
     if OpenHistoryPage(page) then
         M.pageForwardStack = PushPageHistory(M.pageForwardStack, current)
-        -- Count real Back activations: once the user has gone back a few
-        -- times, the discovery pulse on the button retires for good.
-        local g = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
-        if type(g) == "table" then g.pageHistoryBackUses = (tonumber(g.pageHistoryBackUses) or 0) + 1 end
-        M.CallIf(M.RefreshPageHistoryNav, true)
+        M.CallIf(M.RefreshPageHistoryNav)
         return true, "Opened previous page."
     end
     M.pageBackStack = PushPageHistory(M.pageBackStack, page)
-    M.CallIf(M.RefreshPageHistoryNav, true)
+    M.CallIf(M.RefreshPageHistoryNav)
     return false, "Dashboard back navigation is not available right now."
 end
 function M.GoForwardPage()
@@ -1415,21 +1411,16 @@ function M.GoForwardPage()
     local current = M.activeKey
     if OpenHistoryPage(page) then
         M.pageBackStack = PushPageHistory(M.pageBackStack, current)
-        M.CallIf(M.RefreshPageHistoryNav, true)
+        M.CallIf(M.RefreshPageHistoryNav)
         return true, "Opened next page."
     end
     M.pageForwardStack = PushPageHistory(M.pageForwardStack, page)
-    M.CallIf(M.RefreshPageHistoryNav, true)
+    M.CallIf(M.RefreshPageHistoryNav)
     return false, "Dashboard forward navigation is not available right now."
 end
 --- Chrome hook: keeps the status-strip Back/Forward buttons in sync with the
 --- page history stacks. Cold path -- runs only on page navigation, and stays a
 --- no-op until BuildWindowChrome has created the buttons.
---- Discovery: until the user has actually gone back a few times, a normal
---- navigation that arms Back plays a soft one-shot pulse on the button
---- (C-side animation, no OnUpdate). Navigations driven by the history buttons
---- themselves pass suppressPulse so active use never blinks at the user.
-local PAGE_HISTORY_DISCOVERY_USES = 3
 function M.SetPageHistoryTourCue(enabled)
     local back, forward = M.pageHistoryBackButton, M.pageHistoryForwardButton
     if not (back and forward
@@ -1444,7 +1435,7 @@ function M.SetPageHistoryTourCue(enabled)
     forward._msuf2SetTourCue(shown)
     return shown
 end
-function M.RefreshPageHistoryNav(suppressPulse)
+function M.RefreshPageHistoryNav()
     local back, forward = M.pageHistoryBackButton, M.pageHistoryForwardButton
     if not (back and forward) then return end
     local state = M.GetPageHistoryState()
@@ -1459,18 +1450,6 @@ function M.RefreshPageHistoryNav(suppressPulse)
     if type(forward._msuf2SetTourCue) == "function" then
         forward._msuf2SetTourCue(showTourCue)
     end
-    if suppressPulse or state.canBack ~= true then return end
-    local pulse = back._msuf2DiscoveryPulse
-    if not pulse then return end
-    -- Hard combat gate on top of the quiescence teardown: the pulse can never
-    -- start in combat, and a mid-play pulse is stopped by MenuRuntime:Quiesce
-    -- like every other tracked menu animation.
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
-    if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
-    local g = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
-    if type(g) ~= "table" or (tonumber(g.pageHistoryBackUses) or 0) >= PAGE_HISTORY_DISCOVERY_USES then return end
-    if pulse.Stop then pulse:Stop() end
-    if pulse.Play then pulse:Play() end
 end
 function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
@@ -1549,7 +1528,7 @@ function M.SelectPage(key)
     M.CallIf(M.SetActivePageHeader, entry)
     M.CallIf(M.RefreshLayerOverviewContext)
     if not suppressPageHistory then RecordPageNavigation(previousKey, key) end
-    M.CallIf(M.RefreshPageHistoryNav, suppressPageHistory == true)
+    M.CallIf(M.RefreshPageHistoryNav)
     M.sessionLastPage = key
     if M.frame then M.frame._msufCurrentKey = key end
     if M.scrollChild then SetFrameHeightIfChanged(M.scrollChild, entry.height or CONTENT_H) end
@@ -2378,32 +2357,6 @@ local function BuildWindowChrome(state)
     histForward:SetPoint("LEFT", histBack, "RIGHT", 2, 0)
     M.pageHistoryBackButton = histBack
     M.pageHistoryForwardButton = histForward
-    -- Discovery pulse for the Back button: a soft accent halo one frame level
-    -- below the button, driven purely by a C-side animation group. Base alpha
-    -- stays 0, so outside a one-shot Play() the halo costs nothing and shows
-    -- nothing; RefreshPageHistoryNav owns when it may fire.
-    local glow = CreateFrame("Frame", nil, status)
-    glow:SetPoint("TOPLEFT", histBack, "TOPLEFT", -2, 2)
-    glow:SetPoint("BOTTOMRIGHT", histBack, "BOTTOMRIGHT", 2, -2)
-    glow:SetFrameLevel(math.max(0, histBack:GetFrameLevel() - 1))
-    local glowFill, glowEdge = T.CreateSuperellipseLayers(glow, "_msuf2HistNavGlow", 1, "BACKGROUND", "BORDER")
-    if glowFill then glowFill:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.22) end
-    if glowEdge then glowEdge:SetVertexColor(T.colors.pillEdgeActive[1], T.colors.pillEdgeActive[2], T.colors.pillEdgeActive[3], 0.55) end
-    glow:SetAlpha(0)
-    if glow.CreateAnimationGroup then
-        local pulse = glow:CreateAnimationGroup()
-        if T.TrackMenuAnimationGroup then T.TrackMenuAnimationGroup(pulse) end
-        local function PulseStep(order, from, to, duration)
-            local step = pulse:CreateAnimation("Alpha")
-            step:SetOrder(order)
-            step:SetFromAlpha(from)
-            step:SetToAlpha(to)
-            step:SetDuration(duration)
-        end
-        PulseStep(1, 0, 1, 0.18)
-        PulseStep(2, 1, 0, 0.42)
-        histBack._msuf2DiscoveryPulse = pulse
-    end
     local function HistoryTargetTitle(field)
         local history = type(M.GetPageHistoryState) == "function" and M.GetPageHistoryState() or nil
         local spec = history and history[field] and M.pages and M.pages[history[field]]
@@ -2425,7 +2378,7 @@ local function BuildWindowChrome(state)
             historyMode = "none", help = "Opens the next page from the menu page history.",
         })
     end
-    M.RefreshPageHistoryNav(true)
+    M.RefreshPageHistoryNav()
     local sbProfile = StatusText("LEFT", status, "LEFT", 24, 15)
     local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
     local sbCombat = StatusText("LEFT", sbEdit, "RIGHT", 16, 0)

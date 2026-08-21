@@ -251,10 +251,6 @@ popupIn 0.105
 popupOut 0.085
 focusIn 0.095
 focusOut 0.080
-accordionIn 0.135
-accordionOut 0.105
-contentIn 0.095
-contentOut 0.075
 controlFocusIn 0.060
 controlFocusOut 0.055
 controlFeedback 0.100
@@ -278,10 +274,6 @@ DefaultToken(T.motionProfiles, "popupIn", { type = "alpha", fromAlpha = 0, toAlp
 DefaultToken(T.motionProfiles, "popupOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "popupOut", smoothing = "IN", scaleFrom = 1, scaleTo = T.motionPolicy.popupScaleOut, scaleOrigin = "CENTER" })
 DefaultToken(T.motionProfiles, "focusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "focusIn", smoothing = "OUT" })
 DefaultToken(T.motionProfiles, "focusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "focusOut", smoothing = "IN" })
-DefaultToken(T.motionProfiles, "accordionIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "accordionIn", smoothing = "OUT" })
-DefaultToken(T.motionProfiles, "accordionOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "accordionOut", smoothing = "IN" })
-DefaultToken(T.motionProfiles, "contentIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "contentIn", smoothing = "OUT" })
-DefaultToken(T.motionProfiles, "contentOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "contentOut", smoothing = "IN" })
 DefaultToken(T.motionProfiles, "controlFocusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "controlFocusIn", smoothing = "OUT" })
 DefaultToken(T.motionProfiles, "controlFocusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "controlFocusOut", smoothing = "IN" })
 DefaultToken(T.motionProfiles, "controlFeedback", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "controlFeedback", smoothing = "OUT" })

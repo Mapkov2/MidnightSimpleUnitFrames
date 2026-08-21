@@ -780,6 +780,34 @@ RefreshManagerOnUpdate = function()
     return false
 end
 
+-- RegisterCastbar can run once for target, focus, and boss in the same event
+-- tick. If the first registration already installed the exact driver topology
+-- required by the aggregate buckets, later registrations only need to add and
+-- initialize their own frame; repeating Show/SetScript/ticker arbitration is
+-- pure dispatch overhead.
+local function ManagerTopologyMatches()
+    if activeCount <= 0 then
+        return managerDriverMode == "IDLE"
+    end
+
+    local canUseTicker = C_Timer and type(C_Timer.NewTicker) == "function"
+    if failsafeOnlyCount > 0 and canUseTicker and not failsafeTicker then
+        return false
+    end
+
+    local runtimeCount = activeCount - failsafeOnlyCount
+    if runtimeCount <= 0 then
+        return managerDriverMode == "FAILSAFE"
+    end
+    if highFrequencyCount > 0 then
+        return managerDriverMode == "FRAME"
+    end
+    if canUseTicker then
+        return managerDriverMode == "LOW_TICKER" and lowFrequencyTicker ~= nil
+    end
+    return managerDriverMode == "FRAME"
+end
+
 CastbarManager:SetScript("OnHide", function(manager)
     StopLowFrequencyTicker()
     StopFailsafeTicker()
@@ -904,7 +932,10 @@ RegisterCastbar = function(frame)
         frame._msufManagerBucket = newBucket
     end
 
-    local lowBucketScanned = RefreshManagerOnUpdate()
+    local lowBucketScanned = false
+    if not ManagerTopologyMatches() then
+        lowBucketScanned = RefreshManagerOnUpdate()
+    end
     -- Failsafe-only frames have no visual work: the first frame is sampled
     -- when its ticker starts and later additions retain that ticker's cadence.
     if not lowBucketScanned

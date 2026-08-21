@@ -252,6 +252,11 @@ local function UpdateBossCastbarAnchorBase(frame)
         end
     end
 
+    -- Position/profile/unitframe refresh owners all converge here. Once this
+    -- pass validated the live provider and size for the current visual
+    -- revision, the next spellcast does not need to repeat the same native
+    -- geometry reads merely because the bar became active.
+    frame._msufBossAnchorValidationRev = tonumber(_G.MSUF__castbarStyleGlobalRev) or 1
     return changed, sizeChanged
 end
 
@@ -284,9 +289,12 @@ end
 --- remains comparison-only; a full layout is performed only for stale state.
 local function PrepareBossCastbarForCast(frame)
     if not frame then return false end
-    local _, sizeChanged = UpdateBossCastbarAnchorBase(frame)
     local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
     local visualRevision = tonumber(_G.MSUF__castbarStyleGlobalRev) or 1
+    local sizeChanged = false
+    if frame._msufBossAnchorValidationRev ~= visualRevision then
+        _, sizeChanged = UpdateBossCastbarAnchorBase(frame)
+    end
     local layoutStale = frame._msufCastbarDetailLayoutUnit ~= "boss"
         or frame._msufCastbarDetailLayoutFontEpoch ~= fontEpoch
         or frame._msufCastbarDetailLayoutVisualRev ~= visualRevision
