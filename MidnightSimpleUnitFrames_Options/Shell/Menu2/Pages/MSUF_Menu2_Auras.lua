@@ -264,7 +264,7 @@ M._customContainerAssistantSuffixes = {
     "placed.showStacks", "placed.showCooldown", "placed.showCooldownSwipe",
     "placed.reminderEnabled", "placed.reminderAlpha", "placed.reminderDesaturate",
     "placed.reminderClickCast", "placed.reminderOnlyCastable",
-    "reminderEnchantMainHand", "reminderEnchantOffHand",
+    "reminderEnchantMainHand", "reminderEnchantOffHand", "reminderEnchantDurationMinutes",
 }
 local function AuraControlMeta(ctx, path, classification, assistantContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
@@ -5411,7 +5411,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         -- question with one answer, not two places to look.
         if unit == "player" then
             local ench = b:CollapsibleSection("aura_reminder_enchants_" .. tostring(index),
-                "Weapon enchants", 218, false)
+                "Weapon enchants", 284, false)
             local ew = ench._msuf2Width or b.width or 720
             local eInner = ew - 48
             local ecol, egap = Grid(ew, 2)
@@ -5461,7 +5461,17 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 })
             AddTooltip(enchantInput, "Oil or stone",
                 "Paste the consumable these slots should offer on click. A weapon enchant cannot be cast, so only an item makes them clickable. Leave it empty to keep them as pure indicators.")
-            local enchantStatus = W.Text(ench, "", 24, -160, eInner, T.colors.muted)
+            local enchantDuration = BindSlider(ctx, ench, "Enchant duration (minutes)", 24, -160,
+                5, 240, 5, eInner,
+                function() return tonumber(item.reminderEnchantDurationMinutes) or 60 end,
+                function(value)
+                    item.reminderEnchantDurationMinutes = tonumber(value) or 60
+                    Apply("AURAS3_CUSTOM_REMINDER_ENCHANT_DURATION", true)
+                end,
+                AuraControlMeta(ctx, "custom-container.reminder.enchant-duration"))
+            AddTooltip(enchantDuration, "Weapon enchant duration",
+                "Sets the swipe's full duration because Blizzard exposes only the remaining time. Oils normally use 60 minutes. Change this for stones or poisons with a different duration.")
+            local enchantStatus = W.Text(ench, "", 24, -226, eInner, T.colors.muted)
             M.TrackRefresh(ctx, function()
                 local reminder = item.placed.reminderEnabled == true
                 local tracked = (item.reminderEnchantMainHand == true and 1 or 0)
@@ -5469,7 +5479,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 local itemID, itemName = Model.CustomContainerReminderEnchantItem(unit, index)
                 if type(W.SetControlsEnabled) == "function" then
                     W.SetControlsEnabled({ enchantMain, enchantOff }, reminder)
-                    W.SetControlsEnabled({ enchantInput, enchantSet }, reminder and tracked > 0)
+                    W.SetControlsEnabled({ enchantInput, enchantSet, enchantDuration }, reminder and tracked > 0)
                 end
                 if not reminder then
                     enchantStatus:SetText(Tr("Needs Display set to Fixed slots in Setup · enchants have no aura to show otherwise."))
@@ -5865,8 +5875,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         local durationBarNote = W.Text(durationBar, "", 24, -116, (durationBar._msuf2Width or b.width or 720) - 48, T.colors.muted)
         local function RefreshCustomDurationBarState()
             local placed = item.placed
-            -- Reminder slots are placed AuraSlots without a duration surface, so
-            -- this whole group has nothing to drive while that mode is on.
+            -- Fixed aura slots and Oil placeholders can show cooldown text/swipe,
+            -- but neither owns the AuraButton duration-bar surface this group drives.
             local reminder = placed.reminderEnabled == true
             local enabled = placed.showDurationBar == true and not reminder
             if durationBarSwitch then W.SetControlEnabled(durationBarSwitch, not reminder) end

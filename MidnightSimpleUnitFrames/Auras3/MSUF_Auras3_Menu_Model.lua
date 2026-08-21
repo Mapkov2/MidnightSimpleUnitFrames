@@ -2291,6 +2291,10 @@ local function NewCustomContainer(index, unit)
         -- covers both hands in practice.
         reminderEnchantMainHand = false,
         reminderEnchantOffHand = false,
+        -- C_PaperDollInfo exposes only remainingTimeMs. Oils normally last one
+        -- hour, and this user-adjustable total lets their swipe retain the
+        -- correct progress after login/reload instead of restarting as full.
+        reminderEnchantDurationMinutes = 60,
         filters = {
             enabled = true,
             hidePermanent = false,
@@ -2895,11 +2899,41 @@ end
 --- previews. The target-dot container mirrors the runtime include filter: only
 --- curated dot IDs plus explicitly allowed custom IDs survive. Empty means
 --- empty - previews outside edit mode render nothing for this container.
+local function AppendReminderEnchantPreviewEntries(unit, index, entries)
+    if unit ~= "player" or index >= PLAYER_DEFENSIVE_CONTAINER_INDEX then return entries end
+    local item = Model.CustomContainer(unit, index, false)
+    local placed = type(item and item.placed) == "table" and item.placed or nil
+    if not (item and placed and placed.reminderEnabled == true) then return entries end
+    local cap = math_floor(ClampNumber(placed.max, 8, 0, 40))
+    if #entries >= cap then return entries end
+
+    local itemID, itemName, icon = Model.CustomContainerReminderEnchantItem(unit, index)
+    icon = icon or "Interface\\Icons\\INV_Misc_QuestionMark"
+    local function Append(enabled, token, label)
+        if enabled ~= true or #entries >= cap then return end
+        entries[#entries + 1] = {
+            value = "enchant:" .. token,
+            enchantSlot = token,
+            itemID = itemID,
+            itemName = itemName,
+            itemIcon = icon,
+            icon = icon,
+            text = label .. (itemName and (" - " .. itemName) or ""),
+            clickAction = itemID and ("item:" .. tostring(itemID)) or nil,
+            keep = true,
+        }
+    end
+    Append(item.reminderEnchantMainHand, "MAINHAND", "Main Hand")
+    Append(item.reminderEnchantOffHand, "OFFHAND", "Off Hand")
+    return entries
+end
+
 function Model.CustomContainerPreviewEntries(unit, index)
     unit = NormalizeScope(unit)
     if unit == "shared" then unit = "player" end
     index = math_floor(ClampNumber(index, 1, 1, CUSTOM_CONTAINER_MAX))
     local entries = Model.CustomContainerSpellEntries(unit, index)
+    entries = AppendReminderEnchantPreviewEntries(unit, index, entries)
     if unit == "player" and index == PLAYER_DEFENSIVE_CONTAINER_INDEX then
         local out, seen = {}, {}
         local builtins = type(Model.PlayerDefensivePreviewEntries) == "function"
