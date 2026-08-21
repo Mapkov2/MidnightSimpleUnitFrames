@@ -79,4 +79,18 @@ local unitGuard = assert(runtimeSource:find("if not ActiveUnitMatches(frame, eve
 assert(activeGuard < unitGuard,
     "player castbar accepted interrupted feedback before proving an active cast")
 
+local previewFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua", "rb"))
+local previewSource = previewFile:read("*a")
+previewFile:close()
+assert(not previewSource:find('"PVP_MATCH_STATE_CHANGED"', 1, true),
+    "Classic castbar previews reintroduced an event absent from supported Classic clients")
+for _, event in ipairs({
+    "INSTANCE_ENCOUNTER_ENGAGE_UNIT", "ENCOUNTER_START", "ENCOUNTER_END",
+    "PLAYER_ENTERING_WORLD", "GROUP_ROSTER_UPDATE",
+    "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+}) do
+    assert(previewSource:find('"' .. event .. '"', 1, true),
+        "Classic castbar preview lifecycle lost supported event: " .. event)
+end
+
 print("classic castbar engine smoke passed")

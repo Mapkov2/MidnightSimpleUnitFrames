@@ -1945,6 +1945,12 @@ local function EnsureLane(root, state, kind, cfg)
             lane.frame:SetParent(parent)
             lane.root = parent
         end
+        -- The shared Edit Mode layer treats the rendered lane frame as its
+        -- input-forwarding surface. Keep the same compact contract exposed by
+        -- Retail's native Aura containers so Classic aura buttons cannot eat
+        -- drag clicks while the preview mover is active.
+        lane.frame._msufA3NativeLane = kind
+        lane.frame._msufA3NativeLaneConfig = lane
         return lane
     end
     local frame = CreateFrame("Frame", nil, parent)
@@ -1962,6 +1968,14 @@ local function EnsureLane(root, state, kind, cfg)
         visible = 0,
         createdButtons = 0,
     }
+    frame._msufA3NativeLane = kind
+    frame._msufA3NativeLaneConfig = lane
+    frame.GetAuraFrameCount = function()
+        return lane.createdButtons or 0
+    end
+    frame.GetAuraFrame = function(_, index)
+        return lane[index]
+    end
     lanes[kind] = lane
     return lane
 end
@@ -1984,8 +1998,10 @@ local function EnsureState(frame)
     }
     frame._msufA3State = state
     root.__owner = frame
-    root.Buffs = EnsureLane(root, state, "buff")
-    root.Debuffs = EnsureLane(root, state, "debuff")
+    local buffLane = EnsureLane(root, state, "buff")
+    local debuffLane = EnsureLane(root, state, "debuff")
+    root.Buffs = buffLane.frame
+    root.Debuffs = debuffLane.frame
     return state
 end
 

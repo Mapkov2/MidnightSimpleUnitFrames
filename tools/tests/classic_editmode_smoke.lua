@@ -268,4 +268,15 @@ assert(auraModel:find("buffSpacing = true", 1, true)
     and auraModel:find("debuffSpacing = true", 1, true),
     "Classic profile model drops per-lane aura spacing")
 
+local editCore = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua")
+assert(editCore:find("local function HardHideEditModePreviews", 1, true)
+    and editCore:find("MSUF_HideAllCastbarPreviews", 1, true)
+    and editCore:find("HardHideEditModePreviews()", 1, true),
+    "Classic Edit Mode exit no longer hard-hides transient castbar previews")
+local auraEditMode = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode.lua")
+assert(auraEditMode:find("local function OnEditModeChanged(active)", 1, true)
+    and auraEditMode:find("EM.HideAll()", 1, true)
+    and auraEditMode:find("StopAuraDragCapture", 1, true),
+    "Classic Edit Mode exit no longer clears Aura previews and drag capture")
+
 print("Classic Edit Mode smoke passed")

@@ -65,7 +65,18 @@ _G.MSUF_DB = {
         },
     },
 }
-_G.CreateFrame = function() error("unexpected top-level CreateFrame") end
+local allowFrameCreation = false
+local function MakeFrame(parent)
+    local widget = { parent = parent }
+    function widget:SetAllPoints() self.allPoints = true end
+    function widget:SetParent(value) self.parent = value end
+    function widget:Hide() self.hidden = true end
+    return widget
+end
+_G.CreateFrame = function(_, _, parent)
+    if not allowFrameCreation then error("unexpected top-level CreateFrame") end
+    return MakeFrame(parent)
+end
 _G.UnitExists = function() return true end
 _G.GetTime = function() return 0 end
 _G.InCombatLockdown = function() return false end
@@ -91,6 +102,30 @@ assert(registrations == 1, "Retail aura backend registered after Classic ownersh
 assert(namespace.MSUF_Auras3.classicAuraBackend == true, "Classic backend marker missing")
 assert(namespace.MSUF_Auras3.nativeAuraBackend == false, "native backend must be disabled on Classic")
 assert(registered and registered.events[1] == "UNIT_AURA", "Classic backend must own UNIT_AURA")
+
+-- The shared Edit Mode preview hides the rendered lane and forwards clicks
+-- from its live buttons into the draggable overlay. Classic owns custom lane
+-- frames, so it must expose the same small lane-enumeration contract as the
+-- Retail native Aura containers.
+allowFrameCreation = true
+local renderFrame = MakeFrame()
+renderFrame.MSUFUnitKey = "target"
+renderFrame.MSUFSpec = {}
+registered.Create(renderFrame)
+local nativeBuffLane = assert(renderFrame.Auras and renderFrame.Auras.Buffs,
+    "Classic buff lane frame was not created")
+local nativeDebuffLane = assert(renderFrame.Auras and renderFrame.Auras.Debuffs,
+    "Classic debuff lane frame was not created")
+assert(nativeBuffLane._msufA3NativeLane == "buff"
+    and nativeDebuffLane._msufA3NativeLane == "debuff",
+    "Classic lanes do not identify themselves to the shared Edit Mode input bridge")
+local buffLaneConfig = assert(nativeBuffLane._msufA3NativeLaneConfig,
+    "Classic buff lane does not expose its renderer config")
+buffLaneConfig[1] = { marker = "button" }
+buffLaneConfig.createdButtons = 1
+assert(nativeBuffLane:GetAuraFrameCount() == 1
+    and nativeBuffLane:GetAuraFrame(1) == buffLaneConfig[1],
+    "Classic lane enumeration does not expose rendered buttons to Edit Mode")
 
 local frame = { MSUFUnitKey = "target", MSUFSpec = {} }
 assert(frame.unit == nil, "lifecycle smoke precondition failed")
