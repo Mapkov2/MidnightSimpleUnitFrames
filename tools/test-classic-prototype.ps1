@@ -261,30 +261,41 @@ foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
 
 if ($retailReferenceRootFull) {
     $retailCanonicalCount = 0
-    foreach ($target in $targets) {
-        $referenceFolder = Join-Path $retailReferenceRootFull $target.Folder
-        foreach ($referenceFile in Get-ChildItem -LiteralPath $referenceFolder -Recurse -File) {
-            $relativePath = $referenceFile.FullName.Substring($retailReferenceRootFull.Length).TrimStart('\', '/').Replace('\', '/')
-            if ($relativePath -eq ($target.Folder + "/" + $target.Base + ".toc")) { continue }
-            $candidatePath = Join-Path $root $relativePath
-            if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
-                throw "Canonical Retail file is missing from Classic repository: $relativePath"
+    $retailTocCount = 0
+    $retailTargetFolders = @($targets | ForEach-Object { $_.Folder })
+    $retailTrackedPaths = @(& git -C $retailReferenceRootFull ls-tree -r --name-only HEAD -- @retailTargetFolders 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to enumerate tracked Retail addon files:`n$($retailTrackedPaths -join "`n")"
+    }
+    foreach ($relativePath in $retailTrackedPaths) {
+        $relativePath = $relativePath.Replace('\', '/')
+        $candidateRelativePath = $relativePath
+        $isRetailToc = $false
+        foreach ($target in $targets) {
+            if ($relativePath -eq ($target.Folder + "/" + $target.Base + ".toc")) {
+                $candidateRelativePath = $target.Folder + "/" + $target.Base + "_Mainline.toc"
+                $isRetailToc = $true
+                break
             }
-            $referenceHash = (Get-FileHash -LiteralPath $referenceFile.FullName -Algorithm SHA256).Hash
-            $candidateHash = (Get-FileHash -LiteralPath $candidatePath -Algorithm SHA256).Hash
-            if ($referenceHash -ne $candidateHash) {
-                throw "Canonical Retail file differs in Classic repository: $relativePath"
-            }
+        }
+        $referencePath = Join-Path $retailReferenceRootFull $relativePath
+        $candidatePath = Join-Path $root $candidateRelativePath
+        if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
+            throw "Canonical Retail file is missing from Classic repository: $candidateRelativePath"
+        }
+        $referenceHash = (Get-FileHash -LiteralPath $referencePath -Algorithm SHA256).Hash
+        $candidateHash = (Get-FileHash -LiteralPath $candidatePath -Algorithm SHA256).Hash
+        if ($referenceHash -ne $candidateHash) {
+            throw "Canonical Retail file differs in Classic repository: $candidateRelativePath"
+        }
+        if ($isRetailToc) {
+            $retailTocCount++
+        } else {
             $retailCanonicalCount++
         }
-        $referenceToc = Join-Path $referenceFolder ($target.Base + ".toc")
-        $candidateToc = Join-Path (Join-Path $root $target.Folder) ($target.Base + "_Mainline.toc")
-        if ((Get-FileHash -LiteralPath $referenceToc -Algorithm SHA256).Hash -ne
-            (Get-FileHash -LiteralPath $candidateToc -Algorithm SHA256).Hash) {
-            throw "$($target.Base)_Mainline.toc is not byte-identical to Retail"
-        }
     }
-    Write-Host "Canonical Retail source parity: $retailCanonicalCount files plus 3 Mainline TOCs match byte-for-byte"
+    if ($retailTocCount -ne 3) { throw "Expected exactly three tracked Retail TOCs, found $retailTocCount" }
+    Write-Host "Canonical Retail source parity: $retailCanonicalCount files plus $retailTocCount Mainline TOCs match byte-for-byte"
 }
 
 # Retail's load graph must never enter a Classic/Vanilla/Mists/TBC implementation
