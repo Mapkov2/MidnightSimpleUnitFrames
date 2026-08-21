@@ -879,68 +879,32 @@ function W.PageBuilder(ctx, opts)
         end
         entry._msuf2RefreshHeaderTone = RefreshHeaderTone
         entry.kind = "collapsible"
+        local function SetSectionOpenImmediate(value)
+            local wanted = value == true or value == 1
+                or type(value) == "string" and (value:lower() == "true" or value:lower() == "on" or value == "1")
+            if entry.open == wanted and not entry._msuf2MotionActive then return true end
+            entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
+            if T.StopMotion then T.StopMotion(body) end
+            entry._msuf2MotionActive = nil
+            entry._msuf2Closing = nil
+            entry.open = wanted
+            RefreshHeaderTone(false)
+            M.accordionState[stateKey] = wanted
+            if body.SetAlpha then body:SetAlpha(1) end
+            self:RelayoutCollapsibles()
+            if wanted and type(entry._msuf2SettleContentLayout) == "function" then
+                entry._msuf2SettleContentLayout()
+                self:RelayoutCollapsibles()
+            end
+            return entry.open == wanted
+        end
+        entry.SetOpenImmediate = SetSectionOpenImmediate
         header:SetScript("OnClick", function()
-            if entry._msuf2MotionActive then return end
             local nextOpen = not entry.open
-            M.accordionState[stateKey] = nextOpen
             local threshold = tonumber(T.collapseHintClickHideThreshold) or 8
             collapseHintClickState.total = math.min((tonumber(collapseHintClickState.total) or 0) + 1, threshold)
             RefreshCollapseHintSuppression(entry)
-            entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
-            local motionSerial = entry._msuf2MotionSerial
-            if nextOpen then
-                local function SettleOpenedLayout()
-                    if entry._msuf2MotionSerial ~= motionSerial or not entry.open or entry._msuf2Closing then return end
-                    -- Large nested sections (notably the Aura workspace) can
-                    -- finish their child geometry only after becoming visible.
-                    -- Reflow the root once that geometry has settled so the
-                    -- ScrollFrame receives the expanded height immediately.
-                    if type(entry._msuf2SettleContentLayout) == "function" then
-                        entry._msuf2SettleContentLayout()
-                    end
-                    self:RelayoutCollapsibles()
-                end
-                entry.open = true
-                RefreshHeaderTone(false)
-                entry._msuf2MotionActive = true
-                if body.SetAlpha then body:SetAlpha(0) end
-                self:RelayoutCollapsibles()
-                if C_Timer and C_Timer.After then C_Timer.After(0, SettleOpenedLayout) end
-                if T.PlayMotion then
-                    T.PlayMotion(body, "accordionIn", { fromAlpha = 0, onFinished = function()
-                        if entry._msuf2MotionSerial ~= motionSerial then return end
-                        entry._msuf2MotionActive = nil
-                        if body.SetAlpha then body:SetAlpha(1) end
-                        SettleOpenedLayout()
-                    end })
-                else
-                    entry._msuf2MotionActive = nil
-                    if body.SetAlpha then body:SetAlpha(1) end
-                    SettleOpenedLayout()
-                end
-                return
-            end
-            entry._msuf2MotionActive = true
-            entry._msuf2Closing = true
-            T.ApplyCollapseVisual(entry.arrow, entry.hint, false)
-            if entry._msuf2RefreshState then entry._msuf2RefreshState(entry) end
-            if body.Show then body:Show() end
-            if T.PlayMotion then
-                T.PlayMotion(body, "accordionOut", { fromAlpha = body.GetAlpha and body:GetAlpha() or 1, onFinished = function()
-                    if entry._msuf2MotionSerial ~= motionSerial then return end
-                    entry.open = false
-                    entry._msuf2MotionActive = nil
-                    entry._msuf2Closing = nil
-                    if body.SetAlpha then body:SetAlpha(1) end
-                    self:RelayoutCollapsibles()
-                end })
-            else
-                entry.open = false
-                entry._msuf2MotionActive = nil
-                entry._msuf2Closing = nil
-                if body.SetAlpha then body:SetAlpha(1) end
-                self:RelayoutCollapsibles()
-            end
+            SetSectionOpenImmediate(nextOpen)
         end)
         header:HookScript("OnEnter", function() RefreshHeaderTone(true) end)
         header:HookScript("OnLeave", function() RefreshHeaderTone(false) end)
@@ -951,25 +915,6 @@ function W.PageBuilder(ctx, opts)
             if pageToken == "" then pageToken = "page" end
             if sectionToken == "" then sectionToken = "section" end
             local identity = pageToken .. ".section." .. sectionToken .. ".expanded"
-            local function SetSectionOpenImmediate(value)
-                local wanted = value == true or value == 1
-                    or type(value) == "string" and (value:lower() == "true" or value:lower() == "on" or value == "1")
-                if entry.open == wanted and not entry._msuf2MotionActive then return true end
-                entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
-                entry._msuf2MotionActive = nil
-                entry._msuf2Closing = nil
-                entry.open = wanted
-                RefreshHeaderTone(false)
-                M.accordionState[stateKey] = wanted
-                if body.SetAlpha then body:SetAlpha(1) end
-                self:RelayoutCollapsibles()
-                if wanted and type(entry._msuf2SettleContentLayout) == "function" then
-                    entry._msuf2SettleContentLayout()
-                    self:RelayoutCollapsibles()
-                end
-                return entry.open == wanted
-            end
-            entry.SetOpenImmediate = SetSectionOpenImmediate
             M.RegisterSearchWidget(header, {
                 controlId = "menu2." .. identity,
                 identityKey = identity,
