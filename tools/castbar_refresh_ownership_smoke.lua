@@ -3,7 +3,7 @@ local function read(path)
     assert(file, err)
     local text = file:read("*a")
     file:close()
-    return text
+    return (text:gsub("\r\n", "\n"))
 end
 
 local function contains(text, needle)
