@@ -1270,8 +1270,12 @@ local function ApplyPreviewData(frame, index, kind)
   frame._msufGFKind = kind
 
   local textLayerOn = PreviewLayerOn("text")
-  if frame.nameText and frame.nameText:IsShown() and textLayerOn then
-    frame.nameText:SetText(ShortName(name or "Preview", frame))
+  local showPreviewName = frame.nameText and frame.nameText:IsShown() and textLayerOn
+  -- Keep the fake identity authoritative when ordinary unit events refresh the
+  -- player-backed dummy outside Edit Mode.
+  frame._msufPreviewNameText = showPreviewName and (name or "Preview") or nil
+  if showPreviewName then
+    frame.nameText:SetText(ShortName(frame._msufPreviewNameText, frame))
     local r, g, b = PreviewNameColor(kind, class)
     local a = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
     frame.nameText:SetTextColor(r, g, b, a)
@@ -1368,6 +1372,7 @@ local function ClearPreviewData(frame)
   if not frame then return end
   frame._msufGFPreviewActive = nil
   frame._msufGFPreviewIndex = nil
+  frame._msufPreviewNameText = nil
   SetText(frame.nameText, "")
   SetText(frame.hpTextLeft, "")
   SetText(frame.hpTextCenter, "")
