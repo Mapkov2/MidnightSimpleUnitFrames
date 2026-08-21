@@ -512,6 +512,12 @@ assert(debuff.visible == 0 and debuff[1]._shown == false,
 _G.MSUF_DB.auras3.perUnit.target.filters = { buffs = { enabled = true }, debuffs = { enabled = true } }
 
 local visuals = assert(namespace.MSUF_Auras3.ClassicVisuals, "Classic visuals missing")
+assert(type(namespace.MSUF_Auras3.PreviewDispelTypeForIndex) == "function",
+    "Classic Auras3 preview dispel-type provider missing")
+assert(namespace.MSUF_Auras3.PreviewDispelTypeForIndex(1) == "Magic"
+    and namespace.MSUF_Auras3.PreviewDispelTypeForIndex(2) == "Curse"
+    and namespace.MSUF_Auras3.PreviewDispelTypeForIndex(6) == "Magic",
+    "Classic Auras3 preview dispel-type order drifted")
 local effectOwner = setmetatable({ _shown = true, hpBar = setmetatable({ _shown = true }, Widget) }, Widget)
 local effectButton = setmetatable({ _shown = true }, Widget)
 effectButton.Icon = effectButton:CreateTexture()

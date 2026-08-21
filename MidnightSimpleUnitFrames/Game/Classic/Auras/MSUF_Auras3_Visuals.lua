@@ -759,6 +759,17 @@ function V.HideButtonVisual(button)
 end
 
 V.DispelTypes = V.DispelTypes or { "Magic", "Curse", "Disease", "Poison", "Bleed" }
+
+-- Shared Retail preview renderers ask the active Auras3 backend for a stable
+-- sample dispel type before they know whether the Classic renderer will use
+-- the value. Keep that backend contract available on every Classic client so
+-- OFF/rectangle previews cannot fail while evaluating the call arguments.
+function A3.PreviewDispelTypeForIndex(index)
+    local types = V.DispelTypes
+    index = math_max(1, math_floor(tonumber(index) or 1))
+    return types[((index - 1) % #types) + 1]
+end
+
 V.DispelAtlases = V.DispelAtlases or {
     BLIZZARD = {
         Magic = "RaidFrame-Icon-DebuffMagic", Curse = "RaidFrame-Icon-DebuffCurse",
