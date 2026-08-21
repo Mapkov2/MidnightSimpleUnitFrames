@@ -158,6 +158,33 @@ local function LiveGroupKind()
   return nil
 end
 
+local function ArenaPartyContext()
+  return type(GF.IsArenaPartyContext) == "function" and GF.IsArenaPartyContext() == true
+end
+
+local function ArenaPartyHeaderActive()
+  return ArenaPartyContext() and ConfEnabled("party")
+end
+
+--- Only a Party ROLE sort with Player-first emits MSUF's native nameList.
+--- Keep its identity catch-up completely absent from PvE and from Arena
+--- configurations that stay on SecureGroupHeader's ordinary roster path.
+local function ArenaPartyNameListActive()
+  if not ArenaPartyHeaderActive() then return false end
+  local conf = Conf("party")
+  if not (conf and conf.playerFirstInRole == true) then return false end
+  local mode = conf.sortMode
+  return mode == "ROLE" or (mode == nil and conf.sortByRole == true)
+end
+
+local function PriorityNameRefreshActive()
+  local kind = type(GF.GetPriorityBaseKind) == "function" and GF.GetPriorityBaseKind() or nil
+  if not kind then kind = LiveGroupKind() end
+  return kind ~= nil and ConfEnabled(kind)
+    and type(GF.PriorityFramesConfigured) == "function"
+    and GF.PriorityFramesConfigured() == true
+end
+
 local function AnyGroupFrameEnabled()
   if type(GF.AnyMSUFGroupFrameEnabled) == "function" then
     return GF.AnyMSUFGroupFrameEnabled() == true
@@ -193,10 +220,12 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
   for i = 1, #RUNTIME_EVENTS do
     eventFrame:RegisterEvent(RUNTIME_EVENTS[i])
   end
-  local priorityKind = type(GF.GetPriorityBaseKind) == "function" and GF.GetPriorityBaseKind() or nil
-  if not priorityKind then priorityKind = LiveGroupKind() end
-  if priorityKind and ConfEnabled(priorityKind)
-    and type(GF.PriorityFramesConfigured) == "function" and GF.PriorityFramesConfigured() == true then
+  -- Match-state transitions are the authoritative extra boundary for Arena
+  -- round/team swaps. Never subscribe in PvE.
+  if ArenaPartyHeaderActive() then
+    eventFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED")
+  end
+  if PriorityNameRefreshActive() or ArenaPartyNameListActive() then
     eventFrame:RegisterEvent("UNIT_NAME_UPDATE")
   end
 end
@@ -873,21 +902,36 @@ local function RuntimeOnEvent(self, event, unit)
       RefreshVisibleRoleState(event)
     end
     return
+  elseif event == "PVP_MATCH_STATE_CHANGED" then
+    if not ArenaPartyHeaderActive() then return end
+    if InCombat() then
+      GF.DeferGroupRuntime("roster", "party")
+    else
+      -- One coalesced cold-path pass per match-state edge; no polling.
+      ScheduleHeaderLayoutSettle(true)
+    end
+    return
   elseif event == "UNIT_NAME_UPDATE" then
     if not IsUnitToken(unit) then return end
-    local valid
-    if type(GF.IsPriorityGroupUnit) == "function" then
-      valid = GF.IsPriorityGroupUnit(unit)
-    elseif LiveGroupKind() ~= "party" and IsInRaid and IsInRaid() then
-      valid = unit:match("^raid%d+$") ~= nil
-    else
-      valid = unit == "player" or unit:match("^party[1-4]$") ~= nil
+    local partyNameListUnit = ArenaPartyNameListActive()
+      and (unit == "player" or unit:match("^party[1-4]$") ~= nil)
+    local priorityUnit = false
+    if PriorityNameRefreshActive() then
+      if type(GF.IsPriorityGroupUnit) == "function" then
+        priorityUnit = GF.IsPriorityGroupUnit(unit) == true
+      elseif LiveGroupKind() ~= "party" and IsInRaid and IsInRaid() then
+        priorityUnit = unit:match("^raid%d+$") ~= nil
+      else
+        priorityUnit = unit == "player" or unit:match("^party[1-4]$") ~= nil
+      end
     end
-    if valid ~= true then return end
+    if partyNameListUnit ~= true and priorityUnit ~= true then return end
     if InCombat() then
-      GF.RefreshPriorityFrames("unit-name")
+      if partyNameListUnit == true then GF.DeferGroupRuntime("roster", "party") end
+      if priorityUnit == true then GF.RefreshPriorityFrames("unit-name") end
     else
-      SchedulePriorityNameSettle()
+      if partyNameListUnit == true then ScheduleHeaderLayoutSettle() end
+      if priorityUnit == true then SchedulePriorityNameSettle() end
     end
     return
   elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
