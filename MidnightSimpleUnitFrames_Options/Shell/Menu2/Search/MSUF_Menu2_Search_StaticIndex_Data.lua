@@ -11,7 +11,7 @@ MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
 Search.StaticIndexSourceSha256 = "693C577F30A50093E2B4754A5254EB2642E55508D330E817D68548EBB8E7F1A5"
-Search.StaticIndexRecordCount = 2863
+Search.StaticIndexRecordCount = 2864
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -2099,6 +2099,7 @@ uf_player	Enable filters	toggle	auras3.player.buff.filtersEnabled		Buff > Filter
 uf_player	Enable filters	toggle	auras3.player.debuff.filtersEnabled		Debuff > Filters	enable filters	iduf_playermenu2%2Euf_player%2Eauras%2Eunit-workspace%2Elane%2Edebuff%2Efilters%2Eenabled				enable filters debuff filters auras unit workspace lane debuff filters enabled uf player toggle auras3 player debuff filtersenabled
 uf_player	Enabled	toggle			Custom Container > Player Defensives	enabled	iduf_playermenu2%2Euf_player%2Eauras%2Ecustom-container%2Eplayer-defensives%2Eenabled				enabled custom container player defensives auras custom container player defensives enabled uf player toggle
 uf_player	Enabled	toggle			Custom Container > Setup	enabled	iduf_playermenu2%2Euf_player%2Eauras%2Ecustom-container%2Esetup%2Eenabled				enabled custom container setup auras custom container setup enabled uf player toggle
+uf_player	Enchant duration (minutes)	slider			Custom Container > Reminder	enchant duration minutes	iduf_playermenu2%2Euf_player%2Eauras%2Ecustom-container%2Ereminder%2Eenchant-duration				enchant duration minutes custom container reminder auras custom container reminder enchant duration uf player slider
 uf_player	External defensive	toggle			Custom Container > Filters	external defensive	iduf_playermenu2%2Euf_player%2Eauras%2Ecustom-container%2Efilters%2Eexternaldefensive				external defensive custom container filters auras custom container filters externaldefensive uf player toggle
 uf_player	External defensive	toggle	auras3.player.buff.filter.externalDefensive		Buff > Filters	external defensive	iduf_playermenu2%2Euf_player%2Eauras%2Eunit-workspace%2Elane%2Ebuff%2Efilters%2Eexternaldefensive				external defensive buff filters auras unit workspace lane buff filters externaldefensive uf player toggle auras3 player buff filter externaldefensive
 uf_player	Fade frame out of combat	toggle	player.oocFadeEnabled		Unit > Transparency	fade frame out of combat	iduf_playermenu2%2Euf_player%2Eunit%2Etransparency%2Eooc_fade_enabled	transparency			fade frame out of combat unit transparency unit transparency ooc fade enabled uf player toggle player oocfadeenabled
