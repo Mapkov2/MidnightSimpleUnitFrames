@@ -341,18 +341,7 @@ local function CheckFriendly(unit)
     if deadResult ~= nil then return deadResult end
   end
 
-  local spellResult
-  if unit == "target" and next(targetFriendlySpells) then
-    local sawOut = false
-    for spellID in pairs(targetFriendlySpells) do
-      local result = SpellRange(spellID, unit)
-      if result == true then return true end
-      if result == false then sawOut = true end
-    end
-    if sawOut then spellResult = false end
-  else
-    spellResult = SpellRange(unit == "target" and targetFriendlySpell or friendlySpell, unit)
-  end
+  local spellResult = SpellRange(friendlySpell, unit)
   if spellResult ~= nil then return spellResult end
 
   if CanUseInteractDistance() then
@@ -400,10 +389,11 @@ end
 
 local function TargetRange(existsKnown)
   if existsKnown ~= true and not UnitExistsPlain("target") then return nil end
-  local direct = DirectRange("target")
-  if direct ~= nil then return direct end
+  local inRange, checked = UnitInRangeChecked("target")
+  if checked then return inRange end
   if targetChecked > 0 then return targetInRange > 0 end
-  return nil
+  local frame = FrameForUnit("target")
+  return frame and frame._msufRangeInRange
 end
 
 local function UnitRange(unit, existsKnown)
@@ -561,9 +551,9 @@ TargetRefresh = function(force, preparedFrame)
     return false
   end
 
-  local direct = DirectRange("target")
-  if direct ~= nil then
-    ApplyMul(frame, direct, force)
+  local inRange, checked = UnitInRangeChecked("target")
+  if checked then
+    ApplyMul(frame, inRange, force)
     return true
   end
 
@@ -1036,7 +1026,9 @@ local function DriverOnEvent(source, event, unit, a, b, c)
     EvaluateAll(true)
   elseif unit and activeUnits[unit] then
     if unit == "target" then
-      TargetRefresh(true)
+      -- Unit-range/phase/connection edges do not imply a new target identity.
+      -- Keep the event-owned spell state and only re-evaluate its composition.
+      EvaluateUnit("target", false, true)
     elseif event == "UNIT_IN_RANGE_UPDATE" and ApplyUnitInRangeEvent(unit, a) then
       return
     else
