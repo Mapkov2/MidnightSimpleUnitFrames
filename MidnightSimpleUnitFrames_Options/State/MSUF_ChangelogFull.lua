@@ -8,12 +8,42 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "DC41B7D5CF1A54EC32767FCD41B11E95B46FAF3EA803FAC8A08E18614B25A8CB",
-    currentVersion = "6.11",
+    sourceSha256 = "0D2B257A9FFC063153FD2B9299732EF2CF342783D19162B729D36690D2D1A827",
+    currentVersion = "6.11-beta2",
     historyFromVersion = "6.02",
-    previousVersion = "6.1",
-    rangeLabel = "6.1 -> 6.11",
+    previousVersion = "6.11",
+    rangeLabel = "6.11 -> 6.11-beta2",
     entries = {
+        {
+            version = "6.11-beta2",
+            date = "2026-08-21",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Friendly Target Range Fade now remains accurate in instanced combat. Moving farther out of range no longer makes the Target Frame appear in range again when Blizzard temporarily stops returning a fresh range result.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target range fade",
+                                label = "Enable Range Fade",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_target.unit.range_fade.enabled",
+                                settingKey = "target.rangeFadeEnabled",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Target Range Fade now keeps the last authoritative friendly-target result until a native range event or a real target change supplies a replacement, without adding polling, timers, or an open-world fallback path.",
+                        "Castbars reuse unchanged manager topology and boss-frame geometry validation, resolve cast activity once per update, and share the player's plain interrupt-cooldown status across same-frame Target, Focus, and Boss refreshes.",
+                        "Player-first role-sorted Party Frames now wait for a complete Arena roster before publishing their secure name list and refresh on Arena match-state and unit-name transitions; the additional listeners remain disabled in PvE.",
+                    },
+                },
+            },
+        },
         {
             version = "6.11",
             date = "2026-08-21",

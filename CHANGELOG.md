@@ -1,5 +1,18 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.11-beta2 - 2026-08-21
+
+### Highlights
+
+- **Friendly Target Range Fade now remains accurate in instanced combat.** Moving farther out of range no longer makes the Target Frame appear in range again when Blizzard temporarily stops returning a fresh range result.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"range_fade","controlId":"menu2.uf_target.unit.range_fade.enabled","settingKey":"target.rangeFadeEnabled","prepareKind":"","prepareValue":"","query":"target range fade","label":"Enable Range Fade"} -->
+
+### Fixes & Performance
+
+- Target Range Fade now keeps the last authoritative friendly-target result until a native range event or a real target change supplies a replacement, without adding polling, timers, or an open-world fallback path.
+- Castbars reuse unchanged manager topology and boss-frame geometry validation, resolve cast activity once per update, and share the player's plain interrupt-cooldown status across same-frame Target, Focus, and Boss refreshes.
+- Player-first role-sorted Party Frames now wait for a complete Arena roster before publishing their secure name list and refresh on Arena match-state and unit-name transitions; the additional listeners remain disabled in PvE.
+
 ## 6.11 - 2026-08-21
 
 ### Highlights
