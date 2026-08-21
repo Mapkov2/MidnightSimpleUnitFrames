@@ -1322,9 +1322,12 @@ local function CreateCastBar(frameName, unit)
     end)
 
     function frame:Cast(state)
-        if not (CastStateHasSpell(state) and state.unit == self.unit) then
+        local hasSpell = CastStateHasSpell(state)
+        if not (hasSpell and state.unit == self.unit) then
             state = BuildState(self)
+            hasSpell = CastStateHasSpell(state)
         end
+        local stateActive = CastStateActive(state)
 
         if state ~= nil then
             self._msufApiNotInterruptibleRaw = state.apiNotInterruptibleRaw
@@ -1334,7 +1337,7 @@ local function CreateCastBar(frameName, unit)
 
         local spellName, label, icon, startTimeMS, endTimeMS
         local isChannel = false
-        if CastStateHasSpell(state) then
+        if hasSpell then
             spellName = state.spellName
             label = state.text or state.spellName
             icon = state.icon
@@ -1352,7 +1355,7 @@ local function CreateCastBar(frameName, unit)
         end
 
         local durationObj = (state and state.durationObj ~= nil) and state.durationObj or nil
-        if durationObj == nil and CastStateActive(state) then
+        if durationObj == nil and stateActive then
             local sequenceID = state.spellSequenceID
             if type(sequenceID) == "number"
                 and self._msufLastDurationSeq == sequenceID
@@ -1362,13 +1365,13 @@ local function CreateCastBar(frameName, unit)
             end
         end
 
-        if CastStateActive(state) and durationObj ~= nil then
+        if stateActive and durationObj ~= nil then
             local sequenceID = state.spellSequenceID
             if type(sequenceID) == "number" then
                 self._msufLastDurationSeq = sequenceID
                 self._msufLastDurationObj = durationObj
             end
-        elseif not CastStateActive(state) then
+        elseif not stateActive then
             self._msufApiNotInterruptibleRaw = nil
             self._msufLastDurationSeq = nil
             self._msufLastDurationObj = nil
