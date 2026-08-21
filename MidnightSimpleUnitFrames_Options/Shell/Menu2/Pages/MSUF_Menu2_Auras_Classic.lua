@@ -65,6 +65,7 @@ M.AURA_PANDEMIC_BLEND_VALUES = M.AURA_PANDEMIC_BLEND_VALUES or VTP "ADD=Additive
 local AURA_SORT_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reversed"
 local BUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|BIG_DEFENSIVE=Other Defensives First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
 local DEBUFF_AURA_SORT_METHOD_VALUES = VTP "DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
+local CUSTOM_PRIORITY_AURA_SORT_METHOD_VALUES = VTP "CUSTOM_PRIORITY=Custom Priority|DEFAULT=Player & Priority First|UNIT_FRAME_DEBUFF=Debuff Type First|IMPORTANT_FIRST=Important First|EXPIRATION=Player First, Expiring Soon|EXPIRATION_ONLY=Expiring Soon|NAME=Player First, then Name|NAME_ONLY=Name|INSTANCE_ID=Arrival Order"
 local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
 local DURATION_BAR_POSITION_VALUES = VTP "BOTTOM=Bottom|TOP=Top"
 local DURATION_BAR_DIRECTION_VALUES = VTP "REMAINING=Remaining|ELAPSED=Elapsed"
@@ -114,7 +115,8 @@ function M.AttachAuraFontsAndColors(section, title, unit)
 end
 local BUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, BIG_DEFENSIVE=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
 local DEBUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, UNIT_FRAME_DEBUFF=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
-local function AuraSortMethodValues(lane)
+local function AuraSortMethodValues(lane, allowCustomPriority)
+    if allowCustomPriority == true then return CUSTOM_PRIORITY_AURA_SORT_METHOD_VALUES end
     return lane == "debuff" and DEBUFF_AURA_SORT_METHOD_VALUES or BUFF_AURA_SORT_METHOD_VALUES
 end
 local function ChoiceLabel(values, value, fallback)
@@ -132,14 +134,15 @@ local AURA_ANCHOR_LABELS = {
 local AURA_SORT_SUMMARY_LABELS = {
     DEFAULT = "Priority first", BIG_DEFENSIVE = "Defensives first", UNIT_FRAME_DEBUFF = "Debuff type first",
     IMPORTANT_FIRST = "Important first", EXPIRATION = "Player + expiring", EXPIRATION_ONLY = "Expiring soon",
-    NAME = "Player + name", NAME_ONLY = "Name", INSTANCE_ID = "Arrival order",
+    NAME = "Player + name", NAME_ONLY = "Name", INSTANCE_ID = "Arrival order", CUSTOM_PRIORITY = "Custom priority",
 }
 local function AnchorLabel(value)
     value = tostring(value or "CENTER"):upper()
     return AURA_ANCHOR_LABELS[value] or value
 end
-local function NormalizeAuraSortMethodForLane(lane, value)
+local function NormalizeAuraSortMethodForLane(lane, value, allowCustomPriority)
     value = tostring(value or "DEFAULT"):upper()
+    if allowCustomPriority == true and value == "CUSTOM_PRIORITY" then return value end
     local allowed = lane == "debuff" and DEBUFF_AURA_SORT_METHOD_OK or BUFF_AURA_SORT_METHOD_OK
     return allowed[value] and value or "DEFAULT"
 end
@@ -246,6 +249,9 @@ M._customContainerAssistantSuffixes = {
     "filters.bigDefensive", "filters.crowdControl", "placed.anchor", "placed.growth",
     "placed.x", "placed.y", "placed.max", "placed.size", "placed.perRow", "placed.spacing",
     "placed.showStacks", "placed.showCooldown", "placed.showCooldownSwipe",
+    "placed.reminderEnabled", "placed.reminderAlpha", "placed.reminderDesaturate",
+    "placed.reminderClickCast", "placed.reminderOnlyCastable",
+    "reminderEnchantMainHand", "reminderEnchantOffHand",
 }
 local function AuraControlMeta(ctx, path, classification, assistantContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
@@ -278,6 +284,13 @@ local function AuraControlMeta(ctx, path, classification, assistantContract)
         meta.assistantDisposition = "dynamic"
         meta.assistantDispositionReason = "This Aura control targets the selected scope, lane, tool, or container on the current Aura workspace."
     end
+    return meta
+end
+local function AuraControlMetaAtVisiblePath(ctx, identityPath, visiblePath, classification, assistantContract)
+    local meta = AuraControlMeta(ctx, identityPath, classification, assistantContract)
+    visiblePath = tostring(visiblePath or identityPath or "control"):lower():gsub("[^%w%._/-]+", "-")
+    visiblePath = visiblePath:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
+    meta.controlPath = "auras/" .. visiblePath:gsub("%.", "/")
     return meta
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
@@ -338,7 +351,12 @@ local function NormalizeDebuffTypeBorderMode(value, fallback)
     return fallback or "OFF"
 end
 local function AddTooltip(widget, title, body)
-    return M.AddTooltip(widget, title, body, { hook = true, titleAsLine = true })
+    return M.AddTooltip(widget, title, body, {
+        hook = true,
+        titleAsLine = true,
+        labelHit = true,
+        labelHitWhenDisabled = true,
+    })
 end
 local function AddAuraTooltipHelp(widget)
     return AddTooltip(widget, "Aura tooltip",
@@ -354,7 +372,7 @@ end
 
 local CUSTOM_DEBUFF_BLACKLIST_INFO_SEEN_KEY = "auraEnemyDebuffBlacklistInfoSeen"
 local CUSTOM_DEBUFF_BLACKLIST_INFO_TITLE = "UnitFrame Debuff blacklist"
-local CUSTOM_DEBUFF_BLACKLIST_INFO_BODY = "You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID."
+local CUSTOM_DEBUFF_BLACKLIST_INFO_BODY = "You can blacklist any debuff applied by the player on the %s UnitFrame using its exact Spell ID. The debuff on the unit can carry a different Spell ID than the spell you cast - use the ID from the debuff itself."
 
 local function CustomDebuffBlacklistInfoSeen()
     local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
@@ -468,12 +486,13 @@ local function HandleNestedScrollWheel(scrollFrame, delta, step)
     local leavingTop = delta > 0 and current <= 0.01
     local leavingBottom = delta < 0 and current >= range - 0.01
     if range <= 0 or leavingTop or leavingBottom then
-        if scrollFrame.SetPropagateMouseWheel then
+        local main = M.scrollFrame
+        local handler = main and main.GetScript and main:GetScript("OnMouseWheel")
+        if type(handler) == "function" and main ~= scrollFrame then
+            if scrollFrame.SetPropagateMouseWheel then scrollFrame:SetPropagateMouseWheel(false) end
+            handler(main, delta)
+        elseif scrollFrame.SetPropagateMouseWheel then
             scrollFrame:SetPropagateMouseWheel(true)
-        else
-            local main = M.scrollFrame
-            local handler = main and main.GetScript and main:GetScript("OnMouseWheel")
-            if type(handler) == "function" then handler(main, delta) end
         end
         return
     end
@@ -481,6 +500,88 @@ local function HandleNestedScrollWheel(scrollFrame, delta, step)
     local value = current - (delta * (tonumber(step) or 42))
     if value < 0 then value = 0 elseif value > range then value = range end
     if scrollFrame.SetVerticalScroll then scrollFrame:SetVerticalScroll(value) end
+end
+
+function M._StyleNestedAuraScrollFrame(scrollFrame, anchor, step)
+    if not scrollFrame then return end
+    if scrollFrame.SetPropagateMouseWheel then scrollFrame:SetPropagateMouseWheel(false) end
+    if type(T.StyleScrollFrame) == "function" then T.StyleScrollFrame(scrollFrame, anchor) end
+    local function OnMouseWheel(_, delta)
+        HandleNestedScrollWheel(scrollFrame, delta, step)
+    end
+    if scrollFrame.EnableMouseWheel then scrollFrame:EnableMouseWheel(true) end
+    scrollFrame:SetScript("OnMouseWheel", OnMouseWheel)
+    local child = scrollFrame.GetScrollChild and scrollFrame:GetScrollChild()
+    if child and child.EnableMouseWheel then
+        child:EnableMouseWheel(true)
+        child:SetScript("OnMouseWheel", OnMouseWheel)
+    end
+    local bar = scrollFrame._msuf2ScrollBar
+    if bar and bar.EnableMouseWheel then
+        bar:EnableMouseWheel(true)
+        bar:SetScript("OnMouseWheel", OnMouseWheel)
+    end
+end
+
+local function ConfigureAuraSpellPriorityDrag(row, handle, listChild, rowHeight, onDrop)
+    if not (row and handle and listChild) then return end
+    rowHeight = max(1, tonumber(rowHeight) or 1)
+    row:SetMovable(true)
+    handle:RegisterForDrag("LeftButton")
+    handle:EnableMouse(true)
+    local function SnapRow()
+        local slot = max(1, tonumber(row._displayIndex) or 1)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((slot - 1) * rowHeight))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((slot - 1) * rowHeight))
+    end
+    local function ClearDragState(shouldSnap)
+        if row.StopMovingOrSizing then row:StopMovingOrSizing() end
+        if row.SetFrameStrata and row._msufA3OldStrata then row:SetFrameStrata(row._msufA3OldStrata) end
+        row._msufA3OldStrata = nil
+        row._msufA3Dragging = nil
+        if shouldSnap == true then SnapRow() end
+    end
+    handle:HookScript("OnEnter", function()
+        if row._dragEnabled ~= true or not row.SetBackdropBorderColor then return end
+        local c = (T.colors and T.colors.coreBlue) or { 0.095, 0.360, 0.560, 0.95 }
+        row:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
+    end)
+    handle:HookScript("OnLeave", function()
+        if not row.SetBackdropBorderColor then return end
+        local c = (T.colors and (T.colors.cardBorder or T.colors.borderSoft)) or { 0.210, 0.230, 0.300, 0.78 }
+        row:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
+    end)
+    handle:SetScript("OnDragStart", function()
+        if row._dragEnabled ~= true or not row._spellID then return end
+        if GameTooltip then GameTooltip:Hide() end
+        row._msufA3Dragging = true
+        row._msufA3OldStrata = row.GetFrameStrata and row:GetFrameStrata() or nil
+        if row.SetFrameStrata then row:SetFrameStrata("TOOLTIP") end
+        row:StartMoving()
+    end)
+    handle:SetScript("OnDragStop", function()
+        if row._msufA3Dragging ~= true then return end
+        if row.StopMovingOrSizing then row:StopMovingOrSizing() end
+        local _, centerY = row:GetCenter()
+        local top = listChild.GetTop and listChild:GetTop()
+        local count = max(1, tonumber(row._entryCount) or 1)
+        local source = max(1, min(count, tonumber(row._displayIndex) or 1))
+        local target, bestDistance = source, math.huge
+        if centerY and top then
+            local rowHalf = (row.GetHeight and row:GetHeight() or rowHeight) * 0.5
+            for slot = 1, count do
+                local distance = math.abs(centerY - (top - ((slot - 1) * rowHeight) - rowHalf))
+                if distance < bestDistance then
+                    target, bestDistance = slot, distance
+                end
+            end
+        end
+        local spellID = row._spellID
+        ClearDragState(true)
+        if spellID and target ~= source and type(onDrop) == "function" then onDrop(spellID, target) end
+    end)
+    row:HookScript("OnHide", function() ClearDragState(false) end)
 end
 local function QueueAurasPageRefresh(ctx, reason)
     if AurasMenuCombatLocked() then return false end
@@ -528,8 +629,8 @@ local function ConfigureMaxDurationSlider(slider)
             return tonumber(value:match("%d+"))
         end)
     end
-    AddTooltip(slider, "Maximum debuff duration",
-        "Off shows debuffs of any duration. Otherwise, debuffs whose total duration exceeds this number of seconds are hidden.")
+    AddTooltip(slider, "Maximum duration",
+        "Off shows auras of any duration. Otherwise, auras whose total duration exceeds this number of seconds are hidden.")
     return slider
 end
 local UNIT_AURA_WORKSPACE_TAB_STYLE = {
@@ -999,7 +1100,7 @@ local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, w
         end,
         AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key), nil, assistantContract))
 end
-local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope, groupKey, key, defaultValue, mode, afterSet)
+local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope, groupKey, key, defaultValue, mode, afterSet, controlMeta)
     return BindDropdown(ctx, parent, label, x, y, values, width,
         function()
             local group = GFReadGroup(scope, groupKey)
@@ -1015,7 +1116,7 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
             GFWriteGroupValue(scope, groupKey, key, value, mode or "visual")
             if afterSet then afterSet(value) end
         end,
-        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key)))
+        controlMeta or AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key)))
 end
 local function ReadGroupDebuffTypeBorderMode(scope, groupKey)
     local group = GFReadGroup(scope, groupKey or "debuff")
@@ -1550,9 +1651,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         if borderAtlas and cfg.iconShape ~= "RECTANGLE" and type(A3.ApplyAuraDispelPreview) == "function" then
             A3.ApplyAuraDispelPreview(icon.dispelBorder, icon, cfg.size, cfg.debuffBorderMode, cfg.iconShape)
         elseif borderAtlas and icon.dispelBorder.SetAtlas then
-            local pad = type(A3.AuraDispelBorderPadding) == "function"
-                and A3.AuraDispelBorderPadding(cfg.size)
-                or max(1, floor((cfg.size / 6) + 0.5))
+            local pad = max(1, floor((cfg.size / 6) + 0.5))
             icon.dispelBorder:ClearAllPoints()
             icon.dispelBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
             icon.dispelBorder:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
@@ -1973,23 +2072,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
     end
     local function WriteScopeSwipeDirection(value)
         WriteScopeBool("cooldownSwipeReverse", value == "REVERSE")
-    end
-    local function ReadScopeSortMethod()
-        local value = type(Model.ReadLaneStyleString) == "function"
-            and Model.ReadLaneStyleString(unit, lane, "sortMethod", "DEFAULT") or "DEFAULT"
-        return NormalizeAuraSortMethodForLane(lane, value)
-    end
-    local function WriteScopeSortMethod(value)
-        value = NormalizeAuraSortMethodForLane(lane, value)
-        if type(Model.WriteLaneStyleString) == "function" then
-            Model.WriteLaneStyleString(unit, lane, "sortMethod", value)
-        end
-    end
-    local function ReadScopeSortDirection()
-        return ReadScopeBool("sortReverse", false) and "REVERSE" or "NORMAL"
-    end
-    local function WriteScopeSortDirection(value)
-        WriteScopeBool("sortReverse", value == "REVERSE")
     end
     local function ReadScopeDurationBarDisplay()
         if type(Model.ReadLaneDurationBarDisplay) == "function" then return Model.ReadLaneDurationBarDisplay(unit, lane) end
@@ -2559,15 +2641,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
     EffectSlider("Thickness", 2, -96, 1, 16, 1, "Thickness", 2, "AURAS3_LANE_FRAME_EFFECT_THICKNESS")
     EffectSlider("Priority", 0, -150, 1, 10, 1, "Priority", 5, "AURAS3_LANE_FRAME_EFFECT_PRIORITY")
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 156, false)
-    local bw = BodyWidth(behavior)
-    local sortMethod = BindStyleDropdown(behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
-        ReadScopeSortMethod, WriteScopeSortMethod, "AURAS3_SORT_METHOD")
-    AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
-    local sortDirection = BindStyleDropdown(behavior, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, bw - 48,
-        ReadScopeSortDirection, WriteScopeSortDirection, "AURAS3_SORT_DIRECTION")
-    AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-
     M.TrackRefresh(ctx, function()
         -- Individual Style editors are always actionable. The first write to a
         -- formerly inherited lane activates its sparse per-frame override.
@@ -2625,14 +2698,68 @@ local function BuildUnitStyle(ctx, b, scope, options)
                 kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
             }})
 
-            local sortKey = ReadScopeSortMethod()
-            W.SetCollapsibleBadges(behavior, {{
-                text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / " .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, ReadScopeSortDirection(), "Normal"),
-                kind = "info", showWhenClosed = true,
-            }})
         end
     end)
 end
+
+local function BuildUnitOrdering(ctx, b, unit, lane)
+    lane = lane == "debuff" and "debuff" or "buff"
+    local section = b:Section("Ordering", 156)
+    local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
+    local function ReadSortMethod()
+        local value = type(Model.ReadLaneStyleString) == "function"
+            and Model.ReadLaneStyleString(unit, lane, "sortMethod", "DEFAULT") or "DEFAULT"
+        return NormalizeAuraSortMethodForLane(lane, value)
+    end
+    local function ReadSortDirection()
+        local reverse = false
+        if type(Model.ReadLaneStyleBool) == "function" then
+            reverse = Model.ReadLaneStyleBool(unit, lane, "sortReverse", false)
+        elseif type(Model.ReadBool) == "function" then
+            reverse = Model.ReadBool(unit, "sortReverse", false)
+        end
+        return reverse == true and "REVERSE" or "NORMAL"
+    end
+    local function ApplyOrdering(reason)
+        ApplyUnit(ctx, unit, reason)
+        local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+        if apply and type(apply.Flush) == "function" then apply.Flush() end
+        local refreshOwnedPreview = ctx and ctx._msuf2RefreshUnitPreview
+        if type(refreshOwnedPreview) == "function" then
+            refreshOwnedPreview(reason)
+        elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+            _G.MSUF_UFPreview_RequestRefresh(reason)
+        end
+    end
+    local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(lane), width - 48,
+        ReadSortMethod,
+        function(value)
+            value = NormalizeAuraSortMethodForLane(lane, value)
+            if type(Model.WriteLaneStyleString) == "function" then
+                Model.WriteLaneStyleString(unit, lane, "sortMethod", value)
+            end
+            ApplyOrdering("AURAS3_SORT_METHOD")
+        end,
+        AuraControlMetaAtVisiblePath(ctx,
+            "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_METHOD"),
+            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method"))
+    AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
+    local sortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, width - 48,
+        ReadSortDirection,
+        function(value)
+            if type(Model.WriteLaneStyleBool) == "function" then
+                Model.WriteLaneStyleBool(unit, lane, "sortReverse", value == "REVERSE")
+            elseif type(Model.WriteBool) == "function" then
+                Model.WriteBool(unit, "sortReverse", value == "REVERSE")
+            end
+            ApplyOrdering("AURAS3_SORT_DIRECTION")
+        end,
+        AuraControlMetaAtVisiblePath(ctx,
+            "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_DIRECTION"),
+            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction"))
+    AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
+end
+
 local function BuildGroupStyle(ctx, b, scope, options)
     options = type(options) == "table" and options or nil
     local embeddedGroupPreview = options and options.embeddedGroupPreview == true
@@ -2795,23 +2922,10 @@ local function BuildGroupStyle(ctx, b, scope, options)
     BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -210, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Ordering", 216, false)
-    local bw = BodyWidth(behavior)
-    local groupSortMethod = BindGroupDropdown(ctx, behavior, "Sort By", 24, -48, AuraSortMethodValues(lane), bw - 48,
-        scope, lane, "sortMethod", "DEFAULT", "visual")
-    AddTooltip(groupSortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
-    local groupSortDirection = BindDropdown(ctx, behavior, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, bw - 48,
-        function()
-            local group = GFReadGroup(scope, lane)
-            return group.sortReverse == true and "REVERSE" or "NORMAL"
-        end,
-        function(v)
-            GFWriteGroupValue(scope, lane, "sortReverse", v == "REVERSE", "visual")
-        end,
-        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction"))
-    AddTooltip(groupSortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-    BindGroupRootSwitch(ctx, behavior, "Scale Icons for Large Groups", 24, -160, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
-    W.Text(behavior, "85% above 15 members · 70% above 25", 24, -192, bw - 48, T.colors.muted)
+    local largeGroups = b:CollapsibleSection(baseId .. "_large_groups", "Large Groups", 112, false)
+    local lgw = BodyWidth(largeGroups)
+    BindGroupRootSwitch(ctx, largeGroups, "Scale Icons for Large Groups", 24, -48, lgw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
+    W.Text(largeGroups, "85% above 15 members / 70% above 25", 24, -78, lgw - 48, T.colors.muted)
 
     M.TrackRefresh(ctx, function()
         if not W.SetCollapsibleBadges then return end
@@ -2855,12 +2969,34 @@ local function BuildGroupStyle(ctx, b, scope, options)
             kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
         }})
 
-        local sortKey = NormalizeAuraSortMethodForLane(lane, group.sortMethod or "DEFAULT")
-        W.SetCollapsibleBadges(behavior, {
-            { text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / " .. (group.sortReverse == true and "Reversed" or "Normal"), kind = "info", showWhenClosed = true },
+        W.SetCollapsibleBadges(largeGroups, {
             ToggleBadge("Large-group scaling", root.dynamicScale == true),
         })
     end)
+end
+
+local function BuildGroupOrdering(ctx, b, scope, lane)
+    lane = lane == "externals" and "externals" or (lane == "debuff" and "debuff" or "buff")
+    local section = b:Section("Ordering", 156)
+    local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
+    local groupSortMethod = BindGroupDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(lane), width - 48,
+        scope, lane, "sortMethod", "DEFAULT", "visual", nil,
+        AuraControlMetaAtVisiblePath(ctx,
+            "group-style.lane." .. AuraCatalogToken(lane) .. ".sortmethod",
+            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method"))
+    AddTooltip(groupSortMethod, "Aura sorting", "Only relevant sorting methods are shown for helpful and harmful auras.")
+    local groupSortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, width - 48,
+        function()
+            local group = GFReadGroup(scope, lane)
+            return group.sortReverse == true and "REVERSE" or "NORMAL"
+        end,
+        function(value)
+            GFWriteGroupValue(scope, lane, "sortReverse", value == "REVERSE", "visual")
+        end,
+        AuraControlMetaAtVisiblePath(ctx,
+            "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction",
+            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction"))
+    AddTooltip(groupSortDirection, "Aura sort order", "Reversed flips the complete priority order.")
 end
 local function CustomStyleSectionId(index, suffix)
     return "aura_style_custom_" .. tostring(index or 1) .. "_" .. tostring(suffix or "section")
@@ -2942,7 +3078,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local half = ceil(#meta / 2)
     local categoryHeight = max(356, 180 + half * 30)
     local originY = embedded and (tonumber(opts.originY) or -400) or 0
-    local blacklistY = showFilter and (originY - (laneKey == "debuff" and 362 or 304)) or (originY - 42)
+    local blacklistY = showFilter and (originY - 362) or (originY - 42)
     local directY = blacklistY - categoryHeight - 24
     local standaloneHeight = max(930, abs(directY) + (laneKey == "debuff" and 270 or 324))
     local section = opts.parent or b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", standaloneHeight, false)
@@ -2980,7 +3116,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         W.LabelAt(section, "Blizzard Filters & Lists", 24, originY - 24, w - 48, "GameFontNormal", T.colors.accent)
     end
     if showFilter then
-        local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)), M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, lane == "debuff" and 296 or 234)
+        local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)), M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, 296)
         W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or Tr("Filter Type"), 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
         if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
         local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
@@ -2990,10 +3126,10 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             ReadHidePermanent, WriteHidePermanent,
             AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".hide-permanent"))
         AddHidePermanentTooltip(hidePermanent)
-        if lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
+        if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
             ConfigureMaxDurationSlider(BindSlider(ctx, filter, "Maximum duration", 16, -230, 0, 180, 1, filterW - 32,
                 ReadMaxDuration, WriteMaxDuration,
-                AuraControlMeta(ctx, "group-filter.lane.debuff.max-duration", nil, {
+                AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".max-duration", nil, {
                     assistantDisposition = "compound",
                     assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
                 })))
@@ -3128,15 +3264,13 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local prepared = W.Text(direct, "", 16, directPresetY - 84, w - 80, T.colors.accent)
     local empty = W.Text(direct, lane == "debuff" and "No blacklisted spells. Add one from the presets above."
         or "No blacklisted spells. Add one above or use a preset.", 16, directPresetY - 120, w - 80, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, direct, "UIPanelScrollFrameTemplate")
+    local listScroll = CreateFrame("ScrollFrame", nil, direct)
     listScroll:SetPoint("TOPLEFT", direct, "TOPLEFT", 16, directPresetY - 110)
     listScroll:SetSize(w - 108, 48)
-    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(w - 130, 48)
     listScroll:SetScrollChild(listChild)
-    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 28) end)
+    M._StyleNestedAuraScrollFrame(listScroll, direct, 28)
     local rows = {}
     local function EnsureRow(index)
         local row = rows[index]
@@ -3195,15 +3329,14 @@ end
 local UNIT_AURA_CHOICE_WIDTH = 92
 local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target", UNIT_AURA_CHOICE_WIDTH)
 M._unitAuraWorkspaceTabsPlayer = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensives", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|filters=Filters|blacklist=Blacklist|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|filters=Filters|whitelist=Whitelist|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|dots=Dots|style=Style", UNIT_AURA_CHOICE_WIDTH)
-M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|defensives=Defensives|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, filters = true, blacklist = true, style = true }
-local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, whitelist = true, filters = true, layout = true, style = true }
-local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, dots = true, style = true }
-M._unitAuraPlayerDefensiveToolOK = M._unitAuraPlayerDefensiveToolOK
-    or { setup = true, layout = true, defensives = true, style = true }
+local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|behavior=Ordering|filters=Filters|blacklist=Blacklist|style=Style", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|whitelist=Whitelist|style=Style", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|dots=Dots|style=Style", UNIT_AURA_CHOICE_WIDTH)
+M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|defensives=Defensives|style=Style", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, behavior = true, filters = true, blacklist = true, style = true }
+local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, behavior = true, whitelist = true, filters = true, layout = true, style = true }
+local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, behavior = true, filters = true, dots = true, style = true }
+M._unitAuraPlayerDefensiveToolOK = { setup = true, layout = true, behavior = true, filters = true, defensives = true, style = true }
 
 local function CurrentUnitAuraTool(unit, container)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
@@ -3334,7 +3467,7 @@ end
 
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
     local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters",
-        M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or (lane == "debuff" and 224 or 182))
+        M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or 256)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -3402,8 +3535,8 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
             "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
     AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration, even when Blizzard token filters are disabled.")
     local maxDuration
-    if lane == "debuff" then
-        maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -142, 0, 180, 1, inner,
+    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
+        maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -174, 0, 180, 1, inner,
             function()
                 return type(Model.ReadBlacklistMaxDuration) == "function"
                     and Model.ReadBlacklistMaxDuration(unit, lane) or 0
@@ -3411,10 +3544,10 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
             function(value)
                 if type(Model.WriteBlacklistMaxDuration) == "function"
                     and Model.WriteBlacklistMaxDuration(unit, lane, value) then
-                    ApplyUnit(ctx, unit, "AURAS3_DEBUFF_MAX_DURATION", true)
+                    ApplyUnit(ctx, unit, "AURAS3_" .. tostring(lane):upper() .. "_MAX_DURATION", true)
                 end
             end,
-            AuraControlMeta(ctx, "unit-workspace.lane.debuff.filters.max-duration", nil, {
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {
                 assistantDisposition = "compound",
                 assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
             })))
@@ -3493,9 +3626,9 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
     local showPresets = not isDebuff or type(Model.UnitBlacklistPresetValues) ~= "function"
         or #Model.UnitBlacklistPresetValues(unit, lane) > 0
     local combinedManualAndPresets = (not isDebuff or enemyDebuff) and showPresets
-    local refreshList
+    local refreshList, renderVerify, refreshLiveBlock, nonPresetHint
     local section = b:Section(laneTitle .. " Blacklist",
-        combinedManualAndPresets and 528 or 446)
+        combinedManualAndPresets and 620 or ((not isDebuff or enemyDebuff) and 538 or 446))
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     if not isDebuff or enemyDebuff then
@@ -3508,15 +3641,389 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             function() return inputValue end, function(value) inputValue = value or "" end,
             false, AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.manual-input", "ephemeral"))
         if enemyDebuff then CreateCustomDebuffBlacklistInfoButton(section, input, unit) end
+        AddTooltip(input, "Spell ID vs. aura ID",
+            "The aura on the unit can use a different Spell ID than the spell you cast. Enter the ID shown on the aura itself. After adding, MSUF checks the live unit and warns when only a same-named aura with a different ID is active.")
         local add = ActionButton(section, addLabel, enemyDebuff and 132 or 118, "primary")
         add:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + inputW, -60)
-        add:SetScript("OnClick", function()
-            local value = input and input.GetText and input:GetText() or inputValue
-            local changed = Model.AddBlacklistSpell(unit, value, lane)
+        local verifyText = W.Text(section, "", 24, -92, inner - 214, T.colors.muted)
+        if verifyText.SetMaxLines then verifyText:SetMaxLines(2) end
+        local swapBtn = ActionButton(section, "", 180, "primary")
+        swapBtn:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -86)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(swapBtn, input) end
+        swapBtn:Hide()
+        renderVerify = function()
+            local state = M.auraBlacklistVerify
+            local mine = state and state.unit == unit and state.lane == lane and state or nil
+            if not mine then
+                verifyText:SetText("")
+            elseif mine.status == "scan" and mine.blocked then
+                local c = T.colors.accent2 or T.colors.accent
+                if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
+                verifyText:SetText(Tr("Blizzard is blocking aura scanning right now (encounter, Mythic+, or PvP match). Use the curated presets - they cover everything blockable in instanced content."))
+            elseif mine.status == "scan" then
+                local c = T.colors.accent
+                if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
+                if (mine.secretCount or 0) > 0 then
+                    verifyText:SetText(M.Format("Scan complete: %d auras readable right now, %d captured this session. %d more are hidden by Blizzard and cannot be blocked by any addon.",
+                        mine.liveCount or 0, mine.sessionCount or 0, mine.secretCount))
+                else
+                    verifyText:SetText(M.Format("Scan complete: %d auras readable right now, %d captured this session.",
+                        mine.liveCount or 0, mine.sessionCount or 0))
+                end
+            elseif mine.status == "active" then
+                local c = T.colors.accent
+                if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
+                verifyText:SetText(M.Format("%s (#%d) is active on this frame right now - blacklist entry verified.",
+                    tostring(mine.name or "Spell"), mine.enteredID or 0))
+            else
+                local c = T.colors.accent2 or T.colors.accent
+                if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
+                verifyText:SetText(M.Format("#%d is not active on this frame, but %s is currently active as #%d. The aura's ID can differ from your cast's Spell ID.",
+                    mine.enteredID or 0, tostring(mine.suggestName or "Spell"), mine.suggestID or 0))
+            end
+            local showSwap = mine ~= nil and mine.status == "mismatch" and mine.suggestID ~= nil
+            if showSwap and swapBtn._msuf2Label and swapBtn._msuf2Label.SetText then
+                swapBtn._msuf2Label:SetText(M.Format("Block #%d instead", mine.suggestID))
+            end
+            swapBtn:SetShown(showSwap)
+            if nonPresetHint then nonPresetHint:SetShown(mine == nil) end
+        end
+        swapBtn:SetScript("OnClick", function()
+            local state = M.auraBlacklistVerify
+            local mine = state and state.unit == unit and state.lane == lane and state or nil
+            if not (mine and mine.suggestID) then return false end
+            if mine.enteredID and mine.enteredID ~= mine.suggestID then
+                Model.RemoveBlacklistSpell(unit, mine.enteredID, lane)
+            end
+            Model.AddBlacklistSpell(unit, mine.suggestID, lane)
+            M.auraBlacklistVerify = {
+                unit = unit, lane = lane, status = "active",
+                enteredID = mine.suggestID, name = mine.suggestName,
+            }
+            ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true)
+            if refreshList then refreshList() end
+            QueueAurasPageRefresh(ctx, "aura-blacklist-swap-suggested")
+            return true
+        end)
+        local liveY = showPresets and -122 or -134
+        local liveW = max(140, min(floor(inner * 0.62), inner - 266))
+        local captureKey = unit .. "|" .. lane
+        local function CapturedAuras(wipeStore)
+            local store = M.auraBlacklistCaptured
+            if type(store) ~= "table" then store = {} M.auraBlacklistCaptured = store end
+            if wipeStore then store[captureKey] = nil end
+            local captured = store[captureKey]
+            if type(captured) ~= "table" then captured = {} store[captureKey] = captured end
+            return captured
+        end
+        -- Scanning is strictly click-driven: only the Rescan/Block handlers
+        -- call LiveAuraValues. Refreshes and the dropdown read the cached
+        -- last scan, so an open menu never scans the unit on its own.
+        local liveScanCache
+        local function LiveAuraValues()
+            local values, unreadable, blocked
+            if type(Model.LiveBlacklistAuraValues) == "function" then
+                values, unreadable, blocked = Model.LiveBlacklistAuraValues(unit, lane)
+            end
+            values = values or {}
+            -- Every scan also feeds the session capture list, so short-lived
+            -- combat debuffs stay pickable after they expire or combat ends.
+            local captured = CapturedAuras(false)
+            local liveSeen = {}
+            for i = 1, #values do
+                local entry = values[i]
+                liveSeen[entry.value] = true
+                local cap = captured[entry.value]
+                if type(cap) ~= "table" then
+                    cap = { name = type(cap) == "string" and cap or nil }
+                    captured[entry.value] = cap
+                end
+                if type(entry.name) == "string" then cap.name = entry.name end
+                if entry.icon ~= nil and cap.icon == nil then cap.icon = entry.icon end
+            end
+            local capturedOnly = {}
+            for id, cap in pairs(captured) do
+                if not liveSeen[id] then
+                    local capName = type(cap) == "table" and cap.name or (type(cap) == "string" and cap or nil)
+                    local label = (capName or "Spell") .. " (#" .. tostring(id) .. ")"
+                    capturedOnly[#capturedOnly + 1] = {
+                        value = id, name = capName, icon = type(cap) == "table" and cap.icon or nil,
+                        text = M.Format("%s - captured", label), captured = true,
+                    }
+                end
+            end
+            table.sort(capturedOnly, function(a, b) return tostring(a.text) < tostring(b.text) end)
+            for i = 1, #capturedOnly do values[#values + 1] = capturedOnly[i] end
+            if #values == 0 then
+                values = { { value = nil, text = Tr("No readable auras right now") } }
+            end
+            liveScanCache = values
+            return values, tonumber(unreadable) or 0, blocked == true
+        end
+        local function CachedAuraValues()
+            if liveScanCache then return liveScanCache end
+            -- No scan ran in this menu session yet: show the session capture
+            -- store as-is (a plain table read - no unit scan happens here).
+            local captured = CapturedAuras(false)
+            local values = {}
+            for id, cap in pairs(captured) do
+                local capName = type(cap) == "table" and cap.name or (type(cap) == "string" and cap or nil)
+                local label = (capName or "Spell") .. " (#" .. tostring(id) .. ")"
+                values[#values + 1] = {
+                    value = id, name = capName, icon = type(cap) == "table" and cap.icon or nil,
+                    text = M.Format("%s - captured", label), captured = true,
+                }
+            end
+            if #values == 0 then
+                return { { value = nil, text = Tr("No scan yet - click Rescan") } }
+            end
+            table.sort(values, function(a, b) return tostring(a.text) < tostring(b.text) end)
+            return values
+        end
+        local function CurrentLiveAura()
+            local values = CachedAuraValues()
+            local selected = M.auraBlacklistLiveSpell
+            for i = 1, #values do if values[i].value ~= nil and values[i].value == selected then return selected end end
+            for i = 1, #values do if values[i].value ~= nil then return values[i].value end end
+            return nil
+        end
+        local liveDrop = W.Dropdown(section, "Active auras on this frame", CachedAuraValues, liveW)
+        W.MoveWidget(liveDrop, section, 24, liveY, liveW)
+        M.BindDropdownWidget(ctx, liveDrop, CurrentLiveAura,
+            function(value) M.auraBlacklistLiveSpell = value end,
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.live-aura-selection", "ephemeral"))
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(liveDrop, input) end
+        AddTooltip(liveDrop, "Active auras on this frame",
+            "Shows the result of the last scan: every readable aura with the exact ID it carried, plus everything captured earlier this session. Press Rescan to scan the current unit - blocking from this list always uses the aura's own ID. Secret auras cannot be listed.")
+        local blockLive = ActionButton(section, "Block selected aura", 150, "primary")
+        blockLive:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + liveW, liveY - 24)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(blockLive, input) end
+        AddTooltip(blockLive, "Block selected aura",
+            "Blocks the selected aura using the exact ID it carries right now.")
+        blockLive:SetScript("OnClick", function()
+            local spellID = CurrentLiveAura()
+            if not spellID then return false end
+            local auraName, liveNow
+            local liveValues = type(Model.LiveBlacklistAuraValues) == "function"
+                and Model.LiveBlacklistAuraValues(unit, lane) or {}
+            for i = 1, #liveValues do
+                if liveValues[i].value == spellID then liveNow = true auraName = liveValues[i].name break end
+            end
+            if not auraName then
+                local values = LiveAuraValues()
+                for i = 1, #values do if values[i].value == spellID then auraName = values[i].name break end end
+            end
+            local changed = Model.AddBlacklistSpell(unit, spellID, lane)
+            M.auraBlacklistLiveSpell = nil
+            -- Captured entries may no longer be on the unit; only claim the
+            -- live-verified state when the aura is actually visible right now.
+            M.auraBlacklistVerify = liveNow
+                and { unit = unit, lane = lane, status = "active", enteredID = spellID, name = auraName } or nil
             if changed then
                 ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true)
                 if refreshList then refreshList() end
+                QueueAurasPageRefresh(ctx, "aura-blacklist-live-added")
+            else
+                renderVerify()
+            end
+            return changed and true or false
+        end)
+        refreshLiveBlock = function(blocked)
+            local liveSel = CurrentLiveAura()
+            W.SetControlEnabled(blockLive, liveSel ~= nil and not blocked[tostring(liveSel)])
+        end
+        local rescan = ActionButton(section, "Rescan", 96)
+        rescan:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + liveW + 158, liveY - 24)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(rescan, input) end
+        rescan._msuf2SkipHistoryCheckpoint = true
+        -- Scanning only reads C_UnitAuras and repaints plain menu widgets, so
+        -- this click is safe during combat lockdown; blocking stays gated.
+        rescan._msuf2AllowCombatClick = true
+        AddTooltip(rescan, "Rescan",
+            "Re-reads the auras on the current unit and adds everything it sees to this session's captured list - works in combat too. Shift-click clears the captured list.")
+        rescan:SetScript("OnClick", function()
+            if type(_G.IsShiftKeyDown) == "function" and _G.IsShiftKeyDown() then
+                CapturedAuras(true)
+            end
+            M.auraBlacklistLiveSpell = nil
+            local values, secretCount, blocked = LiveAuraValues()
+            local liveCount = 0
+            for i = 1, #values do
+                if values[i].value ~= nil and not values[i].captured then liveCount = liveCount + 1 end
+            end
+            local sessionCount = 0
+            for _ in pairs(CapturedAuras(false)) do sessionCount = sessionCount + 1 end
+            M.auraBlacklistVerify = {
+                unit = unit, lane = lane, status = "scan", blocked = blocked or nil,
+                liveCount = liveCount, sessionCount = sessionCount, secretCount = secretCount,
+            }
+            if liveDrop.SetValue then liveDrop:SetValue(CurrentLiveAura()) end
+            if refreshList then refreshList() end
+            return true
+        end)
+        local startScan = ActionButton(section, "Start combat scan", 170)
+        startScan:SetPoint("TOPLEFT", section, "TOPLEFT", 24, liveY - 54)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(startScan, input) end
+        startScan._msuf2SkipHistoryCheckpoint = true
+        startScan._msuf2AllowCombatClick = true
+        AddTooltip(startScan, "Start combat scan",
+            "Closes the menu and keeps scanning this frame's auras until combat ends or you press Stop. Every aura an addon can block is captured with its icon - auras Blizzard keeps secret cannot be blocked by any addon.")
+        startScan:SetScript("OnClick", function()
+            -- The scanner overlay is a shared singleton parked on M (this file
+            -- sits at the 200-upvalue ceiling, so no new file-scope locals).
+            local s = M._auraCombatScanner
+            if not s then
+                s = CreateFrame("Frame", nil, _G.UIParent)
+                M._auraCombatScanner = s
+                s:SetSize(372, 100)
+                s:SetPoint("TOP", _G.UIParent, "TOP", 0, -160)
+                s:SetFrameStrata("DIALOG")
+                s:SetMovable(true)
+                s:EnableMouse(true)
+                s:RegisterForDrag("LeftButton")
+                s:SetScript("OnDragStart", function(self) self:StartMoving() end)
+                s:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+                s:SetClampedToScreen(true)
+                if T.ApplyBackdrop then T.ApplyBackdrop(s, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+                s.title = T.Font(s, "GameFontHighlightSmall", "", T.colors.accent)
+                s.title:SetPoint("TOPLEFT", s, "TOPLEFT", 12, -10)
+                s.count = T.Font(s, "GameFontDisableSmall", "", T.colors.muted)
+                s.count:SetPoint("TOPLEFT", s, "TOPLEFT", 12, -28)
+                s.hint = T.Font(s, "GameFontDisableSmall", "", T.colors.muted)
+                s.hint:SetPoint("TOPLEFT", s, "TOPLEFT", 12, -42)
+                s.hint:SetPoint("TOPRIGHT", s, "TOPRIGHT", -12, -42)
+                s.hint:SetJustifyH("LEFT")
+                s.hint:Hide()
+                s.icons = {}
+                for i = 1, 12 do
+                    local tex = s:CreateTexture(nil, "ARTWORK")
+                    tex:SetSize(20, 20)
+                    tex:SetPoint("BOTTOMLEFT", s, "BOTTOMLEFT", 12 + (i - 1) * 24, 10)
+                    tex:Hide()
+                    s.icons[i] = tex
+                end
+                s.stopBtn = ActionButton(s, "Stop scan", 96)
+                s.stopBtn:SetPoint("TOPRIGHT", s, "TOPRIGHT", -10, -10)
+                s.stopBtn._msuf2AllowCombatClick = true
+                s.stopBtn._msuf2SkipHistoryCheckpoint = true
+                s.Finish = function(reopen)
+                    if not s:IsShown() then return end
+                    s:Hide()
+                    M.auraBlacklistVerify = {
+                        unit = s._scope, lane = s._lane, status = "scan",
+                        liveCount = s._lastLive or 0, sessionCount = s._count or 0,
+                        secretCount = s._unreadable or 0,
+                    }
+                    if reopen and not (M.BlockCombatAction and M.BlockCombatAction()) then
+                        M.CallIf(M.Open, s._returnPage)
+                    end
+                end
+                s.stopBtn:SetScript("OnClick", function()
+                    s.Finish(not (M.BlockCombatAction and M.BlockCombatAction()))
+                    return true
+                end)
+                s:RegisterEvent("PLAYER_REGEN_ENABLED")
+                s:SetScript("OnEvent", function(self)
+                    if self:IsShown() then self.Finish(true) end
+                end)
+                s:SetScript("OnUpdate", function(self, elapsed)
+                    self._accum = (self._accum or 0) + (tonumber(elapsed) or 0)
+                    if self._accum < 0.4 then return end
+                    self._accum = 0
+                    local live, unreadable, blocked
+                    if type(Model.LiveBlacklistAuraValues) == "function" then
+                        live, unreadable, blocked = Model.LiveBlacklistAuraValues(self._scope, self._lane)
+                    end
+                    if blocked then
+                        -- Access denial is temporary (encounter/M+/PvP); keep
+                        -- ticking cheaply so the scan resumes on its own.
+                        self._dots = ((self._dots or 0) % 3) + 1
+                        self.title:SetText(Tr("Scanning auras - creating a list") .. string.rep(".", self._dots))
+                        self.hint:SetText(Tr("Blocked by Blizzard during this fight - resumes automatically. In instances, use the curated presets."))
+                        self.hint:Show()
+                        return
+                    end
+                    live = live or {}
+                    self._lastLive = #live
+                    self._unreadable = tonumber(unreadable) or 0
+                    local store = M.auraBlacklistCaptured
+                    if type(store) ~= "table" then store = {} M.auraBlacklistCaptured = store end
+                    local capKey = tostring(self._scope) .. "|" .. tostring(self._lane)
+                    local captured = store[capKey]
+                    if type(captured) ~= "table" then captured = {} store[capKey] = captured end
+                    for i = 1, #live do
+                        local entry = live[i]
+                        local cap = captured[entry.value]
+                        if type(cap) ~= "table" then
+                            cap = { name = type(cap) == "string" and cap or nil }
+                            captured[entry.value] = cap
+                            self._count = (self._count or 0) + 1
+                            self._recent[#self._recent + 1] = entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark"
+                        end
+                        if type(entry.name) == "string" then cap.name = entry.name end
+                        if entry.icon ~= nil and cap.icon == nil then cap.icon = entry.icon end
+                    end
+                    local total = #self._recent
+                    for i = 1, #self.icons do
+                        local tex = self.icons[i]
+                        local icon = self._recent[total - i + 1]
+                        if icon then tex:SetTexture(icon) tex:Show() else tex:Hide() end
+                    end
+                    self._dots = ((self._dots or 0) % 3) + 1
+                    self.title:SetText(Tr("Scanning auras - creating a list") .. string.rep(".", self._dots))
+                    if (self._unreadable or 0) > 0 then
+                        self.count:SetText(M.Format("%d captured so far - %d hidden by Blizzard",
+                            self._count or 0, self._unreadable))
+                        self.hint:SetText(Tr("Hidden auras are Blizzard-secret - no addon can block them. Everything blockable was captured."))
+                        self.hint:Show()
+                    else
+                        self.count:SetText(M.Format("%d captured so far", self._count or 0))
+                        self.hint:Hide()
+                    end
+                end)
+            end
+            s._scope, s._lane = unit, lane
+            s._returnPage = M.activeKey
+            s._recent = {}
+            s._accum = 1
+            s._dots = 0
+            s._lastLive = 0
+            local sessionCount = 0
+            for _ in pairs(CapturedAuras(false)) do sessionCount = sessionCount + 1 end
+            s._count = sessionCount
+            s.title:SetText(Tr("Scanning auras - creating a list"))
+            s.count:SetText(M.Format("%d captured so far", sessionCount))
+            if s.hint then s.hint:Hide() end
+            for i = 1, #s.icons do s.icons[i]:Hide() end
+            s:Show()
+            M.CallIf(M.HideSlashMenuAndMinibar, M.frame)
+            return true
+        end)
+        add:SetScript("OnClick", function()
+            local value = input and input.GetText and input:GetText() or inputValue
+            local spellID = type(Model.ResolveSpellInputID) == "function" and Model.ResolveSpellInputID(value) or nil
+            local changed = Model.AddBlacklistSpell(unit, value, lane)
+            if changed then
+                ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true)
+            end
+            -- The aura left on the unit can carry a different SpellID than the
+            -- cast the entry resolved to; compare against the live unit so the
+            -- mismatch surfaces immediately instead of failing silently.
+            M.auraBlacklistVerify = nil
+            local verdict = spellID and type(Model.FindLiveBlacklistAura) == "function"
+                and Model.FindLiveBlacklistAura(unit, spellID, lane) or nil
+            if verdict then
+                M.auraBlacklistVerify = {
+                    unit = unit, lane = lane, status = verdict.status,
+                    enteredID = spellID, name = verdict.name,
+                    suggestID = verdict.suggestID, suggestName = verdict.suggestName,
+                }
+            end
+            if changed then
+                if refreshList then refreshList() end
                 QueueAurasPageRefresh(ctx, "aura-blacklist-manual-added")
+            else
+                renderVerify()
             end
             if input and input.SetText then input:SetText("") end
             inputValue = ""
@@ -3533,7 +4040,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             AddTooltip(add, "Add custom buff", "Adds one exact buff to this frame's blacklist.")
         end
     end
-    local curatedOffset = combinedManualAndPresets and -82 or 0
+    local curatedOffset = combinedManualAndPresets and -174 or 0
     local presetW = max(130, min(floor(inner * 0.62), inner - 138))
     local spellW = max(160, min(floor(inner * 0.68), inner - 108))
     local function PresetValues()
@@ -3615,11 +4122,11 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         })
         AddTooltip(addSpell, "Add spell", "Blocks only the selected aura from the curated set.")
     else
-        W.Text(section,
+        nonPresetHint = W.Text(section,
             "Enemy debuffs: hide only exact noisy SpellIDs. Selected Dots on target are handled automatically by that scope's Auto-blacklist toggle.",
             24, -104, inner, T.colors.muted)
     end
-    local listOffset = showPresets and curatedOffset or 44
+    local listOffset = showPresets and curatedOffset or (enemyDebuff and -48 or 44)
     local prepared = W.Text(section, "", 24, -186 + listOffset, inner, T.colors.accent)
     local searchValue = ""
     local searchInput = BindTextInput(ctx, section, "Search", 24, -210 + listOffset, inner,
@@ -3641,15 +4148,13 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         or (isDebuff and "No blocked spells. Add one from the allowed presets above."
         or "No blocked spells. Add one above or use a preset.")
     local empty = W.Text(section, emptyText, 24, -284 + listOffset, inner, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+    local listScroll = CreateFrame("ScrollFrame", nil, section)
     listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + listOffset)
     listScroll:SetSize(inner - 20, 150)
-    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(inner - 44, 150)
     listScroll:SetScrollChild(listChild)
-    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
+    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
     local rows = {}
     local function EnsureRow(i)
         local row = rows[i]
@@ -3683,6 +4188,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         local entries = Model.BlacklistEntries(unit, lane)
         local blocked = {}
         for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        if refreshLiveBlock then refreshLiveBlock(blocked) end
         if showPresets then
             local setSpells = type(Model.UnitBlacklistSpellValues) == "function"
                 and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
@@ -3723,6 +4229,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                 row:Show()
             elseif row then row._spellID = nil; row:Hide() end
         end
+        if renderVerify then renderVerify() end
     end
     M.TrackRefresh(ctx, refreshList)
 end
@@ -3779,7 +4286,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local values = GroupFilterValues(lane)
     local optionRows = max(1, ceil(#values / 4))
     local sectionHeight = max(150, 104 + optionRows * 32)
-        + (lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true and 58 or 0)
+        + (M.CLASSIC_AURA_FILTERS_REDUCED ~= true and 58 or 0)
     local section = b:Section(laneTitle .. " Filters", sectionHeight)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
@@ -3830,7 +4337,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 } or nil))
         AddTooltip(control, item.text or item.value, "Only one filter can be active.")
     end
-    if lane == "debuff" and M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
+    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
         ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1, inner,
             function()
                 return type(Model.ReadGroupBlacklistMaxDuration) == "function"
@@ -3842,7 +4349,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                     QueueGroupScope(scope, "auras")
                 end
             end,
-            AuraControlMeta(ctx, "group-workspace.lane.debuff.filters.max-duration", nil, {
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {
                 assistantDisposition = "compound",
                 assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
             })))
@@ -3976,15 +4483,13 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local emptyText = isDebuff and "No blocked spells. Add one from the presets above."
         or "No blocked spells. Add one above or use a preset."
     local empty = W.Text(section, emptyText, 24, -284 + curatedOffset, inner, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+    local listScroll = CreateFrame("ScrollFrame", nil, section)
     listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + curatedOffset)
     listScroll:SetSize(inner - 20, 150)
-    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(inner - 44, 150)
     listScroll:SetScrollChild(listChild)
-    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
+    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
     local rows = {}
     local function EnsureRow(i)
         local row = rows[i]
@@ -4071,6 +4576,8 @@ function M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, lane, opts)
     if opts and opts.compact == true then
         if opts.tool == "style" then
             BuildGroupStyle(ctx, b, scope, { embeddedGroupPreview = true, lane = lane })
+        elseif opts.tool == "behavior" then
+            BuildGroupOrdering(ctx, b, scope, lane)
         elseif opts.tool == "blacklist" then
             BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         else
@@ -4176,6 +4683,42 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
             Rebuild(ctx)
         end,
     }), workspaceTabs, "unit-workspace.container-selector", customContainerContract)
+    if containerBar then
+        local exactKind = "unitAuraWorkspace"
+        -- prepareValue -> { tab, tool, representative settingKey }. Changelog
+        -- highlights and search deep-links use these to open the exact
+        -- workspace view instead of flashing an unrelated control.
+        local exactViews = {
+            custom1_reminder = { tab = "custom1", tool = "setup",
+                settingKey = "auras3." .. tostring(unit) .. ".custom1.placed.reminderEnabled" },
+        }
+        if unit ~= "player" then
+            exactViews.custom4_behavior = { tab = "custom4", tool = "behavior",
+                settingKey = "auras3." .. tostring(unit) .. ".custom4.placed.sortMethod" }
+            exactViews.debuff_blacklist = { tab = "debuff", tool = "blacklist",
+                settingKey = "auras3." .. tostring(unit) .. ".debuff.blacklist.hidePermanent" }
+        end
+        local exactContracts = {}
+        for value, view in pairs(exactViews) do exactContracts[value] = view.settingKey end
+        containerBar._msuf2ExactTargetKinds = { [exactKind] = true }
+        containerBar._msuf2ExactTargetContracts = {
+            [exactKind] = exactContracts,
+        }
+        containerBar._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= exactKind then
+                return false
+            end
+            local view = exactViews[tostring(exactTarget.prepareValue or "")]
+            if not view then return false end
+            local alreadySelected = M.unitAuraTabSelection[unit] == view.tab
+                and CurrentUnitAuraTool(unit, view.tab) == view.tool
+            if not alreadySelected then
+                M.unitAuraTabSelection[unit] = view.tab
+                SetUnitAuraTool(unit, view.tab, view.tool)
+            end
+            return true
+        end
+    end
     local toolBar = RegisterAuraChoiceBar(ctx, W.ScopeOverrideBar(ctx, top, {
         values = tools,
         width = sectionW,
@@ -4199,12 +4742,12 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     AddTooltip(openStyle, "Shared Aura Style",
         "Opens the global Aura icon theme: border, shadow, colors, lane padding and native Player weapon enchants. This frame's container Style stays here.")
     local workspaceHint = W.Text(top,
-        "Aura Options and Aura Style belong to this UnitFrame. Shared icon theme: Appearance > Aura Style.",
+        "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.",
         16, footerY - 8, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
         workspaceHint:SetText(normalLane and UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit)
             and UNIT_AURA_DISPEL_WARNING
-            or "Aura Options and Aura Style belong to this UnitFrame. Shared icon theme: Appearance > Aura Style.")
+            or "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.")
     end)
 
     if normalLane then
@@ -4212,6 +4755,8 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         SetCurrentLane("auraFilterLane", currentTab)
         if currentTool == "style" then
             BuildUnitStyle(ctx, auraBuilder, unit, { embeddedUnitPreview = true })
+        elseif currentTool == "behavior" then
+            BuildUnitOrdering(ctx, auraBuilder, unit, currentTab)
         elseif currentTool == "filters" then
             BuildCompactUnitAuraFilters(ctx, auraBuilder, unit, currentTab)
         elseif currentTool == "blacklist" then
@@ -4225,6 +4770,10 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
 end
 
 local CUSTOM_AURA_TYPES = VTP "BUFF=Buff|DEBUFF=Debuff"
+-- Reminder is the container's operating mode, not a styling detail: it turns
+-- a compacting list into one fixed slot per whitelisted entry. It belongs
+-- next to Aura type, where the other structural decision already lives.
+local CUSTOM_DISPLAY_MODES = VTP "active=Only active auras|reminder=Fixed slots (reminder)"
 --- Compact, task-focused Custom Aura editor used inside UnitFrame > Auras.
 --- Only one tool is rendered at a time; all values still write to the same
 --- native Custom Container record consumed by runtime and previews.
@@ -4288,15 +4837,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if refreshCustom then refreshCustom() end
             end)
         end
-        local predefinedScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        local predefinedScroll = CreateFrame("ScrollFrame", nil, section)
         predefinedScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -108)
         predefinedScroll:SetSize(inner - 20, 184)
-        if predefinedScroll.EnableMouseWheel then predefinedScroll:EnableMouseWheel(true) end
         local predefinedChild = CreateFrame("Frame", nil, predefinedScroll)
         predefinedChild:SetSize(inner - 44, max(184, #predefined * 30))
         predefinedScroll:SetScrollChild(predefinedChild)
-        if predefinedScroll.SetPropagateMouseWheel then predefinedScroll:SetPropagateMouseWheel(false) end
-        predefinedScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 30) end)
+        M._StyleNestedAuraScrollFrame(predefinedScroll, section, 30)
         local predefinedSwitches = {}
         local predefinedIcons = {}
         RefreshPredefined = function()
@@ -4379,15 +4926,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             "Enter a Spell ID, paste a spell link, or type a spell name. The visible helpful aura is matched even when its buff ID differs from the cast Spell ID.")
         local status = W.Text(section, "", 24, -392, inner, T.colors.accent)
         local empty = W.Text(section, "No custom buffs added.", 24, -442, inner, T.colors.muted)
-        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        local listScroll = CreateFrame("ScrollFrame", nil, section)
         listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -418)
         listScroll:SetSize(inner - 20, 118)
-        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
         listChild:SetSize(inner - 44, 104)
         listScroll:SetScrollChild(listChild)
-        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+        M._StyleNestedAuraScrollFrame(listScroll, section, 32)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
@@ -4446,7 +4991,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
     end
 
     if tool == "dots" and isTargetDots then
-        local section = b:Section("Dots on target", 370)
+        local section = b:Section("Dots on target", 430)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local values = type(Model.TargetDotValues) == "function" and Model.TargetDotValues() or {}
@@ -4514,32 +5059,64 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if refreshList then refreshList() end
             end)
         end
-        local empty = W.Text(section, "No DoT selected. Choose one above or add a custom Spell ID.", 24, -260, inner, T.colors.muted)
-        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        local empty = W.Text(section, "No DoT selected. Choose one above or add a custom Spell ID.", 24, -288, inner, T.colors.muted)
+        local listScroll = CreateFrame("ScrollFrame", nil, section)
         listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -236)
-        listScroll:SetSize(inner - 20, 104)
-        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
+        listScroll:SetSize(inner - 20, 164)
         local listChild = CreateFrame("Frame", nil, listScroll)
-        listChild:SetSize(inner - 44, 104)
+        listChild:SetSize(inner - 44, 164)
         listScroll:SetScrollChild(listChild)
-        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+        M._StyleNestedAuraScrollFrame(listScroll, section, 32)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
             if row then return row end
-            row = CreateFrame("Button", nil, listChild)
-            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 24))
-            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 24))
-            row:SetHeight(20)
+            row = CreateFrame("Frame", nil, listChild)
+            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 34))
+            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 34))
+            row:SetHeight(30)
+            if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+            row.rank = T.Font(row, "GameFontDisableSmall", "", T.colors.accent)
+            row.rank:SetPoint("LEFT", row, "LEFT", 7, 0)
+            row.rank:SetWidth(24)
             row.icon = row:CreateTexture(nil, "ARTWORK")
-            row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
-            row.icon:SetSize(17, 17)
+            row.icon:SetPoint("LEFT", row.rank, "RIGHT", 3, 0)
+            row.icon:SetSize(20, 20)
             row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
             row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
-            row:SetScript("OnClick", function(self)
-                if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
+            row.up = ActionButton(row, "Up", 38)
+            row.up:SetPoint("RIGHT", row, "RIGHT", -84, 0)
+            row.down = ActionButton(row, "Down", 48)
+            row.down:SetPoint("LEFT", row.up, "RIGHT", 3, 0)
+            row.remove = ActionButton(row, "X", 30, "danger")
+            row.remove:SetPoint("LEFT", row.down, "RIGHT", 3, 0)
+            row.text:SetPoint("RIGHT", row.up, "LEFT", -8, 0)
+            row.up:SetScript("OnClick", function()
+                if row._spellID and Model.MoveCustomContainerSpell(unit, index, row._spellID, -1) then
+                    Apply("AURAS3_TARGET_DOT_PRIORITY", true)
+                    Rebuild(ctx)
+                end
+            end)
+            row.down:SetScript("OnClick", function()
+                if row._spellID and Model.MoveCustomContainerSpell(unit, index, row._spellID, 1) then
+                    Apply("AURAS3_TARGET_DOT_PRIORITY", true)
+                    Rebuild(ctx)
+                end
+            end)
+            row.remove:SetScript("OnClick", function()
+                if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_TARGET_DOT_REMOVE", true)
+                    Rebuild(ctx)
+                end
+            end)
+            AddTooltip(row.up, "Move up", "Raises this DoT in the fixed priority order.")
+            AddTooltip(row.down, "Move down", "Lowers this DoT in the fixed priority order.")
+            AddTooltip(row.remove, "Remove DoT", "Stops tracking this DoT.")
+            AddTooltip(row, "Drag to reorder", "Drag this row to a new position. Reordering activates Custom Priority.")
+            ConfigureAuraSpellPriorityDrag(row, row, listChild, 34, function(spellID, target)
+                if Model.MoveCustomContainerSpellToIndex(unit, index, spellID, target) then
+                    Model.EnableCustomContainerSpellPriority(unit, index)
+                    Apply("AURAS3_TARGET_DOT_PRIORITY", true)
                     Rebuild(ctx)
                 end
             end)
@@ -4555,25 +5132,40 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
-            status:SetText((#entries == 1 and Tr("1 tracked DoT · click an entry to remove")
-                or M.Format("%d tracked DoTs · click an entry to remove", #entries))
+            local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
+            status:SetText(M.Format("%d tracked DoTs", #entries)
+                .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
+                    or customPriority and Tr(" - dynamic priority active")
+                    or Tr(" - drag to set Custom Priority"))
                 .. MatchSuffix(query, #visible))
             empty:SetText(#entries == 0 and Tr("No DoT selected. Choose one above or add a custom Spell ID.")
                 or M.Format(Tr("No results for \"%s\"."), query))
             empty:SetShown(#visible == 0)
             listScroll:SetShown(#visible > 0)
-            listChild:SetHeight(max(104, #visible * 24))
+            listChild:SetHeight(max(164, #visible * 34))
             for i = 1, max(#rows, #visible) do
                 local row, entry = rows[i], visible[i]
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
+                    row.rank:SetText("#" .. tostring(entry.priority or i))
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                     row.text:SetText(entry.text or tostring(entry.spellID))
-                    RegisterAuraControl(ctx, row, entry.text or tostring(entry.spellID), "button",
+                    RegisterAuraControl(ctx, row.remove, "Remove " .. (entry.text or tostring(entry.spellID)), "button",
                         customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
+                    RegisterAuraControl(ctx, row.up, "Raise " .. (entry.text or tostring(entry.spellID)), "button",
+                        customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".up", "action")
+                    RegisterAuraControl(ctx, row.down, "Lower " .. (entry.text or tostring(entry.spellID)), "button",
+                        customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".down", "action")
+                    if type(W.SetControlsEnabled) == "function" then
+                        W.SetControlsEnabled({ row.up }, customPriority and query == "" and (entry.priority or i) > 1)
+                        W.SetControlsEnabled({ row.down }, customPriority and query == "" and (entry.priority or i) < #entries)
+                    end
+                    row._entryCount = #entries
+                    row._displayIndex = i
+                    row._dragEnabled = query == "" and #entries > 1
                     row:Show()
-                elseif row then row._spellID = nil; row:Hide() end
+                elseif row then row._spellID = nil; row._displayIndex = nil; row._dragEnabled = nil; row:Hide() end
             end
         end
         M.TrackRefresh(ctx, refreshList)
@@ -4591,8 +5183,8 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         -- German and Russian. `auraNoun` itself stays raw - it feeds Assistant action ids.
         local isDebuff = auraType == "DEBUFF"
         local addLabel = isDebuff and Tr("Add debuff") or Tr("Add buff")
-        local trackHint = isDebuff and Tr("Track a debuff - Spell ID, link, or name")
-            or Tr("Track a buff - Spell ID, link, or name")
+        local trackHint = isDebuff and Tr("Add a debuff - Spell ID, spell link or item link")
+            or Tr("Add a buff - Spell ID, spell link or item link")
         local addBody = isDebuff and Tr("Adds this exact debuff to the custom container.")
             or Tr("Adds this exact buff to the custom container.")
         local removeBody = isDebuff and Tr("Stops tracking this debuff in the custom container.")
@@ -4621,7 +5213,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             actionKey = "aura_custom_whitelist_add_spell", actionFixedArgs = { scope = unit, index = index }, actionInputArg = "value",
         })
         AddTooltip(input, "Exact aura tracking",
-            "Enter a Spell ID, paste a spell link, or type a spell name. This whitelist tracks exact Spell IDs.")
+            "Enter a Spell ID, paste a spell link, or type a spell name. This whitelist tracks exact Spell IDs. Paste an item link instead to track the buff that item applies and offer the item itself on click - flasks, runes, stones and potions all work that way. If the item's buff differs from its use effect, put both on one line: the Spell ID decides what is tracked, the item what a click uses.")
         AddTooltip(add, addLabel, addBody)
         local status = W.Text(section, "", 24, -136, floor(inner * 0.52), T.colors.accent)
         local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.",
@@ -4641,15 +5233,13 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if refreshList then refreshList() end
             end)
         end
-        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        local listScroll = CreateFrame("ScrollFrame", nil, section)
         listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -214)
         listScroll:SetSize(inner - 20, 190)
-        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
         local listChild = CreateFrame("Frame", nil, listScroll)
         listChild:SetSize(inner - 44, 190)
         listScroll:SetScrollChild(listChild)
-        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
-        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 44) end)
+        M._StyleNestedAuraScrollFrame(listScroll, section, 44)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
@@ -4659,8 +5249,11 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
             row:SetHeight(40)
             if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+            row.rank = T.Font(row, "GameFontDisableSmall", "", T.colors.accent)
+            row.rank:SetPoint("LEFT", row, "LEFT", 7, 0)
+            row.rank:SetWidth(24)
             row.icon = row:CreateTexture(nil, "ARTWORK")
-            row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
+            row.icon:SetPoint("LEFT", row.rank, "RIGHT", 3, 0)
             row.icon:SetSize(28, 28)
             row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
             row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
@@ -4668,6 +5261,38 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
             row.remove = ActionButton(row, "Remove", 80)
             row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+            -- Two static buttons instead of one relabelled one: the styled
+            -- action button has no guaranteed text setter, and a fixed label
+            -- always states what the click will do.
+            row.keepOn = ActionButton(row, "Always show", 96)
+            row.keepOn:SetPoint("RIGHT", row.remove, "LEFT", -6, 0)
+            row.keepOff = ActionButton(row, "Filter again", 96)
+            row.keepOff:SetPoint("RIGHT", row.remove, "LEFT", -6, 0)
+            row.keepOn:Hide()
+            row.keepOff:Hide()
+            row.keepOn:SetScript("OnClick", function()
+                if row._spellID and Model.ToggleCustomContainerKeepSpell(unit, index, row._spellID, true) then
+                    Apply("AURAS3_CUSTOM_REMINDER_KEEP", true)
+                    Rebuild(ctx)
+                end
+            end)
+            row.keepOff:SetScript("OnClick", function()
+                if row._spellID and Model.ToggleCustomContainerKeepSpell(unit, index, row._spellID, false) then
+                    Apply("AURAS3_CUSTOM_REMINDER_KEEP", true)
+                    Rebuild(ctx)
+                end
+            end)
+            AddTooltip(row.keepOn, "Always show",
+                "Pins this entry so the self-cast filter never hides it. Use it for anything that is not a class ability - a flask, food, a rune, a buff someone else casts on you. MSUF cannot tell those apart from another class's spell on its own: nothing reports which class owns a Spell ID.")
+            AddTooltip(row.keepOff, "Filter again",
+                "Lets the self-cast filter decide about this entry again. It will be hidden on characters that cannot cast it.")
+            row.name:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
+            -- The second line carries the Spell ID and what a click does, so it
+            -- needs the same right edge as the name. Without it the text runs
+            -- straight under the Remove button on a narrow menu.
+            row.id:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
+            row.id:SetJustifyH("LEFT")
+            row.id:SetWordWrap(false)
             row.remove:SetScript("OnClick", function()
                 if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
@@ -4675,12 +5300,21 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 end
             end)
             AddTooltip(row.remove, "Remove from whitelist", removeBody)
+            AddTooltip(row, "Drag to reorder", "Drag this row to a new position. Reordering activates Custom Priority.")
+            ConfigureAuraSpellPriorityDrag(row, row, listChild, 44, function(spellID, target)
+                if Model.MoveCustomContainerSpellToIndex(unit, index, spellID, target) then
+                    Model.EnableCustomContainerSpellPriority(unit, index)
+                    Apply("AURAS3_CUSTOM_PRIORITY", true)
+                    Rebuild(ctx)
+                end
+            end)
             rows[i] = row
             return row
         end
         refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
             local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
             local visible = {}
             for i = 1, #entries do
                 local entry = entries[i]
@@ -4688,7 +5322,10 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
             status:SetText(tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
-                .. (query ~= "" and (" - " .. tostring(#visible) .. " matches") or ""))
+                .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
+                    or customPriority and Tr(" - dynamic priority active")
+                    or Tr(" - drag to set Custom Priority"))
+                .. MatchSuffix(query, #visible))
             empty:SetText(#entries == 0 and Tr("No spells tracked. Add up to 40 exact SpellIDs.")
                 or M.Format(Tr("No results for \"%s\"."), query))
             empty:SetShown(#visible == 0)
@@ -4699,22 +5336,182 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
+                    row.rank:SetText("#" .. tostring(entry.priority or i))
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                     local name = tostring(entry.text or entry.spellID or "Spell"):gsub("%s*%(#%d+%)$", "")
                     row.name:SetText(name)
-                    row.id:SetText(tostring("Spell ID ") .. tostring(entry.spellID))
+                    -- Say plainly what a click on this row will do. A tracked
+                    -- aura the player cannot apply has no click action, and a
+                    -- silently dead button is worse than a visible hint.
+                    local clickNote = entry.clickAction == "item" and Tr("Click uses this item")
+                        or entry.clickAction == "spell" and Tr("Click casts this")
+                        or Tr("No click action \194\183 paste an item")
+                    -- The self-cast filter is the only thing that can make a
+                    -- whitelisted row disappear, so the row has to say so itself
+                    -- rather than letting it vanish without explanation.
+                    local filtering = item.placed.reminderEnabled == true
+                        and item.placed.reminderOnlyCastable == true
+                    local exempt = entry.keep == true
+                    local stateNote = ""
+                    if filtering and exempt then
+                        stateNote = " \194\183 " .. Tr("always shown")
+                    elseif filtering and not entry.clickAction then
+                        stateNote = " \194\183 " .. Tr("hidden on this character")
+                    end
+                    row.id:SetText(tostring("Spell ID ") .. tostring(entry.spellID)
+                        .. " \194\183 " .. clickNote .. stateNote)
+                    -- Only offered where it changes anything: with the filter off,
+                    -- or on a row a bound item already protects, it is noise.
+                    local offerKeep = filtering and entry.itemID == nil
+                    row.keepOn:SetShown(offerKeep and not entry.keepExplicit)
+                    row.keepOff:SetShown(offerKeep and entry.keepExplicit == true)
+                    if offerKeep then
+                        row.name:SetPoint("RIGHT", row.keepOn, "LEFT", -8, 0)
+                        row.id:SetPoint("RIGHT", row.keepOn, "LEFT", -8, 0)
+                    else
+                        row.name:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
+                        row.id:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
+                    end
                     RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
                         customActionPath .. ".whitelist.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
+                    row._entryCount = #entries
+                    row._displayIndex = i
+                    row._dragEnabled = query == "" and #entries > 1
                     row:Show()
-                elseif row then row._spellID = nil; row:Hide() end
+                elseif row then row._spellID = nil; row._displayIndex = nil; row._dragEnabled = nil; row:Hide() end
             end
         end
         M.TrackRefresh(ctx, refreshList)
+
+        -- Temporary weapon enchants are not auras at all -- Blizzard keeps them
+        -- out of aura parsing, groups and slots -- so they cannot ride the list
+        -- above. They still belong on this tab: "what is tracked" should be one
+        -- question with one answer, not two places to look.
+        if unit == "player" then
+            local ench = b:CollapsibleSection("aura_reminder_enchants_" .. tostring(index),
+                "Weapon enchants", 218, false)
+            local ew = ench._msuf2Width or b.width or 720
+            local eInner = ew - 48
+            local ecol, egap = Grid(ew, 2)
+            local enchantMain = BindSwitch(ctx, ench, "Track the Main Hand enchant", 24, -46, ecol,
+                function() return item.reminderEnchantMainHand == true end,
+                function(value)
+                    item.reminderEnchantMainHand = value == true
+                    Apply("AURAS3_CUSTOM_REMINDER_ENCHANT", true)
+                    Rebuild(ctx)
+                end,
+                AuraControlMeta(ctx, "custom-container.reminder.enchant-main-hand"))
+            AddTooltip(enchantMain, "Track the Main Hand enchant",
+                "Adds a reminder slot for the temporary enchant on your main hand - a weapon oil, a stone or a weapon-applied poison. Unlike an aura this state is plainly readable, so the icon lights up while the enchant runs and dims when it is gone, in every kind of content.")
+            local enchantOff = BindSwitch(ctx, ench, "Track the Off Hand enchant", 24 + ecol + egap, -46, ecol,
+                function() return item.reminderEnchantOffHand == true end,
+                function(value)
+                    item.reminderEnchantOffHand = value == true
+                    Apply("AURAS3_CUSTOM_REMINDER_ENCHANT", true)
+                    Rebuild(ctx)
+                end,
+                AuraControlMeta(ctx, "custom-container.reminder.enchant-off-hand"))
+            AddTooltip(enchantOff, "Track the Off Hand enchant",
+                "Same slot for your off hand. Both hands share the consumable set below, which is what you normally want.")
+            local enchantInputValue = ""
+            local enchantInputW = max(140, min(floor(eInner * 0.62), eInner - 132))
+            local enchantInput = BindTextInput(ctx, ench, "Oil or stone - item link or ID", 24, -96, enchantInputW,
+                function() return enchantInputValue end,
+                function(value) enchantInputValue = value or "" end,
+                false, AuraControlMeta(ctx, "custom-container.reminder.enchant-item", "ephemeral"))
+            local enchantSet = ActionButton(ench, "Bind item", 118, "primary")
+            enchantSet:SetPoint("TOPLEFT", ench, "TOPLEFT", 36 + enchantInputW, -120)
+            enchantSet:SetScript("OnClick", function()
+                local value = enchantInput and enchantInput.GetText and enchantInput:GetText() or enchantInputValue
+                local changed = Model.SetCustomContainerReminderEnchantItem(unit, index, value)
+                if changed then
+                    if enchantInput and enchantInput.SetText then enchantInput:SetText("") end
+                    enchantInputValue = ""
+                    Apply("AURAS3_CUSTOM_REMINDER_ENCHANT_ITEM", true)
+                    Rebuild(ctx)
+                end
+                return changed and true or false
+            end)
+            RegisterAuraTextAction(ctx, enchantSet, enchantInput, "Bind item",
+                customActionPath .. ".reminder.enchant-item.set", {
+                    actionKey = "aura_custom_reminder_enchant_item",
+                    actionFixedArgs = { scope = unit, index = index }, actionInputArg = "value",
+                })
+            AddTooltip(enchantInput, "Oil or stone",
+                "Paste the consumable these slots should offer on click. A weapon enchant cannot be cast, so only an item makes them clickable. Leave it empty to keep them as pure indicators.")
+            local enchantStatus = W.Text(ench, "", 24, -160, eInner, T.colors.muted)
+            M.TrackRefresh(ctx, function()
+                local reminder = item.placed.reminderEnabled == true
+                local tracked = (item.reminderEnchantMainHand == true and 1 or 0)
+                    + (item.reminderEnchantOffHand == true and 1 or 0)
+                local itemID, itemName = Model.CustomContainerReminderEnchantItem(unit, index)
+                if type(W.SetControlsEnabled) == "function" then
+                    W.SetControlsEnabled({ enchantMain, enchantOff }, reminder)
+                    W.SetControlsEnabled({ enchantInput, enchantSet }, reminder and tracked > 0)
+                end
+                if not reminder then
+                    enchantStatus:SetText(Tr("Needs Display set to Fixed slots in Setup · enchants have no aura to show otherwise."))
+                elseif tracked == 0 then
+                    enchantStatus:SetText(Tr("No weapon slot tracked."))
+                elseif itemID then
+                    enchantStatus:SetText(M.Format("Click uses %s.", tostring(itemName or ("item:" .. tostring(itemID)))))
+                else
+                    enchantStatus:SetText(Tr("No item bound · these slots only indicate."))
+                end
+                if W.SetCollapsibleBadges then
+                    W.SetCollapsibleBadges(ench, {{
+                        text = tracked > 0 and M.Format("%d tracked", tracked) or Tr("Off"),
+                        kind = tracked > 0 and "accent" or "muted", showWhenClosed = true,
+                    }})
+                end
+            end)
+        end
         return
     end
 
     if tool == "filters" then
-        local section = b:Section(containerLabel .. " Filters", item.auraType == "DEBUFF" and 224 or 182)
+        if isPlayerDefensives or isTargetDots then
+            local section = b:Section(containerLabel .. " Filters", 160)
+            local w = section._msuf2Width or b.width or 720
+            local inner = w - 48
+            local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24, -40, inner,
+                function() return item.filters.hidePermanent == true end,
+                function(value)
+                    item.filters.hidePermanent = value == true
+                    Apply("AURAS3_CUSTOM_HIDE_PERMANENT", true)
+                end,
+                AuraControlMeta(ctx, "custom-container.filters.hide-permanent"))
+            AddTooltip(hidePermanent, "Hide permanent auras",
+                "Always excludes auras without a duration.")
+            local maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration",
+                24, -92, 0, 180, 1, inner,
+                function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
+                function(value)
+                    item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
+                    Apply("AURAS3_CUSTOM_MAX_DURATION", true)
+                end,
+                AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
+                    assistantDisposition = "compound",
+                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
+                })))
+            M.TrackRefresh(ctx, function()
+                W.SetControlEnabled(hidePermanent, true)
+                W.SetControlEnabled(maxDuration, true)
+            end)
+            return
+        end
+        local specs = item.auraType == "DEBUFF" and {
+            { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
+            { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
+        } or {
+            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
+            { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
+            { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
+        }
+        local optionRows = max(1, ceil(#specs / 4))
+        local section = b:Section(containerLabel .. " Filters", 160 + optionRows * 32)
         local w = section._msuf2Width or b.width or 720
         local colW, gap = Grid(w, 4)
         local controls = {}
@@ -4727,16 +5524,6 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function(value) item.filters.hidePermanent = value == true; Apply("AURAS3_CUSTOM_HIDE_PERMANENT", true) end,
             AuraControlMeta(ctx, "custom-container.filters.hide-permanent"))
         AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration. It remains active when token filters are disabled.")
-        local specs = item.auraType == "DEBUFF" and {
-            { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
-            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
-            { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
-        } or {
-            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
-            { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
-            { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
-            { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
-        }
         for i = 1, #specs do
             local spec = specs[i]
             local col = (i - 1) % 4
@@ -4756,19 +5543,17 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 AuraControlMeta(ctx, "custom-container.filters." .. AuraCatalogToken(spec[2])))
             controls[#controls + 1] = control
         end
-        local maxDuration
-        if item.auraType == "DEBUFF" then
-            maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -140, 0, 180, 1, w - 48,
-                function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
-                function(value)
-                    item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
-                    Apply("AURAS3_CUSTOM_DEBUFF_MAX_DURATION", true)
-                end,
-                AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
-                    assistantDisposition = "compound",
-                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-                })))
-        end
+        local maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24,
+            -76 - optionRows * 32, 0, 180, 1, w - 48,
+            function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
+            function(value)
+                item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
+                Apply("AURAS3_CUSTOM_MAX_DURATION", true)
+            end,
+            AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
+                assistantDisposition = "compound",
+                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
+            })))
         M.TrackRefresh(ctx, function()
             W.SetControlEnabled(master, true)
             W.SetControlEnabled(hidePermanent, true)
@@ -5048,21 +5833,30 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
                 AuraControlMeta(ctx, "custom-container.appearance.swipe-direction")),
         })
 
-        local durationBar = b:CollapsibleSection(CustomStyleSectionId(index, "duration_bar"), "Duration Bar", 130, false)
+        local durationBar = b:CollapsibleSection(CustomStyleSectionId(index, "duration_bar"), "Duration Bar", 156, false)
         local barCol, barX, BarNumber = StyleGrid(durationBar)
-        local durationBarControls
+        local durationBarControls, durationBarSwitch
+        local durationBarNote = W.Text(durationBar, "", 24, -116, (durationBar._msuf2Width or b.width or 720) - 48, T.colors.muted)
         local function RefreshCustomDurationBarState()
             local placed = item.placed
-            local enabled = placed.showDurationBar == true
+            -- Reminder slots are placed AuraSlots without a duration surface, so
+            -- this whole group has nothing to drive while that mode is on.
+            local reminder = placed.reminderEnabled == true
+            local enabled = placed.showDurationBar == true and not reminder
+            if durationBarSwitch then W.SetControlEnabled(durationBarSwitch, not reminder) end
             if durationBarControls then W.SetControlsEnabled(durationBarControls, enabled) end
+            durationBarNote:SetText(reminder
+                and Tr("Reminder slots do not draw a duration bar.") or "")
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(durationBar, {{
-                    text = enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off",
+                    text = reminder and Tr("Unavailable")
+                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
                     kind = enabled and "accent" or "muted", showWhenClosed = true,
                 }})
             end
         end
-        BindSwitch(ctx, durationBar, "Duration bar", barX(1), -42, barCol, function() return item.placed.showDurationBar == true end,
+        M.TrackRefresh(ctx, RefreshCustomDurationBarState)
+        durationBarSwitch = BindSwitch(ctx, durationBar, "Duration bar", barX(1), -42, barCol, function() return item.placed.showDurationBar == true end,
             function(value)
                 item.placed.showDurationBar = value == true
                 Apply("AURAS3_CUSTOM_DURATION_BAR")
@@ -5175,13 +5969,28 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
             function() return tonumber(item.frame.priority) or 5 end,
             function(value) item.frame.priority = tonumber(value) or 5; Apply("AURAS3_CUSTOM_EFFECT_PRIORITY") end,
             AuraControlMeta(ctx, "custom-container.effect.priority"))
+        if isTargetDots then
+            local pandemicOnly = BindSwitch(ctx, section, "Only during Pandemic window", 24 + col3 + gap, -150,
+                col3 * 2 + gap, function() return item.frame.onlyInPandemicWindow == true end,
+                function(value)
+                    item.frame.onlyInPandemicWindow = value == true
+                    Apply("AURAS3_TARGET_DOT_EFFECT_PANDEMIC_ONLY", true)
+                end,
+                AuraControlMeta(ctx, "custom-container.effect.only-during-pandemic-window"))
+            AddTooltip(pandemicOnly, "Pandemic-only Full-Frame effect",
+                "Shows this effect only while a tracked DoT is in its native Pandemic window. Multiple DoTs in Pandemic can intensify the same effect. Blizzard may run an OnUpdate on each visible aura button while its Pandemic timing is available.")
+        end
         if W.SetCollapsibleBadges then
             M.TrackRefresh(ctx, function()
                 local effectType = tostring(item.frame.type or "none")
-                W.SetCollapsibleBadges(section, {{
+                local badges = {{
                     text = ChoiceLabel(CUSTOM_FRAME_EFFECTS, effectType, effectType),
                     kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
-                }})
+                }}
+                if isTargetDots and item.frame.onlyInPandemicWindow == true then
+                    badges[#badges + 1] = { text = "Pandemic only", kind = "info", showWhenClosed = true }
+                end
+                W.SetCollapsibleBadges(section, badges)
             end)
         end
         return
@@ -5189,33 +5998,55 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
 
     if tool == "behavior" then
         local sortLane = (isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF") and "debuff" or "buff"
-        local section = b:CollapsibleSection(CustomStyleSectionId(index, "behavior"), "Ordering", 96, false)
+        local supportsCustomPriority = not isPlayerDefensives
+        local section = b:Section("Ordering", 190)
         local w = section._msuf2Width or b.width or 720
-        local col4, gap = Grid(w, 4)
-        -- The sort-method choice list differs between helpful and harmful
-        -- containers, so the catalog path carries the lane type exactly like
-        -- the Buff/Debuff style pages do; a shared path would merge two
-        -- different value domains into one schema row.
-        local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -34, AuraSortMethodValues(sortLane), col4,
-            function() return NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod) end,
-            function(value) item.placed.sortMethod = value or "DEFAULT"; Apply("AURAS3_CUSTOM_SORT_METHOD") end,
-            AuraControlMeta(ctx, "custom-container.behavior." .. sortLane .. "-sort-method"))
-        AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
-        local sortDirection = BindDropdown(ctx, section, "Order", 24 + col4 + gap, -34, AURA_SORT_DIRECTION_VALUES, col4,
+        -- Keep every custom container's identity separate. Exact-ID custom
+        -- containers can each persist their own CUSTOM_PRIORITY or ordinary
+        -- sort mode without sharing a lane preset.
+        local orderingPath = customActionPath .. ".ordering"
+        local visibleOrderingPath = isTargetDots and "custom-container.dots-on-target.ordering"
+            or (isPlayerDefensives and "custom-container.defensive-buffs.ordering" or orderingPath)
+        local sortMethod = BindDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(sortLane, supportsCustomPriority), w - 48,
+            function() return NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, supportsCustomPriority) end,
+            function(value)
+                if supportsCustomPriority and value == "CUSTOM_PRIORITY"
+                    and type(Model.EnableCustomContainerSpellPriority) == "function" then
+                    Model.EnableCustomContainerSpellPriority(unit, index)
+                else
+                    item.placed.sortMethod = value or "DEFAULT"
+                end
+                Apply("AURAS3_CUSTOM_SORT_METHOD", supportsCustomPriority)
+            end,
+            AuraControlMetaAtVisiblePath(ctx,
+                orderingPath .. "." .. sortLane .. "-sort-method",
+                visibleOrderingPath .. "." .. sortLane .. "-sort-method"))
+        AddTooltip(sortMethod, "Aura sorting", supportsCustomPriority
+            and "Custom Priority packs active tracked auras into the configured order. Inactive entries leave no gap; drag the spell rows in Setup to change their priority."
+            or "Only relevant sorting methods are shown for buffs and debuffs.")
+        local sortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, w - 48,
             function() return item.placed.sortReverse == true and "REVERSE" or "NORMAL" end,
             function(value) item.placed.sortReverse = value == "REVERSE"; Apply("AURAS3_CUSTOM_SORT_DIRECTION") end,
-            AuraControlMeta(ctx, "custom-container.behavior.sort-direction"))
+            AuraControlMetaAtVisiblePath(ctx,
+                orderingPath .. ".sort-direction",
+                visibleOrderingPath .. ".sort-direction"))
         AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
-        if W.SetCollapsibleBadges then
-            M.TrackRefresh(ctx, function()
-                local sortKey = NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod)
-                W.SetCollapsibleBadges(section, {{
-                    text = (AURA_SORT_SUMMARY_LABELS[sortKey] or sortKey) .. " / "
-                        .. ChoiceLabel(AURA_SORT_DIRECTION_VALUES, item.placed.sortReverse == true and "REVERSE" or "NORMAL", "Normal"),
-                    kind = "info", showWhenClosed = true,
-                }})
-            end)
-        end
+        -- Fixed reminder slots take their order from the Whitelist, so nothing
+        -- on this tab can influence them. Leaving the controls live would let
+        -- the page promise something the runtime ignores.
+        local orderingNote = W.Text(section, "", 24, -156, w - 48, T.colors.muted)
+        M.TrackRefresh(ctx, function()
+            local reminder = item.placed.reminderEnabled == true
+            if type(W.SetControlsEnabled) == "function" then
+                W.SetControlsEnabled({ sortMethod }, not reminder)
+                W.SetControlsEnabled({ sortDirection }, not reminder
+                    and (not supportsCustomPriority
+                        or NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, supportsCustomPriority) ~= "CUSTOM_PRIORITY"))
+            end
+            orderingNote:SetText(reminder
+                and Tr("Sorting is off while this container shows fixed reminder slots \194\183 their order comes from the Whitelist.")
+                or "")
+        end)
         return
     end
 
@@ -5370,7 +6201,7 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
 
     local setupW = b.width or 720
     local compactSetup = setupW < 680
-    local section = b:Section(containerLabel .. " Setup", compactSetup and 184 or 132)
+    local section = b:Section(containerLabel .. " Setup", compactSetup and 262 or 210)
     local w = section._msuf2Width or setupW
     local inner = w - 48
     local enabled = BindSwitch(ctx, section, "Enabled", 24, compactSetup and -52 or -62, 106,
@@ -5401,12 +6232,175 @@ function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
         false, AuraControlMeta(ctx, "custom-container.setup.name"))
     BindDropdown(ctx, section, "Aura type", fieldX + nameW + fieldGap, fieldY, CUSTOM_AURA_TYPES, typeW,
         function() return item.auraType == "DEBUFF" and "DEBUFF" or "BUFF" end,
-        function(value) item.auraType = value == "DEBUFF" and "DEBUFF" or "BUFF"; Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true); Rebuild(ctx) end,
+        function(value)
+            local nextType = value == "DEBUFF" and "DEBUFF" or "BUFF"
+            local prevType = item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
+            -- A duration ceiling configured for one aura type must not survive
+            -- the switch: since 6.09 it compiles for every lane and would
+            -- silently hide long or permanent auras of the other type.
+            if nextType ~= prevType and type(item.filters) == "table" then
+                item.filters.maxDuration = nil
+            end
+            item.auraType = nextType
+            Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true)
+            Rebuild(ctx)
+        end,
         AuraControlMeta(ctx, "custom-container.setup.aura-type"))
+    local modeY = (compactSetup and -82 or -34) - 70
+    BindDropdown(ctx, section, "Display", 24, modeY, CUSTOM_DISPLAY_MODES, max(200, min(320, floor(inner * 0.42))),
+        function() return item.placed.reminderEnabled == true and "reminder" or "active" end,
+        function(value)
+            item.placed.reminderEnabled = value == "reminder"
+            Apply("AURAS3_CUSTOM_REMINDER", true)
+            Rebuild(ctx)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.enabled"))
+    local modeNote = W.Text(section, "", 24, modeY - 44, inner, T.colors.muted)
     local count = #Model.CustomContainerSpellEntries(unit, index)
     W.Text(section, count == 1 and Tr("1 whitelisted spell · style remains live in Menu Preview and Edit Mode.")
-        or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count), 24, compactSetup and -156 or -104, inner, T.colors.muted)
-    M.TrackRefresh(ctx, function() W.SetControlEnabled(enabled, true) end)
+        or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count), 24, modeY - 66, inner, T.colors.muted)
+    M.TrackRefresh(ctx, function()
+        modeNote:SetText(item.placed.reminderEnabled == true
+            and Tr("Every whitelisted entry keeps its own place. A dimmed icon means that entry is missing.")
+            or Tr("Only auras that are currently active are shown, packed together."))
+    end)
+
+    -- Buff Reminder. Exact Spell ID whitelists are the only aura source that
+    -- can carry one fixed slot per spell, so the mode belongs to Custom 1-3.
+    -- It is never state driven: MSUF cannot read whether an aura is present
+    -- on 12.1, so the placeholder is simply drawn beneath the native icon.
+    local reminderSection = b:CollapsibleSection("aura_reminder_custom_" .. tostring(index),
+        "Buff Reminder", 258, false)
+    local rw = reminderSection._msuf2Width or setupW
+    local rInner = rw - 48
+    local rcol, rgap = Grid(rw, 2)
+    -- The mode itself lives in Setup next to Aura type; this section owns only
+    -- how the reminder looks and what a click on it does.
+    local reminderAlpha = BindSlider(ctx, reminderSection, "Placeholder opacity", 24, -46, 10, 100, 5, rcol,
+        function() return floor(((tonumber(item.placed.reminderAlpha) or 0.45) * 100) + 0.5) end,
+        function(value)
+            item.placed.reminderAlpha = max(0.1, min(1, (tonumber(value) or 45) / 100))
+            Apply("AURAS3_CUSTOM_REMINDER_ALPHA", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.opacity"))
+    AddTooltip(reminderAlpha, "Placeholder opacity",
+        "How strongly a missing aura's placeholder is drawn. Lower values keep the frame calm; the running aura always covers it completely either way.")
+    local reminderDesaturate = BindSwitch(ctx, reminderSection, "Grey out placeholders", 24 + rcol + rgap, -46, rcol,
+        function() return item.placed.reminderDesaturate ~= false end,
+        function(value)
+            item.placed.reminderDesaturate = value == true
+            Apply("AURAS3_CUSTOM_REMINDER_DESATURATE", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.desaturate"))
+    AddTooltip(reminderDesaturate, "Grey out placeholders",
+        "Draws the placeholder without colour so a missing aura reads at a glance. Turn this off to keep the spell's own colours and separate the two states by opacity or tint alone.")
+    local reminderColor = W.Color(reminderSection, "Placeholder tint")
+    M.BindColor(ctx, reminderColor,
+        function()
+            local c = type(item.placed.reminderColor) == "table" and item.placed.reminderColor or nil
+            return c and c[1] or 1, c and c[2] or 1, c and c[3] or 1
+        end,
+        function(r, g, blue)
+            item.placed.reminderColor = { r, g, blue }
+            Apply("AURAS3_CUSTOM_REMINDER_COLOR", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.color"))
+    reminderColor:Hide()
+    if reminderColor._msuf2Title then
+        reminderColor._msuf2Title:Hide()
+        reminderColor._msuf2Title._msuf2AlwaysHidden = true
+    end
+    local reminderClick = BindSwitch(ctx, reminderSection, "Click the icon to cast the spell", 24, -96, rInner,
+        function() return item.placed.reminderClickCast ~= false end,
+        function(value)
+            item.placed.reminderClickCast = value == true
+            Apply("AURAS3_CUSTOM_REMINDER_CLICK_CAST", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.click-cast"))
+    AddTooltip(reminderClick, "Click the icon to cast the spell",
+        "Turns every reminder slot into a cast button: clicking it casts that slot's spell at this frame's unit, whether the aura is missing or already running, so re-applying a poison or flask works. The binding is written once outside combat and never changes afterwards, so this costs no timer, no event and no aura read. Only spells work; food, flasks and other items cannot be triggered this way.")
+    -- One whitelist for every character: with this on, a Mage's reminder row
+    -- keeps Arcane Intellect and drops the Rogue poisons from the same profile.
+    -- Rows with a bound item stay either way -- an item is class agnostic.
+    local reminderSelfOnly = BindSwitch(ctx, reminderSection, "Only show what I can apply myself", 24, -142, rInner,
+        function() return item.placed.reminderOnlyCastable == true end,
+        function(value)
+            item.placed.reminderOnlyCastable = value == true
+            Apply("AURAS3_CUSTOM_REMINDER_SELF_ONLY", true)
+        end,
+        AuraControlMeta(ctx, "custom-container.reminder.only-castable"))
+    AddTooltip(reminderSelfOnly, "Only show what I can apply myself",
+        "Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat.")
+    local reminderStatus = W.Text(reminderSection, "", 24, -190, rInner, T.colors.muted)
+    M.TrackRefresh(ctx, function()
+        W.SetControlEnabled(enabled, true)
+        local on = item.placed.reminderEnabled == true
+        if type(W.SetControlsEnabled) == "function" then
+            W.SetControlsEnabled({ reminderAlpha, reminderDesaturate, reminderClick, reminderSelfOnly }, on)
+        end
+        local cap = max(0, floor(tonumber(item.placed.max) or 8))
+        local allEntries = Model.CustomContainerSpellEntries(unit, index)
+        -- A filtered row is not a slot, so it must not be counted as one.
+        local selfOnly = item.placed.reminderOnlyCastable == true
+        local hidden, slots = 0, 0
+        for i = 1, #allEntries do
+            local entry = allEntries[i]
+            if selfOnly and not entry.clickAction and entry.keep ~= true then
+                hidden = hidden + 1
+            elseif slots < cap then
+                slots = slots + 1
+            end
+        end
+        if unit == "player" then
+            if item.reminderEnchantMainHand == true and slots < cap then slots = slots + 1 end
+            if item.reminderEnchantOffHand == true and slots < cap then slots = slots + 1 end
+        end
+        -- One line, three facts: how many slots, how many of them react to a
+        -- click, and where their order comes from.
+        if not on then
+            reminderStatus:SetText(Tr("Off · switch Display to Fixed slots in Setup to use this."))
+        else
+            local clickable, counted = 0, 0
+            for i = 1, #allEntries do
+                local entry = allEntries[i]
+                if not (selfOnly and not entry.clickAction and entry.keep ~= true) and counted < cap then
+                    counted = counted + 1
+                    if entry.clickAction then clickable = clickable + 1 end
+                end
+            end
+            if unit == "player" then
+                local hasItem = Model.CustomContainerReminderEnchantItem(unit, index) ~= nil
+                if item.reminderEnchantMainHand == true and counted < cap then
+                    counted = counted + 1
+                    if hasItem then clickable = clickable + 1 end
+                end
+                if item.reminderEnchantOffHand == true and counted < cap then
+                    counted = counted + 1
+                    if hasItem then clickable = clickable + 1 end
+                end
+            end
+            local base = item.placed.reminderClickCast == false
+                and M.Format("%d fixed slots · order comes from the Whitelist.", slots)
+                or M.Format("%d fixed slots · %d clickable · order comes from the Whitelist.",
+                    slots, clickable)
+            -- Say it out loud when the filter is swallowing rows, otherwise a
+            -- whitelisted entry would just be missing with no explanation.
+            if hidden > 0 then
+                base = base .. " " .. M.Format("%d hidden: not castable by this character.", hidden)
+            end
+            reminderStatus:SetText(base)
+        end
+        if W.SetCollapsibleBadges then
+            local badges = {{
+                text = on and Tr("Reminder on") or Tr("Reminder off"),
+                kind = on and "accent" or "muted", showWhenClosed = true,
+            }}
+            if on and item.placed.reminderClickCast ~= false then
+                badges[#badges + 1] = { text = Tr("Click-cast"), kind = "info", showWhenClosed = true }
+            end
+            W.SetCollapsibleBadges(reminderSection, badges)
+        end
+    end)
 end
 
 local function BuildMovedAuraPage(ctx)

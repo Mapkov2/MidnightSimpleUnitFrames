@@ -68,7 +68,22 @@ menu = {
         return control
     end,
     BindToggleAt = function() error("Classic group filters unexpectedly built a toggle") end,
-    BindSliderAt = function() error("Classic group filters unexpectedly built a slider") end,
+    BindSliderAt = function(_, _, label, x, y, minimum, maximum, step, width, getValue, setValue, meta)
+        local control = {
+            label = label,
+            x = x,
+            y = y,
+            minimum = minimum,
+            maximum = maximum,
+            step = step,
+            width = width,
+            getValue = getValue,
+            setValue = setValue,
+            meta = meta,
+        }
+        controls[#controls + 1] = control
+        return control
+    end,
     AddTooltip = function() end,
     Format = string.format,
     RegisterPage = function() end,
@@ -192,5 +207,7 @@ local fallback = {}
 for i = 1, #controls do fallback[controls[i].label] = true end
 assert(fallback["All Buffs"] == true and fallback["Cast by Me"] == true,
     "Mainline group filter fallback did not build through M.ValueTextList")
+assert(fallback["Maximum duration"] == true,
+    "Mainline group filter fallback lost the current Retail duration control")
 
 print("classic Aura menu filter smoke passed")

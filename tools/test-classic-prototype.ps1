@@ -617,6 +617,9 @@ if ($lua) {
     $classicEditModeSmoke = Join-Path $root "tools/tests/classic_editmode_smoke.lua"
     & $lua.Source $classicEditModeSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Edit Mode smoke failed" }
+    $classicMenuParitySmoke = Join-Path $root "tools/tests/classic_menu_retail_parity_smoke.lua"
+    & $lua.Source $classicMenuParitySmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic Menu2 Retail parity smoke failed" }
     $classicAuraRenderSmoke = Join-Path $root "tools/tests/classic_aura_render_smoke.lua"
     $classicAuraBackend = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"
     $classicAuraFeatures = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"

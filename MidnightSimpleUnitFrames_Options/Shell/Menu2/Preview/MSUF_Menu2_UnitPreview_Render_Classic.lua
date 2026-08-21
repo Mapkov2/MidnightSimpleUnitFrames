@@ -899,9 +899,21 @@ function Render.Install(Preview, deps)
         ROUNDED = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\rounded_mask.tga",
         DIAMOND = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\diamond_mask.tga",
     }
-    local function ApplyPreviewPortraitShapeMask(portrait, shape)
+    local PREVIEW_SOFT_EDGE_MASKS = { SQUARE = {}, CIRCLE = {}, ROUNDED = {}, DIAMOND = {} }
+    do
+        local root = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
+        for level = 1, 15 do
+            local suffix = (level < 10 and "0" or "") .. tostring(level) .. ".png"
+            PREVIEW_SOFT_EDGE_MASKS.SQUARE[level] = root .. "texture_layer_edge_softness_" .. suffix
+            PREVIEW_SOFT_EDGE_MASKS.CIRCLE[level] = root .. "portrait_edge_softness_circle_" .. suffix
+            PREVIEW_SOFT_EDGE_MASKS.ROUNDED[level] = root .. "portrait_edge_softness_rounded_" .. suffix
+            PREVIEW_SOFT_EDGE_MASKS.DIAMOND[level] = root .. "portrait_edge_softness_diamond_" .. suffix
+        end
+    end
+    local function ApplyPreviewPortraitShapeMask(portrait, shape, edgeSoftnessLevel)
         local wantAtlas = shape == "BLIZZARD"
-        local file = PREVIEW_SHAPE_MASKS[shape]
+        local softMasks = PREVIEW_SOFT_EDGE_MASKS[shape]
+        local file = softMasks and softMasks[edgeSoftnessLevel] or PREVIEW_SHAPE_MASKS[shape]
         local mask = portrait._msufPreviewShapeMask
         if not (wantAtlas or file) then
             if mask and portrait._msufPreviewShapeMasked then
@@ -1517,7 +1529,10 @@ function Preview.Refresh(box, reason)
     -- Auto size (Size override = 0) is resolved by the live Portrait element.
     -- Edit Mode displays that applied holder, so consume the same final geometry
     -- instead of letting Menu2 maintain a second approximation of the auto path.
-    if (tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) <= 0 then
+    local runtimeSizeMode = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.sizeMode
+    if runtimeSizeMode == "SEPARATE"
+        or (tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) <= 0
+    then
         box._runtimeAppliedPortraitW, box._runtimeAppliedPortraitH = R.RuntimeAppliedPortraitSizeForPreviewKey(key)
         if tonumber(box._runtimeAppliedPortraitW) and box._runtimeAppliedPortraitW > 0 then
             box._runtimePortraitW = box._runtimeAppliedPortraitW
@@ -1615,6 +1630,20 @@ function Preview.Refresh(box, reason)
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
     local classPowerSegCount = PreviewClassPowerSegmentCount(classPowerPreviewSpec, 10)
     box._runtimeClassPowerW = classPowerOn and PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount) or 0
+    -- Augmentation no longer builds a composite surface: Ebon Might is rendered
+    -- by the ordinary Player Power bar and Essence stays an ordinary Class
+    -- Resource, so there is no second class row and no shared geometry. Only the
+    -- power bar's *content* changes, which the render pass reads from
+    -- _runtimePowerEbonMight below.
+    box._runtimeClassPowerSecondarySpec = classPowerPreviewSpec and classPowerPreviewSpec.secondaryTimer
+    box._runtimeClassPowerSecondaryOn = false
+    box._runtimeClassPowerSecondaryH = 0
+    box._runtimeAugCompositePreview = false
+    box._runtimePowerEbonMight = key == "player"
+        and classPowerOn
+        and type(box._runtimeClassPowerSecondarySpec) == "table"
+        and bars.showEbonMight ~= false
+        and classPowerPreviewSpec and classPowerPreviewSpec.key == "evoker_augmentation_ebon" or false
     box._runtimeDetachedPowerSyncClass = key == "player" and ((runtimePower and runtimePower.detachedSyncClass == true) or (runtimePower == nil and conf.detachedPowerBarSyncClassPower ~= false)) or false
     box._runtimeDetachedPowerX = tonumber(runtimePower and runtimePower.detachedX) or tonumber(conf.detachedPowerBarOffsetX) or 0
     box._runtimeDetachedPowerY = tonumber(runtimePower and runtimePower.detachedY) or tonumber(conf.detachedPowerBarOffsetY) or -4
@@ -2146,8 +2175,8 @@ function Preview.Refresh(box, reason)
         cp.r, cp.g, cp.b = pr, pg, pb
         cp.animatedValue = animState and R.CPPreview.AnimatedValue and R.CPPreview.AnimatedValue(cp.preview, animState.elapsed) or nil
         if cp.token then cp.r, cp.g, cp.b = R.CPPreview.ResolveBaseColor(cp.preview, bars, pr, pg, pb) end
-        cp.isFull = R.CPPreview.IsFull(cp.preview, cp.animatedValue)
-        local _, fullR, fullG, fullB = R.CPPreview.ResolveFullColor(bars, cp.token, cp.r, cp.g, cp.b)
+        local fullEnabled, fullR, fullG, fullB = R.CPPreview.ResolveFullColor(bars, cp.token, cp.r, cp.g, cp.b)
+        cp.isFull = fullEnabled == true and R.CPPreview.IsFull(cp.preview, cp.animatedValue)
         cp.fullR, cp.fullG, cp.fullB = fullR, fullG, fullB
         cp.filledAlpha = tonumber(bars.classPowerFilledAlpha) or 0.95
         if cp.filledAlpha < 0 then cp.filledAlpha = 0 elseif cp.filledAlpha > 1 then cp.filledAlpha = 1 end
@@ -2265,10 +2294,10 @@ function Preview.Refresh(box, reason)
                 if segEdge then segEdge:Hide() end
                 cp.sr, cp.sg, cp.sb = cp.r, cp.g, cp.b
                 cp.charged = R.CPPreview.IsCharged(cp.preview, bars, i)
-                if cp.isFull then
-                    cp.sr, cp.sg, cp.sb = cp.fullR, cp.fullG, cp.fullB
-                elseif cp.charged then
+                if cp.charged then
                     cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveColor("CHARGED", 0.60, 0.20, 0.80)
+                elseif cp.isFull then
+                    cp.sr, cp.sg, cp.sb = cp.fullR, cp.fullG, cp.fullB
                 else
                     cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveSlotColor(bars, cp.token, i, cp.r, cp.g, cp.b)
                 end
@@ -2530,7 +2559,10 @@ function Preview.Refresh(box, reason)
     box._fontPreviewBaselineOffset = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
     if box._fontPreviewBaselineOffset < -4 then box._fontPreviewBaselineOffset = -4 elseif box._fontPreviewBaselineOffset > 4 then box._fontPreviewBaselineOffset = 4 end
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.nameText, nameRawSize, "name")
-    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.raidGroupNameText, nameRawSize, "name")
+    -- The inline group number carries its own size and only falls back to the
+    -- name font while raidGroupNameSize is unwritten. No local for the resolved
+    -- value: this Refresh function sits at Lua's 200 active-local limit.
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.raidGroupNameText, tonumber(runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.size) or tonumber(conf.raidGroupNameSize) or nameRawSize, "name")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.totInlineSep, nameRawSize, "name")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.totInlineText, nameRawSize, "name")
     -- Reverse order renders the configured Right slot on the physical left
@@ -2668,6 +2700,9 @@ function Preview.Refresh(box, reason)
     local hpTextOn = conf.showHP ~= false
     if runtimeSpec then hpTextOn = runtimeSpec.showHealthText ~= false end
     local powerTextOn = PreviewPowerTextShown(runtimeSpec, conf)
+    -- Ebon Might's native duration binding owns the text on this bar, so the
+    -- ordinary power slots are dropped exactly as the config compiler does.
+    if box._runtimePowerEbonMight == true then powerTextOn = false end
     if detachedPowerManagedByClassPreview and box._runtimeDetachedPowerTextOnBar then powerTextOn = false end
     mock.nameText:SetShown(showNamePreview)
     local raidGroupCfg = runtimeStatus and runtimeStatus.raidGroup
@@ -2905,10 +2940,16 @@ function Preview.Refresh(box, reason)
             if mock.portrait._msufPreviewLayoutWidth ~= nil then mock.portrait._msufPreviewLayoutWidth = nil end
             if mock.portrait._msufPreviewLayoutHeight ~= nil then mock.portrait._msufPreviewLayoutHeight = nil end
         end
-        R.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape)
+        local bStyle = box._runtimePortraitBorderStyle or (portraitBorder and portraitBorder.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE")
+        local edgeSoftnessLevel = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.edgeSoftnessLevel)
+        if edgeSoftnessLevel == nil then
+            edgeSoftnessLevel = floor(((tonumber(PortraitStyleGet(key, "portraitEdgeSoftness", 0)) or 0) / 2) + 0.5)
+            if edgeSoftnessLevel < 0 then edgeSoftnessLevel = 0 elseif edgeSoftnessLevel > 15 then edgeSoftnessLevel = 15 end
+            if previewShape == "BLIZZARD" or bStyle ~= "NONE" then edgeSoftnessLevel = 0 end
+        end
+        R.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel)
         R.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",
             S(box._runtimePortraitW), S(box._runtimePortraitH))
-        local bStyle = box._runtimePortraitBorderStyle or (portraitBorder and portraitBorder.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE")
         -- The Blizzard ring shape parks every MSUF border renderer, exactly
         -- like the live element.
         if previewShape == "BLIZZARD" or bStyle == "NONE" then
