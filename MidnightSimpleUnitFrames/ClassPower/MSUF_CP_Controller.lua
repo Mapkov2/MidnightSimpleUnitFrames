@@ -2362,8 +2362,12 @@ local function FullRefresh()
         CP.modeProfile = CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
         CP_CompileVisual(powerType, renderMode, maxP)
 
-        --- Charged points only for standard segmented (CP/HP)
-        if renderMode == CPK.MODE.SEGMENTED then
+        --- Charged slots exist only for Rogue Combo Points. Seed the sparse map
+        --- before the first paint; ordinary Combo Point updates keep it current.
+        if PLAYER_CLASS == "ROGUE" and renderMode == CPK.MODE.SEGMENTED
+            and powerType == PT.ComboPoints
+            and CP.visual and CP.visual.showCharged == true
+        then
             RefreshChargedPoints()
         end
 
@@ -2854,6 +2858,7 @@ CP_RefreshEventBindings = function()
     local wantMaxHealth = (CP.visible and profile.health == true) or PHP.visible
     local wantPointCharge = CP.visible
         and profile.pointCharge == true
+        and PLAYER_CLASS == "ROGUE"
         and CP.powerType == PT.ComboPoints
         and CP.visual ~= nil
         and CP.visual.showCharged == true
@@ -2993,6 +2998,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         if arg1 == "player" then
             --- Only Rogue Combo Points consume charged slot indices.
             if CP.visible and CP.renderMode == CPK.MODE.SEGMENTED
+                and PLAYER_CLASS == "ROGUE"
                 and CP.powerType == PT.ComboPoints
                 and CP.visual and CP.visual.showCharged == true
             then
@@ -3052,6 +3058,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
     if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
         local refreshCharged = event == "PLAYER_REGEN_ENABLED"
             and CP.visible and CP.renderMode == CPK.MODE.SEGMENTED
+            and PLAYER_CLASS == "ROGUE"
             and CP.powerType == PT.ComboPoints
             and CP.visual and CP.visual.showCharged == true
         if event == "PLAYER_REGEN_ENABLED" then

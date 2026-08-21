@@ -1142,6 +1142,18 @@ builders.RUNTIME = function(env)
         local expectedToken = CP.powerToken or POWER_TYPE_TOKENS[CP.powerType]
         if powerToken and expectedToken and powerToken ~= expectedToken then return end
 
+        --- Blizzard resolves charged Rogue slots inside every Combo Point power
+        --- update, not only on UNIT_POWER_POINT_CHARGE. Mirror that ownership so
+        --- an omitted/coalesced charge event cannot leave the sparse slot map
+        --- stale while the ordinary Combo Point event already repaints the row.
+        if PLAYER_CLASS == "ROGUE"
+            and CP.renderMode == CPK.MODE.SEGMENTED
+            and CP.powerType == PT.ComboPoints
+            and CP.visual and CP.visual.showCharged == true
+        then
+            RefreshChargedPoints()
+        end
+
         RunActiveUpdate(CP.powerType, CP.currentMax)
     end
 
