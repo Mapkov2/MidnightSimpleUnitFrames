@@ -36,9 +36,11 @@ local function Fmt(n)
 end
 
 local function GetECV()
-    return (type(_G.MSUF_GetEffectiveCooldownFrame) == "function"
+    local frame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function"
         and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
         or _G["EssentialCooldownViewer"]
+    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+    return type(getSize) == "function" and getSize(frame) ~= nil and frame or nil
 end
 
 local function ECVLine()
@@ -101,7 +103,7 @@ local function UpdateOverlay()
         l[3]:SetText("ECV: |cFFAAAAAAnot found|r")
     end
 
-    local units = { "player", "target", "focus", "targettarget", "pet", "boss1", "arena1" }
+    local units = { "player", "target", "focus", "targettarget", "pet", "boss1" }
     for i, unit in ipairs(units) do
         local frame = (UF and type(UF.GetFrame) == "function" and UF.GetFrame(unit))
             or (frames and frames[unit])

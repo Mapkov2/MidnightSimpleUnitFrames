@@ -41,7 +41,7 @@ local refreshQueued = false
 local refreshTimer
 local MENU_REFRESH_DELAY = 0.04
 local C_Timer = M.MenuTimer or _G.C_Timer
-local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena")
+local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
 local TEXT_SLOT_SIDES = { "Left", "Center", "Right" }
 local TEXT_SLOT_SIDE_SET = { Left = true, Center = true, Right = true }
 local DIRECT_TEXT_GROUP_ORDER = { "name", "hp", "power" }
@@ -217,30 +217,6 @@ function M.StageFactoryReset()
     if type(fn) ~= "function" then return false end
     fn({ skipReload = true })
     M.CallIf(M.SetFixedPreviewExpandedPreference, true)
-    return true
-end
---- Dialog-guarded entry for UI buttons. The slash path already demands a
---- typed "confirm"; a one-click button must never be the easier way to wipe
---- every profile on the account. Assistant commands keep calling
---- StageFactoryReset directly behind their own confirmation flow.
-function M.ConfirmFactoryReset()
-    if M.BlockCombatAction and M.BlockCombatAction() then return false end
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        -- Headless/stub environments have no dialog layer; fall back to the
-        -- staged reset rather than silently doing nothing.
-        return M.StageFactoryReset()
-    end
-    M.InstallStaticPopup("MSUF2_CONFIRM_FACTORY_RESET", {
-        text = "%s",
-        button1 = M.Tr("Delete everything"),
-        button2 = _G.CANCEL or M.Tr("Cancel"),
-        showAlert = true,
-        OnAccept = function()
-            M.CallIf(M.StageFactoryReset)
-        end,
-    })
-    _G.StaticPopup_Show("MSUF2_CONFIRM_FACTORY_RESET",
-        M.Tr("Factory reset MSUF?\n\nThis deletes EVERY MSUF profile and setting for this account. This cannot be undone - export any profile you want to keep first."))
     return true
 end
 local function BlockCombatAndRefresh(ctx)
@@ -524,7 +500,6 @@ local HISTORY_PAGE_RESET_UNITS = {
     uf_focus = "focus",
     uf_pet = "pet",
     uf_boss = "boss",
-    uf_arena = "arena",
 }
 local HISTORY_PAGE_RESET_FEATURES = {
     opt_castbar = "castbar",
@@ -1178,7 +1153,7 @@ function M.SetGeneralValue(key, value, reason, opts)
     M.RequestGeneralApply(reason or ("MSUF2_" .. tostring(key)), opts)
     return true
 end
-local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf_target = { unit = "target", label = "Target" }, uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" }, uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_arena = { unit = "arena", label = "Arena Frames" }, uf_pet = { unit = "pet", label = "Pet" } }
+local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf_target = { unit = "target", label = "Target" }, uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" }, uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_pet = { unit = "pet", label = "Pet" } }
 local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB"
 local CASTBAR_TARGET_NAME_SUFFIX_KEYS = WL "TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB"
 local function BuildUnitCastbarResetKeys(spec)
@@ -1264,7 +1239,7 @@ local FONT_SCOPE_KEYS = KSW [[
     nameMaxChars nameNoEllipsis shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
 ]]
 local FONT_ROOT_KEYS = KS("shortenNames", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots")
-local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget focus pet boss arena gf_party gf_raid gf_mythicraid]]
+local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget focus pet boss gf_party gf_raid gf_mythicraid]]
 local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier tooltipShowAuraSpellIDs

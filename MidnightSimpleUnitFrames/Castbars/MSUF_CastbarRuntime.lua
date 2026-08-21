@@ -447,9 +447,7 @@ end
 local function CastTimeUnitKey(frame, unit)
     unit = tostring(unit or ""):lower()
     if frame and frame._msufIsBossCastbar then return "boss" end
-    if frame and frame._msufIsArenaCastbar then return "arena" end
     if unit:match("^boss%d+$") then return "boss" end
-    if unit:match("^arena%d+$") then return "arena" end
     return unit
 end
 
@@ -479,8 +477,6 @@ function Runtime:RefreshWorkConfig(frame, force)
             enabled = general.showFocusCastTime ~= false
         elseif frame._msufIsBossCastbar or tostring(unit or ""):match("^boss%d+$") then
             enabled = general.showBossCastTime ~= false
-        elseif frame._msufIsArenaCastbar or tostring(unit or ""):match("^arena%d+$") then
-            enabled = general.showArenaCastTime ~= false
         end
     end
 

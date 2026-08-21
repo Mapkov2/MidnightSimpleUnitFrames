@@ -59,10 +59,18 @@ local function SafeText(raw)
         local ch = raw:sub(i, i)
         if ch == "," or ch == ";" then
             local prev = raw:sub(i - 1, i - 1)
+            local immediate = raw:sub(i + 1, i + 1)
             local j = i + 1
             while j <= #raw and raw:sub(j, j):match("%s") do j = j + 1 end
             local nextCh = raw:sub(j, j)
-            if prev:match("%d") and nextCh:match("%d") then
+            -- A comma written tight against the next word is a VALUE list, not
+            -- a clause break: "set ... Highlight Priority Order to
+            -- dispel,aggro,bossTarget,purge" is one ordered value, and turning
+            -- those commas into "and" reordered the list the player asked for.
+            -- People separate clauses with ", " (a space follows); list items
+            -- they write without one.
+            local tightList = prev:match("%w") and immediate:match("%w")
+            if (prev:match("%d") and nextCh:match("%d")) or tightList then
                 out[#out + 1] = ch
             else
                 out[#out + 1] = " and "
@@ -190,6 +198,66 @@ local function SimpleParse(text)
     end
     if type(cache) == "table" and cacheKey then cache[cacheKey] = parsed or false end
     return parsed
+end
+
+local ClauseHoldsSeveralControls
+
+-- Resolve one clause of an explicit compound the way a single command is
+-- resolved: the parser first, then its visible LABEL. The parser matches
+-- aliases and topical shapes; the Router matches labels; the label is what the
+-- player read on screen, so it outranks a topical pick exactly as it does for a
+-- single command. Two things went wrong without it -- a clause naming a control
+-- only the label index carries ("Priority Frames Placement") failed and
+-- discarded the whole sentence, and a clause naming a SPECIFIC control ("Player
+-- Status AFK Text Anchor") was answered with the generic sibling a topical lane
+-- preferred. A single command escapes both because the Router lane runs after
+-- the parser; a clause inside a compound never does.
+--
+-- Deliberately NOT inside SimpleParse: that runs for every candidate string of
+-- every compound strategy, and the label match is expensive enough that doing
+-- it there took the compound cold path from 9ms to 660ms. Here it runs at most
+-- once per clause of one already-proven sentence shape.
+local function ResolveExplicitClause(command)
+    local plan = SimpleParse(command)
+    -- A clause can legitimately hold more than one control ("party width 120
+    -- height 36"), and SimpleParse returns only the first. The compound parser
+    -- reads such a clause whole, so when it finds more, take its plan: the
+    -- split no longer has to be perfect, because a clause that swallowed two
+    -- controls is still resolved correctly instead of silently truncated.
+    if plan and plan.kind == "changes" and type(plan.changes) == "table"
+        and #plan.changes == 1 and ClauseHoldsSeveralControls
+    then
+        local richer = ClauseHoldsSeveralControls(command, true)
+        if type(richer) == "table" and type(richer.changes) == "table"
+            and #richer.changes > #plan.changes
+        then
+            plan = richer
+        end
+    end
+    MaybeYield()
+    local router = A.RouterPrivate
+    if not (router and type(router.ExactRegistrySettingForCommand) == "function"
+        and type(P.PlanForExactRegistrySetting) == "function")
+    then
+        return plan
+    end
+    local planKey = plan and plan.kind == "changes" and type(plan.changes) == "table"
+        and plan.changes[1] and plan.changes[1].setting
+        and tostring(plan.changes[1].setting.key or "") or nil
+    P._compoundDepth = (tonumber(P._compoundDepth) or 0) + 1
+    local okSetting, setting = pcall(router.ExactRegistrySettingForCommand, command)
+    local labelPlan
+    if okSetting and setting and tostring(setting.key or "") ~= (planKey or "") then
+        local okPlan, candidate = pcall(P.PlanForExactRegistrySetting, setting, Normalize(command), command)
+        if okPlan and type(candidate) == "table" and candidate.kind == "changes"
+            and type(candidate.changes) == "table" and #candidate.changes > 0
+        then
+            labelPlan = candidate
+        end
+    end
+    P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
+    MaybeYield()
+    return labelPlan or plan
 end
 
 local function ScopePhrase(changes)
@@ -2555,6 +2623,487 @@ local function LooksLikeCompoundCandidate(text, hasJoin)
     return false
 end
 
+-- Every strategy above infers structure from attribute keywords, so two of
+-- them can produce the same number of changes from different readings of the
+-- same sentence. In "set Boss Absorb Bar Anchor to left and Boss Absorb Bar
+-- Height to 50" the keyword matcher reduced the second clause to the frame's
+-- own Height, because it recognised "height" and inferred the qualifier away.
+--
+-- When the sentence splits into clauses that EACH parse as a complete command
+-- on their own, the reading is not an inference at all, so it outranks
+-- anything the keyword heuristics assembled. Requiring an explicit "to" value
+-- in every clause keeps this away from the fragment and shared-value shapes
+-- ("names off portraits on") that the other strategies exist to handle.
+local CLAUSE_LEAD_VERBS = {
+    set = true, change = true, make = true, adjust = true, put = true,
+    setze = true, stelle = true, aendere = true, andere = true,
+}
+
+-- The scope exactly as the player wrote it, so it can be re-attached to a
+-- later clause verbatim. Only the SUBJECT is searched: several values are
+-- frame words themselves ("set Raid Buff Filter to Player"), and treating one
+-- as the clause's scope would carry the wrong frame into the next clause.
+-- "shared" and "global" name a scope that is not any one frame. They are not
+-- unit or group words, so without this a clause reading "shared health text
+-- color mode to class" inherited the previous clause's frame and wrote the
+-- Player copy of the setting instead.
+local EXPLICIT_NON_FRAME_SCOPES = {
+    shared = true, global = true, allgemein = true, geteilt = true,
+}
+
+local function ClauseScopeWord(part)
+    part = part:match("^(.-)%s+to%s") or part
+    for word in part:gmatch("%S+") do
+        if EXPLICIT_NON_FRAME_SCOPES[word] then return word end
+    end
+    for word in part:gmatch("%S+") do
+        local units = DetectUnits and DetectUnits(word) or nil
+        if units and #units > 0 then return word end
+        local groups = DetectGroups and DetectGroups(word) or nil
+        if groups and #groups > 0 then return word end
+    end
+    return nil
+end
+
+-- A scope-less clause inherits the previous clause's frame, because that is
+-- nearly always what was meant: "set party width to 120 and height to 36 and
+-- power bar height to 5" means the party frame's power bar, even though a
+-- global Power Bar Height also exists. The inheritance is only skipped when
+-- the scoped reading does not resolve at all, so a clause naming a control
+-- that has no per-frame version still reaches it instead of becoming nil.
+local function ClauseResolves(command)
+    local plan = SimpleParse(command)
+    return plan and plan.kind == "changes"
+        and type(plan.changes) == "table" and #plan.changes > 0
+end
+
+local function KeyNamesAFrame(key)
+    for segment in tostring(key or ""):gmatch("[^%.]+") do
+        if segment:find("^gf_") then return true end
+        local units = DetectUnits and DetectUnits(segment) or nil
+        if units and #units > 0 then return true end
+        local groups = DetectGroups and DetectGroups(segment) or nil
+        if groups and #groups > 0 then return true end
+    end
+    return false
+end
+
+-- Whether a clause is really configuring a FRAME, as opposed to a global
+-- control whose name merely contains a frame word. "set Player Cast Bar to
+-- off" writes general.enablePlayerCastbar -- "player" belongs to the control's
+-- name there -- so carrying it onto the next clause turned the global Power
+-- Bar Gradient into the Player bar scope's copy. "set party width to 120"
+-- writes gf_party.width, where the frame genuinely is the context and the
+-- following clauses should inherit it.
+local function ClauseConfiguresAFrame(command)
+    local plan = SimpleParse(command)
+    if not (plan and plan.kind == "changes" and type(plan.changes) == "table") then return false end
+    for i = 1, #plan.changes do
+        local setting = plan.changes[i] and plan.changes[i].setting
+        if KeyNamesAFrame(setting and setting.key) then return true end
+    end
+    return false
+end
+
+local CommandsToClausePlan
+
+-- A direct map from a control's visible label to the control, built once and
+-- cached on P. The Router has a label index too, but it deliberately DECLINES
+-- any subject that also names a semantic family ("boss buff hide permanent
+-- auras", "focus unit dispel symbol x") -- correct for its own lane, and the
+-- reason label-driven splitting kept coming up empty here. Splitting an
+-- unpunctuated run needs the plain fact "these words are exactly one control's
+-- name", with no policy attached.
+local function BareLabelIndex()
+    local registry = A.Registry
+    local settings = registry and registry.AllSettings and registry:AllSettings() or nil
+    if type(settings) ~= "table" then return nil end
+    local cached = P._bareLabelIndex
+    if type(cached) == "table" and cached.count == #settings then return cached end
+    local map, maxWords = {}, 0
+    for i = 1, #settings do
+        local setting = settings[i]
+        local label = Normalize(tostring(setting and setting.label or ""))
+        if label ~= "" then
+            local words = 0
+            for _ in label:gmatch("%S+") do words = words + 1 end
+            if words > maxWords then maxWords = words end
+            -- A label shared by several controls cannot identify one, so it is
+            -- recorded as ambiguous rather than silently resolving to the first.
+            if map[label] == nil then map[label] = setting
+            elseif map[label] ~= setting then map[label] = false end
+        end
+        if i % 256 == 0 then MaybeYield() end
+    end
+    local index = { map = map, maxWords = maxWords, count = #settings }
+    P._bareLabelIndex = index
+    return index
+end
+
+-- "set Boss Buff Icons Per Row 21 Boss Buff Show Cooldown Swipe off": no
+-- joiner, no "to" -- just control names, each followed by its value. Nothing in
+-- the wording says where one control ends and the next begins, so the label
+-- index has to say it: walk the sentence taking the LONGEST phrase that is a
+-- visible label, then treat everything up to the next label as that control's
+-- value. Rewriting each pair as "set <label> to <value>" hands the result back
+-- to the ordinary clause path.
+--
+-- Only entered for exactly this shape (a set-verb, no joiner, no "to"), so the
+-- label lookups never touch an ordinary sentence.
+local function BareLabelValueRun(text)
+    local norm = Normalize(text)
+    if norm == "" then return nil end
+    if norm:find(" and ", 1, true) or norm:find(" und ", 1, true) then return nil end
+    if norm:find("%f[%a]to%f[%A]") then return nil end
+
+    local tokens = {}
+    for word in norm:gmatch("%S+") do tokens[#tokens + 1] = word end
+    local n = #tokens
+    local first = CLAUSE_LEAD_VERBS[tokens[1]] and 2 or 1
+    if (n - first + 1) < 4 or n > 24 then return nil end
+    local lead = (first > 1) and tokens[1] or "set"
+
+    local index = BareLabelIndex()
+    if not index then return nil end
+    local map, maxWords = index.map, index.maxWords
+
+    -- Longest label wins at each position, so "boss buff stack count anchor"
+    -- beats the shorter "boss buff" that also exists.
+    local function LabelAt(from)
+        local limit = math.min(n, from + maxWords - 1)
+        for to = limit, from, -1 do
+            local setting = map[table.concat(tokens, " ", from, to)]
+            if setting then return to, setting end
+        end
+        return nil
+    end
+
+    local commands = {}
+    local i = first
+    while i <= n do
+        MaybeYield()
+        local labelEnd = LabelAt(i)
+        if not labelEnd or labelEnd >= n then return nil end
+        local nextLabel
+        for k = labelEnd + 1, n do
+            if LabelAt(k) then nextLabel = k break end
+        end
+        local valueEnd = (nextLabel and (nextLabel - 1)) or n
+        if valueEnd <= labelEnd then return nil end
+        commands[#commands + 1] = lead .. " " .. table.concat(tokens, " ", i, labelEnd)
+            .. " to " .. table.concat(tokens, " ", labelEnd + 1, valueEnd)
+        i = valueEnd + 1
+    end
+    if #commands < 2 then return nil end
+    return commands
+end
+-- Second way to split an unpunctuated run, used when the label index cannot.
+-- It declines any subject that also names a semantic family ("boss buff hide
+-- permanent auras", "focus unit dispel symbol x"), yet those clauses resolve
+-- perfectly well on their own -- so the boundary is found by asking the
+-- ordinary resolver where a complete command ends instead of asking the label
+-- index where a name ends. Memoised and bounded; SimpleParse is already cached
+-- for the whole ParseCompound call, so each distinct fragment is parsed once.
+local BARE_VALUE_WORDS = {
+    on = true, off = true, ["true"] = true, ["false"] = true,
+    enabled = true, disabled = true, show = true, hide = true, shown = true,
+    an = true, aus = true, aktiviert = true, deaktiviert = true,
+}
+
+-- The consumed-extent test that the clause resolver cannot give us directly:
+-- ask the resolved CONTROL what words belong to it. Anything left in the
+-- clause that its own label and aliases do not account for -- and that is not
+-- a value -- is a second control, so the clause was truncated.
+--
+-- This is what separates the two cases every earlier guard confused:
+--   "target debuff show duration bar on" -> leftover "bar on"; "bar" IS in the
+--   control's label, so the clause is one control with an optional word.
+--   "player name on portrait on"         -> leftover "portrait on"; "portrait"
+--   is NOT in Show Name's label, so it is a second control.
+local function IsBareValueToken(word)
+    return (BARE_VALUE_WORDS[word] or word:match("^[-+]?%d+%.?%d*$")) and true or false
+end
+
+local function LeftoverBelongsToSetting(setting, tokens, first, last, consumedEndsInValue)
+    if last < first then return true end
+    local hay = " " .. Normalize(tostring(setting and setting.label or "")) .. " "
+    local aliases = type(setting) == "table" and setting.aliases or nil
+    for i = 1, #(aliases or {}) do
+        hay = hay .. Normalize(tostring(aliases[i])) .. " "
+    end
+    local valuesSeen = 0
+    for i = first, last do
+        local word = tokens[i]
+        if IsBareValueToken(word) then
+            -- The control's value can trail its name ("... show duration bar
+            -- ON"), but only when the consumed prefix did not already end in
+            -- one. A SECOND value means a second control: in "player width
+            -- height 300 45" the prefix ends at 300, so the 45 is not ours.
+            valuesSeen = valuesSeen + 1
+            if consumedEndsInValue or valuesSeen > 1 then return false end
+        elseif not hay:find(" " .. word .. " ", 1, true) then
+            return false
+        end
+    end
+    return true
+end
+
+-- The exact answer to "does this clause hold more than one control?", which no
+-- amount of prefix, label or value inspection could give: ask the compound
+-- parser about the clause on its own. It reports 2 changes for "player name on
+-- portrait on", "party width 120 height 36" and "player hp text left current
+-- right percent", and 1 for "target debuff show duration bar on" -- exactly the
+-- distinction every earlier guard confused.
+--
+-- Re-entry is deliberate and bounded to a single level by its own counter, so
+-- the oracle can never ask itself. Used only as the final check on a candidate
+-- clause, after the cheap tests have already accepted it.
+ClauseHoldsSeveralControls = function(command, wantPlan)
+    if (tonumber(P._bareOracleDepth) or 0) > 0 then return false end
+    if type(P.ParseCompound) ~= "function" then return false end
+    P._bareOracleDepth = 1
+    local savedDepth = P._compoundDepth
+    P._compoundDepth = 0
+    local ok, plan = pcall(P.ParseCompound, Normalize(command), command, nil)
+    P._compoundDepth = savedDepth
+    P._bareOracleDepth = 0
+    local several = ok and type(plan) == "table" and type(plan.changes) == "table"
+        and #plan.changes > 1
+    if wantPlan then return several and plan or nil end
+    return several
+end
+
+local function BareParseSplit(text, scopeAnchoredOnly)
+    local norm = Normalize(text)
+    if norm == "" then return nil end
+    if norm:find("%f[%a]to%f[%A]") then return nil end
+    if norm:find(" and ", 1, true) or norm:find(" und ", 1, true) then return nil end
+
+    local tokens = {}
+    for word in norm:gmatch("%S+") do tokens[#tokens + 1] = word end
+    local n = #tokens
+    local start = CLAUSE_LEAD_VERBS[tokens[1]] and 2 or 1
+    -- Two controls each needing a name and a value take at least six words, and
+    -- every clause needs three of its own. Without both floors this split an
+    -- ordinary command: "make target castbar use normal direction" came back as
+    -- two bogus changes because some three-word prefix happened to parse.
+    local MIN_CLAUSE_TOKENS = 3
+    if (n - start + 1) < (MIN_CLAUSE_TOKENS * 2) or n > 20 then return nil end
+    local lead = (start > 1) and tokens[1] or "set"
+
+    local function Command(from, to) return lead .. " " .. table.concat(tokens, " ", from, to) end
+    local function Parses(from, to)
+        if to < from then return false end
+        local plan = SimpleParse(Command(from, to))
+        if not (plan and plan.kind == "changes"
+            and type(plan.changes) == "table" and #plan.changes > 0)
+        then
+            return false
+        end
+        -- SimpleParse resolves ONE control, so a clause that really holds
+        -- several ("party width 120 height 36") comes back TRUNCATED to the
+        -- first -- the change count cannot reveal that. A clause carrying two
+        -- numbers is two values, so it is not the single-control shape this
+        -- mode claims; the shared-scope strategies already read those
+        -- sentences correctly and should keep them.
+        if scopeAnchoredOnly then
+            -- SimpleParse resolves ONE control and never says how much of the
+            -- clause it used, so a clause holding two controls comes back
+            -- truncated to the first with nothing to reveal it. The compound
+            -- parser, asked about the clause alone, answers exactly that
+            -- question -- so use it rather than inferring from prefixes,
+            -- labels or value counts, all of which have counterexamples.
+            if ClauseHoldsSeveralControls(Command(from, to)) then return false end
+            -- "300x45" is a width-and-height pair that SizePair reads
+            -- correctly; splitting around it produced Raid Group Name Size for
+            -- "set player size 300x45".
+            for i = from, to do
+                if tokens[i]:match("^%d+%.?%d*x%d+%.?%d*$") then return false end
+            end
+        end
+        return true
+    end
+
+    -- Positions where a new clause may begin. Anchoring cuts on a frame word is
+    -- what makes this reliable: it is how such sentences are actually written
+    -- ("... Boss Debuff X Offset -150 Boss Debuff Y Offset 0") and it stops the
+    -- search cutting INSIDE a control name, which is what turned "focus unit
+    -- dispel symbol x 0" into the frame's X Position.
+    local clauseStart = {}
+    for k = start + 1, n do
+        local word = tokens[k]
+        local units = DetectUnits and DetectUnits(word) or nil
+        local groups = DetectGroups and DetectGroups(word) or nil
+        if (units and #units > 0) or (groups and #groups > 0)
+            or (EXPLICIT_NON_FRAME_SCOPES and EXPLICIT_NON_FRAME_SCOPES[word])
+        then
+            clauseStart[k] = true
+        end
+    end
+
+    local memo = {}
+    local function Split(from)
+        if from > n then return {} end
+        if memo[from] ~= nil then return memo[from] or nil end
+        memo[from] = false
+        for to = from + MIN_CLAUSE_TOKENS - 1, n do
+            -- Skip cuts that would strand a remainder too short to be a clause,
+            -- but keep scanning: the LAST cut (remainder zero) is always valid
+            -- and a `break` here stopped the search just before reaching it.
+            local remainder = n - to
+            local cutAllowed = (remainder == 0 or remainder >= MIN_CLAUSE_TOKENS)
+                and (not scopeAnchoredOnly or to == n or clauseStart[to + 1] == true)
+            if cutAllowed then
+                MaybeYield()
+                if Parses(from, to) then
+                    local rest = Split(to + 1)
+                    if rest then
+                        local out = { Command(from, to) }
+                        for i = 1, #rest do out[#out + 1] = rest[i] end
+                        memo[from] = out
+                        return out
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local commands = Split(start)
+    if not commands or #commands < 2 then return nil end
+    return commands
+end
+
+local function ExplicitClauseCommands(text)
+    -- SafeText has already turned separating commas into " and ". Any comma
+    -- still here sits between digits ("10,5"), which is part of a value and
+    -- must never become a clause break.
+    local joined = Normalize(text)
+    local rawParts = SplitParts(joined)
+    if not rawParts or #rawParts < 2 then return nil end
+    -- Control names contain "and" too ("GCD Bar Spell Name and Icon"), so a
+    -- split on every joiner cuts one name in half. Each clause states exactly
+    -- one value, so regroup: a fragment carrying no value belongs to the
+    -- clause that follows it, because a control's name precedes its value. A
+    -- fragment left over at the end means the trailing "and" joined a value
+    -- rather than a clause ("set X to a and b"); that is not this strategy's
+    -- shape, so stand down rather than guess.
+    local parts, pending = {}, {}
+    for i = 1, #rawParts do
+        pending[#pending + 1] = rawParts[i]
+        if rawParts[i]:find(" to ", 1, true) then
+            parts[#parts + 1] = table.concat(pending, " and ")
+            pending = {}
+        end
+    end
+    if #pending > 0 or #parts < 2 then return nil end
+    -- Players write the verb once ("set A to 1 and B to 2"), so later clauses
+    -- borrow it and become complete commands in their own right. Only a real
+    -- command verb is propagated: when the sentence opens with a scope instead
+    -- ("player width to 300 and target width to 250") copying that word onto
+    -- the later clause would name two frames at once.
+    local lead = joined:match("^(%a+)%s")
+    if lead and not CLAUSE_LEAD_VERBS[lead] then lead = nil end
+    local commands, carriedScope, firstSubjectWords = {}, nil, nil
+    for i = 1, #parts do
+        MaybeYield()
+        local body = Trim(parts[i])
+        if body == "" or not body:find(" to ", 1, true) then return nil end
+        if lead then body = Trim((body:gsub("^" .. lead .. "%s+", "", 1))) end
+        if body == "" then return nil end
+        local ownScope = ClauseScopeWord(body)
+        -- How much of the control's name this clause actually spells out,
+        -- ignoring the frame it names.
+        local subject = body:match("^(.-)%s+to%s") or body
+        local subjectWords = 0
+        for word in subject:gmatch("%S+") do
+            if word ~= ownScope then subjectWords = subjectWords + 1 end
+        end
+        if i == 1 then
+            firstSubjectWords = subjectWords
+        elseif not ownScope and subjectWords <= 1 and subjectWords < (firstSubjectWords or 0) then
+            -- A later clause naming no frame and only a SINGLE word of control
+            -- name is a fragment sharing the opening clause's qualifier: in
+            -- "set player portrait shape to rounded and size to 64" the 64 is
+            -- the portrait's size, not the frame's. Only the shared-attribute
+            -- strategies can resolve that, so stand down rather than resolve
+            -- "size" against the whole registry.
+            -- The single-word test matters: "set Aggro Shows For to non tank
+            -- and Aggro Border to off" has a shorter second clause too, but
+            -- "aggro border" is a whole control name, and rejecting it handed
+            -- the sentence to a boolean strategy that wrote false into an enum.
+            return nil
+        end
+        if ownScope and EXPLICIT_NON_FRAME_SCOPES[ownScope] then
+            -- "shared" must still displace an earlier frame, or the next bare
+            -- clause would fall back to it.
+            carriedScope = ownScope
+        elseif ownScope then
+            if ClauseConfiguresAFrame(Trim((lead and (lead .. " ") or "") .. body)) then
+                carriedScope = ownScope
+            end
+        elseif carriedScope then
+            -- "set player width to 300 and height to 45 and target width to
+            -- 250 and height to 40": the last clause names no frame, and
+            -- without the carried scope it silently lands back on Player.
+            local scoped = Trim((lead and (lead .. " ") or "") .. carriedScope .. " " .. body)
+            if ClauseResolves(scoped) then body = carriedScope .. " " .. body end
+        end
+        commands[#commands + 1] = Trim((lead and (lead .. " ") or "") .. body)
+    end
+    if #commands > 12 then return nil end
+    return CommandsToClausePlan(commands)
+end
+
+-- Shared by both shapes that produce a list of complete one-control commands:
+-- the joined form ("A to 1 and B to 2") and the unpunctuated run ("A 1 B 2").
+CommandsToClausePlan = function(commands)
+    local plans = {}
+    for c = 1, #commands do
+        MaybeYield()
+        local clausePlan = ResolveExplicitClause(commands[c])
+        if not (clausePlan and clausePlan.kind == "changes"
+            and type(clausePlan.changes) == "table" and #clausePlan.changes > 0)
+        then
+            return nil
+        end
+        plans[#plans + 1] = clausePlan
+    end
+    local plan = MergePlans(plans)
+    -- Marks the one compound reading that involved no inference: each clause
+    -- named its own control and its own value. A.Parse lets this outrank even
+    -- its topical fast paths, which a keyword-assembled plan must not do.
+    if plan then plan.explicitClauses = true end
+    return plan
+end
+
+-- Both bare splitters, each tried through to a finished plan. Chaining them
+-- with `or` on the COMMAND list was wrong: when the label run produced commands
+-- that then failed to resolve, the parse-based splitter never got its turn.
+-- All three bare readings, most trustworthy first, each carried through to a
+-- finished plan. Chaining them on the COMMAND list would be wrong: when one
+-- produces commands that then fail to resolve, the next must still get a turn.
+--
+-- The whole group stays a LAST resort. Offering the scope-anchored split early
+-- was tried and reverted: a clause can itself hold two controls ("player name
+-- on portrait on", "player hp text left current right percent") and the
+-- single-control resolver returns only the first, a truncation no change count
+-- can reveal. Every such sentence already has a strategy that reads it whole,
+-- and those strategies must keep it.
+local function BarePlanFor(text)
+    local attempts = {
+        function() return BareLabelValueRun(text) end,
+        function() return BareParseSplit(text, true) end,
+        function() return BareParseSplit(text, false) end,
+    }
+    for i = 1, #attempts do
+        local commands = attempts[i]()
+        local plan = commands and CommandsToClausePlan(commands) or nil
+        if plan then return plan end
+    end
+    return nil
+end
+
 function P.ParseCompound(normalized, raw, normalParsed)
     if (tonumber(P._compoundDepth) or 0) > 0 then return nil end
     local text = SafeText(raw ~= "" and raw or normalized)
@@ -2563,7 +3112,7 @@ function P.ParseCompound(normalized, raw, normalParsed)
     if normalParsed and normalParsed.kind ~= "changes" and normalParsed.kind ~= "ambiguous" and normalParsed.kind ~= "unknown" then return nil end
 
     local hasJoin = text:find(" and ", 1, true) or text:find(" und ", 1, true)
-    if not LooksLikeCompoundCandidate(text, hasJoin) then return nil end
+    local looksCompound = LooksLikeCompoundCandidate(text, hasJoin)
     local previousSimpleParseCache = P._compoundSimpleParseCache
     P._compoundSimpleParseCache = {}
     local function finish(result)
@@ -2581,6 +3130,51 @@ function P.ParseCompound(normalized, raw, normalParsed)
             return PlanSignature(candidate) ~= normalSignature, count
         end
         return false, count
+    end
+
+    -- Clause-by-clause resolution is the most faithful reading available, so
+    -- it is offered before any keyword strategy can win on change count alone.
+    --
+    -- It is also the one strategy allowed to run when LooksLikeCompoundCandidate
+    -- said no. That gate turns the whole compound path off for any sentence
+    -- mixing an aura filter term with an aura kind term, because the aura
+    -- filtering conversation owns that wording -- but the exclusion also caught
+    -- explicit two-control commands ("set Boss Buff Not Cancelable Filter to on
+    -- and Boss Buff Important Filter to on"), which the filter lane answers by
+    -- applying whichever filter it recognised first. Requiring every clause to
+    -- name its own control AND its own value keeps conversational filter
+    -- phrasing ("show only my target buffs") with its lane, where it belongs.
+    -- The bare splitters are NOT offered here. Four different guard designs
+    -- were tried at this precedence and each one traded one reviewed contract
+    -- for another, because a clause can hold two controls and the
+    -- single-control resolver returns the first without saying so. The
+    -- consumption test below catches most of that, but not a fragment like
+    -- "right percent" that is not a standalone command. They run as a last
+    -- resort instead, where a wrong split can only replace no answer at all.
+    -- The scope-anchored bare split shares the explicit form's precedence: its
+    -- clauses each parse as a complete command, begin on a frame word, and are
+    -- checked for truncation by re-attaching the clause qualifier to whatever
+    -- words are left over. The UNRESTRICTED search stays a last resort below.
+    local explicitClauses = ExplicitClauseCommands(text)
+    if not explicitClauses then
+        local anchored = BareParseSplit(text, true)
+        local anchoredPlan = anchored and CommandsToClausePlan(anchored) or nil
+        if anchoredPlan and anchoredPlan.changes and #anchoredPlan.changes > 1 then
+            explicitClauses = anchoredPlan
+        end
+    end
+    if explicitClauses then
+        local clauseOk, clauseCount = accepted(explicitClauses)
+        if clauseOk and clauseCount >= 2 then return finish(explicitClauses) end
+    end
+    if not looksCompound then
+        -- An unpunctuated run has no joiner and no "to", so none of the shape
+        -- tests above can recognise it -- only the label index can. Its own
+        -- guards (a set-verb, no joiner, no "to", every phrase resolving to a
+        -- unique visible label) keep the scan off ordinary sentences.
+        local barePlan = BarePlanFor(text)
+        if barePlan and accepted(barePlan) then return finish(barePlan) end
+        return finish(nil)
     end
 
     if text:find(" but ", 1, true) then
@@ -2675,6 +3269,15 @@ function P.ParseCompound(normalized, raw, normalParsed)
         if candidate and accepted(candidate) then
             if not best or ChangeCount(candidate) > ChangeCount(best) then best = candidate end
         end
+    end
+    if not best then
+        -- Last resort, and only ever last: an unpunctuated run of control names
+        -- and values ("set Boss Buff Icons Per Row 21 Boss Buff Show Cooldown
+        -- Swipe off"). Offering it earlier let it claim shapes the shared-scope
+        -- strategies already read correctly -- "set party width 120 height 36
+        -- raid width 140 height 42" came back with the Raid width first.
+        local barePlan = BarePlanFor(text)
+        if barePlan and accepted(barePlan) then best = barePlan end
     end
     return finish(best)
 end

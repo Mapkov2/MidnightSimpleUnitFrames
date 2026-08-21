@@ -852,6 +852,25 @@ local function SceneAuraLaneAvailable(scene, cfg, defaultMax)
         and (tonumber(cfg.max) or defaultMax or 0) > 0
 end
 
+--- A compiled Auras3 lane carries a resolved layout signature; a raw config
+--- never does. The two spell the cooldown text differently, so every reader of
+--- that flag has to branch on the same test.
+local function IsRuntimeAuraLane(cfg)
+    return cfg._msufA3LayoutSignature ~= nil and cfg.initialAnchor ~= nil
+        and cfg.xSign ~= nil and cfg.ySign ~= nil
+end
+
+--- The CD/Stack chip owns the timer and stack texts printed on the aura icons,
+--- so it is only "on in settings" when a lane that draws icons actually prints
+--- one of them. Reporting it available off the bare lane made the chip claim a
+--- layer that had nothing to show.
+local function SceneAuraLaneTextAvailable(scene, cfg, defaultMax)
+    if not SceneAuraLaneAvailable(scene, cfg, defaultMax) then return false end
+    if cfg.showStacks ~= false then return true end
+    if IsRuntimeAuraLane(cfg) then return cfg.showCooldownText == true end
+    return cfg.showCooldown ~= false
+end
+
 local function SceneLayerOn(scene, key)
     return scene.layerAvailable[key] ~= false and scene.layerVisible[key] ~= false
 end
@@ -1067,10 +1086,10 @@ local function BuildScene(box, reason)
         powerTextEnabled = (gf and gf.IsPowerTextEnabled and gf.IsPowerTextEnabled(kind, conf))
             or conf.showPowerText == true or conf.showPower == true
     end
-    local customAuraText = SceneAuraLaneAvailable(scene, scene.buffCfg, 6)
-        or SceneAuraLaneAvailable(scene, scene.trackedBuffCfg, 4)
-        or SceneAuraLaneAvailable(scene, scene.debuffCfg, 6)
-        or SceneAuraLaneAvailable(scene, scene.externalCfg, 2)
+    local customAuraText = SceneAuraLaneTextAvailable(scene, scene.buffCfg, 6)
+        or SceneAuraLaneTextAvailable(scene, scene.trackedBuffCfg, 4)
+        or SceneAuraLaneTextAvailable(scene, scene.debuffCfg, 6)
+        or SceneAuraLaneTextAvailable(scene, scene.externalCfg, 2)
     local textAvailable
     if runtimeSpec then
         textAvailable = runtimeSpec.showName == true
@@ -1238,18 +1257,28 @@ local function FinalizeScene(scene)
     local function ElementLevel(layer, fallback, detail)
         return PreviewElementLevel(mock, S.Layers, layer, fallback, detail)
     end
-    local function SelectedSpellEffectLevel(layer, priority)
+    --- Mirror of Layers.AuraEffectLevel inside the preview's private band. The
+    --- shared renderer floors every full-frame effect above the surface it
+    --- recolors -- the health bar, or the Name overlay for a Name Overlay --
+    --- so a low Layer cannot be drawn under the very thing it tints. Rebasing
+    --- the root into the local band has to carry that floor along or the box
+    --- shows a different stacking order than the frames.
+    local function SpellEffectPreviewLevel(layer, priority, kind)
         local level = ElementLevel(layer, 0, 11 - priority)
-        local effect = scene.selectedSpellEffect
-        if type(effect) == "table" and tostring(effect.type or "none"):lower() == "namecolor" then
-            -- The shared renderer already places Name Overlay above its source.
-            -- Preserve that one target floor when Group Preview rebases the
-            -- selected effect into its private frame-level band.
-            local nameOwner = mock._nameFS and mock._nameFS.GetParent and mock._nameFS:GetParent()
-            local nameLevel = nameOwner and nameOwner.GetFrameLevel and tonumber(nameOwner:GetFrameLevel())
-            if nameLevel ~= nil then level = max(level, nameLevel + 1) end
+        local owner
+        if kind == "namecolor" then
+            owner = mock._nameFS and mock._nameFS.GetParent and mock._nameFS:GetParent()
+        else
+            owner = mock._health
         end
+        local ownerLevel = owner and owner.GetFrameLevel and tonumber(owner:GetFrameLevel())
+        if ownerLevel ~= nil then level = max(level, ownerLevel + 1) end
         return level
+    end
+    local function SelectedSpellEffectLevel(layer, priority)
+        local effect = scene.selectedSpellEffect
+        return SpellEffectPreviewLevel(layer, priority,
+            type(effect) == "table" and tostring(effect.type or "none"):lower() or nil)
     end
     PlaceTextHandles(scene)
     local liveStrata, hostStrata = PreviewHostStrata(scene)
@@ -1328,7 +1357,8 @@ local function FinalizeScene(scene)
             local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
             local effectLayer = S.ClampLayer(effectRoot._msufSpellPreviewLayer, 0)
             ApplyHandleStrata(scene, effectRoot, "AUTO", liveStrata, hostStrata)
-            SetPreviewFrameLevel(effectRoot, ElementLevel(effectLayer, 0, 11 - priority))
+            SetPreviewFrameLevel(effectRoot, SpellEffectPreviewLevel(effectLayer, priority,
+                effectRoot._msufSpellPreviewKind))
         end
         local iconEffectRoot = handle._msufSpellPreviewIconEffectRoot
         if iconEffectRoot and iconEffectRoot.IsShown and iconEffectRoot:IsShown() then
@@ -1396,6 +1426,13 @@ local function FinalizeScene(scene)
         if button.Refresh then button:Refresh() end
     end
     box._visibleLayerButtonCount = visibleLayerButtonCount
+    -- The in-world dummies answer to the same rail. Pushing from here instead of
+    -- from the chip's OnClick covers every route into the state -- click, Shift
+    -- solo, Assistant command, page re-entry -- and the engine compares a
+    -- signature, so a refresh that changed nothing costs one string.
+    if scene.gf and type(scene.gf.SetPreviewLayerFilter) == "function" then
+        scene.gf.SetPreviewLayerFilter(scene.layerVisible, scene.soloLayer)
+    end
     if box._selectedHandle and box._selectedHandle.IsShown and not box._selectedHandle:IsShown() then S.SelectHandle(nil) end
     S.RefreshHandleSelection(box)
 end
@@ -1580,8 +1617,7 @@ local function RenderAuras(scene)
     local function LayoutAuraGroup(handle, groupKey, cfg, defaults)
         cfg = cfg or {}
         defaults = defaults or {}
-        local runtimeLane = cfg._msufA3LayoutSignature ~= nil
-            and cfg.initialAnchor ~= nil and cfg.xSign ~= nil and cfg.ySign ~= nil
+        local runtimeLane = IsRuntimeAuraLane(cfg)
         local maxIcons = Int(cfg.max, defaults.max or 6, 0, 40)
         local perRow = Int(cfg.perRow, defaults.perRow or maxIcons, 1, 40)
         local rawSize = cfg.size or defaults.size or 16
@@ -1595,10 +1631,19 @@ local function RenderAuras(scene)
         if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
         if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
         local textScale = compiledLane and previewScale or laneScale
+        -- CD/Stack is a layer chip of its own, so the icon texts have to follow
+        -- it exactly like the lane icons follow theirs. The texts hang off the
+        -- lane handle, and soloing CD/Stack dims that handle to 0.15 -- divide
+        -- that dimming back out, or the one soloed layer is the only thing on
+        -- the stage that cannot be read.
+        local auraTextOn = SceneLayerOn(scene, "auraText")
+        local laneAlpha = SceneLayerAlpha(scene, groupKey)
+        local auraTextAlpha = min(1, SceneLayerAlpha(scene, "auraText") / max(0.0001, laneAlpha))
         local showCooldown
         if runtimeLane then showCooldown = cfg.showCooldownText == true
         else showCooldown = cfg.showCooldown ~= false end
-        local showStacks = cfg.showStacks ~= false
+        showCooldown = showCooldown and auraTextOn
+        local showStacks = cfg.showStacks ~= false and auraTextOn
         local showSwipe = cfg.showCooldownSwipe ~= false
         local barOnly = cfg.showDurationBar == true and (cfg.durationBarDisplay or "BAR_ONLY") == "BAR_ONLY"
         local cooldownSwipeReverse = cfg.cooldownSwipeReverse == true
@@ -1766,6 +1811,7 @@ local function RenderAuras(scene)
                 if stack then
                     SetPreviewFont(stack, stackSize)
                     stack:SetTextColor(1, 1, 1, 1)
+                    stack:SetAlpha(auraTextAlpha)
                     PlaceAuraPreviewText(stack, tex, stackAnchor, stackX, stackY)
                     stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
                     stack:SetShown(showStacks)
@@ -1773,6 +1819,7 @@ local function RenderAuras(scene)
                 if timer then
                     SetPreviewFont(timer, cooldownSize)
                     timer:SetTextColor(1, 1, 1, 1)
+                    timer:SetAlpha(auraTextAlpha)
                     PlaceAuraPreviewText(timer, tex, cooldownAnchor, cooldownX, cooldownY)
                     timer:SetText(showCooldown and (auraState and auraState.text or (i % 2 == 0 and "12" or "")) or "")
                     timer:SetShown(showCooldown)
@@ -2237,6 +2284,7 @@ function Render.Install(box, ctx, deps)
                             runtimeRoot._msufSpellPreviewPriority = max(1,
                                 min(10, floor((tonumber(previewEffect.priority) or 5) + 0.5)))
                             runtimeRoot._msufSpellPreviewLayer = S.ClampLayer(previewEffect.layer, 0)
+                            runtimeRoot._msufSpellPreviewKind = kind
                             return
                         end
                     end
@@ -2259,6 +2307,7 @@ function Render.Install(box, ctx, deps)
             root._msufSpellPreviewStrata = effect.strata or handle._msufSpellIndicatorStrata
             root._msufSpellPreviewPriority = max(1, min(10, floor((tonumber(effect.priority) or 5) + 0.5)))
             root._msufSpellPreviewLayer = S.ClampLayer(effect.layer, 0)
+            root._msufSpellPreviewKind = tostring(effect.type or "none"):lower()
             local color = effect.color or {}
             local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
             local a = color[4] or 1

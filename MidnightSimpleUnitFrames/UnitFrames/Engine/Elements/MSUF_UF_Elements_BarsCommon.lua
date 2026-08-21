@@ -72,6 +72,20 @@ local SafeNumber = Secrets.SafeNumber or tonumber
 local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
 local SECRET_NATIVE_CLASS_COLOR = 2
 
+-- Elemental Maelstrom and Shadow Insanity move to MSUF's Class Resource row.
+-- While that row is active, the Player power surface deliberately represents
+-- the paired Mana resource instead of UnitPowerType("player"). Keep this one
+-- allocation-free identity resolver shared by the bar, text values, percent
+-- formatting and color paths so they cannot drift apart again.
+local function ResolveDisplayedPowerIdentity(unit, powerType, powerToken)
+  if unit == "player"
+    and (_G.MSUF_EleMaelstromActive == true or _G.MSUF_ShadowManaActive == true)
+  then
+    return POWER_TYPE_MANA, "MANA", true
+  end
+  return powerType, powerToken, false
+end
+
 local npcTypeReferenceLevel
 local npcTypeReferenceInstanceType
 local npcTypeLieutenantLevel
@@ -821,11 +835,9 @@ local function ExternalFrameWidth(frameName, relativeTo)
     return nil
   end
   local frame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(frameName)) or _G[frameName]
-  if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true or (frame.IsShown and not frame:IsShown()) then
-    return nil
-  end
   local widthFn = _G.MSUF_CDM_GetScaledWidth
-  local width = type(widthFn) == "function" and widthFn(frame, relativeTo) or frame:GetWidth()
+  local width = type(widthFn) == "function" and widthFn(frame, relativeTo) or nil
+  if issecretvalue(width) == true then return nil end
   width = tonumber(width)
   if width and width >= 20 then
     return width
@@ -1566,8 +1578,14 @@ local function PowerColor(frame, unit, powerType, token, metaKnown)
   if metaKnown == true then
     tokenKey = token
     powerTypeKey = powerType
-  elseif IsUnitToken(unit) and UnitPowerType then
-    powerType, token = UnitPowerType(unit)
+  elseif IsUnitToken(unit) then
+    local displayMana
+    if unit == "player" then
+      powerType, token, displayMana = ResolveDisplayedPowerIdentity(unit)
+    end
+    if displayMana ~= true and UnitPowerType then
+      powerType, token = UnitPowerType(unit)
+    end
     tokenKey = issecretvalue(token) ~= true and token or nil
     powerTypeKey = issecretvalue(powerType) ~= true and powerType or nil
   end
@@ -1603,6 +1621,7 @@ MSUF.UFBarTextCommon = {
   UnitPower = UnitPower,
   UnitPowerMax = UnitPowerMax,
   UnitPowerType = UnitPowerType,
+  ResolveDisplayedPowerIdentity = ResolveDisplayedPowerIdentity,
   UnitHealthPercent = UnitHealthPercent,
   UnitPowerPercent = UnitPowerPercent,
   AbbreviateNumbers = AbbreviateNumbers,

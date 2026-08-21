@@ -1164,11 +1164,16 @@ function GF.EnsureStableGridPosition(kind, count, conf)
     if conf.positionMode == STABLE_GRID_POSITION_MODE then return false end
     if conf.positionMode ~= LEGACY_GRID_POSITION_MODE then return false end
 
-    local dx, dy = GF.GetGridMetrics(kind, count)
+    -- Undo exactly the delta the legacy stamp added. Whoever converts first
+    -- (live header, Edit Mode, preview) otherwise supplies a different count
+    -- than the migration did, and the difference is written to disk for good.
+    local pinnedCount = tonumber(conf.positionMigrationCount)
+    local dx, dy = GF.GetGridMetrics(kind, pinnedCount or count)
     local fallbackX = IsRaidLikeKind(kind) and -500 or -400
     conf.offsetX = (tonumber(conf.offsetX) or fallbackX) - (tonumber(dx) or 0)
     conf.offsetY = (tonumber(conf.offsetY) or 0) - (tonumber(dy) or 0)
     conf.positionMode = STABLE_GRID_POSITION_MODE
+    conf.positionMigrationCount = nil
     return true
 end
 
@@ -1198,10 +1203,14 @@ end
 local function MigrateGroupPositionToGridCenter(conf, kind)
     if not conf then return end
     if conf.positionMode == LEGACY_GRID_POSITION_MODE or conf.positionMode == STABLE_GRID_POSITION_MODE then return end
-    local dx, dy = GF.GetGridMetrics(kind, GetMigrationCount(kind, conf))
+    local migrationCount = GetMigrationCount(kind, conf)
+    local dx, dy = GF.GetGridMetrics(kind, migrationCount)
     conf.offsetX = (conf.offsetX or (IsRaidLikeKind(kind) and -500 or -400)) + dx
     conf.offsetY = (conf.offsetY or 0) + dy
     conf.positionMode = LEGACY_GRID_POSITION_MODE
+    -- Carry the count forward so EnsureStableGridPosition can subtract the very
+    -- same delta instead of whatever roster the converting surface happens to see.
+    conf.positionMigrationCount = migrationCount
 end
 
 ---

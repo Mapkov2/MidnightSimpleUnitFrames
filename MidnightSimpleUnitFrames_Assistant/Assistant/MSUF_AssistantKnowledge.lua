@@ -128,7 +128,6 @@ local PAGE_TO_UNIT = {
     uf_targettarget = "targettarget",
     uf_focustarget = "focustarget",
     uf_boss = "boss",
-    uf_arena = "arena",
 }
 
 local PAGE_FRAME_TYPES = {
@@ -243,7 +242,6 @@ local PAGE_LABEL_OVERRIDES = {
     uf_focus = "Focus",
     uf_pet = "Pet",
     uf_boss = "Boss",
-    uf_arena = "Arena",
     uf_targettarget = "Target of Target",
     uf_focustarget = "Focus Target",
 }
@@ -780,12 +778,11 @@ local QUERY_SCOPE_ORDER = {
     { unit = "focus", terms = { "focus" } },
     { unit = "pet", terms = { "pet" } },
     { unit = "boss", terms = { "boss" } },
-    { unit = "arena", terms = { "arena" } },
 }
 
 local GROUP_QUERY_UNITS = { party = true, raid = true, mythicraid = true }
 local UNIT_QUERY_UNITS = {
-    player = true, target = true, focus = true, pet = true, boss = true, arena = true,
+    player = true, target = true, focus = true, pet = true, boss = true,
     targettarget = true, focustarget = true,
 }
 
@@ -1170,7 +1167,6 @@ local PAGE_HELP = {
         actions = { "Open Focus Target" },
     },
     uf_boss = { title = "Boss Frames help", lines = { "You can change Boss frame visibility, size, position, name/HP/power text, raid marker/range fade, and boss cast bar options." }, actions = { "Open Boss Frames", "Open Cast Bars" } },
-    uf_arena = { title = "Arena Frames help", lines = { "You can change Arena frame visibility, size, position, name/HP/power text, range fade, and arena cast bar options." }, actions = { "Open Arena Frames", "Open Cast Bars" } },
     opt_castbar = {
         title = "Cast Bars help",
         lines = {
@@ -1246,7 +1242,6 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "focus help", "help focus", "focus frame help" }, page = "uf_focus" },
     { terms = { "pet help", "help pet", "pet frame help" }, page = "uf_pet" },
     { terms = { "boss help", "boss frames help", "help boss frames" }, page = "uf_boss" },
-    { terms = { "arena help", "arena frames help", "help arena frames" }, page = "uf_arena" },
     { terms = { "castbar help", "castbars help", "help castbar", "target castbar help", "zauberleiste hilfe" }, page = "opt_castbar" },
     { terms = { "bar help", "bars help", "help bar", "help bars", "texture help", "help texture" }, page = "opt_bars" },
     { terms = { "color help", "colors help", "help color", "help colors", "farbe hilfe", "farben hilfe" }, page = "opt_colors" },
@@ -1388,7 +1383,7 @@ end
 
 local WHAT_CAN_UNIT_FRAME_SCOPE_TERMS = {
     "player", "target", "focus", "pet", "target of target", "targettarget", "focus target", "focustarget",
-    "boss", "arena", "unit frame", "unit frames", "unitframe", "unitframes",
+    "boss", "unit frame", "unit frames", "unitframe", "unitframes",
 }
 
 local WHAT_CAN_UNIT_TEXT_TERMS = {
@@ -1438,7 +1433,6 @@ local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "uf_targettarget", terms = { "target of target", "targettarget" } },
     { page = "uf_focustarget", terms = { "focus target", "focustarget" } },
     { page = "uf_boss", terms = { "boss frame", "boss frames", "boss" } },
-    { page = "uf_arena", terms = { "arena frame", "arena frames", "arena" } },
     { page = "uf_player", terms = { "player frame", "player", "self frame" } },
     { page = "uf_target", terms = { "target frame", "target" } },
     { page = "uf_focus", terms = { "focus frame", "focus" } },
@@ -1691,7 +1685,7 @@ local GROUP_INDICATOR_HELP_TERMS = {
 
 local UNIT_FRAME_SCOPE_TERMS = {
     "player", "target", "focus", "pet", "target of target", "targettarget", "focus target", "focustarget",
-    "boss", "arena", "unit frame", "unit frames", "unitframe", "unitframes",
+    "boss", "unit frame", "unit frames", "unitframe", "unitframes",
 }
 
 local UNIT_TEXT_HELP_TERMS = {
@@ -1764,7 +1758,7 @@ local ADDON_COMPANION_RELATION_WORDS = {
 
 local ADDON_COMPANION_INTERNAL_WORDS = {
     "setting", "settings", "option", "options", "control", "controls",
-    "player", "target", "focus", "boss", "arena", "party", "raid", "unitframe", "unitframes", "frame", "frames",
+    "player", "target", "focus", "boss", "party", "raid", "unitframe", "unitframes", "frame", "frames",
     "width", "height", "color", "texture", "aura", "buff", "debuff", "castbar", "profile", "profiles", "search", "version",
     "einstellung", "einstellungen", "optionen", "steuerung", "spieler", "ziel", "breite", "hoehe", "farbe", "profil", "suche", "version",
 }
@@ -2162,6 +2156,19 @@ local function PriorityFramesAnswer(norm)
         or norm:match("^enable%s+") or norm:match("^disable%s+")
         or norm:match("^turn%s+on%s+") or norm:match("^turn%s+off%s+")
         or norm:match("^oeffne%s+") or norm:match("^aktiviere%s+") or norm:match("^deaktiviere%s+")
+    then
+        return nil
+    end
+    -- "Setting changes" above meant more than the polarity verbs: the plainest
+    -- form of all is "set <control> to <value>", and without it "set Priority
+    -- Frames Include Tanks Automatically to off" was answered with co-tank
+    -- help. Single commands survived only because the Router's exact-label
+    -- lane rescued them downstream -- a compound sentence has no such rescue,
+    -- so nothing was applied at all. A value tail is required so that "set up
+    -- priority frames" stays a how-to question.
+    if (norm:match("^set%s+") or norm:match("^change%s+") or norm:match("^make%s+")
+        or norm:match("^adjust%s+") or norm:match("^setze%s+") or norm:match("^stelle%s+"))
+        and (norm:find("%f[%a]to%f[%A]") or norm:find("=", 1, true))
     then
         return nil
     end
@@ -3121,7 +3128,7 @@ end
 
 local NO_MATCH_SEARCH_SIGNAL_TERMS = {
     "msuf", "menu", "setting", "settings", "option", "options", "page", "where", "help", "explain", "find", "search",
-    "player", "target", "focus", "pet", "boss", "arena", "party", "raid", "mythic", "frame", "frames", "unitframe", "group",
+    "player", "target", "focus", "pet", "boss", "party", "raid", "mythic", "frame", "frames", "unitframe", "group",
     "health", "hp", "power", "mana", "name", "text", "font", "bar", "bars", "texture", "color", "colour",
     "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
     "width", "height", "size", "scale", "alpha", "opacity", "anchor", "position", "offset", "spacing", "gap",

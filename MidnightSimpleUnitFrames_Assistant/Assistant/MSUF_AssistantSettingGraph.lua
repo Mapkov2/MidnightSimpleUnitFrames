@@ -478,15 +478,11 @@ local function ApplyUnitStatusComponentGates(state)
             if type(spec) == "table" and (not spec.units or spec.units[unit] == true) then
                 local parent = unit .. "." .. tostring(spec.show or "")
                 for _, field in ipairs(fields) do
-                    -- Inline raid-group text reuses the normal name font, but
-                    -- owns its independent status layer.
-                    if not (spec.inlineName and field == "size") then
-                        local child = spec[field]
-                        if type(child) == "string" and child ~= "" then
-                            AddComponentGate(state, seen, unit .. "." .. child, parent,
-                                "unit-status-component", "This status detail is visible only while its unit-frame status component is shown.",
-                                "MSUF_AssistantRegistry_Unitframes_StatusData.lua:STATUS_CONTROL_SPECS and Unitframes_Status.lua registration")
-                        end
+                    local child = spec[field]
+                    if type(child) == "string" and child ~= "" then
+                        AddComponentGate(state, seen, unit .. "." .. child, parent,
+                            "unit-status-component", "This status detail is visible only while its unit-frame status component is shown.",
+                            "MSUF_AssistantRegistry_Unitframes_StatusData.lua:STATUS_CONTROL_SPECS and Unitframes_Status.lua registration")
                     end
                 end
                 if spec.value == "raidgroupname" then

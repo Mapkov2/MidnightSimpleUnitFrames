@@ -354,7 +354,7 @@ local function ResolvePreviewHealthTextColor(renderState, runtimeText, conf, gen
 end
 local function PreviewLiveFrame(key)
     local uf = MSUF and MSUF.UF
-    local unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
+    local unit = key == "boss" and "boss1" or key
     local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame(unit) or nil
     if not frame then frame = uf and uf.frames and uf.frames[unit] or nil end
     return frame
@@ -386,7 +386,7 @@ end
 local function ShortenCastbarPreviewSpellName(key, text)
     local shorten = _G.MSUF_ShortenCastbarSpellName
     if type(shorten) ~= "function" then return text end
-    return shorten({ unit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key }, text)
+    return shorten({ unit = key == "boss" and "boss1" or key }, text)
 end
 local function HideCastbarPreviewIconBorder(icon)
     local border = icon and icon._msufCastbarPreviewBorder
@@ -728,7 +728,7 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         AnchorCastbarPreviewText(mock.cast.text, surface, textPosition, textX, textY, CastbarPreviewJustifyForPosition(textPosition), S)
         local textMaxWidth = ReadCastbarNum(g, key, "SpellNameMaxWidth", "bossCastSpellNameMaxWidth", 0)
         local truncate = NormalizeCastbarPreviewTruncate(CastbarPreview.ReadString(g, key, "SpellNameTruncate", "bossCastSpellNameTruncate", "AUTO"))
-        local spellName = ShortenCastbarPreviewSpellName(key, TR((key == "boss" and "Celestial Ruin") or (key == "arena" and "Greater Pyroblast") or "Arcane Surge"))
+        local spellName = ShortenCastbarPreviewSpellName(key, TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
         mock.cast.text:SetText(spellName)
         if truncate == "NONE" then
             local naturalWidth = (mock.cast.text.GetStringWidth and mock.cast.text:GetStringWidth()) or scw
@@ -791,9 +791,6 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         if key == "boss" then
             timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
             timeY = tonumber(g.bossCastTimeOffsetY) or 0
-        elseif key == "arena" then
-            timeX = -2 + (tonumber(g.arenaCastTimeOffsetX) or 0)
-            timeY = tonumber(g.arenaCastTimeOffsetY) or 0
         end
         local timeSize = ReadCastbarNum(g, key, "TimeFontSize", "bossCastTimeFontSize", g.castbarTimeFontSize or g.fontSize or 14)
         if not timeSize or timeSize <= 0 then timeSize = g.fontSize or 14 end
@@ -1619,8 +1616,8 @@ function Preview.Refresh(box, reason)
     local ch = canvas:GetHeight() or 180
     if cw <= 1 then cw = 600 end
     if ch <= 1 then ch = 180 end
-    local w = tonumber(runtimeSpec and runtimeSpec.width) or tonumber(conf.width or conf.frameWidth) or ((key == "boss" or key == "arena") and 180 or (key == "focus" and 180 or 275))
-    local h = tonumber(runtimeSpec and runtimeSpec.height) or tonumber(conf.height or conf.frameHeight) or ((key == "boss" or key == "arena") and 30 or (key == "focus" and 30 or 40))
+    local w = tonumber(runtimeSpec and runtimeSpec.width) or tonumber(conf.width or conf.frameWidth) or (key == "boss" and 180 or (key == "focus" and 180 or 275))
+    local h = tonumber(runtimeSpec and runtimeSpec.height) or tonumber(conf.height or conf.frameHeight) or (key == "boss" and 30 or (key == "focus" and 30 or 40))
     w, h = R.ClampUnitPreviewSize(w, h)
     local mode = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.side) or conf.portraitMode
     local hasPortrait
@@ -1684,7 +1681,7 @@ function Preview.Refresh(box, reason)
     local castEnabled = runtimeSpec and runtimeSpec.castbar and runtimeSpec.castbar.enabled == true
     if not (runtimeSpec and runtimeSpec.castbar) then castEnabled = CastbarEnabled(key, g) end
     if box._msuf2ColorPainterForceCastbar == true then castEnabled = true end
-    local castW, castBarH = ReadCastbarSize(key, g, w, (key == "boss" or key == "arena") and 12 or 18)
+    local castW, castBarH = ReadCastbarSize(key, g, w, key == "boss" and 12 or 18)
     local castXKey, castYKey, castDefX, castDefY = CastbarOffsetFields(key)
     local castOffsetX = castXKey and tonumber(g[castXKey]) or nil
     local castOffsetY = castYKey and tonumber(g[castYKey]) or nil
@@ -1702,7 +1699,7 @@ function Preview.Refresh(box, reason)
         end
     end
     box._bossBorderInset = 0
-    if (key == "boss" or key == "arena")
+    if key == "boss"
         and runtimeSpec and runtimeSpec.border
         and runtimeSpec.border.enabled == true
     then
@@ -1762,32 +1759,20 @@ function Preview.Refresh(box, reason)
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
     local classPowerSegCount = PreviewClassPowerSegmentCount(classPowerPreviewSpec, 10)
     box._runtimeClassPowerW = classPowerOn and PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount) or 0
+    -- Augmentation no longer builds a composite surface: Ebon Might is rendered
+    -- by the ordinary Player Power bar and Essence stays an ordinary Class
+    -- Resource, so there is no second class row and no shared geometry. Only the
+    -- power bar's *content* changes, which the render pass reads from
+    -- _runtimePowerEbonMight below.
     box._runtimeClassPowerSecondarySpec = classPowerPreviewSpec and classPowerPreviewSpec.secondaryTimer
-    box._runtimeClassPowerSecondaryOn = classPowerOn
+    box._runtimeClassPowerSecondaryOn = false
+    box._runtimeClassPowerSecondaryH = 0
+    box._runtimeAugCompositePreview = false
+    box._runtimePowerEbonMight = key == "player"
+        and classPowerOn
         and type(box._runtimeClassPowerSecondarySpec) == "table"
         and bars.showEbonMight ~= false
-    box._runtimeClassPowerSecondaryH = box._runtimeClassPowerSecondaryOn
-        and PreviewSecondaryClassTimerHeight(runtimePower, conf) or 0
-    box._runtimeAugCompositePreview = box._runtimeClassPowerSecondaryOn == true
         and classPowerPreviewSpec and classPowerPreviewSpec.key == "evoker_augmentation_ebon" or false
-    if box._runtimeAugCompositePreview == true then
-        -- Runtime keeps the ordinary Player Power StatusBar as an invisible
-        -- geometry carrier even when the user disabled its Mana surface.  The
-        -- composite must therefore keep following detached/embed settings;
-        -- only the ordinary Power visuals and events disappear.
-        detachedPower = CanDetachPowerBarKey(key) and (
-            (runtimePower and runtimePower.detached == true)
-            or (runtimePower == nil and conf.powerBarDetached == true)
-        )
-        box._runtimePowerEmbedded = not detachedPower and (
-            (runtimePower and runtimePower.embed ~= false)
-            or (runtimePower == nil and conf.embedPowerBarIntoHealth == true)
-            or (runtimePower == nil and conf.embedPowerBarIntoHealth == nil and bars.embedPowerBarIntoHealth ~= false)
-        ) or false
-        box._runtimePowerAttached = not detachedPower and box._runtimePowerEmbedded ~= true
-        box._runtimeHealthPowerInset = box._runtimePowerEmbedded == true
-            and (cpH + 2 + box._runtimeClassPowerSecondaryH) or 0
-    end
     box._runtimeDetachedPowerSyncClass = key == "player" and ((runtimePower and runtimePower.detachedSyncClass == true) or (runtimePower == nil and conf.detachedPowerBarSyncClassPower ~= false)) or false
     box._runtimeDetachedPowerX = tonumber(runtimePower and runtimePower.detachedX) or tonumber(conf.detachedPowerBarOffsetX) or 0
     box._runtimeDetachedPowerY = tonumber(runtimePower and runtimePower.detachedY) or tonumber(conf.detachedPowerBarOffsetY) or -4
@@ -2045,7 +2030,7 @@ function Preview.Refresh(box, reason)
         elseif key == "player" then
             cLeft = (w - castW) * 0.5 + castOffsetX
             cBottom = h + castOffsetY
-        elseif key == "boss" or key == "arena" then
+        elseif key == "boss" then
             cLeft = castOffsetX - box._bossBorderInset
             cBottom = castOffsetY - box._bossBorderInset - box._bossCastbarGap - castBarH
                 + (box._runtimePowerEmbedded == true and (tonumber(runtimePower and runtimePower.height) or ReadPowerBarHeight(conf)) or 0)
@@ -2058,7 +2043,6 @@ function Preview.Refresh(box, reason)
             local showTargetName = (key == "target" and g.castbarTargetShowTargetName == true)
                 or (key == "focus" and g.castbarFocusShowTargetName == true)
                 or (key == "boss" and g.showBossCastTargetName == true)
-                or (key == "arena" and g.showArenaCastTargetName == true)
             local targetPadX = showTargetName and (abs(R.ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0) or 0) + 96) or 0
             local targetPadY = showTargetName and (abs(R.ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1) or 1) + 24) or 0
             local detailPadX = max(
@@ -2394,8 +2378,8 @@ function Preview.Refresh(box, reason)
         cp.r, cp.g, cp.b = pr, pg, pb
         cp.animatedValue = animState and R.CPPreview.AnimatedValue and R.CPPreview.AnimatedValue(cp.preview, animState.elapsed) or nil
         if cp.token then cp.r, cp.g, cp.b = R.CPPreview.ResolveBaseColor(cp.preview, bars, pr, pg, pb) end
-        cp.isFull = R.CPPreview.IsFull(cp.preview, cp.animatedValue)
-        local _, fullR, fullG, fullB = R.CPPreview.ResolveFullColor(bars, cp.token, cp.r, cp.g, cp.b)
+        local fullEnabled, fullR, fullG, fullB = R.CPPreview.ResolveFullColor(bars, cp.token, cp.r, cp.g, cp.b)
+        cp.isFull = fullEnabled == true and R.CPPreview.IsFull(cp.preview, cp.animatedValue)
         cp.fullR, cp.fullG, cp.fullB = fullR, fullG, fullB
         cp.filledAlpha = tonumber(bars.classPowerFilledAlpha) or 0.95
         if cp.filledAlpha < 0 then cp.filledAlpha = 0 elseif cp.filledAlpha > 1 then cp.filledAlpha = 1 end
@@ -2513,10 +2497,10 @@ function Preview.Refresh(box, reason)
                 if segEdge then segEdge:Hide() end
                 cp.sr, cp.sg, cp.sb = cp.r, cp.g, cp.b
                 cp.charged = R.CPPreview.IsCharged(cp.preview, bars, i)
-                if cp.isFull then
-                    cp.sr, cp.sg, cp.sb = cp.fullR, cp.fullG, cp.fullB
-                elseif cp.charged then
+                if cp.charged then
                     cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveColor("CHARGED", 0.60, 0.20, 0.80)
+                elseif cp.isFull then
+                    cp.sr, cp.sg, cp.sb = cp.fullR, cp.fullG, cp.fullB
                 else
                     cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveSlotColor(bars, cp.token, i, cp.r, cp.g, cp.b)
                 end
@@ -2794,7 +2778,10 @@ function Preview.Refresh(box, reason)
     box._fontPreviewBaselineOffset = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
     if box._fontPreviewBaselineOffset < -4 then box._fontPreviewBaselineOffset = -4 elseif box._fontPreviewBaselineOffset > 4 then box._fontPreviewBaselineOffset = 4 end
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.nameText, nameRawSize, "name")
-    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.raidGroupNameText, nameRawSize, "name")
+    -- The inline group number carries its own size and only falls back to the
+    -- name font while raidGroupNameSize is unwritten. No local for the resolved
+    -- value: this Refresh function sits at Lua's 200 active-local limit.
+    ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.raidGroupNameText, tonumber(runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.size) or tonumber(conf.raidGroupNameSize) or nameRawSize, "name")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.totInlineSep, nameRawSize, "name")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.totInlineText, nameRawSize, "name")
     -- Reverse order renders the configured Right slot on the physical left
@@ -2932,7 +2919,9 @@ function Preview.Refresh(box, reason)
     local hpTextOn = conf.showHP ~= false
     if runtimeSpec then hpTextOn = runtimeSpec.showHealthText ~= false end
     local powerTextOn = PreviewPowerTextShown(runtimeSpec, conf)
-    if box._runtimeAugCompositePreview == true then powerTextOn = false end
+    -- Ebon Might's native duration binding owns the text on this bar, so the
+    -- ordinary power slots are dropped exactly as the config compiler does.
+    if box._runtimePowerEbonMight == true then powerTextOn = false end
     if detachedPowerManagedByClassPreview and box._runtimeDetachedPowerTextOnBar then powerTextOn = false end
     mock.nameText:SetShown(showNamePreview)
     local raidGroupCfg = runtimeStatus and runtimeStatus.raidGroup
@@ -3197,7 +3186,7 @@ function Preview.Refresh(box, reason)
         elseif bStyle == "CLASS_COLOR" then
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, cr, cg, cb, 1)
         elseif bStyle == "REACTION" then
-            local hostile = (key == "target" or key == "boss" or key == "arena" or key == "focus" or key == "focustarget")
+            local hostile = (key == "target" or key == "boss" or key == "focus" or key == "focustarget")
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, hostile and 1 or 0.1, hostile and 0.2 or 0.85, 0.1, 1)
         else
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, 1, 1, 1, 1)
@@ -3265,7 +3254,7 @@ function Preview.Refresh(box, reason)
             mock.cast:SetPoint("CENTER", mock, "CENTER", box._detachedCastBaseOffsetX, box._detachedCastBaseOffsetY)
         elseif key == "player" then
             mock.cast:SetPoint("BOTTOM", mock, "TOP", S(castOffsetX), S(castOffsetY))
-        elseif key == "boss" or key == "arena" then
+        elseif key == "boss" then
             mock.cast:SetPoint("TOPLEFT", mock, "BOTTOMLEFT",
                 S(castOffsetX - box._bossBorderInset),
                 S(castOffsetY - box._bossBorderInset - box._bossCastbarGap)

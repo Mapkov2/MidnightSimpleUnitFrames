@@ -138,15 +138,15 @@ end
 local COLOR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["castbar.text_color.spell_name"] = {
         "general.castbarPlayerSpellNameColor", "general.castbarTargetSpellNameColor",
-        "general.castbarFocusSpellNameColor", "general.bossCastSpellNameColor", "general.arenaCastSpellNameColor",
+        "general.castbarFocusSpellNameColor", "general.bossCastSpellNameColor",
     },
     ["castbar.text_color.time"] = {
         "general.castbarPlayerTimeColor", "general.castbarTargetTimeColor",
-        "general.castbarFocusTimeColor", "general.bossCastTimeColor", "general.arenaCastTimeColor",
+        "general.castbarFocusTimeColor", "general.bossCastTimeColor",
     },
     ["castbar.text_color.target_name"] = {
         "general.castbarPlayerTargetNameColor", "general.castbarTargetTargetNameColor",
-        "general.castbarFocusTargetNameColor", "general.bossCastTargetNameColor", "general.arenaCastTargetNameColor",
+        "general.castbarFocusTargetNameColor", "general.bossCastTargetNameColor",
     },
     ["bar_gradient.health.color"] = {
         "general.healthBarGradientColorR", "general.healthBarGradientColorG", "general.healthBarGradientColorB",
@@ -280,6 +280,11 @@ local function RequestGeneral(reason, opts)
 end
 
 local function ApplyColors()
+    -- The painter's Resources strip paints straight from these DB values and
+    -- has no writer of its own, so both apply paths poke it. Kept inline: this
+    -- file rides the 200 active-local ceiling.
+    local painter = M.ColorPainter
+    if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()
     if apply and type(apply.RequestColors) == "function" then
         return apply.RequestColors("MSUF2_COLORS")
@@ -389,6 +394,11 @@ function M._SetDispelTypeColorEnabled(dispelType, enabled)
     return true
 end
 local function ApplyClassPowerColors()
+    -- The painter's Resources strip paints straight from these DB values and
+    -- has no writer of its own, so both apply paths poke it. Kept inline: this
+    -- file rides the 200 active-local ceiling.
+    local painter = M.ColorPainter
+    if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()
     if apply and type(apply.RequestClassPower) == "function" then
         return apply.RequestClassPower("MSUF2_CLASSPOWER_COLORS", { colors = true, playerHP = true }, { preview = true, applyAll = false, colors = true, colorScope = "player" })
@@ -1152,7 +1162,7 @@ local function SetAllPortraitRGB(prefix, r, g, b)
     local db = DB()
     db.general = db.general or {}
     db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, g, b
-    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }) do
+    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
         db[key] = db[key] or {}
         db[key][prefix .. "R"], db[key][prefix .. "G"], db[key][prefix .. "B"] = r, g, b
     end
@@ -1170,7 +1180,7 @@ function M._SetAllTextureLayerRGB(prefix, r, g, b)
     local db = DB()
     db.general = db.general or {}
     db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, g, b
-    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }) do
+    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
         db[key] = db[key] or {}
         db[key][prefix .. "R"], db[key][prefix .. "G"], db[key][prefix .. "B"] = r, g, b
     end
@@ -1482,7 +1492,7 @@ end
 -- PrefixedStatusDef naming in one piece. Parked on M rather than a file local:
 -- this chunk is at Lua 5.1's 200-local ceiling and one more breaks the page.
 M._statusTextColor = {
-    units = ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|boss=Boss Frames|arena=Arena Frames",
+    units = ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|boss=Boss Frames",
     indicators = ValueTextPairs "levelIndicator=Level Text|raceIndicator=Race Text|classTextIndicator=Class Text|raidGroupName=Raid Group|statusText=Dead / Offline Text|statusGhostText=Ghost Text|statusAFKText=AFK Text|statusDNDText=DND Text",
     unitKeys = {},
     prefixKeys = {},
@@ -2091,7 +2101,6 @@ local function ContextUnitKey(context)
     if type(key) == "string" and key ~= "" then return key end
     local unit = ContextUnit(context)
     if unit:match("^boss%d+$") then return "boss" end
-    if unit:match("^arena%d+$") then return "arena" end
     return unit
 end
 local function ContextNPCHealthTarget(context)
@@ -2304,7 +2313,7 @@ FixedContextFactory("portrait.border", function()
     local target = ContextTarget("portrait.border", "Portrait border",
         function() return GeneralRGB("portraitBorderColor", 1, 1, 1) end,
         function(r, g, b) SetAllPortraitRGB("portraitBorderColor", r, g, b) end)
-    local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" },
+    local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" },
         { "portraitBorderColorR", "portraitBorderColorG", "portraitBorderColorB" }, ApplyColors)
     target.captureState, target.restoreState = state.captureState, state.restoreState
     return target
@@ -2313,7 +2322,7 @@ FixedContextFactory("portrait.background", function()
     local target = ContextTarget("portrait.background", "Portrait background",
         function() return GeneralRGB("portraitBgColor", 0.05, 0.05, 0.05) end,
         function(r, g, b) SetAllPortraitRGB("portraitBgColor", r, g, b) end)
-    local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" },
+    local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" },
         { "portraitBgColorR", "portraitBgColorG", "portraitBgColorB" }, ApplyColors)
     target.captureState, target.restoreState = state.captureState, state.restoreState
     return target
@@ -2328,7 +2337,7 @@ for _, texSlot in ipairs({
         local target = ContextTarget(slotId .. ".color", slotLabel,
             function() return GeneralRGB(slotPrefix .. "Color", 1, 1, 1) end,
             function(r, g, b) M._SetAllTextureLayerRGB(slotPrefix .. "Color", r, g, b) end)
-        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" },
+        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" },
             { slotPrefix .. "ColorR", slotPrefix .. "ColorG", slotPrefix .. "ColorB" }, M._ApplyTextureLayerColors)
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
@@ -2337,7 +2346,7 @@ for _, texSlot in ipairs({
         local target = ContextTarget(slotId .. ".gradient", M.Format("%s gradient end", Tr(slotLabel)),
             function() return GeneralRGB(slotPrefix .. "Gradient2", 0, 0, 0) end,
             function(r, g, b) M._SetAllTextureLayerRGB(slotPrefix .. "Gradient2", r, g, b) end)
-        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" },
+        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" },
             { slotPrefix .. "Gradient2R", slotPrefix .. "Gradient2G", slotPrefix .. "Gradient2B" }, M._ApplyTextureLayerColors)
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
@@ -2470,7 +2479,6 @@ FixedContextFactory("cast.kick_not_ready", function() return ContextTable("cast.
 -- 5.1 upvalue ceiling, so the DB reach-through goes via the exported globals.
 local CAST_DETAIL_PREFIX = {
     player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast",
-    arena = "arenaCast",
 }
 local function CastDetailContextTarget(context, detail, label, sharedId)
     local unit = ContextUnit(context)
@@ -3207,7 +3215,7 @@ local function BuildCastbarColors(ctx, b, CH)
     local detailW = detail._msuf2Width or ctx.width or 720
     local function DetailUnit()
         local value = tostring(M._colorsCastbarDetailUnit or "player")
-        if value == "target" or value == "focus" or value == "boss" or value == "arena" then return value end
+        if value == "target" or value == "focus" or value == "boss" then return value end
         return "player"
     end
     local function DetailRGB(suffix)
@@ -3226,7 +3234,7 @@ local function BuildCastbarColors(ctx, b, CH)
     LabelAt(detail, "Each castbar text can override the shared castbar text color. Target text exists on Target and Focus only.",
         12, -8, detailW - 28, "GameFontHighlightSmall", T.colors.muted)
     local detailUnitDropdown = ValueDropdownAt(ctx, detail, "Editing:", 12, -44,
-        ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss|arena=Arena", min(260, detailW - 32),
+        ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss", min(260, detailW - 32),
         DetailUnit,
         function(value)
             M._colorsCastbarDetailUnit = value

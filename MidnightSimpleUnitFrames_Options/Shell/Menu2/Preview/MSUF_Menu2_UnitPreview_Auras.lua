@@ -1790,6 +1790,19 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon.tex:SetShown(not barOnly)
         icon.edge:SetVertexColor(0, 0, 0, 0)
         if type(applyIconStyle) == "function" then applyIconStyle(icon, iconStyle, size, bounds.iconShape) end
+        -- Buff Reminder shows two states, and the dimmed one IS the feature.
+        -- Previewing every icon lit would hide exactly what the mode does, so
+        -- alternate slots render as the missing look here.
+        local reminderPlaced = bounds.item and type(bounds.item.placed) == "table" and bounds.item.placed or nil
+        if reminderPlaced and reminderPlaced.reminderEnabled == true and i % 2 == 0 then
+            local tint = type(reminderPlaced.reminderColor) == "table" and reminderPlaced.reminderColor or nil
+            if icon.tex.SetDesaturated then icon.tex:SetDesaturated(reminderPlaced.reminderDesaturate ~= false) end
+            icon.tex:SetVertexColor(tint and tint[1] or 1, tint and tint[2] or 1, tint and tint[3] or 1,
+                ClampNumber(reminderPlaced.reminderAlpha, 0.45, 0.1, 1))
+        elseif icon.tex.SetDesaturated then
+            icon.tex:SetDesaturated(false)
+            icon.tex:SetVertexColor(1, 1, 1, 1)
+        end
         if icon.swipe then
             if showSwipe and not barOnly then
                 LayoutPreviewAuraSwipe(icon.swipe, icon, size, auraState and auraState.remainingFrac, swipeReverse)

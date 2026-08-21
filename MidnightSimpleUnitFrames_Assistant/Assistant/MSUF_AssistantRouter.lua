@@ -1924,6 +1924,18 @@ function R.IsSubjectiveSafePlanningRequest(text)
     -- subjective planning requests out of that lane so words such as
     -- "important" cannot be mistaken for a concrete Aura filter token or a
     -- frame toggle before the Router can ask what signal the player means.
+    -- A planning request is subjective precisely because it states no value:
+    -- "make the frames cleaner". Once the player writes "set <control> to
+    -- <value>" the request is concrete, and treating it as planning refuses a
+    -- change that was fully specified. This matters most for sentences naming
+    -- two controls, where every fuzzy planning term in either control's NAME
+    -- gets a chance to match (R.ContainsAny falls back to fuzzy phrase
+    -- matching), so the longer and more explicit the command, the likelier it
+    -- was to be classified as a vague idea.
+    local startsWithSetVerb = norm:match("^set%s+") or norm:match("^change%s+")
+        or norm:match("^make%s+") or norm:match("^adjust%s+")
+        or norm:match("^setze%s+") or norm:match("^stelle%s+")
+    if startsWithSetVerb and norm:find("%f[%a]to%f[%A]%s+%S") then return false end
     local planningTerms = A.RouterSafePlanningTerms or {}
     local broadImportantAura = norm == "show important debuffs"
         or norm == "show important buffs"
@@ -2642,6 +2654,13 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
     -- choices without letting a label word masquerade as a value.
     if type(R.IsExactRegistrySettingMutation) == "function"
         and R.IsExactRegistrySettingMutation(text)
+    then
+        return false
+    end
+    -- Same reasoning for a sentence that names several controls with values:
+    -- it is a command, and the single-setting lane above stands down for it.
+    if type(R.NamesMultipleExactControls) == "function"
+        and R.NamesMultipleExactControls(text)
     then
         return false
     end
@@ -3584,7 +3603,12 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         }
     end
 
-    if R.ContainsAny(norm, { "thanks", "thank you", "thx", "danke", "danke dir" }) then
+    -- Same discipline as the greeting above, and for a sharper reason:
+    -- R.ContainsAny falls back to fuzzy phrase matching, so "Priority Frames
+    -- Include Tanks Automatically" matched "thanks" and a two-part command was
+    -- answered with "You're welcome" while nothing was changed. Gratitude is
+    -- only gratitude when the message is nothing else.
+    if R.IsThanksOnly(norm) then
         return {
             text = "You're welcome. I'm here when you're ready for the next tweak.",
             status = "info",
@@ -3838,6 +3862,49 @@ function R.IsGreetingOnly(norm)
         while remaining:find(padded, 1, true) do
             local at = remaining:find(padded, 1, true)
             remaining = remaining:sub(1, at) .. remaining:sub(at + #padded)
+        end
+    end
+    return R.Trim(remaining) == ""
+end
+
+local THANKS_WORDS = {
+    "thanks", "thank you", "thankyou", "thx", "ty", "cheers",
+    "danke", "danke dir", "dankeschoen", "vielen dank",
+}
+
+-- Words that can sit beside a thank-you without turning it into a request.
+local THANKS_FILLER = {
+    "ok", "okay", "alright", "cool", "nice", "great", "perfect", "awesome",
+    "lot", "much", "very", "so", "a", "that", "it", "works", "worked", "now",
+    "danke", "super", "prima", "passt", "gut", "sehr", "vielen",
+}
+
+-- Gratitude only counts when the message is nothing but gratitude. Matching
+-- the word anywhere let "Include Tanks Automatically" (fuzzy "thanks") answer
+-- a real command with "You're welcome". Mirrors R.IsGreetingOnly, and reuses
+-- its filler list so "ok thanks!" still reads as thanks.
+function R.IsThanksOnly(norm)
+    local remaining = " " .. R.Trim(tostring(norm or "")) .. " "
+    if R.Trim(remaining) == "" then return false end
+    local matched = false
+    for i = 1, #THANKS_WORDS do
+        local padded = " " .. THANKS_WORDS[i] .. " "
+        while remaining:find(padded, 1, true) do
+            matched = true
+            local at = remaining:find(padded, 1, true)
+            remaining = remaining:sub(1, at) .. remaining:sub(at + #padded)
+        end
+    end
+    if not matched then return false end
+    local fillerLists = { GREETING_FILLER, GREETING_WORDS, THANKS_FILLER }
+    for list = 1, #fillerLists do
+        local words = fillerLists[list]
+        for i = 1, #words do
+            local padded = " " .. words[i] .. " "
+            while remaining:find(padded, 1, true) do
+                local at = remaining:find(padded, 1, true)
+                remaining = remaining:sub(1, at) .. remaining:sub(at + #padded)
+            end
         end
     end
     return R.Trim(remaining) == ""
@@ -5689,6 +5756,23 @@ end
 
 function R.AuraGrowthNamedScopes(norm)
     norm = R.Normalize(norm)
+    -- A frame name is only a SCOPE when it names the subject. Several aura
+    -- filter tokens are themselves frame words -- "set Raid Buff Filter to
+    -- Player" sets the filter token Player on the Raid lane -- and counting
+    -- the value made that read as two scopes, so the whole request was
+    -- refused with "you named more than one frame scope (Player and Raid)".
+    -- Keep only the subject of each clause: everything up to its last "to".
+    do
+        local subjects = {}
+        for segment in (norm .. " and "):gmatch("(.-)%s+and%s+") do
+            local subject = segment
+            local cut
+            for at in segment:gmatch("()%f[%a]to%f[%A]") do cut = at end
+            if cut then subject = segment:sub(1, cut - 1) end
+            subjects[#subjects + 1] = subject
+        end
+        if #subjects > 0 then norm = R.Normalize(table.concat(subjects, " ")) end
+    end
     local scopes, seen = {}, {}
     local function Add(key, label)
         if not seen[key] then
@@ -5708,6 +5792,16 @@ function R.AuraGrowthNamedScopes(norm)
     end
 
     local groups = direct
+    -- "Raid" also names aura FILTER tokens, and those are part of a control's
+    -- name, not a frame: "set Focus Custom Aura 3 Raid In Combat Filter to on"
+    -- was refused as naming both Focus and Raid. Remove the filter wordings
+    -- before the frame words are counted.
+    for _, filterPhrase in ipairs({
+        "raid in combat", "raid%-in%-combat", "raid combat",
+        "raid filter", "raid relevant", "raid%-relevant",
+    }) do
+        groups = groups:gsub(filterPhrase, " ")
+    end
     if R.ContainsAny(groups, { "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid" }) then
         Add("mythicraid", "Mythic Raid")
         groups = groups:gsub("mythic%s+raid%s+frames", " ")
@@ -14915,6 +15009,40 @@ local function ExactBooleanMutationMatch(text)
     return item, true, value
 end
 
+-- This lane applies exactly ONE setting, and it finds that setting by cutting
+-- the sentence at a connector and treating everything after it as the value.
+-- When the tail itself names another control ("... to 6 and Boss Buff Stack
+-- Count Anchor to topleft") the sentence asked for more than one change, and
+-- claiming it silently drops every item after the first while reporting
+-- success. Stand down instead so the compound planner in A.Parse owns it.
+local VALUE_TAIL_JOINERS = { " and ", " und ", ", " }
+local VALUE_TAIL_CONNECTORS = { " to ", " as ", " is ", " = ", " auf ", " zu ", " als " }
+local function ValueTailNamesAnotherControl(valueText)
+    local norm = R.Normalize(valueText or "")
+    if norm == "" then return false end
+    local padded = " " .. norm .. " "
+    for j = 1, #VALUE_TAIL_JOINERS do
+        local startAt = 1
+        while true do
+            local at, finish = padded:find(VALUE_TAIL_JOINERS[j], startAt, true)
+            if not at then break end
+            local rest = R.Trim(padded:sub(finish + 1, -2))
+            if rest ~= "" then
+                local restPadded = " " .. rest .. " "
+                for c = 1, #VALUE_TAIL_CONNECTORS do
+                    local connectorAt = restPadded:find(VALUE_TAIL_CONNECTORS[c], 1, true)
+                    if connectorAt then
+                        local subject = R.Trim(restPadded:sub(2, connectorAt - 1))
+                        if subject ~= "" and UniqueExactMutationEntry(subject) then return true end
+                    end
+                end
+            end
+            startAt = at + 1
+        end
+    end
+    return false
+end
+
 local function ExactMutationMatch(text)
     -- Problem reports such as "Menu Language is wrong" name a real control and
     -- use the grammatical connector "is", but they do not provide a value.
@@ -14947,7 +15075,9 @@ local function ExactMutationMatch(text)
             local subject = R.Trim(padded:sub(2, at - 1))
             local valueText = R.Trim(padded:sub(finish + 1, -2))
             local candidate = valueText ~= "" and UniqueExactMutationEntry(subject) or nil
-            if candidate and (not bestAt or at > bestAt) then
+            if candidate and (not bestAt or at > bestAt)
+                and not ValueTailNamesAnotherControl(valueText)
+            then
                 bestItem, bestValue, bestAt = candidate, valueText, at
             end
             startAt = at + 1
@@ -14969,7 +15099,9 @@ local function ExactMutationMatch(text)
                 local synthetic = "set " .. tostring(setting.label or subject) .. " to " .. valueText
                 local parsedValue = type(parser.ValueForRegistrySetting) == "function"
                     and parser.ValueForRegistrySetting(setting, R.Normalize(synthetic), synthetic) or nil
-                if parsedValue ~= nil and R.ValueTailIsOnlyValue(setting, valueText) then
+                if parsedValue ~= nil and R.ValueTailIsOnlyValue(setting, valueText)
+                    and not ValueTailNamesAnotherControl(valueText)
+                then
                     bestItem = candidate
                     bestValue = valueText
                     break
@@ -14978,6 +15110,25 @@ local function ExactMutationMatch(text)
         end
     end
     return bestItem, bestItem ~= nil, bestValue
+end
+
+-- True when the sentence states a value for more than one exact control.
+-- IsExactRegistrySettingMutation deliberately answers false for these -- that
+-- lane writes a single setting and must not claim a sentence it would only
+-- half-apply -- so every caller that asks "is this a write at all?" needs its
+-- own way to see that it is. Without this a perfectly explicit two-part
+-- command ("set Boss Buff Spacing to 6 and Boss Buff Stack Count Anchor to
+-- topleft") fell through to the fail-closed read-only reply and changed
+-- nothing at all.
+function R.NamesMultipleExactControls(text)
+    if type(R.StartsWithMutationCommand) == "function"
+        and not R.StartsWithMutationCommand(text)
+    then
+        return false
+    end
+    local body = ExactMutationBody(text)
+    if not body then return false end
+    return ValueTailNamesAnotherControl(body)
 end
 
 function R.IsExactRegistrySettingMutation(text)
@@ -15346,6 +15497,36 @@ end
 -- Exact visible setting names own their commands before broad feature parsers.
 -- This is deliberately bounded to one unique label/alias and a clear mutation
 -- verb, so natural ideas still receive semantic guidance instead of raw writes.
+-- The label index behind ExactMutationMatch reaches control names the parser's
+-- ALIAS index does not carry ("Priority Frames Placement" resolves here and
+-- nowhere else). A single command survives because this Router lane runs after
+-- the parser, but a compound sentence is planned entirely inside the parser, so
+-- one such clause failed the whole sentence. Compound clause resolution borrows
+-- the lookup; the plan is still built by the parser's own
+-- PlanForExactRegistrySetting. Returns the setting only, never a side effect.
+-- The label index costs ~80ms to build, and this is called once per clause, so
+-- building it here would put that cost on the compound cold path (measured:
+-- 9ms -> 660ms on assistant_cold_compound_callback_perf_smoke). It therefore
+-- answers nil until something else has warmed the index -- the same discipline
+-- R.CommandNamedSettingLabel already uses. In a session the index is warm after
+-- the first exact-label command, which is when compound sentences are typed.
+-- Resolve a bare subject phrase -- no verb, no value -- to the single control
+-- whose visible label it is. Used to find where one control name ends and the
+-- next begins in an unpunctuated run. Warm-gated for the same reason as
+-- R.ExactRegistrySettingForCommand below.
+function R.ExactRegistrySettingForLabel(phrase, force)
+    if type(R._settingLabelIndex) ~= "table" and not force then return nil end
+    local item = UniqueExactMutationEntry(phrase)
+    return item and item.setting or nil
+end
+
+function R.ExactRegistrySettingForCommand(text, force)
+    if type(R._settingLabelIndex) ~= "table" and not force then return nil end
+    local item, hasExplicitValue = ExactMutationMatch(text)
+    if not hasExplicitValue then return nil end
+    return item and item.setting or nil
+end
+
 function R.TryExactRegistrySettingMutation(text)
     local item, hasExplicitValue = ExactMutationMatch(text)
     local setting = item and item.setting
@@ -15451,6 +15632,16 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
     -- disagree about what counts as an exact match, a request stands down here
     -- and is refused there, so nothing applies it.
     if R.ExactAliasSingleChange(text) then return nil end
+    -- The same reasoning one step further out: when the sentence names SEVERAL
+    -- exact controls this lane still ranks and applies a single candidate, so
+    -- it reported "Done, I changed Boss Buff Spacing" for a request that also
+    -- named Boss Buff Stack Count Anchor. Multi-change planning belongs to
+    -- A.Parse; stand down so the whole sentence reaches it.
+    if type(R.NamesMultipleExactControls) == "function"
+        and R.NamesMultipleExactControls(text)
+    then
+        return nil
+    end
     local actionable = type(parser.ActionableText) == "function" and parser.ActionableText(text) or nil
     if actionable and R.Normalize(actionable) ~= "" and R.Normalize(actionable) ~= R.Normalize(text)
         and R.OpenEndedMutationSubject(actionable) ~= nil
@@ -17970,6 +18161,34 @@ function A.RouterLooksLikePendingChoiceTopicSwitch(text)
     return false
 end
 
+-- True when the sentence provably asks for more than one change. Every topical
+-- lane in RouteInput resolves a single control, so a multi-change request was
+-- answered by whichever lane recognised a fragment first -- applying half of
+-- it, or an unrelated control that merely shared a word ("set Boss Portrait
+-- Shape to circle and Boss Portrait Show Background to on" replied "Boss Raid
+-- Marker is already enabled"). A.Parse is the only component that plans all
+-- the clauses together, so proof is its own multi-change plan rather than a
+-- string heuristic that each lane would have to re-implement.
+--
+-- Read-only intent is checked first, so questions ("what is X and Y") keep
+-- their existing answer instead of being applied.
+function R.ProvenMultiChangeRequest(text)
+    local parser = A.Parser or {}
+    if type(parser.ShouldTryEarlyCompound) ~= "function" or type(A.Parse) ~= "function" then
+        return false
+    end
+    local norm = R.Normalize(text)
+    if norm == "" or not parser.ShouldTryEarlyCompound(norm, text) then return false end
+    if type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+        and A.RouterIsFailClosedReadOnlyRequest(text)
+    then
+        return false
+    end
+    local ok, parsed = pcall(A.Parse, text)
+    if not ok or type(parsed) ~= "table" then return false end
+    return parsed.kind == "changes" and type(parsed.changes) == "table" and #parsed.changes > 1
+end
+
 function A.RouteInput(text, coreHandler)
     text = R.Trim(text)
     if text == "" then return nil end
@@ -18028,6 +18247,17 @@ function A.RouteInput(text, coreHandler)
     if not hasBlockingPending and R.TryFeatureExistenceQuestion then
         local existence = R.TryFeatureExistenceQuestion(text, coreHandler)
         if existence then return existence end
+    end
+
+    -- A proven multi-change sentence is planned as one transaction by A.Parse.
+    -- It has to win here, ahead of every single-control lane below, or the
+    -- first lane to recognise a fragment answers for the whole request.
+    if not hasBlockingPending and type(coreHandler) == "function"
+        and R.ProvenMultiChangeRequest(text)
+    then
+        local multiOk, multiResult = pcall(coreHandler, text)
+        if not multiOk then error(multiResult, 0) end
+        if multiResult and not A.RouterIsUnknownResult(multiResult) then return multiResult end
     end
 
     -- "Reset everything" / "hide everything" name a scope rather than a

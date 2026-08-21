@@ -17,6 +17,7 @@ local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
 local UnitPower = Text.UnitPower
 local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
+local ResolveDisplayedPowerIdentity = Text.ResolveDisplayedPowerIdentity
 local InCombatLockdown = Text.InCombatLockdown
 local UnitName = Text.UnitName
 local ReadDisplayName = UnitName
@@ -69,6 +70,25 @@ local POWER_IDENTITY_EVENTS = {
   MSUF_UNIT_IDENTITY_SOFT_FAST = true,
   MSUF_GF_UNIT_IDENTITY = true,
   MSUF_GF_UNIT_STRUCTURE = true,
+  -- Single-unit frames never see the synthetic MSUF_UNIT_IDENTITY reasons:
+  -- AddIdentityLifecycleHandlers routes their swaps into the identity path
+  -- under the raw Blizzard event name. Without these the cached power type
+  -- outlives the unit it was read for, and a frame whose power bar is disabled
+  -- has no bar-fed seed to correct it.
+  PLAYER_ENTERING_WORLD = true,
+  PLAYER_TARGET_CHANGED = true,
+  PLAYER_FOCUS_CHANGED = true,
+  UNIT_PET = true,
+  UNIT_TARGET = true,
+  INSTANCE_ENCOUNTER_ENGAGE_UNIT = true,
+  MSUF_DEPENDENT_IDENTITY = true,
+  MSUF_UF_ONSHOW = true,
+  -- The displayed resource itself changed. A frame with a power bar re-seeds
+  -- from the bar payload here, but a text-only frame is handed no metadata at
+  -- all, so without these it would keep painting the previous resource.
+  UNIT_DISPLAYPOWER = true,
+  UNIT_POWER_BAR_SHOW = true,
+  UNIT_POWER_BAR_HIDE = true,
 }
 
 -- Match oUF's 250 ms text cadence with one shared, combat-window ticker. The
@@ -503,31 +523,43 @@ local function RefreshCachedPowerType(frame, unit)
   -- Power type changes less often than power values. Cache token/type per frame so frequent
   -- UNIT_POWER_UPDATE events do not repeatedly ask the client for display metadata.
   local cacheUnit = unit
-  if not UnitPowerType then
+  local powerType, powerToken, displayMana
+  if unit == "player" and ResolveDisplayedPowerIdentity then
+    powerType, powerToken, displayMana = ResolveDisplayedPowerIdentity(unit)
+  end
+  displayMana = displayMana == true
+  if not displayMana and not UnitPowerType then
     frame._msufTextPowerType = nil
     frame._msufTextPowerToken = nil
     frame._msufTextPowerTypeKnown = true
     frame._msufTextPowerTypeUnit = cacheUnit
+    frame._msufTextPowerDisplayMana = false
     return false
   end
-  local powerType, powerToken = UnitPowerType(unit)
+  if not displayMana then
+    powerType, powerToken = UnitPowerType(unit)
+  end
   if issecretvalue(powerType) == true then powerType = nil end
   if issecretvalue(powerToken) == true then powerToken = nil end
   local oldUnit = frame._msufTextPowerTypeUnit
   local sameUnit = cacheUnit ~= nil and oldUnit == cacheUnit
+  local sameDisplayMana = frame._msufTextPowerDisplayMana == displayMana
   if powerType == nil
     and powerToken == nil
     and frame._msufTextPowerTypeKnown == true
-    and sameUnit then
+    and sameUnit
+    and sameDisplayMana then
     return false
   end
   local changed = powerType ~= frame._msufTextPowerType
     or powerToken ~= frame._msufTextPowerToken
     or not sameUnit
+    or not sameDisplayMana
   frame._msufTextPowerType = powerType
   frame._msufTextPowerToken = powerToken
   frame._msufTextPowerTypeKnown = true
   frame._msufTextPowerTypeUnit = cacheUnit
+  frame._msufTextPowerDisplayMana = displayMana
   return changed
 end
 
@@ -543,14 +575,21 @@ local function SeedCachedPowerType(frame, unit, powerType, powerToken)
   end
   local cacheUnit = unit
   local sameUnit = cacheUnit ~= nil and frame._msufTextPowerTypeUnit == cacheUnit
+  local displayMana = false
+  if unit == "player" and ResolveDisplayedPowerIdentity then
+    local _, _, resolvedDisplayMana = ResolveDisplayedPowerIdentity(unit)
+    displayMana = resolvedDisplayMana == true
+  end
   local changed = frame._msufTextPowerTypeKnown ~= true
     or not sameUnit
+    or frame._msufTextPowerDisplayMana ~= displayMana
     or powerType ~= frame._msufTextPowerType
     or powerToken ~= frame._msufTextPowerToken
   frame._msufTextPowerType = powerType
   frame._msufTextPowerToken = powerToken
   frame._msufTextPowerTypeKnown = true
   frame._msufTextPowerTypeUnit = cacheUnit
+  frame._msufTextPowerDisplayMana = displayMana
   return changed
 end
 
@@ -575,10 +614,16 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
   local powerType
   if frame._msufTextPowerNeedsType == true then
     powerType = frame._msufTextPowerType
+    local displayMana = false
+    if unit == "player" and ResolveDisplayedPowerIdentity then
+      local _, _, resolvedDisplayMana = ResolveDisplayedPowerIdentity(unit)
+      displayMana = resolvedDisplayMana == true
+    end
     local typeUnit = frame._msufTextPowerTypeUnit
     local typeUnitMatches = typeUnit == unit
     if frame._msufTextPowerTypeKnown ~= true
       or not typeUnitMatches
+      or frame._msufTextPowerDisplayMana ~= displayMana
       or (not powerTick
         and (POWER_IDENTITY_EVENTS[event] == true
           or event == "UNIT_DISPLAYPOWER"
@@ -586,7 +631,13 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
           or event == "UNIT_POWER_BAR_HIDE"
           or event == "MSUF_APPLY"
           or event == "MSUF_FORCE_UPDATE")) then
-      RefreshCachedPowerType(frame, unit)
+      if RefreshCachedPowerType(frame, unit) then
+        -- A cached maximum belongs to the resolved resource identity too. Drop
+        -- it only on the rare identity transition; steady value ticks retain
+        -- the existing one-read max cache.
+        frame._msufTextPowerMax = nil
+        frame._msufTextPowerMaxUnit = nil
+      end
       powerType = frame._msufTextPowerType
     end
   end
@@ -1127,16 +1178,30 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   end
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   local identityChanged = not animate and POWER_IDENTITY_EVENTS[event] == true
+  -- One client read per dispatch: an identity or tick refresh below already
+  -- asked, and a second ask in the same event returns the same answer.
+  local powerTypeReread = false
   if identityChanged then
-    frame._msufTextPowerType = nil
-    frame._msufTextPowerToken = nil
-    frame._msufTextPowerTypeKnown = nil
-    frame._msufTextPowerTypeUnit = nil
     frame._msufTextPowerMax = nil
     frame._msufTextPowerMaxUnit = nil
-    local seededPowerType = SeedCachedPowerType(frame, unit, powerType, powerToken)
-    if rt.powerColorByType == true and seededPowerType ~= true then
-      RefreshCachedPowerType(frame, unit)
+    -- A bar-fed identity event already carries authoritative metadata for the
+    -- new unit, so seeding it over the old values is enough. Only a frame with
+    -- no power bar arrives here empty-handed, and for it the cached type still
+    -- belongs to the previous unit behind this token: drop it and read once.
+    if (powerType ~= nil or powerToken ~= nil)
+      and issecretvalue(powerType) ~= true
+      and issecretvalue(powerToken) ~= true then
+      SeedCachedPowerType(frame, unit, powerType, powerToken)
+    else
+      frame._msufTextPowerType = nil
+      frame._msufTextPowerToken = nil
+      frame._msufTextPowerTypeKnown = nil
+      frame._msufTextPowerTypeUnit = nil
+      frame._msufTextPowerDisplayMana = nil
+      if rt.powerColorByType == true then
+        RefreshCachedPowerType(frame, unit)
+        powerTypeReread = true
+      end
     end
   elseif not (powerMetaChanged == false
       and animate
@@ -1164,6 +1229,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     local typeUnitMatches = typeUnit == unit
     if frame._msufTextPowerTypeKnown ~= true or not typeUnitMatches then
       RefreshCachedPowerType(frame, unit)
+      powerTypeReread = true
     end
   end
   local typeUnit = frame._msufTextPowerTypeUnit
@@ -1174,27 +1240,51 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       or event == "MSUF_FORCE_UPDATE"
       or event == "MSUF_POWER_LAYOUT"
       or event == "MSUF_POWER_TEXT_COLORS")
+  local displayManaChanged = false
+  if powerTextColorEvent and unit == "player" and ResolveDisplayedPowerIdentity then
+    local _, _, displayMana = ResolveDisplayedPowerIdentity(unit)
+    displayManaChanged = frame._msufTextPowerDisplayMana ~= (displayMana == true)
+  end
   if rt.powerColorByType == true
     and (powerTextColorEvent
       or frame._msufPowerTextColorInitialized ~= true
       or not typeUnitMatches
+      or displayManaChanged
       or frame._msufPowerTextColorType ~= frame._msufTextPowerType
       or frame._msufPowerTextColorToken ~= frame._msufTextPowerToken) then
-    if frame._msufTextPowerTypeKnown ~= true or not typeUnitMatches then
+    -- "Known" with nothing cached is a failed read, not knowledge: UnitPowerType
+    -- returns nothing for a restricted unit token, and PowerColor trusts the
+    -- known flag and settles on Mana. Retry here, where the gate already only
+    -- opens on colour events, never on a value tick.
+    if not powerTypeReread
+      and (frame._msufTextPowerTypeKnown ~= true
+        or not typeUnitMatches
+        or displayManaChanged
+        or (frame._msufTextPowerType == nil and frame._msufTextPowerToken == nil)) then
       RefreshCachedPowerType(frame, unit)
       typeUnit = frame._msufTextPowerTypeUnit
       typeUnitMatches = typeUnit == unit
     end
-    local metaKnown = frame._msufTextPowerTypeKnown == true and typeUnitMatches
-    local r, g, b = PowerColor(
-      frame, unit,
-      frame._msufTextPowerType, frame._msufTextPowerToken,
-      metaKnown
-    )
-    SetPowerTextColor(frame, r, g, b, rt.textColorA or 1)
+    local cachedType = frame._msufTextPowerType
+    local cachedToken = frame._msufTextPowerToken
+    -- Same contract the power bar applies (MSUF_UF_Elements_Power.lua SetColor):
+    -- metadata counts as known only once a read actually produced a resource.
+    -- The flag alone means "already asked", and PowerColor answers a known but
+    -- empty pair with Mana, claiming a resource this unit never reported.
+    local metaKnown = frame._msufTextPowerTypeKnown == true
+      and typeUnitMatches
+      and (cachedType ~= nil or cachedToken ~= nil)
+    if metaKnown then
+      local r, g, b = PowerColor(frame, unit, cachedType, cachedToken, true)
+      SetPowerTextColor(frame, r, g, b, rt.textColorA or 1)
+    else
+      -- Nothing to colour by, so render the configured text colour instead of
+      -- guessing: what these slots show with colour-by-type switched off.
+      SetPowerTextColor(frame, rt.textColorR or 1, rt.textColorG or 1, rt.textColorB or 1, rt.textColorA or 1)
+    end
     frame._msufPowerTextColorInitialized = true
-    frame._msufPowerTextColorType = frame._msufTextPowerType
-    frame._msufPowerTextColorToken = frame._msufTextPowerToken
+    frame._msufPowerTextColorType = cachedType
+    frame._msufPowerTextColorToken = cachedToken
   elseif rt.powerColorByType == false
     and (powerTextColorEvent
       or frame._msufPowerTextColorInitialized ~= true
@@ -1850,12 +1940,15 @@ UF.RegisterElement("HealthText", HealthText)
 local PowerText = {}
 
 function PowerText.IsEnabled(frame, spec)
-  if frame and frame._msufAugPowerReplacementActive == true then return false end
+  -- Ebon Might writes its own native duration text on this bar, and the config
+  -- compiler already drops every power slot for that case. Keep the runtime
+  -- guard too: it survives a stale spec between the flag flip and the recompile.
+  if frame and frame._msufPowerEbonMight == true then return false end
   return PowerTextEnabled(spec)
 end
 
 function PowerText.GetEvents(frame, spec)
-  if frame and frame._msufAugPowerReplacementActive == true then
+  if frame and frame._msufPowerEbonMight == true then
     return EMPTY_EVENTS
   end
   if not PowerTextEnabled(spec) then

@@ -17,6 +17,19 @@ local ControlMeta, RegisterControl = M.Pick(AP, [[ControlMeta RegisterControl]])
 local floor, max, min = math.floor, math.max, math.min
 local Tr = M.TranslateText or M.Tr or function(text) return text end
 
+-- The Resources tab renders a menu-only strip that reads colors straight out of
+-- the DB, so nothing repaints it when a color setter writes. Those setters live
+-- in the Colors page and cannot reach the Build-local strip, so they poke this
+-- instead. Strips register once at creation; hidden ones (other tabs, hidden
+-- builds) short-circuit on IsShown, so the call stays free away from this tab.
+local resourceStrips = {}
+function P.RefreshResourcesStrip()
+    for i = 1, #resourceStrips do
+        local strip = resourceStrips[i]
+        if strip.IsShown and strip:IsShown() and type(strip.Update) == "function" then strip.Update() end
+    end
+end
+
 local function Label(parent, text, x, y, width, color, template)
     local fs = T.Font(parent, template or "GameFontHighlightSmall", Tr(text), color or T.colors.text)
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -739,6 +752,7 @@ function P.Build(ctx, builder, categories)
         for i = 1, #unitBoxes do RequestPreview(unitBoxes[i], reason) end
         if groupBox then RequestPreview(groupBox, reason) end
         if castBox then RequestPreview(castBox, reason) end
+        P.RefreshResourcesStrip()
     end
 
     -- Hint line: makes the clickable preview discoverable and doubles as the
@@ -1066,6 +1080,7 @@ function P.Build(ctx, builder, categories)
         end
         strip:Hide()
         resourcesStrip = strip
+        resourceStrips[#resourceStrips + 1] = strip
         return strip
     end
     M.TrackRefresh(ctx, function()

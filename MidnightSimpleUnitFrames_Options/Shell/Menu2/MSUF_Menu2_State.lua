@@ -17,7 +17,7 @@ local MENU_STATE_TABLE_FIELDS = M.WordList [[
     accordionState navHeaderState unitTextTabSelection unitTextSlotSelection unitPortraitTabSelection
     unitStatusSelection unitStatusTabSelection gfTextTabSelection gfTextSlotSelection
     gfStatusIconTabSelection gfSpellMultiSpecSelection gfSpellIndicatorSelection
-    collapseHintClickState focusSectionState
+    collapseHintClickState
 ]]
 local MENU_STATE_SCALAR_DEFAULTS = {
     gfScope = "party",
@@ -45,7 +45,6 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     dashboardRecoveryOpen = false,
     dashboardScalingOpen = false,
     lastPandemicMode = "PULSE",
-    fixedPreviewUserHeight = 0,
 }
 local function MenuCharKey()
     local fn = rawget(_G, "MSUF_GetCharKey")

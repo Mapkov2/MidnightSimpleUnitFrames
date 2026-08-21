@@ -52,7 +52,6 @@ local UnitExistsPlain = UF.UnitExistsSafe
 local SUPPORTED_UNITS = {
   target = true, targettarget = true, focus = true, focustarget = true, pet = true,
   boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-  arena1 = true, arena2 = true, arena3 = true,
 }
 
 -- Bitmasks let one driver frame know which unit families need target/focus/pet/boss events
@@ -60,12 +59,10 @@ local SUPPORTED_UNITS = {
 local RANGE_UNITS = {
   "target", "targettarget", "focus", "focustarget", "pet",
   "boss1", "boss2", "boss3", "boss4", "boss5",
-  "arena1", "arena2", "arena3",
 }
 local RANGE_UNIT_BITS = {
   target = 1, targettarget = 2, focus = 4, focustarget = 8, pet = 16,
   boss1 = 32, boss2 = 64, boss3 = 128, boss4 = 256, boss5 = 512,
-  arena1 = 1024, arena2 = 2048, arena3 = 4096,
 }
 local TARGET_EVENT_TARGET_BIT = 1
 local TARGET_EVENT_FOCUS_BIT = 2
@@ -75,7 +72,6 @@ local DRIVER_EVENT_FOCUS_BIT = 4
 local DRIVER_EVENT_PET_BIT = 8
 local DRIVER_EVENT_BOSS_BIT = 16
 local DRIVER_EVENT_TARGET_SPELL_BIT = 32
-local DRIVER_EVENT_ARENA_BIT = 64
 
 local UNIT_EVENTS = {
   "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE", "UNIT_CTR_OPTIONS", "UNIT_OTHER_PARTY_CHANGED",
@@ -93,7 +89,6 @@ local MOVEMENT_EVENTS = {
 }
 
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
-local ARENA_UNITS = { "arena1", "arena2", "arena3" }
 local UNIT_EVENT_FILTER_LIMIT = 4
 
 local ENEMY_SPELLS = {
@@ -153,6 +148,7 @@ local TARGET_FRIENDLY_SPELLS = {
 
 local activeUnits = {}
 local pollUnits = {}
+local pollCovered = {}
 local targetRegistered = {}
 local targetWanted = {}
 local targetStates = {}
@@ -163,6 +159,7 @@ local targetEventUnits = {}
 local enemySpell, friendlySpell, resSpell, targetFriendlySpell
 local activeCount = 0
 local pollCount = 0
+local pollBlindCount = 0
 local pollQueued = false
 local pollNextAt
 local pollTimer
@@ -464,12 +461,6 @@ local function EvaluateBossUnits(force)
   end
 end
 
-local function EvaluateArenaUnits(force)
-  for i = 1, #ARENA_UNITS do
-    EvaluateIfActive(ARENA_UNITS[i], force)
-  end
-end
-
 local function TargetClearStates()
   if targetChecked <= 0 and targetInRange <= 0 then
     return
@@ -660,8 +651,27 @@ local PollNow
 
 local pollSettlePending = false -- run one final eval after movement stops
 
-local function RangePollCombatBlocked()
-  return InCombatLockdown and InCombatLockdown()
+-- Range fade output is alpha only (see UF.ApplyRangeModifier); nothing on this
+-- path is protected, so the poll must NOT be disabled in combat. Bosses have no
+-- range event source at all -- SPELL_RANGE_CHECK_UPDATE is documented as
+-- "in range with the current target", and UNIT_IN_RANGE_UPDATE/UnitInRange are
+-- group-only APIs -- so a combat-blocked poller froze every boss frame at the
+-- alpha it happened to have when the encounter engaged.
+-- Cost is bounded by scope instead of by combat: only units MSUF has to sample
+-- keep a timer alive at all (see UnitRangeIsBlind), so every state without such
+-- a unit stays at exactly zero idle work.
+local POLL_INTERVAL_MOVING = 0.75
+local POLL_INTERVAL_IDLE = 2.00
+
+-- "Blind" = MSUF has no event telling it this unit's range changed, so the only
+-- way to notice is to sample. The current target is the one exception: the
+-- client fires SPELL_RANGE_CHECK_UPDATE for every armed spell whenever its range
+-- to the target changes, including range changes the target itself caused. With
+-- no armed spell there is nothing to hear and the target falls back to sampling.
+local function UnitRangeIsBlind(unit)
+  if unit ~= "target" then return true end
+  if not EnableSpellRangeCheck then return true end
+  return next(targetRegistered) == nil
 end
 
 local function MarkPollSetDirty()
@@ -676,17 +686,17 @@ local function UnitMoving(unit)
 end
 
 local function RangeCanChange()
-  if RangePollCombatBlocked() then return false end
   if not GetUnitSpeed then return true end
   if UnitMoving("player") then return true end
-  for i = 1, pollCount do
+  -- Blind units are stored first, so this stops before the covered tail.
+  for i = 1, pollBlindCount do
     if UnitMoving(pollUnits[i]) then return true end
   end
   return false
 end
 
 local function PollInterval()
-  return 2.00
+  return POLL_INTERVAL_IDLE
 end
 
 local function CancelPollTimer()
@@ -701,11 +711,6 @@ end
 local function PollTimerCallback()
   pollTimer = nil
   if not pollQueued then return end
-  if RangePollCombatBlocked() then
-    CancelPollTimer()
-    pollSettlePending = false
-    return
-  end
   local now = GetTime and GetTime() or 0
   if pollNextAt and now < pollNextAt then
     pollTimer = NewTimer(pollNextAt - now, PollTimerCallback)
@@ -718,43 +723,61 @@ end
 
 local function SchedulePoll(delay)
   if pollQueued or pollCount <= 0 then return end
-  if RangePollCombatBlocked() then return end
   pollQueued = true
   delay = delay or PollInterval()
   pollNextAt = (GetTime and GetTime() or 0) + delay
   pollTimer = NewTimer(delay, PollTimerCallback)
 end
 
-local function RebuildPollSet()
-  pollSetDirty = false
-  pollCount = 0
-  if RangePollCombatBlocked() then
-    for i = 1, #pollUnits do
-      pollUnits[i] = nil
-    end
+-- A blind unit can leave range without the player moving -- a boss walking away
+-- is the common case -- so the heartbeat stays armed for as long as the poll set
+-- holds one, instead of retiring on PLAYER_STOPPED_MOVING. With no blind unit
+-- there is nothing a wake-up could discover that an event will not deliver, so
+-- the timer retires completely and idle cost returns to zero.
+-- The fast cadence exists for sampling too: when every poll unit is covered the
+-- sweep is only a fallback and does not need to run four times as often.
+local function RearmPoll(moving)
+  if pollCount <= 0 or (not moving and pollBlindCount <= 0) then
     CancelPollTimer()
-    pollSettlePending = false
     return
   end
+  if pollTimer then CancelPollTimer() end
+  SchedulePoll((moving and pollBlindCount > 0) and POLL_INTERVAL_MOVING or POLL_INTERVAL_IDLE)
+end
+
+local function RebuildPollSet()
+  pollSetDirty = false
+  -- Blind units land in pollUnits[1..pollBlindCount], covered ones after them.
+  -- A covered unit stays in the set so a movement edge still runs its full
+  -- check -- including the CheckInteractDistance fallback that only the poll
+  -- reaches -- it just never keeps the timer alive on its own.
+  local coveredCount = 0
+  pollBlindCount = 0
   for unit in pairs(activeUnits) do
     if UnitNeedsPoll(unit) then
-      pollCount = pollCount + 1
-      pollUnits[pollCount] = unit
+      if UnitRangeIsBlind(unit) then
+        pollBlindCount = pollBlindCount + 1
+        pollUnits[pollBlindCount] = unit
+      else
+        coveredCount = coveredCount + 1
+        pollCovered[coveredCount] = unit
+      end
     end
+  end
+  pollCount = pollBlindCount
+  for i = 1, coveredCount do
+    pollCount = pollCount + 1
+    pollUnits[pollCount] = pollCovered[i]
+    pollCovered[i] = nil
   end
   for i = pollCount + 1, #pollUnits do
     pollUnits[i] = nil
   end
-  if pollCount <= 0 then
-    CancelPollTimer()
-    return
-  end
-  SchedulePoll()
+  RearmPoll(pollSettlePending)
 end
 
 local driver
 local secondaryUnitDriver
-local tertiaryUnitDriver
 local SyncRuntime
 local visibilitySyncQueued = false
 local function FlushVisibilityRuntime()
@@ -872,12 +895,6 @@ local function HookFrameVisibility(frame)
 end
 
 PollNow = function()
-  if RangePollCombatBlocked() then
-    pollQueued = false
-    pollNextAt = nil
-    pollSettlePending = false
-    return
-  end
   local settlePending = pollSettlePending
   local moving = RangeCanChange()
   if moving or settlePending then
@@ -888,12 +905,11 @@ PollNow = function()
   pollSettlePending = moving
   if pollSetDirty then
     RebuildPollSet()
-  elseif moving then
-    SchedulePoll()
-  else
-    pollQueued = false
-    pollNextAt = nil
+    return
   end
+  -- PollTimerCallback already retired the fired timer, so this re-arm is the
+  -- only one. A set with nothing left to sample retires inside RearmPoll.
+  RearmPoll(moving)
 end
 
 local driverRegistered = false
@@ -968,26 +984,22 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   end
 
   if event == "PLAYER_STARTED_MOVING" or event == "PLAYER_STOPPED_MOVING" then
-    if RangePollCombatBlocked() then return end
     MarkPollSetDirty()
     RebuildPollSet()
     if pollCount <= 0 then return end
 
-    -- Evaluate immediately at both edges. While movement continues the
-    -- existing sparse timer remains armed; stopping performs the final settle
-    -- and lets at most the already queued callback retire itself.
+    -- Evaluate immediately at both edges, then re-arm at the cadence that
+    -- matches the new state. Stopping is the player's final settled value but
+    -- not the unit's, so the heartbeat stays armed at the idle interval.
     for i = 1, pollCount do
       EvaluateUnit(pollUnits[i])
     end
     if event == "PLAYER_STARTED_MOVING" then
       pollSettlePending = true
-      SchedulePoll()
+      RearmPoll(true)
     else
       pollSettlePending = false
-      -- The edge evaluation above is the final settled value. Native
-      -- NewTimer handles let the sparse movement poll disappear immediately
-      -- instead of waking once more after movement has stopped.
-      if pollTimer then CancelPollTimer() end
+      RearmPoll(false)
     end
     return
   end
@@ -1015,8 +1027,6 @@ local function DriverOnEvent(source, event, unit, a, b, c)
     if unit == "player" then EvaluateIfActive("pet", false) end
   elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
     EvaluateBossUnits(false)
-  elseif event == "ARENA_OPPONENT_UPDATE" then
-    EvaluateArenaUnits(false)
   elseif event == "PLAYER_ENTERING_WORLD"
     or event == "PLAYER_REGEN_DISABLED"
     or event == "PLAYER_REGEN_ENABLED" then
@@ -1050,14 +1060,6 @@ local function EnsureSecondaryUnitDriver()
   secondaryUnitDriver = CreateFrame("Frame")
   secondaryUnitDriver:SetScript("OnEvent", DriverOnEvent)
   return secondaryUnitDriver
-end
-
-local function EnsureTertiaryUnitDriver()
-  if tertiaryUnitDriver then return tertiaryUnitDriver end
-  if not CreateFrame then return nil end
-  tertiaryUnitDriver = CreateFrame("Frame")
-  tertiaryUnitDriver:SetScript("OnEvent", DriverOnEvent)
-  return tertiaryUnitDriver
 end
 
 local function ClearDriverUnitSpan(frame)
@@ -1131,9 +1133,6 @@ local function RegisterDriver()
     or activeUnits.boss3 == true
     or activeUnits.boss4 == true
     or activeUnits.boss5 == true
-  local arenaActive = activeUnits.arena1 == true
-    or activeUnits.arena2 == true
-    or activeUnits.arena3 == true
 
   local eventMask = 0
   if activeCount > 0 then eventMask = eventMask + DRIVER_EVENT_ACTIVE_BIT end
@@ -1141,7 +1140,6 @@ local function RegisterDriver()
   if focusDependent then eventMask = eventMask + DRIVER_EVENT_FOCUS_BIT end
   if petActive then eventMask = eventMask + DRIVER_EVENT_PET_BIT end
   if bossActive then eventMask = eventMask + DRIVER_EVENT_BOSS_BIT end
-  if arenaActive then eventMask = eventMask + DRIVER_EVENT_ARENA_BIT end
   if targetActive and EnableSpellRangeCheck then eventMask = eventMask + DRIVER_EVENT_TARGET_SPELL_BIT end
 
   if driverRegistered
@@ -1159,30 +1157,18 @@ local function RegisterDriver()
     if driverRegistered and driverUnitMask and driverUnitMask ~= 0 then
       UnregisterDriverUnitEvents(f)
       UnregisterDriverUnitEvents(secondaryUnitDriver)
-      UnregisterDriverUnitEvents(tertiaryUnitDriver)
     end
     if unitCount > 0 then
-      -- RegisterUnitEvent accepts at most UNIT_EVENT_FILTER_LIMIT (4) unit
-      -- tokens. With boss1-5 plus arena1-3 active the unit list can reach 11
-      -- tokens, so spread the spans over up to three driver frames.
       local firstLast = math.min(unitCount, UNIT_EVENT_FILTER_LIMIT)
       RegisterDriverUnitChunk(f, 1, firstLast)
       if unitCount > firstLast then
-        local secondLast = math.min(unitCount, firstLast + UNIT_EVENT_FILTER_LIMIT)
-        RegisterDriverUnitChunk(EnsureSecondaryUnitDriver(), firstLast + 1, secondLast)
-        if unitCount > secondLast then
-          RegisterDriverUnitChunk(EnsureTertiaryUnitDriver(), secondLast + 1, unitCount)
-        elseif tertiaryUnitDriver then
-          ClearDriverUnitSpan(tertiaryUnitDriver)
-        end
-      else
-        if secondaryUnitDriver then ClearDriverUnitSpan(secondaryUnitDriver) end
-        if tertiaryUnitDriver then ClearDriverUnitSpan(tertiaryUnitDriver) end
+        RegisterDriverUnitChunk(EnsureSecondaryUnitDriver(), firstLast + 1, unitCount)
+      elseif secondaryUnitDriver then
+        ClearDriverUnitSpan(secondaryUnitDriver)
       end
     else
       ClearDriverUnitSpan(f)
       ClearDriverUnitSpan(secondaryUnitDriver)
-      ClearDriverUnitSpan(tertiaryUnitDriver)
     end
   end
 
@@ -1220,10 +1206,6 @@ local function RegisterDriver()
     DriverMaskHas(oldEventMask, DRIVER_EVENT_BOSS_BIT)
   )
   SetDriverEventRegistered(
-    f, "ARENA_OPPONENT_UPDATE", arenaActive,
-    DriverMaskHas(oldEventMask, DRIVER_EVENT_ARENA_BIT)
-  )
-  SetDriverEventRegistered(
     f, "SPELL_RANGE_CHECK_UPDATE", targetActive and EnableSpellRangeCheck and true or false,
     DriverMaskHas(oldEventMask, DRIVER_EVENT_TARGET_SPELL_BIT)
   )
@@ -1242,10 +1224,6 @@ local function UnregisterDriver()
     secondaryUnitDriver:UnregisterAllEvents()
     ClearDriverUnitSpan(secondaryUnitDriver)
   end
-  if tertiaryUnitDriver then
-    tertiaryUnitDriver:UnregisterAllEvents()
-    ClearDriverUnitSpan(tertiaryUnitDriver)
-  end
   driverRegistered = false
   driverUnitMask = nil
   driverTargetMask = nil
@@ -1258,8 +1236,8 @@ SyncRuntime = function()
     SyncTargetSpells()
     if pollSetDirty == true then
       RebuildPollSet()
-    else
-      SchedulePoll()
+    elseif not pollQueued then
+      RearmPoll(pollSettlePending)
     end
     return
   end
@@ -1272,6 +1250,7 @@ SyncRuntime = function()
   spellsBuilt = false
   MarkTargetSpellSyncDirty()
   pollCount = 0
+  pollBlindCount = 0
   CancelPollTimer()
   pollSettlePending = false
   UnregisterDriver()

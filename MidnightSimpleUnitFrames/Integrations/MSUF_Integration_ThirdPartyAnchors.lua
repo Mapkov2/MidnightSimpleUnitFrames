@@ -12,6 +12,8 @@ local EventRegistry = EventRegistry
 local InCombatLockdown = InCombatLockdown
 local UIParent = UIParent
 local type = type
+local pcall = pcall
+local issecretvalue = _G.issecretvalue
 local format = string.format
 
 local ARCUI_ANCHOR_EVENT = "ArcUI.AnchorProxy.SizeChanged"
@@ -308,19 +310,128 @@ InCombat = function()
     return InCombatLockdown and InCombatLockdown() or false
 end
 
+local function IsSecretValue(value)
+    return issecretvalue and issecretvalue(value) == true or false
+end
+
+local OPTIONAL_FRAME_FLAG_ABSENT = {}
+
+local function ReadOptionalFrameFlag(frame, key)
+    local method = frame[key]
+    if method == nil then return OPTIONAL_FRAME_FLAG_ABSENT end
+    return method(frame)
+end
+
+local function ProbeCooldownAnchorFrame(frame, requireHeight, requireSetPoint)
+    local getWidth = frame.GetWidth
+    local getHeight = requireHeight == true and frame.GetHeight or nil
+    return frame._msufLegacyCooldownAnchor,
+        ReadOptionalFrameFlag(frame, "CanBeAccessedInContext"),
+        ReadOptionalFrameFlag(frame, "IsForbidden"),
+        ReadOptionalFrameFlag(frame, "IsAnchoringRestricted"),
+        ReadOptionalFrameFlag(frame, "IsAnchoringSecret"),
+        ReadOptionalFrameFlag(frame, "IsShown"),
+        getWidth and getWidth(frame) or nil,
+        getHeight and getHeight(frame) or nil,
+        requireSetPoint == true and frame.SetPoint or nil
+end
+
+-- Cooldown providers may anchor their public frame to a restricted AuraContainer
+-- child. On 12.1 that makes geometry accessors return secret numbers, which must
+-- never enter Lua comparisons or arithmetic. One protected probe batches every
+-- foreign accessor; plain-value validation happens only after it returns.
+local function GetUsableCooldownAnchorSize(frame, requireHeight, requireSetPoint)
+    if not frame or IsSecretValue(frame) or frame == UIParent or frame == _G.WorldFrame then
+        return nil
+    end
+
+    local ok, legacy, canAccess, forbidden, anchoringRestricted, anchoringSecret,
+        shown, width, height, setPoint = pcall(ProbeCooldownAnchorFrame, frame, requireHeight, requireSetPoint)
+    if not ok
+        or IsSecretValue(legacy) or IsSecretValue(canAccess) or IsSecretValue(forbidden)
+        or IsSecretValue(anchoringRestricted) or IsSecretValue(anchoringSecret)
+        or IsSecretValue(shown) or IsSecretValue(width) or IsSecretValue(height)
+        or IsSecretValue(setPoint) then
+        return nil
+    end
+    if legacy == true then return nil end
+    if canAccess ~= OPTIONAL_FRAME_FLAG_ABSENT and canAccess ~= true then return nil end
+    if forbidden ~= OPTIONAL_FRAME_FLAG_ABSENT and forbidden ~= false then return nil end
+    if anchoringRestricted ~= OPTIONAL_FRAME_FLAG_ABSENT and anchoringRestricted ~= false then return nil end
+    if anchoringSecret ~= OPTIONAL_FRAME_FLAG_ABSENT and anchoringSecret ~= false then return nil end
+    if shown ~= OPTIONAL_FRAME_FLAG_ABSENT and shown ~= true then return nil end
+    if type(width) ~= "number" or width <= 0 then return nil end
+    if requireHeight == true and (type(height) ~= "number" or height <= 0) then return nil end
+    if requireSetPoint == true and type(setPoint) ~= "function" then return nil end
+    return width, height
+end
+
+local function ProbeCooldownAnchorScales(frame, targetFrame)
+    local sourceScale, targetScale = 1, 1
+    local getSourceScale = frame.GetEffectiveScale
+    if getSourceScale ~= nil then sourceScale = getSourceScale(frame) end
+    if targetFrame then
+        local getTargetScale = targetFrame.GetEffectiveScale
+        if getTargetScale ~= nil then targetScale = getTargetScale(targetFrame) end
+    end
+    return sourceScale, targetScale
+end
+
+local function GetCooldownAnchorScaledWidth(frame, targetFrame, knownWidth)
+    if IsSecretValue(knownWidth) then return nil end
+    local width = knownWidth
+    if width == nil then width = GetUsableCooldownAnchorSize(frame) end
+    if type(width) ~= "number" or width <= 0 then return nil end
+    local ok, sourceScale, targetScale = pcall(ProbeCooldownAnchorScales, frame, targetFrame)
+    if not ok or IsSecretValue(sourceScale) or IsSecretValue(targetScale)
+        or type(sourceScale) ~= "number" or type(targetScale) ~= "number" then
+        return nil
+    end
+    if sourceScale <= 0 then sourceScale = 1 end
+    if targetScale <= 0 then targetScale = 1 end
+    return width * sourceScale / targetScale
+end
+
+MSUF.GetUsableCooldownAnchorSize = GetUsableCooldownAnchorSize
+MSUF.GetCooldownAnchorScaledWidth = GetCooldownAnchorScaledWidth
+_G.MSUF_GetUsableCooldownAnchorSize = GetUsableCooldownAnchorSize
+_G.MSUF_GetCooldownAnchorScaledWidth = GetCooldownAnchorScaledWidth
+
 local function IsFrameUsable(frame)
-    if not (frame and frame ~= UIParent and frame ~= WorldFrame) then
+    return GetUsableCooldownAnchorSize(frame, true, true) ~= nil
+end
+
+local function ProbeCooldownAnchorObserver(frame)
+    return frame._msufLegacyCooldownAnchor,
+        ReadOptionalFrameFlag(frame, "CanBeAccessedInContext"),
+        ReadOptionalFrameFlag(frame, "IsForbidden"),
+        ReadOptionalFrameFlag(frame, "IsAnchoringRestricted"),
+        ReadOptionalFrameFlag(frame, "IsAnchoringSecret"),
+        frame.HookScript
+end
+
+-- A hidden provider has no usable anchor rectangle yet, but it still needs an
+-- OnShow observer so acquisition remains event-driven. Keep this separate from
+-- IsFrameUsable: observation validates only frame access and the hook method,
+-- and never reads or compares foreign geometry.
+local function IsFrameObservable(frame)
+    if not frame or IsSecretValue(frame) or frame == UIParent or frame == _G.WorldFrame then
         return false
     end
-    if frame.IsForbidden and frame:IsForbidden() then
+    local ok, legacy, canAccess, forbidden, anchoringRestricted, anchoringSecret, hookScript =
+        pcall(ProbeCooldownAnchorObserver, frame)
+    if not ok
+        or IsSecretValue(legacy) or IsSecretValue(canAccess) or IsSecretValue(forbidden)
+        or IsSecretValue(anchoringRestricted) or IsSecretValue(anchoringSecret)
+        or IsSecretValue(hookScript) then
         return false
     end
-    if frame.IsShown and not frame:IsShown() then
-        return false
-    end
-    local width = frame.GetWidth and frame:GetWidth() or 0
-    local height = frame.GetHeight and frame:GetHeight() or 0
-    return width > 0 and height > 0 and frame.SetPoint ~= nil
+    if legacy == true then return false end
+    if canAccess ~= OPTIONAL_FRAME_FLAG_ABSENT and canAccess ~= true then return false end
+    if forbidden ~= OPTIONAL_FRAME_FLAG_ABSENT and forbidden ~= false then return false end
+    if anchoringRestricted ~= OPTIONAL_FRAME_FLAG_ABSENT and anchoringRestricted ~= false then return false end
+    if anchoringSecret ~= OPTIONAL_FRAME_FLAG_ABSENT and anchoringSecret ~= false then return false end
+    return type(hookScript) == "function"
 end
 
 local function ResolveSkironAnchorSource(preferredFrame, isActiveProxy)
@@ -394,8 +505,7 @@ local function EnsureEllesmereCooldownAnchorSource()
 end
 
 local function ObserveCoolinatorSource(source)
-    if not (source and source.HookScript) then return false end
-    if source.IsForbidden and source:IsForbidden() then return false end
+    if not IsFrameObservable(source) then return false end
     if observedCoolinatorSources[source] then return true end
     if InCombat()
         and source.IsProtected and source:IsProtected() then
@@ -436,8 +546,7 @@ local function EnsureCoolinatorAnchorSource()
 end
 
 local function ObserveSkironSource(source)
-    if not (source and source.HookScript) then return false end
-    if source.IsForbidden and source:IsForbidden() then return false end
+    if not IsFrameObservable(source) then return false end
     if observedSkironSources[source] then return true end
     if InCombat()
         and source.IsProtected and source:IsProtected() then

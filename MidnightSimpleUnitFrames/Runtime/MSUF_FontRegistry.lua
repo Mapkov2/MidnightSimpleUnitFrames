@@ -253,7 +253,7 @@ local function MSUF_NormalizeStoredFontKeys()
     if type(db) ~= "table" then return end
     MSUF_NormalizeFontKeyField(db.general)
     for _, key in ipairs({
-        "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
+        "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         if type(db[key]) == "table" then
@@ -376,10 +376,6 @@ local function MSUF_GetPowerBarColor(powerType, powerToken)
     local g = G.MSUF_DB.general
     local ov = g and g.powerColorOverrides
     local c = ov and ov[powerToken] or nil
-    if type(c) ~= "table" and G.MSUF_AugEvokerActive and powerToken == "ESSENCE" then
-        local cpOv = g and g.classPowerColorOverrides
-        c = cpOv and cpOv[powerToken] or nil
-    end
     if type(c) ~= "table" then
         return nil
     end

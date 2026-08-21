@@ -35,8 +35,6 @@ end
 
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local BOSS_LOOKUP = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
-local ARENA_UNITS = { "arena1", "arena2", "arena3" }
-local ARENA_LOOKUP = { arena1=true, arena2=true, arena3=true }
 local UNIT_FLAG = {
     player = "showPlayer",
     target = "showTarget",
@@ -47,10 +45,6 @@ local UNIT_FLAG = {
     boss3 = "showBoss",
     boss4 = "showBoss",
     boss5 = "showBoss",
-    arena = "showArena",
-    arena1 = "showArena",
-    arena2 = "showArena",
-    arena3 = "showArena",
 }
 
 local PUBLIC_UNITS = {
@@ -58,7 +52,6 @@ local PUBLIC_UNITS = {
     { value = "target", text = "Target" },
     { value = "focus", text = "Focus" },
     { value = "boss", text = "Boss" },
-    { value = "arena", text = "Arena" },
 }
 
 local STYLE_SCOPES = {
@@ -67,7 +60,6 @@ local STYLE_SCOPES = {
     { value = "target", text = "Target" },
     { value = "focus", text = "Focus" },
     { value = "boss", text = "Boss" },
-    { value = "arena", text = "Arena" },
 }
 
 local GROWTH_VALUES = {
@@ -919,7 +911,6 @@ end
 local function NormalizeUnit(unit)
     unit = tostring(unit or "player")
     if unit == "boss" or BOSS_LOOKUP[unit] then return "boss" end
-    if unit == "arena" or ARENA_LOOKUP[unit] then return "arena" end
     if unit == "target" or unit == "focus" then return unit end
     return "player"
 end
@@ -927,19 +918,14 @@ end
 local function RuntimeUnit(unit)
     unit = tostring(unit or "player")
     if BOSS_LOOKUP[unit] then return unit end
-    if ARENA_LOOKUP[unit] then return unit end
     unit = NormalizeUnit(unit)
-    if unit == "boss" then return "boss1" end
-    if unit == "arena" then return "arena1" end
-    return unit
+    return unit == "boss" and "boss1" or unit
 end
 
 local function EachRuntimeUnit(unit, fn)
     unit = NormalizeUnit(unit)
     if unit == "boss" then
         for i = 1, #BOSS_UNITS do fn(BOSS_UNITS[i]) end
-    elseif unit == "arena" then
-        for i = 1, #ARENA_UNITS do fn(ARENA_UNITS[i]) end
     else
         fn(unit)
     end
@@ -1311,6 +1297,100 @@ local function SpellIDFromInput(value)
     end
     return nil
 end
+
+--- Item input for Buff Reminder slots. Only an explicit item link or an
+--- `item:<id>` token counts: a bare number stays a Spell ID so the existing
+--- whitelist behaviour cannot change under anyone.
+local function ItemIDFromInput(value)
+    value = tostring(value or "")
+    local itemID = tonumber(value:match("|Hitem:(%d+)") or value:match("item:(%d+)"))
+    if not itemID or itemID <= 0 then return nil end
+    return math_floor(itemID + 0.5)
+end
+
+--- Strip an item link/token so the remaining text can still be read as a
+--- Spell ID. This is what lets one input line bind an item to a specific
+--- aura ("461257 [Feast]") when the item's own use-spell is not the buff.
+local function StripItemInput(value)
+    value = tostring(value or "")
+    value = value:gsub("|c%x%x%x%x%x%x%x%x|Hitem:.-|h.-|h|r", " ")
+    value = value:gsub("|Hitem:.-|h.-|h", " ")
+    value = value:gsub("item:[%d:%-]+", " ")
+    return (value:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+function Model.ItemInfo(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return nil end
+    local CI = _G.C_Item
+    local name, icon, spellID
+    if type(CI) == "table" then
+        if type(CI.GetItemNameByID) == "function" then name = CI.GetItemNameByID(itemID) end
+        if type(CI.GetItemIconByID) == "function" then icon = CI.GetItemIconByID(itemID) end
+        if type(CI.GetItemSpell) == "function" then
+            local _, id = CI.GetItemSpell(itemID)
+            spellID = tonumber(id)
+        end
+    end
+    return itemID, name, icon, spellID
+end
+
+--- What a click on a Buff Reminder slot will actually do. A bound item always
+--- wins; otherwise the click only does something if the player really knows
+--- the tracked spell. Cold path only -- the runtime binding never consults
+--- this, it exists so the list can tell the user which rows are dead.
+function Model.ReminderClickAction(spellID, itemID)
+    if tonumber(itemID) then return "item" end
+    spellID = tonumber(spellID)
+    if not spellID then return nil end
+    local book = _G.C_SpellBook
+    if type(book) == "table" and type(book.IsSpellKnown) == "function"
+        and book.IsSpellKnown(spellID) == true then return "spell" end
+    if type(_G.IsPlayerSpell) == "function" and _G.IsPlayerSpell(spellID) == true then
+        return "spell"
+    end
+    return nil
+end
+
+--- Rows the self-cast filter must never hide. There is no API that says which
+--- class owns a spell, so a flask buff and another class's ability look
+--- identical to IsSpellKnown: both are simply "not mine". A bound item settles
+--- it automatically; everything else is this explicit keep list.
+local function CustomContainerKeepSpells(item, create)
+    local map = type(item) == "table" and item.reminderKeepSpells or nil
+    if map or create ~= true or type(item) ~= "table" then return map end
+    map = {}
+    item.reminderKeepSpells = map
+    return map
+end
+
+function Model.IsCustomContainerKeepSpell(unit, index, spellID)
+    local item = Model.CustomContainer(unit, index, false)
+    local map = CustomContainerKeepSpells(item, false)
+    return map ~= nil and map[tonumber(spellID) or -1] == true
+end
+
+function Model.ToggleCustomContainerKeepSpell(unit, index, spellID, value)
+    spellID = tonumber(spellID)
+    local item = Model.CustomContainer(unit, index, true)
+    if not (spellID and item) then return false, "invalid" end
+    local map = CustomContainerKeepSpells(item, true)
+    local next = value
+    if next == nil then next = map[spellID] ~= true end
+    next = next == true or nil
+    if map[spellID] == next then return false, "unchanged" end
+    map[spellID] = next
+    return true
+end
+
+local function CustomContainerReminderItems(item, create)
+    local map = type(item) == "table" and item.reminderItems or nil
+    if map or create ~= true or type(item) ~= "table" then return map end
+    map = {}
+    item.reminderItems = map
+    return map
+end
+Model.CustomContainerReminderItems = CustomContainerReminderItems
 
 local function SpellLabel(spellID)
     local id, name = SpellInfo(spellID)
@@ -1779,14 +1859,12 @@ function Model.ScopeLabel(scope)
     if scope == "player" then return "Player" end
     if scope == "target" then return "Target" end
     if scope == "focus" then return "Focus" end
-    if scope == "arena" then return "Arena" end
     return "Boss"
 end
 
 function Model.UnitSupported(unit)
     unit = NormalizeUnit(unit)
     return unit == "player" or unit == "target" or unit == "focus" or unit == "boss"
-        or unit == "arena"
 end
 
 function Model.UnitEnabled(unit)
@@ -2208,6 +2286,11 @@ local function NewCustomContainer(index, unit)
         name = "Custom " .. tostring(index),
         auraType = "BUFF",
         spellIDs = "",
+        -- Temporary weapon enchants are not auras, so they are tracked per
+        -- weapon slot instead of through the whitelist. One consumable
+        -- covers both hands in practice.
+        reminderEnchantMainHand = false,
+        reminderEnchantOffHand = false,
         filters = {
             enabled = true,
             hidePermanent = false,
@@ -2231,6 +2314,16 @@ local function NewCustomContainer(index, unit)
             max = 8, perRow = 4, spacing = 2,
             iconShape = "RECTANGLE",
             showCooldown = true, showCooldownSwipe = true, showStacks = true,
+            -- Buff Reminder is off by default: it converts the container from a
+            -- compacting list into one fixed slot per whitelisted spell.
+            reminderEnabled = false, reminderAlpha = 0.45,
+            reminderDesaturate = true, reminderColor = { 1, 1, 1 },
+            -- Click-to-cast follows the reminder itself: a placeholder the
+            -- user cannot act on is only half the feature.
+            reminderClickCast = true,
+            -- Opt-in: nothing a user deliberately whitelisted should vanish
+            -- without them asking for it.
+            reminderOnlyCastable = false,
         },
         layer = 9,
         strata = "AUTO",
@@ -2638,9 +2731,23 @@ end
 function Model.AddCustomContainerSpell(unit, index, value, allowCustomID)
     unit = NormalizeScope(unit)
     if unit == "shared" then unit = "player" end
-    local spellID = SpellIDFromInput(value)
+    -- An item may accompany a Spell ID (bind that item to that aura) or
+    -- stand alone (track whatever aura the item's own use-spell applies).
+    local itemID = ItemIDFromInput(value)
+    local spellID = SpellIDFromInput(itemID and StripItemInput(value) or value)
+    local itemSpellID
+    if itemID then
+        local _, _, _, resolved = Model.ItemInfo(itemID)
+        itemSpellID = resolved
+        spellID = spellID or resolved
+    end
     local item = Model.CustomContainer(unit, index, true)
-    if not (spellID and item) then return false, "invalid" end
+    if not (spellID and item) then
+        -- An item whose use-effect is not a spell (or is not cached yet)
+        -- gives nothing to track, so refuse instead of adding a dead row.
+        return false, itemID and not itemSpellID and "item-no-aura" or "invalid"
+    end
+    if itemID then CustomContainerReminderItems(item, true)[spellID] = itemID end
     if unit == "player" and index == PLAYER_DEFENSIVE_CONTAINER_INDEX
         and Model.IsPlayerDefensiveSpell(spellID)
         and type(Model.SetPlayerDefensiveSpellEnabled) == "function"
@@ -2682,6 +2789,10 @@ function Model.RemoveCustomContainerSpell(unit, index, value)
     if set[spellID] ~= true then return false, "unchanged" end
     set[spellID] = nil
     if type(item.customSpellIDs) == "table" then item.customSpellIDs[spellID] = nil end
+    local reminderItems = CustomContainerReminderItems(item, false)
+    if reminderItems then reminderItems[spellID] = nil end
+    local keepSpells = CustomContainerKeepSpells(item, false)
+    if keepSpells then keepSpells[spellID] = nil end
     WriteCustomContainerSpellSet(item, set)
     if item.prioritySpellIDs ~= nil then ReconcileCustomContainerSpellPriority(item, false) end
     return true
@@ -2697,20 +2808,68 @@ function Model.ClearCustomContainerSpells(unit, index)
     if count > 0 then WriteCustomContainerSpellSet(item, {}) end
     item.customSpellIDs = nil
     item.prioritySpellIDs = nil
+    item.reminderItems = nil
+    item.reminderKeepSpells = nil
     return count
+end
+
+--- Bind the consumable that a weapon-enchant reminder offers on click. A bare
+--- number is an item ID here: unlike the whitelist, this field has no spell
+--- meaning to be ambiguous with.
+function Model.SetCustomContainerReminderEnchantItem(unit, index, value)
+    local item = Model.CustomContainer(unit, index, true)
+    if not item then return false, "invalid" end
+    local text = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if text == "" then
+        if item.reminderEnchantItem == nil then return false, "unchanged" end
+        item.reminderEnchantItem = nil
+        return true
+    end
+    local itemID = ItemIDFromInput(text) or tonumber(text:match("^(%d+)$"))
+    if not itemID then return false, "invalid" end
+    itemID = math_floor(itemID + 0.5)
+    if item.reminderEnchantItem == itemID then return false, "unchanged" end
+    item.reminderEnchantItem = itemID
+    return true
+end
+
+function Model.CustomContainerReminderEnchantItem(unit, index)
+    local item = Model.CustomContainer(unit, index, false)
+    local itemID = item and tonumber(item.reminderEnchantItem) or nil
+    if not itemID then return nil end
+    local _, name, icon = Model.ItemInfo(itemID)
+    return itemID, name, icon
 end
 
 function Model.CustomContainerSpellEntries(unit, index)
     local item = Model.CustomContainer(unit, index, false)
     local customSpellIDs = type(item and item.customSpellIDs) == "table" and item.customSpellIDs or nil
     local out, bySpellID = {}, {}
+    local reminderItems = CustomContainerReminderItems(item, false)
+    local keepSpells = CustomContainerKeepSpells(item, false)
     for spellID in pairs(CustomContainerSpellSet(item)) do
         local id, name, icon = SpellInfo(spellID)
         id = id or spellID
+        -- A bound item owns the row's face: the reminder placeholder and the
+        -- click both use the item, so the list has to show the same thing.
+        local itemID = reminderItems and tonumber(reminderItems[id]) or nil
+        local itemName, itemIcon
+        if itemID then
+            local _, resolvedName, resolvedIcon = Model.ItemInfo(itemID)
+            itemName, itemIcon = resolvedName, resolvedIcon
+            if resolvedIcon then icon = resolvedIcon end
+        end
         local entry = {
             value = tostring(id), spellID = id, icon = icon,
-            text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
+            itemID = itemID, itemName = itemName, itemIcon = itemIcon,
+            text = (type(itemName) == "string" and itemName ~= "" and itemName
+                or (type(name) == "string" and name ~= "" and name or "Spell"))
+                .. " (#" .. tostring(id) .. ")",
             customID = customSpellIDs and customSpellIDs[id] == true or false,
+            clickAction = Model.ReminderClickAction(id, itemID),
+            -- A bound item already proves the row is not class bound.
+            keep = itemID ~= nil or (keepSpells ~= nil and keepSpells[id] == true),
+            keepExplicit = keepSpells ~= nil and keepSpells[id] == true,
         }
         out[#out + 1] = entry
         bySpellID[id] = entry
@@ -4320,7 +4479,6 @@ function Model.Apply(unit, reason)
         Refresh("target")
         Refresh("focus")
         for i = 1, #BOSS_UNITS do Refresh(BOSS_UNITS[i]) end
-        for i = 1, #ARENA_UNITS do Refresh(ARENA_UNITS[i]) end
         RefreshGroup("group")
     end
     if type(A3._NotifyAuraColdpathPreview) == "function" then

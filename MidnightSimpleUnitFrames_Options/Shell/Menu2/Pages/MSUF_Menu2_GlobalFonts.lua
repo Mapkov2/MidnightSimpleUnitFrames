@@ -191,8 +191,6 @@ local function CurrentPowerColorPreview()
     if type(_G.UnitPowerType) == "function" then powerType, powerToken = _G.UnitPowerType("player") end
     if _G.MSUF_EleMaelstromActive or _G.MSUF_ShadowManaActive then
         powerType, powerToken = 0, "MANA"
-    elseif _G.MSUF_AugEvokerActive then
-        powerType, powerToken = 19, "ESSENCE"
     end
     if powerType == nil and (powerToken == nil or powerToken == "") then powerType, powerToken = 0, "MANA" end
     local fn = _G.MSUF_GetResolvedPowerColor or (MSUF and MSUF.MSUF_GetResolvedPowerColor)
@@ -317,7 +315,7 @@ local function ApplyNameShortening(reason)
     local scope = CurrentFontScope()
     if IsGFScope(scope) then return end
     if scope == "shared" then
-        for _, unit in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }) do
+        for _, unit in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
             M.RequestUnitApply(unit, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
         end
     elseif UNIT_SCOPE_KEYS[scope] then

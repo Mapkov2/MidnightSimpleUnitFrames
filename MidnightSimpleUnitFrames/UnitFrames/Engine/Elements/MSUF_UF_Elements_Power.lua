@@ -12,6 +12,7 @@ local UnitPower = C and C.UnitPower or UnitPower
 local UnitPowerMax = C and C.UnitPowerMax or UnitPowerMax
 local UnitPowerType = C and C.UnitPowerType or UnitPowerType
 local UnitPowerPercent = C and C.UnitPowerPercent or UnitPowerPercent
+local ResolveDisplayedPowerIdentity = C and C.ResolveDisplayedPowerIdentity
 local PowerBarColor = C and C.PowerBarColor or PowerBarColor
 local ResolvePowerColor = C and C.PowerColor
 local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
@@ -91,26 +92,17 @@ local function SpecPower(frame)
   return frame and frame.MSUFSpec and frame.MSUFSpec.power or nil
 end
 
-local function ResolveAugPowerReplacement(frame)
-  if not (frame and frame.MSUFUnitKey == "player") then return false end
-  local getMetrics = _G.MSUF_GetAugPowerReplacementMetrics
-  if type(getMetrics) ~= "function" then return false end
-  local active, totalHeight, essenceHeight = getMetrics(frame)
-  if active ~= true then return false end
-  totalHeight = tonumber(totalHeight)
-  essenceHeight = tonumber(essenceHeight)
-  if not IsFiniteNumber(totalHeight) or totalHeight <= 0
-    or not IsFiniteNumber(essenceHeight) or essenceHeight <= 0 then
-    return false
-  end
-  return true, totalHeight, essenceHeight
-end
-
-local function ClearAugPowerReplacement(frame)
-  if not frame then return end
-  frame._msufAugPowerReplacementActive = nil
-  frame._msufAugPowerReplacementHeight = nil
-  frame._msufAugPowerReplacementEssenceHeight = nil
+-- Augmentation Evoker renders Ebon Might's remaining duration on the Player
+-- Power bar itself: Essence stays the ordinary Class Resource and Mana moves to
+-- the Alternative Mana bar. Geometry, media, border and layer therefore stay the
+-- ordinary Player Power settings - only value updates, power events and power
+-- text are handed to the native AuraContainer that ClassPower mounts on this
+-- bar. The global flips to false when the container cannot be created, so the
+-- bar falls back to an ordinary Mana bar instead of rendering nothing.
+local function PowerShowsEbonMight(frame)
+  return frame ~= nil
+    and frame.MSUFUnitKey == "player"
+    and _G.MSUF_AugEvokerActive == true
 end
 
 local function ResolveDynamicPowerColor(frame, unit, powerType, token, metaKnown)
@@ -136,11 +128,20 @@ local function ResolveDynamicPowerColor(frame, unit, powerType, token, metaKnown
 end
 
 local function ReadPowerTypeCached(bar, unit, force)
-  if not UnitPowerType then return nil, nil end
-  if force ~= true and bar and bar._msufPowerTypeKnown == true and bar._msufPowerTypeUnit == unit then
+  local powerType, token, displayMana
+  if unit == "player" and ResolveDisplayedPowerIdentity then
+    powerType, token, displayMana = ResolveDisplayedPowerIdentity(unit)
+  end
+  displayMana = displayMana == true
+  if force ~= true and bar and bar._msufPowerTypeKnown == true
+    and bar._msufPowerTypeUnit == unit
+    and bar._msufPowerDisplayMana == displayMana then
     return bar._msufPowerType, bar._msufPowerToken
   end
-  local powerType, token = UnitPowerType(unit)
+  if not displayMana then
+    if not UnitPowerType then return nil, nil end
+    powerType, token = UnitPowerType(unit)
+  end
   local typeSecret = issecretvalue(powerType) == true
   local tokenSecret = issecretvalue(token) == true
   if typeSecret then powerType = nil end
@@ -151,6 +152,7 @@ local function ReadPowerTypeCached(bar, unit, force)
       bar._msufPowerToken = nil
       bar._msufPowerTypeKnown = nil
       bar._msufPowerTypeUnit = nil
+      bar._msufPowerDisplayMana = nil
     end
     return nil, nil
   end
@@ -159,8 +161,19 @@ local function ReadPowerTypeCached(bar, unit, force)
     bar._msufPowerToken = token
     bar._msufPowerTypeKnown = true
     bar._msufPowerTypeUnit = unit
+    bar._msufPowerDisplayMana = displayMana
   end
   return powerType, token
+end
+
+-- UNIT_POWER_* carries the resource token that changed. Preserve the cheap
+-- mismatch rejection, but let one event through when Class Resources just
+-- changed Player's displayed identity and a protected layout refresh is still
+-- deferred. The helper is called only for an already-mismatched token.
+local function CachedDisplayPowerIdentityIsCurrent(bar, unit)
+  if unit ~= "player" or not ResolveDisplayedPowerIdentity then return true end
+  local _, _, displayMana = ResolveDisplayedPowerIdentity(unit)
+  return bar._msufPowerDisplayMana == (displayMana == true)
 end
 
 local function SetShown(frame, shown)
@@ -335,11 +348,9 @@ local function RoundNonNegative(value, fallback)
 end
 
 local function FrameWidth(frame)
-  if not (frame and frame.GetWidth) then return nil end
-  if frame._msufLegacyCooldownAnchor == true then return nil end
-  if frame.IsShown and not frame:IsShown() then return nil end
-  local width = frame:GetWidth()
-  if type(width) == "number" and width > 1 then return width end
+  local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+  local width = type(getSize) == "function" and getSize(frame) or nil
+  if width and width > 1 then return width end
   return nil
 end
 
@@ -397,14 +408,14 @@ end
 --      predicted class width) as the sync fallback. It lives on another page and
 --      silently applies to every unit, so it must not outrank the frame itself.
 --   5. the frame width.
-local function ResolveDetachedWidth(frame, power, avoidClassPower)
+local function ResolveDetachedWidth(frame, power)
   local bar = frame and frame.targetPowerBar
   local width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar)
-  if width == nil and avoidClassPower ~= true and power.detachedSyncClass == true then
+  if width == nil and power.detachedSyncClass == true then
     width = FrameWidth(_G.MSUF_ClassPowerContainer)
   end
   width = width or Number(power.detachedWidthExplicit, nil)
-  if width == nil and avoidClassPower ~= true and power.detachedSyncClass == true then
+  if width == nil and power.detachedSyncClass == true then
     width = CachedExternalFrameWidth(power.detachedClassWidthFrameName, bar)
       or Number(power.detachedClassWidth, nil)
   end
@@ -414,9 +425,9 @@ local function ResolveDetachedWidth(frame, power, avoidClassPower)
 end
 Power.ResolveDetachedWidth = ResolveDetachedWidth
 
-local function ResolveDetachedAnchor(power, avoidClassPower)
+local function ResolveDetachedAnchor(power)
   local anchor = _G.MSUF_ClassPowerContainer
-  if avoidClassPower ~= true and power.detachedAnchorClass == true
+  if power.detachedAnchorClass == true
     and anchor and anchor.GetWidth and anchor:GetWidth() > 1
     and (not anchor.IsShown or anchor:IsShown()) then
     return anchor, "TOP", "BOTTOM"
@@ -548,16 +559,15 @@ local function SetPowerFrameLevel(bar, level)
   bar._msufPowerFrameLevel = level
 end
 
-local function LayoutDetached(frame, bar, power, defaultHeight, augReplacement)
+local function LayoutDetached(frame, bar, power, defaultHeight)
   local shape = NormalizeShape(power.shape)
-  local size = augReplacement ~= true and shape == "ORB"
+  local size = shape == "ORB"
     and RoundPositive(power.orbSize, power.detachedHeight or defaultHeight or 6) or nil
-  local width = size or ResolveDetachedWidth(frame, power, augReplacement)
-  local height = augReplacement == true and defaultHeight
-    or size or RoundPositive(power.detachedHeight, defaultHeight or 6)
+  local width = size or ResolveDetachedWidth(frame, power)
+  local height = size or RoundPositive(power.detachedHeight, defaultHeight or 6)
   local x = math_floor(Number(power.detachedX, 0) + 0.5)
   local y = math_floor(Number(power.detachedY, -4) + 0.5)
-  local anchor, point, relativePoint = ResolveDetachedAnchor(power, augReplacement)
+  local anchor, point, relativePoint = ResolveDetachedAnchor(power)
 
   bar:ClearAllPoints()
   bar:SetSize(math_max(1, width), math_max(1, height))
@@ -585,7 +595,7 @@ end
 -- Resolve even when the last width stamp matches: outside combat this also
 -- clears the per-bar protected fallback cache when a source becomes hidden.
 local function RefreshDetachedWidthOnly(frame, bar, power)
-  local width = ResolveDetachedWidth(frame, power, frame and frame._msufAugPowerReplacementActive == true)
+  local width = ResolveDetachedWidth(frame, power)
   if bar._msufDetachedWidth ~= width then
     bar:SetWidth(math_max(1, width))
     bar._msufDetachedWidth = width
@@ -655,11 +665,13 @@ end
 
 function Power.IsEnabled(frame, spec)
   local power = spec and spec.power
-  return (power and power.enabled == true) or ResolveAugPowerReplacement(frame) == true
+  return power ~= nil and power.enabled == true
 end
 
 function Power.GetEvents(frame, spec)
-  if frame and frame._msufAugPowerReplacementActive == true then
+  -- Ebon Might is driven entirely by the native AuraContainer's duration
+  -- binding, so this bar needs no power stream of its own.
+  if frame and frame._msufPowerEbonMight == true then
     return EMPTY_EVENTS
   end
   local power = spec and spec.power
@@ -684,7 +696,7 @@ function Power.Disable(frame)
   HidePowerBorder(frame and frame.targetPowerBar)
   if HideBarGradient and frame then HideBarGradient(frame.powerGradients) end
   if frame then
-    ClearAugPowerReplacement(frame)
+    frame._msufPowerEbonMight = nil
     frame._msufPowerBarDetached = nil
     if Health and Health.Layout then Health.Layout(frame, frame.MSUFSpec, false) end
   end
@@ -737,19 +749,16 @@ function Power.Apply(frame, spec)
   frame.power = bar
 
   local power = spec and spec.power or {}
-  local augReplacement, augHeight, augEssenceHeight = ResolveAugPowerReplacement(frame)
-  if augReplacement then
-    frame._msufAugPowerReplacementActive = true
-    frame._msufAugPowerReplacementHeight = augHeight
-    frame._msufAugPowerReplacementEssenceHeight = augEssenceHeight
-  else
-    ClearAugPowerReplacement(frame)
-  end
-  local h = augReplacement and augHeight or tonumber(power.height) or 3
+  -- Augmentation Evoker renders Ebon Might here instead of a power value. That
+  -- is a value/event/text decision only: geometry, media, border and layer stay
+  -- the ordinary Player Power configuration below.
+  local ebonMight = power.enabled == true and PowerShowsEbonMight(frame)
+  frame._msufPowerEbonMight = ebonMight or nil
+  local h = tonumber(power.height) or 3
   frame._msufPowerBarDetached = power.detached == true and true or nil
-  if Health and Health.Layout then Health.Layout(frame, spec, augReplacement or power.enabled == true) end
+  if Health and Health.Layout then Health.Layout(frame, spec, power.enabled == true) end
   if power.detached == true then
-    LayoutDetached(frame, bar, power, h, augReplacement)
+    LayoutDetached(frame, bar, power, h)
   else
     bar._msufDetached = nil
     bar._msufDetachedWidth = nil
@@ -769,18 +778,6 @@ function Power.Apply(frame, spec)
   if frame.powerBarBG then
     frame.powerBarBG:ClearAllPoints()
     frame.powerBarBG:SetAllPoints(bar)
-  end
-  if augReplacement then
-    -- Essence + Ebon Might own the visible surface. Keep the ordinary Player
-    -- Power StatusBar only as their geometry carrier, with no visual layers or
-    -- recurring value work of its own.
-    ApplyShapeMedia(frame, nil, power.texture or spec and spec.texture or WHITE)
-    if SetBarSmoothing then SetBarSmoothing(bar, false, false, frame.powerLossTrail) end
-    SetShown(frame, false)
-    HidePowerBorder(bar)
-    if HideBarGradient then HideBarGradient(frame.powerGradients) end
-    NotifyRoundedPowerBorder(frame, false)
-    return
   end
   local texture = power.texture or spec and spec.texture or WHITE
   if power.detached == true then
@@ -875,6 +872,7 @@ function Power.Apply(frame, spec)
   bar._msufPowerToken = nil
   bar._msufPowerTypeKnown = nil
   bar._msufPowerTypeUnit = nil
+  bar._msufPowerDisplayMana = nil
   if trail then
     local pool = trail._msufLossTrailPool
     local count = pool and #pool or 1
@@ -886,7 +884,12 @@ function Power.Apply(frame, spec)
       snapshot:SetStatusBarColor(lossR, lossG, lossB, power.alpha or 1)
     end
   end
-  if SetBarSmoothing then SetBarSmoothing(bar, power.smooth == true, power.chunked == true, trail) end
+  if SetBarSmoothing then
+    -- Ebon Might has no "power loss", and the native duration bar owns its own
+    -- interpolation, so the carrier keeps neither smoothing nor a loss trail.
+    SetBarSmoothing(bar, not ebonMight and power.smooth == true,
+      not ebonMight and power.chunked == true, trail)
+  end
   SetColor(frame, true)
   local enabled = power.enabled == true
   SetShown(frame, enabled)
@@ -895,6 +898,27 @@ function Power.Apply(frame, spec)
   else
     HidePowerBorder(bar)
     if HideBarGradient then HideBarGradient(frame.powerGradients) end
+  end
+  if ebonMight then
+    -- Park the carrier's own fill: Power.Update no longer runs for this bar, so
+    -- without this the last Mana value would stay painted underneath the native
+    -- duration bar. Background, border and media above stay fully configured.
+    if bar._msufMinMax ~= 1 then
+      bar:SetMinMaxValues(0, 1)
+      bar._msufMinMax = 1
+    end
+    bar:SetValue(0)
+    bar._msufInterpolating = nil
+    if trail then
+      local pool = trail._msufLossTrailPool
+      if pool then
+        for i = 1, #pool do pool[i]:Hide() end
+      else
+        trail:Hide()
+      end
+    end
+    local mount = _G.MSUF_ClassPower_MountEbonMight
+    if type(mount) == "function" then mount(bar) end
   end
   if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
     _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
@@ -1015,7 +1039,8 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken then return end
+    and bar._msufPowerToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1043,7 +1068,8 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken then return end
+    and bar._msufPowerToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1066,7 +1092,8 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken then return end
+    and bar._msufPowerToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1095,7 +1122,8 @@ local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
   if shown ~= true and (shown == false or (bar.IsShown and not bar:IsShown())) then return end
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken then return end
+    and bar._msufPowerToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1124,7 +1152,8 @@ local function UpdateGroupPercentPathLean(frame, event, unit, eventPowerToken)
   local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
-    and bar._msufPowerToken ~= eventPowerToken then return end
+    and bar._msufPowerToken ~= eventPowerToken
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
   if not (UnitPowerPercent and UnitPowerType and SCALE_100) then
     return UpdatePercentPath(frame, event, unit, eventPowerToken)
   end
@@ -1168,7 +1197,7 @@ local function PowerValuePlan(frame)
 end
 
 function Power.Update(frame, event, unit, eventPowerToken)
-  if frame and frame._msufAugPowerReplacementActive == true then return end
+  if frame and frame._msufPowerEbonMight == true then return end
   local spec = frame and frame.MSUFSpec
   if frame and (frame._msufIsGroupFrame == true or (spec and spec.scope == "group")) then
     return UpdatePercentPath(frame, event, unit, eventPowerToken)
@@ -1181,7 +1210,7 @@ function Power.Update(frame, event, unit, eventPowerToken)
 end
 
 function Power.SelectUpdate(frame, spec)
-  if frame and frame._msufAugPowerReplacementActive == true then
+  if frame and frame._msufPowerEbonMight == true then
     return Power.Update
   end
   if (spec and spec.scope == "group") or (frame and frame._msufIsGroupFrame == true) then

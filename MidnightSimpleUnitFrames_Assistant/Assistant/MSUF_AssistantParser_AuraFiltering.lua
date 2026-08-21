@@ -23,7 +23,7 @@ local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
 
 local UNIT_LABELS = {
-    player = "Player", target = "Target", focus = "Focus", boss = "Boss", arena = "Arena",
+    player = "Player", target = "Target", focus = "Focus", boss = "Boss",
 }
 
 local GROUP_LABELS = {
@@ -822,6 +822,22 @@ local function FilterMasterIntent(text)
     if not scopeEvidence then return nil end
     if HasAny(text, { "turn off", "disable" }) then return false end
     if HasAny(text, { "turn on", "enable" }) then return true end
+    -- The control's own label is "<Frame> <Lane> Filters Enabled", so the
+    -- plainest way to ask for it is "set Boss Buff Filters Enabled to off".
+    -- That form carries no polarity verb, so the master toggle was unreachable
+    -- by its own name and the request fell through to the content-filter
+    -- chooser. The value is read from the tail AFTER the label, because
+    -- "enabled" is part of the name and must not be mistaken for the value.
+    local tail = text:match("filters?%s+enabled%s+(.*)$") or text:match("filters?%s+aktiviert%s+(.*)$")
+    if tail then
+        tail = tail:gsub("^to%s+", ""):gsub("^auf%s+", "")
+        if tail:find("^off") or tail:find("^false") or tail:find("^disabled") or tail:find("^aus") then
+            return false
+        end
+        if tail:find("^on") or tail:find("^true") or tail:find("^enabled") or tail:find("^an") then
+            return true
+        end
+    end
     return nil
 end
 

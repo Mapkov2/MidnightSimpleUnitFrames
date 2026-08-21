@@ -1969,7 +1969,16 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             placed.barTimerY = tonumber(placed.barTimerY) or 0
             if placed.showCooldownSwipe == nil then placed.showCooldownSwipe = true end
         end,
-        RefreshPage)
+        -- Re-gate this section synchronously before the page-level refresh.
+        -- A page reselect runs its refreshers behind the menu-data revision
+        -- guard, and the surrounding history capture only bumps that revision
+        -- after this setter returns. Without the direct call the controls of
+        -- the previous shape stay as they were, so switching Icon to Square
+        -- left Icon Effect visible until an unrelated interaction refreshed it.
+        function()
+            RefreshSpellIndicatorState()
+            RefreshPage()
+        end)
     local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -546)
     local placedSize = BindPlacedSlider("Size", 6, 48, 1, "size", 18, -600)
     local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -654)
@@ -2341,8 +2350,6 @@ local function BuildGFIndicators(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
-    -- Group pages run in focus-section mode: chip bar + one visible section.
-    if b.EnableFocusSectionMode then b:EnableFocusSectionMode() end
     local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
     BuildIndicatorsSection(ctx, b)
     BuildStatusIconsSection(ctx, b, RefreshPage)

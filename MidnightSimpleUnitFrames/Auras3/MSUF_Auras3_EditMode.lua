@@ -50,29 +50,18 @@ A3.__editModeLoaded = true
 A3.EditMode = (type(A3.EditMode) == "table") and A3.EditMode or {}
 local EM = A3.EditMode
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
-local SPELL_FRAME_EFFECT_BASE_OFFSET = tonumber(FrameLayers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1
 
 local AURA_DRAG_RUNTIME_INTERVAL = 0.05
 local AURA_PENDING_DRAG_THRESHOLD = 3
-local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5",
-    "arena1", "arena2", "arena3" }
+local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
-local ARENA_UNITS = { arena1=true, arena2=true, arena3=true }
 local function IsBossScope(unit)
     return tostring(unit or ""):lower() == "boss"
-end
-local function IsArenaScope(unit)
-    return tostring(unit or ""):lower() == "arena"
 end
 
 local function ForEachBossUnit(fn)
     if type(fn) ~= "function" then return end
     for i = 1, 5 do fn("boss" .. i) end
-end
-
-local function ForEachArenaUnit(fn)
-    if type(fn) ~= "function" then return end
-    for i = 1, 3 do fn("arena" .. i) end
 end
 
 local GROUPS = {
@@ -272,17 +261,9 @@ local function BossPageAuraPreviewActive()
     return rawget(_G, "MSUF2_BossPageAuraPreviewActive") == true
 end
 
---- Menu2's arena page mirrors the boss-page flag for its own preview lane.
-local function ArenaPageAuraPreviewActive()
-    return rawget(_G, "MSUF2_ArenaPageAuraPreviewActive") == true
-end
-
 local function UnitPreviewActive(unit)
     if EditPreviewActive() then return true end
-    if unit == nil then return BossPageAuraPreviewActive() or ArenaPageAuraPreviewActive() end
-    if (ARENA_UNITS[unit] == true or IsArenaScope(unit)) and ArenaPageAuraPreviewActive() then
-        return true
-    end
+    if unit == nil then return BossPageAuraPreviewActive() end
     return (BOSS_UNITS[unit] == true or IsBossScope(unit)) and BossPageAuraPreviewActive() or false
 end
 
@@ -356,7 +337,6 @@ local function UnitLabel(unit)
     if unit == "target" then return "Target" end
     if unit == "focus" then return "Focus" end
     if BOSS_UNITS[unit] then return "Boss " .. tostring(unit):match("%d+") end
-    if ARENA_UNITS[unit] then return "Arena " .. tostring(unit):match("%d+") end
     return tostring(unit or "")
 end
 
@@ -388,7 +368,6 @@ local function UnitEnabled(auras, unit)
     if unit == "target" then return auras.showTarget == true end
     if unit == "focus" then return auras.showFocus == true end
     if BOSS_UNITS[unit] then return auras.showBoss == true end
-    if ARENA_UNITS[unit] then return auras.showArena == true end
     return false
 end
 
@@ -875,10 +854,6 @@ local function RefreshAffectedRuntimeUnits(unit, shared)
         for i = 1, 5 do
             A3.RefreshUnit("boss" .. i)
         end
-    elseif ARENA_UNITS[unit] and shared and shared.arenaEditTogether ~= false then
-        for i = 1, 3 do
-            A3.RefreshUnit("arena" .. i)
-        end
     elseif unit then
         A3.RefreshUnit(unit)
     end
@@ -930,10 +905,6 @@ local function ApplyDragDelta(self, dx, dy, elapsed)
     if BOSS_UNITS[baseUnit] and shared.bossEditTogether ~= false then
         for i = 1, 5 do
             ApplyDragUnit(auras, "boss" .. i, moverKind, x, y)
-        end
-    elseif ARENA_UNITS[baseUnit] and shared.arenaEditTogether ~= false then
-        for i = 1, 3 do
-            ApplyDragUnit(auras, "arena" .. i, moverKind, x, y)
         end
     elseif baseUnit then
         ApplyDragUnit(auras, baseUnit, moverKind, x, y)
@@ -1805,85 +1776,36 @@ local function CreateGroup(unit, kind)
     return group
 end
 
+--- Edit Mode paints Custom Aura Full-Frame effects through the live renderer,
+--- the single owner the frames and the Menu previews already use. The former
+--- Edit-Mode-only copy drew Glow as four flat edges instead of the runtime's
+--- radial halo, never animated Pulse and carried its own alpha, so the surface
+--- you drag disagreed with the result you get. Layer and priority now come from
+--- the same Layers.AuraEffectLevel call the live effect uses.
 local function ApplyEditModeCustomEffect(group, frame, item)
-    local effect = item and item.frame
-    local kind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
-    local root = group and group._msufA3CustomEffectPreview
-    if kind == "none" then
-        if root then root:Hide() end
-        return
-    end
-    local health = frame and (frame.hpBar or frame.Health or frame.health)
-    local target = health and health.GetStatusBarTexture and health:GetStatusBarTexture()
-    local nameSource = frame and (frame.Name or frame.name or frame.NameText or frame.nameText or frame._nameFS)
-    if kind ~= "namecolor" and not (health and target) then
-        if root then root:Hide() end
-        return
-    end
-    if kind == "namecolor" and not nameSource then
-        if root then root:Hide() end
-        return
-    end
-    if not root then
-        root = CreateFrame("Frame", nil, group)
-        root:EnableMouse(false)
-        root.tint = root:CreateTexture(nil, "OVERLAY")
-        root.tint:SetTexture(W8)
-        root.edges = {}
-        for i = 1, 4 do
-            root.edges[i] = root:CreateTexture(nil, "OVERLAY")
-            root.edges[i]:SetTexture(W8)
+    local runtime = A3 and A3.SpellIndicators
+    local owner = group and group._msufA3CustomEffectPreview
+    local normalize = runtime and runtime.NormalizeFrameEffect
+    local effect = type(normalize) == "function" and normalize(item and item.frame) or nil
+    if not (group and frame and effect
+        and runtime and type(runtime.ApplyPreviewFrameEffect) == "function") then
+        if owner then
+            if runtime and type(runtime.HidePreviewFrameEffect) == "function" then
+                runtime.HidePreviewFrameEffect(owner)
+            else
+                owner:Hide()
+            end
         end
-        root.name = root:CreateFontString(nil, "OVERLAY")
-        group._msufA3CustomEffectPreview = root
+        return
     end
-    if not root.name then root.name = root:CreateFontString(nil, "OVERLAY") end
-    root:ClearAllPoints()
-    root:SetAllPoints(health or frame)
-    if root.SetFrameLevel then
-        local priority = Clamp(effect.priority, 5, 1, 10)
-        local layer = Clamp(effect.layer, 0, 0, 30)
-        local targetOwner = health
-        if kind == "namecolor" then
-            targetOwner = nameSource and nameSource.GetParent and nameSource:GetParent() or frame
-        end
-        root:SetFrameLevel(FrameLayers.AuraEffectLevel and FrameLayers.AuraEffectLevel(layer, priority, targetOwner)
-            or FrameLayers.ElementLevel and FrameLayers.ElementLevel(layer, 0, 11 - priority)
-            or ((group:GetFrameLevel() or 900) + SPELL_FRAME_EFFECT_BASE_OFFSET + (11 - priority) + layer))
+    if not owner then
+        owner = CreateFrame("Frame", nil, group)
+        owner:EnableMouse(false)
+        group._msufA3CustomEffectPreview = owner
     end
-    root.tint:Hide()
-    for i = 1, 4 do root.edges[i]:Hide() end
-    root.name:Hide()
-    local color = effect.color or {}
-    local r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 0.8
-    if kind == "healthtint" then
-        root.tint:ClearAllPoints()
-        root.tint:SetAllPoints(target)
-        root.tint:SetVertexColor(r, g, b, tonumber(effect.tintAlpha) or a)
-        root.tint:Show()
-    elseif kind == "namecolor" then
-        local path, size, flags
-        if nameSource.GetFont then path, size, flags = nameSource:GetFont() end
-        if path and size then root.name:SetFont(path, size, flags) end
-        if nameSource.GetJustifyH then root.name:SetJustifyH(nameSource:GetJustifyH()) end
-        if nameSource.GetJustifyV then root.name:SetJustifyV(nameSource:GetJustifyV()) end
-        if nameSource.GetShadowColor then root.name:SetShadowColor(nameSource:GetShadowColor()) end
-        if nameSource.GetShadowOffset then root.name:SetShadowOffset(nameSource:GetShadowOffset()) end
-        root.name:ClearAllPoints()
-        root.name:SetAllPoints(nameSource)
-        root.name:SetText(nameSource.GetText and nameSource:GetText() or "")
-        root.name:SetTextColor(r, g, b, a)
-        root.name:Show()
-    elseif kind == "border" or kind == "glow" or kind == "pulse" then
-        local thickness = Clamp(effect.thickness, kind == "glow" and 3 or 2, 1, 16)
-        local top, bottom, left, right = root.edges[1], root.edges[2], root.edges[3], root.edges[4]
-        top:ClearAllPoints(); top:SetPoint("TOPLEFT", target, "TOPLEFT", -thickness, thickness); top:SetPoint("TOPRIGHT", target, "TOPRIGHT", thickness, thickness); top:SetHeight(thickness)
-        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", -thickness, -thickness); bottom:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", thickness, -thickness); bottom:SetHeight(thickness)
-        left:ClearAllPoints(); left:SetPoint("TOPLEFT", top, "BOTTOMLEFT"); left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT"); left:SetWidth(thickness)
-        right:ClearAllPoints(); right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT"); right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT"); right:SetWidth(thickness)
-        for i = 1, 4 do root.edges[i]:SetVertexColor(r, g, b, kind == "glow" and math_min(1, a + 0.16) or a); root.edges[i]:Show() end
-    end
-    root:Show()
+    owner:ClearAllPoints()
+    owner:SetAllPoints(group)
+    runtime.ApplyPreviewFrameEffect(owner, effect, frame)
 end
 
 local function FrameRefreshSignature(frame)
@@ -1960,10 +1882,6 @@ function EM.HideUnit(unit)
         ForEachBossUnit(EM.HideUnit)
         return
     end
-    if IsArenaScope(unit) then
-        ForEachArenaUnit(EM.HideUnit)
-        return
-    end
     local byUnit = EM.groups and EM.groups[unit]
     SetRuntimeAuraHidden(unit, false)
     if not byUnit then return end
@@ -1979,10 +1897,6 @@ function EM.RefreshUnit(unit)
     if not unit then return end
     if IsBossScope(unit) then
         ForEachBossUnit(EM.RefreshUnit)
-        return
-    end
-    if IsArenaScope(unit) then
-        ForEachArenaUnit(EM.RefreshUnit)
         return
     end
     if not UnitPreviewActive(unit) then
@@ -2218,10 +2132,6 @@ function A3.RefreshUnit(unit)
             ForEachBossUnit(function(bossUnit)
                 PromoteRuntimeLayout(bossUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
             end)
-        elseif IsArenaScope(unit) then
-            ForEachArenaUnit(function(arenaUnit)
-                PromoteRuntimeLayout(arenaUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
-            end)
         else
             PromoteRuntimeLayout(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
         end
@@ -2248,15 +2158,6 @@ function A3.UpdateUnitAnchor(unit)
             end)
         end
         EM.RefreshUnit("boss")
-        return
-    end
-    if IsArenaScope(unit) then
-        if IsEditModeActive() then
-            ForEachArenaUnit(function(arenaUnit)
-                PromoteRuntimeLayout(arenaUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
-            end)
-        end
-        EM.RefreshUnit("arena")
         return
     end
     if IsEditModeActive() then
@@ -2286,13 +2187,6 @@ function A3.RefreshEditPreviewAnimation(unit, elapsed)
         local any = false
         ForEachBossUnit(function(bossUnit)
             any = A3.RefreshEditPreviewAnimation(bossUnit, elapsed) or any
-        end)
-        return any
-    end
-    if IsArenaScope(unit) then
-        local any = false
-        ForEachArenaUnit(function(arenaUnit)
-            any = A3.RefreshEditPreviewAnimation(arenaUnit, elapsed) or any
         end)
         return any
     end

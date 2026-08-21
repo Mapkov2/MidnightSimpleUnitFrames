@@ -532,7 +532,7 @@ end
 --- three scopes by construction (see SetSyncedValue), so copying it would only ever be
 --- a no-op that pretends the value is per scope.
 local GF_COPY_EXCLUDE = M.KeySetFromWords [[
-    offsetX offsetY point positionMode _hlMigrated
+    offsetX offsetY point positionMode positionMigrationCount _hlMigrated
     anchorMode anchorPoint anchorToFrame customAnchorFrame attachGap attachOffset
     raidManagerMode
 ]]
@@ -932,40 +932,15 @@ local function ScopeSection(ctx, builder, opts)
             popup._msuf2GuidedNoScroll = true
             if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, popup, "Copy Party settings", "group_copy_popup") end
         end,
-        -- Destination clicks only select; the explicit run button commits.
-        -- This mirrors the Unit copy popup - the two popups share chrome, so
-        -- they must share commit semantics or one of them becomes a trap.
-        selectedTarget = function(source)
-            local dest = M.gfCopyTarget
-            if dest == nil or dest == source then
-                dest = (source == "raid") and "party" or "raid"
-            end
-            M.gfCopyTarget = dest
-            return dest
-        end,
-        onTargetClick = function(kind) M.gfCopyTarget = kind end,
-        runLabel = "Copy Selected",
-        runWidth = 128,
-        onRun = function(api, popup)
-            -- Owns the combat failure path like the Unit popup: a blocked run
-            -- produces visible feedback instead of a silent no-op.
-            if M.BlockCombatAction and M.BlockCombatAction() then return false end
-            local source = CurrentScope()
-            local dest = M.gfCopyTarget
-            if dest == nil or dest == source then
-                dest = (source == "raid") and "party" or "raid"
-                M.gfCopyTarget = dest
-            end
+        onTargetClick = function(kind, api, popup)
             local function RunCopy()
-                if CopyGroupSettings(source, dest, M.gfCopyScopes) then
+                if CopyGroupSettings(CurrentScope(), kind, M.gfCopyScopes) then
                     RefreshContext(ctx)
-                    if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("Copied to %s", ScopeShortLabel(dest)), "ok", 1.3) end
-                    popup:Hide()
-                elseif M.ShowStatusFeedback then
-                    M.ShowStatusFeedback(M.Tr("Nothing was copied."), "warning", 1.6)
+                    if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("Copied to %s", ScopeShortLabel(kind)), "ok", 1.3) end
                 end
             end
-            return M.RunWithHistory("Copy Group Settings", "group:copy:" .. tostring(source) .. ":" .. tostring(dest), RunCopy)
+            M.RunWithHistory("Copy Group Settings", "group:copy:" .. tostring(CurrentScope()) .. ":" .. tostring(kind), RunCopy)
+            popup:Hide()
         end,
     })
     RegisterGroupControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral")

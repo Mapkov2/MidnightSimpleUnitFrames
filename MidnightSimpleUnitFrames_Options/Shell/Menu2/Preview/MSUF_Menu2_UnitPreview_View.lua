@@ -507,9 +507,6 @@ end
 local function CastbarSubOffsetKey(unitKey, suffix, bossKey)
     unitKey = CanonKey(unitKey)
     if unitKey == "boss" then return bossKey end
-    -- Arena shares the boss-style flat key family; derive arenaCast* from the
-    -- declared bossCast* field name instead of a per-unit prefix.
-    if unitKey == "arena" and bossKey then return (bossKey:gsub("^bossCast", "arenaCast")) end
     local prefix = PreviewCastbar.Prefix and PreviewCastbar.Prefix(unitKey) or nil
     return prefix and (prefix .. suffix) or nil
 end
@@ -903,24 +900,6 @@ local function StorePreviewTextSelection(menu, unitKey, kind, slot)
         menu.unitTextSlotSelection[unitKey][kind] = slot
     end
 end
---- Maps a preview element to the unit-page focus section that owns its
---- settings, so clicking an element in the preview opens the right section.
---- Unknown keys return nil and change nothing. Lives on the Preview table:
---- this file sits at the 200-local ceiling.
-function Preview.FocusSectionForHandle(handle)
-    local key = tostring(handle and handle._key or ""):lower()
-    if key == "" then return nil end
-    local fields = handle._fields or {}
-    if fields.statusRefresh then return "status_icons" end
-    if PreviewTextKindSlotForKey(handle._key) then return "text" end
-    if key:find("cast", 1, true) then return "castbar" end
-    if key:find("portrait", 1, true) then return "portrait" end
-    if key:find("tex", 1, true) then return "texture_layer" end
-    if key:find("power", 1, true) then return "power_bar" end
-    if key:find("buff", 1, true) or key:find("aura", 1, true) then return "auras" end
-    if key:find("dispel", 1, true) then return "unit_dispel_overlay" end
-    return nil
-end
 SelectPreviewHandle = function(handle, skipSectionOpen)
     local box = handle and handle._preview or Preview.active
     if not box then return end
@@ -949,14 +928,6 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
                 if kind then focus(box.key or "player", kind, slot, { source = "unit-preview", clearHover = true }) end
             end
         end
-        if not skipSectionOpen then
-            -- Clicking a preview element also opens the section that owns its
-            -- settings; the preview becomes the page's primary navigation.
-            local sectionId = Preview.FocusSectionForHandle(handle)
-            if sectionId and menu and type(menu.SetPageFocusSection) == "function" then
-                menu.SetPageFocusSection("uf_" .. tostring(box.key or "player"), sectionId, { noScroll = true })
-            end
-        end
         FocusPreviewKeyboardTarget(box, handle, true)
     end
     RefreshHandleSelectionVisuals(box)
@@ -974,7 +945,6 @@ local function ExactUnitPreviewKey(value)
     if value == "tot" then return "targettarget" end
     if value == "focus_target" or value == "focustargettarget" then return "focustarget" end
     if value:match("^boss%d+$") then return "boss" end
-    if value:match("^arena%d+$") then return "arena" end
     return nil
 end
 local function FindUnitPreviewHandle(box, handleKey)
@@ -1473,7 +1443,7 @@ end
 --- listener for the whole fight (only the single re-arm signal stays), and
 --- the driver exists only while a preview box is in use.
 local LIVE_STATE_UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION" }
-local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", arena = "arena1", pet = "pet" }
+local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", pet = "pet" }
 local SyncUnitPreviewLiveState
 local function UnitPreviewLiveStateEvent(driver, event)
     local box = driver._msufLiveStateBox

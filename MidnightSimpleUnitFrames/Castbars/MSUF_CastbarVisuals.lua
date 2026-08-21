@@ -41,7 +41,6 @@ end
 local function NormalizeUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit:match("^boss") then return "boss" end
-    if unit:match("^arena") then return "arena" end
     if unit == "player" or unit == "target" or unit == "focus" then return unit end
     return nil
 end
@@ -53,15 +52,12 @@ local function UnitFromFrame(frame)
     unit = NormalizeUnit(unit)
     if unit then return unit end
     if frame._msufIsBossCastbar then return "boss" end
-    if frame._msufIsArenaCastbar then return "arena" end
     unit = NormalizeUnit(frame.unit or frame.MSUF_unit or frame._msufUnit)
     if unit then return unit end
     if frame == _G.MSUF_BossCastbarPreview or frame == _G.MSUF_BossCastbarPreview1 then return "boss" end
-    if frame == _G.MSUF_ArenaCastbarPreview or frame == _G.MSUF_ArenaCastbarPreview1 then return "arena" end
     local name = frame.GetName and frame:GetName() or nil
     if type(name) == "string" then
         if name:find("Boss", 1, true) or name:find("boss", 1, true) then return "boss" end
-        if name:find("Arena", 1, true) or name:find("arena", 1, true) then return "arena" end
         if name:find("Player", 1, true) then return "player" end
         if name:find("Target", 1, true) then return "target" end
         if name:find("Focus", 1, true) then return "focus" end
@@ -74,7 +70,6 @@ local function PrefixForUnit(unit)
     if unit == "target" then return "castbarTarget" end
     if unit == "focus" then return "castbarFocus" end
     if unit == "boss" then return "bossCast" end
-    if unit == "arena" then return "arenaCast" end
     return nil
 end
 
@@ -664,33 +659,61 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     if type(_G.MSUF_GetCastbarSpellNameShorteningConfig) == "function" then
         shortening, shorteningMaxLen, shorteningReserved = _G.MSUF_GetCastbarSpellNameShorteningConfig(frame)
     end
+    --- Returns the comfortable auto width plus the hard edge the spell text may
+    --- never cross. Both keep the time text's own pixels and the user's
+    --- "Reserved space"; only the fixed 8px edge padding separates them, so a
+    --- character budget that needs those last pixels can reclaim them without
+    --- eating either the timer or a configured gap.
     local function AutoWidth()
-        local reserve = shortening and (tonumber(shorteningReserved) or 0) or 0
-        if frame.timeText and frame.timeText.IsShown and frame.timeText:IsShown() then
+        local timeReserve = 0
+        -- Time text is always Shown() with alpha 0 when the user turns it off,
+        -- so its widget state cannot answer this - ask the profile instead, or
+        -- disabling the timer never gives its pixels back to the name.
+        if frame.timeText and ShowTimeForUnit(g, unit) then
             local timeW = RegionNumber(frame.timeText, "GetStringWidth", nil)
-            reserve = reserve + (timeW and math.max(44, timeW + 10) or ApproxTimeTextReserve(frame, g, prefix, statusW))
+            timeReserve = timeW and math.max(44, timeW + 10) or ApproxTimeTextReserve(frame, g, prefix, statusW)
         end
-        return math.max(20, statusW - reserve - 8)
+        local reserved = shortening and (tonumber(shorteningReserved) or 0) or 0
+        local hardMax = math.max(20, statusW - timeReserve - reserved)
+        return math.max(20, hardMax - 8), hardMax
     end
-    local width
+    local width, autoHardMax
     if truncate == "NONE" then
         width = math.max(statusW, 1000)
     elseif truncate == "CLIP" then
-        width = (maxWidth and maxWidth > 0) and maxWidth or AutoWidth()
+        if maxWidth and maxWidth > 0 then
+            width = maxWidth
+        else
+            width, autoHardMax = AutoWidth()
+        end
     else
-        width = AutoWidth()
+        width, autoHardMax = AutoWidth()
     end
     if shortening then
-        -- Restricted unit cast names can be secret in combat and therefore
-        -- cannot legally pass through Lua substring/concatenation. A bounded
-        -- one-line FontString gives those values the same renderer-side
-        -- truncation contract as the non-secret shortener, on this cold layout
-        -- path only.
+        -- "Max name length" is a character budget, but restricted unit cast
+        -- names can be secret in combat and therefore cannot legally pass
+        -- through Lua substring/concatenation. Translating the budget into
+        -- pixels gives those values the same truncation contract from WoW's
+        -- one-line FontString renderer, on this cold layout path only.
         local shorteningWidth = math.floor(((tonumber(shorteningMaxLen) or 30) * size * 0.60) + 6.5)
         shorteningWidth = math.max(40, math.min(800, shorteningWidth))
-        width = math.min(width, shorteningWidth)
+        if autoHardMax and shorteningWidth > width then
+            -- The budget wants more room than the comfortable auto width left.
+            -- Hand back the cosmetic padding up to the timer's own pixels;
+            -- clamping to the comfortable width instead made the renderer cut
+            -- names well below the configured character count (GitHub #121).
+            width = math.min(shorteningWidth, autoHardMax)
+        else
+            width = math.min(width, shorteningWidth)
+        end
     end
     if fs.SetWidth then fs:SetWidth(width) end
+
+    -- Hand the box to the warm shortener so it can cut the real string to fit
+    -- instead of leaving that to the renderer. NONE opts out of length-driven
+    -- truncation entirely, so it opts out of the fit as well. This must land
+    -- before the refresh below, which is what consumes it.
+    frame._msufSpellTextFitWidth = (shortening and truncate ~= "NONE") and width or nil
 
     if type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then
         _G.MSUF_RefreshCastbarSpellNameText(frame)

@@ -83,7 +83,6 @@ local DEFAULTS = {
   focustarget = { width = 180, height = 30, x = 260, y = 180, showName = true, showPower = false },
   pet = { width = 220, height = 30, x = -275, y = -250, showName = true, showPower = true },
   boss = { width = 180, height = 30, x = 500, y = 180, showName = true, showPower = false },
-  arena = { width = 180, height = 30, x = 360, y = -40, showName = true, showPower = true },
 }
 
 local POWER_KEYS = {
@@ -91,7 +90,6 @@ local POWER_KEYS = {
   target = "showTargetPowerBar",
   focus = "showFocusPowerBar",
   boss = "showBossPowerBar",
-  arena = "showArenaPowerBar",
 }
 
 local function IsCooldownViewerFrameName(frameName)
@@ -103,7 +101,6 @@ local CASTBAR_KEYS = {
   target = "enableTargetCastbar",
   focus = "enableFocusCastbar",
   boss = "enableBossCastbar",
-  arena = "enableArenaCastbar",
 }
 
 local RANGE_KEYS = {
@@ -113,7 +110,6 @@ local RANGE_KEYS = {
   focustarget = true,
   pet = true,
   boss = true,
-  arena = true,
 }
 
 local CLASS_TOKENS = {
@@ -1093,7 +1089,6 @@ local function StatusAllowed(key, id)
     return key == "player" or key == "target"
   elseif id == "pvp" then
     return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
-      or key == "arena"
   elseif id == "resting" or id == "stance" then
     return key == "player"
   elseif id == "raidGroup" then
@@ -1168,7 +1163,7 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("bossNumber", "showBossNumberIndicator", false, "bossNumberIndicator", 14, "TOPLEFT", 4, -4, 7),
   PrefixedStatusDef("race", "showRaceIndicator", false, "raceIndicator", 14, "NAMERIGHT", 0, 0, 7),
   PrefixedStatusDef("classText", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", 0, 0, 7),
-  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
+  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "raidGroupNameSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
   PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
   PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("resting", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", -40, 50, 25, { "restedStateIndicatorIconStyle", "BLIZZARD" }, { "restedStateIndicatorSymbol", "rested_blizzard_animated", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
@@ -1698,6 +1693,9 @@ local function CompileUnitStatus(out, conf, general, key)
   status.useMidnight = StatusBool(conf, general, "statusIconsUseMidnightStyle", false)
 
   local levelSize = Number(conf.nameFontSize or general.nameFontSize, out.nameFontSize)
+  -- raidGroupNameSize ships unseeded on purpose: an untouched profile keeps
+  -- the inline group number at the frame's name font size, exactly as it looked
+  -- while the two shared one key.
   local raidGroupSize = out.nameFontSize
   local statusTextSize = out.nameFontSize + 2
   for i = 1, #UNIT_STATUS_ENTRY_DEFS do
@@ -1770,9 +1768,7 @@ local function ResolveUnitContext(db, unit)
   end
   local general = type(db.general) == "table" and db.general or {}
   local bars = type(db.bars) == "table" and db.bars or {}
-  -- Arena frames reuse the boss stacked-layout model (same spacing/layout-mode
-  -- keys), so both families resolve to the same container index here.
-  local bossIndex = unit and (unit:match("^boss(%d+)$") or unit:match("^arena(%d+)$"))
+  local bossIndex = unit and unit:match("^boss(%d+)$")
   return key, def, conf, general, bars, bossIndex
 end
 
@@ -1892,6 +1888,13 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.powerLeft = NormalizePowerTextMode(conf.powerTextLeft, "NONE")
   text.powerCenter = NormalizePowerTextMode(conf.powerTextCenter, "NONE")
   text.powerRight = NormalizePowerTextMode(conf.powerTextRight or conf.powerTextMode or general.powerTextMode, "CURPERCENT")
+  -- Augmentation Evoker hands the Player Power bar to Ebon Might, whose remaining
+  -- duration is written by Blizzard's native duration binding. Power value slots
+  -- would keep whatever the last Mana update left behind, so drop them entirely
+  -- and let the native text own the bar.
+  if key == "player" and _G.MSUF_AugEvokerActive == true then
+    text.powerLeft, text.powerCenter, text.powerRight = "NONE", "NONE", "NONE"
+  end
   text.powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")
   text.powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol")
   text.powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol")
@@ -2342,12 +2345,6 @@ local function MSUF_GetBossLayoutDelta(index, conf)
   return BossLayoutDelta(conf, index, DEFAULTS.boss)
 end
 ExportPublic("MSUF_GetBossLayoutDelta", MSUF_GetBossLayoutDelta)
-
-ExportPublic("MSUF_GetArenaLayoutDelta", function(index, conf)
-  local db = EnsureDB()
-  conf = conf or (db and db.arena) or {}
-  return BossLayoutDelta(conf, index, DEFAULTS.arena)
-end)
 
 function Config.RefreshUnit(unit)
   if not (unit and UF.IsManagedUnit and UF.IsManagedUnit(unit)) then

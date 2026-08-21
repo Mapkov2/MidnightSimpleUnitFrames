@@ -879,7 +879,6 @@ end
 local function GetCastbarOffsetKeys(unit)
     if not unit then return nil, nil end
     if unit == "boss" then return "bossCastbarOffsetX", "bossCastbarOffsetY" end
-    if unit == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY" end
     local fn = _G.MSUF_GetCastbarPrefix
     if type(fn) ~= "function" then return nil, nil end
     local prefix = fn(unit)
@@ -892,7 +891,6 @@ local CASTBAR_NUDGE_UNITS = {
     castbar_target = "target",
     castbar_focus  = "focus",
     castbar_boss   = "boss",
-    castbar_arena  = "arena",
 }
 
 local CASTBAR_NUDGE_DEFAULTS = {
@@ -900,7 +898,6 @@ local CASTBAR_NUDGE_DEFAULTS = {
     target = { 65, -15 },
     focus  = { 65, -15 },
     boss   = { 0, 0 },
-    arena  = { 0, 0 },
 }
 
 local function IsFiniteNudgeNumber(value)
@@ -1073,12 +1070,9 @@ local function NudgeTarget(dx, dy, exactDelta)
                     _G.MSUF_EM_UndoBeforeChange("aura", unitKey, true)
                 end
                 local isBoss = type(unitKey) == "string" and unitKey:match("^boss%d+$")
-                local isArena = type(unitKey) == "string" and unitKey:match("^arena%d+$")
                 local applyKeys
                 if isBoss and a2.shared and a2.shared.bossEditTogether ~= false then
                     applyKeys = { "boss1","boss2","boss3","boss4","boss5" }
-                elseif isArena and a2.shared and a2.shared.arenaEditTogether ~= false then
-                    applyKeys = { "arena1","arena2","arena3" }
                 else
                     applyKeys = { unitKey }
                 end
@@ -1355,7 +1349,9 @@ local function ResolveNamedEditAnchor(name)
     if type(name) ~= "string" or name == "" then return nil end
     if EDIT_COOLDOWN_ANCHORS[name] then
         local cooldownFrame = type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(name) or nil
-        return cooldownFrame or _G[name]
+        cooldownFrame = cooldownFrame or _G[name]
+        local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+        return type(getSize) == "function" and getSize(cooldownFrame) ~= nil and cooldownFrame or nil
     end
     local UF = MSUF and MSUF.UF
     if UF and type(UF.GetFrame) == "function" then
@@ -1496,21 +1492,22 @@ local function TryApplyFramePoint(frame, point, anchor, relativePoint, x, y)
     return false
 end
 
-local function SetStackedPreviewPosition(unitPrefix, count, layoutDelta, point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
+local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
+    local layoutDelta = _G.MSUF_GetBossLayoutDelta
     if type(layoutDelta) ~= "function" then return false end
     local uf = MSUF and MSUF.UF
     local frames = uf and uf.frames
     local moved = false
-    for i = 1, count do
-        local unit = unitPrefix .. i
+    for i = 1, 5 do
+        local unit = "boss" .. i
         local frame = (frames and frames[unit]) or _G["MSUF_" .. unit]
         if frame then
             local dx, dy = layoutDelta(i, conf)
             frame._msufDragActive = true
             if not TryApplyFramePoint(frame, point, anchor, relativePoint, x + (dx or 0), y + (dy or 0)) then
                 if rollbackX ~= nil and rollbackY ~= nil then
-                    for restoreIndex = 1, count do
-                        local restoreUnit = unitPrefix .. restoreIndex
+                    for restoreIndex = 1, 5 do
+                        local restoreUnit = "boss" .. restoreIndex
                         local restoreFrame = (frames and frames[restoreUnit]) or _G["MSUF_" .. restoreUnit]
                         if restoreFrame then
                             local restoreDX, restoreDY = layoutDelta(restoreIndex, conf)
@@ -1531,16 +1528,6 @@ local function SetStackedPreviewPosition(unitPrefix, count, layoutDelta, point, 
         end
     end
     return moved
-end
-
-local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
-    return SetStackedPreviewPosition("boss", 5, _G.MSUF_GetBossLayoutDelta,
-        point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
-end
-
-local function SetArenaPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
-    return SetStackedPreviewPosition("arena", 3, _G.MSUF_GetArenaLayoutDelta,
-        point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
 end
 
 local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
@@ -1570,9 +1557,6 @@ local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
     elseif d.isBossLayout then
         positioned = SetBossPreviewPosition(d.point, d.anchor, d.relativePoint,
             nextX, nextY, d.conf, previousX, previousY)
-    elseif d.isArenaLayout then
-        positioned = SetArenaPreviewPosition(d.point, d.anchor, d.relativePoint,
-            nextX, nextY, d.conf, previousX, previousY)
     else
         positioned = TryApplyFramePoint(d.bar, d.point, d.anchor, d.relativePoint, nextX, nextY)
     end
@@ -1582,7 +1566,7 @@ local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
             local baseX, extraY = d.ecvRule[3] or 0, d.ecvRule[4] or 0
             TryApplyFramePoint(d.bar, point, d.ecvFrame, relativePoint,
                 baseX + previousX, previousY + extraY)
-        elseif not (d.isBossLayout or d.isArenaLayout) then
+        elseif not d.isBossLayout then
             TryApplyFramePoint(d.bar, d.point, d.anchor, d.relativePoint, previousX, previousY)
         end
         return false
@@ -1778,8 +1762,11 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
     if changed then
         d.conf.offsetX = nextX
         d.conf.offsetY = nextY
+        -- Only the write earns the stamp. A click that never moved would
+        -- otherwise label untouched legacy offsets as already converted, and
+        -- GF.EnsureStableGridPosition refuses to convert them ever after.
+        d.conf.positionMode = "GRID_BOUNDS_V2"
     end
-    d.conf.positionMode = "GRID_BOUNDS_V2"
     return true
 end
 
@@ -1854,13 +1841,6 @@ local function SetActiveDragFlags(d, active)
         local frames = MSUF and MSUF.UF and MSUF.UF.frames
         for i = 1, 5 do
             local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
-            if frame then frame._msufDragActive = active end
-        end
-    end
-    if d.isArenaLayout then
-        local frames = MSUF and MSUF.UF and MSUF.UF.frames
-        for i = 1, 3 do
-            local frame = (frames and frames["arena" .. i]) or _G["MSUF_arena" .. i]
             if frame then frame._msufDragActive = active end
         end
     end
@@ -2105,13 +2085,10 @@ local function BuildDrag(mover, key, cfg, start)
             castbarReanchorFunc = "MSUF_ReanchorFocusCastBar"
         elseif castbarUnit == "boss" then
             castbarReanchorFunc = "MSUF_ReanchorBossCastBar"
-        elseif castbarUnit == "arena" then
-            castbarReanchorFunc = "MSUF_ReanchorArenaCastBar"
         end
     end
 
     local isBossLayout = not isCastbar and key == "boss"
-    local isArenaLayout = not isCastbar and key == "arena"
 
     local drag = {
         mover        = mover,
@@ -2135,7 +2112,6 @@ local function BuildDrag(mover, key, cfg, start)
         focusNotifyAcc = 0.05,
         isGroupFrame = isGroupFrame,
         isBossLayout = isBossLayout,
-        isArenaLayout = isArenaLayout,
         groupKind    = groupKind,
         isCastbar    = isCastbar,
         castbarUnit  = castbarUnit,
