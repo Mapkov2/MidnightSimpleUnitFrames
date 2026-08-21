@@ -9395,6 +9395,7 @@ function A.Submit(text)
         -- the control ("let the target frame have its own bar settings").
         local unresolved = status == "ambiguous" or status == "failed" or status == "info"
             or status == "needs_choice" or status == "unknown" or status == "navigated"
+        if type(produced) == "table" and produced._readOnlyGuard == true then unresolved = false end
         -- Only for openers that can ONLY mean navigation. "direct me to target
         -- portrait position left" names the value to identify the control, and
         -- this hook applied it. Deliberately not every navigation-shaped
@@ -9415,6 +9416,20 @@ function A.Submit(text)
         if type(A.RouterPrivate) == "table"
             and type(A.RouterPrivate.IsAdviceQuestion) == "function"
             and A.RouterPrivate.IsAdviceQuestion(text)
+        then
+            unresolved = false
+        end
+        -- The router may correctly return an informational answer for an exact
+        -- setting lookup. Do not let this last-resort recovery hook reinterpret
+        -- command words embedded in the setting label as permission to write.
+        local parser = A.Parser or {}
+        local nonMutatingIntent = type(parser.NonMutatingIntent) == "function"
+            and parser.NonMutatingIntent(text) or nil
+        if nonMutatingIntent == "lookup" or nonMutatingIntent == "capability" then
+            unresolved = false
+        end
+        if type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+            and A.RouterIsFailClosedReadOnlyRequest(text)
         then
             unresolved = false
         end

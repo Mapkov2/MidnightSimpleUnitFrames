@@ -906,6 +906,7 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
             elseif SearchRouteHasAny(normalized,
                 "ordering|sort by|sort order|custom priority|fixed priority|dynamic priority")
             then tool = "behavior"
+            elseif SearchRouteHasAny(normalized, "filter|only mine|hide permanent") then tool = "filters"
             elseif unit == "player" and SearchRouteHasAny(normalized,
                 "defensive|defensives|spell|track|list")
             then tool = "defensives"

@@ -1626,6 +1626,7 @@ function R.TryFullFrameAuraEffectRequest(text)
                 .. " but I can identify the configured owner, color, thickness, and trigger without changing anything."
                 .. " Open a Unit Frame > Auras > Buffs or Debuffs > Style > Full-Frame Effect.",
             status = "info",
+            _readOnlyGuard = true,
             summary = "Explains Auras3 Full-Frame Effect ownership.",
         }
     end
@@ -7000,6 +7001,9 @@ function R.LiveAuraFrameEffectExplanation(unitLabel, effect)
         ownerLine = " The Effect value is owned by this Dots-on-Target tracking slot."
     elseif effect and effect.ownerKind == "custom" then
         ownerLine = " The Effect value is owned by this tracked Custom Aura slot."
+    elseif effect and effect.source == "shared" and effect.colorSource == "unit" then
+        ownerLine = " Effect type is inherited from Shared Aura Style, while the visual details are owned by the "
+            .. tostring(unitLabel) .. " Aura Style override."
     elseif effect and effect.source == "unit" then
         ownerLine = " The Effect value is owned by the " .. tostring(unitLabel)
             .. " " .. tostring(laneLabel) .. " Aura lane."
@@ -7025,10 +7029,13 @@ function R.LiveAuraFrameEffectExplanation(unitLabel, effect)
     local pathLine = effect and effect.ownerKind == "lane"
         and (" Change it at " .. tostring(unitLabel) .. " > Auras > " .. tostring(laneLabel) .. "s > Style > Full-Frame Effect; set Effect to None to remove it.")
         or (" Change it in " .. tostring(unitLabel) .. " > Auras > " .. tostring(laneLabel) .. " > Style > Full-Frame Effect.")
+    local resetLine = effect and (effect.source == "unit" or effect.colorSource == "unit")
+        and " Because this value belongs to the per-unit Aura lane, resetting only the Unit Frame does not reset it."
+        or ""
     return tostring(unitLabel) .. " " .. tostring(laneLabel) .. " Full-Frame Effect is configured as " .. effectLabel .. "."
         .. colorLine .. detailLine .. ownerLine .. armedLine .. triggerLine .. geometryLine
         .. " WoW keeps the exact live AuraSlot match opaque to addon Lua, so I can identify the owner and configuration but cannot safely name the assigned aura right now."
-        .. pathLine .. " UnitFrame Dispel Overlay is separate. I kept MSUF unchanged."
+        .. resetLine .. pathLine .. " UnitFrame Dispel Overlay is separate. I kept MSUF unchanged."
 end
 
 local function LiveBorderVisual(frame, uf, spec)
@@ -18747,7 +18754,11 @@ function A.RouteInput(text, coreHandler)
             -- boolean control by result rather than by state ("mark shields
             -- that overflow past full health"). That is an instruction, and
             -- an article about the area is the wrong reply to it.
-            if type(A.ExecutePlan) == "function" and type(R.NamedBooleanIntentPlan) == "function" then
+            local wrapperIntent = A.Parser and type(A.Parser.NonMutatingIntent) == "function"
+                and A.Parser.NonMutatingIntent(normalized) or nil
+            if wrapperIntent ~= "lookup" and wrapperIntent ~= "capability"
+                and type(A.ExecutePlan) == "function" and type(R.NamedBooleanIntentPlan) == "function"
+            then
                 local intentPlan = R.NamedBooleanIntentPlan(text)
                 if intentPlan then
                     local okIntent, intentResult = pcall(A.ExecutePlan, intentPlan, { sourceText = text })
@@ -18909,6 +18920,8 @@ function A.RouteInput(text, coreHandler)
     -- unit Name Anchor owns the reviewed unit text enum, while shared group
     -- Aura Spacing owns the reviewed Buff+Debuff pair as one transaction.
     if hasCore and not A.RouterHasPendingConfirmationOrFlow()
+        and not (A.Parser and type(A.Parser.NonMutatingIntent) == "function"
+            and A.Parser.NonMutatingIntent(text))
         and R.ReviewedSemanticMutationKind(text)
     then
         local reviewedSemanticMutation = Core(text)
@@ -19106,7 +19119,7 @@ function A.RouteInput(text, coreHandler)
         -- pre-pass already resolves these, so hand the text to the core handler
         -- rather than re-implementing the write. This is deliberately the
         -- strict full-phrase form, not a fuzzy match.
-        if hasCore then
+        if hasCore and parserIntent ~= "lookup" and parserIntent ~= "capability" then
             local parser = A.Parser or {}
             if type(parser.ParseRegistryExactAliasShortcut) == "function" then
                 local ok, exact = pcall(parser.ParseRegistryExactAliasShortcut,
@@ -19122,8 +19135,10 @@ function A.RouteInput(text, coreHandler)
             end
         end
 
-        local exactSettingMutation = R.TryExactRegistrySettingMutation(text)
-        if exactSettingMutation then return exactSettingMutation end
+        if parserIntent ~= "lookup" and parserIntent ~= "capability" then
+            local exactSettingMutation = R.TryExactRegistrySettingMutation(text)
+            if exactSettingMutation then return exactSettingMutation end
+        end
 
         -- A value-less "move <component>" is a request for position choices,
         -- never permission to enable/disable the component. Resolve this
