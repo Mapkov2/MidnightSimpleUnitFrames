@@ -5700,10 +5700,13 @@ end
 
 -- Rounded frames are optional and loaded outside Auras3. Keep weak references
 -- to the native overlay textures on their owning unit frame so a later rounded
--- enable/apply can discover them without walking AuraButtons. Registration is
--- initialize/preview-only; aura events never cross this bridge.
-local function RegisterRoundedDispelOverlayRegion(parentFrame, region)
-    if not (parentFrame and region) then return end
+-- enable/apply can discover them without walking AuraButtons. Preserve the
+-- already-known texture owner as well: AddDispelTypeTexture makes the region's
+-- parent relationship forbidden to addon code, so RoundedFrames must never
+-- rediscover it through region:GetParent(). Registration is initialize/preview-
+-- only; aura events never cross this bridge.
+local function RegisterRoundedDispelOverlayRegion(parentFrame, region, owner)
+    if not (parentFrame and region and owner) then return end
     local key = IsGroupFrame(parentFrame) and "_msufGFDispelOverlays" or "_msufUFDispelOverlays"
     local regions = parentFrame[key]
     if type(regions) ~= "table" then
@@ -5711,6 +5714,12 @@ local function RegisterRoundedDispelOverlayRegion(parentFrame, region)
         parentFrame[key] = regions
     end
     regions[region] = true
+    local owners = parentFrame._msufRoundedMaskOwners
+    if type(owners) ~= "table" then
+        owners = setmetatable({}, { __mode = "k" })
+        parentFrame._msufRoundedMaskOwners = owners
+    end
+    owners[region] = owner
     local callback = _G.MSUF_RoundedUF_OnDispelOverlayChanged
     if type(callback) == "function" then
         callback(parentFrame, region)
@@ -5808,7 +5817,7 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region:SetAlpha(1)
         button:SetAlpha(Clamp01(sensor.alpha, 0.35))
         button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
-        RegisterRoundedDispelOverlayRegion(parentFrame, region)
+        RegisterRoundedDispelOverlayRegion(parentFrame, region, button)
     elseif sensor.visual == "purge" then
         region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         region:SetAlpha(1)
@@ -5898,7 +5907,7 @@ A3._ApplyDispelOverlayPreview = function(frame)
     if not LayoutDispelSensorOverlay(region, host, sensor, DispelSensorTarget(frame, sensor)) then
         return A3._HideDispelOverlayPreview(frame)
     end
-    RegisterRoundedDispelOverlayRegion(frame, region)
+    RegisterRoundedDispelOverlayRegion(frame, region, host)
     A3.SetDispelColorTexture(region, A3.GetDispelColorPreviewType(), true, 1)
     region:SetAlpha(Clamp01(sensor.alpha, 0.35))
     region:Show()

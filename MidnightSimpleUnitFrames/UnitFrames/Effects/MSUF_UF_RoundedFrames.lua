@@ -314,7 +314,14 @@ RoundedSurface.DeferApply = DeferApply
 RoundedSurface.SnapOff = SE_SnapOff
 
 local function ResolveMaskOwner(f, tex, anchor)
-  local owner = tex and tex.GetParent and tex:GetParent() or nil
+  -- Native CustomAuraButton display regions become forbidden after Blizzard
+  -- accepts them. Their owner is captured while Auras3 still has the button;
+  -- consulting that identity first avoids a forbidden region:GetParent() call.
+  local owners = f and f._msufRoundedMaskOwners
+  local owner = owners and tex and owners[tex] or nil
+  if not owner then
+    owner = tex and tex.GetParent and tex:GetParent() or nil
+  end
   if owner and type(owner.CreateMaskTexture) == "function" then return owner end
   if anchor and type(anchor.CreateMaskTexture) == "function" then return anchor end
   return f
