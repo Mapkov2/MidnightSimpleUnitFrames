@@ -1,5 +1,25 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.12-beta2 - 2026-08-22
+
+### Highlights
+
+- **Subtlety Rogues can now enable an APEX IT combat cue.** The opt-in Deathstalker helper shows at five or more Shadow Techniques stacks while Darkest Night is active and Ancient Arts is not, with configurable text size, position, and an in-menu preview.
+<!-- msuf-menu-link: {"pageKey":"gameplay","sectionId":"gameplay_dev_auras","controlId":"menu2.gameplay.advanced.dev.aura.apex.it.enabled","settingKey":"gameplay.enableApexItDevAura","prepareKind":"","prepareValue":"","query":"subtlety rogue apex it","label":"Subtlety Rogue: APEX IT"} -->
+
+### Changes
+
+- APEX IT follows Blizzard's native Cooldown Viewer and AuraContainer state updates without polling, fails closed for secret spell values, and disables its event routes outside the supported specialization and talent.
+- Preserve Raid Groups now derives the effective group-aware sorting mode without overwriting the selected Index, Name, or Role preference.
+
+### Fixes & Performance
+
+- Boss encounter lifecycle bursts now coalesce Unit Frame identity, AuraContainer identity, and Range Fade reconciliation into next-frame refreshes instead of repeating synchronous work for every Boss token.
+- Group threat-role changes now refresh only the affected border and corner-indicator domains rather than invalidating unrelated Group Frame configuration.
+- Rounded native dispel-overlay masks are fully configured before Blizzard takes ownership and are recreated through the cold Auras3 refresh path after rounded-frame setting or media changes.
+- The global Castbar preview canvas is taller so below-bar text, thick outlines, and vertical icon offsets are no longer clipped.
+- Gameplay configuration caching now follows the active profile table, and a failed gameplay apply can no longer leave later apply requests permanently blocked.
+
 ## 6.12-beta1 - 2026-08-22
 
 ### Highlights

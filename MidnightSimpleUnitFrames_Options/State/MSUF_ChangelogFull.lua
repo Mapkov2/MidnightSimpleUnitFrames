@@ -8,12 +8,51 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "26727424D6F781AC611C6B28E27D7055F17C6BB13F6B54E277491EF75C55F2DE",
-    currentVersion = "6.12-beta1",
+    sourceSha256 = "AC9ADA4B5C3D4F7DB5D971422E6CDDB7F69AB8D95B03EE54BFE1CD4126FAD4EA",
+    currentVersion = "6.12-beta2",
     historyFromVersion = "6.02",
-    previousVersion = "6.11",
-    rangeLabel = "6.11 -> 6.12-beta1",
+    previousVersion = "6.12-beta1",
+    rangeLabel = "6.12-beta1 -> 6.12-beta2",
     entries = {
+        {
+            version = "6.12-beta2",
+            date = "2026-08-22",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Subtlety Rogues can now enable an APEX IT combat cue. The opt-in Deathstalker helper shows at five or more Shadow Techniques stacks while Darkest Night is active and Ancient Arts is not, with configurable text size, position, and an in-menu preview.",
+                            link = {
+                                pageKey = "gameplay",
+                                query = "subtlety rogue apex it",
+                                label = "Subtlety Rogue: APEX IT",
+                                sectionId = "gameplay_dev_auras",
+                                controlId = "menu2.gameplay.advanced.dev.aura.apex.it.enabled",
+                                settingKey = "gameplay.enableApexItDevAura",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "APEX IT follows Blizzard's native Cooldown Viewer and AuraContainer state updates without polling, fails closed for secret spell values, and disables its event routes outside the supported specialization and talent.",
+                        "Preserve Raid Groups now derives the effective group-aware sorting mode without overwriting the selected Index, Name, or Role preference.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Boss encounter lifecycle bursts now coalesce Unit Frame identity, AuraContainer identity, and Range Fade reconciliation into next-frame refreshes instead of repeating synchronous work for every Boss token.",
+                        "Group threat-role changes now refresh only the affected border and corner-indicator domains rather than invalidating unrelated Group Frame configuration.",
+                        "Rounded native dispel-overlay masks are fully configured before Blizzard takes ownership and are recreated through the cold Auras3 refresh path after rounded-frame setting or media changes.",
+                        "The global Castbar preview canvas is taller so below-bar text, thick outlines, and vertical icon offsets are no longer clipped.",
+                        "Gameplay configuration caching now follows the active profile table, and a failed gameplay apply can no longer leave later apply requests permanently blocked.",
+                    },
+                },
+            },
+        },
         {
             version = "6.12-beta1",
             date = "2026-08-22",
