@@ -89,6 +89,9 @@ local MOVEMENT_EVENTS = {
 }
 
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+local BOSS_UNIT_SET = {
+  boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
+}
 local UNIT_EVENT_FILTER_LIMIT = 4
 
 local ENEMY_SPELLS = {
@@ -149,6 +152,7 @@ local TARGET_FRIENDLY_SPELLS = {
 local activeUnits = {}
 local pollUnits = {}
 local pollCovered = {}
+local pollBossUnits = {}
 local targetRegistered = {}
 local targetWanted = {}
 local targetStates = {}
@@ -160,8 +164,12 @@ local enemySpell, friendlySpell, resSpell, targetFriendlySpell
 local activeCount = 0
 local pollCount = 0
 local pollBlindCount = 0
+local pollBossCount = 0
+local pollBossInterval
 local pollQueued = false
 local pollNextAt
+local pollFallbackNextAt
+local pollBossNextAt
 local pollTimer
 local pollSetDirty = true
 local targetChecked = 0
@@ -652,6 +660,7 @@ local pollSettlePending = false -- run one final eval after movement stops
 -- a unit stays at exactly zero idle work.
 local POLL_INTERVAL_MOVING = 0.75
 local POLL_INTERVAL_IDLE = 2.00
+local MAX_BOSS_UPDATE_RATE = 20
 
 -- "Blind" = MSUF has no event telling it this unit's range changed, so the only
 -- way to notice is to sample. The current target is the one exception: the
@@ -685,10 +694,6 @@ local function RangeCanChange()
   return false
 end
 
-local function PollInterval()
-  return POLL_INTERVAL_IDLE
-end
-
 local function CancelPollTimer()
   if pollTimer then
     pollTimer:Cancel()
@@ -698,25 +703,51 @@ local function CancelPollTimer()
   pollNextAt = nil
 end
 
-local function PollTimerCallback()
+local function StopPollScheduler()
+  CancelPollTimer()
+  pollFallbackNextAt = nil
+  pollBossNextAt = nil
+end
+
+local function PollClock()
+  return GetTime and GetTime() or 0
+end
+
+local function NextPollDeadline()
+  local nextAt = pollFallbackNextAt
+  if pollBossNextAt and (not nextAt or pollBossNextAt < nextAt) then
+    nextAt = pollBossNextAt
+  end
+  return nextAt
+end
+
+local PollTimerCallback
+local function ArmPollTimer()
+  local nextAt = NextPollDeadline()
+  if not nextAt then
+    CancelPollTimer()
+    return
+  end
+  if pollQueued and pollNextAt == nextAt then return end
+  if pollTimer then CancelPollTimer() end
+  local delay = nextAt - PollClock()
+  if delay < 0 then delay = 0 end
+  pollQueued = true
+  pollNextAt = nextAt
+  pollTimer = NewTimer(delay, PollTimerCallback)
+end
+
+PollTimerCallback = function()
   pollTimer = nil
   if not pollQueued then return end
-  local now = GetTime and GetTime() or 0
+  local now = PollClock()
   if pollNextAt and now < pollNextAt then
     pollTimer = NewTimer(pollNextAt - now, PollTimerCallback)
     return
   end
   pollQueued = false
   pollNextAt = nil
-  PollNow()
-end
-
-local function SchedulePoll(delay)
-  if pollQueued or pollCount <= 0 then return end
-  pollQueued = true
-  delay = delay or PollInterval()
-  pollNextAt = (GetTime and GetTime() or 0) + delay
-  pollTimer = NewTimer(delay, PollTimerCallback)
+  PollNow(now)
 end
 
 -- A blind unit can leave range without the player moving -- a boss walking away
@@ -727,12 +758,19 @@ end
 -- The fast cadence exists for sampling too: when every poll unit is covered the
 -- sweep is only a fallback and does not need to run four times as often.
 local function RearmPoll(moving)
+  local now = PollClock()
   if pollCount <= 0 or (not moving and pollBlindCount <= 0) then
-    CancelPollTimer()
-    return
+    pollFallbackNextAt = nil
+  else
+    local delay = (moving and pollBlindCount > 0) and POLL_INTERVAL_MOVING or POLL_INTERVAL_IDLE
+    pollFallbackNextAt = now + delay
   end
-  if pollTimer then CancelPollTimer() end
-  SchedulePoll((moving and pollBlindCount > 0) and POLL_INTERVAL_MOVING or POLL_INTERVAL_IDLE)
+  if pollBossCount <= 0 or not pollBossInterval then
+    pollBossNextAt = nil
+  elseif not pollBossNextAt then
+    pollBossNextAt = now + pollBossInterval
+  end
+  ArmPollTimer()
 end
 
 local function RebuildPollSet()
@@ -743,9 +781,19 @@ local function RebuildPollSet()
   -- reaches -- it just never keeps the timer alive on its own.
   local coveredCount = 0
   pollBlindCount = 0
+  pollBossCount = 0
+  pollBossInterval = nil
   for unit in pairs(activeUnits) do
     if UnitNeedsPoll(unit) then
-      if UnitRangeIsBlind(unit) then
+      local frame = FrameForUnit(unit)
+      local updateRate = BOSS_UNIT_SET[unit] and frame and tonumber(frame._msufRangeUpdateRate)
+      if updateRate and updateRate > 0 then
+        if updateRate > MAX_BOSS_UPDATE_RATE then updateRate = MAX_BOSS_UPDATE_RATE end
+        pollBossCount = pollBossCount + 1
+        pollBossUnits[pollBossCount] = unit
+        local interval = 1 / updateRate
+        if not pollBossInterval or interval < pollBossInterval then pollBossInterval = interval end
+      elseif UnitRangeIsBlind(unit) then
         pollBlindCount = pollBlindCount + 1
         pollUnits[pollBlindCount] = unit
       else
@@ -763,6 +811,11 @@ local function RebuildPollSet()
   for i = pollCount + 1, #pollUnits do
     pollUnits[i] = nil
   end
+  for i = pollBossCount + 1, #pollBossUnits do
+    pollBossUnits[i] = nil
+  end
+  pollFallbackNextAt = nil
+  pollBossNextAt = nil
   RearmPoll(pollSettlePending)
 end
 
@@ -884,22 +937,44 @@ local function HookFrameVisibility(frame)
   frame:HookScript("OnHide", RangeFrameOnHide)
 end
 
-PollNow = function()
-  local settlePending = pollSettlePending
-  local moving = RangeCanChange()
-  if moving or settlePending then
-    for i = 1, pollCount do
-      EvaluateUnit(pollUnits[i])
+PollNow = function(now)
+  now = now or PollClock()
+  local fallbackDue = pollFallbackNextAt and now >= pollFallbackNextAt
+  local bossDue = pollBossNextAt and now >= pollBossNextAt
+  local moving = pollSettlePending
+  if fallbackDue then
+    pollFallbackNextAt = nil
+    local settlePending = pollSettlePending
+    moving = RangeCanChange()
+    if moving or settlePending then
+      for i = 1, pollCount do
+        EvaluateUnit(pollUnits[i])
+      end
+    end
+    pollSettlePending = moving
+  end
+  if bossDue then
+    pollBossNextAt = nil
+    for i = 1, pollBossCount do
+      EvaluateUnit(pollBossUnits[i])
     end
   end
-  pollSettlePending = moving
   if pollSetDirty then
     RebuildPollSet()
     return
   end
-  -- PollTimerCallback already retired the fired timer, so this re-arm is the
-  -- only one. A set with nothing left to sample retires inside RearmPoll.
-  RearmPoll(moving)
+  if fallbackDue then
+    if pollCount <= 0 or (not moving and pollBlindCount <= 0) then
+      pollFallbackNextAt = nil
+    else
+      local delay = (moving and pollBlindCount > 0) and POLL_INTERVAL_MOVING or POLL_INTERVAL_IDLE
+      pollFallbackNextAt = now + delay
+    end
+  end
+  if bossDue and pollBossCount > 0 and pollBossInterval then
+    pollBossNextAt = now + pollBossInterval
+  end
+  ArmPollTimer()
 end
 
 local driverRegistered = false
@@ -984,6 +1059,10 @@ local function DriverOnEvent(source, event, unit, a, b, c)
     for i = 1, pollCount do
       EvaluateUnit(pollUnits[i])
     end
+    for i = 1, pollBossCount do
+      EvaluateUnit(pollBossUnits[i])
+    end
+    pollBossNextAt = nil
     if event == "PLAYER_STARTED_MOVING" then
       pollSettlePending = true
       RearmPoll(true)
@@ -1243,7 +1322,9 @@ SyncRuntime = function()
   MarkTargetSpellSyncDirty()
   pollCount = 0
   pollBlindCount = 0
-  CancelPollTimer()
+  pollBossCount = 0
+  pollBossInterval = nil
+  StopPollScheduler()
   pollSettlePending = false
   UnregisterDriver()
 end
@@ -1271,6 +1352,15 @@ function Range.RegisterFrame(frame, spec)
   frame._msufRangeUnitSupported = supported or nil
   frame._msufRangeActiveCfg = active == true or nil
   frame._msufRangeOutAlpha = active and (tonumber(range.alpha) or 1) or nil
+  local oldUpdateRate = frame._msufRangeUpdateRate
+  local updateRate = active and BOSS_UNIT_SET[unit] and tonumber(range.updateRate) or nil
+  if not updateRate or updateRate < 1 then
+    updateRate = nil
+  elseif updateRate > MAX_BOSS_UPDATE_RATE then
+    updateRate = MAX_BOSS_UPDATE_RATE
+  end
+  frame._msufRangeUpdateRate = updateRate
+  if oldUpdateRate ~= updateRate then MarkPollSetDirty() end
   if not active then
     if activeUnits[unit] then
       if unit == "target" then
@@ -1313,6 +1403,7 @@ function Range.UnregisterFrame(frame)
     frame._msufRangeUnitSupported = nil
     frame._msufRangeActiveCfg = nil
     frame._msufRangeOutAlpha = nil
+    frame._msufRangeUpdateRate = nil
     ApplyMul(frame, nil, true)
   end
   SyncRuntime()

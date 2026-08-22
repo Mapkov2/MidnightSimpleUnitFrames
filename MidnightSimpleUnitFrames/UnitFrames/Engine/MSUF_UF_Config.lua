@@ -866,6 +866,13 @@ local function CompileRange(out, conf, general, key)
   range.active = out.enabled ~= false and range.enabled == true
   range.alpha = Clamp01(conf.rangeFadeAlpha or general.rangeFadeAlpha, 0.4)
   range.layerMode = NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode or general.rangeFadeLayerMode)
+  local updateRate = math.floor(Number(conf.rangeFadeUpdateRate, 0) + 0.5)
+  if key ~= "boss" or updateRate < 1 then
+    updateRate = 0
+  elseif updateRate > 20 then
+    updateRate = 20
+  end
+  range.updateRate = updateRate
 end
 
 local function CompileAlpha(out, conf, general, key)
