@@ -9090,8 +9090,18 @@ A3._EnsureDirectIdentityRefreshFrame = function()
             end
             local units = A3._directIdentityEventUnits[event]
             if not units then return end
+            local deferBossBurst = event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
             for i = 1, #units do
-                A3._DirectIdentityRefreshUnit(units[i])
+                if deferBossBurst then
+                    -- Blizzard refreshes all boss tokens synchronously and can
+                    -- repeat the notification while a reset settles. Native
+                    -- AuraContainer reparses are the expensive follower here;
+                    -- merge the burst through the existing identity scheduler
+                    -- instead of running every Boss lane inside the event tick.
+                    A3._ScheduleDirectIdentityEventRefresh(units[i])
+                else
+                    A3._DirectIdentityRefreshUnit(units[i])
+                end
             end
         end)
         A3._directIdentityAuraFrame = frame

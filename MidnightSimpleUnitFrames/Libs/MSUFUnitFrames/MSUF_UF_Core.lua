@@ -2155,6 +2155,47 @@ local function QueueDependentIdentity(frame, event)
   end
 end
 
+local function FlushBossIdentity(frame)
+  if not frame then return end
+  frame._msufBossIdentityQueued = nil
+  local event = frame._msufBossIdentityEvent or "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
+  frame._msufBossIdentityEvent = nil
+  if UF.RunLeanIdentity then
+    UF.RunLeanIdentity(frame, event)
+  else
+    IdentityEventUpdate(frame, event)
+  end
+end
+
+local function QueueBossIdentity(frame, event)
+  if not frame then return end
+  local unit = frame.MSUFUnitKey
+  -- RegisterUnitWatch can expose a Boss frame just before the shared lifecycle
+  -- event. Preserve the existing same-frame GUID suppression before deferring;
+  -- otherwise the queued callback would repeat the complete OnShow identity
+  -- seed on the next frame.
+  if ConsumeOnShowIdentityFollowup(frame, event, unit) then return end
+  frame._msufBossIdentityEvent = event or "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
+  if frame._msufBossIdentityQueued == true then return end
+  frame._msufBossIdentityQueued = true
+
+  local callback = frame._msufBossIdentityCallback
+  if not callback then
+    callback = function() FlushBossIdentity(frame) end
+    frame._msufBossIdentityCallback = callback
+  end
+
+  local scheduleOnce = UF.GetService and UF.GetService("ScheduleOnce")
+    or HOST_VALUES.MSUF_ScheduleOnce
+  if type(scheduleOnce) == "function" then
+    scheduleOnce(callback, callback)
+  elseif _G.C_Timer and _G.C_Timer.After then
+    _G.C_Timer.After(0, callback)
+  else
+    callback()
+  end
+end
+
 local function FrameNeedsIdentityLifecycle(frame)
   local active = frame and frame._msufActiveElements
   if not active then return false end
@@ -2191,7 +2232,10 @@ local function AddIdentityLifecycleHandlers(frame)
     AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", QueueDependentIdentity, true)
     AddEventHandler(frame, "UNIT_TARGET", QueueDependentIdentity, false)
   elseif IsBossUnit(unit) then
-    AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", IdentityEventUpdate, true)
+    -- One Blizzard notification fans out to all five Boss frames. Merge repeat
+    -- notifications per frame and move the bounded identity fan-out out of the
+    -- synchronous encounter-reset tick; OnShow remains immediate above.
+    AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", QueueBossIdentity, true)
   end
 end
 

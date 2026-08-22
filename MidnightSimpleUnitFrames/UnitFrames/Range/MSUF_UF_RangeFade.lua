@@ -937,6 +937,33 @@ local function HookFrameVisibility(frame)
   frame:HookScript("OnHide", RangeFrameOnHide)
 end
 
+-- Boss-unit lifecycle notifications can arrive as a same-frame burst while
+-- RegisterUnitWatch is also showing or hiding several frames. OnShow already
+-- seeds a newly visible frame immediately, so collapse the event followers into
+-- one next-frame reconciliation instead of stacking five range probes and poll
+-- scheduler rebuilds on top of the encounter-reset frame.
+local bossLifecycleRangeQueued = false
+local function FlushBossLifecycleRange()
+  bossLifecycleRangeQueued = false
+  if activeCount <= 0 then return end
+  MarkPollSetDirty()
+  EvaluateBossUnits(false)
+  RebuildPollSet()
+end
+
+local function QueueBossLifecycleRange()
+  if bossLifecycleRangeQueued then return end
+  bossLifecycleRangeQueued = true
+  local scheduleOnce = _G.MSUF_ScheduleOnce
+  if type(scheduleOnce) == "function" then
+    scheduleOnce("MSUF_RANGE_BOSS_LIFECYCLE", FlushBossLifecycleRange)
+  elseif type(After) == "function" then
+    After(0, FlushBossLifecycleRange)
+  else
+    FlushBossLifecycleRange()
+  end
+end
+
 PollNow = function(now)
   now = now or PollClock()
   local fallbackDue = pollFallbackNextAt and now >= pollFallbackNextAt
@@ -1026,6 +1053,9 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   if event == "SPELL_RANGE_CHECK_UPDATE" then
     OnTargetSpellRange(unit, a, b)
     return
+  elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
+    QueueBossLifecycleRange()
+    return
   elseif event == "SPELLS_CHANGED"
     or event == "PLAYER_TALENT_UPDATE"
     or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
@@ -1094,8 +1124,6 @@ local function DriverOnEvent(source, event, unit, a, b, c)
 
   if event == "UNIT_PET" then
     if unit == "player" then EvaluateIfActive("pet", false) end
-  elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-    EvaluateBossUnits(false)
   elseif event == "PLAYER_ENTERING_WORLD"
     or event == "PLAYER_REGEN_DISABLED"
     or event == "PLAYER_REGEN_ENABLED" then

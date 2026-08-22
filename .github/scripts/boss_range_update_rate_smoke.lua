@@ -14,9 +14,13 @@ local repoRoot = arg and arg[1] or "."
 local runtimePath = repoRoot .. "/MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade.lua"
 local menuPath = repoRoot .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitRangeFade.lua"
 local configPath = repoRoot .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua"
+local auraPath = repoRoot .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
+local corePath = repoRoot .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"
 
 local now = 0
 local timers = {}
+local afterCallbacks = {}
+local driverFrames = {}
 local rangeCalls = 0
 local focusRangeCalls = 0
 local registeredElement
@@ -50,6 +54,14 @@ local function fireActiveTimer()
   return timer
 end
 
+local function flushAfterCallbacks()
+  while #afterCallbacks > 0 do
+    local callbacks = afterCallbacks
+    afterCallbacks = {}
+    for i = 1, #callbacks do callbacks[i]() end
+  end
+end
+
 local function driverFrame()
   local frame = { events = {} }
   function frame:SetScript(script, callback) self[script] = callback end
@@ -57,6 +69,7 @@ local function driverFrame()
   function frame:UnregisterEvent(event) self.events[event] = nil end
   function frame:RegisterUnitEvent(event) self.events[event] = true end
   function frame:UnregisterAllEvents() self.events = {} end
+  driverFrames[#driverFrames + 1] = frame
   return frame
 end
 
@@ -83,7 +96,7 @@ local UF = {
 local MSUF = { UF = UF }
 _G.C_Timer = {
   NewTimer = newTimer,
-  After = function(_, callback) callback() end,
+  After = function(_, callback) afterCallbacks[#afterCallbacks + 1] = callback end,
 }
 _G.C_Spell = {
   IsSpellInRange = function(_, unit)
@@ -129,6 +142,29 @@ expect(rangeCalls == callsBeforeFastTick + 1,
 expect(focusRangeCalls == focusCallsBeforeFastTick,
   "custom Boss ticks must not accelerate another unit's adaptive fallback")
 expect(near(activeTimer() and activeTimer().delay, 0.05), "custom Boss rate did not re-arm at 50 ms")
+
+local rangeDriver
+for i = 1, #driverFrames do
+  local frame = driverFrames[i]
+  if frame.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT and type(frame.OnEvent) == "function" then
+    rangeDriver = frame
+    break
+  end
+end
+expect(rangeDriver, "Boss lifecycle range driver is missing")
+local callsBeforeBossReset = rangeCalls
+rangeDriver.OnEvent(rangeDriver, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+rangeDriver.OnEvent(rangeDriver, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+rangeDriver.OnEvent(rangeDriver, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+expect(rangeCalls == callsBeforeBossReset,
+  "Boss lifecycle burst must not evaluate range synchronously")
+expect(#afterCallbacks == 1,
+  "Boss lifecycle burst must queue exactly one next-frame reconciliation")
+flushAfterCallbacks()
+expect(rangeCalls == callsBeforeBossReset + 1,
+  "Boss lifecycle burst must reconcile each active Boss once")
+expect(near(activeTimer() and activeTimer().delay, 0.05),
+  "Boss lifecycle reconciliation did not restart the selected cadence")
 
 registeredElement.Apply(bossFrame, {
   range = { active = true, alpha = 0.4, updateRate = 0 },
@@ -264,5 +300,19 @@ local configSource = configFile:read("*a")
 configFile:close()
 expect(configSource:find("range.updateRate = updateRate", 1, true), "compiled range spec does not carry update rate")
 expect(configSource:find('key ~= "boss"', 1, true), "compiled update rate is not restricted to Boss frames")
+
+local auraFile = assert(io.open(auraPath, "rb"))
+local auraSource = auraFile:read("*a")
+auraFile:close()
+expect(auraSource:find('local deferBossBurst = event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT"', 1, true),
+  "Boss AuraContainer identity refreshes are not burst-gated")
+expect(auraSource:find("A3._ScheduleDirectIdentityEventRefresh(units[i])", 1, true),
+  "Boss AuraContainer identity refreshes do not use the existing coalescer")
+
+local coreFile = assert(io.open(corePath, "rb"))
+local coreSource = coreFile:read("*a")
+coreFile:close()
+expect(coreSource:find('AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", QueueBossIdentity, true)', 1, true),
+  "Boss unit-frame identity refreshes are not burst-coalesced")
 
 print("boss range update rate smoke: OK")
