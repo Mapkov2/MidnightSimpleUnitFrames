@@ -12,6 +12,10 @@ local gameplay = {
     enableCombatCrosshair = false,
     enablePlayerTotems = false,
     enableApexItDevAura = true,
+    enableShadowTechniquesStackHighlight = true,
+    shadowTechniquesGlowColor = { 0.69, 0.50, 0.88 },
+    shadowTechniquesGlowScale = 100,
+    shadowTechniquesGlowStrength = 80,
     apexItFontSize = 32,
     apexItOffsetX = 0,
     apexItOffsetY = 140,
@@ -91,6 +95,10 @@ local function NewFontString(name, template)
     function fontString:SetTextColor(...)
         ExpectMutable(self, "SetTextColor")
         self.color = { ... }
+    end
+    function fontString:SetAlpha(alpha)
+        ExpectMutable(self, "SetAlpha")
+        self.alpha = alpha
     end
     function fontString:SetShadowOffset(...)
         ExpectMutable(self, "SetShadowOffset")
@@ -182,6 +190,7 @@ local function NewTrackedBuffItem(spellID)
     function item:GetSpellID() return self.spellID end
     function item:GetCooldownInfo() return self.cooldownInfo end
     function item:IsActive() return self.active end
+    function item:GetSize() return 36, 36 end
     function item:GetApplicationsFontString() return applications end
     function item:RefreshApplications() applications:SetText(self.applicationText) end
     function item:OnActiveStateChanged() end
@@ -264,22 +273,28 @@ chunk("MidnightSimpleUnitFrames", MSUF)
 local overlay = _G.MSUF_ApexItDevAuraFrame
 local text = overlay and overlay._msufApexItText
 local stackText = overlay and overlay._msufApexItStackText
-local apexItSensor, apexStackSensor
+local apexItSensor, apexStackSensor, shadowHighlightSensor
 for i = 1, #nativeAuraSensors do
     local sensor = nativeAuraSensors[i]
     if sensor.key == "msuf_apex_it_label" then apexItSensor = sensor
-    elseif sensor.key == "msuf_apex_it_stacks" then apexStackSensor = sensor end
+    elseif sensor.key == "msuf_apex_it_stacks" then apexStackSensor = sensor
+    elseif sensor.key:match("^msuf_shadow_techniques_stack_highlight_") then shadowHighlightSensor = sensor end
 end
 Expect(overlay == partialOverlay and text ~= nil and stackText ~= nil,
     "enabled setting did not repair the partially-created overlay")
 Expect(overlay.shown == false, "overlay must start hidden without Darkest Night")
 Expect(text.text == "APEX IT", "overlay text drifted")
 Expect(stackText.text == nil and stackText.shown == false, "live mode did not hide the preview stack text")
-Expect(#nativeApplicationFontStrings == 2, "native APEX IT five-stack renderers were not created")
+Expect(#nativeApplicationFontStrings == 3, "native APEX IT and stack-highlight renderers were not created")
 Expect(apexItSensor and apexStackSensor, "native APEX IT sensors were not created")
+Expect(shadowHighlightSensor, "native Shadow Techniques stack-highlight sensor was not created")
 Expect(apexItSensor.shown == true and apexStackSensor.shown == true,
     "native APEX IT sensors did not start active")
-Expect(nativeApplicationFontStrings[1].text == "" and nativeApplicationFontStrings[2].text == "",
+Expect(shadowHighlightSensor.shown == true, "Shadow Techniques stack-highlight sensor did not start active")
+Expect(nativeApplicationFontStrings[3].alpha == 0.8,
+    "Shadow Techniques stack-highlight strength was not applied before native ownership")
+Expect(nativeApplicationFontStrings[1].text == "" and nativeApplicationFontStrings[2].text == ""
+    and nativeApplicationFontStrings[3].text == "",
     "inactive native five-stack renderers were not empty")
 Expect(text.fontSize == 32, "configured text size was not applied")
 Expect(stackText.fontSize == 20.8, "stack text size did not follow the configured text size")
@@ -322,20 +337,44 @@ Expect(overlay.shown == true, "Darkest Night did not activate the native render 
 Expect(text.shown == false and stackText.shown == false, "live mode exposed preview text")
 Expect(nativeApplicationFontStrings[1].text == "" and nativeApplicationFontStrings[2].text == "",
     "APEX IT rendered below five Shadow Techniques stacks")
+Expect(nativeApplicationFontStrings[3].text == "",
+    "Shadow Techniques icon was highlighted below five stacks")
 
 shadowTechniques:SetAuraState(true, 5)
 Expect(nativeApplicationFontStrings[1].text == "APEX IT"
     and nativeApplicationFontStrings[2].text == "5"
     and apexItSensor.shown == true,
     "APEX IT did not render at exactly five Shadow Techniques stacks")
+Expect(nativeApplicationFontStrings[3].text == "|A:UI-HUD-RotationHelper-ProcAltGlow:47:47:0:0:176:128:224|a",
+    "Shadow Techniques icon was not highlighted at exactly five stacks")
+
+local previousShadowHighlightSensor = shadowHighlightSensor
+gameplay.shadowTechniquesGlowColor = { 0.10, 0.60, 1.00 }
+gameplay.shadowTechniquesGlowScale = 125
+gameplay.shadowTechniquesGlowStrength = 55
+MSUF.MSUF_RequestGameplayApply()
+shadowHighlightSensor = nativeAuraSensors[#nativeAuraSensors]
+Expect(shadowHighlightSensor ~= previousShadowHighlightSensor
+    and previousShadowHighlightSensor.shown == false
+    and previousShadowHighlightSensor.enabled == false,
+    "changing glow appearance did not replace and retire the native sensor")
+Expect(nativeApplicationFontStrings[4].text == "|A:UI-HUD-RotationHelper-ProcAltGlow:59:59:0:0:26:153:255|a",
+    "changed glow size/color did not reach the native threshold formatter")
+Expect(nativeApplicationFontStrings[4].alpha == 0.55,
+    "changed glow strength did not reach the native FontString before ownership")
 
 shadowTechniques:SetAuraState(true, 9)
 Expect(nativeApplicationFontStrings[1].text == "APEX IT"
     and nativeApplicationFontStrings[2].text == "9",
     "native Shadow Techniques stack changes were not rendered")
+Expect(nativeApplicationFontStrings[4].text == "|A:UI-HUD-RotationHelper-ProcAltGlow:59:59:0:0:26:153:255|a",
+    "Shadow Techniques icon highlight did not remain active above five stacks")
 
 ancientArts:SetAuraState(true)
 Expect(overlay.shown == false, "Ancient Arts did not suppress APEX IT")
+Expect(shadowHighlightSensor.shown == true
+    and nativeApplicationFontStrings[4].text == "|A:UI-HUD-RotationHelper-ProcAltGlow:59:59:0:0:26:153:255|a",
+    "independent stack highlight was incorrectly gated by Ancient Arts")
 
 ancientArts:SetAuraState(false)
 Expect(overlay.shown == true, "removing Ancient Arts did not restore APEX IT")
@@ -348,6 +387,8 @@ Expect(overlay.shown == true, "a secret spell ID was compared instead of failing
 
 eventFrame.OnEvent(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-eviscerate", 196819)
 Expect(overlay.shown == false, "successful Eviscerate did not immediately consume APEX IT")
+Expect(shadowHighlightSensor.shown == true,
+    "Eviscerate incorrectly disabled the independent stack highlight")
 MSUF.MSUF_RequestGameplayApply()
 Expect(overlay.shown == false, "a regular apply cleared the consumed latch while Darkest Night remained active")
 
@@ -359,20 +400,37 @@ Expect(overlay.shown == true, "a new Darkest Night cycle did not re-arm APEX IT"
 specID = 259
 eventFrame.OnEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED", "player")
 Expect(overlay.shown == false, "non-Subtlety spec did not hide the overlay")
+Expect(shadowHighlightSensor.shown == false, "non-Subtlety spec retained the stack highlight")
 
 specID = 261
 eventFrame.OnEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED", "player")
 Expect(overlay.shown == true, "returning to Subtlety did not restore the native driver state")
+Expect(shadowHighlightSensor.shown == true, "returning to Subtlety did not restore the stack highlight")
 
 deathstalkerKnown = false
 eventFrame.OnEvent(eventFrame, "PLAYER_TALENT_UPDATE")
 Expect(overlay.shown == false, "Trickster activated the Deathstalker-only APEX IT routes")
 Expect(eventFrame.events.UNIT_SPELLCAST_SUCCEEDED == nil,
     "Trickster retained Deathstalker-only runtime events")
+Expect(shadowHighlightSensor.shown == true,
+    "Trickster incorrectly disabled the spec-wide Shadow Techniques stack highlight")
 
 gameplay.enableApexItDevAura = false
 MSUF.MSUF_RequestGameplayApply()
 Expect(overlay.shown == false, "disabling the setting did not hide the overlay")
+Expect(shadowHighlightSensor.shown == true,
+    "disabling APEX IT also disabled the independent stack highlight")
+Expect(eventFrame.events.COOLDOWN_VIEWER_DATA_LOADED == true,
+    "enabled stack highlight lost its CooldownViewer driver event")
+Expect(eventFrame.events.UNIT_AURA == nil, "stack highlight registered direct UNIT_AURA traffic")
+Expect(eventFrame.events.UNIT_SPELLCAST_SUCCEEDED == nil,
+    "stack-highlight-only mode retained the finisher success event")
+Expect(registeredModule and registeredModule.IsEnabled() == true,
+    "module enable state ignored the enabled stack highlight")
+
+gameplay.enableShadowTechniquesStackHighlight = false
+MSUF.MSUF_RequestGameplayApply()
+Expect(shadowHighlightSensor.shown == false, "disabling the stack highlight retained its sensor")
 Expect(eventFrame.events.COOLDOWN_VIEWER_DATA_LOADED == nil, "disabling retained CooldownViewer driver events")
 Expect(eventFrame.events.UNIT_AURA == nil, "disabling registered direct UNIT_AURA traffic")
 Expect(eventFrame.events.UNIT_SPELLCAST_SUCCEEDED == nil, "disabling retained the finisher success event")

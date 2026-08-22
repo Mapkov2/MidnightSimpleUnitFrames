@@ -25,6 +25,7 @@ local GetCVar    = GetCVar
 local GetCVarBool = GetCVarBool
 local math_min     = math.min
 local math_max     = math.max
+local math_floor   = math.floor
 local IsAltKeyDown  = IsAltKeyDown
 local tonumber            = tonumber
 
@@ -231,6 +232,7 @@ local apexItText
 local apexItStackText
 local apexItLabelSensor
 local apexItStackSensor
+local shadowTechHighlightSensorsByFrame = {}
 local apexItEventFrame
 local apexItPreviewActive = false
 local apexItConsumed = false
@@ -541,8 +543,10 @@ local SHADOW_TECHNIQUES_AURA_SPELL_ID = 196911
 local EVISCERATE_SPELL_ID = 196819
 local SUBTLETY_ROGUE_SPEC_ID = 261
 local APEX_MIN_SHADOW_TECHNIQUES_STACKS = 5
+local SHADOW_TECHNIQUES_GLOW_ATLAS = "UI-HUD-RotationHelper-ProcAltGlow"
 local APEX_ROLE_DARKEST = "darkestNight"
 local APEX_ROLE_ANCIENT = "ancientArts"
+local APEX_ROLE_SHADOW_TECHNIQUES = "shadowTechniques"
 local APEX_VIEWER_NAMES = { "BuffIconCooldownViewer", "BuffBarCooldownViewer" }
 local apexRoleByCooldownID = {}
 local apexRoleByViewerFrame = {}
@@ -627,6 +631,8 @@ local function ResolveApexViewerFrameRole(frame)
         role = APEX_ROLE_DARKEST
     elseif CooldownInfoContainsSpell(cooldownInfo, ANCIENT_ARTS_AURA_SPELL_ID) then
         role = APEX_ROLE_ANCIENT
+    elseif CooldownInfoContainsSpell(cooldownInfo, SHADOW_TECHNIQUES_AURA_SPELL_ID) then
+        role = APEX_ROLE_SHADOW_TECHNIQUES
     end
     apexRoleByCooldownID[cooldownID] = role or false
     return role
@@ -672,6 +678,110 @@ local function CreateApexStackThresholdFormatter(visibleFormat)
         { threshold = APEX_MIN_SHADOW_TECHNIQUES_STACKS, format = visibleFormat },
     })
     return formatter
+end
+
+local function ShadowTechniquesHighlightTarget(frame)
+    if frame and type(frame.GetAlertTargetFrame) == "function" then
+        local ok, target = pcall(frame.GetAlertTargetFrame, frame)
+        if ok and target then return target end
+    end
+    return frame
+end
+
+local function ShadowTechniquesHighlightSize(target, g)
+    local width, height
+    if target and type(target.GetSize) == "function" then
+        local ok, w, h = pcall(target.GetSize, target)
+        if ok then width, height = tonumber(w), tonumber(h) end
+    end
+    local iconSize = math_max(width or 36, height or 36)
+    local scale = math_max(75, math_min(175, tonumber(g and g.shadowTechniquesGlowScale) or 100)) / 100
+    -- 100% matches the regular MSUF aura-icon glow's 15% padding on every edge.
+    return math_max(34, math_min(168, math_floor(iconSize * 1.30 * scale + 0.5)))
+end
+
+local function ShadowTechniquesHighlightVisual(g, target)
+    local color = g and g.shadowTechniquesGlowColor
+    local r = math_max(0, math_min(1, tonumber(color and color[1]) or 0.69))
+    local green = math_max(0, math_min(1, tonumber(color and color[2]) or 0.50))
+    local b = math_max(0, math_min(1, tonumber(color and color[3]) or 0.88))
+    local alpha = math_max(10, math_min(100, tonumber(g and g.shadowTechniquesGlowStrength) or 80)) / 100
+    local glowSize = ShadowTechniquesHighlightSize(target, g)
+    local ri = math_floor(r * 255 + 0.5)
+    local gi = math_floor(green * 255 + 0.5)
+    local bi = math_floor(b * 255 + 0.5)
+
+    -- Application counts are secret in combat. A NumericRuleFormatter therefore
+    -- owns the 5+ decision, while this compact square proc-glow atlas supplies a
+    -- tintable inline visual. Unlike RotationHelper-Active it has no gold
+    -- horseshoe artwork.
+    local markup = string_format("|A:%s:%d:%d:0:0:%d:%d:%d|a",
+        SHADOW_TECHNIQUES_GLOW_ATLAS, glowSize, glowSize, ri, gi, bi)
+    local signature = string_format("%d:%d:%d:%d:%d", glowSize, ri, gi, bi, math_floor(alpha * 100 + 0.5))
+    return markup, alpha, signature
+end
+
+local function InitializeShadowTechniquesHighlightButton(button, formatter, alpha)
+    button:ClearAllPoints()
+    button:SetAllPoints(button:GetParent())
+    if button.SetMouseClickEnabled then button:SetMouseClickEnabled(false) end
+    if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
+    if button.EnableMouse then button:EnableMouse(false) end
+
+    local fontString = button:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    fontString:SetPoint("CENTER", button, "CENTER", 0, 0)
+    fontString:SetAlpha(alpha)
+    -- The native formatter owns both the secret 5+ comparison and whether the
+    -- MSUF halo has any text to render.
+    button:SetApplicationCount(fontString, { formatter = formatter })
+end
+
+local function EnsureShadowTechniquesHighlightSensor(frame)
+    local A3 = _G.MSUF_Auras3
+    local createSensor = A3 and A3.CreateClassPowerAuraSensor
+    local target = ShadowTechniquesHighlightTarget(frame)
+    if type(createSensor) ~= "function" or not target then return nil end
+
+    local g = GetGameplayDB()
+    local visibleFormat, alpha, signature = ShadowTechniquesHighlightVisual(g, target)
+    local current = shadowTechHighlightSensorsByFrame[frame]
+    if current and current.signature == signature then return current.sensor end
+
+    local formatter = CreateApexStackThresholdFormatter(visibleFormat)
+    if not formatter then return nil end
+
+    local generation = (current and current.generation or 0) + 1
+    local sensor = createSensor(target, "msuf_shadow_techniques_stack_highlight_" .. tostring(generation), {
+        [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true,
+    }, function(button)
+        InitializeShadowTechniquesHighlightButton(button, formatter, alpha)
+    end)
+    if not sensor then return nil end
+
+    sensor:ClearAllPoints()
+    sensor:SetAllPoints(target)
+    if current and current.sensor then
+        if type(current.sensor.SetEnabled) == "function" then current.sensor:SetEnabled(false) end
+        current.sensor:SetShown(false)
+    end
+    shadowTechHighlightSensorsByFrame[frame] = {
+        sensor = sensor,
+        signature = signature,
+        generation = generation,
+    }
+    return sensor
+end
+
+local function SetShadowTechniquesHighlightSensorsActive(active)
+    active = active == true
+    for frame, entry in pairs(shadowTechHighlightSensorsByFrame) do
+        local sensor = entry and entry.sensor
+        local shown = active and apexRoleByViewerFrame[frame] == APEX_ROLE_SHADOW_TECHNIQUES
+        if sensor then
+            if type(sensor.SetEnabled) == "function" then sensor:SetEnabled(shown) end
+            sensor:SetShown(shown)
+        end
+    end
 end
 
 local function InitializeApexStackSensorButton(button, isStackText, formatter)
@@ -783,6 +893,7 @@ end
 RefreshApexItCooldownDrivers = function()
     if apexDriverRefreshBusy then return end
     apexDriverRefreshBusy = true
+    local g = GetGameplayDB()
 
     for frame in pairs(apexRoleByViewerFrame) do apexRoleByViewerFrame[frame] = nil end
     for frame in pairs(apexActiveByViewerFrame) do apexActiveByViewerFrame[frame] = nil end
@@ -808,6 +919,11 @@ RefreshApexItCooldownDrivers = function()
                             hooksecurefunc(itemFrame, "OnActiveStateChanged", OnApexViewerActiveStateChanged)
                         end
                     end
+                    if role == APEX_ROLE_SHADOW_TECHNIQUES
+                        and g and g.enableShadowTechniquesStackHighlight == true
+                        and IsSubtletyRogue() then
+                        EnsureShadowTechniquesHighlightSensor(itemFrame)
+                    end
                 end
             end
         end
@@ -816,6 +932,9 @@ RefreshApexItCooldownDrivers = function()
     if not ApexRoleIsActive(APEX_ROLE_DARKEST) then
         apexItConsumed = false
     end
+    SetShadowTechniquesHighlightSensorsActive(g
+        and g.enableShadowTechniquesStackHighlight == true
+        and IsSubtletyRogue())
     apexDriverRefreshBusy = false
     RefreshApexItDevAura()
 end
@@ -842,32 +961,42 @@ local function EnsureApexItEventFrame()
 end
 
 ApplyApexItDevAura = function(g)
-    local enabled = g and g.enableApexItDevAura == true
+    local apexEnabled = g and g.enableApexItDevAura == true
+    local shadowHighlightEnabled = g and g.enableShadowTechniquesStackHighlight == true
+    local enabled = apexEnabled or shadowHighlightEnabled
     if not enabled and not apexItPreviewActive then
         apexItConsumed = false
         apexDeathstalkerKnown = false
         if apexItEventFrame then apexItEventFrame:UnregisterAllEvents() end
         SetApexStackThresholdSensorsActive(false)
+        SetShadowTechniquesHighlightSensorsActive(false)
         if apexItFrame then apexItFrame:Hide() end
         return
     end
 
     g = g or GetGameplayDB() or {}
-    local frame = EnsureApexItFrame()
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "CENTER", tonumber(g.apexItOffsetX) or 0, tonumber(g.apexItOffsetY) or 140)
+    local frame
+    if apexEnabled or apexItPreviewActive then
+        frame = EnsureApexItFrame()
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", UIParent, "CENTER", tonumber(g.apexItOffsetX) or 0, tonumber(g.apexItOffsetY) or 140)
+    elseif apexItFrame then
+        apexItFrame:Hide()
+    end
     local subtletyEnabled = enabled and IsSubtletyRogue()
-    if subtletyEnabled then
+    if subtletyEnabled and apexEnabled then
         RefreshApexDeathstalkerKnown()
         EnsureApexStackThresholdSensors()
     else
         apexDeathstalkerKnown = false
     end
     local deathstalkerEnabled = subtletyEnabled and IsDeathstalkerActive()
-    ApplyFontToCounter()
-    -- Text is assigned only after ApplyFontToCounter. WoW rejects SetText on a
-    -- FontString that has no FontObject/font yet.
-    apexItText:SetText("APEX IT")
+    if apexEnabled or apexItPreviewActive then
+        ApplyFontToCounter()
+        -- Text is assigned only after ApplyFontToCounter. WoW rejects SetText on a
+        -- FontString that has no FontObject/font yet.
+        apexItText:SetText("APEX IT")
+    end
 
     local events = EnsureApexItEventFrame()
     events:UnregisterAllEvents()
@@ -877,7 +1006,7 @@ ApplyApexItDevAura = function(g)
         events:RegisterEvent("PLAYER_ENTERING_WORLD")
         events:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
     end
-    if subtletyEnabled then
+    if subtletyEnabled and apexEnabled then
         events:RegisterEvent("PLAYER_TALENT_UPDATE")
         events:RegisterEvent("TRAIT_CONFIG_UPDATED")
         events:RegisterEvent("SPELLS_CHANGED")
@@ -886,7 +1015,8 @@ ApplyApexItDevAura = function(g)
         events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
     end
     SetApexStackThresholdSensorsActive(deathstalkerEnabled and not apexItPreviewActive)
-    if deathstalkerEnabled then
+    SetShadowTechniquesHighlightSensorsActive(shadowHighlightEnabled and subtletyEnabled)
+    if subtletyEnabled then
         RefreshApexItCooldownDrivers()
     end
     RefreshApexItDevAura()
@@ -1684,6 +1814,7 @@ do
             or g.enableCombatStateText == true
             or g.enableCombatCrosshair == true
             or g.enableApexItDevAura == true
+            or g.enableShadowTechniquesStackHighlight == true
             or g.enablePlayerTotems == true)
         _specChangeFrame:UnregisterAllEvents()
         if wanted then _specChangeFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED") end
@@ -1735,6 +1866,7 @@ local function IsGameplayModuleEnabled()
         or g.enableCombatStateText == true
         or g.enableCombatCrosshair == true
         or g.enableApexItDevAura == true
+        or g.enableShadowTechniquesStackHighlight == true
         or g.enablePlayerTotems == true
         or apexItPreviewActive) or false
 end

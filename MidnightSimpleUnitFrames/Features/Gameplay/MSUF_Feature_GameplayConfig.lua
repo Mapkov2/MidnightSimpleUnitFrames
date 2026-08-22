@@ -99,6 +99,10 @@ local function EnsureGameplayDefaults()
     if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then g.nameplateMeleeSpellIDBySpec = {} end
 
     Default(g, "enableApexItDevAura", false)
+    Default(g, "enableShadowTechniquesStackHighlight", false)
+    DefaultRGB(g, "shadowTechniquesGlowColor", 0.69, 0.50, 0.88)
+    ClampPositive(g, "shadowTechniquesGlowScale", 100, 75, 175)
+    ClampPositive(g, "shadowTechniquesGlowStrength", 80, 10, 100)
     ClampPositive(g, "apexItFontSize", 32, 10, 64)
     Default(g, "apexItOffsetX", 0)
     Default(g, "apexItOffsetY", 140)

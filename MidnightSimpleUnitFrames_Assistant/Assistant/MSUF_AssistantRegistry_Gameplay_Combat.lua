@@ -153,6 +153,31 @@ function A.GameplayRegistry.RegisterCombatTextSettings(ctx)
         reason = "MSUF_ASSISTANT_APEX_IT_DEV_AURA",
         matchLabel = false,
     })
+    RegisterGameplayBoolean("enableShadowTechniquesStackHighlight", "enabled", "Shadow Techniques 5+ Stack Glow", false, {
+        "shadow techniques glow", "shadow techniques stack highlight", "shadow techniques 5 stacks",
+        "subtlety rogue stack glow", "cooldown manager shadow techniques highlight",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "shadowTechniquesStackHighlight",
+        reason = "MSUF_ASSISTANT_SHADOW_TECHNIQUES_STACK_HIGHLIGHT",
+        matchLabel = false,
+    })
+    RegisterGameplayNumber("shadowTechniquesGlowScale", "glowScale", "Shadow Techniques Glow Size", 100, 75, 175, {
+        "shadow techniques glow size", "shadow techniques glow scale", "stack glow size",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "shadowTechniquesStackHighlight",
+        reason = "MSUF_ASSISTANT_SHADOW_TECHNIQUES_GLOW_SIZE",
+        step = 5,
+    })
+    RegisterGameplayNumber("shadowTechniquesGlowStrength", "glowStrength", "Shadow Techniques Glow Strength", 80, 10, 100, {
+        "shadow techniques glow strength", "shadow techniques glow opacity", "stack glow strength",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "shadowTechniquesStackHighlight",
+        reason = "MSUF_ASSISTANT_SHADOW_TECHNIQUES_GLOW_STRENGTH",
+        step = 5,
+    })
     RegisterGameplayNumber("apexItFontSize", "fontSize", "APEX IT Text Size", 32, 10, 64, {
         "apex it size", "apex it text size", "apex it font size",
     }, {
