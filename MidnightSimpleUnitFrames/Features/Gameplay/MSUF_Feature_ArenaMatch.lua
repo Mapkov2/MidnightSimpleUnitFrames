@@ -9,10 +9,6 @@
 ---      the unit, which securely hides the real frame. A separate INSECURE
 ---      overlay (Blizzard's StealthedArenaUnitFrame pattern) marks the slot
 ---      while the match is engaged.
----   3. Trinket/CC readiness: a per-frame icon driven by
----      ARENA_CROWD_CONTROL_SPELL_UPDATE / ARENA_COOLDOWNS_UPDATE. Enemy
----      cooldown numbers are secret to addons in 12.x, so the swipe uses the
----      secret-safe DurationObject route when available.
 --- All work is event-driven; no OnUpdate, no polling.
 
 local _, MSUF = ...
@@ -23,7 +19,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local MAX_ARENA = 3
-local TRINKET_FALLBACK_ICON = 1322720 -- inv_jewelry_trinketpvp_01
 
 local function InCombat()
     return _G.MSUF_InCombat == true
@@ -316,120 +311,6 @@ local function SyncStealthOverlays()
 end
 
 ------------------------------------------------------------------------
--- 3) Trinket / crowd-control readiness icons
-------------------------------------------------------------------------
-
-local trinketIcons = {}
-
-local function EnsureTrinketIcon(index)
-    local holder = trinketIcons[index]
-    if holder then return holder end
-    local frame = ArenaFrame(index)
-    if not frame then return nil end
-
-    holder = CreateFrame("Frame", "MSUF_ArenaTrinket" .. index, UIParent)
-    holder:SetSize(20, 20)
-    holder:SetFrameStrata("MEDIUM")
-    holder:Hide()
-
-    holder.icon = holder:CreateTexture(nil, "ARTWORK")
-    holder.icon:SetAllPoints(holder)
-    holder.icon:SetTexture(TRINKET_FALLBACK_ICON)
-    holder.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    holder.cooldown = CreateFrame("Cooldown", nil, holder, "CooldownFrameTemplate")
-    holder.cooldown:SetAllPoints(holder)
-    holder.cooldown:SetDrawEdge(false)
-
-    trinketIcons[index] = holder
-    return holder
-end
-
-local function PositionTrinketIcon(holder, index)
-    local frame = ArenaFrame(index)
-    if not frame then return false end
-    holder:ClearAllPoints()
-    holder:SetPoint("LEFT", frame, "RIGHT", 4, 0)
-    return true
-end
-
-local function ShowTrinketEnabled()
-    local conf = ArenaConf()
-    return not conf or conf.showTrinket ~= false
-end
-
-local function UpdateTrinketCooldown(holder, index)
-    local unit = "arena" .. index
-    local cooldown = holder.cooldown
-    if not cooldown then return end
-
-    -- Secret-safe order: the DurationObject route accepts secret enemy
-    -- cooldowns from tainted code; the numeric route stays as a fallback for
-    -- contexts where the info is not restricted (e.g. spectators).
-    local getDuration = _G.C_PvP and _G.C_PvP.GetArenaCrowdControlDuration
-    if type(getDuration) == "function" and cooldown.SetCooldownFromDurationObject then
-        local duration = getDuration(unit)
-        if duration ~= nil then
-            cooldown:SetCooldownFromDurationObject(duration)
-            return
-        end
-    end
-    local getInfo = _G.C_PvP and _G.C_PvP.GetArenaCrowdControlInfo
-    if type(getInfo) == "function" then
-        local spellID, startTimeMs, durationMs = getInfo(unit)
-        local issecret = _G.issecretvalue
-        if spellID and (not issecret or issecret(startTimeMs) ~= true) then
-            local startTime = (tonumber(startTimeMs) or 0) / 1000
-            local durationSec = (tonumber(durationMs) or 0) / 1000
-            if durationSec > 0 then
-                cooldown:SetCooldown(startTime, durationSec)
-            else
-                cooldown:Clear()
-            end
-            if spellID and holder.icon then
-                local getTexture = _G.C_Spell and _G.C_Spell.GetSpellTexture
-                local texture = type(getTexture) == "function" and getTexture(spellID) or nil
-                if texture and (not issecret or issecret(texture) ~= true) then
-                    holder.icon:SetTexture(texture)
-                end
-            end
-        end
-    end
-end
-
--- One request per slot per match segment. The CC response events
--- (ARENA_CROWD_CONTROL_SPELL_UPDATE / ARENA_COOLDOWNS_UPDATE) must NEVER
--- re-request: request -> response event -> request would self-sustain and
--- fan out 1:3 per round-trip, which pegs the CPU the moment gates open.
-local ccRequested = {}
-
-local function SyncTrinketIcons(allowRequest)
-    local active = ArenaEnabled() and ShowTrinketEnabled() and InArenaMatch()
-    for index = 1, MAX_ARENA do
-        local unit = "arena" .. index
-        local holder = trinketIcons[index]
-        local wanted = active and LiveUnitExists(unit)
-        if wanted then
-            holder = EnsureTrinketIcon(index)
-            if holder and PositionTrinketIcon(holder, index) then
-                holder:Show()
-                if allowRequest and not ccRequested[index] then
-                    local request = _G.C_PvP and _G.C_PvP.RequestCrowdControlSpell
-                    if type(request) == "function" then
-                        ccRequested[index] = true
-                        request(unit)
-                    end
-                end
-                UpdateTrinketCooldown(holder, index)
-            end
-        else
-            ccRequested[index] = nil
-            if holder then holder:Hide() end
-        end
-    end
-end
-
-------------------------------------------------------------------------
 -- Event wiring (EventBus preferred; direct frame fallback)
 ------------------------------------------------------------------------
 
@@ -441,7 +322,6 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
     if event == "PVP_MATCH_STATE_CHANGED" then
         SyncPrepDisplay()
         SyncStealthOverlays()
-        SyncTrinketIcons(true)
         return
     end
     if event == "ARENA_OPPONENT_UPDATE" then
@@ -456,23 +336,14 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
         end
         if prepActive then SyncPrepDisplay() end
         SyncStealthOverlays()
-        SyncTrinketIcons(true)
-        return
-    end
-    if event == "ARENA_CROWD_CONTROL_SPELL_UPDATE" or event == "ARENA_COOLDOWNS_UPDATE" then
-        -- Response events refresh from the delivered data only; re-requesting
-        -- here would close the request/response feedback loop.
-        SyncTrinketIcons(false)
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
         for index = 1, MAX_ARENA do
             unseenSlots[index] = nil
-            ccRequested[index] = nil
         end
         SyncPrepDisplay()
         SyncStealthOverlays()
-        SyncTrinketIcons(true)
         return
     end
     if event == "PLAYER_REGEN_ENABLED" then
@@ -489,8 +360,6 @@ local function WireEvents()
         register("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_MATCH_PREP", HandleArenaMatchEvent)
         register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_MATCH_STATE", HandleArenaMatchEvent)
         register("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_MATCH_OPPONENT", HandleArenaMatchEvent)
-        register("ARENA_CROWD_CONTROL_SPELL_UPDATE", "MSUF_ARENA_MATCH_CC", HandleArenaMatchEvent)
-        register("ARENA_COOLDOWNS_UPDATE", "MSUF_ARENA_MATCH_CD", HandleArenaMatchEvent)
         register("PLAYER_ENTERING_WORLD", "MSUF_ARENA_MATCH_WORLD", HandleArenaMatchEvent)
         register("PLAYER_REGEN_ENABLED", "MSUF_ARENA_MATCH_REGEN", HandleArenaMatchEvent)
         return
@@ -502,8 +371,6 @@ local function WireEvents()
     eventFrame:RegisterEvent("ARENA_PREP_OPPONENT_SPECIALIZATIONS")
     eventFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED")
     eventFrame:RegisterEvent("ARENA_OPPONENT_UPDATE")
-    eventFrame:RegisterEvent("ARENA_CROWD_CONTROL_SPELL_UPDATE")
-    eventFrame:RegisterEvent("ARENA_COOLDOWNS_UPDATE")
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
@@ -512,4 +379,3 @@ WireEvents()
 
 ExportPublic("MSUF_ArenaMatch_SyncPrepDisplay", SyncPrepDisplay)
 ExportPublic("MSUF_ArenaMatch_SyncStealthOverlays", SyncStealthOverlays)
-ExportPublic("MSUF_ArenaMatch_SyncTrinketIcons", function() SyncTrinketIcons(true) end)

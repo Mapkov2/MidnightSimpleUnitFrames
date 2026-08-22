@@ -89,9 +89,7 @@ local match = Read("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_Aren
 for _, marker in ipairs({
     "GetArenaOpponentSpec",
     "SetPrepNameClassColor",
-    "SetCooldownFromDurationObject",
     '"unseen"',
-    "RequestCrowdControlSpell",
 }) do
     Check(match:find(marker, 1, true),
         "arena match feature lost its contract: " .. marker)
@@ -108,5 +106,31 @@ local prepVisibilityPos = match:find("SyncPrepVisibility(wantPrep)", 1, true)
 local prepFramePos = match:find("changed = ApplyPrepFrame(frame, index)", 1, true)
 Check(prepVisibilityPos and prepFramePos and prepVisibilityPos < prepFramePos,
     "arena prep data is applied before its unitless frames become securely visible")
+
+local trinkets = Read("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua")
+for _, marker in ipairs({
+    "SetCooldownFromDurationObject",
+    "RequestCrowdControlSpell",
+    "GetArenaCrowdControlInfo",
+    "ARENA_CROWD_CONTROL_SPELL_UPDATE",
+    "ARENA_COOLDOWNS_UPDATE",
+    "MISTS_TRINKET_DURATION = 120",
+}) do
+    Check(trinkets:find(marker, 1, true),
+        "arena trinket feature lost its contract: " .. marker)
+end
+Check(not trinkets:find('SetScript("OnUpdate"', 1, true),
+    "arena trinket feature introduced an OnUpdate polling path")
+
+for _, toc in ipairs({
+    "Mainline",
+    "Mists",
+    "TBC",
+    "Vanilla",
+}) do
+    local tocSource = Read("MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_" .. toc .. ".toc")
+    Check(tocSource:find("Features\\Gameplay\\MSUF_Feature_ArenaTrinkets.lua", 1, true),
+        "arena trinket feature is missing from the " .. toc .. " TOC")
+end
 
 print("arena_unit_scope_smoke: ok")
