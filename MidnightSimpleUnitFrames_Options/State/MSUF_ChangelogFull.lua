@@ -8,12 +8,63 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "6D981891C5FDC0B1D75A21CF0E1B7F0207E58C354A91C131EDBADA6FDC0B7175",
-    currentVersion = "6.11",
+    sourceSha256 = "26727424D6F781AC611C6B28E27D7055F17C6BB13F6B54E277491EF75C55F2DE",
+    currentVersion = "6.12-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.11",
+    previousVersion = "6.11",
+    rangeLabel = "6.11 -> 6.12-beta1",
     entries = {
+        {
+            version = "6.12-beta1",
+            date = "2026-08-22",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Class Resource text can now show Current, Maximum, or Current / Maximum. The new Resource text selector keeps Automatic as the untouched resource-specific default, while explicit modes change only the central resource value.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "class resource text mode",
+                                label = "Resource text",
+                                sectionId = "classpower_visuals",
+                                controlId = "menu2.classpower.advanced.style.text.mode",
+                                settingKey = "bars.classPowerTextMode",
+                            },
+                        },
+                        {
+                            text = "Boss Range Fade can now update up to 20 times per second. The new Boss update-rate slider keeps the adaptive standard cadence at zero or continuously checks visible Boss Frames from 1 through 20 updates per second.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "boss range update rate",
+                                label = "Updates per second",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_boss.unit.range_fade.update_rate",
+                                settingKey = "boss.rangeFadeUpdateRate",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats.",
+                        "Class Resource previews mirror the selected text mode, and the Assistant can find and set both the resource-text format and the Boss range-update rate.",
+                        "Retired unused legacy Class Resource text-format fields from existing profiles and generated fallback metadata.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "One-icon aura lanes now use Blizzard's one-frame AuraSlot primitive instead of allocating a ten-frame AuraGroup pool; weapon-enchant and custom-priority lanes keep their specialized group behavior.",
+                        "Aura identity-event topology changes are batched across secure Group Frame header scans, resolved aura-name registrations survive unchanged layout refreshes, and redundant native full-aura refreshes were removed.",
+                        "Target name and health text now resolve protected PvP class tokens through Blizzard's native class-color object without comparing or caching secret-backed RGB values.",
+                        "Standard Boss Range Fade retains its adaptive 0.75/2-second checks, while a custom rate accelerates only visible Boss Frames and shares the existing timer scheduler.",
+                        "See New Features now reports the correct compact and full-history version ranges for 6.11.",
+                    },
+                },
+            },
+        },
         {
             version = "6.11",
             date = "2026-08-21",

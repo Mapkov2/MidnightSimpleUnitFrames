@@ -8,12 +8,63 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "6D981891C5FDC0B1D75A21CF0E1B7F0207E58C354A91C131EDBADA6FDC0B7175",
-    currentVersion = "6.11",
-    historyFromVersion = "6.08",
-    previousVersion = "6.08",
-    rangeLabel = "6.08 -> 6.11",
+    sourceSha256 = "26727424D6F781AC611C6B28E27D7055F17C6BB13F6B54E277491EF75C55F2DE",
+    currentVersion = "6.12-beta1",
+    historyFromVersion = "6.09",
+    previousVersion = "6.11",
+    rangeLabel = "6.11 -> 6.12-beta1",
     entries = {
+        {
+            version = "6.12-beta1",
+            date = "2026-08-22",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Class Resource text can now show Current, Maximum, or Current / Maximum. The new Resource text selector keeps Automatic as the untouched resource-specific default, while explicit modes change only the central resource value.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "class resource text mode",
+                                label = "Resource text",
+                                sectionId = "classpower_visuals",
+                                controlId = "menu2.classpower.advanced.style.text.mode",
+                                settingKey = "bars.classPowerTextMode",
+                            },
+                        },
+                        {
+                            text = "Boss Range Fade can now update up to 20 times per second. The new Boss update-rate slider keeps the adaptive standard cadence at zero or continuously checks visible Boss Frames from 1 through 20 updates per second.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "boss range update rate",
+                                label = "Updates per second",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_boss.unit.range_fade.update_rate",
+                                settingKey = "boss.rangeFadeUpdateRate",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats.",
+                        "Class Resource previews mirror the selected text mode, and the Assistant can find and set both the resource-text format and the Boss range-update rate.",
+                        "Retired unused legacy Class Resource text-format fields from existing profiles and generated fallback metadata.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "One-icon aura lanes now use Blizzard's one-frame AuraSlot primitive instead of allocating a ten-frame AuraGroup pool; weapon-enchant and custom-priority lanes keep their specialized group behavior.",
+                        "Aura identity-event topology changes are batched across secure Group Frame header scans, resolved aura-name registrations survive unchanged layout refreshes, and redundant native full-aura refreshes were removed.",
+                        "Target name and health text now resolve protected PvP class tokens through Blizzard's native class-color object without comparing or caching secret-backed RGB values.",
+                        "Standard Boss Range Fade retains its adaptive 0.75/2-second checks, while a custom rate accelerates only visible Boss Frames and shares the existing timer scheduler.",
+                        "See New Features now reports the correct compact and full-history version ranges for 6.11.",
+                    },
+                },
+            },
+        },
         {
             version = "6.11",
             date = "2026-08-21",
@@ -224,126 +275,6 @@ local data = {
                         "Fixed Edit Mode arrow-key nudging for Custom 1-4 aura containers, including shared boss-frame positioning.",
                         "Fixed Spell Indicator controls from an inactive display type remaining visible after selection or preview changes.",
                         "Kept Custom Priority ordering and blacklist scanning fully event- and click-driven: no polling, no recurring OnUpdate work, and nothing added to combat hotpaths.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.08",
-            date = "2026-08-16",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Added optional profile-wide custom colors for Magic, Curse, Disease, Poison, and Bleed across Unit and Group Frame dispel visuals while preserving Blizzard's native defaults whenever no override is enabled.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "magic dispel color",
-                                label = "Magic color",
-                                sectionId = "colors_auras",
-                                controlId = "menu2.opt.colors.advanced.auras.dispel.magic.color",
-                                settingKey = "general.dispelTypeColorOverrides.Magic",
-                            },
-                        },
-                        {
-                            text = "Added an optional, class-colored interrupter name beside the castbar's interrupted state.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "show interrupter name",
-                                label = "Show interrupter name",
-                                sectionId = "castbar",
-                                controlId = "menu2.uf_target.unit.castbar.show_interrupt_source",
-                                settingKey = "target.showInterruptSource",
-                                prepareKind = "unitCastbarTab",
-                                prepareValue = "general",
-                            },
-                        },
-                        {
-                            text = "Added configurable AFK timers to Unit and Group Frame status text.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "afk timer",
-                                label = "AFK Timer",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.selected.enabled",
-                                settingKey = "player.statusAFKTimerEnabled",
-                                prepareKind = "unitStatus",
-                                prepareValue = "statusAFKTimer",
-                            },
-                        },
-                        {
-                            text = "Added an optional Player Frame Stance text indicator for warrior stances, paladin auras, druid forms, and other native stance-bar forms.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "stance",
-                                label = "Stance",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.selected.enabled",
-                                settingKey = "player.showStanceIndicator",
-                                prepareKind = "unitStatus",
-                                prepareValue = "stance",
-                            },
-                        },
-                        {
-                            text = "Added explicit Uniform and Width & height portrait sizing modes for Unit and Group Frames while preserving existing portrait geometry during migration.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "portrait size mode",
-                                label = "Size mode",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitsizemode",
-                                settingKey = "player.portraitSizeMode",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "geometry",
-                            },
-                        },
-                        {
-                            text = "Added configurable edge softness for circular, rounded, and diamond portraits, with matching Unit Frame, Group Frame, and preview rendering.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "portrait edge softness",
-                                label = "Portrait edge softness",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitedgesoftness",
-                                settingKey = "player.portraitEdgeSoftness",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "border",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added an optional Slug font rendering mode for clearer, more consistent text across Unit Frames, Group Frames, Castbars, Class Resources, and other MSUF text.",
-                        "Applied custom Dispel colors consistently to Unit Dispel Overlays, Group Dispel Overlays, Dispel Highlight Borders, MSUF Dispel symbols, Edit Mode, and every matching Menu preview.",
-                        "Added ::: color shortcuts to Unit Dispel Overlay, Group Dispel Overlay, and Highlight Borders for direct access to the matching global Dispel colors.",
-                        "Kept original Blizzard and MSUF Dispel artwork for default colors; tint-neutral MSUF symbol assets are selected only for Dispel types with an active custom override.",
-                        "Replaced the toolbar's New Task action with a dedicated See New Features changelog page. Highlighted feature sentences now link directly to their exact MSUF Menu controls and subcategories.",
-                        "Localized the new Dispel colors, AFK timer, stance, portrait sizing, portrait edge-softness, and related controls across all 12 supported locales.",
-                        "Updated Assistant registrations, profile behavior, copy/reset handling, search routing, generated coverage data, and static search data for the new controls.",
-                        "Added daily GitHub synchronization from Retail main to the Classic repository, clearer sync-failure reporting, and required versioned Classic validation.",
-                        "Added manual release-channel recovery support to the GitHub release workflow.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Updated Spell Indicator filters in place through Blizzard's public AuraSlot setter, avoiding unnecessary restricted AuraButton and container rebuilds when only a friendly/hostile filter changes.",
-                        "Fixed custom MSUF Dispel symbols becoming black or incorrectly multiplied after recoloring. Custom overrides now use tint-neutral, alpha-identical companions, while unchanged colors continue using the original assets.",
-                        "Fixed Group Frame absorb overlays ignoring the configured opacity.",
-                        "Fixed aura icon zoom scaling when a Debuff border is active, including runtime and preview rendering.",
-                        "Fixed the Castbar General tab height after adding the interrupter-name option.",
-                        "Changed Target and Focus castbar identity refreshes from deferred callbacks to direct synchronous updates.",
-                        "Cleared the castbar driver's unused OnUpdate script once during construction instead of repeating the native transition on target swaps.",
-                        "Fixed player Unit Frames showing the fallback blue or another incorrect health color for identity-restricted PvP targets by routing every player class through Blizzard's native secret-safe class-color pipeline.",
-                        "Fixed restricted Race and Class status text showing a unit name or blank value by using Blizzard's stable identity return directly when localized identity text is protected.",
-                        "Streamlined Unit Frame identity refreshes across bars, portraits, status text, regular text, and range fading so unchanged identity state avoids redundant work.",
-                        "Skipped player-only nickname-provider APIs for NPC units while retaining supported NPC nickname sources.",
-                        "Fixed Arena Group Frames using Raid instead of Party configuration across runtime, Blizzard-frame ownership, Edit Mode, and previews.",
-                        "Fixed exact-ID aura indicators mixing friendly and hostile filters after switching targets.",
-                        "Limited PvP indicator runtime to Arenas, Battlegrounds, and War Mode, removing unrelated faction and PvP-timer event traffic outside those modes.",
                     },
                 },
             },

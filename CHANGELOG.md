@@ -1,5 +1,28 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.12-beta1 - 2026-08-22
+
+### Highlights
+
+- **Class Resource text can now show Current, Maximum, or Current / Maximum.** The new Resource text selector keeps Automatic as the untouched resource-specific default, while explicit modes change only the central resource value.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visuals","controlId":"menu2.classpower.advanced.style.text.mode","settingKey":"bars.classPowerTextMode","prepareKind":"","prepareValue":"","query":"class resource text mode","label":"Resource text"} -->
+- **Boss Range Fade can now update up to 20 times per second.** The new Boss update-rate slider keeps the adaptive standard cadence at zero or continuously checks visible Boss Frames from 1 through 20 updates per second.
+<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"range_fade","controlId":"menu2.uf_boss.unit.range_fade.update_rate","settingKey":"boss.rangeFadeUpdateRate","prepareKind":"","prepareValue":"","query":"boss range update rate","label":"Updates per second"} -->
+
+### Changes
+
+- Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats.
+- Class Resource previews mirror the selected text mode, and the Assistant can find and set both the resource-text format and the Boss range-update rate.
+- Retired unused legacy Class Resource text-format fields from existing profiles and generated fallback metadata.
+
+### Fixes & Performance
+
+- One-icon aura lanes now use Blizzard's one-frame AuraSlot primitive instead of allocating a ten-frame AuraGroup pool; weapon-enchant and custom-priority lanes keep their specialized group behavior.
+- Aura identity-event topology changes are batched across secure Group Frame header scans, resolved aura-name registrations survive unchanged layout refreshes, and redundant native full-aura refreshes were removed.
+- Target name and health text now resolve protected PvP class tokens through Blizzard's native class-color object without comparing or caching secret-backed RGB values.
+- Standard Boss Range Fade retains its adaptive 0.75/2-second checks, while a custom rate accelerates only visible Boss Frames and shares the existing timer scheduler.
+- See New Features now reports the correct compact and full-history version ranges for 6.11.
+
 ## 6.11 - 2026-08-21
 
 ### Highlights
