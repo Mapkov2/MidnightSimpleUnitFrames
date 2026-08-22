@@ -97,6 +97,12 @@ local function EnsureGameplayDefaults()
     Default(g, "meleeSpellPerSpec", false)
     if type(g.nameplateMeleeSpellIDByClass) ~= "table" then g.nameplateMeleeSpellIDByClass = {} end
     if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then g.nameplateMeleeSpellIDBySpec = {} end
+
+    Default(g, "enableApexItDevAura", false)
+    ClampPositive(g, "apexItFontSize", 32, 10, 64)
+    Default(g, "apexItOffsetX", 0)
+    Default(g, "apexItOffsetY", 140)
+
     -- Blizzard's TotemFrame is class-agnostic and parented to PlayerFrame, which MSUF hides, so
     -- this helper is what makes an occupied totem slot visible at all. Seeded on for every class
     -- instead of just Shaman/Monk; profiles that already stored a value keep it.
@@ -121,7 +127,9 @@ local function EnsureGameplayDefaults()
 end
 
 local function GetGameplayDBFast()
-    if type(gameplayDBCache) == "table" then
+    local db = _G.MSUF_DB
+    local activeGameplay = type(db) == "table" and db.gameplay or nil
+    if type(gameplayDBCache) == "table" and gameplayDBCache == activeGameplay then
         return gameplayDBCache
     end
     return EnsureGameplayDefaults()

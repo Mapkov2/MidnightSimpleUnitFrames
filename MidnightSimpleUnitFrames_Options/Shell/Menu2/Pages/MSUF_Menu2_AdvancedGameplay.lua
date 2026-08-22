@@ -16,6 +16,7 @@ local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs, ControlMeta
 local GAMEPLAY_SETTING_BY_PATH = {
     ["timer.enabled"] = "gameplay.enableCombatTimer",
     ["combat_state.enabled"] = "gameplay.enableCombatStateText",
+    ["dev_aura.apex_it.enabled"] = "gameplay.enableApexItDevAura",
     ["totem_frame.enabled"] = "gameplay.enablePlayerTotems",
     ["crosshair.enabled"] = "gameplay.enableCombatCrosshair",
     ["crosshair.melee_spell"] = "gameplay.nameplateMeleeSpellID",
@@ -36,6 +37,10 @@ local function Meta(path, classification, exact)
 end
 local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList
+local function MoreMenuOptionsEnabled()
+    local general = M.GetGeneralDB and M.GetGeneralDB()
+    return type(general) == "table" and general.hideAdvancedMenu == false
+end
 local function BuildGameplay(ctx)
     local b = W.PageBuilder(ctx)
     local disabledRefresh
@@ -67,7 +72,8 @@ local function BuildGameplay(ctx)
         if type(M.SetGameplayMeleeSpellID) == "function" then return M.SetGameplayMeleeSpellID(value) end
         Gameplay().nameplateMeleeSpellID = floor((tonumber(value) or 0) + 0.5)
     end
-    local timerControls, stateControls, totemControls = {}, {}, {}
+    local timerControls, stateControls, apexItControls, totemControls = {}, {}, {}, {}
+    local apexEnable
     local crossControls, meleeControls = {}, {}, {}
     local selectedSpellText
     local noSpellWarn
@@ -231,6 +237,72 @@ local function BuildGameplay(ctx)
     end
     AddGameplayTextInput(stateControls, enterInput, "combatStateEnterText", "+Combat")
     AddGameplayTextInput(stateControls, leaveInput, "combatStateLeaveText", "-Combat")
+    local function IsApexItPreviewActive()
+        return type(MSUF.MSUF_Gameplay_ApexIt_IsPreviewActive) == "function"
+            and MSUF.MSUF_Gameplay_ApexIt_IsPreviewActive() == true
+    end
+    local SyncApexItPreviewButton = function() end
+    do
+        local apexStartY = b.y
+        local apexStacked = GameplayStacked()
+        local apex = b:CollapsibleSection("gameplay_dev_auras", "Developer Auras", apexStacked and 460 or 310, false)
+        local apexW = apex._msuf2Width or ctx.width or 900
+        local apexCardW = SectionCardWidth(apex, 700)
+        local apexControlW = SectionControlWidth(apex, 280, 120)
+        local apexLeftX, apexRightX, apexColW = SectionColumns(apex, 280)
+        local apexPreviewBtn
+        if apexStacked then
+            AddBackdrops(apex, { { -38, apexCardW, 370 } })
+            apexEnable = SwitchAt(ctx, apex, "Subtlety Rogue: APEX IT", 30, -40, min(330, apexControlW), Gameplay, "enableApexItDevAura", false, ApplyGameplayUI, Meta("dev_aura.apex_it.enabled"))
+            LabelAt(apex, "Deathstalker only: 5+ Shadow Techniques and no Ancient Arts.", 30, -76, min(540, apexW - 60), "GameFontDisableSmall", T.colors.muted)
+            LabelAt(apex, "Darkest Night: APEX IT. Event-driven; no polling.", 30, -98, min(540, apexW - 60), "GameFontDisableSmall", T.colors.muted)
+            apexPreviewBtn = T.Button(apex, "Preview", min(120, apexControlW), 22)
+            apexPreviewBtn:SetPoint("TOPLEFT", apex, "TOPLEFT", 30, -124)
+            T.FitButtonWidth(apexPreviewBtn, 90, max(120, apexCardW - 60))
+            AddControls(apexItControls, apex, {
+                { "slider", "Text size", 30, -174, 10, 64, 1, apexControlW, "apexItFontSize", 32 },
+                { "slider", "X offset", 30, -244, -800, 800, 1, apexControlW, "apexItOffsetX", 0 },
+                { "slider", "Y offset", 30, -314, -800, 800, 1, apexControlW, "apexItOffsetY", 140 },
+            })
+        else
+            AddBackdrops(apex, { { -38, apexCardW, 220 } })
+            apexEnable = SwitchAt(ctx, apex, "Subtlety Rogue: APEX IT", apexLeftX, -40, min(330, apexColW), Gameplay, "enableApexItDevAura", false, ApplyGameplayUI, Meta("dev_aura.apex_it.enabled"))
+            apexPreviewBtn = T.Button(apex, "Preview", min(120, apexColW), 22)
+            apexPreviewBtn:SetPoint("TOPLEFT", apex, "TOPLEFT", apexRightX, -40)
+            T.FitButtonWidth(apexPreviewBtn, 90, max(120, apexColW))
+            LabelAt(apex, "Deathstalker only: 5+ Shadow Techniques and no Ancient Arts.", apexLeftX, -76, min(600, apexCardW - 36), "GameFontDisableSmall", T.colors.muted)
+            LabelAt(apex, "Darkest Night: APEX IT. Event-driven; no polling.", apexLeftX, -98, min(600, apexCardW - 36), "GameFontDisableSmall", T.colors.muted)
+            AddControls(apexItControls, apex, {
+                { "slider", "Text size", apexLeftX, -142, 10, 64, 1, apexColW, "apexItFontSize", 32 },
+                { "slider", "X offset", apexRightX, -142, -800, 800, 1, apexColW, "apexItOffsetX", 0 },
+                { "slider", "Y offset", apexLeftX, -212, -800, 800, 1, apexColW, "apexItOffsetY", 140 },
+            })
+        end
+        SyncApexItPreviewButton = function()
+            T.ApplyButtonRole(apexPreviewBtn, IsApexItPreviewActive() and "success" or "normal")
+        end
+        apexPreviewBtn:SetScript("OnClick", function()
+            if type(MSUF.MSUF_Gameplay_ApexIt_TogglePreview) == "function" then
+                MSUF.MSUF_Gameplay_ApexIt_TogglePreview()
+            end
+            SyncApexItPreviewButton()
+            if disabledRefresh then disabledRefresh() end
+        end)
+        SyncApexItPreviewButton()
+        RegisterControl(apexPreviewBtn, Meta("dev_aura.apex_it.preview", "ephemeral"), "Preview", "button")
+        if not MoreMenuOptionsEnabled() then
+            local apexEntry = apex._msuf2CollapsibleEntry
+            if apexEntry and apexEntry.outer then apexEntry.outer:Hide() end
+            for i = #b.layoutEntries, 1, -1 do
+                if b.layoutEntries[i] == apexEntry then
+                    table.remove(b.layoutEntries, i)
+                    break
+                end
+            end
+            if ctx.entry and ctx.entry.sections then ctx.entry.sections.gameplay_dev_auras = nil end
+            b.y = apexStartY
+        end
+    end
     local classStacked = GameplayStacked()
     local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", classStacked and 620 or 390, false)
     local classW = classSec._msuf2Width or ctx.width or 900
@@ -459,6 +531,9 @@ local function BuildGameplay(ctx)
     disabledRefresh = M.BindGateGroup(ctx, Gameplay, {
         { enable = timerEnable, controls = timerControls, on = function(g) return g.enableCombatTimer == true end },
         { enable = stateEnable, controls = stateControls, on = function(g) return g.enableCombatStateText == true end },
+        { enable = apexEnable, controls = apexItControls, on = function(g)
+            return g.enableApexItDevAura == true or IsApexItPreviewActive()
+        end },
         { enable = totemEnable, controls = totemActionControls, on = function() return true end },
         { controls = totemControls, on = function(g) return g.enablePlayerTotems == true end },
         { enable = crossEnable, controls = crossControls, on = function(g) return g.enableCombatCrosshair == true end },
@@ -467,8 +542,9 @@ local function BuildGameplay(ctx)
         end },
     }, { also = function()
         M.CallIf(previewRefresh)
+        SyncApexItPreviewButton()
         SyncTotemPreviewButton()
     end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 3 })
+M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 7 })

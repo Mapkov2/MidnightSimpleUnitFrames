@@ -143,4 +143,35 @@ function A.GameplayRegistry.RegisterCombatTextSettings(ctx)
         frameType = "combatState",
         reason = "MSUF_ASSISTANT_COMBAT_STATE_Y",
     })
+
+    RegisterGameplayBoolean("enableApexItDevAura", "enabled", "Subtlety Rogue APEX IT", false, {
+        "apex it", "apex it dev aura", "apex it stack counter", "shadow techniques stacks",
+        "darkest night ancient arts warning", "subtlety rogue apex warning",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexItDevAura",
+        reason = "MSUF_ASSISTANT_APEX_IT_DEV_AURA",
+        matchLabel = false,
+    })
+    RegisterGameplayNumber("apexItFontSize", "fontSize", "APEX IT Text Size", 32, 10, 64, {
+        "apex it size", "apex it text size", "apex it font size",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexItDevAura",
+        reason = "MSUF_ASSISTANT_APEX_IT_SIZE",
+    })
+    RegisterGameplayNumber("apexItOffsetX", "offsetX", "APEX IT Offset X", 0, -800, 800, {
+        "apex it x", "apex it x offset", "apex it horizontal offset",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexItDevAura",
+        reason = "MSUF_ASSISTANT_APEX_IT_X",
+    })
+    RegisterGameplayNumber("apexItOffsetY", "offsetY", "APEX IT Offset Y", 140, -800, 800, {
+        "apex it y", "apex it y offset", "apex it vertical offset",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexItDevAura",
+        reason = "MSUF_ASSISTANT_APEX_IT_Y",
+    })
 end

@@ -5629,6 +5629,10 @@ L["Filter again"] = "Wieder filtern"
 L["Lets the self-cast filter decide about this entry again. It will be hidden on characters that cannot cast it."] = "Überlässt diesen Eintrag wieder dem Selbst-Wirken-Filter. Auf Charakteren, die ihn nicht wirken können, wird er ausgeblendet."
 L["always shown"] = "immer sichtbar"
 L["hidden on this character"] = "auf diesem Charakter ausgeblendet"
+L["Developer Auras"] = "Entwickler-Auren"
+L["Subtlety Rogue: APEX IT"] = "Täuschungs-Schurke: APEX IT"
+L["Shows APEX IT with the current Shadow Techniques stack count while Darkest Night is active and Ancient Arts is not."] = "Zeigt APEX IT mit der aktuellen Anzahl an Shadow-Techniques-Stapeln, solange Darkest Night aktiv ist und Ancient Arts fehlt."
+L["Player aura events only; no polling."] = "Nur Spieler-Aura-Events; kein Polling."
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "Blendet jeden freigegebenen Zauber aus, den dieser Charakter nicht wirken kann – ohne eine Lücke zu hinterlassen. So bedient eine Whitelist all deine Charaktere: Der Magier behält Arkane Intelligenz, der Schurke die Gifte. Nichts verrät, welcher Klasse eine Zauber-ID gehört, ein Fläschchen-Buff sieht hier also genauso aus wie ein fremder Klassenzauber – schütze solche Einträge mit einem gebundenen Gegenstand oder mit „Immer zeigen“ in der Whitelist. MSUF prüft das nur neu, wenn sich Zauberbuch oder Talente wirklich ändern, niemals im Kampf."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)

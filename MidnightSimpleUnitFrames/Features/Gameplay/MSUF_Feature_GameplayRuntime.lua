@@ -12,6 +12,10 @@ end
 local CreateFrame   = CreateFrame
 local UIParent      = UIParent
 local C_Spell       = C_Spell
+local C_SpellBook   = C_SpellBook
+local C_CooldownViewer = C_CooldownViewer
+local C_StringUtil = C_StringUtil
+local hooksecurefunc = hooksecurefunc
 local UnitExists    = UnitExists
 local UnitCanAttack = UnitCanAttack
 local GetTime             = GetTime
@@ -37,6 +41,7 @@ local EventBus_Unregister = _G.MSUF_EventBus_Unregister
 local RegisterModule = MSUF.MSUF_RegisterModule
 local ApplyGameplayNow
 local SyncGameplaySpecEvents
+local ApplyApexItDevAura
 
 local function BusRegister(...)
     if type(EventBus_Register) == "function" then EventBus_Register(...) end
@@ -68,8 +73,10 @@ do
     local _applyPending = false
 
     local function _DoGameplayApply()
-        if ApplyGameplayNow then ApplyGameplayNow() end
+        -- Release the coalescing guard before applying. If any feature throws, a later
+        -- settings change must still be able to schedule a fresh apply.
         _applyPending = false
+        if ApplyGameplayNow then ApplyGameplayNow() end
     end
 
     function MSUF.MSUF_RequestGameplayApply()
@@ -219,6 +226,15 @@ local timerText
 local stateFrame
 local stateText
 local CombatStateOnEvent
+local apexItFrame
+local apexItText
+local apexItStackText
+local apexItLabelSensor
+local apexItStackSensor
+local apexItEventFrame
+local apexItPreviewActive = false
+local apexItConsumed = false
+local apexDeathstalkerKnown = false
 local crosshairFrame
 local crosshairEventFrame
 local crosshairZoomHooksInstalled = false
@@ -476,8 +492,25 @@ local function ApplyGameplayFont(fs, path, size, flags)
     return false
 end
 
+local function ApplyApexTextStyle(fontString, isStackText)
+    if not fontString then return end
+    local gdb = GetGameplayDB()
+    local path, flags, _, _, _, _, useShadow = GetGameplayFont("state")
+    local apexFontSize = tonumber(gdb and gdb.apexItFontSize) or 32
+    local fontSize = isStackText
+        and math_min(24, math_max(12, apexFontSize * 0.65))
+        or apexFontSize
+    ApplyGameplayFont(fontString, path, fontSize, flags or "OUTLINE")
+    if isStackText then
+        fontString:SetTextColor(1, 1, 1, GlobalFontTextAlpha())
+    else
+        fontString:SetTextColor(1, 0.82, 0.08, GlobalFontTextAlpha())
+    end
+    SetTextShadow(fontString, useShadow ~= false)
+end
+
 local function ApplyFontToCounter()
-    if not timerText and not stateText then return end
+    if not timerText and not stateText and not apexItText and not apexItStackText then return end
     if timerText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFont("timer")
         ApplyGameplayFont(timerText, path, size or 20, flags or "OUTLINE")
@@ -494,6 +527,383 @@ local function ApplyFontToCounter()
         SetTextShadow(stateText, useShadow)
         ApplyCombatStateDynamicColor()
     end
+
+    if apexItText or apexItStackText then
+        ApplyApexTextStyle(apexItText, false)
+        ApplyApexTextStyle(apexItStackText, true)
+    end
+end
+
+local DARKEST_NIGHT_TALENT_SPELL_ID = 457058
+local DARKEST_NIGHT_AURA_SPELL_ID = 457280
+local ANCIENT_ARTS_AURA_SPELL_ID = 1269163
+local SHADOW_TECHNIQUES_AURA_SPELL_ID = 196911
+local EVISCERATE_SPELL_ID = 196819
+local SUBTLETY_ROGUE_SPEC_ID = 261
+local APEX_MIN_SHADOW_TECHNIQUES_STACKS = 5
+local APEX_ROLE_DARKEST = "darkestNight"
+local APEX_ROLE_ANCIENT = "ancientArts"
+local APEX_VIEWER_NAMES = { "BuffIconCooldownViewer", "BuffBarCooldownViewer" }
+local apexRoleByCooldownID = {}
+local apexRoleByViewerFrame = {}
+local apexActiveByViewerFrame = {}
+local apexHookedViewerFrames = {}
+local apexHookedViewers = {}
+local apexDriverRefreshBusy = false
+local RefreshApexItCooldownDrivers
+
+local function IsSubtletyRogue()
+    return type(GetPlayerSpecID) == "function" and GetPlayerSpecID() == SUBTLETY_ROGUE_SPEC_ID
+end
+
+local function EnsureApexItFrame()
+    -- Reuse and repair a partially-created named frame. This matters for developer
+    -- reload paths: the named frame can survive while this file's local FontString
+    -- references are rebuilt.
+    apexItFrame = apexItFrame or _G.MSUF_ApexItDevAuraFrame
+    local createdFrame = not apexItFrame
+    if createdFrame then
+        apexItFrame = CreateFrame("Frame", "MSUF_ApexItDevAuraFrame", UIParent)
+    end
+    apexItFrame:SetSize(360, 80)
+    apexItFrame:SetFrameStrata("DIALOG")
+    if createdFrame then apexItFrame:Hide() end
+
+    apexItText = apexItText or apexItFrame._msufApexItText or _G.MSUF_ApexItDevAuraText
+    if not apexItText then
+        apexItText = apexItFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+        apexItFrame._msufApexItText = apexItText
+        apexItText:SetPoint("BOTTOM", apexItFrame, "CENTER", 0, 2)
+    else
+        apexItFrame._msufApexItText = apexItText
+    end
+
+    apexItStackText = apexItStackText or apexItFrame._msufApexItStackText or _G.MSUF_ApexItDevAuraStackText
+    if not apexItStackText then
+        apexItStackText = apexItFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        apexItFrame._msufApexItStackText = apexItStackText
+        apexItStackText:SetPoint("TOP", apexItText, "BOTTOM", 0, -2)
+    else
+        apexItFrame._msufApexItStackText = apexItStackText
+    end
+    return apexItFrame
+end
+
+local function CooldownInfoContainsSpell(cooldownInfo, spellID)
+    if not cooldownInfo then return false end
+    if cooldownInfo.spellID == spellID
+        or cooldownInfo.overrideSpellID == spellID
+        or cooldownInfo.overrideTooltipSpellID == spellID
+        or cooldownInfo.linkedSpellID == spellID then
+        return true
+    end
+    local linkedSpellIDs = cooldownInfo.linkedSpellIDs
+    if type(linkedSpellIDs) == "table" then
+        for i = 1, #linkedSpellIDs do
+            if linkedSpellIDs[i] == spellID then return true end
+        end
+    end
+    return false
+end
+
+local function ResolveApexViewerFrameRole(frame)
+    if not (frame and type(frame.GetCooldownID) == "function") then return nil end
+    local cooldownID = frame:GetCooldownID()
+    if not cooldownID then return nil end
+
+    local cachedRole = apexRoleByCooldownID[cooldownID]
+    if cachedRole ~= nil then return cachedRole or nil end
+
+    -- Cooldown metadata is static, non-secret data. Resolve each cooldown ID once;
+    -- combat callbacks then use only this cached role and Blizzard's active boolean.
+    local cooldownInfo
+    if C_CooldownViewer and type(C_CooldownViewer.GetCooldownViewerCooldownInfo) == "function" then
+        cooldownInfo = C_CooldownViewer.GetCooldownViewerCooldownInfo(cooldownID)
+    end
+    if not cooldownInfo and type(frame.GetCooldownInfo) == "function" then cooldownInfo = frame:GetCooldownInfo() end
+
+    local role
+    if CooldownInfoContainsSpell(cooldownInfo, DARKEST_NIGHT_AURA_SPELL_ID) then
+        role = APEX_ROLE_DARKEST
+    elseif CooldownInfoContainsSpell(cooldownInfo, ANCIENT_ARTS_AURA_SPELL_ID) then
+        role = APEX_ROLE_ANCIENT
+    end
+    apexRoleByCooldownID[cooldownID] = role or false
+    return role
+end
+
+local function ApexRoleIsActive(role)
+    for frame, frameRole in pairs(apexRoleByViewerFrame) do
+        if frameRole == role and apexActiveByViewerFrame[frame] == true then return true end
+    end
+    return false
+end
+
+local function IsPlainSpellID(spellID, expectedSpellID)
+    local issecretvalue = _G.issecretvalue
+    if type(issecretvalue) == "function" and issecretvalue(spellID) == true then return false end
+    return type(spellID) == "number" and spellID == expectedSpellID
+end
+
+local function RefreshApexDeathstalkerKnown()
+    local known = false
+    local isKnown = C_SpellBook and C_SpellBook.IsSpellKnown
+    if type(isKnown) == "function" then
+        local ok, result = pcall(isKnown, DARKEST_NIGHT_TALENT_SPELL_ID)
+        local issecretvalue = _G.issecretvalue
+        if ok and not (type(issecretvalue) == "function" and issecretvalue(result) == true) then
+            known = result == true
+        end
+    end
+    apexDeathstalkerKnown = known
+end
+
+local function IsDeathstalkerActive()
+    -- Fail closed here: a stale CooldownViewer entry for Darkest Night must not
+    -- turn this Deathstalker-only helper into a Trickster rule.
+    return apexDeathstalkerKnown
+end
+
+local function CreateApexStackThresholdFormatter(visibleFormat)
+    if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then return nil end
+    local formatter = C_StringUtil.CreateNumericRuleFormatter()
+    formatter:SetBreakpoints({
+        { threshold = 0, format = "" },
+        { threshold = APEX_MIN_SHADOW_TECHNIQUES_STACKS, format = visibleFormat },
+    })
+    return formatter
+end
+
+local function InitializeApexStackSensorButton(button, isStackText, formatter)
+    button:ClearAllPoints()
+    button:SetAllPoints(button:GetParent())
+    if button.SetMouseClickEnabled then button:SetMouseClickEnabled(false) end
+    if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
+    if button.EnableMouse then button:EnableMouse(false) end
+
+    local fontTemplate = isStackText and "GameFontNormalLarge" or "GameFontNormalHuge"
+    local fontString = button:CreateFontString(nil, "OVERLAY", fontTemplate)
+    if isStackText then
+        fontString:SetPoint("TOP", button, "CENTER", 0, -2)
+    else
+        fontString:SetPoint("BOTTOM", button, "CENTER", 0, 2)
+    end
+
+    -- Finish every addon-owned visual mutation before AuraContainer seals the
+    -- inbound FontString and takes ownership of its secret Text/Shown aspects.
+    ApplyApexTextStyle(fontString, isStackText)
+    button:SetApplicationCount(fontString, { formatter = formatter })
+end
+
+local function EnsureApexStackThresholdSensors()
+    local A3 = _G.MSUF_Auras3
+    local createSensor = A3 and A3.CreateClassPowerAuraSensor
+    if type(createSensor) ~= "function" or not apexItFrame then return false end
+
+    if not apexItLabelSensor then
+        local formatter = CreateApexStackThresholdFormatter("APEX IT")
+        if formatter then
+            apexItLabelSensor = createSensor(apexItFrame, "msuf_apex_it_label",
+                { [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true }, function(button)
+                    InitializeApexStackSensorButton(button, false, formatter)
+                end)
+        end
+    end
+
+    if not apexItStackSensor then
+        local formatter = CreateApexStackThresholdFormatter("%d")
+        if formatter then
+            apexItStackSensor = createSensor(apexItFrame, "msuf_apex_it_stacks",
+                { [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true }, function(button)
+                    InitializeApexStackSensorButton(button, true, formatter)
+                end)
+        end
+    end
+
+    local function AnchorSensor(sensor)
+        if sensor then
+            sensor:ClearAllPoints()
+            sensor:SetAllPoints(apexItFrame)
+        end
+    end
+    AnchorSensor(apexItLabelSensor)
+    AnchorSensor(apexItStackSensor)
+    return apexItLabelSensor ~= nil and apexItStackSensor ~= nil
+end
+
+local function SetApexStackThresholdSensorsActive(active)
+    active = active == true
+    local function SetSensorState(sensor)
+        if sensor then
+            if type(sensor.SetEnabled) == "function" then sensor:SetEnabled(active) end
+            sensor:SetShown(active)
+        end
+    end
+    SetSensorState(apexItLabelSensor)
+    SetSensorState(apexItStackSensor)
+end
+
+local function RefreshApexItDevAura()
+    local g = GetGameplayDB()
+    if apexItPreviewActive then
+        local frame = EnsureApexItFrame()
+        if apexItText then apexItText:Show() end
+        if apexItStackText then
+            apexItStackText:SetText(tostring(APEX_MIN_SHADOW_TECHNIQUES_STACKS))
+            apexItStackText:Show()
+        end
+        frame:Show()
+        return
+    end
+    if apexItText then apexItText:Hide() end
+    if apexItStackText then apexItStackText:Hide() end
+    if not (apexItFrame and g and g.enableApexItDevAura == true and IsSubtletyRogue()) then
+        if apexItFrame then apexItFrame:Hide() end
+        return
+    end
+
+    local deathstalkerActive = IsDeathstalkerActive()
+    SetApexStackThresholdSensorsActive(deathstalkerActive)
+    apexItFrame:SetShown(deathstalkerActive
+        and not apexItConsumed
+        and ApexRoleIsActive(APEX_ROLE_DARKEST)
+        and not ApexRoleIsActive(APEX_ROLE_ANCIENT))
+end
+
+local function OnApexViewerActiveStateChanged(frame)
+    local role = apexRoleByViewerFrame[frame]
+    if not role then return end
+    apexActiveByViewerFrame[frame] = type(frame.IsActive) == "function" and frame:IsActive() == true or false
+    if role == APEX_ROLE_DARKEST and not ApexRoleIsActive(APEX_ROLE_DARKEST) then
+        apexItConsumed = false
+    end
+    RefreshApexItDevAura()
+end
+
+RefreshApexItCooldownDrivers = function()
+    if apexDriverRefreshBusy then return end
+    apexDriverRefreshBusy = true
+
+    for frame in pairs(apexRoleByViewerFrame) do apexRoleByViewerFrame[frame] = nil end
+    for frame in pairs(apexActiveByViewerFrame) do apexActiveByViewerFrame[frame] = nil end
+
+    for i = 1, #APEX_VIEWER_NAMES do
+        local viewer = _G[APEX_VIEWER_NAMES[i]]
+        if viewer and type(viewer.GetItemFrames) == "function" then
+            if not apexHookedViewers[viewer] and type(hooksecurefunc) == "function" and type(viewer.RefreshData) == "function" then
+                apexHookedViewers[viewer] = true
+                hooksecurefunc(viewer, "RefreshData", RefreshApexItCooldownDrivers)
+            end
+
+            local itemFrames = viewer:GetItemFrames()
+            for j = 1, #itemFrames do
+                local itemFrame = itemFrames[j]
+                local role = ResolveApexViewerFrameRole(itemFrame)
+                if role then
+                    apexRoleByViewerFrame[itemFrame] = role
+                    apexActiveByViewerFrame[itemFrame] = type(itemFrame.IsActive) == "function" and itemFrame:IsActive() == true or false
+                    if not apexHookedViewerFrames[itemFrame] and type(hooksecurefunc) == "function" then
+                        apexHookedViewerFrames[itemFrame] = true
+                        if type(itemFrame.OnActiveStateChanged) == "function" then
+                            hooksecurefunc(itemFrame, "OnActiveStateChanged", OnApexViewerActiveStateChanged)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if not ApexRoleIsActive(APEX_ROLE_DARKEST) then
+        apexItConsumed = false
+    end
+    apexDriverRefreshBusy = false
+    RefreshApexItDevAura()
+end
+
+local function EnsureApexItEventFrame()
+    if apexItEventFrame then return apexItEventFrame end
+
+    apexItEventFrame = CreateFrame("Frame")
+    apexItEventFrame:SetScript("OnEvent", function(_, event, arg1, _, spellID)
+        if event == "UNIT_SPELLCAST_SUCCEEDED" then
+            if IsPlainSpellID(spellID, EVISCERATE_SPELL_ID)
+                and ApexRoleIsActive(APEX_ROLE_DARKEST) then
+                apexItConsumed = true
+                RefreshApexItDevAura()
+            end
+            return
+        end
+        if event == "ADDON_LOADED"
+            and arg1 ~= "Blizzard_CooldownViewer"
+            and arg1 ~= "Blizzard_AuraContainer" then return end
+        if ApplyApexItDevAura then ApplyApexItDevAura(GetGameplayDB()) end
+    end)
+    return apexItEventFrame
+end
+
+ApplyApexItDevAura = function(g)
+    local enabled = g and g.enableApexItDevAura == true
+    if not enabled and not apexItPreviewActive then
+        apexItConsumed = false
+        apexDeathstalkerKnown = false
+        if apexItEventFrame then apexItEventFrame:UnregisterAllEvents() end
+        SetApexStackThresholdSensorsActive(false)
+        if apexItFrame then apexItFrame:Hide() end
+        return
+    end
+
+    g = g or GetGameplayDB() or {}
+    local frame = EnsureApexItFrame()
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", UIParent, "CENTER", tonumber(g.apexItOffsetX) or 0, tonumber(g.apexItOffsetY) or 140)
+    local subtletyEnabled = enabled and IsSubtletyRogue()
+    if subtletyEnabled then
+        RefreshApexDeathstalkerKnown()
+        EnsureApexStackThresholdSensors()
+    else
+        apexDeathstalkerKnown = false
+    end
+    local deathstalkerEnabled = subtletyEnabled and IsDeathstalkerActive()
+    ApplyFontToCounter()
+    -- Text is assigned only after ApplyFontToCounter. WoW rejects SetText on a
+    -- FontString that has no FontObject/font yet.
+    apexItText:SetText("APEX IT")
+
+    local events = EnsureApexItEventFrame()
+    events:UnregisterAllEvents()
+    if enabled then
+        events:RegisterEvent("ADDON_LOADED")
+        events:RegisterEvent("COOLDOWN_VIEWER_DATA_LOADED")
+        events:RegisterEvent("PLAYER_ENTERING_WORLD")
+        events:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+    end
+    if subtletyEnabled then
+        events:RegisterEvent("PLAYER_TALENT_UPDATE")
+        events:RegisterEvent("TRAIT_CONFIG_UPDATED")
+        events:RegisterEvent("SPELLS_CHANGED")
+    end
+    if deathstalkerEnabled then
+        events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+    end
+    SetApexStackThresholdSensorsActive(deathstalkerEnabled and not apexItPreviewActive)
+    if deathstalkerEnabled then
+        RefreshApexItCooldownDrivers()
+    end
+    RefreshApexItDevAura()
+end
+
+function MSUF.MSUF_Gameplay_ApexIt_SetPreview(enabled)
+    apexItPreviewActive = enabled == true
+    ApplyApexItDevAura(GetGameplayDB())
+    return apexItPreviewActive
+end
+
+function MSUF.MSUF_Gameplay_ApexIt_TogglePreview()
+    return MSUF.MSUF_Gameplay_ApexIt_SetPreview(not apexItPreviewActive)
+end
+
+function MSUF.MSUF_Gameplay_ApexIt_IsPreviewActive()
+    return apexItPreviewActive
 end
 
 local EnsureCombatStateText
@@ -1200,6 +1610,7 @@ ApplyGameplayNow = function()
     ApplyCombatTimer(g)
     ApplyCombatStateText(g)
     ApplyCombatCrosshair(g)
+    ApplyApexItDevAura(g)
     local applyTotems = MSUF.MSUF_Gameplay_PlayerTotems_Apply
     if applyTotems then applyTotems(g) end
 
@@ -1272,6 +1683,7 @@ do
         local wanted = g and (g.enableCombatTimer == true
             or g.enableCombatStateText == true
             or g.enableCombatCrosshair == true
+            or g.enableApexItDevAura == true
             or g.enablePlayerTotems == true)
         _specChangeFrame:UnregisterAllEvents()
         if wanted then _specChangeFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED") end
@@ -1308,6 +1720,8 @@ end
 local function StopGameplayModule()
     _StopCombatTimerTick()
     UnregisterGameplayEventBus(true, true)
+    apexItPreviewActive = false
+    ApplyApexItDevAura({})
     if SyncGameplaySpecEvents then SyncGameplaySpecEvents({}) end
     local modifierFrame = MSUF._MSUF_CombatTimerModifierFrame
     if modifierFrame then modifierFrame:UnregisterAllEvents() end
@@ -1320,7 +1734,9 @@ local function IsGameplayModuleEnabled()
     return g and (g.enableCombatTimer == true
         or g.enableCombatStateText == true
         or g.enableCombatCrosshair == true
-        or g.enablePlayerTotems == true) or false
+        or g.enableApexItDevAura == true
+        or g.enablePlayerTotems == true
+        or apexItPreviewActive) or false
 end
 
 local reg = RegisterModule or _G.MSUF_RegisterModule
