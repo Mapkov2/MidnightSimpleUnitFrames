@@ -135,6 +135,32 @@ local function SetPrepBar(bar, r, g, b)
     end
 end
 
+local function SetPrepNameClassColor(frame, r, g, b)
+    local spec = frame and frame.MSUFSpec
+    local textSpec = spec and spec.text
+    if not (textSpec and textSpec.nameClassColor == true) then return end
+
+    -- A prep opponent has no live unit identity, so the normal name-color
+    -- resolver cannot read UnitClass and falls back to its blue unknown color.
+    -- We already own a plain class token from GetArenaOpponentSpec; feed its
+    -- resolved RGB through the same cached text setter used by live frames.
+    local fallback = spec and spec.textColor
+    local alpha = fallback and fallback.a or 1
+    local text = MSUF.UFText
+    if text and type(text.SetNameTextColor) == "function" then
+        text.SetNameTextColor(frame, r, g, b, alpha)
+        return
+    end
+    if frame.nameText and frame.nameText.SetTextColor then
+        frame.nameText:SetTextColor(r, g, b, alpha)
+    end
+    if frame._msufNameDotsFS and frame._msufNameDotsFS.SetTextColor then
+        frame._msufNameDotsFS:SetTextColor(r, g, b, alpha)
+    end
+    frame._msufNameTextR, frame._msufNameTextG = r, g
+    frame._msufNameTextB, frame._msufNameTextA = b, alpha
+end
+
 local function ApplyPrepFrame(frame, index)
     local specName, _, _, classToken, className = OpponentSpecInfo(index)
     if not specName then return false end
@@ -161,7 +187,9 @@ local function ApplyPrepFrame(frame, index)
         frame.nameText:SetText(specName .. (className and (" - " .. className) or ""))
         frame.nameText:Show()
     end
-    SetPrepBar(frame.hpBar or frame.Health, ClassColor(classToken))
+    local r, g, b = ClassColor(classToken)
+    SetPrepNameClassColor(frame, r, g, b)
+    SetPrepBar(frame.hpBar or frame.Health, r, g, b)
     return true
 end
 

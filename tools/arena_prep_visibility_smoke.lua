@@ -75,10 +75,18 @@ local frames = {}
 local prepVisibilityReady = false
 local visibilityRefreshes = 0
 local matchEngaged = false
+local classColors = {
+    MAGE = { r = 0.25, g = 0.78, b = 0.92 },
+    WARRIOR = { r = 0.78, g = 0.61, b = 0.43 },
+}
 for index = 1, 3 do
-    local frame = { MSUFUnitKey = "arena" .. index }
+    local frame = {
+        MSUFUnitKey = "arena" .. index,
+        MSUFSpec = { text = { nameClassColor = true }, textColor = { a = 0.8 } },
+    }
     frame.nameText = {
         SetText = function(_, value) frame._name = value end,
+        SetTextColor = function(_, r, g, b, a) frame._nameColor = { r, g, b, a } end,
         Show = function() frame._nameShown = true end,
     }
     frame.hpBar = {
@@ -99,6 +107,11 @@ end
 
 UF.frames = frames
 UF.GetFrame = function(unit) return frames[unit] end
+MSUF.UFText = {
+    SetNameTextColor = function(frame, r, g, b, a)
+        frame.nameText:SetTextColor(r, g, b, a)
+    end,
+}
 UF.RefreshVisibilityDrivers = function(key)
     Check(key == "arena", "prep refreshed the wrong unit-frame scope")
     visibilityRefreshes = visibilityRefreshes + 1
@@ -109,14 +122,16 @@ _G.MSUF_DB = { arena = { enabled = true } }
 _G.MSUF_EventBus_Register = function() return true end
 _G.GetNumArenaOpponentSpecs = function() return 2 end
 _G.GetArenaOpponentSpec = function(index)
-    if index <= 2 then return 62, 2 end
+    if index == 1 then return 62, 2 end
+    if index == 2 then return 71, 2 end
     return 0, 2
 end
 _G.GetSpecializationInfoByID = function(specID)
-    return nil, "Spec " .. specID, nil, 135846, "DAMAGER", "MAGE", "Mage"
+    local classToken = specID == 71 and "WARRIOR" or "MAGE"
+    return nil, "Spec " .. specID, nil, 135846, "DAMAGER", classToken, classToken
 end
 _G.C_ClassColor = {
-    GetClassColor = function() return { r = 0.25, g = 0.78, b = 0.92 } end,
+    GetClassColor = function(classToken) return classColors[classToken] end,
 }
 _G.C_PvP = {
     IsMatchConsideredArena = function() return true end,
@@ -133,6 +148,12 @@ Check(visibilityRefreshes == 1 and _G.MSUF_ArenaPrepVisibilityActive == true,
     "prep visibility was not activated exactly once")
 Check(frames.arena1._shown == true and frames.arena2._shown == true and not frames.arena3._shown,
     "prep did not show exactly the known opponent slots")
+Check(frames.arena1._nameColor and frames.arena1._nameColor[1] == classColors.MAGE.r
+        and frames.arena1._nameColor[4] == 0.8,
+    "mage prep name did not receive its configured class color")
+Check(frames.arena2._nameColor and frames.arena2._nameColor[1] == classColors.WARRIOR.r
+        and frames.arena2._nameColor[1] ~= frames.arena1._nameColor[1],
+    "warrior prep name reused the blue unknown-class fallback")
 
 matchEngaged = true
 Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,

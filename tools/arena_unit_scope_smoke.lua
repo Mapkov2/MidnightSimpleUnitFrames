@@ -88,6 +88,7 @@ end
 local match = Read("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua")
 for _, marker in ipairs({
     "GetArenaOpponentSpec",
+    "SetPrepNameClassColor",
     "SetCooldownFromDurationObject",
     '"unseen"',
     "RequestCrowdControlSpell",
