@@ -84,7 +84,8 @@ local IsSecret = C.IsSecret or Secrets.IsSecret or function(_) return false end
 -- states. Cache normal numbers, but never persist secret-backed color tuples.
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
-local SECRET_DEPENDENT_CLASS_COLOR = 2
+local SECRET_NATIVE_CLASS_COLOR = 2
+local DispatchClassColor
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
@@ -346,11 +347,27 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
     return
   end
   if rt.healthColorByClass == true then
-    local r, g, b = ClassColor(unit or frame.MSUFUnitKey)
+    local colorUnit = unit or frame.MSUFUnitKey
+    local r, g, b, secretClass
+    if colorUnit == "target" then
+      r, g, b, secretClass = DispatchClassColor(frame, colorUnit, true)
+    else
+      r, g, b = ClassColor(colorUnit)
+    end
     local a = rt.healthTextAlpha
     if a == nil then
       local _
       _, _, _, a = BaseTextColor(frame)
+    end
+    if secretClass == SECRET_NATIVE_CLASS_COLOR then
+      local classColor = C_ClassColor_GetClassColor and C_ClassColor_GetClassColor(r)
+      if classColor then
+        local sr, sg, sb = classColor:GetRGB()
+        SetHealthTextColor(frame, rt, sr, sg, sb, a)
+        rt._textGradientPct = nil
+        return
+      end
+      r, g, b = 0.12, 0.62, 0.95
     end
     SetHealthTextColor(frame, rt, r, g, b, a)
     rt._textGradientPct = nil
@@ -406,12 +423,16 @@ local function PlainUnitIsPlayer(frame, unit)
   return nil
 end
 
-local function DispatchClassColor(frame, unit, allowSecretPassThrough)
+DispatchClassColor = function(frame, unit, allowSecretPassThrough)
   local _, class = ReadUnitClassCached(frame, unit)
-  if allowSecretPassThrough == true and issecretvalue(class) == true then
-    return class, nil, nil, SECRET_DEPENDENT_CLASS_COLOR
+  local classIsKnownPlain
+  if allowSecretPassThrough == true then
+    if issecretvalue(class) == true then
+      return class, nil, nil, SECRET_NATIVE_CLASS_COLOR
+    end
+    classIsKnownPlain = true
   end
-  local r, g, b = ClassColorForToken(class)
+  local r, g, b = ClassColorForToken(class, classIsKnownPlain)
   if r ~= nil then return r, g, b end
   return 0.12, 0.62, 0.95
 end
@@ -439,7 +460,7 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   if isPlayer then
     if classNames then
       local r, g, b, secretClass = DispatchClassColor(
-        frame, unit, unit == "targettarget" or unit == "focustarget")
+        frame, unit, unit == "target" or unit == "targettarget" or unit == "focustarget")
       return r, g, b, fa, secretClass
     end
   else
@@ -519,7 +540,7 @@ local function InlineTextColor(frame, unit, inline)
   if isPlayer then
     if inline and inline.targetNameClassColor == true then
       local r, g, b, secretClass = DispatchClassColor(
-        frame, unit, unit == "targettarget" or unit == "focustarget")
+        frame, unit, unit == "target" or unit == "targettarget" or unit == "focustarget")
       return r, g, b, fa, secretClass
     end
   else
@@ -551,7 +572,7 @@ end
 
 local function ApplyNameTextColor(frame, unit)
   local r, g, b, a, secretClass = NameTextColor(frame, unit)
-  if secretClass == SECRET_DEPENDENT_CLASS_COLOR then
+  if secretClass == SECRET_NATIVE_CLASS_COLOR then
     if ApplySecretClassTextColor(frame and frame.nameText, frame and frame._msufNameDotsFS, r, a) then
       frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
       return
@@ -563,7 +584,7 @@ end
 
 local function ApplyInlineTextColor(frame, unit, inline)
   local r, g, b, a, secretClass = InlineTextColor(frame, unit, inline)
-  if secretClass == SECRET_DEPENDENT_CLASS_COLOR then
+  if secretClass == SECRET_NATIVE_CLASS_COLOR then
     if ApplySecretClassTextColor(frame and frame.totInlineText, frame and frame._msufInlineDotsFS, r, a) then
       frame._msufInlineTextR, frame._msufInlineTextG, frame._msufInlineTextB, frame._msufInlineTextA = nil, nil, nil, nil
       return
