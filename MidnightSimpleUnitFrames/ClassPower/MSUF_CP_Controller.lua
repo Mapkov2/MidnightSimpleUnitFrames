@@ -97,7 +97,7 @@ end
 local _cpDB = {
     colorByType    = true,   showCharged    = true,
     bgAlpha        = 0.3,    showPrediction = true,
-    showText       = true,   fontSize       = 14,
+    showText       = true,   textMode       = nil, fontSize = 14,
     classSmooth    = true,   altManaSmooth = true,
     colorOverrides = nil,
     bgColorOverrides = nil,  bars = nil, general = nil,
@@ -117,6 +117,12 @@ local function _CP_RefreshConfig()
     _cpDB.bgAlpha           = tonumber(b.classPowerBgAlpha) or 0.3
     _cpDB.showPrediction    = (b.classPowerShowPrediction ~= false)
     _cpDB.showText          = (b.classPowerShowText ~= false)
+    local textMode = tostring(b.classPowerTextMode or ""):upper()
+    -- nil is the compiled AUTO/legacy mode. Keeping AUTO out of the runtime
+    -- cache lets every renderer take its original formatter path without an
+    -- extra helper call; only explicit overrides enter the shared formatter.
+    if textMode ~= "CURRENT" and textMode ~= "MAX" and textMode ~= "CURMAX" then textMode = nil end
+    _cpDB.textMode          = textMode
     _cpDB.fontSize          = tonumber(b.classPowerFontSize) or 14
     _cpDB.classSmooth       = (b.classPowerSmoothFill == true)
     _cpDB.altManaSmooth     = (b.altManaSmoothFill == true)
@@ -3327,6 +3333,9 @@ CP.ApplyPublic = function(opts)
         end
         if (opts.fonts == true or opts.text == true) and not visuals then
             CP.ApplyFontsPublic()
+            if opts.text == true and CP.visible then
+                CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+            end
             did = true
         end
         if opts.anchor == true or opts.reanchor == true or opts.geometry == true then

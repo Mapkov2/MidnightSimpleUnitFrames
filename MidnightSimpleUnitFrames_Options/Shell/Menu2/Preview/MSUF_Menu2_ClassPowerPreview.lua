@@ -1482,7 +1482,8 @@ local function RenderClassPower(preview, bars, player, spec)
     if bars.classPowerShowText == true or spec.nativeDurationText == true then
         local textSize = Clamp(bars.classPowerFontSize, 16, 6, 48)
         ApplyFont(frame.text, textSize)
-        frame.text:SetText(CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue) or tostring(spec.previewText or "3"))
+        frame.text:SetText(CPPreview.ConfiguredTextForValue and CPPreview.ConfiguredTextForValue(bars, spec, animatedValue)
+            or (CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue)) or tostring(spec.previewText or "3"))
         frame.text:SetTextColor(textColorR, textColorG, textColorB, textAlpha)
         frame.text:ClearAllPoints()
         frame.text:SetPoint("CENTER", frame, "CENTER", tonumber(bars.classPowerTextOffsetX) or 0, tonumber(bars.classPowerTextOffsetY) or 0)
@@ -1887,7 +1888,8 @@ local function UpdateClassPowerAnimation(preview, frame)
         end
     end
     if frame.text and (bars.classPowerShowText == true or spec.nativeDurationText == true) then
-        frame.text:SetText(CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue) or tostring(spec.previewText or "3"))
+        frame.text:SetText(CPPreview.ConfiguredTextForValue and CPPreview.ConfiguredTextForValue(bars, spec, animatedValue)
+            or (CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue)) or tostring(spec.previewText or "3"))
         if LayerOn(preview, "classText") then frame.text:Show() end
     end
     return true

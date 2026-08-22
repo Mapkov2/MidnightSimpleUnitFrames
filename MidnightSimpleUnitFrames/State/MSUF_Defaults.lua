@@ -713,9 +713,25 @@ local function MSUF_Defaults_MigrateSplitUnitStatusText(db)
     return changed
 end
 
+--- These fields belonged to an abandoned class-resource text model. The live
+--- renderer never consumed them; the reviewed classPowerTextMode setting now
+--- owns the central value format. Keep this tiny and allocation-free because
+--- the public DB guard also calls it before taking its persisted fast path.
+local function MSUF_Defaults_PruneRetiredClassPowerTextFields(db)
+    local bars = db.bars
+    if type(bars) ~= "table" then return false end
+    local changed = bars.classPowerTextAnchor ~= nil
+        or bars.classPowerTextFormat ~= nil or bars.continuousTextFormat ~= nil
+    bars.classPowerTextAnchor = nil
+    bars.classPowerTextFormat = nil
+    bars.continuousTextFormat = nil
+    return changed == true
+end
+
 local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
     if type(db) ~= "table" then return false end
     local changed = MSUF_Defaults_MigrateSplitUnitStatusText(db)
+    changed = MSUF_Defaults_PruneRetiredClassPowerTextFields(db) or changed
     --- Masque support was removed from MSUF 6.0. Purge the orphaned toggle
     --- from factory snapshots, imports, and existing profiles without touching
     --- the Masque addon or any settings it owns for other addons.
@@ -4969,6 +4985,7 @@ local function MSUF_EnsureDB(force, allowPersistedFastPath, temporaryProfile)
         if MSUF_DB_LastHeavyRun == MSUF_DB then
             return MSUF_DB
         end
+        MSUF_Defaults_PruneRetiredClassPowerTextFields(MSUF_DB)
         if allowPersistedFastPath == true and MSUF_Defaults_IsCurrentProfileDB(MSUF_DB) then
             if temporaryProfile ~= true then
                 MSUF_DB_LastHeavyRun = MSUF_DB

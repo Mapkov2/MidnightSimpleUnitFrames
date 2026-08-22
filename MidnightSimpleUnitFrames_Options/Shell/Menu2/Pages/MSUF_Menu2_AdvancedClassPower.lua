@@ -108,6 +108,7 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["style.resources.color"] = "bars.classPowerColorByType",
     ["style.resources.comboColor"] = "bars.classPowerComboPointColorMode",
     ["style.resources.fgTex"] = "bars.classPowerTexture",
+    ["style.text.mode"] = "bars.classPowerTextMode",
     ["style.text.font"] = "bars.classPowerFontSize",
     ["style.text.layer"] = "bars.classPowerTextLayer",
     ["style.text.textX"] = "bars.classPowerTextOffsetX",
@@ -230,6 +231,7 @@ local function ResolvePlayerHPShape(bars, db)
     return CPPreview.ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars and bars.classPowerShape)
 end
 local DETACHED_POWER_TEXT_PRESET_VALUES = VTP "OFF=Off|CURRENT=Current|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current + Percent|CURMAXPERCENT=Current / Max + Percent|CUSTOM=Custom Slots"
+local CLASS_POWER_TEXT_MODE_VALUES = VTP "AUTO=Automatic (resource default)|CURRENT=Current|MAX=Maximum|CURMAX=Current / Maximum"
 local DETACHED_POWER_TEXT_OUTLINE_VALUES = VTP "OUTLINE=Outline|THICKOUTLINE=Thick Outline|NONE=None"
 local PLAYER_HP_ANCHOR_VALUES = VTP "CLASS_TOP=Above Class Resource|CLASS_BOTTOM=Below Class Resource|POWER_TOP=Above Player Power|POWER_BOTTOM=Below Player Power"
 local PLAYER_HP_WIDTH_VALUES = VTP "class=Class Resource|power=Player Power|player=Player Frame|custom=Custom"
@@ -480,7 +482,7 @@ local QUICK_DPB_GAP = 4
 local QUICK_CDM_GAP = 4
 local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_KEYS = {
-    bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar chunkedPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
+    bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerTextMode classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar chunkedPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
     player = M.WordList [[showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill powerChunkedFill]],
 }
 local quickSetupUndoSnapshot
@@ -1005,11 +1007,13 @@ function Page:BuildClassStyle()
         { "bgTex", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "classPowerBgTexture", "", group = "cp" },
     }))
     M.Assign(self.cp, self:Controls(text, Bars, ApplyClassPowerText, "style.text", {
+        { "mode", "dropdown", "Resource text", CLASS_POWER_TEXT_MODE_VALUES, 300, "classPowerTextMode", "AUTO", group = "cpText" },
         { "font", "slider", "Font size", 6, 32, 1, 300, "classPowerFontSize", 16, group = "cpText" },
         { "layer", "slider", "Class Resource text layer", 0, 30, 1, 300, "classPowerTextLayer", 5, ApplyClassPower, group = "cpText" },
         { "textX", "slider", "Text X", -200, 200, 1, 300, "classPowerTextOffsetX", 0, group = "cpText" },
         { "textY", "slider", "Text Y", -200, 200, 1, 300, "classPowerTextOffsetY", 0, group = "cpText" },
     }))
+    AddTooltip(self.cp.mode, "Resource Text", "Automatic keeps each resource's established text, such as Current for Combo Points and Current / Maximum for Vengeance Soul Fragments. The explicit modes override only the central resource value; Rune timers, Ebon Might duration and the Ironfur stack counter keep their native formats.")
     AddTooltip(self.cp.layer, "Class Resource Text Layer", "Orders Class Resource numeric text, Rune times and the Ebon Might duration text independently from the Class Resource bar and Player Power text.")
     M.Assign(self.cp, self:Controls(opacity, Bars, ApplyClassPower, "style.opacity", {
         { "bg", "alpha", "BG opacity", "classPowerBgAlpha", .3, nil, 1, group = "cp" },
@@ -1022,7 +1026,7 @@ function Page:BuildClassStyle()
         { "gap", "slider", "Pip gap", 0, 8, 1, 300, "classPowerGap", 0, group = "cp" },
     }))
     local resourcesCard, textCard, pipsCard
-    for _, card in ipairs({ { resources, "Resource & Textures", 248 }, { text, "Text", 262 }, { opacity, "Opacity", 204 }, { pips, "Pips & Border", 230 } }) do
+    for _, card in ipairs({ { resources, "Resource & Textures", 248 }, { text, "Text", 318 }, { opacity, "Opacity", 204 }, { pips, "Pips & Border", 230 } }) do
         local controlCard = W.ControlCard(card[1], card[2], nil, 18, -38, cardW + 28, card[3])
         if card[1] == resources then resourcesCard = controlCard end
         if card[1] == text then textCard = controlCard end

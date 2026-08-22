@@ -30,6 +30,7 @@ function A.ClassPowerRegistry.RegisterDisplaySettings(ctx)
     if type(RegisterDisplayTextSetting) == "function" then
         RegisterDisplayTextSetting({
             RegisterBarsBoolean = RegisterBarsBoolean,
+            RegisterBarsEnum = RegisterBarsEnum,
             ClassPowerAliases = ClassPowerAliases,
         })
     end
