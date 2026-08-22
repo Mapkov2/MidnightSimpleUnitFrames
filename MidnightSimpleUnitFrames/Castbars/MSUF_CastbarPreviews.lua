@@ -573,9 +573,6 @@ local function InstallBossPreviewEventDriver()
         "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
         "ENCOUNTER_START",
         "ENCOUNTER_END",
-        "ARENA_OPPONENT_UPDATE",
-        "ARENA_PREP_OPPONENT_SPECIALIZATIONS",
-        "PVP_MATCH_STATE_CHANGED",
         "PLAYER_ENTERING_WORLD",
         "GROUP_ROSTER_UPDATE",
     }
