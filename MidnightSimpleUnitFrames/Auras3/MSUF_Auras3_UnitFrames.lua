@@ -5783,28 +5783,27 @@ function DS.Options(style)
     return DS.options
 end
 
--- Rounded frames are optional and loaded outside Auras3. Keep weak references
--- to the native overlay textures on their owning unit frame so a later rounded
--- enable/apply can discover them without walking AuraButtons. Preserve the
--- already-known texture owner as well: AddDispelTypeTexture makes the region's
--- parent relationship forbidden to addon code, so RoundedFrames must never
--- rediscover it through region:GetParent(). Registration is initialize/preview-
--- only; aura events never cross this bridge.
-local function RegisterRoundedDispelOverlayRegion(parentFrame, region, owner)
-    if not (parentFrame and region and owner) then return end
-    local key = IsGroupFrame(parentFrame) and "_msufGFDispelOverlays" or "_msufUFDispelOverlays"
+-- Live native regions must be prepared before AddDispelTypeTexture seals their
+-- layout. This one-shot bridge never retains the region: later rounded-setting
+-- changes recreate the native sensor instead of touching a forbidden object.
+local function PrepareRoundedDispelOverlayRegion(parentFrame, region, owner)
+    if not (parentFrame and region and owner) then return false end
+    local callback = _G.MSUF_RoundedUF_PrepareDispelOverlay
+    if type(callback) ~= "function" then return false end
+    return callback(parentFrame, region, owner) == true
+end
+
+-- The flat-color menu preview is entirely MSUF-owned, so it may stay in the
+-- normal mutable RoundedFrames registry and follow live setting changes.
+local function RegisterRoundedDispelOverlayPreviewRegion(parentFrame, region)
+    if not (parentFrame and region) then return end
+    local key = IsGroupFrame(parentFrame) and "_msufGFDispelOverlayPreviews" or "_msufUFDispelOverlayPreviews"
     local regions = parentFrame[key]
     if type(regions) ~= "table" then
         regions = setmetatable({}, { __mode = "k" })
         parentFrame[key] = regions
     end
     regions[region] = true
-    local owners = parentFrame._msufRoundedMaskOwners
-    if type(owners) ~= "table" then
-        owners = setmetatable({}, { __mode = "k" })
-        parentFrame._msufRoundedMaskOwners = owners
-    end
-    owners[region] = owner
     local callback = _G.MSUF_RoundedUF_OnDispelOverlayChanged
     if type(callback) == "function" then
         callback(parentFrame, region)
@@ -5901,8 +5900,8 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
         region:SetAlpha(1)
         button:SetAlpha(Clamp01(sensor.alpha, 0.35))
+        PrepareRoundedDispelOverlayRegion(parentFrame, region, button)
         button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
-        RegisterRoundedDispelOverlayRegion(parentFrame, region, button)
     elseif sensor.visual == "purge" then
         region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         region:SetAlpha(1)
@@ -5992,7 +5991,7 @@ A3._ApplyDispelOverlayPreview = function(frame)
     if not LayoutDispelSensorOverlay(region, host, sensor, DispelSensorTarget(frame, sensor)) then
         return A3._HideDispelOverlayPreview(frame)
     end
-    RegisterRoundedDispelOverlayRegion(frame, region, host)
+    RegisterRoundedDispelOverlayPreviewRegion(frame, region)
     A3.SetDispelColorTexture(region, A3.GetDispelColorPreviewType(), true, 1)
     region:SetAlpha(Clamp01(sensor.alpha, 0.35))
     region:Show()
@@ -10466,6 +10465,18 @@ function A3.RefreshAll()
         A3._refreshAllCoalescing = nil
     end
     return true
+end
+
+-- Rounded masks attached to native Dispel display regions are immutable after
+-- Blizzard accepts them. A rounded setting change therefore advances the
+-- existing visual generation and recreates the affected native containers on
+-- this cold configuration path; aura events never call this function.
+function A3.RefreshRoundedDispelOverlayMasks()
+    if AuraRuntimeCombatBlocked() then
+        return A3._QueueDeferredAuraRuntime("shared", "AURAS3_ROUNDED_DISPEL_MASKS", true)
+    end
+    A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
+    return A3.RefreshAll()
 end
 
 A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {

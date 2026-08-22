@@ -314,14 +314,7 @@ RoundedSurface.DeferApply = DeferApply
 RoundedSurface.SnapOff = SE_SnapOff
 
 local function ResolveMaskOwner(f, tex, anchor)
-  -- Native CustomAuraButton display regions become forbidden after Blizzard
-  -- accepts them. Their owner is captured while Auras3 still has the button;
-  -- consulting that identity first avoids a forbidden region:GetParent() call.
-  local owners = f and f._msufRoundedMaskOwners
-  local owner = owners and tex and owners[tex] or nil
-  if not owner then
-    owner = tex and tex.GetParent and tex:GetParent() or nil
-  end
+  local owner = tex and tex.GetParent and tex:GetParent() or nil
   if owner and type(owner.CreateMaskTexture) == "function" then return owner end
   if anchor and type(anchor.CreateMaskTexture) == "function" then return anchor end
   return f
@@ -1794,10 +1787,43 @@ local function MaskOverlayList(f, overlays, group, anchor)
   end
 end
 
--- Native Auras3 dispel overlays are plain textures, not StatusBars. Bind a
--- newly initialized texture immediately to the same outer mask used by health
--- (and by embedded power), while the stored weak set lets ApplyAll rebind it
--- after settings/media changes. This callback is cold-path only.
+-- Blizzard makes native CustomAuraButton display regions immutable to addon
+-- layout code in AddDispelTypeTexture(). Give a fresh region its final mask
+-- before that handoff, then deliberately retain no mutable registry entry for
+-- either object. Rounded setting changes recreate the native Auras3 sensor.
+local function PrepareFrozenDispelOverlayMask(f, region, owner)
+  if not (f and region and owner) then return false end
+  if type(owner.CreateMaskTexture) ~= "function" or type(region.AddMaskTexture) ~= "function" then return false end
+  if IsCombatLocked() then
+    DeferApply()
+    return false
+  end
+  local group = FrameIsGroup(f)
+  local anchor
+  if group then
+    if not RoundedGroupFramesEnabled() then return false end
+    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and (f.barGroup or f) or nil
+    anchor = shared or f.health or f.barGroup or f
+  else
+    if not RoundedUnitFramesEnabled() then return false end
+    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and f or nil
+    anchor = shared or f.hpBar or f.bg or f
+  end
+  if not anchor or not CanCreateRoundedRegion(nil) then return false end
+
+  UpdateRoundedMediaState()
+  local mask = owner:CreateMaskTexture(nil, "ARTWORK")
+  if not mask then return false end
+  SE_SnapOff(mask)
+  mask:SetTexture(roundedMaskPath, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+  mask:SetAllPoints(anchor)
+  ApplyRoundedMediaSlice(mask, roundedMaskPath)
+  region:AddMaskTexture(mask)
+  return true
+end
+
+-- MSUF-owned overlays and previews never enter Blizzard's forbidden native
+-- display-element path, so they continue using the normal mutable mask cache.
 local function ApplyDispelOverlayMask(f, region)
   if not (f and region) then return false end
   if IsCombatLocked() then
@@ -1956,7 +1982,7 @@ local function ApplyToUnitFrame(f)
   end
   MaskStatusBarsAt(f, false, sharedFrameMaskAnchor, f.tempMaxHealthBar, f.absorbBar, f.healAbsorbBar)
   MaskStatusBarFill(f, f.overAbsorbGlowBar, false, healthMaskAnchor)
-  MaskOverlayList(f, f._msufUFDispelOverlays or f._msufUFDispelOverlay, false, sharedFrameMaskAnchor)
+  MaskOverlayList(f, f._msufUFDispelOverlayPreviews, false, sharedFrameMaskAnchor)
   MaskStatusBarFill(f, f.incomingHealBar or f.selfHealPredBar, false, sharedFrameMaskAnchor)
   if f.selfHealPredBar ~= f.incomingHealBar then
     MaskStatusBarFill(f, f.selfHealPredBar, false, sharedFrameMaskAnchor)
@@ -2065,7 +2091,7 @@ ApplyToGroupFrame = function(f, kind)
   MaskStatusBarsAt(f, true, sharedFrameMaskAnchor,
     f.tempMaxHealthBar, f.incomingHealBar, f.absorbBar, f.healAbsorbBar)
   MaskStatusBarFill(f, f.overAbsorbGlowBar, true, sharedFrameMaskAnchor or f.health)
-  MaskOverlayList(f, f._msufGFDispelOverlays or f._msufGFDispelOverlay, true, sharedFrameMaskAnchor)
+  MaskOverlayList(f, f._msufGFDispelOverlayPreviews, true, sharedFrameMaskAnchor)
   local debuffStripe = f.MSUFGFDebuffStripe or f._msufGFDebuffStripe
   if debuffStripe then
     MaskGroupTexture(f, debuffStripe, sharedFrameMaskAnchor or f.health or f.barGroup or f)
@@ -2224,6 +2250,14 @@ local function ApplyVisualRefreshUnit(unit)
   end)
 end
 
+local function RefreshFrozenDispelOverlayMasks()
+  local auras = MSUF and MSUF.MSUF_Auras3
+  if auras and type(auras.RefreshRoundedDispelOverlayMasks) == "function" then
+    return auras.RefreshRoundedDispelOverlayMasks()
+  end
+  return false
+end
+
 local function HookOnce()
   local eventFrame = MSUF.__msufRoundedEventFrame
   if eventFrame and eventFrame.RegisterEvent then
@@ -2263,6 +2297,9 @@ local function HookOnce()
       ApplyToUnitFrame(frame)
     end
   end)
+  ExportPublic("MSUF_RoundedUF_PrepareDispelOverlay", function(frame, region, owner)
+    return PrepareFrozenDispelOverlayMask(frame, region, owner)
+  end)
   ExportPublic("MSUF_RoundedUF_OnDispelOverlayChanged", function(frame, region)
     return ApplyDispelOverlayMask(frame, region)
   end)
@@ -2297,6 +2334,7 @@ local function HookOnce()
   end)
   ExportPublic("MSUF_RoundedUF_OnModulesApplied", function()
     ApplyAll()
+    RefreshFrozenDispelOverlayMasks()
   end)
   if SUPPRESS_NATIVE_OUTLINE then
     ExportPublic("MSUF_RoundedUF_OnRareVisualsRefreshed", function(frame)
@@ -2322,6 +2360,7 @@ local ROUNDED_CALLBACK_NAMES = {
   "MSUF_RoundedUF_OnBorderVisualChanged",
   "MSUF_RoundedUF_OnPowerBorderChanged",
   "MSUF_RoundedUF_OnUnitDispelOverlayChanged",
+  "MSUF_RoundedUF_PrepareDispelOverlay",
   "MSUF_RoundedUF_OnDispelOverlayChanged",
   "MSUF_RoundedUF_OnGroupFrameApplied",
   "MSUF_RoundedUF_OnGroupBackdropAlphaChanged",
@@ -2399,12 +2438,14 @@ local Module = {
     forceDisabled = true
     ApplyAll()
     SetRoundedCallbacksActive(false)
+    RefreshFrozenDispelOverlayMasks()
   end,
 
   Apply = function()
     forceDisabled = false
     SetRoundedCallbacksActive(true)
     ApplyAll()
+    RefreshFrozenDispelOverlayMasks()
   end,
 }
 
@@ -2462,5 +2503,6 @@ local function ApplyRoundedUnitframes()
     SetRoundedCallbacksActive(false)
   end
   ApplyAll()
+  RefreshFrozenDispelOverlayMasks()
 end
 ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)

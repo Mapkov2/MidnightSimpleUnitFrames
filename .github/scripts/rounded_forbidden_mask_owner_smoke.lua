@@ -6,63 +6,104 @@ local function Read(path)
 end
 
 local rounded = Read("MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua")
-local resolve = assert(rounded:match(
-    "local function ResolveMaskOwner%b()%s*(.-)%s*local function EnsureMaskForAnchor"
-), "rounded mask-owner resolver missing")
-local registeredLookup = assert(resolve:find("local owners = f and f._msufRoundedMaskOwners", 1, true),
-    "rounded masks do not consult the registered native texture owner")
-local forbiddenGetter = assert(resolve:find("tex:GetParent()", 1, true),
-    "ordinary texture-parent fallback missing")
-assert(registeredLookup < forbiddenGetter,
-    "forbidden native display regions are queried before their registered owner")
-assert(resolve:find("if not owner then", registeredLookup, true),
-    "texture-parent fallback is not guarded by the registered owner")
+assert(not rounded:find("_msufRoundedMaskOwners", 1, true),
+    "native forbidden regions must not retain a mutable rounded owner registry")
 
-local resolverStart = assert(rounded:find("local function ResolveMaskOwner", 1, true),
-    "could not find rounded mask-owner resolver")
-local resolverEnd = assert(rounded:find("local function EnsureMaskForAnchor", resolverStart, true),
-    "could not find end of rounded mask-owner resolver")
-local resolverSource = rounded:sub(resolverStart, resolverEnd - 1)
+local prepareStart = assert(rounded:find("local function PrepareFrozenDispelOverlayMask", 1, true),
+    "frozen native dispel-mask preparation missing")
+local prepareEnd = assert(rounded:find("local function ApplyDispelOverlayMask", prepareStart, true),
+    "could not find end of frozen native dispel-mask preparation")
+local prepareSource = rounded:sub(prepareStart, prepareEnd - 1)
+assert(not prepareSource:find("ClearAllPoints", 1, true),
+    "fresh native dispel masks must not perform redundant point clearing")
+assert(not prepareSource:find("MaskedTextures", 1, true),
+    "frozen native dispel masks entered the mutable rounded mask registry")
+local setTexture = assert(prepareSource:find("mask:SetTexture", 1, true),
+    "frozen native dispel mask texture setup missing")
+local setPoints = assert(prepareSource:find("mask:SetAllPoints", 1, true),
+    "frozen native dispel mask layout missing")
+local addMask = assert(prepareSource:find("region:AddMaskTexture(mask)", 1, true),
+    "frozen native dispel mask binding missing")
+assert(setTexture < setPoints and setPoints < addMask,
+    "native dispel mask is not fully configured before binding")
+
 local compile = loadstring or load
-local resolveOwner = assert(compile(resolverSource .. "\nreturn ResolveMaskOwner"))()
-local forbiddenTexture = {
-    GetParent = function()
-        error("forbidden GetParent must not run for registered native regions")
+local harness = [[
+local calls = {}
+local roundedMaskPath = "rounded-mask"
+local anchor = {}
+local function IsCombatLocked() return false end
+local function DeferApply() error("unexpected defer") end
+local function FrameIsGroup() return true end
+local function RoundedGroupFramesEnabled() return true end
+local function RoundedUnitFramesEnabled() return true end
+local function RoundedPowerBarsEnabled() return false end
+local function PowerIsEmbedded() return false end
+local function CanCreateRoundedRegion() return true end
+local function UpdateRoundedMediaState() calls[#calls + 1] = "media" end
+local function SE_SnapOff(mask) mask:SnapOff() end
+local function ApplyRoundedMediaSlice(mask, path) mask:Slice(path) end
+]] .. prepareSource .. [[
+return PrepareFrozenDispelOverlayMask, calls, anchor
+]]
+local prepare, calls, anchor = assert(compile(harness))()
+local sealed = false
+local mask = {
+    SnapOff = function() assert(not sealed); calls[#calls + 1] = "snap" end,
+    SetTexture = function(_, path) assert(not sealed and path == "rounded-mask"); calls[#calls + 1] = "texture" end,
+    SetAllPoints = function(_, target) assert(not sealed and target == anchor); calls[#calls + 1] = "points" end,
+    Slice = function(_, path) assert(not sealed and path == "rounded-mask"); calls[#calls + 1] = "slice" end,
+    ClearAllPoints = function() assert(not sealed, "forbidden ClearAllPoints") end,
+}
+local owner = {
+    CreateMaskTexture = function()
+        calls[#calls + 1] = "create"
+        return mask
     end,
 }
-local registeredOwner = { CreateMaskTexture = function() end }
-assert(resolveOwner({ _msufRoundedMaskOwners = { [forbiddenTexture] = registeredOwner } }, forbiddenTexture, nil)
-        == registeredOwner,
-    "registered native texture owner did not bypass forbidden GetParent")
-local ordinaryOwner = { CreateMaskTexture = function() end }
-local ordinaryTexture = { GetParent = function() return ordinaryOwner end }
-assert(resolveOwner({}, ordinaryTexture, nil) == ordinaryOwner,
-    "ordinary texture-parent fallback no longer resolves the real owner")
+local region = {
+    AddMaskTexture = function(_, value)
+        assert(value == mask)
+        calls[#calls + 1] = "bind"
+    end,
+}
+local frame = { health = anchor }
+assert(prepare(frame, region, owner) == true, "frozen native dispel mask preparation failed")
+assert(table.concat(calls, ",") == "media,create,snap,texture,points,slice,bind",
+    "frozen native dispel mask setup order changed")
+sealed = true
+assert(not pcall(mask.ClearAllPoints),
+    "test mask did not model the post-AddDispelTypeTexture forbidden state")
 
 local auras = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
-local register = assert(auras:match(
-    "local function RegisterRoundedDispelOverlayRegion%b()%s*(.-)%s*local function PrepareDispelSensorButton"
-), "rounded dispel-overlay registration missing")
-assert(register:find('setmetatable({}, { __mode = "k" })', 1, true),
-    "native texture owner registry must not retain discarded regions")
-local ownerStore = assert(register:find("owners[region] = owner", 1, true),
-    "native dispel texture owner is not retained")
-local callback = assert(register:find("callback(parentFrame, region)", 1, true),
-    "rounded dispel callback missing")
-assert(ownerStore < callback,
-    "native texture owner must be available before RoundedFrames applies the mask")
-assert(auras:find("RegisterRoundedDispelOverlayRegion(parentFrame, region, button)", 1, true),
-    "dispel overlay registration does not pass its already-known AuraButton owner")
-assert(auras:find("RegisterRoundedDispelOverlayRegion(frame, region, host)", 1, true),
-    "dispel overlay preview does not pass its already-known host owner")
-local registrations = 0
-for arguments in auras:gmatch("RegisterRoundedDispelOverlayRegion(%b())") do
-    local _, commaCount = arguments:gsub(",", "")
-    assert(commaCount == 2, "rounded dispel overlay registration omitted its explicit owner")
-    registrations = registrations + 1
-end
-assert(registrations == 3, "unexpected rounded dispel overlay registration call count")
-assert(not register:find("GetParent", 1, true),
-    "dispel overlay registration reintroduced a forbidden parent query")
+local overlayBranch = assert(auras:match(
+    'if sensor%.visual == "overlay" then(.-)elseif sensor%.visual == "purge" then'
+), "native dispel overlay branch missing")
+local prepareCall = assert(overlayBranch:find(
+    "PrepareRoundedDispelOverlayRegion(parentFrame, region, button)", 1, true),
+    "native dispel overlay is not prepared with its explicit owner")
+local blizzardHandoff = assert(overlayBranch:find(
+    "button:AddDispelTypeTexture(region, GetSensorOverlayOptions())", 1, true),
+    "native dispel overlay Blizzard handoff missing")
+assert(prepareCall < blizzardHandoff,
+    "native dispel overlay is masked after Blizzard makes it forbidden")
+assert(not auras:find("RegisterRoundedDispelOverlayRegion", 1, true),
+    "legacy post-handoff native dispel registration remains")
+assert(auras:find("RegisterRoundedDispelOverlayPreviewRegion(frame, region)", 1, true),
+    "MSUF-owned dispel overlay preview lost its mutable rounded registration")
+assert(auras:find("function A3.RefreshRoundedDispelOverlayMasks()", 1, true),
+    "rounded setting changes cannot recreate frozen native dispel masks")
+assert(auras:find("A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1", 1, true),
+    "native dispel-mask recreation does not advance the Auras3 visual generation")
+local modulesApplied = assert(rounded:match(
+    'ExportPublic%("MSUF_RoundedUF_OnModulesApplied", function%b()%s*(.-)%s*end%)'
+), "rounded module-apply callback missing")
+assert(modulesApplied:find("RefreshFrozenDispelOverlayMasks()", 1, true),
+    "profile/module applies do not recreate frozen native dispel masks")
+local applyRounded = assert(rounded:match(
+    "local function ApplyRoundedUnitframes%b()%s*(.-)%s*end%s*ExportPublic"
+), "rounded settings apply function missing")
+assert(applyRounded:find("RefreshFrozenDispelOverlayMasks()", 1, true),
+    "direct rounded setting changes do not recreate frozen native dispel masks")
 
 io.write("rounded_forbidden_mask_owner_smoke: ok\n")
