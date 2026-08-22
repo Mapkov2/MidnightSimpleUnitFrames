@@ -114,7 +114,10 @@ local function BuildCastbars(ctx)
     local function BuildPreview()
         local availableW = b.width or ctx.width or 720
         local compactControls = availableW < 694
-        local previewHeight = ctx and ctx.hiddenBuild and 72 or (compactControls and 178 or 148)
+        -- Leave enough vertical canvas for below-bar text, thick outlines, and
+        -- scoped icon Y offsets. The former 62px body could cut those regions
+        -- at the fixed-preview boundary even though the castbar itself fit.
+        local previewHeight = ctx and ctx.hiddenBuild and 72 or (compactControls and 180 or 164)
         local section, _, fixedPreview = W.FixedPreviewSection(ctx, b, {
             title = "Preview",
             height = previewHeight,
@@ -237,7 +240,7 @@ local function BuildCastbars(ctx)
         RegisterControl(interrupt, Meta("preview.interrupt", "ephemeral"), "Interrupt", "button")
         local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
         box:SetPoint("TOPLEFT", section, "TOPLEFT", 16, compactControls and -82 or -52)
-        box:SetSize(innerW, 62)
+        box:SetSize(innerW, 78)
         local portrait = T.Panel(box, nil, { 0.040, 0.060, 0.120, 0.96 }, { 0.16, 0.22, 0.42, 0.75 })
         portrait:SetSize(52, 52)
         portrait:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -20)
