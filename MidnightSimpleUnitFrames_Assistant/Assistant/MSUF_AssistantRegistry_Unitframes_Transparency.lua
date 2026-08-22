@@ -98,5 +98,17 @@ function A.UnitframesRegistry.RegisterTransparencyAndRangeSettings(ctx, unit)
                 ["health only"] = "health",
             },
         })
+        if unit == "boss" then
+            RegisterUnitNumberSetting(unit, "rangeFadeUpdateRate", "rangeFadeUpdateRate", "Range Updates per Second",
+                0, 0, 20,
+                MakeAliases(unit,
+                    "range updates per second", "range update rate", "boss range update rate",
+                    "range check rate", "range check frequency"
+                ), {
+                category = "Range",
+                step = 1,
+                description = "0 uses the standard adaptive range checks; 1 through 20 continuously checks visible Boss Frames at that rate.",
+            })
+        end
     end
 end

@@ -4556,6 +4556,17 @@ LaneTrackingSignature = function(lane)
         .. "\030" .. tostring(lane.weaponEnchants)
 end
 
+local function UsesStandaloneAuraSlot(lane)
+    -- Blizzard AuraGroups allocate frames in batches of ten. A normal lane
+    -- that can display exactly one aura needs neither that pool nor flow
+    -- layout, so use the one-frame AuraSlot primitive instead. Weapon enchants
+    -- and custom-priority lanes retain AuraGroups because they own additional
+    -- group-local ordering/layout behavior.
+    return lane and lane.max == 1
+        and lane.weaponEnchants ~= true
+        and lane.customPriority ~= true
+end
+
 LaneStructuralSignature = function(lane)
     -- PTR 5 applies access restrictions immediately after initializeFrame.
     -- Any option that changes a button must therefore create a fresh native
@@ -4569,6 +4580,7 @@ LaneStructuralSignature = function(lane)
         .. "\030" .. tostring(lane.customPriority)
         .. "\030" .. tostring(lane.customPrioritySignature)
         .. "\030" .. tostring(lane.customPriority and lane.candidateFilterSignature or nil)
+        .. "\030" .. tostring(UsesStandaloneAuraSlot(lane))
 end
 
 LaneLayoutSignature = function(lane)
@@ -6502,9 +6514,44 @@ local function BuildGroupLaneSlotOptions(container, lane, parentFrame, buttonInd
             -- that icon by the configured outer anchor preserves its position.
             button:ClearAllPoints()
             button:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
-            button:SetAlpha(lane.alpha or 1)
+            -- Standalone slots inherit the lane alpha from their container.
+            -- Shared GroupSlots cannot do that because every slot can have a
+            -- different alpha, so those buttons continue to own it directly.
+            button:SetAlpha(container._msufA3StandaloneAuraSlot == true and 1 or (lane.alpha or 1))
         end,
     }
+end
+
+local function CreateManagedNativeSlotLane(container, lane, parentFrame)
+    if not container then return nil end
+    A3.nativeAuraRuntimeAvailable = true
+    ConfigureContainer(container, lane, parentFrame)
+    container._msufA3ManagedAuraSlots = true
+    container._msufA3StandaloneAuraSlot = true
+    container._msufA3ManagedSlotKey = GroupLaneSlotKey(lane)
+    container._msufA3LaneSlotFilterStrings = {}
+    container._msufA3LaneSlotCandidateSignatures = {}
+    container._msufA3LaneSlotSortSignatures = {}
+    container.createdButtons = 1
+    ConfigureNativeAuraContainer(container, lane.unit)
+
+    local slotKey = container._msufA3ManagedSlotKey
+    local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
+    container:AddAuraSlot(slotKey, nativeFilter,
+        BuildGroupLaneSlotOptions(container, lane, parentFrame, 1))
+    container._msufA3LaneSlotFilterStrings[slotKey] = nativeFilter
+    container._msufA3LaneSlotCandidateSignatures[slotKey] = candidateFilterSignature
+    container._msufA3LaneSlotSortSignatures[slotKey] = AuraSortSignature(lane)
+    container._msufA3FilterString = nativeFilter
+    container._msufA3CandidateFilterSignature = candidateFilterSignature
+    container._msufA3SortSignature = AuraSortSignature(lane)
+    if not RegisterNativeContainer(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    container:Show()
+    A3.nativeAuraRuntimeError = nil
+    return container
 end
 
 local function UpdateAuraGroupEffectiveFilters(container, lane)
@@ -6585,22 +6632,16 @@ end
 local function UpdateGroupFlowLane(container, lane)
     if not (container and lane and container._msufA3ManagedGroupKey) then return false end
     local groupKey = container._msufA3ManagedGroupKey
-    local refresh = false
     UpdateAuraGroupEffectiveFilters(container, lane)
     if container._msufA3MaxFrameCount ~= lane.max then
         container:SetAuraGroupMaxFrameCount(groupKey, lane.max)
         container._msufA3MaxFrameCount = lane.max
-        refresh = true
     end
     local sortSignature = AuraSortSignature(lane)
     if container._msufA3SortSignature ~= sortSignature then
         local sortMethod, sortDirection = AuraSortEnums(lane)
         container:SetAuraGroupSortMethod(groupKey, sortMethod, sortDirection)
         container._msufA3SortSignature = sortSignature
-    end
-    if refresh == true and A3._NativeContainerVisible(container)
-        and type(container.UpdateAllAuras) == "function" then
-        container:UpdateAllAuras()
     end
     container.createdButtons = (container._msufA3FixedButtonCount or 0) + (lane.max or 0)
     return true
@@ -8105,7 +8146,11 @@ local function SyncCuratedBigDefensiveContainer(container)
             changed = UpdateAuraGroupEffectiveFilters(container, flowLane) or changed
         end
     elseif config._msufA3BigDefensiveFilter then
-        changed = UpdateAuraGroupEffectiveFilters(container, config)
+        if container._msufA3StandaloneAuraSlot == true then
+            changed = UpdateAuraSlotEffectiveFilters(container, config)
+        else
+            changed = UpdateAuraGroupEffectiveFilters(container, config)
+        end
     end
     return changed
 end
@@ -8554,6 +8599,8 @@ end
 -- group-only runtime never receives target/focus/boss identity callbacks.
 local directIdentityRefreshEventFrame
 local directIdentityRefreshRegisteredEvents = {}
+local directIdentityEventTopologyBatchDepth = 0
+local directIdentityEventTopologySyncPending = false
 
 -- Unit identity events can be noisy across every visible world unit. Keep the
 -- group-token variants outside the shared global driver: stable four-token
@@ -8817,6 +8864,38 @@ local function SyncDirectIdentityRefreshEvents(frame)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
     SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
     return true
+end
+
+-- A secure Raid header can bind every visible child in one synchronous scan.
+-- Each first container for a new unit changes the identity topology, but no
+-- event can be delivered between those child applies. Defer the shared event
+-- and four-token shard rebuild until the scan boundary so a 20/40-player cold
+-- setup performs one authoritative topology pass instead of one pass per unit.
+local function RequestDirectIdentityRefreshEventSync(frame)
+    if directIdentityEventTopologyBatchDepth > 0 then
+        directIdentityEventTopologySyncPending = true
+        return true
+    end
+    directIdentityEventTopologySyncPending = false
+    return SyncDirectIdentityRefreshEvents(frame)
+end
+
+A3._BeginDirectIdentityEventTopologyBatch = function()
+    directIdentityEventTopologyBatchDepth = directIdentityEventTopologyBatchDepth + 1
+    return directIdentityEventTopologyBatchDepth
+end
+
+A3._EndDirectIdentityEventTopologyBatch = function()
+    if directIdentityEventTopologyBatchDepth <= 0 then return false end
+    directIdentityEventTopologyBatchDepth = directIdentityEventTopologyBatchDepth - 1
+    if directIdentityEventTopologyBatchDepth > 0
+        or directIdentityEventTopologySyncPending ~= true then
+        return false
+    end
+    directIdentityEventTopologySyncPending = false
+    local frame = directIdentityRefreshEventFrame
+    if not frame then return false end
+    return SyncDirectIdentityRefreshEvents(frame)
 end
 
 local function DirectIdentityRefreshEventsAlreadyCover(unit)
@@ -9175,7 +9254,7 @@ A3._RegisterDirectIdentityRefreshContainer = function(container)
         or groupGlobalTopologyChanged or groupUnitTopologyChanged
         or (assistGated and directIdentityRefreshRegisteredEvents.GROUP_ROSTER_UPDATE == nil)
         or not DirectIdentityRefreshEventsAlreadyCover(unit) then
-        SyncDirectIdentityRefreshEvents(frame)
+        RequestDirectIdentityRefreshEventSync(frame)
     end
     if groupOwner then
         local presenceState = A3._groupAuraPresenceState
@@ -9293,7 +9372,7 @@ A3._UnregisterDirectIdentityRefreshContainer = function(container)
         directIdentityRefreshEventFrame = nil
     elseif topologyChanged or assistUnitTopologyChanged or assistGlobalTopologyChanged
         or groupGlobalTopologyChanged or groupUnitTopologyChanged then
-        SyncDirectIdentityRefreshEvents(directIdentityRefreshEventFrame)
+        RequestDirectIdentityRefreshEventSync(directIdentityRefreshEventFrame)
     end
 end
 
@@ -9386,6 +9465,9 @@ A3._CreateNativeLane = function(root, lane, parentFrame)
     end
     container._msufA3LayoutHost = host
     container._msufA3HostParented = true
+    if UsesStandaloneAuraSlot(lane) then
+        return CreateManagedNativeSlotLane(container, lane, parentFrame)
+    end
     if lane and lane.customPriority == true then
         return CreateManagedPriorityNativeLane(container, lane, parentFrame)
     end
@@ -9463,6 +9545,17 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, lane.unit)
+        if current._msufA3StandaloneAuraSlot == true then
+            UpdateGroupLaneSlot(current, lane)
+            SyncContainerGeometry(current, lane, parentFrame)
+            current:Show()
+            if not RegisterNativeContainer(current) then return nil end
+            current._msufA3TrackingSignature = trackingSignature
+            current._msufA3StructuralSignature = structuralSignature
+            current._msufA3LayoutSignature = layoutSignature
+            current._msufA3MaxFrameCount = 1
+            return current
+        end
         if current._msufA3PriorityAuraGroups == true then
             SyncContainerGeometry(current, lane, parentFrame)
             current:Show()
@@ -9472,13 +9565,11 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
             current._msufA3LayoutSignature = layoutSignature
             return current
         end
-        local refresh = false
         local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
         UpdateAuraGroupEffectiveFilters(current, lane)
         if current._msufA3MaxFrameCount ~= lane.max then
             current:SetAuraGroupMaxFrameCount(current._msufA3ManagedGroupKey, lane.max)
             current._msufA3MaxFrameCount = lane.max
-            refresh = true
         end
         local sortSignature = AuraSortSignature(lane)
         if current._msufA3SortSignature ~= sortSignature then
@@ -9492,9 +9583,6 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         SyncContainerGeometry(current, lane, parentFrame)
         current:Show()
         if not RegisterNativeContainer(current) then return nil end
-        if refresh == true and A3._NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
-            current:UpdateAllAuras()
-        end
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature

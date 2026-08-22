@@ -96,6 +96,27 @@ local function CP_SetPassthroughFormattedText(txt, format, ...)
     if txt._msufCPText ~= nil then txt._msufCPText = nil end
 end
 
+--- The default preserves each resource's established presentation (for
+--- example Vengeance fragments as current/max and Stagger as a compact value).
+--- Explicit modes share one secret-safe native output path. Restricted values
+--- are never compared, concatenated, or formatted in Lua.
+local function CP_ApplyConfiguredText(mode, txt, current, maximum, suffix)
+    if mode == "MAX" then
+        CP_SetPassthroughText(txt, maximum)
+    elseif mode == "CURMAX" then
+        if suffix then
+            CP_SetPassthroughFormattedText(txt, "%s%s / %s", current, suffix, maximum)
+        else
+            CP_SetPassthroughFormattedText(txt, "%s / %s", current, maximum)
+        end
+    elseif suffix then
+        CP_SetPassthroughFormattedText(txt, "%s%s", current, suffix)
+    else
+        CP_SetPassthroughText(txt, current)
+    end
+    return true
+end
+
 local function CP_StampTextColor(txt, r, g, b, a)
     if not txt then return end
     a = a or 1
@@ -286,6 +307,7 @@ end
 
 modeBuilders.SEGMENTED = function(E)
     local tonumber = tonumber
+    local _cpDB = E._cpDB or {}
     local PLAYER_CLASS = E.PLAYER_CLASS
     local PT = E.PT
     local CPConst = E.CPConst
@@ -461,7 +483,9 @@ modeBuilders.SEGMENTED = function(E)
             local txt = CP.text
             if txt then
                 if visual and visual.showText == true then
-                    CP_SetPassthroughText(txt, cur)
+                    if not _cpDB.textMode or not CP_ApplyConfiguredText(_cpDB.textMode, txt, cur, maxPower) then
+                        CP_SetPassthroughText(txt, cur)
+                    end
                     CP_StampShown(txt, true)
                     CP_StampTextColor(txt, 1, 1, 1, 1)
                 else
@@ -592,7 +616,9 @@ modeBuilders.SEGMENTED = function(E)
         if txt then
             local showText = visual and visual.showText == true
             if showText then
-                CP_StampText(txt, cur)
+                if not _cpDB.textMode or not CP_ApplyConfiguredText(_cpDB.textMode, txt, cur, maxPower) then
+                    CP_StampText(txt, cur)
+                end
                 CP_StampShown(txt, true)
                 CP_StampTextColor(txt, 1, 1, 1, 1)
             else
@@ -629,7 +655,9 @@ modeBuilders.SEGMENTED = function(E)
                     local predictionActive = PLAYER_CLASS == "WARLOCK"
                         and visual.showPrediction ~= false
                         and CP.wlPredDelta ~= 0
-                    if predictionActive then
+                    if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, cur, maxPower, predictionActive and "*" or nil) then
+                        -- Explicit text modes are written by the shared helper.
+                    elseif predictionActive then
                         CP_SetPassthroughFormattedText(txt, "%s*", cur)
                     else
                         CP_SetPassthroughText(txt, cur)
@@ -699,7 +727,10 @@ modeBuilders.SEGMENTED = function(E)
             if showText then
                 local predOn = visual.showPrediction ~= false
                 local predDelta = CP.wlPredDelta
-                if predOn and predDelta ~= 0 and PLAYER_CLASS == "WARLOCK" then CP_StampText(txt, cur .. "*") else CP_StampText(txt, cur) end
+                local predictionActive = predOn and predDelta ~= 0 and PLAYER_CLASS == "WARLOCK"
+                if not _cpDB.textMode or not CP_ApplyConfiguredText(_cpDB.textMode, txt, cur, maxPower, predictionActive and "*" or nil) then
+                    if predictionActive then CP_StampText(txt, cur .. "*") else CP_StampText(txt, cur) end
+                end
                 CP_StampShown(txt, true)
                 if PLAYER_CLASS == "WARLOCK" and predOn then
                     local spec = GetSpec and GetSpec()
@@ -721,6 +752,7 @@ end
 
 modeBuilders.FRACTIONAL = function(E)
     local tonumber = tonumber
+    local _cpDB = E._cpDB or {}
     local string_format = string.format
     local math_floor = math.floor
     local CP = E.CP
@@ -760,7 +792,9 @@ modeBuilders.FRACTIONAL = function(E)
                     -- regular UnitPower result is the user-facing shard count.
                     local displayPower = UnitPower("player", powerType)
                     local predictionActive = visual.showPrediction ~= false and CP.wlPredDelta ~= 0
-                    if predictionActive then
+                    if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, displayPower, maxPower, predictionActive and "*" or nil) then
+                        -- Explicit text modes are written by the shared helper.
+                    elseif predictionActive then
                         CP_SetPassthroughFormattedText(txt, "%s*", displayPower)
                     else
                         CP_SetPassthroughText(txt, displayPower)
@@ -814,7 +848,10 @@ modeBuilders.FRACTIONAL = function(E)
             if showText then
                 local predOn = visual.showPrediction ~= false
                 local predDelta = CP.wlPredDelta
-                if predOn and predDelta ~= 0 then
+                local predictionActive = predOn and predDelta ~= 0
+                if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, fractional, maxPower, predictionActive and "*" or nil) then
+                    -- Explicit text modes are written by the shared helper.
+                elseif predictionActive then
                     if partial > 0.001 then CP_StampText(txt, string_format("%.1f*", fractional)) else CP_StampText(txt, fullBars .. "*") end
                 else
                     if partial > 0.001 then CP_StampText(txt, string_format("%.1f", fractional)) else CP_StampText(txt, fullBars) end
@@ -1144,7 +1181,9 @@ modeBuilders.RUNE = function(E)
         if txt then
             local showText = visual and visual.showText == true
             if showText then
-                CP_StampText(txt, readyCount)
+                if not _cpDB.textMode or not CP_ApplyConfiguredText(_cpDB.textMode, txt, readyCount, maxPower) then
+                    CP_StampText(txt, readyCount)
+                end
                 CP_StampShown(txt, true)
             else
                 CP_StampShown(txt, false)
@@ -1243,7 +1282,9 @@ modeBuilders.AURA = function(E)
             if txt then
                 local showText = visual and visual.showText == true
                 if showText then
-                    if NotSecret(rawCur) then
+                    if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, rawCur, maxPower) then
+                        -- Explicit text modes are written by the shared helper.
+                    elseif NotSecret(rawCur) then
                         CP_SetPassthroughFormattedText(txt, "%d / %d", tonumber(rawCur) or 0, maxPower)
                     else
                         CP_SetPassthroughFormattedText(txt, "%s / %d", rawCur, maxPower)
@@ -1328,7 +1369,9 @@ modeBuilders.AURA = function(E)
             if txt then
                 local showText = visual and visual.showText == true
                 if showText then
-                    if NotSecret(textValue) then CP_StampText(txt, tonumber(textValue) or 0)
+                    if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, textValue, maxPower) then
+                        -- Explicit text modes are written by the shared helper.
+                    elseif NotSecret(textValue) then CP_StampText(txt, tonumber(textValue) or 0)
                     else CP_SetPassthroughText(txt, textValue) end
                     CP_StampShown(txt, true)
                 else
@@ -1411,7 +1454,9 @@ modeBuilders.AURA = function(E)
         if txt then
             local showText = visual and visual.showText == true
             if showText then
-                if NotSecret(textValue) then CP_StampText(txt, tonumber(textValue) or 0)
+                if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, textValue, progressMax or 1) then
+                    -- Explicit text modes are written by the shared helper.
+                elseif NotSecret(textValue) then CP_StampText(txt, tonumber(textValue) or 0)
                 else CP_SetPassthroughText(txt, textValue) end
                 CP_StampShown(txt, true)
             else
@@ -1478,6 +1523,7 @@ end
 modeBuilders.CONTINUOUS = function(E)
     local tonumber = tonumber
     local CP = E.CP
+    local _cpDB = E._cpDB or {}
     local UnitPower = E.UnitPower
     local UnitPowerMax = E.UnitPowerMax
     local NotSecret = E.NotSecret
@@ -1535,7 +1581,9 @@ modeBuilders.CONTINUOUS = function(E)
         if txt then
             local showText = visual and visual.showText == true
             if showText then
-                if curSafe and mxSafe then
+                if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, rawCur, rawMx) then
+                    -- Explicit text modes are written by the shared helper.
+                elseif curSafe and mxSafe then
                     CP_SetPassthroughFormattedText(txt, "%d / %d", cur, mx)
                 else
                     CP_SetPassthroughFormattedText(txt, "%d / %d", rawCur, rawMx)
@@ -1660,7 +1708,9 @@ modeBuilders.STAGGER = function(E)
         local txt = CP.text
         if txt then
             local showText = visual and visual.showText == true
-            if showText and curSafe then
+            if showText and _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, rawCur, rawMx) then
+                CP_StampShown(txt, true)
+            elseif showText and curSafe then
                 if cur >= 1000 then
                     txt:SetFormattedText("%.1fK", cur / 1000)
                 else

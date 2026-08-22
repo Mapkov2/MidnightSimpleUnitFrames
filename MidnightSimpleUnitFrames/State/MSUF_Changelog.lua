@@ -11,8 +11,8 @@ local data = {
     sourceSha256 = "6D981891C5FDC0B1D75A21CF0E1B7F0207E58C354A91C131EDBADA6FDC0B7175",
     currentVersion = "6.11",
     historyFromVersion = "6.08",
-    previousVersion = "6.1",
-    rangeLabel = "6.1 -> 6.11",
+    previousVersion = "6.08",
+    rangeLabel = "6.08 -> 6.11",
     entries = {
         {
             version = "6.11",

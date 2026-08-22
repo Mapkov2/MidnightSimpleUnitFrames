@@ -670,6 +670,35 @@ function CP.TextForValue(spec, value)
     if spec.token == "SOUL_FRAGMENTS_VENG" then return tostring(rounded) .. " / " .. tostring(tonumber(spec.segments) or 6) end
     return tostring(rounded)
 end
+function CP.ConfiguredTextForValue(bars, spec, value)
+    local automatic = CP.TextForValue(spec, value)
+    if not spec or spec.nativeDurationText == true or spec.mode == "ironfur" then return automatic end
+    local textMode = tostring(bars and bars.classPowerTextMode or "AUTO"):upper()
+    if textMode ~= "CURRENT" and textMode ~= "MAX" and textMode ~= "CURMAX" then return automatic end
+
+    local mode = spec.mode or "segmented"
+    local current, maximum
+    value = tonumber(value)
+    if value == nil then value = tonumber(spec.value) or 0 end
+    if mode == "continuous" then
+        current, maximum = tostring(floor((value * 100) + 0.5)), "100"
+    elseif mode == "timer_bar" then
+        current, maximum = string.format("%.1f", floor((value * 20 * 10) + 0.5) / 10), "20.0"
+    elseif mode == "stagger" then
+        current, maximum = tostring(floor((value * 34000) + 0.5)), "34000"
+    elseif mode == "aura_single" then
+        current, maximum = tostring(floor((value * 5) + 0.5)), "5"
+    elseif mode == "fractional" then
+        current = string.format("%.1f", value)
+        maximum = tostring(tonumber(spec.segments) or 1)
+    else
+        local rounded = CP.IsEssence(spec) and floor(value) or floor(value + 0.5)
+        current, maximum = tostring(rounded), tostring(tonumber(spec.segments) or 1)
+    end
+    if textMode == "MAX" then return maximum end
+    if textMode == "CURMAX" then return current .. " / " .. maximum end
+    return current
+end
 local RUNE_PREVIEW_REMAINING = { nil, 7.2, nil, 4.1, nil, 1.4 }
 local RUNE_PREVIEW_OFFSET = { nil, 0.0, nil, 3.1, nil, 6.2 }
 local RUNE_PREVIEW_READY_HOLD = 1.2

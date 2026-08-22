@@ -10,6 +10,14 @@ local max = math.max
 local PercentValue = M.PercentValue
 local SettingMeta = UP.SettingMeta
 local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet boss"
+local function RangeFadeSectionHeight(_, _, unit)
+    return unit == "boss" and 350 or 230
+end
+local function BossUpdateRateValue(value)
+    local rate = floor((tonumber(value) or 0) + 0.5)
+    if rate <= 0 then return "Standard" end
+    return tostring(rate) .. " / sec"
+end
 local function BuildRangeFade(ctx, builder, unit)
     local ReadBool = UP.ReadBool
     local SetBool = UP.SetBool
@@ -19,7 +27,7 @@ local function BuildRangeFade(ctx, builder, unit)
     local SetControlEnabled = UP.SetControlEnabled
     local GetConf = UP.GetConf
     if not (ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf) then return end
-    local sec = builder:CollapsibleSection("range_fade", "Range Fade", 230, false)
+    local sec = builder:CollapsibleSection("range_fade", "Range Fade", RangeFadeSectionHeight(nil, nil, unit), false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 16
     local leftX = 20
@@ -58,10 +66,41 @@ local function BuildRangeFade(ctx, builder, unit)
         function(v) SetString(unit, "rangeFadeLayerMode", v == "health" and "health" or "frame", "MSUF2_RANGE_FADE_LAYER", { preview = true }) end,
         SettingMeta(ctx, "range_fade.layer_mode", unit, "rangeFadeLayerMode"))
     W.MoveWidget(mode, alphaCard, 16, -104, rightW - 32, "LEFT")
+    local updateRate
+    if unit == "boss" then
+        local updateCard = W.ControlCard(sec, "Boss update rate", nil, leftX, -220, innerW, 106)
+        updateRate = W.Slider(updateCard, "Updates per second", 0, 20, 1, innerW - 58)
+        if updateRate.SetValueFormatter then updateRate:SetValueFormatter(BossUpdateRateValue) end
+        if updateRate.SetValueParser then
+            updateRate:SetValueParser(function(value)
+                if tostring(value or ""):lower():find("standard", 1, true) then return 0 end
+                return tonumber(value) or 0
+            end)
+        end
+        local updateMeta = SettingMeta(ctx, "range_fade.update_rate", unit, "rangeFadeUpdateRate")
+        updateMeta.step = 1
+        updateMeta.roundStep = true
+        M.BindNumberWidget(ctx, updateRate,
+            function() return ReadNumber(unit, "rangeFadeUpdateRate", 0) end,
+            function(v)
+                local rate = floor((tonumber(v) or 0) + 0.5)
+                if rate < 0 then rate = 0 elseif rate > 20 then rate = 20 end
+                SetNumber(unit, "rangeFadeUpdateRate", rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", { preview = true })
+            end,
+            0,
+            updateMeta)
+        W.MoveWidget(updateRate, updateCard, 16, -54, innerW - 58, "LEFT")
+        if M.AddTooltip then
+            M.AddTooltip(updateRate, "Boss range update rate",
+                "Standard keeps the adaptive 0.75 / 2 second checks. Higher values continuously check visible Boss Frames at the selected rate; 20 per second is a 50 ms interval.",
+                { hook = true, owner = "ANCHOR_RIGHT" })
+        end
+    end
     RefreshRangeControls = RefreshRangeControls(function()
         local on = ReadBool(unit, "rangeFadeEnabled", true)
         SetControlEnabled(slider, on)
         SetControlEnabled(mode, on)
+        if updateRate then SetControlEnabled(updateRate, on) end
     end)
     M.TrackRefresh(ctx, RefreshRangeControls)
 end
@@ -69,7 +108,7 @@ if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "range_fade",
         title = "Range Fade",
-        height = 230,
+        height = RangeFadeSectionHeight,
         placement = "after_load_conditions",
         order = 10,
         units = RANGE_FADE_UNITS,

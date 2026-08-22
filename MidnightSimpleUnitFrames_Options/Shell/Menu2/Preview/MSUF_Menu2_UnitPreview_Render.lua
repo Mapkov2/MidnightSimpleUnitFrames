@@ -881,6 +881,7 @@ function Render.Install(Preview, deps)
         end,
         AnimatedValue = SharedCPPreview.AnimatedValue,
         TextForValue = SharedCPPreview.TextForValue,
+        ConfiguredTextForValue = SharedCPPreview.ConfiguredTextForValue,
     }
     local fallbackFont = deps.FONT or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     if type(deps.ApplyPreviewFont) ~= "function" then
@@ -2577,8 +2578,10 @@ function Preview.Refresh(box, reason)
             local cpTextSize = S(tonumber(bars.classPowerFontSize) or 16)
             if cpTextSize < 7 then cpTextSize = 7 end
             ApplyPreviewFont(mock.classPower.text, cpTextSize)
-            if cp.animatedValue ~= nil and R.CPPreview.TextForValue then
-                mock.classPower.text:SetText(R.CPPreview.TextForValue(cp.preview, cp.animatedValue))
+            if cp.animatedValue ~= nil and (R.CPPreview.ConfiguredTextForValue or R.CPPreview.TextForValue) then
+                mock.classPower.text:SetText(R.CPPreview.ConfiguredTextForValue
+                    and R.CPPreview.ConfiguredTextForValue(bars, cp.preview, cp.animatedValue)
+                    or R.CPPreview.TextForValue(cp.preview, cp.animatedValue))
             else
                 mock.classPower.text:SetText((cp.preview and cp.preview.previewText) or "3")
             end

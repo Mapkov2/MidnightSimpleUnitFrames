@@ -16,8 +16,10 @@ function A.ClassPowerRegistry.RegisterDisplayTextSetting(ctx)
     if type(ctx) ~= "table" then return end
 
     local RegisterBarsBoolean = ctx.RegisterBarsBoolean
+    local RegisterBarsEnum = ctx.RegisterBarsEnum
     local ClassPowerAliases = ctx.ClassPowerAliases
-    if type(RegisterBarsBoolean) ~= "function" or type(ClassPowerAliases) ~= "function" then return end
+    if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsEnum) ~= "function"
+        or type(ClassPowerAliases) ~= "function" then return end
 
     RegisterBarsBoolean("classPowerShowText", "text", "Class Resource Text", false, ClassPowerAliases("text", "resource text", "class resource numbers", "class power numbers"), {
         reason = "MSUF_ASSISTANT_CLASSPOWER_TEXT",
@@ -79,6 +81,23 @@ function A.ClassPowerRegistry.RegisterDisplayTextSetting(ctx)
             "combo point numbers",
             "combo points numbers",
             "resource text",
+        },
+    })
+    RegisterBarsEnum("classPowerTextMode", "textMode", "Class Resource Text Mode", "AUTO", {
+        "AUTO", "CURRENT", "MAX", "CURMAX",
+    }, ClassPowerAliases("text mode", "resource text mode", "number format", "resource number format"), {
+        reason = "MSUF_ASSISTANT_CLASSPOWER_TEXT_MODE",
+        description = "Chooses the central Class Resource value format. Rune timers, Ebon Might duration and the Ironfur stack counter keep their native formats.",
+        valueAliases = {
+            automatic = "AUTO", auto = "AUTO", default = "AUTO", ["resource default"] = "AUTO",
+            current = "CURRENT", value = "CURRENT", ["current value"] = "CURRENT",
+            maximum = "MAX", max = "MAX", ["maximum value"] = "MAX",
+            ["current max"] = "CURMAX", ["current maximum"] = "CURMAX",
+            ["current / max"] = "CURMAX", ["current / maximum"] = "CURMAX",
+        },
+        companionChanges = {
+            { key = "bars.showClassPower", value = true, prepend = true },
+            { key = "bars.classPowerShowText", value = true, prepend = true },
         },
     })
 end

@@ -97,6 +97,14 @@ local function ApplyAlias(container, sourceSpellID, auraSpellID)
         if groupKey and type(container.SetAuraGroupCandidateFilters) == "function" then
             container:SetAuraGroupCandidateFilters(groupKey, filters)
             container._msufA3CandidateFilterSignature = lane.candidateFilterSignature
+        else
+            local slotKey = container._msufA3ManagedSlotKey
+            if slotKey and type(container.SetAuraSlotCandidateFilters) == "function" then
+                container:SetAuraSlotCandidateFilters(slotKey, filters)
+                local signatures = container._msufA3LaneSlotCandidateSignatures
+                if signatures then signatures[slotKey] = lane.candidateFilterSignature end
+                container._msufA3CandidateFilterSignature = lane.candidateFilterSignature
+            end
         end
     end
     QueueScope(container.unit)
@@ -260,13 +268,23 @@ function Resolver.UnregisterContainer(container)
         end
     end
     container._msufA3AuraAliasUnit = nil
+    container._msufA3AuraAliasLane = nil
     container._msufA3AuraAliasNames = nil
     container._msufA3AuraAliasScanNames = nil
 end
 
 function Resolver.SyncContainer(container)
-    Resolver.UnregisterContainer(container)
     local lane = container and container._msufA3NativeLaneConfig
+    local unit = container and container.unit
+    -- Identity/layout refreshes frequently re-register an already live native
+    -- owner with the exact same compiled lane. Preserve its resolved-name set,
+    -- UNIT_AURA registration, and exhausted fallback list in that case. A new
+    -- compiled lane table or unit still takes the full unregister/rebuild path.
+    if container and container._msufA3AuraAliasLane == lane
+        and container._msufA3AuraAliasUnit == unit then
+        return true
+    end
+    Resolver.UnregisterContainer(container)
     local spellIDs = lane and lane.nameAliasSpellIDs
     if type(spellIDs) ~= "table" or not next(spellIDs) then return false end
     local names = {}
@@ -284,7 +302,6 @@ function Resolver.SyncContainer(container)
     -- public incremental resolver.
     local scanNames = {}
     for name in pairs(names) do scanNames[#scanNames + 1] = name end
-    local unit = container.unit
     if type(unit) ~= "string" or unit == "" then return false end
     local containers = containersByUnit[unit]
     if not containers then
@@ -293,6 +310,7 @@ function Resolver.SyncContainer(container)
     end
     containers[container] = true
     container._msufA3AuraAliasUnit = unit
+    container._msufA3AuraAliasLane = lane
     container._msufA3AuraAliasNames = names
     container._msufA3AuraAliasScanNames = scanNames
     local frame = framesByUnit[unit]
