@@ -575,6 +575,9 @@ if ($lua) {
     $classicCastbarSmoke = Join-Path $root "tools/tests/classic_castbar_engine_smoke.lua"
     & $lua.Source $classicCastbarSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic castbar engine smoke failed" }
+    $classicCastbarVisualSmoke = Join-Path $root "tools/tests/classic_castbar_visual_compat_smoke.lua"
+    & $lua.Source $classicCastbarVisualSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic castbar visual compatibility smoke failed" }
     $castbarOwnershipSmoke = Join-Path $root "tools/castbar_refresh_ownership_smoke.lua"
     & $lua.Source $castbarOwnershipSmoke
     if ($LASTEXITCODE -ne 0) { throw "Shared castbar refresh ownership smoke failed" }

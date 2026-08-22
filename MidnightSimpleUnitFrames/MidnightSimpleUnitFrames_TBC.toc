@@ -189,4 +189,5 @@ Castbars\MSUF_InterruptReady.lua
 Castbars\MSUF_FocusKickIcon.lua
 UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
 Castbars\MSUF_CastbarRounded.lua
+Game\Classic\Castbars\MSUF_CastbarVisualCompat.lua
 Game\Classic\UnitFrames\Effects\MSUF_UF_TextureLayer.lua
