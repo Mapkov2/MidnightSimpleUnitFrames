@@ -13,6 +13,7 @@ end
 local repoRoot = arg and arg[1] or "."
 local runtimePath = repoRoot .. "/MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade.lua"
 local menuPath = repoRoot .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitRangeFade.lua"
+local windowPath = repoRoot .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua"
 local configPath = repoRoot .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua"
 local auraPath = repoRoot .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 local corePath = repoRoot .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"
@@ -190,6 +191,8 @@ local numberBindings = {}
 local writes = {}
 local tooltips = {}
 local sectionHeights = {}
+local popupShows = {}
+local popupDialogs = {}
 
 local function widget()
   local control = {}
@@ -199,6 +202,7 @@ local function widget()
 end
 
 local Menu = {
+  _msuf2MenuSessionSerial = 1,
   KeySetFromWords = function(words)
     local set = {}
     for token in words:gmatch("%S+") do set[token] = true end
@@ -225,6 +229,10 @@ local Menu = {
   AddTooltip = function(control, title, body)
     tooltips[#tooltips + 1] = { control = control, title = title, body = body }
   end,
+  InstallStaticPopup = function(key, spec)
+    popupDialogs[key] = popupDialogs[key] or spec
+    return popupDialogs[key]
+  end,
 }
 Menu.Widgets = {
   ControlCard = function() return {} end,
@@ -232,6 +240,7 @@ Menu.Widgets = {
   Slider = function(_, label, minimum, maximum, step)
     local control = widget()
     control.label, control.minimum, control.maximum, control.step = label, minimum, maximum, step
+    function control:SetValueBoxWidth(width) self.valueBoxWidth = width end
     sliders[#sliders + 1] = control
     return control
   end,
@@ -253,6 +262,8 @@ Menu.UnitPage = {
   SetControlEnabled = function() end,
   GetConf = function() return {} end,
 }
+_G.StaticPopupDialogs = popupDialogs
+_G.StaticPopup_Show = function(key) popupShows[#popupShows + 1] = key end
 
 local menuChunk, menuError = loadfile(menuPath)
 expect(menuChunk, menuError)
@@ -275,6 +286,7 @@ expect(rateSlider.minimum == 0 and rateSlider.maximum == 20 and rateSlider.step 
 expect(rateSlider.formatter and rateSlider.formatter(0) == "Standard", "zero rate must render as Standard")
 expect(rateSlider.formatter and rateSlider.formatter(20) == "20 / sec", "20 Hz label is incorrect")
 expect(rateSlider.parser and rateSlider.parser("Standard") == 0, "Standard input must parse to zero")
+expect(rateSlider.valueBoxWidth == 76, "Boss rate value box must fit Standard and the per-second suffix")
 
 local rateBinding
 for i = 1, #numberBindings do
@@ -289,6 +301,16 @@ local write = writes[#writes]
 expect(write and write.unit == "boss" and write.key == "rangeFadeUpdateRate" and write.value == 20,
   "Boss update-rate slider did not write its Boss setting")
 expect(write.reason == "MSUF2_BOSS_RANGE_UPDATE_RATE", "Boss update-rate apply reason is incorrect")
+expect(#popupShows == 1 and popupShows[1] == "MSUF2_BOSS_RANGE_UPDATE_RATE_WARNING",
+  "first custom Boss rate in a menu session must show the performance warning")
+rateBinding.set(19)
+expect(#popupShows == 1, "Boss rate warning must not spam within one menu session")
+Menu._msuf2MenuSessionSerial = 2
+rateBinding.set(18)
+expect(#popupShows == 2, "Boss rate warning must reset for the next menu session")
+Menu._msuf2MenuSessionSerial = 3
+rateBinding.set(0)
+expect(#popupShows == 2, "Standard Boss rate must not show a performance warning")
 expect(#tooltips == 1 and tooltips[1].body:find("50 ms", 1, true), "Boss update-rate cost tooltip is missing")
 
 local sliderCountBeforeTarget = #sliders
@@ -314,5 +336,11 @@ local coreSource = coreFile:read("*a")
 coreFile:close()
 expect(coreSource:find('AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", QueueBossIdentity, true)', 1, true),
   "Boss unit-frame identity refreshes are not burst-coalesced")
+
+local windowFile = assert(io.open(windowPath, "rb"))
+local windowSource = windowFile:read("*a")
+windowFile:close()
+expect(windowSource:find('M._msuf2MenuSessionSerial = (tonumber(M._msuf2MenuSessionSerial) or 0) + 1', 1, true),
+  "Menu2 open lifecycle no longer resets the once-per-session Boss rate warning")
 
 print("boss range update rate smoke: OK")
