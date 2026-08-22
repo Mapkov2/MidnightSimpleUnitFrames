@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "1F7EABB83FC57BDE96B9684C8E310E5BD0668162E78B52CEC72E387B2313BE71"
-Search.StaticIndexRecordCount = 2864
+Search.StaticIndexSourceSha256 = "9D9825FF38BB25A31D86CDB26056D5BFE116FB27F2B64BF834ECCD80A8C7CD50"
+Search.StaticIndexRecordCount = 2866
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -51,6 +51,7 @@ auras3_styling	Show Weapon Enchants on Player	toggle			Appearance > Native Flow	
 classpower	Above Class Resource	dropdown	bars.playerHPBarAnchor		Hp > Layout	above class resource	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Elayout%2Eanchor	classpower_player_hp			above class resource hp layout classpower advanced player hp layout anchor classpower dropdown bars playerhpbaranchor
 classpower	Anchor to Class Resource	toggle	player.detachedPowerBarAnchorToClassPower		Power > Layout	anchor to class resource	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Elayout%2Eanchor	classpower_detached_power			anchor to class resource power layout classpower advanced detached power layout anchor classpower toggle player detachedpowerbaranchortoclasspower
 classpower	Anchor to Essential Cooldown	toggle	bars.classPowerAnchorToCooldown		Advanced > Behavior	anchor to essential cooldown	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ebehavior%2Eanchor	classpower_behavior			anchor to essential cooldown advanced behavior classpower advanced behavior anchor classpower toggle bars classpoweranchortocooldown
+classpower	Automatic (resource default)	dropdown	bars.classPowerTextMode		Style > Text	automatic resource default	idclasspowermenu2%2Eclasspower%2Eadvanced%2Estyle%2Etext%2Emode	classpower_visuals			automatic resource default style text classpower advanced style text mode classpower dropdown bars classpowertextmode
 classpower	BG opacity	slider	bars.classPowerBgAlpha		Style > Opacity	bg opacity	idclasspowermenu2%2Eclasspower%2Eadvanced%2Estyle%2Eopacity%2Ebg	classpower_visuals			bg opacity style opacity classpower advanced style opacity bg classpower slider bars classpowerbgalpha
 classpower	BG opacity	slider	bars.playerHPBarBgAlpha		Textures > Bg	bg opacity	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Etextures%2Ebg%2Ealpha	classpower_player_hp			bg opacity textures bg classpower advanced player hp textures bg alpha classpower slider bars playerhpbarbgalpha
 classpower	Bar	dropdown	bars.playerHPBarShape		Hp > Layout	bar	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Elayout%2Eshape	classpower_player_hp			bar hp layout classpower advanced player hp layout shape classpower dropdown bars playerhpbarshape
@@ -1307,6 +1308,7 @@ uf_boss	Top Left	dropdown	boss.nameTextAnchor		Text > Name	top left	iduf_bossm
 uf_boss	Top Right	dropdown			Dispel > Symbol	top right	iduf_bossmenu2%2Euf_boss%2Eunit%2Edispel%2Esymbol%2Eunitdispelsymbolanchor	unit_dispel_symbol			top right dispel symbol unit dispel symbol unitdispelsymbolanchor uf boss dropdown
 uf_boss	Track DoT	button		aura_custom_whitelist_add_spell	Custom4 > Dots	track dot	iduf_bossmenu2%2Euf_boss%2Eauras%2Ecustom-container%2Ecustom4%2Edots%2Eadd				track dot custom4 dots auras custom container custom4 dots add uf boss button aura custom whitelist add spell
 uf_boss	Up	dropdown	boss.portraitBorderDirection		Unit > Portrait	up	iduf_bossmenu2%2Euf_boss%2Eunit%2Eportrait%2Eportraitborderdirection	portrait			up unit portrait unit portrait portraitborderdirection uf boss dropdown boss portraitborderdirection
+uf_boss	Updates per second	slider	boss.rangeFadeUpdateRate		Unit > Range Fade	updates per second	iduf_bossmenu2%2Euf_boss%2Eunit%2Erange_fade%2Eupdate_rate	range_fade			updates per second unit range fade unit range fade update rate uf boss slider boss rangefadeupdaterate
 uf_boss	Use Dispel border detects	dropdown			Dispel > Overlay	use dispel border detects	iduf_bossmenu2%2Euf_boss%2Eunit%2Edispel%2Eoverlay%2Eunitdispeloverlaytrigger	unit_dispel_overlay			use dispel border detects dispel overlay unit dispel overlay unitdispeloverlaytrigger uf boss dropdown
 uf_boss	Use Dispel border detects	dropdown			Dispel > Symbol	use dispel border detects	iduf_bossmenu2%2Euf_boss%2Eunit%2Edispel%2Esymbol%2Eunitdispelsymboltrigger	unit_dispel_symbol			use dispel border detects dispel symbol unit dispel symbol unitdispelsymboltrigger uf boss dropdown
 uf_boss	Use Global (Class / Reaction)	dropdown	boss.healthColorMode		Unit > Basics	use global class reaction	iduf_bossmenu2%2Euf_boss%2Eunit%2Ebasics%2Ehealth_color_mode	frame_basics			use global class reaction unit basics unit basics health color mode uf boss dropdown boss healthcolormode

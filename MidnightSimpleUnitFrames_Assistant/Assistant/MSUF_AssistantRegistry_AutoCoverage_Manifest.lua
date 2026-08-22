@@ -19,11 +19,11 @@ M.Assistant = A
 local Manifest = A.AutoCoverageManifest or {}
 A.AutoCoverageManifest = Manifest
 
--- Defaults generated offline on 2026-08-15 from the current factory profile
+-- Defaults generated offline on 2026-08-21 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 4816 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4816
+-- 4813 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 4813
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -104,8 +104,6 @@ Manifest.defaults = {
         classPowerSmoothBars = false,
         classPowerSmoothFill = false,
         classPowerSpendAnim = "fade",
-        classPowerTextAnchor = "CENTER",
-        classPowerTextFormat = "{cur}",
         classPowerTextOffsetX = 0,
         classPowerTextOffsetY = 0,
         classPowerTexture = "MSUF Minimalist",
@@ -115,7 +113,6 @@ Manifest.defaults = {
         classPowerTickWidth = 1,
         classPowerWidth = 280,
         classPowerWidthMode = "player",
-        continuousTextFormat = "cur_max",
         cpCondEnabled = false,
         cpCondGroupOnly = false,
         cpCondHideMounted = false,
@@ -4873,4 +4870,4 @@ Manifest.defaults = {
     },
 }
 
--- top-level scalar paths: 4815
+-- top-level scalar paths: 4813
