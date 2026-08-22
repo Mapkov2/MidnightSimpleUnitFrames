@@ -10327,12 +10327,16 @@ function A3._NotifyAuraColdpathPreview(reason, scope)
     return did
 end
 
-A3._ApplyRuntimeUnit = function(runtimeUnit)
-    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_RUNTIME_UNIT") end
-    local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
+local function RuntimeFrame(runtimeUnit)
+    return (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
         or (UF.GetFrame and UF.GetFrame(runtimeUnit))
         or (UF.frames and UF.frames[runtimeUnit])
         or _G["MSUF_" .. runtimeUnit]
+end
+
+A3._ApplyRuntimeUnit = function(runtimeUnit)
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_RUNTIME_UNIT") end
+    local frame = RuntimeFrame(runtimeUnit)
     if not frame then return false end
     if UF.ApplyElementToFrame then
         UF.ApplyElementToFrame(frame, "Auras", frame.MSUFSpec, nil)
@@ -10570,7 +10574,35 @@ function A3.ApplyFontsFromGlobal(scope, reason)
     if scope ~= nil then
         return A3.RequestScope(scope, reason or "AURAS3_FONT_VISUALS")
     end
-    return A3.RefreshAll()
+    -- FontRuntime has already refreshed the UnitFrame and GroupFrame text
+    -- elements before reaching this global follower. A second RefreshAll here
+    -- used to route every group frame through GF.RefreshVisuals -> UF.ApplySpec,
+    -- rebuilding element/status/event state for no structural change. Refresh
+    -- only the native aura owners whose copied fonts depend on those texts.
+    local visualReason = reason or "AURAS3_FONT_VISUALS"
+    local didWork = false
+    local function RefreshRuntimeUnit(runtimeUnit)
+        local frame = RuntimeFrame(runtimeUnit)
+        if frame then didWork = A3.RenderFrame(frame, visualReason) == true or didWork end
+    end
+
+    RefreshRuntimeUnit("player")
+    RefreshRuntimeUnit("target")
+    RefreshRuntimeUnit("focus")
+    for i = 1, 5 do RefreshRuntimeUnit("boss" .. i) end
+    for i = 1, 3 do RefreshRuntimeUnit("arena" .. i) end
+
+    local gf = A3._GroupAPI()
+    if gf and type(gf.ForEachFrame) == "function" then
+        didWork = gf.ForEachFrame(function(frame)
+            return A3.RenderFrame(frame, visualReason) == true
+        end, true) == true or didWork
+    end
+    A3._NotifyAuraColdpathPreview(visualReason, "shared")
+    if type(A3.RefreshEditPreview) == "function" then
+        didWork = A3.RefreshEditPreview() == true or didWork
+    end
+    return didWork
 end
 
 --- Narrow ClassPower bridge for secret player auras. AuraContainer retains
