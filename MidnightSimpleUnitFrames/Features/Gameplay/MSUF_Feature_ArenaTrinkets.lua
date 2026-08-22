@@ -22,7 +22,15 @@ local MISTS_TRINKET_SPELL_ID = 42292
 local MISTS_TRINKET_DURATION = 120
 
 local Client = MSUF.Client or {}
+-- The canonical Retail TOC does not load Game/Shared/Initialize.lua. Prefer its
+-- flag when present, but derive Mainline directly when this shared feature is
+-- loaded by that TOC so Retail can never fall into the numeric Classic path.
 local IS_RETAIL = Client.IsRetail == true
+if Client.IsRetail == nil then
+    local projectID = _G.WOW_PROJECT_ID
+    local mainlineID = _G.WOW_PROJECT_MAINLINE
+    IS_RETAIL = mainlineID ~= nil and projectID == mainlineID
+end
 local IS_MISTS = Client.IsMists == true
 local FALLBACK_TEXTURE = IS_RETAIL and RETAIL_TRINKET_TEXTURE or CLASSIC_TRINKET_TEXTURE
 
@@ -221,6 +229,10 @@ local function RefreshClassicCooldown(holder, index)
     end
 
     local spellID, itemID, startTimeMs, durationMs = getInfo("arena" .. index)
+    if IsSecret(spellID) or IsSecret(itemID) or IsSecret(startTimeMs) or IsSecret(durationMs) then
+        if not ApplyMistsFallback(holder, index) then cooldown:Clear() end
+        return
+    end
     local numericSpellID = tonumber(spellID)
     if numericSpellID and numericSpellID > 0 then
         holder.spellID = numericSpellID
@@ -324,6 +336,12 @@ local function HandleClassicSpellUpdate(unit, spellID, itemID)
     local index = UnitIndex(unit)
     if not index then return end
     local holder = EnsureHolder(index)
+    if IsSecret(spellID) or IsSecret(itemID) then
+        -- Some client/event combinations publish restricted numeric payloads.
+        -- They must not enter tonumber, ordering, table keys, or texture APIs.
+        RefreshClassicCooldown(holder, index)
+        return
+    end
     local numericSpellID = tonumber(spellID)
     if numericSpellID and numericSpellID > 0 then
         holder.spellID = numericSpellID

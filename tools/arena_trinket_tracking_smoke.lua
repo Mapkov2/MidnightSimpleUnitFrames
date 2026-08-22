@@ -50,6 +50,8 @@ local function NewFrame(name, parent)
     return frame
 end
 
+local baseTonumber = tonumber
+
 local function RunScenario(kind)
     local framesByName = {}
     local allFrames = {}
@@ -76,6 +78,12 @@ local function RunScenario(kind)
     _G.GetSpellTexture = function(spellID) return spellID + 1000, spellID + 2000 end
     _G.C_Item = { GetItemIconByID = function(itemID) return itemID + 3000 end }
     _G.issecretvalue = function(value) return type(value) == "table" and value.secret == true end
+    _G.tonumber = function(value, base)
+        if _G.issecretvalue(value) then error("secret value reached tonumber") end
+        return baseTonumber(value, base)
+    end
+    _G.WOW_PROJECT_MAINLINE = 1
+    _G.WOW_PROJECT_ID = kind == "retail" and 1 or 2
     _G.MSUF_DB = { arena = { enabled = true, showTrinket = true } }
     _G.MSUF_EventBus_Register = function(event, _, callback) callbacks[event] = callback end
     _G.hooksecurefunc = function(receiver, method, callback)
@@ -114,7 +122,9 @@ local function RunScenario(kind)
 
     local MSUF = {
         Client = {
-            IsRetail = kind == "retail",
+            -- Retail intentionally exercises the Mainline project-ID fallback:
+            -- its canonical TOC does not populate MSUF.Client.
+            IsRetail = kind ~= "retail" and false or nil,
             IsMists = kind == "mists",
             IsTBC = kind == "classic",
         },
@@ -157,6 +167,11 @@ local function RunScenario(kind)
         Check(holder.cooldown.durationObject == durationObject,
             "Retail did not use the secret-safe DurationObject")
 
+        callbacks.ARENA_CROWD_CONTROL_SPELL_UPDATE(
+            "ARENA_CROWD_CONTROL_SPELL_UPDATE", "arena1", { secret = true }, { secret = true })
+        Check(holder.cooldown.durationObject == durationObject,
+            "Retail secret response escaped into the Classic numeric path")
+
         local secretTexture = { secret = true }
         nativeIcon:SetTexture(secretTexture)
         Check(holder.createdTexture.texture == secretTexture,
@@ -182,6 +197,11 @@ local function RunScenario(kind)
         Check(holder.createdTexture.texture == 3123,
             "Classic did not prefer the delivered item texture")
         Check(requests == 1, "Classic response event re-requested crowd-control data")
+
+        callbacks.ARENA_CROWD_CONTROL_SPELL_UPDATE(
+            "ARENA_CROWD_CONTROL_SPELL_UPDATE", "arena1", { secret = true }, { secret = true })
+        Check(holder.createdTexture.texture == 3123,
+            "Classic secret response replaced the last plain trinket texture")
     else
         Check(callbacks.COMBAT_LOG_EVENT_UNFILTERED ~= nil,
             "Mists did not register its combat-log fallback")
