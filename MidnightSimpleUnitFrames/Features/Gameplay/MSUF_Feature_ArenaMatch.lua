@@ -78,6 +78,25 @@ end
 
 local prepActive = false
 
+local function SyncPrepVisibility(active)
+    active = active == true
+    if (_G.MSUF_ArenaPrepVisibilityActive == true) == active then
+        return false
+    end
+
+    -- arena1..3 do not exist during preparation. Their ordinary
+    -- RegisterUnitWatch owner therefore keeps the protected buttons hidden and
+    -- wins over a direct frame:Show(). Hand visibility to LoadConditions for
+    -- this out-of-combat phase; it installs the existing secure
+    -- "[nocombat] show" driver and restores RegisterUnitWatch when prep ends.
+    _G.MSUF_ArenaPrepVisibilityActive = active and true or nil
+    local uf = MSUF.UF
+    if uf and type(uf.RefreshVisibilityDrivers) == "function" then
+        uf.RefreshVisibilityDrivers("arena")
+    end
+    return true
+end
+
 local function OpponentSpecInfo(index)
     local getSpec = _G.GetArenaOpponentSpec
     if type(getSpec) ~= "function" then return nil end
@@ -177,7 +196,9 @@ local function SyncPrepDisplay()
         and not MatchEngaged()
         and (tonumber(numSpecs) or 0) > 0
 
-    local changed = false
+    -- Swap visibility ownership before writing the synthetic opponent data.
+    -- Otherwise RegisterUnitWatch can immediately hide these unitless frames.
+    local changed = SyncPrepVisibility(wantPrep)
     for index = 1, MAX_ARENA do
         local frame = ArenaFrame(index)
         if frame then

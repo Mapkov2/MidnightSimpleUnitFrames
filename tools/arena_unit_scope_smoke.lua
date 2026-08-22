@@ -98,5 +98,14 @@ end
 -- Prep display must never touch protected visibility in combat.
 Check(match:find("if InCombat() then return end", 1, true),
     "arena prep display lost its combat guard")
+local loadConditions = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")
+Check(loadConditions:find("_G.MSUF_ArenaPrepVisibilityActive == true", 1, true),
+    "arena prep is not represented in the secure visibility owner")
+Check(match:find('uf.RefreshVisibilityDrivers("arena")', 1, true),
+    "arena prep no longer swaps away from RegisterUnitWatch visibility")
+local prepVisibilityPos = match:find("SyncPrepVisibility(wantPrep)", 1, true)
+local prepFramePos = match:find("changed = ApplyPrepFrame(frame, index)", 1, true)
+Check(prepVisibilityPos and prepFramePos and prepVisibilityPos < prepFramePos,
+    "arena prep data is applied before its unitless frames become securely visible")
 
 print("arena_unit_scope_smoke: ok")

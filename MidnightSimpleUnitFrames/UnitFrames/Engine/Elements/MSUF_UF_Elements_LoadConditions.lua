@@ -117,7 +117,8 @@ local function ShouldForcePreview(frame)
       or _G.MSUF_PreviewTestMode == true
   end
   if ARENA_PREVIEW_UNITS[unit] == true then
-    return _G.MSUF_ArenaTestMode == true
+    return _G.MSUF_ArenaPrepVisibilityActive == true
+      or _G.MSUF_ArenaTestMode == true
       or _G.MSUF2_ArenaUnitframePreviewActive == true
       or _G.MSUF_PreviewTestMode == true
   end
