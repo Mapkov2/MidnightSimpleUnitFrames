@@ -419,6 +419,7 @@ local function MergeDirtyMask(current, incoming)
   out = AddDirty(out, MaskHas(incoming, GF.DIRTY_AURAS) and GF.DIRTY_AURAS or nil)
   out = AddDirty(out, MaskHas(incoming, GF.DIRTY_UNIT_BINDING) and GF.DIRTY_UNIT_BINDING or nil)
   out = AddDirty(out, MaskHas(incoming, GF.DIRTY_CONFIG) and GF.DIRTY_CONFIG or nil)
+  out = AddDirty(out, MaskHas(incoming, GF.DIRTY_AGGRO) and GF.DIRTY_AGGRO or nil)
   return out
 end
 
@@ -449,6 +450,7 @@ function GF.ApplyMaskForDirtyMask(mask)
   if MaskHas(mask, GF.DIRTY_FONT) then did = AddElementNames(out, Metadata.MASK_FONT) or did end
   if MaskHas(mask, GF.DIRTY_COLOR) then did = AddElementNames(out, Metadata.MASK_COLOR) or did end
   if MaskHas(mask, GF.DIRTY_BORDER) then did = AddElementNames(out, Metadata.MASK_BORDER) or did end
+  if MaskHas(mask, GF.DIRTY_AGGRO) then did = AddElementNames(out, Metadata.MASK_AGGRO) or did end
   if MaskHas(mask, GF.DIRTY_AURAS) then did = AddElementNames(out, Metadata.MASK_AURAS) or did end
   if MaskHas(mask, GF.DIRTY_GEOMETRY) or MaskHas(mask, GF.DIRTY_LAYOUT) or MaskHas(mask, GF.DIRTY_UNIT_BINDING) then
     did = AddElementNames(out, Metadata.MASK_RUNTIME) or did
@@ -708,6 +710,7 @@ GF.RefreshGeometry = function(kind) return GF.RefreshHeaderLayout(kind) end
 GF.RefreshOverlays = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_AURAS) end
 GF.RefreshColors = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_COLOR) end
 GF.RefreshBorder = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_BORDER) end
+GF.RefreshAggro = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_AGGRO) end
 GF.RefreshOutlineGeometry = GF.RefreshBorder
 GF.RefreshFonts = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_FONT) end
 

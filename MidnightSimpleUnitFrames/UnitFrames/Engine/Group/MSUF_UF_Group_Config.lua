@@ -2135,26 +2135,37 @@ local function RefreshBorderDomain(kind, base, conf)
   BumpSpecDomain(base, "_msufBorderVisualRevision")
 end
 
+local function RefreshAggroDomain(kind, base, conf)
+  local general = GeneralDB() or {}
+  base.border = ReplaceTableContents(base.border, CompileBorderSpec(kind, conf, general))
+  if GF.CompileCornerIndicators then
+    base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf))
+  end
+  BumpSpecDomain(base, "_msufBorderVisualRevision")
+end
+
 local function DomainMaskHas(mask, flag)
   mask = tonumber(mask) or 0
   flag = tonumber(flag) or 0
   return flag > 0 and mask % (flag * 2) >= flag
 end
 
---- Refresh color/font/border values in-place. These domains do not change the
---- structural element/event contract, so callers can keep the compiled base and
---- per-frame specs instead of dropping the cache and rebuilding all routing.
+--- Refresh targeted visual values in-place. Callers keep the compiled base and
+--- per-frame specs instead of dropping the cache; UF.ApplySpec validates the
+--- dynamic event routes after applying the selected element owners.
 function GF.RefreshCompiledSpecDomains(kind, mask)
   if type(mask) ~= "number" then return false end
   local font = DomainMaskHas(mask, GF.DIRTY_FONT)
   local color = DomainMaskHas(mask, GF.DIRTY_COLOR)
   local border = DomainMaskHas(mask, GF.DIRTY_BORDER)
-  if not (font or color or border) then return false end
+  local aggro = DomainMaskHas(mask, GF.DIRTY_AGGRO)
+  if not (font or color or border or aggro) then return false end
 
   local remainder = mask
   if font then remainder = remainder - GF.DIRTY_FONT end
   if color then remainder = remainder - GF.DIRTY_COLOR end
   if border then remainder = remainder - GF.DIRTY_BORDER end
+  if aggro then remainder = remainder - GF.DIRTY_AGGRO end
   if remainder ~= 0 then return false end
 
   local function RefreshOne(refreshKind, base)
@@ -2164,6 +2175,8 @@ function GF.RefreshCompiledSpecDomains(kind, mask)
     if font then RefreshFontDomain(refreshKind, base, conf) end
     if color then
       RefreshColorDomain(refreshKind, base, conf)
+    elseif aggro then
+      RefreshAggroDomain(refreshKind, base, conf)
     elseif border then
       RefreshBorderDomain(refreshKind, base, conf)
     end

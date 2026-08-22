@@ -425,7 +425,7 @@ local function RefreshTargetedGeneral(reason, opt, alphaDeferred)
         opt.text == true or opt.power == true or opt.alpha == true
         or opt.fonts == true or opt.bars == true or opt.barGradients == true
         or opt.barOutline == true or opt.roundedBars == true
-        or opt.aggroBorder == true or opt.dispelPurgeBorder == true
+        or opt.aggroBorder == true or opt.groupAggroRole == true or opt.dispelPurgeBorder == true
         or opt.bossTargetBorder == true or opt.highlightPriority == true or opt.colors == true
         or opt.mouseoverHighlight == true
         or opt.castbar == true or opt.castbarTextures == true
@@ -487,6 +487,7 @@ local function WantsBarRuntime(opts)
         or opts.barOutline == true
         or opts.roundedBars == true
         or opts.aggroBorder == true
+        or opts.groupAggroRole == true
         or opts.dispelPurgeBorder == true
         or opts.bossTargetBorder == true
         or opts.highlightPriority == true)
@@ -550,6 +551,7 @@ local function GroupDirtyForMode(gf, mode)
     if mode == "auras" then return gf.DIRTY_AURAS end
     if mode == "fonts" or mode == "font" then return gf.DIRTY_FONT end
     if mode == "border" or mode == "borders" then return gf.DIRTY_BORDER end
+    if mode == "aggro" then return gf.DIRTY_AGGRO or gf.DIRTY_COLOR end
     if mode == "colors" or mode == "color" then return gf.DIRTY_COLOR end
     return gf.DIRTY_VISUAL
 end
@@ -574,6 +576,7 @@ local function MergeGroupDirty(gf, current, incoming)
         out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AURAS) and gf.DIRTY_AURAS or nil)
         out = AddDirty(out, MaskHas(incoming, gf.DIRTY_UNIT_BINDING) and gf.DIRTY_UNIT_BINDING or nil)
         out = AddDirty(out, MaskHas(incoming, gf.DIRTY_CONFIG) and gf.DIRTY_CONFIG or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AGGRO) and gf.DIRTY_AGGRO or nil)
     end
     return out
 end
@@ -876,8 +879,10 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
     local unitScope = (not globalScope and not kindA) and NormalizeApplyScope(scope) or nil
     local wantsTextureRuntime = opt and opt.bars == true
     local borderDirty = (MSUF and MSUF.GF and MSUF.GF.DIRTY_BORDER) or 0x10
+    local aggroDirty = (MSUF and MSUF.GF and (MSUF.GF.DIRTY_AGGRO or MSUF.GF.DIRTY_COLOR)) or 0x08
     local didOutlineRefresh = false
     local needsGroupBorderRefresh = false
+    local needsGroupAggroRefresh = false
     local castbarTexturesApplied = false
     if wantsTextureRuntime then
         local textureScope = globalScope and nil or (unitScope or scope)
@@ -927,6 +932,9 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
         needsGroupBorderRefresh = true
         didOutlineRefresh = true
     end
+    if opt and opt.groupAggroRole == true then
+        needsGroupAggroRefresh = true
+    end
     if opt and opt.dispelPurgeBorder == true then
         if not groupOnly and unitFramesApplied ~= true and not didOutlineRefresh then
             Apply.CallGlobal("MSUF_ApplyBarOutlineThickness_All", unitScope)
@@ -949,7 +957,9 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
             end
         end
     end
-    if needsGroupBorderRefresh then
+    if needsGroupAggroRefresh then
+        RefreshGroupBarVisuals(aggroDirty, scope)
+    elseif needsGroupBorderRefresh then
         RefreshGroupBarVisuals(borderDirty, scope)
     end
     return castbarTexturesApplied
@@ -1268,7 +1278,7 @@ function Apply.RequestGeneral(reason, opts)
             MergeScopeField(pendingGeneral, "fontScope", opts.fontScope)
         end
         if opts.bars or opts.barGradients
-            or opts.barOutline or opts.roundedBars or opts.aggroBorder
+            or opts.barOutline or opts.roundedBars or opts.aggroBorder or opts.groupAggroRole
             or opts.dispelPurgeBorder or opts.bossTargetBorder or opts.highlightPriority
         then
             if opts.bars then pendingGeneral.bars = true end
@@ -1277,6 +1287,7 @@ function Apply.RequestGeneral(reason, opts)
             if opts.barOutline then pendingGeneral.barOutline = true end
             if opts.roundedBars then pendingGeneral.roundedBars = true end
             if opts.aggroBorder then pendingGeneral.aggroBorder = true end
+            if opts.groupAggroRole then pendingGeneral.groupAggroRole = true end
             if opts.dispelPurgeBorder then pendingGeneral.dispelPurgeBorder = true end
             if opts.bossTargetBorder then pendingGeneral.bossTargetBorder = true end
             if opts.highlightPriority then pendingGeneral.highlightPriority = true end
@@ -1385,6 +1396,16 @@ function Apply.RequestAggroBorder(reason, scope)
         applyAll = false,
         notify = false,
         aggroBorder = true,
+        barsScope = scope,
+    })
+end
+
+function Apply.RequestGroupAggroRole(reason, scope)
+    return Apply.RequestGeneral(reason or "MSUF2_GROUP_AGGRO_ROLE", {
+        preview = true,
+        applyAll = false,
+        notify = false,
+        groupAggroRole = true,
         barsScope = scope,
     })
 end

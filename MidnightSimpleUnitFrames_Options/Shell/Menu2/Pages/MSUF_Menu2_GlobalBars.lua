@@ -373,6 +373,7 @@ local function RequestApply(method, reason, scope)
 end
 local function RequestOutlineRuntime() return RequestApply("RequestBarOutline", "MSUF2_BAR_OUTLINE", CurrentBarsScope()) end
 local function RequestAggroBorderRuntime() return RequestApply("RequestAggroBorder", "MSUF2_AGGRO_BORDER_RUNTIME", CurrentBarsScope()) end
+local function RequestGroupAggroRoleRuntime() return RequestApply("RequestGroupAggroRole", "MSUF2_GROUP_AGGRO_ROLE_RUNTIME", CurrentBarsScope()) end
 local function RequestBossTargetBorderRuntime() return RequestApply("RequestBossTargetBorder", "MSUF2_BOSS_TARGET_BORDER_RUNTIME", "boss") end
 local function RequestHighlightPriorityRuntime(reason)
     return RequestApply("RequestHighlightPriority", reason or "MSUF2_HIGHLIGHT_PRIORITY_RUNTIME", CurrentBarsScope())
@@ -1960,11 +1961,11 @@ local function BuildHighlightSection(ctx, b)
     local aggroModeValues = VT("ALL", "All roles", "NON_TANK", "Non-tanks", "HEALER", "Healers only", "TANK", "Tanks only")
     local aggro = BindBorderModeDropdown("Aggro border", "aggroOutlineMode", 1, "MSUF2_AGGRO_BORDER", -136,
         "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", RequestAggroBorderRuntime)
-    local aggroMode = BindHighlightDropdown("Aggro shows for", aggroModeValues, -190,
+    local aggroMode = BindHighlightDropdown("Group threat visuals show for", aggroModeValues, -190,
         function() return NormalizeAggroMode(BarScopeGet("aggroMode", "ALL")) end,
         function(v)
             BarScopeSet("aggroMode", NormalizeAggroMode(v), "MSUF2_AGGRO_MODE", true)
-            RequestAggroBorderRuntime()
+            RequestGroupAggroRoleRuntime()
         end,
         "highlight.aggro.roles")
     local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -244,
@@ -2079,7 +2080,7 @@ local function BuildHighlightSection(ctx, b)
         SetControlEnabled(dispelBorder, scopedActive and not DISPEL_BORDER_121_PTR_DISABLED)
         SetControlEnabled(purge, scopedActive and purgeSupported and not PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTarget, sharedActive)
-        SetControlEnabled(aggroMode, scopedActive and aggroOn)
+        SetControlEnabled(aggroMode, scopedActive and (sharedActive or GroupScope()))
         SetControlEnabled(aggroTest, scopedActive and aggroOn)
         SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn and not DISPEL_BORDER_121_PTR_DISABLED)
         SetControlEnabled(purgeTest, scopedActive and purgeSupported and purgeOn and not PURGE_BORDER_121_PTR_DISABLED)

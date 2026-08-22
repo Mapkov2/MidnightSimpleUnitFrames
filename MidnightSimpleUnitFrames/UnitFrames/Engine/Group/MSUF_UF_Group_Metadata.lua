@@ -33,7 +33,8 @@ GF.DIRTY_LAYOUT = GF.DIRTY_LAYOUT or 0x20
 GF.DIRTY_AURAS = GF.DIRTY_AURAS or 0x40
 GF.DIRTY_UNIT_BINDING = GF.DIRTY_UNIT_BINDING or 0x80
 GF.DIRTY_CONFIG = GF.DIRTY_CONFIG or 0x100
-GF.DIRTY_ALL = GF.DIRTY_ALL or 0x1FF
+GF.DIRTY_AGGRO = GF.DIRTY_AGGRO or 0x200
+GF.DIRTY_ALL = GF.DIRTY_ALL or 0x3FF
 
 Metadata.MASK_FONT = BuildNameSet({
   "Text", "NameText", "HealthText", "PowerText", "StatusIndicators", "GroupStatusRuntime",
@@ -44,6 +45,7 @@ Metadata.MASK_COLOR = BuildNameSet({
   "Borders", "Portrait",
 })
 Metadata.MASK_BORDER = BuildNameSet({ "Borders", "GroupVisuals" })
+Metadata.MASK_AGGRO = BuildNameSet({ "Borders", "GroupCornerIndicators" })
 Metadata.MASK_AURAS = BuildNameSet({ "Auras" })
 Metadata.MASK_VISUAL = BuildNameSet({
   "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
@@ -60,6 +62,7 @@ Metadata.dirtyApplyMasks = {
   [GF.DIRTY_FONT] = Metadata.MASK_FONT,
   [GF.DIRTY_COLOR] = Metadata.MASK_COLOR,
   [GF.DIRTY_BORDER] = Metadata.MASK_BORDER,
+  [GF.DIRTY_AGGRO] = Metadata.MASK_AGGRO,
   [GF.DIRTY_AURAS] = Metadata.MASK_AURAS,
   [GF.DIRTY_VISUAL] = Metadata.MASK_VISUAL,
 }
