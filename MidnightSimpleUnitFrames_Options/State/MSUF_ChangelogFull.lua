@@ -8,12 +8,48 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "AC9ADA4B5C3D4F7DB5D971422E6CDDB7F69AB8D95B03EE54BFE1CD4126FAD4EA",
-    currentVersion = "6.12-beta2",
+    sourceSha256 = "74A3D86382112210F00843DF59B4C625D8B2EC97128A01B036C95D26489DD66E",
+    currentVersion = "6.12-beta3",
     historyFromVersion = "6.02",
-    previousVersion = "6.12-beta1",
-    rangeLabel = "6.12-beta1 -> 6.12-beta2",
+    previousVersion = "6.12-beta2",
+    rangeLabel = "6.12-beta2 -> 6.12-beta3",
     entries = {
+        {
+            version = "6.12-beta3",
+            date = "2026-08-23",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Subtlety Rogues can now highlight Shadow Techniques at five or more stacks. The opt-in native Cooldown Viewer glow supports configurable color, size, and strength while keeping the protected stack comparison inside Blizzard's formatter.",
+                            link = {
+                                pageKey = "gameplay",
+                                query = "shadow techniques stack glow",
+                                label = "Shadow Techniques: 5+ Stack Glow",
+                                sectionId = "gameplay_dev_auras",
+                                controlId = "menu2.gameplay.advanced.dev.aura.shadow.techniques.stack.highlight.enabled",
+                                settingKey = "gameplay.enableShadowTechniquesStackHighlight",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Preserve Raid Groups now creates a separate secure header for each physical raid subgroup, keeping subgroup blocks intact while retaining the selected Index, Name, or Role sorting inside each group.",
+                        "Group Frame scanning, Edit Mode bounds, visibility, and runtime layout handling now cover every active preserved subgroup header.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Custom Boss Range Fade rates now show a once-per-menu-session performance warning, use a wider value field, and visually distinguish continuous custom rates from the adaptive Standard mode.",
+                        "Group Adapter header scans retain the single-header fallback used by isolated and legacy load paths.",
+                    },
+                },
+            },
+        },
         {
             version = "6.12-beta2",
             date = "2026-08-22",

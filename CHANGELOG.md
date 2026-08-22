@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.12-beta3 - 2026-08-23
+
+### Highlights
+
+- **Subtlety Rogues can now highlight Shadow Techniques at five or more stacks.** The opt-in native Cooldown Viewer glow supports configurable color, size, and strength while keeping the protected stack comparison inside Blizzard's formatter.
+<!-- msuf-menu-link: {"pageKey":"gameplay","sectionId":"gameplay_dev_auras","controlId":"menu2.gameplay.advanced.dev.aura.shadow.techniques.stack.highlight.enabled","settingKey":"gameplay.enableShadowTechniquesStackHighlight","prepareKind":"","prepareValue":"","query":"shadow techniques stack glow","label":"Shadow Techniques: 5+ Stack Glow"} -->
+
+### Changes
+
+- Preserve Raid Groups now creates a separate secure header for each physical raid subgroup, keeping subgroup blocks intact while retaining the selected Index, Name, or Role sorting inside each group.
+- Group Frame scanning, Edit Mode bounds, visibility, and runtime layout handling now cover every active preserved subgroup header.
+
+### Fixes & Performance
+
+- Custom Boss Range Fade rates now show a once-per-menu-session performance warning, use a wider value field, and visually distinguish continuous custom rates from the adaptive Standard mode.
+- Group Adapter header scans retain the single-header fallback used by isolated and legacy load paths.
+
 ## 6.12-beta2 - 2026-08-22
 
 ### Highlights
