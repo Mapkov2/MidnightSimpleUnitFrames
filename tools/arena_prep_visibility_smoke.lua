@@ -75,6 +75,7 @@ local frames = {}
 local prepVisibilityReady = false
 local visibilityRefreshes = 0
 local matchEngaged = false
+local matchState = 2
 local classColors = {
     MAGE = { r = 0.25, g = 0.78, b = 0.92 },
     WARRIOR = { r = 0.78, g = 0.61, b = 0.43 },
@@ -120,6 +121,16 @@ UF.RefreshVisibilityDrivers = function(key)
 end
 _G.MSUF_DB = { arena = { enabled = true } }
 _G.MSUF_EventBus_Register = function() return true end
+_G.Enum = {
+    PvPMatchState = {
+        Inactive = 0,
+        Waiting = 1,
+        StartUp = 2,
+        Engaged = 3,
+        PostRound = 4,
+        Complete = 5,
+    },
+}
 _G.GetNumArenaOpponentSpecs = function() return 2 end
 _G.GetArenaOpponentSpec = function(index)
     if index == 1 then return 62, 2 end
@@ -135,9 +146,10 @@ _G.C_ClassColor = {
 }
 _G.C_PvP = {
     IsMatchConsideredArena = function() return true end,
-    IsMatchActive = function() return true end,
+    IsMatchActive = function() return false end,
     IsMatchComplete = function() return false end,
     IsMatchEngaged = function() return matchEngaged end,
+    GetActiveMatchState = function() return matchState end,
 }
 
 assert(loadfile("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua"))(
@@ -156,6 +168,7 @@ Check(frames.arena2._nameColor and frames.arena2._nameColor[1] == classColors.WA
     "warrior prep name reused the blue unknown-class fallback")
 
 matchEngaged = true
+matchState = _G.Enum.PvPMatchState.Engaged
 Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
     "engaged handoff did not report its visibility/data change")
 Check(visibilityRefreshes == 2 and _G.MSUF_ArenaPrepVisibilityActive == nil,

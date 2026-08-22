@@ -57,6 +57,20 @@ local function MatchEngaged()
     return false
 end
 
+local function MatchPreparing()
+    local considered = _G.C_PvP and _G.C_PvP.IsMatchConsideredArena
+    if type(considered) ~= "function" or considered() ~= true then return false end
+
+    -- Retail 12.1 reports the room/countdown as Waiting or StartUp. Neither
+    -- state satisfies IsMatchActive/IsMatchEngaged, so using the live-match
+    -- gate here suppresses every unitless preparation frame.
+    local state = MatchState()
+    local states = _G.Enum and _G.Enum.PvPMatchState
+    local waiting = states and states.Waiting or 1
+    local startUp = states and states.StartUp or 2
+    return state == waiting or state == startUp
+end
+
 local function InArenaMatch()
     local considered = _G.C_PvP and _G.C_PvP.IsMatchConsideredArena
     if type(considered) ~= "function" or considered() ~= true then return false end
@@ -215,8 +229,7 @@ local function SyncPrepDisplay()
 
     local numSpecs = _G.GetNumArenaOpponentSpecs and _G.GetNumArenaOpponentSpecs() or 0
     local wantPrep = ArenaEnabled()
-        and InArenaMatch()
-        and not MatchEngaged()
+        and MatchPreparing()
         and (tonumber(numSpecs) or 0) > 0
 
     -- Swap visibility ownership before writing the synthetic opponent data.
