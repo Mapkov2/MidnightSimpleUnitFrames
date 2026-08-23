@@ -123,14 +123,20 @@ end
 local nativeAuraStates = {}
 local nativeAuraSensors = {}
 local nativeApplicationFontStrings = {}
+local nativeApplicationBars = {}
 
 local function RefreshNativeAuraSensors(spellID, active, stackCount)
     nativeAuraStates[spellID] = { active = active == true, stackCount = stackCount or 0 }
     for i = 1, #nativeAuraSensors do
         local sensor = nativeAuraSensors[i]
-        if sensor.spellIDs[spellID] and sensor.button.applicationCount then
-            local display = sensor.button.applicationCount
-            display.fontString:SetText(active and display.formatter:FormatNumber(stackCount or 0) or "")
+        if sensor.spellIDs[spellID] then
+            if sensor.button.applicationCount then
+                local display = sensor.button.applicationCount
+                display.fontString:SetText(active and display.formatter:FormatNumber(stackCount or 0) or "")
+            end
+            if sensor.button.applicationBar then
+                sensor.button.applicationBar.statusBar:SetValue(active and (stackCount or 0) or 0)
+            end
         end
     end
 end
@@ -164,6 +170,15 @@ MSUF_Auras3 = {
                 break
             end
         end
+        function button:SetApplicationBar(statusBar, options)
+            self.applicationBar = { statusBar = statusBar, maxApplications = options.maxApplications }
+            nativeApplicationBars[#nativeApplicationBars + 1] = self.applicationBar
+            for spellID in pairs(spellIDs) do
+                local state = nativeAuraStates[spellID]
+                statusBar:SetValue(state and state.active and state.stackCount or 0)
+                break
+            end
+        end
 
         nativeAuraSensors[#nativeAuraSensors + 1] = sensor
         initializeFrame(button)
@@ -172,6 +187,7 @@ MSUF_Auras3 = {
             -- initializeFrame callback returns. Later addon-side mutation is forbidden.
             button.applicationCount.fontString.forbidden = true
         end
+        if button.applicationBar then button.applicationBar.statusBar.forbidden = true end
         return sensor
     end,
 }
@@ -218,18 +234,44 @@ function BuffIconCooldownViewer:RefreshData()
     end
 end
 
-function CreateFrame(frameType, name)
+local function NewTexture()
+    local texture = { shown = true }
+    function texture:SetAlpha(alpha) self.alpha = alpha end
+    function texture:SetTexture(path) self.texture = path end
+    function texture:SetPoint(...) self.point = { ... } end
+    function texture:ClearAllPoints() self.point = nil end
+    function texture:SetSize(width, height) self.width, self.height = width, height end
+    function texture:SetWidth(width) self.width = width end
+    function texture:SetHeight(height) self.height = height end
+    function texture:SetTexCoord(...) self.texCoord = { ... } end
+    function texture:SetVertexColor(...) self.color = { ... } end
+    function texture:Show() self.shown = true end
+    function texture:Hide() self.shown = false end
+    return texture
+end
+
+function CreateFrame(frameType, name, parent)
     if name and _G[name] then return _G[name] end
-    local frame = { events = {}, shown = true }
+    local frame = { events = {}, shown = true, parent = parent, frameType = frameType }
     frames[#frames + 1] = frame
     if name then _G[name] = frame end
 
     function frame:SetSize(width, height) self.width, self.height = width, height end
+    function frame:GetSize() return self.width, self.height end
     function frame:SetFrameStrata(strata) self.strata = strata end
     function frame:SetScript(script, callback) self[script] = callback end
     function frame:CreateFontString(fontName, _, template) return NewFontString(fontName, template) end
+    function frame:CreateTexture()
+        self.textures = self.textures or {}
+        local texture = NewTexture()
+        self.textures[#self.textures + 1] = texture
+        return texture
+    end
     function frame:ClearAllPoints() self.point = nil end
     function frame:SetPoint(...) self.point = { ... } end
+    function frame:SetAlpha(alpha) self.alpha = alpha end
+    function frame:SetClipsChildren(enabled) self.clipsChildren = enabled == true end
+    function frame:EnableMouse(enabled) self.mouseEnabled = enabled == true end
     function frame:SetShown(shown) self.shown = shown == true end
     function frame:Show() self.shown = true end
     function frame:Hide() self.shown = false end
@@ -240,6 +282,17 @@ function CreateFrame(frameType, name)
     if frameType == "Cooldown" then
         function frame:SetCooldownFromDurationObject(duration) self.duration = duration end
         function frame:Clear() self.duration = nil end
+    elseif frameType == "StatusBar" then
+        frame.statusTexture = NewTexture()
+        function frame:SetStatusBarTexture(path) self.statusTexture:SetTexture(path) end
+        function frame:GetStatusBarTexture() return self.statusTexture end
+        function frame:SetMinMaxValues(minimum, maximum) self.minimum, self.maximum = minimum, maximum end
+        function frame:SetValue(value)
+            value = tonumber(value) or 0
+            if self.minimum and value < self.minimum then value = self.minimum end
+            if self.maximum and value > self.maximum then value = self.maximum end
+            self.value = value
+        end
     end
     return frame
 end
@@ -264,6 +317,10 @@ local MSUF = {
 MSUF_ScheduleOnce = function(_, callback) callback() end
 MSUF_ResolveFontShadowMetrics = function() return 1, 1, -1 end
 
+local borderChunk, borderLoadError = loadfile("MidnightSimpleUnitFrames/Runtime/MSUF_BorderStyles.lua")
+if not borderChunk then Fail(borderLoadError) end
+borderChunk("MidnightSimpleUnitFrames", MSUF)
+
 local chunk, loadError = loadfile("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_GameplayRuntime.lua")
 if not chunk then Fail(loadError) end
 local partialOverlay = CreateFrame("Frame", "MSUF_ApexItDevAuraFrame", UIParent)
@@ -273,6 +330,22 @@ chunk("MidnightSimpleUnitFrames", MSUF)
 local overlay = _G.MSUF_ApexItDevAuraFrame
 local text = overlay and overlay._msufApexItText
 local stackText = overlay and overlay._msufApexItStackText
+local function NativeSoftGlowIsExposed(index)
+    local binding = nativeApplicationBars[index]
+    return binding and binding.statusBar.value >= binding.maxApplications or false
+end
+local function SoftGlowHosts()
+    local result = {}
+    for i = 1, #frames do
+        local frame = frames[i]
+        local texture = frame.textures and frame.textures[1]
+        if texture and texture.texture
+            and texture.texture:find("msuf_aura_border_glow.tga", 1, true) then
+            result[#result + 1] = frame
+        end
+    end
+    return result
+end
 local apexItSensor, apexStackSensor, shadowHighlightSensor
 for i = 1, #nativeAuraSensors do
     local sensor = nativeAuraSensors[i]
@@ -285,16 +358,23 @@ Expect(overlay == partialOverlay and text ~= nil and stackText ~= nil,
 Expect(overlay.shown == false, "overlay must start hidden without Darkest Night")
 Expect(text.text == "APEX IT", "overlay text drifted")
 Expect(stackText.text == nil and stackText.shown == false, "live mode did not hide the preview stack text")
-Expect(#nativeApplicationFontStrings == 3, "native APEX IT and stack-highlight renderers were not created")
+Expect(#nativeApplicationFontStrings == 2, "native APEX IT renderers were not created")
+local softGlowHosts = SoftGlowHosts()
+Expect(#nativeApplicationBars == 1 and #softGlowHosts == 1,
+    "native Shadow Techniques Soft Glow renderer was not created")
 Expect(apexItSensor and apexStackSensor, "native APEX IT sensors were not created")
 Expect(shadowHighlightSensor, "native Shadow Techniques stack-highlight sensor was not created")
 Expect(apexItSensor.shown == true and apexStackSensor.shown == true,
     "native APEX IT sensors did not start active")
 Expect(shadowHighlightSensor.shown == true, "Shadow Techniques stack-highlight sensor did not start active")
-Expect(nativeApplicationFontStrings[3].alpha == 0.8,
-    "Shadow Techniques stack-highlight strength was not applied before native ownership")
+local initialGlowTexture = softGlowHosts[1].textures[1]
+Expect(initialGlowTexture.color[1] == 0.69
+    and initialGlowTexture.color[2] == 0.50
+    and initialGlowTexture.color[3] == 0.88
+    and initialGlowTexture.color[4] == 0.8,
+    "Shadow Techniques Soft Glow color/strength was not applied before native ownership")
 Expect(nativeApplicationFontStrings[1].text == "" and nativeApplicationFontStrings[2].text == ""
-    and nativeApplicationFontStrings[3].text == "",
+    and nativeApplicationBars[1].statusBar.value == 0,
     "inactive native five-stack renderers were not empty")
 Expect(text.fontSize == 32, "configured text size was not applied")
 Expect(stackText.fontSize == 20.8, "stack text size did not follow the configured text size")
@@ -337,7 +417,7 @@ Expect(overlay.shown == true, "Darkest Night did not activate the native render 
 Expect(text.shown == false and stackText.shown == false, "live mode exposed preview text")
 Expect(nativeApplicationFontStrings[1].text == "" and nativeApplicationFontStrings[2].text == "",
     "APEX IT rendered below five Shadow Techniques stacks")
-Expect(nativeApplicationFontStrings[3].text == "",
+Expect(nativeApplicationBars[1].statusBar.value == 4 and not NativeSoftGlowIsExposed(1),
     "Shadow Techniques icon was highlighted below five stacks")
 
 shadowTechniques:SetAuraState(true, 5)
@@ -345,7 +425,7 @@ Expect(nativeApplicationFontStrings[1].text == "APEX IT"
     and nativeApplicationFontStrings[2].text == "5"
     and apexItSensor.shown == true,
     "APEX IT did not render at exactly five Shadow Techniques stacks")
-Expect(nativeApplicationFontStrings[3].text == "|A:UI-HUD-RotationHelper-ProcAltGlow:47:47:0:0:176:128:224|a",
+Expect(NativeSoftGlowIsExposed(1),
     "Shadow Techniques icon was not highlighted at exactly five stacks")
 
 local previousShadowHighlightSensor = shadowHighlightSensor
@@ -358,22 +438,27 @@ Expect(shadowHighlightSensor ~= previousShadowHighlightSensor
     and previousShadowHighlightSensor.shown == false
     and previousShadowHighlightSensor.enabled == false,
     "changing glow appearance did not replace and retire the native sensor")
-Expect(nativeApplicationFontStrings[4].text == "|A:UI-HUD-RotationHelper-ProcAltGlow:59:59:0:0:26:153:255|a",
-    "changed glow size/color did not reach the native threshold formatter")
-Expect(nativeApplicationFontStrings[4].alpha == 0.55,
-    "changed glow strength did not reach the native FontString before ownership")
+softGlowHosts = SoftGlowHosts()
+local changedGlowTexture = softGlowHosts[2] and softGlowHosts[2].textures[1]
+Expect(changedGlowTexture and math.abs(changedGlowTexture.width - 7.65) < 0.001,
+    "changed glow size did not reach the MSUF Soft Glow renderer")
+Expect(changedGlowTexture.color[1] == 0.10 and changedGlowTexture.color[2] == 0.60
+    and changedGlowTexture.color[3] == 1.00 and changedGlowTexture.color[4] == 0.55,
+    "changed glow color/strength did not reach the MSUF Soft Glow renderer")
+Expect(NativeSoftGlowIsExposed(2),
+    "replacement Soft Glow did not inherit the active five-stack state")
 
 shadowTechniques:SetAuraState(true, 9)
 Expect(nativeApplicationFontStrings[1].text == "APEX IT"
     and nativeApplicationFontStrings[2].text == "9",
     "native Shadow Techniques stack changes were not rendered")
-Expect(nativeApplicationFontStrings[4].text == "|A:UI-HUD-RotationHelper-ProcAltGlow:59:59:0:0:26:153:255|a",
+Expect(NativeSoftGlowIsExposed(2),
     "Shadow Techniques icon highlight did not remain active above five stacks")
 
 ancientArts:SetAuraState(true)
 Expect(overlay.shown == false, "Ancient Arts did not suppress APEX IT")
 Expect(shadowHighlightSensor.shown == true
-    and nativeApplicationFontStrings[4].text == "|A:UI-HUD-RotationHelper-ProcAltGlow:59:59:0:0:26:153:255|a",
+    and NativeSoftGlowIsExposed(2),
     "independent stack highlight was incorrectly gated by Ancient Arts")
 
 ancientArts:SetAuraState(false)
