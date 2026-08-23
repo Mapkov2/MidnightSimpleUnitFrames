@@ -168,6 +168,7 @@ ClassPower\MSUF_CP_Controller.lua
 # GROUP FRAMES
 # ---------------------------------------------------------------
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Group.xml
+Integrations\MSUF_Integration_MiniAuras.lua
 Integrations\MSUF_Integration_EllesmereUnlock.lua
 
 # ---------------------------------------------------------------

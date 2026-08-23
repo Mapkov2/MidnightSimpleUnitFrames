@@ -36,6 +36,7 @@ local appliedWidth = setmetatable({}, { __mode = "k" })
 local appliedHeight = setmetatable({}, { __mode = "k" })
 local appliedPowerEnabled = setmetatable({}, { __mode = "k" })
 local secureClicksConfigured = setmetatable({}, { __mode = "k" })
+local frameRegistryObservers = {}
 local unitIndexRebindDepth = 0
 local headerLayoutRebindHeader
 local headerLayoutRebindDepth = 0
@@ -114,6 +115,28 @@ end
 local function IsPreviewFrame(shell, visual)
   return (shell and shell._msufGFIsPreviewFrame == true)
     or (visual and visual._msufGFIsPreviewFrame == true)
+end
+
+--- Register a cold-path observer for changes to the authoritative live group
+--- frame registry. Consumers can rebuild their own frame list after the
+--- callback; preview frames never cross this boundary.
+function GF.RegisterFrameRegistryObserver(owner, callback)
+  if type(owner) ~= "string" or owner == "" or type(callback) ~= "function" then return false end
+  frameRegistryObservers[owner] = callback
+  return true
+end
+
+function GF.UnregisterFrameRegistryObserver(owner)
+  if frameRegistryObservers[owner] == nil then return false end
+  frameRegistryObservers[owner] = nil
+  return true
+end
+
+local function NotifyFrameRegistryObservers(operation, frame, oldUnit, newUnit)
+  if not frame or IsPreviewFrame(ShellFrame(frame), VisualFrame(frame)) then return end
+  for _, callback in next, frameRegistryObservers do
+    callback(operation, frame, oldUnit, newUnit)
+  end
 end
 
 local function IsPriorityFrame(frame)
@@ -326,12 +349,18 @@ end
 
 local function TrackFrame(frame, unit)
   if not frame then return end
+  local wasTracked = GF.frames[frame] == true
+  local oldUnit = frame._msufGFIndexedUnit
   if frame._msufGFInFrameList ~= true then
     frame._msufGFInFrameList = true
     GF.frameList[#GF.frameList + 1] = frame
   end
   GF.frames[frame] = true
   IndexFrameUnit(frame, unit or frame.MSUFUnitKey)
+  local newUnit = frame._msufGFIndexedUnit
+  if not wasTracked or oldUnit ~= newUnit then
+    NotifyFrameRegistryObservers("track", frame, oldUnit, newUnit)
+  end
 end
 GF.TrackFrame = TrackFrame
 
@@ -575,6 +604,8 @@ function GF.UntrackFrame(frame)
   if not frame then return end
   local shell = ShellFrame(frame)
   local visual = VisualFrame(shell)
+  local wasTracked = GF.frames[visual] == true
+  local oldUnit = visual and visual._msufGFIndexedUnit
   GF.UnregisterClickCastFrame(shell)
   if UF and UF.DetachFrame then UF.DetachFrame(visual) end
   if UF and UF.DisablePingCompatibility then UF.DisablePingCompatibility(shell) end
@@ -592,12 +623,17 @@ function GF.UntrackFrame(frame)
   for i = #GF.frameList, 1, -1 do
     if GF.frameList[i] == visual then table_remove(GF.frameList, i) end
   end
+  if wasTracked or oldUnit ~= nil then
+    NotifyFrameRegistryObservers("untrack", visual, oldUnit, nil)
+  end
 end
 
 local function SuspendUnitBinding(frame)
   if not frame then return end
   local shell = ShellFrame(frame)
   local visual = VisualFrame(shell)
+  local wasTracked = GF.frames[visual] == true
+  local oldUnit = visual and visual._msufGFIndexedUnit
   -- Secure headers recycle children. Once a child has no unit, its old
   -- RegisterUnitEvent subscriptions must not keep crossing into Lua for the
   -- previous party/raid token; the normal rebind path rebuilds them exactly.
@@ -612,6 +648,9 @@ local function SuspendUnitBinding(frame)
     visual.unitKey = nil
     DiscardDeferredHeaderOnShow(visual)
     NotifyGroupRangeUnitIdentity(visual)
+  end
+  if wasTracked or oldUnit ~= nil then
+    NotifyFrameRegistryObservers("suspend", visual, oldUnit, nil)
   end
 end
 
