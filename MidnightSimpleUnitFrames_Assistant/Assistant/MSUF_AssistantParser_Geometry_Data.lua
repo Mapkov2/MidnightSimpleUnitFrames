@@ -540,6 +540,7 @@ Data.GEOMETRY_PARSER = {
         [252] = { "power bar", "mana bar", "powerbar", "mana bar", "power balken", "mana balken" },
         [253] = {
         "class power", "class resource", "class resources", "power text", "mana text", "resource text",
+        "mana on player power bar", "mana on the player power bar", "player power bar as mana",
         "text on", "sync", "anchor", "width", "height", "x offset", "y offset", "offset x", "offset y",
         "frame level", "layer", "shape", "orb", "border thickness", "border size", "smooth",
         "aura", "auras", "buff", "debuff", "castbar", "cast bar", "group frame", "group frames",
