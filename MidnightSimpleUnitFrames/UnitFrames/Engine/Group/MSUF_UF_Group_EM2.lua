@@ -206,13 +206,13 @@ local function RuntimeAnchor(kind)
   if not (kind and UsesRuntimeAnchor(kind)) then return nil end
   local gf = GF()
   local headerKey = RuntimeHeaderKey(kind)
-  local header = gf and gf.headers and headerKey and gf.headers[headerKey]
   local anchor = gf and gf.anchors and headerKey and gf.anchors[headerKey]
   -- Party/Raid anchors deliberately survive secure-header retirement so saved
   -- geometry remains stable.  The retained anchor alone therefore cannot prove
   -- that live frames currently own the Edit Mode visual; require the matching
   -- shown header before suppressing the logical preview.
-  if header and header.IsShown and header:IsShown()
+  local headerShown = gf and gf.ForEachHeader and gf.ForEachHeader(headerKey, function(header) return header:IsShown() end)
+  if headerShown
     and anchor and anchor.IsShown and anchor:IsShown()
     and anchor.GetLeft and anchor:GetLeft() then
     return anchor
@@ -606,14 +606,15 @@ end
 local function RuntimeBounds(kind)
   local gf = GF()
   local headerKey = RuntimeHeaderKey(kind)
-  local header = gf and gf.headers and headerKey and gf.headers[headerKey]
   local bounds
-  if header and header.GetChildren then
-    local count = CaptureChildren(header:GetChildren())
+  local function AddHeaderBounds(physicalHeader)
+    if not (physicalHeader and physicalHeader.GetChildren) then return end
+    local count = CaptureChildren(physicalHeader:GetChildren())
     for i = 1, count do
       bounds = ExpandBounds(bounds, _childScratch[i])
     end
   end
+  if gf and gf.ForEachHeader then gf.ForEachHeader(headerKey, AddHeaderBounds) end
   if bounds then return bounds end
   return ExpandBounds(nil, RuntimeAnchor(kind))
 end

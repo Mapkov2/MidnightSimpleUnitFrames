@@ -3220,7 +3220,7 @@ local NAME_SHORTENING_ALL_TERMS = {
 
 local NAME_SHORTENING_SCOPE_LABELS = {
     shared = "Shared", target = "Target", targettarget = "Target of Target",
-    focus = "Focus", focustarget = "Focus Target", pet = "Pet", boss = "Boss", arena = "Arena",
+    focus = "Focus", focustarget = "Focus Target", pet = "Pet", boss = "Boss",
     gf_party = "Party", gf_raid = "Raid", gf_mythicraid = "Mythic Raid", player = "Player",
 }
 

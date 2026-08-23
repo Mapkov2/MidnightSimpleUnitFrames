@@ -2608,6 +2608,9 @@ local function InstallWindowLifecycle(state)
             self:Hide()
             return
         end
+        -- A monotonic, runtime-only token lets expensive-setting warnings show
+        -- once per real Menu2 visit without persisting acknowledgement state.
+        M._msuf2MenuSessionSerial = (tonumber(M._msuf2MenuSessionSerial) or 0) + 1
         if type(MenuRuntime.Resume) == "function" then MenuRuntime:Resume("menu-show") end
         self._msuf2Closing = nil
         if self.SetAlpha then self:SetAlpha(1) end

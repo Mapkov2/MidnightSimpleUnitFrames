@@ -172,7 +172,7 @@ local function ResolveFocusValue(value)
     if type(value) == "function" then return value() end
     return value
 end
-local UNIT_FOCUS_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss arena"
+local UNIT_FOCUS_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss"
 local GROUP_FOCUS_KIND = {
     gf_party = "party",
     gf_raid = "raid",
@@ -3918,7 +3918,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     end
     local minus = StepButton("-")
     local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
-    edit:SetSize(52, 24)
+    edit:SetSize(editW, 24)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("CENTER")
     edit:SetNumeric(false)
@@ -3994,6 +3994,15 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     end
     function slider:SetValueParser(fn)
         self._msuf2ValueParser = (type(fn) == "function") and fn or nil
+    end
+    function slider:SetValueBoxWidth(boxWidth)
+        boxWidth = max(40, floor((tonumber(boxWidth) or editW) + 0.5))
+        if editW == boxWidth then return end
+        editW = boxWidth
+        valueClusterW = valueGap + stepButtonW + buttonGap + editW + buttonGap + stepButtonW
+        compactValueClusterW = valueGap + editW
+        edit:SetWidth(editW)
+        self:_msuf2SetLayoutWidth(self._msuf2RowWidth or width)
     end
     function slider:SetInteractionCallbacks(onStart, onStop)
         self._msuf2InteractionStart = type(onStart) == "function" and onStart or nil

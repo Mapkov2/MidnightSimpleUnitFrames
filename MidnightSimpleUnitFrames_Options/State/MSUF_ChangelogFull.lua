@@ -8,12 +8,138 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "6D981891C5FDC0B1D75A21CF0E1B7F0207E58C354A91C131EDBADA6FDC0B7175",
-    currentVersion = "6.11",
+    sourceSha256 = "74A3D86382112210F00843DF59B4C625D8B2EC97128A01B036C95D26489DD66E",
+    currentVersion = "6.12-beta3",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.11",
+    previousVersion = "6.12-beta2",
+    rangeLabel = "6.12-beta2 -> 6.12-beta3",
     entries = {
+        {
+            version = "6.12-beta3",
+            date = "2026-08-23",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Subtlety Rogues can now highlight Shadow Techniques at five or more stacks. The opt-in native Cooldown Viewer glow supports configurable color, size, and strength while keeping the protected stack comparison inside Blizzard's formatter.",
+                            link = {
+                                pageKey = "gameplay",
+                                query = "shadow techniques stack glow",
+                                label = "Shadow Techniques: 5+ Stack Glow",
+                                sectionId = "gameplay_dev_auras",
+                                controlId = "menu2.gameplay.advanced.dev.aura.shadow.techniques.stack.highlight.enabled",
+                                settingKey = "gameplay.enableShadowTechniquesStackHighlight",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Preserve Raid Groups now creates a separate secure header for each physical raid subgroup, keeping subgroup blocks intact while retaining the selected Index, Name, or Role sorting inside each group.",
+                        "Group Frame scanning, Edit Mode bounds, visibility, and runtime layout handling now cover every active preserved subgroup header.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Custom Boss Range Fade rates now show a once-per-menu-session performance warning, use a wider value field, and visually distinguish continuous custom rates from the adaptive Standard mode.",
+                        "Group Adapter header scans retain the single-header fallback used by isolated and legacy load paths.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.12-beta2",
+            date = "2026-08-22",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Subtlety Rogues can now enable an APEX IT combat cue. The opt-in Deathstalker helper shows at five or more Shadow Techniques stacks while Darkest Night is active and Ancient Arts is not, with configurable text size, position, and an in-menu preview.",
+                            link = {
+                                pageKey = "gameplay",
+                                query = "subtlety rogue apex it",
+                                label = "Subtlety Rogue: APEX IT",
+                                sectionId = "gameplay_dev_auras",
+                                controlId = "menu2.gameplay.advanced.dev.aura.apex.it.enabled",
+                                settingKey = "gameplay.enableApexItDevAura",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "APEX IT follows Blizzard's native Cooldown Viewer and AuraContainer state updates without polling, fails closed for secret spell values, and disables its event routes outside the supported specialization and talent.",
+                        "Preserve Raid Groups now derives the effective group-aware sorting mode without overwriting the selected Index, Name, or Role preference.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Boss encounter lifecycle bursts now coalesce Unit Frame identity, AuraContainer identity, and Range Fade reconciliation into next-frame refreshes instead of repeating synchronous work for every Boss token.",
+                        "Group threat-role changes now refresh only the affected border and corner-indicator domains rather than invalidating unrelated Group Frame configuration.",
+                        "Rounded native dispel-overlay masks are fully configured before Blizzard takes ownership and are recreated through the cold Auras3 refresh path after rounded-frame setting or media changes.",
+                        "The global Castbar preview canvas is taller so below-bar text, thick outlines, and vertical icon offsets are no longer clipped.",
+                        "Gameplay configuration caching now follows the active profile table, and a failed gameplay apply can no longer leave later apply requests permanently blocked.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.12-beta1",
+            date = "2026-08-22",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Class Resource text can now show Current, Maximum, or Current / Maximum. The new Resource text selector keeps Automatic as the untouched resource-specific default, while explicit modes change only the central resource value.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "class resource text mode",
+                                label = "Resource text",
+                                sectionId = "classpower_visuals",
+                                controlId = "menu2.classpower.advanced.style.text.mode",
+                                settingKey = "bars.classPowerTextMode",
+                            },
+                        },
+                        {
+                            text = "Boss Range Fade can now update up to 20 times per second. The new Boss update-rate slider keeps the adaptive standard cadence at zero or continuously checks visible Boss Frames from 1 through 20 updates per second.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "boss range update rate",
+                                label = "Updates per second",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_boss.unit.range_fade.update_rate",
+                                settingKey = "boss.rangeFadeUpdateRate",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats.",
+                        "Class Resource previews mirror the selected text mode, and the Assistant can find and set both the resource-text format and the Boss range-update rate.",
+                        "Retired unused legacy Class Resource text-format fields from existing profiles and generated fallback metadata.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "One-icon aura lanes now use Blizzard's one-frame AuraSlot primitive instead of allocating a ten-frame AuraGroup pool; weapon-enchant and custom-priority lanes keep their specialized group behavior.",
+                        "Aura identity-event topology changes are batched across secure Group Frame header scans, resolved aura-name registrations survive unchanged layout refreshes, and redundant native full-aura refreshes were removed.",
+                        "Target name and health text now resolve protected PvP class tokens through Blizzard's native class-color object without comparing or caching secret-backed RGB values.",
+                        "Standard Boss Range Fade retains its adaptive 0.75/2-second checks, while a custom rate accelerates only visible Boss Frames and shares the existing timer scheduler.",
+                        "See New Features now reports the correct compact and full-history version ranges for 6.11.",
+                    },
+                },
+            },
+        },
         {
             version = "6.11",
             date = "2026-08-21",

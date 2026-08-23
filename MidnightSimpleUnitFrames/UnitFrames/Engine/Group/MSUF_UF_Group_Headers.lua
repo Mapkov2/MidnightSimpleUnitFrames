@@ -42,6 +42,7 @@ local IsInRaid = IsInRaid
 GF.headers = GF.headers or {}
 GF.anchors = GF.anchors or {}
 GF._headerPool = GF._headerPool or {}
+GF.raidGroupHeaders = GF.raidGroupHeaders or {}
 GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 
 local NIL_ATTR = {}
@@ -110,8 +111,53 @@ local function RetireHeader(header)
   if header.Hide then header:Hide() end
 end
 
+function GF.ForEachHeader(key, fn)
+  if type(fn) ~= "function" then return false end
+  local first = GF.headers and GF.headers[key]
+  if key == "raid" and first and first._msufRaidGroupIndex then
+    local matched = false
+    for i = 1, first._msufRaidGroupCount or 0 do
+      local header = GF.raidGroupHeaders[i]
+      if header and fn(header, i) then matched = true end
+    end
+    return matched
+  end
+  if first then
+    return fn(first, nil) and true or false
+  end
+  return false
+end
+
+function GF.ShowHeaders(key)
+  local shown = false
+  GF.ForEachHeader(key, function(header)
+    local allowed = key ~= "raid" or header._msufRaidGroupIndex == nil
+      or header._msufPreservedGroupAllowed == true
+    if allowed then
+      header:Show()
+      shown = true
+    else
+      header:Hide()
+    end
+  end)
+  return shown
+end
+
+local function RetirePreservedRaidHeaders()
+  local first = GF.headers and GF.headers.raid
+  if not (first and first._msufRaidGroupIndex) then return false end
+  for i = 1, first._msufRaidGroupCount or 0 do
+    RetireHeader(GF.raidGroupHeaders[i])
+  end
+  GF.headers.raid = nil
+  return true
+end
+
 function GF.RetireHeader(key)
   if not (GF.headers and key) then return false end
+  if key == "raid" and RetirePreservedRaidHeaders() then
+    return true
+  end
   local header = GF.headers[key]
   if not header then
     if key == "priority" then
@@ -462,6 +508,17 @@ local function PreservedRaidGroupLimit(conf)
   return ClampInt(conf.maxColumns, 8, 1, 8)
 end
 
+function GF.GetPreservedRaidGroupCount(conf)
+  local groups = PreservedRaidGroupLimit(conf) or 8
+  if IsInRaid and IsInRaid() and GetNumGroupMembers and GetRaidRosterInfo then
+    for index = 1, GetNumGroupMembers() or 0 do
+      local subgroup = tonumber((select(3, GetRaidRosterInfo(index)))) or 0
+      if subgroup > groups then groups = subgroup end
+    end
+  end
+  return groups > 8 and 8 or groups
+end
+
 local function RaidGroupingOrder(conf)
   local limit = PreservedRaidGroupLimit(conf)
   if not limit or limit >= 8 then
@@ -585,6 +642,25 @@ local function GroupFilterAllows(conf, groupIndex, classFile, role)
   return true
 end
 
+local function RaidGroupAllowed(conf, groupIndex)
+  local filter = conf and conf.groupFilter
+  if type(filter) == "table" then
+    local value = filter[groupIndex]
+    return value ~= false and (value ~= nil or filter[tostring(groupIndex)] ~= false)
+  elseif type(filter) == "string" then
+    local hasGroups = false
+    for token in filter:gmatch("[^,]+") do
+      local group = tonumber(token)
+      if group and group >= 1 and group <= 8 then
+        hasGroups = true
+        if group == groupIndex then return true end
+      end
+    end
+    return not hasGroups
+  end
+  return true
+end
+
 local function UnitFullName(unit)
   if not (unit and UnitName) then return nil end
   local name, realm = UnitName(unit)
@@ -640,7 +716,7 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex)
     local assignedRole
     name, _, subgroup, _, _, classFile, _, _, _, _, _, assignedRole = GetRaidRosterInfo(raidIndex)
     if issecretvalue(name) == true or type(name) ~= "string" or name == "" then return false end
-    role = assignedRole == "TANK" or assignedRole == "HEALER" or assignedRole == "DAMAGER"
+    role = (assignedRole == "TANK" or assignedRole == "HEALER" or assignedRole == "DAMAGER")
       and assignedRole or UnitRole(unit)
   else
     if UnitMissing(unit) then return false end
@@ -768,7 +844,7 @@ local function EntryRolePriority(entry, priority)
   return priority and priority[entry and entry.role] or 999
 end
 
-local function BuildRaidFreezeNameList(kind, conf, mode, descending)
+local function BuildRaidFreezeNameList(kind, conf, mode, descending, subgroupIndex)
   if not IsRaidLikeKind(kind) then
     return nil
   end
@@ -819,13 +895,17 @@ local function BuildRaidFreezeNameList(kind, conf, mode, descending)
 
   local names, seen = {}, {}
   for i = 1, #entries do
-    local name = entries[i].name
-    if name and not seen[name] then
+    local entry = entries[i]
+    local name = entry.name
+    if (subgroupIndex == nil or entry.group == subgroupIndex) and name and not seen[name] then
       seen[name] = true
       names[#names + 1] = name
     end
   end
   if #names == 0 then
+    -- Empty is authoritative for a complete subgroup roster; nil would reveal
+    -- the whole group through the native fallback filter.
+    if subgroupIndex ~= nil then return "" end
     return nil
   end
   return table_concat(names, ",")
@@ -843,6 +923,12 @@ local function ResolveSortMode(key, conf)
     else
       mode = "INDEX"
     end
+  end
+  -- Preserve raid groups is an independent layout contract. Derive the
+  -- effective group-aware mode without overwriting the user's saved sort mode,
+  -- so disabling the option restores the previous INDEX/NAME/ROLE behavior.
+  if key ~= "party" and conf.preserveRaidGroups == true then
+    mode = (mode == "ROLE" or mode == "GROUP_ROLE") and "GROUP_ROLE" or "GROUP"
   end
   if key == "party" and (mode == "GROUP" or mode == "GROUP_ROLE") then
     mode = conf.sortByRole == true and "ROLE" or "INDEX"
@@ -886,6 +972,21 @@ local function BuildSortState(key, kind, conf)
     sortDir = (nameList and key ~= "party") and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
     groupBy = groupBy,
     groupingOrder = groupingOrder,
+    nameList = nameList,
+    playerFirst = conf.playerFirstInRole == true,
+  }
+end
+
+local function BuildPreservedSortState(kind, conf, groupIndex)
+  local mode = ResolveSortMode("raid", conf)
+  local nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true, groupIndex)
+  local nativeRole = not nameList and mode == "GROUP_ROLE"
+  return {
+    mode = mode,
+    sortMethod = nameList and "NAMELIST" or "INDEX",
+    sortDir = nameList and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
+    groupBy = nativeRole and "ASSIGNEDROLE" or nil,
+    groupingOrder = nativeRole and RoleOrder(conf) or nil,
     nameList = nameList,
     playerFirst = conf.playerFirstInRole == true,
   }
@@ -1055,20 +1156,25 @@ function GF.ApplyGroupBorder(kind)
   end
 end
 
-local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount)
+local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex)
   local buttonTemplate = ButtonTemplate()
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing, conf.groupGrowth)
-  local upc = ClampInt(conf.unitsPerColumn, kind == "party" and 5 or 5, 1, 40)
-  local requiredColumns = RequiredHeaderColumns(kind, conf, layoutCount)
-  local columns = requiredColumns
+  local upc = ClampInt(conf.unitsPerColumn, 5, 1, preservedGroupIndex and 5 or 40)
+  local columns = preservedGroupIndex and floor((5 + upc - 1) / upc)
+    or RequiredHeaderColumns(kind, conf, layoutCount)
   local initialWidth = floor((w or 80) + 0.5)
   local initialHeight = floor((h or 32) + 0.5)
   local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
     or AttrChanged(header, "initial-height", initialHeight)
   local secureInitChanged = AttrChanged(header, "_msufSecureInitVersion", SECURE_INIT_VERSION)
   local initCfg = (sizeChanged or secureInitChanged) and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
-  local sortState = BuildSortState(key, kind, conf)
-  local groupFilter = sortState.sortMethod == "NAMELIST" and nil or (key == "party" and nil or ResolveGroupFilter(conf))
+  local sortState = preservedGroupIndex and BuildPreservedSortState(kind, conf, preservedGroupIndex)
+    or BuildSortState(key, kind, conf)
+  local groupFilter
+  if sortState.sortMethod ~= "NAMELIST" then
+    groupFilter = preservedGroupIndex and tostring(preservedGroupIndex)
+      or (key == "party" and nil or ResolveGroupFilter(conf))
+  end
   local childAnchorTopologyChanged = AttrChanged(header, "point", point)
     or AttrChanged(header, "columnAnchorPoint", columnAnchor)
     or AttrChanged(header, "unitsPerColumn", upc)
@@ -1132,6 +1238,72 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     changed = ApplySortAttributes(header, sortState) or changed
   end
   return changed, shouldHide
+end
+
+local function PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
+  if not (header and anchor) then return end
+  local growth = conf.growth or "DOWN"
+  local offset = groupIndex - 1
+  local point, x, y
+  if growth == "DOWN" or growth == "UP" then
+    local reverse = conf.groupGrowth == "LEFT"
+    point = (growth == "UP" and "BOTTOM" or "TOP") .. (reverse and "RIGHT" or "LEFT")
+    x, y = (reverse and -1 or 1) * offset * (blockW + spacing), 0
+  else
+    local reverse = conf.groupGrowth == "UP"
+    point = (reverse and "BOTTOM" or "TOP") .. (growth == "LEFT" and "RIGHT" or "LEFT")
+    x, y = 0, (reverse and 1 or -1) * offset * (blockH + spacing)
+  end
+  header:ClearAllPoints()
+  header:SetPoint(point, anchor, point, x, y)
+end
+
+local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount)
+  local flat = GF.headers.raid
+  if flat and flat._msufRaidGroupIndex == nil then
+    RetireHeader(flat)
+    GF._headerPool.raid = flat
+    GF.headers.raid = nil
+  end
+
+  local primary = ClampInt(conf.unitsPerColumn, 5, 1, 5)
+  local blockColumns = floor((5 + primary - 1) / primary)
+  local vertical = conf.growth ~= "LEFT" and conf.growth ~= "RIGHT"
+  local blockW = vertical and (blockColumns * w + (blockColumns - 1) * spacing)
+    or (primary * w + (primary - 1) * spacing)
+  local blockH = vertical and (primary * h + (primary - 1) * spacing)
+    or (blockColumns * h + (blockColumns - 1) * spacing)
+  local groupCount = GF.GetPreservedRaidGroupCount(conf)
+  local headers = GF.raidGroupHeaders
+
+  for groupIndex = 1, groupCount do
+    local header = headers[groupIndex]
+    if not header then
+      header = CreateFrame("Frame", HeaderName("raid"), anchor, "SecureGroupHeaderTemplate")
+      headers[groupIndex] = header
+    end
+
+    if header:GetParent() ~= anchor then header:SetParent(anchor) end
+    header._msufGFKind = kind
+    header._msufRaidGroupIndex = groupIndex
+    header._msufPreservedGroupAllowed = RaidGroupAllowed(conf, groupIndex)
+    local _, wasHiddenForLayout = ConfigureHeader(header, "raid", kind, conf, w, h, spacing, layoutCount, groupIndex)
+    PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
+
+    if wasHiddenForLayout and header._msufPreservedGroupAllowed == true then
+      local coalescedShow = GF.ScheduleScan and BeginHeaderLayoutRebind(header)
+      header:Show()
+      EndHeaderLayoutRebind(header, coalescedShow)
+    elseif header._msufPreservedGroupAllowed ~= true then
+      RetireHeader(header)
+    end
+  end
+
+  for groupIndex = groupCount + 1, #headers do RetireHeader(headers[groupIndex]) end
+
+  headers[1]._msufRaidGroupCount = groupCount
+  GF.headers.raid = headers[1]
+  return headers[1], false
 end
 
 local PRIORITY_SECURE_INIT_VERSION = 1
@@ -1341,6 +1513,12 @@ function GF.SetupHeader(key, kind)
   anchor._msufGFDragCenterToGridX = 0
   anchor._msufGFDragCenterToGridY = 0
   ApplyGroupBorderForKey(key)
+
+  if key == "raid" and conf.preserveRaidGroups == true then
+    return SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount)
+  elseif key == "raid" and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then
+    RetirePreservedRaidHeaders()
+  end
 
   local header = GF.headers[key]
   local newHeader = false

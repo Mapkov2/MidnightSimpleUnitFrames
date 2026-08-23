@@ -86,15 +86,6 @@ local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local SECRET_NATIVE_CLASS_COLOR = 2
 local DispatchClassColor
-local IsArenaOpponentUnit = C.IsArenaOpponentUnit or function(unit)
-  return unit == "arena1" or unit == "arena2" or unit == "arena3"
-    or unit == "arena4" or unit == "arena5"
-end
-
-local function SecretClassColorAllowed(unit)
-  return unit == "target" or unit == "targettarget" or unit == "focustarget"
-    or IsArenaOpponentUnit(unit)
-end
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
@@ -358,7 +349,7 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
   if rt.healthColorByClass == true then
     local colorUnit = unit or frame.MSUFUnitKey
     local r, g, b, secretClass
-    if SecretClassColorAllowed(colorUnit) then
+    if colorUnit == "target" then
       r, g, b, secretClass = DispatchClassColor(frame, colorUnit, true)
     else
       r, g, b = ClassColor(colorUnit)
@@ -420,12 +411,6 @@ local function SetNameTextColor(frame, r, g, b, a)
 end
 
 local function PlainUnitIsPlayer(frame, unit)
-  -- Arena tokens are player-only even while their identity APIs return secret
-  -- values. This is the same native-pass-through contract used by the shared
-  -- GroupFrames color path; no opponent identity is inspected in Lua.
-  if IsArenaOpponentUnit(unit) then
-    return true
-  end
   if issecretvalue(unit) == true then
     return nil
   end
@@ -475,7 +460,7 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   if isPlayer then
     if classNames then
       local r, g, b, secretClass = DispatchClassColor(
-        frame, unit, SecretClassColorAllowed(unit))
+        frame, unit, unit == "target" or unit == "targettarget" or unit == "focustarget")
       return r, g, b, fa, secretClass
     end
   else
@@ -555,7 +540,7 @@ local function InlineTextColor(frame, unit, inline)
   if isPlayer then
     if inline and inline.targetNameClassColor == true then
       local r, g, b, secretClass = DispatchClassColor(
-        frame, unit, SecretClassColorAllowed(unit))
+        frame, unit, unit == "target" or unit == "targettarget" or unit == "focustarget")
       return r, g, b, fa, secretClass
     end
   else

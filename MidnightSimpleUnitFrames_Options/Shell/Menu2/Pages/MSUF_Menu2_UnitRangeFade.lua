@@ -4,12 +4,13 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local W = M.Widgets or {}
 local UP = M.UnitPage or {}
+local T = M.Theme or {}
 local VT = M.ValueTextList
 local floor = math.floor
 local max = math.max
 local PercentValue = M.PercentValue
 local SettingMeta = UP.SettingMeta
-local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet boss arena"
+local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet boss"
 local function RangeFadeSectionHeight(_, _, unit)
     return unit == "boss" and 350 or 230
 end
@@ -17,6 +18,22 @@ local function BossUpdateRateValue(value)
     local rate = floor((tonumber(value) or 0) + 0.5)
     if rate <= 0 then return "Standard" end
     return tostring(rate) .. " / sec"
+end
+local BOSS_UPDATE_RATE_WARNING = "MSUF2_BOSS_RANGE_UPDATE_RATE_WARNING"
+local function MaybeShowBossUpdateRateWarning(rate)
+    rate = floor((tonumber(rate) or 0) + 0.5)
+    if rate <= 0 then return false end
+    local session = tonumber(M._msuf2MenuSessionSerial) or 0
+    if M._msuf2BossUpdateRateWarningSession == session then return false end
+    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show and type(M.InstallStaticPopup) == "function") then return false end
+    M.InstallStaticPopup(BOSS_UPDATE_RATE_WARNING, {
+        text = "Performance warning\n\nCustom Boss update rates replace the adaptive default with continuous range checks for every visible Boss Frame. Higher values can increase CPU use during encounters.\n\nStandard keeps the performance-friendly adaptive rate.",
+        button1 = _G.OKAY or "Okay",
+        showAlert = true,
+    })
+    M._msuf2BossUpdateRateWarningSession = session
+    _G.StaticPopup_Show(BOSS_UPDATE_RATE_WARNING)
+    return true
 end
 local function BuildRangeFade(ctx, builder, unit)
     local ReadBool = UP.ReadBool
@@ -70,6 +87,7 @@ local function BuildRangeFade(ctx, builder, unit)
     if unit == "boss" then
         local updateCard = W.ControlCard(sec, "Boss update rate", nil, leftX, -220, innerW, 106)
         updateRate = W.Slider(updateCard, "Updates per second", 0, 20, 1, innerW - 58)
+        if updateRate.SetValueBoxWidth then updateRate:SetValueBoxWidth(76) end
         if updateRate.SetValueFormatter then updateRate:SetValueFormatter(BossUpdateRateValue) end
         if updateRate.SetValueParser then
             updateRate:SetValueParser(function(value)
@@ -86,9 +104,30 @@ local function BuildRangeFade(ctx, builder, unit)
                 local rate = floor((tonumber(v) or 0) + 0.5)
                 if rate < 0 then rate = 0 elseif rate > 20 then rate = 20 end
                 SetNumber(unit, "rangeFadeUpdateRate", rate, "MSUF2_BOSS_RANGE_UPDATE_RATE", { preview = true })
+                if updateRate and updateRate._msuf2SliderActive then
+                    updateRate._msuf2BossRateWarningPending = rate > 0 and rate or nil
+                else
+                    MaybeShowBossUpdateRateWarning(rate)
+                end
             end,
             0,
             updateMeta)
+        local function PaintBossRateValue(value)
+            local editBox = updateRate and updateRate.editBox
+            local text = editBox and editBox.GetFontString and editBox:GetFontString()
+            local colors = T.colors
+            local color = colors and ((tonumber(value) or 0) > 0 and (colors.warning or colors.accent2) or colors.text)
+            if text and color and text.SetTextColor then text:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
+        end
+        if updateRate.HookScript then
+            updateRate:HookScript("OnMouseUp", function(self)
+                local pending = self._msuf2BossRateWarningPending
+                self._msuf2BossRateWarningPending = nil
+                if pending then MaybeShowBossUpdateRateWarning(pending) end
+            end)
+            updateRate:HookScript("OnValueChanged", function(_, value) PaintBossRateValue(value) end)
+        end
+        PaintBossRateValue(ReadNumber(unit, "rangeFadeUpdateRate", 0))
         W.MoveWidget(updateRate, updateCard, 16, -54, innerW - 58, "LEFT")
         if M.AddTooltip then
             M.AddTooltip(updateRate, "Boss range update rate",

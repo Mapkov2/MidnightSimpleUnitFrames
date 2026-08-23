@@ -3876,19 +3876,6 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "always shown"
 L["hidden on this character"] = "hidden on this character"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."
-
---- Arena frames (dedicated arena1-3 unit frames)
-L["Arena"] = "Arena"
-L["Arena Castbar"] = "Arena Castbar"
-L["Arena Frames"] = "Arena Frames"
-L["Arena Layout"] = "Arena Layout"
-L["Arena Opponent"] = "Arena Opponent"
-L["Arena castbar preview"] = "Arena castbar preview"
-L["Arena frame layout"] = "Arena frame layout"
-L["Arena spacing"] = "Arena spacing"
-L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."
-L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."
-L["MSUF Arena Frames"] = "MSUF Arena Frames"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

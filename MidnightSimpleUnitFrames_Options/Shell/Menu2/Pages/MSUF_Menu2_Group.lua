@@ -218,6 +218,7 @@ local function MergeDirtyMask(gf, current, incoming)
         out = AddDirty(out, MaskHas(incoming, gf.DIRTY_LAYOUT) and gf.DIRTY_LAYOUT or nil)
         out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AURAS) and gf.DIRTY_AURAS or nil)
         out = AddDirty(out, MaskHas(incoming, gf.DIRTY_UNIT_BINDING) and gf.DIRTY_UNIT_BINDING or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AGGRO) and gf.DIRTY_AGGRO or nil)
     end
     return out
 end
@@ -227,6 +228,7 @@ local function ModeDirtyMask(gf, mode)
     if mode == "font" or mode == "fonts" then return gf.DIRTY_FONT end
     if mode == "color" or mode == "colors" then return gf.DIRTY_COLOR end
     if mode == "border" or mode == "borders" then return gf.DIRTY_BORDER end
+    if mode == "aggro" then return gf.DIRTY_AGGRO or gf.DIRTY_COLOR end
     if mode == "auras" then return gf.DIRTY_AURAS end
     if mode == "geometry" then return AddDirty(gf.DIRTY_GEOMETRY, gf.DIRTY_LAYOUT) end
     if mode == "config" then return gf.DIRTY_CONFIG end

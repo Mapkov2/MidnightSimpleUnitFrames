@@ -52,7 +52,6 @@ local UnitExistsPlain = UF.UnitExistsSafe
 local SUPPORTED_UNITS = {
   target = true, targettarget = true, focus = true, focustarget = true, pet = true,
   boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-  arena1 = true, arena2 = true, arena3 = true,
 }
 
 -- Bitmasks let one driver frame know which unit families need target/focus/pet/boss events
@@ -60,12 +59,10 @@ local SUPPORTED_UNITS = {
 local RANGE_UNITS = {
   "target", "targettarget", "focus", "focustarget", "pet",
   "boss1", "boss2", "boss3", "boss4", "boss5",
-  "arena1", "arena2", "arena3",
 }
 local RANGE_UNIT_BITS = {
   target = 1, targettarget = 2, focus = 4, focustarget = 8, pet = 16,
   boss1 = 32, boss2 = 64, boss3 = 128, boss4 = 256, boss5 = 512,
-  arena1 = 1024, arena2 = 2048, arena3 = 4096,
 }
 local TARGET_EVENT_TARGET_BIT = 1
 local TARGET_EVENT_FOCUS_BIT = 2
@@ -75,7 +72,6 @@ local DRIVER_EVENT_FOCUS_BIT = 4
 local DRIVER_EVENT_PET_BIT = 8
 local DRIVER_EVENT_BOSS_BIT = 16
 local DRIVER_EVENT_TARGET_SPELL_BIT = 32
-local DRIVER_EVENT_ARENA_BIT = 64
 
 local UNIT_EVENTS = {
   "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE", "UNIT_CTR_OPTIONS", "UNIT_OTHER_PARTY_CHANGED",
@@ -96,7 +92,6 @@ local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local BOSS_UNIT_SET = {
   boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
-local ARENA_UNITS = { "arena1", "arena2", "arena3" }
 local UNIT_EVENT_FILTER_LIMIT = 4
 
 local ENEMY_SPELLS = {
@@ -464,12 +459,6 @@ local function EvaluateBossUnits(force)
   end
 end
 
-local function EvaluateArenaUnits(force)
-  for i = 1, #ARENA_UNITS do
-    EvaluateIfActive(ARENA_UNITS[i], force)
-  end
-end
-
 local function TargetClearStates()
   if targetChecked <= 0 and targetInRange <= 0 then
     return
@@ -832,7 +821,6 @@ end
 
 local driver
 local secondaryUnitDriver
-local tertiaryUnitDriver
 local SyncRuntime
 local visibilitySyncQueued = false
 local function FlushVisibilityRuntime()
@@ -949,6 +937,33 @@ local function HookFrameVisibility(frame)
   frame:HookScript("OnHide", RangeFrameOnHide)
 end
 
+-- Boss-unit lifecycle notifications can arrive as a same-frame burst while
+-- RegisterUnitWatch is also showing or hiding several frames. OnShow already
+-- seeds a newly visible frame immediately, so collapse the event followers into
+-- one next-frame reconciliation instead of stacking five range probes and poll
+-- scheduler rebuilds on top of the encounter-reset frame.
+local bossLifecycleRangeQueued = false
+local function FlushBossLifecycleRange()
+  bossLifecycleRangeQueued = false
+  if activeCount <= 0 then return end
+  MarkPollSetDirty()
+  EvaluateBossUnits(false)
+  RebuildPollSet()
+end
+
+local function QueueBossLifecycleRange()
+  if bossLifecycleRangeQueued then return end
+  bossLifecycleRangeQueued = true
+  local scheduleOnce = _G.MSUF_ScheduleOnce
+  if type(scheduleOnce) == "function" then
+    scheduleOnce("MSUF_RANGE_BOSS_LIFECYCLE", FlushBossLifecycleRange)
+  elseif type(After) == "function" then
+    After(0, FlushBossLifecycleRange)
+  else
+    FlushBossLifecycleRange()
+  end
+end
+
 PollNow = function(now)
   now = now or PollClock()
   local fallbackDue = pollFallbackNextAt and now >= pollFallbackNextAt
@@ -1038,6 +1053,9 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   if event == "SPELL_RANGE_CHECK_UPDATE" then
     OnTargetSpellRange(unit, a, b)
     return
+  elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
+    QueueBossLifecycleRange()
+    return
   elseif event == "SPELLS_CHANGED"
     or event == "PLAYER_TALENT_UPDATE"
     or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
@@ -1106,10 +1124,6 @@ local function DriverOnEvent(source, event, unit, a, b, c)
 
   if event == "UNIT_PET" then
     if unit == "player" then EvaluateIfActive("pet", false) end
-  elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-    EvaluateBossUnits(false)
-  elseif event == "ARENA_OPPONENT_UPDATE" then
-    EvaluateArenaUnits(false)
   elseif event == "PLAYER_ENTERING_WORLD"
     or event == "PLAYER_REGEN_DISABLED"
     or event == "PLAYER_REGEN_ENABLED" then
@@ -1145,14 +1159,6 @@ local function EnsureSecondaryUnitDriver()
   secondaryUnitDriver = CreateFrame("Frame")
   secondaryUnitDriver:SetScript("OnEvent", DriverOnEvent)
   return secondaryUnitDriver
-end
-
-local function EnsureTertiaryUnitDriver()
-  if tertiaryUnitDriver then return tertiaryUnitDriver end
-  if not CreateFrame then return nil end
-  tertiaryUnitDriver = CreateFrame("Frame")
-  tertiaryUnitDriver:SetScript("OnEvent", DriverOnEvent)
-  return tertiaryUnitDriver
 end
 
 local function ClearDriverUnitSpan(frame)
@@ -1226,9 +1232,6 @@ local function RegisterDriver()
     or activeUnits.boss3 == true
     or activeUnits.boss4 == true
     or activeUnits.boss5 == true
-  local arenaActive = activeUnits.arena1 == true
-    or activeUnits.arena2 == true
-    or activeUnits.arena3 == true
 
   local eventMask = 0
   if activeCount > 0 then eventMask = eventMask + DRIVER_EVENT_ACTIVE_BIT end
@@ -1236,7 +1239,6 @@ local function RegisterDriver()
   if focusDependent then eventMask = eventMask + DRIVER_EVENT_FOCUS_BIT end
   if petActive then eventMask = eventMask + DRIVER_EVENT_PET_BIT end
   if bossActive then eventMask = eventMask + DRIVER_EVENT_BOSS_BIT end
-  if arenaActive then eventMask = eventMask + DRIVER_EVENT_ARENA_BIT end
   if targetActive and EnableSpellRangeCheck then eventMask = eventMask + DRIVER_EVENT_TARGET_SPELL_BIT end
 
   if driverRegistered
@@ -1254,30 +1256,18 @@ local function RegisterDriver()
     if driverRegistered and driverUnitMask and driverUnitMask ~= 0 then
       UnregisterDriverUnitEvents(f)
       UnregisterDriverUnitEvents(secondaryUnitDriver)
-      UnregisterDriverUnitEvents(tertiaryUnitDriver)
     end
     if unitCount > 0 then
-      -- RegisterUnitEvent accepts at most UNIT_EVENT_FILTER_LIMIT (4) unit
-      -- tokens. With boss1-5 plus arena1-3 active the unit list can reach 11
-      -- tokens, so spread the spans over up to three driver frames.
       local firstLast = math.min(unitCount, UNIT_EVENT_FILTER_LIMIT)
       RegisterDriverUnitChunk(f, 1, firstLast)
       if unitCount > firstLast then
-        local secondLast = math.min(unitCount, firstLast + UNIT_EVENT_FILTER_LIMIT)
-        RegisterDriverUnitChunk(EnsureSecondaryUnitDriver(), firstLast + 1, secondLast)
-        if unitCount > secondLast then
-          RegisterDriverUnitChunk(EnsureTertiaryUnitDriver(), secondLast + 1, unitCount)
-        elseif tertiaryUnitDriver then
-          ClearDriverUnitSpan(tertiaryUnitDriver)
-        end
-      else
-        if secondaryUnitDriver then ClearDriverUnitSpan(secondaryUnitDriver) end
-        if tertiaryUnitDriver then ClearDriverUnitSpan(tertiaryUnitDriver) end
+        RegisterDriverUnitChunk(EnsureSecondaryUnitDriver(), firstLast + 1, unitCount)
+      elseif secondaryUnitDriver then
+        ClearDriverUnitSpan(secondaryUnitDriver)
       end
     else
       ClearDriverUnitSpan(f)
       ClearDriverUnitSpan(secondaryUnitDriver)
-      ClearDriverUnitSpan(tertiaryUnitDriver)
     end
   end
 
@@ -1315,10 +1305,6 @@ local function RegisterDriver()
     DriverMaskHas(oldEventMask, DRIVER_EVENT_BOSS_BIT)
   )
   SetDriverEventRegistered(
-    f, "ARENA_OPPONENT_UPDATE", arenaActive,
-    DriverMaskHas(oldEventMask, DRIVER_EVENT_ARENA_BIT)
-  )
-  SetDriverEventRegistered(
     f, "SPELL_RANGE_CHECK_UPDATE", targetActive and EnableSpellRangeCheck and true or false,
     DriverMaskHas(oldEventMask, DRIVER_EVENT_TARGET_SPELL_BIT)
   )
@@ -1336,10 +1322,6 @@ local function UnregisterDriver()
   if secondaryUnitDriver then
     secondaryUnitDriver:UnregisterAllEvents()
     ClearDriverUnitSpan(secondaryUnitDriver)
-  end
-  if tertiaryUnitDriver then
-    tertiaryUnitDriver:UnregisterAllEvents()
-    ClearDriverUnitSpan(tertiaryUnitDriver)
   end
   driverRegistered = false
   driverUnitMask = nil

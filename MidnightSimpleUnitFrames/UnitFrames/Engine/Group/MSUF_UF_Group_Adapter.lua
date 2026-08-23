@@ -776,8 +776,6 @@ local function ScanOneChild(child, kind)
 end
 
 function GF.ScanHeader(key, kind)
-  local header = GF.headers and GF.headers[key]
-  if not (header and header.GetChildren) then return false end
   local found = false
   local auras = MSUF.MSUF_Auras3
   local batchAuraTopology = auras
@@ -785,9 +783,20 @@ function GF.ScanHeader(key, kind)
     and type(auras._EndDirectIdentityEventTopologyBatch) == "function"
   if batchAuraTopology then auras._BeginDirectIdentityEventTopologyBatch() end
   if UF.BeginEventRegistrationBatch then UF.BeginEventRegistrationBatch() end
-  for i = 1, select("#", header:GetChildren()) do
-    found = ScanOneChild(select(i, header:GetChildren()), kind) or found
+
+  local function ScanPhysicalHeader(header)
+    if not (header and header.GetChildren) then return end
+    for i = 1, select("#", header:GetChildren()) do
+      found = ScanOneChild(select(i, header:GetChildren()), kind) or found
+    end
   end
+
+  if GF.ForEachHeader then
+    GF.ForEachHeader(key, ScanPhysicalHeader)
+  else
+    ScanPhysicalHeader(GF.headers and GF.headers[key])
+  end
+
   if batchAuraTopology then auras._EndDirectIdentityEventTopologyBatch() end
   if UF.EndEventRegistrationBatch then UF.EndEventRegistrationBatch() end
   return found

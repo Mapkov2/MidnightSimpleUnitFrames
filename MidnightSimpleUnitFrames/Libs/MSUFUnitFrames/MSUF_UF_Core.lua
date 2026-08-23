@@ -47,7 +47,6 @@ local HOST_VALUES = UF._hostValues or _G
 UF.unitOrder = UF.unitOrder or {
   "player", "target", "focus", "targettarget", "focustarget", "pet",
   "boss1", "boss2", "boss3", "boss4", "boss5",
-  "arena1", "arena2", "arena3",
 }
 
 UF.unitLookup = UF.unitLookup or {}
@@ -65,7 +64,6 @@ UF.configKeyUnits = UF.configKeyUnits or {
   focustarget = { "focustarget" },
   pet = { "pet" },
   boss = { "boss1", "boss2", "boss3", "boss4", "boss5" },
-  arena = { "arena1", "arena2", "arena3" },
 }
 UF.singleUnitLists = UF.singleUnitLists or {}
 
@@ -188,10 +186,6 @@ local BOSS_UNITS = {
   boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
 
-local ARENA_UNITS = {
-  arena1 = true, arena2 = true, arena3 = true,
-}
-
 UF.dependentUnitParents = UF.dependentUnitParents or {
   targettarget = "target",
   focustarget = "focus",
@@ -207,7 +201,6 @@ end
 
 function UF.ConfigKeyForUnit(unit)
   if BOSS_UNITS[unit] then return "boss" end
-  if ARENA_UNITS[unit] then return "arena" end
   if unit == "targetoftarget" or unit == "tot" then return "targettarget" end
   return unit
 end
@@ -751,9 +744,7 @@ local function FrameVisibleForEvent(frame)
   if visible == true then return true end
   if HOST_VALUES.MSUF_PreviewTestMode == true
     or HOST_VALUES.MSUF_BossTestMode == true
-    or HOST_VALUES.MSUF2_BossUnitframePreviewActive == true
-    or HOST_VALUES.MSUF_ArenaTestMode == true
-    or HOST_VALUES.MSUF2_ArenaUnitframePreviewActive == true then
+    or HOST_VALUES.MSUF2_BossUnitframePreviewActive == true then
     return true
   end
   if visible == false then return false end
@@ -769,8 +760,6 @@ local function IdentityUnitExists(frame, unit)
   if HOST_VALUES.MSUF_PreviewTestMode == true
     or HOST_VALUES.MSUF_BossTestMode == true
     or HOST_VALUES.MSUF2_BossUnitframePreviewActive == true
-    or HOST_VALUES.MSUF_ArenaTestMode == true
-    or HOST_VALUES.MSUF2_ArenaUnitframePreviewActive == true
     or HOST_VALUES.MSUF_UnitEditModeActive == true then
     return true
   end
@@ -912,9 +901,6 @@ local function OnShowIdentityFollowupEvent(unit)
   if unit == "boss1" or unit == "boss2" or unit == "boss3"
     or unit == "boss4" or unit == "boss5" then
     return "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
-  end
-  if unit == "arena1" or unit == "arena2" or unit == "arena3" then
-    return "ARENA_OPPONENT_UPDATE"
   end
   return nil
 end
@@ -2169,6 +2155,47 @@ local function QueueDependentIdentity(frame, event)
   end
 end
 
+local function FlushBossIdentity(frame)
+  if not frame then return end
+  frame._msufBossIdentityQueued = nil
+  local event = frame._msufBossIdentityEvent or "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
+  frame._msufBossIdentityEvent = nil
+  if UF.RunLeanIdentity then
+    UF.RunLeanIdentity(frame, event)
+  else
+    IdentityEventUpdate(frame, event)
+  end
+end
+
+local function QueueBossIdentity(frame, event)
+  if not frame then return end
+  local unit = frame.MSUFUnitKey
+  -- RegisterUnitWatch can expose a Boss frame just before the shared lifecycle
+  -- event. Preserve the existing same-frame GUID suppression before deferring;
+  -- otherwise the queued callback would repeat the complete OnShow identity
+  -- seed on the next frame.
+  if ConsumeOnShowIdentityFollowup(frame, event, unit) then return end
+  frame._msufBossIdentityEvent = event or "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
+  if frame._msufBossIdentityQueued == true then return end
+  frame._msufBossIdentityQueued = true
+
+  local callback = frame._msufBossIdentityCallback
+  if not callback then
+    callback = function() FlushBossIdentity(frame) end
+    frame._msufBossIdentityCallback = callback
+  end
+
+  local scheduleOnce = UF.GetService and UF.GetService("ScheduleOnce")
+    or HOST_VALUES.MSUF_ScheduleOnce
+  if type(scheduleOnce) == "function" then
+    scheduleOnce(callback, callback)
+  elseif _G.C_Timer and _G.C_Timer.After then
+    _G.C_Timer.After(0, callback)
+  else
+    callback()
+  end
+end
+
 local function FrameNeedsIdentityLifecycle(frame)
   local active = frame and frame._msufActiveElements
   if not active then return false end
@@ -2188,23 +2215,6 @@ local function IsBossUnit(unit)
     or unit == "boss4" or unit == "boss5"
 end
 
-local function IsArenaUnit(unit)
-  return unit == "arena1" or unit == "arena2" or unit == "arena3"
-end
-
-local function ArenaOpponentIdentityUpdate(frame, event, unit)
-  -- The non-unitless route hands through the event's own unit token. Stealth
-  -- openers flap seen/unseen many times per second at gate-open; without the
-  -- slot filter and the coalescer every flap paid a full identity reseed on
-  -- all three arena frames, which pegged the CPU when matches started.
-  local issecret = _G.issecretvalue
-  if type(unit) == "string" and (not issecret or issecret(unit) ~= true)
-    and IsArenaUnit(unit) and unit ~= frame.MSUFUnitKey then
-    return
-  end
-  QueueDependentIdentity(frame, event)
-end
-
 local function AddIdentityLifecycleHandlers(frame)
   if not FrameNeedsIdentityLifecycle(frame) then return end
   local unit = frame.MSUFUnitKey
@@ -2222,13 +2232,10 @@ local function AddIdentityLifecycleHandlers(frame)
     AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", QueueDependentIdentity, true)
     AddEventHandler(frame, "UNIT_TARGET", QueueDependentIdentity, false)
   elseif IsBossUnit(unit) then
-    AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", IdentityEventUpdate, true)
-  elseif IsArenaUnit(unit) then
-    -- Fires with (unitToken, updateReason) on seen/unseen/destroyed/cleared and
-    -- on every Solo Shuffle round rebind. Registered non-unitless so the route
-    -- forwards the payload token: the handler drops other slots' updates and
-    -- coalesces the burst instead of reseeding per event.
-    AddEventHandler(frame, "ARENA_OPPONENT_UPDATE", ArenaOpponentIdentityUpdate, false)
+    -- One Blizzard notification fans out to all five Boss frames. Merge repeat
+    -- notifications per frame and move the bounded identity fan-out out of the
+    -- synchronous encounter-reset tick; OnShow remains immediate above.
+    AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", QueueBossIdentity, true)
   end
 end
 

@@ -23,7 +23,7 @@ local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
 
 local UNIT_LABELS = {
-    player = "Player", target = "Target", focus = "Focus", boss = "Boss", arena = "Arena",
+    player = "Player", target = "Target", focus = "Focus", boss = "Boss",
 }
 
 local GROUP_LABELS = {

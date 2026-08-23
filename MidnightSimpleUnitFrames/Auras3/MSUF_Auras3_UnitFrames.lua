@@ -615,16 +615,13 @@ local NormalizeAuraSortMethod, AuraSortEnums, AuraSortSignature
 local MANAGED_UNITS = {
     player = true, target = true, focus = true,
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-    arena1 = true, arena2 = true, arena3 = true,
 }
 
 -- The menu exposes one Boss filter scope, while layout remains frame-local for
 -- boss1..boss5. Keep boss1 as the persisted token/blacklist rule owner so an
 -- older profile with absent or stale siblings cannot compile different filters.
--- Arena mirrors the same owner-collapse pattern onto arena1.
 local BOSS_FILTER_SCOPE_OWNER = {
     boss1 = "boss1", boss2 = "boss1", boss3 = "boss1", boss4 = "boss1", boss5 = "boss1",
-    arena1 = "arena1", arena2 = "arena1", arena3 = "arena1",
 }
 
 local UNIT_FLAG = {
@@ -636,9 +633,6 @@ local UNIT_FLAG = {
     boss3 = "showBoss",
     boss4 = "showBoss",
     boss5 = "showBoss",
-    arena1 = "showArena",
-    arena2 = "showArena",
-    arena3 = "showArena",
 }
 
 local DEFAULT_SHARED = {
@@ -1434,7 +1428,6 @@ end
 local function NormalizeRuntimeUnit(unit)
     unit = tostring(unit or "")
     if unit == "boss" then return "boss1" end
-    if unit == "arena" then return "arena1" end
     if MANAGED_UNITS[unit] then return unit end
     return nil
 end
@@ -5790,28 +5783,27 @@ function DS.Options(style)
     return DS.options
 end
 
--- Rounded frames are optional and loaded outside Auras3. Keep weak references
--- to the native overlay textures on their owning unit frame so a later rounded
--- enable/apply can discover them without walking AuraButtons. Preserve the
--- already-known texture owner as well: AddDispelTypeTexture makes the region's
--- parent relationship forbidden to addon code, so RoundedFrames must never
--- rediscover it through region:GetParent(). Registration is initialize/preview-
--- only; aura events never cross this bridge.
-local function RegisterRoundedDispelOverlayRegion(parentFrame, region, owner)
-    if not (parentFrame and region and owner) then return end
-    local key = IsGroupFrame(parentFrame) and "_msufGFDispelOverlays" or "_msufUFDispelOverlays"
+-- Live native regions must be prepared before AddDispelTypeTexture seals their
+-- layout. This one-shot bridge never retains the region: later rounded-setting
+-- changes recreate the native sensor instead of touching a forbidden object.
+local function PrepareRoundedDispelOverlayRegion(parentFrame, region, owner)
+    if not (parentFrame and region and owner) then return false end
+    local callback = _G.MSUF_RoundedUF_PrepareDispelOverlay
+    if type(callback) ~= "function" then return false end
+    return callback(parentFrame, region, owner) == true
+end
+
+-- The flat-color menu preview is entirely MSUF-owned, so it may stay in the
+-- normal mutable RoundedFrames registry and follow live setting changes.
+local function RegisterRoundedDispelOverlayPreviewRegion(parentFrame, region)
+    if not (parentFrame and region) then return end
+    local key = IsGroupFrame(parentFrame) and "_msufGFDispelOverlayPreviews" or "_msufUFDispelOverlayPreviews"
     local regions = parentFrame[key]
     if type(regions) ~= "table" then
         regions = setmetatable({}, { __mode = "k" })
         parentFrame[key] = regions
     end
     regions[region] = true
-    local owners = parentFrame._msufRoundedMaskOwners
-    if type(owners) ~= "table" then
-        owners = setmetatable({}, { __mode = "k" })
-        parentFrame._msufRoundedMaskOwners = owners
-    end
-    owners[region] = owner
     local callback = _G.MSUF_RoundedUF_OnDispelOverlayChanged
     if type(callback) == "function" then
         callback(parentFrame, region)
@@ -5908,8 +5900,8 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
         region:SetAlpha(1)
         button:SetAlpha(Clamp01(sensor.alpha, 0.35))
+        PrepareRoundedDispelOverlayRegion(parentFrame, region, button)
         button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
-        RegisterRoundedDispelOverlayRegion(parentFrame, region, button)
     elseif sensor.visual == "purge" then
         region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         region:SetAlpha(1)
@@ -5999,7 +5991,7 @@ A3._ApplyDispelOverlayPreview = function(frame)
     if not LayoutDispelSensorOverlay(region, host, sensor, DispelSensorTarget(frame, sensor)) then
         return A3._HideDispelOverlayPreview(frame)
     end
-    RegisterRoundedDispelOverlayRegion(frame, region, host)
+    RegisterRoundedDispelOverlayPreviewRegion(frame, region)
     A3.SetDispelColorTexture(region, A3.GetDispelColorPreviewType(), true, 1)
     region:SetAlpha(Clamp01(sensor.alpha, 0.35))
     region:Show()
@@ -7218,9 +7210,6 @@ A3._directIdentityRefreshUnits = A3._directIdentityRefreshUnits or {
     boss3 = true,
     boss4 = true,
     boss5 = true,
-    arena1 = true,
-    arena2 = true,
-    arena3 = true,
 }
 
 A3._directIdentityRefreshAllEvents = A3._directIdentityRefreshAllEvents or {
@@ -7233,7 +7222,6 @@ A3._directIdentityEventUnits = A3._directIdentityEventUnits or {
     PLAYER_TARGET_CHANGED = { "target" },
     PLAYER_FOCUS_CHANGED = { "focus" },
     INSTANCE_ENCOUNTER_ENGAGE_UNIT = { "boss1", "boss2", "boss3", "boss4", "boss5" },
-    ARENA_OPPONENT_UPDATE = { "arena1", "arena2", "arena3" },
 }
 
 A3._HasDirectIdentityRefreshContainers = function()
@@ -8789,10 +8777,6 @@ local function DirectIdentityBossUnit(unit)
         or unit == "boss4" or unit == "boss5"
 end
 
-local function DirectIdentityArenaUnit(unit)
-    return unit == "arena1" or unit == "arena2" or unit == "arena3"
-end
-
 local function SetDirectIdentityRefreshEvent(frame, event, enabled, unit)
     local desiredMode = enabled == true and (unit and ("unit:" .. unit) or "global") or nil
     local currentMode = directIdentityRefreshRegisteredEvents[event]
@@ -8818,7 +8802,6 @@ end
 local function SyncDirectIdentityRefreshEvents(frame)
     local byUnit = A3._directIdentityAuraContainers
     local hasAny, hasGroup, hasPlayer, hasTarget, hasFocus, hasBoss = false, false, false, false, false, false
-    local hasArena = false
     local hasGroupAssist = A3._HasGroupAuraAssistOwners()
     hasGroup = (A3._directIdentityGroupOwnerCount or 0) > 0
     if byUnit then
@@ -8834,8 +8817,6 @@ local function SyncDirectIdentityRefreshEvents(frame)
                         hasFocus = true
                     elseif DirectIdentityBossUnit(unit) then
                         hasBoss = true
-                    elseif DirectIdentityArenaUnit(unit) then
-                        hasArena = true
                     end
                 end
             else
@@ -8881,7 +8862,6 @@ local function SyncDirectIdentityRefreshEvents(frame)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_TARGET_CHANGED", hasTarget)
     SetDirectIdentityRefreshEvent(frame, "PLAYER_FOCUS_CHANGED", hasFocus)
     SetDirectIdentityRefreshEvent(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", hasBoss)
-    SetDirectIdentityRefreshEvent(frame, "ARENA_OPPONENT_UPDATE", hasArena)
     return true
 end
 
@@ -8948,9 +8928,6 @@ local function DirectIdentityRefreshEventsAlreadyCover(unit)
     end
     if DirectIdentityBossUnit(unit) then
         return directIdentityRefreshRegisteredEvents.INSTANCE_ENCOUNTER_ENGAGE_UNIT ~= nil
-    end
-    if DirectIdentityArenaUnit(unit) then
-        return directIdentityRefreshRegisteredEvents.ARENA_OPPONENT_UPDATE ~= nil
     end
     return true
 end
@@ -9112,26 +9089,18 @@ A3._EnsureDirectIdentityRefreshFrame = function()
             end
             local units = A3._directIdentityEventUnits[event]
             if not units then return end
-            if event == "ARENA_OPPONENT_UPDATE" then
-                -- Opponent updates flap in bursts at gate-open (stealth
-                -- openers flip seen/unseen many times per second) and a
-                -- synchronous UpdateAllAuras per event per unit re-walks
-                -- secret data three times per flap. Honor the event's own
-                -- unit token and drain through the deduped next-frame
-                -- coalescer instead.
-                local issecret = _G.issecretvalue
-                if type(unit) == "string" and (not issecret or issecret(unit) ~= true)
-                    and A3._directIdentityRefreshUnits[unit] == true then
-                    A3._ScheduleDirectIdentityEventRefresh(unit)
-                else
-                    for i = 1, #units do
-                        A3._ScheduleDirectIdentityEventRefresh(units[i])
-                    end
-                end
-                return
-            end
+            local deferBossBurst = event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
             for i = 1, #units do
-                A3._DirectIdentityRefreshUnit(units[i])
+                if deferBossBurst then
+                    -- Blizzard refreshes all boss tokens synchronously and can
+                    -- repeat the notification while a reset settles. Native
+                    -- AuraContainer reparses are the expensive follower here;
+                    -- merge the burst through the existing identity scheduler
+                    -- instead of running every Boss lane inside the event tick.
+                    A3._ScheduleDirectIdentityEventRefresh(units[i])
+                else
+                    A3._DirectIdentityRefreshUnit(units[i])
+                end
             end
         end)
         A3._directIdentityAuraFrame = frame
@@ -10327,16 +10296,12 @@ function A3._NotifyAuraColdpathPreview(reason, scope)
     return did
 end
 
-local function RuntimeFrame(runtimeUnit)
-    return (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
+A3._ApplyRuntimeUnit = function(runtimeUnit)
+    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_RUNTIME_UNIT") end
+    local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
         or (UF.GetFrame and UF.GetFrame(runtimeUnit))
         or (UF.frames and UF.frames[runtimeUnit])
         or _G["MSUF_" .. runtimeUnit]
-end
-
-A3._ApplyRuntimeUnit = function(runtimeUnit)
-    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_RUNTIME_UNIT") end
-    local frame = RuntimeFrame(runtimeUnit)
     if not frame then return false end
     if UF.ApplyElementToFrame then
         UF.ApplyElementToFrame(frame, "Auras", frame.MSUFSpec, nil)
@@ -10416,18 +10381,12 @@ A3._RequestUnitNow = function(unit)
         didWork = A3._ApplyRuntimeUnit("target") or didWork
         didWork = A3._ApplyRuntimeUnit("focus") or didWork
         for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
-        for i = 1, 3 do didWork = A3._ApplyRuntimeUnit("arena" .. i) or didWork end
         didWork = A3._RequestGroupKindNow(nil) or didWork
         return didWork
     end
     if unit == "boss" then
         local didWork = false
         for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
-        return didWork
-    end
-    if unit == "arena" then
-        local didWork = false
-        for i = 1, 3 do didWork = A3._ApplyRuntimeUnit("arena" .. i) or didWork end
         return didWork
     end
     if unit == "group" or unit == "groups" then return A3._RequestGroupKindNow(nil) end
@@ -10508,8 +10467,20 @@ function A3.RefreshAll()
     return true
 end
 
+-- Rounded masks attached to native Dispel display regions are immutable after
+-- Blizzard accepts them. A rounded setting change therefore advances the
+-- existing visual generation and recreates the affected native containers on
+-- this cold configuration path; aura events never call this function.
+function A3.RefreshRoundedDispelOverlayMasks()
+    if AuraRuntimeCombatBlocked() then
+        return A3._QueueDeferredAuraRuntime("shared", "AURAS3_ROUNDED_DISPEL_MASKS", true)
+    end
+    A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
+    return A3.RefreshAll()
+end
+
 A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
-    player = true, target = true, focus = true, boss = true, arena = true,
+    player = true, target = true, focus = true, boss = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
     group = true, groups = true,
@@ -10521,7 +10492,6 @@ A3._LooksLikeApplyScope = function(value)
     if value == "" then return false end
     if A3._requestApplyScopeKeys[value] then return true end
     return value:match("^boss%d+$") ~= nil
-        or value:match("^arena%d+$") ~= nil
         or value:match("^party%d+$") ~= nil
         or value:match("^raid%d+$") ~= nil
 end
@@ -10557,10 +10527,6 @@ function A3.RefreshUnit(unit)
         for i = 1, 5 do InvalidateUnitRuntimeConfig("boss" .. i) end
         return A3.RequestUnit("boss")
     end
-    if unit == "arena" then
-        for i = 1, 3 do InvalidateUnitRuntimeConfig("arena" .. i) end
-        return A3.RequestUnit("arena")
-    end
     local runtimeUnit = InvalidateUnitRuntimeConfig(unit)
     if runtimeUnit then return A3.RequestUnit(runtimeUnit) end
     A3.BumpRuntimeConfig()
@@ -10574,35 +10540,7 @@ function A3.ApplyFontsFromGlobal(scope, reason)
     if scope ~= nil then
         return A3.RequestScope(scope, reason or "AURAS3_FONT_VISUALS")
     end
-    -- FontRuntime has already refreshed the UnitFrame and GroupFrame text
-    -- elements before reaching this global follower. A second RefreshAll here
-    -- used to route every group frame through GF.RefreshVisuals -> UF.ApplySpec,
-    -- rebuilding element/status/event state for no structural change. Refresh
-    -- only the native aura owners whose copied fonts depend on those texts.
-    local visualReason = reason or "AURAS3_FONT_VISUALS"
-    local didWork = false
-    local function RefreshRuntimeUnit(runtimeUnit)
-        local frame = RuntimeFrame(runtimeUnit)
-        if frame then didWork = A3.RenderFrame(frame, visualReason) == true or didWork end
-    end
-
-    RefreshRuntimeUnit("player")
-    RefreshRuntimeUnit("target")
-    RefreshRuntimeUnit("focus")
-    for i = 1, 5 do RefreshRuntimeUnit("boss" .. i) end
-    for i = 1, 3 do RefreshRuntimeUnit("arena" .. i) end
-
-    local gf = A3._GroupAPI()
-    if gf and type(gf.ForEachFrame) == "function" then
-        didWork = gf.ForEachFrame(function(frame)
-            return A3.RenderFrame(frame, visualReason) == true
-        end, true) == true or didWork
-    end
-    A3._NotifyAuraColdpathPreview(visualReason, "shared")
-    if type(A3.RefreshEditPreview) == "function" then
-        didWork = A3.RefreshEditPreview() == true or didWork
-    end
-    return didWork
+    return A3.RefreshAll()
 end
 
 --- Narrow ClassPower bridge for secret player auras. AuraContainer retains

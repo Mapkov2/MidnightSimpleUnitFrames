@@ -5160,19 +5160,6 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "항상 표시됨"
 L["hidden on this character"] = "이 캐릭터에서 숨김"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "이 캐릭터가 시전할 수 없는 허용 목록 주문을 빈자리 없이 숨깁니다. 하나의 허용 목록으로 모든 캐릭터를 커버합니다. 마법사는 비상의 지성을, 도적은 독을 유지합니다. 주문 ID가 어느 직업의 것인지 알려주는 정보가 없으므로 물약 버프도 다른 직업 주문처럼 보입니다. 그런 항목은 아이템을 연결하거나 목록에서 ‘항상 표시’로 보호하세요. MSUF는 주문서나 특성이 실제로 바뀔 때만 다시 확인하며, 전투 중에는 결코 하지 않습니다."
-
---- Arena frames (dedicated arena1-3 unit frames)
-L["Arena"] = "투기장"
-L["Arena Castbar"] = "투기장 시전 바"
-L["Arena Frames"] = "투기장 프레임"
-L["Arena Layout"] = "투기장 배치"
-L["Arena Opponent"] = "투기장 상대"
-L["Arena castbar preview"] = "투기장 시전 바 미리보기"
-L["Arena frame layout"] = "투기장 프레임 배치"
-L["Arena spacing"] = "투기장 간격"
-L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "오라 설정은 플레이어, 대상, 주시 대상, 우두머리, 투기장 프레임에서만 사용할 수 있습니다."
-L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "시전 바 설정은 플레이어, 대상, 주시 대상, 우두머리, 투기장 프레임에서만 사용할 수 있습니다."
-L["MSUF Arena Frames"] = "MSUF 투기장 프레임"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end
