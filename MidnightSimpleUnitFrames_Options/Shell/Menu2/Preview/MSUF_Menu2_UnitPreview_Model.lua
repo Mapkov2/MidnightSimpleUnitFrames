@@ -171,7 +171,7 @@ end
 --- open, out of combat), never events or combat code, so it adds zero combat
 --- overhead. Every field falls back to the stylized UNIT_DATA mock when the
 --- unit or a value is unavailable (missing unit, loading, secret values).
-local function LiveUnitData(key)
+local function LiveUnitData(key, playerManaSourceActive)
     key = CanonKey(key)
     local unit = LIVE_UNIT_TOKENS[key]
     local UnitExists = _G.UnitExists
@@ -232,14 +232,18 @@ local function LiveUnitData(key)
         d.hpCur, d.hpMax = nil, nil
         d.hp = mock.hp or 0.72
     end
+    local powerType = playerManaSourceActive == true
+        and ((_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0) or nil
     local powerToken
-    if _G.UnitPowerType then
+    if powerType then
+        powerToken = "MANA"
+    elseif _G.UnitPowerType then
         local _, token = _G.UnitPowerType(unit)
         powerToken = LivePlain(token)
     end
     d.powerToken = powerToken or mock.powerToken or "MANA"
-    local powerCur = _G.UnitPower and LiveNumber(_G.UnitPower(unit))
-    local powerMax = _G.UnitPowerMax and LiveNumber(_G.UnitPowerMax(unit))
+    local powerCur = _G.UnitPower and LiveNumber(_G.UnitPower(unit, powerType))
+    local powerMax = _G.UnitPowerMax and LiveNumber(_G.UnitPowerMax(unit, powerType))
     if powerCur and powerMax and powerMax > 0 then
         if powerCur < 0 then powerCur = 0 elseif powerCur > powerMax then powerCur = powerMax end
         d.powerCur, d.powerMax = powerCur, powerMax

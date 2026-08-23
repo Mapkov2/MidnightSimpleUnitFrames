@@ -20,6 +20,17 @@ local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
 if type(ApplyService) ~= "table" then error("MSUF Menu2 ApplyService missing") end
 local Invoke = ApplyService.Invoke
 local CallGlobal = ApplyService.CallGlobal
+local CLASSPOWER_FULL_RUNTIME = { full = true, cdm = true }
+
+function M.ApplyPlayerPowerSource(reason)
+    reason = reason or "MSUF2_PLAYER_POWER_SOURCE"
+    CallGlobal("MSUF_ApplyModules")
+    CallGlobal("MSUF_ClassPower_Apply", CLASSPOWER_FULL_RUNTIME)
+    CallGlobal("MSUF_UFPreview_RequestRefresh", reason)
+    local preview = M._msuf2ClassPowerInlinePreview
+    if preview and type(preview.Refresh) == "function" then Invoke(preview.Refresh, preview) end
+    return true
+end
 
 -- Menu2 binding/apply layer.
 -- Owns DB accessors, pending apply coalescing, edit history snapshots, and fanout into the
@@ -507,8 +518,6 @@ local HISTORY_PAGE_RESET_FEATURES = {
     gameplay = "gameplay",
     modules = "modules",
 }
-local HISTORY_CLASSPOWER_RUNTIME = { full = true, cdm = true }
-local HISTORY_CLASSPOWER_FLAGS = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
 local COLOR_CLASSPOWER_RUNTIME = { colors = true, playerHP = true }
 local RequestHistoryAurasRuntime
 local RequestHistoryGroupRuntime
@@ -564,11 +573,14 @@ local function ApplyScopedFeatureRuntime(kind, reason, scope)
         return did
     end
     if kind == "classpower" then
+        -- A ClassPower-owned setting can also decide whether the module has any
+        -- work at all (notably Player Power's shared AUTO/MANA source).
+        CallGlobal("MSUF_ApplyModules")
         if ApplyService.RequestClassPower then
-            ApplyService.RequestClassPower(reason, HISTORY_CLASSPOWER_RUNTIME, HISTORY_CLASSPOWER_FLAGS)
+            ApplyService.RequestClassPower(reason, CLASSPOWER_FULL_RUNTIME)
             return true
         end
-        return CallGlobal("MSUF_ClassPower_Apply", { full = true, cdm = true })
+        return CallGlobal("MSUF_ClassPower_Apply", CLASSPOWER_FULL_RUNTIME)
     end
     if kind == "auras" then
         return RequestHistoryAurasRuntime and RequestHistoryAurasRuntime(reason, scope) or false
@@ -612,15 +624,24 @@ local function ApplyScopedFeatureRuntime(kind, reason, scope)
     return false
 end
 local function ApplyScopedHistoryRestore(reason, source)
+    -- Both visible Player Power selectors deliberately use this stable source.
+    -- Restore the owner and both previews, not just the page the user edited.
+    if source == "classpower:playerPowerSource" then
+        return M.ApplyPlayerPowerSource(reason)
+    end
     local unit = HistoryUnitFromSource(source)
     local applyReason = reason or "MSUF2_HISTORY_UNIT"
     if unit then
+        if unit == "player" and source == "page:reset:uf_player" then
+            ApplyScopedFeatureRuntime("classpower", applyReason)
+        end
         local opts = {
             history = false,
             preview = true,
             power = true,
             castbar = true,
             auras = true,
+            classpowerApplied = unit == "player" and source == "page:reset:uf_player",
         }
         return M.RequestUnitApply(unit, applyReason, opts) ~= false
     end
@@ -734,7 +755,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     end
     RequestHistoryAurasRuntime(reason or "MSUF2_HISTORY_AURAS")
     if ApplyService.RequestClassPower then
-        ApplyService.RequestClassPower("MSUF2_HISTORY_CLASSPOWER", { full = true, cdm = true }, {
+        ApplyService.RequestClassPower("MSUF2_HISTORY_CLASSPOWER", CLASSPOWER_FULL_RUNTIME, {
             preview = false,
             applyAll = false,
             classpower = true,
@@ -1085,6 +1106,9 @@ local function WidgetHistoryLabel(ctx, widget, fallback)
     return fallback or tostring((ctx and ctx.key) or "MSUF2 option")
 end
 local function WidgetHistorySource(ctx, widget, suffix)
+    local explicit = widget and widget._msuf2CommandAction
+        and widget._msuf2CommandAction.historySource
+    if type(explicit) == "string" and explicit ~= "" then return explicit end
     local key = (ctx and ctx.key) or "page"
     local kind = widget and (widget._msuf2ControlKind or widget.GetObjectType and widget:GetObjectType()) or "control"
     local tail = tostring(key) .. ":" .. tostring(kind) .. ":" .. tostring(suffix or WidgetHistoryLabel(ctx, widget))
@@ -1498,6 +1522,14 @@ local function ResetMiscPage(db, defaults)
 end
 local function ResetClassPowerPage(db, defaults)
     ResetRootFiltered(db, defaults, "bars", IsClassPowerBarsKey)
+    -- Player Power is exposed on both the Player Unit Frame and Class Resources
+    -- pages, but it remains a Player setting. Reset only this shared key here so
+    -- a Class Resources reset neither misses its visible control nor replaces
+    -- unrelated Player-frame configuration.
+    db.player = type(db.player) == "table" and db.player or {}
+    local defaultPlayer = type(defaults) == "table" and type(defaults.player) == "table"
+        and defaults.player or {}
+    db.player.playerPowerSource = defaultPlayer.playerPowerSource
 end
 local function ResetGameplayPage(db, defaults)
     ReplaceRootTable(db, defaults, "gameplay")
@@ -1611,8 +1643,14 @@ end
 local function ApplyAfterPageReset(pageKey, info)
     local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
     if info and info.kind == "unit" and info.unit then
+        if info.unit == "player" then
+            ApplyScopedFeatureRuntime("classpower", reason)
+        end
         if M.RequestUnitApply then
-            M.RequestUnitApply(info.unit, reason, { history = false, preview = true, power = true, castbar = true, auras = true })
+            M.RequestUnitApply(info.unit, reason, {
+                history = false, preview = true, power = true, castbar = true, auras = true,
+                classpowerApplied = info.unit == "player",
+            })
         end
         FinishPageResetApply(pageKey)
         return
@@ -1681,13 +1719,6 @@ local function ApplyAfterPageReset(pageKey, info)
                 end
                 if type(gf.RequestAuraRefresh) == "function" then Invoke(gf.RequestAuraRefresh) end
             end
-        end
-    end
-    if info and info.kind == "classpower" then
-        if ApplyService.RequestClassPower then
-            ApplyService.RequestClassPower(reason or "MSUF2_RESET_CLASSPOWER", { full = true, cdm = true }, { preview = true, applyAll = false, classpower = true })
-        else
-            CallGlobal("MSUF_ClassPower_Apply", { full = true, cdm = true })
         end
     end
     if info and info.kind == "modules" then CallGlobal("MSUF_ApplyModules") end
@@ -1950,6 +1981,7 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
         actionInputArg = opts.actionInputArg,
         actionFixedArgs = opts.actionFixedArgs,
         navigationKey = opts.navigationKey,
+        historySource = opts.historySource,
         assistantDisposition = opts.assistantDisposition,
         assistantDispositionReason = opts.assistantDispositionReason,
         assistantSettingKeys = opts.assistantSettingKeys,

@@ -328,14 +328,14 @@ local function CopyPreviewAnimationData(box, data, hpFrac, powerFrac)
     copy.powerCur = nil
     return copy
 end
-local function ResolvePreviewPowerColor(renderState, data, power)
+local function ResolvePreviewPowerColor(renderState, data, power, powerToken)
     local mode = power and power.mode
     if mode == "dark" or mode == "unified" or mode == "static" then
         return power.r or 0.1, power.g or 0.35, power.b or 0.95
     elseif mode == "class" then
         return renderState.ClassColor(data.class)
     end
-    return renderState.PowerColor(data.powerToken)
+    return renderState.PowerColor(powerToken)
 end
 
 local function ResolvePreviewHealthTextColor(renderState, runtimeText, conf, general, data, fr, fg, fb)
@@ -1583,7 +1583,11 @@ function Preview.Refresh(box, reason)
     end
     -- Live snapshot first so the preview mirrors the real frame's current
     -- state (exact name/class/HP/power); stylized mock only as fallback.
-    local data = (D.LiveUnitData and D.LiveUnitData(key)) or UNIT_DATA[key] or UNIT_DATA.player or {}
+    box._playerManaSourcePreviewActive = key == "player"
+        and PreviewHelpers.PlayerManaSourceActive
+        and PreviewHelpers.PlayerManaSourceActive(conf) or false
+    local data = (D.LiveUnitData and D.LiveUnitData(key, box._playerManaSourcePreviewActive))
+        or UNIT_DATA[key] or UNIT_DATA.player or {}
     local runtimeSpec = R.RuntimeSpecForPreviewKey(key)
     local runtimePower = runtimeSpec and runtimeSpec.power
     local runtimeStatus = runtimeSpec and runtimeSpec.status
@@ -1756,6 +1760,7 @@ function Preview.Refresh(box, reason)
         data = CopyPreviewAnimationData(box, data, animHp, powerFrac)
     end
     data = TextureLayerPreviewData(conf, key, data)
+    local displayPowerToken = box._playerManaSourcePreviewActive and "MANA" or data.powerToken
     local cpH = classPowerOn and (tonumber(bars.classPowerHeight) or 4) or 0
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
     local classPowerSegCount = PreviewClassPowerSegmentCount(classPowerPreviewSpec, 10)
@@ -1772,6 +1777,7 @@ function Preview.Refresh(box, reason)
     box._runtimePowerEbonMight = key == "player"
         and classPowerOn
         and type(box._runtimeClassPowerSecondarySpec) == "table"
+        and not box._playerManaSourcePreviewActive
         and bars.showEbonMight ~= false
         and classPowerPreviewSpec and classPowerPreviewSpec.key == "evoker_augmentation_ebon" or false
     box._runtimeDetachedPowerSyncClass = key == "player" and ((runtimePower and runtimePower.detachedSyncClass == true) or (runtimePower == nil and conf.detachedPowerBarSyncClassPower ~= false)) or false
@@ -2321,7 +2327,7 @@ function Preview.Refresh(box, reason)
             mock.powerBG:SetPoint("TOPRIGHT", mock, "BOTTOMRIGHT", 0, -max(1, S(1)))
         end
         mock.powerBG:SetHeight(powerH)
-        local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower)
+        local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower, displayPowerToken)
         local pbr, pbg, pbb, pba
         local powerBg = runtimePower and runtimePower.background
         if powerBg then
@@ -2345,7 +2351,7 @@ function Preview.Refresh(box, reason)
             "_msufPreviewPowerGradients")
     end
     local fr, fg, fb = R.FontColor()
-    local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower)
+    local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower, displayPowerToken)
     if classPowerOn then
         mock.classPower:Show()
         local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
@@ -2816,7 +2822,7 @@ function Preview.Refresh(box, reason)
         SetPreviewTextColor(mock.hpText, RuntimeHealthPhysicalSlotValue(runtimeText, "Right", "directHealth", "Color"), box._fontPreviewTextAlpha)
     end
     if (runtimeText and runtimeText.powerColorByType == true) or (not runtimeText and g.colorPowerTextByType == true) then
-        local prt, pgt, pbt = R.PowerColor(data.powerToken)
+        local prt, pgt, pbt = R.PowerColor(displayPowerToken)
         SetTextColorSet(prt, pgt, pbt, box._fontPreviewTextAlpha, mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct)
     else
         SetTextColorSet(fr, fg, fb, box._fontPreviewTextAlpha, mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct)

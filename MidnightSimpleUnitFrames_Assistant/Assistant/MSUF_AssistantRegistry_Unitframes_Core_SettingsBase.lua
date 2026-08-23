@@ -56,7 +56,12 @@ function A.UnitframesRegistry.BuildSettingBaseContext(ctx)
             alpha = opts.alpha,
             castbar = opts.castbar,
         })
-        if opts.refresh then CallGlobal(opts.refresh) end
+        local refresh = opts.refresh
+        if type(refresh) == "table" then
+            for i = 1, #refresh do CallGlobal(refresh[i]) end
+        elseif refresh then
+            CallGlobal(refresh)
+        end
     end
 
     local BuildSettingBaseUnitContext = A.UnitframesRegistry.BuildSettingBaseUnitContext

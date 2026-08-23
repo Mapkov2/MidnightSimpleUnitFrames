@@ -45,6 +45,8 @@ builders.ALT_MANA = function(E)
     end
 
     local function NeedsAltManaBar()
+        --- The Player surface already represents Mana -> no duplicate alt bar.
+        if _G.MSUF_PlayerPowerManaOverrideActive then return false end
         if _G.MSUF_EleMaelstromActive then return false end
         if _G.MSUF_AugEvokerActive then return true end
         if _G.MSUF_ShadowManaActive then return false end

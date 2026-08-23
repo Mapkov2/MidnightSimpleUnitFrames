@@ -29,6 +29,7 @@ local CPPreview = M.ClassPowerPreview or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local PreviewCore = MSUF.UFPreviewCore or {}
 local Helpers = M.PreviewHelpers or {}
+local PlayerManaSourceActive = Helpers.PlayerManaSourceActive or M.Fallbacks.False
 local ZoomPan = Preview.ZoomPan or {}
 Preview.ZoomPan = ZoomPan
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
@@ -325,9 +326,10 @@ local function ClassColor(dr, dg, db, spec)
     if c then return c.r, c.g, c.b end
     return dr or 0.95, dg or 0.82, db or 0.10
 end
-local function PowerColor()
+local function PowerColor(player)
     local pbc = _G.PowerBarColor
-    local c = pbc and (pbc.ENERGY or pbc.MANA)
+    local explicitMana = PlayerManaSourceActive(player)
+    local c = pbc and ((explicitMana and pbc.MANA) or pbc.ENERGY or pbc.MANA)
     if c then return c.r or c[1] or 1, c.g or c[2] or 0.82, c.b or c[3] or 0.10 end
     return 1.00, 0.86, 0.12
 end
@@ -1254,8 +1256,10 @@ end
 --- True while the Player Power bar renders Ebon Might instead of Mana. Ordinary
 --- Power visibility still decides whether that bar exists at all, exactly as it
 --- does at runtime.
-local function PowerShowsEbonMight(bars, spec)
-    return IsAugCompositePreviewSpec(spec) and bars.showEbonMight ~= false
+local function PowerShowsEbonMight(bars, player, spec)
+    return IsAugCompositePreviewSpec(spec)
+        and not PlayerManaSourceActive(player)
+        and bars.showEbonMight ~= false
 end
 
 local function ClassPowerPreviewState(bars, spec)
@@ -1608,13 +1612,13 @@ local function RenderDetachedPower(preview, bars, player, classFrame, spec)
     end
     -- Augmentation: this bar renders Ebon Might's remaining duration instead of
     -- Mana. Geometry, media and outline stay the ordinary Player Power settings.
-    local ebonSpec = PowerShowsEbonMight(bars, spec) and spec.secondaryTimer or nil
+    local ebonSpec = PowerShowsEbonMight(bars, player, spec) and spec.secondaryTimer or nil
     if type(ebonSpec) ~= "table" then ebonSpec = nil end
     local width, shape = DetachedPowerWidth(preview, bars, player, classFrame)
     local shapeInfo = POWER_SHAPES[shape]
     local height = shape == "ORB" and width or Clamp(player.detachedPowerBarHeight, 6, 2, 80)
     local x, y = tonumber(player.detachedPowerBarOffsetX) or 0, tonumber(player.detachedPowerBarOffsetY) or -4
-    local pr, pg, pb = PowerColor()
+    local pr, pg, pb = PowerColor(player)
     -- The detached bar follows the normal power-texture precedence (per-unit
     -- Player value -> shared bars value -> global bar texture); there is no
     -- separate Class Resources texture anymore (see UF config).
@@ -1962,7 +1966,7 @@ end
 local function PaintPlayerReference(preview, spec, bars, playerDB)
     local player = preview.playerRef
     local parent = PreviewParent(preview)
-    local pr, pg, pb = PowerColor()
+    local pr, pg, pb = PowerColor(playerDB)
     local hr, hg, hb = ClassColor(0.20, 0.78, 0.26, spec)
     player:SetSize(preview.playerW, preview.playerH)
     player:ClearAllPoints()

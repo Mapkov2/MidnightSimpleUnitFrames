@@ -72,14 +72,15 @@ local SafeNumber = Secrets.SafeNumber or tonumber
 local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
 local SECRET_NATIVE_CLASS_COLOR = 2
 
--- Elemental Maelstrom and Shadow Insanity move to MSUF's Class Resource row.
--- While that row is active, the Player power surface deliberately represents
--- the paired Mana resource instead of UnitPowerType("player"). Keep this one
+-- An explicit Player-source choice and the existing Elemental/Shadow class-row
+-- hand-offs can all make the Player surface represent Mana instead of
+-- UnitPowerType("player"). Keep this one
 -- allocation-free identity resolver shared by the bar, text values, percent
 -- formatting and color paths so they cannot drift apart again.
 local function ResolveDisplayedPowerIdentity(unit, powerType, powerToken)
   if unit == "player"
-    and (_G.MSUF_EleMaelstromActive == true or _G.MSUF_ShadowManaActive == true)
+    and (_G.MSUF_PlayerPowerManaOverrideActive == true
+      or _G.MSUF_EleMaelstromActive == true or _G.MSUF_ShadowManaActive == true)
   then
     return POWER_TYPE_MANA, "MANA", true
   end

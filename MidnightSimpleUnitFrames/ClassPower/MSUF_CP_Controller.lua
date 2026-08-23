@@ -142,15 +142,6 @@ local function CP_ConfigClassPowerEnabled()
     return not b or b.showClassPower ~= false
 end
 
-local function CP_ConfigAltManaEnabled()
-    local b = _cpDB.bars
-    if not b then
-        local db = MSUF_DB
-        b = db and db.bars
-    end
-    return b and b.showAltMana == true or false
-end
-
 local function CP_ConfigPlayerHPBarEnabled()
     local b = _cpDB.bars
     if not b then
@@ -160,8 +151,33 @@ local function CP_ConfigPlayerHPBarEnabled()
     return b and b.playerHPBarEnabled == true or false
 end
 
-local function CP_ConfigAnyFeatureEnabled()
-    return CP_ConfigClassPowerEnabled() or CP_ConfigAltManaEnabled() or CP_ConfigPlayerHPBarEnabled()
+local function CP_ConfigPlayerManaOverrideEnabled(inVehicle)
+    local db = MSUF_DB
+    local player = db and db.player
+    if not (player and player.playerPowerSource == "MANA") then
+        return false
+    end
+    -- Keep the owner and UNIT_EXITED_VEHICLE lifecycle alive while vehicle
+    -- power masks the player's own pools. The visible override still stays off.
+    if inVehicle == nil then
+        inVehicle = (_G.UnitHasVehicleUI and _G.UnitHasVehicleUI("player")) or false
+    end
+    if inVehicle then return true end
+    -- Profiles can be shared across characters. Keep the ClassPower owner cold
+    -- when the current class has no Mana pool, while retaining the preference
+    -- for the next character that does. The API is absent on older clients.
+    if not _G.UnitHasPowerType then return true end
+    local manaType = (_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0
+    local hasMana = _G.UnitHasPowerType("player", manaType)
+    return NotSecret(hasMana) and hasMana == true or false
+end
+
+local function CP_ConfigAnyFeatureEnabled(playerManaEnabled)
+    local db = MSUF_DB
+    local b = db and db.bars
+    return not b or b.showClassPower ~= false or b.showAltMana == true
+        or b.playerHPBarEnabled == true or playerManaEnabled == true
+        or (playerManaEnabled == nil and CP_ConfigPlayerManaOverrideEnabled())
 end
 
 --- Spec API (12.0: C_SpecializationInfo preferred, fallback to global)
@@ -169,7 +185,7 @@ local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
     or GetSpecialization
 
 --- Player class (resolved once, never changes)
-local _, PLAYER_CLASS = UnitClass("player")
+local PLAYER_CLASS = select(2, UnitClass("player"))
 
 --- Phase 1 CP split: shared constants / profiles now live in ClassPower/*.lua
 --- Keeps the core chunk smaller and reduces WoW's top-level local pressure.
@@ -209,6 +225,10 @@ local function CP_CallBuilder(builder, env)
 end
 
 local function CP_Noop() end
+local function RefreshPlayerPowerBar()
+    local refresh = _G.MSUF_RefreshPlayerPowerBar
+    if refresh then refresh() end
+end
 --- DH Vengeance: Soul Fragments via C_Spell.GetSpellCastCount (MCR-sourced)
 
 --- Whirlwind Tracker (Sensei pattern - own event frame, event-driven render)
@@ -619,41 +639,8 @@ end
 
 --- Stagger detection (Brewmaster Monk only)
 
---- AltMana: helper declarations now bind through ClassPower/MSUF_CP_AltMana.lua
-local function NeedsAltManaBar()
-    --- Ele Shaman: when Maelstrom is in class power, main bar shows Mana -> no alt needed
-    if _G.MSUF_EleMaelstromActive then return false end
-    --- Aug Evoker: the composite replaces the ordinary Power surface, so an
-    --- explicitly enabled AltMana bar remains the optional Mana display.
-    if _G.MSUF_AugEvokerActive then return true end
-    --- Shadow Priest: main bar shows Mana -> no AltMana needed
-    if _G.MSUF_ShadowManaActive then return false end
-    local pType = UnitPowerType("player")
-    --- pType == 0 = Mana primary -> no alt bar needed
-    if NotSecret(pType) then
-        if pType == nil or pType == PT.Mana then return false end
-    end
-    --- Must actually have a mana pool (Warriors, Rogues, DKs etc. have 0 max mana)
-    local maxMana = UnitPowerMax("player", PT.Mana)
-    if NotSecret(maxMana) and maxMana ~= nil and maxMana <= 0 then
-        return false
-    end
-    --- Non-secret primary + has mana pool -> check class/spec heuristic
-    if not NotSecret(pType) then
-        local SPECS_NEED_ALT = {
-            PRIEST  = { [3] = true },           --- Shadow
-            SHAMAN  = { [1] = true, [2] = true }, --- Ele, Enh
-            DRUID   = { [1] = true, [2] = true, [3] = true }, --- Balance, Feral, Guardian
-            PALADIN = { [3] = true },           --- Ret
-            MONK    = { [3] = true },           --- WW
-        }
-        local specs = SPECS_NEED_ALT[PLAYER_CLASS]
-        if not specs then return false end
-        local si = GetSpec and GetSpec()
-        return si and specs[si] or false
-    end
-    return true
-end
+--- The TOC-loaded AltMana builder replaces this before any consumer runs.
+local NeedsAltManaBar = CP_Noop
 
 --- Color resolution (uses MSUF's PowerBarColor override system)
 local _cachedColorR, _cachedColorG, _cachedColorB = 1, 1, 1
@@ -1944,7 +1931,8 @@ local function CP_ComputeStructuralSignature()
         newRenderMode = CPK.MODE.NONE
     end
     local newVehicle = (cpEnabled and UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
-    local wantAugComposite = cpEnabled and newPowerType == PT.Essence
+    local wantAugComposite = _G.MSUF_PlayerPowerManaOverrideActive ~= true
+        and cpEnabled and newPowerType == PT.Essence
         and PLAYER_CLASS == "EVOKER"
         and GetSpec and GetSpec() == CPK.SPEC.EVOKER_AUG
         and b.showEbonMight ~= false
@@ -2162,25 +2150,32 @@ local function FullRefresh()
         end)
     end
 
-    --- Elemental: only move Player Power to Mana while Maelstrom actually owns
-    --- the Class Resource row. If that opt-in row is disabled (or a vehicle
-    --- replaces it), keep the primary Maelstrom resource visible on Player.
+    --- Player Power source override. Missing/AUTO preserves the exact existing
+    --- profile behavior below (Elemental/Shadow row ownership and Aug Ebon
+    --- Might). MANA is explicit, applies only to a real player Mana pool, and
+    --- yields to vehicle power until the structural exit event fires.
+    local inVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
+    local playerManaEnabled = CP_ConfigPlayerManaOverrideEnabled(inVehicle)
+    local playerManaOverride = playerManaEnabled and not inVehicle or false
+    local wasDisplayMana = _G.MSUF_PlayerPowerManaOverrideActive == true
+        or _G.MSUF_EleMaelstromActive == true or _G.MSUF_ShadowManaActive == true
+
+    --- Elemental: AUTO keeps the current ownership contract. When Maelstrom
+    --- owns MSUF's Class Resource row, the ordinary Player surface shows Mana.
     local isEleMaelstrom = (cpEnabled and PLAYER_CLASS == "SHAMAN"
         and powerType == PT.Maelstrom and renderMode == CPK.MODE.CONTINUOUS) or false
-    local eleMaelChanged = (isEleMaelstrom ~= (_G.MSUF_EleMaelstromActive == true))
+    local isShadowMana = (cpEnabled and PLAYER_CLASS == "PRIEST"
+        and powerType == PT.Insanity and renderMode == CPK.MODE.CONTINUOUS) or false
+    local displayManaChanged = wasDisplayMana
+        ~= (playerManaOverride or isEleMaelstrom or isShadowMana)
     ExportPublic("MSUF_EleMaelstromActive", isEleMaelstrom)
-    --- Force player power bar refresh so it immediately switches Mana ↔ Maelstrom
-    if eleMaelChanged then
-        if _G.MSUF_RefreshPlayerPowerBar then
-            _G.MSUF_RefreshPlayerPowerBar()
-        end
-    end
-
+    ExportPublic("MSUF_ShadowManaActive", isShadowMana)
     --- Augmentation uses a two-resource model: segmented Essence remains active
     --- while Ebon Might occupies a native companion row. The
     --- hidden Player Power bar carries their combined geometry; optional Mana
     --- remains available through AltMana.
-    local wantsAugComposite = (cpEnabled and powerType == PT.Essence
+    local wantsAugComposite = (not playerManaOverride
+        and cpEnabled and powerType == PT.Essence
         and PLAYER_CLASS == "EVOKER"
         and GetSpec and GetSpec() == CPK.SPEC.EVOKER_AUG
         and b.showEbonMight ~= false) or false
@@ -2199,19 +2194,16 @@ local function FullRefresh()
     if CP.augLifecycleRetryPending == true then
         --- A second structural change can return to the already-published side
         --- before regen (vehicle enter -> exit, or spec/settings reversal).
-        --- Cancel the pending hand-off without rebuilding that stable surface.
-        if CP.augLifecycleTarget ~= nil
-            and CP.augLifecycleTarget ~= wantsAugComposite
-            and wasAugComposite == wantsAugComposite
-        then
-            CP.augLifecycleRetryPending = false
-            CP.augLifecycleTarget = nil
-            if CP_RefreshEventBindings then CP_RefreshEventBindings() end
-            return
-        end
+        --- Clear the obsolete hand-off and finish the ordinary refresh: vehicle,
+        --- class-resource and event state may still have changed underneath it.
         CP.augLifecycleRetryPending = false
         CP.augLifecycleTarget = nil
     end
+
+    -- Publish only after any protected Aug/Ebon hand-off can happen. During a
+    -- combat-deferred transition the old flag must continue to describe the
+    -- surface that is actually still mounted.
+    ExportPublic("MSUF_PlayerPowerManaOverrideActive", playerManaOverride)
 
     --- Publish the intent before the Power element re-applies: it reads the
     --- public flag to decide whether this bar renders Ebon Might or ordinary
@@ -2230,9 +2222,7 @@ local function FullRefresh()
         if augChanged then
             CP.augCompositeActive = true
             ExportPublic("MSUF_AugEvokerActive", true)
-            if _G.MSUF_RefreshPlayerPowerBar then
-                _G.MSUF_RefreshPlayerPowerBar()
-            end
+            RefreshPlayerPowerBar()
         end
         CP.SetEbonSensorActive(true)
         if CP.ebonSensor == nil then
@@ -2241,9 +2231,7 @@ local function FullRefresh()
             --- an empty one behind; the event driver retries after regen.
             CP.augCompositeActive = false
             ExportPublic("MSUF_AugEvokerActive", false)
-            if _G.MSUF_RefreshPlayerPowerBar then
-                _G.MSUF_RefreshPlayerPowerBar()
-            end
+            RefreshPlayerPowerBar()
         end
     else
         --- Exit order is state -> sensor -> Power, matching CP.DisableNow: the
@@ -2254,22 +2242,11 @@ local function FullRefresh()
             ExportPublic("MSUF_AugEvokerActive", false)
         end
         CP.SetEbonSensorActive(false)
-        if augChanged and _G.MSUF_RefreshPlayerPowerBar then
-            _G.MSUF_RefreshPlayerPowerBar()
-        end
+        if augChanged then RefreshPlayerPowerBar() end
     end
 
-    --- Shadow Priest: when showShadowMana is ON, main power bar shows Mana
-    --- instead of Insanity. Insanity moves to CP class resource (CONTINUOUS).
-    local isShadowMana = (cpEnabled and PLAYER_CLASS == "PRIEST"
-        and powerType == PT.Insanity and renderMode == CPK.MODE.CONTINUOUS) or false
-    local shadowChanged = (isShadowMana ~= (_G.MSUF_ShadowManaActive == true))
-    ExportPublic("MSUF_ShadowManaActive", isShadowMana)
-    if shadowChanged then
-        if _G.MSUF_RefreshPlayerPowerBar then
-            _G.MSUF_RefreshPlayerPowerBar()
-        end
-    end
+    --- Aug entry/exit already reapplied the same Player surface.
+    if displayManaChanged and not augChanged then RefreshPlayerPowerBar() end
 
     if WW.SetActive then
         WW.SetActive(cpEnabled and powerType == "WHIRLWIND" and renderMode ~= CPK.MODE.NONE)
@@ -2449,9 +2426,7 @@ local function FullRefresh()
     if refreshAugPowerAfterClassLayout then
         CP_ClearAugCompositeState()
         CP.SetEbonSensorActive(false)
-        if _G.MSUF_RefreshPlayerPowerBar then
-            _G.MSUF_RefreshPlayerPowerBar()
-        end
+        RefreshPlayerPowerBar()
     end
 
     --- --- AltMana ---
@@ -2475,8 +2450,9 @@ local function FullRefresh()
 
     CP.structuralFlags, CP.structuralPowerType, CP.structuralRenderMode = CP_ComputeStructuralSignature()
     CP_RefreshEventBindings()
-    CP_SetStructuralEventsBound(CP_ConfigAnyFeatureEnabled())
-    if CP.SyncControllerEvents then CP.SyncControllerEvents(CP_ConfigAnyFeatureEnabled()) end
+    local anyFeatureEnabled = CP_ConfigAnyFeatureEnabled(playerManaEnabled)
+    CP_SetStructuralEventsBound(anyFeatureEnabled)
+    if CP.SyncControllerEvents then CP.SyncControllerEvents(anyFeatureEnabled) end
     if type(_G.MSUF_BAL_RefreshRuntime) == "function" then
         _G.MSUF_BAL_RefreshRuntime()
     end
@@ -3442,8 +3418,10 @@ function CP.DisableNow()
     local augWasActive = CP.augCompositeActive == true or _G.MSUF_AugEvokerActive == true
     local displayPowerWasOverridden = _G.MSUF_EleMaelstromActive == true
         or _G.MSUF_ShadowManaActive == true
+        or _G.MSUF_PlayerPowerManaOverrideActive == true
     ExportPublic("MSUF_EleMaelstromActive", false)
     ExportPublic("MSUF_ShadowManaActive", false)
+    ExportPublic("MSUF_PlayerPowerManaOverrideActive", false)
 
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(false)
@@ -3454,9 +3432,7 @@ function CP.DisableNow()
     if AM.container then AM.container:Hide() end
     if PHP.container then PHP.container:Hide() end
     CP.visible, AM.visible, PHP.visible = false, false, false
-    if (augWasActive or displayPowerWasOverridden) and _G.MSUF_RefreshPlayerPowerBar then
-        _G.MSUF_RefreshPlayerPowerBar()
-    end
+    if augWasActive or displayPowerWasOverridden then RefreshPlayerPowerBar() end
 end
 
 --- Phase 4: Module Registration
@@ -3465,12 +3441,7 @@ do
         _G.MSUF_RegisterModule("ClassPower", {
             order = 30,
             IsEnabled = function()
-                if not MSUF_DB then return true end
-                local b = MSUF_DB.bars
-                return not b
-                    or b.showClassPower ~= false
-                    or b.showAltMana == true
-                    or b.playerHPBarEnabled == true
+                return CP_ConfigAnyFeatureEnabled()
             end,
             Init = function()
                 EnsureDefaults()
@@ -3483,7 +3454,6 @@ do
                 CP.augLifecycleRetryPending = false
                 CP.augLifecycleTarget = nil
                 CP.SyncControllerEvents(true)
-                _CP_RefreshConfig()
                 FullRefresh()
             end,
             Disable = function()
@@ -3501,7 +3471,6 @@ do
             RefreshSettings = function(_, source)
                 _cachedColorToken = nil
                 _cachedBgColorToken = nil
-                _CP_RefreshConfig()
                 FullRefresh()
             end,
             Shutdown = function()

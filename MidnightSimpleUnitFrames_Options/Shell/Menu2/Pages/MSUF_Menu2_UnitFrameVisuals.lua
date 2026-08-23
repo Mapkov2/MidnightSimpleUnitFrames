@@ -31,6 +31,8 @@ local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "A
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
 local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
+local PLAYER_POWER_SOURCE_VALUES = M.PlayerPowerSourceValues
+local NormalizePlayerPowerSource = M.NormalizePlayerPowerSource
 -- Portrait placement value lists. Kept in one table so the page stays well clear
 -- of the Lua 200-upvalue ceiling that already bites the Auras page.
 local PORTRAIT_PLACEMENT = {
@@ -47,13 +49,14 @@ local PORTRAIT_SIZE_MODES = VT("UNIFORM", "Uniform", "SEPARATE", "Width & height
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
--- Power Bar section card geometry. BuildPower and PowerSectionHeight must stay
--- in sync, so both read this instead of repeating the offsets. The detached card
--- follows the two 220pt cards on the first row (-38 - 220 - 26).
-local POWER_DETACHED_CARD_TOP = -284
+-- Power Bar section card geometry. Player gets one extra resource-source row;
+-- BuildPower and PowerSectionHeight share these helpers so the detached card
+-- always follows the first row without overlap.
+local function PowerMainCardHeight(unit) return unit == "player" and 284 or 220 end
+local function PowerDetachedCardTop(unit) return -38 - PowerMainCardHeight(unit) - 26 end
 local function PowerSectionHeight(unit)
     local isPlayer = unit == "player"
-    return math.abs(POWER_DETACHED_CARD_TOP) + (isPlayer and 340 or 238) + 52
+    return math.abs(PowerDetachedCardTop(unit)) + (isPlayer and 340 or 238) + 52
 end
 local function NormalizeCastbarTabKey(key)
     if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then key = "general" end
@@ -442,7 +445,8 @@ end
 local function BuildPower(ctx, builder, unit)
     if not POWER_UNITS[unit] then return end
     local isPlayer = unit == "player"
-    local detachedCardY = POWER_DETACHED_CARD_TOP
+    local mainCardHeight = PowerMainCardHeight(unit)
+    local detachedCardY = PowerDetachedCardTop(unit)
     local detachedCardHeight = isPlayer and 340 or 238
     local powerSectionHeight = PowerSectionHeight(unit)
     local powerNoticeY = detachedCardY - detachedCardHeight - 12
@@ -618,8 +622,8 @@ local function BuildPower(ctx, builder, unit)
             RefreshPowerEnabled()
         end)
     end
-    local mainCard = PowerCard("Visibility & Size", nil, leftX, -38, cardW, 220)
-    local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, 220)
+    local mainCard = PowerCard("Visibility & Size", nil, leftX, -38, cardW, mainCardHeight)
+    local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, mainCardHeight)
     local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
     -- Power bar art is configured once on the Bars page. The per-unit keys stay
     -- scope-aware in the UF compiler (conf -> bars -> unit bar texture); they
@@ -650,6 +654,31 @@ local function BuildPower(ctx, builder, unit)
             RefreshPowerEnabled()
         end,
         SettingMeta(ctx, "power.show", unit, "showPowerBar"))
+    if isPlayer then
+        local playerPowerSource = W.Dropdown(mainCard, "Displayed resource", PLAYER_POWER_SOURCE_VALUES, cardW - 72)
+        playerPowerSource._msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel
+        W.MoveWidget(playerPowerSource, mainCard, 16, -132, cardW - 72)
+        local sourceMeta = SettingMeta(ctx, "power.resource_source", unit, "playerPowerSource")
+        sourceMeta.label = M.PlayerPowerSourceSearchLabel
+        sourceMeta.historySource = "classpower:playerPowerSource"
+        M.BindDropdownWidget(ctx, playerPowerSource,
+            function() return NormalizePlayerPowerSource(GetConf(unit).playerPowerSource) end,
+            function(value)
+                GetConf(unit).playerPowerSource = NormalizePlayerPowerSource(value)
+                M.ApplyPlayerPowerSource("MSUF2_PLAYER_POWER_SOURCE")
+            end,
+            sourceMeta)
+        RegisterControl(playerPowerSource, ctx, "power.resource_source",
+            M.PlayerPowerSourceSearchLabel, "dropdown", "setting", {
+                settingKey = "player.playerPowerSource",
+                values = PLAYER_POWER_SOURCE_VALUES,
+            })
+        if M.AddTooltip then
+            M.AddTooltip(playerPowerSource, "Displayed resource",
+                M.PlayerPowerSourceTooltip,
+                { hook = true, owner = "ANCHOR_RIGHT" })
+        end
+    end
     local powerBorder = AddPowerControl(W.ToggleAt(borderCard, "Power bar border", 16, -62, rightW - 32))
     M.BindBoolWidget(ctx, powerBorder, ReadPowerBorderEnabled, function(value)
         if isPlayer then
@@ -680,7 +709,7 @@ local function BuildPower(ctx, builder, unit)
             local conf = GetConf(unit)
             return tonumber(conf.powerBarHeight) or tonumber(GetBars().powerBarHeight) or 3
         end },
-        { "toggle", "Embed into health", 16, -138, cardW - 32, "embedPowerBarIntoHealth", false, "MSUF2_POWER_EMBED",
+        { "toggle", "Embed into health", 16, isPlayer and -202 or -138, cardW - 32, "embedPowerBarIntoHealth", false, "MSUF2_POWER_EMBED",
         function()
             local conf = GetConf(unit)
             if conf.embedPowerBarIntoHealth ~= nil then return conf.embedPowerBarIntoHealth == true end
@@ -703,7 +732,7 @@ local function BuildPower(ctx, builder, unit)
         meta.step, meta.roundStep = 1, true
         return meta
     end)())
-    local detached = AddPowerControl(W.ToggleAt(mainCard, "Detach from frame", 16, -166, cardW - 32))
+    local detached = AddPowerControl(W.ToggleAt(mainCard, "Detach from frame", 16, isPlayer and -230 or -166, cardW - 32))
     M.BindBoolWidget(ctx, detached,
         function() return ReadBool(unit, "powerBarDetached", false) end,
         function(v)
