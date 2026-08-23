@@ -557,10 +557,10 @@ if ($stagedFullChangelogPayload.IndexOf("historyFromVersion = `"$changelogHistor
     throw "Bundled full changelog must contain only releases from $changelogHistoryFloor through the current release."
 }
 
-# Every bullet in the current release's Highlights section must carry the
-# invisible JSON route consumed by See New Features. This keeps the visible
-# platform changelog clean while making the highlight sentence itself a direct
-# Menu2 hyperlink.
+# Every bullet in the current release's Highlights section must explicitly
+# choose a route policy: either the invisible JSON route consumed by See New
+# Features, or `msuf-menu-link: none` for an informational highlight that has
+# no owning Menu2 control. Unmarked bullets still fail closed.
 $changelogLines = Get-Content -LiteralPath $changelogSourcePath -Encoding UTF8
 $currentReleaseStart = -1
 for ($lineIndex = 0; $lineIndex -lt $changelogLines.Count; $lineIndex++) {
@@ -584,8 +584,11 @@ for ($lineIndex = $currentReleaseStart + 1; $lineIndex -lt $changelogLines.Count
     if (-not $inHighlights -or $line -notmatch '^\s*-\s+(.+?)\s*$') { continue }
     $bulletText = $Matches[1]
     $nextLine = if (($lineIndex + 1) -lt $changelogLines.Count) { $changelogLines[$lineIndex + 1] } else { "" }
+    if ($nextLine -match '^\s*<!--\s*msuf-menu-link:\s*none\s*-->\s*$') {
+        continue
+    }
     if ($nextLine -notmatch '^\s*<!--\s*msuf-menu-link:\s*(\{.+\})\s*-->\s*$') {
-        throw "Current Highlights bullet has no msuf-menu-link metadata: $bulletText"
+        throw "Current Highlights bullet has no explicit msuf-menu-link route policy: $bulletText"
     }
     try {
         $menuLink = $Matches[1] | ConvertFrom-Json -ErrorAction Stop

@@ -67,33 +67,37 @@ assert(type(highlights) == "table" and #highlights > 0, "current Highlights sect
 for index, bullet in ipairs(highlights) do
     assert(type(bullet) == "table" and type(bullet.text) == "string" and bullet.text ~= "",
         "current highlight " .. index .. " has no generated text record")
-    local link = assert(bullet.link, "current highlight " .. index .. " has no menu link")
-    assert(type(link.pageKey) == "string" and link.pageKey:match("^[a-z0-9_]+$"),
-        "current highlight " .. index .. " has an invalid page key")
-    assert(type(link.query) == "string" and link.query ~= "", "current highlight " .. index .. " has no query")
-    assert(type(link.label) == "string" and link.label ~= "", "current highlight " .. index .. " has no label")
-    assert(type(link.sectionId) == "string" and link.sectionId ~= "",
-        "current highlight " .. index .. " has no exact section")
-    assert(type(link.controlId) == "string" and link.controlId:match("^menu2%.[%w_.-]+$"),
-        "current highlight " .. index .. " has no exact control ID")
-    assert(type(link.settingKey) == "string" and link.settingKey ~= "",
-        "current highlight " .. index .. " has no exact setting key")
-    local identity = "id" .. string.char(31) .. link.pageKey .. string.char(31)
-        .. EncodeIdentityComponent(link.controlId)
-    local row = assert(staticRows[identity],
-        "current highlight " .. index .. " exact control is absent from the built Menu2 catalog")
-    assert(row[1] == link.pageKey and row[9] == link.sectionId,
-        "current highlight " .. index .. " page/section differs from the built Menu2 control")
-    assert(row[4] == "" or row[4] == link.settingKey,
-        "current highlight " .. index .. " setting differs from the built Menu2 control")
-    local hasPrepare = type(link.prepareKind) == "string" and link.prepareKind ~= ""
-        and type(link.prepareValue) == "string" and link.prepareValue ~= ""
-    assert(row[4] ~= "" or hasPrepare,
-        "current highlight " .. index .. " dynamic control has no exact subcategory contract")
-    if hasPrepare then
-        local expectedContract = table.concat({ link.prepareKind, link.prepareValue, link.settingKey }, "=")
-        assert(("|" .. row[11] .. "|"):find("|" .. expectedContract .. "|", 1, true),
-            "current highlight " .. index .. " subcategory is not supported by the built Menu2 control")
+    if bullet.linkless == true then
+        assert(bullet.link == nil, "current highlight " .. index .. " is both linkless and linked")
+    else
+        local link = assert(bullet.link, "current highlight " .. index .. " has no explicit route policy")
+        assert(type(link.pageKey) == "string" and link.pageKey:match("^[a-z0-9_]+$"),
+            "current highlight " .. index .. " has an invalid page key")
+        assert(type(link.query) == "string" and link.query ~= "", "current highlight " .. index .. " has no query")
+        assert(type(link.label) == "string" and link.label ~= "", "current highlight " .. index .. " has no label")
+        assert(type(link.sectionId) == "string" and link.sectionId ~= "",
+            "current highlight " .. index .. " has no exact section")
+        assert(type(link.controlId) == "string" and link.controlId:match("^menu2%.[%w_.-]+$"),
+            "current highlight " .. index .. " has no exact control ID")
+        assert(type(link.settingKey) == "string" and link.settingKey ~= "",
+            "current highlight " .. index .. " has no exact setting key")
+        local identity = "id" .. string.char(31) .. link.pageKey .. string.char(31)
+            .. EncodeIdentityComponent(link.controlId)
+        local row = assert(staticRows[identity],
+            "current highlight " .. index .. " exact control is absent from the built Menu2 catalog")
+        assert(row[1] == link.pageKey and row[9] == link.sectionId,
+            "current highlight " .. index .. " page/section differs from the built Menu2 control")
+        assert(row[4] == "" or row[4] == link.settingKey,
+            "current highlight " .. index .. " setting differs from the built Menu2 control")
+        local hasPrepare = type(link.prepareKind) == "string" and link.prepareKind ~= ""
+            and type(link.prepareValue) == "string" and link.prepareValue ~= ""
+        assert(row[4] ~= "" or hasPrepare,
+            "current highlight " .. index .. " dynamic control has no exact subcategory contract")
+        if hasPrepare then
+            local expectedContract = table.concat({ link.prepareKind, link.prepareValue, link.settingKey }, "=")
+            assert(("|" .. row[11] .. "|"):find("|" .. expectedContract .. "|", 1, true),
+                "current highlight " .. index .. " subcategory is not supported by the built Menu2 control")
+        end
     end
 end
 
@@ -141,6 +145,7 @@ Require(menuXml, 'MSUF_Menu2_Changelog.lua', "Menu2 XML does not load the change
 local generator = Read("tools/update-addon-changelog.ps1")
 Require(generator, "msuf-menu-link", "local generator does not parse feature links")
 Require(generator, "RequireCurrentHighlightLinks", "local generator cannot require current highlight links")
+Require(generator, "linkless = $false", "local generator cannot preserve explicit linkless highlights")
 Require(generator, 'FullHistoryFromVersion = "6.02"', "local generator does not keep the 6.02 history floor")
 local releaseBuilder = Read(".github/scripts/build_release_package.ps1")
 Require(releaseBuilder, "msuf-menu-link", "release push does not enforce highlight links")
