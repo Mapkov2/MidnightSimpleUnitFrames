@@ -543,7 +543,6 @@ local SHADOW_TECHNIQUES_AURA_SPELL_ID = 196911
 local EVISCERATE_SPELL_ID = 196819
 local SUBTLETY_ROGUE_SPEC_ID = 261
 local APEX_MIN_SHADOW_TECHNIQUES_STACKS = 5
-local SHADOW_TECHNIQUES_GLOW_ATLAS = "UI-HUD-RotationHelper-ProcAltGlow"
 local APEX_ROLE_DARKEST = "darkestNight"
 local APEX_ROLE_ANCIENT = "ancientArts"
 local APEX_ROLE_SHADOW_TECHNIQUES = "shadowTechniques"
@@ -688,52 +687,82 @@ local function ShadowTechniquesHighlightTarget(frame)
     return frame
 end
 
-local function ShadowTechniquesHighlightSize(target, g)
+local function ShadowTechniquesHighlightVisual(g, target)
     local width, height
     if target and type(target.GetSize) == "function" then
         local ok, w, h = pcall(target.GetSize, target)
         if ok then width, height = tonumber(w), tonumber(h) end
     end
-    local iconSize = math_max(width or 36, height or 36)
+    width = math_max(1, width or 36)
+    height = math_max(1, height or 36)
     local scale = math_max(75, math_min(175, tonumber(g and g.shadowTechniquesGlowScale) or 100)) / 100
-    -- 100% matches the regular MSUF aura-icon glow's 15% padding on every edge.
-    return math_max(34, math_min(168, math_floor(iconSize * 1.30 * scale + 0.5)))
-end
-
-local function ShadowTechniquesHighlightVisual(g, target)
+    local edge = math_max(3, math_min(24, math_min(width, height) * 0.17 * scale))
     local color = g and g.shadowTechniquesGlowColor
     local r = math_max(0, math_min(1, tonumber(color and color[1]) or 0.69))
     local green = math_max(0, math_min(1, tonumber(color and color[2]) or 0.50))
     local b = math_max(0, math_min(1, tonumber(color and color[3]) or 0.88))
     local alpha = math_max(10, math_min(100, tonumber(g and g.shadowTechniquesGlowStrength) or 80)) / 100
-    local glowSize = ShadowTechniquesHighlightSize(target, g)
-    local ri = math_floor(r * 255 + 0.5)
-    local gi = math_floor(green * 255 + 0.5)
-    local bi = math_floor(b * 255 + 0.5)
-
-    -- Application counts are secret in combat. A NumericRuleFormatter therefore
-    -- owns the 5+ decision, while this compact square proc-glow atlas supplies a
-    -- tintable inline visual. Unlike RotationHelper-Active it has no gold
-    -- horseshoe artwork.
-    local markup = string_format("|A:%s:%d:%d:0:0:%d:%d:%d|a",
-        SHADOW_TECHNIQUES_GLOW_ATLAS, glowSize, glowSize, ri, gi, bi)
-    local signature = string_format("%d:%d:%d:%d:%d", glowSize, ri, gi, bi, math_floor(alpha * 100 + 0.5))
-    return markup, alpha, signature
+    local signature = string_format("%.2f:%.2f:%.2f:%d:%d:%d:%d",
+        width, height, edge, math_floor(r * 255 + 0.5), math_floor(green * 255 + 0.5),
+        math_floor(b * 255 + 0.5), math_floor(alpha * 100 + 0.5))
+    return {
+        width = width,
+        height = height,
+        edge = edge,
+        r = r,
+        g = green,
+        b = b,
+        a = alpha,
+        signature = signature,
+    }
 end
 
-local function InitializeShadowTechniquesHighlightButton(button, formatter, alpha)
+local function InitializeShadowTechniquesHighlightButton(button, visual)
     button:ClearAllPoints()
     button:SetAllPoints(button:GetParent())
     if button.SetMouseClickEnabled then button:SetMouseClickEnabled(false) end
     if button.SetMouseMotionEnabled then button:SetMouseMotionEnabled(false) end
     if button.EnableMouse then button:EnableMouse(false) end
 
-    local fontString = button:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-    fontString:SetPoint("CENTER", button, "CENTER", 0, 0)
-    fontString:SetAlpha(alpha)
-    -- The native formatter owns both the secret 5+ comparison and whether the
-    -- MSUF halo has any text to render.
-    button:SetApplicationCount(fontString, { formatter = formatter })
+    local BorderStyles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+    local texture = BorderStyles and BorderStyles.Resolve and BorderStyles.Resolve("GLOW")
+    if not (texture and BorderStyles.Create and BorderStyles.Apply and button.SetApplicationBar) then return end
+
+    -- Application counts are secret in combat. AuraContainer therefore owns a
+    -- hidden StatusBar whose value is clamped to 0..5. Its C-side fill edge
+    -- moves the glow host into this clipping gate only at five applications;
+    -- addon Lua never reads or compares the protected stack count.
+    local gate = CreateFrame("Frame", nil, button)
+    if not gate.SetClipsChildren then return end
+    local gateWidth = visual.width + visual.edge
+    local gateHeight = visual.height + visual.edge
+    gate:SetSize(gateWidth, gateHeight)
+    gate:SetPoint("CENTER", button, "CENTER", 0, 0)
+    gate:SetClipsChildren(true)
+
+    local travel = math_max(gateWidth, gateHeight) + visual.edge + 2
+    local applicationBar = CreateFrame("StatusBar", nil, button)
+    applicationBar:SetSize(travel * APEX_MIN_SHADOW_TECHNIQUES_STACKS, 1)
+    applicationBar:SetPoint("LEFT", gate, "CENTER", -travel * APEX_MIN_SHADOW_TECHNIQUES_STACKS, 0)
+    applicationBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    applicationBar:SetMinMaxValues(0, APEX_MIN_SHADOW_TECHNIQUES_STACKS)
+    applicationBar:SetValue(0)
+    applicationBar:SetAlpha(0)
+    if applicationBar.EnableMouse then applicationBar:EnableMouse(false) end
+
+    local fill = applicationBar:GetStatusBarTexture()
+    local host = CreateFrame("Frame", nil, gate)
+    host:SetSize(visual.width, visual.height)
+    host:SetPoint("CENTER", fill, "RIGHT", 0, 0)
+    local pieces = BorderStyles.Create(host, "OVERLAY", 7, texture)
+    BorderStyles.Apply(pieces, host, visual.edge, visual.width, visual.height,
+        visual.r, visual.g, visual.b, visual.a)
+
+    -- Bind last: AuraContainer seals the inbound StatusBar and its descendants
+    -- immediately. Every visual mutation above must remain initialization-only.
+    button:SetApplicationBar(applicationBar, {
+        maxApplications = APEX_MIN_SHADOW_TECHNIQUES_STACKS,
+    })
 end
 
 local function EnsureShadowTechniquesHighlightSensor(frame)
@@ -743,18 +772,15 @@ local function EnsureShadowTechniquesHighlightSensor(frame)
     if type(createSensor) ~= "function" or not target then return nil end
 
     local g = GetGameplayDB()
-    local visibleFormat, alpha, signature = ShadowTechniquesHighlightVisual(g, target)
+    local visual = ShadowTechniquesHighlightVisual(g, target)
     local current = shadowTechHighlightSensorsByFrame[frame]
-    if current and current.signature == signature then return current.sensor end
-
-    local formatter = CreateApexStackThresholdFormatter(visibleFormat)
-    if not formatter then return nil end
+    if current and current.signature == visual.signature then return current.sensor end
 
     local generation = (current and current.generation or 0) + 1
     local sensor = createSensor(target, "msuf_shadow_techniques_stack_highlight_" .. tostring(generation), {
         [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true,
     }, function(button)
-        InitializeShadowTechniquesHighlightButton(button, formatter, alpha)
+        InitializeShadowTechniquesHighlightButton(button, visual)
     end)
     if not sensor then return nil end
 
@@ -766,7 +792,7 @@ local function EnsureShadowTechniquesHighlightSensor(frame)
     end
     shadowTechHighlightSensorsByFrame[frame] = {
         sensor = sensor,
-        signature = signature,
+        signature = visual.signature,
         generation = generation,
     }
     return sensor

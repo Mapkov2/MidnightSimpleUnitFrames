@@ -40,6 +40,7 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["detached_power.layout.height"] = "player.detachedPowerBarHeight",
     ["detached_power.layout.layer"] = "player.detachedPowerBarFrameLevelOffset",
     ["detached_power.layout.mode"] = "bars.detachedPowerBarWidthMode",
+    ["detached_power.layout.resource_source"] = "player.playerPowerSource",
     ["detached_power.layout.orbSize"] = "player.detachedPowerOrbSize",
     ["detached_power.layout.smooth_fill"] = "player.powerSmoothFill",
     ["detached_power.layout.sync"] = "player.detachedPowerBarSyncClassPower",
@@ -207,6 +208,8 @@ local function ApplyClassPowerSmoothing() ApplyClassPowerRuntime("MSUF2_CLASSPOW
 local function ApplyClassPowerText() ApplyClassPowerRuntime("MSUF2_CLASSPOWER_TEXT", CLASSPOWER_TEXT, APPLY_CLASSPOWER_GENERAL) end
 local TextureValues = M.StatusBarTextureItems
 local VT, VTP = M.ValueTextList, M.ValueTextPairs
+local PLAYER_POWER_SOURCE_VALUES = M.PlayerPowerSourceValues
+local NormalizePlayerPowerSource = M.NormalizePlayerPowerSource
 local NormalizeClassPowerShape = CPPreview.NormalizeClassShape
 local function NormalizeClassPowerShapeAlign(value)
     value = tostring(value or "CENTER"):upper()
@@ -964,6 +967,7 @@ end
 
 function Page:BuildClassBehavior()
     local section = self.b:CollapsibleSection("classpower_behavior", "Behavior", 282, false)
+    local applyRefresh = self:WithRefresh(ApplyClassPower)
     local fields = self:Controls(section, Bars, ApplyClassPower, "behavior", {
         { "anchor", "toggle", "Anchor to Essential Cooldown", "classPowerAnchorToCooldown", false, group = "cp" },
         { "charged", "toggle", "Show empowered combo points", "showChargedComboPoints", true, group = "cp" },
@@ -975,7 +979,7 @@ function Page:BuildClassBehavior()
             helpTitle = "Ebon Might On Player Power",
             help = "Augmentation Evoker only. The Player power bar shows the remaining Ebon Might duration instead of Mana, and uses the Player Power settings below for width, height, position, textures and text. Essence stays an ordinary Class Resource, and Mana is available through Alternative Mana. Turn this off to get a normal Mana bar back." },
         { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false, group = "cp" },
-        { "ironfur", "toggle", "Show Ironfur tracker (Guardian)", "showGuardianIronfur", false, group = "cp",
+        { "ironfur", "toggle", "Show Ironfur tracker (Guardian)", "showGuardianIronfur", false, applyRefresh, group = "cp",
             helpTitle = "Guardian Ironfur Tracker", help = "In Bear Form, replaces the empty Guardian class-resource slot with an estimated Ironfur lifetime bar. Each successful cast adds one moving marker; Ursoc's Endurance and Guardian of Elune are included." },
         { "ironfurHashes", "toggle", "Show Ironfur cast markers", "guardianIronfurShowHashLines", true, group = "cp",
             helpTitle = "Ironfur Cast Markers", help = "Shows one moving marker per tracked Ironfur cast. The 30 Hz motion ticker exists only while the optional tracker has active casts." },
@@ -1076,7 +1080,8 @@ function Page:BuildClassStyle()
     MoveWidget(self.cp.color, resources, 32, -72)
     MoveWidget(self.cp.comboColor, resources, 32, -104, controlW)
     PlaceColumn(resources, 32, -192, 54, controlW, nil, self.cp.fgTex, self.cp.bgTex)
-    PlaceColumn(text, 32, -84, 52, controlW, nil, self.cp.font, self.cp.layer, self.cp.textX, self.cp.textY)
+    MoveWidget(self.cp.mode, text, 32, -84, controlW, "LEFT")
+    PlaceColumn(text, 32, -136, 52, controlW, nil, self.cp.font, self.cp.layer, self.cp.textX, self.cp.textY)
     PlaceColumn(opacity, 32, -84, 52, controlW, nil, self.cp.bg, self.cp.filled, self.cp.empty)
     PlaceColumn(pips, 32, -84, 52, controlW, nil, self.cp.separator, self.cp.outline, self.cp.gap)
 end
@@ -1109,7 +1114,7 @@ function Page:BuildDetachedPower()
     local values = VT("layout", "Layout", "textures", "Textures", "text", "Text")
     RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerDetachedPowerTab", label = "Power area", values = values,
         width = min(520, max(320, width - 64)), frames = frames, defaultTab = "layout", x = 32, y = -44 }), "detached_power.workspace_tab", values)
-    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 536 or 814)
+    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. In Automatic mode, Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 536 or 814)
     self.dpbUse = W.SwitchAt(layout, "Detached player power", 32, -104, controlW)
     M.BindBoolWidget(self.ctx, self.dpbUse, function() return Player().powerBarDetached == true end,
         function(value)
@@ -1128,8 +1133,29 @@ function Page:BuildDetachedPower()
         end, Meta("detached_power.enabled"))
     local smooth = SwitchAt(self.ctx, layout, "Smooth fill", twoColumns and rightX or 32, twoColumns and -104 or -138, controlW,
         Player, "powerSmoothFill", false, ApplyDetachedPlayerPowerSmoothing, Meta("detached_power.layout.smooth_fill"))
+    self.dpbSource = W.Dropdown(layout, "Displayed resource", PLAYER_POWER_SOURCE_VALUES, 300)
+    self.dpbSource._msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel
+    local sourceMeta = Meta("detached_power.layout.resource_source", "setting", {
+        label = M.PlayerPowerSourceSearchLabel,
+        historySource = "classpower:playerPowerSource",
+    })
+    M.BindDropdownWidget(self.ctx, self.dpbSource,
+        function() return NormalizePlayerPowerSource(Player().playerPowerSource) end,
+        function(value)
+            local player = Player()
+            value = NormalizePlayerPowerSource(value)
+            if player.playerPowerSource == value then return end
+            player.playerPowerSource = value
+            M.ApplyPlayerPowerSource("MSUF2_CLASSPOWER_PLAYER_POWER_SOURCE")
+        end,
+        sourceMeta)
+    RegisterControl(self.dpbSource, sourceMeta,
+        M.PlayerPowerSourceSearchLabel, "dropdown", PLAYER_POWER_SOURCE_VALUES)
+    MoveWidget(self.dpbSource, layout, 32, twoColumns and -154 or -188, controlW, "LEFT")
+    AddTooltip(self.dpbSource, "Displayed resource",
+        M.PlayerPowerSourceTooltip)
     local mode = self:Controls(layout, Bars, ApplyDetachedPowerWidthMode, "detached_power.layout", {
-        { "mode", "nilDefaultDropdown", "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs"), 260, "detachedPowerBarWidthMode", "manual", group = "detached" },
+        { "mode", "nilDefaultDropdown", "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs"), 260, "detachedPowerBarWidthMode", "manual", self:WithRefresh(ApplyDetachedPowerWidthMode), group = "detached" },
     })
     self.dpb = self:Controls(layout, Player, ApplyDetachedPowerBar, "detached_power.layout", {
         { "anchor", "toggle", "Anchor to Class Resource", "detachedPowerBarAnchorToClassPower", false, group = "detachedPlayer" },
@@ -1141,7 +1167,7 @@ function Page:BuildDetachedPower()
         { "height", "slider", "Power height", 2, 80, 1, 300, "detachedPowerBarHeight", 6, group = "detachedPlayer" },
         { "layer", "slider", "Player Power layer", 0, 30, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
     })
-    AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width. For Augmentation Evoker this bar shows Ebon Might, so these settings size and place the Ebon Might bar.")
+    AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width. In Automatic mode, Augmentation Evoker uses this bar for Ebon Might; an explicit Mana selection keeps it as Mana.")
     AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.width, "Power Width", "Manual width for the detached Player power bar. Available while Width mode is Manual; dragging it releases Sync width to Class Resource, because that sync would otherwise win. Unset, the bar inherits the Player frame width.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
@@ -1159,12 +1185,13 @@ function Page:BuildDetachedPower()
             },
         })
     end
+    local textStateRefresh = self:WithRefresh(ApplyDetachedPowerText)
     self.dpbText = self:Controls(text, Player, ApplyDetachedPowerText, "detached_power.text", {
-        { "onBar", "detachedTextOnBar", "Power text on bar", "detachedPowerBarTextOnBar", false, group = "detachedPlayer" },
+        { "onBar", "detachedTextOnBar", "Power text on bar", "detachedPowerBarTextOnBar", false, textStateRefresh, group = "detachedPlayer" },
         { "preset", "detachedTextPreset", "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300, group = "detachedPlayer" },
-        { "right", "dropdown", "Right slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextRight", "CURPERCENT", group = "detachedText" },
-        { "left", "dropdown", "Left slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextLeft", "NONE", group = "detachedText" },
-        { "center", "dropdown", "Center slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextCenter", "NONE", group = "detachedText" },
+        { "right", "dropdown", "Right slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextRight", "CURPERCENT", textStateRefresh, group = "detachedText" },
+        { "left", "dropdown", "Left slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextLeft", "NONE", textStateRefresh, group = "detachedText" },
+        { "center", "dropdown", "Center slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextCenter", "NONE", textStateRefresh, group = "detachedText" },
         { "sep", "dropdown", "Delimiter", DETACHED_POWER_SEPARATORS, 180, "powerTextSeparator", "", group = "detachedText" },
         { "size", "slider", "Power text size", 6, 48, 1, 300, "powerFontSize", 14, group = "detachedText" },
         { "x", "slider", "Text X", -300, 300, 1, 300, "powerOffsetX", -4, group = "detachedText" },
@@ -1240,8 +1267,8 @@ function Page:BuildDetachedPower()
     })
     self.dpbTextures = texture
     AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of every detached Player power shape, including Bar, Round, Crystal and Orb. 0 disables only that edge.")
-    PlaceColumn(layout, 32, twoColumns and -154 or -188, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.width, self.dpb.orbSize, self.dpb.height)
-    PlaceColumn(layout, rightX, twoColumns and -154 or -574, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
+    PlaceColumn(layout, 32, twoColumns and -220 or -254, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.width, self.dpb.orbSize, self.dpb.height)
+    PlaceColumn(layout, rightX, twoColumns and -220 or -640, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.outline)
     PlaceColumn(text, 32, -104, 54, controlW, "LEFT", self.dpbText.onBar, self.dpbText.preset, self.dpbText.right)
     for i, control in ipairs({ self.dpbHide[1], self.dpbText.left, self.dpbHide[2], self.dpbText.center, self.dpbHide[3], self.dpbText.sep }) do
@@ -1363,9 +1390,9 @@ function Page:BuildPlayerHP()
     self.hpTextEnable = SwitchAt(self.ctx, text, "Show HP text", 32, -104, controlW, Bars, "playerHPBarTextEnabled", true, textRefresh, Meta("player_hp.text.enabled"))
     local shared = SwitchAt(self.ctx, text, "Use Player HP text", 32, -136, controlW, Bars, "playerHPBarUsePlayerText", true, textRefresh, Meta("player_hp.text.use_player_text"))
     self.hpText = self:Controls(text, Bars, ApplyPlayerHPText, "player_hp.text", {
-        { "right", "dropdown", "Right slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextRight", "CURPERCENT" },
-        { "left", "dropdown", "Left slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextLeft", "NONE" },
-        { "center", "dropdown", "Center slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextCenter", "NONE" },
+        { "right", "dropdown", "Right slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextRight", "CURPERCENT", textRefresh },
+        { "left", "dropdown", "Left slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextLeft", "NONE", textRefresh },
+        { "center", "dropdown", "Center slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextCenter", "NONE", textRefresh },
         { "sep", "dropdown", "Delimiter", PLAYER_HP_SEPARATORS, 180, "playerHPBarTextSeparator", "" },
         { "reverse", "toggle", "Reverse order", "playerHPBarTextReverse", false },
         { "size", "slider", "Text size", 6, 48, 1, 300, "playerHPBarTextSize", 14 },
@@ -1399,9 +1426,9 @@ function Page:BuildAlternativeMana()
             historySource = "menu:class-power-alternative-mana-color",
         })
     end
-    self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, ApplyClassPower, Meta("alternative_mana.enabled"))
-    local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", false, ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
     local applyRefresh = self:WithRefresh(ApplyClassPower)
+    self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, applyRefresh, Meta("alternative_mana.enabled"))
+    local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", false, ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {
         { "widthMode", "dropdown", "Width mode", ALT_MANA_WIDTH_VALUES, 300, "altManaWidthMode", "player", applyRefresh },
         { "width", "slider", "Custom width", 20, 1200, 1, 300, "altManaWidth", 0 },

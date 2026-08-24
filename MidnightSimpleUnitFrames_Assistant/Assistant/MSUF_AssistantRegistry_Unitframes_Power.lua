@@ -67,6 +67,30 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
 
     RegisterUnitBooleanSetting(unit, "powerBar", "showPowerBar", "Power Bar", UnitDefaultPowerBar(unit),
         MakeAliases(unit, "power bar", "show power bar"), { category = "Power Bar", power = true })
+    if unit == "player" then
+        RegisterUnitEnum(unit, "playerPowerSource", "playerPowerSource", "Displayed Power Resource", "AUTO",
+            { "AUTO", "MANA" },
+            MakeAliases(unit, "displayed power resource", "power bar resource"), {
+            category = "Power Bar",
+            power = true,
+            exactAliases = {
+                "mana on player power bar",
+                "mana on the player power bar",
+                "player power bar as mana",
+                "player power source",
+                "player power bar resource",
+            },
+            valueLabels = { AUTO = "Automatic (current behavior)", MANA = "Mana" },
+            valueAliases = {
+                automatic = "AUTO", current = "AUTO", ["current behavior"] = "AUTO",
+                ["class resource"] = "AUTO", ["class/spec resource"] = "AUTO",
+            },
+            description = "Automatic preserves the existing class/spec resource behavior. Mana explicitly keeps Mana on the Player power bar; vehicles remain native.",
+            applyOpts = { preview = true, notify = false, classpowerApplied = true },
+            reason = "MSUF_ASSISTANT_PLAYER_POWER_SOURCE",
+            refresh = { "MSUF_ApplyModules", "MSUF_ClassPower_Refresh" },
+        })
+    end
     -- Per-unit override of the shared bars power art, applying whether the bar
     -- is detached or not. Empty means "follow the shared texture", which is the
     -- menu's "Use global power texture" entry -- so an empty value is a real

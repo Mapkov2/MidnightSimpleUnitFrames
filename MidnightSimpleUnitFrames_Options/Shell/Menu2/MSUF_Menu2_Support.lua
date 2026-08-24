@@ -408,6 +408,14 @@ function M.ValueTextList(...)
     end
     return out
 end
+M.PlayerPowerSourceValues = M.ValueTextList(
+    "AUTO", "Automatic (current behavior)",
+    "MANA", "Mana")
+M.PlayerPowerSourceSearchLabel = "Mana / Automatic displayed resource"
+M.PlayerPowerSourceTooltip = "Automatic preserves the current profile behavior for the active class and specialization, including Maelstrom, Insanity, and Ebon Might hand-offs. Mana explicitly keeps Mana on the Player power bar. Vehicles always use their native resource; classes without a Mana pool keep their normal resource while the preference stays saved."
+function M.NormalizePlayerPowerSource(value)
+    return value == "MANA" and "MANA" or "AUTO"
+end
 function M.Lines(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end
 function M.ValueTextRows(rows)
     local out = {}

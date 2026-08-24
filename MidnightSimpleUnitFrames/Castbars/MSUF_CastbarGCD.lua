@@ -299,6 +299,7 @@ local function OnSucceeded(spellID)
         return
     end
 
+    spellID = PlainNumber(spellID)
     if not spellID or spellSkip[spellID] then return end
 
     local frame = _G.MSUF_PlayerCastbar

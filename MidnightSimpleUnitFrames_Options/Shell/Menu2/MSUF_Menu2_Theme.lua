@@ -2610,11 +2610,15 @@ local function ButtonSetText(self, value)
     if self._msuf2Label then self._msuf2Label._msuf2SearchText = raw end
     self._msuf2Label:SetText(text)
     if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then
+        -- Dropdown buttons display the selected value, but selected text is not
+        -- always the semantic control name. Opt-in controls keep one stable
+        -- search label while their visible value continues to change normally.
+        local searchLabel = self._msuf2StableSearchLabel or value
         local previous = type(self._msuf2SearchMeta) == "table" and self._msuf2SearchMeta or nil
-        local meta = { label = value, kind = "button", anchor = self._msuf2Label }
+        local meta = { label = searchLabel, kind = "button", anchor = self._msuf2Label }
         if previous then
             for key, item in pairs(previous) do meta[key] = item end
-            meta.label, meta.kind, meta.anchor = value, previous.kind or "button", previous.anchor or self._msuf2Label
+            meta.label, meta.kind, meta.anchor = searchLabel, previous.kind or "button", previous.anchor or self._msuf2Label
         end
         M.RegisterSearchWidget(self, meta)
     end

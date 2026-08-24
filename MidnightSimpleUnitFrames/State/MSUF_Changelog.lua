@@ -8,94 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "74A3D86382112210F00843DF59B4C625D8B2EC97128A01B036C95D26489DD66E",
-    currentVersion = "6.12-beta3",
-    historyFromVersion = "6.11",
-    previousVersion = "6.12-beta2",
-    rangeLabel = "6.12-beta2 -> 6.12-beta3",
+    sourceSha256 = "BA10D891ADE12467CD97EE68FE2E0B1935055A047F7325A3E6832CBDBFB74CBD",
+    currentVersion = "6.12",
+    historyFromVersion = "6.09",
+    previousVersion = "6.11",
+    rangeLabel = "6.11 -> 6.12",
     entries = {
         {
-            version = "6.12-beta3",
+            version = "6.12",
             date = "2026-08-23",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Subtlety Rogues can now highlight Shadow Techniques at five or more stacks. The opt-in native Cooldown Viewer glow supports configurable color, size, and strength while keeping the protected stack comparison inside Blizzard's formatter.",
+                            text = "Boss Range Fade can now update up to 20 times per second. The new Boss update-rate slider keeps the adaptive standard cadence at zero or continuously checks visible Boss Frames from 1 through 20 updates per second.",
                             link = {
-                                pageKey = "gameplay",
-                                query = "shadow techniques stack glow",
-                                label = "Shadow Techniques: 5+ Stack Glow",
-                                sectionId = "gameplay_dev_auras",
-                                controlId = "menu2.gameplay.advanced.dev.aura.shadow.techniques.stack.highlight.enabled",
-                                settingKey = "gameplay.enableShadowTechniquesStackHighlight",
+                                pageKey = "uf_boss",
+                                query = "boss range update rate",
+                                label = "Updates per second",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_boss.unit.range_fade.update_rate",
+                                settingKey = "boss.rangeFadeUpdateRate",
                             },
                         },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Preserve Raid Groups now creates a separate secure header for each physical raid subgroup, keeping subgroup blocks intact while retaining the selected Index, Name, or Role sorting inside each group.",
-                        "Group Frame scanning, Edit Mode bounds, visibility, and runtime layout handling now cover every active preserved subgroup header.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Custom Boss Range Fade rates now show a once-per-menu-session performance warning, use a wider value field, and visually distinguish continuous custom rates from the adaptive Standard mode.",
-                        "Group Adapter header scans retain the single-header fallback used by isolated and legacy load paths.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.12-beta2",
-            date = "2026-08-22",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
                         {
-                            text = "Subtlety Rogues can now enable an APEX IT combat cue. The opt-in Deathstalker helper shows at five or more Shadow Techniques stacks while Darkest Night is active and Ancient Arts is not, with configurable text size, position, and an in-menu preview.",
+                            text = "Class Resources can now keep Player Power Automatic or explicitly display Mana. The new Displayed resource dropdown preserves the existing class/spec behavior in Automatic mode, while Mana keeps the Player power surface on its Mana pool whenever the character has one.",
                             link = {
-                                pageKey = "gameplay",
-                                query = "subtlety rogue apex it",
-                                label = "Subtlety Rogue: APEX IT",
-                                sectionId = "gameplay_dev_auras",
-                                controlId = "menu2.gameplay.advanced.dev.aura.apex.it.enabled",
-                                settingKey = "gameplay.enableApexItDevAura",
+                                pageKey = "classpower",
+                                query = "mana automatic displayed resource",
+                                label = "Displayed resource",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.resource.source",
+                                settingKey = "player.playerPowerSource",
                             },
                         },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "APEX IT follows Blizzard's native Cooldown Viewer and AuraContainer state updates without polling, fails closed for secret spell values, and disables its event routes outside the supported specialization and talent.",
-                        "Preserve Raid Groups now derives the effective group-aware sorting mode without overwriting the selected Index, Name, or Role preference.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Boss encounter lifecycle bursts now coalesce Unit Frame identity, AuraContainer identity, and Range Fade reconciliation into next-frame refreshes instead of repeating synchronous work for every Boss token.",
-                        "Group threat-role changes now refresh only the affected border and corner-indicator domains rather than invalidating unrelated Group Frame configuration.",
-                        "Rounded native dispel-overlay masks are fully configured before Blizzard takes ownership and are recreated through the cold Auras3 refresh path after rounded-frame setting or media changes.",
-                        "The global Castbar preview canvas is taller so below-bar text, thick outlines, and vertical icon offsets are no longer clipped.",
-                        "Gameplay configuration caching now follows the active profile table, and a failed gameplay apply can no longer leave later apply requests permanently blocked.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.12-beta1",
-            date = "2026-08-22",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
                         {
                             text = "Class Resource text can now show Current, Maximum, or Current / Maximum. The new Resource text selector keeps Automatic as the untouched resource-specific default, while explicit modes change only the central resource value.",
                             link = {
@@ -108,23 +55,18 @@ local data = {
                             },
                         },
                         {
-                            text = "Boss Range Fade can now update up to 20 times per second. The new Boss update-rate slider keeps the adaptive standard cadence at zero or continuously checks visible Boss Frames from 1 through 20 updates per second.",
-                            link = {
-                                pageKey = "uf_boss",
-                                query = "boss range update rate",
-                                label = "Updates per second",
-                                sectionId = "range_fade",
-                                controlId = "menu2.uf_boss.unit.range_fade.update_rate",
-                                settingKey = "boss.rangeFadeUpdateRate",
-                            },
+                            text = "MiniAuras and MiniCC now work with MSUF Party and Raid Frames again. The event-driven frame provider refreshes only when the authoritative Group Frame registry changes, without polling the roster or frame list.",
+                            linkless = true,
                         },
                     },
                 },
                 {
                     title = "Changes",
                     bullets = {
-                        "Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats.",
-                        "Class Resource previews mirror the selected text mode, and the Assistant can find and set both the resource-text format and the Boss range-update rate.",
+                        "Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats; previews and the Assistant mirror the selected mode.",
+                        "The Player Power resource selector is shared between Player Power and Class Resources, follows vehicle-resource handoffs, and is supported by previews, reset/undo history, search, and the Assistant.",
+                        "Subtlety Rogues can enable an APEX IT combat cue and a configurable Shadow Techniques soft glow at five or more stacks. Both follow Blizzard's native Cooldown Viewer and AuraContainer state without polling and keep protected stack decisions inside the native application binding.",
+                        "Preserve Raid Groups now creates a separate secure header for each physical raid subgroup, retaining empty subgroup geometry and the selected Index, Name, or Role sorting inside each group. Scanning, Edit Mode bounds, visibility, and runtime layout cover every active subgroup header.",
                         "Retired unused legacy Class Resource text-format fields from existing profiles and generated fallback metadata.",
                     },
                 },
@@ -134,7 +76,15 @@ local data = {
                         "One-icon aura lanes now use Blizzard's one-frame AuraSlot primitive instead of allocating a ten-frame AuraGroup pool; weapon-enchant and custom-priority lanes keep their specialized group behavior.",
                         "Aura identity-event topology changes are batched across secure Group Frame header scans, resolved aura-name registrations survive unchanged layout refreshes, and redundant native full-aura refreshes were removed.",
                         "Target name and health text now resolve protected PvP class tokens through Blizzard's native class-color object without comparing or caching secret-backed RGB values.",
-                        "Standard Boss Range Fade retains its adaptive 0.75/2-second checks, while a custom rate accelerates only visible Boss Frames and shares the existing timer scheduler.",
+                        "Standard Boss Range Fade retains its adaptive 0.75/2-second checks, while a custom rate accelerates only visible Boss Frames through the existing scheduler. Custom rates are visually distinguished and show a once-per-menu-session performance warning.",
+                        "Boss encounter lifecycle bursts now coalesce Unit Frame identity, AuraContainer identity, and Range Fade reconciliation into next-frame refreshes instead of repeating synchronous work for every Boss token.",
+                        "Group threat-role changes refresh only the affected border and corner-indicator domains, and Group Adapter header scans retain their standalone single-header fallback.",
+                        "Rounded native dispel-overlay masks are fully configured before Blizzard takes ownership and are recreated through the cold Auras3 refresh path after rounded-frame setting or media changes.",
+                        "The global Castbar preview canvas is taller so below-bar text, thick outlines, and vertical icon offsets are no longer clipped.",
+                        "The GCD indicator now rejects protected or otherwise non-plain spell IDs before lookup instead of allowing them into Lua table indexing.",
+                        "Explicit Player Mana ownership no longer creates a duplicate Alternative Mana bar, survives vehicle and module lifecycle transitions, and keeps live bars, text, colors, Class Resource previews, and Unit Frame previews on the same displayed resource.",
+                        "Class Resource, Player HP, Alternative Mana, detached-power width, and power-text controls now refresh their dependent enabled states immediately after changes, resets, undo, or Assistant application.",
+                        "Gameplay configuration caching now follows the active profile table, and a failed gameplay apply can no longer leave later apply requests permanently blocked.",
                         "See New Features now reports the correct compact and full-history version ranges for 6.11.",
                     },
                 },
@@ -188,6 +138,168 @@ local data = {
                         "Aura menu search now opens the Filters tool correctly for Player Defensives and Target Dots instead of falling back to Setup.",
                         "Rounded Unit Frames no longer read the protected parent of Blizzard-owned dispel-overlay textures; the safe owner is captured before the region becomes forbidden and reused when masks are applied.",
                         "Group Frame previews keep their generated character names when ordinary player-unit events refresh the dummy frames outside Edit Mode.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.1",
+            date = "2026-08-19",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "The Raid Group indicator now has its own Size slider in Status icons, on every frame that can show it. It used to render at the frame's name font size with no way to change it; an untouched profile keeps that size, so nothing moves until you drag the slider.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "raid group size",
+                                label = "Size",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_player.unit.status.selected.size",
+                                settingKey = "player.raidGroupNameSize",
+                                prepareKind = "unitStatus",
+                                prepareValue = "raidgroupname",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Separated the Augmentation Evoker resources: Ebon Might now renders on the Player power bar, Essence is an ordinary Class Resource, and Mana moves to Alternative Mana. The Ebon Might bar takes its height, position, texture, background, border and text from the Player Power settings; only its fill colour still comes from the Ebon Might colour entry.",
+                        "Class Resource width, offsets, pixel snapping and cooldown anchoring finally apply to an Augmentation Evoker's Essence bar; it used to silently copy the power bar's width and anchor and ignore those settings.",
+                        "Turning the Player Power bar off now also turns off the Ebon Might display instead of leaving an empty bar behind.",
+                        "Ebon Might's bar and duration text follow live setting changes instead of freezing at the values they had when the native aura slot was first created.",
+                        "Added a Power width slider to the Class Resources > Player Power card, where Width mode \"Manual\" previously had no width to set. Dragging it releases *Sync width to Class Resource*, because that sync outranks an explicit width.",
+                        "Switching the Active profile now offers a UI reload: frames re-apply at once, but settings that are only read at load time otherwise keep the old profile's values until the next reload.",
+                        "The group preview LAYERS chips now apply to the preview frames drawn on screen as well as to the preview box in the menu, and Shift-click solo shows only that one element on them.",
+                        "Cooldown and stack numbers on the preview's aura icons follow the CD/Stack chip, and the chip is greyed out when no enabled aura lane prints a timer or stack count.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Power text on the Target, Focus, Pet and Boss frames follows the unit you are actually on again. With *Colour power text by type* enabled the colour was resolved once and then kept across every target change, so a Focus or Rage target could stay on the previous target's colour, or sit on Mana blue for the rest of the session (#125). Frames with the power bar switched off were affected the most, because they had no bar to take fresh resource data from.",
+                        "Power text no longer falls back to the Mana colour when a unit reports no resource at all. It renders the configured text colour instead, which is what those slots show with colour by power type switched off.",
+                        "Boss frames no longer freeze at the range fade they happened to have when the pull started. Boss units have no range event of their own, so the periodic check behind *Enable Range Fade* now keeps running in combat instead of stopping at the encounter start.",
+                        "The range fade check now retires completely once nothing is left to sample. Only units MSUF has no range event for keep the timer running, so a state without such a unit costs nothing while idle instead of waking up every 0.75 to 2 seconds.",
+                        "The Assistant can see and set the Power width slider again. Its generated control schema had not been rebuilt since the slider landed, so the one control added this cycle was missing from everything the Assistant can reach by name.",
+                        "The Assistant can now drive the Active auras on this frame dropdown in the blacklist workspace. It was the only control in that section it could not see, so a live scan could be started and blocked by hand but not by request.",
+                        "Aura name resolution compiles its alias list once per container instead of rebuilding an iterator on every event, which is the hot path whenever the client falls back to a full aura update in a raid.",
+                        "The over-absorb glow decides once per render pass whether the absorb value is protected, instead of re-checking it at every branch that writes to the bar.",
+                        "Fixed a spell indicator's health-bar highlight covering the player name and the aura icons on live Group Frames, while the menu preview drew the same effect correctly underneath (#123). The effect rode along whenever its native aura container was re-levelled, so opening the settings or changing zone could flip the order either way; it now keeps the Layer it was configured with.",
+                        "Full-Frame effect previews in the Group preview and in Edit Mode now paint through the same renderer the frames use, so Glow shows its real halo instead of four flat edges and Pulse animates with its live opacity.",
+                        "Changing a spell indicator's Display as shape now re-gates that section right away; controls belonging to the previous shape, such as Icon Effect, could stay visible until an unrelated click refreshed the page.",
+                        "Colour changes on the Colors page now repaint the Resources strip in the preview immediately instead of leaving it on the previous colours until the tab was rebuilt.",
+                        "Fixed a raid frame block not staying where it was placed in Edit Mode: the saved position was converted between two internal formats with mismatched roster counts and drifted by up to 162 pixels, and a click that never moved could permanently lock the conversion out.",
+                        "Long castbar spell names are now shortened with a visible ellipsis that respects the bar width instead of being clipped by the renderer at an unpredictable spot (#121); a 23-character name could previously disappear completely under a 25-character limit, because the client cuts a bounded line at a glyph-dependent position.",
+                        "Turning off a castbar's cast time hands those pixels back to the spell name instead of leaving the gap reserved, so names truncate far less often.",
+                        "Fixed an Augmentation Evoker's player health bar shrinking by the extra composite height, and the power bar showing frozen Mana numbers under the Ebon Might duration text.",
+                        "If the UI starts in combat and the native aura container cannot be created, an Augmentation Evoker's power bar falls back to a normal Mana bar and retries after combat instead of showing an empty bar.",
+                        "The raid preview shows the correct group number on each preview frame instead of numbering members 1-5 within every group.",
+                        "The power colour swatch on the Global Fonts page shows an Augmentation Evoker's real power token instead of a hard-coded Essence colour.",
+                        "The castbar name shortening no longer builds a cache key string on every text write.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.09",
+            date = "2026-08-17",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Added dynamic Custom Priority ordering for Dots on target and Custom 1-3 aura containers, keeping the configured spell order compact and stable as tracked auras appear or expire.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "dots on target custom priority",
+                                label = "Custom Priority",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.target.custom4.placed.sortMethod",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "custom4_behavior",
+                            },
+                        },
+                        {
+                            text = "Added a combat aura scanner to the Unitframe blacklist workspace: one click closes the menu, keeps capturing every blockable aura with its icon until combat ends, then reopens the menu with the collected list, ready to block.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target debuff blacklist",
+                                label = "Combat scan",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.target.debuff.blacklist.hidePermanent",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "debuff_blacklist",
+                            },
+                        },
+                        {
+                            text = "Manual blacklist entries are now verified by Spell ID against the live unit: when your cast's ID differs from the aura's actual ID, MSUF warns and offers to block the real aura ID instead.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target debuff blacklist",
+                                label = "Blacklist",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.target.debuff.blacklist.hidePermanent",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "debuff_blacklist",
+                            },
+                        },
+                        {
+                            text = "Added an optional Show spell IDs in aura tooltips toggle that keeps the native 12.1 tooltip option enabled across logins.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "spell ids",
+                                label = "Aura tooltip spell IDs",
+                                sectionId = "misc_tooltips",
+                                controlId = "menu2.opt.misc.global.setting.tooltip.show.aura.spell.ids",
+                                settingKey = "general.tooltipShowAuraSpellIDs",
+                            },
+                        },
+                        {
+                            text = "Added an optional Boss Number status indicator so boss frames can show their encounter index directly on the frame.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "boss number",
+                                label = "Boss Number",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_boss.unit.status.selected.enabled",
+                                settingKey = "boss.showBossNumberIndicator",
+                                prepareKind = "unitStatus",
+                                prepareValue = "bossNumber",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Moved aura ordering out of Style into dedicated, scope-aware Ordering workspaces for Unit Frames, Group Frames, custom aura containers, and external defensives, with draggable priority rows that snap to their new slot.",
+                        "Added a live Active auras on this frame dropdown to the blacklist with one-click blocking, a Rescan button, and a session capture list; scans run only on click.",
+                        "Extended the Maximum duration filter to every aura lane on unit and group frames, including Buffs, Tracked Buffs, and External Defensives.",
+                        "Reworked pandemic-window Full-Frame effects for tracked DoTs to bind to the visible aura buttons themselves, including portrait mode.",
+                        "Replaced Aura list scrollbars with the consistent MSUF scrollbar style and exposed Ordering options directly without a redundant accordion.",
+                        "Added Blizzard's NEW badge to the See New Features button, shown until the bundled release notes have been opened.",
+                        "Added Deathstalker's Mark for Rogues and Atmospheric Exposure for Druids to the tracked target-effect presets, and corrected the Balance Druid presets for Moonfire (164812), Sunfire (164815), and Atmospheric Exposure (430589).",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the combat timer not being movable while its position was unlocked.",
+                        "Added a tooltip to the combat timer's Lock position toggle explaining how positioning works.",
+                        "Fixed the Combat Enter/Leave text vanishing after every combat transition while unlocked; it now stays visible as its movable handle.",
+                        "Fixed gameplay mover offsets drifting when the moved element was anchored to a scaled frame, and dragging a mover now repaints its X/Y sliders live.",
+                        "Scanning respects Blizzard's instanced-content restrictions: encounter, Mythic+, and PvP lockdowns show a clear notice pointing to the curated presets and resume automatically instead of erroring.",
+                        "Scan results state how many auras Blizzard hides as secret; hidden auras cannot be identified or blocked by any addon, so everything blockable is always captured.",
+                        "Fixed Edit Mode arrow-key nudging for Custom 1-4 aura containers, including shared boss-frame positioning.",
+                        "Fixed Spell Indicator controls from an inactive display type remaining visible after selection or preview changes.",
+                        "Kept Custom Priority ordering and blacklist scanning fully event- and click-driven: no polling, no recurring OnUpdate work, and nothing added to combat hotpaths.",
                     },
                 },
             },

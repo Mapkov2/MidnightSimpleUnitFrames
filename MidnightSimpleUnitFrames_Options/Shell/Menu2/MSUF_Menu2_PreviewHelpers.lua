@@ -16,6 +16,7 @@ M.ClassPowerPreview = CP
 -- preview modules. Keep preview-only fallbacks here instead of coupling pages to live runtime.
 local floor = math.floor
 local min = math.min
+local IsSecretValue = _G.issecretvalue or function() return false end
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
 local ROUNDED_MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
@@ -45,6 +46,21 @@ function H.ResolveRoundedMedia()
     local strength = floor((tonumber(bars and bars.roundedCornerStrength) or 3) + 0.5)
     if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
     return ROUNDED_MASK_PATHS[strength], ROUNDED_EDGE_PATHS[strength], strength
+end
+
+--- Mirrors the controller's effective Player Mana ownership in both previews.
+--- Native API fallback exists only for isolated/early preview loads.
+function H.PlayerManaSourceActive(player)
+    if not (player and player.playerPowerSource == "MANA") then return false end
+    local published = _G.MSUF_PlayerPowerManaOverrideActive
+    if type(published) == "boolean" then return published end
+    local vehicle = _G.UnitHasVehicleUI and _G.UnitHasVehicleUI("player")
+    if IsSecretValue(vehicle) or vehicle == true then return false end
+    local hasPowerType = _G.UnitHasPowerType
+    if type(hasPowerType) ~= "function" then return true end
+    local manaType = (_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0
+    local hasMana = hasPowerType("player", manaType)
+    return not IsSecretValue(hasMana) and hasMana == true
 end
 
 function H.ApplyRoundedMediaSlice(region, strength)
