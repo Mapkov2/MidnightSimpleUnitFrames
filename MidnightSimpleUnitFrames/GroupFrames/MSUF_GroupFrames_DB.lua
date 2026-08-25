@@ -1037,10 +1037,9 @@ end
 function GF.GetVisibleLayoutCount(kind, count, conf)
     count = math_floor((tonumber(count) or 0) + 0.5)
     if count < 1 then return count end
-    if not IsRaidLikeKind(kind) then return count end
 
     conf = conf or (GF.GetConf and GF.GetConf(kind)) or {}
-    if conf and conf.preserveRaidGroups == true then
+    if IsRaidLikeKind(kind) and conf and conf.preserveRaidGroups == true then
         local groups = math_floor((tonumber(conf.maxColumns) or 8) + 0.5)
         if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
         return math_min(count, groups * 5)
@@ -1048,8 +1047,10 @@ function GF.GetVisibleLayoutCount(kind, count, conf)
 
     local upc = math_floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
     if upc < 1 then upc = 1 elseif upc > 40 then upc = 40 end
-    local columns = math_floor((tonumber(conf and conf.maxColumns) or 8) + 0.5)
-    if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
+    local maxDefault = IsRaidLikeKind(kind) and 8 or 1
+    local columnCap = IsRaidLikeKind(kind) and 40 or 8
+    local columns = math_floor((tonumber(conf and conf.maxColumns) or maxDefault) + 0.5)
+    if columns < 1 then columns = 1 elseif columns > columnCap then columns = columnCap end
     return math_min(count, upc * columns)
 end
 

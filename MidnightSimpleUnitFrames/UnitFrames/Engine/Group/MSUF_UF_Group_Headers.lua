@@ -532,10 +532,9 @@ local function RaidGroupingOrder(conf)
 end
 
 local function RequiredHeaderColumns(kind, conf, count)
-  if kind == "party" then return 1 end
   count = floor((tonumber(count) or 0) + 0.5)
   if count < 1 then return 1 end
-  if conf and conf.preserveRaidGroups == true then
+  if kind ~= "party" and conf and conf.preserveRaidGroups == true then
     local groups = floor(((count + 4) / 5))
     local maxGroups = PreservedRaidGroupLimit(conf) or 8
     if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
@@ -548,9 +547,11 @@ local function RequiredHeaderColumns(kind, conf, count)
     return columns
   end
   local upc = ClampInt(conf and conf.unitsPerColumn, 5, 1, 40)
-  local maxColumns = ClampInt(conf and conf.maxColumns, 8, 1, 40)
+  local maxDefault = kind == "party" and 1 or 8
+  local columnCap = kind == "party" and 8 or 40
+  local maxColumns = ClampInt(conf and conf.maxColumns, maxDefault, 1, columnCap)
   local columns = floor(((count + upc - 1) / upc))
-  if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
+  if columns < 1 then columns = 1 elseif columns > columnCap then columns = columnCap end
   if columns > maxColumns then columns = maxColumns end
   return columns
 end
