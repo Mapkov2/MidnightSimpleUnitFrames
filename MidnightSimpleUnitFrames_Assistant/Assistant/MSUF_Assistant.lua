@@ -1758,7 +1758,9 @@ function AP.AppendValueClampNotes(text)
         elseif clamp.max ~= nil then
             range = FormatClampNumber(clamp.max) .. " or lower"
         end
-        lines[#lines + 1] = "You asked for " .. FormatClampNumber(clamp.requested) .. ", but "
+        -- "That worked out to" stays honest for relative requests ("wider"
+        -- becomes +step) where the player never typed the number.
+        lines[#lines + 1] = "That request worked out to " .. FormatClampNumber(clamp.requested) .. ", but "
             .. clamp.label .. " only accepts " .. tostring(range or "a narrower range")
             .. ", so I used " .. FormatClampNumber(clamp.applied) .. "."
     end
@@ -7458,6 +7460,66 @@ function A.ExecutePlan(plan, opts)
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
     end
+    -- A sentence carrying two RGB triplets is an ambiguous colour request; no
+    -- lane may hand one of the components to a number control ("make bar
+    -- outlines 255,0,0, 0,0,255" clamped 255 into Outline Thickness on a warm
+    -- follow-up turn). Checked here because every write funnels through this
+    -- transaction entry, whatever lane assembled the plan.
+    if plan.kind == "changes" then
+        -- Both texts matter: a lane may pass a rewritten sourceText with the
+        -- triplets stripped, while the player's actual sentence is the stash.
+        local function HasTwoTriplets(hay)
+            hay = tostring(hay or "")
+            local firstStart = hay:find("%d+%s*,%s*%d+%s*,%s*%d+")
+            if not firstStart then return false end
+            local _, firstEnd = hay:find("%d+%s*,%s*%d+%s*,%s*%d+", firstStart)
+            return firstEnd ~= nil and hay:find("%d+%s*,%s*%d+%s*,%s*%d+", firstEnd + 1) ~= nil
+        end
+        -- Class Resources have no outline colour: wording that names both the
+        -- class-power family and an outline must not write a shared outline
+        -- control that lacks class-power identity, whichever lane planned it.
+        local function ClassPowerOutlineMismatch(hay)
+            hay = " " .. tostring(hay or ""):lower() .. " "
+            if not ((hay:find("class power", 1, true) or hay:find("class resource", 1, true)
+                or hay:find("classpower", 1, true)) and hay:find("outline", 1, true)) then
+                return false
+            end
+            for i = 1, #(plan.changes or {}) do
+                local setting = plan.changes[i] and plan.changes[i].setting
+                if type(setting) == "table" then
+                    local own = (tostring(setting.key or "") .. " " .. tostring(setting.label or "")
+                        .. " " .. tostring(setting.attribute or "")):lower()
+                    if not (own:find("classpower", 1, true) or own:find("class power", 1, true)
+                        or own:find("class resource", 1, true)) then
+                        return true
+                    end
+                end
+            end
+            return false
+        end
+        if ClassPowerOutlineMismatch(sourceText) or ClassPowerOutlineMismatch(A._activeSubmitSourceText) then
+            return NormalizePlanResult({
+                text = "Class Resources have no outline colour of their own, so I kept everything unchanged. The shared control is Bar Outline Color under Global Bars; the Class Resource outline thickness is Class Resource Outline.",
+                result = "ambiguous", status = "ambiguous",
+                summary = "Fails a class-power outline colour request closed instead of writing the shared control.",
+            })
+        end
+        if HasTwoTriplets(sourceText) or HasTwoTriplets(A._activeSubmitSourceText) then
+            do
+                for i = 1, #(plan.changes or {}) do
+                    local change = plan.changes[i]
+                    local setting = change and change.setting
+                    if type(setting) == "table" and setting.type == "number" and not setting.assistantColorChannel then
+                        return NormalizePlanResult({
+                            text = "That names two colours at once, so I kept everything unchanged. Tell me one colour, for example 'set the bar outline color to 255,0,0'.",
+                            result = "ambiguous", status = "ambiguous",
+                            summary = "Asks which of two stated colours to use instead of writing a number control.",
+                        })
+                    end
+                end
+            end
+        end
+    end
     -- Enabled per-unit filter values require that exact lane's gate. Expand
     -- this dependency into the same transaction. Group filter dropdowns
     -- similarly require their lane to be active.
@@ -7996,6 +8058,29 @@ function A.HandleInput(text, handleOpts)
     -- Router here. The notice is still reachable through A.Parse when the
     -- sentence genuinely cannot be planned.
     if type(semanticBarOutlineColor) == "table" and semanticBarOutlineColor.kind ~= "changes" then
+        -- Dropping the notice only helps when the compound planner can read
+        -- the WHOLE sentence; otherwise a Router colour lane applies the
+        -- colour and silently discards the other change ("set bar outline
+        -- color red and thickness 2" wrote the colour alone). If no whole
+        -- plan exists, the fail-closed notice IS the answer.
+        local parser = A.Parser or {}
+        local wholePlan
+        if type(parser.ParseCompound) == "function" and type(parser.Normalize) == "function" then
+            local okWhole, plan = pcall(parser.ParseCompound, parser.Normalize(text), text, nil)
+            if okWhole and type(plan) == "table" and plan.kind == "changes"
+                and type(plan.changes) == "table" and #plan.changes > 1 then
+                wholePlan = plan
+            end
+        end
+        -- Only the multi-detail notice may end the turn here: it proves the
+        -- colour was understood and a second change was named. Any other
+        -- non-change reply from the shortcut (a missing-value ask on typo'd
+        -- wording, for example) still routes so the fuzzy registry fallback
+        -- can resolve the sentence whole.
+        if not wholePlan and type(semanticBarOutlineColor.text) == "string"
+            and semanticBarOutlineColor.text:find("also asks", 1, true) then
+            return AP.ExecuteBarOutlineColorSemanticPlan(semanticBarOutlineColor)
+        end
         semanticBarOutlineColor = nil
     end
     local function RunRoute()
@@ -8385,6 +8470,25 @@ function AP.IsNamedConjunctionBoundary(before, after)
 end
 
 function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendingChoices() then return nil end
+    -- A sentence that pins or unpins a player belongs to the Router's atomic
+    -- Priority Frames block. Splitting "enable Priority Frames and pin Bob by
+    -- name" would apply the safe half and silently drop the unsafe pin.
+    do
+        local lower = " " .. tostring(text or ""):lower() .. " "
+        if lower:find("%f[%a]pin%f[%A]") or lower:find("%f[%a]unpin%f[%A]") or lower:find("pinned", 1, true) then
+            return nil
+        end
+    end
+    -- "what can the assistant change and what can't it" is one QUESTION; a
+    -- question opener never splits into a command batch.
+    do
+        local lead = tostring(text or ""):lower():gsub("^%s+", "")
+        if lead:match("^what%f[%A]") or lead:match("^which%f[%A]") or lead:match("^where%f[%A]")
+            or lead:match("^why%f[%A]") or lead:match("^how%f[%A]") or lead:match("^was%f[%A]")
+            or lead:match("^wie%f[%A]") or lead:match("^wo%f[%A]") then
+            return nil
+        end
+    end
     local parts = { Trim(text) }
     local connectors = { " and ", " then ", " und ", " dann " }
     local changed = true
@@ -9003,6 +9107,25 @@ function AP.TryImmediateMutationResult(text, opts)
     -- path parse and apply them atomically instead of allowing a warm exact-
     -- alias index to consume only the final frame name.
     if normalized:find(" but ", 1, true) then return nil end
+    -- Two RGB triplets in one sentence is an ambiguous colour request the
+    -- Router answers read-only; the warm continuation lane must not feed one
+    -- of the components into a sibling number control from context.
+    do
+        local first = normalized:find("%d+%s*,%s*%d+%s*,%s*%d+")
+        if first then
+            local _, firstEnd = normalized:find("%d+%s*,%s*%d+%s*,%s*%d+", first)
+            if firstEnd and normalized:find("%d+%s*,%s*%d+%s*,%s*%d+", firstEnd + 1) then return nil end
+        end
+    end
+    -- Priority Frames pins are owned by the Router's atomic block: "enable
+    -- Priority Frames and pin Bob by name" must not have its safe half applied
+    -- here while the unsafe name-pin half is silently dropped.
+    if (normalized:find("%f[%a]pin%f[%A]") or normalized:find("%f[%a]unpin%f[%A]") or normalized:find("pinned", 1, true))
+        and (normalized:find("priority", 1, true) or normalized:find("pinned", 1, true)
+            or normalized:find("by name", 1, true))
+    then
+        return nil
+    end
     if AP.SplitBatchCommands(text) then return nil end
     -- Never let continuation/exact-alias fast paths reinterpret a problem,
     -- capability question, location lookup, or subjective request as a write.
@@ -9329,6 +9452,7 @@ function AP.TryImmediateMutationResult(text, opts)
 end
 
 function AP.SubmitNow(text, opts)    opts = opts or {}
+    A._activeSubmitSourceText = text
     text = Trim(text)
     if text == "" then return nil end
     if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
@@ -9467,6 +9591,9 @@ function A.Submit(text)
             if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then unresolved = false end
             if type(A.pendingCandidates) == "table" and #A.pendingCandidates > 0 then unresolved = false end
         end
+        -- A sentence carrying an RGB triplet states colour components; no
+        -- rescue rewrite may hand one of those numbers to a number control.
+        if unresolved and tostring(text or ""):find("%d+%s*,%s*%d+%s*,%s*%d+") then unresolved = false end
         if unresolved and type(A.RouterPrivate) == "table" and type(A.ExecutePlan) == "function" then
             local router = A.RouterPrivate
             -- The dimension rewrite is consulted last so nothing the existing
@@ -9582,6 +9709,7 @@ function AP.RunSubmitCallback(callback, result, label, text)
 end
 
 function AP.SubmitDeferredNow(text, callback)
+    A._activeSubmitSourceText = text
     text = Trim(text)
     if text == "" then return nil end
     if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
