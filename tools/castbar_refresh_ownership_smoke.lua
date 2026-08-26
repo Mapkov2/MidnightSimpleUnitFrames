@@ -25,6 +25,7 @@ local fonts = read(root .. "Runtime/MSUF_FontRuntime.lua")
 local interruptReady = read(root .. "Castbars/MSUF_InterruptReady.lua")
 local focusKickIcon = read(root .. "Castbars/MSUF_FocusKickIcon.lua")
 local previewAnimation = read(root .. "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
+local factory = read(root .. "UnitFrames/Engine/MSUF_UF_Factory.lua")
 
 local function ownerCountFor(needle, sources)
     local count = 0
@@ -69,6 +70,13 @@ assert(contains(style, 'ExportPublic("MSUF_UpdateCastbarFillDirection",'))
 assert(ownerCountFor('ExportPublic("MSUF_GetCastbarReverseFillForFrame",', { core, utils }) == 1,
     "castbar reverse-fill resolution must have exactly one public owner")
 assert(contains(utils, 'ExportPublic("MSUF_GetCastbarReverseFillForFrame",'))
+
+local spawnStart = assert(factory:find("function Factory.SpawnAll", 1, true))
+local spawnEnd = assert(factory:find("function Factory.Apply", spawnStart, true))
+local spawnBody = factory:sub(spawnStart, spawnEnd - 1)
+assert(contains(spawnBody, "MSUF_FocusKickDriver_ForceUpdate")
+    and contains(spawnBody, "MSUF_KickReady_RefreshAll"),
+    "post-profile startup must refresh the saved focus tracker state")
 
 local coldStart = assert(core:find("local function ApplyCastbarVisualFrameCold", 1, true))
 local coldEnd = assert(core:find("local function MaxBossFrames", coldStart, true))

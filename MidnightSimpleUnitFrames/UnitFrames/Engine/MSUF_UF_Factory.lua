@@ -1122,6 +1122,9 @@ function Factory.SpawnAll(applyMask)
   -- UnitFrames/Effects/MSUF_UF_TextureLayer.lua); stamp it after the spawn pass.
   local refreshTexLayer = _G.MSUF_RefreshUnitTextureLayers
   if type(refreshTexLayer) == "function" then refreshTexLayer(nil) end
+  -- Optional focus-tracker modules load before the active profile is selected.
+  if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then _G.MSUF_FocusKickDriver_ForceUpdate() end
+  if type(_G.MSUF_KickReady_RefreshAll) == "function" then _G.MSUF_KickReady_RefreshAll() end
   return true
 end
 
