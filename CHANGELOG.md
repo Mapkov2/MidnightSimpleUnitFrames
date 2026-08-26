@@ -1,5 +1,21 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.13-beta2 - 2026-08-26
+
+### Highlights
+
+- **Range Fade now stays accurate in PvP instances.** Group and Unit Frames re-query when the instance context changes, while unchanged polling sets avoid redundant rebuilds.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"range_fade","controlId":"menu2.uf_target.unit.range_fade.enabled","settingKey":"target.rangeFadeEnabled","prepareKind":"","prepareValue":"","query":"target range fade","label":"Enable Range Fade"} -->
+- **Focus castbar trackers recover correctly after startup.** Focus interrupt and cast ownership is restored when the underlying tracker becomes available after the initial load.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_focus_kick","controlId":"menu2.opt.castbar.global.focus.kick.enable.focus.kick.icon","settingKey":"general.enableFocusKickIcon","prepareKind":"","prepareValue":"","query":"focus interrupt tracker","label":"Focus interrupt tracker"} -->
+- **Player Power text keeps the correct current resource identity.** Current-value text no longer loses its power type when the live bar source has already been resolved.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.resource.source","settingKey":"player.playerPowerSource","prepareKind":"","prepareValue":"","query":"displayed resource","label":"Displayed resource"} -->
+
+### Changes
+
+- Reissued the 6.13 Beta 1 runtime code as Beta 2 after a local CurseForge client installation was interrupted while a locale file was locked. Only release metadata, the bundled changelog, and release validation changed; this is not an addon code fix.
+- Revalidated every Core TOC payload path, Lua 5.1 loadability, and the affected XML manifests before republishing.
+
 ## 6.13-beta1 - 2026-08-26
 
 ### Highlights

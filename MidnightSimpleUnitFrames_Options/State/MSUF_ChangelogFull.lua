@@ -8,12 +8,63 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "17546BBBA5AAED6C1F4DCCF61FEF0086E593E8F83834CF7C9B07A91780D8976B",
-    currentVersion = "6.13-beta1",
+    sourceSha256 = "E90ACAC10522CC5966DAFB58D5FDD6C9B0BAA8A04CC0CF1BE2B6C2CE2792DC1A",
+    currentVersion = "6.13-beta2",
     historyFromVersion = "6.02",
-    previousVersion = "6.12",
-    rangeLabel = "6.12 -> 6.13-beta1",
+    previousVersion = "6.13-beta1",
+    rangeLabel = "6.13-beta1 -> 6.13-beta2",
     entries = {
+        {
+            version = "6.13-beta2",
+            date = "2026-08-26",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Range Fade now stays accurate in PvP instances. Group and Unit Frames re-query when the instance context changes, while unchanged polling sets avoid redundant rebuilds.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target range fade",
+                                label = "Enable Range Fade",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_target.unit.range_fade.enabled",
+                                settingKey = "target.rangeFadeEnabled",
+                            },
+                        },
+                        {
+                            text = "Focus castbar trackers recover correctly after startup. Focus interrupt and cast ownership is restored when the underlying tracker becomes available after the initial load.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "focus interrupt tracker",
+                                label = "Focus interrupt tracker",
+                                sectionId = "castbar_focus_kick",
+                                controlId = "menu2.opt.castbar.global.focus.kick.enable.focus.kick.icon",
+                                settingKey = "general.enableFocusKickIcon",
+                            },
+                        },
+                        {
+                            text = "Player Power text keeps the correct current resource identity. Current-value text no longer loses its power type when the live bar source has already been resolved.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "displayed resource",
+                                label = "Displayed resource",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.resource.source",
+                                settingKey = "player.playerPowerSource",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Reissued the 6.13 Beta 1 runtime code as Beta 2 after a local CurseForge client installation was interrupted while a locale file was locked. Only release metadata, the bundled changelog, and release validation changed; this is not an addon code fix.",
+                        "Revalidated every Core TOC payload path, Lua 5.1 loadability, and the affected XML manifests before republishing.",
+                    },
+                },
+            },
+        },
         {
             version = "6.13-beta1",
             date = "2026-08-26",
