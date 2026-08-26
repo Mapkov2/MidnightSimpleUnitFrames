@@ -8,11 +8,11 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "BA10D891ADE12467CD97EE68FE2E0B1935055A047F7325A3E6832CBDBFB74CBD",
+    sourceSha256 = "0B3C60FCABF8992830320E517A71D625EF843C278D1922FFDE2979F28BAE0191",
     currentVersion = "6.12",
     historyFromVersion = "6.09",
-    previousVersion = "6.11",
-    rangeLabel = "6.11 -> 6.12",
+    previousVersion = "6.09",
+    rangeLabel = "6.09 -> 6.12",
     entries = {
         {
             version = "6.12",
@@ -65,7 +65,6 @@ local data = {
                     bullets = {
                         "Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats; previews and the Assistant mirror the selected mode.",
                         "The Player Power resource selector is shared between Player Power and Class Resources, follows vehicle-resource handoffs, and is supported by previews, reset/undo history, search, and the Assistant.",
-                        "Subtlety Rogues can enable an APEX IT combat cue and a configurable Shadow Techniques soft glow at five or more stacks. Both follow Blizzard's native Cooldown Viewer and AuraContainer state without polling and keep protected stack decisions inside the native application binding.",
                         "Preserve Raid Groups now creates a separate secure header for each physical raid subgroup, retaining empty subgroup geometry and the selected Index, Name, or Role sorting inside each group. Scanning, Edit Mode bounds, visibility, and runtime layout cover every active subgroup header.",
                         "Retired unused legacy Class Resource text-format fields from existing profiles and generated fallback metadata.",
                     },
