@@ -520,8 +520,10 @@ local function HideOverAbsorbGlow(frame)
   end
 end
 
-local function SetOverAbsorbAlpha(holder, alpha)
-  local secret = issecretvalue(alpha) == true
+local function SetOverAbsorbAlpha(holder, alpha, secret)
+  -- Every caller owns the value it passes and already knows whether it came
+  -- from a secret-capable native source. Carry that classification into this
+  -- sink instead of repeating issecretvalue for every health follower write.
   if not secret
     and holder._msufOverAbsorbAlphaPlain == true
     and holder._msufOverAbsorbAlpha == alpha then
@@ -732,11 +734,12 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       and frame._msufPredictionFullHealthAlphaUnit == unit
     if not alphaReady then
       local alpha = FullHealthAlpha(unit)
-      if issecretvalue(alpha) ~= true and alpha == nil then
+      local alphaSecret = issecretvalue(alpha) == true
+      if not alphaSecret and alpha == nil then
         HideOverAbsorbGlow(frame)
         return
       end
-      SetOverAbsorbAlpha(holder, alpha)
+      SetOverAbsorbAlpha(holder, alpha, alphaSecret)
       frame._msufPredictionFullHealthAlphaReady = true
       frame._msufPredictionFullHealthAlphaDirty = nil
       frame._msufPredictionFullHealthAlphaUnit = unit
@@ -775,17 +778,19 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
         and issecretvalue(unit) ~= true
         and frame._msufPredictionFullHealthAlphaUnit == unit
       if not alphaReady then
-        local alpha
+        local alpha, alphaSecret
         if not hpSecret and not maxSecret and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
           alpha = hp >= maxHP and 1 or 0
+          alphaSecret = false
         else
           alpha = FullHealthAlpha(unit)
+          alphaSecret = issecretvalue(alpha) == true
         end
-        if issecretvalue(alpha) ~= true and alpha == nil then
+        if not alphaSecret and alpha == nil then
           HideOverAbsorbGlow(frame)
           return
         end
-        SetOverAbsorbAlpha(holder, alpha)
+        SetOverAbsorbAlpha(holder, alpha, alphaSecret)
         frame._msufPredictionFullHealthAlphaReady = true
         frame._msufPredictionFullHealthAlphaDirty = nil
         frame._msufPredictionFullHealthAlphaUnit = issecretvalue(unit) ~= true and unit or nil
@@ -816,7 +821,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     HideOverAbsorbGlow(frame)
     return
   end
-  SetOverAbsorbAlpha(holder, 1)
+  SetOverAbsorbAlpha(holder, 1, false)
   if holder._msufOverAbsorbShown ~= true then
     holder:SetShown(true)
     holder._msufOverAbsorbShown = true
@@ -1427,6 +1432,7 @@ local CancelQueuedPrediction
 local UpdateFull
 local UpdateBoundPredictionData
 local UpdateGlowHealthFast
+local UpdateFullHealthStripeFast
 local UpdateMixedFollowHealthFast
 local PREDICTION_BAR_DEFS = {
   { "heal", "incomingHealBar", 1, "healPredictionBar" },
@@ -1578,6 +1584,8 @@ local function CompilePredictionRuntime(frame, cfg, spec)
   if frame._msufPredictionNeedsHealth == true and cfg.test ~= true then
     if mixedFollowClamp then
       frame._msufUpdatePredictionHealthValue = UpdateMixedFollowHealthFast
+    elseif frame._msufPredictionFullHealthStripe == true then
+      frame._msufUpdatePredictionHealthValue = UpdateFullHealthStripeFast
     else
       frame._msufUpdatePredictionHealthValue = UpdateGlowHealthFast
     end
@@ -1996,30 +2004,57 @@ function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
     frame._msufPredictionAbsorbSecret == true)
 end
 
--- Core has already C-filtered UNIT_HEALTH. The common route only updates the
--- optional edge visual from cached prediction payloads; it never reads one of
--- the three prediction APIs.
-local function UpdateWarmFullHealthStripe(frame, unit)
+-- Bound full-health-stripe follower. CompilePredictionRuntime installs this
+-- only for the non-mixed stripe archetype, so its UNIT_HEALTH path never pays
+-- the generic glow wrapper's feature tests or partial-overlay bucket branch.
+-- It consumes only the absorb payload cached by the data-event owner.
+UpdateFullHealthStripeFast = function(frame, event, unit, seedHP, seedMaxHP)
+  if not frame then return end
+  if frame._msufPredictionHealthVisualActive ~= true then return end
+  unit = unit or frame.MSUFUnitKey
+  local cfg = frame._msufPredictionRuntimeCfg
+  if issecretvalue(unit) == true
+    or unit ~= frame.MSUFUnitKey
+    or frame._msufPredictionDisabled == true
+    or not cfg
+    or frame._msufPredictionCacheReady ~= true
+    or frame._msufPredictionCacheUnit ~= unit
+    or frame._msufPredictionCacheCfg ~= cfg then
+    return Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
+  end
+
+  local absorb = frame._msufPredictionAbsorb
+  local absorbSecret = frame._msufPredictionAbsorbSecret == true
+  -- The data-event owner opens _msufPredictionHealthVisualActive only for a
+  -- plain positive absorb or, for this stripe archetype, a secret absorb. The
+  -- validated warm cache therefore makes another type/value test redundant.
+
   local holder = frame.overAbsorbGlowBar
   local hpBar = frame.hpBar or frame.Health
   local reverse = frame._msufPredictionHpReverse == true
   if not (holder and hpBar
     and holder._msufOverAbsorbReverse == reverse
     and holder._msufOverAbsorbAnchor == hpBar) then
-    return false
+    return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true,
+      nil, absorbSecret)
   end
 
   -- A plain percent is already owned by Health. It is enough to resolve the
   -- full-health edge and, when partial over-absorb is enabled, lets the general
   -- threshold path reconstruct current health without another UnitHealth read.
   local pct = CachedHealthPercent(frame, unit)
-  if issecretvalue(pct) ~= true and type(pct) == "number" then
+  -- Health publishes only plain percentages into this comparison cache and
+  -- clears both fields for protected values, so type is the complete gate.
+  if type(pct) == "number" then
     if pct < 100 then
-      if frame._msufPredictionOverAbsorbOverlay == true then return false end
+      if frame._msufPredictionOverAbsorbOverlay == true then
+        return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true,
+          nil, absorbSecret)
+      end
       HideOverAbsorbGlow(frame)
-      return true
+      return
     end
-    SetOverAbsorbAlpha(holder, 1)
+    SetOverAbsorbAlpha(holder, 1, false)
   else
     -- A protected percentage cannot be passed into LuaCurve:Evaluate from
     -- addon code: that call is tainted even though the value itself came from
@@ -2028,14 +2063,20 @@ local function UpdateWarmFullHealthStripe(frame, unit)
     local alpha = FullHealthAlpha(unit)
     local alphaSecret = issecretvalue(alpha) == true
     if not alphaSecret then
-      if type(alpha) ~= "number" then return false end
+      if type(alpha) ~= "number" then
+        return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true,
+          nil, absorbSecret)
+      end
       if alpha <= 0 then
-        if frame._msufPredictionOverAbsorbOverlay == true then return false end
+        if frame._msufPredictionOverAbsorbOverlay == true then
+          return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true,
+            nil, absorbSecret)
+        end
         HideOverAbsorbGlow(frame)
-        return true
+        return
       end
     end
-    SetOverAbsorbAlpha(holder, alpha)
+    SetOverAbsorbAlpha(holder, alpha, alphaSecret)
   end
 
   frame._msufPredictionFullHealthAlphaReady = true
@@ -2045,7 +2086,6 @@ local function UpdateWarmFullHealthStripe(frame, unit)
     holder:SetShown(true)
     holder._msufOverAbsorbShown = true
   end
-  return true
 end
 
 UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
@@ -2065,19 +2105,9 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
     return Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
   end
   local absorb = frame._msufPredictionAbsorb
-  -- Partial over-absorb cannot derive its threshold from protected health or
-  -- absorb values. The absorb-data event already hides that unrenderable
-  -- state and publishes this plain-positive gate, so steady UNIT_HEALTH ticks
-  -- do not repeat secret/type/value inspection. Full-health stripe is
-  -- different: its native value/alpha gates intentionally consume protected
-  -- payloads.
-  -- The absorb-data owner already classified this payload when it populated
-  -- the cache. Reuse that plain boolean on every UNIT_HEALTH follower tick;
-  -- the protected payload itself remains opaque and is never compared.
-  local absorbSecret = frame._msufPredictionAbsorbSecret == true
-  if not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
-    return
-  end
+  -- This compiled non-stripe route can open only for the plain-positive absorb
+  -- verdict published by the data-event owner. Protected/non-positive payloads
+  -- never pass the health-visual gate, so do not reclassify them here.
   -- Steady-tick dedupe (pure overlay, plain absorb). The overshield verdict is
   -- a function of the integer health-percent bucket and the absorb amount; it
   -- cannot change while both are unchanged. Skip the redundant render on
@@ -2086,31 +2116,26 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
   -- test: a cache miss falls through to the authoritative UpdateOverAbsorbGlow,
   -- which owns the full-health / partial-spill decision. Every prediction data
   -- event clears this key (ApplyPredictionValues) so the next tick re-syncs.
-  if frame._msufPredictionFullHealthStripe ~= true and not absorbSecret then
-    local bar = frame.hpBar
-    local pct = bar and bar._msufHealthPercentValue
-    if pct ~= nil and issecretvalue(pct) ~= true and type(pct) == "number"
-      and bar._msufHealthPercentUnit == unit then
-      local bucket = pct - (pct % 1)
-      if frame._msufGlowTickBucket == bucket
-        and frame._msufGlowTickAbsorb == absorb
-        and frame._msufGlowTickUnit == unit then
-        return
-      end
-      frame._msufGlowTickBucket = bucket
-      frame._msufGlowTickAbsorb = absorb
-      frame._msufGlowTickUnit = unit
-    else
-      frame._msufGlowTickBucket = nil
-      frame._msufGlowTickUnit = nil
+  -- CompilePredictionRuntime binds this function only to non-stripe frames.
+  local bar = frame.hpBar
+  local pct = bar and bar._msufHealthPercentValue
+  if type(pct) == "number"
+    and bar._msufHealthPercentUnit == unit then
+    local bucket = pct - (pct % 1)
+    if frame._msufGlowTickBucket == bucket
+      and frame._msufGlowTickAbsorb == absorb
+      and frame._msufGlowTickUnit == unit then
+      return
     end
-  end
-  if frame._msufPredictionFullHealthStripe == true
-    and UpdateWarmFullHealthStripe(frame, unit) then
-    return
+    frame._msufGlowTickBucket = bucket
+    frame._msufGlowTickAbsorb = absorb
+    frame._msufGlowTickUnit = unit
+  else
+    frame._msufGlowTickBucket = nil
+    frame._msufGlowTickUnit = nil
   end
   return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true,
-    nil, absorbSecret)
+    nil, false)
 end
 
 UpdateMixedFollowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
@@ -2507,10 +2532,14 @@ function Prediction.SelectEventUpdate(frame, _spec, event)
 end
 Prediction.NoDispatchUpdates = { [QueuePredictionDataEvent] = true }
 Prediction.UpdateGlowHealthFast = UpdateGlowHealthFast
+Prediction.UpdateFullHealthStripeFast = UpdateFullHealthStripeFast
 Prediction.UpdateMixedFollowHealthFast = UpdateMixedFollowHealthFast
 -- Core may omit this follower entirely while the absorb-data owner says there
 -- is no health-dependent glow/stripe to render.
-Prediction.HealthVisualGateUpdates = { [UpdateGlowHealthFast] = true }
+Prediction.HealthVisualGateUpdates = {
+  [UpdateGlowHealthFast] = true,
+  [UpdateFullHealthStripeFast] = true,
+}
 
 --- Reseed live prediction values after Blizzard has finalized world/unit data.
 --- This is a cold lifecycle path: it touches only visible frames with an active
