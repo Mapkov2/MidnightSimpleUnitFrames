@@ -17,7 +17,6 @@
 
 - Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats; previews and the Assistant mirror the selected mode.
 - The Player Power resource selector is shared between Player Power and Class Resources, follows vehicle-resource handoffs, and is supported by previews, reset/undo history, search, and the Assistant.
-- Subtlety Rogues can enable an APEX IT combat cue and a configurable Shadow Techniques soft glow at five or more stacks. Both follow Blizzard's native Cooldown Viewer and AuraContainer state without polling and keep protected stack decisions inside the native application binding.
 - Preserve Raid Groups now creates a separate secure header for each physical raid subgroup, retaining empty subgroup geometry and the selected Index, Name, or Role sorting inside each group. Scanning, Edit Mode bounds, visibility, and runtime layout cover every active subgroup header.
 - Retired unused legacy Class Resource text-format fields from existing profiles and generated fallback metadata.
 

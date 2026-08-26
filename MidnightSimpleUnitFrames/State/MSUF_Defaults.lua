@@ -4247,19 +4247,6 @@ end
     if gp.combatStateOffsetX == nil then gp.combatStateOffsetX = 0 end
     if gp.combatStateOffsetY == nil then gp.combatStateOffsetY = 80 end
     if gp.combatStateDuration == nil then gp.combatStateDuration = 1.5 end
-    if gp.enableApexItDevAura == nil then gp.enableApexItDevAura = false end
-    if gp.enableShadowTechniquesStackHighlight == nil then gp.enableShadowTechniquesStackHighlight = false end
-    if gp.shadowTechniquesGlowColor == nil then gp.shadowTechniquesGlowColor = { 0.69, 0.50, 0.88 } end
-    if gp.shadowTechniquesGlowScale == nil then gp.shadowTechniquesGlowScale = 100 end
-    if gp.shadowTechniquesGlowStrength == nil then gp.shadowTechniquesGlowStrength = 80 end
-    if gp.apexItFontSize == nil then gp.apexItFontSize = 32 end
-    if gp.apexItOffsetX == nil then gp.apexItOffsetX = 0 end
-    if gp.apexItOffsetY == nil then gp.apexItOffsetY = 140 end
-    if gp.enableApexNameplateRangeDetection == nil then gp.enableApexNameplateRangeDetection = true end
-    if gp.enableApexRangeCounter == nil then gp.enableApexRangeCounter = false end
-    if gp.apexRangeCounterFontSize == nil then gp.apexRangeCounterFontSize = 18 end
-    if gp.apexRangeCounterOffsetX == nil then gp.apexRangeCounterOffsetX = 0 end
-    if gp.apexRangeCounterOffsetY == nil then gp.apexRangeCounterOffsetY = 70 end
     if gp.enableCombatCrosshair == nil then gp.enableCombatCrosshair = false end
     if gp.enableCombatCrosshairMeleeRangeColor == nil then gp.enableCombatCrosshairMeleeRangeColor = false end
     if gp.crosshairSize == nil then gp.crosshairSize = 40 end

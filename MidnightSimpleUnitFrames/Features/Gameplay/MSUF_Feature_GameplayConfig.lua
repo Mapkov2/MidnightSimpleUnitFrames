@@ -98,15 +98,6 @@ local function EnsureGameplayDefaults()
     if type(g.nameplateMeleeSpellIDByClass) ~= "table" then g.nameplateMeleeSpellIDByClass = {} end
     if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then g.nameplateMeleeSpellIDBySpec = {} end
 
-    Default(g, "enableApexItDevAura", false)
-    Default(g, "enableShadowTechniquesStackHighlight", false)
-    DefaultRGB(g, "shadowTechniquesGlowColor", 0.69, 0.50, 0.88)
-    ClampPositive(g, "shadowTechniquesGlowScale", 100, 75, 175)
-    ClampPositive(g, "shadowTechniquesGlowStrength", 80, 10, 100)
-    ClampPositive(g, "apexItFontSize", 32, 10, 64)
-    Default(g, "apexItOffsetX", 0)
-    Default(g, "apexItOffsetY", 140)
-
     -- Blizzard's TotemFrame is class-agnostic and parented to PlayerFrame, which MSUF hides, so
     -- this helper is what makes an occupied totem slot visible at all. Seeded on for every class
     -- instead of just Shaman/Monk; profiles that already stored a value keep it.

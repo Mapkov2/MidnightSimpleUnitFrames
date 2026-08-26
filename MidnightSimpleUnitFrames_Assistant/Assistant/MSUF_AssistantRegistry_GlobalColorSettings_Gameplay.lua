@@ -66,25 +66,4 @@ function A.GlobalRegistry.RegisterGameplayColorSettings(ctx)
     end, function(r, g, b)
         SetTableRGB(GameplayDB(), "crosshairOutRangeColor", r, g, b)
     end, { category = "Colors / Gameplay", frameType = "gameplay", attribute = "crosshairOutRangeColor", defaultR = 1, defaultG = 0, defaultB = 0, apply = ApplyGameplayColors })
-    ColorSetting("gameplay.shadowTechniquesGlowColor", "Shadow Techniques Glow Color", {
-        "shadow techniques glow color", "shadow techniques stack glow color", "stack glow color",
-    }, function()
-        return TableRGB(GameplayDB(), "shadowTechniquesGlowColor", 0.69, 0.50, 0.88)
-    end, function(r, g, b)
-        SetTableRGB(GameplayDB(), "shadowTechniquesGlowColor", r, g, b)
-    end, {
-        category = "Gameplay / Developer Auras",
-        frameType = "shadowTechniquesStackHighlight",
-        attribute = "glowColor",
-        defaultR = 0.69,
-        defaultG = 0.50,
-        defaultB = 0.88,
-        apply = function(reason)
-            if type(MSUF.MSUF_RequestGameplayApply) == "function" then
-                MSUF.MSUF_RequestGameplayApply(reason or "MSUF_ASSISTANT_SHADOW_TECHNIQUES_GLOW_COLOR")
-            else
-                ApplyGameplayColors(reason or "MSUF_ASSISTANT_SHADOW_TECHNIQUES_GLOW_COLOR")
-            end
-        end,
-    })
 end
