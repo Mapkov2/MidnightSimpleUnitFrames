@@ -14,6 +14,7 @@ local UIParent      = UIParent
 local C_Spell       = C_Spell
 local C_SpellBook   = C_SpellBook
 local C_CooldownViewer = C_CooldownViewer
+local C_NamePlate = C_NamePlate
 local C_StringUtil = C_StringUtil
 local hooksecurefunc = hooksecurefunc
 local UnitExists    = UnitExists
@@ -43,6 +44,8 @@ local RegisterModule = MSUF.MSUF_RegisterModule
 local ApplyGameplayNow
 local SyncGameplaySpecEvents
 local ApplyApexItDevAura
+local ApplyApexRangeCounter
+local ApplyApexRangeCounterStyle
 
 local function BusRegister(...)
     if type(EventBus_Register) == "function" then EventBus_Register(...) end
@@ -237,6 +240,21 @@ local apexItEventFrame
 local apexItPreviewActive = false
 local apexItConsumed = false
 local apexDeathstalkerKnown = false
+local apexRangeCounterFrame
+local apexRangeCounterHeader
+local apexRangeCounterText
+local apexRangeCounterEventFrame
+local apexRangeCounterTimer
+local apexRangeCounterTimerGeneration = 0
+local apexRangeCounterScanPending = false
+local apexRangeCounterPreviewActive = false
+local apexRangeCounterUnits = {}
+local apexRangeState = {
+    snapshotValid = false,
+    inRangeEnemyCount = 0,
+    sensorActionApplied = false,
+    secretTechniqueReadyByFrame = {},
+}
 local crosshairFrame
 local crosshairEventFrame
 local crosshairZoomHooksInstalled = false
@@ -512,7 +530,8 @@ local function ApplyApexTextStyle(fontString, isStackText)
 end
 
 local function ApplyFontToCounter()
-    if not timerText and not stateText and not apexItText and not apexItStackText then return end
+    if not timerText and not stateText and not apexItText and not apexItStackText
+        and not apexRangeCounterHeader and not apexRangeCounterText then return end
     if timerText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFont("timer")
         ApplyGameplayFont(timerText, path, size or 20, flags or "OUTLINE")
@@ -534,6 +553,9 @@ local function ApplyFontToCounter()
         ApplyApexTextStyle(apexItText, false)
         ApplyApexTextStyle(apexItStackText, true)
     end
+    if (apexRangeCounterHeader or apexRangeCounterText) and ApplyApexRangeCounterStyle then
+        ApplyApexRangeCounterStyle()
+    end
 end
 
 local DARKEST_NIGHT_TALENT_SPELL_ID = 457058
@@ -546,7 +568,7 @@ local APEX_MIN_SHADOW_TECHNIQUES_STACKS = 5
 local APEX_ROLE_DARKEST = "darkestNight"
 local APEX_ROLE_ANCIENT = "ancientArts"
 local APEX_ROLE_SHADOW_TECHNIQUES = "shadowTechniques"
-local APEX_VIEWER_NAMES = { "BuffIconCooldownViewer", "BuffBarCooldownViewer" }
+local APEX_VIEWER_NAMES = { "EssentialCooldownViewer", "BuffIconCooldownViewer", "BuffBarCooldownViewer" }
 local apexRoleByCooldownID = {}
 local apexRoleByViewerFrame = {}
 local apexActiveByViewerFrame = {}
@@ -626,7 +648,9 @@ local function ResolveApexViewerFrameRole(frame)
     if not cooldownInfo and type(frame.GetCooldownInfo) == "function" then cooldownInfo = frame:GetCooldownInfo() end
 
     local role
-    if CooldownInfoContainsSpell(cooldownInfo, DARKEST_NIGHT_AURA_SPELL_ID) then
+    if CooldownInfoContainsSpell(cooldownInfo, 280719) then
+        role = "secretTechnique"
+    elseif CooldownInfoContainsSpell(cooldownInfo, DARKEST_NIGHT_AURA_SPELL_ID) then
         role = APEX_ROLE_DARKEST
     elseif CooldownInfoContainsSpell(cooldownInfo, ANCIENT_ARTS_AURA_SPELL_ID) then
         role = APEX_ROLE_ANCIENT
@@ -642,6 +666,215 @@ local function ApexRoleIsActive(role)
         if frameRole == role and apexActiveByViewerFrame[frame] == true then return true end
     end
     return false
+end
+
+apexRangeState.SecretTechniqueIsReady = function()
+    for frame, frameRole in pairs(apexRoleByViewerFrame) do
+        if frameRole == "secretTechnique"
+            and apexRangeState.secretTechniqueReadyByFrame[frame] == true then
+            return true
+        end
+    end
+    return false
+end
+
+apexRangeState.HasSecretTechniqueCooldownDriver = function()
+    for frame, frameRole in pairs(apexRoleByViewerFrame) do
+        if frameRole == "secretTechnique" and frame then return true end
+    end
+    return false
+end
+
+apexRangeState.EnsureSecretTechniqueWindowCurve = function()
+    if apexRangeState.secretTechniqueWindowCurve then return apexRangeState.secretTechniqueWindowCurve end
+    local curveUtil = _G.C_CurveUtil
+    if not (curveUtil and type(curveUtil.CreateCurve) == "function") then return nil end
+
+    local curve = curveUtil.CreateCurve()
+    if not (curve and type(curve.AddPoint) == "function") then return nil end
+    if type(curve.SetType) == "function" then
+        local curveTypes = _G.Enum and _G.Enum.LuaCurveType
+        curve:SetType(curveTypes and curveTypes.Step or 1)
+    end
+    -- The native duration owns the protected remaining time. This public step
+    -- curve only turns it into an alpha sink: visible through five seconds,
+    -- fully transparent above that threshold. Addon Lua never compares or
+    -- stores the cooldown value/result.
+    curve:AddPoint(0, 1)
+    curve:AddPoint(5.001, 0)
+    apexRangeState.secretTechniqueWindowCurve = curve
+    return curve
+end
+
+apexRangeState.EnsureSecretTechniqueOutsideWindowCurve = function()
+    if apexRangeState.secretTechniqueOutsideWindowCurve then
+        return apexRangeState.secretTechniqueOutsideWindowCurve
+    end
+    local curveUtil = _G.C_CurveUtil
+    if not (curveUtil and type(curveUtil.CreateCurve) == "function") then return nil end
+
+    local curve = curveUtil.CreateCurve()
+    if not (curve and type(curve.AddPoint) == "function") then return nil end
+    if type(curve.SetType) == "function" then
+        local curveTypes = _G.Enum and _G.Enum.LuaCurveType
+        curve:SetType(curveTypes and curveTypes.Step or 1)
+    end
+    -- Complement of the SECTECH window. The cooldown duration remains native:
+    -- addon Lua never branches on the protected remaining-time value.
+    curve:AddPoint(0, 0)
+    curve:AddPoint(5.001, 1)
+    apexRangeState.secretTechniqueOutsideWindowCurve = curve
+    return curve
+end
+
+apexRangeState.CanUseSecretTechniqueNativeWindow = function()
+    return apexRangeState.HasSecretTechniqueCooldownDriver()
+        and C_Spell and type(C_Spell.GetSpellCooldownDuration) == "function"
+        and apexRangeState.EnsureSecretTechniqueWindowCurve() ~= nil
+        and apexRangeState.EnsureSecretTechniqueOutsideWindowCurve() ~= nil
+end
+
+apexRangeState.RefreshChargedComboPointState = function()
+    local hasCharged = false
+    local getCharged = _G.GetUnitChargedPowerPoints
+    if type(getCharged) == "function" then
+        local ok, result = pcall(function()
+            local indices = getCharged("player")
+            local issecretvalue = _G.issecretvalue
+            local canaccesstable = _G.canaccesstable
+            if indices == nil
+                or (type(issecretvalue) == "function" and issecretvalue(indices) == true)
+                or type(indices) ~= "table"
+                or (type(canaccesstable) == "function" and canaccesstable(indices) == false) then
+                return false
+            end
+
+            for i = 1, #indices do
+                local chargedIndex = indices[i]
+                if not (type(issecretvalue) == "function" and issecretvalue(chargedIndex) == true)
+                    and type(chargedIndex) == "number"
+                    and chargedIndex >= 1 then
+                    return true
+                end
+            end
+            return false
+        end)
+        if ok and result == true then hasCharged = true end
+    end
+
+    local changed = apexRangeState.hasChargedComboPoint ~= hasCharged
+    apexRangeState.hasChargedComboPoint = hasCharged
+    return changed
+end
+
+apexRangeState.RefreshMultiTargetActionAlphas = function()
+    if not apexItFrame or apexRangeState.sensorAction ~= "multiTarget" then return false end
+    local function SetSensorAlpha(sensor, alpha)
+        if sensor and type(sensor.SetAlpha) == "function" then sensor:SetAlpha(alpha) end
+    end
+
+    if apexRangeState.secretTechniqueCastPending == true then
+        SetSensorAlpha(apexRangeState.secTechLabelSensor, 0)
+        SetSensorAlpha(apexRangeState.secTechStackSensor, 0)
+        SetSensorAlpha(apexRangeState.blackPowderLabelSensor, 0)
+        SetSensorAlpha(apexRangeState.blackPowderStackSensor, 0)
+        return false
+    end
+
+    if apexRangeState.CanUseSecretTechniqueNativeWindow() then
+        local ok, duration = pcall(C_Spell.GetSpellCooldownDuration, 280719, true)
+        if ok and duration and type(duration.EvaluateRemainingDuration) == "function" then
+            local secOK, secAlpha = pcall(duration.EvaluateRemainingDuration,
+                duration, apexRangeState.secretTechniqueWindowCurve)
+            local bpOK, bpAlpha = pcall(duration.EvaluateRemainingDuration,
+                duration, apexRangeState.secretTechniqueOutsideWindowCurve)
+            local issecretvalue = _G.issecretvalue
+            local secUsable = secOK and ((type(issecretvalue) == "function"
+                and issecretvalue(secAlpha) == true) or type(secAlpha) == "number")
+            local bpUsable = bpOK and ((type(issecretvalue) == "function"
+                and issecretvalue(bpAlpha) == true) or type(bpAlpha) == "number")
+            if secUsable and bpUsable then
+                -- Both values go straight from Blizzard's Duration object into
+                -- native alpha sinks. The complementary curves choose SECTECH
+                -- inside five seconds and BLACK POWDER outside that window.
+                SetSensorAlpha(apexRangeState.secTechLabelSensor, secAlpha)
+                SetSensorAlpha(apexRangeState.secTechStackSensor, secAlpha)
+                SetSensorAlpha(apexRangeState.blackPowderLabelSensor, bpAlpha)
+                SetSensorAlpha(apexRangeState.blackPowderStackSensor, bpAlpha)
+                return true
+            end
+        end
+    end
+
+    -- Degraded clients retain deterministic exact-ready behavior. Black Powder
+    -- is the fallback only when a Supercharger-marked point is actually known.
+    local secretReady = apexRangeState.SecretTechniqueIsReady()
+    local secAlpha = secretReady and 1 or 0
+    local bpAlpha = not secretReady
+        and apexRangeState.hasChargedComboPoint == true and 1 or 0
+    SetSensorAlpha(apexRangeState.secTechLabelSensor, secAlpha)
+    SetSensorAlpha(apexRangeState.secTechStackSensor, secAlpha)
+    SetSensorAlpha(apexRangeState.blackPowderLabelSensor, bpAlpha)
+    SetSensorAlpha(apexRangeState.blackPowderStackSensor, bpAlpha)
+    return false
+end
+
+apexRangeState.UpdateSecretTechniqueReadyFromFrame = function(frame)
+    if apexRoleByViewerFrame[frame] ~= "secretTechnique"
+        or type(frame.IsOnCooldown) ~= "function" then return false end
+    local inCombat = type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    if inCombat then return false end
+
+    local ok, onCooldown = pcall(frame.IsOnCooldown, frame)
+    local issecretvalue = _G.issecretvalue
+    if not ok
+        or (type(issecretvalue) == "function" and issecretvalue(onCooldown) == true)
+        or type(onCooldown) ~= "boolean" then return false end
+
+    local ready = onCooldown == false
+    if apexRangeState.secretTechniqueReadyByFrame[frame] == ready then return false end
+    apexRangeState.secretTechniqueReadyByFrame[frame] = ready
+    return true
+end
+
+apexRangeState.SetSecretTechniqueReady = function(frame, ready)
+    if apexRoleByViewerFrame[frame] ~= "secretTechnique" then return false end
+    ready = ready == true
+    if apexRangeState.secretTechniqueReadyByFrame[frame] == ready then return false end
+    apexRangeState.secretTechniqueReadyByFrame[frame] = ready
+    return true
+end
+
+apexRangeState.SetAllSecretTechniqueReady = function(ready)
+    local changed = false
+    for frame, frameRole in pairs(apexRoleByViewerFrame) do
+        if frameRole == "secretTechnique"
+            and apexRangeState.SetSecretTechniqueReady(frame, ready) then changed = true end
+    end
+    return changed
+end
+
+apexRangeState.OnSecretTechniqueCooldownDataChanged = function(frame)
+    local changed = apexRangeState.UpdateSecretTechniqueReadyFromFrame(frame)
+    if apexRangeState.secretTechniqueCastPending then
+        apexRangeState.secretTechniqueCastPending = false
+        changed = true
+    end
+    if changed and apexRangeState.RefreshApexItDevAura then
+        apexRangeState.RefreshApexItDevAura()
+    elseif apexRangeState.RefreshMultiTargetActionAlphas then
+        apexRangeState.RefreshMultiTargetActionAlphas()
+    end
+end
+
+apexRangeState.OnSecretTechniqueCooldownDone = function(frame)
+    local changed = apexRangeState.SetSecretTechniqueReady(frame, true)
+    if apexRangeState.secretTechniqueCastPending then
+        apexRangeState.secretTechniqueCastPending = false
+        changed = true
+    end
+    if (changed or apexRangeState.sensorAction == "multiTarget")
+        and apexRangeState.RefreshApexItDevAura then apexRangeState.RefreshApexItDevAura() end
 end
 
 local function IsPlainSpellID(spellID, expectedSpellID)
@@ -846,10 +1079,53 @@ local function EnsureApexStackThresholdSensors()
         end
     end
 
+    if not apexRangeState.secTechLabelSensor then
+        local formatter = CreateApexStackThresholdFormatter("APEX SECTECH")
+        if formatter then
+            apexRangeState.secTechLabelSensor = createSensor(apexItFrame, "msuf_apex_sectech_label",
+                { [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true }, function(button)
+                    InitializeApexStackSensorButton(button, false, formatter)
+                end)
+        end
+    end
+
+    if not apexRangeState.blackPowderLabelSensor then
+        local formatter = CreateApexStackThresholdFormatter("APEX BLACK POWDER")
+        if formatter then
+            apexRangeState.blackPowderLabelSensor = createSensor(apexItFrame,
+                "msuf_apex_black_powder_label",
+                { [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true }, function(button)
+                    InitializeApexStackSensorButton(button, false, formatter)
+                end)
+        end
+    end
+
     if not apexItStackSensor then
         local formatter = CreateApexStackThresholdFormatter("%d")
         if formatter then
             apexItStackSensor = createSensor(apexItFrame, "msuf_apex_it_stacks",
+                { [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true }, function(button)
+                    InitializeApexStackSensorButton(button, true, formatter)
+                end)
+        end
+    end
+
+    if not apexRangeState.secTechStackSensor then
+        local formatter = CreateApexStackThresholdFormatter("%d")
+        if formatter then
+            apexRangeState.secTechStackSensor = createSensor(apexItFrame,
+                "msuf_apex_sectech_stacks",
+                { [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true }, function(button)
+                    InitializeApexStackSensorButton(button, true, formatter)
+                end)
+        end
+    end
+
+    if not apexRangeState.blackPowderStackSensor then
+        local formatter = CreateApexStackThresholdFormatter("%d")
+        if formatter then
+            apexRangeState.blackPowderStackSensor = createSensor(apexItFrame,
+                "msuf_apex_black_powder_stacks",
                 { [SHADOW_TECHNIQUES_AURA_SPELL_ID] = true }, function(button)
                     InitializeApexStackSensorButton(button, true, formatter)
                 end)
@@ -863,26 +1139,104 @@ local function EnsureApexStackThresholdSensors()
         end
     end
     AnchorSensor(apexItLabelSensor)
+    AnchorSensor(apexRangeState.secTechLabelSensor)
+    AnchorSensor(apexRangeState.blackPowderLabelSensor)
     AnchorSensor(apexItStackSensor)
-    return apexItLabelSensor ~= nil and apexItStackSensor ~= nil
+    AnchorSensor(apexRangeState.secTechStackSensor)
+    AnchorSensor(apexRangeState.blackPowderStackSensor)
+    apexRangeState.sensorActionApplied = false
+    return apexItLabelSensor ~= nil
+        and apexRangeState.secTechLabelSensor ~= nil
+        and apexRangeState.blackPowderLabelSensor ~= nil
+        and apexItStackSensor ~= nil
+        and apexRangeState.secTechStackSensor ~= nil
+        and apexRangeState.blackPowderStackSensor ~= nil
 end
 
-local function SetApexStackThresholdSensorsActive(active)
-    active = active == true
-    local function SetSensorState(sensor)
+local function SetApexStackThresholdSensorAction(action)
+    local blackPowderEligible = apexRangeState.hasChargedComboPoint == true
+    if action ~= "multiTarget" and apexRangeState.CancelMultiTargetRefreshTimer then
+        apexRangeState.CancelMultiTargetRefreshTimer()
+    end
+    if apexRangeState.sensorActionApplied and apexRangeState.sensorAction == action
+        and (action ~= "multiTarget"
+            or apexRangeState.blackPowderEligibleApplied == blackPowderEligible) then return end
+    apexRangeState.sensorAction = action
+    apexRangeState.sensorActionApplied = true
+    apexRangeState.blackPowderEligibleApplied = blackPowderEligible
+    local function SetSensorState(sensor, active)
         if sensor then
             if type(sensor.SetEnabled) == "function" then sensor:SetEnabled(active) end
             sensor:SetShown(active)
+            if type(sensor.SetAlpha) == "function" then sensor:SetAlpha(1) end
         end
     end
-    SetSensorState(apexItLabelSensor)
-    SetSensorState(apexItStackSensor)
+
+    -- Switching target bands must be visually atomic. Clear every native label
+    -- first so Darkest Night can never leave APEX IT exposed while the 4+
+    -- Secret Technique route is being activated (or vice versa).
+    SetSensorState(apexItLabelSensor, false)
+    SetSensorState(apexRangeState.secTechLabelSensor, false)
+    SetSensorState(apexRangeState.blackPowderLabelSensor, false)
+    SetSensorState(apexItStackSensor, false)
+    SetSensorState(apexRangeState.secTechStackSensor, false)
+    SetSensorState(apexRangeState.blackPowderStackSensor, false)
+
+    if action == "multiTarget" then
+        SetSensorState(apexRangeState.secTechLabelSensor, true)
+        SetSensorState(apexRangeState.secTechStackSensor, true)
+        SetSensorState(apexRangeState.blackPowderLabelSensor, blackPowderEligible)
+        SetSensorState(apexRangeState.blackPowderStackSensor, blackPowderEligible)
+        apexRangeState.RefreshMultiTargetActionAlphas()
+    elseif action == "eviscerate" then
+        SetSensorState(apexItLabelSensor, true)
+        SetSensorState(apexItStackSensor, true)
+    end
+end
+
+apexRangeState.InvalidateActionSnapshot = function()
+    apexRangeState.snapshotValid = false
+    apexRangeState.inRangeEnemyCount = 0
+    SetApexStackThresholdSensorAction(nil)
+    if apexItFrame then
+        apexItFrame:SetAlpha(1)
+        apexItFrame:Hide()
+    end
+end
+
+apexRangeState.CommonRuleEligible = function(g)
+    return g and g.enableApexItDevAura == true
+        and IsSubtletyRogue()
+        and IsDeathstalkerActive()
+        and ApexRoleIsActive(APEX_ROLE_SHADOW_TECHNIQUES)
+        and not ApexRoleIsActive(APEX_ROLE_ANCIENT)
+end
+
+apexRangeState.EviscerateRuleEligible = function(g)
+    return apexRangeState.CommonRuleEligible(g)
+        and not apexItConsumed
+        and ApexRoleIsActive(APEX_ROLE_DARKEST)
+end
+
+apexRangeState.MultiTargetRuleEligible = function(g)
+    return apexRangeState.CommonRuleEligible(g)
+        and apexRangeState.secretTechniqueCastPending ~= true
+        and (apexRangeState.CanUseSecretTechniqueNativeWindow()
+            or apexRangeState.SecretTechniqueIsReady()
+            or apexRangeState.hasChargedComboPoint == true)
+end
+
+apexRangeState.BaseRuleEligible = function(g)
+    return apexRangeState.EviscerateRuleEligible(g)
+        or apexRangeState.MultiTargetRuleEligible(g)
 end
 
 local function RefreshApexItDevAura()
     local g = GetGameplayDB()
     if apexItPreviewActive then
+        SetApexStackThresholdSensorAction(nil)
         local frame = EnsureApexItFrame()
+        frame:SetAlpha(1)
         if apexItText then apexItText:Show() end
         if apexItStackText then
             apexItStackText:SetText(tostring(APEX_MIN_SHADOW_TECHNIQUES_STACKS))
@@ -894,17 +1248,54 @@ local function RefreshApexItDevAura()
     if apexItText then apexItText:Hide() end
     if apexItStackText then apexItStackText:Hide() end
     if not (apexItFrame and g and g.enableApexItDevAura == true and IsSubtletyRogue()) then
+        SetApexStackThresholdSensorAction(nil)
         if apexItFrame then apexItFrame:Hide() end
         return
     end
 
-    local deathstalkerActive = IsDeathstalkerActive()
-    SetApexStackThresholdSensorsActive(deathstalkerActive)
-    apexItFrame:SetShown(deathstalkerActive
-        and not apexItConsumed
-        and ApexRoleIsActive(APEX_ROLE_DARKEST)
-        and not ApexRoleIsActive(APEX_ROLE_ANCIENT))
+    local baseEligible = apexRangeState.BaseRuleEligible(g)
+    local targetDetectionEnabled = g.enableApexNameplateRangeDetection ~= false
+    local action
+    if baseEligible then
+        if not targetDetectionEnabled and apexRangeState.EviscerateRuleEligible(g) then
+            -- The expensive target-count driver is optional. Without it we cannot
+            -- distinguish 1-3 from 4+ targets. Keep only the deterministic Darkest
+            -- Night single-target fallback; never reinterpret a ready multi-target
+            -- Secret Technique route as APEX IT.
+            action = "eviscerate"
+        elseif apexRangeState.snapshotValid then
+            if apexRangeState.inRangeEnemyCount >= 4
+                and apexRangeState.MultiTargetRuleEligible(g) then
+                action = "multiTarget"
+            elseif apexRangeState.inRangeEnemyCount >= 1
+                and apexRangeState.inRangeEnemyCount <= 3
+                and apexRangeState.EviscerateRuleEligible(g) then
+                action = "eviscerate"
+            end
+        end
+    end
+    SetApexStackThresholdSensorAction(action)
+    if apexItFrame then apexItFrame:SetAlpha(1) end
+    if action == "multiTarget" then
+        apexRangeState.RefreshMultiTargetActionAlphas()
+        if apexRangeState.ArmMultiTargetRefreshTimer then
+            apexRangeState.ArmMultiTargetRefreshTimer()
+        end
+    end
+    apexItFrame:SetShown(action ~= nil)
+
+    if targetDetectionEnabled and apexRangeState.CommonRuleEligible(g)
+        and not apexRangeState.snapshotValid and apexRangeState.RequestScan then
+        apexRangeState.RequestScan()
+    elseif not targetDetectionEnabled
+        or (not apexRangeState.CommonRuleEligible(g)
+            and not (g.enableApexRangeCounter == true and IsSubtletyRogue())) then
+        -- Never reuse a target count from an earlier actionable APEX window.
+        apexRangeState.snapshotValid = false
+        apexRangeState.inRangeEnemyCount = 0
+    end
 end
+apexRangeState.RefreshApexItDevAura = RefreshApexItDevAura
 
 local function OnApexViewerActiveStateChanged(frame)
     local role = apexRoleByViewerFrame[frame]
@@ -912,6 +1303,9 @@ local function OnApexViewerActiveStateChanged(frame)
     apexActiveByViewerFrame[frame] = type(frame.IsActive) == "function" and frame:IsActive() == true or false
     if role == APEX_ROLE_DARKEST and not ApexRoleIsActive(APEX_ROLE_DARKEST) then
         apexItConsumed = false
+    end
+    if role == "secretTechnique" then
+        apexRangeState.UpdateSecretTechniqueReadyFromFrame(frame)
     end
     RefreshApexItDevAura()
 end
@@ -944,6 +1338,27 @@ RefreshApexItCooldownDrivers = function()
                         if type(itemFrame.OnActiveStateChanged) == "function" then
                             hooksecurefunc(itemFrame, "OnActiveStateChanged", OnApexViewerActiveStateChanged)
                         end
+                        if role == "secretTechnique" then
+                            if type(itemFrame.RefreshData) == "function" then
+                                hooksecurefunc(itemFrame, "RefreshData", apexRangeState.OnSecretTechniqueCooldownDataChanged)
+                            end
+                            if type(itemFrame.RefreshCooldownOnly) == "function" then
+                                hooksecurefunc(itemFrame, "RefreshCooldownOnly", apexRangeState.OnSecretTechniqueCooldownDataChanged)
+                            end
+                            if type(itemFrame.OnCooldownDone) == "function" then
+                                hooksecurefunc(itemFrame, "OnCooldownDone", apexRangeState.OnSecretTechniqueCooldownDone)
+                            end
+                            local cooldownFrame = type(itemFrame.GetCooldownFrame) == "function"
+                                and itemFrame:GetCooldownFrame() or nil
+                            if cooldownFrame and type(cooldownFrame.HookScript) == "function" then
+                                cooldownFrame:HookScript("OnCooldownDone", function()
+                                    apexRangeState.OnSecretTechniqueCooldownDone(itemFrame)
+                                end)
+                            end
+                        end
+                    end
+                    if role == "secretTechnique" then
+                        apexRangeState.UpdateSecretTechniqueReadyFromFrame(itemFrame)
                     end
                     if role == APEX_ROLE_SHADOW_TECHNIQUES
                         and g and g.enableShadowTechniquesStackHighlight == true
@@ -952,6 +1367,12 @@ RefreshApexItCooldownDrivers = function()
                     end
                 end
             end
+        end
+    end
+
+    for frame in pairs(apexRangeState.secretTechniqueReadyByFrame) do
+        if apexRoleByViewerFrame[frame] ~= "secretTechnique" then
+            apexRangeState.secretTechniqueReadyByFrame[frame] = nil
         end
     end
 
@@ -970,10 +1391,26 @@ local function EnsureApexItEventFrame()
 
     apexItEventFrame = CreateFrame("Frame")
     apexItEventFrame:SetScript("OnEvent", function(_, event, arg1, _, spellID)
+        if event == "UNIT_POWER_POINT_CHARGE" then
+            if arg1 == "player" and apexRangeState.RefreshChargedComboPointState() then
+                RefreshApexItDevAura()
+            end
+            return
+        end
         if event == "UNIT_SPELLCAST_SUCCEEDED" then
-            if IsPlainSpellID(spellID, EVISCERATE_SPELL_ID)
-                and ApexRoleIsActive(APEX_ROLE_DARKEST) then
-                apexItConsumed = true
+            if IsPlainSpellID(spellID, EVISCERATE_SPELL_ID) then
+                if ApexRoleIsActive(APEX_ROLE_DARKEST) then
+                    apexItConsumed = true
+                    apexRangeState.snapshotValid = false
+                    RefreshApexItDevAura()
+                end
+            elseif IsPlainSpellID(spellID, 280719) then
+                -- Consume immediately even if Blizzard publishes the new
+                -- cooldown duration one event later. The hooked native
+                -- RefreshCooldownOnly/RefreshData path clears this latch.
+                apexRangeState.secretTechniqueCastPending = true
+                apexRangeState.SetAllSecretTechniqueReady(false)
+                apexRangeState.snapshotValid = false
                 RefreshApexItDevAura()
             end
             return
@@ -982,6 +1419,7 @@ local function EnsureApexItEventFrame()
             and arg1 ~= "Blizzard_CooldownViewer"
             and arg1 ~= "Blizzard_AuraContainer" then return end
         if ApplyApexItDevAura then ApplyApexItDevAura(GetGameplayDB()) end
+        if ApplyApexRangeCounter then ApplyApexRangeCounter(GetGameplayDB()) end
     end)
     return apexItEventFrame
 end
@@ -994,7 +1432,7 @@ ApplyApexItDevAura = function(g)
         apexItConsumed = false
         apexDeathstalkerKnown = false
         if apexItEventFrame then apexItEventFrame:UnregisterAllEvents() end
-        SetApexStackThresholdSensorsActive(false)
+        SetApexStackThresholdSensorAction(nil)
         SetShadowTechniquesHighlightSensorsActive(false)
         if apexItFrame then apexItFrame:Hide() end
         return
@@ -1012,11 +1450,16 @@ ApplyApexItDevAura = function(g)
     local subtletyEnabled = enabled and IsSubtletyRogue()
     if subtletyEnabled and apexEnabled then
         RefreshApexDeathstalkerKnown()
-        EnsureApexStackThresholdSensors()
+        if apexEnabled then EnsureApexStackThresholdSensors() end
     else
         apexDeathstalkerKnown = false
     end
     local deathstalkerEnabled = subtletyEnabled and IsDeathstalkerActive()
+    if deathstalkerEnabled and apexEnabled then
+        apexRangeState.RefreshChargedComboPointState()
+    else
+        apexRangeState.hasChargedComboPoint = false
+    end
     if apexEnabled or apexItPreviewActive then
         ApplyFontToCounter()
         -- Text is assigned only after ApplyFontToCounter. WoW rejects SetText on a
@@ -1036,11 +1479,15 @@ ApplyApexItDevAura = function(g)
         events:RegisterEvent("PLAYER_TALENT_UPDATE")
         events:RegisterEvent("TRAIT_CONFIG_UPDATED")
         events:RegisterEvent("SPELLS_CHANGED")
+        events:RegisterEvent("PLAYER_REGEN_ENABLED")
     end
-    if deathstalkerEnabled then
+    if deathstalkerEnabled and apexEnabled then
         events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        events:RegisterUnitEvent("UNIT_POWER_POINT_CHARGE", "player")
     end
-    SetApexStackThresholdSensorsActive(deathstalkerEnabled and not apexItPreviewActive)
+    if not (deathstalkerEnabled and not apexItPreviewActive) then
+        SetApexStackThresholdSensorAction(nil)
+    end
     SetShadowTechniquesHighlightSensorsActive(shadowHighlightEnabled and subtletyEnabled)
     if subtletyEnabled then
         RefreshApexItCooldownDrivers()
@@ -1060,6 +1507,341 @@ end
 
 function MSUF.MSUF_Gameplay_ApexIt_IsPreviewActive()
     return apexItPreviewActive
+end
+
+-- Full nameplate scans stay bounded because they query every visible hostile.
+-- The lightweight BP/SECTECH alpha gate below runs separately, so the action
+-- can react much faster without multiplying those per-nameplate range calls.
+local APEX_RANGE_COUNTER_INTERVAL = 0.10
+
+local function IsApexRangeCounterUnit(unit)
+    return type(unit) == "string" and unit:match("^nameplate%d+$") ~= nil
+end
+
+local function ClearApexRangeCounterUnits()
+    for unit in pairs(apexRangeCounterUnits) do apexRangeCounterUnits[unit] = nil end
+    apexRangeState.snapshotValid = false
+    apexRangeState.inRangeEnemyCount = 0
+end
+
+local function CancelApexRangeCounterTimer()
+    apexRangeCounterTimerGeneration = apexRangeCounterTimerGeneration + 1
+    local timer = apexRangeCounterTimer
+    apexRangeCounterTimer = nil
+    if timer and timer.Cancel then timer:Cancel() end
+end
+
+apexRangeState.DiagnosticActive = function(g)
+    return g and g.enableApexNameplateRangeDetection ~= false
+        and g.enableApexRangeCounter == true
+        and apexRangeCounterPreviewActive ~= true
+        and IsSubtletyRogue()
+end
+
+local function ApexRangeCounterRuntimeActive()
+    local g = GetGameplayDB()
+    return g and g.enableApexNameplateRangeDetection ~= false
+        -- Keep the current target snapshot warm throughout the shared APEX
+        -- window. Readiness/Darkest Night decide the action, not whether target
+        -- monitoring is allowed to run; coupling those states caused SECTECH
+        -- to wait for a fresh scan after becoming relevant.
+        and (apexRangeState.DiagnosticActive(g) or apexRangeState.CommonRuleEligible(g))
+end
+
+apexRangeState.CancelMultiTargetRefreshTimer = function()
+    apexRangeState.multiTargetRefreshTimerGeneration =
+        (apexRangeState.multiTargetRefreshTimerGeneration or 0) + 1
+    local timer = apexRangeState.multiTargetRefreshTimer
+    apexRangeState.multiTargetRefreshTimer = nil
+    if timer and timer.Cancel then timer:Cancel() end
+end
+
+apexRangeState.MultiTargetRefreshRuntimeActive = function()
+    return apexRangeState.sensorAction == "multiTarget"
+        and ApexRangeCounterRuntimeActive()
+        and apexRangeState.CanUseSecretTechniqueNativeWindow()
+end
+
+apexRangeState.ArmMultiTargetRefreshTimer = function()
+    apexRangeState.CancelMultiTargetRefreshTimer()
+    if not apexRangeState.MultiTargetRefreshRuntimeActive() then return end
+    local generation = apexRangeState.multiTargetRefreshTimerGeneration
+    local function OnTimer()
+        if generation ~= apexRangeState.multiTargetRefreshTimerGeneration then return end
+        apexRangeState.multiTargetRefreshTimer = nil
+        if not apexRangeState.MultiTargetRefreshRuntimeActive() then return end
+        apexRangeState.RefreshMultiTargetActionAlphas()
+        apexRangeState.ArmMultiTargetRefreshTimer()
+    end
+    if C_Timer and type(C_Timer.NewTimer) == "function" then
+        apexRangeState.multiTargetRefreshTimer = C_Timer.NewTimer(0.05, OnTimer)
+    elseif C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(0.05, OnTimer)
+    end
+end
+
+ApplyApexRangeCounterStyle = function()
+    if not (apexRangeCounterHeader and apexRangeCounterText) then return end
+    local g = GetGameplayDB() or {}
+    local path, flags, _, _, _, _, useShadow = GetGameplayFont("state")
+    local size = math_max(10, math_min(36, tonumber(g.apexRangeCounterFontSize) or 18))
+    ApplyGameplayFont(apexRangeCounterHeader, path, math_max(9, math_floor(size * 0.72)), flags or "OUTLINE")
+    ApplyGameplayFont(apexRangeCounterText, path, size, flags or "OUTLINE")
+    apexRangeCounterHeader:SetTextColor(1, 0.82, 0.08, GlobalFontTextAlpha())
+    apexRangeCounterText:SetTextColor(1, 1, 1, GlobalFontTextAlpha())
+    SetTextShadow(apexRangeCounterHeader, useShadow ~= false)
+    SetTextShadow(apexRangeCounterText, useShadow ~= false)
+end
+
+local function EnsureApexRangeCounterFrame()
+    apexRangeCounterFrame = apexRangeCounterFrame or _G.MSUF_ApexRangeCounterFrame
+    local createdFrame = not apexRangeCounterFrame
+    if createdFrame then
+        apexRangeCounterFrame = CreateFrame("Frame", "MSUF_ApexRangeCounterFrame", UIParent)
+    end
+    apexRangeCounterFrame:SetSize(620, 52)
+    apexRangeCounterFrame:SetFrameStrata("DIALOG")
+    if createdFrame then apexRangeCounterFrame:Hide() end
+
+    apexRangeCounterHeader = apexRangeCounterHeader or apexRangeCounterFrame._msufHeader
+    if not apexRangeCounterHeader then
+        apexRangeCounterHeader = apexRangeCounterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        apexRangeCounterFrame._msufHeader = apexRangeCounterHeader
+        apexRangeCounterHeader:SetPoint("BOTTOM", apexRangeCounterFrame, "CENTER", 0, 3)
+    end
+
+    apexRangeCounterText = apexRangeCounterText or apexRangeCounterFrame._msufText
+    if not apexRangeCounterText then
+        apexRangeCounterText = apexRangeCounterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        apexRangeCounterFrame._msufText = apexRangeCounterText
+        apexRangeCounterText:SetPoint("TOP", apexRangeCounterFrame, "CENTER", 0, -1)
+    end
+
+    ApplyApexRangeCounterStyle()
+    apexRangeCounterHeader:SetText("NAMEPLATE RANGE - EVISCERATE 196819")
+    return apexRangeCounterFrame
+end
+
+local function SetApexRangeCounterValues(plates, enemies, inRange, outOfRange, invalid)
+    if not apexRangeCounterText then return end
+    apexRangeCounterText:SetText(string_format(
+        "PLATES %d   ENEMIES %d   IN %d   OUT %d   NIL %d",
+        plates or 0, enemies or 0, inRange or 0, outOfRange or 0, invalid or 0))
+end
+
+local function SeedApexRangeCounterUnits()
+    ClearApexRangeCounterUnits()
+    if not (C_NamePlate and type(C_NamePlate.GetNamePlates) == "function") then return end
+    local ok, nameplates = pcall(C_NamePlate.GetNamePlates)
+    if not ok or type(nameplates) ~= "table" then return end
+    for _, nameplate in pairs(nameplates) do
+        local unitOK, unit = pcall(function()
+            local getUnit = nameplate and nameplate.GetUnit
+            if type(getUnit) == "function" then return getUnit(nameplate) end
+        end)
+        if unitOK and IsApexRangeCounterUnit(unit) then
+            apexRangeCounterUnits[unit] = true
+        end
+    end
+end
+
+local ArmApexRangeCounterTimer
+local function RunApexRangeCounterScan()
+    apexRangeCounterScanPending = false
+    if not ApexRangeCounterRuntimeActive() then
+        CancelApexRangeCounterTimer()
+        return
+    end
+
+    local g = GetGameplayDB()
+    local diagnosticActive = apexRangeState.DiagnosticActive(g)
+    local frame = diagnosticActive and EnsureApexRangeCounterFrame() or nil
+    local previousSnapshotValid = apexRangeState.snapshotValid
+    local previousInRangeEnemyCount = apexRangeState.inRangeEnemyCount
+    local plates, enemies, inRange, invalid = 0, 0, 0, 0
+    local issecretvalue = _G.issecretvalue
+    local hasRangeAPI = C_Spell and type(C_Spell.IsSpellInRange) == "function"
+
+    for unit in pairs(apexRangeCounterUnits) do
+        local existsOK, exists = pcall(UnitExists, unit)
+        local existsSecret = type(issecretvalue) == "function" and issecretvalue(exists) == true
+        if not existsOK or existsSecret or exists ~= true then
+            apexRangeCounterUnits[unit] = nil
+        else
+            plates = plates + 1
+            local attackOK, canAttack = pcall(UnitCanAttack, "player", unit)
+            local deadOK, isDead = pcall(UnitIsDeadOrGhost, unit)
+            local attackSecret = type(issecretvalue) == "function" and issecretvalue(canAttack) == true
+            local deadSecret = type(issecretvalue) == "function" and issecretvalue(isDead) == true
+            if attackOK and deadOK and not attackSecret and not deadSecret
+                and canAttack == true and isDead ~= true then
+                enemies = enemies + 1
+                local rangeOK, result
+                if hasRangeAPI then
+                    rangeOK, result = pcall(C_Spell.IsSpellInRange, EVISCERATE_SPELL_ID, unit)
+                end
+                local rangeSecret = type(issecretvalue) == "function" and issecretvalue(result) == true
+                if not rangeOK or rangeSecret or result == nil then
+                    invalid = invalid + 1
+                elseif result == true or result == 1 then
+                    inRange = inRange + 1
+                end
+            end
+        end
+    end
+
+    local outOfRange = math_max(0, enemies - inRange - invalid)
+    apexRangeState.snapshotValid = true
+    apexRangeState.inRangeEnemyCount = inRange
+    if diagnosticActive then
+        SetApexRangeCounterValues(plates, enemies, inRange, outOfRange, invalid)
+        frame:Show()
+    end
+    if not previousSnapshotValid or previousInRangeEnemyCount ~= inRange then
+        RefreshApexItDevAura()
+    elseif apexRangeState.sensorAction == "multiTarget" then
+        -- Keep event/scan refreshes authoritative as well; the separate 0.05 s
+        -- wake-up only shortens the protected five-second cooldown transition.
+        apexRangeState.RefreshMultiTargetActionAlphas()
+    end
+    ArmApexRangeCounterTimer()
+end
+
+ArmApexRangeCounterTimer = function()
+    CancelApexRangeCounterTimer()
+    if not ApexRangeCounterRuntimeActive() or next(apexRangeCounterUnits) == nil then return end
+    local generation = apexRangeCounterTimerGeneration
+    local function OnTimer()
+        if generation ~= apexRangeCounterTimerGeneration then return end
+        apexRangeCounterTimer = nil
+        RunApexRangeCounterScan()
+    end
+    if C_Timer and type(C_Timer.NewTimer) == "function" then
+        apexRangeCounterTimer = C_Timer.NewTimer(APEX_RANGE_COUNTER_INTERVAL, OnTimer)
+    elseif C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(APEX_RANGE_COUNTER_INTERVAL, OnTimer)
+    end
+end
+
+apexRangeState.RequestScan = function()
+    if not ApexRangeCounterRuntimeActive() then return end
+    CancelApexRangeCounterTimer()
+    if apexRangeCounterScanPending then return end
+    apexRangeCounterScanPending = true
+    local function Flush()
+        apexRangeCounterScanPending = false
+        RunApexRangeCounterScan()
+    end
+    if type(ScheduleOnce) == "function" then
+        ScheduleOnce("MSUF_APEX_RANGE_COUNTER_SCAN", Flush)
+    elseif C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(0, Flush)
+    else
+        Flush()
+    end
+end
+
+local function EnsureApexRangeCounterEventFrame()
+    if apexRangeCounterEventFrame then return apexRangeCounterEventFrame end
+    apexRangeCounterEventFrame = CreateFrame("Frame")
+    apexRangeCounterEventFrame:SetScript("OnEvent", function(_, event, unit)
+        if event == "NAME_PLATE_UNIT_ADDED" then
+            if IsApexRangeCounterUnit(unit) then apexRangeCounterUnits[unit] = true end
+            apexRangeState.InvalidateActionSnapshot()
+            apexRangeState.RequestScan()
+        elseif event == "NAME_PLATE_UNIT_REMOVED" then
+            if IsApexRangeCounterUnit(unit) then apexRangeCounterUnits[unit] = nil end
+            apexRangeState.InvalidateActionSnapshot()
+            apexRangeState.RequestScan()
+        elseif event == "PLAYER_ENTERING_WORLD" then
+            SeedApexRangeCounterUnits()
+            apexRangeState.InvalidateActionSnapshot()
+            apexRangeState.RequestScan()
+        elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+            if ApplyApexRangeCounter then ApplyApexRangeCounter(GetGameplayDB()) end
+        elseif event == "SPELL_RANGE_CHECK_UPDATE" or event == "ACTION_RANGE_CHECK_UPDATE" then
+            -- Blizzard emits these when the current target crosses a native
+            -- spell/action range boundary. Coalesce an immediate full snapshot;
+            -- other nameplates remain covered by the bounded fallback cadence.
+            apexRangeState.RequestScan()
+        else
+            apexRangeState.InvalidateActionSnapshot()
+            apexRangeState.RequestScan()
+        end
+    end)
+    return apexRangeCounterEventFrame
+end
+
+ApplyApexRangeCounter = function(g)
+    g = g or GetGameplayDB() or {}
+    local subtlety = IsSubtletyRogue()
+    local targetDetectionEnabled = g.enableApexNameplateRangeDetection ~= false
+    local diagnosticEnabled = targetDetectionEnabled and g.enableApexRangeCounter == true and subtlety
+    local apexRangeEnabled = targetDetectionEnabled and g.enableApexItDevAura == true
+        and subtlety and IsDeathstalkerActive()
+    local wantFrame = diagnosticEnabled or apexRangeCounterPreviewActive
+    local wantRoster = (diagnosticEnabled and not apexRangeCounterPreviewActive) or apexRangeEnabled
+    local events = EnsureApexRangeCounterEventFrame()
+    events:UnregisterAllEvents()
+    CancelApexRangeCounterTimer()
+    apexRangeCounterScanPending = false
+
+    if not wantFrame and not wantRoster then
+        ClearApexRangeCounterUnits()
+        if apexRangeCounterFrame then apexRangeCounterFrame:Hide() end
+        return
+    end
+
+    local frame
+    if wantFrame then
+        frame = EnsureApexRangeCounterFrame()
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", UIParent, "CENTER",
+            tonumber(g.apexRangeCounterOffsetX) or 0,
+            tonumber(g.apexRangeCounterOffsetY) or 70)
+        ApplyApexRangeCounterStyle()
+    elseif apexRangeCounterFrame then
+        apexRangeCounterFrame:Hide()
+    end
+
+    if apexRangeCounterPreviewActive then
+        SetApexRangeCounterValues(6, 5, 4, 1, 0)
+        frame:Show()
+    end
+
+    if wantRoster then
+        events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+        events:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+        events:RegisterEvent("PLAYER_ENTERING_WORLD")
+        events:RegisterUnitEvent("PLAYER_SPECIALIZATION_CHANGED", "player")
+        events:RegisterEvent("PLAYER_REGEN_DISABLED")
+        events:RegisterEvent("PLAYER_REGEN_ENABLED")
+        events:RegisterEvent("SPELLS_CHANGED")
+        events:RegisterEvent("SPELL_RANGE_CHECK_UPDATE")
+        events:RegisterEvent("ACTION_RANGE_CHECK_UPDATE")
+        SeedApexRangeCounterUnits()
+        if ApexRangeCounterRuntimeActive() then
+            RunApexRangeCounterScan()
+        else
+            RefreshApexItDevAura()
+        end
+    else
+        ClearApexRangeCounterUnits()
+    end
+end
+
+function MSUF.MSUF_Gameplay_ApexRangeCounter_SetPreview(enabled)
+    apexRangeCounterPreviewActive = enabled == true
+    ApplyApexRangeCounter(GetGameplayDB())
+    return apexRangeCounterPreviewActive
+end
+
+function MSUF.MSUF_Gameplay_ApexRangeCounter_TogglePreview()
+    return MSUF.MSUF_Gameplay_ApexRangeCounter_SetPreview(not apexRangeCounterPreviewActive)
+end
+
+function MSUF.MSUF_Gameplay_ApexRangeCounter_IsPreviewActive()
+    return apexRangeCounterPreviewActive
 end
 
 local EnsureCombatStateText
@@ -1767,6 +2549,7 @@ ApplyGameplayNow = function()
     ApplyCombatStateText(g)
     ApplyCombatCrosshair(g)
     ApplyApexItDevAura(g)
+    ApplyApexRangeCounter(g)
     local applyTotems = MSUF.MSUF_Gameplay_PlayerTotems_Apply
     if applyTotems then applyTotems(g) end
 
@@ -1840,6 +2623,7 @@ do
             or g.enableCombatStateText == true
             or g.enableCombatCrosshair == true
             or g.enableApexItDevAura == true
+            or g.enableApexRangeCounter == true
             or g.enableShadowTechniquesStackHighlight == true
             or g.enablePlayerTotems == true)
         _specChangeFrame:UnregisterAllEvents()
@@ -1879,6 +2663,8 @@ local function StopGameplayModule()
     UnregisterGameplayEventBus(true, true)
     apexItPreviewActive = false
     ApplyApexItDevAura({})
+    apexRangeCounterPreviewActive = false
+    ApplyApexRangeCounter({})
     if SyncGameplaySpecEvents then SyncGameplaySpecEvents({}) end
     local modifierFrame = MSUF._MSUF_CombatTimerModifierFrame
     if modifierFrame then modifierFrame:UnregisterAllEvents() end
@@ -1892,9 +2678,11 @@ local function IsGameplayModuleEnabled()
         or g.enableCombatStateText == true
         or g.enableCombatCrosshair == true
         or g.enableApexItDevAura == true
+        or g.enableApexRangeCounter == true
         or g.enableShadowTechniquesStackHighlight == true
         or g.enablePlayerTotems == true
-        or apexItPreviewActive) or false
+        or apexItPreviewActive
+        or apexRangeCounterPreviewActive) or false
 end
 
 local reg = RegisterModule or _G.MSUF_RegisterModule

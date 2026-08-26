@@ -144,14 +144,55 @@ function A.GameplayRegistry.RegisterCombatTextSettings(ctx)
         reason = "MSUF_ASSISTANT_COMBAT_STATE_Y",
     })
 
-    RegisterGameplayBoolean("enableApexItDevAura", "enabled", "Subtlety Rogue APEX IT", false, {
-        "apex it", "apex it dev aura", "apex it stack counter", "shadow techniques stacks",
-        "darkest night ancient arts warning", "subtlety rogue apex warning",
+    RegisterGameplayBoolean("enableApexItDevAura", "enabled", "Subtlety Rogue APEX IT / SECTECH", false, {
+        "apex it", "apex sectech", "apex secret technique", "apex it dev aura",
+        "apex it stack counter", "shadow techniques stacks", "darkest night ancient arts warning",
+        "subtlety rogue apex warning", "four targets secret technique",
+        "secret technique ready", "sectech ready without darkest night",
     }, {
         category = "Gameplay / Developer Auras",
         frameType = "apexItDevAura",
         reason = "MSUF_ASSISTANT_APEX_IT_DEV_AURA",
         matchLabel = false,
+    })
+    RegisterGameplayBoolean("enableApexNameplateRangeDetection", "enabled", "APEX Nameplate Target Detection", true, {
+        "apex nameplate detection", "apex target count detection", "apex range scan",
+        "apex nameplate performance", "disable apex target counter",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexTargetDetection",
+        reason = "MSUF_ASSISTANT_APEX_TARGET_DETECTION",
+        matchLabel = false,
+    })
+    RegisterGameplayBoolean("enableApexRangeCounter", "enabled", "Subtlety Rogue Nameplate Range Counter", false, {
+        "apex range counter", "nameplate range counter", "subtlety rogue range diagnostic",
+        "eviscerate range counter", "enemy nameplates in range",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexRangeCounter",
+        reason = "MSUF_ASSISTANT_APEX_RANGE_COUNTER",
+        matchLabel = false,
+    })
+    RegisterGameplayNumber("apexRangeCounterFontSize", "fontSize", "Nameplate Range Counter Text Size", 18, 10, 36, {
+        "range counter size", "nameplate counter text size", "apex range counter font size",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexRangeCounter",
+        reason = "MSUF_ASSISTANT_APEX_RANGE_COUNTER_SIZE",
+    })
+    RegisterGameplayNumber("apexRangeCounterOffsetX", "offsetX", "Nameplate Range Counter Offset X", 0, -800, 800, {
+        "range counter x", "nameplate counter x offset", "apex range counter horizontal offset",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexRangeCounter",
+        reason = "MSUF_ASSISTANT_APEX_RANGE_COUNTER_X",
+    })
+    RegisterGameplayNumber("apexRangeCounterOffsetY", "offsetY", "Nameplate Range Counter Offset Y", 70, -800, 800, {
+        "range counter y", "nameplate counter y offset", "apex range counter vertical offset",
+    }, {
+        category = "Gameplay / Developer Auras",
+        frameType = "apexRangeCounter",
+        reason = "MSUF_ASSISTANT_APEX_RANGE_COUNTER_Y",
     })
     RegisterGameplayBoolean("enableShadowTechniquesStackHighlight", "enabled", "Shadow Techniques 5+ Stack Glow", false, {
         "shadow techniques glow", "shadow techniques stack highlight", "shadow techniques 5 stacks",

@@ -12,6 +12,8 @@ local gameplay = {
     enableCombatCrosshair = false,
     enablePlayerTotems = false,
     enableApexItDevAura = true,
+    enableApexNameplateRangeDetection = true,
+    enableApexRangeCounter = false,
     enableShadowTechniquesStackHighlight = true,
     shadowTechniquesGlowColor = { 0.69, 0.50, 0.88 },
     shadowTechniquesGlowScale = 100,
@@ -22,13 +24,84 @@ local gameplay = {
 }
 local specID = 261
 local deathstalkerKnown = true
+local inCombat = false
+local secretTechniqueCooldownRemaining = 20
+local chargedPowerPoints = {}
 local frames = {}
+local nameplateState = {
+    nameplate1 = { exists = true, enemy = true, dead = false, inRange = true },
+    nameplate2 = { exists = true, enemy = true, dead = false, inRange = false },
+    nameplate3 = { exists = true, enemy = true, dead = false, inRange = false },
+    nameplate4 = { exists = true, enemy = true, dead = false, inRange = false },
+}
 
 UIParent = {}
 STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
 issecretvalue = function(value) return type(value) == "table" and value.secret == true end
+canaccesstable = function(value) return type(value) == "table" and value.secret ~= true end
 issecure = function() return false end
-C_Spell = {}
+InCombatLockdown = function() return inCombat end
+GetUnitChargedPowerPoints = function(unit)
+    Expect(unit == "player", "charged combo-point query used the wrong unit")
+    return chargedPowerPoints
+end
+C_Spell = {
+    IsSpellInRange = function(spellID, unit)
+        Expect(spellID == 196819, "range scan did not use Eviscerate")
+        local state = nameplateState[unit]
+        return state and state.inRange or false
+    end,
+    GetSpellCooldownDuration = function(spellID, ignoreGCD)
+        Expect(spellID == 280719 and ignoreGCD == true,
+            "Secret Technique duration request did not ignore the GCD")
+        local duration = {}
+        function duration:EvaluateRemainingDuration(curve)
+            return curve:Evaluate(secretTechniqueCooldownRemaining)
+        end
+        return duration
+    end,
+}
+C_CurveUtil = {
+    CreateCurve = function()
+        local curve = { points = {} }
+        function curve:SetType(curveType) self.curveType = curveType end
+        function curve:AddPoint(x, y) self.points[#self.points + 1] = { x = x, y = y } end
+        function curve:Evaluate(value)
+            local selected = self.points[1]
+            for i = 1, #self.points do
+                if value >= self.points[i].x then selected = self.points[i] end
+            end
+            return selected and selected.y or 0
+        end
+        return curve
+    end,
+}
+Enum = { LuaCurveType = { Step = 1 } }
+C_NamePlate = {
+    GetNamePlates = function()
+        local result = {}
+        for unit, state in pairs(nameplateState) do
+            if state.exists then
+                local nameplate = { unit = unit }
+                function nameplate:GetUnit() return self.unit end
+                result[#result + 1] = nameplate
+            end
+        end
+        return result
+    end,
+}
+UnitExists = function(unit)
+    local state = nameplateState[unit]
+    return state and state.exists == true or false
+end
+UnitCanAttack = function(_, unit)
+    local state = nameplateState[unit]
+    return state and state.enemy == true or false
+end
+UnitIsDeadOrGhost = function(unit)
+    local state = nameplateState[unit]
+    return state and state.dead == true or false
+end
 C_SpellBook = {
     IsSpellKnown = function(spellID)
         return spellID == 457058 and deathstalkerKnown
@@ -54,8 +127,32 @@ C_UnitAuras = {
     GetAuraDataBySpellName = function() Fail("runtime performed a direct named-aura read") end,
     GetAuraApplicationDisplayCount = function() Fail("runtime performed a direct stack read") end,
 }
+local pendingTimers = {}
+local scheduledTimerDelays = {}
+local function TimerWasScheduled(delay)
+    for i = 1, #scheduledTimerDelays do
+        if scheduledTimerDelays[i] == delay then return true end
+    end
+    return false
+end
+local function RunPendingTimersOnce()
+    local callbacks = pendingTimers
+    pendingTimers = {}
+    for i = 1, #callbacks do callbacks[i]() end
+end
 C_Timer = {
-    After = function(_, callback) callback() end,
+    After = function(delay, callback)
+        if delay == 0 then callback() else pendingTimers[#pendingTimers + 1] = callback end
+    end,
+    NewTimer = function(delay, callback)
+        scheduledTimerDelays[#scheduledTimerDelays + 1] = delay
+        local timer = { callback = callback, cancelled = false }
+        function timer:Cancel() self.cancelled = true end
+        pendingTimers[#pendingTimers + 1] = function()
+            if not timer.cancelled then callback() end
+        end
+        return timer
+    end,
 }
 
 function hooksecurefunc(target, methodName, callback)
@@ -148,6 +245,7 @@ MSUF_Auras3 = {
         function sensor:SetAllPoints(relativeTo) self.point = relativeTo end
         function sensor:SetEnabled(enabled) self.enabled = enabled == true end
         function sensor:SetShown(shown) self.shown = shown == true end
+        function sensor:SetAlpha(alpha) self.alpha = alpha end
 
         local button = { parent = sensor }
         sensor.button = button
@@ -220,9 +318,55 @@ local function NewTrackedBuffItem(spellID)
     return item
 end
 
+local function NewTrackedCooldownItem(spellID)
+    local cooldownFrame = { hooks = {} }
+    function cooldownFrame:HookScript(scriptName, callback)
+        self.hooks[scriptName] = self.hooks[scriptName] or {}
+        self.hooks[scriptName][#self.hooks[scriptName] + 1] = callback
+    end
+    local item = {
+        cooldownID = spellID,
+        spellID = spellID,
+        active = true,
+        onCooldown = true,
+        cooldownInfo = { spellID = spellID, linkedSpellIDs = {} },
+        cooldownFrame = cooldownFrame,
+    }
+    function item:GetCooldownID() return self.cooldownID end
+    function item:GetSpellID() return self.spellID end
+    function item:GetCooldownInfo() return self.cooldownInfo end
+    function item:IsActive() return self.active end
+    function item:IsOnCooldown()
+        if inCombat then return { secret = true } end
+        return self.onCooldown
+    end
+    function item:GetCooldownFrame() return self.cooldownFrame end
+    function item:OnActiveStateChanged() end
+    function item:RefreshData() end
+    function item:RefreshCooldownOnly() self:RefreshData() end
+    function item:OnCooldownDone() self.onCooldown = false end
+    local capturedOnCooldownDone = item.OnCooldownDone
+    function item:TriggerNativeCooldownDone()
+        secretTechniqueCooldownRemaining = 0
+        capturedOnCooldownDone(self)
+        for _, callback in ipairs(self.cooldownFrame.hooks.OnCooldownDone or {}) do
+            callback(self.cooldownFrame)
+        end
+    end
+    return item
+end
+
 local darkestNight = NewTrackedBuffItem(457280)
 local ancientArts = NewTrackedBuffItem(1269163)
 local shadowTechniques = NewTrackedBuffItem(196911)
+local secretTechnique = NewTrackedCooldownItem(280719)
+EssentialCooldownViewer = {
+    itemFrames = { secretTechnique },
+}
+function EssentialCooldownViewer:GetItemFrames() return self.itemFrames end
+function EssentialCooldownViewer:RefreshData()
+    for i = 1, #self.itemFrames do self.itemFrames[i]:RefreshData() end
+end
 BuffIconCooldownViewer = {
     itemFrames = { darkestNight, ancientArts, shadowTechniques },
 }
@@ -259,6 +403,9 @@ function CreateFrame(frameType, name, parent)
     function frame:SetSize(width, height) self.width, self.height = width, height end
     function frame:GetSize() return self.width, self.height end
     function frame:SetFrameStrata(strata) self.strata = strata end
+    function frame:SetClampedToScreen(enabled) self.clamped = enabled == true end
+    function frame:SetMovable(enabled) self.movable = enabled == true end
+    function frame:RegisterForDrag(...) self.dragButtons = { ... } end
     function frame:SetScript(script, callback) self[script] = callback end
     function frame:CreateFontString(fontName, _, template) return NewFontString(fontName, template) end
     function frame:CreateTexture()
@@ -273,6 +420,9 @@ function CreateFrame(frameType, name, parent)
     function frame:SetClipsChildren(enabled) self.clipsChildren = enabled == true end
     function frame:EnableMouse(enabled) self.mouseEnabled = enabled == true end
     function frame:SetShown(shown) self.shown = shown == true end
+    function frame:IsShown() return self.shown == true end
+    function frame:StartMoving() self.moving = true end
+    function frame:StopMovingOrSizing() self.moving = false end
     function frame:Show() self.shown = true end
     function frame:Hide() self.shown = false end
     function frame:RegisterEvent(event) self.events[event] = true end
@@ -303,6 +453,16 @@ local MSUF = {
         GetPlayerSpecID = function() return specID end,
         Clamp = function(value) return value end,
         RoundInt = function(value) return value end,
+        SetupArrowNudge = function(frame, move, canMove)
+            frame._smokeNudge = move
+            frame._smokeCanNudge = canMove
+        end,
+        SelectNudgeFrame = function() end,
+        RefreshKeyboardNudge = function() end,
+        ReleaseKeyboardNudge = function() end,
+        BeginHistory = function() end,
+        CommitHistory = function() end,
+        CheckpointHistory = function() end,
     },
     MSUF_EnsureGameplayDefaults = function() return gameplay end,
     MSUF_GetGameplayDBFast = function() return gameplay end,
@@ -346,11 +506,17 @@ local function SoftGlowHosts()
     end
     return result
 end
-local apexItSensor, apexStackSensor, shadowHighlightSensor
+local apexItSensor, apexSecTechSensor, apexBlackPowderSensor
+local apexStackSensor, apexSecTechStackSensor, apexBlackPowderStackSensor
+local shadowHighlightSensor
 for i = 1, #nativeAuraSensors do
     local sensor = nativeAuraSensors[i]
     if sensor.key == "msuf_apex_it_label" then apexItSensor = sensor
+    elseif sensor.key == "msuf_apex_sectech_label" then apexSecTechSensor = sensor
+    elseif sensor.key == "msuf_apex_black_powder_label" then apexBlackPowderSensor = sensor
     elseif sensor.key == "msuf_apex_it_stacks" then apexStackSensor = sensor
+    elseif sensor.key == "msuf_apex_sectech_stacks" then apexSecTechStackSensor = sensor
+    elseif sensor.key == "msuf_apex_black_powder_stacks" then apexBlackPowderStackSensor = sensor
     elseif sensor.key:match("^msuf_shadow_techniques_stack_highlight_") then shadowHighlightSensor = sensor end
 end
 Expect(overlay == partialOverlay and text ~= nil and stackText ~= nil,
@@ -358,14 +524,18 @@ Expect(overlay == partialOverlay and text ~= nil and stackText ~= nil,
 Expect(overlay.shown == false, "overlay must start hidden without Darkest Night")
 Expect(text.text == "APEX IT", "overlay text drifted")
 Expect(stackText.text == nil and stackText.shown == false, "live mode did not hide the preview stack text")
-Expect(#nativeApplicationFontStrings == 2, "native APEX IT renderers were not created")
+Expect(#nativeApplicationFontStrings == 6, "native APEX action renderers were not created")
 local softGlowHosts = SoftGlowHosts()
 Expect(#nativeApplicationBars == 1 and #softGlowHosts == 1,
     "native Shadow Techniques Soft Glow renderer was not created")
-Expect(apexItSensor and apexStackSensor, "native APEX IT sensors were not created")
+Expect(apexItSensor and apexSecTechSensor and apexBlackPowderSensor
+    and apexStackSensor and apexSecTechStackSensor and apexBlackPowderStackSensor,
+    "native APEX action sensors were not created")
 Expect(shadowHighlightSensor, "native Shadow Techniques stack-highlight sensor was not created")
-Expect(apexItSensor.shown == true and apexStackSensor.shown == true,
-    "native APEX IT sensors did not start active")
+Expect(apexItSensor.shown == false and apexSecTechSensor.shown == false
+    and apexBlackPowderSensor.shown == false and apexStackSensor.shown == false
+    and apexSecTechStackSensor.shown == false and apexBlackPowderStackSensor.shown == false,
+    "native APEX action sensors did not start fail-closed")
 Expect(shadowHighlightSensor.shown == true, "Shadow Techniques stack-highlight sensor did not start active")
 local initialGlowTexture = softGlowHosts[1].textures[1]
 Expect(initialGlowTexture.color[1] == 0.69
@@ -373,25 +543,62 @@ Expect(initialGlowTexture.color[1] == 0.69
     and initialGlowTexture.color[3] == 0.88
     and initialGlowTexture.color[4] == 0.8,
     "Shadow Techniques Soft Glow color/strength was not applied before native ownership")
-Expect(nativeApplicationFontStrings[1].text == "" and nativeApplicationFontStrings[2].text == ""
+local apexItApplicationText = apexItSensor.button.applicationCount.fontString
+local apexSecTechApplicationText = apexSecTechSensor.button.applicationCount.fontString
+local apexBlackPowderApplicationText = apexBlackPowderSensor.button.applicationCount.fontString
+local apexStackApplicationText = apexStackSensor.button.applicationCount.fontString
+local apexSecTechStackApplicationText = apexSecTechStackSensor.button.applicationCount.fontString
+local apexBlackPowderStackApplicationText = apexBlackPowderStackSensor.button.applicationCount.fontString
+Expect(apexItApplicationText.text == "" and apexSecTechApplicationText.text == ""
+    and apexBlackPowderApplicationText.text == "" and apexStackApplicationText.text == ""
+    and apexSecTechStackApplicationText.text == "" and apexBlackPowderStackApplicationText.text == ""
     and nativeApplicationBars[1].statusBar.value == 0,
     "inactive native five-stack renderers were not empty")
 Expect(text.fontSize == 32, "configured text size was not applied")
 Expect(stackText.fontSize == 20.8, "stack text size did not follow the configured text size")
 Expect(overlay.point and overlay.point[4] == 0 and overlay.point[5] == 140, "configured position was not applied")
 
-local eventFrame
+local eventFrame, rangeEventFrame
 for i = 1, #frames do
     if frames[i].events.COOLDOWN_VIEWER_DATA_LOADED then eventFrame = frames[i] end
+    if frames[i].events.NAME_PLATE_UNIT_ADDED then rangeEventFrame = frames[i] end
 end
 Expect(eventFrame ~= nil, "CooldownViewer driver events were not registered")
+Expect(rangeEventFrame ~= nil, "APEX range driver events were not registered")
 Expect(eventFrame.events.UNIT_AURA == nil, "feature retained direct UNIT_AURA handling")
 Expect(eventFrame.events.UNIT_SPELLCAST_SUCCEEDED == "player",
     "player finisher success event was not registered")
+Expect(eventFrame.events.UNIT_POWER_POINT_CHARGE == "player",
+    "supercharged combo-point event was not registered for the player")
+Expect(eventFrame.events.UNIT_POWER_UPDATE == nil,
+    "tracker registered the high-frequency generic power event")
+Expect(eventFrame.events.PLAYER_REGEN_ENABLED == true,
+    "APEX driver did not register its out-of-combat Secret Technique readiness resync")
 Expect(eventFrame.events.SPELL_UPDATE_COOLDOWN == nil,
     "feature registered an unrelated cooldown event")
 Expect(eventFrame.events.NAME_PLATE_UNIT_ADDED == nil and eventFrame.events.NAME_PLATE_UNIT_REMOVED == nil,
-    "feature registered nameplate target-count events")
+    "CooldownViewer driver absorbed nameplate target-count events")
+Expect(rangeEventFrame.events.NAME_PLATE_UNIT_ADDED == true
+    and rangeEventFrame.events.NAME_PLATE_UNIT_REMOVED == true
+    and rangeEventFrame.events.SPELL_RANGE_CHECK_UPDATE == true
+    and rangeEventFrame.events.ACTION_RANGE_CHECK_UPDATE == true,
+    "range driver did not subscribe to nameplate target-count events")
+
+gameplay.enableApexNameplateRangeDetection = false
+MSUF.MSUF_RequestGameplayApply()
+Expect(rangeEventFrame.events.NAME_PLATE_UNIT_ADDED == nil
+    and rangeEventFrame.events.NAME_PLATE_UNIT_REMOVED == nil
+    and rangeEventFrame.events.SPELL_RANGE_CHECK_UPDATE == nil
+    and rangeEventFrame.events.ACTION_RANGE_CHECK_UPDATE == nil
+    and rangeEventFrame.events.PLAYER_REGEN_DISABLED == nil,
+    "target-detection off retained nameplate roster or scan-trigger events")
+gameplay.enableApexNameplateRangeDetection = true
+MSUF.MSUF_RequestGameplayApply()
+Expect(rangeEventFrame.events.NAME_PLATE_UNIT_ADDED == true
+    and rangeEventFrame.events.NAME_PLATE_UNIT_REMOVED == true
+    and rangeEventFrame.events.SPELL_RANGE_CHECK_UPDATE == true
+    and rangeEventFrame.events.ACTION_RANGE_CHECK_UPDATE == true,
+    "target-detection on did not restore the APEX nameplate driver")
 
 Expect(MSUF.MSUF_Gameplay_ApexIt_TogglePreview() == true, "preview did not turn on")
 Expect(MSUF.MSUF_Gameplay_ApexIt_IsPreviewActive() == true, "preview state was not exported")
@@ -415,18 +622,38 @@ shadowTechniques:SetAuraState(true, 4)
 darkestNight:SetAuraState(true)
 Expect(overlay.shown == true, "Darkest Night did not activate the native render host")
 Expect(text.shown == false and stackText.shown == false, "live mode exposed preview text")
-Expect(nativeApplicationFontStrings[1].text == "" and nativeApplicationFontStrings[2].text == "",
-    "APEX IT rendered below five Shadow Techniques stacks")
+Expect(apexItApplicationText.text == "" and apexSecTechApplicationText.text == ""
+    and apexBlackPowderApplicationText.text == "" and apexStackApplicationText.text == ""
+    and apexSecTechStackApplicationText.text == "" and apexBlackPowderStackApplicationText.text == "",
+    "APEX action rendered below five Shadow Techniques stacks")
 Expect(nativeApplicationBars[1].statusBar.value == 4 and not NativeSoftGlowIsExposed(1),
     "Shadow Techniques icon was highlighted below five stacks")
 
 shadowTechniques:SetAuraState(true, 5)
-Expect(nativeApplicationFontStrings[1].text == "APEX IT"
-    and nativeApplicationFontStrings[2].text == "5"
-    and apexItSensor.shown == true,
+Expect(apexItApplicationText.text == "APEX IT"
+    and apexStackApplicationText.text == "5"
+    and apexItSensor.shown == true and apexSecTechSensor.shown == false
+    and apexBlackPowderSensor.shown == false,
     "APEX IT did not render at exactly five Shadow Techniques stacks")
 Expect(NativeSoftGlowIsExposed(1),
     "Shadow Techniques icon was not highlighted at exactly five stacks")
+
+gameplay.enableApexNameplateRangeDetection = false
+MSUF.MSUF_RequestGameplayApply()
+Expect(rangeEventFrame.events.NAME_PLATE_UNIT_ADDED == nil
+    and rangeEventFrame.events.NAME_PLATE_UNIT_REMOVED == nil,
+    "target-detection off retained nameplate events during an active APEX window")
+Expect(overlay.shown == true
+    and apexItSensor.shown == true and apexSecTechSensor.shown == false
+    and apexBlackPowderSensor.shown == false
+    and apexItApplicationText.text == "APEX IT"
+    and apexStackApplicationText.text == "5",
+    "target-detection off suppressed the base Darkest Night APEX IT fallback")
+gameplay.enableApexNameplateRangeDetection = true
+MSUF.MSUF_RequestGameplayApply()
+Expect(rangeEventFrame.events.NAME_PLATE_UNIT_ADDED == true
+    and rangeEventFrame.events.NAME_PLATE_UNIT_REMOVED == true,
+    "target-detection on did not restore nameplate events during an active APEX window")
 
 local previousShadowHighlightSensor = shadowHighlightSensor
 gameplay.shadowTechniquesGlowColor = { 0.10, 0.60, 1.00 }
@@ -449,8 +676,8 @@ Expect(NativeSoftGlowIsExposed(2),
     "replacement Soft Glow did not inherit the active five-stack state")
 
 shadowTechniques:SetAuraState(true, 9)
-Expect(nativeApplicationFontStrings[1].text == "APEX IT"
-    and nativeApplicationFontStrings[2].text == "9",
+Expect(apexItApplicationText.text == "APEX IT"
+    and apexStackApplicationText.text == "9",
     "native Shadow Techniques stack changes were not rendered")
 Expect(NativeSoftGlowIsExposed(2),
     "Shadow Techniques icon highlight did not remain active above five stacks")
@@ -463,7 +690,84 @@ Expect(shadowHighlightSensor.shown == true
 
 ancientArts:SetAuraState(false)
 Expect(overlay.shown == true, "removing Ancient Arts did not restore APEX IT")
-Expect(nativeApplicationFontStrings[2].text == "9", "restored APEX IT lost the native stack count")
+Expect(apexStackApplicationText.text == "9", "restored APEX IT lost the native stack count")
+
+nameplateState.nameplate2.inRange = true
+nameplateState.nameplate3.inRange = true
+nameplateState.nameplate4.inRange = true
+chargedPowerPoints = { 2 }
+eventFrame.OnEvent(eventFrame, "UNIT_POWER_POINT_CHARGE", "player")
+rangeEventFrame.OnEvent(rangeEventFrame, "SPELL_RANGE_CHECK_UPDATE", 196819, true, true)
+Expect(overlay.shown == true and overlay.alpha == 1
+    and apexSecTechSensor.shown == true and apexSecTechSensor.alpha == 0
+    and apexBlackPowderSensor.shown == true and apexBlackPowderSensor.alpha == 1
+    and apexItSensor.shown == false,
+    "four-target action did not fall back to APEX BLACK POWDER above the SECTECH window")
+Expect(apexBlackPowderApplicationText.text == "APEX BLACK POWDER"
+    and apexBlackPowderStackApplicationText.text == "9",
+    "APEX BLACK POWDER did not preserve the native five-stack renderer")
+Expect(TimerWasScheduled(0.10), "active APEX range snapshot did not use the faster bounded cadence")
+Expect(TimerWasScheduled(0.05), "multi-target action did not arm its lightweight fast refresh")
+
+chargedPowerPoints = { 6 }
+eventFrame.OnEvent(eventFrame, "UNIT_POWER_POINT_CHARGE", "player")
+Expect(apexBlackPowderSensor.shown == true,
+    "an active Supercharger slot was incorrectly gated by current combo points")
+chargedPowerPoints = { secret = true }
+eventFrame.OnEvent(eventFrame, "UNIT_POWER_POINT_CHARGE", "player")
+Expect(apexBlackPowderSensor.shown == false,
+    "an inaccessible charged-point table did not fail closed")
+chargedPowerPoints = {}
+eventFrame.OnEvent(eventFrame, "UNIT_POWER_POINT_CHARGE", "player")
+Expect(apexBlackPowderSensor.shown == false,
+    "an empty charged-point table enabled APEX BLACK POWDER")
+chargedPowerPoints = { 2 }
+eventFrame.OnEvent(eventFrame, "UNIT_POWER_POINT_CHARGE", "player")
+Expect(apexBlackPowderSensor.shown == true and apexBlackPowderSensor.alpha == 1,
+    "active supercharged combo point did not restore APEX BLACK POWDER")
+
+secretTechniqueCooldownRemaining = 4.9
+RunPendingTimersOnce()
+Expect(overlay.shown == true and apexSecTechSensor.shown == true
+    and apexSecTechSensor.alpha == 1 and apexBlackPowderSensor.alpha == 0,
+    "four-target APEX SECTECH did not appear inside its five-second window outside Shadow Dance")
+secretTechniqueCooldownRemaining = 20
+RunPendingTimersOnce()
+Expect(apexSecTechSensor.alpha == 0 and apexBlackPowderSensor.alpha == 1,
+    "four-target action did not return to BLACK POWDER after leaving the SECTECH window")
+secretTechnique:TriggerNativeCooldownDone()
+Expect(overlay.shown == true and apexSecTechSensor.alpha == 1
+    and apexBlackPowderSensor.alpha == 0,
+    "four-target APEX SECTECH did not activate when Secret Technique became ready")
+inCombat = true
+rangeEventFrame.OnEvent(rangeEventFrame, "PLAYER_REGEN_DISABLED")
+Expect(overlay.shown == true and apexItSensor.shown == false and apexSecTechSensor.shown == true,
+    "four in-range enemies did not switch the action to APEX SECTECH")
+Expect(apexSecTechApplicationText.text == "APEX SECTECH"
+    and apexSecTechStackApplicationText.text == "9",
+    "APEX SECTECH did not preserve the native five-stack renderer")
+
+darkestNight:SetAuraState(false)
+Expect(overlay.shown == true and apexSecTechSensor.shown == true,
+    "four-target APEX SECTECH incorrectly depended on Darkest Night")
+gameplay.enableApexNameplateRangeDetection = false
+MSUF.MSUF_RequestGameplayApply()
+Expect(overlay.shown == false and apexItSensor.shown == false
+    and apexSecTechSensor.shown == false and apexBlackPowderSensor.shown == false,
+    "target-detection off reinterpreted a ready multi-target route as APEX IT without Darkest Night")
+gameplay.enableApexNameplateRangeDetection = true
+MSUF.MSUF_RequestGameplayApply()
+Expect(overlay.shown == true and apexSecTechSensor.shown == true,
+    "target-detection on did not restore the ready four-target APEX SECTECH route")
+
+nameplateState.nameplate4.inRange = false
+inCombat = false
+rangeEventFrame.OnEvent(rangeEventFrame, "PLAYER_REGEN_ENABLED")
+Expect(overlay.shown == false,
+    "three-target APEX IT rendered without Darkest Night")
+darkestNight:SetAuraState(true)
+Expect(apexItSensor.shown == true and apexSecTechSensor.shown == false,
+    "three in-range enemies did not switch the action back to APEX IT")
 
 eventFrame.OnEvent(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-irrelevant", 53)
 Expect(overlay.shown == true, "an unrelated successful spell suppressed APEX IT")
@@ -482,6 +786,29 @@ Expect(overlay.shown == false, "ending Darkest Night unexpectedly showed APEX IT
 darkestNight:SetAuraState(true)
 Expect(overlay.shown == true, "a new Darkest Night cycle did not re-arm APEX IT")
 
+nameplateState.nameplate4.inRange = true
+inCombat = true
+rangeEventFrame.OnEvent(rangeEventFrame, "PLAYER_REGEN_DISABLED")
+Expect(apexSecTechSensor.shown == true, "four-target cycle did not select APEX SECTECH")
+secretTechnique.onCooldown = true
+secretTechniqueCooldownRemaining = 20
+eventFrame.OnEvent(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-secret-technique", 280719)
+Expect(overlay.shown == false, "successful Secret Technique did not immediately consume APEX SECTECH")
+darkestNight:SetAuraState(false)
+darkestNight:SetAuraState(true)
+Expect(overlay.shown == false,
+    "a new Darkest Night cycle incorrectly re-armed APEX SECTECH while it was on cooldown")
+darkestNight:SetAuraState(false)
+secretTechnique:TriggerNativeCooldownDone()
+Expect(overlay.shown == true and apexSecTechSensor.shown == true,
+    "Secret Technique cooldown completion did not re-arm APEX SECTECH without Darkest Night")
+shadowTechniques:SetAuraState(false)
+Expect(overlay.shown == false,
+    "APEX SECTECH remained active without Shadow Techniques")
+shadowTechniques:SetAuraState(true, 9)
+Expect(overlay.shown == true and apexSecTechSensor.shown == true,
+    "restoring Shadow Techniques did not restore the ready four-target SECTECH rule")
+
 specID = 259
 eventFrame.OnEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED", "player")
 Expect(overlay.shown == false, "non-Subtlety spec did not hide the overlay")
@@ -497,6 +824,11 @@ eventFrame.OnEvent(eventFrame, "PLAYER_TALENT_UPDATE")
 Expect(overlay.shown == false, "Trickster activated the Deathstalker-only APEX IT routes")
 Expect(eventFrame.events.UNIT_SPELLCAST_SUCCEEDED == nil,
     "Trickster retained Deathstalker-only runtime events")
+Expect(eventFrame.events.UNIT_POWER_POINT_CHARGE == nil
+    and eventFrame.events.UNIT_POWER_UPDATE == nil,
+    "Trickster retained Deathstalker-only combo-point events")
+Expect(rangeEventFrame.events.NAME_PLATE_UNIT_ADDED == nil,
+    "Trickster retained Deathstalker-only nameplate range events")
 Expect(shadowHighlightSensor.shown == true,
     "Trickster incorrectly disabled the spec-wide Shadow Techniques stack highlight")
 
@@ -510,6 +842,9 @@ Expect(eventFrame.events.COOLDOWN_VIEWER_DATA_LOADED == true,
 Expect(eventFrame.events.UNIT_AURA == nil, "stack highlight registered direct UNIT_AURA traffic")
 Expect(eventFrame.events.UNIT_SPELLCAST_SUCCEEDED == nil,
     "stack-highlight-only mode retained the finisher success event")
+Expect(eventFrame.events.UNIT_POWER_POINT_CHARGE == nil
+    and eventFrame.events.UNIT_POWER_UPDATE == nil,
+    "stack-highlight-only mode retained charged combo-point events")
 Expect(registeredModule and registeredModule.IsEnabled() == true,
     "module enable state ignored the enabled stack highlight")
 
@@ -519,7 +854,7 @@ Expect(shadowHighlightSensor.shown == false, "disabling the stack highlight reta
 Expect(eventFrame.events.COOLDOWN_VIEWER_DATA_LOADED == nil, "disabling retained CooldownViewer driver events")
 Expect(eventFrame.events.UNIT_AURA == nil, "disabling registered direct UNIT_AURA traffic")
 Expect(eventFrame.events.UNIT_SPELLCAST_SUCCEEDED == nil, "disabling retained the finisher success event")
-Expect(eventFrame.events.NAME_PLATE_UNIT_ADDED == nil, "disabling retained a nameplate counter event")
+Expect(rangeEventFrame.events.NAME_PLATE_UNIT_ADDED == nil, "disabling retained a nameplate counter event")
 Expect(registeredModule and registeredModule.IsEnabled() == false, "module enable state ignored the disabled setting")
 
 print("apex_it_dev_aura_smoke: OK")
