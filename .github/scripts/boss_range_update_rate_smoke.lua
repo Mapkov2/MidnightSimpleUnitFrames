@@ -24,6 +24,9 @@ local afterCallbacks = {}
 local driverFrames = {}
 local rangeCalls = 0
 local focusRangeCalls = 0
+local targetCanAttack = false
+local targetMembershipChecks = 0
+local membershipChecks = 0
 local registeredElement
 
 local function newTimer(delay, callback)
@@ -80,10 +83,15 @@ function bossFrame:HookScript(script, callback) self[script] = callback end
 local focusFrame = { MSUFUnitKey = "focus", visible = true }
 function focusFrame:IsVisible() return self.visible end
 function focusFrame:HookScript(script, callback) self[script] = callback end
+local targetFrame = { MSUFUnitKey = "target", visible = true }
+function targetFrame:IsVisible() return self.visible end
+function targetFrame:HookScript(script, callback) self[script] = callback end
 
 local UF = {
-  frames = { boss1 = bossFrame, focus = focusFrame },
-  UnitExistsSafe = function(unit) return unit == "boss1" or unit == "focus" end,
+  frames = { boss1 = bossFrame, focus = focusFrame, target = targetFrame },
+  UnitExistsSafe = function(unit)
+    return unit == "boss1" or unit == "focus" or unit == "target"
+  end,
   CompileAlphaRuntime = function() end,
   ApplyRangeModifier = function(frame, multiplier)
     frame.rangeMultiplier = multiplier
@@ -108,7 +116,14 @@ _G.C_Spell = {
 }
 _G.CreateFrame = function() return driverFrame() end
 _G.UnitCanAssist = function() return false end
-_G.UnitCanAttack = function(_, unit) return unit == "boss1" or unit == "focus" end
+_G.UnitCanAttack = function(_, unit)
+  membershipChecks = membershipChecks + 1
+  if unit == "target" then
+    targetMembershipChecks = targetMembershipChecks + 1
+    return targetCanAttack
+  end
+  return unit == "boss1" or unit == "focus"
+end
 _G.UnitIsDeadOrGhost = function() return false end
 _G.UnitInRange = function() return nil, false end
 _G.UnitClass = function() return "Warlock", "WARLOCK" end
@@ -153,6 +168,14 @@ for i = 1, #driverFrames do
   end
 end
 expect(rangeDriver, "Boss lifecycle range driver is missing")
+local membershipChecksBeforeUnownedTarget = membershipChecks
+local timersBeforeUnownedTarget = #timers
+local activeTimerBeforeUnownedTarget = activeTimer()
+rangeDriver.OnEvent(rangeDriver, "PLAYER_TARGET_CHANGED")
+expect(membershipChecks == membershipChecksBeforeUnownedTarget
+    and #timers == timersBeforeUnownedTarget
+    and activeTimer() == activeTimerBeforeUnownedTarget,
+  "target event without a target consumer touched poll membership or scheduler state")
 local callsBeforeBossReset = rangeCalls
 rangeDriver.OnEvent(rangeDriver, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
 rangeDriver.OnEvent(rangeDriver, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
@@ -181,9 +204,91 @@ expect(rangeCalls == callsBeforeStandardTick,
 expect(focusRangeCalls == focusCallsBeforeStandardTick,
   "Standard idle heartbeat changed another unit's speed-gated evaluation")
 
+-- A movement edge changes only the adaptive cadence. It must evaluate every
+-- fallback unit immediately and replace the outstanding one-shot timer once,
+-- without rebuilding membership and arming an intermediate stale cadence.
+now = now + 0.1
+local timersBeforeMoveStart = #timers
+local rangeCallsBeforeMoveStart = rangeCalls
+local focusCallsBeforeMoveStart = focusRangeCalls
+rangeDriver.OnEvent(rangeDriver, "PLAYER_STARTED_MOVING")
+expect(rangeCalls == rangeCallsBeforeMoveStart + 1
+    and focusRangeCalls == focusCallsBeforeMoveStart + 1,
+  "movement start must immediately evaluate each fallback unit once")
+expect(#timers == timersBeforeMoveStart + 1,
+  "movement start must replace the one-shot timer exactly once")
+expect(near(activeTimer() and activeTimer().delay, 0.75),
+  "movement start must select the existing 750 ms cadence")
+
+now = now + 0.1
+local timersBeforeMoveStop = #timers
+local rangeCallsBeforeMoveStop = rangeCalls
+local focusCallsBeforeMoveStop = focusRangeCalls
+rangeDriver.OnEvent(rangeDriver, "PLAYER_STOPPED_MOVING")
+expect(rangeCalls == rangeCallsBeforeMoveStop + 1
+    and focusRangeCalls == focusCallsBeforeMoveStop + 1,
+  "movement stop must immediately evaluate each fallback unit once")
+expect(#timers == timersBeforeMoveStop + 1,
+  "movement stop must replace the one-shot timer exactly once")
+expect(near(activeTimer() and activeTimer().delay, 2.0),
+  "movement stop must restore the existing 2 second cadence")
+
+-- A real membership mutation can still be pending when a movement event wins
+-- the same-frame race. Rebuild that dirty set before evaluating, but retain the
+-- single scheduler-arm contract.
+focusFrame.visible = false
+focusFrame.OnHide(focusFrame)
+expect(#afterCallbacks == 1,
+  "focus hide must queue one shared range-runtime reconciliation")
+now = now + 0.1
+local timersBeforeDirtyMove = #timers
+local rangeCallsBeforeDirtyMove = rangeCalls
+local focusCallsBeforeDirtyMove = focusRangeCalls
+rangeDriver.OnEvent(rangeDriver, "PLAYER_STARTED_MOVING")
+expect(rangeCalls == rangeCallsBeforeDirtyMove + 1
+    and focusRangeCalls == focusCallsBeforeDirtyMove,
+  "movement must rebuild a dirty poll set before immediate evaluation")
+expect(#timers == timersBeforeDirtyMove + 1,
+  "dirty movement rebuild must still replace the one-shot timer exactly once")
+expect(near(activeTimer() and activeTimer().delay, 0.75),
+  "dirty movement rebuild must retain the moving cadence")
+flushAfterCallbacks()
+
+focusFrame.visible = true
+focusFrame.OnShow(focusFrame)
+flushAfterCallbacks()
+
 registeredElement.Disable(bossFrame)
 registeredElement.Disable(focusFrame)
 expect(not activeTimer(), "Boss timer must retire after its last visible consumer is disabled")
+
+-- A target identity can change poll membership while its frame stays visible.
+-- Begin with a neutral identity that needs no fallback, then switch to a
+-- hostile identity and require PLAYER_TARGET_CHANGED to publish that membership
+-- before the next movement edge, without a duplicate rebuild.
+registeredElement.Apply(targetFrame, {
+  range = { active = true, alpha = 0.4, updateRate = 0 },
+})
+expect(not activeTimer(), "neutral target unexpectedly armed fallback polling")
+local timersBeforeNeutralMove = #timers
+rangeDriver.OnEvent(rangeDriver, "PLAYER_STARTED_MOVING")
+rangeDriver.OnEvent(rangeDriver, "PLAYER_STOPPED_MOVING")
+expect(#timers == timersBeforeNeutralMove,
+  "neutral target unexpectedly joined the movement pollset")
+
+targetCanAttack = true
+local membershipChecksBeforeSwap = targetMembershipChecks
+rangeDriver.OnEvent(rangeDriver, "PLAYER_TARGET_CHANGED")
+expect(targetMembershipChecks == membershipChecksBeforeSwap + 1,
+  "target identity swap must rebuild poll membership exactly once")
+local timersBeforeTargetMove = #timers
+rangeDriver.OnEvent(rangeDriver, "PLAYER_STARTED_MOVING")
+expect(#timers == timersBeforeTargetMove + 1,
+  "hostile target identity was not available to the next movement edge")
+expect(near(activeTimer() and activeTimer().delay, 0.75),
+  "blind target must retain the existing 750 ms moving cadence")
+registeredElement.Disable(targetFrame)
+expect(not activeTimer(), "target fallback timer survived element disable")
 
 local registeredSection
 local sliders = {}
