@@ -199,6 +199,10 @@ Data.AURAS_PARSER = {
             "border", "borders", "tooltip", "tooltips", "sort", "reverse",
             "opacity", "alpha", "transparency", "font", "zoom", "shape", "mask",
             "padding", "highlight", "glow",
+            -- Size comparatives in either language mean the ICON SIZE, never
+            -- the lane's visibility toggle ("buffs groesser am player").
+            "bigger", "larger", "smaller", "shrink", "grow",
+            "groesser", "grosser", "kleiner", "vergroessern", "verkleinern",
         },
         [121] = { "debuff", "debuffs" },
         [122] = { "buff", "buffs" },

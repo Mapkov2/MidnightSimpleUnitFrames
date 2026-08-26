@@ -197,6 +197,40 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         end,
     })
 
+    -- The "Bind item" button of a custom container's weapon-enchant reminder
+    -- card (Menu2 catalog action aura_custom_reminder_enchant_item). A weapon
+    -- enchant cannot be cast, so only a bound consumable makes the reminder
+    -- slot clickable; an empty value unbinds it.
+    local ParseAuraCustomReminderEnchantItemAliasArgs = ctx.ParseAuraCustomReminderEnchantItemAliasArgs
+    Registry:RegisterAction({
+        key = "aura_custom_reminder_enchant_item",
+        label = "Bind Custom Aura Enchant Item",
+        type = "auras",
+        combatSafe = true,
+        aliases = {
+            "bind item", "bind enchant item", "bind weapon enchant item", "bind oil", "bind stone", "bind poison",
+            "enchant item", "enchant reminder", "enchant reminder item", "weapon enchant reminder",
+            "set enchant reminder item", "custom aura enchant item", "bind item for enchant reminder",
+        },
+        parseAliasArgs = ParseAuraCustomReminderEnchantItemAliasArgs,
+        run = function(args)
+            local Model, scope, err = RequireModelAndScope(args)
+            if not Model then return false, err end
+            if type(Model.SetCustomContainerReminderEnchantItem) ~= "function" then
+                return false, "This MSUF build has no weapon-enchant reminder item binding."
+            end
+            local index = tonumber(args and args.index)
+            local changed, reason = Model.SetCustomContainerReminderEnchantItem(scope, index, args and args.value)
+            if reason == "invalid" then return false, "That is not an item link or item ID I can bind to the enchant reminder." end
+            if changed then ApplyAura(scope, "MSUF_ASSISTANT_AURA_CUSTOM_REMINDER_ENCHANT_ITEM") end
+            local bound = tostring(args and args.value or "")
+            return true, (changed and ("Done. The " .. AuraScopeLabel(scope) .. " Custom Aura " .. tostring(index)
+                    .. " enchant reminder now offers " .. bound .. " on click.")
+                or "Already set. That enchant reminder already uses " .. bound .. "."),
+                not changed and { noChange = true } or nil
+        end,
+    })
+
     if type(ParseAuraCustomWhitelistAddAliasArgs) == "function" then
         Registry:RegisterAction({
             key = "aura_custom_whitelist_add_spell",

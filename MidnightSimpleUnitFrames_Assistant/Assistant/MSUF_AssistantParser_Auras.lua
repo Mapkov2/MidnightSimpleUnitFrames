@@ -1280,7 +1280,13 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             and P.ParseRegistryExactAliasShortcut(text, raw)
             or nil
     end
-    if ContainsAny(text, AurasPhrases[93]) then
+    -- "allow hidden aura spell Rejuvenation" is the remove-from-blacklist
+    -- action, not a request to type "Rejuvenation" into the menu's hidden-spell
+    -- box; the action aliases own every removal verb.
+    if ContainsAny(text, AurasPhrases[93]) and not ContainsAny(text, {
+        "allow", "remove", "delete", "unblacklist", "unblock", "unhide", "stop hiding",
+        "show again", "let ", "entfernen", "loeschen", "erlaube",
+    }) then
         local value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw or text, { " to ", " as ", " = " }) or nil
         if not value or value == "" then
             value = tostring(raw or text):match("[Ss][Pp][Ee][Ll][Ll]%s+(.+)$")
@@ -1298,6 +1304,13 @@ local function ParseAuraDirectSettingShortcut(text, raw)
     if ContainsAny(text, AurasPhrases[96]) then
         local value = AuraBooleanValue(text)
         if value ~= nil then return AuraDirectSettingChange("auras3.enabled", value, "Unit Auras") end
+    end
+    -- "reset buff aura style overrides" names a destructive intent. The lane
+    -- SELECTORS below must never read that as "switch the tab to Buffs" -- the
+    -- old scope-override reset left with the Auras3 cut, so such wording falls
+    -- through to read-only aura guidance instead of writing menu state.
+    if ContainsAny(text, { "reset", "wipe", "clear", "restore", "revert", "default" }) then
+        return nil
     end
     if ContainsAny(text, AurasPhrases[98]) then
         local setting = Registry and Registry:GetSetting("menu.auraStyleGFLane")
@@ -2372,7 +2385,9 @@ local function CleanAuraBlacklistSpellValue(value)
     if linkedName and linkedName ~= "" then value = linkedName end
     value = value:gsub("^['\"]", ""):gsub("['\"]$", "")
     value = value:gsub("^%[", ""):gsub("%]$", "")
-    value = value:gsub("^spell%s+", "")
+    value = value:gsub("^[Hh]idden%s+[Aa]ura%s+[Ss]pell%s+", "")
+    value = value:gsub("^[Aa]ura%s+[Ss]pell%s+", "")
+    value = value:gsub("^[Ss]pell%s+", "")
     value = value:gsub("^named%s+", "")
     value = value:gsub("^called%s+", "")
     value = value:gsub("^#%s*", "")
@@ -2438,6 +2453,8 @@ local function AuraBlacklistSpellValue(raw)
         "[Aa]llow%s+(.+)%s+[Oo]n%s+.+[Bb]lacklist",
         "[Aa]llow%s+(.+)%s+[Ii]n%s+.+[Aa]uras?",
         "[Aa]llow%s+(.+)%s+[Ii]n%s+",
+        "[Aa]llow%s+(.+)%s+[Oo]n%s+",
+        "[Aa]llow%s+(.+)%s+[Ff]or%s+",
         "[Aa]llow%s+[Hh]idden%s+[Aa]ura%s+[Ss]pell%s+(.+)%s+[Ii]n%s+",
         "[Aa]llow%s+[Aa]ura%s+[Ss]pell%s+(.+)%s+[Ii]n%s+",
         "[Aa]llow%s+[Hh]idden%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
