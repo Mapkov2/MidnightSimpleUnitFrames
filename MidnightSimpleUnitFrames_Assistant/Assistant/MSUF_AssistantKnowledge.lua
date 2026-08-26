@@ -2384,15 +2384,24 @@ local function DirectHelpAnswer(query, opts)
         or norm:match("^i'm%s+trying%s+")
         or norm:match("^im%s+trying%s+")
         or norm:match("^i%s+need%s+help%s+with%s+")
+        or norm:match("^i%s+want%s+to%s+configure%s+")
+        or norm:match("^i%s+want%s+to%s+set%s+up%s+")
     if not scopedHelpWrapper
         and type(A.RouterNamedSettingLabel) == "function"
     then
         local namedLabel = A.RouterNamedSettingLabel(query)
         -- "what are party frames" reaches Party Frames Enabled only through
         -- the category alias; the definitional question belongs to the
-        -- concept blocks below, not the toggle.
+        -- concept blocks below, not the toggle. The same holds for any
+        -- definitional question that does not literally spell the resolved
+        -- label: "what is font outline" asks about the concept, not the
+        -- "Shared Font Outline" control an alias happens to reach.
         local definitional = norm:match("^what%s+is%s+") ~= nil or norm:match("^what%s+are%s+") ~= nil
-        if namedLabel and not (definitional and tostring(namedLabel):match(" Frames? Enabled$") ~= nil) then
+        local labelNorm = namedLabel and Normalize(tostring(namedLabel)) or ""
+        local literallyNamed = labelNorm ~= "" and norm:find(labelNorm, 1, true) ~= nil
+        if namedLabel and not (definitional
+            and (tostring(namedLabel):match(" Frames? Enabled$") ~= nil or not literallyNamed))
+        then
             return nil
         end
     end
@@ -3303,6 +3312,17 @@ function K.Answer(query, opts)
     -- understand that" is more useful than a confident wrong list. Location and
     -- FAQ intents are answered above and keep their own thresholds.
     if (topResult.score or 0) < K.MIN_GENERIC_LIST_SCORE then return nil end
+
+    -- A precise Router location/setting lane beats a generic list even when
+    -- the intent classifier did not read the query as a location ask ("how do
+    -- I hide player name" is a text-lane question, not a filter list).
+    if opts.forceSearch ~= true and type(A.RouterLocationLaneReply) == "function" then
+        local routerNorm = tostring(Normalize(query) or "")
+            :gsub("healthbar", "health bar"):gsub("powerbar", "power bar")
+            :gsub("castbar", "cast bar"):gsub("manabar", "mana bar")
+        local laneReply = A.RouterLocationLaneReply(routerNorm)
+        if laneReply then return AsReadOnlyKnowledgeResult(laneReply) end
+    end
 
     local lines = { "I found these MSUF matches:" }
     for i = 1, math.min(#results, 5) do lines[#lines + 1] = FormatResultLine(i, results[i].item) end

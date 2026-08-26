@@ -7480,8 +7480,19 @@ function A.ExecutePlan(plan, opts)
         -- control that lacks class-power identity, whichever lane planned it.
         local function ClassPowerOutlineMismatch(hay)
             hay = " " .. tostring(hay or ""):lower() .. " "
-            if not ((hay:find("class power", 1, true) or hay:find("class resource", 1, true)
-                or hay:find("classpower", 1, true)) and hay:find("outline", 1, true)) then
+            -- Clause-aware: "set global bar outline thickness to 4 and class
+            -- resource anchor to X" names class power and an outline in
+            -- DIFFERENT clauses; only a clause carrying both is the
+            -- class-power-outline wording this guard exists for.
+            local sameClause = false
+            for clause in (hay .. " and "):gmatch("(.-)%f[%a]and%f[%A]") do
+                if (clause:find("class power", 1, true) or clause:find("class resource", 1, true)
+                    or clause:find("classpower", 1, true)) and clause:find("outline", 1, true) then
+                    sameClause = true
+                    break
+                end
+            end
+            if not sameClause then
                 return false
             end
             for i = 1, #(plan.changes or {}) do
@@ -8489,6 +8500,15 @@ function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendi
             return nil
         end
     end
+    -- The MSUF/Blizzard global frame switch is one atomic command even when
+    -- phrased as two halves ("turn on all blizzard unitframes and turn off
+    -- msuf frames"); splitting it would plan the halves separately.
+    do
+        local R = A.RouterPrivate
+        if R and type(R.GlobalFrameSwitchIntent) == "function" and R.GlobalFrameSwitchIntent(text) then
+            return nil
+        end
+    end
     local parts = { Trim(text) }
     local connectors = { " and ", " then ", " und ", " dann " }
     local changed = true
@@ -9019,6 +9039,15 @@ function AP.TryImmediateMutationResult(text, opts)
     if normalized == "" then return nil end
     if AP.BarOutlineColorSemanticPlan(text) then return nil end
     local routePrivate = A.RouterPrivate
+    -- The MSUF/Blizzard global frame switch is an atomic multi-setting
+    -- command owned by its Router lane; the exact-alias fast path would
+    -- resolve one clause ("turn on all blizzard unitframes ...") to a single
+    -- control and invert or drop the rest of the request.
+    if routePrivate and type(routePrivate.GlobalFrameSwitchIntent) == "function"
+        and routePrivate.GlobalFrameSwitchIntent(text)
+    then
+        return nil
+    end
     -- A build request is not a mutation. "I want to track a spell on my player
     -- frame" contains "player frame", which this fast path matched to Player
     -- Frame Enabled and answered "already enabled". Let the Router explain how
@@ -9594,6 +9623,18 @@ function A.Submit(text)
         -- A sentence carrying an RGB triplet states colour components; no
         -- rescue rewrite may hand one of those numbers to a number control.
         if unresolved and tostring(text or ""):find("%d+%s*,%s*%d+%s*,%s*%d+") then unresolved = false end
+        -- "can i change X" is a capability question whatever the normal path
+        -- answered (including "unchanged"); the rescue rewrite must never
+        -- turn it into a write. Checked last so no later override re-arms it.
+        if unresolved then
+            local rescueLead = tostring(text or ""):lower():gsub("^%s+", "")
+            if rescueLead:match("^can i%f[%A]") or rescueLead:match("^could i%f[%A]")
+                or rescueLead:match("^may i%f[%A]") or rescueLead:match("^kann ich%f[%A]")
+                or rescueLead:match("^darf ich%f[%A]")
+            then
+                unresolved = false
+            end
+        end
         if unresolved and type(A.RouterPrivate) == "table" and type(A.ExecutePlan) == "function" then
             local router = A.RouterPrivate
             -- The dimension rewrite is consulted last so nothing the existing

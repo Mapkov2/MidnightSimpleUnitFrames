@@ -1476,6 +1476,9 @@ local function ParseGroupScalingFastShortcut(normalized)
     elseif ContainsAny(normalized, P.RootPhrases[205]) then
         attr = "frameScaleManual"
         value = NumberAfterLastConnector(normalized)
+        -- Manual group scale is stored as a percent number (50-200); a
+        -- fractional multiplier ("scale 0.9") means 90, not min-clamped 50.
+        if value ~= nil and value > 0 and value <= 3 then value = value * 100 end
     end
     if not attr or value == nil then return nil end
 
@@ -1558,7 +1561,9 @@ local function ParseDashboardScaleFastShortcut(normalized)
     local value
     if relativeDelta == nil then
         value = FirstNumber(normalized)
-        if value ~= nil and value > 1.5 then value = value / 100 end
+        -- Multiplier vs percent: "scale to 1.2" and "scale to 2" stay as
+        -- multipliers; only clearly-percent numbers divide down.
+        if value ~= nil and value > 3 then value = value / 100 end
     end
     if value == nil and relativeDelta == nil then return nil end
     return {
@@ -6346,6 +6351,9 @@ function A.Parse(text, ctxOverride)
         if not hasBreakpoint then
             local groups = P.DetectGroups(normalized)
             local value = P.FirstNumber(normalized)
+            -- Manual group scale is stored as a percent number (50-200); a
+            -- fractional multiplier ("scale 0.9") means 90, not min-clamped 50.
+            if value ~= nil and value > 0 and value <= 3 then value = value * 100 end
             local changes = {}
             for _, scope in ipairs(groups or {}) do
                 local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(scope) .. ".frameScaleManual")

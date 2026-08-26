@@ -786,6 +786,19 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
         matches[1] = { setting = setting, score = #Compact(subject) }
         fullPhraseMatchedSetting = setting
         seen[setting] = true
+        -- The token scan reads "show" out of "isnt it possible to NOT show
+        -- debuffs"; only the wrapped-negation verdict may override it (the
+        -- full DetectBoolean is label-blind). Resolved at call time: this
+        -- file can load before the parser exports the helper.
+        local liveWrapped = (A.Parser and A.Parser.NegationWrappedBoolean) or P.NegationWrappedBoolean
+        if setting.type == "boolean" and boolFromVerb ~= nil
+            and type(liveWrapped) == "function"
+        then
+            local wrapped = liveWrapped(text)
+            if wrapped ~= nil and wrapped ~= boolFromVerb then
+                boolFromVerb = wrapped
+            end
+        end
         if setting.type == "boolean" and boolFromVerb ~= nil then
             -- When the stored flag is inverted relative to the spoken feature
             -- ("class resource when full" -> classPowerHideWhenFull), "turn on"

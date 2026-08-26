@@ -58,6 +58,19 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     -- "the personal castbar" is the player's castbar; left untranslated it
     -- fuzzy-matched the "Personalize with guided setup" action instead.
     personal = "player",
+    -- German element nouns with no English cognate in the term lists. These
+    -- are direct translations (safe under the list-normalization rule above:
+    -- meaning is preserved, unlike the banned comparative mappings).
+    castleiste = "castbar", castleisten = "castbar",
+    zauberleiste = "castbar", zauberleisten = "castbar", zauberbalken = "castbar",
+    -- Bare "schrift" only exists next to "font" in every term list, so the
+    -- mapping preserves meaning; it keeps "mach die schrift groesser" out of
+    -- the frame-resize chooser (whose blockers know "font", not "schrift").
+    schrift = "font", schriften = "font",
+    lebensbalken = "health bar", lebensanzeige = "health bar", lebensleiste = "health bar",
+    manaanzeige = "mana bar", manaleiste = "mana bar", manabalken = "mana bar",
+    energieleiste = "power bar", energieanzeige = "power bar",
+    haustierrahmen = "pet frame", haustier = "pet",
     wat = "what",
     whta = "what",
     wich = "which",
@@ -476,6 +489,12 @@ do
         begleiter = "begleiter", begleiters = "begleiter",
         boss = "boss", bosses = "boss",
         gruppe = "gruppe", gruppen = "gruppe",
+        raid = "raid", raids = "raid",
+        -- Emit the ENGLISH unit here: the compound replacement runs in the
+        -- same single token pass, so a German word it produces would never be
+        -- translated afterwards, and "haustier" is not a declension the unit
+        -- detector knows (begleiter is).
+        haustier = "pet", haustiers = "pet",
     }
     -- Emit the English attribute: replacement happens in a single token pass,
     -- so a German word produced here would never be translated afterwards, and
@@ -493,7 +512,7 @@ do
         abstand = "spacing", abstaende = "spacing",
         skalierung = "scale",
         name = "name", namen = "name",
-        rahmen = "frame",
+        rahmen = "frame", fenster = "frame",
         portraet = "portrait", portraets = "portrait",
         textur = "texture", texturen = "texture",
         position = "position",
@@ -1315,7 +1334,22 @@ local OFF_WORDS = {
     "aus", "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet",
     "deaktiviere", "schalte aus", "mach aus", "verstecken", "versteckt",
     "verstecke", "ausblenden", "ausgeblendet", "blende aus", "nein",
+    -- German negative determiners: "ich will KEINE debuffs sehen" is an OFF
+    -- request even though "sehen" reads like wanting to see. Bare "nicht" is
+    -- deliberately excluded (it appears inside too many neutral sentences);
+    -- the phrases carry the polarity. Bare "weg" is deliberately absent:
+    -- terse "X weg" reports are pinned to the aura/frame diagnostics.
+    "keine", "kein", "keinen", "nie", "niemals", "weg damit", "mach weg",
+    "nicht sehen", "nicht mehr sehen", "nicht anzeigen", "nicht mehr anzeigen",
 }
+-- Colloquial removal verbs, generated with their determiners: "axe those raid
+-- buffs", "yeet the boss castbar". Never the bare verbs — "kill"/"axe"/"bin"
+-- alone collide with fuzzy matching and real nouns elsewhere.
+for _, colloquialVerb in ipairs({ "ditch", "axe", "yeet", "nuke", "kill", "zap", "bin", "murder", "wipe" }) do
+    for _, determiner in ipairs({ "the", "my", "those", "these", "that", "all" }) do
+        OFF_WORDS[#OFF_WORDS + 1] = colloquialVerb .. " " .. determiner
+    end
+end
 local ON_WORDS = {
     "on", "enable", "enabled", "show", "visible", "true", "yes",
     "activate", "activated", "switch on", "switched on", "unhide",
@@ -1386,8 +1420,69 @@ local function MaskNonPolarityOff(text)
     return text
 end
 
+-- Imperative negations only: bare "not"/"isnt"/"no" also open complaint
+-- shapes ("combat timer not showing", "no buffs showing") that belong to the
+-- diagnostics, and the determiner negations (keine/kein/no) already carry OFF
+-- through the plain word scan. "do not"/"to not"/"hoer auf" are handled as
+-- patterns beside this list.
+local NEGATION_LEAD_WORDS = {
+    "never", "dont", "stop", "quit",
+    "nicht", "nie", "niemals",
+}
+local NEGATED_HIDE_VERBS = {
+    "disappear", "disappearing", "vanish", "vanishing", "hide", "hidden", "hiding",
+    "fade", "fades", "fading", "invisible", "transparent",
+    "verstecken", "versteckt", "ausblenden", "verschwinden", "verblassen",
+}
+local NEGATED_SHOW_VERBS = {
+    "show", "showing", "see", "display", "displaying",
+    "anzeigen", "zeigen", "sehen",
+}
+
+-- Negation followed closely by a visibility verb flips it: "should never
+-- disappear", "stop hiding", "hoer auf ... zu verstecken" mean ON; "quit
+-- showing", "to not show" mean OFF. Returns true/false ONLY for a wrapped
+-- verb, nil otherwise — callers that already hold a label-aware verdict use
+-- this (never the full DetectBoolean, whose flat scans cannot see labels).
+-- The verb must follow the negation within a short window so "show buffs,
+-- not debuffs" and "when not in combat" keep their plain reading.
+local function NegationWrappedBoolean(text)
+    local lowerText = " " .. tostring(text or ""):lower() .. " "
+    local function negationWraps(verbs)
+        local function windowHasVerb(fromPos, span)
+            local window = lowerText:sub(fromPos, fromPos + span)
+            for _, verb in ipairs(verbs) do
+                if window:find("%f[%a]" .. verb .. "%f[%A]") then return true end
+            end
+            return false
+        end
+        for _, neg in ipairs(NEGATION_LEAD_WORDS) do
+            local startAt = 1
+            while true do
+                local s, e = lowerText:find("%f[%a]" .. neg .. "%f[%A]", startAt)
+                if not s then break end
+                if windowHasVerb(e + 1, 34) then return true end
+                startAt = e + 1
+            end
+        end
+        for _, pattern in ipairs({ "do%s+not", "to%s+not", "hoer%s+auf" }) do
+            local _, patternEnd = lowerText:find(pattern)
+            if patternEnd and windowHasVerb(patternEnd + 1, 48) then return true end
+        end
+        return false
+    end
+    local hitsHide = negationWraps(NEGATED_HIDE_VERBS)
+    local hitsShow = negationWraps(NEGATED_SHOW_VERBS)
+    if hitsHide and not hitsShow then return true end
+    if hitsShow and not hitsHide then return false end
+    -- Both classes wrapped ("stop showing and never hide") is ambiguous.
+    return nil
+end
+
 local function DetectBoolean(text)
     text = MaskNonPolarityOff(text)
+    local wrapped = NegationWrappedBoolean(text)
+    if wrapped ~= nil then return wrapped end
     local target = TargetAfterLastConnector(text)
     if target then
         if ContainsAny(target, OFF_WORDS) then return false end
@@ -1864,7 +1959,13 @@ local function NonMutatingIntent(text)
     local lookupPrefix = StartsWithAnyPhrase(actionable, READ_ONLY_LOOKUP_PREFIXES)
         or StartsWithAnyPhrase(normalized, READ_ONLY_LOOKUP_PREFIXES)
     local embeddedQuestion = HasAnyExactPhrase(normalized, EMBEDDED_QUESTION_PHRASES)
-    local bareCapability = StartsWithAnyPhrase(actionable, { "can", "could", "does" })
+    -- I-form permission questions ("may i", "am i able to", "kann ich") ask
+    -- about capability exactly like "can i"; you-forms stay polite commands.
+    -- "is it possible to ..." and its negated twin are the same question.
+    local bareCapability = StartsWithAnyPhrase(actionable, {
+        "can", "could", "does", "may i", "am i", "kann ich", "darf ich", "koennte ich", "kann man",
+        "is it possible", "isnt it possible", "is there a way", "gibt es eine moeglichkeit",
+    })
         and not StartsWithAnyPhrase(actionable, { "can you", "could you" })
     -- "Show me X" asks to be shown X, whatever X is; only "show X" without the
     -- pronoun is the command to switch X on. Requiring a page/location word on
@@ -1995,6 +2096,9 @@ function P.MarkerLocationAnswer(text)
             .. " It lives in the frame's Status Indicators section and is currently " .. state .. "."
             .. " Say 'turn off " .. tostring(setting.label) .. "' when you want it gone. I did not change it.",
         summary = "Names the exact Raid Marker control for the asked frame.",
+        -- The Router resolver turns this into a pending-result followup so
+        -- "current value" / "open it" / "turn it off" act on this control.
+        markerSettingKey = unit .. ".showRaidMarker",
     }
 end
 
@@ -2088,6 +2192,7 @@ P.ON_WORDS = ON_WORDS
 P.RawAfterLastConnector = RawAfterLastConnector
 P.TargetAfterLastConnector = TargetAfterLastConnector
 P.DetectBoolean = DetectBoolean
+P.NegationWrappedBoolean = NegationWrappedBoolean
 P.FirstNumber = FirstNumber
 P.Compact = Compact
 P.AliasRelationText = AliasRelationText

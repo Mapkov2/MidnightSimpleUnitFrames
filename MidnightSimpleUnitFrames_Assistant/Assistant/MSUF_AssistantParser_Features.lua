@@ -449,6 +449,15 @@ end
 
 function A._ParseClassPowerTextSizeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
+    -- The intent gate above tolerates fuzz ("chnage healht text size" matched
+    -- "charge"); an actual Class Resource text-size request names the
+    -- resource directly, so demand one of its own words before writing.
+    if not ContainsAny(text, {
+        "class", "combo", "chi", "holy power", "soul shard", "shard",
+        "rune", "runes", "essence", "maelstrom", "arcane charge", "klassenressource",
+    }) then
+        return nil
+    end
     if ContainsAny(text, FeaturesPhrases[58]) then return nil end
     if ContainsAny(text, FeaturesPhrases[59]) then return nil end
     if not ContainsAny(text, FeaturesPhrases[60]) then return nil end
@@ -2857,7 +2866,10 @@ local function ParseDashboardScaleShortcut(text)
     local value
     if relativeDelta == nil then
         value = FirstNumber(text)
-        if value ~= nil and setting.percent == true and value > 1 then value = value / 100 end
+        -- "scale to 1.2" and "scale to 2" are multipliers, not percentages;
+        -- only clearly-percent numbers (90, 120) divide down. The old > 1
+        -- threshold turned 1.2 into 0.012 and clamped the whole UI to minimum.
+        if value ~= nil and setting.percent == true and value > 3 then value = value / 100 end
     end
     if value == nil and relativeDelta == nil then return nil end
     return {

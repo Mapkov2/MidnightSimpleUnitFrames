@@ -2485,6 +2485,36 @@ function R.NamedBooleanIntentPlan(text)
     local tokens = 0
     for _ in norm:gmatch("%S+") do tokens = tokens + 1 end
     if tokens < 5 then return nil end
+    -- "cast bar vs focus kick tracker" compares two features; a comparison
+    -- never states a polarity, so the mention-implies-on inference below must
+    -- not write from it.
+    if norm:find(" vs ", 1, true) or norm:find(" versus ", 1, true)
+        or R.ContainsAny(norm, { "compare", "comparison", "difference between", "unterschied" })
+    then
+        return nil
+    end
+    -- "can i change X" asks about capability; it never states the value this
+    -- lane infers, and the submit-rescue hook consults this plan for
+    -- unresolved sentences — a question must not become its write.
+    if norm:match("^can i ") or norm:match("^could i ") or norm:match("^may i ")
+        or norm:match("^kann ich ") or norm:match("^darf ich ")
+    then
+        return nil
+    end
+    -- "i want to configure raid ready check icons" states no desired value:
+    -- configure/customize verbs ask for the controls, not a polarity, so the
+    -- mention-implies-on inference below must not write from them.
+    if R.ContainsAny(norm, {
+        "configure", "configuring", "customize", "customise", "set up", "setup",
+        "konfigurieren", "einrichten",
+    })
+        and not R.ContainsAny(norm, {
+            "turn on", "turn off", "switch on", "switch off", "enable", "disable",
+            "show", "hide", "activate", "deactivate", "without", "ohne",
+        })
+    then
+        return nil
+    end
     local bestNamedLength = 0
     local map = R.EnsureSettingLabelIndex and R.EnsureSettingLabelIndex()
     local aliasMap = R.EnsureSettingAliasIndex and R.EnsureSettingAliasIndex()
@@ -2599,7 +2629,17 @@ function R.NamedBooleanIntentPlan(text)
     -- on means shown, which is exactly what this lane infers.
     local hay = (tostring(setting.label or "") .. " " .. tostring(setting.key or "")):lower()
     if hay:find("hide", 1, true) or hay:find("hidden", 1, true) then return nil end
-    local value = not R.ContainsAny(norm, R.NAMED_BOOLEAN_NEGATIONS)
+    -- The parser's polarity reader understands double negatives ("should
+    -- never disappear" is ON) and German negatives; the flat negation list is
+    -- only the fallback when no polarity word appears at all.
+    local parserBool = type((A.Parser or {}).DetectBoolean) == "function"
+        and A.Parser.DetectBoolean(norm) or nil
+    local value
+    if parserBool ~= nil then
+        value = parserBool
+    else
+        value = not R.ContainsAny(norm, R.NAMED_BOOLEAN_NEGATIONS)
+    end
     return {
         kind = "changes",
         changes = { { setting = setting, value = value } },
@@ -3005,6 +3045,26 @@ function R.KnowledgeNoMatch(text)    -- "I did not catch which option you meant"
                 if (not entries or #entries < 2) and R.RegistrySettingSearchEntries then
                     local fuzzy = R.RegistrySettingSearchEntries(norm, norm, 5)
                     if fuzzy and #fuzzy > (entries and #entries or 0) then entries = fuzzy end
+                end
+                -- A single match still deserves a second followup: its own
+                -- page, so "result 2" and comparisons have something to act on.
+                if entries and #entries == 1 then
+                    local single = entries[1].item or {}
+                    local page = single.page
+                    local pageLabel = single.pageLabel
+                        or (page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page"))
+                    if page and pageLabel then
+                        entries[2] = { item = {
+                            kind = "page",
+                            key = page,
+                            label = pageLabel,
+                            page = page,
+                            pageLabel = pageLabel,
+                            description = tostring(single.label or "This control") .. " lives on " .. tostring(pageLabel) .. ".",
+                            canOpen = true,
+                            canExplain = true,
+                        } }
+                    end
                 end
                 if entries and #entries > 0 then
                     local visible = math.min(3, #entries)
@@ -4759,6 +4819,138 @@ A.RouterTryMiscProblemShortcut = function(text, coreHandler)
     return nil
 end
 
+-- "turn off MSUF frames", "use blizzard frames", "turn on all blizzard
+-- unitframes and turn off msuf frames": one global switch between the MSUF
+-- unit frames and the Blizzard default unit frames. Direction "blizzard"
+-- disables every MSUF unit frame and restores the Blizzard frames; "msuf" is
+-- the reverse. Group frames are deliberately excluded: they replace the
+-- Blizzard raid frames and keep their own commands.
+R.GLOBAL_FRAME_SWITCH_UNIT_KEYS = {
+    "player.enabled", "target.enabled", "focus.enabled", "pet.enabled",
+    "boss.enabled", "targettarget.enabled", "focustarget.enabled",
+}
+
+function R.GlobalFrameSwitchIntent(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    -- Questions about the switch stay read-only lanes' business.
+    if norm:match("^what%f[%A]") or norm:match("^where%f[%A]") or norm:match("^why%f[%A]")
+        or norm:match("^how%f[%A]") or norm:match("^which%f[%A]") or norm:match("^can%f[%A]")
+        or norm:match("^could%f[%A]") or norm:match("^is%f[%A]") or norm:match("^do%f[%A]")
+        or norm:match("^does%f[%A]") or norm:match("^was%f[%A]") or norm:match("^wie%f[%A]")
+        or norm:match("^wo%f[%A]")
+    then
+        return nil
+    end
+    -- The literal control names keep their exact single-setting routes.
+    if norm:find("disable blizzard unit frames", 1, true)
+        or norm:find("disable blizzard unitframes", 1, true)
+        or norm:find("fully hide blizzard", 1, true)
+        or norm:find("force blizzard", 1, true)
+    then
+        return nil
+    end
+    -- Another subsystem named alongside "msuf"/"blizzard" is not the global
+    -- unit-frame handoff: "turn on MSUF Style Module", "switch to blizzard
+    -- castbar", and "use blizzard raid frames" all keep their own routes.
+    if R.ContainsAny(norm, {
+        "castbar", "cast bar", "castbars", "cast bars", "nameplate", "nameplates",
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "font", "fonts",
+        "texture", "textures", "style module", "class resource", "class resources",
+        "class power", "raid frame", "raid frames", "party frame", "party frames",
+        "group frame", "group frames", "minimap", "tooltip", "tooltips", "edit mode",
+    }) then
+        return nil
+    end
+    local msufOff = R.ContainsAny(norm, {
+        "turn off msuf frames", "turn off all msuf frames", "turn off msuf unit frames",
+        "turn off all msuf unit frames", "turn off the msuf frames",
+        "disable msuf frames", "disable all msuf frames", "disable msuf unit frames",
+        "hide msuf frames", "hide all msuf frames", "deactivate msuf frames",
+        "msuf frames off", "stop using msuf frames", "msuf frames aus",
+    })
+        or norm == "turn off msuf" or norm == "disable msuf" or norm == "msuf off"
+        or norm == "msuf ausschalten"
+    local msufOn = R.ContainsAny(norm, {
+        "turn on msuf frames", "turn on all msuf frames", "turn on msuf unit frames",
+        "turn on the msuf frames", "enable msuf frames", "enable all msuf frames",
+        "enable msuf unit frames", "show msuf frames", "msuf frames on",
+        "use msuf frames", "switch to msuf frames", "switch back to msuf frames",
+        "msuf frames an",
+    })
+        or norm == "turn on msuf" or norm == "enable msuf" or norm == "msuf on"
+        or norm == "switch to msuf" or norm == "switch back to msuf" or norm == "back to msuf"
+        or norm == "msuf einschalten"
+    local blizzardOn = R.ContainsAny(norm, {
+        "use blizzard frames", "use blizzard unit frames", "use blizzard unitframes",
+        "use the blizzard frames", "switch to blizzard frames", "switch to blizzard unit frames",
+        "blizzard frames back", "restore blizzard frames", "restore blizzard unit frames",
+        "restore blizzard unitframes", "give me blizzard frames",
+        "turn on all blizzard", "enable all blizzard", "show all blizzard",
+        "bring back blizzard frames", "bring back the blizzard frames",
+    })
+        or norm == "switch to blizzard" or norm == "back to blizzard"
+        or norm == "bring back blizzard" or norm == "use blizzard"
+    local wantsBlizzard = msufOff or blizzardOn
+    local wantsMsuf = msufOn
+    if wantsBlizzard and wantsMsuf then return "conflict" end
+    if wantsBlizzard then return "blizzard" end
+    if wantsMsuf then return "msuf" end
+    return nil
+end
+
+A.RouterTryGlobalFrameSwitchShortcut = function(text)
+    local direction = R.GlobalFrameSwitchIntent(text)
+    if not direction then return nil end
+    if direction == "conflict" then
+        return {
+            text = "Global frame switch clarification"
+                .. "\nThat asks for the MSUF frames and the Blizzard frames to move in opposite directions at once, so I kept everything unchanged."
+                .. "\nSay 'use blizzard frames' to hand the unit frames back to Blizzard, or 'use msuf frames' to switch back to MSUF.",
+            status = "ambiguous",
+            result = "ambiguous",
+            summary = "Asks which way to run the global frame switch.",
+        }
+    end
+    local registry = A.Registry
+    if not (registry and type(registry.GetSetting) == "function") then return nil end
+    local msufOn = direction == "msuf"
+    local changes = {}
+    local blizzardSetting = registry:GetSetting("general.disableBlizzardUnitFrames")
+    if blizzardSetting then
+        changes[#changes + 1] = { setting = blizzardSetting, value = msufOn }
+    end
+    for i = 1, #R.GLOBAL_FRAME_SWITCH_UNIT_KEYS do
+        local setting = registry:GetSetting(R.GLOBAL_FRAME_SWITCH_UNIT_KEYS[i])
+        if setting then changes[#changes + 1] = { setting = setting, value = msufOn } end
+    end
+    if #changes < 2 or type(A.ExecutePlan) ~= "function" then return nil end
+    local result = A.ExecutePlan({
+        kind = "changes",
+        changes = changes,
+        label = msufOn and "MSUF unit frames" or "Blizzard unit frames",
+        summary = msufOn and "Enables every MSUF unit frame and hides the Blizzard unit frames."
+            or "Disables every MSUF unit frame and restores the Blizzard unit frames.",
+        raw = text,
+        sourceText = text,
+        exactSettingMutation = true,
+    })
+    if not result then return nil end
+    -- ExecutePlan may come back with a confirmation request or a failure;
+    -- only a real apply earns the "switched" wording — anything else must
+    -- surface exactly as ExecutePlan reported it.
+    local status = tostring(result.status or result.result or "")
+    if status ~= "applied" then return result end
+    local nl = string.char(10)
+    result.text = (msufOn
+            and "Switched to the MSUF unit frames: every MSUF unit frame is enabled and the Blizzard default unit frames are hidden."
+            or "Switched to the Blizzard default unit frames: every MSUF unit frame is disabled and the Blizzard unit frames are back.")
+        .. nl .. tostring(result.text or "")
+        .. nl .. "Group frames are separate: say 'turn off party frames' or 'turn off raid frames' for those. Say 'undo' to revert this switch."
+    result.summary = "Global switch between the MSUF and Blizzard unit frames."
+    return result
+end
+
 A.RouterEditModeProblemTerms = A.RouterEditModeProblemTerms or {
     editMode = { "edit mode", "editmode", "msuf edit mode", "frame edit mode", "move frames mode" },
     moveFrames = {
@@ -5165,6 +5357,15 @@ function R.IsDisplayOnlySettingsRequest(norm)
 end
 
 function R.WantsVisibilityOff(norm)
+    -- The wrapped-negation verdict ("quit showing X" is OFF, "stop hiding X"
+    -- is ON) outranks the flat verb list every lane shares; the full
+    -- DetectBoolean is deliberately NOT consulted here — it is label-blind
+    -- and inverts hide-named controls.
+    local wrappedDetect = (A.Parser or {}).NegationWrappedBoolean
+    if type(wrappedDetect) == "function" then
+        local wrapped = wrappedDetect(norm)
+        if wrapped ~= nil then return wrapped == false end
+    end
     return R.ContainsAny(norm, { "turn off", "disable", "hide", "remove", "get rid", "dont show", "do not show" })
 end
 
@@ -11509,7 +11710,7 @@ function R.TryCorrectionShortcut(text, coreHandler)    local norm = R.Normalize(
             return R.CoreControl(coreHandler, "undo",
                 "I have no Assistant change to undo -- I have not changed anything this session."
                 .. "\nIf something still looks wrong, tell me what you are seeing and I will find it, for example 'why are target buffs hidden' or 'my player frame disappeared'."
-                .. "\nIf you meant a change you made in the menu yourself, I cannot undo that, but I can reset a frame or a page: 'reset player options'.",
+                .. "\nIf you meant a change you made in the menu yourself, I cannot revert it, but I can reset a frame or a page: 'reset player options'.",
                 "failed")
         end
     end
@@ -12256,6 +12457,9 @@ R.ROLE_RECOMMEND_TERMS = {    "recommend settings for healer", "recommend healer
     "recommend tank settings", "tank setup", "best tank settings", "settings for tank",
     "recommend settings for dps", "recommend dps settings", "dps setup",
     "best dps settings", "settings for dps",
+    "what should i change as healer", "what should i do as healer",
+    "what should i change as tank", "what should i do as tank",
+    "what should i change as dps", "what should i do as dps",
 }
 
 R.ROLE_RECOMMEND_INTENT_TERMS = {    "recommend", "recommendation", "recommendations", "best", "setup", "set up", "ui for", "interface for",
@@ -13892,6 +14096,17 @@ R.COMPACT_SETTING_STOP_WORDS = {
 R.COMPACT_SETTING_WORDS = {
     breite = "width", hoehe = "height", groesse = "size", textur = "texture",
     spieler = "player", ziel = "target", gruppe = "group", bereit = "ready",
+    -- Collapsed unit ids appear in typed queries but never in labels; map to
+    -- the word the labels do use ("Target of Target ...", "Focus Target ...").
+    targettarget = "target", focustarget = "focus",
+}
+
+-- One-shot retry synonyms when a compact search finds nothing: labels are
+-- inconsistent between these pairs ("Show Elite Icon" vs "Symbol size",
+-- "Texture Layer 3 Alpha" vs "Absorb Bar Opacity"), so the swap only runs
+-- after the literal wording found zero matches.
+R.COMPACT_SETTING_RETRY_WORDS = {
+    symbol = "icon", icon = "symbol", opacity = "alpha", alpha = "opacity",
 }
 
 function R.CompactRegistrySettingTokens(text)
@@ -13931,7 +14146,7 @@ local function CopyCompactRegistryEntries(entries)
     return copy
 end
 
-function R.CompactRegistrySettingSearchEntries(text, limit)
+function R.CompactRegistrySettingSearchEntries(text, limit, noRetry)
     local queryWords = R.CompactRegistrySettingTokens(text)
     if #queryWords < 2 then return nil end
     local settings = R.EnsureCompleteSettingRegistry()
@@ -13988,6 +14203,30 @@ function R.CompactRegistrySettingSearchEntries(text, limit)
         R._compactRegistrySettingSearchCache = {
             settings = settings, count = #settings, query = queryJoined, limit = limit, entries = false,
         }
+        -- One-shot synonym retry: "show elite symbol" finds nothing literally,
+        -- but the control is "Show Elite Icon", and "chi slot 6" names the
+        -- "Windwalker Monk Chi 6 Color" slot without the word "slot". Only
+        -- runs when the literal wording found zero matches, so consistent
+        -- labels are unaffected. noRetry stops the involution (symbol<->icon)
+        -- from ping-ponging.
+        if not noRetry then
+            local retried, changed = {}, false
+            for i = 1, #queryWords do
+                local word = queryWords[i]
+                local swap = R.COMPACT_SETTING_RETRY_WORDS[word]
+                if swap then
+                    retried[#retried + 1] = swap
+                    changed = true
+                elseif word == "slot" then
+                    changed = true
+                else
+                    retried[#retried + 1] = word
+                end
+            end
+            if changed and #retried >= 2 then
+                return R.CompactRegistrySettingSearchEntries(table.concat(retried, " "), limit, true)
+            end
+        end
         return nil
     end
     table.sort(matches, function(a, b)
@@ -14313,6 +14552,10 @@ function R.TryCompactExplicitSettingSearch(text)
     local subject = norm:match("^search%s+(.+)$") or norm:match("^find%s+(.+)$")
         or norm:match("^suche%s+(.+)$") or norm:match("^finde%s+(.+)$")
     if not subject or subject == "" then return nil end
+    -- "find set chi slot 6" keeps a verb inside the subject; labels never
+    -- start with it, so it only costs recall.
+    subject = subject:gsub("^set%s+", ""):gsub("^change%s+", "")
+    if subject == "" then return nil end
     local entries, canonicalKind = R.CanonicalExplicitSearchEntries(subject)
     if not entries then entries = R.CompactRegistrySettingSearchEntries(subject, 5) end
     if not entries then return nil end
@@ -17927,7 +18170,19 @@ end
 function R.ResolveLocationLaneReply(text)
     local marker = type(A.Parser) == "table" and type(A.Parser.MarkerLocationAnswer) == "function"
         and A.Parser.MarkerLocationAnswer(text) or nil
-    if marker then return marker end
+    if marker then
+        if marker.markerSettingKey and not marker.searchResults
+            and type(R.RegistrySettingItemForKey) == "function"
+            and type(R.RegistryLocationResultFollowups) == "function"
+        then
+            local item = R.RegistrySettingItemForKey(marker.markerSettingKey)
+            if item then
+                marker.searchResults = R.RegistryLocationResultFollowups({ { item = item } }, 1)
+                marker.selectPendingResult = 1
+            end
+        end
+        return marker
+    end
     -- Profile questions have their own precise read-only help; without this
     -- entry the Knowledge location path lists profile actions instead of the
     -- reviewed export/backup/import guidance.
@@ -17946,8 +18201,12 @@ function R.ResolveLocationLaneReply(text)
     -- The castbar setting lane self-gates on AsksSettingLocation; it must beat
     -- the text lane's generic "Frame Text" fallback for castbar move/position
     -- questions so the Cast Bars page followup is the one that gets attached.
-    local castbarSetting = type(A.RouterTryCastbarSettingShortcut) == "function"
-        and A.RouterTryCastbarSettingShortcut(R.Normalize(text)) or nil
+    -- Its own setting fallback resolves generic "text"/"bar" nouns to castbar
+    -- controls, so it only runs when the question actually says cast bar.
+    local resolverNorm = R.Normalize(text)
+    local castbarSetting = R.ContainsAny(resolverNorm, { "castbar", "cast bar", "casting bar" })
+        and type(A.RouterTryCastbarSettingShortcut) == "function"
+        and A.RouterTryCastbarSettingShortcut(resolverNorm) or nil
     if castbarSetting then return castbarSetting end
     local movement = type(A.RouterTryMovementSettingShortcut) == "function"
         and A.RouterTryMovementSettingShortcut(text) or nil
@@ -17964,6 +18223,21 @@ function R.ResolveLocationLaneReply(text)
     local auraSetting = type(A.RouterTryAuraSettingShortcut) == "function"
         and A.RouterTryAuraSettingShortcut(R.Normalize(text)) or nil
     if auraSetting then return auraSetting end
+    -- "where can I change target health text" names a text slot with a
+    -- generic verb: the text lane's overview of the visibility, slot, format,
+    -- size, anchor, and offset controls answers that better than pinning the
+    -- bare visibility toggle the registry would single-match.
+    if R.ContainsAny(resolverNorm, { "health text", "hp text", "power text", "mana text", "name text", "status text" })
+        and R.ContainsAny(resolverNorm, { "change", "manage", "configure", "customize", "customise", "edit", "adjust" })
+        and not R.ContainsAny(resolverNorm, {
+            "format", "size", "color", "colour", "font", "anchor", "offset", "position",
+            "hide", "show", "turn on", "turn off", "enable", "disable",
+        })
+    then
+        local textFirst = type(A.RouterTryTextPowerSettingShortcut) == "function"
+            and A.RouterTryTextPowerSettingShortcut(resolverNorm) or nil
+        if textFirst then return textFirst end
+    end
     local located = type(A.RouterTryRegistrySettingLocationShortcut) == "function"
         and A.RouterTryRegistrySettingLocationShortcut(text) or nil
     if located and located.selectPendingResult == 1 then return located end
@@ -17977,6 +18251,23 @@ function R.ResolveLocationLaneReply(text)
 end
 
 function R.AdvisoryNoMutationReply(text, comparative)
+    -- "what did you just do" is a history question, not a lookup or a
+    -- preference call; answer it from the Assistant's own change history.
+    local historyNorm = R.Normalize(text)
+    if R.ContainsAny(historyNorm, {
+        "what did you change", "what changed", "what was changed", "what did you do",
+        "what did you just do", "what did you just change", "what exactly did you change",
+        "what exactly did you just do", "what did you set", "show last change",
+        "was hast du geaendert", "was hast du gerade geaendert", "was hast du gemacht",
+        "was hast du gerade gemacht", "was wurde geaendert", "letzte aenderung",
+    }) then
+        local ctx = type(A.GetContext) == "function" and A.GetContext() or nil
+        local parsed = type(A._ParseFollowupAnswer) == "function" and A._ParseFollowupAnswer("what did you change", ctx) or nil
+        if parsed and type(parsed.text) == "string" and parsed.text ~= "" then
+            return R.ControlResult(parsed.text, parsed.status or "info")
+        end
+        return R.ControlResult("I do not have a recorded Assistant change yet.", "info")
+    end
     local topicReply = not comparative and R.AdviceTopicReply(text) or nil
     if topicReply then return topicReply end
     -- A profile question has its own precise read-only help; the generic
@@ -18287,6 +18578,59 @@ function R.TryContextualSettingAdviceFollowup(text, coreHandler)
     return nil
 end
 
+-- "open that" / "open option 1" / "open the right page" with nothing pending
+-- names no destination at all. Offer the main MSUF pages as numbered choices
+-- instead of a dead end; the numbers work like search-result followups.
+R.VAGUE_OPEN_PICK_PAGES = {
+    { page = "uf_player", label = "Player" },
+    { page = "opt_castbar", label = "Cast Bars" },
+    { page = "auras3", label = "Auras" },
+    { page = "gf_layout", label = "Group Layout" },
+    { page = "profiles", label = "Profiles" },
+}
+
+function R.VagueOpenPickReply(text)
+    local norm = R.Normalize(text)
+    local subject = norm
+        :gsub("^please%s+", ""):gsub("^open%s+", ""):gsub("^go%s+to%s+", "")
+        :gsub("^show%s+me%s+", ""):gsub("^take%s+me%s+to%s+", "")
+    if subject == norm then return nil end
+    if not (subject == "that" or subject == "it" or subject == "this"
+        or subject == "the right page" or subject == "the page" or subject == "the correct page"
+        or subject == "the option" or subject == "the right option"
+        or subject == "the setting" or subject == "the right setting"
+        or subject == "the right one" or subject == "the correct one"
+        or subject:match("^option%s+%d+$") ~= nil
+        or subject:match("^the%s+option%s+%d+$") ~= nil)
+    then
+        return nil
+    end
+    local pages = R.VAGUE_OPEN_PICK_PAGES
+    local lines = { "I do not have a destination selected. Pick the one you want me to open:" }
+    local results = {}
+    for i = 1, #pages do
+        lines[#lines + 1] = tostring(i) .. ". " .. pages[i].label
+        results[#results + 1] = {
+            kind = "page",
+            key = pages[i].page,
+            label = pages[i].label,
+            page = pages[i].page,
+            pageLabel = pages[i].label,
+            description = pages[i].label .. " is a main MSUF menu page.",
+            canOpen = true,
+            canExplain = true,
+        }
+    end
+    lines[#lines + 1] = "Answer with a number, or name any other page or control."
+    return {
+        text = table.concat(lines, "\n"),
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Asks which destination to open instead of guessing.",
+        searchResults = results,
+    }
+end
+
 function R.TryGeneralGuidanceShortcut(text, coreHandler)    local norm = R.Normalize(text)
     if norm == "" then return nil end
     -- Every reply below is a setup article. None of them is the right answer to
@@ -18323,6 +18667,8 @@ function R.TryGeneralGuidanceShortcut(text, coreHandler)    local norm = R.Norma
     end
 
     if R.ContainsAny(norm, R.CONTEXTLESS_GUIDANCE_TERMS) then
+        local pick = R.VagueOpenPickReply(norm)
+        if pick then return pick end
         return R.ContextlessGuidanceReply()
     end
 
@@ -18857,6 +19203,14 @@ function A.RouteInput(text, coreHandler)
         if existence then return existence end
     end
 
+    -- The MSUF/Blizzard global frame switch is one atomic command even when
+    -- phrased as two halves ("turn on all blizzard unitframes and turn off
+    -- msuf frames"); it must win before the compound planner sees fragments.
+    if not hasBlockingPending and A.RouterTryGlobalFrameSwitchShortcut then
+        local frameSwitch = A.RouterTryGlobalFrameSwitchShortcut(text)
+        if frameSwitch then return frameSwitch end
+    end
+
     -- A proven multi-change sentence is planned as one transaction by A.Parse.
     -- It has to win here, ahead of every single-control lane below, or the
     -- first lane to recognise a fragment answers for the whole request.
@@ -19226,6 +19580,8 @@ function A.RouteInput(text, coreHandler)
                     and R.RegistryLocationResultFollowups(navEntries, 3) or nil,
             }
         end
+        local vaguePick = R.VagueOpenPickReply and R.VagueOpenPickReply(text)
+        if vaguePick then return vaguePick end
         return {
             text = "I could not identify one exact MSUF destination from that wording, so I kept every setting unchanged. Name the page or exact control you want me to open.",
             status = "info",
@@ -19919,6 +20275,37 @@ function A.RouteInput(text, coreHandler)
         local registrySettingDecisionResult = A.RouterTryRegistrySettingDecisionShortcut and A.RouterTryRegistrySettingDecisionShortcut(text, Core)
         if registrySettingDecisionResult then return registrySettingDecisionResult end
 
+        -- Orientation questions are not preference calls: first-steps wording
+        -- runs the guided setup, and "what now" needs more context, not a
+        -- pointer list.
+        do
+            local bearingsNorm = R.Normalize(text)
+            if bearingsNorm == "what should i do first" or bearingsNorm == "what should i change first"
+                or bearingsNorm == "where should i start" or bearingsNorm == "where should i begin"
+                or bearingsNorm == "wo soll ich anfangen" or bearingsNorm == "was soll ich zuerst tun"
+            then
+                if hasCore then
+                    local setupResult = Core("guided setup")
+                    if setupResult and not A.RouterIsUnknownResult(setupResult) then return setupResult end
+                end
+                if type(R.ContextlessGuidanceReply) == "function" then return R.ContextlessGuidanceReply() end
+            end
+            if bearingsNorm == "what now" or bearingsNorm == "what should i do now"
+                or bearingsNorm == "was jetzt" or bearingsNorm == "und jetzt"
+                or bearingsNorm == "show me where" or bearingsNorm == "zeig mir wo"
+            then
+                if type(R.ContextlessGuidanceReply) == "function" then return R.ContextlessGuidanceReply() end
+            end
+            -- "what should i change as healer" is a role-setup question; the
+            -- role/class guidance article beats the generic preference reply.
+            if (R.LooksLikeRoleGuidanceRequest(bearingsNorm) or R.LooksLikeClassGuidanceRequest(bearingsNorm))
+                and type(R.TryGeneralGuidanceShortcut) == "function"
+            then
+                local guidanceResult = R.TryGeneralGuidanceShortcut(text, Core)
+                if guidanceResult then return guidanceResult end
+            end
+        end
+
         -- The decision shortcut only answers when one control resolves
         -- confidently. Everything below this point can write, so an advice
         -- question that got this far has to be answered read-only rather than
@@ -19976,11 +20363,36 @@ function A.RouteInput(text, coreHandler)
                 -- precedence ("what is Castbar Texture" stays exact).
                 do
                     local defNorm = R.Normalize(text)
+                    -- "how do i change target health text" asks about the text
+                    -- family, not the single toggle the alias reaches; hand it
+                    -- to the same text-lane overview the location resolver
+                    -- prefers for that shape.
                     if namedLookup and namedLookup ~= ""
-                        and (defNorm:match("^what is ") ~= nil or defNorm:match("^what are ") ~= nil)
-                        and namedLookup:match(" Frames? Enabled$") ~= nil
+                        and (defNorm:match("^how do i ") ~= nil or defNorm:match("^how can i ") ~= nil)
+                        and R.ContainsAny(defNorm, { "health text", "hp text", "power text", "mana text", "name text", "status text" })
+                        and R.ContainsAny(defNorm, { "change", "manage", "configure", "customize", "customise", "edit", "adjust" })
+                        and not R.ContainsAny(defNorm, {
+                            "format", "size", "color", "colour", "font", "anchor", "offset", "position",
+                            "hide", "show", "turn on", "turn off", "enable", "disable",
+                        })
+                        and not defNorm:find(R.Normalize(namedLookup), 1, true)
                     then
                         namedLookup = nil
+                    end
+                    if namedLookup and namedLookup ~= ""
+                        and (defNorm:match("^what is ") ~= nil or defNorm:match("^what are ") ~= nil)
+                    then
+                        -- A definitional question that does not literally spell
+                        -- the resolved label asks about the concept, not the
+                        -- control an alias happens to reach: "what is font
+                        -- outline" wants font-rendering help, not the Shared
+                        -- Font Outline control. Literal spellings ("what is
+                        -- castbar texture") keep their exact-control answer.
+                        local labelNorm = R.Normalize(namedLookup)
+                        local literallyNamed = labelNorm ~= "" and defNorm:find(labelNorm, 1, true) ~= nil
+                        if namedLookup:match(" Frames? Enabled$") ~= nil or not literallyNamed then
+                            namedLookup = nil
+                        end
                     end
                 end
                 if namedLookup and namedLookup ~= "" then

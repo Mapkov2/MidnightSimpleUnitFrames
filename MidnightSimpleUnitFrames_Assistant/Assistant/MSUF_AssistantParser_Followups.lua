@@ -2051,7 +2051,10 @@ local function ParseSetting(text, ctx)
     end
     local frameType = DetectFrameType(text, ctx)
     local direction = DetectDirection(text, ctx)
+    -- "nudge the frame width up" adjusts the WIDTH; the direction word only
+    -- says which way the value should go, so a dimension noun beats movement.
     local movementIntent = direction and ContainsAny(text, FollowupData.PARSE_MOVEMENT_TERMS) and not ContainsAny(text, FollowupData.PARSE_ANCHOR_TERMS)
+        and not ContainsAny(text, { "width", "height", "breite", "hoehe" })
     local attr = movementIntent and ((direction == "left" or direction == "right") and "offsetX" or "offsetY") or DetectAttribute(text, frameType)
     if not attr then return nil end
     -- "bold" names Bold Text or Font Outline. Resolving "set player name bold
