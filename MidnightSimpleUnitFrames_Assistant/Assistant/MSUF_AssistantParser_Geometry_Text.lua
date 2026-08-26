@@ -150,6 +150,12 @@ function A._ParseTextFontSizeShortcut(text)
     if ContainsAny(text, GeometryTextPhrases[21]) then
         return nil
     end
+    -- "make target cooldown text bigger" is aura text: cooldown and stack
+    -- text sizes are per-lane aura controls, never the frame's Name/HP/Power
+    -- font sizes this lane offers.
+    if ContainsAny(text, { "cooldown", "stack", "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then
+        return nil
+    end
     local allTextIntent = ContainsAny(text, GeometryTextPhrases[22]) and ContainsAny(text, GeometryTextPhrases[23])
     local broadGenericTextIntent = ContainsAny(text, GeometryTextPhrases[17])
         and ContainsAny(text, { "text", "font" })
@@ -1593,6 +1599,22 @@ function A._ParseTextSlotDropdownShortcut(text)
         }
     end
     if #changes == 0 then return nil end
+    -- Value words such as "maximum" and "percent" also occur inside other
+    -- controls' names: "set player maximum health loss texture to Minimalist"
+    -- was read as the MAX text slot. When the sentence is one registered
+    -- control's full name and that control is not a text slot this lane is
+    -- about to write, the exact-alias pass owns it.
+    if type(P.WholeCommandNamesOneSetting) == "function" then
+        local named = P.WholeCommandNamesOneSetting(text)
+        if named then
+            local owned = false
+            for i = 1, #changes do
+                local setting = changes[i] and changes[i].setting
+                if setting and setting.key == named.key then owned = true break end
+            end
+            if not owned then return nil end
+        end
+    end
     if #changes > 1 and not clearAllSlots then
         return {
             kind = "ambiguous",

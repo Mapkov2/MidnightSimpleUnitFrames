@@ -52,6 +52,7 @@ Data.FOLLOWUPS_PARSER = {
     },
     ASK_WHAT_CHANGED_TERMS = {
         "what did you change", "what changed", "what was changed", "what did you do",
+        "what did you just do", "what have you just done", "what have you done",
         "what did you just change", "what exactly did you change", "what did you set",
         "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",

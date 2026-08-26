@@ -569,6 +569,35 @@ local function FullPhraseMatch(index, tokens, minTokens)
     return setting, subject, boolFromVerb
 end
 
+-- Whether the whole command -- minus its verb and its value tail -- is the
+-- full name of exactly one registered setting. Lanes that would otherwise cut
+-- such a name into pieces (the bare compound splitters read "turn on player
+-- portrait border use class color" as a portrait-border clause plus a colour
+-- clause) or claim it for a broader control they own ("bar texture" inside
+-- "heal prediction bar texture") use this as their stand-down test. It is
+-- deliberately only asked once a lane is about to answer, so cold paths that
+-- never reach those lanes never pay for the index.
+function P.WholeCommandNamesOneSetting(text)
+    local allSettings = Registry and Registry:AllSettings() or {}
+    if #allSettings == 0 then return nil end
+    local index = EnsureIndex(allSettings)
+    if (index.maxTokens or 0) <= 0 then return nil end
+    local tokens = Tokens(text)
+    if not HasTriggerToken(index, tokens) then return nil end
+    local setting = FullPhraseMatch(index, tokens, 3)
+    if not setting then return nil end
+    -- The name alone is not ownership: "set target power text to percent"
+    -- spells out Target Power Text (the visibility toggle), but "percent" is a
+    -- slot value that toggle cannot take, so the text-slot lane keeps it. The
+    -- same eligibility rule the exact-alias pass applies decides here too.
+    if type(P.RegistrySettingMayMatchExactAlias) == "function"
+        and P.RegistrySettingMayMatchExactAlias(setting, Normalize(text)) ~= true
+    then
+        return nil
+    end
+    return setting
+end
+
 local function GuardedSettingResponse(setting, text, raw)
     local guard = type(setting) == "table" and setting.intentGuard or nil
     if type(guard) ~= "function" then return nil end
@@ -609,6 +638,32 @@ end
 
 local function AddExactAliasChange(changes, seenKeys, setting, value, relativeDelta, score, text)
     local key = tostring(setting and setting.key or "")
+    -- Destructive wording never selects transient menu state through an alias:
+    -- "reset buff aura style overrides" matched the Aura Style lane selector's
+    -- "buff aura style" alias and switched the tab instead of failing closed.
+    -- Every exact-alias assembly path funnels through here, so this is the one
+    -- guard that cannot be bypassed by a caller with a pre-stripped subject.
+    if key:sub(1, 5) == "menu." then
+        local hay = " " .. Normalize(text or "") .. " "
+        for _, verb in ipairs({ "reset", "wipe", "restore", "revert", "start over" }) do
+            if hay:find(" " .. verb .. " ", 1, true) then return end
+        end
+    end
+    -- An RGB triplet marks every number in the sentence as a colour component.
+    if type(setting) == "table" and setting.type == "number" and not setting.assistantColorChannel
+        and tostring(text or ""):find("%d+%s*,%s*%d+%s*,%s*%d+") then
+        return
+    end
+    -- "red channel to 20" names a colour component; only a channel control may
+    -- take the number.
+    if type(setting) == "table" and setting.type == "number" and not setting.assistantColorChannel then
+        local hay = " " .. Normalize(text or "") .. " "
+        if hay:find(" channel ", 1, true)
+            and (hay:find(" red ", 1, true) or hay:find(" green ", 1, true)
+                or hay:find(" blue ", 1, true) or hay:find(" alpha ", 1, true)) then
+            return
+        end
+    end
     if key ~= "" and not seenKeys[key] then
         seenKeys[key] = true
         changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, matchScore = score }
@@ -778,6 +833,26 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
                         value = forcedBooleanValue
                     else
                         value = ValueForRegistrySetting(setting, text, raw)
+                        -- An enum's value has to be stated OUTSIDE the
+                        -- control's own name: "change player font outline"
+                        -- contains "outline" only as the label's last word,
+                        -- and applying it as the choice answered "already
+                        -- outline" instead of asking. A real value arrives
+                        -- behind a connector ("to thick outline"). Only
+                        -- label-embedded values are refused: "set player
+                        -- portrait border class color" states CLASS_COLOR
+                        -- outside the name and is a legitimate connectorless
+                        -- write.
+                        if value ~= nil
+                            and (setting.type == "enum" or (setting.type == "string" and setting.closedValues))
+                            and not (text:find(" to ", 1, true) or text:find(" as ", 1, true) or text:find(" = ", 1, true))
+                        then
+                            local own = Compact(tostring(setting.label or "") .. " " .. tostring(setting.attribute or ""))
+                            local valueCompact = Compact(tostring(value))
+                            if valueCompact ~= "" and own:find(valueCompact, 1, true) then
+                                value = nil
+                            end
+                        end
                     end
                 end
                 if value ~= nil or relativeDelta ~= nil then
