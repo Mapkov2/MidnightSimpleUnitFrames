@@ -1318,22 +1318,14 @@ end
 -- assistant_menu_slider_domain_smoke re-reads the options source and fails if
 -- any entry drifts from its binding, so this table cannot rot silently.
 local REVIEWED_MENU_DOMAINS = {
-    absorbBarHeight = { min = 0, max = 100, step = 1, source = "absorb.absorbBarHeight" },
-    absorbBarOffsetY = { min = -100, max = 100, step = 1, source = "absorb.absorbBarOffsetY" },
-    healAbsorbBarHeight = { min = 0, max = 100, step = 1, source = "absorb.healAbsorbBarHeight" },
-    healAbsorbBarOffsetY = { min = -100, max = 100, step = 1, source = "absorb.healAbsorbBarOffsetY" },
-    healPredictionBarHeight = { min = 0, max = 100, step = 1, source = "absorb.healPredictionBarHeight" },
-    healPredictionBarOffsetY = { min = -100, max = 100, step = 1, source = "absorb.healPredictionBarOffsetY" },
-    healPredictionBarOpacity = { min = 0, max = 1, step = 0.05, source = "absorb.healPredictionBarOpacity" },
+    -- The absorb/heal-prediction/max-health-loss geometry and the power
+    -- gradient strength moved to hand-written registrations (general + nine
+    -- bar scopes) in 6.12, so their generated fallbacks never materialise any
+    -- more and their reviewed rows left this ledger with them.
 
     -- Labelled sliders on the same bar-scope page: bound by widget rather than
     -- by literal key, but still written through BarScopeSet, so one range again
     -- governs every scope.
-    tempMaxHealthOpacity = { min = 0.05, max = 1, step = 0.05, source = "temp_max_health.opacity",
-        sharedSlider = { file = "Pages/MSUF_Menu2_GlobalBars.lua", label = "Overlay opacity" } },
-    tempMaxHealthBackgroundOpacity = { min = 0, max = 1, step = 0.05,
-        source = "temp_max_health.background_opacity",
-        sharedSlider = { file = "Pages/MSUF_Menu2_GlobalBars.lua", label = "Background opacity" } },
 
     -- The highlight thickness slider writes highlightBorderThickness and this
     -- legacy twin in the same setter, so both carry its range.
@@ -1351,16 +1343,15 @@ local REVIEWED_MENU_DOMAINS = {
         sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Size" } },
     -- The unit text appearance slider and the group text scope slider agree on
     -- this range, so the name font size is unambiguous across both.
+    -- The name Appearance card renamed its slider from "Default size" to "Size"
+    -- in the 6.12 text rework; same 6..48 step 1 range.
     nameFontSize = { min = 6, max = 48, step = 1, source = "text.appearance.size",
-        sharedSlider = { file = "Pages/MSUF_Menu2_UnitText.lua", label = "Default size" } },
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitText.lua", label = "Size" } },
     -- Same shared status Size slider as the icon sizes above; the DND text is
     -- just another descriptor the placement card drives.
     -- BindGradientStrength computes its label into a variable, so the entry is
     -- pinned to that helper rather than a label literal; it builds exactly one
     -- slider, W.Slider(textures, label, 0, 1, 0.05, 220).
-    powerGradientStrength = { min = 0, max = 1, step = 0.05, source = "gradient.power.strength",
-        sharedSlider = { file = "Pages/MSUF_Menu2_GlobalBars.lua",
-            enclosing = "BindGradientStrength" } },
     statusDNDTextSize = { min = 8, max = 64, step = 1, source = "status.placement.size",
         sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Size" } },
     -- BindStatusPlacementSlider(card, "Layer", 0, 30, …) states no step literal;
@@ -1379,10 +1370,12 @@ local REVIEWED_MENU_DOMAINS = {
     -- above, so the shared-label lookup still resolves to one domain.
     dispelSymbolSize = { min = 4, max = 48, step = 1, source = "visual.dispel.symbol.size",
         sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Symbol size" } },
+    -- The symbol X/Y sliders left Group Bars when the preview gained its
+    -- dispel-symbol drag handle; that handle is the evidence now.
     dispelSymbolX = { min = -128, max = 128, step = 1, source = "visual.dispel.symbol.x",
-        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Offset X" } },
+        previewHandle = { file = "Preview/MSUF_Menu2_GroupPreview_Handles.lua" } },
     dispelSymbolY = { min = -128, max = 128, step = 1, source = "visual.dispel.symbol.y",
-        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Offset Y" } },
+        previewHandle = { file = "Preview/MSUF_Menu2_GroupPreview_Handles.lua" } },
     dispelSymbolSpacing = { min = 0, max = 32, step = 1, source = "visual.dispel.symbol.spacing",
         sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Symbol spacing" } },
     dispelSymbolAlpha = { min = 0.05, max = 1, step = 0.05, source = "visual.dispel.symbol.opacity",
@@ -1398,18 +1391,22 @@ local REVIEWED_MENU_DOMAINS = {
     -- BindStatusPlacementSlider states no step literal (it builds
     -- W.Slider(parent, label, minValue, maxValue, 1, 300) and rounds to whole
     -- numbers), so step 1 is the ledger's part, exactly as for the Layer entry.
+    -- The status-text offsets lost their "(extended)" sliders when the frame
+    -- editors took over placement; the unit preview's drag handles own them
+    -- now, so the evidence is the preview spec still exposing each key. The
+    -- clamp itself stays this hand-reviewed range.
     statusAFKTextOffsetX = { min = -1000, max = 1000, step = 1, source = "status.placement.x",
-        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "X Offset (extended)" } },
+        previewHandle = { file = "Preview/MSUF_Menu2_UnitPreview_Specs.lua" } },
     statusAFKTextOffsetY = { min = -1000, max = 1000, step = 1, source = "status.placement.y",
-        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Y Offset (extended)" } },
+        previewHandle = { file = "Preview/MSUF_Menu2_UnitPreview_Specs.lua" } },
     statusDNDTextOffsetX = { min = -1000, max = 1000, step = 1, source = "status.placement.x",
-        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "X Offset (extended)" } },
+        previewHandle = { file = "Preview/MSUF_Menu2_UnitPreview_Specs.lua" } },
     statusDNDTextOffsetY = { min = -1000, max = 1000, step = 1, source = "status.placement.y",
-        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Y Offset (extended)" } },
+        previewHandle = { file = "Preview/MSUF_Menu2_UnitPreview_Specs.lua" } },
     statusGhostTextOffsetX = { min = -1000, max = 1000, step = 1, source = "status.placement.x",
-        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "X Offset (extended)" } },
+        previewHandle = { file = "Preview/MSUF_Menu2_UnitPreview_Specs.lua" } },
     statusGhostTextOffsetY = { min = -1000, max = 1000, step = 1, source = "status.placement.y",
-        sharedSlider = { file = "Pages/MSUF_Menu2_UnitStatusSection.lua", label = "Y Offset (extended)" } },
+        previewHandle = { file = "Preview/MSUF_Menu2_UnitPreview_Specs.lua" } },
 }
 Auto.ReviewedMenuDomains = REVIEWED_MENU_DOMAINS
 

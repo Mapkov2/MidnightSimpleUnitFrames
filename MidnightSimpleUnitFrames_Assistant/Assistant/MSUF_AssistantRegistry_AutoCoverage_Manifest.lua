@@ -19,11 +19,11 @@ M.Assistant = A
 local Manifest = A.AutoCoverageManifest or {}
 A.AutoCoverageManifest = Manifest
 
--- Defaults generated offline on 2026-08-21 from the current factory profile
+-- Defaults generated offline on 2026-08-24 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 4813 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4813
+-- 4825 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 4825
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -1217,6 +1217,12 @@ Manifest.defaults = {
         apexAlertShadowTechID = 245529,
         apexAlertTrackOverlay = true,
         apexAlertTrackShadowTech = true,
+        apexItFontSize = 32,
+        apexItOffsetX = 0,
+        apexItOffsetY = 140,
+        apexRangeCounterFontSize = 18,
+        apexRangeCounterOffsetX = 0,
+        apexRangeCounterOffsetY = 70,
         combatFontSize = 12,
         combatOffsetX = -50,
         combatOffsetY = 4,
@@ -1233,6 +1239,9 @@ Manifest.defaults = {
         crosshairSize = 18,
         crosshairThickness = 4,
         enableApexAlert = false,
+        enableApexItDevAura = false,
+        enableApexNameplateRangeDetection = true,
+        enableApexRangeCounter = false,
         enableCombatCrosshair = false,
         enableCombatCrosshairMeleeRangeColor = false,
         enableCombatStateText = false,
@@ -1242,6 +1251,7 @@ Manifest.defaults = {
         enableNameplateCounter = false,
         enableNameplateMeleeOnly = false,
         enablePlayerTotems = false,
+        enableShadowTechniquesStackHighlight = false,
         firstDanceClickThrough = true,
         firstDanceIconSize = 32,
         firstDanceOffsetX = -180,
@@ -1282,6 +1292,8 @@ Manifest.defaults = {
         rangeFadeEnabled = false,
         rangeFadeMaxRange = 40,
         rangeFadeTick = 0.25,
+        shadowTechniquesGlowScale = 100,
+        shadowTechniquesGlowStrength = 80,
         shownGameplayColorsTip = true,
     },
     general = {
