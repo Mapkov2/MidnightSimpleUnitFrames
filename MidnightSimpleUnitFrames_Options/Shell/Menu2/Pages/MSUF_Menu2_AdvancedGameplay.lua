@@ -12,6 +12,7 @@ local AP = M.AdvancedPage or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
+local C_Timer = M.MenuTimer or _G.C_Timer
 local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs, ControlMeta, RegisterControl = M.Pick(AP, [[Gameplay MoveWidget LabelAt SwitchAt AddTableControlSpecs ControlMeta RegisterControl]])
 local GAMEPLAY_SETTING_BY_PATH = {
     ["timer.enabled"] = "gameplay.enableCombatTimer",
