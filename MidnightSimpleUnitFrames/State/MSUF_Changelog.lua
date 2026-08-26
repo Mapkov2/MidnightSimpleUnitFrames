@@ -8,12 +8,73 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "0B3C60FCABF8992830320E517A71D625EF843C278D1922FFDE2979F28BAE0191",
-    currentVersion = "6.12",
-    historyFromVersion = "6.09",
-    previousVersion = "6.09",
-    rangeLabel = "6.09 -> 6.12",
+    sourceSha256 = "17546BBBA5AAED6C1F4DCCF61FEF0086E593E8F83834CF7C9B07A91780D8976B",
+    currentVersion = "6.13-beta1",
+    historyFromVersion = "6.1",
+    previousVersion = "6.12",
+    rangeLabel = "6.12 -> 6.13-beta1",
     entries = {
+        {
+            version = "6.13-beta1",
+            date = "2026-08-26",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Range Fade now stays accurate in PvP instances. Group and Unit Frames re-query when the instance context changes, while unchanged polling sets avoid redundant rebuilds.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target range fade",
+                                label = "Enable Range Fade",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_target.unit.range_fade.enabled",
+                                settingKey = "target.rangeFadeEnabled",
+                            },
+                        },
+                        {
+                            text = "Focus castbar trackers recover correctly after startup. Focus interrupt and cast ownership is restored when the underlying tracker becomes available after the initial load.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "focus interrupt tracker",
+                                label = "Focus interrupt tracker",
+                                sectionId = "castbar_focus_kick",
+                                controlId = "menu2.opt.castbar.global.focus.kick.enable.focus.kick.icon",
+                                settingKey = "general.enableFocusKickIcon",
+                            },
+                        },
+                        {
+                            text = "Player Power text keeps the correct current resource identity. Current-value text no longer loses its power type when the live bar source has already been resolved.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "displayed resource",
+                                label = "Displayed resource",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.resource.source",
+                                settingKey = "player.playerPowerSource",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Expanded Assistant action inputs for enchant-related requests and tightened Aura action routing.",
+                        "Exact setting guidance now outranks broader suggestions, while ambiguous control requests fail closed without changing settings.",
+                        "Removed the experimental built-in Rogue APEX developer helper and its retired settings, menu controls, Assistant registrations, and generated metadata.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Party-style Arena Group Frames fail open when Blizzard's Arena roster is temporarily incomplete instead of publishing an unusable secure roster.",
+                        "Aura-name fallback work is coalesced so repeated unresolved-name events do not trigger duplicate scans in the same frame.",
+                        "Heal-prediction stripe updates use a specialized full-health path and avoid redundant overflow work.",
+                        "Range drivers reuse unchanged poll sets and keep PvP instance transitions event-driven.",
+                    },
+                },
+            },
+        },
         {
             version = "6.12",
             date = "2026-08-23",
@@ -199,106 +260,6 @@ local data = {
                         "The raid preview shows the correct group number on each preview frame instead of numbering members 1-5 within every group.",
                         "The power colour swatch on the Global Fonts page shows an Augmentation Evoker's real power token instead of a hard-coded Essence colour.",
                         "The castbar name shortening no longer builds a cache key string on every text write.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.09",
-            date = "2026-08-17",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Added dynamic Custom Priority ordering for Dots on target and Custom 1-3 aura containers, keeping the configured spell order compact and stable as tracked auras appear or expire.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "dots on target custom priority",
-                                label = "Custom Priority",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
-                                settingKey = "auras3.target.custom4.placed.sortMethod",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "custom4_behavior",
-                            },
-                        },
-                        {
-                            text = "Added a combat aura scanner to the Unitframe blacklist workspace: one click closes the menu, keeps capturing every blockable aura with its icon until combat ends, then reopens the menu with the collected list, ready to block.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "target debuff blacklist",
-                                label = "Combat scan",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
-                                settingKey = "auras3.target.debuff.blacklist.hidePermanent",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "debuff_blacklist",
-                            },
-                        },
-                        {
-                            text = "Manual blacklist entries are now verified by Spell ID against the live unit: when your cast's ID differs from the aura's actual ID, MSUF warns and offers to block the real aura ID instead.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "target debuff blacklist",
-                                label = "Blacklist",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_target.auras.unit-workspace.container-selector",
-                                settingKey = "auras3.target.debuff.blacklist.hidePermanent",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "debuff_blacklist",
-                            },
-                        },
-                        {
-                            text = "Added an optional Show spell IDs in aura tooltips toggle that keeps the native 12.1 tooltip option enabled across logins.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "spell ids",
-                                label = "Aura tooltip spell IDs",
-                                sectionId = "misc_tooltips",
-                                controlId = "menu2.opt.misc.global.setting.tooltip.show.aura.spell.ids",
-                                settingKey = "general.tooltipShowAuraSpellIDs",
-                            },
-                        },
-                        {
-                            text = "Added an optional Boss Number status indicator so boss frames can show their encounter index directly on the frame.",
-                            link = {
-                                pageKey = "uf_boss",
-                                query = "boss number",
-                                label = "Boss Number",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_boss.unit.status.selected.enabled",
-                                settingKey = "boss.showBossNumberIndicator",
-                                prepareKind = "unitStatus",
-                                prepareValue = "bossNumber",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Moved aura ordering out of Style into dedicated, scope-aware Ordering workspaces for Unit Frames, Group Frames, custom aura containers, and external defensives, with draggable priority rows that snap to their new slot.",
-                        "Added a live Active auras on this frame dropdown to the blacklist with one-click blocking, a Rescan button, and a session capture list; scans run only on click.",
-                        "Extended the Maximum duration filter to every aura lane on unit and group frames, including Buffs, Tracked Buffs, and External Defensives.",
-                        "Reworked pandemic-window Full-Frame effects for tracked DoTs to bind to the visible aura buttons themselves, including portrait mode.",
-                        "Replaced Aura list scrollbars with the consistent MSUF scrollbar style and exposed Ordering options directly without a redundant accordion.",
-                        "Added Blizzard's NEW badge to the See New Features button, shown until the bundled release notes have been opened.",
-                        "Added Deathstalker's Mark for Rogues and Atmospheric Exposure for Druids to the tracked target-effect presets, and corrected the Balance Druid presets for Moonfire (164812), Sunfire (164815), and Atmospheric Exposure (430589).",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed the combat timer not being movable while its position was unlocked.",
-                        "Added a tooltip to the combat timer's Lock position toggle explaining how positioning works.",
-                        "Fixed the Combat Enter/Leave text vanishing after every combat transition while unlocked; it now stays visible as its movable handle.",
-                        "Fixed gameplay mover offsets drifting when the moved element was anchored to a scaled frame, and dragging a mover now repaints its X/Y sliders live.",
-                        "Scanning respects Blizzard's instanced-content restrictions: encounter, Mythic+, and PvP lockdowns show a clear notice pointing to the curated presets and resume automatically instead of erroring.",
-                        "Scan results state how many auras Blizzard hides as secret; hidden auras cannot be identified or blocked by any addon, so everything blockable is always captured.",
-                        "Fixed Edit Mode arrow-key nudging for Custom 1-4 aura containers, including shared boss-frame positioning.",
-                        "Fixed Spell Indicator controls from an inactive display type remaining visible after selection or preview changes.",
-                        "Kept Custom Priority ordering and blacklist scanning fully event- and click-driven: no polling, no recurring OnUpdate work, and nothing added to combat hotpaths.",
                     },
                 },
             },

@@ -8,12 +8,73 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "0B3C60FCABF8992830320E517A71D625EF843C278D1922FFDE2979F28BAE0191",
-    currentVersion = "6.12",
+    sourceSha256 = "17546BBBA5AAED6C1F4DCCF61FEF0086E593E8F83834CF7C9B07A91780D8976B",
+    currentVersion = "6.13-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.12",
+    previousVersion = "6.12",
+    rangeLabel = "6.12 -> 6.13-beta1",
     entries = {
+        {
+            version = "6.13-beta1",
+            date = "2026-08-26",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Range Fade now stays accurate in PvP instances. Group and Unit Frames re-query when the instance context changes, while unchanged polling sets avoid redundant rebuilds.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target range fade",
+                                label = "Enable Range Fade",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_target.unit.range_fade.enabled",
+                                settingKey = "target.rangeFadeEnabled",
+                            },
+                        },
+                        {
+                            text = "Focus castbar trackers recover correctly after startup. Focus interrupt and cast ownership is restored when the underlying tracker becomes available after the initial load.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "focus interrupt tracker",
+                                label = "Focus interrupt tracker",
+                                sectionId = "castbar_focus_kick",
+                                controlId = "menu2.opt.castbar.global.focus.kick.enable.focus.kick.icon",
+                                settingKey = "general.enableFocusKickIcon",
+                            },
+                        },
+                        {
+                            text = "Player Power text keeps the correct current resource identity. Current-value text no longer loses its power type when the live bar source has already been resolved.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "displayed resource",
+                                label = "Displayed resource",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.resource.source",
+                                settingKey = "player.playerPowerSource",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Expanded Assistant action inputs for enchant-related requests and tightened Aura action routing.",
+                        "Exact setting guidance now outranks broader suggestions, while ambiguous control requests fail closed without changing settings.",
+                        "Removed the experimental built-in Rogue APEX developer helper and its retired settings, menu controls, Assistant registrations, and generated metadata.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Party-style Arena Group Frames fail open when Blizzard's Arena roster is temporarily incomplete instead of publishing an unusable secure roster.",
+                        "Aura-name fallback work is coalesced so repeated unresolved-name events do not trigger duplicate scans in the same frame.",
+                        "Heal-prediction stripe updates use a specialized full-health path and avoid redundant overflow work.",
+                        "Range drivers reuse unchanged poll sets and keep PvP instance transitions event-driven.",
+                    },
+                },
+            },
+        },
         {
             version = "6.12",
             date = "2026-08-23",
