@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9CA775144C9AAF1592FFDF7494BEBE2A104ACCBE4D5AE7600EA2C54B5AC68790",
+    sourceSha256 = "DC53F778C46D275C45B3A7AF2905BF4FA503BFA13AF85239754E015792BBA022",
     currentVersion = "6.13-beta3",
     historyFromVersion = "6.02",
     previousVersion = "6.13-beta2",
@@ -50,6 +50,7 @@ local data = {
                         "Live Party, Raid, and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; Edit Mode and previews keep the configured point semantics, and unavailable protected geometry fails closed.",
                         "The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition, without adding polling or permanent update work.",
                         "Assistant routing preserves the original request polarity and capability intent across page-context resolution, preventing safe questions from being rewritten into setting changes.",
+                        "The Assistant's unloaded-Menu group-copy fallback now mirrors the native copy categories for chunked health and power fills while excluding anchor and migration-only fields.",
                         "Focus Kick castbar state follows the icon lifecycle and clears stale cast ownership when the combined display is disabled.",
                     },
                 },
