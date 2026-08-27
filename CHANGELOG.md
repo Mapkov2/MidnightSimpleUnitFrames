@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.13-beta3 - 2026-08-27
+
+### Highlights
+
+- **Focus Kick can now stay visible beside the Focus castbar.** The new option keeps the compact interrupt icon while restoring the matching Focus castbar and its normal cast ownership.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_focus_kick","controlId":"menu2.opt.castbar.global.focus.kick.focus.kick.show.castbar","settingKey":"general.focusKickShowCastbar","prepareKind":"","prepareValue":"","query":"show castbar with focus kick icon","label":"Show castbar with Focus Kick icon"} -->
+
+### Changes
+
+- Party Frames now honor the configured Units per column and Max columns values instead of forcing a single secure column, including combat-safe secure-header growth.
+- The Assistant now understands German negative determiners and double negatives, can switch all supported MSUF or Blizzard Unit Frames globally, and retries zero-result setting searches with registered synonyms.
+- Explicit Assistant setting searches resolve exact registry aliases, full portrait control labels resolve to their owning controls, and ambiguous read-only questions remain non-mutating.
+- Typed HEX colors in the compact color picker now commit on Enter through the same apply path as the visual picker.
+- The Group Frame preview roster now includes B3NZII.
+
+### Fixes & Performance
+
+- Live Party, Raid, and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; Edit Mode and previews keep the configured point semantics, and unavailable protected geometry fails closed.
+- The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition, without adding polling or permanent update work.
+- Assistant routing preserves the original request polarity and capability intent across page-context resolution, preventing safe questions from being rewritten into setting changes.
+- Focus Kick castbar state follows the icon lifecycle and clears stale cast ownership when the combined display is disabled.
+
 ## 6.13-beta2 - 2026-08-26
 
 ### Highlights
