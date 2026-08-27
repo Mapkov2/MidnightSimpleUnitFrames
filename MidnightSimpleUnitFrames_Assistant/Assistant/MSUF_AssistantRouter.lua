@@ -2758,6 +2758,26 @@ function R.ComputeFailClosedReadOnlyRequest(text)
     then
         return true
     end
+    -- A leading movement verb plus an explicit amount and axis/direction is a
+    -- complete write command. Recognize that bounded grammar before exact
+    -- setting discovery scans thousands of labels merely to prove the same
+    -- verdict. Counterfactual/refusal wrappers and compound exclusions remain
+    -- on the fail-closed path above or are rejected here.
+    local explicitNumericMovement = norm:find("[%+%-]?%d")
+        and (norm:match("^move%s+") or norm:match("^nudge%s+")
+            or norm:match("^shift%s+") or norm:match("^position%s+")
+            or norm:match("^reposition%s+") or norm:match("^offset%s+")
+            or norm:match("^raise%s+") or norm:match("^lower%s+"))
+        and (norm:match("^raise%s+") or norm:match("^lower%s+")
+            or R.ContainsAny(norm, {
+                "left", "right", "up", "down", "links", "rechts", "hoch", "runter",
+                "x offset", "y offset", "offset x", "offset y",
+            }))
+        and not R.ContainsAny(norm, {
+            "without changing", "without applying", "without setting",
+            "do not", "dont", "never", "nicht", "ohne",
+        })
+    if explicitNumericMovement then return false end
     -- Question-shaped AND naming an exact control: "whats the target frame
     -- width" asks what the value is, and was being answered with "what value do
     -- you want me to use?". Only the question lead-ins can produce a label
@@ -2933,7 +2953,9 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
     local cached = cacheable and R._failClosedReadOnlyCache or nil
     if type(cached) == "table" and cached.text == key then return cached.value end
     local value = R.ComputeFailClosedReadOnlyRequest(text) == true
-    if cacheable then R._failClosedReadOnlyCache = { text = key, value = value } end
+    if cacheable then
+        R._failClosedReadOnlyCache = { text = key, value = value }
+    end
     return value
 end
 
@@ -19709,6 +19731,17 @@ function A.RouteInput(text, coreHandler)
             or normalized:match("^shift%s+") or normalized:match("^position%s+")
             or normalized:match("^reposition%s+") or normalized:match("^offset%s+")
             or normalized:match("^raise%s+") or normalized:match("^lower%s+")
+        -- A concrete numeric cast-bar movement already has a bounded owner
+        -- below. Asking the broad exact-control index whether it names one
+        -- setting first costs the entire cold registry build and cannot alter
+        -- this reviewed movement verdict. Value-only enum requests such as
+        -- "Boss Castbar Time Position to LEFT" carry no numeric delta and
+        -- retain exact-control precedence.
+        local numericCastbarMovement = startsMovement and normalized:find("[%+%-]?%d")
+            and ((type(R.CastbarComponentMovementIntent) == "function"
+                    and R.CastbarComponentMovementIntent(text) ~= nil)
+                or (type(R.CastbarMovementIntent) == "function"
+                    and R.CastbarMovementIntent(text) ~= nil))
         if startsMovement then
             local directTextMovement = R.TryTextMovementConversation(text, Core)
             if directTextMovement then return directTextMovement end
@@ -19724,7 +19757,8 @@ function A.RouteInput(text, coreHandler)
         -- outright belongs to that control.
         if (startsMovement or normalized:find("castbar", 1, true)
             or normalized:find("cast bar", 1, true))
-            and not (type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text))
+            and (numericCastbarMovement
+                or not (type(R.RequestNamesOneControl) == "function" and R.RequestNamesOneControl(text)))
         then
             local directCastbarIconPosition = R.TryCastbarIconFixedPositionConversation(text)
             if directCastbarIconPosition then return directCastbarIconPosition end
