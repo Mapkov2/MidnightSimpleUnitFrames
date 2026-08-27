@@ -679,6 +679,8 @@ local function GetUpdateKey(name)
   return UPDATE_KEYS[name]
 end
 
+local RESTING_UPDATE_KEY = GetUpdateKey("RestingIndicator")
+
 function UF.BasicElementAllowed(name)
   return BASIC_ELEMENTS[name] == true
 end
@@ -959,6 +961,17 @@ local function FrameOnShow(frame)
     and RegisterFrameEvent then
     RegisterFrameEvent(frame, "UNIT_IN_RANGE_UPDATE", frame._msufCoreRangeEventUnitless == true)
     frame._msufCoreRangeEventSuspended = nil
+  end
+  -- Zoning can deliver PLAYER_UPDATE_RESTING/PLAYER_ENTERING_WORLD while an
+  -- ancestor keeps the player frame hidden, so FrameOnEvent intentionally
+  -- drops the update. Re-seed only this event-owned player state on the cold
+  -- OnShow edge; the generic runtime plan stays unchanged for every other
+  -- refresh and no polling/driver work is added.
+  if frame.MSUFUnitKey == "player" then
+    local updateResting = frame[RESTING_UPDATE_KEY]
+    if updateResting then
+      updateResting(frame, "MSUF_UF_ONSHOW", "player")
+    end
   end
   if frame._msufCoreScope == "group" then
     if HeaderLayoutRebindActive(frame) then
