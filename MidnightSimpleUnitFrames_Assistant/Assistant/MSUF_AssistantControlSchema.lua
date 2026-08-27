@@ -1811,6 +1811,18 @@ function Schema.TryConversation(text)
     local top, second = results[1], results[2]
     local confident = (top._score or 0) >= 14 and (not second or (top._score or 0) - (second._score or 0) >= 6)
 
+    -- The player spelling one candidate's full label verbatim settles a close
+    -- score: "set group frame portrait attach to frame point to bottom left"
+    -- names Attach To Frame Point outright, and a fuzzy cousin ("Placement")
+    -- scoring nearby must not turn that into a shortlist refusal.
+    if not confident and top and second and (top._score or 0) >= 14 then
+        local function LabelVerbatim(row)
+            local label = Normalize(tostring(DisplayLabel(row) or ""))
+            return label ~= "" and normalized:find(" " .. label .. " ", 1, true) ~= nil
+        end
+        if LabelVerbatim(top) and not LabelVerbatim(second) then confident = true end
+    end
+
     -- Dropping words the player actually wrote is a guess, not a match. It may
     -- still identify one control outright, but it must never be dressed up as a
     -- shortlist: "change all unitframe borders" once answered with three
@@ -1862,14 +1874,26 @@ function Schema.TryConversation(text)
                     return { text = "Applied " .. tostring(top.label) .. ".", status = "applied", result = "applied", summary = top.label }
                 end
                 -- Every refusal Schema.Execute raises for a catalog control
-                -- means "not writable from here", not "broken". Say the same
-                -- thing the guided lane says rather than reporting a fault.
+                -- means "not writable from here", not "broken". Before saying
+                -- guided, let the reviewed parser try: the generated index can
+                -- lose a row's registry owner, while the parser still holds
+                -- the real write ("attach to frame point" is a registry enum).
                 if CATALOG_GUIDED_RESULTS[tostring(result or "")] then
+                    local parsed = type(A.Parse) == "function" and A.Parse(text) or nil
+                    if type(parsed) == "table" and parsed.kind == "changes" and type(A.ExecutePlan) == "function" then
+                        return A.ExecutePlan(parsed)
+                    end
                     return { text = GuidedReplyText(top.label), status = "info",
                         result = "guided", summary = top.label }
                 end
                 return { text = "I found " .. tostring(top.label) .. ", but it is not available right now.",
                     status = "failed", result = tostring(result or "failed"), summary = top.label }
+            end
+            do
+                local parsed = type(A.Parse) == "function" and A.Parse(text) or nil
+                if type(parsed) == "table" and parsed.kind == "changes" and type(A.ExecutePlan) == "function" then
+                    return A.ExecutePlan(parsed)
+                end
             end
             return { text = GuidedReplyText(top.label), status = "info", result = "guided", summary = top.label }
         end
