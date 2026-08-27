@@ -449,6 +449,9 @@ DefineObject("aura_custom_whitelist_add_spell aura_custom_whitelist_remove_spell
 DefineObject("aura_custom_whitelist_clear_spells aura_custom_whitelist_summary", {
     scope = AURA_UNIT_INPUT_SCOPE, index = Integer(1, 4),
 }, { required = { "scope", "index" } })
+DefineObject("aura_custom_reminder_enchant_item", {
+    scope = AURA_UNIT_INPUT_SCOPE, index = Integer(1, 3), value = OneOf(String({ minLength = 0, maxLength = 512 }), Integer(0)),
+}, { required = { "scope", "index", "value" } })
 DefineObject("reset_aura_custom_container", {
     scope = AURA_CUSTOM_CONTAINER_SCOPE, index = Integer(1, 3),
 }, { required = { "scope", "index" } })

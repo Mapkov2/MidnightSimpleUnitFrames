@@ -1439,8 +1439,47 @@ local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "uf_pet", terms = { "pet frame", "pet" } },
 }
 
+local function HasConceptDefinitionIntent(norm)
+    norm = Normalize(norm)
+    if norm == "" then return false end
+    if norm:match("^what%s+is%s+") or norm:match("^what%s+are%s+") or norm:match("^what%s+does%s+") then return true end
+    if norm:match("^explain%s+") or norm:match("^describe%s+") then return true end
+    if norm:match("%smean$") or norm:find(" mean ", 1, true) or norm:find(" means ", 1, true) then return true end
+    if norm:match("^[%w%s%-]+%s+help$") then return true end
+    return false
+end
+
+-- True when a location question is owned by one of the Router's specific
+-- location lanes (see A.RouterLocationLaneReply). Concept overviews stand
+-- down for those; definitional "what is/are X" questions keep concept help.
+local locationLaneOwnsCache = { norm = nil, owns = false }
+local function LocationLaneOwnsQuestion(norm)
+    norm = tostring(norm or "")
+    -- Every concept block asks this about the same input; resolve the lane
+    -- chain once per input, not once per block.
+    if locationLaneOwnsCache.norm == norm then return locationLaneOwnsCache.owns end
+    local owns = false
+    if type(A.RouterPrivate) == "table" and type(A.RouterPrivate.AsksSettingLocation) == "function"
+        and A.RouterPrivate.AsksSettingLocation(norm)
+        and not HasConceptDefinitionIntent(norm)
+        and type(A.RouterLocationLaneReply) == "function"
+    then
+        -- This module's normalizer collapses compounds; expand them back so
+        -- the Router lanes see their own vocabulary.
+        local routerNorm = norm:gsub("healthbar", "health bar")
+            :gsub("powerbar", "power bar"):gsub("castbar", "cast bar"):gsub("manabar", "mana bar")
+        owns = A.RouterLocationLaneReply(routerNorm) ~= nil
+    end
+    locationLaneOwnsCache.norm = norm
+    locationLaneOwnsCache.owns = owns
+    return owns
+end
+
 local function TryWhatCanPageHelp(norm)
     if not LooksLikeWhatCanPageHelpIntent(norm) then return nil end
+    -- A location question one of the Router's specific lanes owns gets that
+    -- precise answer instead of the page overview.
+    if LocationLaneOwnsQuestion(norm) then return nil end
     if ContainsAny(norm, WHAT_CAN_UNIT_FRAME_SCOPE_TERMS) and ContainsAny(norm, WHAT_CAN_UNIT_TEXT_TERMS) then return nil end
     if ContainsAny(norm, WHAT_CAN_GROUP_FRAME_SCOPE_TERMS) and ContainsAny(norm, WHAT_CAN_GROUP_LAYOUT_TERMS) then return nil end
     if ContainsAny(norm, WHAT_CAN_DIRECT_HELP_TERMS) then return nil end
@@ -1719,15 +1758,7 @@ local function HasConceptHelpIntent(norm)
     return ContainsAny(norm, CONCEPT_HELP_INTENT_TERMS)
 end
 
-local function HasConceptDefinitionIntent(norm)
-    norm = Normalize(norm)
-    if norm == "" then return false end
-    if norm:match("^what%s+is%s+") or norm:match("^what%s+are%s+") or norm:match("^what%s+does%s+") then return true end
-    if norm:match("^explain%s+") or norm:match("^describe%s+") then return true end
-    if norm:match("%smean$") or norm:find(" mean ", 1, true) or norm:find(" means ", 1, true) then return true end
-    if norm:match("^[%w%s%-]+%s+help$") then return true end
-    return false
-end
+
 
 local ADDON_COMPANION_CATALOG = {
     { id = "betterfriendlist", label = "BetterFriendList", aliases = { "betterfriendlist", "better friend list" } },
@@ -2355,9 +2386,15 @@ local function DirectHelpAnswer(query, opts)
         or norm:match("^i%s+need%s+help%s+with%s+")
     if not scopedHelpWrapper
         and type(A.RouterNamedSettingLabel) == "function"
-        and A.RouterNamedSettingLabel(query)
     then
-        return nil
+        local namedLabel = A.RouterNamedSettingLabel(query)
+        -- "what are party frames" reaches Party Frames Enabled only through
+        -- the category alias; the definitional question belongs to the
+        -- concept blocks below, not the toggle.
+        local definitional = norm:match("^what%s+is%s+") ~= nil or norm:match("^what%s+are%s+") ~= nil
+        if namedLabel and not (definitional and tostring(namedLabel):match(" Frames? Enabled$") ~= nil) then
+            return nil
+        end
     end
     if norm == "help" or norm == "show commands" or norm == "commands" or norm == "what can you do"
         or norm == "what can i ask" or norm == "what can i ask you" or norm == "what can the assistant do"
@@ -2419,7 +2456,10 @@ local function DirectHelpAnswer(query, opts)
     -- copying rather than about group frames.
     -- The guard needs an explicit question intent: the bare imperative
     -- "copy player settings to target" must still reach the copy action.
+    -- Profile copies have their own workflow and help; "how to copy profile"
+    -- must not answer with the frame Copy To button.
     if ContainsAny(norm, { "copy", "kopieren", "kopiere" })
+        and not ContainsAny(norm, { "profile", "profil" })
         and (HasConceptHelpIntent(norm) or norm:match("^can i%f[%W]") ~= nil
             or norm:match("^kann ich%f[%W]") ~= nil)
     then
@@ -2452,6 +2492,26 @@ local function DirectHelpAnswer(query, opts)
         }
     end
     if ContainsAny(norm, { "unit frame", "unit frames", "unitframe", "unitframes", "player frame", "target frame", "focus frame", "pet frame" })
+        -- "the moon icon on player frame" is a raid-marker question about one
+        -- concrete control; the marker location lane answers it, not this
+        -- generic overview. The same holds for every named status indicator
+        -- (leader, pvp, elite, rested, rez...): the indicator location lane
+        -- names the exact control.
+        and not ContainsAny(norm, {
+            "moon icon", "skull icon", "star icon", "circle icon", "diamond icon",
+            "triangle icon", "square icon", "cross icon", "marker icon", "raid icon",
+            "raid marker", "target marker",
+        })
+        and not LocationLaneOwnsQuestion(norm)
+        -- "where can I make player frame transparent?" resolves to one scoped
+        -- visual control (Player Opacity); its location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
+        -- "where can I move target frame?" is a frame-position location ask;
+        -- the movement location lane names the exact controls.
+        and not LocationLaneOwnsQuestion(norm)
+        -- "what controls target of target frame width?" names one frame-scope
+        -- size control; that location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
         and HasConceptHelpIntent(norm)
     then
         return {
@@ -2468,6 +2528,15 @@ local function DirectHelpAnswer(query, opts)
     if ContainsAny(norm, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "buffs and debuffs", "buff and debuff" })
         and not ContainsAny(norm, { "dispel", "dispels", "dispellable", "debuff dispel" })
         and HasConceptHelpIntent(norm)
+        -- "where can I make target buff icons bigger?" asks where one scoped
+        -- aura control lives; the aura setting location lane names it exactly.
+        and not LocationLaneOwnsQuestion(norm)
+        -- "what setting controls target aura cooldown text size?" is one
+        -- scoped aura detail control; that lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
+        -- "where do I set aura blacklist preset?" resolves to one confident
+        -- registry match; its exact location answer wins.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Auras, buffs, and debuffs help\nAura content lives directly on the frame it affects. Open Player, Target, Focus, or Boss Frames > Auras for Buffs, Debuffs, and Custom 1–3. Party/Raid filters and lists live in Group Frames > Auras. For content changes, name the frame and Buff or Debuff lane: broad filters select aura groups, Hide Permanent handles auras with no timer, and exact SpellID lists hide individual auras where Blizzard permits identity filtering. Cooldown/stack text, swipe, duration bars, colors, size, and growth are presentation only.\nExamples: hide player buffs with no timer; show only dispellable raid debuffs; list target buff blacklist; set target buff icon size to 30.\nYou can ask: Open Target | Open Player | Open Boss Frames | Open Group Auras | Open Aura Style",
@@ -2477,6 +2546,9 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "health bar", "health bars", "hp bar", "hp bars", "life bar", "life bars" })
         and HasConceptHelpIntent(norm)
+        -- "where can I change target health bar color?" names one scoped
+        -- visual control; the visual-setting location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Health Bar help\nA health bar shows how much health a unit has. MSUF can change health bar size, opacity, texture, color behavior, gradients, absorb overlays, incoming-heal overlays, text, and group-frame health layout options.\nExamples: set player height to 40; set raid health text size to 14; turn on heal prediction overlay; set health bar texture to Smooth.\nYou can ask: Open Player | Open Group Layout | Open Bars",
@@ -2489,8 +2561,14 @@ local function DirectHelpAnswer(query, opts)
             "detached", "detach", "powerbar offset", "power bar offset", "powerbar x", "powerbar y",
             "power bar x", "power bar y", "offset", "role power", "healer power", "tank power",
             "dps power", "damager power",
+            -- The Alternative Mana Bar is its own Class Resources control; its
+            -- exact location answer must not be buried under this overview.
+            "alternative mana", "alt mana", "alternate mana",
         })
         and HasConceptHelpIntent(norm)
+        -- "how do I disable target power bar?" names one unit's power bar;
+        -- the text/power location lane answers with the exact control.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Power Bar help\nA power bar shows a unit resource such as mana, energy, rage, focus, runic power, or a similar class resource. MSUF can change unit power bars, detached power bars, power text, role power in group frames, and class-resource/player-power options.\nExamples: detach target power bar; hide healer power bars in raid frames; set mana power bar color blue; open class resources.\nYou can ask: Open Player | Open Group Layout | Open Class Resources | Open Colors",
@@ -2500,6 +2578,10 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "ready check", "ready checks", "readycheck", "ready-check" })
         and HasConceptHelpIntent(norm)
+        -- "where can I turn off ready check icon on raid frames?" asks for the
+        -- control's location; the indicator location lane names the exact
+        -- Group Status & Indicators controls.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Ready Check help\nA ready check lets the group confirm who is ready before a pull. MSUF can show ready-check icons on Party, Raid, and Mythic Raid frames through Group Status & Indicators, including size, anchor, layer, and offset options.\nExamples: show raid ready check icon; set party ready check size to 18; move raid ready check icon right 4.\nYou can ask: Open Group Status & Indicators",
@@ -2509,6 +2591,9 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "raid marker", "raid markers", "target marker", "target markers", "world marker", "skull marker" })
         and HasConceptHelpIntent(norm)
+        -- "where can I move raid marker icon?" is an indicator location ask;
+        -- the indicator location lane names the exact controls.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Raid Marker help\nRaid markers are target icons such as skull, cross, square, and moon. MSUF can display raid-marker indicators on unit frames and group frames and can help with their size, anchor, layer, and offsets where the menu exposes those controls.\nExamples: show raid marker on target; set raid marker size to 18; move raid marker icon up.\nYou can ask: Open Player | Open Target | Open Group Status & Indicators",
@@ -2527,6 +2612,9 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "incoming heal", "incoming heals", "heal prediction", "healing prediction", "predicted heal", "predicted heals" })
         and HasConceptHelpIntent(norm)
+        -- "where can I turn off heal prediction?" resolves to the exact
+        -- Heal Prediction Overlay control; its location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Incoming Heal and Heal Prediction help\nIncoming heals are heals that are already being cast or predicted. MSUF can show them with heal prediction overlays and related bar options, so healers can see health plus expected healing.\nExamples: turn on heal prediction overlay; set heal prediction anchor right; open bars; open group layout.\nYou can ask: Open Bars | Open Group Layout",
@@ -2536,6 +2624,10 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, CLASS_RESOURCE_HELP_TERMS)
         and HasConceptHelpIntent(norm)
+        -- Location questions about the class resource display belong to the
+        -- Router's class-resource location lane, which names the exact page.
+        and not (type(A.RouterTryClassResourceLocationShortcut) == "function"
+            and A.RouterTryClassResourceLocationShortcut(norm) ~= nil)
     then
         return {
             text = "Class Resources help\nClass resources are class-specific combat resources such as Rogue/Feral Combo Points, Paladin Holy Power, Warlock Soul Shards, Monk Chi, Death Knight Runes, Evoker Essence, Arcane Charges, Vengeance Soul Fragments, Maelstrom Weapon, Whirlwind, Tip of the Spear, and Icicles. MSUF can color each discrete slot independently, use the resource color/ramp, and switch the entire display to a separate color at the dynamic maximum. You can name the resource, class/spec, slot number, or ordinal naturally.\nExamples: set Evoker essence 3 blue; make the second DK rune red; set full Warlock shards purple; disable max rune color; reset Maelstrom Weapon slot colors.\nYou can ask: Open Class Resources | Open Colors",
@@ -2669,6 +2761,13 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "target of target", "targettarget" })
         and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "where" })
+        -- "where is target of target castbar?" asks about one element MSUF
+        -- does not offer for this unit; the unsupported-castbar lane owns
+        -- that answer, not the unit overview.
+        and not ContainsAny(norm, { "castbar", "castbars", "cast bar", "cast bars", "casting bar" })
+        -- "what controls target of target frame width?" names one exact
+        -- frame-scope control; that location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Target of Target help\nTarget of Target shows what your current target is targeting. It is useful for tanks, assist targeting, and checking whether an enemy is targeting you or another player. In MSUF, it has its own page for visibility, size, text, cast bar, range fade, colors, and position.\nExamples: open target of target; show target of target; set target of target width to 160; make target of target width smaller.\nYou can ask: Open Target of Target",
@@ -2679,6 +2778,10 @@ local function DirectHelpAnswer(query, opts)
     if ContainsAny(norm, { "interrupt", "interrupts", "kick", "kicks", "interrupting", "kick tracker" })
         and not ContainsAny(norm, { "interrupt color", "interruptible color", "uninterruptible color", "castbar interrupt color", "cast bar interrupt color" })
         and ContainsAny(norm, { "help", "how", "how do", "make", "easier", "see", "what", "explain", "where" })
+        -- "where do I make focus kick tracker bigger?" names the exact kick
+        -- tracker controls; the cast-bar special lane is precise.
+        and not (type(A.RouterTryCastbarSpecialSettingShortcut) == "function"
+            and A.RouterTryCastbarSpecialSettingShortcut(norm) ~= nil)
     then
         return {
             text = "Interrupt help\nMSUF can make interrupts easier to read through Cast Bar options: Interrupt Ready indicators, Focus Kick Tracker, cast bar colors, interrupt shake, and Target/Focus/Boss cast bar visibility. It cannot decide when to interrupt, but it can make the relevant frame feedback clearer.\nExamples: show kick ready on target; show focus kick tracker; turn on shake on interrupt; set uninterruptible cast color red.\nYou can ask: Open Cast Bars | Explain Interrupt Ready",
@@ -2686,7 +2789,15 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant interrupt help",
         }
     end
-    if ContainsAny(norm, { "mouseover healing", "mouse over healing", "mouseover heal", "mouse over heal", "click casting", "click-casting", "click cast", "clickcast" })
+    if not (type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.AsksSettingLocation) == "function"
+            and A.RouterPrivate.AsksSettingLocation(norm)
+            and not HasConceptDefinitionIntent(norm)
+            and type(A.RouterTryRegistrySettingLocationShortcut) == "function"
+            and A.RouterTryRegistrySettingLocationShortcut(norm) ~= nil)
+        -- "where can I turn off party click casting?" names one registered
+        -- control; its exact location answer outranks this overview.
+        and ContainsAny(norm, { "mouseover healing", "mouse over healing", "mouseover heal", "mouse over heal", "click casting", "click-casting", "click cast","clickcast" })
         and ContainsAny(norm, { "help", "what", "what is", "how", "where", "enable", "show", "explain" })
     then
         return {
@@ -2697,6 +2808,9 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "range check", "range fade", "out of range", "in range", "melee range" })
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "range" })
+        -- "where can I set range fade for raid frames?" names one scoped
+        -- Range Fade control; its location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Range check help\nMSUF can show range through unit-frame and group-frame Range Fade options, and Gameplay has Combat Crosshair range feedback through the melee range spell. Group-frame Range Fade lives in Group Layout.\nExamples: set raid range fade to 40; turn on target range fade; show combat crosshair; set crosshair melee spell 100780.\nYou can ask: Open Group Layout | Open Target | Open Gameplay",
@@ -2706,6 +2820,9 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "dispel", "dispels", "dispellable", "dispellable debuff", "dispellable debuffs", "debuff dispel" })
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "debuff" })
+        -- "where can I show only dispellable debuffs on raid frames?" resolves
+        -- to one scoped aura filter control; its location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Dispel help\nMSUF has separate dispel features. Party/Raid/Mythic Raid use Group Frames > Dispel Overlay. Player/Target/Focus/Boss use Bars > UnitFrame Dispel Overlay and the global/scoped Dispel Border. Aura Filters decide which dispellable debuffs are shown as icons. UnitFrame Dispel Border/Overlay need at least one UnitFrame aura container enabled.\nExamples: turn on party dispel overlay; set raid dispel overlay to max; set target dispel overlay opacity to 80; set dispel border detects to dispellable by me; show only dispellable raid debuffs.\nYou can ask: Open Group Dispel Overlay | Open Bars | Open Aura Filters",
@@ -2715,6 +2832,9 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "threat", "aggro", "threat border", "aggro border" })
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain" })
+        -- "where can I turn off aggro border?" resolves to the exact Aggro
+        -- Border control; its location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Threat and aggro help\nThreat is how enemies decide whom to attack; aggro means a unit currently has enemy attention. MSUF can highlight this with Aggro Border options, aggro role filters, threat/status indicators, group status and indicators, and colors.\nExamples: turn on aggro border; set raid aggro shows for non tanks; test aggro border; set aggro border color red.\nYou can ask: Open Bars | Open Colors | Open Group Status & Indicators",
@@ -2743,6 +2863,21 @@ local function DirectHelpAnswer(query, opts)
     if ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
         and ContainsAny(norm, GROUP_INDICATOR_HELP_TERMS)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+        -- "where can I turn off ready check icon on raid frames?" asks where
+        -- one indicator's toggle lives; the indicator location lane names the
+        -- exact control. Bare page questions ("which page has ready check
+        -- icons") keep this overview.
+        and not (ContainsAny(norm, { "turn off", "turn on", "hide", "disable", "enable", "remove", "get rid" })
+            and type(A.RouterPrivate) == "table"
+            and type(A.RouterPrivate.AsksSettingLocation) == "function"
+            and A.RouterPrivate.AsksSettingLocation(norm)
+            and not HasConceptDefinitionIntent(norm))
+        -- "where can I show only dispellable debuffs on raid frames?" is one
+        -- scoped aura filter control; its location lane answers precisely.
+        and not LocationLaneOwnsQuestion(norm)
+        -- "where can I move raid marker icon?" is an indicator location ask;
+        -- the indicator location lane names the exact controls.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Group Status & Indicators help\nIn Group Frames > Status & Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, and corner indicators. Spell Indicators are in Group Frames > Auras.\nExamples: show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Status & Indicators",
@@ -2752,6 +2887,9 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
         and ContainsAny(norm, GROUP_HEALTH_TEXT_HELP_TERMS)
+        -- Scoped location questions ("where can I set range fade for raid
+        -- frames?") belong to the visual-setting location lane.
+        and not LocationLaneOwnsQuestion(norm)
         and not ContainsAny(norm, { "role power", "healer power", "healer power bar", "tank power", "tank power bar", "dps power", "dps power bar", "damager power", "damager power bar" })
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
@@ -2764,6 +2902,16 @@ local function DirectHelpAnswer(query, opts)
     if ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
         and ContainsAny(norm, GROUP_LAYOUT_HELP_TERMS)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+        -- "how do I make raid frames wider?" names one Group Layout control;
+        -- the frame-setting location lane answers with the exact control.
+        and not LocationLaneOwnsQuestion(norm)
+        -- "where can I set range fade for raid frames?" is one scoped visual
+        -- control; its location lane is precise.
+        and not LocationLaneOwnsQuestion(norm)
+        -- "what controls party ready check size?" is an indicator layout ask;
+        -- the indicator location lane names the exact controls.
+        and not (type(A.RouterTryIndicatorProblemShortcut) == "function"
+            and A.RouterTryIndicatorProblemShortcut(norm) ~= nil)
     then
         return {
             text = "Group frame layout help\nGroup frame sizing, text, resource bars, range fade, transparency, spacing, growth direction, anchoring, offline behavior, and raid-size scaling live in Group Layout. Dispel Overlay and Debuff Stripe share the Dispel Overlay page.\nExamples: set raid width to 140; make party frames taller; set raid growth direction to down; hide offline players in raid frames; set raid range fade to 40.\nYou can ask: Open Group Layout | Open Group Dispel Overlay",
@@ -2774,6 +2922,9 @@ local function DirectHelpAnswer(query, opts)
     if ContainsAny(norm, UNIT_FRAME_SCOPE_TERMS)
         and ContainsAny(norm, UNIT_TEXT_HELP_TERMS)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+        -- "where can I hide player name text?" names one text control; the
+        -- text location lane answers with the exact control and page.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Unit frame text help\nPlayer, Target, Focus, Pet, Target of Target, Focus Target, and Boss pages offer name, health, power, level, status, font-size, anchor, slot, and offset text options when that unit supports them.\nExamples: move target HP text left; set target power text to percent; make player name text bigger; open target text options.\nYou can ask: Open Player | Open Target | Open Boss Frames",
@@ -2785,6 +2936,13 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
         and not ContainsAny(norm, CASTBAR_TEXT_HELP_TERMS)
         and not ContainsAny(norm, { "interrupt", "interruptible", "uninterruptible", "kick", "focus kick" })
+        -- A cast-bar question about Target of Target or Focus Target is about
+        -- a unit MSUF offers no cast bar for; the unsupported-castbar lane
+        -- explains that precisely.
+        and not ContainsAny(norm, { "target of target", "targettarget", "focus target", "focustarget" })
+        -- "where can I turn off target cast bar?" names one registered
+        -- control; its exact location answer outranks this overview.
+        and not LocationLaneOwnsQuestion(norm)
     then
         return {
             text = "Cast Bars help\nIn Cast Bars, I can help with Player, Target, Focus, and Boss cast bars: visibility, size, position, fill direction, textures, text, interrupt-ready indicators, cast colors, and preview options.\nExamples: open cast bars; set target cast bar height to 24; move focus cast bar down; make boss cast bars wider; change cast bar texture.\nYou can ask: Open Cast Bars",
@@ -2916,7 +3074,11 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant interrupt ready help",
         }
     end
-    if ContainsAny(norm, { "focus kick", "focus kick tracker", "focus kick icon", "focus interrupt tracker", "focus interrupt icon", "fokus kick", "fokus kick tracker", "fokus kick anzeige", "fokus interrupt tracker" })
+    if not (type(A.RouterTryCastbarSpecialSettingShortcut) == "function"
+            and A.RouterTryCastbarSpecialSettingShortcut(norm) ~= nil)
+        -- A kick-tracker sentence the special lane can pin to an exact
+        -- control keeps its precise location answer.
+        and ContainsAny(norm, { "focus kick", "focus kick tracker", "focus kick icon", "focus interrupt tracker", "focus interrupt icon", "fokus kick", "fokus kick tracker", "fokus kick anzeige", "fokus interrupt tracker" })
         and ContainsAny(norm, { "explain", "what is", "what does", "where", "where is", "where do", "help", "tracker", "icon", "position", "size" })
     then
         return {
@@ -2947,6 +3109,13 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "combat timer" })
         and ContainsAny(norm, { "lock", "locked", "unlock", "click through", "click-through", "clickable", "where", "what", "explain", "help" })
+        -- "where can I turn off combat timer?" names the registered toggle;
+        -- its exact location answer outranks this overview.
+        and not LocationLaneOwnsQuestion(norm)
+        -- "can I unlock combat timer to drag it?" is a lock/drag location ask
+        -- the gameplay-extras lane answers precisely.
+        and not (type(A.RouterTryGameplayExtrasLocationShortcut) == "function"
+            and A.RouterTryGameplayExtrasLocationShortcut(norm) ~= nil)
     then
         return {
             text = "Combat Timer help\nIn Gameplay, I can help with Combat Timer options. You can enable it, set its anchor, move it, resize its text, lock its position, or make it click-through. Click-through means the timer ignores mouse clicks; clickable turns click-through off.\nExamples: lock combat timer; unlock combat timer; make combat timer click through; make combat timer clickable; move combat timer up 10.\nYou can ask: Open Gameplay",
@@ -2959,6 +3128,8 @@ local function DirectHelpAnswer(query, opts)
     -- same question about the same frame.
     if ContainsAny(norm, { "totem icon", "totem icons", "totem frame", "totems", "statue frame", "totem rahmen", "totemrahmen", "statuen rahmen", "statuenrahmen", "raise dead", "consecration", "konsekration" })
         and ContainsAny(norm, { "where", "where can", "where do", "make", "bigger", "smaller", "size", "move", "offset", "position", "help", "explain", "wo", "hilfe", "erklaeren", "erklaer", "groesse", "groesser", "kleiner", "verschieben", "verschiebe", "versatz", "class", "classes", "klasse", "klassen", "only", "nur", "work", "works", "working", "funktioniert", "dismiss", "cancel", "entlassen", "abbrechen", "death knight", "deathknight", "todesritter", "paladin", "ghoul", "ghul", "shaman", "schamane", "monk", "moench" })
+        and not (type(A.RouterTryGameplayExtrasLocationShortcut) == "function"
+            and A.RouterTryGameplayExtrasLocationShortcut(norm) ~= nil)
     then
         return {
             text = "Totem Frame help\nIn Gameplay, I can help with Totem/Statue frame options. I can enable the frame, resize the icons, move the frame by X/Y offset, change its anchor points, preview it, or reset its layout.\nIt is not Shaman and Monk only. Every class that fills a totem slot uses the same frame, for example a Death Knight Raise Dead ghoul or a Paladin Consecration, and right-clicking an icon dismisses that totem. It stays hidden while no slot is filled.\nExamples: show totem frame; make totem icons bigger; move totem icons right 6; set totem frame to anchor to bottom left; preview totem frame; reset totem frame.\nYou can ask: Open Gameplay",
@@ -2968,6 +3139,10 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "combat crosshair", "crosshair", "melee range crosshair", "melee range spell", "fadenkreuz" })
         and ContainsAny(norm, { "where", "where can", "where do", "what", "what is", "what does", "help", "explain", "size", "thickness", "spell", "range", "color", "wo", "hilfe", "erklaeren", "erklaer", "groesse", "dicke", "farbe" })
+        -- Location questions about these extras belong to the Router's
+        -- gameplay-extras location lane, which names the exact control.
+        and not (type(A.RouterTryGameplayExtrasLocationShortcut) == "function"
+            and A.RouterTryGameplayExtrasLocationShortcut(norm) ~= nil)
     then
         return {
             text = "Combat Crosshair help\nIn Gameplay, I can help with Combat Crosshair options. You can enable it, set size and thickness, configure in-range/out-of-range colors, and set the melee range spell used for range checks.\nExamples: show combat crosshair; make combat crosshair thicker; set crosshair size to 60; set crosshair melee spell 100780.\nYou can ask: Open Gameplay",
@@ -3087,6 +3262,19 @@ function K.Answer(query, opts)
         return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext({ text = table.concat(lines, "\n"), status = "info", summary = "Assistant FAQ answer" }))
     end
 
+    if intent == "location" and opts.forceSearch ~= true then
+        -- A location question one of the Router's specific lanes can pin to
+        -- an exact control gets that precise answer, not a generic result
+        -- list — the same precedence the DirectHelpAnswer gates enforce.
+        -- Explicit "search ..." commands (forceSearch) keep the list.
+        local routerNorm = tostring(Normalize(query) or "")
+            :gsub("healthbar", "health bar"):gsub("powerbar", "power bar")
+            :gsub("castbar", "cast bar"):gsub("manabar", "mana bar")
+        if type(A.RouterLocationLaneReply) == "function" then
+            local laneReply = A.RouterLocationLaneReply(routerNorm)
+            if laneReply then return AsReadOnlyKnowledgeResult(laneReply) end
+        end
+    end
     if intent == "location" then
         local lines = { "I found this in MSUF:" }
         for i = 1, math.min(#results, 4) do lines[#lines + 1] = FormatResultLine(i, results[i].item) end
@@ -3268,7 +3456,9 @@ function K.NoMatch(query)
     end
     local tokenCount = 0
     for _ in norm:gmatch("%S+") do tokenCount = tokenCount + 1 end
-    local looksLikeRequest = tokenCount >= 3 or ContainsAny(norm, NO_MATCH_SEARCH_SIGNAL_TERMS)
+    -- Two words are a plausible search subject ("style module", "bar
+    -- texture"); only single tokens stay behind the unreadable guard.
+    local looksLikeRequest = tokenCount >= 2 or ContainsAny(norm, NO_MATCH_SEARCH_SIGNAL_TERMS)
     if not hasWord or not looksLikeRequest then
         return {
             text = "I could not read a request out of that."
@@ -3277,6 +3467,66 @@ function K.NoMatch(query)
             status = "info",
             summary = "Assistant unreadable input fallback",
         }
+    end
+
+    -- An option question whose subject is a control's own name deserves that
+    -- control's explanation, not an apology: "what are the options for cp
+    -- sound on empty file" names the generated Bars scalar in full.
+    do
+        local subject = norm
+        for _, lead in ipairs({
+            "what are the options for ", "what are the choices for ",
+            "can you explain ", "explain ", "tell me about ", "info about ",
+            "information about ", "how do i find ", "i want to know about ",
+            "what does ", "what is ",
+        }) do
+            if subject:sub(1, #lead) == lead then
+                subject = subject:sub(#lead + 1)
+                break
+            end
+        end
+        subject = subject:gsub("%s+used%s+for$", ""):gsub("%s+mean$", ""):gsub("%s+do$", "")
+        subject = subject:gsub("^the%s+", "")
+        if subject ~= norm and subject ~= "" and type(A.RouterTryRegistrySettingExplainShortcut) == "function" then
+            local explained = A.RouterTryRegistrySettingExplainShortcut("explain " .. subject)
+            if explained then return explained end
+        end
+        -- A registered alias shared by several frames ("leader symbol layer"
+        -- exists once per unit) is a real name; ask which frame instead of
+        -- apologising. Cold-path only: this is the last stop before no-match.
+        if subject ~= norm and subject ~= "" and A.Registry and type(A.Registry.AllSettings) == "function" then
+            local owners = {}
+            local EMPTY_ALIASES = {}
+            for _, candidate in ipairs(A.Registry:AllSettings()) do
+                -- A nil first list would end ipairs before the second one.
+                for _, list in ipairs({ candidate.exactAliases or EMPTY_ALIASES, candidate.aliases or EMPTY_ALIASES }) do
+                    if type(list) == "table" then
+                        for j = 1, #list do
+                            if Normalize(list[j] or "") == subject then
+                                owners[#owners + 1] = candidate
+                                break
+                            end
+                        end
+                    end
+                end
+                if #owners > 6 then break end
+            end
+            if #owners == 1 and type(A.RouterTryRegistrySettingExplainShortcut) == "function" then
+                local explained = A.RouterTryRegistrySettingExplainShortcut(
+                    "explain " .. tostring(owners[1].label or subject))
+                if explained then return explained end
+            elseif #owners > 1 then
+                local labels = {}
+                for j = 1, math.min(#owners, 6) do labels[#labels + 1] = tostring(owners[j].label) end
+                return {
+                    text = "That name exists once per frame. Which one do you mean?"
+                        .. string.char(10) .. table.concat(labels, " | ")
+                        .. string.char(10) .. "Name the frame and I will explain or change that copy. I did not change anything.",
+                    status = "info",
+                    summary = "Asks which frame's copy of a shared alias is meant.",
+                }
+            end
+        end
     end
 
     -- Last stop before "I did not catch that": the sentence may describe a
@@ -3310,6 +3560,12 @@ K.TOPIC_GUIDANCE = {
       title = "That sounds like auras",
       body = "Buffs, debuffs and aura filtering live on the frame they belong to: Player, Target, Focus and Boss each have their own aura lanes, and Party/Raid aura filters live under Group Frames.",
       examples = "open target; hide player buffs with no timer; show only dispellable raid debuffs; set target buff icon size to 30" },
+    -- Ordered before cast bars: "click casting" contains "casting" and was
+    -- being routed to the cast-bar topic.
+    { terms = { "click casting", "click cast", "click-cast", "clique" },
+      title = "That sounds like click casting",
+      body = "Click casting lets you heal or cast directly by clicking group frames. MSUF has a Click Casting toggle per group scope (Party, Raid, Mythic Raid) in Group Layout.",
+      examples = "turn on raid click casting; turn on party click casting; open group layout" },
     { terms = { "castbar", "cast bar", "casting", "interrupt", "kick", "spell name" },
       title = "That sounds like cast bars",
       body = "Cast bars are configured per unit -- size, position, text, icon, colours and interrupt handling are all on the Cast Bars page.",

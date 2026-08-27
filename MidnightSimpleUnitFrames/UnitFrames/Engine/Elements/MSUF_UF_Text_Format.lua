@@ -1271,8 +1271,16 @@ local function CompileTextRuntime(frame, spec, text)
   local powerSpec = spec and spec.power
   rt.powerRefreshTypeOnTick = rt.powerColorByType == true
     and (not powerSpec or powerSpec.mode == nil or powerSpec.mode == "power")
+  -- CURRENT-only non-Player text normally needs no power metadata. Player can
+  -- switch native identity (forms/vehicles) or hand this surface to Mana while
+  -- the text layout itself remains unchanged, so keep its cached identity path
+  -- available. Steady bar-fed value events still consume Power's shared payload
+  -- and perform no extra native reads.
   frame._msufTextPowerNeedsType = rt.powerSlotCount > 0
-    and (rt.powerColorByType == true or needsMax == true or needsPercent == true)
+    and (frame.MSUFUnitKey == "player"
+      or rt.powerColorByType == true
+      or needsMax == true
+      or needsPercent == true)
     and true
     or nil
   rt.powerPlain = nativeSecrets ~= true and frame.MSUFUnitKey == "player"

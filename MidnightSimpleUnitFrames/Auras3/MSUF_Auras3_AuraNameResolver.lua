@@ -200,6 +200,11 @@ local function FlushFallbackScans()
 end
 
 local function QueueFallbackScan(unit, containers)
+    -- A queued unit already owns one scan in the next rendered frame. Avoid
+    -- re-walking all of its containers for every additional secret/full event
+    -- in the same burst; unregister clears both batch tables before a unit can
+    -- lose its final owner.
+    if pendingFallbackUnits[unit] then return end
     containers = containers or containersByUnit[unit]
     local hasWork = false
     if containers then
@@ -236,9 +241,21 @@ local function OnEvent(_, _, unit, updateInfo)
     end
 
     local isFullUpdate = updateInfo.isFullUpdate
+    if issecretvalue(isFullUpdate) or isFullUpdate == true then
+        QueueFallbackScan(unit, containers)
+        return
+    end
+
+    -- UnitAuraUpdateInfo's three incremental collections are independently
+    -- nilable. An update-only or remove-only event cannot teach a new
+    -- spell-name alias, so it needs neither a fallback scan nor any work here.
     local added = updateInfo.addedAuras
-    if issecretvalue(isFullUpdate) or isFullUpdate == true
-        or issecretvalue(added) or type(added) ~= "table"
+    if issecretvalue(added) then
+        QueueFallbackScan(unit, containers)
+        return
+    end
+    if added == nil then return end
+    if type(added) ~= "table"
         or (canaccesstable and canaccesstable(added) == false) then
         QueueFallbackScan(unit, containers)
         return

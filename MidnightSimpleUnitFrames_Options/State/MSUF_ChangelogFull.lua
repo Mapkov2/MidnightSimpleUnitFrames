@@ -8,12 +8,124 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "BA10D891ADE12467CD97EE68FE2E0B1935055A047F7325A3E6832CBDBFB74CBD",
-    currentVersion = "6.12",
+    sourceSha256 = "E90ACAC10522CC5966DAFB58D5FDD6C9B0BAA8A04CC0CF1BE2B6C2CE2792DC1A",
+    currentVersion = "6.13-beta2",
     historyFromVersion = "6.02",
-    previousVersion = "6.11",
-    rangeLabel = "6.11 -> 6.12",
+    previousVersion = "6.13-beta1",
+    rangeLabel = "6.13-beta1 -> 6.13-beta2",
     entries = {
+        {
+            version = "6.13-beta2",
+            date = "2026-08-26",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Range Fade now stays accurate in PvP instances. Group and Unit Frames re-query when the instance context changes, while unchanged polling sets avoid redundant rebuilds.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target range fade",
+                                label = "Enable Range Fade",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_target.unit.range_fade.enabled",
+                                settingKey = "target.rangeFadeEnabled",
+                            },
+                        },
+                        {
+                            text = "Focus castbar trackers recover correctly after startup. Focus interrupt and cast ownership is restored when the underlying tracker becomes available after the initial load.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "focus interrupt tracker",
+                                label = "Focus interrupt tracker",
+                                sectionId = "castbar_focus_kick",
+                                controlId = "menu2.opt.castbar.global.focus.kick.enable.focus.kick.icon",
+                                settingKey = "general.enableFocusKickIcon",
+                            },
+                        },
+                        {
+                            text = "Player Power text keeps the correct current resource identity. Current-value text no longer loses its power type when the live bar source has already been resolved.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "displayed resource",
+                                label = "Displayed resource",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.resource.source",
+                                settingKey = "player.playerPowerSource",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Reissued the 6.13 Beta 1 runtime code as Beta 2 after a local CurseForge client installation was interrupted while a locale file was locked. Only release metadata, the bundled changelog, and release validation changed; this is not an addon code fix.",
+                        "Revalidated every Core TOC payload path, Lua 5.1 loadability, and the affected XML manifests before republishing.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.13-beta1",
+            date = "2026-08-26",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Range Fade now stays accurate in PvP instances. Group and Unit Frames re-query when the instance context changes, while unchanged polling sets avoid redundant rebuilds.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "target range fade",
+                                label = "Enable Range Fade",
+                                sectionId = "range_fade",
+                                controlId = "menu2.uf_target.unit.range_fade.enabled",
+                                settingKey = "target.rangeFadeEnabled",
+                            },
+                        },
+                        {
+                            text = "Focus castbar trackers recover correctly after startup. Focus interrupt and cast ownership is restored when the underlying tracker becomes available after the initial load.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "focus interrupt tracker",
+                                label = "Focus interrupt tracker",
+                                sectionId = "castbar_focus_kick",
+                                controlId = "menu2.opt.castbar.global.focus.kick.enable.focus.kick.icon",
+                                settingKey = "general.enableFocusKickIcon",
+                            },
+                        },
+                        {
+                            text = "Player Power text keeps the correct current resource identity. Current-value text no longer loses its power type when the live bar source has already been resolved.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "displayed resource",
+                                label = "Displayed resource",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.resource.source",
+                                settingKey = "player.playerPowerSource",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Expanded Assistant action inputs for enchant-related requests and tightened Aura action routing.",
+                        "Exact setting guidance now outranks broader suggestions, while ambiguous control requests fail closed without changing settings.",
+                        "Removed the experimental built-in Rogue APEX developer helper and its retired settings, menu controls, Assistant registrations, and generated metadata.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Party-style Arena Group Frames fail open when Blizzard's Arena roster is temporarily incomplete instead of publishing an unusable secure roster.",
+                        "Aura-name fallback work is coalesced so repeated unresolved-name events do not trigger duplicate scans in the same frame.",
+                        "Heal-prediction stripe updates use a specialized full-health path and avoid redundant overflow work.",
+                        "Range drivers reuse unchanged poll sets and keep PvP instance transitions event-driven.",
+                    },
+                },
+            },
+        },
         {
             version = "6.12",
             date = "2026-08-23",
@@ -65,7 +177,6 @@ local data = {
                     bullets = {
                         "Added Automatic, Current, Maximum, and Current / Maximum formats for the central Class Resource value. Rune timers, Ebon Might duration, and the Ironfur stack counter retain their native formats; previews and the Assistant mirror the selected mode.",
                         "The Player Power resource selector is shared between Player Power and Class Resources, follows vehicle-resource handoffs, and is supported by previews, reset/undo history, search, and the Assistant.",
-                        "Subtlety Rogues can enable an APEX IT combat cue and a configurable Shadow Techniques soft glow at five or more stacks. Both follow Blizzard's native Cooldown Viewer and AuraContainer state without polling and keep protected stack decisions inside the native application binding.",
                         "Preserve Raid Groups now creates a separate secure header for each physical raid subgroup, retaining empty subgroup geometry and the selected Index, Name, or Role sorting inside each group. Scanning, Edit Mode bounds, visibility, and runtime layout cover every active subgroup header.",
                         "Retired unused legacy Class Resource text-format fields from existing profiles and generated fallback metadata.",
                     },

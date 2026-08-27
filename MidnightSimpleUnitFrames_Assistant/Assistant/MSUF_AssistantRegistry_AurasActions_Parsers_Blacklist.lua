@@ -103,8 +103,10 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local value = type(P.AuraBlacklistSpellValue) == "function" and P.AuraBlacklistSpellValue(raw or text) or nil
         if type(value) ~= "string" or value == "" then return false end
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
-        if not scope then return false end
         local lane = type(P.AuraBlacklistLane) == "function" and P.AuraBlacklistLane(normalized) or "both"
+        -- No frame named: the intent is still this action, so hand the parser
+        -- guard an incomplete argument set and let it ask which frame -- the
+        -- alternative was the generic "no precise aura option" dead end.
         return { scope = scope, lane = lane or "both", value = value }, {
             summary = "Edits the native exact-SpellID hidden-aura list for the selected aura lane.",
         }
@@ -205,6 +207,48 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         return args, { summary = "Edits the exact-SpellID whitelist for a unit-frame custom aura container." }
     end
 
+    -- "bind item 12345 to target custom aura 1 enchant reminder": the Bind
+    -- item button on a custom container's weapon-enchant reminder card. The
+    -- value is an item (link or ID), never a spell, so the spell extractor is
+    -- not used; a bare number is the item ID.
+    local function ParseAuraCustomReminderEnchantItemAliasArgs(text, raw)
+        local P = Assistant.Parser or {}
+        local normalized = AuraActionNormalized(text)
+        if not (normalized:find("enchant", 1, true) or normalized:find("oil", 1, true)
+            or normalized:find("stone", 1, true) or normalized:find("poison", 1, true)) then
+            return false
+        end
+        if normalized:find("whitelist", 1, true) or normalized:find("blacklist", 1, true) then return false end
+        local index = tonumber(normalized:match("custom%s+aura%s*([123])") or normalized:match("custom%s*([123])")
+            or normalized:match("container%s*([123])"))
+        local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+        local rawText = tostring(raw or text)
+        local value = rawText:match("|Hitem:(%d+)") or rawText:match("item:(%d+)")
+        if not value then
+            local linkedName = rawText:match("|h%[(.-)%]|h")
+            if linkedName and linkedName ~= "" then value = linkedName end
+        end
+        if not value then
+            local tail = rawText:match("[Bb]ind%s+(.-)%s+[Tt]o%s+") or rawText:match("[Bb]ind%s+(.-)%s+[Ff]or%s+")
+                or rawText:match("[Bb]ind%s+(.-)%s+[Oo]n%s+") or rawText:match("[Uu]se%s+(.-)%s+[Ff]or%s+")
+                or rawText:match("[Ss]et%s+.-[Ee]nchant%s+[Ii]tem%s+[Tt]o%s+(.+)$")
+            if tail then
+                tail = tail:gsub("^[Ii]tem%s+", ""):gsub("^[Ee]nchant%s+[Ii]tem%s+", ""):gsub("^[Oo]il%s+", ""):gsub("^[Ss]tone%s+", "")
+                if tail ~= "" then value = tail end
+            end
+        end
+        if not value then
+            local number = normalized:match("%f[%d](%d%d%d+)%f[%D]")
+            if number then value = number end
+        end
+        if type(value) ~= "string" or value == "" then return false end
+        -- A missing frame or container index is handed to the parser guard,
+        -- which asks for it instead of dead-ending.
+        return { scope = scope, index = index, value = value }, {
+            summary = "Binds the consumable a custom container's weapon-enchant reminder offers on click.",
+        }
+    end
+
     local function ParseAuraCustomWhitelistAddAliasArgs(text, raw) return CustomWhitelistArgs(text, raw, "add") end
     local function ParseAuraCustomWhitelistRemoveAliasArgs(text, raw) return CustomWhitelistArgs(text, raw, "remove") end
     local function ParseAuraCustomWhitelistClearAliasArgs(text, raw) return CustomWhitelistArgs(text, raw, "clear") end
@@ -220,5 +264,6 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         ParseAuraCustomWhitelistRemoveAliasArgs = ParseAuraCustomWhitelistRemoveAliasArgs,
         ParseAuraCustomWhitelistClearAliasArgs = ParseAuraCustomWhitelistClearAliasArgs,
         ParseAuraCustomWhitelistSummaryAliasArgs = ParseAuraCustomWhitelistSummaryAliasArgs,
+        ParseAuraCustomReminderEnchantItemAliasArgs = ParseAuraCustomReminderEnchantItemAliasArgs,
     }
 end

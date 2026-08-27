@@ -517,6 +517,21 @@ local function ParseGroupAvailabilityFastShortcut(normalized)
         attr = "enabled"
     end
     if not attr then return nil end
+    -- "show role icons on party frames" names a DETAIL of the group frame;
+    -- switching the whole frame on is a different control. The shared
+    -- detail vocabulary already guards the scored lanes — apply it here too.
+    if attr == "enabled" and type(P.TextNamesFrameDetail) == "function"
+        and P.TextNamesFrameDetail(normalized)
+    then
+        return nil
+    end
+    -- "blizzard party frames show instead" reports which UI is rendering; the
+    -- Blizzard-fallback help owns that, not the enable toggle.
+    if attr == "enabled"
+        and (normalized:find("blizzard", 1, true) or normalized:find("instead", 1, true))
+    then
+        return nil
+    end
 
     local fromToValue
     if ContainsAny(normalized, P.RootPhrases[71]) then
@@ -787,6 +802,17 @@ local function ParseUnitSimpleBooleanFastShortcut(normalized)
     local units = DetectUnits(normalized)
     if #units == 0 then return nil end
 
+    if #units > 1 then
+        -- "show player name ON TARGET FRAME" detects both units, but the
+        -- second one is a locative destination, not a second subject. The
+        -- cross-frame clarification lane owns that sentence; writing both
+        -- units' controls would be an invented change.
+        local RP = A.RouterPrivate
+        if type(RP) == "table" and type(RP.CrossFrameTextRequestParts) == "function" then
+            local subjectUnit, _, frameUnit = RP.CrossFrameTextRequestParts(normalized)
+            if subjectUnit and frameUnit and subjectUnit ~= frameUnit then return nil end
+        end
+    end
     local changes = {}
     local seen = {}
     for i = 1, #units do
@@ -827,6 +853,17 @@ local function ParseUnitStatusDetailFastShortcut(normalized)
     local units = DetectUnits(normalized)
     if #units == 0 then return nil end
 
+    if #units > 1 then
+        -- "show player name ON TARGET FRAME" detects both units, but the
+        -- second one is a locative destination, not a second subject. The
+        -- cross-frame clarification lane owns that sentence; writing both
+        -- units' controls would be an invented change.
+        local RP = A.RouterPrivate
+        if type(RP) == "table" and type(RP.CrossFrameTextRequestParts) == "function" then
+            local subjectUnit, _, frameUnit = RP.CrossFrameTextRequestParts(normalized)
+            if subjectUnit and frameUnit and subjectUnit ~= frameUnit then return nil end
+        end
+    end
     local changes = {}
     local seen = {}
     for i = 1, #units do
@@ -1021,6 +1058,13 @@ local function ParseGroupTextureFastShortcut(normalized, raw)
         return nil
     end
 
+    -- The scope's own bar texture is also the tail of longer control names
+    -- ("party heal prediction bar texture"); a sentence spelling one of those
+    -- out in full belongs to that control, resolved by the exact-alias pass.
+    if type(P.WholeCommandNamesOneSetting) == "function" then
+        local named = P.WholeCommandNamesOneSetting(normalized)
+        if named and named.key ~= key then return nil end
+    end
     local value = GroupCornerCustomValueAfterTo(raw, normalized)
     if value == nil then return nil end
     local setting = A.Registry and A.Registry:GetSetting(key)
@@ -1761,6 +1805,12 @@ local function ParseGlobalUnitFrameColorFastShortcut(normalized, raw)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
     elseif ContainsAny(normalized, P.RootPhrases[236]) then
+        -- Class Resources have no outline colour; keep their wording off the
+        -- shared Bar Outline Color.
+        if normalized:find("class power", 1, true) or normalized:find("class resource", 1, true)
+            or normalized:find("classpower", 1, true) then
+            return nil
+        end
         key = "general.barOutlineColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
@@ -2303,6 +2353,12 @@ A._ParseExactColorSettingFastShortcut = A._ParseExactColorSettingFastShortcut or
 end
 
 local function ParseScopedBarOutlineColorFastShortcut(normalized, raw)
+    -- Class Resources have no outline colour; "class power bar outline color
+    -- red" must not land on the shared Bar Outline Color.
+    if normalized:find("class power", 1, true) or normalized:find("class resource", 1, true)
+        or normalized:find("classpower", 1, true) then
+        return nil
+    end
     -- Resolve the bounded semantic frame behind ordinary bar-outline color
     -- wording without making the full registry matcher order-insensitive.
     -- Explicit bar/bars language owns the global domain unless the user also
@@ -3939,6 +3995,14 @@ if not P.InitUnsupportedAuraCommand then
         if not P.ParseUnsupportedAuraCommand then
             function P.ParseUnsupportedAuraCommand(text)
                 if P.CopyCommandExcludesAuras and P.CopyCommandExcludesAuras(text) then return nil end
+                -- A sentence that is one registered control's full name is not
+                -- an unsupported aura command: "set aura editing scope to
+                -- target" is the menu's Aura Editing Scope selector and the
+                -- exact-alias pass resolves it once this fallback stands down.
+                if type(P.WholeCommandNamesOneSetting) == "function"
+                    and P.WholeCommandNamesOneSetting(text) then
+                    return nil
+                end
                 if ContainsAny(text, P.AURA_DEBUFF_STRIPE_TERMS) then return nil end
                 if ContainsAny(text, P.AURA_DISPEL_OVERLAY_TERMS) then return nil end
                 local groupBlacklistScope = ContainsAny(text, P.AURA_GROUP_BLACKLIST_SCOPE_TERMS)
@@ -4862,6 +4926,15 @@ local function ParseGlobalBarTexturePriorityShortcut(normalized, raw)
 
     local setting = A.Registry and A.Registry:GetSetting(key)
     if not setting then return nil end
+    -- "bar texture" is also the tail of longer control names ("heal
+    -- prediction bar texture", "absorb bar texture"). When the sentence spells
+    -- out one of those in full, that control owns the request; the exact-alias
+    -- pass further down resolves it, so stand down instead of writing the
+    -- shared texture.
+    if type(P.WholeCommandNamesOneSetting) == "function" then
+        local named = P.WholeCommandNamesOneSetting(normalized)
+        if named and named.key ~= key then return nil end
+    end
     local value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw or normalized, { " to ", " as ", " = " }) or nil
     if value == nil or value == "" then
         value = P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, normalized, raw or normalized) or nil
@@ -5283,6 +5356,14 @@ local function ParseFontScopePriorityShortcut(normalized)
         value = FirstNumber(normalized)
         if value == nil then return nil end
     elseif ContainsAny(normalized, P.RootPhrases[598]) then
+        -- "change player font outline" names the control, not the OUTLINE
+        -- choice; a real value arrives behind a connector or as a style word
+        -- of its own ("thick outline", "none", "off").
+        if not (normalized:find(" to ", 1, true) or normalized:find(" as ", 1, true)
+            or normalized:find(" = ", 1, true)
+            or ContainsAny(normalized, { "thick", "monochrome", "mono", "none", " off", " on", "enable", "disable" })) then
+            return nil
+        end
         suffix = "outline"
     elseif ContainsAny(normalized, P.RootPhrases[599]) then
         suffix = "fontMonochrome"
@@ -5887,6 +5968,35 @@ function A.Parse(text, ctxOverride)
     local normalized = P.Normalize(raw)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return { kind = "empty" } end
+    -- "show target castbar ON PLAYER FRAME" pairs one subject with a
+    -- different destination frame. MSUF cannot embed one frame's element in
+    -- another, so no plan built from that sentence is right: a unit-scanning
+    -- lane would write both units' controls. Fail the parse closed and let the
+    -- Router's cross-frame clarification answer. The one supported embedding
+    -- (Target of Target name inline on the Target frame) is exempt and keeps
+    -- its write path.
+    do
+        local RP = A.RouterPrivate
+        -- Only a destination that names a FRAME is cross-frame wording;
+        -- "only show boss debuffs on target" is a caster filter, where
+        -- "boss" describes the auras, not a source frame.
+        if type(RP) == "table" and normalized:find("frame", 1, true) then
+            for _, partsFn in ipairs({ "CrossFrameTextRequestParts", "CrossFrameVisualRequestParts" }) do
+                if type(RP[partsFn]) == "function" then
+                    local subjectUnit, _, frameUnit = RP[partsFn](normalized)
+                    if subjectUnit and frameUnit and subjectUnit ~= frameUnit then
+                        local totInline = subjectUnit == "targettarget" and frameUnit == "target"
+                            and partsFn == "CrossFrameTextRequestParts"
+                            and not P.ContainsAny(normalized, {
+                                "health", "hp", "power", "mana", "font size", "text size",
+                                "bigger", "larger", "smaller",
+                            })
+                        if not totInline then return { kind = "unknown", raw = raw, normalized = normalized } end
+                    end
+                end
+            end
+        end
+    end
     -- Every topical fast path below resolves ONE control and returns, so a
     -- sentence naming several changes loses everything after the first item.
     -- ProvenCompoundPlan is the shared veto: it answers only when the compound

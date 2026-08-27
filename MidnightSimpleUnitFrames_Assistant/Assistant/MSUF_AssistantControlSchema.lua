@@ -1428,6 +1428,15 @@ local function ExecuteSchemaAction(top, text)
     })
     if type(result) == "table" then return result end
     if not ok and (result == "readOnly" or result == "guided" or result == "stale_control") then
+        -- Wizard prompts carry question-shaped labels ("What do you want to
+        -- set up?"); templating one into "I can guide you to X" produced a
+        -- garbled sentence. Point at the guided setup by name instead.
+        if tostring(top.label or ""):find("?", 1, true) then
+            return {
+                text = "That wording doesn't name one exact control. Tell me the frame and option you mean, or say 'help me set up my UI' to run the guided setup.",
+                status = "info", result = result, summary = "Guided setup pointer",
+            }
+        end
         return { text = Schema.Render(result == "readOnly" and "readOnly" or "guided", { label = top.label }),
             status = "info", result = result, summary = top.label }
     end
@@ -1597,6 +1606,16 @@ local function ChoiceListResult(top)
         status = "info", result = "info", summary = top.label, values = values }
 end
 
+-- Wizard prompts carry question-shaped labels ("What do you want to set
+-- up?"); templating one into "I can guide you to X" reads as garbage. Point
+-- at the guided setup instead.
+local function GuidedReplyText(label)
+    if tostring(label or ""):find("?", 1, true) then
+        return "That wording doesn't name one exact control. Tell me the frame and option you mean, or say 'help me set up my UI' to run the guided setup."
+    end
+    return Schema.Render("guided", { label = label })
+end
+
 local function ExplainResult(top, wantsOpen)
     local lines = { tostring(top.label or "This control") .. ": " .. tostring(top.help or "MSUF exposes this control in its options.") }
     lines[#lines + 1] = "Location: " .. HumanPath(top) .. "."
@@ -1718,6 +1737,14 @@ function Schema.TryConversation(text)
     local wantsCurrent = HasAny(normalized, { "current value", "what is", "whats", "how is", "hows",
         "is currently", "configured to", "set to now",
         "aktueller wert", "welcher wert", "wie ist", "eingestellt auf" })
+    -- "what is X used for" / "what is X for" asks for the control's purpose,
+    -- not its stored value; answering "Monk is currently RGB 1, 1, 1" reads
+    -- the wrong question.
+    if wantsCurrent and (HasAny(normalized, { "used for", "wofuer" })
+        or normalized:match("%sfor%s*$") ~= nil) then
+        wantsCurrent = false
+        wantsExplain = true
+    end
     local mutation = HasMutationIntent(normalized)
     local modeIntent = HasAny(normalized, MODE_MARKERS)
         and (HasAny(normalized, MODE_START_TERMS) or HasAny(normalized, MODE_OFF_TERMS) or HasAny(normalized, MODE_TOGGLE_TERMS))
@@ -1838,13 +1865,13 @@ function Schema.TryConversation(text)
                 -- means "not writable from here", not "broken". Say the same
                 -- thing the guided lane says rather than reporting a fault.
                 if CATALOG_GUIDED_RESULTS[tostring(result or "")] then
-                    return { text = Schema.Render("guided", { label = top.label }), status = "info",
+                    return { text = GuidedReplyText(top.label), status = "info",
                         result = "guided", summary = top.label }
                 end
                 return { text = "I found " .. tostring(top.label) .. ", but it is not available right now.",
                     status = "failed", result = tostring(result or "failed"), summary = top.label }
             end
-            return { text = Schema.Render("guided", { label = top.label }), status = "info", result = "guided", summary = top.label }
+            return { text = GuidedReplyText(top.label), status = "info", result = "guided", summary = top.label }
         end
         local value
         if Parser and type(Parser.ValueForRegistrySetting) == "function" then
@@ -1865,7 +1892,7 @@ function Schema.TryConversation(text)
             return { text = Schema.Render(result, { label = top.label }), status = "info", summary = top.label }
         end
         if result == "stale_control" then
-            return { text = Schema.Render("guided", { label = top.label }), status = "info", summary = top.label }
+            return { text = GuidedReplyText(top.label), status = "info", summary = top.label }
         end
         if result == "invalid_value" then return MissingSettingValue(setting, top, text) end
         return { text = "I found " .. tostring(top.label or setting.label) .. ", but the change could not be applied safely.",

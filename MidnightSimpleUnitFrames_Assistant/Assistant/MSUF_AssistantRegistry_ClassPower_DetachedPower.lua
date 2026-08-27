@@ -72,6 +72,6 @@ function A.ClassPowerRegistry.RegisterDetachedPowerSettings(ctx)
             player.powerBarBorderEnabled = value > 0
             if value > 0 then player.powerBarBorderThickness = value end
         end,
-        description = "Controls the Player power border shared by the Unit Frame and Class Resources pages. 0 disables the outline without changing fill or background textures.",
+        description = "Controls only the detached Player power outline. The same control appears on the Unit Frame and Class Resources pages; 0 disables the outline without changing fill or background textures.",
     })
 end

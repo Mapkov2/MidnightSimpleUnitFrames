@@ -835,6 +835,13 @@ end
 function A._ParseClassPowerOutlineOpacityShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
     if ContainsAny(text, FeaturesPhrases[118]) then return nil end
+    -- "outline color red channel to 20" states a colour component; the
+    -- thickness/opacity numbers here must not swallow it.
+    if text:find("channel", 1, true)
+        and (text:find("red", 1, true) or text:find("green", 1, true)
+            or text:find("blue", 1, true) or text:find("alpha", 1, true)) then
+        return nil
+    end
 
     local key
     local label

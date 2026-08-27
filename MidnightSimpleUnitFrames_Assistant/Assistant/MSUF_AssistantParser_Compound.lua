@@ -2647,8 +2647,12 @@ local CLAUSE_LEAD_VERBS = {
 -- unit or group words, so without this a clause reading "shared health text
 -- color mode to class" inherited the previous clause's frame and wrote the
 -- Player copy of the setting instead.
+-- "general" belongs here too: many generated labels open with it ("General
+-- Gradient Dir Down"), and without it a leading "Global ..." clause carried its
+-- scope onto them -- "global general bar outline thickness" then resolved to
+-- the Bars-scope copy instead of the named general.* control.
 local EXPLICIT_NON_FRAME_SCOPES = {
-    shared = true, global = true, allgemein = true, geteilt = true,
+    shared = true, global = true, general = true, allgemein = true, geteilt = true,
 }
 
 local function ClauseScopeWord(part)
@@ -2878,6 +2882,10 @@ local function BareParseSplit(text, scopeAnchoredOnly)
     if norm == "" then return nil end
     if norm:find("%f[%a]to%f[%A]") then return nil end
     if norm:find(" and ", 1, true) or norm:find(" und ", 1, true) then return nil end
+    -- " but " marks a polarity boundary the keep/but strategies own. A bare cut
+    -- across it mixes the second clause's negation into the first ("show target
+    -- power text but hide | target power bar" read as text OFF plus a shape).
+    if norm:find(" but ", 1, true) or norm:find(" aber ", 1, true) then return nil end
 
     local tokens = {}
     for word in norm:gmatch("%S+") do tokens[#tokens + 1] = word end
@@ -3090,6 +3098,17 @@ end
 -- single-control resolver returns only the first, a truncation no change count
 -- can reveal. Every such sentence already has a strategy that reads it whole,
 -- and those strategies must keep it.
+-- A sentence that is one control's full name plus a value is never a compound,
+-- however many of its fragments happen to parse on their own. "turn on player
+-- portrait border use class color" split into a portrait-border clause and a
+-- colour clause, and "turn on party buff hidden category long-term raid buffs"
+-- into a Party lane clause and a Raid lane clause -- each an unrelated write.
+-- ParseCompound asks this only once a multi-change plan exists.
+local function WholeSentenceIsOneControl(text)
+    return type(P.WholeCommandNamesOneSetting) == "function"
+        and P.WholeCommandNamesOneSetting(text) ~= nil
+end
+
 local function BarePlanFor(text)
     local attempts = {
         function() return BareLabelValueRun(text) end,
@@ -3117,6 +3136,123 @@ function P.ParseCompound(normalized, raw, normalParsed)
     P._compoundSimpleParseCache = {}
     local function finish(result)
         P._compoundSimpleParseCache = previousSimpleParseCache
+        -- Every strategy here wins on change count, and A.Parse prefers a
+        -- multi-change compound over a one-change exact-alias match. A
+        -- sentence that is one control's full name therefore has to be
+        -- refused HERE, whichever strategy assembled the extra changes:
+        -- "turn on party buff hidden category long-term raid buffs" read as a
+        -- Party lane off plus a Raid lane on because "raid buffs" is part of
+        -- the category's own name. Checked only on a finished multi-change
+        -- plan, so single-control sentences never build the exact index.
+        if type(result) == "table" and type(result.changes) == "table" and #result.changes > 1
+            and WholeSentenceIsOneControl(text)
+        then
+            return nil
+        end
+        -- "move boss 3 power text down 5" is ONE relative movement command.
+        -- A merged plan that turns its numbers into absolute writes invented
+        -- targets ("boss 3" is a frame index, not Absorb Bar Offset = 3).
+        -- Any compound from a to-less movement sentence must consist of
+        -- relative steps only.
+        if type(result) == "table" and type(result.changes) == "table" and #result.changes > 1 then
+            local hay = " " .. tostring(P.Normalize and P.Normalize(text) or text):lower() .. " "
+            local moveVerb = hay:find(" move ", 1, true) or hay:find(" nudge ", 1, true)
+                or hay:find(" shift ", 1, true) or hay:find(" verschiebe ", 1, true)
+            local directionWord = hay:find(" up ", 1, true) or hay:find(" down ", 1, true)
+                or hay:find(" left ", 1, true) or hay:find(" right ", 1, true)
+                or hay:find(" hoch ", 1, true) or hay:find(" runter ", 1, true)
+                or hay:find(" links ", 1, true) or hay:find(" rechts ", 1, true)
+            local hasConnector = hay:find(" to ", 1, true) or hay:find(" auf ", 1, true)
+            if moveVerb and directionWord and not hasConnector then
+                for i = 1, #result.changes do
+                    local c = result.changes[i]
+                    if c and c.relativeDelta == nil and type(c.value) == "number" then
+                        return nil
+                    end
+                end
+            end
+        end
+        -- "show player name ON TARGET FRAME" names one subject that belongs
+        -- to a different frame than the named destination. The Router's
+        -- cross-frame clarification owns that sentence; a compound that
+        -- distributed the item over both units invented a second write.
+        if type(result) == "table" and type(result.changes) == "table" and #result.changes > 1
+            and tostring(text or ""):lower():find("frame", 1, true)
+        then
+            local RP = A.RouterPrivate
+            for _, partsFn in ipairs({ "CrossFrameTextRequestParts", "CrossFrameVisualRequestParts" }) do
+                if type(RP) == "table" and type(RP[partsFn]) == "function" then
+                    local subjectUnit, _, frameUnit = RP[partsFn](text)
+                    if subjectUnit and frameUnit and subjectUnit ~= frameUnit then
+                        return nil
+                    end
+                end
+            end
+        end
+        -- "make target's target name bigger ON TARGET FRAME" ends in a
+        -- locative: "on <unit> frame" says where the thing lives, it never
+        -- asks to enable that frame. A strategy that turned the tail into
+        -- "<unit>.enabled = true" built a change the user did not request;
+        -- drop that change and let the single-control lanes answer. A real
+        -- "turn on target frame" clause keeps its verb ("turn"/"switch")
+        -- directly before "on" and is kept.
+        if type(result) == "table" and type(result.changes) == "table" and #result.changes > 1 then
+            local hay = " " .. tostring(P.Normalize and P.Normalize(text) or text):lower() .. " "
+            local phrasesByUnit = {
+                player = { "player" }, target = { "target" }, focus = { "focus" },
+                pet = { "pet" }, boss = { "boss" },
+                targettarget = { "target of target", "targets target", "tot" },
+                focustarget = { "focus target", "focuss target" },
+            }
+            local kept = {}
+            for i = 1, #result.changes do
+                local change = result.changes[i]
+                local key = change and change.setting and tostring(change.setting.key or "") or ""
+                local unit = key:match("^(%w+)%.enabled$")
+                local locativeOnly = false
+                if unit and change.value == true and phrasesByUnit[unit] then
+                    for _, phrase in ipairs(phrasesByUnit[unit]) do
+                        local prefix = hay:match("(.-) on " .. phrase .. " frames? ")
+                        if prefix and not prefix:find("turn$") and not prefix:find("switch$")
+                            and not prefix:find("toggle$") then
+                            locativeOnly = true
+                            break
+                        end
+                    end
+                end
+                if not locativeOnly then kept[#kept + 1] = change end
+            end
+            if #kept < #result.changes then
+                if #kept == 0 then return nil end
+                result.changes = kept
+                if #kept == 1 then return nil end
+            end
+        end
+        -- "move target name 5 left and 10 right" resolves into two relative
+        -- steps on the SAME axis pulling opposite ways. That is a contradiction
+        -- to clarify, never a pair of writes whose net effect silently wins.
+        if type(result) == "table" and type(result.changes) == "table" and #result.changes > 1 then
+            local deltasByKey = {}
+            for i = 1, #result.changes do
+                local change = result.changes[i]
+                local key = change and change.setting and tostring(change.setting.key or "") or ""
+                local delta = tonumber(change and change.relativeDelta)
+                if key ~= "" and delta then
+                    local prior = deltasByKey[key]
+                    if prior and ((prior < 0 and delta > 0) or (prior > 0 and delta < 0)) then
+                        return {
+                            kind = "answer",
+                            status = "ambiguous",
+                            text = "Those amounts pull " .. tostring(change.setting.label or key)
+                                .. " in opposite directions, so I did not move anything."
+                                .. " Tell me one direction and amount, for example 'move it 5 right'.",
+                            summary = "Asks about contradictory same-axis movement amounts.",
+                        }
+                    end
+                    deltasByKey[key] = delta
+                end
+            end
+        end
         return result
     end
     local normalCount = ChangeCount(normalParsed)

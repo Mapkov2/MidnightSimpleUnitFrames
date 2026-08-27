@@ -922,6 +922,31 @@ local function GenericDefensivePlan(text, ctx)
 end
 
 local function FilterPlan(text, ctx)
+    -- "can Priority Frames show only my co-tank?" is a Priority Frames
+    -- capability question; the Router's priority block owns that topic and
+    -- answers read-only. Without this, "show only" turned it into an aura
+    -- lane clarification.
+    do
+        local hay = " " .. tostring(text or ""):lower() .. " "
+        if hay:find("priority frame", 1, true) or hay:find("priorityframe", 1, true)
+            or hay:find(" pinned ", 1, true) or hay:find("co tank", 1, true) or hay:find("co-tank", 1, true) then
+            return nil
+        end
+        -- "make MY BUFFS bigger" / "hide the stack count on MY BUFFS" carry a
+        -- size/layout/detail intent; the possessive alone is not a caster
+        -- filter. Only explicit filter wording keeps this lane.
+        local propertyIntent = hay:find(" bigger ", 1, true) or hay:find(" larger ", 1, true)
+            or hay:find(" smaller ", 1, true) or hay:find(" size ", 1, true)
+            or hay:find(" stack ", 1, true) or hay:find(" cooldown ", 1, true)
+            or hay:find(" timer ", 1, true) or hay:find(" spot ", 1, true)
+            or hay:find(" position ", 1, true) or hay:find(" move ", 1, true)
+            or hay:find(" anchor ", 1, true) or hay:find(" offset ", 1, true)
+            or hay:find(" spacing ", 1, true) or hay:find(" row ", 1, true)
+        local filterWording = hay:find(" only ", 1, true) or hay:find(" just ", 1, true)
+            or hay:find(" nur ", 1, true) or hay:find(" filter", 1, true)
+            or hay:find(" blacklist", 1, true) or hay:find(" permanent", 1, true)
+        if propertyIntent and not filterWording then return nil end
+    end
     local spec = FindFilterSpec(text)
     local sourceIntent = SourceIntent(text)
     local kind, scope = ResolveScope(text, ctx)

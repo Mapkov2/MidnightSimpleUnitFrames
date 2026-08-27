@@ -59,6 +59,7 @@ local ACTION_PROMPTS = {
     ["assistant.action.editMode.gridStep"] = "What Edit Mode grid step do you want, from 8 to 64?",
     apply_global_scale_preset = "Which scale preset do you want to apply?",
     aura_blacklist_add_preset = "Which frame or Aura lane and which blacklist preset do you want to use?",
+    aura_custom_reminder_enchant_item = "Which frame, which custom aura container (1-3), and which item link or item ID should the enchant reminder offer?",
     aura_blacklist_add_spell = "Which frame or Aura lane and which spell do you want to blacklist?",
     aura_blacklist_remove_spell = "Which frame or Aura lane and which spell do you want to remove from the blacklist?",
     aura_blacklist_summary = "Which frame or Aura lane blacklist do you want to see?",

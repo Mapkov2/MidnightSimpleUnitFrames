@@ -33,6 +33,7 @@ if type(ActionParsers) ~= "table" then return end
 
 local ParseAuraBlacklistAddSpellAliasArgs = ActionParsers.ParseAuraBlacklistAddSpellAliasArgs
 local ParseAuraBlacklistRemoveSpellAliasArgs = ActionParsers.ParseAuraBlacklistRemoveSpellAliasArgs
+local ParseAuraCustomReminderEnchantItemAliasArgs = ActionParsers.ParseAuraCustomReminderEnchantItemAliasArgs
 local ParseAuraBlacklistClearAliasArgs = ActionParsers.ParseAuraBlacklistClearAliasArgs
 local ParseAuraBlacklistPresetAliasArgs = ActionParsers.ParseAuraBlacklistPresetAliasArgs
 local ParseAuraBlacklistSummaryAliasArgs = ActionParsers.ParseAuraBlacklistSummaryAliasArgs
@@ -113,6 +114,7 @@ if type(RegisterBlacklistActions) == "function" then
         AuraScopeLabel = AuraScopeLabel,
         ParseAuraBlacklistAddSpellAliasArgs = ParseAuraBlacklistAddSpellAliasArgs,
         ParseAuraBlacklistRemoveSpellAliasArgs = ParseAuraBlacklistRemoveSpellAliasArgs,
+        ParseAuraCustomReminderEnchantItemAliasArgs = ParseAuraCustomReminderEnchantItemAliasArgs,
         ParseAuraBlacklistClearAliasArgs = ParseAuraBlacklistClearAliasArgs,
         ParseAuraBlacklistPresetAliasArgs = ParseAuraBlacklistPresetAliasArgs,
         ParseAuraBlacklistSummaryAliasArgs = ParseAuraBlacklistSummaryAliasArgs,

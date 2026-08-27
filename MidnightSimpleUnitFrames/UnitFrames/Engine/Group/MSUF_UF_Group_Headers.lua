@@ -34,7 +34,6 @@ local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetNumArenaOpponentSpecs = GetNumArenaOpponentSpecs
-local GetNumArenaOpponents = GetNumArenaOpponents
 local GetRaidRosterInfo = GetRaidRosterInfo
 local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
@@ -737,11 +736,12 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex)
 end
 
 --- Arena teams can replace party unit identities between rounds while the
---- opponent/team size is already stable. Use Blizzard's arena-size signals as
---- a lower bound so a transient GetNumSubgroupMembers() value cannot make a
---- partial NAMELIST look complete. Nil means normal non-Arena Party behavior;
---- false means Arena scope without a readable count, which must fail open to
---- SecureGroupHeader's native roster path.
+--- advertised match size is already stable. Only GetNumArenaOpponentSpecs is
+--- a fixed pre-match size; Blizzard documents GetNumArenaOpponents as whoever
+--- currently happens to be present, so neither it nor a transient subgroup
+--- count may authorize a filtering NAMELIST. Nil means normal non-Arena Party
+--- behavior; false means Arena scope without a readable fixed size, which must
+--- fail open to SecureGroupHeader's native roster path.
 local function ArenaPartyExpectedCompanionCount()
   if type(GF.IsArenaPartyContext) ~= "function" or GF.IsArenaPartyContext() ~= true then
     return nil
@@ -752,15 +752,13 @@ local function ArenaPartyExpectedCompanionCount()
   if issecretvalue(count) ~= true and type(count) == "number" then
     count = floor(count + 0.5)
     if count < 0 then count = 0 elseif count > 4 then count = 4 end
-    known = true
+    -- A transient subgroup count can itself be partial during a Shuffle swap;
+    -- only a positive fixed opponent-spec count may prove this list complete.
   else
     count = 0
   end
 
   local arenaSize = GetNumArenaOpponentSpecs and GetNumArenaOpponentSpecs() or nil
-  if issecretvalue(arenaSize) == true or type(arenaSize) ~= "number" or arenaSize < 1 then
-    arenaSize = GetNumArenaOpponents and GetNumArenaOpponents() or nil
-  end
   if issecretvalue(arenaSize) ~= true and type(arenaSize) == "number" then
     arenaSize = floor(arenaSize + 0.5)
     if arenaSize > 0 then

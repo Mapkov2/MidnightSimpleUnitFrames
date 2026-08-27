@@ -773,7 +773,7 @@ local function RearmPoll(moving)
   ArmPollTimer()
 end
 
-local function RebuildPollSet()
+local function RebuildPollSet(deferScheduler)
   pollSetDirty = false
   -- Blind units land in pollUnits[1..pollBlindCount], covered ones after them.
   -- A covered unit stays in the set so a movement edge still runs its full
@@ -816,7 +816,9 @@ local function RebuildPollSet()
   end
   pollFallbackNextAt = nil
   pollBossNextAt = nil
-  RearmPoll(pollSettlePending)
+  if not deferScheduler then
+    RearmPoll(pollSettlePending)
+  end
 end
 
 local driver
@@ -886,12 +888,12 @@ local function ScheduleFocusRange()
   return true
 end
 
-local function ScheduleTargetTargetRange()
+local function ScheduleTargetTargetRange(deferPollRebuild)
   if not RangeUnitScheduled("targettarget") then
     return false
   end
   EvaluateIfActive("targettarget", false)
-  RebuildPollSet()
+  if not deferPollRebuild then RebuildPollSet() end
   return true
 end
 
@@ -1079,9 +1081,20 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   end
 
   if event == "PLAYER_STARTED_MOVING" or event == "PLAYER_STOPPED_MOVING" then
-    MarkPollSetDirty()
-    RebuildPollSet()
-    if pollCount <= 0 then return end
+    -- Movement changes the sampling cadence, not poll membership. Honor a
+    -- membership change already dirtied by lifecycle/config work, but do not
+    -- rebuild every active unit just because the player crossed a movement
+    -- edge. Defer that rebuild's scheduler arm so this path creates at most one
+    -- timer after the immediate evaluations below.
+    local pollSetRebuilt = false
+    if pollSetDirty then
+      RebuildPollSet(true)
+      pollSetRebuilt = true
+    end
+    if pollCount <= 0 then
+      if pollSetRebuilt then RearmPoll(pollSettlePending) end
+      return
+    end
 
     -- Evaluate immediately at both edges, then re-arm at the cadence that
     -- matches the new state. Stopping is the player's final settled value but
@@ -1104,8 +1117,15 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   end
 
   if event == "PLAYER_TARGET_CHANGED" then
+    if not (activeUnits.target or activeUnits.targettarget) then return end
+    -- The new identity can switch UnitNeedsPoll between friendly, hostile, and
+    -- neutral coverage even though the visible target frame itself stayed
+    -- active. Evaluate target and targettarget in their established order, then
+    -- rebuild membership once so neither scheduler work nor timer arms double.
+    MarkPollSetDirty()
     ScheduleTargetRange()
-    ScheduleTargetTargetRange()
+    ScheduleTargetTargetRange(true)
+    RebuildPollSet()
     return
   elseif event == "PLAYER_FOCUS_CHANGED" then
     ScheduleFocusRange()

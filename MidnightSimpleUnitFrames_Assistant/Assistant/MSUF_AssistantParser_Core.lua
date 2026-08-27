@@ -46,6 +46,18 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     bg = "background",
     groesse = "size",
     grosse = "size",
+    -- NOTE: do NOT map German comparatives (groesser/kleiner/breiter/hoeher)
+    -- or schriftgroesse here. ContainsAny normalizes LIST terms too, so such
+    -- a mapping rewrites every German term list into English ("hoeher" in
+    -- DIRECTION_UP_TERMS became "taller", and "make player power bar taller"
+    -- suddenly read as a MOVE up). The term lists carry the German words
+    -- natively; lanes must handle them there.
+    -- "schriftgroesse vom power text auf 14": the untranslated preposition hid
+    -- "power text" from the scoped-text lane and Global Font Size won instead.
+    vom = "of",
+    -- "the personal castbar" is the player's castbar; left untranslated it
+    -- fuzzy-matched the "Personalize with guided setup" action instead.
+    personal = "player",
     wat = "what",
     whta = "what",
     wich = "which",
@@ -1758,6 +1770,10 @@ local PROCEDURAL_QUESTION_PREFIXES = {
 -- words: "where/wo" means navigation, while "why/warum" means diagnosis.
 local READ_ONLY_QUESTION_PREFIXES = {
     "what", "which", "where", "how", "why",
+    -- Normalize strips apostrophes, so "what's the setting for X" arrives as
+    -- "whats ..." — without these contracted forms the question opened a
+    -- VALUE-WRITE transaction on the named control.
+    "whats", "wheres", "hows", "whys",
     "was", "welche", "welcher", "welches", "wo", "wie", "warum", "wieso", "weshalb", "wofuer",
 }
 
@@ -1778,6 +1794,10 @@ local READ_ONLY_LOOKUP_PREFIXES = {
 local EMBEDDED_QUESTION_PHRASES = {
     "what is", "what are", "what does", "what did", "what can", "what depends", "what affects",
     "which is", "which are", "where is", "where are", "how is", "how are", "how does", "why is", "why are",
+    -- "raid leader here, can i see ready check status" hides the capability
+    -- question behind a vocative; without the embedded form the sentence
+    -- classified as a command and WROTE the setting.
+    "can i see", "can i view", "kann ich sehen",
     "was ist", "was sind", "welche sind", "welcher ist", "welches ist", "wo ist", "wo sind",
     "wie ist", "wie sind", "warum ist", "warum sind", "wieso ist", "wieso sind",
 }
@@ -1947,6 +1967,37 @@ local function NonMutatingIntent(text)
     return nil
 end
 
+-- "where can I turn off the moon icon from player frame?" names one concrete
+-- control: the frame's Raid Marker toggle. Answer with its exact location and
+-- state instead of a generic overview. Read-only; shared with the Router's
+-- advisory lane so lane order cannot bury it.
+function P.MarkerLocationAnswer(text)
+    local normalized = Normalize(text)
+    if not HasAnyExactPhrase(normalized, {
+        "moon icon", "skull icon", "star icon", "circle icon", "diamond icon",
+        "triangle icon", "square icon", "cross icon", "marker icon", "raid icon",
+        "raid marker", "target marker", "moon", "skull",
+    }) then return nil end
+    local units = type(P.DetectUnits) == "function" and P.DetectUnits(normalized) or nil
+    local unit = type(units) == "table" and units[1] or nil
+    local setting = unit and A.Registry and A.Registry.GetSetting
+        and A.Registry:GetSetting(unit .. ".showRaidMarker") or nil
+    if not setting then return nil end
+    local state = "configurable"
+    if type(setting.get) == "function" then
+        state = setting.get() and "enabled" or "disabled"
+    end
+    return {
+        kind = "answer",
+        status = "info",
+        text = "Raid Marker setting location" .. string.char(10) .. tostring(setting.label)
+            .. " is the control for the moon, skull, and other target icons on that frame."
+            .. " It lives in the frame's Status Indicators section and is currently " .. state .. "."
+            .. " Say 'turn off " .. tostring(setting.label) .. "' when you want it gone. I did not change it.",
+        summary = "Names the exact Raid Marker control for the asked frame.",
+    }
+end
+
 local function NonMutatingIntentAnswer(text)
     local intent = NonMutatingIntent(text)
     if not intent then return nil end
@@ -1974,6 +2025,12 @@ local function NonMutatingIntentAnswer(text)
             "raid marker", "target marker", "moon", "skull", "star", "circle", "diamond",
             "triangle", "square", "cross",
         })
+        -- A marker question that names a frame deserves the exact control, not
+        -- a generic option-list reply: the moon icon IS the Raid Marker.
+        if markerQuestion then
+            local markerReply = P.MarkerLocationAnswer(normalized)
+            if markerReply then return markerReply end
+        end
         local title = markerQuestion and "Raid Marker setting location"
             or (HasAnyExactPhrase(normalized, { "castbar", "cast bar" })
             and HasAnyExactPhrase(normalized, { "interrupt", "kick" })

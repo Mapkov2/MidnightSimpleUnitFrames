@@ -190,6 +190,12 @@ local ROOT_FRAME_ENABLED_DETAIL_TERMS = {
     "aura", "auras", "buff", "buffs", "debuff", "debuffs",
     "gradient", "texture", "color", "colour", "font",
     "round", "rounded", "corner", "corners", "shape",
+    -- "show hp percent on raid frames" enabled the raid frames outright: the
+    -- text/value vocabulary was missing entirely.
+    "percent", "percentage", "hp", "health", "power", "mana", "level",
+    "leader", "assist", "ready check", "readycheck", "summon", "phase",
+    "rez", "resurrection", "click casting", "click cast",
+    "spacing", "width", "height", "columns", "column",
     "spacing", "padding", "column", "columns", "growth", "position", "offset",
 }
 
@@ -457,6 +463,14 @@ end
 
 local function SettingMatchesText(setting, text)
     if type(setting) ~= "table" then return false end
+    -- A destructive verb never selects transient menu state through the broad
+    -- scored lane: "reset buff aura style overrides" must not become "switch
+    -- the Aura Style lane to Buffs" merely because the selector shares words.
+    if tostring(setting.key or ""):sub(1, 5) == "menu."
+        and ContainsAny(text, { "reset", "wipe", "restore", "revert", "start over" })
+    then
+        return false
+    end
     if RootFrameEnabledBlockedByDetail(setting, text) then return false end
     if AuraLaneVisibilityBlockedByDetail(setting, text) then return false end
     if not SettingAllowedByExplicitScopes(setting, text) then return false end
@@ -794,7 +808,61 @@ local function EnumValueForText(setting, text)
     local tailValue = tail and tail ~= "" and matchSegment(tail)
     if tailValue ~= nil then return tailValue end
     if tail and tail ~= "" then return nil end
-    return matchSegment(norm)
+    -- " by " states a mode ("color text by health"), so a choice behind it is
+    -- a real value even when the same word sits inside the control's name.
+    -- Unlike the strong connectors above it is NOT binding: "dispellable by
+    -- group" keeps "by" inside the value's own wording, so a by-tail that
+    -- resolves nothing falls through to whole-text matching.
+    do
+        local byEnd
+        local startAt = 1
+        while true do
+            local _, endPos = padded:find(" by ", startAt, true)
+            if not endPos then break end
+            byEnd = endPos
+            startAt = endPos + 1
+        end
+        local byTail = byEnd and Trim(padded:sub(byEnd + 1)) or nil
+        if byTail then byTail = Trim(byTail:gsub("^the%s+", ""):gsub("^a%s+", "")) end
+        local byValue = byTail and byTail ~= "" and matchSegment(byTail)
+        if byValue ~= nil then return byValue end
+    end
+    local whole = matchSegment(norm)
+    -- Without a connector, a choice word that is part of the control's OWN
+    -- name is the name, not a stated value: "change player font outline"
+    -- answered "already outline" because OUTLINE sits inside the label. A
+    -- choice word the label does not contain ("hp text mode current") still
+    -- resolves connectorless.
+    if whole ~= nil then
+        -- "disable class colors" names the CLASS choice of Global Bar Mode,
+        -- but the verb asks to turn it OFF; applying the named choice inverts
+        -- the request. Under a negative opener only an off-like choice may
+        -- resolve connectorless — anything else asks.
+        local negativeOpener = norm:match("^disable ") or norm:match("^turn off ")
+            or norm:match("^hide ") or norm:match("^remove ") or norm:match("^deactivate ")
+            or norm:match("^deaktiviere ") or norm:match("^schalte .* aus") or norm:match("^blende ")
+        if negativeOpener then
+            local chosenToken = CompactToken(tostring(whole))
+            if chosenToken ~= "off" and chosenToken ~= "none" and chosenToken ~= "disabled"
+                and chosenToken ~= "hide" and chosenToken ~= "hidden" then
+                return nil
+            end
+        end
+        local own = CompactToken(tostring(setting and setting.label or "") .. " "
+            .. tostring(setting and setting.attribute or ""))
+        local chosen = CompactToken(tostring(whole))
+        if chosen ~= "" and own:find(chosen, 1, true) then
+            -- Stated twice ("player font outline outline") is a real value.
+            local first = norm:find(tostring(whole):lower(), 1, true)
+            local again = first and norm:find(tostring(whole):lower(), first + 1, true)
+            -- An affirmative opener keeps the label-embedded value: "turn on
+            -- target debuff type borders" plainly asks for the BORDER mode.
+            -- Value-neutral verbs ("change player font outline") still ask.
+            local affirmative = norm:match("^turn on ") or norm:match("^enable ")
+            if not again and not affirmative then return nil end
+        end
+    end
+    return whole
 end
 
 P.BooleanAliasValueForText = P.BooleanAliasValueForText or function(setting, text)
@@ -3585,10 +3653,16 @@ local function ParseGroupTextureStringShortcut(text, raw)
         return nil
     end
 
+    -- The scope's own bar texture is also the tail of longer control names
+    -- ("party heal prediction bar texture"); a sentence spelling one of those
+    -- out in full belongs to that control, resolved by the exact-alias pass.
+    local named = type(P.WholeCommandNamesOneSetting) == "function"
+        and P.WholeCommandNamesOneSetting(text) or nil
     local changes = {}
     for i = 1, #scopes do
         local scope = tostring(scopes[i])
         local key = useBarScope and ("barScope.gf_" .. scope .. "." .. keySuffix) or ("gf_" .. scope .. "." .. keySuffix)
+        if named and named.key ~= key then return nil end
         local setting = Registry and Registry:GetSetting(key)
         local value = setting and ValueForRegistrySetting(setting, text, raw)
         if value ~= nil then
@@ -5774,14 +5848,83 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
     local changes = {}
     local missingValue = {}
     local bestScore = 0
+    -- Destructive wording never selects transient menu state -- and the verb
+    -- may already be stripped from `text` as actionable filler, so judge by
+    -- the raw sentence. "reset buff aura style overrides" scored the Aura
+    -- Style lane selector and switched the tab instead of failing closed.
+    local destructiveMenuBlock
+    do
+        local hay = " " .. Normalize(raw or text) .. " "
+        destructiveMenuBlock = (hay:find(" reset ", 1, true) or hay:find(" wipe ", 1, true)
+            or hay:find(" restore ", 1, true) or hay:find(" revert ", 1, true)
+            or hay:find(" start over ", 1, true)) and true or false
+    end
+    -- An RGB triplet in the sentence means the numbers are colour components;
+    -- none of them may be consumed as a scalar for a number control.
+    local rgbTripletPresent = tostring(raw or text):find("%d+%s*,%s*%d+%s*,%s*%d+") and true or false
+    -- "red channel to 20" targets a colour component; a plain number control
+    -- ("Class Resource Outline") must not swallow the amount.
+    local colorChannelIntent
+    do
+        local hay = " " .. Normalize(raw or text) .. " "
+        colorChannelIntent = hay:find(" channel ", 1, true) ~= nil
+            and (hay:find(" red ", 1, true) or hay:find(" green ", 1, true)
+                or hay:find(" blue ", 1, true) or hay:find(" alpha ", 1, true)) ~= nil
+    end
+    -- Class Resources wording keeps candidates without class-power identity
+    -- out of the sweep entirely (Class Resources have no outline colour; the
+    -- shared Bar Outline Color was taking the write).
+    local classPowerIntent
+    do
+        local hay = " " .. Normalize(raw or text) .. " "
+        classPowerIntent = (hay:find("class power", 1, true) or hay:find("class resource", 1, true)
+            or hay:find("classpower", 1, true)) and hay:find("outline", 1, true) ~= nil
+    end
+    local function LacksClassPowerIdentity(setting)
+        local own = (tostring(setting and setting.key or "") .. " "
+            .. tostring(setting and setting.label or "") .. " "
+            .. tostring(setting and setting.attribute or "")):lower()
+        return not (own:find("classpower", 1, true) or own:find("class power", 1, true)
+            or own:find("class resource", 1, true))
+    end
     -- Resolved once for the whole candidate sweep: almost no request carries a
     -- styling qualifier, and testing every setting for one would tax the
     -- broadest matcher in the parser.
     local stylingQualifiers = P.StylingQualifiersInText(text)
+    -- "font size of POWER TEXT" names a text-slot identity; candidates that
+    -- lack it (Global Font Size) may not win however well the rest scores.
+    local textSlotIdent
+    do
+        local hay = " " .. Normalize(text) .. " "
+        if hay:find(" power text ", 1, true) or hay:find(" mana text ", 1, true) then
+            textSlotIdent = "power"
+        elseif hay:find(" hp text ", 1, true) or hay:find(" health text ", 1, true) then
+            textSlotIdent = "hp"
+        elseif hay:find(" name text ", 1, true) then
+            textSlotIdent = "name"
+        end
+    end
+    local function LacksTextSlotIdentity(setting)
+        if not textSlotIdent then return false end
+        local own = (tostring(setting and setting.key or "") .. " "
+            .. tostring(setting and setting.label or "") .. " "
+            .. tostring(setting and setting.attribute or "")):lower()
+        if textSlotIdent == "hp" then
+            return not own:find("hp", 1, true) and not own:find("health", 1, true)
+        end
+        if textSlotIdent == "power" then
+            return not own:find("power", 1, true) and not own:find("mana", 1, true)
+        end
+        return not own:find(textSlotIdent, 1, true)
+    end
     for i = 1, #settings do
         if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
-        local score = SettingMatchScore(setting, text)
+        local score = ((destructiveMenuBlock and tostring(setting.key or ""):sub(1, 5) == "menu.")
+            or ((rgbTripletPresent or colorChannelIntent) and setting.type == "number" and not setting.assistantColorChannel)
+            or (classPowerIntent and LacksClassPowerIdentity(setting))
+            or LacksTextSlotIdentity(setting)) and 0
+            or SettingMatchScore(setting, text)
         -- "bold" names Bold Text / Font Outline. A candidate that owns neither
         -- is not what was asked for, however well the rest of the sentence
         -- scores against it.
@@ -5828,6 +5971,15 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
     end
     if #changes == 0 then
         if suppressNoMatch then return nil end
+        -- A stated colour word means the subject is a colour control the sweep
+        -- failed to match (typo'd label, cold fuzzy scope). Asking for a
+        -- number here would end the turn before the yielded fuzzy fallback
+        -- gets to resolve the colour whole ("make the bar outlin color red"
+        -- asked for Outline Thickness).
+        if #missingValue > 0 and type(P.ExtractColor) == "function" then
+            local r = P.ExtractColor(raw or text, Normalize(raw or text))
+            if r then return nil end
+        end
         return MissingValueResponse(missingValue, raw) or RegistrySuggestions(text, raw, settings)
     end
     if #changes == 1 and changes[1].mediaNoMatch then
@@ -6131,6 +6283,65 @@ P.NON_NAME_DOT_EXACT_TERMS = P.NON_NAME_DOT_EXACT_TERMS or {
     "class power", "aura", "buff", "debuff", "castbar", "spell name",
 }
 P.RegistrySettingMayMatchExactAlias = function(setting, text)
+    -- "class power bar outline color" names the Class Resources family; an
+    -- exact alias owned by a control without class-power identity must stand
+    -- down rather than let its phrase match inside the longer request
+    -- (Class Resources have no outline colour, and the shared Bar Outline
+    -- Color was taking the write).
+    do
+        local hay = " " .. tostring(text or ""):lower() .. " "
+        if (hay:find("class power", 1, true) or hay:find("class resource", 1, true)
+            or hay:find("classpower", 1, true)) and hay:find("outline", 1, true) then
+            local own = (tostring(setting and setting.key or "") .. " "
+                .. tostring(setting and setting.label or "") .. " "
+                .. tostring(setting and setting.attribute or "")):lower()
+            if not (own:find("classpower", 1, true) or own:find("class power", 1, true)
+                or own:find("class resource", 1, true)) then
+                return false
+            end
+        end
+    end
+    -- "target COOLDOWN text size" names aura cooldown text; the bare
+    -- "text size" alias of Global Font Size (or any other control without
+    -- cooldown/stack identity) must stand down rather than consume the
+    -- number from the longer, more specific request.
+    do
+        local hay = " " .. tostring(text or ""):lower() .. " "
+        if hay:find(" cooldown ", 1, true) or hay:find(" stack ", 1, true) then
+            local own = (tostring(setting and setting.key or "") .. " "
+                .. tostring(setting and setting.label or "") .. " "
+                .. tostring(setting and setting.attribute or "")):lower()
+            if not own:find("cooldown", 1, true) and not own:find("stack", 1, true)
+                and not own:find("swipe", 1, true) then
+                return false
+            end
+        end
+        -- Same rule for text-slot identities: "font size of POWER TEXT" must
+        -- not fall to the bare Global Font Size alias.
+        for _, ident in ipairs({ "power", "mana", "name" }) do
+            if hay:find(" " .. ident .. " text ", 1, true) then
+                local own = (tostring(setting and setting.key or "") .. " "
+                    .. tostring(setting and setting.label or "") .. " "
+                    .. tostring(setting and setting.attribute or "")):lower()
+                if not own:find(ident, 1, true) then return false end
+            end
+        end
+        if hay:find(" hp text ", 1, true) or hay:find(" health text ", 1, true) then
+            local own = (tostring(setting and setting.key or "") .. " "
+                .. tostring(setting and setting.label or "") .. " "
+                .. tostring(setting and setting.attribute or "")):lower()
+            if not own:find("hp", 1, true) and not own:find("health", 1, true) then return false end
+        end
+    end
+    -- Destructive wording never selects transient menu state: "reset buff aura
+    -- style overrides" matched the Aura Style lane selector's alias and
+    -- switched the tab instead of failing closed. Mirrors the same rule in
+    -- SettingMatchesText for the scored lane.
+    if tostring(setting and setting.key or ""):sub(1, 5) == "menu."
+        and ContainsAny(text, { "reset", "wipe", "restore", "revert", "start over" })
+    then
+        return false
+    end
     if RootFrameEnabledBlockedByDetail(setting, text) then return false end
     if AuraLaneVisibilityBlockedByDetail(setting, text) then return false end
     local exactKey = tostring(setting and setting.key or "")

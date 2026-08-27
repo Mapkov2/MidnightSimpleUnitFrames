@@ -12,12 +12,11 @@ local AP = M.AdvancedPage or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
+local C_Timer = M.MenuTimer or _G.C_Timer
 local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs, ControlMeta, RegisterControl = M.Pick(AP, [[Gameplay MoveWidget LabelAt SwitchAt AddTableControlSpecs ControlMeta RegisterControl]])
 local GAMEPLAY_SETTING_BY_PATH = {
     ["timer.enabled"] = "gameplay.enableCombatTimer",
     ["combat_state.enabled"] = "gameplay.enableCombatStateText",
-    ["dev_aura.apex_it.enabled"] = "gameplay.enableApexItDevAura",
-    ["dev_aura.shadow_techniques_stack_highlight.enabled"] = "gameplay.enableShadowTechniquesStackHighlight",
     ["totem_frame.enabled"] = "gameplay.enablePlayerTotems",
     ["crosshair.enabled"] = "gameplay.enableCombatCrosshair",
     ["crosshair.melee_spell"] = "gameplay.nameplateMeleeSpellID",
@@ -38,10 +37,6 @@ local function Meta(path, classification, exact)
 end
 local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList
-local function MoreMenuOptionsEnabled()
-    local general = M.GetGeneralDB and M.GetGeneralDB()
-    return type(general) == "table" and general.hideAdvancedMenu == false
-end
 local function BuildGameplay(ctx)
     local b = W.PageBuilder(ctx)
     local disabledRefresh
@@ -52,21 +47,6 @@ local function BuildGameplay(ctx)
         -- also runs previewRefresh via its `also` hook, so one call covers both.
         ApplyGameplay()
         if disabledRefresh then disabledRefresh() end
-    end
-    local shadowGlowApplyGeneration = 0
-    local function ApplyShadowGlowUI()
-        -- Color pickers and sliders emit continuously while dragged. Debounce this
-        -- cold options path so a drag replaces the native, combat-safe aura sensor
-        -- once at its final value instead of allocating one sealed sensor per tick.
-        shadowGlowApplyGeneration = shadowGlowApplyGeneration + 1
-        local generation = shadowGlowApplyGeneration
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0.15, function()
-                if generation == shadowGlowApplyGeneration then ApplyGameplayUI() end
-            end)
-        else
-            ApplyGameplayUI()
-        end
     end
     local anchorValues = VT("none", "None", "player", "Player", "target", "Target", "focus", "Focus")
     local frameAnchors = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
@@ -88,9 +68,7 @@ local function BuildGameplay(ctx)
         if type(M.SetGameplayMeleeSpellID) == "function" then return M.SetGameplayMeleeSpellID(value) end
         Gameplay().nameplateMeleeSpellID = floor((tonumber(value) or 0) + 0.5)
     end
-    local timerControls, stateControls, apexItControls, shadowGlowControls, totemControls = {}, {}, {}, {}, {}
-    local apexEnable
-    local shadowGlowEnable
+    local timerControls, stateControls, totemControls = {}, {}, {}
     local crossControls, meleeControls = {}, {}, {}
     local selectedSpellText
     local noSpellWarn
@@ -103,14 +81,6 @@ local function BuildGameplay(ctx)
         end
         return AddTableControlSpecs(ctx, list, section, Gameplay, specs, ApplyGameplayUI)
     end
-    local function AddShadowGlowControls(section, specs)
-        for i = 1, #specs do
-            local spec = specs[i]
-            local key = spec[CONTROL_KEY_INDEX[spec[1]]]
-            spec.meta = spec.meta or Meta("setting." .. tostring(key))
-        end
-        return AddTableControlSpecs(ctx, shadowGlowControls, section, Gameplay, specs, ApplyShadowGlowUI)
-    end
     local function AddBackdrops(section, specs) for i = 1, #specs do local s = specs[i]; W.ControlCardBackdrop(section, 14, s[1], s[2], s[3]) end end
     local function AddTextInput(list, input, getValue, setValue, metadata)
         M.BindTextInput(ctx, input, getValue, function(v) setValue(v); ApplyGameplayUI() end, true, metadata)
@@ -119,29 +89,6 @@ local function BuildGameplay(ctx)
     local function AddGameplayTextInput(list, input, key, fallback)
         return AddTextInput(list, input, function() return Gameplay()[key] or fallback end,
             function(v) Gameplay()[key] = tostring(v or "") end, Meta("setting." .. key))
-    end
-    local function ShadowGlowColorAt(section, x, y, labelWidth)
-        local color = W.Color(section, "Glow color")
-        M.BindColor(ctx, color,
-            function()
-                local c = Gameplay().shadowTechniquesGlowColor
-                return (c and c[1]) or 0.69, (c and c[2]) or 0.50, (c and c[3]) or 0.88
-            end,
-            function(r, g, blue)
-                Gameplay().shadowTechniquesGlowColor = { r, g, blue }
-                ApplyShadowGlowUI()
-            end,
-            Meta("setting.shadowTechniquesGlowColor"))
-        labelWidth = tonumber(labelWidth) or 150
-        if color._msuf2Title then
-            color._msuf2Title:ClearAllPoints()
-            color._msuf2Title:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
-            color._msuf2Title:SetWidth(labelWidth)
-        end
-        color:ClearAllPoints()
-        color:SetPoint("TOPLEFT", section, "TOPLEFT", x + labelWidth + 12, y + 2)
-        M.AppendValues(shadowGlowControls, color)
-        return color
     end
     local function PaintSpellInput(input, edgeAlpha, withFill, withBorder)
         local accent = T.colors.accent
@@ -285,90 +232,6 @@ local function BuildGameplay(ctx)
     end
     AddGameplayTextInput(stateControls, enterInput, "combatStateEnterText", "+Combat")
     AddGameplayTextInput(stateControls, leaveInput, "combatStateLeaveText", "-Combat")
-    local function IsApexItPreviewActive()
-        return type(MSUF.MSUF_Gameplay_ApexIt_IsPreviewActive) == "function"
-            and MSUF.MSUF_Gameplay_ApexIt_IsPreviewActive() == true
-    end
-    local SyncApexItPreviewButton = function() end
-    do
-        local apexStartY = b.y
-        local apexStacked = GameplayStacked()
-        local apex = b:CollapsibleSection("gameplay_dev_auras", "Developer Auras", apexStacked and 780 or 540, false)
-        local apexW = apex._msuf2Width or ctx.width or 900
-        local apexCardW = SectionCardWidth(apex, 700)
-        local apexControlW = SectionControlWidth(apex, 280, 120)
-        local apexLeftX, apexRightX, apexColW = SectionColumns(apex, 280)
-        local apexPreviewBtn
-        if apexStacked then
-            AddBackdrops(apex, { { -38, apexCardW, 690 } })
-            apexEnable = SwitchAt(ctx, apex, "Subtlety Rogue: APEX IT", 30, -40, min(330, apexControlW), Gameplay, "enableApexItDevAura", false, ApplyGameplayUI, Meta("dev_aura.apex_it.enabled"))
-            LabelAt(apex, "Deathstalker only: 5+ Shadow Techniques and no Ancient Arts.", 30, -76, min(540, apexW - 60), "GameFontDisableSmall", T.colors.muted)
-            LabelAt(apex, "Darkest Night: APEX IT. Event-driven; no polling.", 30, -98, min(540, apexW - 60), "GameFontDisableSmall", T.colors.muted)
-            shadowGlowEnable = SwitchAt(ctx, apex, "Shadow Techniques: 5+ Stack Glow", 30, -128, min(360, apexControlW), Gameplay, "enableShadowTechniquesStackHighlight", false, ApplyGameplayUI, Meta("dev_aura.shadow_techniques_stack_highlight.enabled"))
-            LabelAt(apex, "Highlights the matching Cooldown Manager icon at five or more stacks.", 30, -162, min(560, apexW - 60), "GameFontDisableSmall", T.colors.muted)
-            LabelAt(apex, "Glow appearance", 30, -194, min(260, apexControlW), "GameFontHighlightSmall", T.colors.text)
-            ShadowGlowColorAt(apex, 30, -224, min(170, max(100, apexControlW - 70)))
-            AddShadowGlowControls(apex, {
-                { "slider", "Glow size (%)", 30, -268, 75, 175, 5, apexControlW, "shadowTechniquesGlowScale", 100 },
-                { "slider", "Glow strength (%)", 30, -338, 10, 100, 5, apexControlW, "shadowTechniquesGlowStrength", 80 },
-            })
-            LabelAt(apex, "APEX IT text", 30, -420, min(260, apexControlW), "GameFontHighlightSmall", T.colors.text)
-            apexPreviewBtn = T.Button(apex, "Preview", min(120, apexControlW), 22)
-            apexPreviewBtn:SetPoint("TOPLEFT", apex, "TOPLEFT", 30, -446)
-            T.FitButtonWidth(apexPreviewBtn, 90, max(120, apexCardW - 60))
-            AddControls(apexItControls, apex, {
-                { "slider", "Text size", 30, -492, 10, 64, 1, apexControlW, "apexItFontSize", 32 },
-                { "slider", "X offset", 30, -562, -800, 800, 1, apexControlW, "apexItOffsetX", 0 },
-                { "slider", "Y offset", 30, -632, -800, 800, 1, apexControlW, "apexItOffsetY", 140 },
-            })
-        else
-            AddBackdrops(apex, { { -38, apexCardW, 450 } })
-            apexEnable = SwitchAt(ctx, apex, "Subtlety Rogue: APEX IT", apexLeftX, -40, min(330, apexColW), Gameplay, "enableApexItDevAura", false, ApplyGameplayUI, Meta("dev_aura.apex_it.enabled"))
-            apexPreviewBtn = T.Button(apex, "Preview", min(120, apexColW), 22)
-            apexPreviewBtn:SetPoint("TOPLEFT", apex, "TOPLEFT", apexRightX, -40)
-            T.FitButtonWidth(apexPreviewBtn, 90, max(120, apexColW))
-            LabelAt(apex, "Deathstalker only: 5+ Shadow Techniques and no Ancient Arts.", apexLeftX, -76, min(600, apexCardW - 36), "GameFontDisableSmall", T.colors.muted)
-            LabelAt(apex, "Darkest Night: APEX IT. Event-driven; no polling.", apexLeftX, -98, min(600, apexCardW - 36), "GameFontDisableSmall", T.colors.muted)
-            shadowGlowEnable = SwitchAt(ctx, apex, "Shadow Techniques: 5+ Stack Glow", apexLeftX, -128, min(360, apexColW), Gameplay, "enableShadowTechniquesStackHighlight", false, ApplyGameplayUI, Meta("dev_aura.shadow_techniques_stack_highlight.enabled"))
-            LabelAt(apex, "Highlights the matching Cooldown Manager icon at five or more stacks.", apexLeftX, -162, min(600, apexCardW - 36), "GameFontDisableSmall", T.colors.muted)
-            LabelAt(apex, "Glow appearance", apexLeftX, -194, min(260, apexColW), "GameFontHighlightSmall", T.colors.text)
-            ShadowGlowColorAt(apex, apexLeftX, -224, min(150, max(86, apexColW - 70)))
-            AddShadowGlowControls(apex, {
-                { "slider", "Glow size (%)", apexRightX, -202, 75, 175, 5, apexColW, "shadowTechniquesGlowScale", 100 },
-                { "slider", "Glow strength (%)", apexLeftX, -272, 10, 100, 5, apexColW, "shadowTechniquesGlowStrength", 80 },
-            })
-            LabelAt(apex, "APEX IT text", apexLeftX, -342, min(260, apexColW), "GameFontHighlightSmall", T.colors.text)
-            AddControls(apexItControls, apex, {
-                { "slider", "Text size", apexLeftX, -370, 10, 64, 1, apexColW, "apexItFontSize", 32 },
-                { "slider", "X offset", apexRightX, -370, -800, 800, 1, apexColW, "apexItOffsetX", 0 },
-                { "slider", "Y offset", apexLeftX, -440, -800, 800, 1, apexColW, "apexItOffsetY", 140 },
-            })
-        end
-        SyncApexItPreviewButton = function()
-            T.ApplyButtonRole(apexPreviewBtn, IsApexItPreviewActive() and "success" or "normal")
-        end
-        apexPreviewBtn:SetScript("OnClick", function()
-            if type(MSUF.MSUF_Gameplay_ApexIt_TogglePreview) == "function" then
-                MSUF.MSUF_Gameplay_ApexIt_TogglePreview()
-            end
-            SyncApexItPreviewButton()
-            if disabledRefresh then disabledRefresh() end
-        end)
-        SyncApexItPreviewButton()
-        RegisterControl(apexPreviewBtn, Meta("dev_aura.apex_it.preview", "ephemeral"), "Preview", "button")
-        if not MoreMenuOptionsEnabled() then
-            local apexEntry = apex._msuf2CollapsibleEntry
-            if apexEntry and apexEntry.outer then apexEntry.outer:Hide() end
-            for i = #b.layoutEntries, 1, -1 do
-                if b.layoutEntries[i] == apexEntry then
-                    table.remove(b.layoutEntries, i)
-                    break
-                end
-            end
-            if ctx.entry and ctx.entry.sections then ctx.entry.sections.gameplay_dev_auras = nil end
-            b.y = apexStartY
-        end
-    end
     local classStacked = GameplayStacked()
     local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", classStacked and 620 or 390, false)
     local classW = classSec._msuf2Width or ctx.width or 900
@@ -597,12 +460,6 @@ local function BuildGameplay(ctx)
     disabledRefresh = M.BindGateGroup(ctx, Gameplay, {
         { enable = timerEnable, controls = timerControls, on = function(g) return g.enableCombatTimer == true end },
         { enable = stateEnable, controls = stateControls, on = function(g) return g.enableCombatStateText == true end },
-        { enable = apexEnable, controls = apexItControls, on = function(g)
-            return g.enableApexItDevAura == true or IsApexItPreviewActive()
-        end },
-        { enable = shadowGlowEnable, controls = shadowGlowControls, on = function(g)
-            return g.enableShadowTechniquesStackHighlight == true
-        end },
         { enable = totemEnable, controls = totemActionControls, on = function() return true end },
         { controls = totemControls, on = function(g) return g.enablePlayerTotems == true end },
         { enable = crossEnable, controls = crossControls, on = function(g) return g.enableCombatCrosshair == true end },
@@ -611,9 +468,8 @@ local function BuildGameplay(ctx)
         end },
     }, { also = function()
         M.CallIf(previewRefresh)
-        SyncApexItPreviewButton()
         SyncTotemPreviewButton()
     end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 7 })
+M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 10 })

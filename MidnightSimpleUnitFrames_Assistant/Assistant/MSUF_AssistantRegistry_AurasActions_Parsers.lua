@@ -84,5 +84,6 @@ function A.AurasRegistry.BuildActionParsers(ctx)
         ParseAuraCustomWhitelistRemoveAliasArgs = BlacklistParsers.ParseAuraCustomWhitelistRemoveAliasArgs,
         ParseAuraCustomWhitelistClearAliasArgs = BlacklistParsers.ParseAuraCustomWhitelistClearAliasArgs,
         ParseAuraCustomWhitelistSummaryAliasArgs = BlacklistParsers.ParseAuraCustomWhitelistSummaryAliasArgs,
+        ParseAuraCustomReminderEnchantItemAliasArgs = BlacklistParsers.ParseAuraCustomReminderEnchantItemAliasArgs,
     }
 end

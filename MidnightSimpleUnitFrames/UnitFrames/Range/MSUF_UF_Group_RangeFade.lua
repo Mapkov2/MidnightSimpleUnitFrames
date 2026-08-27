@@ -25,6 +25,7 @@ local UnitInRange = UnitInRange
 local UnitIsVisible = UnitIsVisible
 local UnitPhaseReason = UnitPhaseReason
 local InCombatLockdown = InCombatLockdown
+local IsInInstance = IsInInstance
 local NewTimer = C_Timer.NewTimer
 local GetTime = GetTime
 
@@ -62,6 +63,10 @@ local RANGE_SETTLE_EVENT = {
   PLAYER_DIFFICULTY_CHANGED = true,
   PLAYER_REGEN_ENABLED = true,
 }
+local PVP_RANGE_CONTEXT_EVENT = {
+  PLAYER_ENTERING_WORLD = true,
+  ZONE_CHANGED_NEW_AREA = true,
+}
 local EMPTY_EVENTS = {}
 local RANGE_SETTLE_CHUNK_SIZE = 12
 
@@ -91,6 +96,27 @@ local function SafeBool(value)
     return false
   end
   return nil
+end
+
+-- Blizzard treats UNIT_IN_RANGE_UPDATE as a wake-up and re-reads the bound
+-- unit. Issue #128 reports a PvP-instance stale member result, so mirror that
+-- native refresh only in Arena/Battleground instances. PvE keeps its
+-- existing precompiled direct-event callback with no additional hotpath work.
+local pvpRangeEventRequery = false
+local function RefreshPVPRangeEventMode()
+  local active = false
+  if not IsInInstance then
+    if pvpRangeEventRequery == active then return false end
+    pvpRangeEventRequery = active
+    return true
+  end
+  local _, instanceType = IsInInstance()
+  if issecretvalue(instanceType) ~= true and type(instanceType) == "string" then
+    active = instanceType == "pvp" or instanceType == "arena"
+  end
+  if pvpRangeEventRequery == active then return false end
+  pvpRangeEventRequery = active
+  return true
 end
 
 local function UnitEventMatchesFrame(frame, unit)
@@ -287,12 +313,17 @@ local function FilteredRangeEventUpdate(frame, event, _unit, inRange)
   return GroupRangeFade.Update(frame, event, nil, inRange)
 end
 
+local FilteredPVPRangeEventUpdate
+
 local function FilteredUnitEventUpdate(frame, event)
   return GroupRangeFade.Update(frame, event, nil)
 end
 
-function GroupRangeFade.SelectEventUpdate(_frame, _spec, event)
+function GroupRangeFade.SelectEventUpdate(frame, _spec, event)
   if event == "UNIT_IN_RANGE_UPDATE" then
+    local pvp = pvpRangeEventRequery == true and FilteredPVPRangeEventUpdate ~= nil
+    if frame then frame._msufGFRangeEventHandlerPVP = pvp or nil end
+    if pvp then return FilteredPVPRangeEventUpdate end
     return FilteredRangeEventUpdate
   end
   return FilteredUnitEventUpdate
@@ -443,6 +474,30 @@ local function RefreshRangeVisibilityEdge(frame)
   return true
 end
 
+-- PvP-only compiled event route. Retail's CompactUnitFrame ignores the event
+-- boolean and refreshes UnitInRange(displayedUnit); use the same wake-up model
+-- for the bound secure-header token without inspecting protected returns.
+FilteredPVPRangeEventUpdate = function(frame, event, _unit, inRange)
+  local playerUnit = FrameIsPlayerUnit(frame)
+  local value = playerUnit and true or inRange
+  local presenceBlocksRange = false
+  if not playerUnit and PresenceForcesOutOfRange(frame) then
+    RefreshRangeVisibilityEdge(frame)
+    if PresenceForcesOutOfRange(frame) then
+      value = false
+      presenceBlocksRange = true
+    end
+  end
+  if not playerUnit and not presenceBlocksRange then
+    local refreshed, checked = PollCurrentRange(frame and frame.MSUFUnitKey)
+    if checked then value = refreshed end
+  end
+  local changed, rangeValue, rangeSecret = StoreRange(frame, value)
+  if changed then ApplyAlpha(frame, event, rangeValue, rangeSecret) end
+  return changed
+end
+GroupRangeFade.NoDispatchUpdates[FilteredPVPRangeEventUpdate] = true
+
 local function RefreshSettledRange(frame)
   if not (frame and frame._msufGFRangeRuntimeEnabled == true) then
     return
@@ -575,6 +630,47 @@ end
 local settleDriverRegistered
 local settleRegistrationCount = 0
 
+local function PVPRangeEventRouteStale(frame)
+  return frame and frame._msufGFRangeFadeEnabled == true and FrameVisible(frame)
+    and frame._msufCoreRangeEventConfigured == true
+    and (frame._msufGFRangeEventHandlerPVP == true) ~= (pvpRangeEventRequery == true)
+end
+
+local function RefreshPVPRangeEventRoute(frame)
+  if not PVPRangeEventRouteStale(frame) then return false end
+  local refresh = UF and UF.RefreshFrameUnitEventRouting
+  if type(refresh) ~= "function" then return false end
+  refresh(frame)
+  return true
+end
+
+local function RefreshPVPRangeEventRoutes()
+  local live = GF and GF.frames
+  local needed = false
+  for i = 1, #rangeSettleFrames do
+    local frame = rangeSettleFrames[i]
+    if frame and (not live or live[frame] == true) and PVPRangeEventRouteStale(frame) then
+      needed = true
+      break
+    end
+  end
+  if not needed then return false end
+
+  local beginBatch = UF and UF.BeginEventRegistrationBatch
+  local endBatch = UF and UF.EndEventRegistrationBatch
+  local batched = type(beginBatch) == "function" and type(endBatch) == "function"
+  if batched then beginBatch() end
+  local changed = false
+  for i = 1, #rangeSettleFrames do
+    local frame = rangeSettleFrames[i]
+    if frame and (not live or live[frame] == true) then
+      changed = RefreshPVPRangeEventRoute(frame) or changed
+    end
+  end
+  if batched then endBatch() end
+  return changed
+end
+
 local function RefreshOfflineCombatVisibility(event)
   if offlineCombatRegistrationCount <= 0 then
     return
@@ -591,6 +687,9 @@ local function RefreshOfflineCombatVisibility(event)
 end
 
 local function SettleDriverOnEvent(_, event)
+  if settleRegistrationCount > 0 and PVP_RANGE_CONTEXT_EVENT[event] then
+    if RefreshPVPRangeEventMode() then RefreshPVPRangeEventRoutes() end
+  end
   if event == "PLAYER_REGEN_DISABLED" then
     RefreshOfflineCombatVisibility(event)
     return
@@ -623,6 +722,7 @@ local function RefreshSettleDriver()
   local want = settleRegistrationCount > 0
   if want ~= settleDriverRegistered then
     if want then
+      RefreshPVPRangeEventMode()
       for i = 1, #RANGE_SETTLE_EVENTS do
         driver:RegisterEvent(RANGE_SETTLE_EVENTS[i])
       end
@@ -630,6 +730,7 @@ local function RefreshSettleDriver()
       for i = 1, #RANGE_SETTLE_EVENTS do
         driver:UnregisterEvent(RANGE_SETTLE_EVENTS[i])
       end
+      pvpRangeEventRequery = false
     end
     settleDriverRegistered = want
   end
@@ -713,6 +814,7 @@ local function RangeSettleOnShow(self)
   -- of entering header-rebind detection and settled-range evaluation.
   if not self or self._msufGFRangeRuntimeEnabled ~= true then return end
   SetSettleRegistration(self, self and self._msufGFRangeRuntimeEnabled == true)
+  RefreshPVPRangeEventRoute(self)
   local isRebinding = GF and GF.IsHeaderLayoutRebindActive
   if type(isRebinding) == "function" and isRebinding(self) == true then
     self._msufGFRangeSettleDeferred = true
