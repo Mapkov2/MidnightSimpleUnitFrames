@@ -32,6 +32,10 @@ function A.CastbarsRegistry.RegisterInterruptAppearanceSettings(ctx)
         reason = "MSUF2_FOCUS_KICK_ENABLE",
         apply = ApplyFocusKick,
     })
+    RegisterCastbarBoolean("focusKickShowCastbar", "focusKickShowCastbar", "Show Focus Castbar with Focus Kick Icon", false, CastbarAliases("show focus castbar with focus kick", "focus kick icon and castbar", "focus kick combined mode", "fokus castbar mit kick icon", "fokus kick icon und castbar"), {
+        reason = "MSUF2_FOCUS_KICK_CASTBAR",
+        apply = ApplyFocusKick,
+    })
     Registry:RegisterSetting({
         key = "runtime.focusKickPreview",
         label = "Focus Kick On-screen Preview",
