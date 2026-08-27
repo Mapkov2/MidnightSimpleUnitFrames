@@ -537,7 +537,7 @@ local function RaidGroupingOrder(conf)
 end
 
 local function RequiredHeaderColumns(kind, conf, count)
-  if kind == "party" then return 1 end
+  if kind == "party" then return ClampInt(conf and conf.maxColumns, 1, 1, 8) end
   count = floor((tonumber(count) or 0) + 0.5)
   if count < 1 then return 1 end
   if conf and conf.preserveRaidGroups == true then

@@ -177,4 +177,24 @@ assert(header.attributes.sortMethod == "NAMELIST"
     and header.attributes.nameList == "Player,AllyA",
     "Arena completeness guard changed the PvE Party name-list path")
 
+-- Issue #135: the Party header must publish the configured native column cap.
+-- Keep that cap independent of the current roster so Blizzard can grow the
+-- secure header during combat without an insecure MSUF attribute rewrite.
+subgroupCount = 1
+unitNames.party2 = nil
+conf.unitsPerColumn = 1
+conf.maxColumns = 5
+header = SetupParty()
+assert(header.attributes.unitsPerColumn == 1 and header.attributes.maxColumns == 5,
+    "Party 1x5 did not reach the SecureGroupHeader attributes")
+
+subgroupCount = 4
+unitNames.party2 = "AllyB"
+unitNames.party3 = "AllyC"
+unitNames.party4 = "AllyD"
+local nativeColumns = math.min(math.ceil((subgroupCount + 1) / header.attributes.unitsPerColumn),
+    header.attributes.maxColumns)
+assert(math.min(header.attributes.unitsPerColumn * nativeColumns, subgroupCount + 1) == 5,
+    "Party 1x5 native layout hid a party member")
+
 print("arena_party_roster_fail_open_smoke: ok")
