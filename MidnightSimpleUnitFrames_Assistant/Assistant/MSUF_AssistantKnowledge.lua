@@ -1338,10 +1338,13 @@ local function CountRegisteredForPage(page)
     return settings, actions
 end
 
-local function PageHelp(page, titleOverride)
+local function PageHelp(page, titleOverride, opts)
     page = page or CurrentPageKey()
     local spec = PAGE_HELP[page] or PAGE_HELP.home
-    local settings, actions = CountRegisteredForPage(page)
+    local settings, actions = 0, 0
+    if not (opts and opts.staticOnly == true) then
+        settings, actions = CountRegisteredForPage(page)
+    end
     local lines = {}
     lines[#lines + 1] = tostring(titleOverride or spec.title or PageLabel(page))
     for i = 1, #(spec.lines or {}) do lines[#lines + 1] = spec.lines[i] end
@@ -2366,12 +2369,33 @@ local function PriorityFramesAnswer(norm)
     })
 end
 
+local function IsStaticAuraFilterDefinition(norm)
+    return norm == "what is aura filtering" or norm == "what are aura filters"
+        or norm == "explain aura filtering" or norm == "explain aura filters"
+end
+
+function K.IsStaticConceptDefinition(query)
+    local router = A.RouterPrivate
+    local semanticQuery = router and type(router.StripResponseLanguageDirective) == "function"
+        and router.StripResponseLanguageDirective(query) or query
+    return IsStaticAuraFilterDefinition(Normalize(semanticQuery))
+end
+
 local function DirectHelpAnswer(query, opts)
-    local norm = Normalize(query)
-    local addonCompanions = ComplementaryAddonAnswer(query)
+    local router = A.RouterPrivate
+    local semanticQuery = router and type(router.StripResponseLanguageDirective) == "function"
+        and router.StripResponseLanguageDirective(query) or query
+    local norm = Normalize(semanticQuery)
+    local addonCompanions = ComplementaryAddonAnswer(semanticQuery)
     if addonCompanions then return addonCompanions end
     local priorityFrames = PriorityFramesAnswer(norm)
     if priorityFrames then return priorityFrames end
+    -- This is a fixed concept article, not a leaf-control lookup. Answer it
+    -- before the cold exact-label index; response-language directives have
+    -- already been removed in semanticQuery above.
+    if IsStaticAuraFilterDefinition(norm) then
+        return PageHelp("auras3_filters", nil, { staticOnly = true })
+    end
     -- A question that names one exact control is about that control, not about
     -- the topic its words happen to belong to. Concept vocabulary turns up
     -- inside plenty of real labels ("UnitFrame Dispel Overlay Opacity" was
@@ -2389,7 +2413,10 @@ local function DirectHelpAnswer(query, opts)
     if not scopedHelpWrapper
         and type(A.RouterNamedSettingLabel) == "function"
     then
-        local namedLabel = A.RouterNamedSettingLabel(query)
+        -- This precedence is explicitly for a visible exact label. Aliases are
+        -- concept vocabulary here and are discarded by the literal-name test
+        -- below, so building the broad alias index can never change the result.
+        local namedLabel = A.RouterNamedSettingLabel(semanticQuery, true)
         -- "what are party frames" reaches Party Frames Enabled only through
         -- the category alias; the definitional question belongs to the
         -- concept blocks below, not the toggle. The same holds for any

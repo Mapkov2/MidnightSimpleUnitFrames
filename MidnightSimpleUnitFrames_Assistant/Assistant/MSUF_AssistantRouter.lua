@@ -385,6 +385,11 @@ end
 
 function R.LooksLikeKnowledgeQuestionPrefix(text)    local norm = R.Normalize(text)
     if norm == "" then return false end
+    -- These grammatical openers are questions by construction. Keeping them
+    -- here avoids sending ordinary explanations and diagnostics through exact
+    -- mutation discovery before the read-only router can answer them.
+    if norm:match("^why%s+") or norm:match("^warum%s+") then return true end
+    if norm:match("^how%s+do%s+") or norm:match("^how%s+does%s+") then return true end
     if norm:match("^how%s+do%s+i%s+undo") or norm:match("^how%s+can%s+i%s+undo") then return true end
     if norm:match("^how%s+do%s+i%s+redo") or norm:match("^how%s+can%s+i%s+redo") then return true end
     if norm:match("^can%s+i%s+undo") or norm:match("^can%s+you%s+undo") then return true end
@@ -1103,15 +1108,17 @@ end
 -- pending-search-result follow-up can tell "what is it" (a follow-up) from
 -- "what is Mythic Raid Bottom Right Corner Custom Color" (a new request that
 -- merely starts with the same two words).
-function A.RouterNamedSettingLabel(text)
+function A.RouterNamedSettingLabel(text, labelsOnly)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
     norm = R.Trim((norm:gsub("%s*%?+%s*$", "")))
+    labelsOnly = labelsOnly == true
 
-    -- Several lanes ask this about the same input, and the exact-label lookup
-    -- scans the whole registry for each distinct subject. Memoize per input so
-    -- one request costs one scan rather than one per lane.
-    local cached = R._namedSettingLabelCache
+    -- Several lanes ask this about the same input. Keep label-only precedence
+    -- separate from the broader alias-aware cache, but memoize both so a single
+    -- request never repeats the exact-label lookup.
+    local cacheField = labelsOnly and "_namedSettingLabelOnlyCache" or "_namedSettingLabelCache"
+    local cached = R[cacheField]
     if type(cached) == "table" and cached.text == norm then
         return cached.label ~= false and cached.label or nil
     end
@@ -1129,7 +1136,7 @@ function A.RouterNamedSettingLabel(text)
     -- ordinary command ("set player width to 300") never names a bare label,
     -- and paying a full registry scan for it on every input is wasteful.
     if not matched then
-        R._namedSettingLabelCache = { text = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", ""))), label = false }
+        R[cacheField] = { text = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", ""))), label = false }
         return nil
     end
 
@@ -1137,7 +1144,7 @@ function A.RouterNamedSettingLabel(text)
         :gsub("^the%s+", ""):gsub("^my%s+", "")))
     local key = R.Trim((R.Normalize(text):gsub("%s*%?+%s*$", "")))
     if subject == "" then
-        R._namedSettingLabelCache = { text = key, label = false }
+        R[cacheField] = { text = key, label = false }
         return nil
     end
 
@@ -1157,16 +1164,16 @@ function A.RouterNamedSettingLabel(text)
     -- asked by alias hit the generic catch-all. Labels still win outright, and
     -- EnsureSettingAliasIndex drops any alias claimed by two settings, so this
     -- can only resolve names that were already unambiguous. Still O(1).
-    if not setting then
+    if not setting and not labelsOnly then
         local aliasMap = R.EnsureSettingAliasIndex()
         setting = aliasMap and aliasMap[subject] or nil
     end
     local label = setting and tostring(setting.label or "") or ""
     if label == "" then
-        R._namedSettingLabelCache = { text = key, label = false }
+        R[cacheField] = { text = key, label = false }
         return nil
     end
-    R._namedSettingLabelCache = { text = key, label = label }
+    R[cacheField] = { text = key, label = label }
     return label
 end
 
@@ -2721,7 +2728,7 @@ function R.TopicAnswerSurvivesExactControl(result, text)
     return result
 end
 
-function A.RouterIsFailClosedReadOnlyRequest(text)
+function R.ComputeFailClosedReadOnlyRequest(text)
     local norm = R.StripResponseLanguageDirective(text)
     if norm == "" then return true end
     if R.IsSubjectiveSafePlanningRequest(norm) then return true end
@@ -2742,6 +2749,15 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
     -- permission to do it. Keep direct polite requests ("could you change")
     -- actionable while treating possible/could-I forms as guidance.
     if R.IsCapabilityMutationQuestion(norm) or R.IsExplicitMutationRefusal(norm) then return true end
+    -- Definition, location, and how-to prefixes already prove read-only intent.
+    -- Recognize them before exact-name discovery: the latter may build the full
+    -- lazy alias index or scan every label, work that cannot change this verdict.
+    if R.LooksLikeKnowledgeQuestionPrefix(norm) then return true end
+    if type(A.RouterLooksLikeExplicitSettingRelationshipRequest) == "function"
+        and A.RouterLooksLikeExplicitSettingRelationshipRequest(norm)
+    then
+        return true
+    end
     -- Question-shaped AND naming an exact control: "whats the target frame
     -- width" asks what the value is, and was being answered with "what value do
     -- you want me to use?". Only the question lead-ins can produce a label
@@ -2870,11 +2886,6 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
             return true
         end
     end
-    if type(A.RouterLooksLikeExplicitSettingRelationshipRequest) == "function"
-        and A.RouterLooksLikeExplicitSettingRelationshipRequest(norm)
-    then
-        return true
-    end
     if type(R.LooksLikeRegistrySettingDecisionQuestion) == "function"
         and R.LooksLikeRegistrySettingDecisionQuestion(norm)
     then
@@ -2907,6 +2918,15 @@ function A.RouterIsFailClosedReadOnlyRequest(text)
         "fehlt", "fehlend", "versteckt", "nicht sichtbar", "kaputt", "deaktiviert", "funktioniert nicht",
         "current value", "current setting", "list settings", "list options", "related settings", "related options",
     })
+end
+
+function A.RouterIsFailClosedReadOnlyRequest(text)
+    local key = tostring(text or "")
+    local cached = R._failClosedReadOnlyCache
+    if type(cached) == "table" and cached.text == key then return cached.value end
+    local value = R.ComputeFailClosedReadOnlyRequest(text) == true
+    R._failClosedReadOnlyCache = { text = key, value = value }
+    return value
 end
 
 function R.LooksLikeKnowledgeRequest(text)    local norm = R.Normalize(text)
@@ -17083,6 +17103,8 @@ function A.ClearRouterTransientCaches()
     R._settingBrowserCache = nil
     R._openEndedSettingCache = nil
     R._registryExactLabelLookupCache = nil
+    R._failClosedReadOnlyCache = nil
+    R._namedSettingLabelOnlyCache = nil
 end
 
 function R.TrySettingBrowserShortcut(text)
@@ -20246,6 +20268,16 @@ function A.RouteInput(text, coreHandler)
         local earlySettingGraphResult = A.RouterTrySettingGraphShortcut and A.RouterTrySettingGraphShortcut(text)
         if earlySettingGraphResult then return earlySettingGraphResult end
 
+        -- A few fixed concept articles are known not to be leaf controls. Let
+        -- their bounded knowledge owner answer before exact-label discovery.
+        if A.Knowledge and type(A.Knowledge.IsStaticConceptDefinition) == "function"
+            and A.Knowledge.IsStaticConceptDefinition(text)
+            and type(A.Knowledge.Answer) == "function"
+        then
+            local staticConcept = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+            if staticConcept then return staticConcept end
+        end
+
         local compactExplainSubject = R.LooksLikeRegistrySettingExplainQuestion(text) and R.RegistryExplainSubject(text) or ""
         local compactExplainEntries = compactExplainSubject ~= "" and R.CompactRegistrySettingSearchEntries(compactExplainSubject, 3) or nil
         if compactExplainEntries then
@@ -20262,7 +20294,8 @@ function A.RouteInput(text, coreHandler)
         -- "what is Castbar Texture" to general cast-bar guidance instead of the
         -- texture control the player named. Everything that is not an exact
         -- label still goes to Knowledge.
-        and not (type(A.RouterNamedSettingLabel) == "function" and A.RouterNamedSettingLabel(text))
+        and not (type(A.RouterNamedSettingLabel) == "function"
+            and A.RouterNamedSettingLabel(R.StripResponseLanguageDirective(text), true))
         and A.Knowledge and type(A.Knowledge.Answer) == "function"
     then
         local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
@@ -20443,6 +20476,10 @@ function A.RouteInput(text, coreHandler)
                     local direct = R.NamedSettingDirectAnswer and R.NamedSettingDirectAnswer(namedLookup)
                     if direct then return direct end
                 end
+                local locationLane = R.AsksSettingLocation(text)
+                    and type(A.RouterLocationLaneReply) == "function"
+                    and A.RouterLocationLaneReply(text) or nil
+                if locationLane then return locationLane end
                 if A.Knowledge and type(A.Knowledge.Answer) == "function" then
                     local knowledgeAnswer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
                     if knowledgeAnswer then return knowledgeAnswer end
