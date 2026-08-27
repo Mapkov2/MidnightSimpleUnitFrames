@@ -2922,10 +2922,18 @@ end
 
 function A.RouterIsFailClosedReadOnlyRequest(text)
     local key = tostring(text or "")
-    local cached = R._failClosedReadOnlyCache
+    local norm = R.StripResponseLanguageDirective(text)
+    -- Cache only shapes whose grammar proves they are read-only. Mutation and
+    -- clarification routing can deliberately warm a lazy index between two
+    -- classifications of the same sentence; caching that provisional verdict
+    -- would suppress the retained choices produced by the second pass.
+    local cacheable = R.LooksLikeKnowledgeQuestionPrefix(norm)
+        or (type(A.RouterLooksLikeExplicitSettingRelationshipRequest) == "function"
+            and A.RouterLooksLikeExplicitSettingRelationshipRequest(norm))
+    local cached = cacheable and R._failClosedReadOnlyCache or nil
     if type(cached) == "table" and cached.text == key then return cached.value end
     local value = R.ComputeFailClosedReadOnlyRequest(text) == true
-    R._failClosedReadOnlyCache = { text = key, value = value }
+    if cacheable then R._failClosedReadOnlyCache = { text = key, value = value } end
     return value
 end
 
