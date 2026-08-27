@@ -390,7 +390,7 @@ local function ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX
   anchor:SetPoint(point, parent, relativePoint, (offsetX or 0) + dx, (offsetY or 0) + dy)
 end
 
-local function EnsureAnchor(key, conf, totalW, totalH)
+local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
   local anchor = GF.anchors[key]
   local desiredParent = ResolvePetBattleFrameHider()
   if not anchor then
@@ -418,8 +418,14 @@ local function EnsureAnchor(key, conf, totalW, totalH)
   -- a legacy relativePoint into the offsets, so read those afterwards.
   local point, relativePoint = ResolveAnchorPoint(key, conf, parent)
   local offsetX, offsetY = conf.offsetX or 0, conf.offsetY or 0
-  if key ~= "priority" and GF.ConfigureAnchorPointScreenClamp then
-    GF.ConfigureAnchorPointScreenClamp(anchor, point, totalW, totalH)
+  if key ~= "priority" then
+    local footprintClamped = runtimeClampInsets and GF.ConfigureAnchorFootprintScreenClamp
+      and GF.ConfigureAnchorFootprintScreenClamp(anchor,
+        runtimeClampInsets.left, runtimeClampInsets.right,
+        runtimeClampInsets.top, runtimeClampInsets.bottom)
+    if not footprintClamped and GF.ConfigureAnchorPointScreenClamp then
+      GF.ConfigureAnchorPointScreenClamp(anchor, point, totalW, totalH)
+    end
   end
   -- Resolve, apply and clamp in the logical anchor's coordinate space. An
   -- external parent stays live so the header follows provider movement out of
@@ -1154,6 +1160,186 @@ function GF.ApplyGroupBorder(kind)
   end
 end
 
+--- Get a region rectangle in one shared screen coordinate space. Retail
+--- exposes GetScaledRect; the fallback keeps the same contract for older
+--- clients and for the standalone smoke harnesses.
+local function HasSecretGeometry(...)
+  for i = 1, select("#", ...) do
+    local value = select(i, ...)
+    if issecretvalue(value) == true then return true end
+  end
+  return false
+end
+
+local function GetScaledRegionRect(region)
+  if not region then return nil end
+  local left, bottom, width, height
+  if region.GetScaledRect then
+    left, bottom, width, height = region:GetScaledRect()
+    if HasSecretGeometry(left, bottom, width, height) then return nil, nil, nil, nil, true end
+  else
+    if not region.GetRect then return nil end
+    left, bottom, width, height = region:GetRect()
+    if HasSecretGeometry(left, bottom, width, height) then return nil, nil, nil, nil, true end
+    local scale = region.GetEffectiveScale and region:GetEffectiveScale() or 1
+    if HasSecretGeometry(scale) then return nil, nil, nil, nil, true end
+    if left and bottom and width and height and type(scale) == "number" and scale > 0 then
+      left, bottom, width, height = left * scale, bottom * scale, width * scale, height * scale
+    end
+  end
+  if type(left) ~= "number" or type(bottom) ~= "number"
+    or type(width) ~= "number" or type(height) ~= "number"
+    or width <= 0 or height <= 0 then
+    return nil
+  end
+  return left, bottom, left + width, bottom + height, false
+end
+
+local function AddScaledRectToFootprint(footprint, left, bottom, right, top)
+  footprint.left = footprint.left and math.min(footprint.left, left) or left
+  footprint.bottom = footprint.bottom and math.min(footprint.bottom, bottom) or bottom
+  footprint.right = footprint.right and math.max(footprint.right, right) or right
+  footprint.top = footprint.top and math.max(footprint.top, top) or top
+end
+
+local function AddRegionToFootprint(footprint, region)
+  if not region then return false end
+  local left, bottom, right, top, secret = GetScaledRegionRect(region)
+  if secret then
+    footprint.secret = true
+    return false
+  end
+  if not left then return false end
+  AddScaledRectToFootprint(footprint, left, bottom, right, top)
+  return true
+end
+
+local function AddHeaderToFootprint(footprint, header)
+  if not header then return false end
+  local left, bottom, right, top, secret = GetScaledRegionRect(header)
+  if secret then
+    footprint.secret = true
+    return false
+  end
+  --- Blizzard sizes an empty SecureGroupHeader to 0.1 x 0.1. Do not let
+  --- allowed-but-empty preserved groups become distant pseudo-pixels in the
+  --- visible union.
+  if not left or right - left <= 0.5 or top - bottom <= 0.5 then return false end
+  AddScaledRectToFootprint(footprint, left, bottom, right, top)
+  return true
+end
+
+local function RuntimeGroupBorderActive(kind, conf, anchor)
+  return conf.groupBorderEnabled == true
+    and GroupBorderScopeActive(anchor._msufGFKind or kind, conf)
+    and not GroupBorderPreviewOwned(anchor._msufGFKind or kind)
+end
+
+local function RuntimeFootprintPadding(kind, conf, anchor)
+  local padding = 0
+  if conf.borderEnabled ~= false and GF.GetBarOutlineThickness then
+    local outline = GF.GetBarOutlineThickness(kind)
+    if issecretvalue(outline) == true then return nil, true end
+    outline = math.max(0, tonumber(outline) or 0)
+    padding = math.max(padding, outline)
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local textureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil
+      and conf.barOutlineTexture or (bars and bars.barOutlineTexture)
+    local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+    if outline > 0 and issecretvalue(textureKey) ~= true and type(textureKey) == "string"
+      and styles and type(styles.ResolveFrame) == "function"
+      and type(styles.EdgeSize) == "function" then
+      local mode, resolvedKey, texture = styles.ResolveFrame(textureKey)
+      if mode == styles.FRAME_BORDER and texture then
+        local edgeSize = styles.EdgeSize(resolvedKey, outline)
+        if issecretvalue(edgeSize) == true then return nil, true end
+        padding = math.max(padding, (tonumber(edgeSize) or outline * 2) * 0.5)
+      end
+    end
+  end
+  if RuntimeGroupBorderActive(kind, conf, anchor) then
+    local groupPadding = conf.groupBorderPadding
+    if issecretvalue(groupPadding) == true then return nil, true end
+    padding = math.max(padding, tonumber(groupPadding) or 2)
+  end
+  if padding <= 0 then return 0, false end
+  local scale = anchor.GetEffectiveScale and anchor:GetEffectiveScale() or 1
+  if HasSecretGeometry(scale) then return nil, true end
+  if type(scale) ~= "number" or scale <= 0 then scale = 1 end
+  return padding * scale, false
+end
+
+--- The persisted anchor contract remains point-based. Only the live runtime
+--- root receives a transient full-footprint selection, after Blizzard has
+--- produced the secure header rectangles. Re-running SetupHeader always starts
+--- from the saved point clamp, so corrections cannot accumulate.
+local function ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)
+  if key == "priority" or InCombat() or _G.MSUF_UnitEditModeActive == true
+    or GroupBorderPreviewOwned(key) then
+    return false
+  end
+
+  local footprint, hasRenderedRegion = {}, false
+  if key == "raid" and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then
+    local first = GF.headers.raid
+    for i = 1, first._msufRaidGroupCount or 0 do
+      local header = GF.raidGroupHeaders[i]
+      if header and header._msufPreservedGroupAllowed == true then
+        hasRenderedRegion = AddHeaderToFootprint(footprint, header) or hasRenderedRegion
+      end
+    end
+  else
+    hasRenderedRegion = AddHeaderToFootprint(footprint, GF.headers[key])
+  end
+  --- The logical anchor's estimate may intentionally reserve empty preserved
+  --- subgroups. It is only visible when the group-block border is enabled;
+  --- otherwise the settled header union is the complete rendered grid. The
+  --- anchor is also the only rendered region for an empty bordered group.
+  if RuntimeGroupBorderActive(kind, conf, anchor) then
+    hasRenderedRegion = AddRegionToFootprint(footprint, anchor) or hasRenderedRegion
+  end
+  if footprint.secret == true or not hasRenderedRegion
+    or not (footprint.left and footprint.right and footprint.bottom and footprint.top) then
+    return false
+  end
+
+  local anchorLeft, anchorBottom, anchorRight, anchorTop, anchorRectSecret = GetScaledRegionRect(anchor)
+  if anchorRectSecret or not anchorLeft then return false end
+  local anchorScale = anchor.GetEffectiveScale and anchor:GetEffectiveScale() or 1
+  if HasSecretGeometry(anchorScale) or type(anchorScale) ~= "number" or anchorScale <= 0 then return false end
+
+  local padding, paddingSecret = RuntimeFootprintPadding(kind, conf, anchor)
+  if paddingSecret then return false end
+  local selectionLeft, selectionRight = footprint.left - padding, footprint.right + padding
+  local selectionBottom, selectionTop = footprint.bottom - padding, footprint.top + padding
+  local left = (selectionLeft - anchorLeft) / anchorScale
+  local right = (selectionRight - anchorRight) / anchorScale
+  local top = (selectionTop - anchorTop) / anchorScale
+  local bottom = (selectionBottom - anchorBottom) / anchorScale
+
+  --- An oversized profile cannot fit on its short axis. Keep that axis on the
+  --- configured logical point while still protecting the other, fit-capable
+  --- axis; this avoids a size-dependent tug-of-war for intentionally huge grids.
+  local screenLeft, screenBottom, screenRight, screenTop, screenRectSecret = GetScaledRegionRect(UIParent)
+  if not screenRectSecret and screenLeft then
+    local fx, fy = PointFraction(AnchorPoint(conf))
+    local half = 0.5
+    if selectionRight - selectionLeft > screenRight - screenLeft then
+      local width = (anchorRight - anchorLeft) / anchorScale
+      left, right = width * fx - half, -width * (1 - fx) + half
+    end
+    if selectionTop - selectionBottom > screenTop - screenBottom then
+      local height = (anchorTop - anchorBottom) / anchorScale
+      top, bottom = -height * (1 - fy) + half, height * fy - half
+    end
+  end
+
+  EnsureAnchor(key, conf, totalW, totalH, {
+    left = left, right = right, top = top, bottom = bottom,
+  })
+  return true
+end
+
 local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex)
   local buttonTemplate = ButtonTemplate()
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing, conf.groupGrowth)
@@ -1256,7 +1442,7 @@ local function PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spa
   header:SetPoint(point, anchor, point, x, y)
 end
 
-local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount)
+local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH)
   local flat = GF.headers.raid
   if flat and flat._msufRaidGroupIndex == nil then
     RetireHeader(flat)
@@ -1301,6 +1487,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
 
   headers[1]._msufRaidGroupCount = groupCount
   GF.headers.raid = headers[1]
+  ApplyRuntimeFootprintScreenClamp("raid", kind, conf, anchor, totalW, totalH)
   return headers[1], false
 end
 
@@ -1513,7 +1700,7 @@ function GF.SetupHeader(key, kind)
   ApplyGroupBorderForKey(key)
 
   if key == "raid" and conf.preserveRaidGroups == true then
-    return SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount)
+    return SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH)
   elseif key == "raid" and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then
     RetirePreservedRaidHeaders()
   end
@@ -1591,5 +1778,6 @@ function GF.SetupHeader(key, kind)
     GF.ScheduleScan(key, kind)
     scanHandled = true
   end
+  ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)
   return header, scanHandled
 end

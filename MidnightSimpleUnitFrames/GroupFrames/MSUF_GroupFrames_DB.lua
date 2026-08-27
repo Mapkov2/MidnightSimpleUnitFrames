@@ -797,6 +797,19 @@ function GF.GetAnchorPoint(conf)
     return point
 end
 
+local function ConfigureAnchorScreenClamp(frame, key, left, right, top, bottom)
+    if not (frame and frame.SetClampedToScreen and frame.SetClampRectInsets) then return false end
+    if frame._msufGFScreenClampKey ~= key then
+        frame:SetClampRectInsets(left, right, top, bottom)
+        frame._msufGFScreenClampKey = key
+    end
+    if frame._msufScreenClampEnabled ~= true then
+        frame:SetClampedToScreen(true)
+        frame._msufScreenClampEnabled = true
+    end
+    return true
+end
+
 --- Clamp the configured anchor point, not the complete group footprint.
 --- Party and Raid can have very different grid sizes. Full-frame clamping
 --- silently adds a size-dependent delta after SetPoint, so identical
@@ -814,6 +827,7 @@ function GF.ConfigureAnchorPointScreenClamp(frame, point, width, height)
         frame:SetClampedToScreen(false)
         frame._msufScreenClampEnabled = nil
         frame._msufGFAnchorPointClampKey = nil
+        frame._msufGFScreenClampKey = nil
         return false
     end
 
@@ -822,15 +836,30 @@ function GF.ConfigureAnchorPointScreenClamp(frame, point, width, height)
     local left, right = w * fx - half, -w * (1 - fx) + half
     local top, bottom = -h * (1 - fy) + half, h * fy - half
     local key = point .. "\030" .. tostring(w) .. "\030" .. tostring(h)
-    if frame._msufGFAnchorPointClampKey ~= key then
-        frame:SetClampRectInsets(left, right, top, bottom)
-        frame._msufGFAnchorPointClampKey = key
+    local configured = ConfigureAnchorScreenClamp(frame, "point\030" .. key, left, right, top, bottom)
+    frame._msufGFAnchorPointClampKey = configured and key or nil
+    return configured
+end
+
+--- After the live secure headers have settled, clamp their measured selection
+--- instead of the logical point. The caller supplies native clamp insets in the
+--- anchor's local coordinate space; saved offsets and the point-only Preview /
+--- Edit Mode contract remain untouched.
+function GF.ConfigureAnchorFootprintScreenClamp(frame, left, right, top, bottom)
+    if _GF_issecretvalue and (_GF_issecretvalue(left) == true or _GF_issecretvalue(right) == true
+        or _GF_issecretvalue(top) == true or _GF_issecretvalue(bottom) == true) then
+        return false
     end
-    if frame._msufScreenClampEnabled ~= true then
-        frame:SetClampedToScreen(true)
-        frame._msufScreenClampEnabled = true
+    if type(left) ~= "number" or type(right) ~= "number"
+        or type(top) ~= "number" or type(bottom) ~= "number" then
+        return false
     end
-    return true
+    local key = table.concat({
+        "footprint", tostring(left), tostring(right), tostring(top), tostring(bottom),
+    }, "\030")
+    local configured = ConfigureAnchorScreenClamp(frame, key, left, right, top, bottom)
+    if configured then frame._msufGFAnchorPointClampKey = nil end
+    return configured
 end
 
 --- Convert a legacy relativePoint into the saved offsets. Returns false while
