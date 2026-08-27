@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "23809ABB9940D20482A2335C280998BCD1729D6F9BB6D5665907A2430F7CC8A6"
-Search.StaticIndexRecordCount = 2868
+Search.StaticIndexSourceSha256 = "CF58D1035D66E84D480B71622D118671DD21873633BEC17E836B946BF344F222"
+Search.StaticIndexRecordCount = 2869
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -708,6 +708,7 @@ opt_castbar	Shake strength	slider	general.castbarShakeStrength		Castbar > Shake	
 opt_castbar	Show GCD bar for instant casts	toggle	general.showGCDBar		Gcd > Show	show gcd bar for instant casts	idopt_castbarmenu2%2Eopt%2Ecastbar%2Eglobal%2Egcd%2Eshow%2Egcdbar	castbar_gcd			show gcd bar for instant casts gcd show opt castbar global gcd show gcdbar opt castbar toggle general showgcdbar
 opt_castbar	Show cast pushback	toggle	general.castbarShowPushback		Castbar > Show	show cast pushback	idopt_castbarmenu2%2Eopt%2Ecastbar%2Eglobal%2Efilters%2Ecastbar%2Eshow%2Epushback	castbar_filters			show cast pushback castbar show opt castbar global filters castbar show pushback opt castbar toggle general castbarshowpushback
 opt_castbar	Show castbar glow effect	toggle	general.castbarShowGlow		Castbar > Show	show castbar glow effect	idopt_castbarmenu2%2Eopt%2Ecastbar%2Eglobal%2Etextures%2Ecastbar%2Eshow%2Eglow	castbar_textures			show castbar glow effect castbar show opt castbar global textures castbar show glow opt castbar toggle general castbarshowglow
+opt_castbar	Show castbar with Focus Kick icon	toggle	general.focusKickShowCastbar		Kick > Show	show castbar with focus kick icon	idopt_castbarmenu2%2Eopt%2Ecastbar%2Eglobal%2Efocus%2Ekick%2Efocus%2Ekick%2Eshow%2Ecastbar	castbar_focus_kick			show castbar with focus kick icon kick show opt castbar global focus kick focus kick show castbar opt castbar toggle general focuskickshowcastbar
 opt_castbar	Show latency indicator	toggle	general.castbarShowLatency		Castbar > Show	show latency indicator	idopt_castbarmenu2%2Eopt%2Ecastbar%2Eglobal%2Etextures%2Ecastbar%2Eshow%2Elatency	castbar_textures			show latency indicator castbar show opt castbar global textures castbar show latency opt castbar toggle general castbarshowlatency
 opt_castbar	Show on Boss castbars	toggle	general.kickReadyShowBoss		Ready > Show	show on boss castbars	idopt_castbarmenu2%2Eopt%2Ecastbar%2Eglobal%2Einterrupt%2Eready%2Ekick%2Eready%2Eshow%2Eboss	castbar_interrupt_ready			show on boss castbars ready show opt castbar global interrupt ready kick ready show boss opt castbar toggle general kickreadyshowboss
 opt_castbar	Show on Focus castbar	toggle	general.kickReadyShowFocus		Ready > Show	show on focus castbar	idopt_castbarmenu2%2Eopt%2Ecastbar%2Eglobal%2Einterrupt%2Eready%2Ekick%2Eready%2Eshow%2Efocus	castbar_interrupt_ready			show on focus castbar ready show opt castbar global interrupt ready kick ready show focus opt castbar toggle general kickreadyshowfocus
