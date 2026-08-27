@@ -7480,19 +7480,29 @@ function A.ExecutePlan(plan, opts)
         -- control that lacks class-power identity, whichever lane planned it.
         local function ClassPowerOutlineMismatch(hay)
             hay = " " .. tostring(hay or ""):lower() .. " "
-            -- Clause-aware: "set global bar outline thickness to 4 and class
-            -- resource anchor to X" names class power and an outline in
-            -- DIFFERENT clauses; only a clause carrying both is the
-            -- class-power-outline wording this guard exists for.
-            local sameClause = false
-            for clause in (hay .. " and "):gmatch("(.-)%f[%a]and%f[%A]") do
-                if (clause:find("class power", 1, true) or clause:find("class resource", 1, true)
-                    or clause:find("classpower", 1, true)) and clause:find("outline", 1, true) then
-                    sameClause = true
-                    break
+            -- Proximity-based: the guard exists for wording that names a
+            -- class-power OUTLINE as one phrase ("set class power outline to
+            -- red"). In compounds — connector-joined or bare — the two
+            -- families legitimately appear far apart ("...Outline Thickness 4
+            -- ... Class Resource Anchor..."), so only nearby mentions veto.
+            local nearest
+            local outlineStart = 1
+            while true do
+                local oS = hay:find("outline", outlineStart, true)
+                if not oS then break end
+                for _, word in ipairs({ "class power", "class resource", "classpower" }) do
+                    local cStart = 1
+                    while true do
+                        local cS = hay:find(word, cStart, true)
+                        if not cS then break end
+                        local dist = math.abs(cS - oS)
+                        if not nearest or dist < nearest then nearest = dist end
+                        cStart = cS + 1
+                    end
                 end
+                outlineStart = oS + 1
             end
-            if not sameClause then
+            if not nearest or nearest > 32 then
                 return false
             end
             for i = 1, #(plan.changes or {}) do

@@ -2631,13 +2631,16 @@ function R.NamedBooleanIntentPlan(text)
     if hay:find("hide", 1, true) or hay:find("hidden", 1, true) then return nil end
     -- The parser's polarity reader understands double negatives ("should
     -- never disappear" is ON) and German negatives; the flat negation list is
-    -- only the fallback when no polarity word appears at all.
-    local parserBool = type((A.Parser or {}).DetectBoolean) == "function"
-        and A.Parser.DetectBoolean(norm) or nil
+    -- only the fallback when no polarity word appears at all. NOTE: never
+    -- fold this into `cond and f() or nil` — a FALSE verdict collapses to nil
+    -- and "raid ready check icon aus" flipped back to mention-implies-ON.
     local value
-    if parserBool ~= nil then
-        value = parserBool
-    else
+    local parserDetect = (A.Parser or {}).DetectBoolean
+    if type(parserDetect) == "function" then
+        local sentenceBool = parserDetect(norm)
+        if sentenceBool ~= nil then value = sentenceBool end
+    end
+    if value == nil then
         value = not R.ContainsAny(norm, R.NAMED_BOOLEAN_NEGATIONS)
     end
     return {
@@ -14408,6 +14411,8 @@ function R.CanonicalExplicitSearchEntries(subject)
         or subject == "group spell indicator tint alpha"
         or subject == "spell indicator opacity"
         or subject == "group spell indicator opacity"
+        or subject == "spell indicator growth"
+        or subject == "group spell indicator growth"
     then
         local item = R.RegistryActionItemForKey("set_group_spell_indicator_aura", "gf_auras")
         return item and { { score = 10000, rawScore = 10000, item = item } } or nil
@@ -14415,6 +14420,16 @@ function R.CanonicalExplicitSearchEntries(subject)
 
     if subject == "unit text size" or subject == "unit frame text size" then
         local keys = { "player.hpFontSize", "player.powerFontSize", "player.nameFontSize" }
+        local entries = {}
+        for i = 1, #keys do
+            local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(keys[i]) or nil
+            if item then entries[#entries + 1] = { score = 10001 - i, rawScore = 10001 - i, item = item } end
+        end
+        return #entries > 0 and entries or nil
+    end
+
+    if subject == "group raid marker indicator size" or subject == "group raid marker size" then
+        local keys = { "gf_party.raidMarkerSize", "gf_raid.raidMarkerSize", "gf_mythicraid.raidMarkerSize" }
         local entries = {}
         for i = 1, #keys do
             local item = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey(keys[i]) or nil
@@ -14558,6 +14573,20 @@ function R.TryCompactExplicitSettingSearch(text)
     if subject == "" then return nil end
     local entries, canonicalKind = R.CanonicalExplicitSearchEntries(subject)
     if not entries then entries = R.CompactRegistrySettingSearchEntries(subject, 5) end
+    -- Exact aliases are part of the reviewed Registry contract even when the
+    -- visible label shares no words ("unit text slot" -> HP Center Slot). The
+    -- parser exposes a bounded read-only matcher specifically so location
+    -- lookups do not have to construct its complete mutation index.
+    if not entries and R.ExactRegistrySettingAliasEntries then
+        -- Ask for enough of a shared alias bucket to rank its visible labels
+        -- deterministically before the response displays the best three.
+        entries = R.ExactRegistrySettingAliasEntries(subject, 64)
+    end
+    -- Explicit search is a cold, read-only request, so a final fuzzy registry
+    -- lookup is safe before broad topic guidance takes over.
+    if not entries and R.RegistrySettingSearchEntries then
+        entries = R.RegistrySettingSearchEntries(subject, norm, 5)
+    end
     if not entries then return nil end
     local visible = math.min(3, #entries)
     local lines
@@ -18689,6 +18718,15 @@ end
 
 function R.ShouldSkipContext(text)    local norm = R.Normalize(text)
     if norm == "" then return true end
+    -- A question is never raw material for a page-context rewrite: on the
+    -- Class Resources page, "can i change Bars Cp Sound On Empty File" was
+    -- rewritten into that page's vocabulary and WROTE Class Resource Hide
+    -- When Empty. Capability/lookup/problem intents answer read-only.
+    do
+        local parser = A.Parser or {}
+        local intent = type(parser.NonMutatingIntent) == "function" and parser.NonMutatingIntent(norm) or nil
+        if intent ~= nil then return true end
+    end
     if R.ContainsAny(norm, R.FLOW_TERMS) then return true end
     if R.ContainsAny(norm, R.NAV_HELP_TERMS) then return true end
     if R.ContainsAny(norm, {
