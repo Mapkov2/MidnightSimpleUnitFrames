@@ -8,19 +8,32 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "51DB4505EF1420002EFEBCF44D3216F4BDF431C67D23F962E4FCE94B4CE5E23D",
-    currentVersion = "6.13-beta3",
+    sourceSha256 = "918344CAB47C77387A07215BB01FB3D60E4A4547F48819DF90A5685BFBDB1293",
+    currentVersion = "6.13",
     historyFromVersion = "6.02",
-    previousVersion = "6.13-beta2",
-    rangeLabel = "6.13-beta2 -> 6.13-beta3",
+    previousVersion = "6.12",
+    rangeLabel = "6.12 -> 6.13",
     entries = {
         {
-            version = "6.13-beta3",
-            date = "2026-08-27",
+            version = "6.13",
+            date = "2026-08-28",
             sections = {
                 {
                     title = "Highlights",
                     bullets = {
+                        {
+                            text = "Party and Raid Frames now have a curated MSUF Highlights Buff filter. It shows 122 important offensive, support, defensive, and healer cooldowns from every group member, including short player effects such as Shadow Dance and shared states such as Shroud, while leaving common rotational buffs out. New and Factory-reset profiles use it by default; existing profiles keep their current filter and can opt in.",
+                            link = {
+                                pageKey = "gf_auras",
+                                query = "msuf highlights buff filter",
+                                label = "MSUF Highlights",
+                                sectionId = "auras",
+                                controlId = "menu2.gf_auras.auras.group-workspace.lane.buff.tool-selector",
+                                settingKey = "gf_party.auras.buff.filterToken",
+                                prepareKind = "groupAuraWorkspace",
+                                prepareValue = "party_buff_filters",
+                            },
+                        },
                         {
                             text = "Focus Kick can now stay visible beside the Focus castbar. The new option keeps the compact interrupt icon while restoring the matching Focus castbar and its normal cast ownership.",
                             link = {
@@ -37,135 +50,40 @@ local data = {
                 {
                     title = "Changes",
                     bullets = {
-                        "Party Frames now honor the configured Units per column and Max columns values instead of forcing a single secure column, including combat-safe secure-header growth.",
-                        "The Assistant now understands German negative determiners and double negatives, can switch all supported MSUF or Blizzard Unit Frames globally, and retries zero-result setting searches with registered synonyms.",
-                        "Explicit Assistant setting searches resolve exact registry aliases, full portrait control labels resolve to their owning controls, and ambiguous read-only questions remain non-mutating.",
+                        "MSUF Highlights uses one shared immutable catalog and Blizzard's native exact-ID candidate filtering, with no MiniAuras dependency, polling, or recurring roster scans.",
+                        "The Assistant now understands German negative determiners, colloquial removal requests, and double negatives, can switch all supported MSUF or Blizzard Unit Frames globally, and retries zero-result setting searches with registered synonyms.",
+                        "Assistant Aura actions accept enchant-related inputs and route Aura filter and blacklist requests more precisely.",
+                        "Exact Assistant searches recognize registry aliases and complete portrait-control labels.",
                         "Typed HEX colors in the compact color picker now commit on Enter through the same apply path as the visual picker.",
+                        "Removed the experimental built-in Rogue APEX developer helper and its retired settings, menu controls, Assistant registrations, and generated metadata.",
                         "The Group Frame preview roster now includes B3NZII.",
                     },
                 },
                 {
                     title = "Fixes & Performance",
                     bullets = {
-                        "The Player Castbar now ignores interrupted-spell events when no real cast is active, preventing false \"Interrupted\" flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle, and Empower feedback.",
+                        "The Player Castbar now ignores interrupted or failed terminal events when no real cast is active, preventing false \"Interrupted\" flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle, and Empower feedback.",
+                        "Focus interrupt and cast trackers reinitialize after the active profile and frames become available during startup.",
+                        "Focus Kick castbar state follows the icon lifecycle and clears stale Focus cast ownership when the combined display is disabled.",
+                        "Party Frames now honor the configured Units per column and Max columns values instead of forcing a single secure column, including future combat-safe secure-header capacity.",
                         "Live Party, Raid, and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; Edit Mode and previews keep the configured point semantics, and unavailable protected geometry fails closed.",
+                        "Party-style Arena Group Frames fail open to Blizzard's secure roster while the Arena or Shuffle roster is temporarily incomplete instead of publishing an unusable partial name list.",
+                        "Group Range Fade re-queries the bound member on native range events in PvP instances and refreshes its event route when the instance context changes.",
+                        "Unit Range Fade reuses unchanged poll sets across movement and identity edges instead of rebuilding or duplicating scheduler work.",
+                        "Player Power current-value text retains its resolved resource identity through form, vehicle, and explicit Mana handoffs.",
                         "The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition, without adding polling or permanent update work.",
-                        "Assistant routing preserves the original request polarity and capability intent across page-context resolution, preventing safe questions from being rewritten into setting changes.",
-                        "Read-only Assistant questions now reach their dedicated definition, location, relationship, and diagnostic lanes before broad registry scans, keeping cold responses within the interactive latency budget without polling or background work.",
-                        "The Assistant's unloaded-Menu group-copy fallback now mirrors the native copy categories for chunked health and power fills while excluding anchor and migration-only fields.",
-                        "Focus Kick castbar state follows the icon lifecycle and clears stale cast ownership when the combined display is disabled.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.13-beta2",
-            date = "2026-08-26",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Range Fade now stays accurate in PvP instances. Group and Unit Frames re-query when the instance context changes, while unchanged polling sets avoid redundant rebuilds.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "target range fade",
-                                label = "Enable Range Fade",
-                                sectionId = "range_fade",
-                                controlId = "menu2.uf_target.unit.range_fade.enabled",
-                                settingKey = "target.rangeFadeEnabled",
-                            },
-                        },
-                        {
-                            text = "Focus castbar trackers recover correctly after startup. Focus interrupt and cast ownership is restored when the underlying tracker becomes available after the initial load.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "focus interrupt tracker",
-                                label = "Focus interrupt tracker",
-                                sectionId = "castbar_focus_kick",
-                                controlId = "menu2.opt.castbar.global.focus.kick.enable.focus.kick.icon",
-                                settingKey = "general.enableFocusKickIcon",
-                            },
-                        },
-                        {
-                            text = "Player Power text keeps the correct current resource identity. Current-value text no longer loses its power type when the live bar source has already been resolved.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "displayed resource",
-                                label = "Displayed resource",
-                                sectionId = "classpower_detached_power",
-                                controlId = "menu2.classpower.advanced.detached.power.layout.resource.source",
-                                settingKey = "player.playerPowerSource",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Reissued the 6.13 Beta 1 runtime code as Beta 2 after a local CurseForge client installation was interrupted while a locale file was locked. Only release metadata, the bundled changelog, and release validation changed; this is not an addon code fix.",
-                        "Revalidated every Core TOC payload path, Lua 5.1 loadability, and the affected XML manifests before republishing.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.13-beta1",
-            date = "2026-08-26",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Range Fade now stays accurate in PvP instances. Group and Unit Frames re-query when the instance context changes, while unchanged polling sets avoid redundant rebuilds.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "target range fade",
-                                label = "Enable Range Fade",
-                                sectionId = "range_fade",
-                                controlId = "menu2.uf_target.unit.range_fade.enabled",
-                                settingKey = "target.rangeFadeEnabled",
-                            },
-                        },
-                        {
-                            text = "Focus castbar trackers recover correctly after startup. Focus interrupt and cast ownership is restored when the underlying tracker becomes available after the initial load.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "focus interrupt tracker",
-                                label = "Focus interrupt tracker",
-                                sectionId = "castbar_focus_kick",
-                                controlId = "menu2.opt.castbar.global.focus.kick.enable.focus.kick.icon",
-                                settingKey = "general.enableFocusKickIcon",
-                            },
-                        },
-                        {
-                            text = "Player Power text keeps the correct current resource identity. Current-value text no longer loses its power type when the live bar source has already been resolved.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "displayed resource",
-                                label = "Displayed resource",
-                                sectionId = "classpower_detached_power",
-                                controlId = "menu2.classpower.advanced.detached.power.layout.resource.source",
-                                settingKey = "player.playerPowerSource",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Expanded Assistant action inputs for enchant-related requests and tightened Aura action routing.",
-                        "Exact setting guidance now outranks broader suggestions, while ambiguous control requests fail closed without changing settings.",
-                        "Removed the experimental built-in Rogue APEX developer helper and its retired settings, menu controls, Assistant registrations, and generated metadata.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Party-style Arena Group Frames fail open when Blizzard's Arena roster is temporarily incomplete instead of publishing an unusable secure roster.",
-                        "Aura-name fallback work is coalesced so repeated unresolved-name events do not trigger duplicate scans in the same frame.",
-                        "Heal-prediction stripe updates use a specialized full-health path and avoid redundant overflow work.",
-                        "Range drivers reuse unchanged poll sets and keep PvP instance transitions event-driven.",
+                        "Aura-name fallback scans coalesce to one pending unit scan and skip update-only or removal-only events that cannot resolve a new alias.",
+                        "Heal-prediction stripes use a specialized full-health path and avoid redundant secret checks and overflow work.",
+                        "Assistant ambiguity handling fails closed for conflicting colors, cross-frame wording, contradictory movement, partial compound commands, and misleading numbers in control labels instead of applying unrelated settings.",
+                        "Exact setting, location, and purpose questions outrank generic concept guidance so profile-copy, Aura, status-indicator, castbar, and frame-specific requests reach their precise owner.",
+                        "Safe Assistant questions preserve their original polarity and capability intent across page-context routing instead of becoming setting changes.",
+                        "Full portrait control wording resolves to the intended Unit or Group Frame portrait control.",
+                        "Read-only Assistant definition, location, relationship, and diagnostic requests stay off broad mutation indexes, while explicit numeric movement remains on bounded routes.",
+                        "Assistant clarification choices survive repeated classification instead of being lost through a cached provisional read-only result.",
+                        "The Assistant's unloaded-Menu Group copy path now mirrors the native chunked health and power fill fields while excluding anchor and migration-only state.",
+                        "Exact-ID group buffs remain available on follower-dungeon Party NPCs under Blizzard's Retail group-member identity contract instead of being hidden by the old assist gate.",
+                        "Durationless curated states such as Shroud recipient membership bypass generic Hide Permanent and Maximum Duration restrictions, while every other Group Aura filter keeps the saved restrictions.",
+                        "Exact-ID candidate filters are installed before any broad native filter transition, avoiding an intermediate unrestricted Helpful-aura refresh.",
                     },
                 },
             },
