@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "CF5F9F201767039F3C36FA8E0B588EB720EEF6EBDBA0E88BCEA678D94268C05F",
+    sourceSha256 = "51DB4505EF1420002EFEBCF44D3216F4BDF431C67D23F962E4FCE94B4CE5E23D",
     currentVersion = "6.13-beta3",
     historyFromVersion = "6.12",
     previousVersion = "6.13-beta2",
@@ -47,6 +47,7 @@ local data = {
                 {
                     title = "Fixes & Performance",
                     bullets = {
+                        "The Player Castbar now ignores interrupted-spell events when no real cast is active, preventing false \"Interrupted\" flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle, and Empower feedback.",
                         "Live Party, Raid, and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; Edit Mode and previews keep the configured point semantics, and unavailable protected geometry fails closed.",
                         "The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition, without adding polling or permanent update work.",
                         "Assistant routing preserves the original request polarity and capability intent across page-context resolution, preventing safe questions from being rewritten into setting changes.",

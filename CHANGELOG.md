@@ -17,6 +17,7 @@
 
 ### Fixes & Performance
 
+- The Player Castbar now ignores interrupted-spell events when no real cast is active, preventing false "Interrupted" flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle, and Empower feedback.
 - Live Party, Raid, and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; Edit Mode and previews keep the configured point semantics, and unavailable protected geometry fails closed.
 - The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition, without adding polling or permanent update work.
 - Assistant routing preserves the original request polarity and capability intent across page-context resolution, preventing safe questions from being rewritten into setting changes.

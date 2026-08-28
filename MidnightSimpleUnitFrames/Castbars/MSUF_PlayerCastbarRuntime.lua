@@ -930,12 +930,14 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     if frame.MSUF_testMode then return end
 
     local eventUnit = select(1, ...)
-    -- Failed-spell spam and duplicate channel-stop events are common while no
-    -- castbar exists. They cannot change visible state, so reject them before
-    -- invalidating both player/vehicle engine caches or arming a next-frame
+    -- Failed/interrupted spell spam and duplicate channel-stop events are common
+    -- while no castbar exists. They cannot change visible state, so reject them
+    -- before invalidating both player/vehicle engine caches or arming a next-frame
     -- rebuild. Active and empower casts retain the authoritative resync path.
     if frame.isEmpower ~= true
-        and (event == "UNIT_SPELLCAST_FAILED" or event == "UNIT_SPELLCAST_CHANNEL_STOP")
+        and (event == "UNIT_SPELLCAST_FAILED"
+            or event == "UNIT_SPELLCAST_INTERRUPTED"
+            or event == "UNIT_SPELLCAST_CHANNEL_STOP")
         and not HasActivePlayerCast(frame) then
         return
     end
