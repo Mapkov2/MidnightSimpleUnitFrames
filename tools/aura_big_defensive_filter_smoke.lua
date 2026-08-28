@@ -13,11 +13,13 @@ local MSUF = { MSUF_Auras3 = {} }
 _G.MSUF_NS = MSUF
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua"))("MidnightSimpleUnitFrames", MSUF)
 local A3 = assert(MSUF.MSUF_Auras3)
+assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_GroupHighlightsData.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))("MidnightSimpleUnitFrames", MSUF)
 local spellRuntime = assert(A3.SpellIndicators)
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))("MidnightSimpleUnitFrames", MSUF)
 local groupAuraFilter = assert(_G.MSUF_GF_AuraFilter)
 assert(groupAuraFilter.NormalizeFilterToken("buff", "BigDefensive") == "BigDefensive"
+    and groupAuraFilter.NormalizeFilterToken("buff", "MSUF_GROUP_HIGHLIGHTS_V1") == "MSUF_GROUP_HIGHLIGHTS_V1"
     and groupAuraFilter.NormalizeFilterToken("debuff", "CROWD_CONTROL") == "CROWD_CONTROL",
     "current Group Aura filters were not preserved")
 for _, token in ipairs({ "IMPORTANT", "Cancelable", "NotCancelablePlayer", "INCLUDE_NAME_PLATE_ONLY", "unknown" }) do
@@ -31,6 +33,26 @@ end
 assert(groupAuraFilter.ResolveBuffFilter("IMPORTANT") == "HELPFUL"
     and groupAuraFilter.ResolveDebuffFilter("RaidPlayer") == "HARMFUL",
     "runtime still executes retired Group Aura filters")
+local highlights, highlightsSignature, highlightsCount = A3.GetGroupHighlightsSpellIDHash()
+local sameHighlights, sameHighlightsSignature, sameHighlightsCount = A3.GetGroupHighlightsSpellIDHash()
+assert(highlights == sameHighlights
+    and highlightsSignature == sameHighlightsSignature
+    and highlightsCount == sameHighlightsCount,
+    "Group Highlights catalog should be shared and stable")
+assert(highlightsCount == 122 and highlightsSignature:find("^groupHighlights:12%.1%.0%.69497%-v1:122$"),
+    "unexpected Group Highlights data baseline")
+for _, spellID in ipairs({ 48707, 212800, 22812, 363534, 190319, 10060, 871, 81782, 185422, 114018, 115834 }) do
+    assert(highlights[spellID] == true, "missing Group Highlights Spell ID " .. tostring(spellID))
+end
+for _, spellID in ipairs({ 1784, 5215, 5217, 188501, 199261, 377362, 389794 }) do
+    assert(highlights[spellID] == nil, "noisy aura leaked into Group Highlights: " .. tostring(spellID))
+end
+local resolvedHighlights, resolvedHighlightsSignature, resolvedHighlightsCount =
+    groupAuraFilter.ResolveBuffIncludeHash("MSUF_GROUP_HIGHLIGHTS_V1")
+assert(resolvedHighlights == highlights
+    and resolvedHighlightsSignature == highlightsSignature
+    and resolvedHighlightsCount == 122,
+    "Group Highlights resolver copied or changed the shared catalog")
 local hash, signature = A3.GetBigDefensiveSpellIDHash()
 local sameHash, sameSignature = A3.GetBigDefensiveSpellIDHash()
 assert(hash == sameHash, "Big Defensive hash should be cached")
@@ -59,7 +81,10 @@ assert(has(runtime, "ConfigureCuratedBigDefensiveLane(lane)"), "runtime does not
 assert(has(runtime, "SyncCuratedBigDefensiveContainer(container)"), "identity refresh does not switch safe Big Defensive variants")
 assert(has(runtime, "if playerScoped then filter = filter .. \"|PLAYER\" end"), "Player modifier is not explicit")
 assert(not has(runtime, "elseif nonPlayerScoped then"), "classification filters still inject implicit !PLAYER")
-assert(has(runtime, "if broadening and candidatesChanged then"), "friendly transition is not fail-closed")
+assert(has(runtime, "local installCandidatesFirst = filterChanged and candidatesChanged")
+    and has(runtime, "candidateFilters and candidateFilters.includeSpellIDs ~= nil")
+    and has(runtime, "if installCandidatesFirst then"),
+    "exact-ID transition is not fail-closed")
 assert(not has(runtime, "container:UnregisterEvent(\"AURA_DATA_PROVIDER_SWITCH\")"),
     "CustomAuraContainer event registrations must remain Blizzard-owned")
 assert(has(runtime, "A3._DirectIdentityRefreshUnitWithUnitAuraGate")
@@ -67,6 +92,11 @@ assert(has(runtime, "A3._DirectIdentityRefreshUnitWithUnitAuraGate")
     "ordinary Unit exact-ID owners do not topology-switch the direct identity route")
 assert(has(runtime, 'identityCandidateMode = helpful and "assist" or "hostile"'),
     "ordinary Unit custom exact-ID lanes lack compiled polarity metadata")
+assert(has(runtime, 'type(_G.UnitIsPlayerControlledOrGroupMember) ~= "function"'),
+    "Group HELPFUL exact-ID lanes retained the obsolete party assist gate")
+assert(has(runtime, 'return unitCanAssist("player", unit, true, true)')
+    and has(runtime, 'return unitCanAssist("player", unit)'),
+    "identity candidate checks do not select the Retail/Classic UnitCanAssist contract")
 
 local mixedRoot = assert(spellRuntime.CompileSlots("target", {
     enabled = true,
@@ -123,12 +153,36 @@ assert((effective(lane)) == "HELPFUL|PLAYER", "Party should always use curated I
 lane.unit = "boss1"
 assert((effective(lane)) == "HELPFUL|BIG_DEFENSIVE|PLAYER", "Boss should use the secret-safe native fallback")
 lane.unit = "target"
-_G.UnitCanAssist = function() return true end
+_G.UnitIsPlayerControlledOrGroupMember = function() return true end
+_G.UnitCanAssist = function(source, unit, canAssistImmune, canAssistUninteractable)
+    assert(source == "player" and unit == "target"
+        and canAssistImmune == true and canAssistUninteractable == true,
+        "friendly Target used the old UnitCanAssist contract")
+    return true
+end
 assert((effective(lane)) == "HELPFUL|PLAYER", "friendly Target should use curated IDs")
-_G.UnitCanAssist = function() return false end
+_G.UnitCanAssist = function(source, unit, canAssistImmune, canAssistUninteractable)
+    assert(source == "player" and unit == "target"
+        and canAssistImmune == true and canAssistUninteractable == true,
+        "hostile Target used the old UnitCanAssist contract")
+    return false
+end
 assert((effective(lane)) == "HELPFUL|BIG_DEFENSIVE|PLAYER", "hostile Target should use native fallback")
-_G.UnitCanAssist = function() return { secret = true } end
+_G.UnitCanAssist = function(source, unit, canAssistImmune, canAssistUninteractable)
+    assert(source == "player" and unit == "target"
+        and canAssistImmune == true and canAssistUninteractable == true,
+        "secret Target used the old UnitCanAssist contract")
+    return { secret = true }
+end
 assert((effective(lane)) == "HELPFUL|BIG_DEFENSIVE|PLAYER", "secret Target disposition should fail closed")
+_G.UnitIsPlayerControlledOrGroupMember = nil
+_G.UnitCanAssist = function(...)
+    assert(select("#", ...) == 2, "legacy Target used Retail UnitCanAssist arguments")
+    local source, unit = ...
+    assert(source == "player" and unit == "target", "legacy Target used the wrong assist identity")
+    return true
+end
+assert((effective(lane)) == "HELPFUL|PLAYER", "legacy friendly Target should use the two-argument API")
 
 local model = readFile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua")
 assert(has(model, "BIGDEFENSIVE = \"BIG_DEFENSIVE\","), "Group Big Defensive still excludes player-cast auras")
@@ -147,6 +201,15 @@ local buffItems = assert(model:match("GF_AURA_FILTER%.BUFF_FILTER_ITEMS = {(.-)}
 local debuffItems = assert(model:match("GF_AURA_FILTER%.DEBUFF_FILTER_ITEMS = {(.-)}%s*local function GFNativeFilterKey"))
 assert(not has(buffItems, "CancelablePlayer") and not has(buffItems, "IMPORTANT"), "obsolete Group Buff choices remain visible")
 assert(not has(debuffItems, "INCLUDE_NAME_PLATE_ONLY") and not has(debuffItems, "IMPORTANT"), "modifier/no-op Group Debuff choices remain visible")
+assert(has(buffItems, "overrides duration filters"),
+    "Group Highlights tooltip does not explain its durationless-state policy")
+
+local groupConfig = readFile("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua")
+assert(has(groupConfig, "out.buffIncludeHash, out.buffIncludeSignature, allowDurationless = AuraIncludeHash")
+    and has(groupConfig, "if allowDurationless then")
+    and has(groupConfig, 'out[prefix .. "HidePermanent"] = false')
+    and has(groupConfig, 'out[prefix .. "MaxDuration"] = 0'),
+    "Group Highlights can still inherit generic duration candidate filters")
 
 local profiles = readFile("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
 assert(has(profiles, "MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21")
@@ -156,6 +219,9 @@ assert(has(profiles, "MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21")
 local groupDB = readFile("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua")
 assert(has(groupDB, "g.filterToken = normalize(gk, g.filterToken)"),
     "active Group DB cold repair does not normalize retired filter tokens")
+assert(has(groupDB, "local state = createCanonical(true)")
+    and has(profiles, '"canonical Group Aura reset", createCanonical, true'),
+    "existing-profile repair can inherit new factory-only Group Aura defaults")
 
 local assistantData = readFile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Auras_Data.lua")
 local groupValues = assert(assistantData:match("Data%.GF_AURA_FILTER_VALUES = {(.-)}%s*Data%.GF_AURA_FILTER_ALIASES"))

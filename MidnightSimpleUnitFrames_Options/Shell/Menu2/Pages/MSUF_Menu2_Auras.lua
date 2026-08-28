@@ -156,6 +156,7 @@ M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client and MSUF.Client.IsClassic == true
     or (_G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE)
 local GROUP_NATIVE_FILTER_LABELS = {
     ALL = "All",
+    MSUF_GROUP_HIGHLIGHTS_V1 = "MSUF Highlights",
     Player = "Cast by Me",
     BigDefensivePlayer = "Big Defensive by Me",
     ExternalDefensivePlayer = "External Defensive by Me",
@@ -178,7 +179,8 @@ local GROUP_NATIVE_FILTER_LABELS = {
 }
 local GROUP_NATIVE_FILTER_ALLOWED = {
     buff = {
-        ALL = true, Player = true, BigDefensivePlayer = true, ExternalDefensivePlayer = true,
+        ALL = true, MSUF_GROUP_HIGHLIGHTS_V1 = true,
+        Player = true, BigDefensivePlayer = true, ExternalDefensivePlayer = true,
         BigDefensive = true, ExternalDefensive = true, RaidInCombat = true, Raid = true, RaidPlayer = true,
     },
     debuff = {
@@ -189,6 +191,7 @@ local GROUP_NATIVE_FILTER_ALLOWED = {
 }
 local GROUP_NATIVE_FILTER_CANONICAL = {
     ALL = "ALL",
+    MSUFGROUPHIGHLIGHTSV1 = "MSUF_GROUP_HIGHLIGHTS_V1",
     PLAYER = "Player",
     BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
     EXTERNALDEFENSIVEPLAYER = "ExternalDefensivePlayer",
@@ -1024,6 +1027,9 @@ local function GroupFilterValues(groupKey)
                 out[#out + 1] = {
                     value = value,
                     text = GROUP_NATIVE_FILTER_LABELS[value] or item.text or item.label or value,
+                    tooltipTitle = item.tooltipTitle,
+                    tooltip = item.tooltip,
+                    description = item.description,
                 }
             end
         end
@@ -1032,6 +1038,7 @@ local function GroupFilterValues(groupKey)
     if groupKey == "buff" then
         return VT(
             "ALL", "All Buffs",
+            "MSUF_GROUP_HIGHLIGHTS_V1", "MSUF Highlights",
             "Player", "Cast by Me",
             "BigDefensive", "Big Defensive",
             "BigDefensivePlayer", "Big Defensive by Me",
@@ -4332,7 +4339,8 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
             assistantSettingKeys = GroupAssistantBlacklistSettingKeys(scope,
                 ".auras." .. lane .. ".blacklist.hidePermanent"),
         }))
-    AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
+    AddTooltip(hidePermanent, "Hide permanent auras",
+        "Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible.")
     local selectedFilterToken = CanonicalGroupFilterValue((GFReadGroup(scope, lane) or {}).filterToken or "ALL", lane)
     for i = 1, #values do
         local item = values[i]
@@ -4357,7 +4365,8 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                     assistantSettingKeys = GroupAssistantSettingKeys(scope,
                         ".auras." .. lane .. ".filterToken"),
                 } or nil))
-        AddTooltip(control, item.text or item.value, "Only one filter can be active.")
+        AddTooltip(control, item.tooltipTitle or item.text or item.value,
+            item.tooltip or item.description or "Only one filter can be active.")
     end
     if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
         ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1, inner,

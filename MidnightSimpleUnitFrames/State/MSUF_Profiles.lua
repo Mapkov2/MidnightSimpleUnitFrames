@@ -1994,6 +1994,7 @@ local MSUF_PROFILEIO_GROUP_AURA_FILTER_LANES = { "buff", "debuff" }
 local MSUF_PROFILEIO_GF_CURRENT_FILTER_TOKENS = {
     buff = {
         ALL = "ALL",
+        MSUFGROUPHIGHLIGHTSV1 = "MSUF_GROUP_HIGHLIGHTS_V1",
         PLAYER = "Player",
         BIGDEFENSIVE = "BigDefensive",
         BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
@@ -3672,7 +3673,7 @@ local function MSUF_ProfileIO_ResetGroupAuras(profile, legacyProfile, groupCount
                     conf, scope, legacyProfile, groupCount)
                 if canonical == nil then
                     local ok, value = MSUF_ProfileIO_RunProtected(
-                        "canonical Group Aura reset", createCanonical)
+                        "canonical Group Aura reset", createCanonical, true)
                     if ok and type(value) == "table" then canonical = value else canonical = false end
                 end
                 local state = canonical and canonical[scope]

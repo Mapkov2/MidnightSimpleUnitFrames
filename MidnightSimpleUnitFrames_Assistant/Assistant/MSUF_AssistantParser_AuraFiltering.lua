@@ -46,6 +46,11 @@ local UNIT_FILTER_KEYS = {
 
 local FILTER_SPECS = {
     {
+        id = "msufGroupHighlights", unitKey = nil, groupValue = "MSUF_GROUP_HIGHLIGHTS_V1",
+        label = "MSUF Highlights", lane = "buff",
+        terms = { "msuf highlights", "msuf highlight", "msuf group highlights", "msuf list", "group highlights", "group cooldown buffs", "important group buffs" },
+    },
+    {
         id = "raidInCombat", unitKey = "raidInCombat", groupValue = "RaidInCombat",
         label = "Raid-relevant in combat", lane = nil,
         terms = { "raid in combat", "combat raid", "raid combat", "during raid combat" },

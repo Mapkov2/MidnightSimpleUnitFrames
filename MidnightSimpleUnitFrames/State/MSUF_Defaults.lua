@@ -1690,7 +1690,7 @@ end
 --- 6.0 data instead of being copied from the embedded compatibility snapshot.
 --- Spell Indicators start empty and are populated by the current live
 --- SpecDefaults seeder, so retired saved icons can never become factory data.
-local function MSUF_Defaults_CreateCanonicalGroupAuraState()
+local function MSUF_Defaults_CreateCanonicalGroupAuraState(preserveExistingFilterDefaults)
     local function Lane(values)
         return {
             _filterMigV3 = true,
@@ -1735,6 +1735,12 @@ local function MSUF_Defaults_CreateCanonicalGroupAuraState()
     end
 
     local function Scope(isRaid)
+        -- Factory creation/reset opts into MSUF Highlights. Compatibility
+        -- callers repairing an already-saved profile explicitly request the
+        -- former defaults so a missing legacy field cannot change its display.
+        local buffFilterToken = preserveExistingFilterDefaults == true
+            and (isRaid and "Raid" or "RaidPlayer")
+            or "MSUF_GROUP_HIGHLIGHTS_V1"
         local auras = {
             profileModelRevision = MSUF_DEFAULTS_GROUP_AURA_PROFILE_MODEL_REVISION,
             enabled = true,
@@ -1762,7 +1768,7 @@ local function MSUF_Defaults_CreateCanonicalGroupAuraState()
             auras.buff = Lane({
                 anchor = "TOPLEFT", growth = "RIGHTDOWN", x = 14, y = -2,
                 size = 12, spacing = 0, perRow = 1, max = 1, layer = 8,
-                filterToken = "RAID", stackSize = 10,
+                filterToken = buffFilterToken, stackSize = 10,
             })
             auras.debuff = Lane({
                 anchor = "BOTTOMLEFT", growth = "RIGHTUP", x = 20, y = 2,
@@ -1778,7 +1784,7 @@ local function MSUF_Defaults_CreateCanonicalGroupAuraState()
             auras.buff = Lane({
                 anchor = "TOPLEFT", growth = "RIGHTDOWN", x = 44, y = -2,
                 size = 14, spacing = 0, perRow = 1, max = 1, layer = 8,
-                filterToken = "RAID_PLAYER", stackSize = 10,
+                filterToken = buffFilterToken, stackSize = 10,
             })
             auras.debuff = Lane({
                 anchor = "BOTTOMLEFT", growth = "RIGHTUP", x = 22, y = 2,

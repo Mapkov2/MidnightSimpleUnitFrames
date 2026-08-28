@@ -998,6 +998,12 @@ end
 
 local NATIVE_AURA_BLACKLIST_HASHES_ENABLED = true
 
+-- A missing highlight catalog must never degrade the semantic filter to plain
+-- HELPFUL. Spell ID 0 cannot identify an aura, so this shared map keeps the
+-- lane closed if its versioned data module is unavailable or invalid.
+local GROUP_HIGHLIGHTS_NEVER_MATCH_HASH = { [0] = true }
+local GROUP_HIGHLIGHTS_NEVER_MATCH_SIGNATURE = "groupHighlights:unavailable"
+
 local function AuraBlacklistHash(kind, groupKey, group)
   -- PTR 12.1 CustomAuraContainer candidateFilters can consume SpellID maps.
   -- Keep the expensive category expansion cached in the AuraFilter helper and
@@ -1026,6 +1032,29 @@ local function AuraFilterString(groupKey, group)
     return filter and filter.EXTERNALS_TOKEN or "HELPFUL|EXTERNAL_DEFENSIVE"
   end
   return filter and filter.ResolveDebuffFilter and filter.ResolveDebuffFilter(token) or "HARMFUL"
+end
+
+local function AuraIncludeHash(groupKey, group)
+  if groupKey ~= "buff" then return nil, nil, false end
+
+  local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+  local token = group and group.filterToken
+  local isGroupHighlights
+  if filter and type(filter.IsGroupHighlightsFilter) == "function" then
+    isGroupHighlights = filter.IsGroupHighlightsFilter(token) == true
+  else
+    isGroupHighlights = tostring(token or ""):upper():gsub("[^A-Z0-9]", "") == "MSUFGROUPHIGHLIGHTSV1"
+  end
+  if not isGroupHighlights then return nil, nil, false end
+
+  if filter and type(filter.ResolveBuffIncludeHash) == "function" then
+    local hash, signature = filter.ResolveBuffIncludeHash(token)
+    if type(hash) == "table" and next(hash) ~= nil
+      and type(signature) == "string" and signature ~= "" then
+      return hash, signature, true
+    end
+  end
+  return GROUP_HIGHLIGHTS_NEVER_MATCH_HASH, GROUP_HIGHLIGHTS_NEVER_MATCH_SIGNATURE, true
 end
 
 local function ExcludeAuraFilterToken(filterString, token)
@@ -1102,9 +1131,23 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Strata"] = NormalizeFrameOutlineStrata(group.strata)
   out[prefix .. "Alpha"] = group.behindBar == true and LaneAlpha(group) or 1
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
+  local allowDurationless = false
+  if prefix == "buff" then
+    out.buffIncludeHash, out.buffIncludeSignature, allowDurationless = AuraIncludeHash(groupKey, group)
+  end
   local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
-  out[prefix .. "HidePermanent"] = group.hidePermanent == true or (blacklist and blacklist.hidePermanent == true) or false
-  out[prefix .. "MaxDuration"] = Num(blacklist and blacklist.maxDuration, 0)
+  if allowDurationless then
+    -- The exact Highlights catalog is the complete membership policy. Shroud's
+    -- recipient aura (115834) is temporary but can be reported with duration 0;
+    -- Blizzard rejects every duration-0 aura when maxDuration is present. Keep
+    -- duration filters out of this one native AuraGroup so every curated state
+    -- can render, without changing the saved settings used by other filters.
+    out[prefix .. "HidePermanent"] = false
+    out[prefix .. "MaxDuration"] = 0
+  else
+    out[prefix .. "HidePermanent"] = group.hidePermanent == true or (blacklist and blacklist.hidePermanent == true) or false
+    out[prefix .. "MaxDuration"] = Num(blacklist and blacklist.maxDuration, 0)
+  end
   if prefix == "debuff" then
     local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
     local nonPlayer = tostring(group.filterToken or ""):upper():gsub("[^A-Z0-9]", "") == "NONPLAYER"

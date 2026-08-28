@@ -74,7 +74,8 @@ local function AuraControlMeta(ctx, path, classification, assistantContract)
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
     if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
-    local meta = AuraControlMeta(ctx, path, classification)
+    local meta = AuraControlMeta(ctx, path, classification,
+        type(navigationKey) == "table" and navigationKey or nil)
     meta.label = label
     meta.kind = kind
     if classification == "navigation" then meta.navigationKey = navigationKey end
@@ -195,8 +196,36 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
             RebuildGroupAuraPage(ctx)
         end,
     })
+    local exactKind = "groupAuraWorkspace"
+    local exactViews = lane == "buff" and {
+        party_buff_filters = {
+            scope = "party",
+            lane = "buff",
+            tool = "filters",
+            settingKey = "gf_party.auras.buff.filterToken",
+        },
+    } or nil
     RegisterAuraControl(ctx, toolBar, "Edit", "segment",
-        "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector", "ephemeral")
+        "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector",
+        exactViews and "setting" or "ephemeral", exactViews and {
+            assistantDisposition = "compound",
+            assistantDispositionReason = "This selector only opens the native Buff filter editor; the controls inside own its persisted settings.",
+        } or nil)
+    if exactViews then
+        local exactContracts = {}
+        for value, view in pairs(exactViews) do exactContracts[value] = view.settingKey end
+        toolBar._msuf2ExactTargetKinds = { [exactKind] = true }
+        toolBar._msuf2ExactTargetContracts = { [exactKind] = exactContracts }
+        toolBar._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= exactKind then return false end
+            local view = exactViews[tostring(exactTarget.prepareValue or "")]
+            if not view then return false end
+            M.SetMenuStateValue("gfScope", view.scope)
+            SetAuraWorkspaceLane(view.scope, view.lane)
+            SetAuraWorkspaceTool(view.scope, view.lane, view.tool)
+            return true
+        end
+    end
     if not GF_AURA_BLACKLIST_AVAILABLE then
         for i = 1, #(toolBar.buttons or {}) do
             local button = toolBar.buttons[i]

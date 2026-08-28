@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "CF58D1035D66E84D480B71622D118671DD21873633BEC17E836B946BF344F222"
-Search.StaticIndexRecordCount = 2869
+Search.StaticIndexSourceSha256 = "67F092A67EE56424298E5B89033E214702F1AB5358AE006860AF2E568FDE25D8"
+Search.StaticIndexRecordCount = 2871
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -245,6 +245,7 @@ gf_auras	Display	dropdown			Group Style > Debuff	display	idgf_aurasmenu2%2Egf_
 gf_auras	Display	dropdown			Group Style > Externals	display	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-style%2Elane%2Eexternals%2Edurationbardisplay				display group style externals auras group style lane externals durationbardisplay gf auras dropdown
 gf_auras	Display	dropdown			Spell > Style	display	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Estyle%2Edurationbardisplay	si_style			display spell style group auras spell style durationbardisplay gf auras dropdown
 gf_auras	Display as	dropdown			Selected > Placed	display as	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eselected%2Eplaced%2Etype	si			display as selected placed group auras spell selected placed type gf auras dropdown
+gf_auras	Edit	segment			Auras > Buff	edit	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Ebuff%2Etool-selector	auras	groupAuraWorkspace	groupAuraWorkspace=party_buff_filters=gf_party.auras.buff.filterToken	edit auras buff auras group workspace lane buff tool selector gf auras segment
 gf_auras	Effect	dropdown			Selected > Frame	effect	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eselected%2Eframe%2Etype	si			effect selected frame group auras spell selected frame type gf auras dropdown
 gf_auras	Effect Layer (0-30)	slider			Spell > Frame	effect layer 0 30	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eframe%2Elayer	si			effect layer 0 30 spell frame group auras spell frame layer gf auras slider
 gf_auras	Enable group auras	toggle			Auras	enable group auras	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Eroot%2Eenabled	auras			enable group auras auras auras group workspace root enabled gf auras toggle
@@ -281,6 +282,7 @@ gf_auras	Layer (0-30)	slider			Buff > Layout	layer 0 30	idgf_aurasmenu2%2Egf_a
 gf_auras	Layer (0-30)	slider			Debuff > Layout	layer 0 30	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Edebuff%2Elayout%2Elayer				layer 0 30 debuff layout auras group workspace lane debuff layout layer gf auras slider
 gf_auras	Layer (0-30)	slider			Externals > Layout	layer 0 30	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Eexternals%2Elayout%2Elayer				layer 0 30 externals layout auras group workspace lane externals layout layer gf auras slider
 gf_auras	Layer (0-30)	slider			Spell > Selected	layer 0 30	idgf_aurasmenu2%2Egf_auras%2Egroup%2Espell%2Eselected%2Elayer	si			layer 0 30 spell selected group auras spell selected layer gf auras slider
+gf_auras	MSUF Highlights	toggle			Filters > Native	msuf highlights	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Ebuff%2Efilters%2Enative%2Emsuf-group-highlights-v1				msuf highlights filters native auras group workspace lane buff filters native msuf group highlights v1 gf auras toggle
 gf_auras	Max	slider			Buff > Layout	max	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Ebuff%2Elayout%2Emax	auras			max buff layout auras group workspace lane buff layout max gf auras slider
 gf_auras	Max	slider			Debuff > Layout	max	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Edebuff%2Elayout%2Emax				max debuff layout auras group workspace lane debuff layout max gf auras slider
 gf_auras	Max	slider			Externals > Layout	max	idgf_aurasmenu2%2Egf_auras%2Eauras%2Egroup-workspace%2Elane%2Eexternals%2Elayout%2Emax				max externals layout auras group workspace lane externals layout max gf auras slider

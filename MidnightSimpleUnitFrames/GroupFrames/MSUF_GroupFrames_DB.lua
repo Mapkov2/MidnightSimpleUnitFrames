@@ -2101,7 +2101,10 @@ function GF.MigrateAuraConfig(conf, isRaid)
         local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalGroupAuraState)
             or _G.MSUF_CreateCanonicalGroupAuraState
         if type(createCanonical) == "function" then
-            local state = createCanonical()
+            -- This is repair of an existing canonical profile, not a factory
+            -- creation/reset. Fill missing fields with the former filter
+            -- defaults so installing a new built-in filter cannot opt it in.
+            local state = createCanonical(true)
             state = type(state) == "table" and state[isRaid and "gf_raid" or "gf_party"] or nil
             if type(state) == "table" then
                 changed = FillMissingAuraModel(conf.auras, state.auras) or changed

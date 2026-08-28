@@ -440,7 +440,7 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
                 page = "gf_auras",
                 description = "Chooses which auras pass the content filter for " .. tostring(UNIT_LABELS[scope])
                     .. " " .. laneInfo.plural .. ". It does not show or hide the lane; Group Auras and the " .. laneInfo.label
-                    .. " lane must be enabled separately. Big Defensive uses MSUF's curated exact Spell-ID list; Hide Permanent is an independent no-duration rule.",
+                    .. " lane must be enabled separately. MSUF Highlights and Big Defensive use curated exact Spell-ID lists. MSUF Highlights intentionally overrides Hide Permanent and Maximum Duration so curated no-duration states such as Shroud membership remain visible.",
             })
 
             aliases = {}
