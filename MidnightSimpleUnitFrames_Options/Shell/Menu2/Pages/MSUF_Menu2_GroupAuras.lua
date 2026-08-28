@@ -74,8 +74,7 @@ local function AuraControlMeta(ctx, path, classification, assistantContract)
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
     if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
-    local meta = AuraControlMeta(ctx, path, classification,
-        type(navigationKey) == "table" and navigationKey or nil)
+    local meta = AuraControlMeta(ctx, path, classification)
     meta.label = label
     meta.kind = kind
     if classification == "navigation" then meta.navigationKey = navigationKey end
@@ -207,10 +206,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
     } or nil
     RegisterAuraControl(ctx, toolBar, "Edit", "segment",
         "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector",
-        exactViews and "setting" or "ephemeral", exactViews and {
-            assistantDisposition = "compound",
-            assistantDispositionReason = "This selector only opens the native Buff filter editor; the controls inside own its persisted settings.",
-        } or nil)
+        "ephemeral")
     if exactViews then
         local exactContracts = {}
         for value, view in pairs(exactViews) do exactContracts[value] = view.settingKey end
