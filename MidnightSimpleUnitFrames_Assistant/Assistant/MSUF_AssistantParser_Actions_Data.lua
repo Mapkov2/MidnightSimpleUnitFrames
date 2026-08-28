@@ -194,7 +194,9 @@ Data.ACTIONS_PARSER = {
         [133] = { "close", "hide", "collapse", "schliessen", "verstecken", "ausblenden", "einklappen" },
         [134] = { "toggle", "umschalten" },
         [135] = { "panel", "tools", "changelog", "change log", "release notes", "werkzeuge", "aenderungen", "versionshinweise" },
-        [136] = { "menu", "menue", "dashboard", "options", "optionen", "options window", "msuf menu", "msuf menue", "msuf window", "msuf fenster", "fenster" },
+        -- Bare "fenster" hijacked unit-frame sentences ("fokus fenster
+        -- ausblenden" closed the menu); only the qualified form names the menu.
+        [136] = { "menu", "menue", "dashboard", "options", "optionen", "options window", "msuf menu", "msuf menue", "msuf window", "msuf fenster" },
         [137] = { "restore", "unminimize", "unminimise", "show minimized", "wiederherstellen", "minimierung aufheben" },
         [138] = { "minimize", "minimise", "collapse", "minimieren", "einklappen" },
         [139] = { "maximize", "maximise", "fullscreen", "full screen", "maximieren", "vollbild" },

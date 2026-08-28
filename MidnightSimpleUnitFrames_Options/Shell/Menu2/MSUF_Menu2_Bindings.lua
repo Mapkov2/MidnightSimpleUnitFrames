@@ -1274,7 +1274,7 @@ local MISC_GENERAL_KEYS = KSW [[
 local MISC_UNIT_KEYS = {}
 local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
 local CASTBAR_GENERAL_KEYS = KSW [[
-    empowerColorStages enableFocusKickIcon focusKickIconWidth focusKickIconHeight focusKickTextSize
+    empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss
     kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY
 ]]

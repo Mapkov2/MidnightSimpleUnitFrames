@@ -153,8 +153,11 @@ function A.GroupFramesRegistry.RegisterPortraitSettings(ctx)
     }
     Enum("portraitDetachedPoint", "portraitDetachedPoint", "Portrait Anchor Point", "RIGHT", points,
         Aliases("portrait anchor point", "detached portrait anchor"), pointAliases)
+    -- "attach to frame point" is the full noun players copy from the label;
+    -- the truncated "attach to" alias alone left the exact-alias proof unable
+    -- to verify the sentence and it fail-closed as a question.
     Enum("portraitDetachedTo", "portraitDetachedTo", "Portrait Attach To Frame Point", "LEFT", points,
-        Aliases("portrait attach to", "detached portrait frame point"), pointAliases)
+        Aliases("portrait attach to", "portrait attach to frame point", "detached portrait frame point"), pointAliases)
     Enum("portraitOverlayAlign", "portraitOverlayAlign", "Portrait Overlay Alignment", "LEFT",
         data.PORTRAIT_OVERLAY_ALIGN_VALUES or { "LEFT", "CENTER", "RIGHT", "FULL" },
         Aliases("portrait overlay alignment", "portrait overlay align"), {

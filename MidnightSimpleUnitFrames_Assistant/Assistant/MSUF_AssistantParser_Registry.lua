@@ -803,10 +803,33 @@ local function EnumValueForText(setting, text)
             startAt = endPos + 1
         end
     end
+    -- "make the target name pop more" is a styling colloquialism: the words
+    -- "target name" are not a choice statement, and reading them as the
+    -- TARGET_NAME enum value wrote Target Target Inline Color. No MSUF enum
+    -- value is literally named pop/stand out, so this costs nothing real.
+    if norm:find("%f[%a]pop%f[%A]") or norm:find("stand out", 1, true) then return nil end
+    -- Hoisted for every resolution pass below: a negated sentence ("never
+    -- color npc names by class", "dont set bar mode to class") must not read
+    -- a non-off choice out of its own words, whichever pass finds it.
+    local sentenceNegated = norm:match("^disable ") ~= nil or norm:match("^turn off ") ~= nil
+        or norm:match("^hide ") ~= nil or norm:match("^remove ") ~= nil or norm:match("^deactivate ") ~= nil
+        or norm:match("^deaktiviere ") ~= nil or norm:match("^schalte .* aus") ~= nil or norm:match("^blende ") ~= nil
+        or norm:match("^never ") ~= nil or norm:match("^no ") ~= nil or norm:match("^stop ") ~= nil
+        or norm:match("^dont ") ~= nil or norm:match("^do not ") ~= nil or norm:match("^i want no ") ~= nil
+        or norm:match("^keine ") ~= nil or norm:match("^kein ") ~= nil or norm:match("^nie ") ~= nil
+    local function NegationBlocksChoice(choiceValue)
+        if not sentenceNegated then return false end
+        local chosenToken = CompactToken(tostring(choiceValue))
+        return chosenToken ~= "off" and chosenToken ~= "none" and chosenToken ~= "disabled"
+            and chosenToken ~= "hide" and chosenToken ~= "hidden"
+    end
     local tail = bestEnd and Trim(padded:sub(bestEnd + 1)) or nil
     if tail then tail = Trim(tail:gsub("^the%s+", ""):gsub("^a%s+", "")) end
     local tailValue = tail and tail ~= "" and matchSegment(tail)
-    if tailValue ~= nil then return tailValue end
+    if tailValue ~= nil then
+        if NegationBlocksChoice(tailValue) then return nil end
+        return tailValue
+    end
     if tail and tail ~= "" then return nil end
     -- " by " states a mode ("color text by health"), so a choice behind it is
     -- a real value even when the same word sits inside the control's name.
@@ -825,7 +848,10 @@ local function EnumValueForText(setting, text)
         local byTail = byEnd and Trim(padded:sub(byEnd + 1)) or nil
         if byTail then byTail = Trim(byTail:gsub("^the%s+", ""):gsub("^a%s+", "")) end
         local byValue = byTail and byTail ~= "" and matchSegment(byTail)
-        if byValue ~= nil then return byValue end
+        if byValue ~= nil then
+            if NegationBlocksChoice(byValue) then return nil end
+            return byValue
+        end
     end
     local whole = matchSegment(norm)
     -- Without a connector, a choice word that is part of the control's OWN
@@ -838,16 +864,7 @@ local function EnumValueForText(setting, text)
         -- but the verb asks to turn it OFF; applying the named choice inverts
         -- the request. Under a negative opener only an off-like choice may
         -- resolve connectorless — anything else asks.
-        local negativeOpener = norm:match("^disable ") or norm:match("^turn off ")
-            or norm:match("^hide ") or norm:match("^remove ") or norm:match("^deactivate ")
-            or norm:match("^deaktiviere ") or norm:match("^schalte .* aus") or norm:match("^blende ")
-        if negativeOpener then
-            local chosenToken = CompactToken(tostring(whole))
-            if chosenToken ~= "off" and chosenToken ~= "none" and chosenToken ~= "disabled"
-                and chosenToken ~= "hide" and chosenToken ~= "hidden" then
-                return nil
-            end
-        end
+        if NegationBlocksChoice(whole) then return nil end
         local own = CompactToken(tostring(setting and setting.label or "") .. " "
             .. tostring(setting and setting.attribute or ""))
         local chosen = CompactToken(tostring(whole))
@@ -891,6 +908,16 @@ P.BooleanAliasValueForText = P.BooleanAliasValueForText or function(setting, tex
                     bestValue = aliasValue
                 end
             end
+        end
+    end
+    -- "isnt it possible to NOT show debuffs" contains the "show ... debuffs"
+    -- alias, but the sentence wraps it in a negation; only the wrap verdict
+    -- may override the alias's implied boolean (the full DetectBoolean is
+    -- label-blind and would invert hide-named aliases).
+    if bestValue ~= nil and setting and setting.type == "boolean" then
+        local wrapped = P.NegationWrappedBoolean and P.NegationWrappedBoolean(text)
+        if wrapped ~= nil and wrapped ~= bestValue then
+            bestValue = wrapped
         end
     end
     return bestValue
@@ -2153,6 +2180,24 @@ local function RegistrySuggestions(text, raw, settings)
     end
     if #filtered == 1 then
         local setting = filtered[1].setting
+        -- "make the target frame 20 wider" is a dimension request with an
+        -- AXIS; this partial-score sweep must not hand its number to a
+        -- control on the wrong axis or an unrelated number (Target Absorb
+        -- Bar HEIGHT took the 20 from "wider").
+        do
+            local own = (tostring(setting and setting.label or "") .. " "
+                .. tostring(setting and setting.attribute or "")):lower()
+            if ContainsAny(text, { "wider", "narrower", "breiter", "schmaler" }) then
+                if not own:find("width", 1, true) then return nil end
+            elseif ContainsAny(text, { "taller", "shorter", "hoeher" }) then
+                if not own:find("height", 1, true) then return nil end
+            elseif ContainsAny(text, { "bigger", "smaller", "groesser", "kleiner" }) then
+                if not (own:find("width", 1, true) or own:find("height", 1, true)
+                    or own:find("size", 1, true) or own:find("scale", 1, true)) then
+                    return nil
+                end
+            end
+        end
         return {
             kind = "changes",
             changes = filtered,
@@ -2231,7 +2276,10 @@ P.DirectionalNumberDeltaForSetting = function(setting, text, fallbackAmount)
             or tonumber(setting.step)
             or 1
     end
-    if setting.percent == true and amount > 1 then amount = amount / 100 end
+    -- Convert to a fraction only when the number cannot already be in range:
+    -- "scale to 1.2" is a multiplier on a 0.25-1.5 control, "opacity 50" is a
+    -- percentage on a 0-1 control.
+    if setting.percent == true and amount > 1 and amount > (tonumber(setting.max) or 1) then amount = amount / 100 end
     if direction == "left" or direction == "down" then amount = -amount end
     return amount
 end
@@ -2335,7 +2383,7 @@ RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
             or (setting and tonumber(setting.step))
             or 1
     end
-    if setting and setting.percent == true and amount > 1 then amount = amount / 100 end
+    if setting and setting.percent == true and amount > 1 and amount > (tonumber(setting.max) or 1) then amount = amount / 100 end
     return amount * sign
 end
 
@@ -2457,8 +2505,21 @@ function P.ExplicitBooleanCommandValue(setting, text)
         end
         return false
     end
-    if stated(P.EXPLICIT_BOOLEAN_OFF_TERMS) then return false end
-    if stated(P.EXPLICIT_BOOLEAN_ON_TERMS) then return true end
+    local statedValue
+    if stated(P.EXPLICIT_BOOLEAN_OFF_TERMS) then
+        statedValue = false
+    elseif stated(P.EXPLICIT_BOOLEAN_ON_TERMS) then
+        statedValue = true
+    end
+    if statedValue ~= nil then
+        -- "isnt it possible to NOT show debuffs" contains the ON verb inside
+        -- a negation this term scan cannot see; ONLY the wrapped-negation
+        -- verdict may override (the full DetectBoolean is label-blind and
+        -- would invert "turn on party hide name on dead or offline").
+        local wrapped = P.NegationWrappedBoolean and P.NegationWrappedBoolean(text)
+        if wrapped ~= nil and wrapped ~= statedValue then return wrapped end
+        return statedValue
+    end
     return nil
 end
 
@@ -2541,7 +2602,7 @@ ValueForRegistrySetting = function(setting, text, raw)
         local boolValue = BooleanValueForNumberSetting(setting, text)
         if boolValue ~= nil then return boolValue end
         local value = A._NumberValueForText(setting, text)
-        if value and setting.percent == true and value > 1 then value = value / 100 end
+        if value and setting.percent == true and value > 1 and value > (tonumber(setting.max) or 1) then value = value / 100 end
         return value
     end
     if setting.type == "enum" then
@@ -5875,10 +5936,21 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
     -- out of the sweep entirely (Class Resources have no outline colour; the
     -- shared Bar Outline Color was taking the write).
     local classPowerIntent
+    local classPowerWording
     do
         local hay = " " .. Normalize(raw or text) .. " "
-        classPowerIntent = (hay:find("class power", 1, true) or hay:find("class resource", 1, true)
-            or hay:find("classpower", 1, true)) and hay:find("outline", 1, true) ~= nil
+        classPowerWording = hay:find("class power", 1, true) ~= nil or hay:find("class resource", 1, true) ~= nil
+            or hay:find("classpower", 1, true) ~= nil or hay:find("combo point", 1, true) ~= nil
+            or hay:find("holy power", 1, true) ~= nil or hay:find("soul shard", 1, true) ~= nil
+            or hay:find("resource bar", 1, true) ~= nil or hay:find("klassenressource", 1, true) ~= nil
+        classPowerIntent = classPowerWording and hay:find("outline", 1, true) ~= nil
+    end
+    -- Label check only: keys carry "classPower" for controls whose visible
+    -- name does not ("Detached Power Bar Outline"), and those stay reachable
+    -- without class wording.
+    local function ClassLabeledControl(setting)
+        local lbl = tostring(setting and setting.label or ""):lower()
+        return lbl:find("class resource", 1, true) ~= nil or lbl:find("class power", 1, true) ~= nil
     end
     local function LacksClassPowerIdentity(setting)
         local own = (tostring(setting and setting.key or "") .. " "
@@ -5923,6 +5995,10 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
         local score = ((destructiveMenuBlock and tostring(setting.key or ""):sub(1, 5) == "menu.")
             or ((rgbTripletPresent or colorChannelIntent) and setting.type == "number" and not setting.assistantColorChannel)
             or (classPowerIntent and LacksClassPowerIdentity(setting))
+            -- The inverse: "health text size" / "power text size" wording that
+            -- never says class must not land on a Class Resource control
+            -- ("chnage healht text size" was writing Class Resource Font Size).
+            or (not classPowerWording and ClassLabeledControl(setting))
             or LacksTextSlotIdentity(setting)) and 0
             or SettingMatchScore(setting, text)
         -- "bold" names Bold Text / Font Outline. A candidate that owns neither

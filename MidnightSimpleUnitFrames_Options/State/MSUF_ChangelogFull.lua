@@ -8,12 +8,56 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E90ACAC10522CC5966DAFB58D5FDD6C9B0BAA8A04CC0CF1BE2B6C2CE2792DC1A",
-    currentVersion = "6.13-beta2",
+    sourceSha256 = "51DB4505EF1420002EFEBCF44D3216F4BDF431C67D23F962E4FCE94B4CE5E23D",
+    currentVersion = "6.13-beta3",
     historyFromVersion = "6.02",
-    previousVersion = "6.13-beta1",
-    rangeLabel = "6.13-beta1 -> 6.13-beta2",
+    previousVersion = "6.13-beta2",
+    rangeLabel = "6.13-beta2 -> 6.13-beta3",
     entries = {
+        {
+            version = "6.13-beta3",
+            date = "2026-08-27",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Focus Kick can now stay visible beside the Focus castbar. The new option keeps the compact interrupt icon while restoring the matching Focus castbar and its normal cast ownership.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "show castbar with focus kick icon",
+                                label = "Show castbar with Focus Kick icon",
+                                sectionId = "castbar_focus_kick",
+                                controlId = "menu2.opt.castbar.global.focus.kick.focus.kick.show.castbar",
+                                settingKey = "general.focusKickShowCastbar",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Party Frames now honor the configured Units per column and Max columns values instead of forcing a single secure column, including combat-safe secure-header growth.",
+                        "The Assistant now understands German negative determiners and double negatives, can switch all supported MSUF or Blizzard Unit Frames globally, and retries zero-result setting searches with registered synonyms.",
+                        "Explicit Assistant setting searches resolve exact registry aliases, full portrait control labels resolve to their owning controls, and ambiguous read-only questions remain non-mutating.",
+                        "Typed HEX colors in the compact color picker now commit on Enter through the same apply path as the visual picker.",
+                        "The Group Frame preview roster now includes B3NZII.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "The Player Castbar now ignores interrupted-spell events when no real cast is active, preventing false \"Interrupted\" flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle, and Empower feedback.",
+                        "Live Party, Raid, and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; Edit Mode and previews keep the configured point semantics, and unavailable protected geometry fails closed.",
+                        "The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition, without adding polling or permanent update work.",
+                        "Assistant routing preserves the original request polarity and capability intent across page-context resolution, preventing safe questions from being rewritten into setting changes.",
+                        "Read-only Assistant questions now reach their dedicated definition, location, relationship, and diagnostic lanes before broad registry scans, keeping cold responses within the interactive latency budget without polling or background work.",
+                        "The Assistant's unloaded-Menu group-copy fallback now mirrors the native copy categories for chunked health and power fills while excluding anchor and migration-only fields.",
+                        "Focus Kick castbar state follows the icon lifecycle and clears stale cast ownership when the combined display is disabled.",
+                    },
+                },
+            },
+        },
         {
             version = "6.13-beta2",
             date = "2026-08-26",

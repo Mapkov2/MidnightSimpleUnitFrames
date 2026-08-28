@@ -214,7 +214,9 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
     })
     RegisterUnitEnum(unit, "portraitDetachedTo", "portraitDetachedTo", "Portrait Attach To Frame Point", "LEFT",
         PORTRAIT_ANCHOR_POINT_VALUES,
-        MakeAliases(unit, "portrait attach to", "detached portrait frame point"), {
+        -- Full noun included: see the group-frame twin — the truncated
+        -- "attach to" alias alone fail-closed the natural full-label sentence.
+        MakeAliases(unit, "portrait attach to", "portrait attach to frame point", "detached portrait frame point"), {
         category = "Portrait",
         description = "Which point of the unit frame the detached portrait is pinned to.",
         valueAliases = PORTRAIT_ANCHOR_POINT_ALIASES,

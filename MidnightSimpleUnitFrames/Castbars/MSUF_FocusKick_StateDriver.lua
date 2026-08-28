@@ -37,6 +37,11 @@ local function FocusKickEnabled()
     return db.general.enableFocusKickIcon == true
 end
 
+local function FocusKickShowsCastbar()
+    local db = G.MSUF_DB
+    return db and db.general and db.general.focusKickShowCastbar == true
+end
+
 local function SetFocusCastbarSuppressed(suppressed)
     local focusCastbar = G.MSUF_FocusCastBar or G.MSUF_FocusCastbar
         or ((G.FocusCastBar and G.FocusCastBar._msufCastbarDriver == true) and G.FocusCastBar)
@@ -86,7 +91,7 @@ local function ApplyState(state, stateProvided)
     end
 
     EnsureFocusKickUI()
-    SetFocusCastbarSuppressed(true)
+    SetFocusCastbarSuppressed(not FocusKickShowsCastbar())
     if not stateProvided and state == nil and type(G.MSUF_BuildCastState) == "function" then
         state = G.MSUF_BuildCastState("focus")
     end
@@ -134,10 +139,12 @@ G.MSUF_FocusKickDriver_ForceUpdate = function()
         ApplyState(nil, true)
         return
     end
+    SetFocusCastbarSuppressed(not FocusKickShowsCastbar())
     QueueRefresh(nil, false)
 end
 
 if FocusKickEnabled() then
     SetSubscribed(true)
+    SetFocusCastbarSuppressed(not FocusKickShowsCastbar())
     G.C_Timer.After(0.2, G.MSUF_FocusKickDriver_ForceUpdate)
 end

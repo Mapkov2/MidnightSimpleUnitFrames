@@ -3488,6 +3488,7 @@ if g.kickNotReadyColor   == nil then g.kickNotReadyColor   = { ["1"] = 1, ["2"] 
     InitCastbarDetailDefaults("bossCast")
     --- Focus Kick Icon defaults
     if g.enableFocusKickIcon == nil then g.enableFocusKickIcon = false end
+    if g.focusKickShowCastbar == nil then g.focusKickShowCastbar = false end
     if g.focusKickIconWidth == nil then g.focusKickIconWidth = 40 end
     if g.focusKickIconHeight == nil then g.focusKickIconHeight = 40 end
     if g.focusKickIconOffsetX == nil then g.focusKickIconOffsetX = 300 end

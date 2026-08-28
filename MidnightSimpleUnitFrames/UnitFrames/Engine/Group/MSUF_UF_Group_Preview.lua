@@ -64,7 +64,7 @@ local PREVIEW_CLASSES = {
 --- it was; the crew below fills the extra raid rows.
 local PREVIEW_NAMES = {
   "Mapko", "Jaina", "Thrall", "Tyrande", "Anduin",
-  "Aur0r4", "Dun", "Sif", "Jayee", "Kev", "Slickrock", "Uplift", "Zaazu", "Sha",
+  "Aur0r4", "Dun", "Sif", "Jayee", "Kev", "Slickrock", "Uplift", "Zaazu", "Sha", "B3NZII",
 }
 local PREVIEW_ROLES = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "HEALER" }
 

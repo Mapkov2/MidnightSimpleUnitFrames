@@ -688,6 +688,9 @@ OM.unitRootFrameDetailTerms = OM.unitRootFrameDetailTerms or {
     "ready check", "raid marker", "status", "indicator", "combat", "resting", "leader", "assist",
     "level", "level indicator", "level text", "pvp", "pvp flag", "pvp icon",
     "leben", "gesundheit", "lebenspunkte", "lebensanzeige", "energie", "ressource", "ressourcen",
+    -- "nudge the player frame width up" adjusts a DIMENSION; the move lane
+    -- reading "up" as an offset direction turned it into a Y move.
+    "width", "height", "size", "scale", "breite", "hoehe",
 }
 
 function OM.UnitRootFrameMoveScopes(text)
@@ -903,6 +906,9 @@ end
 
 local function ParseGenericOffsetMove(text)
     if not OM.HasIntent(text) then return nil end
+    -- "nudge the player frame width up" adjusts a DIMENSION; reading "up" as
+    -- an offset direction turned it into a Y move.
+    if ContainsAny(text, { "width", "height", "breite", "hoehe" }) then return nil end
     if text:find("focus kick", 1, true)
         and (text:find("tracker", 1, true) or text:find("icon", 1, true))
     then
@@ -3567,8 +3573,14 @@ local function ParseUnitOpacityShortcut(text)
     local powerOpacity = ContainsAny(text, GeometryPhrases[220])
     local backgroundOpacity = ContainsAny(text, GeometryPhrases[221])
     if ContainsAny(text, GeometryPhrases[222]) then return nil end
+    -- "stop making the boss frames transparent" negates the transparency
+    -- wording: the request is full opacity, not another step down.
+    local negatedTransparency = ContainsAny(text, { "transparent", "transparenter", "transparency", "see through", "durchsichtig", "durchsichtiger" })
+        and ContainsAny(text, { "stop", "dont", "do not", "no more", "never", "quit", "nicht mehr" })
     local relativeDelta
-    if ContainsAny(text, GeometryPhrases[223]) then
+    if negatedTransparency then
+        relativeDelta = nil
+    elseif ContainsAny(text, GeometryPhrases[223]) then
         local amount = FirstNumber(text) or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = -amount
@@ -3580,7 +3592,9 @@ local function ParseUnitOpacityShortcut(text)
         relativeDelta = RelativeNumberDeltaForText({ percent = true, step = 0.05 }, text)
     end
     local value
-    if relativeDelta == nil then
+    if negatedTransparency then
+        value = 1
+    elseif relativeDelta == nil then
         value = FirstNumber(text)
         if value == nil then return nil end
         if value > 1 then value = value / 100 end

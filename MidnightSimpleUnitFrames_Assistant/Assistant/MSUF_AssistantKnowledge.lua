@@ -1338,10 +1338,13 @@ local function CountRegisteredForPage(page)
     return settings, actions
 end
 
-local function PageHelp(page, titleOverride)
+local function PageHelp(page, titleOverride, opts)
     page = page or CurrentPageKey()
     local spec = PAGE_HELP[page] or PAGE_HELP.home
-    local settings, actions = CountRegisteredForPage(page)
+    local settings, actions = 0, 0
+    if not (opts and opts.staticOnly == true) then
+        settings, actions = CountRegisteredForPage(page)
+    end
     local lines = {}
     lines[#lines + 1] = tostring(titleOverride or spec.title or PageLabel(page))
     for i = 1, #(spec.lines or {}) do lines[#lines + 1] = spec.lines[i] end
@@ -2366,12 +2369,33 @@ local function PriorityFramesAnswer(norm)
     })
 end
 
+local function IsStaticAuraFilterDefinition(norm)
+    return norm == "what is aura filtering" or norm == "what are aura filters"
+        or norm == "explain aura filtering" or norm == "explain aura filters"
+end
+
+function K.IsStaticConceptDefinition(query)
+    local router = A.RouterPrivate
+    local semanticQuery = router and type(router.StripResponseLanguageDirective) == "function"
+        and router.StripResponseLanguageDirective(query) or query
+    return IsStaticAuraFilterDefinition(Normalize(semanticQuery))
+end
+
 local function DirectHelpAnswer(query, opts)
-    local norm = Normalize(query)
-    local addonCompanions = ComplementaryAddonAnswer(query)
+    local router = A.RouterPrivate
+    local semanticQuery = router and type(router.StripResponseLanguageDirective) == "function"
+        and router.StripResponseLanguageDirective(query) or query
+    local norm = Normalize(semanticQuery)
+    local addonCompanions = ComplementaryAddonAnswer(semanticQuery)
     if addonCompanions then return addonCompanions end
     local priorityFrames = PriorityFramesAnswer(norm)
     if priorityFrames then return priorityFrames end
+    -- This is a fixed concept article, not a leaf-control lookup. Answer it
+    -- before the cold exact-label index; response-language directives have
+    -- already been removed in semanticQuery above.
+    if IsStaticAuraFilterDefinition(norm) then
+        return PageHelp("auras3_filters", nil, { staticOnly = true })
+    end
     -- A question that names one exact control is about that control, not about
     -- the topic its words happen to belong to. Concept vocabulary turns up
     -- inside plenty of real labels ("UnitFrame Dispel Overlay Opacity" was
@@ -2384,15 +2408,27 @@ local function DirectHelpAnswer(query, opts)
         or norm:match("^i'm%s+trying%s+")
         or norm:match("^im%s+trying%s+")
         or norm:match("^i%s+need%s+help%s+with%s+")
+        or norm:match("^i%s+want%s+to%s+configure%s+")
+        or norm:match("^i%s+want%s+to%s+set%s+up%s+")
     if not scopedHelpWrapper
         and type(A.RouterNamedSettingLabel) == "function"
     then
-        local namedLabel = A.RouterNamedSettingLabel(query)
+        -- This precedence is explicitly for a visible exact label. Aliases are
+        -- concept vocabulary here and are discarded by the literal-name test
+        -- below, so building the broad alias index can never change the result.
+        local namedLabel = A.RouterNamedSettingLabel(semanticQuery, true)
         -- "what are party frames" reaches Party Frames Enabled only through
         -- the category alias; the definitional question belongs to the
-        -- concept blocks below, not the toggle.
+        -- concept blocks below, not the toggle. The same holds for any
+        -- definitional question that does not literally spell the resolved
+        -- label: "what is font outline" asks about the concept, not the
+        -- "Shared Font Outline" control an alias happens to reach.
         local definitional = norm:match("^what%s+is%s+") ~= nil or norm:match("^what%s+are%s+") ~= nil
-        if namedLabel and not (definitional and tostring(namedLabel):match(" Frames? Enabled$") ~= nil) then
+        local labelNorm = namedLabel and Normalize(tostring(namedLabel)) or ""
+        local literallyNamed = labelNorm ~= "" and norm:find(labelNorm, 1, true) ~= nil
+        if namedLabel and not (definitional
+            and (tostring(namedLabel):match(" Frames? Enabled$") ~= nil or not literallyNamed))
+        then
             return nil
         end
     end
@@ -3303,6 +3339,17 @@ function K.Answer(query, opts)
     -- understand that" is more useful than a confident wrong list. Location and
     -- FAQ intents are answered above and keep their own thresholds.
     if (topResult.score or 0) < K.MIN_GENERIC_LIST_SCORE then return nil end
+
+    -- A precise Router location/setting lane beats a generic list even when
+    -- the intent classifier did not read the query as a location ask ("how do
+    -- I hide player name" is a text-lane question, not a filter list).
+    if opts.forceSearch ~= true and type(A.RouterLocationLaneReply) == "function" then
+        local routerNorm = tostring(Normalize(query) or "")
+            :gsub("healthbar", "health bar"):gsub("powerbar", "power bar")
+            :gsub("castbar", "cast bar"):gsub("manabar", "mana bar")
+        local laneReply = A.RouterLocationLaneReply(routerNorm)
+        if laneReply then return AsReadOnlyKnowledgeResult(laneReply) end
+    end
 
     local lines = { "I found these MSUF matches:" }
     for i = 1, math.min(#results, 5) do lines[#lines + 1] = FormatResultLine(i, results[i].item) end

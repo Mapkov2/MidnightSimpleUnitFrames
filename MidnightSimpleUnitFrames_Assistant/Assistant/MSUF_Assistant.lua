@@ -7364,15 +7364,23 @@ function AP.ReadOnlyGuardResult(text)
     -- Refusing to write is right; refusing to answer is not. "Can I change
     -- Boss Buff Player Filter" names the control, so say yes and point at it
     -- instead of describing the guard that stopped the write.
-    local label = type(A.RouterNamedSettingLabel) == "function"
-        and A.RouterNamedSettingLabel(text) or nil
+    local router = A.RouterPrivate
+    local lookupText = router and type(router.StripResponseLanguageDirective) == "function"
+        and router.StripResponseLanguageDirective(text) or text
+    -- Definition/location/how-to shapes already have reviewed read-only owners.
+    -- Do not build the broad alias index merely to decorate the safety fallback;
+    -- capability questions (the case this helper was added for) still resolve
+    -- their exact control name below.
+    local knowledgeQuestion = router and type(router.LooksLikeKnowledgeQuestionPrefix) == "function"
+        and router.LooksLikeKnowledgeQuestionPrefix(lookupText) or false
+    local label = not knowledgeQuestion and type(A.RouterNamedSettingLabel) == "function"
+        and A.RouterNamedSettingLabel(lookupText) or nil
     if label and label ~= "" then
         local noop = function() return nil end
         local located = type(A.RouterTryRegistrySettingLocationShortcut) == "function"
             and A.RouterTryRegistrySettingLocationShortcut("where is " .. label, noop) or nil
         local body = located and tostring(located.text or "") or nil
         if not body or body == "" then
-            local router = A.RouterPrivate
             local direct = router and type(router.NamedSettingDirectAnswer) == "function"
                 and router.NamedSettingDirectAnswer(label) or nil
             body = direct and tostring(direct.text or "") or nil
@@ -7449,13 +7457,18 @@ function A.ExecutePlan(plan, opts)
     opts = opts or {}
     if type(plan) ~= "table" then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
     local sourceText = opts.sourceText or plan.sourceText or plan.raw
-    local guarded = sourceText
-        and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
-        and A.RouterIsFailClosedReadOnlyRequest(sourceText)
     local actionMutability = plan.kind == "action" and tostring(plan.action and plan.action.mutability or "") or nil
     local actionKey = plan.kind == "action" and tostring(plan.action and plan.action.key or "") or ""
     local guidedTourAction = actionKey == "guided_setup" or actionKey == "guided_setup_step"
         or actionKey == "restart_upgrade_highlight_tour"
+    -- Read-only and navigation actions cannot write, so reclassifying their
+    -- canonical source text here only repeats broad exact-setting discovery.
+    -- Mutation plans still pass through the same fail-closed guard below.
+    local guardRequired = plan.kind == "changes"
+        or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")
+    local guarded = guardRequired and sourceText
+        and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+        and A.RouterIsFailClosedReadOnlyRequest(sourceText)
     if guarded and not guidedTourAction
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
@@ -7480,8 +7493,29 @@ function A.ExecutePlan(plan, opts)
         -- control that lacks class-power identity, whichever lane planned it.
         local function ClassPowerOutlineMismatch(hay)
             hay = " " .. tostring(hay or ""):lower() .. " "
-            if not ((hay:find("class power", 1, true) or hay:find("class resource", 1, true)
-                or hay:find("classpower", 1, true)) and hay:find("outline", 1, true)) then
+            -- Proximity-based: the guard exists for wording that names a
+            -- class-power OUTLINE as one phrase ("set class power outline to
+            -- red"). In compounds — connector-joined or bare — the two
+            -- families legitimately appear far apart ("...Outline Thickness 4
+            -- ... Class Resource Anchor..."), so only nearby mentions veto.
+            local nearest
+            local outlineStart = 1
+            while true do
+                local oS = hay:find("outline", outlineStart, true)
+                if not oS then break end
+                for _, word in ipairs({ "class power", "class resource", "classpower" }) do
+                    local cStart = 1
+                    while true do
+                        local cS = hay:find(word, cStart, true)
+                        if not cS then break end
+                        local dist = math.abs(cS - oS)
+                        if not nearest or dist < nearest then nearest = dist end
+                        cStart = cS + 1
+                    end
+                end
+                outlineStart = oS + 1
+            end
+            if not nearest or nearest > 32 then
                 return false
             end
             for i = 1, #(plan.changes or {}) do
@@ -8489,6 +8523,15 @@ function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendi
             return nil
         end
     end
+    -- The MSUF/Blizzard global frame switch is one atomic command even when
+    -- phrased as two halves ("turn on all blizzard unitframes and turn off
+    -- msuf frames"); splitting it would plan the halves separately.
+    do
+        local R = A.RouterPrivate
+        if R and type(R.GlobalFrameSwitchIntent) == "function" and R.GlobalFrameSwitchIntent(text) then
+            return nil
+        end
+    end
     local parts = { Trim(text) }
     local connectors = { " and ", " then ", " und ", " dann " }
     local changed = true
@@ -8781,6 +8824,14 @@ end
 
 function AP.TryImmediateSubmitResult(text, opts)
     if type(A.TryImmediateConversationReply) ~= "function" then return nil end
+    local router = A.RouterPrivate
+    local semanticText = router and type(router.StripResponseLanguageDirective) == "function"
+        and router.StripResponseLanguageDirective(text) or text
+    if router and type(router.LooksLikeKnowledgeQuestionPrefix) == "function"
+        and router.LooksLikeKnowledgeQuestionPrefix(semanticText)
+    then
+        return nil
+    end
     if AP.SplitBatchCommands(text) then return nil end
     local parser = A.Parser or {}
     local normalized = type(parser.Normalize) == "function" and parser.Normalize(text) or tostring(text or ""):lower()
@@ -9008,6 +9059,19 @@ function AP.RequiresExactMovementRouting(text)
         or AP.RequiresOwnedComponentMovementRouting(text)
 end
 
+function AP.PriorityClarificationPlan(text, normalized)
+    local parser = A.Parser or {}
+    local normalize = parser.Normalize
+    normalized = normalized or (type(normalize) == "function" and normalize(text))
+    if not normalized or normalized == "" then return nil end
+    if parser.ParseBareFontTextColorModeChoice then
+        return parser.ParseBareFontTextColorModeChoice(normalized)
+    elseif parser.ParseBareHPTextColorModeChoice then
+        return parser.ParseBareHPTextColorModeChoice(normalized)
+    end
+    return nil
+end
+
 function AP.TryImmediateMutationResult(text, opts)
     if InCombat() or A.pendingConfirmation or CurrentPendingChoices() then return nil end
     local pendingResults = CurrentPendingResults()
@@ -9019,6 +9083,15 @@ function AP.TryImmediateMutationResult(text, opts)
     if normalized == "" then return nil end
     if AP.BarOutlineColorSemanticPlan(text) then return nil end
     local routePrivate = A.RouterPrivate
+    -- The MSUF/Blizzard global frame switch is an atomic multi-setting
+    -- command owned by its Router lane; the exact-alias fast path would
+    -- resolve one clause ("turn on all blizzard unitframes ...") to a single
+    -- control and invert or drop the rest of the request.
+    if routePrivate and type(routePrivate.GlobalFrameSwitchIntent) == "function"
+        and routePrivate.GlobalFrameSwitchIntent(text)
+    then
+        return nil
+    end
     -- A build request is not a mutation. "I want to track a spell on my player
     -- frame" contains "player frame", which this fast path matched to Player
     -- Frame Enabled and answered "already enabled". Let the Router explain how
@@ -9097,12 +9170,7 @@ function AP.TryImmediateMutationResult(text, opts)
     -- Exact value-less font text-color requests have a reviewed enum-choice
     -- parser. Preserve that O(1) clarification before the generic open-ended
     -- guard either guesses a mode or sends the request through fuzzy guidance.
-    local priorityClarification
-    if parser.ParseBareFontTextColorModeChoice then
-        priorityClarification = parser.ParseBareFontTextColorModeChoice(normalized)
-    elseif parser.ParseBareHPTextColorModeChoice then
-        priorityClarification = parser.ParseBareHPTextColorModeChoice(normalized)
-    end
+    local priorityClarification = AP.PriorityClarificationPlan(text, normalized)
     -- Multiple explicit clauses must stay together.  Let the deferred batch
     -- path parse and apply them atomically instead of allowing a warm exact-
     -- alias index to consume only the final frame name.
@@ -9470,23 +9538,30 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     -- first clause and silently discard the remaining commands (for example,
     -- "turn off target name and turn off focus name").
     local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
-    local exactMovement = AP.RequiresExactMovementRouting(text)
+    -- Value-less text-color requests are deliberately classified fail-closed,
+    -- but their bounded parser returns a retained enum choice without writing.
+    -- Preserve that one reviewed clarification while keeping all broad
+    -- mutation discovery off ordinary read-only questions.
+    local priorityClarification = failClosedReadOnly and AP.PriorityClarificationPlan(text) or nil
+    local exactMovement = not failClosedReadOnly and AP.RequiresExactMovementRouting(text)
     local batchParts = not failClosedReadOnly and not exactMovement and AP.SplitBatchCommands(text) or nil
     -- "Is there Boss Texture Layer 3 Offset X in MSUF?" asks whether a control
     -- exists. The immediate mutation lane would treat the "3" inside the label
     -- as the value to apply and move the frame, so existence questions have to
     -- reach the router instead of being answered by a write.
-    local existenceQuestion = type(A.RouterIsFeatureExistenceQuestion) == "function"
+    local existenceQuestion = not failClosedReadOnly and type(A.RouterIsFeatureExistenceQuestion) == "function"
         and A.RouterIsFeatureExistenceQuestion(text) == true
     -- Same reason: "the bar color for NPCs should be class color" reached this
     -- lane and wrote Party Bar Color Mode, dropping the NPC qualifier.
-    local npcBarColor = type(A.RouterIsNpcQualifiedBarColorRequest) == "function"
+    local npcBarColor = not failClosedReadOnly and type(A.RouterIsNpcQualifiedBarColorRequest) == "function"
         and A.RouterIsNpcQualifiedBarColorRequest(text) == true
     -- A question that names a control ("show me Mythic Raid Masque Enabled")
     -- is a lookup, not the instruction its label happens to spell out.
-    local namedLookup = type(A.RouterIsNamedSettingLookup) == "function"
+    local namedLookup = not failClosedReadOnly and type(A.RouterIsNamedSettingLookup) == "function"
         and A.RouterIsNamedSettingLookup(text) == true
-    if not batchParts and not existenceQuestion and not npcBarColor and not namedLookup then
+    if (not failClosedReadOnly or priorityClarification)
+        and not batchParts and not existenceQuestion and not npcBarColor and not namedLookup
+    then
         local immediateMutation = AP.TryImmediateMutationResult(text, opts)
         if immediateMutation then return immediateMutation end
     end
@@ -9574,7 +9649,7 @@ function A.Submit(text)
         -- The exception is a sentence that spells one control's registered
         -- wording in full: offering that control among three guesses is not a
         -- clarification, it is a miss, and the wording decides it.
-        local spelledOut = type(A.RouterPrivate) == "table"
+        local spelledOut = unresolved and type(A.RouterPrivate) == "table"
             and type(A.RouterPrivate.NamedBooleanIntentPlan) == "function"
             and A.RouterPrivate.NamedBooleanIntentPlan(text) or nil
         -- A size stated as a dimension idiom ("make the shield bar 6 pixels
@@ -9584,7 +9659,7 @@ function A.Submit(text)
         -- them the shield bar. That list is a miss for the same reason spelled
         -- out wording is: the rewrite resolves to exactly ONE control (checked
         -- inside CanonicalDimensionCommand), so it decides the sentence.
-        local sized = type(A.RouterPrivate) == "table"
+        local sized = unresolved and type(A.RouterPrivate) == "table"
             and type(A.RouterPrivate.CanonicalDimensionCommand) == "function"
             and A.RouterPrivate.CanonicalDimensionCommand(text) or nil
         if not sized and not (spelledOut and (tonumber(spelledOut.namedWordingTokens) or 0) >= 4) then
@@ -9594,6 +9669,18 @@ function A.Submit(text)
         -- A sentence carrying an RGB triplet states colour components; no
         -- rescue rewrite may hand one of those numbers to a number control.
         if unresolved and tostring(text or ""):find("%d+%s*,%s*%d+%s*,%s*%d+") then unresolved = false end
+        -- "can i change X" is a capability question whatever the normal path
+        -- answered (including "unchanged"); the rescue rewrite must never
+        -- turn it into a write. Checked last so no later override re-arms it.
+        if unresolved then
+            local rescueLead = tostring(text or ""):lower():gsub("^%s+", "")
+            if rescueLead:match("^can i%f[%A]") or rescueLead:match("^could i%f[%A]")
+                or rescueLead:match("^may i%f[%A]") or rescueLead:match("^kann ich%f[%A]")
+                or rescueLead:match("^darf ich%f[%A]")
+            then
+                unresolved = false
+            end
+        end
         if unresolved and type(A.RouterPrivate) == "table" and type(A.ExecutePlan) == "function" then
             local router = A.RouterPrivate
             -- The dimension rewrite is consulted last so nothing the existing

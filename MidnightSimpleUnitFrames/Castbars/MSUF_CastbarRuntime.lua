@@ -1092,7 +1092,7 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
         frame:Show()
     end
 
-    if frame.SetAlpha then
+    if frame.SetAlpha and frame._msufFocusKickSuppressed ~= true then
         frame:SetAlpha(1)
     end
 
@@ -1155,7 +1155,7 @@ function Runtime:ApplyInterrupt(frame, options)
         frame:Show()
     end
 
-    if frame.SetAlpha then
+    if frame.SetAlpha and frame._msufFocusKickSuppressed ~= true then
         frame:SetAlpha(1)
     end
 

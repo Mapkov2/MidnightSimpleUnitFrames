@@ -19,7 +19,11 @@ function A.ClassPowerRegistry.RegisterDisplayNumberSettings(ctx)
     local ClassPowerAliases = ctx.ClassPowerAliases
     if type(RegisterBarsNumber) ~= "function" or type(ClassPowerAliases) ~= "function" then return end
 
-    RegisterBarsNumber("classPowerFontSize", "fontSize", "Class Resource Font Size", 16, 6, 32, ClassPowerAliases("font size", "text size", "number size"), {
+    -- The extra aliases must stay class-qualified: bare "text size" hijacked
+    -- every unqualified text-size sentence ("halve the power text size").
+    RegisterBarsNumber("classPowerFontSize", "fontSize", "Class Resource Font Size", 16, 6, 32, ClassPowerAliases("font size",
+        "class power text size", "class resource text size", "class resources text size",
+        "class power number size", "class resource number size", "class resources number size"), {
         reason = "MSUF_ASSISTANT_CLASSPOWER_FONT_SIZE",
         exactAliases = {
             "class resource font",

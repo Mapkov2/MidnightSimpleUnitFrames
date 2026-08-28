@@ -594,10 +594,11 @@ local function EnsurePicker()
     compactHex:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
     compactHex:SetScript("OnMouseUp", function(self) self:HighlightText() end)
     compactHex:SetScript("OnEditFocusLost", function(self) self:SetText(panel._readoutHex or "") end)
-    compactHex:SetScript("OnTextChanged", function(self, userInput)
-        if userInput then self:SetText(panel._readoutHex or ""); self:HighlightText() end
-    end)
-    if M.AddTooltip then M.AddTooltip(compactHex, "HEX color", "Click to select the value, then press Ctrl+C to copy it.") end
+    compactHex._commit = function(self)
+        local r, g, b = FromHex(self:GetText())
+        if r then panel:Apply(r, g, b) else panel:Refresh() end
+    end
+    if M.AddTooltip then M.AddTooltip(compactHex, "HEX color", "Type a new value, then press Enter.") end
 
     local advancedCard = T.Panel(panel, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
     advancedCard:SetPoint("TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133)

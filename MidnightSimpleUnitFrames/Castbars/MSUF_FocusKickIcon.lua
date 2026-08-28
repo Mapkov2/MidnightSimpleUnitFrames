@@ -32,6 +32,7 @@ local function EnsureOptions()
 
     local general = db.general
     if general.enableFocusKickIcon == nil then general.enableFocusKickIcon = false end
+    if general.focusKickShowCastbar == nil then general.focusKickShowCastbar = false end
     if general.focusKickIconOffsetX == nil then general.focusKickIconOffsetX = 300 end
     if general.focusKickIconOffsetY == nil then general.focusKickIconOffsetY = 0 end
     if general.focusKickIconWidth == nil then general.focusKickIconWidth = 40 end

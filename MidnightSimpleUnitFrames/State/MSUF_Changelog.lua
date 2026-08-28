@@ -8,12 +8,56 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E90ACAC10522CC5966DAFB58D5FDD6C9B0BAA8A04CC0CF1BE2B6C2CE2792DC1A",
-    currentVersion = "6.13-beta2",
-    historyFromVersion = "6.11",
-    previousVersion = "6.13-beta1",
-    rangeLabel = "6.13-beta1 -> 6.13-beta2",
+    sourceSha256 = "51DB4505EF1420002EFEBCF44D3216F4BDF431C67D23F962E4FCE94B4CE5E23D",
+    currentVersion = "6.13-beta3",
+    historyFromVersion = "6.12",
+    previousVersion = "6.13-beta2",
+    rangeLabel = "6.13-beta2 -> 6.13-beta3",
     entries = {
+        {
+            version = "6.13-beta3",
+            date = "2026-08-27",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Focus Kick can now stay visible beside the Focus castbar. The new option keeps the compact interrupt icon while restoring the matching Focus castbar and its normal cast ownership.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "show castbar with focus kick icon",
+                                label = "Show castbar with Focus Kick icon",
+                                sectionId = "castbar_focus_kick",
+                                controlId = "menu2.opt.castbar.global.focus.kick.focus.kick.show.castbar",
+                                settingKey = "general.focusKickShowCastbar",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Party Frames now honor the configured Units per column and Max columns values instead of forcing a single secure column, including combat-safe secure-header growth.",
+                        "The Assistant now understands German negative determiners and double negatives, can switch all supported MSUF or Blizzard Unit Frames globally, and retries zero-result setting searches with registered synonyms.",
+                        "Explicit Assistant setting searches resolve exact registry aliases, full portrait control labels resolve to their owning controls, and ambiguous read-only questions remain non-mutating.",
+                        "Typed HEX colors in the compact color picker now commit on Enter through the same apply path as the visual picker.",
+                        "The Group Frame preview roster now includes B3NZII.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "The Player Castbar now ignores interrupted-spell events when no real cast is active, preventing false \"Interrupted\" flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle, and Empower feedback.",
+                        "Live Party, Raid, and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; Edit Mode and previews keep the configured point semantics, and unavailable protected geometry fails closed.",
+                        "The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition, without adding polling or permanent update work.",
+                        "Assistant routing preserves the original request polarity and capability intent across page-context resolution, preventing safe questions from being rewritten into setting changes.",
+                        "Read-only Assistant questions now reach their dedicated definition, location, relationship, and diagnostic lanes before broad registry scans, keeping cold responses within the interactive latency budget without polling or background work.",
+                        "The Assistant's unloaded-Menu group-copy fallback now mirrors the native copy categories for chunked health and power fills while excluding anchor and migration-only fields.",
+                        "Focus Kick castbar state follows the icon lifecycle and clears stale cast ownership when the combined display is disabled.",
+                    },
+                },
+            },
+        },
         {
             version = "6.13-beta2",
             date = "2026-08-26",
@@ -197,58 +241,6 @@ local data = {
                         "Class Resource, Player HP, Alternative Mana, detached-power width, and power-text controls now refresh their dependent enabled states immediately after changes, resets, undo, or Assistant application.",
                         "Gameplay configuration caching now follows the active profile table, and a failed gameplay apply can no longer leave later apply requests permanently blocked.",
                         "See New Features now reports the correct compact and full-history version ranges for 6.11.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.11",
-            date = "2026-08-21",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Expanded Buff Tracking is back for Custom 1-3 aura containers. Every whitelisted spell keeps a fixed slot, missing buffs show as dimmed placeholders, and the same slots can securely cast spells or use bound items when clicked.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "buff reminder fixed slots",
-                                label = "Buff Reminder",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_player.auras.unit-workspace.container-selector",
-                                settingKey = "auras3.player.custom1.placed.reminderEnabled",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "custom1_reminder",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Buff Reminder accepts Spell IDs, spell links, item links, and separate tracked-spell/item-action pairs. Player reminders can also track Main Hand and Off Hand temporary enchants, filter out spells the current character cannot apply, and pin shared consumables with Always show.",
-                        "Main Hand and Off Hand enchant reminders now show their remaining time and a shaped cooldown swipe. A configurable 5-240 minute duration keeps the swipe proportional after login or reload, while the native duration binding updates without polling.",
-                        "Reminder slots follow whitelist order, preserve their positions as auras appear or expire, and keep their secure click bindings fixed outside combat without polling or recurring aura reads.",
-                        "Localized the complete Buff Reminder setup, whitelist actions, weapon-enchant controls, status text, and tooltips across all 12 supported locales.",
-                        "The Assistant can now execute explicit multi-control requests clause by clause, including comma-separated and shared-scope commands, while continuing to fail closed for questions, planning requests, incomplete values, and ambiguous fragments.",
-                        "Menu pages, accordion sections, and Back/Forward navigation now switch immediately without transition fades or a recurring discovery pulse.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Friendly Target Range Fade becoming inaccurate in instanced combat when Blizzard temporarily stops returning a fresh range result. MSUF now keeps the last authoritative result until a native range event or a real target change supplies a replacement, without adding polling, timers, or an open-world fallback path.",
-                        "Castbars reuse unchanged manager topology and boss-frame geometry validation, resolve cast activity once per update, and share the player's plain interrupt-cooldown status across same-frame Target, Focus, and Boss refreshes.",
-                        "Player-first role-sorted Party Frames now wait for a complete Arena roster before publishing their secure name list and refresh on Arena match-state and unit-name transitions; the additional listeners remain disabled in PvE.",
-                        "The Assistant no longer mistakes player-count ranges inside Group Frame scale labels (such as 1-10 Players) for a requested value when none was supplied.",
-                        "Fixed Elemental Shamans seeing Maelstrom on both resource bars. While Maelstrom owns the Class Resource row, the Player power bar now consistently displays Mana across fill, current value, maximum, percentage, text color, and event filtering; disabling that row or entering a vehicle restores the primary resource.",
-                        "Applied the same resource-ownership transition to Shadow Priest Mana/Insanity and cleared both overrides when the Class Resource module shuts down.",
-                        "Made third-party cooldown-viewer and external-frame anchoring safe when 12.1 returns protected geometry. MSUF validates foreign frames once, shares one stable proxy between Unit Frames, and freezes that proxy at the combat edge instead of repeatedly touching every consumer.",
-                        "Boss castbars now prewarm at most one hidden bar per rendered frame when an encounter starts, avoiding one large synchronous layout burst while retaining authoritative validation when a real cast begins.",
-                        "Aura-name fallback scans are coalesced to one frame and permanently retire each resolved alias until the container configuration changes, removing repeated name lookups from unrelated full aura updates.",
-                        "Aura menu search now opens the Filters tool correctly for Player Defensives and Target Dots instead of falling back to Setup.",
-                        "Rounded Unit Frames no longer read the protected parent of Blizzard-owned dispel-overlay textures; the safe owner is captured before the region becomes forbidden and reused when masks are applied.",
-                        "Group Frame previews keep their generated character names when ordinary player-unit events refresh the dummy frames outside Edit Mode.",
                     },
                 },
             },

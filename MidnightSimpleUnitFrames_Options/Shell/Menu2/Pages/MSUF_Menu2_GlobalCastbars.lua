@@ -1252,7 +1252,7 @@ local function BuildCastbars(ctx)
     end
     LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154, build = BuildNameShorteningSection })
     local function BuildFocusKickSection(_, secBuilder)
-    local focusKick = secBuilder:CollapsibleSection("castbar_focus_kick", "Focus Kick", 326, false)
+    local focusKick = secBuilder:CollapsibleSection("castbar_focus_kick", "Focus Kick", 352, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(focusKick, {
             title = "Focus Kick Text & Colors",
@@ -1268,7 +1268,7 @@ local function BuildCastbars(ctx)
             },
         })
     end
-    local focusHint = W.Text(focusKick, "Track interrupts on your focus without showing the focus castbar.", 14, -38, (focusKick._msuf2Width or ctx.width or 720) - 28, T.colors.muted)
+    local focusHint = W.Text(focusKick, "Track interrupts on your focus with a detached kick icon, optionally alongside the Focus castbar.", 14, -38, (focusKick._msuf2Width or ctx.width or 720) - 28, T.colors.muted)
     if focusHint and focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     focusKick._msuf2CursorY = -68
     local focusLeftX, focusRightX = 14, 392
@@ -1306,6 +1306,13 @@ local function BuildCastbars(ctx)
                 return type(fn) == "function" and fn() or false
             end,
             setValue = function(v) Call("MSUF_FocusKick_SetPreviewEnabled", v and true or false) end, classification = "ephemeral" } },
+        { "toggle", "Show castbar with Focus Kick icon", focusLeftX, -126, 340, "focusKickShowCastbar", false, "MSUF2_FOCUS_KICK_CASTBAR", nil, { name = "show_castbar",
+            setValue = function(v)
+                if M.SetGeneralValue("focusKickShowCastbar", v and true or false, "MSUF2_FOCUS_KICK_CASTBAR",
+                    { applyAll = false, preview = false, notify = false }) then
+                    Call("MSUF_FocusKickDriver_ForceUpdate")
+                end
+            end } },
         { "slider", "Width", focusRightX, -74, 320, 16, 128, 1, "focusKickIconWidth", 40, "MSUF2_FOCUS_KICK_WIDTH", ApplyFocusKickOptions, { name = "width" } },
         { "slider", "Height", focusRightX, -128, 320, 16, 128, 1, "focusKickIconHeight", 40, "MSUF2_FOCUS_KICK_HEIGHT", ApplyFocusKickOptions, { name = "height" } },
         { "slider", "Text size", focusRightX, -182, 320, 8, 24, 1, nil, nil, nil, nil, { name = "text",
@@ -1320,11 +1327,11 @@ local function BuildCastbars(ctx)
                 RequestFocusKickTextFont()
                 ApplyFocusKickOptions()
             end } },
-        { "slider", "X offset", focusLeftX, -150, 320, -500, 500, 1, "focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_X", ApplyFocusKickOptions, { name = "x", setDefault = 0 } },
-        { "slider", "Y offset", focusLeftX, -204, 320, -500, 500, 1, "focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_Y", ApplyFocusKickOptions, { name = "y" } },
+        { "slider", "X offset", focusLeftX, -176, 320, -500, 500, 1, "focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_X", ApplyFocusKickOptions, { name = "x", setDefault = 0 } },
+        { "slider", "Y offset", focusLeftX, -230, 320, -500, 500, 1, "focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_Y", ApplyFocusKickOptions, { name = "y" } },
     }, "focus_kick")
     local resetFocus = W.Button(focusKick, "Reset Position", 150)
-    W.MoveWidget(resetFocus, focusKick, focusLeftX, -258)
+    W.MoveWidget(resetFocus, focusKick, focusLeftX, -284)
     resetFocus:SetScript("OnClick", function()
         SetG("focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
         SetG("focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
@@ -1332,11 +1339,11 @@ local function BuildCastbars(ctx)
         if M.RequestRefresh then M.RequestRefresh(ctx, "castbars-focus-kick-reset") elseif M.Refresh then M.Refresh(ctx) end
     end)
     RegisterControl(resetFocus, Meta("focus_kick.reset_position", "action"), "Reset Position", "button")
-    local focusKickControls = { focusControls.preview, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
+    local focusKickControls = { focusControls.preview, focusControls.show_castbar, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
     M.TrackRefresh(ctx, syncFocusKick)
     end
-    LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 326, build = BuildFocusKickSection })
+    LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 352, build = BuildFocusKickSection })
     local function BuildInterruptReadySection(_, secBuilder)
     local kick = secBuilder:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 328, false)
     if W.AttachContextColorReferences then
