@@ -276,19 +276,86 @@ for _, module in ipairs({
         "dedicated arena runtime is missing from the Mainline TOC: " .. module)
 end
 
-local trinketTocs = multiClientLayout and { "Mists", "TBC", "Vanilla" } or {}
-for _, toc in ipairs(trinketTocs) do
+local classicTocs = multiClientLayout and { "Mists", "TBC", "Vanilla" } or {}
+for _, toc in ipairs(classicTocs) do
     local tocSource = Read(tocRoot .. "_" .. toc .. ".toc")
-    Check(tocSource:find("Features\\Gameplay\\MSUF_Feature_ArenaTrinkets.lua", 1, true),
-        "arena trinket feature is missing from the " .. toc .. " TOC")
-    for _, mainlineOnlyModule in ipairs({
+    local previousFeature
+    for _, module in ipairs({
+        "Features\\Gameplay\\MSUF_Feature_TotemPreview.lua",
         "Features\\Gameplay\\MSUF_Feature_ArenaMatch.lua",
+        "Features\\Gameplay\\MSUF_Feature_ArenaTrinkets.lua",
+    }) do
+        local position = tocSource:find(module, 1, true)
+        Check(position, "arena feature load order is missing from the " .. toc .. " TOC: " .. module)
+        Check(not previousFeature or previousFeature < position,
+            "arena feature load order is invalid in the " .. toc .. " TOC: " .. module)
+        previousFeature = position
+    end
+
+    local previousCastbar
+    for _, module in ipairs({
+        "Castbars\\MSUF_BossCastbars.lua",
+        "Castbars\\MSUF_BossCastbars_Preview.lua",
         "Castbars\\MSUF_ArenaCastbars.lua",
         "Castbars\\MSUF_ArenaCastbars_Preview.lua",
+        "Castbars\\MSUF_Castbars.lua",
     }) do
-        Check(not tocSource:find(mainlineOnlyModule, 1, true),
-            "Mainline-only arena runtime leaked into the " .. toc .. " TOC: " .. mainlineOnlyModule)
+        local position = tocSource:find(module, 1, true)
+        Check(position, "arena castbar load order is missing from the " .. toc .. " TOC: " .. module)
+        Check(not previousCastbar or previousCastbar < position,
+            "arena castbar load order is invalid in the " .. toc .. " TOC: " .. module)
+        previousCastbar = position
     end
 end
+
+-- Classic exposes the arena lifecycle events but not
+-- PVP_MATCH_STATE_CHANGED. Pin both sides of the runtime event-validity gate:
+-- invalid clients must never register or unregister it, while Retail keeps it.
+local function ExerciseArenaCastbarEventGate(valid)
+    local registeredEvents, unregisteredEvents = {}, {}
+    _G.C_EventUtils = {
+        IsEventValid = function(event)
+            Check(event == "PVP_MATCH_STATE_CHANGED", "arena castbars validated the wrong event")
+            return valid
+        end,
+    }
+    _G.MSUF_DB = { general = { enableArenaCastbar = true } }
+    _G.EnsureDB = function() end
+    _G.MSUF_ShouldUseMSUFCastbar = function() return true end
+    _G.MSUF_EventBus_Register = function(event)
+        registeredEvents[event] = true
+        return true
+    end
+    _G.MSUF_EventBus_Unregister = function(event)
+        unregisteredEvents[event] = true
+        return true
+    end
+
+    local gateNamespace = {
+        ExportPublic = function(name, value)
+            _G[name] = value
+            return value
+        end,
+    }
+    assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua"))(
+        "MidnightSimpleUnitFrames", gateNamespace)
+
+    for _, event in ipairs({
+        "PLAYER_LOGIN",
+        "PLAYER_ENTERING_WORLD",
+        "ARENA_OPPONENT_UPDATE",
+        "ARENA_PREP_OPPONENT_SPECIALIZATIONS",
+    }) do
+        Check(registeredEvents[event] == true and unregisteredEvents[event] == true,
+            "arena castbar lifecycle lost its valid event: " .. event)
+    end
+    Check((registeredEvents.PVP_MATCH_STATE_CHANGED == true) == valid,
+        "arena castbars registered PVP_MATCH_STATE_CHANGED against IsEventValid")
+    Check((unregisteredEvents.PVP_MATCH_STATE_CHANGED == true) == valid,
+        "arena castbars unregistered PVP_MATCH_STATE_CHANGED against IsEventValid")
+end
+
+ExerciseArenaCastbarEventGate(false)
+ExerciseArenaCastbarEventGate(true)
 
 print("arena_unit_scope_smoke: ok")

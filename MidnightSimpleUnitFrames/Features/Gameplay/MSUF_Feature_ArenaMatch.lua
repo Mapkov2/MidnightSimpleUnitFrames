@@ -19,6 +19,10 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local MAX_ARENA = 3
+local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
+    and type(_G.C_EventUtils.IsEventValid) == "function"
+    and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
+local classicMatchEngaged = false
 
 local function InCombat()
     return _G.MSUF_InCombat == true
@@ -54,31 +58,47 @@ end
 local function MatchEngaged()
     local states = _G.Enum and _G.Enum.PvPMatchState
     local engaged = states and states.Engaged
-    return engaged ~= nil and MatchState() == engaged
+    if engaged ~= nil and MatchState() == engaged then return true end
+    return HAS_PVP_MATCH_STATE_CHANGED ~= true and classicMatchEngaged == true
 end
 
 local function MatchPreparing()
     local considered = _G.C_PvP and _G.C_PvP.IsMatchConsideredArena
-    if type(considered) ~= "function" or considered() ~= true then return false end
+    if type(considered) == "function" then
+        if considered() ~= true then return false end
 
-    -- Retail 12.1 reports the room/countdown as Waiting or StartUp. Neither
-    -- state satisfies IsMatchActive/IsMatchEngaged, so using the live-match
-    -- gate here suppresses every unitless preparation frame.
-    local state = MatchState()
-    local states = _G.Enum and _G.Enum.PvPMatchState
-    local waiting = states and states.Waiting or 1
-    local startUp = states and states.StartUp or 2
-    return state == waiting or state == startUp
+        -- Retail 12.1 reports the room/countdown as Waiting or StartUp. Neither
+        -- state satisfies IsMatchActive/IsMatchEngaged, so using the live-match
+        -- gate here suppresses every unitless preparation frame.
+        local state = MatchState()
+        local states = _G.Enum and _G.Enum.PvPMatchState
+        local waiting = states and states.Waiting or 1
+        local startUp = states and states.StartUp or 2
+        return state == waiting or state == startUp
+    end
+
+    -- Classic has the arena/prep events and opponent-spec APIs, but no
+    -- PVP_MATCH_STATE_CHANGED or C_PvP match-state API. The prep event arms
+    -- this path; the first opponent update performs the engaged hand-off.
+    local activeArena = _G.IsActiveBattlefieldArena
+    return HAS_PVP_MATCH_STATE_CHANGED ~= true
+        and type(activeArena) == "function" and activeArena() == true
+        and classicMatchEngaged ~= true
 end
 
 local function InArenaMatch()
     local considered = _G.C_PvP and _G.C_PvP.IsMatchConsideredArena
-    if type(considered) ~= "function" or considered() ~= true then return false end
-    local active = _G.C_PvP and _G.C_PvP.IsMatchActive
-    local complete = _G.C_PvP and _G.C_PvP.IsMatchComplete
-    return (type(active) == "function" and active() == true)
-        or (type(complete) == "function" and complete() == true)
-        or MatchEngaged()
+    if type(considered) == "function" then
+        if considered() ~= true then return false end
+        local active = _G.C_PvP and _G.C_PvP.IsMatchActive
+        local complete = _G.C_PvP and _G.C_PvP.IsMatchComplete
+        return (type(active) == "function" and active() == true)
+            or (type(complete) == "function" and complete() == true)
+            or MatchEngaged()
+    end
+    local activeArena = _G.IsActiveBattlefieldArena
+    return HAS_PVP_MATCH_STATE_CHANGED ~= true
+        and type(activeArena) == "function" and activeArena() == true
 end
 
 ------------------------------------------------------------------------
@@ -337,6 +357,7 @@ end
 
 local function HandleArenaMatchEvent(event, arg1, arg2)
     if event == "ARENA_PREP_OPPONENT_SPECIALIZATIONS" then
+        if HAS_PVP_MATCH_STATE_CHANGED ~= true then classicMatchEngaged = false end
         SyncPrepDisplay()
         return
     end
@@ -353,6 +374,16 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
             if index then
                 local plainReason = (not issecret or issecret(reason) ~= true) and reason or nil
                 unseenSlots[index] = (plainReason == "unseen") or nil
+                if HAS_PVP_MATCH_STATE_CHANGED ~= true then
+                    if plainReason == "seen" or plainReason == "unseen" or plainReason == "destroyed" then
+                        classicMatchEngaged = true
+                    elseif plainReason == "cleared" then
+                        local activeArena = _G.IsActiveBattlefieldArena
+                        if type(activeArena) ~= "function" or activeArena() ~= true then
+                            classicMatchEngaged = false
+                        end
+                    end
+                end
             end
         end
         if prepActive then SyncPrepDisplay() end
@@ -360,6 +391,10 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
+        if HAS_PVP_MATCH_STATE_CHANGED ~= true then
+            classicMatchEngaged = LiveUnitExists("arena1")
+                or LiveUnitExists("arena2") or LiveUnitExists("arena3")
+        end
         for index = 1, MAX_ARENA do
             unseenSlots[index] = nil
         end
@@ -379,7 +414,9 @@ local function WireEvents()
     local register = _G.MSUF_EventBus_Register
     if type(register) == "function" then
         register("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_MATCH_PREP", HandleArenaMatchEvent)
-        register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_MATCH_STATE", HandleArenaMatchEvent)
+        if HAS_PVP_MATCH_STATE_CHANGED then
+            register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_MATCH_STATE", HandleArenaMatchEvent)
+        end
         register("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_MATCH_OPPONENT", HandleArenaMatchEvent)
         register("PLAYER_ENTERING_WORLD", "MSUF_ARENA_MATCH_WORLD", HandleArenaMatchEvent)
         register("PLAYER_REGEN_ENABLED", "MSUF_ARENA_MATCH_REGEN", HandleArenaMatchEvent)
@@ -390,7 +427,7 @@ local function WireEvents()
         HandleArenaMatchEvent(event, ...)
     end)
     eventFrame:RegisterEvent("ARENA_PREP_OPPONENT_SPECIALIZATIONS")
-    eventFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED")
+    if HAS_PVP_MATCH_STATE_CHANGED then eventFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED") end
     eventFrame:RegisterEvent("ARENA_OPPONENT_UPDATE")
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")

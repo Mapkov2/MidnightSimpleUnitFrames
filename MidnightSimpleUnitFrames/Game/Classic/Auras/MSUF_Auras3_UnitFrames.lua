@@ -88,6 +88,7 @@ local BOSS_UNITS = {
 local MANAGED_UNITS = {
     player = true, target = true, focus = true,
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
+    arena1 = true, arena2 = true, arena3 = true,
 }
 local EMPTY_EVENTS = {}
 local COMBAT_AURA_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
@@ -123,6 +124,9 @@ local UNIT_FLAG = {
     boss3 = "showBoss",
     boss4 = "showBoss",
     boss5 = "showBoss",
+    arena1 = "showArena",
+    arena2 = "showArena",
+    arena3 = "showArena",
 }
 
 local DEFAULT_SHARED = {
@@ -583,10 +587,8 @@ local function NormalizeRuntimeUnit(unit)
     if unit and IsSecret(unit) == true then return nil end
     unit = tostring(unit or "player")
     if unit == "boss" then return "boss1" end
-    if BOSS_UNITS[unit] or unit == "player" or unit == "target" or unit == "focus" then
-        return unit
-    end
-    return nil
+    if unit == "arena" then return "arena1" end
+    return MANAGED_UNITS[unit] and unit or nil
 end
 
 --- The current 6.0 factory owns identity through MSUFUnitKey/unitKey, while
@@ -605,7 +607,9 @@ end
 
 local function NormalizeConfigUnit(unit)
     unit = NormalizeRuntimeUnit(unit)
-    return BOSS_UNITS[unit] and "boss" or unit
+    if BOSS_UNITS[unit] then return "boss" end
+    if unit == "arena1" or unit == "arena2" or unit == "arena3" then return "arena" end
+    return unit
 end
 
 local function IsGroupFrame(frame)
@@ -630,6 +634,7 @@ local function EnsureRootDB()
     if auras.showTarget == nil then auras.showTarget = true end
     if auras.showFocus == nil then auras.showFocus = true end
     if auras.showBoss == nil then auras.showBoss = true end
+    if auras.showArena == nil then auras.showArena = true end
     return auras, auras.shared
 end
 
@@ -4215,6 +4220,9 @@ local function RequestUnitNow(unit)
         for i = 1, 5 do
             didWork = ApplyRuntimeUnit("boss" .. i) or didWork
         end
+        for i = 1, 3 do
+            didWork = ApplyRuntimeUnit("arena" .. i) or didWork
+        end
         didWork = A3._RequestGroupKindNow(nil) or didWork
         return didWork
     end
@@ -4222,6 +4230,13 @@ local function RequestUnitNow(unit)
         local didWork = false
         for i = 1, 5 do
             didWork = ApplyRuntimeUnit("boss" .. i) or didWork
+        end
+        return didWork
+    end
+    if unit == "arena" then
+        local didWork = false
+        for i = 1, 3 do
+            didWork = ApplyRuntimeUnit("arena" .. i) or didWork
         end
         return didWork
     end
@@ -4269,7 +4284,7 @@ function A3.RefreshAll()
 end
 
 A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
-    player = true, target = true, focus = true, boss = true,
+    player = true, target = true, focus = true, boss = true, arena = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
     group = true, groups = true,
@@ -4281,6 +4296,7 @@ A3._LooksLikeApplyScope = function(value)
     if value == "" then return false end
     if A3._requestApplyScopeKeys[value] then return true end
     return value:match("^boss%d+$") ~= nil
+        or value:match("^arena%d+$") ~= nil
         or value:match("^party%d+$") ~= nil
         or value:match("^raid%d+$") ~= nil
 end
@@ -4595,12 +4611,15 @@ A3._ClassicCombatWeaponAuraEvents = A3._ClassicCombatWeaponAuraEvents
 A3._ClassicTargetIdentityAuraEvents = A3._ClassicTargetIdentityAuraEvents or { "PLAYER_TARGET_CHANGED" }
 A3._ClassicFocusIdentityAuraEvents = A3._ClassicFocusIdentityAuraEvents or { "PLAYER_FOCUS_CHANGED" }
 A3._ClassicBossIdentityAuraEvents = A3._ClassicBossIdentityAuraEvents or { "INSTANCE_ENCOUNTER_ENGAGE_UNIT" }
+A3._ClassicArenaIdentityAuraEvents = A3._ClassicArenaIdentityAuraEvents or { "ARENA_OPPONENT_UPDATE" }
 A3._ClassicTargetIdentityCombatAuraEvents = A3._ClassicTargetIdentityCombatAuraEvents
     or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_TARGET_CHANGED" }
 A3._ClassicFocusIdentityCombatAuraEvents = A3._ClassicFocusIdentityCombatAuraEvents
     or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_FOCUS_CHANGED" }
 A3._ClassicBossIdentityCombatAuraEvents = A3._ClassicBossIdentityCombatAuraEvents
     or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT" }
+A3._ClassicArenaIdentityCombatAuraEvents = A3._ClassicArenaIdentityCombatAuraEvents
+    or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ARENA_OPPONENT_UPDATE" }
 A3._ClassicIdentityAuraEventsByUnit = A3._ClassicIdentityAuraEventsByUnit or {
     target = A3._ClassicTargetIdentityAuraEvents,
     focus = A3._ClassicFocusIdentityAuraEvents,
@@ -4609,6 +4628,9 @@ A3._ClassicIdentityAuraEventsByUnit = A3._ClassicIdentityAuraEventsByUnit or {
     boss3 = A3._ClassicBossIdentityAuraEvents,
     boss4 = A3._ClassicBossIdentityAuraEvents,
     boss5 = A3._ClassicBossIdentityAuraEvents,
+    arena1 = A3._ClassicArenaIdentityAuraEvents,
+    arena2 = A3._ClassicArenaIdentityAuraEvents,
+    arena3 = A3._ClassicArenaIdentityAuraEvents,
 }
 A3._ClassicIdentityCombatAuraEventsByUnit = A3._ClassicIdentityCombatAuraEventsByUnit or {
     target = A3._ClassicTargetIdentityCombatAuraEvents,
@@ -4618,11 +4640,15 @@ A3._ClassicIdentityCombatAuraEventsByUnit = A3._ClassicIdentityCombatAuraEventsB
     boss3 = A3._ClassicBossIdentityCombatAuraEvents,
     boss4 = A3._ClassicBossIdentityCombatAuraEvents,
     boss5 = A3._ClassicBossIdentityCombatAuraEvents,
+    arena1 = A3._ClassicArenaIdentityCombatAuraEvents,
+    arena2 = A3._ClassicArenaIdentityCombatAuraEvents,
+    arena3 = A3._ClassicArenaIdentityCombatAuraEvents,
 }
 A3._ClassicIdentityAuraEvent = A3._ClassicIdentityAuraEvent or {
     PLAYER_TARGET_CHANGED = true,
     PLAYER_FOCUS_CHANGED = true,
     INSTANCE_ENCOUNTER_ENGAGE_UNIT = true,
+    ARENA_OPPONENT_UPDATE = true,
 }
 
 function AurasElement.IsEnabled(frame)

@@ -8,6 +8,7 @@ local function Check(ok, message)
 end
 
 local registeredLoadConditions
+local liveUnits = {}
 local UF = {
     RegisterElement = function(name, element)
         if name == "LoadConditions" then registeredLoadConditions = element end
@@ -15,7 +16,7 @@ local UF = {
 }
 local MSUF = {
     UF = UF,
-    Secrets = { UnitExistsPlain = function() return false end },
+    Secrets = { UnitExistsPlain = function(unit) return liveUnits[unit] == true end },
     ExportPublic = function(name, value)
         _G[name] = value
         return value
@@ -147,7 +148,17 @@ UF.RefreshVisibilityDrivers = function(key)
     return true
 end
 _G.MSUF_DB = { arena = { enabled = true } }
-_G.MSUF_EventBus_Register = function() return true end
+local retailHandlers = {}
+_G.MSUF_EventBus_Register = function(event, _, handler)
+    retailHandlers[event] = handler
+    return true
+end
+_G.C_EventUtils = {
+    IsEventValid = function(event)
+        Check(event == "PVP_MATCH_STATE_CHANGED", "arena match validated the wrong Retail event")
+        return true
+    end,
+}
 _G.Enum = {
     PvPMatchState = {
         Inactive = 0,
@@ -179,6 +190,8 @@ _G.C_PvP = {
 
 assert(loadfile("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
+Check(type(retailHandlers.PVP_MATCH_STATE_CHANGED) == "function",
+    "Retail arena match state event was not registered after IsEventValid")
 Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
     "prep sync did not report its visibility/data change")
 Check(visibilityRefreshes == 1 and _G.MSUF_ArenaPrepVisibilityActive == true,
@@ -221,5 +234,84 @@ Check(visibilityRefreshes == 4 and _G.MSUF_ArenaPrepVisibilityActive == nil
     "engaged handoff did not restore runtime visibility exactly once")
 Check(not frames.arena1._shown and not frames.arena2._shown,
     "engaged handoff left synthetic prep frames visible")
+
+-- Classic has the arena prep/opponent events and opponent-spec APIs, but not
+-- PVP_MATCH_STATE_CHANGED/C_PvP. Exercise the event-driven fallback through a
+-- full second module load so the file-local client gate cannot be bypassed.
+local classicHandlers = {}
+_G.C_EventUtils = {
+    IsEventValid = function(event)
+        Check(event == "PVP_MATCH_STATE_CHANGED", "arena match validated the wrong Classic event")
+        return false
+    end,
+}
+_G.C_PvP = nil
+_G.Enum = nil
+local classicArenaActive = true
+_G.IsActiveBattlefieldArena = function() return classicArenaActive end
+_G.MSUF_EventBus_Register = function(event, _, handler)
+    classicHandlers[event] = handler
+    return true
+end
+arenaSpecCount = 2
+liveUnits = {}
+prepVisibilityReady = false
+visibilityRefreshes = 0
+_G.MSUF_ArenaPrepVisibilityActive = nil
+_G.MSUF_ArenaPrepVisibilityCount = nil
+for index = 1, 3 do
+    local frame = frames["arena" .. index]
+    frame._shown = nil
+    frame._visibilityExpression = nil
+    frame._unitWatched = true
+end
+
+assert(loadfile("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua"))(
+    "MidnightSimpleUnitFrames", MSUF)
+Check(classicHandlers.PVP_MATCH_STATE_CHANGED == nil,
+    "Classic arena match registered invalid PVP_MATCH_STATE_CHANGED")
+for _, event in ipairs({
+    "ARENA_PREP_OPPONENT_SPECIALIZATIONS",
+    "ARENA_OPPONENT_UPDATE",
+    "PLAYER_ENTERING_WORLD",
+}) do
+    Check(type(classicHandlers[event]) == "function",
+        "Classic arena match lost its valid event: " .. event)
+end
+
+classicHandlers.ARENA_PREP_OPPONENT_SPECIALIZATIONS(
+    "ARENA_PREP_OPPONENT_SPECIALIZATIONS")
+Check(visibilityRefreshes == 1
+        and _G.MSUF_ArenaPrepVisibilityActive == true
+        and _G.MSUF_ArenaPrepVisibilityCount == 2,
+    "Classic prep event did not arm the 2v2 unitless visibility fallback")
+Check(frames.arena1._shown == true and frames.arena2._shown == true
+        and not frames.arena3._shown,
+    "Classic prep event did not render exactly the opponent-spec slots")
+
+classicHandlers.ARENA_OPPONENT_UPDATE("ARENA_OPPONENT_UPDATE", "arena1", "seen")
+Check(visibilityRefreshes == 2
+        and _G.MSUF_ArenaPrepVisibilityActive == nil
+        and _G.MSUF_ArenaPrepVisibilityCount == nil,
+    "Classic opponent update did not hand prep visibility to the engaged runtime")
+Check(not frames.arena1._shown and not frames.arena2._shown,
+    "Classic engaged handoff left synthetic prep frames visible")
+
+classicHandlers.ARENA_PREP_OPPONENT_SPECIALIZATIONS(
+    "ARENA_PREP_OPPONENT_SPECIALIZATIONS")
+Check(_G.MSUF_ArenaPrepVisibilityActive == true,
+    "Classic round prep did not clear the prior engaged fallback")
+liveUnits.arena2 = true
+classicHandlers.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+Check(visibilityRefreshes == 4
+        and _G.MSUF_ArenaPrepVisibilityActive == nil
+        and _G.MSUF_ArenaPrepVisibilityCount == nil,
+    "Classic world entry did not seed engaged state from UnitExists")
+
+classicArenaActive = false
+liveUnits = {}
+classicHandlers.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+Check(_G.MSUF_ArenaPrepVisibilityActive == nil,
+    "Classic non-arena world entry incorrectly armed prep visibility")
 
 print("arena_prep_visibility_smoke: ok")

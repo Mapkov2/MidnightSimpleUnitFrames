@@ -14,6 +14,9 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local MAX_ARENA_FRAMES = 3
+local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
+    and type(_G.C_EventUtils.IsEventValid) == "function"
+    and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
 local UnitExists = _G.UnitExists
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitIsUnconscious = _G.UnitIsUnconscious
@@ -653,7 +656,9 @@ local function SyncArenaLifecycle(enabled)
         _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_ARENA_CASTBARS_WORLD")
         _G.MSUF_EventBus_Unregister("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_CASTBARS_OPPONENT")
         _G.MSUF_EventBus_Unregister("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_CASTBARS_PREP")
-        _G.MSUF_EventBus_Unregister("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_CASTBARS_MATCH")
+        if HAS_PVP_MATCH_STATE_CHANGED then
+            _G.MSUF_EventBus_Unregister("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_CASTBARS_MATCH")
+        end
     end
     if arenaLifecycleFrame then arenaLifecycleFrame:UnregisterAllEvents() end
     if not enabled then
@@ -665,7 +670,9 @@ local function SyncArenaLifecycle(enabled)
         _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_ARENA_CASTBARS_WORLD", HandleArenaPoolLifecycle)
         _G.MSUF_EventBus_Register("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_CASTBARS_OPPONENT", HandleArenaPoolLifecycle)
         _G.MSUF_EventBus_Register("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_CASTBARS_PREP", HandleArenaPoolLifecycle)
-        _G.MSUF_EventBus_Register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_CASTBARS_MATCH", HandleArenaPoolLifecycle)
+        if HAS_PVP_MATCH_STATE_CHANGED then
+            _G.MSUF_EventBus_Register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_CASTBARS_MATCH", HandleArenaPoolLifecycle)
+        end
     else
         arenaLifecycleFrame = arenaLifecycleFrame or CreateFrame("Frame")
         arenaLifecycleFrame:SetScript("OnEvent", function(_, event, ...)
@@ -675,7 +682,7 @@ local function SyncArenaLifecycle(enabled)
         arenaLifecycleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
         arenaLifecycleFrame:RegisterEvent("ARENA_OPPONENT_UPDATE")
         arenaLifecycleFrame:RegisterEvent("ARENA_PREP_OPPONENT_SPECIALIZATIONS")
-        arenaLifecycleFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED")
+        if HAS_PVP_MATCH_STATE_CHANGED then arenaLifecycleFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED") end
     end
     return true
 end

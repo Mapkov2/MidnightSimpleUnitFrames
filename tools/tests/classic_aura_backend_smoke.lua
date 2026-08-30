@@ -16,6 +16,11 @@ local namespace = {
         return value
     end,
 }
+namespace.MSUF_Auras3.BumpRuntimeConfig = function()
+    local A3 = namespace.MSUF_Auras3
+    A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
+    return A3._runtimeConfigGen
+end
 
 _G.MSUF_NS = namespace
 _G.MSUF = namespace
@@ -175,6 +180,74 @@ assert(targetConfig.lanes.buff.sortOrder == 1 and targetConfig.lanes.buff.needsP
     "Classic default aura ordering is not deterministic player/priority-first")
 assert(targetConfig and targetConfig.lanes.custom1 and targetConfig.lanes.custom1.includeSpellIDs[900001] == true,
     "Classic custom lane was not integrated into the scan backend")
+
+-- Arena is a first-class Classic runtime family: its three concrete units use
+-- the shared showArena gate, subscribe to their identity event, and receive
+-- canonical arena-scope refreshes without widening the request to other units.
+assert(_G.MSUF_DB.auras3.showArena == true,
+    "Classic Aura defaults did not enable the Arena unit family")
+local function HasEvent(events, wanted)
+    for index = 1, type(events) == "table" and #events or 0 do
+        if events[index] == wanted then return true end
+    end
+    return false
+end
+local arenaRuntimeFrames = {}
+for index = 1, 3 do
+    local unit = "arena" .. index
+    local arenaFrame = { MSUFUnitKey = unit, MSUFSpec = {} }
+    arenaRuntimeFrames[unit] = arenaFrame
+    assert(registered.IsEnabled(arenaFrame) == true and arenaFrame.unit == unit,
+        "Classic Arena Aura lifecycle did not bind/enable " .. unit)
+    local arenaConfig = assert(namespace.MSUF_Auras3.ResolveUnitFrameConfig(unit, arenaFrame.MSUFSpec),
+        "Classic Arena Aura config missing for " .. unit)
+    assert(arenaConfig.unit == unit and arenaConfig.enabled == true,
+        "Classic Arena Aura config did not retain its concrete runtime unit: " .. unit)
+    assert(HasEvent(registered.GetUnitlessEvents(arenaFrame), "ARENA_OPPONENT_UPDATE"),
+        "Classic Arena Aura identity event missing for " .. unit)
+end
+assert(namespace.MSUF_Auras3._LooksLikeApplyScope("arena") == true
+        and namespace.MSUF_Auras3._LooksLikeApplyScope("arena2") == true,
+    "Classic Aura apply routing does not recognize Arena scopes")
+
+local previousFrames = namespace.UF.frames
+local previousApply = namespace.UF.ApplyElementToFrame
+namespace.UF.frames = arenaRuntimeFrames
+local arenaApplies = {}
+namespace.UF.ApplyElementToFrame = function(appliedFrame, element)
+    assert(element == "Auras", "Classic Arena request applied the wrong element")
+    local unit = assert(appliedFrame and appliedFrame.MSUFUnitKey,
+        "Classic Arena request reached a frame without identity")
+    arenaApplies[unit] = (arenaApplies[unit] or 0) + 1
+end
+assert(namespace.MSUF_Auras3.RequestUnit("arena", 0) == true,
+    "Classic Arena unit-family request reported no work")
+for index = 1, 3 do
+    assert(arenaApplies["arena" .. index] == 1,
+        "Classic Arena unit-family request did not fan out exactly once to arena" .. index)
+end
+assert(arenaApplies.player == nil and arenaApplies.target == nil,
+    "Classic Arena unit-family request widened into a non-Arena scope")
+
+arenaApplies = {}
+assert(namespace.MSUF_Auras3.RequestApply("arena", "CLASSIC_ARENA_SMOKE") == true,
+    "Classic Arena apply scope reported no work")
+for index = 1, 3 do
+    assert(arenaApplies["arena" .. index] == 1,
+        "Classic Arena apply scope did not fan out exactly once to arena" .. index)
+end
+assert(arenaApplies.player == nil and arenaApplies.target == nil,
+    "Classic Arena apply scope widened into a non-Arena scope")
+
+arenaApplies = {}
+assert(namespace.MSUF_Auras3.RequestUnit("*", 0) == true,
+    "Classic wildcard Aura request reported no Arena work")
+for index = 1, 3 do
+    assert(arenaApplies["arena" .. index] == 1,
+        "Classic wildcard Aura request omitted arena" .. index)
+end
+namespace.UF.frames = previousFrames
+namespace.UF.ApplyElementToFrame = previousApply
 
 _G.MSUF_DB.auras3.perUnit.target.blacklist.buffs.hidePermanent = false
 namespace.MSUF_Auras3._runtimeConfigGen = (namespace.MSUF_Auras3._runtimeConfigGen or 1) + 1
