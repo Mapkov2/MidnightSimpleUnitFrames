@@ -189,6 +189,19 @@ local function MSUF_NormalizeTooltipSettings(g)
 end
 
 local tooltipCache = {}
+local tooltipModifierWatcher, hoveredTooltipOwner, hoveredTooltipUnit
+local function MSUF_TrackUnitTooltipHover(owner, unit)
+    if not owner or not unit then return end
+    hoveredTooltipOwner = owner
+    hoveredTooltipUnit = unit
+    if tooltipModifierWatcher then tooltipModifierWatcher:RegisterEvent("MODIFIER_STATE_CHANGED") end
+end
+local function MSUF_ClearUnitTooltipHover(owner)
+    if owner ~= nil and hoveredTooltipOwner ~= owner then return end
+    hoveredTooltipOwner = nil
+    hoveredTooltipUnit = nil
+    if tooltipModifierWatcher then tooltipModifierWatcher:UnregisterEvent("MODIFIER_STATE_CHANGED") end
+end
 -- Combat fast-path flag. hoverInert is true exactly when a hover cannot show a
 -- tooltip right now: mode NEVER (always) or mode OOC while in combat. The
 -- per-frame OnEnter/OnLeave hooks read this single boolean and bail, so those
@@ -540,6 +553,7 @@ PublishCompat("MSUF_HidePlayerInfoTooltip", HidePlayerInfoTooltip)
 Tooltips.GetGeneral = Tooltips.GetGeneral or MSUF_GetTooltipGeneral
 Tooltips.Normalize = Tooltips.Normalize or MSUF_NormalizeTooltipSettings
 Tooltips.Refresh = Tooltips.Refresh or MSUF_RefreshTooltipCache
+Tooltips.TrackUnitHover = Tooltips.TrackUnitHover or MSUF_TrackUnitTooltipHover
 Tooltips.Allowed = Tooltips.Allowed or function()
     local cache = MSUF_GetTooltipCache()
     return MSUF_TooltipModeAllowed(cache.mode, cache.modifier)
@@ -549,6 +563,7 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
     local exists = UnitExists(unit)
     if not MSUF_UnitInfo_IsSecret(exists) and not exists then return false end
     local cache = MSUF_GetTooltipCache()
+    if cache.mode == TOOLTIP_MODE_MODIFIER then MSUF_TrackUnitTooltipHover(owner, unit) end
     local g = cache.general
     local provider, anchor = cache.provider, cache.anchor
     -- Fast disabled path: when the mode is NEVER, never reach gt:SetUnit (the
@@ -601,6 +616,7 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
     return true
 end
 Tooltips.HideUnit = Tooltips.HideUnit or function(owner)
+    MSUF_ClearUnitTooltipHover(owner)
     if MSUF_PlayerInfoFrame
         and (MSUF_PlayerInfoFrame._msufEditPreviewActive == true
             or not MSUF_PlayerInfoFrame.IsShown
@@ -608,6 +624,26 @@ Tooltips.HideUnit = Tooltips.HideUnit or function(owner)
         HidePlayerInfoTooltip()
     end
     MSUF_ClearTrackedGameTooltip(owner)
+end
+
+local function MSUF_HandleTooltipModifier()
+    local cache = MSUF_GetTooltipCache()
+    local owner, unit = hoveredTooltipOwner, hoveredTooltipUnit
+    if cache.mode ~= TOOLTIP_MODE_MODIFIER
+        or not (owner and unit and owner.IsMouseOver and owner:IsMouseOver()) then
+        MSUF_ClearUnitTooltipHover(owner)
+        return
+    end
+    if MSUF_TooltipModeAllowed(cache.mode, cache.modifier) then
+        Tooltips.ShowUnit(owner, unit)
+    elseif cache.provider == TOOLTIP_PROVIDER_MSUF then
+        HidePlayerInfoTooltip()
+    else
+        local gt = _G.GameTooltip
+        if gt and not gt:IsForbidden() and gt._msufUnitTooltipOwner == owner then
+            MSUF_ClearTrackedGameTooltip(owner)
+        end
+    end
 end
 
 -- Assign the forward-declared fast-path recompute (see MSUF_GetTooltipCache).
@@ -639,10 +675,17 @@ end
 do
     local watcher = _G.CreateFrame and _G.CreateFrame("Frame")
     if watcher and type(watcher.RegisterEvent) == "function" and type(watcher.SetScript) == "function" then
+        tooltipModifierWatcher = watcher
         watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
         watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
         watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
-        watcher:SetScript("OnEvent", MSUF_RecomputeHoverInert)
+        watcher:SetScript("OnEvent", function(_, event)
+            if event ~= "MODIFIER_STATE_CHANGED" then
+                MSUF_RecomputeHoverInert()
+            else
+                MSUF_HandleTooltipModifier()
+            end
+        end)
     end
     MSUF_RecomputeHoverInert()
 end
