@@ -984,7 +984,11 @@ local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
 end
 local MSUF_ProfileIO_TranslateProfileToCurrent
 local MSUF_ProfileIO_TranslateProfilesToCurrent
+local MSUF_ProfileIO_NotifyAssistantProfileEpochChanged
 function MSUF_InitProfiles()
+    local previousActive = type(MSUF_ActiveProfile) == "string" and MSUF_ActiveProfile or nil
+    local previousDB = type(MSUF_DB) == "table" and MSUF_DB or nil
+    local hadEstablishedOwner = previousActive ~= nil and previousActive ~= "" and previousDB ~= nil
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     local charKey = MSUF_GetCharKey()
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
@@ -1027,6 +1031,10 @@ function MSUF_InitProfiles()
     --- avoiding a second complete pass when this exact profile was already
     --- repaired earlier in the startup chain.
     MSUF_ProfileIO_RunEnsureDB(false, true)
+    if hadEstablishedOwner and (previousActive ~= active or previousDB ~= MSUF_DB) then
+        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_INIT_REBIND", false)
+        MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_INIT_REBIND", active, MSUF_DB)
+    end
  end
 function MSUF_CreateProfile(name)
     if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
@@ -1053,6 +1061,30 @@ function MSUF_CreateProfile(name)
     print("|cff00ff00MSUF:|r Created new profile '"..name.."'.")
     return true
  end
+MSUF_ProfileIO_NotifyAssistantProfileEpochChanged = function(reason, name, db)
+    -- A profile epoch also changes when reset/import keeps the active name or
+    -- table identity. Publish that cold-path scalar before the combat gate so
+    -- the Assistant can detect the boundary lazily on its next safe menu use.
+    local epoch = (tonumber(rawget(_G, "MSUF_ProfileOwnerEpoch")) or 0) + 1
+    ExportPublic("MSUF_ProfileOwnerEpoch", epoch)
+
+    -- Profile mutations may cross combat for the core's existing deferred
+    -- runtime-apply path. Do not even resolve the optional LoD Assistant there;
+    -- its next safe DB access owns lazy cleanup through the epoch above.
+    if rawget(_G, "MSUF_InCombat") == true
+        or (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true)
+        or (type(_G.UnitAffectingCombat) == "function" and _G.UnitAffectingCombat("player") == true)
+    then
+        return false
+    end
+    local assistant = type(MSUF) == "table" and rawget(MSUF, "Assistant") or nil
+    local callback = type(assistant) == "table" and rawget(assistant, "OnProfileEpochChanged") or nil
+    if type(callback) ~= "function" and type(assistant) == "table" then
+        callback = rawget(assistant, "OnProfileOwnerSwitched")
+    end
+    if type(callback) ~= "function" then return false end
+    return MSUF_ProfileIO_RunProtected("Assistant.OnProfileEpochChanged", callback, name, db, epoch, reason)
+end
 function MSUF_SwitchProfile(name)
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     if not name or type(profiles[name]) ~= "table" then
@@ -1085,6 +1117,7 @@ function MSUF_SwitchProfile(name)
     --- second broad default-fill pass while stale/malformed tables still repair.
     MSUF_ProfileIO_RunEnsureDB(false, true)
     MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_SWITCH", false)
+    MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_SWITCH", name, MSUF_DB)
     print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
     return true
  end
@@ -1102,6 +1135,7 @@ function MSUF_ResetProfile(name)
         end
         MSUF_ProfileIO_RunEnsureDB(true)
         MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_RESET", false)
+        MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_RESET", name, MSUF_DB)
     end
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
     return true
@@ -4923,6 +4957,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
         MSUF_ProfileIO_CallGlobal("MSUF_BlizzardEditMode_ApplyProfileSnapshot")
     end
     MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
+    MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
     MSUF.ProfileIOCompleteFirstLoadImport()
      return true
 end
@@ -4999,6 +5034,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
     MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_LEGACY_IMPORT", true)
+    MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_LEGACY_IMPORT", MSUF_ActiveProfile, MSUF_DB)
     print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
     MSUF_ProfileIO_ReportImportWarnings()
     return true
@@ -5276,6 +5312,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
         MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_EXTERNAL_IMPORT", true)
+        MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_EXTERNAL_IMPORT", profileKey, target)
         MSUF_ProfileIO_ReportImportWarnings()
         return true
     end

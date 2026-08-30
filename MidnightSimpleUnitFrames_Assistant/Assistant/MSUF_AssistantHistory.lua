@@ -18,6 +18,10 @@ M.Assistant = A
 -- This is profile-local assistant UX state, not gameplay state. Keep it bounded so
 -- chat-style history never becomes a SavedVariables growth problem.
 local DEFAULT_HISTORY_LIMIT = 100
+local profileBindingInitialized = false
+local boundProfileDB
+local boundProfileName
+local boundProfileEpoch
 local SUPPORT_HINT_SUCCESS_THRESHOLD = 100
 local SUPPORT_HINT_COOLDOWN_SECONDS = 7 * 24 * 60 * 60
 
@@ -45,10 +49,158 @@ local function EnsureRootDB()
     return db
 end
 
+local function ActiveProfileName()
+    local name = tostring(rawget(_G, "MSUF_ActiveProfile") or "Default")
+    return name ~= "" and name or "Default"
+end
+
+local function ActiveProfileEpoch()
+    return tonumber(rawget(_G, "MSUF_ProfileOwnerEpoch")) or 0
+end
+
+local function InCombat()
+    return rawget(_G, "MSUF_InCombat") == true
+        or (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true)
+        or (type(_G.UnitAffectingCombat) == "function" and _G.UnitAffectingCombat("player") == true)
+end
+
+-- These fields can authorize a follow-up write (a bare number, "more", "do
+-- it", a selected result, or a picker callback).  Turn serials are deliberately
+-- profile-local, so merely switching away cannot age them.  Retaining them in
+-- either profile would therefore let an arbitrarily old prompt become the
+-- "adjacent" turn again after a profile round trip.
+--
+-- Chat history and saved helpContext are intentionally absent: they are
+-- non-executable profile memory and should remain available when the player
+-- returns to that profile.
+local PROFILE_EXECUTABLE_CONTEXT_FIELDS = {
+    "pendingCandidates", "pendingCandidatesTurn",
+    "pendingChoices", "pendingChoicesTurn",
+    "pendingResults", "pendingResultsTurn",
+    "pendingSelectedResult", "pendingSelectedResultTurn",
+    "pendingConfirmation", "pendingConfirmationTurn",
+    "pendingFlow", "pendingFlowTurn",
+    "planningContext",
+    "humanConversationChoice", "relationshipChoice",
+    "settingBrowser", "relationshipBrowser",
+    "lastChangeBundle", "lastSetting", "lastSettingTurn", "lastSubjectTurn",
+    "lastAction", "lastActionLabel", "lastActionMessage", "lastActionUndoable", "lastActionArgs",
+    "lastValue", "lastUnit", "lastFrameType", "lastCategory",
+    "lastDirection", "lastAttribute",
+    "lastMentionedSetting", "lastMentionedUnit", "lastMentionedCategory", "lastMentionedTurn",
+    "recentSubjects",
+    "lastTextArea", "lastTextSlot", "lastTextSetting", "lastTextValue",
+    "lastTextFrameType", "lastTextUnit", "selectedTextEditorTarget",
+}
+
+local function ClearProfileExecutableContext(db)
+    local assistant = type(db) == "table" and db.assistant or nil
+    local context = type(assistant) == "table" and assistant.context or nil
+    if type(context) ~= "table" then return end
+    for i = 1, #PROFILE_EXECUTABLE_CONTEXT_FIELDS do
+        context[PROFILE_EXECUTABLE_CONTEXT_FIELDS[i]] = nil
+    end
+end
+
+local function CloseProfileBoundLargeTextPanel()
+    -- The rendered import panel owns an OnClick closure even after the backing
+    -- spec is dropped.  Hide and neutralize that live widget immediately so a
+    -- profile switch cannot leave one frame where the old prompt imports into
+    -- the newly active profile before the deferred UI refresh runs.
+    local ui = A.dashboardUI
+    local panel = type(ui) == "table" and ui.largePanel or nil
+    if type(panel) == "table" then
+        if panel.box and type(panel.box.ClearFocus) == "function" then
+            pcall(panel.box.ClearFocus, panel.box)
+        end
+        if panel.box and type(panel.box.SetText) == "function" then
+            pcall(panel.box.SetText, panel.box, "")
+        end
+        if panel.primary and type(panel.primary.SetScript) == "function" then
+            pcall(panel.primary.SetScript, panel.primary, "OnClick", nil)
+        end
+        if type(panel.Hide) == "function" then pcall(panel.Hide, panel) end
+    end
+    if type(A.CloseLargeTextPanel) == "function" then
+        A.CloseLargeTextPanel()
+    else
+        A.largeTextPanel = nil
+    end
+end
+
+local function RebindProfileLocalRuntime(db, profileName, previousDB)
+    -- Invalidate both sides of the boundary. Clearing the outgoing store stops
+    -- a later return from reviving it; clearing the incoming store also retires
+    -- state saved by an older build before this profile-epoch rule existed.
+    ClearProfileExecutableContext(previousDB)
+    if db ~= previousDB then ClearProfileExecutableContext(db) end
+
+    -- Combat-paused plans and between-frame submit/queue continuations contain
+    -- executable setting/action objects. They belong to the profile epoch in
+    -- which the player created them and must never resume against this DB.
+    if type(A.CancelProfileBoundExecutableWork) == "function" then
+        A.CancelProfileBoundExecutableWork("profile-boundary")
+    elseif type(A.ClearQueuedPlansForProfileBoundary) == "function" then
+        A.ClearQueuedPlansForProfileBoundary("profile-boundary")
+    end
+
+    -- Saved context follows the active profile DB, but these hydrated mirrors
+    -- are ordinary session Lua fields.  Drop the previous profile's mirrors
+    -- before any pending resolver can return them ahead of the new DB state.
+    A.pendingCandidates = nil
+    A.pendingChoices = nil
+    A.pendingResults = nil
+    A.pendingSelectedResult = nil
+    A.pendingFlow = nil
+    A.pendingConfirmation = nil
+    CloseProfileBoundLargeTextPanel()
+    A.lastAssistantHelpContext = nil
+    A.lastAssistantPlanningContext = nil
+    A._helpContextRestored = nil
+    A._planningContextRestored = nil
+    A._pendingResultFollowupHandled = nil
+    A._droppedPendingConfirmation = nil
+    A._droppedPendingChoice = nil
+    A._droppedPendingFlow = nil
+
+    -- Anchor-pick callbacks close over a semantic target but write through the
+    -- currently active DB. Leaving one alive across a profile switch could
+    -- apply the old profile's pending pick to the new profile.
+    local anchorPicker = rawget(_G, "MSUF_AnchorPicker")
+    if type(anchorPicker) == "table" then
+        anchorPicker._onPick = nil
+        if type(anchorPicker.Hide) == "function" then pcall(anchorPicker.Hide, anchorPicker) end
+    end
+
+    -- Undo bundles are runtime-only and carry their owner profile.  The Undo
+    -- module is loaded after History, so keep this hook optional during early
+    -- startup while still failing closed if it is unavailable.
+    if type(A.RebindUndoForProfile) == "function" then
+        A.RebindUndoForProfile(profileName, db)
+    else
+        A.undoStack = {}
+        A.redoStack = {}
+    end
+end
+
 function A.EnsureDB()
     -- Assistant data lives under the active profile DB because history/context follows the
     -- profile the user is editing.
     local db = EnsureRootDB()
+    local profileName = ActiveProfileName()
+    local profileEpoch = ActiveProfileEpoch()
+    local previousDB = boundProfileDB
+    local crossedBoundary = (profileBindingInitialized
+        and (db ~= previousDB or profileName ~= boundProfileName or profileEpoch ~= boundProfileEpoch))
+        or (not profileBindingInitialized and profileEpoch > 0)
+    -- Publish the new identity before cancellation callbacks run so an optional
+    -- callback that consults Assistant history/context cannot recursively
+    -- rediscover the same boundary.
+    profileBindingInitialized = true
+    boundProfileDB = db
+    boundProfileName = profileName
+    boundProfileEpoch = profileEpoch
+    if crossedBoundary then RebindProfileLocalRuntime(db, profileName, previousDB) end
     db.assistant = type(db.assistant) == "table" and db.assistant or {}
     local adb = db.assistant
     adb.history = type(adb.history) == "table" and adb.history or {}
@@ -57,6 +209,29 @@ function A.EnsureDB()
     if adb.historyLimit < 20 then adb.historyLimit = 20 end
     if adb.historyLimit > 200 then adb.historyLimit = 200 end
     return adb
+end
+
+function A.OnProfileEpochChanged(profileName, profileDB, profileEpoch)
+    -- The core profile owner calls this only after an explicit out-of-combat
+    -- profile mutation is fully applied. Keep a defensive combat gate here as
+    -- well so an external caller cannot make Assistant cleanup part of a
+    -- combat-time profile path.
+    if InCombat() then return false end
+    if tostring(profileName or "") ~= ActiveProfileName()
+        or type(profileDB) ~= "table"
+        or profileDB ~= rawget(_G, "MSUF_DB")
+        or (profileEpoch ~= nil and tonumber(profileEpoch) ~= ActiveProfileEpoch())
+    then
+        return false
+    end
+    A.EnsureDB()
+    return true
+end
+
+
+-- Compatibility for a core build that predates the generalized epoch name.
+function A.OnProfileOwnerSwitched(profileName, profileDB)
+    return A.OnProfileEpochChanged(profileName, profileDB)
 end
 
 function A.TrimHistory()

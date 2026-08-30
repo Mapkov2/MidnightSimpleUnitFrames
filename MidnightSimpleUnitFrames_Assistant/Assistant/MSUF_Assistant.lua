@@ -1307,12 +1307,13 @@ function AP.CompleteAssistantJob(job, result)
     return ok
 end
 
-function A.CancelJobs(match, reason)
+function A.CancelJobs(match, reason, opts)
     local jobs = A._assistantJobs
     if type(jobs) ~= "table" or #jobs == 0 then
         ClearCombatDeferredJobsIfIdle()
         return 0
     end
+    opts = type(opts) == "table" and opts or {}
     local removed = 0
     for i = #jobs, 1, -1 do
         local job = jobs[i]
@@ -1320,18 +1321,67 @@ function A.CancelJobs(match, reason)
             job.cancelled = true
             job.cancelReason = tostring(reason or "cancelled")
             table.remove(jobs, i)
-            AP.CompleteAssistantJob(job, {
-                text = "Stopped. I cancelled the assistant work that was still running.",
-                status = "info",
-                summary = "Cancelled running Assistant work.",
-                cancelled = true,
-                suppressAssistantRecord = true,
-            })
+            if opts.suppressCallbacks == true then
+                -- A profile epoch boundary must not execute a callback captured
+                -- by the old profile merely to announce its cancellation.
+                job.callback = nil
+                job._callbackCompleted = true
+            else
+                AP.CompleteAssistantJob(job, {
+                    text = "Stopped. I cancelled the assistant work that was still running.",
+                    status = "info",
+                    summary = "Cancelled running Assistant work.",
+                    cancelled = true,
+                    suppressAssistantRecord = true,
+                })
+            end
             removed = removed + 1
         end
     end
     if removed > 0 then ClearCombatDeferredJobsIfIdle() end
     return removed
+end
+
+local PROFILE_BOUND_EXECUTABLE_JOB_LABELS = {
+    ["assistant.submit"] = true,
+    ["assistant.queue.flush"] = true,
+    ["assistant.broad_apply"] = true,
+}
+
+function A.CancelProfileBoundExecutableWork(reason)
+    reason = tostring(reason or "profile-boundary")
+    local current = A._assistantCurrentJob
+    if type(A.CancelPendingBroadApplyForProfileBoundary) == "function" then
+        A.CancelPendingBroadApplyForProfileBoundary()
+    end
+    local queuedRemoved = 0
+    if type(A.ClearQueuedPlansForProfileBoundary) == "function" then
+        queuedRemoved = tonumber((A.ClearQueuedPlansForProfileBoundary(reason))) or 0
+    elseif type(A.queuedPlans) == "table" then
+        queuedRemoved = #A.queuedPlans
+        A.queuedPlans = {}
+        A._queueFlushRunning = nil
+    end
+
+    local jobsRemoved = 0
+    if type(A.CancelJobs) == "function" then
+        jobsRemoved = A.CancelJobs(function(job)
+            -- The explicit profile-owner handoff can run re-entrantly when the
+            -- currently executing Assistant action is the profile switch itself.
+            -- Let that one step return its honest result; external/spec switches
+            -- occur between job slices, where _assistantCurrentJob is nil and
+            -- every executable continuation is cancelled here.
+            return job ~= current
+                and PROFILE_BOUND_EXECUTABLE_JOB_LABELS[tostring(job and job.label or "")] == true
+        end, reason, { suppressCallbacks = true })
+    end
+    if jobsRemoved > 0 and type(A.SetBusy) == "function" then A.SetBusy(false) end
+    A._profileBoundaryWorkCancellation = (queuedRemoved > 0 or jobsRemoved > 0) and {
+        reason = reason,
+        queuedPlans = queuedRemoved,
+        jobs = jobsRemoved,
+    } or nil
+    return queuedRemoved, jobsRemoved
 end
 
 function ScheduleJobPump()
@@ -1575,6 +1625,11 @@ function A.SetMenuRuntimeActive(active, reason)
         A._refreshPending = nil
         return false
     end
+
+    -- A combat-time or external profile swap intentionally skips the explicit
+    -- Assistant handoff. Rebind at the first safe menu activation, before any
+    -- suspended callback, job, broad apply, or queue can resume against it.
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
 
     if type(A.ResumePendingBroadApply) == "function" then A.ResumePendingBroadApply() end
     ResumeAfterCombatCallbacks()
