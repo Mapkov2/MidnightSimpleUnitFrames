@@ -91,6 +91,35 @@ for _, marker in ipairs({
         "MSUF_ArenaCastbars lost its lifecycle contract: " .. marker)
 end
 
+local castbarPagePreview = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua")
+local detailsStart = assert(castbarPagePreview:find("local function ResolvePreviewTestDetails", 1, true),
+    "shared castbar preview detail resolver is missing")
+local detailsStop = assert(castbarPagePreview:find("local function UpdatePreviewTest", detailsStart, true),
+    "shared castbar preview detail resolver boundary is missing")
+local compile = loadstring or load
+local detailsChunk, detailsError = compile([[
+local PREVIEW_UNITS = {}
+]] .. castbarPagePreview:sub(detailsStart, detailsStop - 1) .. [[
+return ResolvePreviewTestDetails
+]], "@arena_castbar_preview_details")
+Check(detailsChunk ~= nil, detailsError)
+local resolvePreviewTestDetails = detailsChunk()
+local showTime, showTargetName, targetLabel = resolvePreviewTestDetails(
+    { unit = "arena", _msufIsArenaCastbar = true },
+    { showArenaCastTime = false, showArenaCastTargetName = false })
+Check(showTime == false and showTargetName == false and targetLabel == "Arena Ally",
+    "Arena test preview ignored disabled time/target-name settings")
+showTime, showTargetName = resolvePreviewTestDetails(
+    { unit = "arena", _msufIsArenaCastbar = true },
+    { showArenaCastTime = true, showArenaCastTargetName = true })
+Check(showTime == true and showTargetName == true,
+    "Arena test preview ignored enabled time/target-name settings")
+showTime, showTargetName = resolvePreviewTestDetails(
+    { unit = "boss", _msufIsBossCastbar = true },
+    { showBossCastTime = false, showBossCastTargetName = true })
+Check(showTime == false and showTargetName == true,
+    "Boss test preview lost symmetric time/target-name behavior")
+
 local previewEdit = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviewEdit.lua")
 for _, marker in ipairs({
     'w = "arenaCastbarWidth"',
@@ -136,7 +165,6 @@ Check(externalProvider:find('arena  = { x = "arenaCastbarOffsetX",   y = "arenaC
 Check(externalProvider:find('arena = "enableArenaCastbar"', 1, true),
     "external Edit Mode providers do not honor Arena castbar enablement")
 
-local castbarPagePreview = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua")
 for _, marker in ipairs({
     'and unit ~= "arena" then unit = nil end',
     'ClearPreviewTest(frame, "arena")',
@@ -166,6 +194,31 @@ local searchRouting = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/
 Check(searchRouting:find('uf_arena = "arena",', 1, true),
     "Menu2 search routing cannot prepare deep Arena setting routes")
 
+local aurasRuntime = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
+local auraScopeStart = assert(aurasRuntime:find("local function UnitCustomDisplayScope", 1, true),
+    "Auras3 custom-scope normalizer is missing")
+local auraScopeStop = assert(aurasRuntime:find("local function EffectiveUnitCustomDisplays", auraScopeStart, true),
+    "Auras3 custom-scope normalizer boundary is missing")
+local auraScopeChunk, auraScopeError = compile(
+    aurasRuntime:sub(auraScopeStart, auraScopeStop - 1) .. [[
+return UnitCustomDisplayScope, UnitCustomContainerScope, UnitSupportsTargetDots
+]], "@arena_auras3_target_dots")
+Check(auraScopeChunk ~= nil, auraScopeError)
+local _, customContainerScope, supportsTargetDots = auraScopeChunk()
+for index = 1, 3 do
+    local unit = "arena" .. index
+    Check(customContainerScope(unit) == "arena" and supportsTargetDots(unit) == true,
+        unit .. " does not inherit the Arena Target-DoT container")
+end
+Check(supportsTargetDots("player") == false,
+    "Arena Target-DoT support leaked into Player Defensives")
+Check(aurasRuntime:find("local scope = UnitCustomContainerScope(unit)", 1, true),
+    "Arena runtime does not read its canonical custom-container scope")
+Check(aurasRuntime:find("if not UnitSupportsTargetDots(unit) then return nil end", 1, true),
+    "Arena Target-DoT portrait does not use the shared unit gate")
+Check(aurasRuntime:find("elseif UnitSupportsTargetDots(unit) then", 1, true),
+    "Arena normal Debuffs do not use the Target-DoT auto-blacklist gate")
+
 -- 5) Arena match feature module -------------------------------------------------
 local match = Read("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua")
 for _, marker in ipairs({
@@ -180,11 +233,14 @@ end
 Check(match:find("if InCombat() then return end", 1, true),
     "arena prep display lost its combat guard")
 local loadConditions = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")
-Check(loadConditions:find("_G.MSUF_ArenaPrepVisibilityActive == true", 1, true),
-    "arena prep is not represented in the secure visibility owner")
+Check(loadConditions:find("local function ArenaPrepForcesUnit", 1, true)
+        and loadConditions:find("_G.MSUF_ArenaPrepVisibilityCount", 1, true),
+    "arena prep is not slot-bounded in the secure visibility owner")
 Check(match:find('uf.RefreshVisibilityDrivers("arena")', 1, true),
     "arena prep no longer swaps away from RegisterUnitWatch visibility")
-local prepVisibilityPos = match:find("SyncPrepVisibility(wantPrep)", 1, true)
+Check(match:find("previousCount == opponentCount", 1, true),
+    "arena prep does not refresh secure drivers when the opponent count changes")
+local prepVisibilityPos = match:find("SyncPrepVisibility(prepCount)", 1, true)
 local prepFramePos = match:find("changed = ApplyPrepFrame(frame, index)", 1, true)
 Check(prepVisibilityPos and prepFramePos and prepVisibilityPos < prepFramePos,
     "arena prep data is applied before its unitless frames become securely visible")

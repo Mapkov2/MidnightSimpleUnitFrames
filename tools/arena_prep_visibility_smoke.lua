@@ -55,6 +55,7 @@ local watchedFrame = {
     _unitWatched = true,
 }
 _G.MSUF_ArenaPrepVisibilityActive = true
+_G.MSUF_ArenaPrepVisibilityCount = 2
 Check(registeredLoadConditions.IsEnabled(watchedFrame, watchedFrame.MSUFSpec) == true,
     "arena prep did not enable LoadConditions")
 registeredLoadConditions.Apply(watchedFrame, watchedFrame.MSUFSpec)
@@ -63,8 +64,19 @@ Check(watchedFrame._unitWatched ~= true and watchedFrame._unitWatchRemovals == 1
 Check(type(watchedFrame._visibilityExpression) == "string"
         and watchedFrame._visibilityExpression:find("[nocombat] show", 1, true),
     "arena prep did not install the secure nocombat visibility driver")
+local excludedFrame = {
+    MSUFUnitKey = "arena3",
+    MSUFSpec = { unit = "arena3", enabled = true },
+    _unitWatched = true,
+}
+Check(registeredLoadConditions.IsEnabled(excludedFrame, excludedFrame.MSUFSpec) == false,
+    "2v2 prep enabled the arena3 secure visibility driver")
+registeredLoadConditions.Apply(excludedFrame, excludedFrame.MSUFSpec)
+Check(excludedFrame._unitWatched == true and excludedFrame._visibilityExpression == nil,
+    "2v2 prep replaced arena3's native unit watch")
 
 _G.MSUF_ArenaPrepVisibilityActive = nil
+_G.MSUF_ArenaPrepVisibilityCount = nil
 registeredLoadConditions.Disable(watchedFrame)
 Check(watchedFrame._visibilityExpression == nil,
     "arena prep did not remove its secure visibility driver")
@@ -75,6 +87,7 @@ local frames = {}
 local prepVisibilityReady = false
 local visibilityRefreshes = 0
 local matchState = 2
+local arenaSpecCount = 2
 local classColors = {
     MAGE = { r = 0.25, g = 0.78, b = 0.92 },
     WARRIOR = { r = 0.78, g = 0.61, b = 0.43 },
@@ -82,7 +95,13 @@ local classColors = {
 for index = 1, 3 do
     local frame = {
         MSUFUnitKey = "arena" .. index,
-        MSUFSpec = { text = { nameClassColor = true }, textColor = { a = 0.8 } },
+        MSUFSpec = {
+            unit = "arena" .. index,
+            enabled = true,
+            text = { nameClassColor = true },
+            textColor = { a = 0.8 },
+        },
+        _unitWatched = true,
     }
     frame.nameText = {
         SetText = function(_, value) frame._name = value end,
@@ -96,7 +115,8 @@ for index = 1, 3 do
         Show = function() end,
     }
     frame.Show = function(self)
-        Check(_G.MSUF_ArenaPrepVisibilityActive == true and prepVisibilityReady,
+        Check(_G.MSUF_ArenaPrepVisibilityActive == true and prepVisibilityReady
+                and index <= (tonumber(_G.MSUF_ArenaPrepVisibilityCount) or 0),
             "prep frame was shown before secure visibility ownership changed")
         self._shown = true
     end
@@ -115,7 +135,15 @@ MSUF.UFText = {
 UF.RefreshVisibilityDrivers = function(key)
     Check(key == "arena", "prep refreshed the wrong unit-frame scope")
     visibilityRefreshes = visibilityRefreshes + 1
-    prepVisibilityReady = _G.MSUF_ArenaPrepVisibilityActive == true
+    for index = 1, 3 do
+        local frame = frames["arena" .. index]
+        if registeredLoadConditions.IsEnabled(frame, frame.MSUFSpec) then
+            registeredLoadConditions.Apply(frame, frame.MSUFSpec)
+        else
+            registeredLoadConditions.Disable(frame)
+        end
+    end
+    prepVisibilityReady = true
     return true
 end
 _G.MSUF_DB = { arena = { enabled = true } }
@@ -130,14 +158,13 @@ _G.Enum = {
         Complete = 5,
     },
 }
-_G.GetNumArenaOpponentSpecs = function() return 2 end
+_G.GetNumArenaOpponentSpecs = function() return arenaSpecCount end
 _G.GetArenaOpponentSpec = function(index)
-    if index == 1 then return 62, 2 end
-    if index == 2 then return 71, 2 end
-    return 0, 2
+    if index > arenaSpecCount then return 0, 2 end
+    return ({ 62, 71, 259 })[index], 2
 end
 _G.GetSpecializationInfoByID = function(specID)
-    local classToken = specID == 71 and "WARRIOR" or "MAGE"
+    local classToken = specID == 71 and "WARRIOR" or (specID == 259 and "ROGUE" or "MAGE")
     return nil, "Spec " .. specID, nil, 135846, "DAMAGER", classToken, classToken
 end
 _G.C_ClassColor = {
@@ -156,6 +183,10 @@ Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
     "prep sync did not report its visibility/data change")
 Check(visibilityRefreshes == 1 and _G.MSUF_ArenaPrepVisibilityActive == true,
     "prep visibility was not activated exactly once")
+Check(_G.MSUF_ArenaPrepVisibilityCount == 2
+        and frames.arena1._visibilityExpression and frames.arena2._visibilityExpression
+        and frames.arena3._visibilityExpression == nil and frames.arena3._unitWatched == true,
+    "2v2 prep did not limit secure visibility ownership to arena1-2")
 Check(frames.arena1._shown == true and frames.arena2._shown == true and not frames.arena3._shown,
     "prep did not show exactly the known opponent slots")
 Check(frames.arena1._nameColor and frames.arena1._nameColor[1] == classColors.MAGE.r
@@ -165,10 +196,28 @@ Check(frames.arena2._nameColor and frames.arena2._nameColor[1] == classColors.WA
         and frames.arena2._nameColor[1] ~= frames.arena1._nameColor[1],
     "warrior prep name reused the blue unknown-class fallback")
 
+arenaSpecCount = 3
+Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
+    "2v2 to 3v3 prep count change was ignored")
+Check(visibilityRefreshes == 2 and _G.MSUF_ArenaPrepVisibilityCount == 3
+        and frames.arena3._visibilityExpression and frames.arena3._shown == true,
+    "3v3 prep did not securely activate arena3")
+
+arenaSpecCount = 1
+Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
+    "3v3 to 1-slot prep count change was ignored")
+Check(visibilityRefreshes == 3 and _G.MSUF_ArenaPrepVisibilityCount == 1
+        and frames.arena2._visibilityExpression == nil and frames.arena2._unitWatched == true
+        and frames.arena3._visibilityExpression == nil and frames.arena3._unitWatched == true,
+    "prep count shrink left stale secure visibility drivers")
+Check(frames.arena1._shown == true and not frames.arena2._shown and not frames.arena3._shown,
+    "prep count shrink left stale synthetic arena frames visible")
+
 matchState = _G.Enum.PvPMatchState.Engaged
 Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
     "engaged handoff did not report its visibility/data change")
-Check(visibilityRefreshes == 2 and _G.MSUF_ArenaPrepVisibilityActive == nil,
+Check(visibilityRefreshes == 4 and _G.MSUF_ArenaPrepVisibilityActive == nil
+        and _G.MSUF_ArenaPrepVisibilityCount == nil,
     "engaged handoff did not restore runtime visibility exactly once")
 Check(not frames.arena1._shown and not frames.arena2._shown,
     "engaged handoff left synthetic prep frames visible")
