@@ -21,10 +21,13 @@ local player = read(root .. "Castbars/MSUF_PlayerCastbarRuntime.lua")
 local anchors = read(root .. "Castbars/MSUF_CastbarAnchors.lua")
 local style = read(root .. "Castbars/MSUF_CastbarStyle.lua")
 local utils = read(root .. "Castbars/MSUF_CastbarUtils.lua")
+local backend = read(root .. "Castbars/MSUF_Castbars_Backend.lua")
+local bridge = read(root .. "Castbars/MSUF_Castbars_Bridge.lua")
 local fonts = read(root .. "Runtime/MSUF_FontRuntime.lua")
 local interruptReady = read(root .. "Castbars/MSUF_InterruptReady.lua")
 local focusKickIcon = read(root .. "Castbars/MSUF_FocusKickIcon.lua")
 local previewAnimation = read(root .. "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
+local factory = read(root .. "UnitFrames/Engine/MSUF_UF_Factory.lua")
 
 local function ownerCountFor(needle, sources)
     local count = 0
@@ -69,6 +72,37 @@ assert(contains(style, 'ExportPublic("MSUF_UpdateCastbarFillDirection",'))
 assert(ownerCountFor('ExportPublic("MSUF_GetCastbarReverseFillForFrame",', { core, utils }) == 1,
     "castbar reverse-fill resolution must have exactly one public owner")
 assert(contains(utils, 'ExportPublic("MSUF_GetCastbarReverseFillForFrame",'))
+
+local backendSyncStart = assert(backend:find("function Backend.Sync", 1, true))
+local backendSyncEnd = assert(backend:find("function Backend.IsMSUF", backendSyncStart, true))
+local backendSyncBody = backend:sub(backendSyncStart, backendSyncEnd - 1)
+assert(contains(backendSyncBody, 'Backend.Get("arena", general)'),
+    "backend compatibility sync must normalize Arena with the other castbar units")
+
+local anyStart = assert(bridge:find("local AreAnyCastbarsEnabled", 1, true))
+local anyEnd = assert(bridge:find('ExportPublic("MSUF_AreAnyCastbarsEnabled"', anyStart, true))
+local anyBody = bridge:sub(anyStart, anyEnd - 1)
+assert(contains(anyBody, 'ShouldUseMSUF("arena")') and contains(anyBody, "MSUF_DB.arena"),
+    "castbar module enablement must include the Arena backend and Arena frame gate")
+
+local hideStart = assert(bridge:find("local CastbarsForceHideAll", 1, true))
+local hideEnd = assert(bridge:find('ExportPublic("MSUF_Castbars_ForceHideAll"', hideStart, true))
+local hideBody = bridge:sub(hideStart, hideEnd - 1)
+assert(contains(hideBody, "_G.MSUF_ArenaCastbars"),
+    "central castbar force-hide must include the Arena frame pool")
+
+local settingsStart = assert(bridge:find("local CastbarsOnSettingsChanged", 1, true))
+local settingsEnd = assert(bridge:find('ExportPublic("MSUF_Castbars_OnSettingsChanged"', settingsStart, true))
+local settingsBody = bridge:sub(settingsStart, settingsEnd - 1)
+assert(contains(settingsBody, "_G.MSUF_ApplyArenaCastbarsEnabled"),
+    "central settings refresh must apply Arena backend and lifecycle state")
+
+local spawnStart = assert(factory:find("function Factory.SpawnAll", 1, true))
+local spawnEnd = assert(factory:find("function Factory.Apply", spawnStart, true))
+local spawnBody = factory:sub(spawnStart, spawnEnd - 1)
+assert(contains(spawnBody, "MSUF_FocusKickDriver_ForceUpdate")
+    and contains(spawnBody, "MSUF_KickReady_RefreshAll"),
+    "post-profile startup must refresh the saved focus tracker state")
 
 local coldStart = assert(core:find("local function ApplyCastbarVisualFrameCold", 1, true))
 local coldEnd = assert(core:find("local function MaxBossFrames", coldStart, true))

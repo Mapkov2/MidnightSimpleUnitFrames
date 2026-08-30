@@ -74,7 +74,6 @@ Check(watchedFrame._unitWatched == true and watchedFrame._unitWatchRegistrations
 local frames = {}
 local prepVisibilityReady = false
 local visibilityRefreshes = 0
-local matchEngaged = false
 local matchState = 2
 local classColors = {
     MAGE = { r = 0.25, g = 0.78, b = 0.92 },
@@ -148,7 +147,6 @@ _G.C_PvP = {
     IsMatchConsideredArena = function() return true end,
     IsMatchActive = function() return false end,
     IsMatchComplete = function() return false end,
-    IsMatchEngaged = function() return matchEngaged end,
     GetActiveMatchState = function() return matchState end,
 }
 
@@ -167,7 +165,6 @@ Check(frames.arena2._nameColor and frames.arena2._nameColor[1] == classColors.WA
         and frames.arena2._nameColor[1] ~= frames.arena1._nameColor[1],
     "warrior prep name reused the blue unknown-class fallback")
 
-matchEngaged = true
 matchState = _G.Enum.PvPMatchState.Engaged
 Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
     "engaged handoff did not report its visibility/data change")

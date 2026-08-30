@@ -24,6 +24,13 @@ local function Read(path)
     return (source:gsub("\r\n", "\n"))
 end
 
+local function Exists(path)
+    local handle = io.open(path, "rb")
+    if not handle then return false end
+    handle:close()
+    return true
+end
+
 -- 1) Engine roster ----------------------------------------------------------
 local core = Read("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
 Check(core:find('"arena1", "arena2", "arena3",', 1, true),
@@ -84,6 +91,81 @@ for _, marker in ipairs({
         "MSUF_ArenaCastbars lost its lifecycle contract: " .. marker)
 end
 
+local previewEdit = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviewEdit.lua")
+for _, marker in ipairs({
+    'w = "arenaCastbarWidth"',
+    'h = "arenaCastbarHeight"',
+    'x = "arenaCastbarOffsetX"',
+    'y = "arenaCastbarOffsetY"',
+    'reanchor = "MSUF_ReanchorArenaCastBar"',
+    'test = "MSUF_SetArenaCastbarTestMode"',
+    'or (unit == "arena" and "arenaCastbarTestMode")',
+}) do
+    Check(previewEdit:find(marker, 1, true),
+        "Arena preview edit ownership is incomplete: " .. marker)
+end
+
+local castPopup = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_CastPopup.lua")
+for _, marker in ipairs({
+    'arena = "MSUF_SetArenaCastbarTestMode"',
+    'if unit == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY" end',
+    'if unit == "arena" then return "arenaCastbarWidth" end',
+    'if unit == "arena" then return "arenaCastbarHeight" end',
+    'if unit == "arena" then return "arenaCastbarMatchWidth" end',
+    'if unit == "arena" then return "arenaCastbarDetached" end',
+    'or (unit == "arena" and "MSUF_ReanchorArenaCastBar")',
+}) do
+    Check(castPopup:find(marker, 1, true),
+        "Arena Edit Mode cast popup ownership is incomplete: " .. marker)
+end
+
+local editModeCore = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua")
+for _, marker in ipairs({
+    'if key == "player" or key == "target" or key == "focus" or key == "boss" or key == "arena" then return key end',
+    'if key:match("^arena%d+$") then return "arena" end',
+    'if unit:match("^arena%d+$") then return "arena" end',
+    'if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit end',
+}) do
+    Check(editModeCore:find(marker, 1, true),
+        "Arena Edit Mode castbar normalization is incomplete: " .. marker)
+end
+
+local externalProvider = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_ExternalProvider.lua")
+Check(externalProvider:find('arena  = { x = "arenaCastbarOffsetX",   y = "arenaCastbarOffsetY",   w = "arenaCastbarWidth",      h = "arenaCastbarHeight" }', 1, true),
+    "external Edit Mode providers do not expose Arena castbar geometry")
+Check(externalProvider:find('arena = "enableArenaCastbar"', 1, true),
+    "external Edit Mode providers do not honor Arena castbar enablement")
+
+local castbarPagePreview = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua")
+for _, marker in ipairs({
+    'and unit ~= "arena" then unit = nil end',
+    'ClearPreviewTest(frame, "arena")',
+    'local createArenaPreview = _G.MSUF_CreateArenaCastbarPreview',
+    '_G.MSUF_ApplyArenaCastbarPreviewLayout(frame, index)',
+    '_G.MSUF_PositionArenaCastbarPreview(frame, index)',
+    '_G.MSUF_UpdateArenaCastbarPreview()',
+    'general.arenaCastbarTestMode = false',
+    '_G.MSUF_HideAllArenaCastbarPreviews()',
+    'HideCastbarPreviewFrame(_G["MSUF_ArenaCastbarPreview" .. index])',
+}) do
+    Check(castbarPagePreview:find(marker, 1, true),
+        "Arena global castbar-page preview lifecycle is incomplete: " .. marker)
+end
+
+local menuPagePreview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PagePreviews.lua")
+for _, marker in ipairs({
+    'and unit ~= "arena" then unit = "player" end',
+    'local arenaActive = (active or castbarUnit == "arena") and true or false',
+    'and lastCastbarPagePreviewUnit == castbarUnit then',
+}) do
+    Check(menuPagePreview:find(marker, 1, true),
+        "Menu2 does not coordinate the Arena castbar-page preview: " .. marker)
+end
+
+local searchRouting = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua")
+Check(searchRouting:find('uf_arena = "arena",', 1, true),
+    "Menu2 search routing cannot prepare deep Arena setting routes")
+
 -- 5) Arena match feature module -------------------------------------------------
 local match = Read("MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua")
 for _, marker in ipairs({
@@ -122,15 +204,35 @@ end
 Check(not trinkets:find('SetScript("OnUpdate"', 1, true),
     "arena trinket feature introduced an OnUpdate polling path")
 
-for _, toc in ipairs({
-    "Mainline",
-    "Mists",
-    "TBC",
-    "Vanilla",
+local tocRoot = "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames"
+local mainlineTocPath = tocRoot .. "_Mainline.toc"
+local multiClientLayout = Exists(mainlineTocPath)
+if not multiClientLayout then mainlineTocPath = tocRoot .. ".toc" end
+
+local mainlineToc = Read(mainlineTocPath)
+for _, module in ipairs({
+    "Features\\Gameplay\\MSUF_Feature_ArenaMatch.lua",
+    "Features\\Gameplay\\MSUF_Feature_ArenaTrinkets.lua",
+    "Castbars\\MSUF_ArenaCastbars.lua",
+    "Castbars\\MSUF_ArenaCastbars_Preview.lua",
 }) do
-    local tocSource = Read("MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_" .. toc .. ".toc")
+    Check(mainlineToc:find(module, 1, true),
+        "dedicated arena runtime is missing from the Mainline TOC: " .. module)
+end
+
+local trinketTocs = multiClientLayout and { "Mists", "TBC", "Vanilla" } or {}
+for _, toc in ipairs(trinketTocs) do
+    local tocSource = Read(tocRoot .. "_" .. toc .. ".toc")
     Check(tocSource:find("Features\\Gameplay\\MSUF_Feature_ArenaTrinkets.lua", 1, true),
         "arena trinket feature is missing from the " .. toc .. " TOC")
+    for _, mainlineOnlyModule in ipairs({
+        "Features\\Gameplay\\MSUF_Feature_ArenaMatch.lua",
+        "Castbars\\MSUF_ArenaCastbars.lua",
+        "Castbars\\MSUF_ArenaCastbars_Preview.lua",
+    }) do
+        Check(not tocSource:find(mainlineOnlyModule, 1, true),
+            "Mainline-only arena runtime leaked into the " .. toc .. " TOC: " .. mainlineOnlyModule)
+    end
 end
 
 print("arena_unit_scope_smoke: ok")

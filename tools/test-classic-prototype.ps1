@@ -588,7 +588,11 @@ if ($lua) {
         "tools/arena_unit_scope_smoke.lua",
         "tools/arena_prep_visibility_smoke.lua",
         "tools/arena_secret_class_color_smoke.lua",
-        "tools/arena_trinket_tracking_smoke.lua"
+        "tools/arena_trinket_tracking_smoke.lua",
+        "tools/arena_interrupt_ready_smoke.lua",
+        ".github/scripts/arena_assistant_scope_smoke.lua",
+        ".github/scripts/arena_postbase_integration_smoke.lua",
+        ".github/scripts/arena_restoration_gaps_smoke.lua"
     )) {
         & $lua.Source (Join-Path $root $arenaSmoke)
         if ($LASTEXITCODE -ne 0) { throw "Arena frame regression smoke failed: $arenaSmoke" }

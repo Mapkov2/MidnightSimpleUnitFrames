@@ -84,6 +84,7 @@ local function RunScenario(kind)
     end
     _G.WOW_PROJECT_MAINLINE = 1
     _G.WOW_PROJECT_ID = kind == "retail" and 1 or 2
+    _G.Enum = { PvPMatchState = { Engaged = 3 } }
     _G.MSUF_DB = { arena = { enabled = true, showTrinket = true } }
     _G.MSUF_EventBus_Register = function(event, _, callback) callbacks[event] = callback end
     _G.hooksecurefunc = function(receiver, method, callback)
@@ -106,9 +107,9 @@ local function RunScenario(kind)
     local durationObject = { retailDuration = true }
     _G.C_PvP = {
         IsMatchConsideredArena = function() return true end,
-        IsMatchActive = function() return true end,
+        IsMatchActive = function() return false end,
         IsMatchComplete = function() return false end,
-        IsMatchEngaged = function() return true end,
+        GetActiveMatchState = function() return _G.Enum.PvPMatchState.Engaged end,
         RequestCrowdControlSpell = function(unit)
             Check(unit == "arena1", kind .. " requested the wrong unit")
             requests = requests + 1
