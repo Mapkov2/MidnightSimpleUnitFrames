@@ -908,9 +908,13 @@ local function BuildGroupFrameColors(ctx, b)
         function(value) SetGroupValue("healthColorMode", value or "CLASS", "MSUF2_GROUP_HEALTH_FALLBACK", "visual") end,
         Meta("group_frame.health.fallback_mode"))
 
+    local RefreshStateTintControls = M.RefreshProxy()
     ValueSwitchAt(ctx, state, "Dead / Offline Background", 12, -10, min(320, cardW - 32),
         function() return GroupBool("deadBgEnabled", false) end,
-        function(value) SetGroupValue("deadBgEnabled", value and true or false, "MSUF2_GROUP_DEAD_BG", "visual") end,
+        function(value)
+            SetGroupValue("deadBgEnabled", value and true or false, "MSUF2_GROUP_DEAD_BG", "visual")
+            RefreshStateTintControls()
+        end,
         Meta("group_frame.state.dead_offline.enabled"))
     local deadColor = GroupColorAt(ctx, state, "Background color", 12, -48, "deadBg", 0.60, 0.05, 0.05)
     local deadAlpha = GroupAlphaSlider(ctx, state, "Dead/offline opacity", 12, -86, max(220, cardW - 58), "deadBgA", 0.90)
@@ -926,13 +930,13 @@ local function BuildGroupFrameColors(ctx, b)
     GroupColorAt(ctx, highlights, "Group Border Color", 12, -86, "groupBorder", 0.38, 0.68, 1.00)
     GroupAlphaSlider(ctx, highlights, "Group border opacity", 12, -128, max(220, cardW - 58), "groupBorderA", 0.95)
     GroupColorAt(ctx, highlights, "Corner aggro color", 12, -174, "ciAggroColor", 1.00, 0.55, 0.00)
-    M.BindGateGroup(ctx, nil, {
+    RefreshStateTintControls = RefreshStateTintControls(M.BindGateGroup(ctx, nil, {
         { controls = healthColor, on = function()
             local current = GroupBarMode()
             return current == "dark" or current == "unified" or current == "CUSTOM"
         end },
         { controls = { deadColor, deadAlpha, offline }, on = function() return GroupBool("deadBgEnabled", false) end },
-    })
+    }))
 end
 local function NPCColorAt(ctx, section, row, x, y, apply)
     return ColorValueAt(ctx, section, row.label, x, y,
