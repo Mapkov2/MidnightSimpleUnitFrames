@@ -584,6 +584,15 @@ if ($lua) {
     $castbarOwnershipSmoke = Join-Path $root "tools/castbar_refresh_ownership_smoke.lua"
     & $lua.Source $castbarOwnershipSmoke
     if ($LASTEXITCODE -ne 0) { throw "Shared castbar refresh ownership smoke failed" }
+    foreach ($arenaSmoke in @(
+        "tools/arena_unit_scope_smoke.lua",
+        "tools/arena_prep_visibility_smoke.lua",
+        "tools/arena_secret_class_color_smoke.lua",
+        "tools/arena_trinket_tracking_smoke.lua"
+    )) {
+        & $lua.Source (Join-Path $root $arenaSmoke)
+        if ($LASTEXITCODE -ne 0) { throw "Arena frame regression smoke failed: $arenaSmoke" }
+    }
     $nicknameProviderSmoke = Join-Path $root "tools/nickname_provider_api_smoke.lua"
     & $lua.Source $nicknameProviderSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic nickname provider API smoke failed" }
