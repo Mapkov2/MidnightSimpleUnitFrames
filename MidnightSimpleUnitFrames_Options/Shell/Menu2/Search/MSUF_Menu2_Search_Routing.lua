@@ -1203,13 +1203,29 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, e
 end
 -- Deep links (changelog highlights) pass an explicit accordion route and skip
 -- the query heuristics, so an exact target whose prepareKind selects a
--- structurally rebuilt view - currently the unit aura workspace - must inject
--- its tab/tool state into the route. The page then builds directly in the
+-- structurally rebuilt Aura workspace must inject its selector state into the
+-- route. The page then builds directly in the
 -- linked view and the widget's prepare hook only confirms the selection;
 -- rebuilding from inside the prepare hook instead would re-register the
 -- control mid-resolution and orphan the anchor widget.
 local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
-    if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitAuraWorkspace" then return route end
+    if type(exactTarget) ~= "table" then return route end
+    if exactTarget.prepareKind == "groupAuraWorkspace" then
+        local scope, lane, tool = tostring(exactTarget.prepareValue or ""):match("^(%w+)_(%w+)_(%w+)$")
+        if pageKey ~= "gf_auras"
+            or (scope ~= "party" and scope ~= "raid" and scope ~= "mythicraid")
+            or (lane ~= "buff" and lane ~= "debuff" and lane ~= "externals")
+            or not tool
+        then
+            return route
+        end
+        route = type(route) == "table" and route or {}
+        SearchRouteSetState(route, "gfScope", scope)
+        SearchRouteSetTable(route, "gfAuraLaneSelection", scope, lane)
+        SearchRouteSetNestedTable(route, "gfAuraToolSelection", scope, lane, tool)
+        return route
+    end
+    if exactTarget.prepareKind ~= "unitAuraWorkspace" then return route end
     local unit = SEARCH_UNIT_BY_PAGE[pageKey]
     local tab, tool = tostring(exactTarget.prepareValue or ""):match("^(%w+)_(%w+)$")
     if not unit or not tab then return route end

@@ -195,8 +195,33 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
             RebuildGroupAuraPage(ctx)
         end,
     })
+    local exactKind = "groupAuraWorkspace"
+    local exactViews = lane == "buff" and {
+        party_buff_filters = {
+            scope = "party",
+            lane = "buff",
+            tool = "filters",
+            settingKey = "gf_party.auras.buff.filterToken",
+        },
+    } or nil
     RegisterAuraControl(ctx, toolBar, "Edit", "segment",
-        "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector", "ephemeral")
+        "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool-selector",
+        "ephemeral")
+    if exactViews then
+        local exactContracts = {}
+        for value, view in pairs(exactViews) do exactContracts[value] = view.settingKey end
+        toolBar._msuf2ExactTargetKinds = { [exactKind] = true }
+        toolBar._msuf2ExactTargetContracts = { [exactKind] = exactContracts }
+        toolBar._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= exactKind then return false end
+            local view = exactViews[tostring(exactTarget.prepareValue or "")]
+            if not view then return false end
+            M.SetMenuStateValue("gfScope", view.scope)
+            SetAuraWorkspaceLane(view.scope, view.lane)
+            SetAuraWorkspaceTool(view.scope, view.lane, view.tool)
+            return true
+        end
+    end
     if not GF_AURA_BLACKLIST_AVAILABLE then
         for i = 1, #(toolBar.buttons or {}) do
             local button = toolBar.buttons[i]

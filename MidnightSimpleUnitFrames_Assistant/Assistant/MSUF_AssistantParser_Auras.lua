@@ -623,6 +623,7 @@ local AURA_FILTER_EFFECTS = {
 
 local GROUP_AURA_FILTER_EFFECTS = {
     ALL = "shows the normal aura set without an extra live group-filter token.",
+    MSUF_GROUP_HIGHLIGHTS_V1 = "shows MSUF's curated defensive, healer, and major offensive/support cooldown buffs regardless of caster, including curated no-duration states such as Shroud membership.",
     Player = "shows only your own auras.",
     RaidPlayer = "shows raid-relevant auras applied by you.",
     RaidInCombatPlayer = "shows combat raid-frame auras applied by you.",
@@ -691,7 +692,8 @@ local function AuraFilterGuidanceRecommendation()
         "- Raid or Mythic Raid debuffs: set the Debuff filter to Raid. If the frame is still too noisy, try RaidInCombat.",
         "- Group dispels: use RAID_PLAYER_DISPELLABLE for auras someone in your group can remove; use DISPELLABLE for every aura with a dispel type.",
         "- DPS personal tracking: use Player on target debuffs when you only care about your own DoTs.",
-        "- Defensive cooldown tracking: use BigDefensive for non-player major defensives, BigDefensivePlayer for your own, or ExternalDefensive for externals.",
+        "- Group cooldown tracking: use MSUF Highlights for MSUF's curated defensive, healer, and major offensive/support cooldown buffs regardless of caster.",
+        "- Narrow defensive tracking: use BigDefensive for major defensives, BigDefensivePlayer for your own, or ExternalDefensive for externals.",
         "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane.",
         "Examples: set raid debuff filter to Raid; set raid debuff filter to RAID_PLAYER_DISPELLABLE; set target debuffs to any dispel type; set target buffs to Important.",
     }
@@ -710,6 +712,7 @@ local function AuraFilterGuidanceOverview()
         "- RAID_PLAYER_DISPELLABLE: auras someone in your group can dispel.",
         "- DISPELLABLE: every aura with a dispel type, regardless of group capability.",
         "- IMPORTANT: auras Blizzard flags as important.",
+        "- MSUF Highlights: MSUF's curated defensive, healer, and major offensive/support cooldown buffs on group frames.",
         "- BigDefensive / ExternalDefensive and their Player variants: defensive cooldown tracking.",
         "To read the exact active state I need the frame and lane, for example Target Debuffs, Player Buffs, Raid Debuffs, or Party Buffs.",
     }
@@ -786,7 +789,7 @@ local function AuraGroupFilterGuidance(scope, scopeLabel, lane, laneLabel)
     lines[#lines + 1] = "Current live filter token: " .. token .. ". Plain English: it " .. tostring(GROUP_AURA_FILTER_EFFECTS[token] or "uses that group aura filter token for the lane.")
     lines[#lines + 1] = lane == "debuff"
         and "Raid beginner tip: Raid is the player-dispellable view, RAID_PLAYER_DISPELLABLE covers the whole group's dispels, and DISPELLABLE includes every dispel type."
-        or "Raid beginner tip: Raid is the usual not-player buff view; BigDefensive and ExternalDefensive are for non-player defensive cooldown tracking."
+        or "Raid beginner tip: MSUF Highlights is the curated group-cooldown view; BigDefensive and ExternalDefensive are narrower defensive-only choices."
     lines[#lines + 1] = "Safe next commands: 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to Raid', 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RaidInCombat', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to ALL'."
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains active group aura filter." }
 end
@@ -1652,7 +1655,8 @@ end
 local function GroupAuraFilterLaneForText(text, value)
     if ContainsAny(text, AurasPhrases[174]) and not ContainsAny(text, AurasPhrases[175]) then return "buff" end
     if ContainsAny(text, AurasPhrases[176]) then return "debuff" end
-    if value == "CANCELABLE" or value == "NOT_CANCELABLE" or value == "EXTERNAL_DEFENSIVE" or value == "BIG_DEFENSIVE"
+    if value == "MSUF_GROUP_HIGHLIGHTS_V1"
+        or value == "CANCELABLE" or value == "NOT_CANCELABLE" or value == "EXTERNAL_DEFENSIVE" or value == "BIG_DEFENSIVE"
         or value == "Cancelable" or value == "NotCancelable" or value == "ExternalDefensive" or value == "BigDefensive"
         or value == "CancelablePlayer" or value == "NotCancelablePlayer" or value == "ExternalDefensivePlayer" or value == "BigDefensivePlayer" then
         return "buff"

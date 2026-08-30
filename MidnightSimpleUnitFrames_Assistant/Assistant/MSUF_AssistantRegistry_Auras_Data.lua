@@ -26,7 +26,7 @@ Data.GF_AURA_ANCHORS = { "CENTER", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMR
 Data.GF_AURA_GROWTH = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN" }
 Data.GF_AURA_FILTER_VALUES = {
     buff = {
-        "ALL", "Player", "BigDefensive", "BigDefensivePlayer", "ExternalDefensive",
+        "ALL", "MSUF_GROUP_HIGHLIGHTS_V1", "Player", "BigDefensive", "BigDefensivePlayer", "ExternalDefensive",
         "ExternalDefensivePlayer", "RaidInCombat", "Raid", "RaidPlayer",
     },
     debuff = {
@@ -45,6 +45,13 @@ Data.GF_AURA_FILTER_ALIASES = {
     ["no filter"] = "ALL",
     ["filter off"] = "ALL",
     ["show all"] = "ALL",
+    ["msuf highlights"] = "MSUF_GROUP_HIGHLIGHTS_V1",
+    ["msuf highlight"] = "MSUF_GROUP_HIGHLIGHTS_V1",
+    ["msuf group highlights"] = "MSUF_GROUP_HIGHLIGHTS_V1",
+    ["msuf list"] = "MSUF_GROUP_HIGHLIGHTS_V1",
+    ["group highlights"] = "MSUF_GROUP_HIGHLIGHTS_V1",
+    ["group cooldown buffs"] = "MSUF_GROUP_HIGHLIGHTS_V1",
+    ["important group buffs"] = "MSUF_GROUP_HIGHLIGHTS_V1",
     player = "Player",
     mine = "Player",
     ["my buff"] = "Player",

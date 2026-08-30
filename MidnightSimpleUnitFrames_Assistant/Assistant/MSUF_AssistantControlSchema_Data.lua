@@ -160,7 +160,7 @@ Data.collectionStates = {
     { 'unit_boss_custom3_behavior_debuff', 233 },
     { 'gf_party_buff_layout', 69 },
     { 'gf_party_buff_behavior', 62 },
-    { 'gf_party_buff_filters', 71 },
+    { 'gf_party_buff_filters', 72 },
     { 'gf_party_buff_blacklist', 67 },
     { 'gf_party_buff_style', 86 },
     { 'gf_party_debuff_layout', 69 },
@@ -173,7 +173,7 @@ Data.collectionStates = {
     { 'gf_party_externals_style', 86 },
     { 'gf_raid_buff_layout', 69 },
     { 'gf_raid_buff_behavior', 62 },
-    { 'gf_raid_buff_filters', 71 },
+    { 'gf_raid_buff_filters', 72 },
     { 'gf_raid_buff_blacklist', 67 },
     { 'gf_raid_buff_style', 86 },
     { 'gf_raid_debuff_layout', 69 },
@@ -186,7 +186,7 @@ Data.collectionStates = {
     { 'gf_raid_externals_style', 86 },
     { 'gf_mythicraid_buff_layout', 69 },
     { 'gf_mythicraid_buff_behavior', 62 },
-    { 'gf_mythicraid_buff_filters', 71 },
+    { 'gf_mythicraid_buff_filters', 72 },
     { 'gf_mythicraid_buff_blacklist', 67 },
     { 'gf_mythicraid_buff_style', 86 },
     { 'gf_mythicraid_debuff_layout', 69 },
@@ -204,7 +204,7 @@ Data.collectionStates = {
     { 'compat_buff_appearance', 16 },
     { 'compat_debuff_appearance', 14 },
 }
-Data.collectionUnionControls = 3636
+Data.collectionUnionControls = 3637
 Data.contexts = {
     { 'WARRIOR-71', 'WARRIOR', 1, 71, 'Arms', 'enUS' },
     { 'WARRIOR-72', 'WARRIOR', 2, 72, 'Fury', 'enUS' },
@@ -2082,6 +2082,7 @@ Data.records = {
     { 'setting:gf_auras/auras/group-workspace/lane/buff/filters/native/bigdefensiveplayer@gf_auras/auras/group-workspace/lane/buff/filters/native/bigdefensiveplayer', 'menu2.gf_auras.auras.group-workspace.lane.buff.filters.native.bigdefensiveplayer', '', '', 'gf_auras', 'auras/group-workspace/lane/buff/filters/native/bigdefensiveplayer', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Big Defensive by Me', 'Turns Big Defensive by Me on or off. Available on the Group Frames > Auras page.', '', '', '', '', '', '', '', '', 'gf_party_buff_filters,gf_raid_buff_filters,gf_mythicraid_buff_filters', '*' },
     { 'setting:gf_auras/auras/group-workspace/lane/buff/filters/native/externaldefensive@gf_auras/auras/group-workspace/lane/buff/filters/native/externaldefensive', 'menu2.gf_auras.auras.group-workspace.lane.buff.filters.native.externaldefensive', '', '', 'gf_auras', 'auras/group-workspace/lane/buff/filters/native/externaldefensive', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'External Defensive', 'Turns External Defensive on or off. Available on the Group Frames > Auras page.', '', '', '', '', '', '', '', '', 'gf_party_buff_filters,gf_raid_buff_filters,gf_mythicraid_buff_filters', '*' },
     { 'setting:gf_auras/auras/group-workspace/lane/buff/filters/native/externaldefensiveplayer@gf_auras/auras/group-workspace/lane/buff/filters/native/externaldefensiveplayer', 'menu2.gf_auras.auras.group-workspace.lane.buff.filters.native.externaldefensiveplayer', '', '', 'gf_auras', 'auras/group-workspace/lane/buff/filters/native/externaldefensiveplayer', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'External Defensive by Me', 'Turns External Defensive by Me on or off. Available on the Group Frames > Auras page.', '', '', '', '', '', '', '', '', 'gf_party_buff_filters,gf_raid_buff_filters,gf_mythicraid_buff_filters', '*' },
+    { 'setting:gf_auras/auras/group-workspace/lane/buff/filters/native/msuf-group-highlights-v1@gf_auras/auras/group-workspace/lane/buff/filters/native/msuf-group-highlights-v1', 'menu2.gf_auras.auras.group-workspace.lane.buff.filters.native.msuf-group-highlights-v1', '', '', 'gf_auras', 'auras/group-workspace/lane/buff/filters/native/msuf-group-highlights-v1', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'MSUF Highlights', 'Turns MSUF Highlights on or off. Available on the Group Frames > Auras page.', '', '', '', '', '', '', '', '', 'gf_party_buff_filters,gf_raid_buff_filters,gf_mythicraid_buff_filters', '*' },
     { 'setting:gf_auras/auras/group-workspace/lane/buff/filters/native/player@gf_auras/auras/group-workspace/lane/buff/filters/native/player', 'menu2.gf_auras.auras.group-workspace.lane.buff.filters.native.player', '', '', 'gf_auras', 'auras/group-workspace/lane/buff/filters/native/player', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Cast by Me', 'Turns Cast by Me on or off. Available on the Group Frames > Auras page.', '', '', '', '', '', '', '', '', 'gf_party_buff_filters,gf_raid_buff_filters,gf_mythicraid_buff_filters', '*' },
     { 'setting:gf_auras/auras/group-workspace/lane/buff/filters/native/raid@gf_auras/auras/group-workspace/lane/buff/filters/native/raid', 'menu2.gf_auras.auras.group-workspace.lane.buff.filters.native.raid', '', '', 'gf_auras', 'auras/group-workspace/lane/buff/filters/native/raid', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Raid', 'Turns Raid on or off. Available on the Group Frames > Auras page.', '', '', '', '', '', '', '', '', 'gf_party_buff_filters,gf_raid_buff_filters,gf_mythicraid_buff_filters', '*' },
     { 'setting:gf_auras/auras/group-workspace/lane/buff/filters/native/raidincombat@gf_auras/auras/group-workspace/lane/buff/filters/native/raidincombat', 'menu2.gf_auras.auras.group-workspace.lane.buff.filters.native.raidincombat', '', '', 'gf_auras', 'auras/group-workspace/lane/buff/filters/native/raidincombat', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Raid In Combat', 'Turns Raid In Combat on or off. Available on the Group Frames > Auras page.', '', '', '', '', '', '', '', '', 'gf_party_buff_filters,gf_raid_buff_filters,gf_mythicraid_buff_filters', '*' },

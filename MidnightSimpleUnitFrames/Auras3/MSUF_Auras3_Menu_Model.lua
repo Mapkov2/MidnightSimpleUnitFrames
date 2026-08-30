@@ -1110,8 +1110,15 @@ GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS = GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPE
 GF_AURA_FILTER.PUBLIC_AURA_PRESET_META = GF_AURA_FILTER.PUBLIC_AURA_PRESET_META or FALLBACK_PUBLIC_AURA_META
 GF_AURA_FILTER.DECLASSIFIED_SPELLS = GF_AURA_FILTER.DECLASSIFIED_SPELLS or GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS
 GF_AURA_FILTER.DECLASSIFIED_META = GF_AURA_FILTER.DECLASSIFIED_META or GF_AURA_FILTER.PUBLIC_AURA_PRESET_META
+GF_AURA_FILTER.GROUP_HIGHLIGHTS_TOKEN = "MSUF_GROUP_HIGHLIGHTS_V1"
 GF_AURA_FILTER.BUFF_FILTER_ITEMS = {
     { value = "ALL", text = "All Buffs" },
+    {
+        value = "MSUF_GROUP_HIGHLIGHTS_V1",
+        text = "MSUF Highlights",
+        tooltipTitle = "MSUF Highlights",
+        tooltip = "Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible.",
+    },
     { value = "Player", text = "Cast by Me" },
     { value = "BigDefensive", text = "Big Defensive" },
     { value = "BigDefensivePlayer", text = "Big Defensive by Me" },
@@ -1134,8 +1141,19 @@ GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
 local function GFNativeFilterKey(token)
     return tostring(token or "ALL"):upper():gsub("[^A-Z0-9]", "")
 end
+local GF_GROUP_HIGHLIGHTS_FILTER_KEY = GFNativeFilterKey(GF_AURA_FILTER.GROUP_HIGHLIGHTS_TOKEN)
+GF_AURA_FILTER.IsGroupHighlightsFilter = function(token)
+    return GFNativeFilterKey(token) == GF_GROUP_HIGHLIGHTS_FILTER_KEY
+end
+GF_AURA_FILTER.ResolveBuffIncludeHash = function(token)
+    if not GF_AURA_FILTER.IsGroupHighlightsFilter(token) then return nil end
+    local getter = A3.GetGroupHighlightsSpellIDHash
+    if type(getter) ~= "function" then return nil end
+    return getter()
+end
 local GF_CURRENT_BUFF_FILTER_TOKENS = {
     ALL = "ALL",
+    MSUFGROUPHIGHLIGHTSV1 = "MSUF_GROUP_HIGHLIGHTS_V1",
     PLAYER = "Player",
     BIGDEFENSIVE = "BigDefensive",
     BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
@@ -1168,6 +1186,7 @@ end
 GF_AURA_FILTER.NormalizeFilterToken = NormalizeGFStoredFilterToken
 local GF_NATIVE_BUFF_FILTERS = {
     ALL = false,
+    MSUFGROUPHIGHLIGHTSV1 = false,
     PLAYER = "PLAYER",
     BIGDEFENSIVEPLAYER = "BIG_DEFENSIVE|PLAYER",
     EXTERNALDEFENSIVEPLAYER = "EXTERNAL_DEFENSIVE|PLAYER",

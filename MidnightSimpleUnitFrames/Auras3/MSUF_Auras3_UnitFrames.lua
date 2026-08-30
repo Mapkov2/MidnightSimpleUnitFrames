@@ -974,7 +974,8 @@ local GROUP_LANE_SPECS = {
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
         strataKey = "buffStrata",
         alphaKey = "buffAlpha",
-        blacklistHashKey = "buffBlacklistHash",
+        blacklistHashKey = "buffBlacklistHash", includeHashKey = "buffIncludeHash",
+        includeSignatureKey = "buffIncludeSignature",
         hidePermanentKey = "buffHidePermanent",
         maxDurationKey = "buffMaxDuration",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
@@ -1508,8 +1509,18 @@ local function CandidateFiltersFromExcludeSpellIDs(spellIDs)
     return CandidateFiltersFromSpellIDs(spellIDs, "excludeSpellIDs")
 end
 
-local function CandidateFiltersFromIncludeAndExcludeSpellIDs(includeSpellIDs, excludeSpellIDs)
-    local includeFilters, includeSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
+local function CandidateFiltersFromIncludeAndExcludeSpellIDs(includeSpellIDs, excludeSpellIDs, sharedIncludeSignature)
+    local includeFilters, includeSignature
+    if type(includeSpellIDs) == "table"
+        and type(sharedIncludeSignature) == "string" and sharedIncludeSignature ~= "" then
+        -- Versioned static catalogs are already normalized and immutable. Keep
+        -- their hash shared instead of copying/sorting every ID for every raid
+        -- unit config; Blizzard still secure-copies options at its API boundary.
+        includeFilters = { includeSpellIDs = includeSpellIDs }
+        includeSignature = "includeSpellIDs@" .. sharedIncludeSignature
+    else
+        includeFilters, includeSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
+    end
     local excludeFilters, excludeSignature = CandidateFiltersFromSpellIDs(excludeSpellIDs, "excludeSpellIDs")
     if not includeFilters then return excludeFilters, excludeSignature end
     if excludeFilters then
@@ -1782,13 +1793,25 @@ local function ConfigureCuratedBigDefensiveLane(lane)
     return lane
 end
 
+local function UnitCanAssistForAuraIdentity(unit)
+    local unitCanAssist = _G.UnitCanAssist
+    if type(unitCanAssist) ~= "function" then return nil end
+    if type(_G.UnitIsPlayerControlledOrGroupMember) == "function" then
+        -- Retail 12.1 added the same two identity flags AuraContainerUtil uses.
+        return unitCanAssist("player", unit, true, true)
+    end
+    -- Classic-family clients still expose the historical two-argument API.
+    return unitCanAssist("player", unit)
+end
+
 local function UnitSupportsCuratedBigDefensive(unit)
     unit = tostring(unit or "")
     if unit == "player" or unit:match("^party%d+$") or unit:match("^raid%d+$") then return true end
     if unit ~= "target" and unit ~= "focus" then return false end
-    local unitCanAssist = _G.UnitCanAssist
-    if type(unitCanAssist) ~= "function" then return false end
-    local canAssist = unitCanAssist("player", unit)
+    -- Match AuraContainerUtil's identity-candidate check: immunity and temporary
+    -- interaction locks must not turn an otherwise friendly Unit into an
+    -- unrestricted HELPFUL parse.
+    local canAssist = UnitCanAssistForAuraIdentity(unit)
     if issecretvalue(canAssist) == true then return false end
     return canAssist == true
 end
@@ -2277,7 +2300,9 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     if not (spec and type(source) == "table") then return nil end
     local candidateFilters, candidateFilterSignature
     if spec.includeHashKey then
-        candidateFilters, candidateFilterSignature = CandidateFiltersFromIncludeAndExcludeSpellIDs(source[spec.includeHashKey], source[spec.blacklistHashKey])
+        candidateFilters, candidateFilterSignature = CandidateFiltersFromIncludeAndExcludeSpellIDs(
+            source[spec.includeHashKey], source[spec.blacklistHashKey],
+            spec.includeSignatureKey and source[spec.includeSignatureKey])
     else
         candidateFilters, candidateFilterSignature = CandidateFiltersFromBlacklistHash(source[spec.blacklistHashKey])
     end
@@ -2323,7 +2348,14 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
         identityCandidateMode = "hostile"
     elseif kind == "buff" and (hasExactIDs
         or nativeFilter:find("EXTERNAL_DEFENSIVE", 1, true) ~= nil
-        or nativeFilter:find("BIG_DEFENSIVE", 1, true) ~= nil) then
+        or nativeFilter:find("BIG_DEFENSIVE", 1, true) ~= nil)
+        -- Since Retail 12.1.0.69465 Blizzard always permits ordinary Group Buff
+        -- identity candidate filters on player/party/raid tokens, including
+        -- immune or temporarily uninteractable followers. Keep these lanes out
+        -- of MSUF's assist state machine when that API contract is present;
+        -- AuraContainer remains the sole per-aura filter owner. Older clients
+        -- retain the conservative fail-closed gate.
+        and type(_G.UnitIsPlayerControlledOrGroupMember) ~= "function" then
         identityCandidateMode = "assist"
     end
     return FinalizeLane({
@@ -6563,14 +6595,13 @@ local function UpdateAuraGroupEffectiveFilters(container, lane)
     local candidatesChanged = oldCandidateSignature ~= candidateSignature
     if not filterChanged and not candidatesChanged then return false end
 
-    -- Moving from BIG_DEFENSIVE to HELPFUL broadens the native pass. Install
-    -- the exact-ID gate first; moving back narrows the native pass first. This
-    -- keeps both halves of a target/focus identity transition fail-closed even
-    -- though Blizzard refreshes after each setter.
-    local broadening = filterChanged
-        and tostring(oldFilter or ""):find("BIG_DEFENSIVE", 1, true) ~= nil
-        and tostring(nativeFilter or ""):find("BIG_DEFENSIVE", 1, true) == nil
-    if broadening and candidatesChanged then
+    -- A new exact-ID include gate is fail-closed on its own. Install it before
+    -- changing a native filter that may broaden (for example RAID -> HELPFUL).
+    -- When removing the include gate, narrow the native filter first so there
+    -- is likewise no intermediate unrestricted HELPFUL refresh.
+    local installCandidatesFirst = filterChanged and candidatesChanged
+        and candidateFilters and candidateFilters.includeSpellIDs ~= nil
+    if installCandidatesFirst then
         container:SetAuraGroupCandidateFilters(groupKey, candidateFilters)
         container._msufA3CandidateFilterSignature = candidateSignature
     end
@@ -6578,7 +6609,7 @@ local function UpdateAuraGroupEffectiveFilters(container, lane)
         container:SetAuraGroupFilterString(groupKey, nativeFilter)
         container._msufA3FilterString = nativeFilter
     end
-    if candidatesChanged and not broadening then
+    if candidatesChanged and not installCandidatesFirst then
         container:SetAuraGroupCandidateFilters(groupKey, candidateFilters)
         container._msufA3CandidateFilterSignature = candidateSignature
     end
@@ -6596,10 +6627,9 @@ local function UpdateAuraSlotEffectiveFilters(container, lane)
     local filterChanged = oldFilter ~= nativeFilter
     local candidatesChanged = oldCandidateSignature ~= candidateSignature
     if not filterChanged and not candidatesChanged then return false end
-    local broadening = filterChanged
-        and tostring(oldFilter or ""):find("BIG_DEFENSIVE", 1, true) ~= nil
-        and tostring(nativeFilter or ""):find("BIG_DEFENSIVE", 1, true) == nil
-    if broadening and candidatesChanged then
+    local installCandidatesFirst = filterChanged and candidatesChanged
+        and candidateFilters and candidateFilters.includeSpellIDs ~= nil
+    if installCandidatesFirst then
         container:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
         candidates[slotKey] = candidateSignature
     end
@@ -6607,7 +6637,7 @@ local function UpdateAuraSlotEffectiveFilters(container, lane)
         container:SetAuraSlotFilterString(slotKey, nativeFilter)
         filters[slotKey] = nativeFilter
     end
-    if candidatesChanged and not broadening then
+    if candidatesChanged and not installCandidatesFirst then
         container:SetAuraSlotCandidateFilters(slotKey, candidateFilters)
         candidates[slotKey] = candidateSignature
     end
@@ -7193,9 +7223,8 @@ A3._SeedGroupAuraAssistGate = function(frame, fallbackUnit)
     if type(A3._UpdateGroupAuraAssistState) == "function" then
         return A3._UpdateGroupAuraAssistState(unit, false, true)
     end
-    local unitCanAssist = _G.UnitCanAssist
-    if type(unitCanAssist) ~= "function" then return ApplyGroupAuraAssistGate(frame, nil, false) end
-    local canAssist = unitCanAssist("player", unit)
+    if type(_G.UnitCanAssist) ~= "function" then return ApplyGroupAuraAssistGate(frame, nil, false) end
+    local canAssist = UnitCanAssistForAuraIdentity(unit)
     local known = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
     if not known then canAssist = nil end
     return ApplyGroupAuraAssistGate(frame, canAssist, known)
@@ -7344,9 +7373,11 @@ A3._HideGroupAuraAssistOwners = function(unit, canAssist)
 end
 
 A3._ReadGroupAuraAssistIdentity = function(unit, readGUID)
-    local unitCanAssist = _G.UnitCanAssist
-    if type(unitCanAssist) ~= "function" then return nil, false, nil, false end
-    local canAssist = unitCanAssist("player", unit)
+    if type(_G.UnitCanAssist) ~= "function" then return nil, false, nil, false end
+    -- Blizzard_AuraContainerUtil deliberately ignores immune/uninteractable
+    -- restrictions for identity candidate filters. Follower-dungeon partyN
+    -- units can otherwise report false here and hide every HELPFUL owner.
+    local canAssist = UnitCanAssistForAuraIdentity(unit)
     local assistKnown = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
     if not assistKnown then canAssist = nil end
 

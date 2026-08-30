@@ -1820,7 +1820,16 @@ function Schema.TryConversation(text)
             local label = Normalize(tostring(DisplayLabel(row) or ""))
             return label ~= "" and normalized:find(" " .. label .. " ", 1, true) ~= nil
         end
-        if LabelVerbatim(top) and not LabelVerbatim(second) then confident = true end
+        local competingVerbatim = false
+        if LabelVerbatim(top) then
+            for i = 2, #results do
+                if LabelVerbatim(results[i]) then
+                    competingVerbatim = true
+                    break
+                end
+            end
+            if not competingVerbatim then confident = true end
+        end
     end
 
     -- Dropping words the player actually wrote is a guess, not a match. It may
