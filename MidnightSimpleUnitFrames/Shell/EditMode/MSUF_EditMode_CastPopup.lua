@@ -17,6 +17,7 @@ local TEST_FUNCS = {
     target = "MSUF_SetTargetCastbarTestMode",
     focus = "MSUF_SetFocusCastbarTestMode",
     boss = "MSUF_SetBossCastbarTestMode",
+    arena = "MSUF_SetArenaCastbarTestMode",
 }
 
 local pf
@@ -28,8 +29,9 @@ local UnitLabel = Util.UnitLabel or function(unit) return tostring(unit or "") e
 local FramePositionValues = Util.FramePositionValues
 local TranslateFramePosition = Util.TranslateFramePosition
 local NormalizeUnit = Util.NormalizeSimpleUnit or function(unit)
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit end
     if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    if type(unit) == "string" and unit:match("^arena%d+$") then return "arena" end
     return nil
 end
 
@@ -68,18 +70,21 @@ end
 
 local function OffsetKeys(unit)
     if unit == "boss" then return "bossCastbarOffsetX", "bossCastbarOffsetY" end
+    if unit == "arena" then return "arenaCastbarOffsetX", "arenaCastbarOffsetY" end
     local pre = Prefix(unit)
     if pre then return pre .. "OffsetX", pre .. "OffsetY" end
 end
 
 local function WidthKey(unit)
     if unit == "boss" then return "bossCastbarWidth" end
+    if unit == "arena" then return "arenaCastbarWidth" end
     local pre = Prefix(unit)
     if pre then return pre .. "BarWidth" end
 end
 
 local function HeightKey(unit)
     if unit == "boss" then return "bossCastbarHeight" end
+    if unit == "arena" then return "arenaCastbarHeight" end
     local pre = Prefix(unit)
     if pre then return pre .. "BarHeight" end
 end
@@ -94,6 +99,7 @@ local function WidthSourceKey(unit)
     if unit == "target" then return "castbarTargetMatchWidth" end
     if unit == "focus" then return "castbarFocusMatchWidth" end
     if unit == "boss" then return "bossCastbarMatchWidth" end
+    if unit == "arena" then return "arenaCastbarMatchWidth" end
 end
 
 local function DetachedKey(unit)
@@ -106,16 +112,19 @@ local function DetachedKey(unit)
     if unit == "target" then return "castbarTargetDetached" end
     if unit == "focus" then return "castbarFocusDetached" end
     if unit == "boss" then return "bossCastbarDetached" end
+    if unit == "arena" then return "arenaCastbarDetached" end
 end
 
 local function ManualWidth(g, unit)
     local key = WidthKey(unit)
-    return tonumber(key and g and g[key]) or tonumber(g and g.castbarGlobalWidth) or (unit == "boss" and 176 or 271)
+    return tonumber(key and g and g[key]) or tonumber(g and g.castbarGlobalWidth)
+        or ((unit == "boss" or unit == "arena") and 176 or 271)
 end
 
 local function ManualHeight(g, unit)
     local key = HeightKey(unit)
-    return tonumber(key and g and g[key]) or tonumber(g and g.castbarGlobalHeight) or (unit == "boss" and 12 or 18)
+    return tonumber(key and g and g[key]) or tonumber(g and g.castbarGlobalHeight)
+        or ((unit == "boss" or unit == "arena") and 12 or 18)
 end
 
 local function CastbarFrame(unit)
@@ -123,6 +132,11 @@ local function CastbarFrame(unit)
     if unit == "target" then return _G.MSUF_TargetCastbarPreview or _G.MSUF_TargetCastbar end
     if unit == "focus" then return _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar end
     if unit == "boss" then return _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview1"] end
+    if unit == "arena" then
+        local frames = _G.MSUF_ArenaCastbars
+        return _G.MSUF_ArenaCastbarPreview or _G["MSUF_ArenaCastbarPreview1"]
+            or (frames and frames[1]) or _G.MSUF_ArenaCastbar1
+    end
 end
 
 local function EffectiveSize(g, unit)
@@ -165,6 +179,7 @@ local function ReapplyCastbar(unit)
             or (unit == "target" and "MSUF_ReanchorTargetCastBar")
             or (unit == "focus" and "MSUF_ReanchorFocusCastBar")
             or (unit == "boss" and "MSUF_ReanchorBossCastBar")
+            or (unit == "arena" and "MSUF_ReanchorArenaCastBar")
         if type(_G[fn]) == "function" then _G[fn]() end
         if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
             _G.MSUF_ApplyCastbarVisualsForUnit(unit)

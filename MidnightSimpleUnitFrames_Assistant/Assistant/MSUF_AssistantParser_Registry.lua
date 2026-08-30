@@ -2752,9 +2752,9 @@ local function ResolveMediaChange(setting, text, raw, explicitQuery)
     return nil
 end
 
-local POWER_UNIT_ORDER = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local POWER_UNIT_ORDER = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
 local POWER_GROUP_ORDER = { "party", "raid", "mythicraid" }
-local CASTBAR_INTERRUPT_UNITS = { "player", "target", "focus", "boss" }
+local CASTBAR_INTERRUPT_UNITS = { "player", "target", "focus", "boss", "arena" }
 
 local function ParseGlobalFontFamilyShortcut(text, raw)
     if not ContainsAny(text, RegistryPhrases[53]) then return nil end
@@ -2795,6 +2795,7 @@ local FONT_RENDERING_UNIT_SCOPES = {
     focus = "focus",
     pet = "pet",
     boss = "boss",
+    arena = "arena",
 }
 
 local FONT_RENDERING_GROUP_SCOPES = {
@@ -3339,6 +3340,8 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
         key = "general.kickReadyShowFocus"
     elseif ContainsAny(text, RegistryPhrases[113]) then
         key = "general.kickReadyShowBoss"
+    elseif ContainsAny(text, RegistryPhrases[429]) then
+        key = "general.kickReadyShowArena"
     end
     if not key then return nil end
 
@@ -3899,12 +3902,13 @@ function P.ParseAlphaExcludeTextPortraitShortcut(text)
     }
 end
 
-local CASTBAR_BACKEND_UNITS = { "player", "target", "focus", "boss" }
+local CASTBAR_BACKEND_UNITS = { "player", "target", "focus", "boss", "arena" }
 local CASTBAR_BACKEND_ENABLE_KEYS = {
     player = "general.enablePlayerCastbar",
     target = "general.enableTargetCastbar",
     focus = "general.enableFocusCastbar",
     boss = "general.enableBossCastbar",
+    arena = "general.enableArenaCastbar",
 }
 local CASTBAR_BACKEND_PROVIDER_KEYS = {
     player = "general.castbarPlayerBackend",
@@ -3981,7 +3985,7 @@ P.ParseCastbarBackendShortcut = function(text)
             return {
                 kind = "answer",
                 status = "ambiguous",
-                text = "Player is the only cast bar that can switch between Blizzard and MSUF. For Blizzard, ask for 'use Blizzard player cast bar'. Target, Focus, and Boss cast bars can use MSUF or be hidden.",
+                text = "Player is the only cast bar that can switch between Blizzard and MSUF. For Blizzard, ask for 'use Blizzard player cast bar'. Target, Focus, Boss, and Arena cast bars can use MSUF or be hidden.",
                 summary = "Explains which cast bars can use Blizzard mode.",
             }
         end
@@ -3993,7 +3997,7 @@ P.ParseCastbarBackendShortcut = function(text)
                 return {
                     kind = "answer",
                     status = "unsupported",
-                    text = "Only the Player cast bar can use Blizzard mode. For Target, Focus, and Boss, use the MSUF cast bar or hide the cast bar.",
+                    text = "Only the Player cast bar can use Blizzard mode. For Target, Focus, Boss, and Arena, use the MSUF cast bar or hide the cast bar.",
                     summary = "Only the Player cast bar can use Blizzard mode.",
                 }
             end
@@ -4024,7 +4028,7 @@ P.ParseCastbarBackendShortcut = function(text)
         kind = "ambiguous",
         choices = changes,
         label = "Which Cast Bar?",
-        summary = "Which cast bar do you want me to change: Player, Target, Focus, or Boss?",
+        summary = "Which cast bar do you want me to change: Player, Target, Focus, Boss, or Arena?",
     }
 end
 
@@ -4064,6 +4068,7 @@ function P.ParseCastbarPositionRegistryShortcut(text)
         target = "castbarTarget",
         focus = "castbarFocus",
         boss = "bossCast",
+        arena = "arenaCast",
     }
     local explicitUnits = DetectUnits(text)
     local units = {}
@@ -4075,7 +4080,7 @@ function P.ParseCastbarPositionRegistryShortcut(text)
     if #units > 0 then
         concrete = true
     elseif HasAllScopeIntent(text) then
-        units = { "player", "target", "focus", "boss" }
+        units = { "player", "target", "focus", "boss", "arena" }
         concrete = true
     else
         local pageUnit = CurrentRegistryPageUnit()
@@ -4083,7 +4088,7 @@ function P.ParseCastbarPositionRegistryShortcut(text)
             units[#units + 1] = pageUnit
             concrete = true
         else
-            units = { "player", "target", "focus", "boss" }
+            units = { "player", "target", "focus", "boss", "arena" }
         end
     end
 
@@ -4120,7 +4125,7 @@ function P.ParseCastbarPositionRegistryShortcut(text)
         kind = "ambiguous",
         choices = changes,
         label = "Which Cast Bar?",
-        summary = "The request matched a cast bar position option but did not name Player, Target, Focus, or Boss.",
+        summary = "The request matched a cast bar position option but did not name Player, Target, Focus, Boss, or Arena.",
     }
 end
 

@@ -28,7 +28,7 @@ local function Meta(path, classification, exact)
     return ControlMeta("opt_castbar", "global", path, classification, resolved)
 end
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
-local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss"
+local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss arena"
 local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
 local CASTBAR_PAGE_WORK_DELAY = 0.04
 local CASTBAR_PREVIEW_REFRESH_INTERVAL = 1 / 30
@@ -53,6 +53,7 @@ end
 local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit == "boss1" or unit == "bosses" or unit == "boss frames" then unit = "boss" end
+    if unit == "arena1" or unit == "arenas" or unit == "arena frames" then unit = "arena" end
     return CASTBAR_PREVIEW_UNITS[unit] and unit or "player"
 end
 local function NormalizeCastbarPreviewType(kind)
@@ -159,7 +160,7 @@ local function BuildCastbars(ctx)
             local fallbackW, fallbackH = 271, 18
             if unit == "target" then fallbackW = 272
             elseif unit == "focus" then fallbackW = 175
-            elseif unit == "boss" then fallbackW, fallbackH = 176, 12 end
+            elseif unit == "boss" or unit == "arena" then fallbackW, fallbackH = 176, 12 end
             return CastbarPreview.ReadSize(unit, g,
                 tonumber(ReadG("castbarGlobalWidth", fallbackW)) or fallbackW,
                 tonumber(ReadG("castbarGlobalHeight", fallbackH)) or fallbackH)
@@ -175,6 +176,7 @@ local function BuildCastbars(ctx)
         end
         local function CastbarShowTime(unit, g)
             if unit == "boss" then return not (g and g.showBossCastTime == false) end
+            if unit == "arena" then return not (g and g.showArenaCastTime == false) end
             local key = (unit == "player" and "showPlayerCastTime")
                 or (unit == "target" and "showTargetCastTime")
                 or (unit == "focus" and "showFocusCastTime")
@@ -184,6 +186,7 @@ local function BuildCastbars(ctx)
             if unit == "target" then return g and g.castbarTargetShowTargetName == true end
             if unit == "focus" then return g and g.castbarFocusShowTargetName == true end
             if unit == "boss" then return g and g.showBossCastTargetName == true end
+            if unit == "arena" then return g and g.showArenaCastTargetName == true end
             return false
         end
         local function PreviewTexture(parent, layer, r, g, b, a, texture, subLevel)
@@ -216,6 +219,7 @@ local function BuildCastbars(ctx)
             { key = "target", text = "Target" },
             { key = "focus", text = "Focus" },
             { key = "boss", text = "Boss" },
+            { key = "arena", text = "Arena" },
         }, 52, 4, M.SetCastbarPreviewUnit, "preview.unit")
         local buttonGap, interruptW = 6, 90
         local buttonW = compactControls
@@ -423,7 +427,7 @@ local function BuildCastbars(ctx)
             if type(shorten) ~= "function" then return text end
 
             preview._spellNameShortenFrame = preview._spellNameShortenFrame or {}
-            preview._spellNameShortenFrame.unit = unit == "boss" and "boss1" or unit
+            preview._spellNameShortenFrame.unit = (unit == "boss" and "boss1") or (unit == "arena" and "arena1") or unit
             return shorten(preview._spellNameShortenFrame, text)
         end
         local function CastDuration(kind)
@@ -476,6 +480,7 @@ local function BuildCastbars(ctx)
             if unit == "target" then return "kickReadyShowTarget" end
             if unit == "focus" then return "kickReadyShowFocus" end
             if unit == "boss" then return "kickReadyShowBoss" end
+            if unit == "arena" then return "kickReadyShowArena" end
             return nil
         end
         local function ReadColorTable(tbl, dr, dg, db)
@@ -556,6 +561,7 @@ local function BuildCastbars(ctx)
                 or unit == "target" and "castbarTarget"
                 or unit == "focus" and "castbarFocus"
                 or unit == "boss" and "bossCast"
+                or unit == "arena" and "arenaCast"
             local thickness = prefix and tonumber(gdb and gdb[prefix .. "IconBorderThickness"]) or 0
             local style = prefix and tostring((gdb and gdb[prefix .. "IconBorderStyle"]) or "NONE"):upper() or "NONE"
             thickness = max(0, min(8, floor((thickness or 0) + 0.5)))
@@ -1345,7 +1351,7 @@ local function BuildCastbars(ctx)
     end
     LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 352, build = BuildFocusKickSection })
     local function BuildInterruptReadySection(_, secBuilder)
-    local kick = secBuilder:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 328, false)
+    local kick = secBuilder:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 382, false)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(kick, function()
             if tostring(ReadG("kickReadyStyle", "border") or "border"):lower() == "fill" then
@@ -1372,21 +1378,23 @@ local function BuildCastbars(ctx)
         { "toggle", "Show on Target castbar", kickLeftX, -56, 300, "kickReadyShowTarget", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
         { "toggle", "Show on Focus castbar", kickLeftX, -82, 300, "kickReadyShowFocus", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
         { "toggle", "Show on Boss castbars", kickLeftX, -108, 300, "kickReadyShowBoss", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
+        { "toggle", "Show on Arena castbars", kickLeftX, -134, 300, "kickReadyShowArena", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
         { "dropdown", "Indicator style", kickRightX, -56, 300, VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyKickReady },
         { "slider", "Indicator size", kickRightX, -110, 320, 8, 32, 1, "kickReadySize", 16, "MSUF2_KICK_READY_SIZE", ApplyAndRefresh },
         { "toggle", "Auto-size to castbar height", kickRightX, -164, 360, "kickReadyAutoSize", true, "MSUF2_KICK_READY_AUTO", ApplyKickReady },
     }, "interrupt_ready")
     local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -196, 370, T.colors.muted)
-    W.LabelAt(kick, "Placement", kickLeftX, -146, 160, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(kick, "Placement", kickLeftX, -172, 160, "GameFontNormalSmall", T.colors.accent)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
-        { "dropdown", "Anchor", kickLeftX, -164, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
-        { "slider", "X offset", kickLeftX, -218, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
-        { "slider", "Y offset", kickLeftX, -272, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
+        { "dropdown", "Anchor", kickLeftX, -190, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
+        { "slider", "X offset", kickLeftX, -244, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
+        { "slider", "Y offset", kickLeftX, -298, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
     }, "interrupt_ready.placement"))
     local style, size, auto = kickControls.kickReadyStyle, kickControls.kickReadySize, kickControls.kickReadyAutoSize
     local placementControls = { kickControls.kickReadyAnchor, kickControls.kickReadyOffsetX, kickControls.kickReadyOffsetY }
     syncKickReady = function()
-        local enabled = ReadGBool("kickReadyShowTarget", false) or ReadGBool("kickReadyShowFocus", false) or ReadGBool("kickReadyShowBoss", false)
+        local enabled = ReadGBool("kickReadyShowTarget", false) or ReadGBool("kickReadyShowFocus", false)
+            or ReadGBool("kickReadyShowBoss", false) or ReadGBool("kickReadyShowArena", false)
         local autoOn = ReadGBool("kickReadyAutoSize", true)
         local isFill = ReadG("kickReadyStyle", "border") == "fill"
         SetControlEnabled(style, enabled)
@@ -1397,7 +1405,7 @@ local function BuildCastbars(ctx)
     end
     M.TrackRefresh(ctx, syncKickReady)
     end
-    LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 328, build = BuildInterruptReadySection })
+    LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 382, build = BuildInterruptReadySection })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 6 })

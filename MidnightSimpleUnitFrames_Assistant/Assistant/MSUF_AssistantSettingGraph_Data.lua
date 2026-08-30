@@ -32,9 +32,9 @@ local D = {
         association = true,
     },
 
-    unitScopes = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss" },
+    unitScopes = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss", "arena" },
     groupScopes = { "gf_party", "gf_raid", "gf_mythicraid" },
-    auraScopes = { "player", "target", "focus", "boss" },
+    auraScopes = { "player", "target", "focus", "boss", "arena" },
 }
 
 -- Page-resolvable settings normally need another setting node that explains
@@ -549,7 +549,7 @@ D.scopedInheritanceRules = {
     {
         id = "font-scope-inheritance",
         prefix = "fontScope",
-        scopes = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss", "gf_party", "gf_raid" },
+        scopes = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss", "arena", "gf_party", "gf_raid" },
         sourcePrefixes = { "fontScope.shared" },
         overrideSuffix = "override",
         evidence = "MSUF_AssistantRegistry_GlobalFontSettings.lua and Registry_Core_GlobalScope_Accessors.lua:GlobalScopeRead",
@@ -557,7 +557,7 @@ D.scopedInheritanceRules = {
     {
         id = "bar-scope-inheritance",
         prefix = "barScope",
-        scopes = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss", "gf_party", "gf_raid" },
+        scopes = { "player", "target", "focus", "pet", "targettarget", "focustarget", "boss", "arena", "gf_party", "gf_raid" },
         sourcePrefixes = { "general", "bars" },
         requireUniqueSource = true,
         overrideSuffix = "override",

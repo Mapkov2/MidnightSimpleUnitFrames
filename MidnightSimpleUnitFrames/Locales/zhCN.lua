@@ -5800,6 +5800,19 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "始终可见"
 L["hidden on this character"] = "在此角色上隐藏"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "隐藏白名单中这个角色无法施放的每个法术，且不留空位。这样一份白名单就能服务你的所有角色：法师保留奥术智慧，盗贼保留毒药。没有任何接口告知法术 ID 属于哪个职业，因此药剂增益看起来与其他职业的法术完全一样 — 请用绑定物品或列表中的“始终显示”保护它们。MSUF 仅在法术书或天赋真正变化时重新检查，战斗中绝不检查。"
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "竞技场"
+L["Arena Castbar"] = "竞技场施法条"
+L["Arena Frames"] = "竞技场框体"
+L["Arena Layout"] = "竞技场布局"
+L["Arena Opponent"] = "竞技场对手"
+L["Arena castbar preview"] = "竞技场施法条预览"
+L["Arena frame layout"] = "竞技场框体布局"
+L["Arena spacing"] = "竞技场间距"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "光环设置仅适用于玩家、目标、焦点、首领和竞技场框体。"
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "施法条设置仅适用于玩家、目标、焦点、首领和竞技场框体。"
+L["MSUF Arena Frames"] = "MSUF 竞技场框体"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

@@ -22,7 +22,7 @@ local PURGE_BORDER_121_PTR_DISABLED = false
 local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel and Purge use native 12.1 AuraContainer detection."
 local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need each UnitFrame's Aura sensor. Enable Buffs or Debuffs on the affected UnitFrame, or turn on its Dispel feature to enable the sensor automatically. Both icon caps may stay at 0."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
-local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss" }
+local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss", "arena" }
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local ROUNDED_PREVIEW_MASKS = {
     ROUNDED_PREVIEW_MASK_ROOT .. "rounded_clean_mask_s1.png",

@@ -60,7 +60,7 @@ Registry:RegisterAction({
     combatSafe = true,
     run = function(args)
         local unit = args and args.unit or "target"
-        if not CASTBAR_KEYS[unit] then return false, "I can check Player, Target, Focus, or Boss cast bars here." end
+        if not CASTBAR_KEYS[unit] then return false, "I can check Player, Target, Focus, Boss, or Arena cast bars here." end
         local g = GeneralDB()
         local backend = GetCastbarBackend(unit, g)
         local unitEnabled = true

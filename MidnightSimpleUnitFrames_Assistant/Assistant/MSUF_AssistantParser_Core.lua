@@ -1109,9 +1109,9 @@ local function FuzzyAliasWorthTrying(text, alias)
     return false
 end
 
-local UNIT_ORDER = { "targettarget", "focustarget", "player", "target", "focus", "pet", "boss" }
+local UNIT_ORDER = { "targettarget", "focustarget", "player", "target", "focus", "pet", "boss", "arena" }
 local GROUP_ORDER = { "mythicraid", "party", "raid" }
-local ALL_UNITFRAMES = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local ALL_UNITFRAMES = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
 local ALL_GROUPS = { "party", "raid", "mythicraid" }
 -- These term buckets are shared across parser shards so "castbar", "class power", "group",
 -- and global bar commands do not each invent their own meaning for the same words.
@@ -1180,6 +1180,7 @@ local PAGE_TEXT_TARGETS = {
     { page = "uf_focus", label = "Focus", terms = { "focus", "fokus" } },
     { page = "uf_pet", label = "Pet", terms = { "pet", "begleiter" } },
     { page = "uf_boss", label = "Boss", terms = { "boss", "boss frames", "bossframes" } },
+    { page = "uf_arena", label = "Arena", terms = { "arena", "arena frame", "arena frames", "arenaframe", "arenaframes" } },
     { page = "search", label = "Search", terms = { "search", "search page", "search results" } },
 }
 
@@ -1237,6 +1238,7 @@ local function DetectUnits(text)
         if ContainsAny(text, UnitTerms.focus) then AddUnique(units, "focus") end
         if ContainsAny(text, UnitTerms.pet) then AddUnique(units, "pet") end
         if ContainsAny(text, UnitTerms.boss) then AddUnique(units, "boss") end
+        if ContainsAny(text, UnitTerms.arena) then AddUnique(units, "arena") end
         if ContainsAny(text, UnitTerms.targettarget) then AddUnique(units, "targettarget") end
         if ContainsAny(text, UnitTerms.focustarget) then AddUnique(units, "focustarget") end
     end

@@ -52,15 +52,17 @@ local function NormalizeFontScopeKey(key)
     if key == "tot" or key == "targetoftarget" then return "targettarget" end
     if key == "focus_target" or key == "focustargettarget" then return "focustarget" end
     if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(key) then return "boss" end
+    if _G.MSUF_GetArenaIndexFromToken and _G.MSUF_GetArenaIndexFromToken(key) then return "arena" end
     return key
 end
 
 local function CastbarUnitForFontScope(scope)
-    if scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then return scope end
+    if scope == "player" or scope == "target" or scope == "focus" or scope == "boss"
+        or scope == "arena" then return scope end
     return nil
 end
 
-local CASTBAR_FONT_UNITS = { "player", "target", "focus", "boss" }
+local CASTBAR_FONT_UNITS = { "player", "target", "focus", "boss", "arena" }
 local UNITFRAME_FONT_ELEMENTS = {
     "Text", "NameText", "HealthText", "PowerText", "InlineToT", "StatusIndicators",
 }
@@ -678,6 +680,15 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
             local bf = frames["boss" .. i]
             if bf and bf.isBoss and bf.ForceUpdate then
                 bf:ForceUpdate("FONT_RUNTIME")
+            end
+        end
+    end
+    if _G.MSUF_ArenaTestMode and _G.MSUF_UnitEditModeActive and not _G.MSUF_InCombat then
+        local frames = (MSUF and MSUF.UF and MSUF.UF.frames) or {}
+        for i = 1, 3 do
+            local af = frames["arena" .. i]
+            if af and af.ForceUpdate then
+                af:ForceUpdate("FONT_RUNTIME")
             end
         end
     end

@@ -17,7 +17,7 @@ local max, min = math.max, math.min
 local VT = M.ValueTextList
 local UNIT_PAGES, LOAD_CONDITIONS, BOSS_LAYOUT_OPTIONS, SEPARATORS, UF_COPY_CATEGORIES = M.PickDefaults(UP, [[UNIT_PAGES LOAD_CONDITIONS BOSS_LAYOUT_OPTIONS SEPARATORS UF_COPY_CATEGORIES]])
 local GetConf, GetGeneral, Call, DefaultCopyTarget, UnitTopLabel, UnitTopPillWidth, NewCopyScopeDefaults, ConfirmCopyToAll, CopyUnitSettings, ToggleEditMode, IsEditModeActive, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral Call DefaultCopyTarget UnitTopLabel UnitTopPillWidth NewCopyScopeDefaults ConfirmCopyToAll CopyUnitSettings ToggleEditMode IsEditModeActive ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetControlEnabled NormalizeBossLayoutMode UpdateLoadActive ControlMeta SettingMeta ReviewedMeta RegisterControl]])
-local UNIT_AURAS_MENU_UNITS = M.KeySetFromWords "player target focus boss"
+local UNIT_AURAS_MENU_UNITS = M.KeySetFromWords "player target focus boss arena"
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
 local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
 local TOT_INLINE_COLOR_AUTO = "AUTO"
@@ -147,14 +147,14 @@ local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
     end
     return false
 end
-local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet", "all" }
-local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, all = 38 }
-local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", boss = "Boss", all = "All" }
-local UNIT_TAB_ORDER = { "player", "target", "boss", "focus", "pet", "targettarget", "focustarget" }
-local UNIT_TAB_LABELS = { boss = "Boss Frames", targettarget = "Target's Target", focustarget = "Focus Target" }
-local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", targettarget = "ToT", focustarget = "FT" }
-local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, focus = 58, pet = 46, targettarget = 108, focustarget = 98 }
-local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, focus = 50, pet = 40, targettarget = 42, focustarget = 36 }
+local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "all" }
+local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, arena = 50, pet = 38, all = 38 }
+local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", boss = "Boss", arena = "Arena", all = "All" }
+local UNIT_TAB_ORDER = { "player", "target", "boss", "arena", "focus", "pet", "targettarget", "focustarget" }
+local UNIT_TAB_LABELS = { boss = "Boss Frames", arena = "Arena Frames", targettarget = "Target's Target", focustarget = "Focus Target" }
+local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", arena = "Arena", targettarget = "ToT", focustarget = "FT" }
+local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, arena = 96, focus = 58, pet = 46, targettarget = 108, focustarget = 98 }
+local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, arena = 56, focus = 50, pet = 40, targettarget = 42, focustarget = 36 }
 local UNIT_PAGE_FOR_UNIT = {}
 for pageKey, pageInfo in pairs(UNIT_PAGES or {}) do
     if pageInfo and pageInfo.unit then UNIT_PAGE_FOR_UNIT[pageInfo.unit] = pageKey end
@@ -661,9 +661,9 @@ local function BuildTopActions(ctx, builder, unit, label)
                 if result.reason == "no_categories" then
                     message = M.Tr("No copy categories selected.")
                 elseif result.reason == "unsupported_aura_scope" or result.reason == "aura_copy_unavailable" then
-                    message = M.Tr("Aura settings are only available for Player, Target, Focus, and Boss Frames.")
+                    message = M.Tr("Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames.")
                 elseif result.reason == "unsupported_castbar_scope" then
-                    message = M.Tr("Castbar settings are only available for Player, Target, Focus, and Boss Frames.")
+                    message = M.Tr("Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames.")
                 else
                     message = M.Tr("Nothing was copied.")
                 end
@@ -1377,7 +1377,7 @@ local BOSS_LAYOUT_TILE_VALUES = {
     { value = "HORIZONTAL_RIGHT", text = "Right", tooltip = "Horizontal (left -> right)", dx = 1, dy = 0, arrow = ">" },
     { value = "HORIZONTAL_LEFT", text = "Left", tooltip = "Horizontal (right -> left)", dx = -1, dy = 0, arrow = "<" },
 }
-local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap)
+local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
     if not parent then return nil end
     tileW, tileH, gap = tileW or 64, tileH or 70, gap or 8
     local control = CreateFrame("Frame", nil, parent)
@@ -1387,7 +1387,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap)
     control.values = BOSS_LAYOUT_OPTIONS
     control.buttons = {}
 
-    local title = T.Font(control, "GameFontNormalSmall", M.Tr("Boss frame layout"), T.colors.accent)
+    local title = T.Font(control, "GameFontNormalSmall", M.Tr(titleText or "Boss frame layout"), T.colors.accent)
     title:SetPoint("TOPLEFT", control, "TOPLEFT", 0, 0)
     control._msuf2Title = title
 
@@ -1578,6 +1578,38 @@ local function BuildBossLayout(ctx, builder, unit)
         end,
         SettingMeta(ctx, "boss_layout.target_highlight", "general", "bossTargetHighlightEnabled"))
 end
+--- Arena reuses the boss stacked-container model and its exact key names
+--- (spacing/bossLayoutMode), so the same tile control edits the arena scope.
+local function BuildArenaLayout(ctx, builder, unit)
+    if unit ~= "arena" then return end
+    local sec = builder:CollapsibleSection("arena_layout", "Arena Layout", 160, false)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    local leftX = 14
+    local rightX = math.max(350, floor(sectionW * 0.50) + 8)
+    local sliderW = math.min(300, math.max(220, rightX - leftX - 68))
+    local spacing = W.Slider(sec, "Arena spacing", -400, 0, 1, 300)
+    W.MoveWidget(spacing, sec, leftX, -42, sliderW, "CENTER")
+    M.BindNumberWidget(ctx, spacing,
+        function() return ReadNumber(unit, "spacing", -96) end,
+        function(v) SetNumber(unit, "spacing", v, "MSUF2_ARENA_SPACING", { preview = true }) end,
+        -96, (function()
+            local meta = SettingMeta(ctx, "arena_layout.spacing", unit, "spacing")
+            meta.step, meta.roundStep = 1, true
+            return meta
+        end)())
+    local layout = BuildBossLayoutTiles(sec, rightX, -42, 60, 70, 8, "Arena frame layout")
+    M.BindSegment(ctx, layout,
+        function()
+            local conf = GetConf(unit)
+            return NormalizeBossLayoutMode(conf.bossLayoutMode)
+        end,
+        function(v)
+            local conf = GetConf(unit)
+            conf.bossLayoutMode = NormalizeBossLayoutMode(v)
+            M.RequestUnitApply(unit, "MSUF2_ARENA_LAYOUT_MODE", { preview = true })
+        end,
+        SettingMeta(ctx, "arena_layout.mode", unit, "bossLayoutMode"))
+end
 local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn, opts)
     if UP.BuildSectionLazy and not (opts and opts.lazy == false) then
         return UP.BuildSectionLazy(ctx, builder, unit, {
@@ -1615,6 +1647,26 @@ local function BuildUnitPage(info)
             ctx.wrapper:HookScript("OnHide", function() SetBossPagePreviewActive(false) end)
             M.TrackRefresh(ctx, RefreshBossPagePreviewActive)
         end
+        if info.unit == "arena" and ctx and ctx.wrapper then
+            local function ArenaPagePreviewShouldBeActive()
+                return M.frame and M.frame.IsShown and M.frame:IsShown()
+                    and M.activeKey == "uf_arena"
+                    and ctx.wrapper and ctx.wrapper.IsShown and ctx.wrapper:IsShown()
+            end
+            local function SetArenaPagePreviewActive(active)
+                if active and type(M.RequestArenaPagePreviewForKey) == "function" then
+                    M.RequestArenaPagePreviewForKey("uf_arena")
+                    return
+                end
+                if M.UnitPage and M.UnitPage.SetArenaPagePreviewActive then M.UnitPage.SetArenaPagePreviewActive(active) end
+            end
+            local function RefreshArenaPagePreviewActive()
+                SetArenaPagePreviewActive(ArenaPagePreviewShouldBeActive())
+            end
+            ctx.wrapper:HookScript("OnShow", RefreshArenaPagePreviewActive)
+            ctx.wrapper:HookScript("OnHide", function() SetArenaPagePreviewActive(false) end)
+            M.TrackRefresh(ctx, RefreshArenaPagePreviewActive)
+        end
         local builder = W.PageBuilder(ctx)
         BuildTopActions(ctx, builder, info.unit, info.label)
         BuildPreview(ctx, builder, info.unit)
@@ -1649,6 +1701,9 @@ local function BuildUnitPage(info)
         BuildStatus(ctx, builder, info.unit)
         if info.unit == "boss" then
             BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 204 })
+        end
+        if info.unit == "arena" then
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildArenaLayout, { sectionId = "arena_layout", title = "Arena Layout", height = 160 })
         end
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 178 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end

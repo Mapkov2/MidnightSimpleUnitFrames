@@ -60,7 +60,7 @@ local function StatusTexture(bar)
 end
 
 local function UnitFrameForKey(key)
-  local unit = key == "boss" and "boss1" or key
+  local unit = key == "boss" and "boss1" or key == "arena" and "arena1" or key
   if unit and UF and type(UF.GetFrame) == "function" then
     local frame = UF.GetFrame(unit)
     if frame then return frame end

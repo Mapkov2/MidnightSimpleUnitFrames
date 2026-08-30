@@ -149,7 +149,7 @@ local function ParseCastbarWidthModeShortcut(normalized)
 
     local units = DetectUnits(normalized)
     if #units == 0 and ContainsAny(normalized, P.RootPhrases[11]) then
-        units = { "player", "target", "focus", "boss" }
+        units = { "player", "target", "focus", "boss", "arena" }
     end
     if #units == 0 then return nil end
 
@@ -158,6 +158,7 @@ local function ParseCastbarWidthModeShortcut(normalized)
         target = "general.castbarTargetMatchWidth",
         focus = "general.castbarFocusMatchWidth",
         boss = "general.bossCastbarMatchWidth",
+        arena = "general.arenaCastbarMatchWidth",
     }
     local changes = {}
     local seen = {}
@@ -7725,6 +7726,14 @@ function A.Parse(text, ctxOverride)
                 spacing = "general.bossCastIconSpacing",
                 border = "general.bossCastIconBorderStyle",
             },
+            arena = {
+                size = "general.arenaCastIconSize",
+                position = "general.arenaCastIconPosition",
+                x = "general.arenaCastIconOffsetX",
+                y = "general.arenaCastIconOffsetY",
+                spacing = "general.arenaCastIconSpacing",
+                border = "general.arenaCastIconBorderStyle",
+            },
         }
 
         local units = P.DetectUnits(normalized)
@@ -7844,6 +7853,20 @@ function A.Parse(text, ctxOverride)
                 timeY = "general.bossCastTimeOffsetY",
                 timeFontSize = "general.bossCastTimeFontSize",
             },
+            arena = {
+                spellPosition = "general.arenaCastSpellNamePosition",
+                textX = "general.arenaCastTextOffsetX",
+                textY = "general.arenaCastTextOffsetY",
+                -- Retired SpellNameAlign intentionally has no executable route.
+                spellFontSize = "general.arenaCastSpellNameFontSize",
+                spellMaxWidth = "general.arenaCastSpellNameMaxWidth",
+                spellTruncate = "general.arenaCastSpellNameTruncate",
+                timeFormat = "general.arenaCastTimeFormat",
+                timePosition = "general.arenaCastTimePosition",
+                timeX = "general.arenaCastTimeOffsetX",
+                timeY = "general.arenaCastTimeOffsetY",
+                timeFontSize = "general.arenaCastTimeFontSize",
+            },
         }
 
         local units = P.DetectUnits(normalized)
@@ -7894,6 +7917,7 @@ function A.Parse(text, ctxOverride)
             target = { time = "general.showTargetCastTime", icon = "general.castbarTargetShowIcon", text = "general.castbarTargetShowSpellName" },
             focus = { time = "general.showFocusCastTime", icon = "general.castbarFocusShowIcon", text = "general.castbarFocusShowSpellName" },
             boss = { time = "general.showBossCastTime", icon = "general.showBossCastIcon", text = "general.showBossCastName" },
+            arena = { time = "general.showArenaCastTime", icon = "general.showArenaCastIcon", text = "general.showArenaCastName" },
         }
         local changes = {}
         if attr and value ~= nil then
@@ -7932,6 +7956,7 @@ function A.Parse(text, ctxOverride)
             target = { w = "general.castbarTargetBarWidth", h = "general.castbarTargetBarHeight" },
             focus = { w = "general.castbarFocusBarWidth", h = "general.castbarFocusBarHeight" },
             boss = { w = "general.bossCastbarWidth", h = "general.bossCastbarHeight" },
+            arena = { w = "general.arenaCastbarWidth", h = "general.arenaCastbarHeight" },
         }
         local changes = {}
         if axis and value ~= nil then
@@ -7970,6 +7995,7 @@ function A.Parse(text, ctxOverride)
             target = { x = "general.castbarTargetOffsetX", y = "general.castbarTargetOffsetY" },
             focus = { x = "general.castbarFocusOffsetX", y = "general.castbarFocusOffsetY" },
             boss = { x = "general.bossCastbarOffsetX", y = "general.bossCastbarOffsetY" },
+            arena = { x = "general.arenaCastbarOffsetX", y = "general.arenaCastbarOffsetY" },
         }
         local changes = {}
         if axis and value ~= nil then
@@ -8002,6 +8028,7 @@ function A.Parse(text, ctxOverride)
                 target = "general.enableTargetCastbar",
                 focus = "general.enableFocusCastbar",
                 boss = "general.enableBossCastbar",
+                arena = "general.enableArenaCastbar",
             }
             local changes = {}
             for i = 1, #units do

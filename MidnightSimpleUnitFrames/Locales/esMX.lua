@@ -5338,6 +5338,19 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "siempre visible"
 L["hidden on this character"] = "oculto en este personaje"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "Oculta cada hechizo de la lista blanca que este personaje no puede lanzar, sin dejar huecos. Así una sola lista blanca sirve para todos tus personajes: el mago conserva Intelecto arcano y el pícaro sus venenos. Nada indica a qué clase pertenece un ID de hechizo, así que un beneficio de frasco se ve igual que un hechizo de otra clase: protégelos con un objeto vinculado o con Mostrar siempre en la fila. MSUF solo lo vuelve a comprobar cuando tu libro de hechizos o tus talentos cambian de verdad, nunca en combate."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Arena"
+L["Arena Castbar"] = "Barra de lanzamiento de arena"
+L["Arena Frames"] = "Marcos de arena"
+L["Arena Layout"] = "Distribución de arena"
+L["Arena Opponent"] = "Oponente de arena"
+L["Arena castbar preview"] = "Vista previa de la barra de lanzamiento de arena"
+L["Arena frame layout"] = "Distribución de marcos de arena"
+L["Arena spacing"] = "Espaciado de arena"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Los ajustes de aura solo están disponibles para los marcos de jugador, objetivo, foco, jefe y arena."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Los ajustes de la barra de lanzamiento solo están disponibles para los marcos de jugador, objetivo, foco, jefe y arena."
+L["MSUF Arena Frames"] = "MSUF Marcos de arena"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

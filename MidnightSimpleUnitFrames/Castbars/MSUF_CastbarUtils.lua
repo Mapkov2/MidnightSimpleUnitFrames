@@ -550,6 +550,7 @@ local function UnitSupportsInterruptUnavailableTint(frame, general)
     if unit == "target" then return general.kickReadyShowTarget == true and owns("target") end
     if unit == "focus" then return general.kickReadyShowFocus == true and owns("focus") end
     if unit:sub(1, 4) == "boss" then return general.kickReadyShowBoss == true and owns("boss") end
+    if unit:sub(1, 5) == "arena" then return general.kickReadyShowArena == true and owns("arena") end
     return false
 end
 

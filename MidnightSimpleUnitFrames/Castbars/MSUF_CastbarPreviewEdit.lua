@@ -51,6 +51,16 @@ local UNIT_CONFIG = {
         reanchor = "MSUF_ReanchorBossCastBar",
         test = "MSUF_SetBossCastbarTestMode",
     },
+    arena = {
+        w = "arenaCastbarWidth",
+        h = "arenaCastbarHeight",
+        x = "arenaCastbarOffsetX",
+        y = "arenaCastbarOffsetY",
+        dx = 0,
+        dy = 0,
+        reanchor = "MSUF_ReanchorArenaCastBar",
+        test = "MSUF_SetArenaCastbarTestMode",
+    },
 }
 local CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL = 0.05
 
@@ -193,6 +203,7 @@ local function PulsePreview(unit)
         local testModeKey = (unit == "player" and "playerCastbarTestMode")
             or (unit == "target" and "targetCastbarTestMode")
             or (unit == "focus" and "focusCastbarTestMode")
+            or (unit == "arena" and "arenaCastbarTestMode")
             or "bossCastbarTestMode"
 
         if general[testModeKey] then

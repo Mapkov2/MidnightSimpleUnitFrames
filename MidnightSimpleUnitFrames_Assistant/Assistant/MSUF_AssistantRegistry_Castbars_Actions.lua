@@ -22,12 +22,13 @@ local ApplyCastbar = C.ApplyCastbar
 
 if type(GeneralDB) ~= "function" or type(CallGlobal) ~= "function" or type(ApplyCastbar) ~= "function" then return end
 
-local CASTBAR_PREVIEW_UNITS = { player = true, target = true, focus = true, boss = true }
+local CASTBAR_PREVIEW_UNITS = { player = true, target = true, focus = true, boss = true, arena = true }
 local CASTBAR_PREVIEW_TYPES = { normal = true, channel = true, empowered = true }
 
 local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit == "boss1" or unit == "bosses" then unit = "boss" end
+    if unit == "arena1" or unit == "arenas" then unit = "arena" end
     return CASTBAR_PREVIEW_UNITS[unit] and unit or "player"
 end
 
@@ -64,7 +65,7 @@ Registry:RegisterAction({
     category = "Appearance / Cast Bars",
     aliases = {
         "preview castbar", "castbar preview", "show castbar preview", "castbar vorschau", "zauberleiste vorschau",
-        "preview player castbar", "preview target castbar", "preview focus castbar", "preview boss castbar",
+        "preview player castbar", "preview target castbar", "preview focus castbar", "preview boss castbar", "preview arena castbar",
         "spieler zauberleiste vorschau", "ziel zauberleiste vorschau", "fokus zauberleiste vorschau", "boss zauberleiste vorschau",
         "preview channel castbar", "preview empowered castbar", "preview castbar interrupt",
         "kanalisierte zauberleiste vorschau", "empowered zauberleiste vorschau", "unterbrochene zauberleiste vorschau",
@@ -100,8 +101,8 @@ Registry:RegisterAction({
     category = "Appearance / Cast Bars",
     aliases = {
         "start castbar test mode", "stop castbar test mode", "castbar test mode", "cast bar test mode",
-        "start player castbar test", "start target castbar test", "start focus castbar test", "start boss castbar test",
-        "stop player castbar test", "stop target castbar test", "stop focus castbar test", "stop boss castbar test",
+        "start player castbar test", "start target castbar test", "start focus castbar test", "start boss castbar test", "start arena castbar test",
+        "stop player castbar test", "stop target castbar test", "stop focus castbar test", "stop boss castbar test", "stop arena castbar test",
         "zauberleisten testmodus", "spieler zauberleisten test", "ziel zauberleisten test",
         "fokus zauberleisten test", "boss zauberleisten test",
     },
@@ -121,6 +122,7 @@ Registry:RegisterAction({
         local setter = _G[unit == "player" and "MSUF_SetPlayerCastbarTestMode"
             or unit == "target" and "MSUF_SetTargetCastbarTestMode"
             or unit == "focus" and "MSUF_SetFocusCastbarTestMode"
+            or unit == "arena" and "MSUF_SetArenaCastbarTestMode"
             or "MSUF_SetBossCastbarTestMode"]
         if type(setter) ~= "function" then
             return false, "The " .. UnitLabel(unit) .. " castbar test is not available yet."

@@ -381,11 +381,16 @@ end
 --- the target-name contract above.
 local CASTBAR_DETAIL_PREFIX = {
     player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast",
+    arena = "arenaCast",
 }
 local function CastbarDetailColorKey(unit, detail)
     if type(unit) ~= "string" or type(detail) ~= "string" or detail == "" then return nil end
-    -- Boss frames arrive as boss1..boss5 from the driver but share one config row.
-    local prefix = CASTBAR_DETAIL_PREFIX[unit] or (unit:match("^boss%d*$") and "bossCast") or nil
+    -- Boss/arena frames arrive as boss1..boss5/arena1..arena3 from the driver
+    -- but share one config row per family.
+    local prefix = CASTBAR_DETAIL_PREFIX[unit]
+        or (unit:match("^boss%d*$") and "bossCast")
+        or (unit:match("^arena%d*$") and "arenaCast")
+        or nil
     if not prefix then return nil end
     return prefix .. detail .. "Color"
 end

@@ -24,6 +24,7 @@ local UPDATE_INTERVAL = 1 / 20
 local NO_TARGET_GRACE = 0.35
 local PREVIEW_UNITS = { "target", "focus", "targettarget", "focustarget", "pet" }
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+local ARENA_UNITS = { "arena1", "arena2", "arena3" }
 local PREVIEW_NAME_LABELS = {
   player = "Player Name Position",
   target = "Target Name Position",
@@ -281,6 +282,10 @@ local function BossPreviewActive()
   return _G.MSUF_BossTestMode == true or _G.MSUF2_BossUnitframePreviewActive == true
 end
 
+local function ArenaPreviewActive()
+  return _G.MSUF_ArenaTestMode == true or _G.MSUF2_ArenaUnitframePreviewActive == true
+end
+
 local function EditModeAnimationTargetActive()
   if not EditModePreviewActive() then return false end
   return PA.source == "edit_mode"
@@ -294,6 +299,7 @@ local function HasVisibleTarget()
   if HasVisibleGroupBox() then return true end
   if GroupPreviewActive() then return true end
   if BossPreviewActive() then return true end
+  if ArenaPreviewActive() then return true end
   return EditModeAnimationTargetActive()
 end
 
@@ -895,6 +901,17 @@ local function RefreshBossPreviewFrames()
   return any
 end
 
+local function RefreshArenaPreviewFrames()
+  if not ArenaPreviewActive() then return false end
+  local any = false
+  for i = 1, #ARENA_UNITS do
+    local unit = ARENA_UNITS[i]
+    local frame = PreviewFrame(unit)
+    any = PA.ApplyUnitFrame(frame, i, "arena") or any
+  end
+  return any
+end
+
 local function BossCastbarPreview(index)
   if index == 1 then return _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1 end
   return _G["MSUF_BossCastbarPreview" .. index]
@@ -913,6 +930,9 @@ local function RefreshCastbarPreviewFrames()
   for i = 1, bossMax do
     any = ApplyCastbarPreviewFrame(BossCastbarPreview(i), i + 30, "boss", "Celestial Ruin") or any
   end
+  for i = 1, #ARENA_UNITS do
+    any = ApplyCastbarPreviewFrame(_G["MSUF_ArenaCastbarPreview" .. i], i + 40, "arena", "Greater Pyroblast") or any
+  end
   return any
 end
 
@@ -925,6 +945,9 @@ local function RestoreCastbarPreviewFrames()
   for i = 1, bossMax do
     RestoreCastbarFrame(BossCastbarPreview(i))
   end
+  for i = 1, #ARENA_UNITS do
+    RestoreCastbarFrame(_G["MSUF_ArenaCastbarPreview" .. i])
+  end
 end
 
 local function RefreshStaticCastbarPreviews()
@@ -934,6 +957,9 @@ local function RefreshStaticCastbarPreviews()
   end
   if BossPreviewActive() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
     _G.MSUF_UpdateBossCastbarPreview()
+  end
+  if ArenaPreviewActive() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+    _G.MSUF_UpdateArenaCastbarPreview()
   end
 end
 
@@ -1021,6 +1047,7 @@ local function RefreshEditModeTargets()
   any = RefreshGroupRuntimeFrames() or any
   any = RefreshUnitPreviewFrames() or any
   any = RefreshBossPreviewFrames() or any
+  any = RefreshArenaPreviewFrames() or any
   any = RefreshEditAuraPreviews() or any
   any = RefreshCastbarPreviewFrames() or any
   return any
@@ -1032,6 +1059,7 @@ local function RefreshPreviewTargets()
   any = RefreshGroupBoxes() or any
   any = RefreshGroupPreviews() or any
   any = RefreshBossPreviewFrames() or any
+  any = RefreshArenaPreviewFrames() or any
   any = RefreshCastbarPreviewFrames() or any
   return any
 end
@@ -1052,6 +1080,9 @@ local function RefreshAfterDriverStop(stoppedSource)
   end
   if BossPreviewActive() and _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
     _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
+  end
+  if ArenaPreviewActive() and _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
+    _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
   end
 end
 

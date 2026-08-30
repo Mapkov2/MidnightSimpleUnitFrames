@@ -95,6 +95,18 @@ local IsUnitToken = UF.IsUnitToken or function(unit)
   return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
 end
 
+local ARENA_OPPONENT_UNITS = {
+  arena1 = true,
+  arena2 = true,
+  arena3 = true,
+  arena4 = true,
+  arena5 = true,
+}
+
+local function IsArenaOpponentUnit(unit)
+  return ARENA_OPPONENT_UNITS[unit] == true
+end
+
 -- Shared bar/text primitives for unitframe elements.
 -- Health, power, text, color, and smoothing helpers live here so element files can share the
 -- same secret-value handling and cached mutation rules instead of diverging per unit type.
@@ -1241,8 +1253,14 @@ local function RefreshUnitState(frame, unit, spec, event)
   end
   if needsIdentity and not preserveIdentity then
     if validUnit then
-      local isPlayer
-      isPlayer, state.isPlayerKnown = ReadUnitIsPlayerCached(frame, unit)
+      local isPlayer, isPlayerKnown = ReadUnitIsPlayerCached(frame, unit)
+      -- Arena unit tokens always identify opponent players. In Midnight the
+      -- UnitIsPlayer result can itself be identity-restricted, so retain that
+      -- token contract instead of misclassifying the opponent as an NPC.
+      if isPlayerKnown ~= true and IsArenaOpponentUnit(unit) then
+        isPlayer, isPlayerKnown = true, true
+      end
+      state.isPlayerKnown = isPlayerKnown == true
       state.isPlayer = isPlayer == true
     end
     if state.isPlayerKnown and not state.isPlayer then
@@ -1663,6 +1681,7 @@ MSUF.UFBarTextCommon = {
   GetLayerBaseLevel = GetLayerBaseLevel,
   IsSecret = IsSecret,
   IsNil = IsNil,
+  IsArenaOpponentUnit = IsArenaOpponentUnit,
   RefreshUnitState = RefreshUnitState,
   SetStatusTexture = SetStatusTexture,
   ApplyStatusColor = ApplyStatusColor,

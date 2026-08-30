@@ -279,6 +279,13 @@ local function ForEachCastbar(callback)
         Visit(_G["MSUF_BossCastbar" .. index] or _G["MSUF_boss" .. index .. "CastBar"])
         Visit(_G["MSUF_BossCastbarPreview" .. index])
     end
+    Visit(_G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1)
+    local arenaCastbars = _G.MSUF_ArenaCastbars
+    for index = 1, 3 do
+        Visit(type(arenaCastbars) == "table" and arenaCastbars[index] or nil)
+        Visit(_G["MSUF_ArenaCastbar" .. index])
+        Visit(_G["MSUF_ArenaCastbarPreview" .. index])
+    end
 end
 
 local function ApplyAll(masterActive)

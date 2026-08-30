@@ -193,7 +193,7 @@ local function SelectedUnitAuraFrameEffect(model, unit, kind)
 end
 function Auras.WantsDefensivePortraitAnchor(key, runtimeSpec)
     key = Auras.PreviewUnitKey(key)
-    if key ~= "player" and key ~= "target" and key ~= "focus" and key ~= "boss" then return false end
+    if key ~= "player" and key ~= "target" and key ~= "focus" and key ~= "boss" and key ~= "arena" then return false end
     local model = MenuModel()
     local item = CustomItem(model, key, 4, false)
     local portrait = runtimeSpec and runtimeSpec.portrait
@@ -206,7 +206,7 @@ end
 function Auras.PreviewUnitKey(unit)
     if unit == nil then return nil end
     unit = CanonKey(unit)
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit end
     return nil
 end
 local function PreviewUnit(box)
@@ -218,7 +218,7 @@ local function PreviewUnit(box)
     return key
 end
 local function RuntimeUnit(unit)
-    return unit == "boss" and "boss1" or unit
+    return unit == "boss" and "boss1" or unit == "arena" and "arena1" or unit
 end
 local function LiveApplyReason(reason, fallback)
     reason = tostring(reason or "")
@@ -259,6 +259,8 @@ local function RefreshRuntime(unit, reason)
     end
     if unit == "boss" then
         for i = 1, 5 do Refresh("boss" .. i) end
+    elseif unit == "arena" then
+        for i = 1, 3 do Refresh("arena" .. i) end
     else
         Refresh(unit)
     end
@@ -705,7 +707,7 @@ local function CustomLaneBounds(item, styleItem, kind, frameW, frameH, metrics, 
     local trackedPreview = type(previewEntries) == "table" and #previewEntries > 0
     local portrait = runtimeSpec and runtimeSpec.portrait
     local portraitContainer = kind == "custom4"
-        and (unit == "player" or unit == "target" or unit == "focus" or unit == "boss")
+        and (unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena")
         and item.portraitIcon == true
         and portrait and (portrait.enabled == true or item.portraitPositionWhenDisabled == true)
     local playerDefensives = unit == "player" and kind == "custom4"
@@ -786,7 +788,7 @@ local function CustomLaneBounds(item, styleItem, kind, frameW, frameH, metrics, 
         padding = padding,
         iconStyle = LaneIconStyle(metrics, unit,
             kind == "custom4" and unit == "player" and "playerDefensives"
-                or kind == "custom4" and (unit == "target" or unit == "focus" or unit == "boss") and "targetDots"
+                or kind == "custom4" and (unit == "target" or unit == "focus" or unit == "boss" or unit == "arena") and "targetDots"
                 or (item.auraType == "DEBUFF" and "debuff" or "buff")),
         alpha = ClampNumber(placed.alpha, 1, 0, 1),
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
@@ -846,7 +848,7 @@ local function PortraitAuraBounds(item, styleItem, runtimeSpec, previewEntries, 
         previewTextures = previewTextures,
         iconStyle = LaneIconStyle(metrics, unit,
             unit == "player" and "playerDefensives"
-                or (unit == "target" or unit == "focus" or unit == "boss") and "targetDots"
+                or (unit == "target" or unit == "focus" or unit == "boss" or unit == "arena") and "targetDots"
                 or fallbackKind),
         alpha = ClampNumber(placed.alpha, 1, 0, 1),
         iconZoom = ClampNumber(placed.iconZoom, 100, 100, 200),
@@ -872,7 +874,7 @@ local function DefensivePortraitBounds(item, styleItem, runtimeSpec, previewEntr
 end
 
 local function TargetDotPortraitBounds(item, styleItem, runtimeSpec, previewEntries, unit, metrics, forcePreview)
-    if unit ~= "target" and unit ~= "focus" and unit ~= "boss" then return nil end
+    if unit ~= "target" and unit ~= "focus" and unit ~= "boss" and unit ~= "arena" then return nil end
     return PortraitAuraBounds(item, styleItem, runtimeSpec, previewEntries, unit, metrics, true, "debuff", forcePreview)
 end
 

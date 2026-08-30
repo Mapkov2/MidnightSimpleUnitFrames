@@ -12,7 +12,7 @@ M.Assistant = A
 
 A.UnitframesRegistry = A.UnitframesRegistry or {}
 
-local POWER_UNITS = { player = true, target = true, focus = true, targettarget = true, focustarget = true, pet = true, boss = true }
+local POWER_UNITS = { player = true, target = true, focus = true, targettarget = true, focustarget = true, pet = true, boss = true, arena = true }
 
 local function UnitDefaultPowerBar(unit)
     return not (unit == "targettarget" or unit == "focustarget")

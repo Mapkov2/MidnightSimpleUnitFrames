@@ -20,6 +20,7 @@ Data.CORE_PARSER = {
         focus = { "focus", "focus frame", "focus unitframe", "fokus" },
         pet = { "pet", "pet frame", "pet unitframe", "begleiter" },
         boss = { "boss", "boss frame", "boss frames", "bossframe", "bossframes" },
+        arena = { "arena", "arena frame", "arena frames", "arenaframe", "arenaframes" },
         targettarget = { "targettarget", "target of target", "target of target frame", "tot", "ziel des ziels" },
         focustarget = { "focustarget", "focus target", "focus target frame", "fokus ziel" },
     },

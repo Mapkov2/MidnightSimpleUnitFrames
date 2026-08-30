@@ -18,10 +18,11 @@ local CASTBAR_FIELDS = {
     target = { x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight" },
     focus  = { x = "castbarFocusOffsetX",  y = "castbarFocusOffsetY",  w = "castbarFocusBarWidth",  h = "castbarFocusBarHeight" },
     boss   = { x = "bossCastbarOffsetX",   y = "bossCastbarOffsetY",   w = "bossCastbarWidth",       h = "bossCastbarHeight" },
+    arena  = { x = "arenaCastbarOffsetX",   y = "arenaCastbarOffsetY",   w = "arenaCastbarWidth",      h = "arenaCastbarHeight" },
 }
 local CASTBAR_ENABLE_FIELDS = {
     player = "enablePlayerCastbar", target = "enableTargetCastbar",
-    focus = "enableFocusCastbar", boss = "enableBossCastbar",
+    focus = "enableFocusCastbar", boss = "enableBossCastbar", arena = "enableArenaCastbar",
 }
 
 local function General()

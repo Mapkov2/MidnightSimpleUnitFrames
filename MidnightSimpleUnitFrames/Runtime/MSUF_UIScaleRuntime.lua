@@ -106,9 +106,16 @@ local function CollectMsufScaleFrames()
     if type(_G.MSUF_BossCastbars) == "table" then
         for i = 1, 5 do add(_G.MSUF_BossCastbars[i]) end
     end
+    if type(_G.MSUF_ArenaCastbars) == "table" then
+        for i = 1, 3 do add(_G.MSUF_ArenaCastbars[i]) end
+    end
     for i = 1, 5 do
         add(_G["MSUF_boss" .. i .. "CastBar"])
         add(_G["MSUF_BossCastbarPreview" .. (i == 1 and "" or i)])
+    end
+    for i = 1, 3 do
+        add(_G["MSUF_ArenaCastbar" .. i])
+        add(_G["MSUF_ArenaCastbarPreview" .. i])
     end
     return frames
 end

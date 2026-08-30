@@ -52,9 +52,9 @@ local function MatchState()
 end
 
 local function MatchEngaged()
-    local isEngaged = _G.C_PvP and _G.C_PvP.IsMatchEngaged
-    if type(isEngaged) == "function" then return isEngaged() == true end
-    return false
+    local states = _G.Enum and _G.Enum.PvPMatchState
+    local engaged = states and states.Engaged
+    return engaged ~= nil and MatchState() == engaged
 end
 
 local function MatchPreparing()
@@ -87,9 +87,14 @@ end
 
 local prepActive = false
 
-local function SyncPrepVisibility(active)
-    active = active == true
-    if (_G.MSUF_ArenaPrepVisibilityActive == true) == active then
+local function SyncPrepVisibility(opponentCount)
+    opponentCount = math.floor(tonumber(opponentCount) or 0)
+    if opponentCount < 0 then opponentCount = 0 end
+    if opponentCount > MAX_ARENA then opponentCount = MAX_ARENA end
+    local active = opponentCount > 0
+    local previousCount = tonumber(_G.MSUF_ArenaPrepVisibilityCount) or 0
+    if (_G.MSUF_ArenaPrepVisibilityActive == true) == active
+        and previousCount == opponentCount then
         return false
     end
 
@@ -99,6 +104,7 @@ local function SyncPrepVisibility(active)
     -- this out-of-combat phase; it installs the existing secure
     -- "[nocombat] show" driver and restores RegisterUnitWatch when prep ends.
     _G.MSUF_ArenaPrepVisibilityActive = active and true or nil
+    _G.MSUF_ArenaPrepVisibilityCount = active and opponentCount or nil
     local uf = MSUF.UF
     if uf and type(uf.RefreshVisibilityDrivers) == "function" then
         uf.RefreshVisibilityDrivers("arena")
@@ -227,18 +233,20 @@ local function SyncPrepDisplay()
     -- frame visibility once combat lockdown is up.
     if InCombat() then return end
 
-    local numSpecs = _G.GetNumArenaOpponentSpecs and _G.GetNumArenaOpponentSpecs() or 0
+    local numSpecs = tonumber(_G.GetNumArenaOpponentSpecs and _G.GetNumArenaOpponentSpecs()) or 0
+    numSpecs = math.max(0, math.min(MAX_ARENA, math.floor(numSpecs)))
     local wantPrep = ArenaEnabled()
         and MatchPreparing()
-        and (tonumber(numSpecs) or 0) > 0
+        and numSpecs > 0
+    local prepCount = wantPrep and numSpecs or 0
 
     -- Swap visibility ownership before writing the synthetic opponent data.
     -- Otherwise RegisterUnitWatch can immediately hide these unitless frames.
-    local changed = SyncPrepVisibility(wantPrep)
+    local changed = SyncPrepVisibility(prepCount)
     for index = 1, MAX_ARENA do
         local frame = ArenaFrame(index)
         if frame then
-            if wantPrep and index <= numSpecs and not LiveUnitExists("arena" .. index) then
+            if index <= prepCount and not LiveUnitExists("arena" .. index) then
                 changed = ApplyPrepFrame(frame, index) or changed
             else
                 if ClearPrepFrame(frame) then

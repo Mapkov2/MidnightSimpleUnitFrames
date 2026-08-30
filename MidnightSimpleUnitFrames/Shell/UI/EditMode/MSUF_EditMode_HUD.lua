@@ -249,7 +249,7 @@ local function SetTip(widget, text)
     widget:HookScript("OnLeave", function() DockUI.ReleaseTooltip() end)
 end
 
-local UNIT_KEYS = { player = true, target = true, focus = true, focustarget = true, targettarget = true, pet = true, boss = true }
+local UNIT_KEYS = { player = true, target = true, focus = true, focustarget = true, targettarget = true, pet = true, boss = true, arena = true }
 
 local GROUP_KEY_TO_KIND = {
     gf_party = "party",

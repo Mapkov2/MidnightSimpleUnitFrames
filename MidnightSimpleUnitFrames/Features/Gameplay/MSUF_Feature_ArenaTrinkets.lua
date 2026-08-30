@@ -92,10 +92,12 @@ local function InArenaMatch()
         if type(considered) ~= "function" or considered() ~= true then return false end
         local active = pvp.IsMatchActive
         local complete = pvp.IsMatchComplete
-        local engaged = pvp.IsMatchEngaged
+        local getState = pvp.GetActiveMatchState
+        local states = _G.Enum and _G.Enum.PvPMatchState
+        local engaged = states and states.Engaged
         return (type(active) == "function" and active() == true)
             or (type(complete) == "function" and complete() == true)
-            or (type(engaged) == "function" and engaged() == true)
+            or (engaged ~= nil and type(getState) == "function" and getState() == engaged)
     end
 
     local isInInstance = _G.IsInInstance

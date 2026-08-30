@@ -47,12 +47,14 @@ local function GetBackend(unit)
     end
 
     unit = type(unit) == "string" and unit:match("^boss%d*$") and "boss" or unit
+    unit = type(unit) == "string" and unit:match("^arena%d*$") and "arena" or unit
 
     local enableKey =
         unit == "player" and "enablePlayerCastbar"
         or unit == "target" and "enableTargetCastbar"
         or unit == "focus" and "enableFocusCastbar"
         or unit == "boss" and "enableBossCastbar"
+        or unit == "arena" and "enableArenaCastbar"
 
     if not enableKey then
         return nil
@@ -258,6 +260,10 @@ if type(AreAnyCastbarsEnabled) ~= "function" then
             return true
         end
 
+        if ShouldUseMSUF("arena") and not (_G.MSUF_DB and _G.MSUF_DB.arena and _G.MSUF_DB.arena.enabled == false) then
+            return true
+        end
+
         local general = GeneralDB()
         return general.enableFocusKickIcon == true
             and not (_G.MSUF_DB and _G.MSUF_DB.focus and _G.MSUF_DB.focus.enabled == false)
@@ -285,6 +291,13 @@ if type(CastbarsForceHideAll) ~= "function" then
         if type(bossCastbars) == "table" then
             for index = 1, #bossCastbars do
                 Hide(bossCastbars[index])
+            end
+        end
+
+        local arenaCastbars = _G.MSUF_ArenaCastbars
+        if type(arenaCastbars) == "table" then
+            for index = 1, #arenaCastbars do
+                Hide(arenaCastbars[index])
             end
         end
     end
@@ -327,6 +340,11 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
         local applyBossState = _G.MSUF_ApplyBossCastbarsEnabled
         if type(applyBossState) == "function" then
             applyBossState()
+        end
+
+        local applyArenaState = _G.MSUF_ApplyArenaCastbarsEnabled
+        if type(applyArenaState) == "function" then
+            applyArenaState()
         end
 
         if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then

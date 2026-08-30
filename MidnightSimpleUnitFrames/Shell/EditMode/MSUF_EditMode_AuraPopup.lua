@@ -47,7 +47,9 @@ local SyncMovers = (EM2.Util and EM2.Util.SyncMovers) or function() if EM2.Mover
 local UnitPageKey = Util.UnitPageKey or function() return "uf_player" end
 local NormalizeSimpleUnit = Util.NormalizeSimpleUnit or function(unit)
     if unit == "boss" then return "boss1" end
+    if unit == "arena" then return "arena1" end
     if type(unit) == "string" and unit:match("^boss%d+$") then return unit end
+    if type(unit) == "string" and unit:match("^arena%d+$") then return unit end
     if unit == "player" or unit == "target" or unit == "focus" then return unit end
     return nil
 end
@@ -67,11 +69,22 @@ local function IsBoss(unit)
     return type(unit) == "string" and unit:match("^boss%d+$")
 end
 
+local function IsArena(unit)
+    return type(unit) == "string" and unit:match("^arena%d+$")
+end
+
+local function AuraScope(unit)
+    if IsBoss(unit) then return "boss" end
+    if IsArena(unit) then return "arena" end
+    return unit
+end
+
 local function UnitLabel(unit)
     if unit == "player" then return "Player" end
     if unit == "target" then return "Target" end
     if unit == "focus" then return "Focus" end
     if IsBoss(unit) then return "Boss " .. (unit:match("%d+") or "1") end
+    if IsArena(unit) then return "Arena " .. (unit:match("%d+") or "1") end
     return tostring(unit or "")
 end
 
@@ -80,7 +93,7 @@ local function LaneLabel(unit, kind, spec)
     if spec and spec.customIndex and spec.customIndex < 4 then
         local db = _G.MSUF_DB
         local auras = db and db.auras3
-        local scope = IsBoss(unit) and "boss" or unit
+        local scope = AuraScope(unit)
         local root = auras and auras.customContainers
         local record = root and type(root.perUnit) == "table" and root.perUnit[scope] or nil
         local item = record and type(record.items) == "table" and record.items[spec.customIndex] or nil
@@ -131,6 +144,8 @@ end
 local function AffectedUnits(unit, shared)
     if IsBoss(unit) and (not shared or shared.bossEditTogether ~= false) then
         return { "boss1", "boss2", "boss3", "boss4", "boss5" }
+    elseif IsArena(unit) and (not shared or shared.arenaEditTogether ~= false) then
+        return { "arena1", "arena2", "arena3" }
     end
     return { unit }
 end
@@ -173,7 +188,7 @@ local function CustomPlaced(unit, spec, create)
             and model.CustomContainer(unit, spec.customIndex, true) or nil
     else
         local auras = AurasDB(false)
-        local scope = IsBoss(unit) and "boss" or unit
+        local scope = AuraScope(unit)
         local root = auras and auras.customContainers
         local record = root and type(root.perUnit) == "table" and root.perUnit[scope] or nil
         item = record and type(record.items) == "table" and record.items[spec.customIndex] or nil
@@ -232,13 +247,14 @@ local function ReapplyAuras(units)
         a3.RefreshAll()
     end
     if a3 and type(a3.RefreshEditPreview) == "function" then
-        local bossDone = false
+        local stackedDone = {}
         for i = 1, #units do
             local unit = units[i]
-            if IsBoss(unit) then
-                if not bossDone then
-                    a3.RefreshEditPreview("boss")
-                    bossDone = true
+            local scope = AuraScope(unit)
+            if scope == "boss" or scope == "arena" then
+                if not stackedDone[scope] then
+                    a3.RefreshEditPreview(scope)
+                    stackedDone[scope] = true
                 end
             else
                 a3.RefreshEditPreview(unit)
@@ -264,6 +280,17 @@ local function ApplyBossTogether()
         _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
     end
     sh.bossEditTogether = pf.bossTogetherBtn and pf.bossTogetherBtn._checked == true or false
+    if pf and pf:IsShown() then Sync() end
+end
+
+local function ApplyArenaTogether()
+    if Quick.BlockConfigCombatLocked() or not (pf and IsArena(pf.unit)) then return end
+    local sh = Shared(true)
+    if not sh then return end
+    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+        _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
+    end
+    sh.arenaEditTogether = pf.arenaTogetherBtn and pf.arenaTogetherBtn._checked == true or false
     if pf and pf:IsShown() then Sync() end
 end
 
@@ -468,7 +495,7 @@ local function CommitFields()
 end
 
 local function MenuUnit(unit)
-    return IsBoss(unit) and "boss" or unit
+    return AuraScope(unit)
 end
 
 local function OpenUnitAuras()
@@ -564,16 +591,25 @@ function Sync()
         Quick.SetBoxText(pf.yBox, y ~= nil and y or ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
         Quick.SetBoxText(pf.sizeBox, ReadValue(layout, sh, spec.sizeKey, spec.sizeKey, spec.defaultSize))
     end
-    if pf.bossTogetherBtn and pf.bossTogetherBtn.SetCheckedVisual then
+    if pf.bossTogetherBtn and pf.bossTogetherBtn.SetCheckedVisual
+        and pf.arenaTogetherBtn and pf.arenaTogetherBtn.SetCheckedVisual then
         local isBoss = IsBoss(pf.unit)
+        local isArena = IsArena(pf.unit)
+        local isStacked = isBoss or isArena
         pf.bossTogetherBtn:SetShown(isBoss)
+        pf.arenaTogetherBtn:SetShown(isArena)
         if isBoss then
             pf.bossTogetherBtn:ClearAllPoints()
             pf.bossTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 160, -242)
         end
+        if isArena then
+            pf.arenaTogetherBtn:ClearAllPoints()
+            pf.arenaTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 160, -242)
+        end
         pf.bossTogetherBtn:SetCheckedVisual(sh.bossEditTogether ~= false)
-        pf:SetHeight(isBoss and 390 or 350)
-        local actionsY = isBoss and -282 or -244
+        pf.arenaTogetherBtn:SetCheckedVisual(sh.arenaEditTogether ~= false)
+        pf:SetHeight(isStacked and 390 or 350)
+        local actionsY = isStacked and -282 or -244
         if pf.unitAurasBtn then
             pf.unitAurasBtn:ClearAllPoints()
             pf.unitAurasBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, actionsY)
@@ -606,6 +642,8 @@ local function Build()
         { label = "Spacing", key = "spacingBox", onChanged = Apply },
     }, { height = 132, boxWidth = 64, peelSkin = true })
     pf.bossTogetherBtn = Quick.ToggleAt(pf, "Edit Boss 1-5 together", 160, -242, 240, 28, ApplyBossTogether,
+        ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
+    pf.arenaTogetherBtn = Quick.ToggleAt(pf, "Edit Arena 1-3 together", 160, -242, 240, 28, ApplyArenaTogether,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
     pf.unitAurasBtn = WirePopupFocus(Quick.ButtonAt(pf, "Open detailed settings", 20, -244, 334, 34, OpenUnitAuras, {
         variant = "primary", hoverWash = true,
@@ -659,6 +697,11 @@ function AuraPopup.GetAssistantField(field)
             return pf.bossTogetherBtn._checked == true
         end
         return nil
+    elseif field == "arenaTogether" then
+        if pf.arenaTogetherBtn and pf.arenaTogetherBtn:IsShown() then
+            return pf.arenaTogetherBtn._checked == true
+        end
+        return nil
     end
     local widget = ASSISTANT_AURA_FIELDS[field] and pf[ASSISTANT_AURA_FIELDS[field]]
     return widget and tonumber(widget.GetText and widget:GetText()) or nil
@@ -674,6 +717,12 @@ function AuraPopup.SetAssistantField(field, value)
         if pf.bossTogetherBtn.SetCheckedVisual then pf.bossTogetherBtn:SetCheckedVisual(checked) end
         pf.bossTogetherBtn._checked = checked
         ApplyBossTogether()
+    elseif field == "arenaTogether" then
+        if not (pf.arenaTogetherBtn and pf.arenaTogetherBtn:IsShown()) then return false end
+        local checked = value == true
+        if pf.arenaTogetherBtn.SetCheckedVisual then pf.arenaTogetherBtn:SetCheckedVisual(checked) end
+        pf.arenaTogetherBtn._checked = checked
+        ApplyArenaTogether()
     else
         local widget = ASSISTANT_AURA_FIELDS[field] and pf[ASSISTANT_AURA_FIELDS[field]]
         if not widget then return false end

@@ -790,15 +790,25 @@ local function InvalidateTargetFocusState(frame)
     InvalidateBuildState(frame.unit)
 end
 
+local function CastbarConfigUnitKey(unit)
+    if type(unit) ~= "string" then return unit end
+    if unit:match("^boss%d+$") then return "boss" end
+    if unit:match("^arena%d+$") then return "arena" end
+    return unit
+end
+
 local function CastTargetTextEnabled(frame)
     if not (frame and frame.castTargetText) then return false end
     local unit = frame.unit
+    local configUnit = CastbarConfigUnitKey(unit)
     if unit == "target" then
         return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.castbarTargetShowTargetName == true
     elseif unit == "focus" then
         return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.castbarFocusShowTargetName == true
-    elseif frame._msufIsBossCastbar or tostring(unit or ""):match("^boss%d+$") then
+    elseif frame._msufIsBossCastbar or configUnit == "boss" then
         return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.showBossCastTargetName == true
+    elseif frame._msufIsArenaCastbar or configUnit == "arena" then
+        return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.showArenaCastTargetName == true
     end
     return false
 end
@@ -950,6 +960,13 @@ local function RefreshAllCastTargetTextColors()
         RefreshPreview(index == 1 and (_G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1)
             or _G["MSUF_BossCastbarPreview" .. index])
     end
+
+    local arenaCastbars = _G.MSUF_ArenaCastbars
+    for index = 1, 3 do
+        RefreshLive((arenaCastbars and arenaCastbars[index]) or _G["MSUF_ArenaCastbar" .. index])
+        RefreshPreview(index == 1 and (_G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1)
+            or _G["MSUF_ArenaCastbarPreview" .. index])
+    end
 end
 ExportPublic("MSUF_RefreshAllCastTargetTextColors", RefreshAllCastTargetTextColors)
 
@@ -1085,10 +1102,8 @@ function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
         return fallback
     end
     local db = _G.MSUF_DB
-    local unitDB = db and unit and db[unit] or nil
-    if unitDB == nil and type(unit) == "string" and unit:find("^boss") ~= nil then
-        unitDB = db and db.boss or nil
-    end
+    local configUnit = CastbarConfigUnitKey(unit)
+    local unitDB = db and configUnit and db[configUnit] or nil
     if not (unitDB and unitDB.showInterruptSource == true) then
         return fallback
     end
@@ -1465,7 +1480,8 @@ local function CreateCastBar(frameName, unit)
         if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
         if type(_G.MSUF_EnsureDBLazy) == "function" then _G.MSUF_EnsureDBLazy() end
 
-        local unitDB = (self.unit and _G.MSUF_DB and _G.MSUF_DB[self.unit]) or nil
+        local configUnit = CastbarConfigUnitKey(self.unit)
+        local unitDB = (configUnit and _G.MSUF_DB and _G.MSUF_DB[configUnit]) or nil
         if unitDB and unitDB.showInterrupt == false then
             self.interrupted = nil
             if self.castText and _G.MSUF_CB_ApplyTexts then

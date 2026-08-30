@@ -88,6 +88,9 @@ function A.CastbarsRegistry.RegisterInterruptAppearanceSettings(ctx)
     RegisterCastbarBoolean("kickReadyShowBoss", "kickReadyBoss", "Show Interrupt Ready on Boss Cast Bars", false, CastbarAliases("boss interrupt ready", "show interrupt ready on boss", "boss interrupt bereit", "interrupt bereit am boss"), {
         reason = "MSUF2_KICK_READY_ENABLE",
     })
+    RegisterCastbarBoolean("kickReadyShowArena", "kickReadyArena", "Show Interrupt Ready on Arena Cast Bars", false, CastbarAliases("arena interrupt ready", "show interrupt ready on arena", "arena interrupt bereit", "interrupt bereit in der arena"), {
+        reason = "MSUF2_KICK_READY_ENABLE",
+    })
     RegisterCastbarEnum("kickReadyStyle", "kickReadyStyle", "Interrupt Ready Indicator Style", "border", { "border", "box", "fill" }, CastbarAliases("interrupt ready style", "kick ready style", "interrupt ready indicator style", "interrupt ready fill", "unavailable cast fill", "unavailable fill", "interrupt bereit stil", "interrupt bereit anzeige stil"), {
         reason = "MSUF2_KICK_READY_STYLE",
         valueAliases = {

@@ -23,6 +23,7 @@ local PREVIEW_LABELS = {
     target = "Target castbar preview",
     focus = "Focus castbar preview",
     boss = "Celestial Ruin",
+    arena = "Greater Pyroblast",
     test = "Test Cast",
 }
 
@@ -292,6 +293,25 @@ local function ClearPreviewTest(frame, unit)
     end
 end
 
+local function ResolvePreviewTestDetails(frame, general)
+    local unit = frame and frame.unit
+    local config = PREVIEW_UNITS[unit]
+    local showTime = not config or general[config.showTime] ~= false
+    local showTargetName = config and config.showTargetName
+        and general[config.showTargetName] == true or false
+    local targetLabel = "Cleave Training Dummy"
+
+    if unit == "boss" or (frame and frame._msufIsBossCastbar) then
+        showTime = general.showBossCastTime ~= false
+        showTargetName = general.showBossCastTargetName == true
+    elseif unit == "arena" or (frame and frame._msufIsArenaCastbar) then
+        showTime = general.showArenaCastTime ~= false
+        showTargetName = general.showArenaCastTargetName == true
+        targetLabel = "Arena Ally"
+    end
+    return showTime, showTargetName, targetLabel
+end
+
 local function UpdatePreviewTest(frame)
     if IsInCombat() then
         ClearPreviewTest(frame, frame.unit)
@@ -312,16 +332,14 @@ local function UpdatePreviewTest(frame)
     end
 
     local general = EnsureGeneralDB()
-    local config = PREVIEW_UNITS[frame.unit]
-    local showTime = not config or general[config.showTime] ~= false
+    local showTime, showTargetName, targetLabel = ResolvePreviewTestDetails(frame, general)
     if frame.timeText then
         frame.timeText:Show()
         frame.timeText:SetAlpha(showTime and 1 or 0)
         SetTextIfChanged(frame.timeText, showTime and FormatTimeText(frame, remaining, duration) or "")
     end
     if frame.castTargetText then
-        local showTargetName = config and config.showTargetName and general[config.showTargetName] == true
-        SetTextIfChanged(frame.castTargetText, showTargetName and Translate("Cleave Training Dummy") or "")
+        SetTextIfChanged(frame.castTargetText, showTargetName and Translate(targetLabel) or "")
         if type(_G.MSUF_ApplyCastTargetTextColor) == "function" then
             _G.MSUF_ApplyCastTargetTextColor(frame)
         end
@@ -455,7 +473,6 @@ local function SetBossCastbarTestMode(enabled, transient)
     ForEachBossPreview(function(frame)
         if active then
             frame.unit = "boss"
-            frame._msufTestShowTime = general.showBossCastTime ~= false
             StartPreviewTest(frame)
         else
             ClearPreviewTest(frame, "boss")
@@ -465,6 +482,45 @@ local function SetBossCastbarTestMode(enabled, transient)
 end
 
 ExportPublic("MSUF_SetBossCastbarTestMode", SetBossCastbarTestMode)
+
+local function ForEachArenaPreview(callback)
+    for index = 1, 3 do
+        local frame = _G["MSUF_ArenaCastbarPreview" .. index]
+        if frame then callback(frame, index) end
+    end
+end
+
+local function SetArenaCastbarTestMode(enabled, transient)
+    local general = EnsureGeneralDB()
+    if enabled and IsInCombat() then enabled = false end
+    if not transient then
+        general.arenaCastbarTestMode = enabled and true or false
+    end
+
+    local active = _G.MSUF_UnitEditModeActive == true
+        and (transient and enabled == true or general.arenaCastbarTestMode == true)
+    if active then
+        local createArenaPreview = _G.MSUF_CreateArenaCastbarPreview
+        if type(createArenaPreview) == "function" then
+            for index = 1, 3 do createArenaPreview(index) end
+        end
+    end
+    if not IsInCombat() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+        _G.MSUF_UpdateArenaCastbarPreview()
+    end
+
+    ForEachArenaPreview(function(frame)
+        if active then
+            frame.unit = "arena"
+            StartPreviewTest(frame)
+        else
+            ClearPreviewTest(frame, "arena")
+            HideBossPreviewFill(frame)
+        end
+    end)
+end
+
+ExportPublic("MSUF_SetArenaCastbarTestMode", SetArenaCastbarTestMode)
 
 local function EditModeCastbarPreviewActive()
     return _G.MSUF_UnitEditModeActive == true
@@ -482,6 +538,18 @@ local function ShouldShowBossPreview()
         or general.enableBossCastbar ~= false
 end
 
+local function ShouldShowArenaPreview()
+    local general = EnsureGeneralDB()
+    if not EditModeCastbarPreviewActive() or not general.castbarPlayerPreviewEnabled then return false end
+
+    local db = _G.MSUF_DB
+    if db and db.arena and db.arena.enabled == false then return false end
+
+    local shouldUseMSUF = _G.MSUF_ShouldUseMSUFCastbar
+    return type(shouldUseMSUF) == "function" and shouldUseMSUF("arena", general) == true
+        or general.enableArenaCastbar ~= false
+end
+
 local bossPreviewPending = false
 
 local function RefreshBossPreview()
@@ -492,6 +560,9 @@ local function RefreshBossPreview()
 
     if ShouldShowBossPreview() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
         _G.MSUF_UpdateBossCastbarPreview()
+    end
+    if ShouldShowArenaPreview() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+        _G.MSUF_UpdateArenaCastbarPreview()
     end
 end
 
@@ -541,6 +612,20 @@ local function SetupBossCastbarPreviewEditMode()
     end)
 end
 
+local function SetupArenaCastbarPreviewEditMode()
+    if IsInCombat() or not ShouldShowArenaPreview() then return end
+    if type(_G.MSUF_UpdateArenaCastbarPreview) == "function" and not _G.MSUF_ArenaCastbarPreview then
+        _G.MSUF_UpdateArenaCastbarPreview()
+    end
+
+    ForEachArenaPreview(function(frame)
+        HideBossPreviewFill(frame)
+        if type(_G.MSUF_SetupCastbarPreviewEditHandlers) == "function" then
+            _G.MSUF_SetupCastbarPreviewEditHandlers(frame, "arena")
+        end
+    end)
+end
+
 local function HideBlizzardPlayerCastbar()
     local shouldUseBlizzard = _G.MSUF_ShouldUseBlizzardCastbar
     local allowShown = type(shouldUseBlizzard) == "function" and shouldUseBlizzard("player") == true
@@ -571,6 +656,12 @@ local function UpdatePlayerCastbarPreview()
             _G.MSUF_SetBossCastbarTestMode(false, true)
         end
         if _G.MSUF_BossCastbarPreview then _G.MSUF_BossCastbarPreview:Hide() end
+        if type(_G.MSUF_SetArenaCastbarTestMode) == "function" then
+            _G.MSUF_SetArenaCastbarTestMode(false, true)
+        end
+        if type(_G.MSUF_HideAllArenaCastbarPreviews) == "function" then
+            _G.MSUF_HideAllArenaCastbarPreviews()
+        end
         return
     end
 
@@ -588,14 +679,20 @@ local function UpdatePlayerCastbarPreview()
         _G.MSUF_UpdateBossCastbarPreview()
         SetupBossCastbarPreviewEditMode()
     end
+    if not IsInCombat() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+        _G.MSUF_UpdateArenaCastbarPreview()
+        SetupArenaCastbarPreviewEditMode()
+    end
     if type(refreshFrame) ~= "function" then
         local applyUnit = _G.MSUF_ApplyCastbarVisualsForUnit
         if type(applyUnit) == "function" then
             for unit in pairs(PREVIEW_UNITS) do applyUnit(unit) end
             applyUnit("boss")
+            applyUnit("arena")
         elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
             for unit in pairs(PREVIEW_UNITS) do _G.MSUF_UpdateCastbarVisuals(unit) end
             _G.MSUF_UpdateCastbarVisuals("boss")
+            _G.MSUF_UpdateCastbarVisuals("arena")
         end
     end
     if type(_G.MSUF_UpdateCastbarTextures) == "function" then _G.MSUF_UpdateCastbarTextures() end
@@ -629,6 +726,24 @@ local function PositionCastbarPreviewUnit(unit)
         if positioned then return true end
         if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
             _G.MSUF_UpdateBossCastbarPreview()
+            return true
+        end
+    end
+
+    if (unit == "arena" or tostring(unit):match("^arena%d*$"))
+        and not IsInCombat()
+    then
+        local positioned = false
+        local positionArena = _G.MSUF_PositionArenaCastbarPreview
+        if type(positionArena) == "function" then
+            ForEachArenaPreview(function(frame, index)
+                positionArena(frame, index)
+                positioned = true
+            end)
+        end
+        if positioned then return true end
+        if type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+            _G.MSUF_UpdateArenaCastbarPreview()
             return true
         end
     end
@@ -667,6 +782,7 @@ ExportPublic("MSUF_PositionFocusCastbarPreview", PositionFocusCastbarPreview)
 ExportPublic("MSUF_PositionCastbarPreviewUnit", PositionCastbarPreviewUnit)
 ExportPublic("MSUF_UpdatePlayerCastbarPreview", UpdatePlayerCastbarPreview)
 ExportPublic("MSUF_SetupBossCastbarPreviewEditMode", SetupBossCastbarPreviewEditMode)
+ExportPublic("MSUF_SetupArenaCastbarPreviewEditMode", SetupArenaCastbarPreviewEditMode)
 ExportPublic("MSUF_SyncBossCastbarSliders", SyncBossCastbarSliders)
 
 InstallBossPreviewEventDriver()
@@ -714,6 +830,7 @@ local function HideAllCastbarPreviews()
         general.targetCastbarTestMode = false
         general.focusCastbarTestMode = false
         general.bossCastbarTestMode = false
+        general.arenaCastbarTestMode = false
     end
 
     HideCastbarPreviewFrame(_G.MSUF_PlayerCastbarPreview)
@@ -723,6 +840,9 @@ local function HideAllCastbarPreviews()
     if type(_G.MSUF_HideAllBossCastbarPreviews) == "function" then
         _G.MSUF_HideAllBossCastbarPreviews()
     end
+    if type(_G.MSUF_HideAllArenaCastbarPreviews) == "function" then
+        _G.MSUF_HideAllArenaCastbarPreviews()
+    end
 
     local maxBossFrames = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
     if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
@@ -731,6 +851,10 @@ local function HideAllCastbarPreviews()
     HideCastbarPreviewFrame(_G.MSUF_BossCastbarPreview1)
     for index = 2, maxBossFrames do
         HideCastbarPreviewFrame(_G["MSUF_BossCastbarPreview" .. index])
+    end
+    HideCastbarPreviewFrame(_G.MSUF_ArenaCastbarPreview)
+    for index = 1, 3 do
+        HideCastbarPreviewFrame(_G["MSUF_ArenaCastbarPreview" .. index])
     end
 end
 
@@ -776,14 +900,25 @@ local function PagePreviewRestoreDefaults(unit)
         end
         return
     end
-    if unit ~= "boss" then return end
-    ForEachBossPreview(function(frame)
-        ClearPreviewTest(frame, "boss")
+    if unit == "boss" then
+        ForEachBossPreview(function(frame)
+            ClearPreviewTest(frame, "boss")
+            HideBossPreviewFill(frame)
+            frame:Hide()
+        end)
+        if not IsInCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            _G.MSUF_UpdateBossCastbarPreview()
+        end
+        return
+    end
+    if unit ~= "arena" then return end
+    ForEachArenaPreview(function(frame)
+        ClearPreviewTest(frame, "arena")
         HideBossPreviewFill(frame)
         frame:Hide()
     end)
-    if not IsInCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-        _G.MSUF_UpdateBossCastbarPreview()
+    if not IsInCombat() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
+        _G.MSUF_UpdateArenaCastbarPreview()
     end
 end
 
@@ -799,21 +934,41 @@ local function PagePreviewActivate(unit)
         frame:Show()
         return true
     end
-    if unit ~= "boss" then return false end
-    local createBossPreview = _G.MSUF_CreateBossCastbarPreview
-    if type(createBossPreview) ~= "function" then return false end
+    if unit == "boss" then
+        local createBossPreview = _G.MSUF_CreateBossCastbarPreview
+        if type(createBossPreview) ~= "function" then return false end
+        local shown = false
+        for index = 1, PagePreviewMaxBossFrames() do
+            local frame = createBossPreview(index)
+            if frame then
+                if type(_G.MSUF_ApplyBossCastbarPreviewLayout) == "function" then
+                    _G.MSUF_ApplyBossCastbarPreviewLayout(frame, index)
+                end
+                if type(_G.MSUF_PositionBossCastbarPreview) == "function" then
+                    _G.MSUF_PositionBossCastbarPreview(frame, index)
+                end
+                frame.unit = "boss"
+                StartPreviewTest(frame)
+                frame:Show()
+                shown = true
+            end
+        end
+        return shown
+    end
+    if unit ~= "arena" then return false end
+    local createArenaPreview = _G.MSUF_CreateArenaCastbarPreview
+    if type(createArenaPreview) ~= "function" then return false end
     local shown = false
-    for index = 1, PagePreviewMaxBossFrames() do
-        local frame = createBossPreview(index)
+    for index = 1, 3 do
+        local frame = createArenaPreview(index)
         if frame then
-            if type(_G.MSUF_ApplyBossCastbarPreviewLayout) == "function" then
-                _G.MSUF_ApplyBossCastbarPreviewLayout(frame, index)
+            if type(_G.MSUF_ApplyArenaCastbarPreviewLayout) == "function" then
+                _G.MSUF_ApplyArenaCastbarPreviewLayout(frame, index)
             end
-            if type(_G.MSUF_PositionBossCastbarPreview) == "function" then
-                _G.MSUF_PositionBossCastbarPreview(frame, index)
+            if type(_G.MSUF_PositionArenaCastbarPreview) == "function" then
+                _G.MSUF_PositionArenaCastbarPreview(frame, index)
             end
-            frame.unit = "boss"
-            frame._msufTestShowTime = EnsureGeneralDB().showBossCastTime ~= false
+            frame.unit = "arena"
             StartPreviewTest(frame)
             frame:Show()
             shown = true
@@ -824,10 +979,10 @@ end
 
 ApplyCastbarPagePreviewState = function(unit)
     unit = tostring(unit or ""):lower()
-    if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" then unit = nil end
+    if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" and unit ~= "arena" then unit = nil end
     if unit and IsInCombat() then unit = nil end
     local previous = pagePreviewUnit
-    -- Published before restore/activation: UpdateBossCastbarPreview consults it
+    -- Published before restore/activation: the indexed preview owners consult it
     -- so texture/layout re-applies keep (or drop) the page preview correctly.
     pagePreviewUnit = unit
     _G.MSUF2_CastbarPagePreviewUnit = unit

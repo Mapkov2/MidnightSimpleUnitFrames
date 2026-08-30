@@ -333,6 +333,7 @@ Data.REGISTRY_PARSER = {
         [111] = { "target", "target castbar", "target cast bar", "ziel", "ziel castbar", "ziel zauberleiste" },
         [112] = { "focus", "focus castbar", "focus cast bar", "fokus", "fokus castbar", "fokus zauberleiste" },
         [113] = { "boss", "bosses", "boss castbar", "boss castbars", "boss cast bar", "boss cast bars", "boss zauberleiste", "boss zauberleisten" },
+        [429] = { "arena", "arenas", "arena castbar", "arena castbars", "arena cast bar", "arena cast bars", "arena zauberleiste", "arena zauberleisten" },
         [114] = { "show", "enable", "enabled", "turn on", "on", "true", "yes", "anzeigen", "einblenden", "aktivieren", "an" },
         [115] = { "hide", "disable", "disabled", "turn off", "off", "false", "no", "ausblenden", "deaktivieren", "aus" },
         [116] = { "aura", "auras", "buff", "debuff" },

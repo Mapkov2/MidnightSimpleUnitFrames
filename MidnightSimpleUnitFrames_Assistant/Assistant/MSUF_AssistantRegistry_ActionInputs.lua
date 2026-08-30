@@ -120,13 +120,13 @@ local SPELL_VALUE = OneOf(SPELL_TEXT, Integer(0))
 local SPEC_VALUE = OneOf(String({ minLength = 1, maxLength = 128 }), Integer(1))
 
 local UNIT_FRAME = Enum({
-    "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
+    "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
 }, {
     ["target of target"] = "targettarget", tot = "targettarget",
     ["focus target"] = "focustarget", boss1 = "boss", bosses = "boss",
 })
 local EDIT_UNIT = Enum({
-    "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
+    "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
     "party", "raid", "mythicraid", "gf_priority",
 }, {
     ["target of target"] = "targettarget", tot = "targettarget",
@@ -135,8 +135,8 @@ local EDIT_UNIT = Enum({
     priority = "gf_priority", ["priority frame"] = "gf_priority", ["priority frames"] = "gf_priority",
     ["pinned frame"] = "gf_priority", ["pinned frames"] = "gf_priority",
 })
-local CASTBAR_UNIT = Enum({ "player", "target", "focus", "boss" }, {
-    boss1 = "boss", bosses = "boss",
+local CASTBAR_UNIT = Enum({ "player", "target", "focus", "boss", "arena" }, {
+    boss1 = "boss", bosses = "boss", arena1 = "arena", arenas = "arena",
 })
 local GROUP_SCOPE = Enum({ "party", "raid", "mythicraid" }, {
     group = "party", ["mythic raid"] = "mythicraid", mythic = "mythicraid",
@@ -159,7 +159,7 @@ local GROUP_AURA_LANE = Enum({ "buff", "debuff" }, {
     buffs = "buff", helpful = "buff", debuffs = "debuff", harmful = "debuff",
 })
 local GLOBAL_SCOPE = Enum({
-    "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "gf_party", "gf_raid",
+    "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena", "gf_party", "gf_raid",
 }, {
     party = "gf_party", group = "gf_party", gfparty = "gf_party",
     raid = "gf_raid", mythicraid = "gf_raid", mythic = "gf_raid", gfraid = "gf_raid",

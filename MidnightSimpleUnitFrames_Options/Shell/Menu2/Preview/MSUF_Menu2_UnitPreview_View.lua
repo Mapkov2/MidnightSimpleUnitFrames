@@ -507,6 +507,9 @@ end
 local function CastbarSubOffsetKey(unitKey, suffix, bossKey)
     unitKey = CanonKey(unitKey)
     if unitKey == "boss" then return bossKey end
+    -- Arena shares the boss-style flat key family; derive arenaCast* from the
+    -- declared bossCast* field name instead of a per-unit prefix.
+    if unitKey == "arena" and bossKey then return (bossKey:gsub("^bossCast", "arenaCast")) end
     local prefix = PreviewCastbar.Prefix and PreviewCastbar.Prefix(unitKey) or nil
     return prefix and (prefix .. suffix) or nil
 end
@@ -524,8 +527,9 @@ local function ReadCastbarSubOffsets(handle)
     local yKey = CastbarSubOffsetKey(key, fields.suffixY, fields.bossY)
     local x = xKey and g and tonumber(g[xKey]) or nil
     local y = yKey and g and tonumber(g[yKey]) or nil
-    if CanonKey(key) == "boss" and fields.bossBaseX ~= nil then x = (tonumber(fields.bossBaseX) or 0) + (x or 0) end
-    if CanonKey(key) == "boss" and fields.bossBaseY ~= nil then y = (tonumber(fields.bossBaseY) or 0) + (y or 0) end
+    local flatKey = CanonKey(key)
+    if (flatKey == "boss" or flatKey == "arena") and fields.bossBaseX ~= nil then x = (tonumber(fields.bossBaseX) or 0) + (x or 0) end
+    if (flatKey == "boss" or flatKey == "arena") and fields.bossBaseY ~= nil then y = (tonumber(fields.bossBaseY) or 0) + (y or 0) end
     if x == nil and fields.iconFallback and fields.suffixX then x = g and tonumber(g[fields.suffixX:gsub("^Icon", "castbarIcon")]) or nil end
     if y == nil and fields.iconFallback and fields.suffixY then y = g and tonumber(g[fields.suffixY:gsub("^Icon", "castbarIcon")]) or nil end
     if x == nil then x = CastbarDefaultFromG(g, fields, "x") end
@@ -539,8 +543,9 @@ local function WriteCastbarSubOffsets(handle, x, y, reason)
     local xKey = CastbarSubOffsetKey(key, fields.suffixX, fields.bossX)
     local yKey = CastbarSubOffsetKey(key, fields.suffixY, fields.bossY)
     if not xKey or not yKey then return false end
-    if CanonKey(key) == "boss" and fields.bossBaseX ~= nil then x = (tonumber(x) or 0) - (tonumber(fields.bossBaseX) or 0) end
-    if CanonKey(key) == "boss" and fields.bossBaseY ~= nil then y = (tonumber(y) or 0) - (tonumber(fields.bossBaseY) or 0) end
+    local flatKey = CanonKey(key)
+    if (flatKey == "boss" or flatKey == "arena") and fields.bossBaseX ~= nil then x = (tonumber(x) or 0) - (tonumber(fields.bossBaseX) or 0) end
+    if (flatKey == "boss" or flatKey == "arena") and fields.bossBaseY ~= nil then y = (tonumber(y) or 0) - (tonumber(fields.bossBaseY) or 0) end
     g[xKey] = RoundOffset(x)
     g[yKey] = RoundOffset(y)
     RefreshCastbarRuntime(box, key, reason)
@@ -945,6 +950,7 @@ local function ExactUnitPreviewKey(value)
     if value == "tot" then return "targettarget" end
     if value == "focus_target" or value == "focustargettarget" then return "focustarget" end
     if value:match("^boss%d+$") then return "boss" end
+    if value:match("^arena%d+$") then return "arena" end
     return nil
 end
 local function FindUnitPreviewHandle(box, handleKey)
@@ -1443,7 +1449,7 @@ end
 --- listener for the whole fight (only the single re-arm signal stays), and
 --- the driver exists only while a preview box is in use.
 local LIVE_STATE_UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION" }
-local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", pet = "pet" }
+local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", arena = "arena1", pet = "pet" }
 local SyncUnitPreviewLiveState
 local function UnitPreviewLiveStateEvent(driver, event)
     local box = driver._msufLiveStateBox

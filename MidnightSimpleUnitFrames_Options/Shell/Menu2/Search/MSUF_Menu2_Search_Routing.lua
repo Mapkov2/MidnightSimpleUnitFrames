@@ -692,6 +692,7 @@ local SEARCH_UNIT_BY_PAGE = {
     uf_focus = "focus",
     uf_pet = "pet",
     uf_boss = "boss",
+    uf_arena = "arena",
 }
 
 local SEARCH_AURA_ROUTE_PAGES = KeySetFromWords "auras3 auras3_buffs auras3_debuffs auras3_custom auras3_rendering auras3_styling"

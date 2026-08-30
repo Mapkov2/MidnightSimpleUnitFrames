@@ -5198,6 +5198,19 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "всегда видна"
 L["hidden on this character"] = "скрыто на этом персонаже"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "Скрывает каждое заклинание из белого списка, которое этот персонаж не может применить, не оставляя пустоты. Один белый список подходит всем персонажам: маг сохраняет «Чародейский разум», разбойник — яды. Ничто не сообщает, какому классу принадлежит ID заклинания, поэтому баф от флакона выглядит так же, как чужое классовое заклинание — защитите такие записи привязанным предметом или кнопкой «Всегда показывать». MSUF перепроверяет это только при реальном изменении книги заклинаний или талантов и никогда в бою."
+
+--- Arena frames (dedicated arena1-3 unit frames)
+L["Arena"] = "Арена"
+L["Arena Castbar"] = "Полоса заклинаний арены"
+L["Arena Frames"] = "Фреймы арены"
+L["Arena Layout"] = "Расположение арены"
+L["Arena Opponent"] = "Соперник на арене"
+L["Arena castbar preview"] = "Предпросмотр полосы заклинаний арены"
+L["Arena frame layout"] = "Расположение фреймов арены"
+L["Arena spacing"] = "Интервал арены"
+L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Настройки аур доступны только для фреймов игрока, цели, фокуса, босса и арены."
+L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Настройки полосы заклинаний доступны только для фреймов игрока, цели, фокуса, босса и арены."
+L["MSUF Arena Frames"] = "MSUF Фреймы арены"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end
