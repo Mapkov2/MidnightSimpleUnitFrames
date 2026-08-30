@@ -199,12 +199,9 @@ local function FlushFallbackScans()
     end
 end
 
+-- Callers own the pending gate so same-frame bursts skip this helper entirely;
+-- unregister clears both batches before a unit can lose its final owner.
 local function QueueFallbackScan(unit, containers)
-    -- A queued unit already owns one scan in the next rendered frame. Avoid
-    -- re-walking all of its containers for every additional secret/full event
-    -- in the same burst; unregister clears both batch tables before a unit can
-    -- lose its final owner.
-    if pendingFallbackUnits[unit] then return end
     containers = containers or containersByUnit[unit]
     local hasWork = false
     if containers then
@@ -236,12 +233,14 @@ local function OnEvent(_, _, unit, updateInfo)
     if not containers then return end
     if issecretvalue(updateInfo) or type(updateInfo) ~= "table"
         or (canaccesstable and canaccesstable(updateInfo) == false) then
+        if pendingFallbackUnits[unit] then return end
         QueueFallbackScan(unit, containers)
         return
     end
 
     local isFullUpdate = updateInfo.isFullUpdate
     if issecretvalue(isFullUpdate) or isFullUpdate == true then
+        if pendingFallbackUnits[unit] then return end
         QueueFallbackScan(unit, containers)
         return
     end
@@ -251,12 +250,14 @@ local function OnEvent(_, _, unit, updateInfo)
     -- spell-name alias, so it needs neither a fallback scan nor any work here.
     local added = updateInfo.addedAuras
     if issecretvalue(added) then
+        if pendingFallbackUnits[unit] then return end
         QueueFallbackScan(unit, containers)
         return
     end
     if added == nil then return end
     if type(added) ~= "table"
         or (canaccesstable and canaccesstable(added) == false) then
+        if pendingFallbackUnits[unit] then return end
         QueueFallbackScan(unit, containers)
         return
     end
