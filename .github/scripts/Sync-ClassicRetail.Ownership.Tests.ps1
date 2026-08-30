@@ -296,7 +296,7 @@ try {
     Commit-All -Repository $fixture.Classic -Message "unsorted override manifest"
     Set-RetailDelta -Fixture $fixture
     $result = Invoke-Sync -Fixture $fixture
-    Assert-Failure -Result $result -Pattern "must be sorted with ordinal path ordering" `
+    Assert-Failure -Result $result -Pattern "must be sorted with ordinal path" `
         -Case "Unsorted override manifest"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("status", "--porcelain")) -ceq "") `
         -Message "Unsorted-manifest failure mutated the Classic worktree"
