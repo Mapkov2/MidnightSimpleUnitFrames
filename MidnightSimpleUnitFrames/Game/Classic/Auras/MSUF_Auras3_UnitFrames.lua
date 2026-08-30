@@ -731,6 +731,53 @@ local function EffectiveTables(auras, runtimeUnit)
     return layout, sharedLayout, blacklist, filters
 end
 
+A3._ClassicResolveHidePermanent = function(blacklist, filtersRoot, kind)
+    kind = tostring(kind or "buff"):lower()
+    if kind == "buffs" then kind = "buff" end
+    if kind == "debuffs" then kind = "debuff" end
+    local spec = LANE_SPECS[kind]
+    if not spec then return false end
+
+    local rootFilters = type(filtersRoot) == "table" and filtersRoot or nil
+    local storedLaneFilters = rootFilters and type(rootFilters[spec.dbKey]) == "table"
+        and rootFilters[spec.dbKey] or nil
+    local explicitLaneBlacklist = type(blacklist) == "table"
+        and type(blacklist[spec.dbKey]) == "table" and blacklist[spec.dbKey] or nil
+
+    if explicitLaneBlacklist and explicitLaneBlacklist.hidePermanent ~= nil then
+        -- The current menu writes the blacklist lane. Keep an explicit false
+        -- authoritative so a unit can disable an inherited legacy rule.
+        return explicitLaneBlacklist.hidePermanent == true
+    end
+    if type(explicitLaneBlacklist or blacklist) == "table"
+        and (explicitLaneBlacklist or blacklist).hidePermanent == true then
+        return true
+    end
+    -- Portable/legacy profiles can carry the rule in the effective filter
+    -- lane. The old root field applied to Buffs only and remains the final
+    -- compatibility fallback.
+    if storedLaneFilters and storedLaneFilters.hidePermanent == true then return true end
+    return kind == "buff" and rootFilters and rootFilters.hidePermanent == true or false
+end
+
+A3._ClassicReadBlacklistHidePermanent = function(scope, kind)
+    scope = tostring(scope or "player")
+    if BOSS_UNITS[scope] then scope = "boss" end
+    -- The shared menu model collapses every Arena scope to arena1 for reads.
+    -- Arena rendering is owned separately, but the Classic menu adapter must
+    -- still preserve that current SavedVariables ownership contract.
+    local runtimeUnit = (scope == "arena" or scope == "arena1"
+        or scope == "arena2" or scope == "arena3") and "arena1"
+        or NormalizeRuntimeUnit(scope)
+    if not runtimeUnit then return false end
+
+    local auras
+    if type(A3.EnsureDB) == "function" then auras = A3.EnsureDB() end
+    if type(auras) ~= "table" then auras = EnsureRootDB() end
+    local _, _, blacklist, filters = EffectiveTables(auras, runtimeUnit)
+    return A3._ClassicResolveHidePermanent(blacklist, filters, kind)
+end
+
 local function CompileBlacklist(blacklist)
     local spells = type(blacklist) == "table" and blacklist.spells
     if type(spells) ~= "table" then return nil end
@@ -900,8 +947,6 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local layer = ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 1, 15)
     local stackAnchor = ReadAnchor(sharedLayout, nil, spec.stackAnchorKey, DEFAULT_SHARED.stackCountAnchor or "TOPRIGHT")
     local rootFilters = type(filtersRoot) == "table" and filtersRoot or nil
-    local storedLaneFilters = rootFilters and type(rootFilters[spec.dbKey]) == "table"
-        and rootFilters[spec.dbKey] or nil
     local filters = FilterTable(filtersRoot, spec.dbKey)
     local nonPlayerFilter = kind == "debuff" and filters and filters.nonPlayer == true or false
     local explicitLaneBlacklist = type(blacklist) == "table"
@@ -914,24 +959,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local includeStealable = false
     local boss = false
     local onlyBoss = false
-    local hidePermanent
-    if explicitLaneBlacklist and explicitLaneBlacklist.hidePermanent ~= nil then
-        -- The current menu writes the blacklist lane. Keep an explicit false
-        -- authoritative so a unit can disable an inherited legacy rule.
-        hidePermanent = explicitLaneBlacklist.hidePermanent == true
-    else
-        hidePermanent = type(laneBlacklist) == "table" and laneBlacklist.hidePermanent == true
-        -- Portable/legacy profiles can carry the rule in the effective filter
-        -- lane. Retail still consumes that shape, so Classic must read it
-        -- without rewriting the saved payload. The old root field applied to
-        -- Buffs only and remains a final compatibility fallback.
-        if hidePermanent ~= true then
-            hidePermanent = storedLaneFilters and storedLaneFilters.hidePermanent == true
-        end
-        if hidePermanent ~= true and kind == "buff" and rootFilters then
-            hidePermanent = rootFilters.hidePermanent == true
-        end
-    end
+    local hidePermanent = A3._ClassicResolveHidePermanent(blacklist, filtersRoot, kind)
     local maxDuration = 0
     local showSated = kind ~= "buff" or ReadBool(nil, shared, "showSated", true)
     local satedThreshold = kind == "buff" and ReadNumber(nil, shared, "satedShowAtSeconds", 0, 0, 3600) or 0

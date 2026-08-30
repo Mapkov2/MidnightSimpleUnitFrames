@@ -9,4 +9,5 @@
   <Script file="..\Classic\Auras\MSUF_Auras3_UnitFrames.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_EditMode.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_Menu_Model.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_Menu_Compat.lua"/>
 </Ui>

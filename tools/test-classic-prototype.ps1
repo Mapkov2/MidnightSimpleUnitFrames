@@ -259,9 +259,59 @@ foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
     }
 }
 
+$ownershipManifestRelative = "tools/classic-owned-addon-paths.txt"
+$ownershipManifestPath = Join-Path $root $ownershipManifestRelative
+if (-not (Test-Path -LiteralPath $ownershipManifestPath -PathType Leaf)) {
+    throw "Classic ownership manifest is missing: $ownershipManifestRelative"
+}
+& git -C $root ls-files --error-unmatch -- $ownershipManifestRelative 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Classic ownership manifest must be tracked: $ownershipManifestRelative"
+}
+$ownedAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$ownedAddonPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+$ownershipLines = @([IO.File]::ReadAllLines($ownershipManifestPath))
+if ($ownershipLines.Count -eq 0) { throw "Classic ownership manifest is empty" }
+foreach ($ownedPath in $ownershipLines) {
+    $isAddonPath = $false
+    foreach ($target in $targets) {
+        if ($ownedPath.StartsWith($target.Folder + '/', [StringComparison]::Ordinal)) {
+            $isAddonPath = $true
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($ownedPath) -or
+        $ownedPath -cne $ownedPath.Trim() -or
+        $ownedPath.Contains('\') -or
+        $ownedPath.StartsWith('/') -or
+        $ownedPath.EndsWith('/') -or
+        $ownedPath.Contains('//') -or
+        $ownedPath -match '(^|/)\.\.?(?:/|$)' -or
+        -not $isAddonPath) {
+        throw "Invalid Classic ownership path: $ownedPath"
+    }
+    if ($ownedAddonPathCase.ContainsKey($ownedPath)) {
+        throw "Duplicate or case-colliding Classic ownership path: $($ownedAddonPathCase[$ownedPath]) versus $ownedPath"
+    }
+    $ownedFullPath = [IO.Path]::GetFullPath((Join-Path $root $ownedPath))
+    if (-not (Test-Path -LiteralPath $ownedFullPath -PathType Leaf)) {
+        throw "Classic-owned addon file is missing: $ownedPath"
+    }
+    $ownedAddonPathCase.Add($ownedPath, $ownedPath)
+    [void]$ownedAddonPaths.Add($ownedPath)
+}
+$sortedOwnershipLines = [string[]]$ownershipLines.Clone()
+[Array]::Sort($sortedOwnershipLines, [StringComparer]::Ordinal)
+for ($index = 0; $index -lt $ownershipLines.Count; $index++) {
+    if ($ownershipLines[$index] -cne $sortedOwnershipLines[$index]) {
+        throw "Classic ownership manifest must use ordinal path sorting"
+    }
+}
+
 if ($retailReferenceRootFull) {
     $retailCanonicalCount = 0
     $retailTocCount = 0
+    $retailMappedPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $retailTargetFolders = @($targets | ForEach-Object { $_.Folder })
     $retailTrackedPaths = @(& git -C $retailReferenceRootFull ls-tree -r --name-only HEAD -- @retailTargetFolders 2>&1)
     if ($LASTEXITCODE -ne 0) {
@@ -277,6 +327,9 @@ if ($retailReferenceRootFull) {
                 $isRetailToc = $true
                 break
             }
+        }
+        if (-not $retailMappedPaths.Add($candidateRelativePath)) {
+            throw "Retail mapping collision at $candidateRelativePath"
         }
         $referencePath = Join-Path $retailReferenceRootFull $relativePath
         $candidatePath = Join-Path $root $candidateRelativePath
@@ -295,7 +348,32 @@ if ($retailReferenceRootFull) {
         }
     }
     if ($retailTocCount -ne 3) { throw "Expected exactly three tracked Retail TOCs, found $retailTocCount" }
+    foreach ($ownedPath in $ownedAddonPaths) {
+        foreach ($retailPath in $retailMappedPaths) {
+            if ($ownedPath.Equals($retailPath, [StringComparison]::OrdinalIgnoreCase) -or
+                $ownedPath.StartsWith($retailPath + '/', [StringComparison]::OrdinalIgnoreCase) -or
+                $retailPath.StartsWith($ownedPath + '/', [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Retail path collides with Classic ownership: $retailPath versus $ownedPath"
+            }
+        }
+    }
+    $expectedAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($path in $retailMappedPaths) { [void]$expectedAddonPaths.Add($path) }
+    foreach ($path in $ownedAddonPaths) { [void]$expectedAddonPaths.Add($path) }
+    $actualAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($target in $targets) {
+        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $root $target.Folder) -Recurse -File -Force) {
+            $relative = $file.FullName.Substring($rootFull.Length + 1).Replace('\', '/')
+            [void]$actualAddonPaths.Add($relative)
+        }
+    }
+    if (-not $actualAddonPaths.SetEquals($expectedAddonPaths)) {
+        $missing = @($expectedAddonPaths | Where-Object { -not $actualAddonPaths.Contains($_) })
+        $unexpected = @($actualAddonPaths | Where-Object { -not $expectedAddonPaths.Contains($_) })
+        throw "Classic addon inventory must equal Retail plus explicit Classic ownership. Missing=[$($missing -join ', ')] Unexpected=[$($unexpected -join ', ')]"
+    }
     Write-Host "Canonical Retail source parity: $retailCanonicalCount files plus $retailTocCount Mainline TOCs match byte-for-byte"
+    Write-Host "Classic ownership inventory: $($ownedAddonPaths.Count) additive files preserved exactly"
 }
 
 # Retail's load graph must never enter a Classic/Vanilla/Mists/TBC implementation
@@ -584,6 +662,9 @@ if ($lua) {
     $castbarOwnershipSmoke = Join-Path $root "tools/castbar_refresh_ownership_smoke.lua"
     & $lua.Source $castbarOwnershipSmoke
     if ($LASTEXITCODE -ne 0) { throw "Shared castbar refresh ownership smoke failed" }
+    $auraFontFanoutSmoke = Join-Path $root "tools/aura_font_fanout_smoke.lua"
+    & $lua.Source $auraFontFanoutSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Shared aura font fanout smoke failed" }
     foreach ($arenaSmoke in @(
         "tools/arena_unit_scope_smoke.lua",
         "tools/arena_prep_visibility_smoke.lua",

@@ -241,6 +241,8 @@ _G.MSUF_DB.gf_party = {
 }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))(
     "MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Menu_Compat.lua"))(
+    "MidnightSimpleUnitFrames", namespace)
 namespace.GF = namespace.GF or {}
 namespace.GF.GetConf = function() return _G.MSUF_DB.gf_party end
 namespace.GF.GetScaledFrameMetrics = function() return 80, 32 end
@@ -272,5 +274,188 @@ assert(integratedGroupConfig.lanes.debuff.hidePermanent == true
 assert(integratedGroupConfig.lanes.external.filter == "HELPFUL"
     and integratedGroupConfig.lanes.external.filterRequirements.externalDefensive == true,
     "Classic integrated External Defensive lane did not keep its helpful classification")
+
+-- The Classic compiler accepts portable hidePermanent values from the filter
+-- tree, while the shared menu model owns the blacklist controls.  Exercise the
+-- Classic-only compatibility seam against the real compiler and menu model so
+-- reads and first-write copy-on-write cannot silently diverge again.
+do
+    _G.MSUF_DB.auras3 = {
+        enabled = true,
+        showPlayer = true,
+        showTarget = true,
+        showFocus = true,
+        showBoss = true,
+        shared = {},
+        perUnit = {
+            target = {
+                overrideBlacklist = true,
+                filters = {
+                    enabled = false,
+                    buffs = { hidePermanent = true },
+                    debuffs = { hidePermanent = true },
+                },
+                blacklist = {
+                    spells = { [700001] = true },
+                    buffs = { spells = { [700002] = true } },
+                    debuffs = { spells = { [700003] = true } },
+                },
+            },
+        },
+    }
+
+    local A3 = namespace.MSUF_Auras3
+    local Model = assert(A3.MenuModel, "shared Aura menu model missing")
+    assert(A3.__classicAuraMenuCompatLoaded == true,
+        "Classic Aura menu compatibility did not install")
+
+    local auras = _G.MSUF_DB.auras3
+    local target = auras.perUnit.target
+    local originalBlacklist = target.blacklist
+    local originalBuffLane = target.blacklist.buffs
+    local originalDebuffLane = target.blacklist.debuffs
+    local runtime = assert(A3.ResolveUnitFrameConfig("target", {}),
+        "Classic target config missing")
+    assert(runtime.lanes.buff.hidePermanent == true
+        and runtime.lanes.debuff.hidePermanent == true,
+        "Classic compiler lost portable per-lane Hide Permanent filters")
+    assert(Model.ReadBlacklistHidePermanent("target", "buff") == true
+        and Model.ReadBlacklistHidePermanent("target", "debuff") == true,
+        "Classic menu does not read the compiler-effective portable filters")
+    assert(target.overrideBlacklist == true
+        and target.blacklist == originalBlacklist
+        and target.blacklist.buffs == originalBuffLane
+        and target.blacklist.debuffs == originalDebuffLane
+        and target.blacklist.buffs.hidePermanent == nil
+        and target.blacklist.debuffs.hidePermanent == nil,
+        "Classic menu read mutated the saved blacklist owner")
+
+    target.blacklist.debuffs = nil
+    assert(Model.ReadBlacklistHidePermanent("target", "debuff") == true
+        and target.blacklist.debuffs == nil,
+        "Classic portable-filter read recreated a missing blacklist lane")
+    target.blacklist.debuffs = originalDebuffLane
+
+    target.blacklist.buffs.hidePermanent = false
+    assert(Model.ReadBlacklistHidePermanent("target", "buff") == false,
+        "explicit Classic blacklist false did not override the portable filter")
+    target.blacklist.buffs.hidePermanent = nil
+    target.filters.buffs.hidePermanent = nil
+    target.filters.debuffs.hidePermanent = nil
+    target.filters.hidePermanent = true
+    assert(Model.ReadBlacklistHidePermanent("target", "buff") == true,
+        "legacy root Hide Permanent no longer applies to Classic Buffs")
+    assert(Model.ReadBlacklistHidePermanent("target", "debuff") == false,
+        "legacy root Hide Permanent leaked into Classic Debuffs")
+
+    local sharedBlacklist = {
+        spells = { [710001] = true },
+        buffs = {
+            spells = { [710002] = true },
+            maxDuration = 71,
+        },
+        debuffs = {
+            spells = { [710003] = true },
+            hidePermanent = true,
+            maxDuration = 37,
+        },
+    }
+    auras.shared.blacklist = sharedBlacklist
+    target.overrideBlacklist = false
+    target.blacklist = { dormant = true }
+    target.filters.hidePermanent = false
+    local dormantBlacklist = target.blacklist
+    assert(Model.ReadBlacklistHidePermanent("target", "debuff") == true,
+        "Classic menu did not read the effective Shared blacklist")
+    assert(target.overrideBlacklist == false and target.blacklist == dormantBlacklist,
+        "Classic Shared-blacklist read created a local override")
+
+    assert(Model.WriteBlacklistHidePermanent("target", "debuff", false) == true,
+        "Classic Hide Permanent write did not report its change")
+    assert(target.overrideBlacklist == true
+        and target.blacklist ~= sharedBlacklist
+        and target.blacklist.spells[710001] == true
+        and target.blacklist.buffs.spells[710002] == true
+        and target.blacklist.buffs.maxDuration == 71
+        and target.blacklist.debuffs.spells[710003] == true
+        and target.blacklist.debuffs.maxDuration == 37
+        and target.blacklist.debuffs.hidePermanent == false,
+        "Classic first edit did not copy the complete effective Shared blacklist")
+    assert(sharedBlacklist.debuffs.hidePermanent == true
+        and sharedBlacklist.buffs.maxDuration == 71,
+        "Classic first edit mutated the Shared blacklist")
+    local disabledRuntime = assert(A3.ResolveUnitFrameConfig("target", {}),
+        "Classic target config missing after explicit false")
+    assert(disabledRuntime.lanes.debuff.hidePermanent == false,
+        "Classic compiler ignored the explicit false written by the menu")
+
+    for i = 1, 5 do
+        auras.perUnit["boss" .. i] = {
+            overrideBlacklist = false,
+            blacklist = { dormant = i },
+            filters = { buffs = {}, debuffs = {} },
+        }
+    end
+    assert(Model.WriteBlacklistHidePermanent("boss", "buff", true) == true,
+        "Classic Boss Hide Permanent write did not report its change")
+    for i = 1, 5 do
+        local boss = auras.perUnit["boss" .. i]
+        assert(boss.overrideBlacklist == true
+            and boss.blacklist ~= sharedBlacklist
+            and boss.blacklist.spells[710001] == true
+            and boss.blacklist.debuffs.maxDuration == 37
+            and boss.blacklist.buffs.hidePermanent == true,
+            "Classic Boss Hide Permanent did not preserve/fan out owner " .. i)
+    end
+
+    for i = 1, 3 do
+        auras.perUnit["arena" .. i] = {
+            overrideBlacklist = false,
+            blacklist = { dormant = i },
+            filters = {
+                buffs = { hidePermanent = i == 1 },
+                debuffs = {},
+            },
+        }
+    end
+    assert(Model.ReadBlacklistHidePermanent("arena", "buff") == true,
+        "Classic Arena menu did not read arena1 portable Hide Permanent")
+    assert(Model.WriteBlacklistHidePermanent("arena", "debuff", false) == true,
+        "Classic Arena Hide Permanent write did not report its change")
+    assert(auras.perUnit.player == nil,
+        "Classic Arena Hide Permanent write incorrectly prepared Player")
+    for i = 1, 3 do
+        local arena = auras.perUnit["arena" .. i]
+        assert(arena.overrideBlacklist == true
+            and arena.blacklist ~= sharedBlacklist
+            and arena.blacklist.spells[710001] == true
+            and arena.blacklist.buffs.maxDuration == 71
+            and arena.blacklist.debuffs.hidePermanent == false,
+            "Classic Arena Hide Permanent did not preserve/fan out owner " .. i)
+    end
+
+    local function Read(path)
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
+    local sharedMenuPath = "..\\..\\Auras3\\MSUF_Auras3_Menu_Model.lua"
+    local compatPath = "..\\Classic\\Auras\\MSUF_Auras3_Menu_Compat.lua"
+    for _, flavor in ipairs({ "Vanilla", "Mists", "TBC" }) do
+        local xml = Read(root .. "/MidnightSimpleUnitFrames/Game/" .. flavor .. "/UnitFrames.xml")
+        local sharedAt = assert(xml:find(sharedMenuPath, 1, true),
+            flavor .. " shared menu load missing")
+        local compatAt = assert(xml:find(compatPath, 1, true),
+            flavor .. " Classic menu compat load missing")
+        assert(compatAt > sharedAt,
+            flavor .. " Classic menu compat loads before the shared model")
+    end
+    local retailXml = Read(root
+        .. "/MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Elements.xml")
+    assert(not retailXml:find("MSUF_Auras3_Menu_Compat.lua", 1, true),
+        "Retail load graph entered the Classic Aura menu compatibility")
+end
 
 print("classic aura backend smoke passed")

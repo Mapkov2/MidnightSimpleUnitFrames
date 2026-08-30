@@ -94,6 +94,23 @@ against that working tree; otherwise it falls back to this repository's HEAD.
 When the local UI mirror is present it also runs
 `tools/audit-classic-ui-source.ps1` against the relevant Blizzard client branches.
 
+`tools/classic-owned-addon-paths.txt` is the exact additive ownership boundary
+used by the automated Retail sync. Before copying, the sync proves that every
+non-owned Classic destination still equals the previously recorded Retail
+source, rejects undeclared additions and Retail/Classic path collisions, and
+hashes every owned file. The same hashes and the exact `Retail + Classic-owned`
+inventory are checked again after the full gate and before a commit. A
+Classic-only behavior must therefore live in a client TOC/XML path from this
+manifest; changing a mirrored Mainline file now fails closed instead of being
+silently overwritten.
+
+The manifest deliberately retains the 48 `Media/Shapes` files plus
+`Runtime/MSUF_UIThemeBridge.lua` and `MSUF_Menu2_ThemeSkin.lua` from the old
+MidnightSkin experiment. Their former canonical loader/consumer wiring no
+longer exists, so they are preserved historical source/assets, not claimed as
+runtime-reachable. Restoring or retiring that feature is a separate explicit
+decision.
+
 These are source/runtime-mock gates, not a substitute for logging into every
 class/spec on all game clients. Release certification still requires the live
 matrix: clean install and migrated profile, combat and reload, every
