@@ -48,6 +48,25 @@ local arenaPage, arenaPageLabel = parserCore.PageForText(parserCore.Normalize("o
 assert(arenaPage == "uf_arena" and arenaPageLabel == "Arena",
     "central page routing did not resolve Arena Frames")
 
+assert(loadfile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Auras_Data.lua"))(
+    "MidnightSimpleUnitFrames_Assistant", namespace
+)
+assert(ContainsValue(namespace.Assistant.AurasRegistryData.AURA_SCOPES, "arena"),
+    "Assistant Aura registries omitted the Arena scope")
+
+local auraFilteringSource = Read(
+    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser_AuraFiltering.lua"
+)
+AssertContains(auraFilteringSource,
+    'local UNIT_SCOPE_ORDER = { "player", "target", "focus", "boss", "arena" }',
+    "Aura filtering parser scope order omitted Arena")
+AssertContains(auraFilteringSource,
+    '{ "arena", { "on arena frame", "on the arena frame", "arena frame", "arena frames",',
+    "Aura filtering parser omitted explicit Arena destinations")
+AssertContains(auraFilteringSource,
+    'or unit == "boss" or unit == "arena" then',
+    "Aura filtering unit gate omitted Arena")
+
 local parserSource = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser.lua")
 AssertContains(parserSource, 'units = { "player", "target", "focus", "boss", "arena" }',
     "all-castbar width mode omitted Arena")
@@ -71,6 +90,31 @@ for index = 1, #parserArenaKeys do
     AssertContains(parserSource, parserArenaKeys[index],
         "hand-written parser omitted an Arena castbar key")
 end
+
+local castbarColorSource = Read(
+    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_GlobalColorSettings_Castbars.lua"
+)
+AssertContains(castbarColorSource,
+    '{ unit = "arena",  prefix = "arenaCast",     label = "Arena" }',
+    "Assistant castbar text-color registry omitted Arena")
+
+local castbarCoreSource = Read(
+    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Castbars_Core.lua"
+)
+AssertContains(castbarCoreSource,
+    'arena = { key = "arenaCastbarDetached", label = "Arena" }',
+    "Assistant detached-castbar registry omitted Arena")
+local castbarUnitsSource = Read(
+    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Castbars_Units.lua"
+)
+AssertContains(castbarUnitsSource, 'RegisterCastbarDetachSetting("arena")',
+    "Assistant detached-castbar registrar did not register Arena")
+
+local advancedColorsSource = Read(
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua"
+)
+AssertContains(advancedColorsSource, 'SetControlEnabled(detailTargetColor, DetailUnit() ~= "player")',
+    "Advanced Colors still disabled target-name color for Arena castbars")
 
 local registrySource = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser_Registry.lua")
 local registryScopeBlock = Slice(registrySource,
@@ -149,6 +193,8 @@ assert(arenaSettingKeys["general.enableArenaCastbar"],
     "generated Assistant schema omitted the Arena castbar backend setting")
 assert(arenaSettingKeys["general.showArenaCastTime"],
     "generated Assistant schema omitted the Arena cast-time setting")
+assert(arenaSettingKeys["general.showArenaCastTargetName"],
+    "generated Assistant schema omitted the Arena cast-target-name setting")
 
 local manifestNamespace = { Assistant = {} }
 assert(loadfile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_AutoCoverage_Manifest.lua"))(
