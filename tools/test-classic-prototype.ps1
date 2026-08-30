@@ -486,6 +486,9 @@ foreach ($contract in @(
         throw "Expanded texture runtime contract is missing: $contract"
     }
 }
+if ($textureRuntime -match '\bfeatherCount\b' -and $textureRuntime -notmatch '(?m)^\s*local\s+featherCount\s*=') {
+    throw "Classic texture runtime reads featherCount without a local declaration"
+}
 if ($textureRuntime -match 'OnUpdate|C_Timer|NewTicker|NewTimer') {
     throw "Expanded texture runtime must remain apply/event-driven with zero polling"
 }

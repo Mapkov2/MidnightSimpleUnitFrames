@@ -661,7 +661,6 @@ local function ApplyLayerVisual(frame, holder, conf, prefix, unitKey, classR, cl
       if overlay then overlay:Hide() end
     end
   end
-  for i = featherCount + 1, #featherTextures do featherTextures[i] = nil end
   ApplySoftEdgeMask(holder, featherTextures, conf[keys and keys.EdgeSoftness or (prefix .. "EdgeSoftness")])
   holder.clipApplied = clipWanted or nil
   return tex
