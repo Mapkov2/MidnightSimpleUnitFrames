@@ -122,4 +122,48 @@ assert(ContainsValue(assert(inheritanceById["font-scope-inheritance"]).scopes, "
 assert(ContainsValue(assert(inheritanceById["bar-scope-inheritance"]).scopes, "arena"),
     "setting graph bar inheritance omitted Arena")
 
+local generatedNamespace = { Assistant = {} }
+assert(loadfile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema_Data.lua"))(
+    "MidnightSimpleUnitFrames_Assistant", generatedNamespace
+)
+local schemaData = assert(generatedNamespace.Assistant.ControlSchemaData)
+assert(#(schemaData.contexts or {}) == 40,
+    "generated Assistant schema did not cover all 40 class/spec contexts")
+
+local arenaSchemaRecords = 0
+local arenaSettingKeys = {}
+for index = 1, #(schemaData.records or {}) do
+    local record = schemaData.records[index]
+    if record[5] == "uf_arena" then
+        arenaSchemaRecords = arenaSchemaRecords + 1
+        if record[9] and record[9] ~= "" then
+            arenaSettingKeys[record[9]] = true
+        end
+    end
+end
+assert(arenaSchemaRecords > 0,
+    "generated Assistant schema omitted the Arena page")
+assert(arenaSettingKeys["arena.enabled"],
+    "generated Assistant schema omitted the Arena enable setting")
+assert(arenaSettingKeys["general.enableArenaCastbar"],
+    "generated Assistant schema omitted the Arena castbar backend setting")
+assert(arenaSettingKeys["general.showArenaCastTime"],
+    "generated Assistant schema omitted the Arena cast-time setting")
+
+local manifestNamespace = { Assistant = {} }
+assert(loadfile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_AutoCoverage_Manifest.lua"))(
+    "MidnightSimpleUnitFrames_Assistant", manifestNamespace
+)
+local manifest = assert(manifestNamespace.Assistant.AutoCoverageManifest)
+assert(type(manifest.defaults) == "table" and type(manifest.defaults.arena) == "table",
+    "generated AutoCoverage manifest omitted Arena defaults")
+assert(ContainsValue(manifest.requiredScopes, "arena"),
+    "generated AutoCoverage manifest omitted the required Arena scope")
+
+local searchData = Read(
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua"
+)
+AssertContains(searchData, "uf_arena\t",
+    "generated Menu2 search index omitted the Arena page")
+
 print("arena_assistant_scope_smoke: ok")
