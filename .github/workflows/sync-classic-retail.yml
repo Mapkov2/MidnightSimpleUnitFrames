@@ -10,6 +10,7 @@ on:
       - main
     paths:
       - ".github/scripts/Sync-ClassicRetail.ps1"
+      - ".github/scripts/Sync-ClassicRetail.Ownership.Tests.ps1"
       - ".github/workflows/sync-classic-retail.yml"
 
 permissions:
@@ -44,9 +45,21 @@ jobs:
         run: |
           $gate = "$env:GITHUB_WORKSPACE/classic/tools/test-classic-prototype.ps1"
           $smokes = "$env:GITHUB_WORKSPACE/classic/tools/tests"
+          $ownership = "$env:GITHUB_WORKSPACE/classic/tools/classic-owned-addon-paths.txt"
+          $overrides = "$env:GITHUB_WORKSPACE/classic/tools/classic-retail-overrides.tsv"
           if (-not (Test-Path -LiteralPath $gate -PathType Leaf) -or
-              -not (Test-Path -LiteralPath $smokes -PathType Container)) {
+              -not (Test-Path -LiteralPath $smokes -PathType Container) -or
+              -not (Test-Path -LiteralPath $ownership -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $overrides -PathType Leaf)) {
             throw "The versioned Classic validation bundle is incomplete."
+          }
+
+      - name: Prove Classic ownership and override fail-closed behavior
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE/retail/.github/scripts/Sync-ClassicRetail.Ownership.Tests.ps1"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Classic ownership/override regression suite exited with code $LASTEXITCODE."
           }
 
       - name: Install Lua 5.1
