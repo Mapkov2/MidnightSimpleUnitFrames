@@ -1001,9 +1001,9 @@ local function BarHelper(name)
   return BarTextCommon and BarTextCommon[name]
 end
 
-local function ApplyDeadBgColor(region, texture, r, g, b, a)
+local function ApplyDeadBgColor(region, texture, r, g, b, a, force)
   local fn = BarHelper("ApplyTextureColor")
-  if fn then fn(region, texture, r, g, b, a) end
+  if fn then fn(region, texture, r, g, b, a, force) end
 end
 
 local function RestoreHealthBackground(frame)
@@ -1088,9 +1088,10 @@ local function UpdateDeadBg(frame, cfg, seedHP, event)
     elseif texture == nil and frame.MSUFSpec and frame.MSUFSpec.health then
       texture = frame.MSUFSpec.health.backgroundTexture
     end
-    ApplyDeadBgColor(bg, texture, r, g, b, a)
+    local force = frame._msufHealthBgDynamic == true
+    ApplyDeadBgColor(bg, texture, r, g, b, a, force)
     if frame.hpBarBG and frame.hpBarBG ~= bg then
-      ApplyDeadBgColor(frame.hpBarBG, texture, r, g, b, a)
+      ApplyDeadBgColor(frame.hpBarBG, texture, r, g, b, a, force)
     end
     return
   end

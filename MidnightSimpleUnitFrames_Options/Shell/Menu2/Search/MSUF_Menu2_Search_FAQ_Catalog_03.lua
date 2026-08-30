@@ -19,15 +19,15 @@ if type(Data.RegisterFAQProvider) == "function" then
             ]])
 
         return Data.FAQRows({
-            { l = "Where is the unit frame range check?", a = "Open the matching unit page > Range Fade. Group range fade is in Group Frames > Layout.", p = "uf_target", t = "Opens: Target > Range Fade", x = "Range Fade unit frame range check range checker distance check out of range alpha target targettarget focus focustarget pet boss", k = "unit frame range check|unitframe range check|unit frames range check|range check unitframe|range check unit frame|range checker|distance check|distance checker|out of range unit frame|out of range frames|target out of range|focus out of range|boss out of range|target range fade|focus range fade|boss range fade|reichweitencheck|reichweite check|entfernung check", y = 165 },
+            { l = "Where is the unit frame range check?", a = "Open the matching unit page > Range Fade. Group range fade is in Frames > Party/Raid Frames > Layout.", p = "uf_target", t = "Opens: Target > Range Fade", x = "Range Fade unit frame range check range checker distance check out of range alpha target targettarget focus focustarget pet boss", k = "unit frame range check|unitframe range check|unit frames range check|range check unitframe|range check unit frame|range checker|distance check|distance checker|out of range unit frame|out of range frames|target out of range|focus out of range|boss out of range|target range fade|focus range fade|boss range fade|reichweitencheck|reichweite check|entfernung check", y = 165 },
         },
         {
             {
                 l = "How do I change language or translations?",
-                a = "Open Global Style > Miscellaneous > Language. Translation coverage can also be checked with the" ..
+                a = "Open Appearance > Miscellaneous > Language. Translation coverage can also be checked with the" ..
                     " /msuf locale command.",
                 p = "opt_misc",
-                t = "Opens: Global Style > Miscellaneous > Language",
+                t = "Opens: Appearance > Miscellaneous > Language",
                 x = "Language locale localization translation deDE ruRU frFR esES",
                 k = SearchKeywordList(
                     "language|locale|translation|translations|localization|localisation|sprache|deutsch|english",
@@ -37,10 +37,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change unitframe or group frame tooltips?",
-                a = "Open Global Style > Miscellaneous > Unitframe tooltips to control tooltip source, anchor," ..
+                a = "Open Appearance > Miscellaneous > Unitframe tooltips to control tooltip source, anchor," ..
                     " visibility mode, and modifier key for MSUF unit and group frames.",
                 p = "opt_misc",
-                t = "Opens: Global Style > Miscellaneous > Unitframe tooltips",
+                t = "Opens: Appearance > Miscellaneous > Unitframe tooltips",
                 x = "Unitframe tooltips group frame tooltips tooltip mouseover modifier hide tooltip show tooltip",
                 k = SearchKeywordList(
                     "tooltip|tooltips|unit tooltip|group tooltip|group frame tooltip|mouseover tooltip|hide tooltip",
@@ -145,7 +145,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "Why is my castbar not showing?",
                 a = "Open the unit page > Castbar to enable that unit's castbar. Shared castbar visuals are in" ..
-                    " Global Style > Castbar.",
+                    " Appearance > Cast Bars.",
                 p = "uf_player",
                 t = "Opens: Player > Castbar",
                 x = "Castbar Enable player target focus boss pet show interrupt icon text",
@@ -158,10 +158,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where do I change castbar spell names or long cast text?",
-                a = "Open Global Style > Castbar > Name Shortening for castbar spell name shortening, max length," ..
+                a = "Open Appearance > Cast Bars > Name Shortening for castbar spell name shortening, max length," ..
                     " and reserved space.",
                 p = "opt_castbar",
-                t = "Opens: Global Style > Castbar > Name Shortening",
+                t = "Opens: Appearance > Cast Bars > Name Shortening",
                 x = "Name Shortening spell name max name length reserved space castbar",
                 k = SearchKeywordList(
                     "cast name too long|spell name too long|castbar text too long|shorten castbar name",
@@ -198,13 +198,13 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "Why are my buffs or debuffs missing?", "Open the affected UnitFrame > Auras and choose Buffs or Debuffs. Check its frame-specific Blizzard filters, blacklist, enabled state, and icon cap. For Party/Raid use Group Frames > Auras.", "uf_target", "Opens: Target > Auras", "Aura Filters Blacklist Only my buffs Only my debuffs Show Debuffs Include boss buffs dispellable", SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, "buffs missing|debuffs missing|auras missing|buff not showing|debuff not showing|hide buffs|show debuffs|only my buffs|only my debuffs|boss aura missing|dispellable debuff missing|aura filter"), 180, },
+            { "Why are my buffs or debuffs missing?", "Open the affected UnitFrame > Auras and choose Buffs or Debuffs. Check its frame-specific Blizzard filters, blacklist, enabled state, and icon cap. For Party/Raid use Frames > Party/Raid Frames > Auras.", "uf_target", "Opens: Target > Auras", "Aura Filters Blacklist Only my buffs Only my debuffs Show Debuffs Include boss buffs dispellable", SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, "buffs missing|debuffs missing|auras missing|buff not showing|debuff not showing|hide buffs|show debuffs|only my buffs|only my debuffs|boss aura missing|dispellable debuff missing|aura filter"), 180, },
         },
         {
             {
                 l = "Why do I have too many buffs or debuffs?",
                 a = "Open the affected UnitFrame > Auras, choose Buffs or Debuffs, then adjust filters, icon size," ..
-                    " rows, caps, and spacing. Party/Raid settings are in Group Frames > Auras.",
+                    " rows, caps, and spacing. Party/Raid settings are in Frames > Party/Raid Frames > Auras.",
                 p = "uf_target",
                 t = "Opens: Target > Auras",
                 x = "Auras Max Buffs Max Debuffs Icon size rows spacing filters style",
@@ -253,15 +253,15 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "Where do I change group health text or resource bars?", "Open Group Frames > Layout. Text, Resource Bar, and Range Fade are arranged beside Frame Basics and Transparency. Dispel Overlay and Debuff Stripe are on the Dispel Overlay page. Heal prediction is in Global Style > Bars > Absorb Display.", "gf_layout", "Opens: Group Frames > Layout", "Health Text Resource Bar Text Layout Group Dispel Overlay group range check raid range check party range check", SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, "group health text|raid health text|party health text|group resource bar|group power bar|raid power bar|party power bar|heal prediction|incoming heals|dispel overlay|debuff stripe|group range fade|group range check|raid range check|party range check|raid out of range|party out of range|range check raid frames"), 180, },
+            { "Where do I change group health text or resource bars?", "Open Frames > Party/Raid Frames > Layout. Text, Resource Bar, and Range Fade are arranged beside Frame Basics and Transparency. Dispel Overlay and Debuff Stripe are on the Dispel Overlay page. Heal prediction is in Appearance > Bars > Absorb Display.", "gf_layout", "Opens: Frames > Party/Raid Frames > Layout", "Health Text Resource Bar Text Layout Group Dispel Overlay group range check raid range check party range check", SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, "group health text|raid health text|party health text|group resource bar|group power bar|raid power bar|party power bar|heal prediction|incoming heals|dispel overlay|debuff stripe|group range fade|group range check|raid range check|party range check|raid out of range|party out of range|range check raid frames"), 180, },
         },
         {
             {
                 l = "Where is party or raid range check?",
-                a = "Open Group Frames > Layout > Range Fade. Affects chooses frame or HP fading, and the" ..
+                a = "Open Frames > Party/Raid Frames > Layout > Range Fade. Affects chooses frame or HP fading, and the" ..
                     " alpha sliders control out-of-range and offline opacity.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout > Range Fade",
+                t = "Opens: Frames > Party/Raid Frames > Layout > Range Fade",
                 x = "Range Fade group frame range check raid range check party range check out of range alpha" ..
                     " offline opacity affects frame HP",
                 k = SearchKeywordList(
@@ -274,10 +274,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where are absorb bars or heal prediction?",
-                a = "Absorb styling and heal prediction are in Global Style > Bars > Absorb Display. Use the Party" ..
+                a = "Absorb styling and heal prediction are in Appearance > Bars > Absorb Display. Use the Party" ..
                     " or Raid scope there for group incoming heals.",
                 p = "opt_bars",
-                t = "Opens: Global Style > Bars > Absorb Display",
+                t = "Opens: Appearance > Bars > Absorb Display",
                 x = "Absorb Display Heal Prediction incoming heals absorb health group frames",
                 k = SearchKeywordList(
                     "absorb|absorbs|absorb bar|absorb texture|heal prediction|incoming heals|healing prediction",
@@ -287,7 +287,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "Where do I change aggro, threat, dispel, or raid markers?", "Use Global Style > Bars for highlight borders and Group Frames > Status & Indicators for role, threat, dispel, corner, and raid-marker indicators. Spell Indicators are in Group Frames > Auras.", "gf_indicators", "Opens: Group Frames > Status & Indicators", "Status Indicators Status Icons Corner Indicators aggro threat dispel role icon raid marker", SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "aggro|threat|aggro border|threat border|status and indicators|dispel indicator|magic indicator|curse indicator|poison indicator|disease indicator|raid marker|role icon|ready check|leader icon"), 220, },
+            { "Where do I change aggro, threat, dispel, or raid markers?", "Use Appearance > Bars for highlight borders and Frames > Party/Raid Frames > Status & Indicators for role, threat, dispel, corner, and raid-marker indicators. Spell Indicators are in Frames > Party/Raid Frames > Auras.", "gf_indicators", "Opens: Frames > Party/Raid Frames > Status & Indicators", "Status Indicators Status Icons Corner Indicators aggro threat dispel role icon raid marker", SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "aggro|threat|aggro border|threat border|status and indicators|dispel indicator|magic indicator|curse indicator|poison indicator|disease indicator|raid marker|role icon|ready check|leader icon"), 220, },
         },
         {
             {
@@ -306,7 +306,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Why is MSUF lagging or costing FPS?",
-                a = "Open the affected UnitFrame > Auras or Group Frames > Auras and reduce visible counts," ..
+                a = "Open the affected UnitFrame > Auras or Frames > Party/Raid Frames > Auras and reduce visible counts," ..
                     " timer text, or unnecessary native filter rules.",
                 p = "uf_target",
                 t = "Opens: Target > Auras",

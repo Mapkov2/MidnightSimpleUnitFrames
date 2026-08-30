@@ -147,12 +147,9 @@ local PAGE_FRAME_TYPES = {
     gf_indicators = { group = true },
     gf_auras = { groupAura = true, group = true },
     gf_priority = { priority = true },
-    auras3 = { aura = true },
     auras3_buffs = { aura = true },
     auras3_debuffs = { aura = true },
-    auras3_custom = { aura = true },
     auras3_styling = { aura = true },
-    auras3_filters = { aura = true },
 }
 
 local PAGE_CATEGORY_TERMS = {
@@ -218,6 +215,7 @@ local PAGE_LABEL_OVERRIDES = {
     modules = "Modules",
     search = "Search",
     guided_setup = "Guided Setup",
+    changelog = "See New Features",
 
     opt_castbar = "Cast Bars",
     opt_bars = "Bars",
@@ -231,11 +229,8 @@ local PAGE_LABEL_OVERRIDES = {
     gf_auras = "Group Auras",
     gf_priority = "Priority Frames",
 
-    auras3 = "Auras",
     auras3_buffs = "Aura Buffs",
     auras3_debuffs = "Aura Debuffs",
-    auras3_custom = "Custom Auras",
-    auras3_filters = "Aura Filters",
     auras3_styling = "Aura Style",
 
     uf_player = "Player",
@@ -249,8 +244,11 @@ local PAGE_LABEL_OVERRIDES = {
 }
 local function PageLabel(pageKey)
     if not pageKey or tostring(pageKey) == "" then return "Assistant" end
+    if pageKey and A and type(A.DisplayPageLabel) == "function" then
+        local label = A.DisplayPageLabel(pageKey, nil)
+        if label and tostring(label) ~= "" then return label end
+    end
     if pageKey and PAGE_LABEL_OVERRIDES[pageKey] then return PAGE_LABEL_OVERRIDES[pageKey] end
-    if pageKey and A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(pageKey, "MSUF page") end
     return "MSUF page"
 end
 
@@ -335,11 +333,39 @@ end
 
 local function SettingLikelyPage(setting)
     if type(setting) ~= "table" then return nil end
-    if type(setting.page) == "string" and setting.page ~= "" then return setting.page end
+    local ft = tostring(setting.frameType or "")
+    local unit = tostring(setting.unit or ""):lower()
+    if setting.contextualMenuState == "auraContent" then
+        local active = tostring(M and M.activeKey or "")
+        if active == "gf_auras" or active == "uf_player" or active == "uf_target"
+            or active == "uf_focus" or active == "uf_boss" or active == "uf_arena"
+        then
+            return active
+        end
+        return nil
+    end
+    -- Frame-local Aura content always lives on its UnitFrame/GroupFrame page.
+    -- Older metadata sometimes names the real global Buff/Debuff appearance
+    -- page, which is valid but does not own that setting.
+    if ft == "groupAura" or tostring(setting.key or ""):match("^gf_[^%.]+%.auras%.") then
+        return "gf_auras"
+    end
+    if ft == "aura" then
+        if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
+        if unit:match("^boss") then return "uf_boss" end
+        if unit:match("^arena") then return "uf_arena" end
+    end
+    if type(setting.page) == "string" and setting.page ~= "" then
+        if type(A.ResolveCanonicalMenuRoute) == "function" then
+            local page = A.ResolveCanonicalMenuRoute(setting.page, { settingKey = setting.key })
+            if page then return page end
+        elseif type(A.IsKnownPageKey) ~= "function" or A.IsKnownPageKey(setting.page) then
+            return setting.page
+        end
+    end
     if setting.unit then
         for key, unit in pairs(PAGE_TO_UNIT) do if unit == setting.unit then return key end end
     end
-    local ft = setting.frameType
     local cat = Normalize(setting.category or "")
     -- Several Class Resource settings are edited on the dedicated Colors page
     -- even though their runtime owner is classPower.  Page intent is more
@@ -373,14 +399,32 @@ A.ResolveMenuPageForSetting = SettingLikelyPage
 
 local function ActionLikelyPage(action)
     if type(action) ~= "table" then return nil end
-    if type(action.page) == "string" and action.page ~= "" then return action.page end
-    if type(action.pageKey) == "string" and action.pageKey ~= "" then return action.pageKey end
+    local declaredPage = type(action.page) == "string" and action.page ~= "" and action.page
+        or (type(action.pageKey) == "string" and action.pageKey ~= "" and action.pageKey)
+    if declaredPage then
+        if type(A.ResolveCanonicalMenuRoute) == "function" then
+            local page = A.ResolveCanonicalMenuRoute(declaredPage, { actionKey = action.key })
+            if page then return page end
+        elseif type(A.IsKnownPageKey) ~= "function" or A.IsKnownPageKey(declaredPage) then
+            return declaredPage
+        end
+    end
     local key = tostring(action.key or "")
     local typ = tostring(action.type or "")
     if key:find("priority", 1, true) then return "gf_priority" end
-    if key:find("aura_group", 1, true) or key:find("group_aura", 1, true) then return "gf_auras" end
-    if key:find("aura_blacklist", 1, true) or key:find("aura_group_category_blacklist", 1, true) then return "auras3_filters" end
-    if key:find("aura", 1, true) then return "auras3" end
+    if key:find("aura_group", 1, true) or key:find("group_aura", 1, true)
+        or key:find("aura_group_category_blacklist", 1, true)
+    then
+        return "gf_auras"
+    end
+    -- These two actions have one source-owned global destination.  Every other
+    -- non-group Aura action takes a frame/scope argument (blacklists, custom
+    -- containers and visibility diagnostics), so its bare registry entry does
+    -- not own any one unit page.  Keep those entries searchable but non-openable
+    -- until a concrete scoped control/result supplies its canonical page.
+    if key == "reset_aura_colors" then return "opt_colors" end
+    if key == "assistant.action.editMode.auras" then return "home" end
+    if key:find("aura", 1, true) then return nil end
     if key:find("group_status", 1, true) or key:find("group_corner", 1, true) then return "gf_indicators" end
     if key == "copy_group" or key:find("group_custom_anchor", 1, true) then return "gf_layout" end
     if key:find("class_power", 1, true) or typ == "classPower" then return "classpower" end
@@ -615,6 +659,7 @@ local function BuildIndex()
         end
         pages.search = true
         pages.guided_setup = true
+        pages.changelog = true
         local orderedPages = {}
         for pageKey in pairs(pages) do orderedPages[#orderedPages + 1] = pageKey end
         table.sort(orderedPages)
@@ -628,7 +673,16 @@ local function BuildIndex()
                     if key == pageKey then aliases[#aliases + 1] = alias end
                 end
             end
-            AddIndexItem(index, {
+            local canonicalPage = pageKey
+            if type(A.ResolveCanonicalMenuRoute) == "function" then
+                canonicalPage = A.ResolveCanonicalMenuRoute(pageKey, {})
+            end
+            -- Compatibility builders may remain registered so old saved UI
+            -- state can migrate, but they are not destinations the Assistant
+            -- should advertise or return in search results.
+            local isDestination = canonicalPage == pageKey
+                and (type(A.IsKnownPageKey) ~= "function" or A.IsKnownPageKey(pageKey))
+            if isDestination then AddIndexItem(index, {
                 kind = "page",
                 key = pageKey,
                 label = navLabel,
@@ -640,7 +694,7 @@ local function BuildIndex()
                 description = "MSUF menu page.",
                 canOpen = true,
                 canExplain = true,
-            })
+            }) end
         end
     end
     local Data = M.SearchData or {}
@@ -1203,12 +1257,12 @@ local PAGE_HELP = {
         },
         actions = { "Export Current Profile", "Copy Wago Profiles Link", "Import Profile" },
     },
-    auras3 = { title = "Auras help", lines = { "Aura Options and Aura Style live on the frame they affect. Open UnitFrames > Auras for Player/Target/Focus/Boss/Arena, or Group Frames > Auras for Party/Raid.", "Aura Options controls content, filters, lists, and layout. Aura Style controls that frame's zoom, timers, stacks, duration bar, ordering, pandemic warning, and Full-Frame effect.", "Appearance > Aura Style is only the global icon theme selected by Aura product: Buffs, Debuffs, Player Defensives, or Dots on Target." }, actions = { "Open Target", "Open Player", "Open Arena Frames", "Open Group Auras" } },
-    auras3_styling = { title = "Global Aura Appearance help", lines = { "Appearance > Auras is global by Aura type. Select Buffs, Debuffs, Player Defensives, or Dots on Target to preview and edit that product's icon theme.", "Frame-specific cooldown text, stack text, duration bars, pandemic warnings, ordering, and Full-Frame effects stay under the owning UnitFrame or GroupFrame > Auras > Style.", "Group Spell Icons keep their own local Style, but their icon shape, border, and shadow use the global Buff Appearance." }, actions = { "Open Auras", "Open Player", "Open Group Auras" } },
-    auras3_buffs = { title = "Aura Buffs help", lines = { "Open the affected UnitFrame > Auras > Buffs for its Options and frame-local Style; use Group Frames > Auras for Party/Raid Buffs.", "Appearance > Aura Style > Buffs contains only the global Buff icon theme." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
-    auras3_debuffs = { title = "Aura Debuffs help", lines = { "Open the affected UnitFrame > Auras > Debuffs for its Options and frame-local Style; use Group Frames > Auras for Party/Raid Debuffs.", "Appearance > Aura Style > Debuffs contains only the global Debuff icon theme." }, actions = { "Open Target", "Open Focus", "Open Group Auras" } },
-    auras3_custom = { title = "Custom Auras help", lines = { "Every supported UnitFrame has Custom 1, Custom 2, Custom 3, and its special Player Defensives or Dots on Target container under Auras.", "Setup, lists, layout, deep Style, pandemic warning, and Full-Frame effects remain local to that UnitFrame. Only the corresponding icon theme is global under Appearance > Aura Style." }, actions = { "Open Aura Style", "Open Target", "Open Player" } },
-    auras3_filters = { title = "Aura Filter help", lines = { "There is no standalone Aura Filters page anymore. Filters and Black-/Whitelists live directly beside the Buff, Debuff, or Custom container they affect.", "Start with scope and lane: Player/Target/Focus/Boss/Arena Buffs or Debuffs, or Party/Raid Buffs or Debuffs. Unit filter toggles inherit from Shared unless that unit uses custom rules; group lanes use their own filter token.", "Hide Permanent removes every no-duration aura in that lane. Exact SpellID blacklists remove one spell where Blizzard permits identity filtering; group category blacklists expand to the same live exact-SpellID exclusions. Timer text, swipe, and duration bars are style only." }, actions = { "Open Target", "Open Arena Frames", "Open Group Auras" } },
+    aura_overview = { title = "Auras help", lines = { "Aura Options and Aura Style live on the frame they affect. Open UnitFrames > Auras for Player/Target/Focus/Boss/Arena, or Frames > Party/Raid Frames > Auras for Party/Raid.", "Aura Options controls content, filters, lists, and layout. Aura Style controls that frame's zoom, timers, stacks, duration bar, ordering, pandemic warning, and Full-Frame effect.", "Appearance > Auras is only the global icon theme selected by Aura product: Buffs, Debuffs, Player Defensives, or Dots on Target." }, actions = { "Open Target", "Open Player", "Open Arena Frames", "Open Group Auras" } },
+    auras3_styling = { title = "Global Aura Appearance help", lines = { "Appearance > Auras is global by Aura type. Select Buffs, Debuffs, Player Defensives, or Dots on Target to preview and edit that product's icon theme.", "Frame-specific cooldown text, stack text, duration bars, pandemic warnings, ordering, and Full-Frame effects stay under the owning UnitFrame or GroupFrame > Auras > Style.", "Group Spell Icons keep their own local Style, but their icon shape, border, and shadow use the global Buff Appearance." }, actions = { "Open Global Aura Appearance", "Open Player", "Open Group Auras" } },
+    auras3_buffs = { title = "Aura Buffs help", lines = { "Open the affected UnitFrame > Auras > Buffs for its Options and frame-local Style; use Frames > Party/Raid Frames > Auras for Party/Raid Buffs.", "Appearance > Auras > Buffs contains only the global Buff icon theme." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
+    auras3_debuffs = { title = "Aura Debuffs help", lines = { "Open the affected UnitFrame > Auras > Debuffs for its Options and frame-local Style; use Frames > Party/Raid Frames > Auras for Party/Raid Debuffs.", "Appearance > Auras > Debuffs contains only the global Debuff icon theme." }, actions = { "Open Target", "Open Focus", "Open Group Auras" } },
+    aura_custom_help = { title = "Custom Auras help", lines = { "Every supported UnitFrame has Custom 1, Custom 2, Custom 3, and its special Player Defensives or Dots on Target container under Auras.", "Setup, lists, layout, deep Style, pandemic warning, and Full-Frame effects remain local to that UnitFrame. Only the corresponding icon theme is global under Appearance > Auras." }, actions = { "Open Target", "Open Player", "Open Focus", "Open Arena Frames" } },
+    aura_filters_help = { title = "Aura Filter help", lines = { "There is no standalone Aura Filters page anymore. Filters and Black-/Whitelists live directly beside the Buff, Debuff, or Custom container they affect.", "Start with scope and lane: Player/Target/Focus/Boss/Arena Buffs or Debuffs, or Party/Raid Buffs or Debuffs. Unit filter toggles are local to the selected frame and lane; group lanes use their own single filter token.", "Hide Permanent removes every no-duration aura in that lane. Exact SpellID blacklists remove one spell where Blizzard permits identity filtering; group category blacklists expand to the same live exact-SpellID exclusions. Timer text, swipe, and duration bars are style only." }, actions = { "Open Target", "Open Arena Frames", "Open Group Auras" } },
     gf_layout = { title = "Group Layout help", lines = { "You can change group frame basics, text, resource bars, transparency, geometry, sorting, scaling, anchoring, Party/Raid/Mythic Raid behavior, and visibility options.", "Examples: 'set raid health text size to 14', 'hide healer resource bars in raid frames', 'set raid scale for 20 players to 80', or 'set party growth direction to down'." }, actions = { "Open Group Layout", "Open Colors" } },
     gf_bars = {
         title = "Group Dispel Overlay help",
@@ -1255,7 +1309,7 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "misc help", "miscellaneous help", "help misc", "help miscellaneous", "tooltip help", "tooltips help", "minimap help", "sprache hilfe", "tooltip hilfe", "misc hilfe", "menue sprache hilfe", "blizzard frames hilfe" }, page = "opt_misc" },
     { terms = { "modules help", "module help", "help modules", "help module", "style module help", "msuf style help", "module hilfe", "stil modul hilfe", "module hilfe", "msuf stil hilfe", "dropdown stil hilfe" }, page = "modules" },
     { terms = { "aura style help", "aura styling help", "help aura style", "help aura styling" }, page = "auras3_styling" },
-    { terms = { "aura help", "auras help", "buff help", "debuff help" }, page = "auras3" },
+    { terms = { "aura help", "auras help", "buff help", "debuff help" }, page = "aura_overview" },
     { terms = { "edit mode help", "editmode help", "help edit mode", "bearbeitungsmodus hilfe", "hilfe bearbeitungsmodus", "editmodus hilfe" }, page = "home", special = "editmode" },
     { terms = { "group help", "group frames help", "help group", "help group frames", "party help", "help party", "raid help", "help raid" }, page = "gf_layout" },
     { terms = { "group text help", "group health help", "group health and text help", "help group text", "help group health", "help group health and text", "party text help", "raid text help", "party health help", "raid health help" }, page = "gf_layout" },
@@ -1416,6 +1470,122 @@ local WHAT_CAN_DIRECT_HELP_TERMS = {
     "powerbar position", "power bar position",
 }
 
+local FRAME_LOCAL_AURA_DETAIL_TERMS = {
+    "aura filter", "aura filters", "hidden aura", "hidden auras", "blacklist", "whitelist", "ignore list",
+    "aura cooldown", "aura cooldown text", "cooldown text", "cooldown swipe",
+    "aura stack", "aura stacks", "aura stack text", "stack text", "stack count",
+    "aura duration", "duration bar", "duration bars", "pandemic warning",
+    "aura ordering", "aura order", "aura sorting", "aura sort",
+}
+
+local GLOBAL_AURA_ICON_THEME_TERMS = {
+    "global aura appearance", "global aura style", "aura icon theme", "buff icon theme", "debuff icon theme",
+    "global aura icon", "global aura border", "global aura shadow", "appearance aura style",
+}
+
+local GLOBAL_AURA_TIMER_COLOR_TERMS = {
+    "aura cooldown text color", "aura cooldown safe color", "aura cooldown safe text color",
+    "aura cooldown warning color", "aura cooldown warning text color",
+    "aura cooldown urgent color", "aura cooldown urgent text color",
+    "aura timer safe color", "aura timer warning color", "aura timer urgent color",
+    "aura cooldown color buckets", "aura timer color buckets",
+    "aura cooldown safe seconds", "aura cooldown warning seconds", "aura cooldown urgent seconds",
+    "aura timer safe seconds", "aura timer warning seconds", "aura timer urgent seconds",
+}
+
+local function ExplicitAuraOwnerPage(norm)
+    if ContainsAny(norm, { "party", "raid", "mythic raid", "group aura", "group buff", "group debuff" }) then
+        return "gf_auras"
+    end
+    if ContainsAny(norm, { "target", "target frame" }) then return "uf_target" end
+    if ContainsAny(norm, { "player", "player frame", "self frame" }) then return "uf_player" end
+    if ContainsAny(norm, { "focus", "focus frame" }) then return "uf_focus" end
+    if ContainsAny(norm, { "boss", "boss frame", "boss frames" }) then return "uf_boss" end
+    if ContainsAny(norm, { "arena", "arena frame", "arena frames" }) then return "uf_arena" end
+    return nil
+end
+
+local function RecentAuraOwnerPage(norm, opts)
+    local explicit = ExplicitAuraOwnerPage(norm)
+    if explicit then return explicit end
+    local active = tostring((opts and opts.currentPage) or CurrentPageKey() or "")
+    if active == "gf_auras" or active == "uf_player" or active == "uf_target"
+        or active == "uf_focus" or active == "uf_boss" or active == "uf_arena"
+    then
+        return active
+    end
+    local context = type(A.GetContext) == "function" and A.GetContext() or nil
+    local turn = type(context) == "table" and tonumber(context.turnSerial or context.lastTurnSerial) or nil
+    local subjectTurn = type(context) == "table" and tonumber(context.lastSubjectTurn or context.lastMentionedTurn) or nil
+    if not (turn and subjectTurn and turn - subjectTurn >= 0 and turn - subjectTurn <= 3) then return nil end
+    local frameType = tostring(context.lastFrameType or "")
+    local unit = tostring(context.lastUnit or ""):lower()
+    if frameType == "groupAura" then return "gf_auras" end
+    if frameType == "aura" then
+        if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
+        if unit:match("^boss") then return "uf_boss" end
+        if unit:match("^arena") then return "uf_arena" end
+    end
+    local settingKey = tostring(context.lastSetting or "")
+    local setting = settingKey ~= "" and Registry and type(Registry.GetSetting) == "function"
+        and Registry:GetSetting(settingKey) or nil
+    if type(setting) ~= "table" then return nil end
+    local settingFrameType = tostring(setting.frameType or "")
+    local settingUnit = tostring(setting.unit or ""):lower()
+    if settingFrameType == "groupAura" or settingKey:match("^gf_[^%.]+%.auras%.") then return "gf_auras" end
+    if settingFrameType == "aura" then
+        if settingUnit == "player" or settingUnit == "target" or settingUnit == "focus" then return "uf_" .. settingUnit end
+        if settingUnit:match("^boss") then return "uf_boss" end
+        if settingUnit:match("^arena") then return "uf_arena" end
+    end
+    return nil
+end
+
+local function AuraScopeClarification()
+    return {
+        text = "Which Aura frame do you mean?\nCooldown text, stack text, duration bars, ordering, and filters are frame-local. Name Player, Target, Focus, Boss, Arena, Party, or Raid (and Buffs or Debuffs when it matters). Global Aura Appearance only controls the shared icon theme.",
+        status = "info",
+        summary = "Assistant Aura scope clarification",
+        clarification = "Name the affected Aura frame before I open or change a frame-local control.",
+        nextStep = "For example: open target buff cooldown text; where are arena buff filters; open global aura icon theme.",
+    }
+end
+K.AuraScopeClarification = AuraScopeClarification
+
+local function AuraLandingClarification()
+    return {
+        text = "Which Aura area do you want?\nFor frame-local content and Style, name Player, Target, Focus, Boss, Arena, Party, or Raid (and Buffs or Debuffs when it matters). For the shared icon shape, border, and shadow theme, say Global Aura Appearance.",
+        status = "info",
+        summary = "Assistant Aura area clarification",
+        clarification = "Choose a frame-local Aura workspace or the global icon-theme appearance.",
+        nextStep = "For example: open target auras; open arena buff filters; open global aura appearance.",
+    }
+end
+K.AuraLandingClarification = AuraLandingClarification
+
+function K.ResolveAuraLandingPage(query, opts)
+    local norm = Normalize(query)
+    local subject = norm:match("^open%s+(.+)$")
+        or norm:match("^show%s+me%s+(.+)$")
+        or norm:match("^take%s+me%s+to%s+(.+)$")
+        or norm:match("^find%s+(.+)$")
+    if subject ~= "aura" and subject ~= "auras" and subject ~= "aura settings"
+        and subject ~= "aura options" and subject ~= "buff" and subject ~= "buffs"
+        and subject ~= "debuff" and subject ~= "debuffs"
+    then
+        return nil, false
+    end
+    return RecentAuraOwnerPage(norm, opts), true
+end
+
+function K.ResolveFrameLocalAuraPage(query, opts)
+    local norm = Normalize(query)
+    if ContainsAny(norm, GLOBAL_AURA_ICON_THEME_TERMS) then return nil, false end
+    if ContainsAny(norm, GLOBAL_AURA_TIMER_COLOR_TERMS) then return nil, false end
+    if not ContainsAny(norm, FRAME_LOCAL_AURA_DETAIL_TERMS) then return nil, false end
+    return RecentAuraOwnerPage(norm, opts), true
+end
+
 local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "gf_priority", terms = { "priority frame", "priority frames", "priorityframe", "priorityframes", "pinned frame", "pinned frames", "priority strip", "tank frame", "tank frames", "co tank frame", "co tank frames" } },
     { page = "gf_layout", terms = { "group health and text", "group health", "group text", "group resource", "group power", "party health", "party text", "party power", "raid health", "raid text", "raid power", "mythic raid health", "mythic raid text" } },
@@ -1424,11 +1594,13 @@ local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "gf_indicators", terms = { "group status and indicators", "group indicators", "group indicator", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
     { page = "gf_auras", terms = { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "mythic raid aura", "mythic raid auras", "group buff", "group buffs", "group debuff", "group debuffs" } },
     { page = "gf_layout", terms = { "group layout", "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames", "party layout", "raid layout" } },
-    { page = "auras3_filters", terms = { "aura filter", "aura filters", "hidden aura", "hidden auras", "blacklist", "whitelist", "ignore list" } },
-    { page = "auras3_styling", terms = { "aura style", "aura styling", "aura cooldown text", "aura stack text", "cooldown text", "stack text" } },
-    { page = "auras3_debuffs", terms = { "target debuff", "target debuffs", "player debuff", "player debuffs", "focus debuff", "focus debuffs", "unit debuff", "unit debuffs", "debuff", "debuffs" } },
-    { page = "auras3_buffs", terms = { "target buff", "target buffs", "player buff", "player buffs", "focus buff", "focus buffs", "unit buff", "unit buffs", "buff", "buffs" } },
-    { page = "auras3", terms = { "aura", "auras" } },
+    { page = "auras3_styling", terms = { "aura style", "aura styling" } },
+    { page = "uf_target", terms = { "target debuff", "target debuffs", "target buff", "target buffs" } },
+    { page = "uf_player", terms = { "player debuff", "player debuffs", "player buff", "player buffs" } },
+    { page = "uf_focus", terms = { "focus debuff", "focus debuffs", "focus buff", "focus buffs" } },
+    { page = "uf_arena", terms = { "arena debuff", "arena debuffs", "arena buff", "arena buffs" } },
+    { page = "aura_overview", terms = { "unit debuff", "unit debuffs", "debuff", "debuffs", "unit buff", "unit buffs", "buff", "buffs" } },
+    { page = "aura_overview", terms = { "aura", "auras" } },
     { page = "opt_castbar", terms = { "cast bar", "cast bars", "castbar", "castbars", "target cast", "focus cast", "boss cast" } },
     { page = "classpower", terms = { "class resource", "class resources", "class power", "class powers", "combo point", "combo points", "holy power" } },
     { page = "profiles", terms = { "profile", "profiles", "profile import", "profile export", "spec profile", "spec profiles" } },
@@ -1484,7 +1656,7 @@ local function LocationLaneOwnsQuestion(norm)
     return owns
 end
 
-local function TryWhatCanPageHelp(norm)
+local function TryWhatCanPageHelp(norm, opts)
     if not LooksLikeWhatCanPageHelpIntent(norm) then return nil end
     -- A location question one of the Router's specific lanes owns gets that
     -- precise answer instead of the page overview.
@@ -1492,6 +1664,27 @@ local function TryWhatCanPageHelp(norm)
     if ContainsAny(norm, WHAT_CAN_UNIT_FRAME_SCOPE_TERMS) and ContainsAny(norm, WHAT_CAN_UNIT_TEXT_TERMS) then return nil end
     if ContainsAny(norm, WHAT_CAN_GROUP_FRAME_SCOPE_TERMS) and ContainsAny(norm, WHAT_CAN_GROUP_LAYOUT_TERMS) then return nil end
     if ContainsAny(norm, WHAT_CAN_DIRECT_HELP_TERMS) then return nil end
+    -- A broad "what Aura filters are available" question is an overview, not
+    -- a request to open or inspect one frame-local filter workspace. Let the
+    -- dedicated filter guide enumerate the choices and retain its executable
+    -- follow-up context; scoped filter questions still resolve below.
+    if ContainsAny(norm, { "aura filter", "aura filters" }) and not ExplicitAuraOwnerPage(norm) then return nil end
+    if ContainsAny(norm, GLOBAL_AURA_ICON_THEME_TERMS) then return PageHelp("auras3_styling") end
+    local auraPage, frameLocalAura = K.ResolveFrameLocalAuraPage(norm, opts)
+    if frameLocalAura then
+        local page = auraPage
+        if page == "gf_auras" then return PageHelp(page) end
+        if page then return PageHelp("aura_overview", PageLabel(page) .. " Auras") end
+        return AuraScopeClarification()
+    end
+    -- A scoped Aura lane is more specific than its owning frame. Keep the
+    -- curated Buff/Debuff explanation (which points frame-local controls to
+    -- that owner) instead of degrading "target buffs" into generic Target
+    -- frame help merely because the retired focused Aura page no longer opens.
+    if ExplicitAuraOwnerPage(norm) then
+        if ContainsAny(norm, { "debuff", "debuffs" }) then return PageHelp("auras3_debuffs") end
+        if ContainsAny(norm, { "buff", "buffs" }) then return PageHelp("auras3_buffs") end
+    end
     for i = 1, #WHAT_CAN_PAGE_HELP_TARGETS do
         local spec = WHAT_CAN_PAGE_HELP_TARGETS[i]
         if ContainsAny(norm, spec.terms) then
@@ -1691,7 +1884,7 @@ local function ChangelogAnswer(query)
         for b = 1, visibleBullets do lines[#lines + 1] = "- " .. tostring(bullets[b]) end
         if #bullets > visibleBullets then lines[#lines + 1] = "- ... " .. tostring(#bullets - visibleBullets) .. " more." end
     end
-    if #sections > visibleSections then lines[#lines + 1] = "... " .. tostring(#sections - visibleSections) .. " more sections in the Dashboard changelog." end
+    if #sections > visibleSections then lines[#lines + 1] = "... " .. tostring(#sections - visibleSections) .. " more sections on See New Features." end
     lines[#lines + 1] = "You can ask: Open Changelog | Search release notes"
     return { text = table.concat(lines, "\n"), status = "info", summary = "Assistant changelog answer" }
 end
@@ -2231,7 +2424,7 @@ local function PriorityFramesAnswer(norm)
         local lines = {
             "The in-game Assistant can explain or help phrase a Priority Frames feature request, but it cannot submit one. Post it in MSUF Discord: " .. DISCORD_INVITE .. ".",
             "Include whether the request is for Party, Raid, or both; who should be selected; how automatic and manual entries should be ordered; the expected one-to-five-slot behavior; and what should happen during combat.",
-            "Current behavior supports automatic WoW-assigned tanks plus manually pinned current group members. Open Group Frames > Priority to review the existing controls first.",
+            "Current behavior supports automatic WoW-assigned tanks plus manually pinned current group members. Open Frames > Party/Raid Frames > Priority to review the existing controls first.",
         }
         if hasAugmentation then
             lines[#lines + 1] = "Priority Frames does not automatically detect other players' specializations, so an Augmentation Evoker currently needs a manual pin."
@@ -2245,7 +2438,7 @@ local function PriorityFramesAnswer(norm)
         local lines = {
             "Priority Frames does not automatically detect other players' specializations. Automatic selection currently uses WoW's assigned TANK role only; there is no automatic Augmentation or other-spec scan.",
             "While grouped, set the Priority Frames hover hotkey, hover the Augmentation Evoker's MSUF Party or Raid frame, and press the hotkey to pin that player manually.",
-            "Priority Frames can keep that player visible for monitoring and click-casting, but it does not decide the ideal Prescience or Ebon Might target. Group Frames > Auras > Spell Indicators can show Prescience, Ebon Might, and other configured Augmentation effects on the inherited frames.",
+            "Priority Frames can keep that player visible for monitoring and click-casting, but it does not decide the ideal Prescience or Ebon Might target. Frames > Party/Raid Frames > Auras > Spell Indicators can show Prescience, Ebon Might, and other configured Augmentation effects on the inherited frames.",
         }
         if asksAutomatic or isFeatureRequest then
             lines[#lines + 1] = "For automatic Augmentation selection as a feature request, describe the desired Party/Raid rules and combat behavior in MSUF Discord: " .. DISCORD_INVITE .. ". The in-game Assistant can explain the request but cannot submit it for you."
@@ -2312,7 +2505,7 @@ local function PriorityFramesAnswer(norm)
 
     if ContainsAny(norm, { "position", "placement", "place", "attach", "attached", "anchor", "left", "right", "above", "below", "free position", "edit mode", "mover", "growth", "spacing", "positionieren", "platzieren", "anheften", "bearbeitungsmodus" }) then
         return PriorityFramesResult("Priority Frames placement help", {
-            "Open Group Frames > Priority > Placement. Attach the strip to the right, left, top, or bottom of the active Party/Raid container, or choose Free position and place the dedicated Priority Frames mover in Edit Mode.",
+            "Open Frames > Party/Raid Frames > Priority > Placement. Attach the strip to the right, left, top, or bottom of the active Party/Raid container, or choose Free position and place the dedicated Priority Frames mover in Edit Mode.",
             "Attached placement follows whichever Party, Raid, or Mythic Raid container is active. Growth, spacing, attachment gap, and alignment offset are configured on the same page.",
         })
     end
@@ -2345,7 +2538,7 @@ local function PriorityFramesAnswer(norm)
         "delete all priority pin", "delete all priority pins", "remove all priority pin", "remove all priority pins",
     }) then
         return PriorityFramesResult("Priority Frames pin manager help", {
-            "Character-specific Priority pins were not cleared from chat. Open Group Frames > Priority > Manual pins, choose Clear all, and confirm the warning after reviewing the current character's saved list.",
+            "Character-specific Priority pins were not cleared from chat. Open Frames > Party/Raid Frames > Priority > Manual pins, choose Clear all, and confirm the warning after reviewing the current character's saved list.",
             "The hover hotkey toggles one current group member; it is not the Clear all workflow. Ask 'Open Priority Frames' to go to the pin manager safely.",
         })
     end
@@ -2355,14 +2548,14 @@ local function PriorityFramesAnswer(norm)
         "move pinned player up", "move pinned player down", "priority pin order", "priority pins order",
     }) then
         return PriorityFramesResult("Priority Frames pin manager help", {
-            "Character-specific pins were not changed from chat. Open Group Frames > Priority > Manual pins and use the exact saved player's Up, Down, or Remove button.",
+            "Character-specific pins were not changed from chat. Open Frames > Party/Raid Frames > Priority > Manual pins and use the exact saved player's Up, Down, or Remove button.",
             "Those rows depend on the live character-specific pin order, so the Assistant navigates to the manager instead of guessing an index or player.",
         })
     end
 
     if ContainsAny(norm, { "pin", "pinned", "unpin", "hotkey", "keybind", "binding", "by name", "offline", "add player", "remove player", "select player", "anheften", "loesen", "hotkey", "tastenbelegung" }) then
         return PriorityFramesResult("Priority Frames pinning help", {
-            "While grouped, set a hover hotkey on Group Frames > Priority. Then hover an MSUF Party, Raid, or Priority frame and press the Priority Frames hotkey to pin or unpin that player.",
+            "While grouped, set a hover hotkey on Frames > Party/Raid Frames > Priority. Then hover an MSUF Party, Raid, or Priority frame and press the Priority Frames hotkey to pin or unpin that player.",
             "Players cannot be added by typing a name or while they are outside the current group. A previously saved pin waits silently and reappears when that player rejoins your party or raid.",
             "If the player is already included by Include tanks automatically, removing a manual pin does not remove the automatic tank entry; disable automatic tanks if you need manual-only control.",
         })
@@ -2371,12 +2564,13 @@ local function PriorityFramesAnswer(norm)
     return PriorityFramesResult("Priority Frames help", {
         "Priority Frames duplicate automatic tanks and manually pinned current group members into a stable extra strip without removing them from the normal Party or Raid frames.",
         "They work in parties, raids, and Mythic raids, inherit the active group-frame appearance and click-cast behavior, and require the matching base group frames to be enabled.",
-        "Open Group Frames > Priority to enable the strip, set one to five visible slots, configure the hover hotkey, manage pins, and choose attached or Free placement.",
+        "Open Frames > Party/Raid Frames > Priority to enable the strip, set one to five visible slots, configure the hover hotkey, manage pins, and choose attached or Free placement.",
     })
 end
 
 local function IsStaticAuraFilterDefinition(norm)
-    return norm == "what is aura filtering" or norm == "what are aura filters"
+    return norm == "aura filter help" or norm == "aura filters help" or norm == "help aura filters"
+        or norm == "what is aura filtering" or norm == "what are aura filters"
         or norm == "explain aura filtering" or norm == "explain aura filters"
 end
 
@@ -2400,7 +2594,7 @@ local function DirectHelpAnswer(query, opts)
     -- before the cold exact-label index; response-language directives have
     -- already been removed in semanticQuery above.
     if IsStaticAuraFilterDefinition(norm) then
-        return PageHelp("auras3_filters", nil, { staticOnly = true })
+        return PageHelp("aura_filters_help", nil, { staticOnly = true })
     end
     -- A question that names one exact control is about that control, not about
     -- the topic its words happen to belong to. Concept vocabulary turns up
@@ -2470,13 +2664,13 @@ local function DirectHelpAnswer(query, opts)
     if norm == "was kann ich hier aendern" or norm == "hilfe hier" or norm == "hilfe fuer diese seite" or norm == "diese seite hilfe" then
         return PageHelp((opts and opts.currentPage) or CurrentPageKey(), "Current page help")
     end
-    local pageHelp = TryWhatCanPageHelp(norm)
+    local pageHelp = TryWhatCanPageHelp(norm, opts)
     if pageHelp then return pageHelp end
     if ContainsAny(norm, { "gcd", "global cooldown", "global cool down" })
         and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "mean" })
     then
         return {
-            text = "Global cooldown help\nThe global cooldown, or GCD, is the short shared cooldown WoW triggers after most abilities. MSUF does not change the GCD, but it can make related UI easier to read through cast bars, aura cooldown text, class resources, and action-adjacent frame visibility.\nExamples: make aura cooldown text bigger; open cast bars; open class resources; show combat timer.\nYou can ask: Open Cast Bars | Open Aura Style | Open Class Resources",
+            text = "Global cooldown help\nThe global cooldown, or GCD, is the short shared cooldown WoW triggers after most abilities. MSUF does not change the GCD, but it can make related UI easier to read through cast bars, frame-local aura cooldown text, class resources, and action-adjacent frame visibility.\nExamples: make target buff cooldown text bigger; open cast bars; open class resources; show combat timer.\nYou can ask: Open Cast Bars | Open Target | Open Class Resources",
             status = "applied",
             summary = "Assistant global cooldown help",
         }
@@ -2569,6 +2763,12 @@ local function DirectHelpAnswer(query, opts)
     end
     if ContainsAny(norm, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "buffs and debuffs", "buff and debuff" })
         and not ContainsAny(norm, { "dispel", "dispels", "dispellable", "debuff dispel" })
+        -- A question such as "what filter can hide Player Buffs with no
+        -- timer" names an executable duration-filter goal. Keep it out of the
+        -- broad Aura concept card so the filtering planner can offer its safe
+        -- choices and preserve the follow-up transaction.
+        and not (ContainsAny(norm, { "permanent", "no timer", "without timer", "no duration", "without duration", "timeless" })
+            and ContainsAny(norm, { "hide", "show", "filter" }))
         and HasConceptHelpIntent(norm)
         -- "where can I make target buff icons bigger?" asks where one scoped
         -- aura control lives; the aura setting location lane names it exactly.
@@ -2581,7 +2781,7 @@ local function DirectHelpAnswer(query, opts)
         and not LocationLaneOwnsQuestion(norm)
     then
         return {
-            text = "Auras, buffs, and debuffs help\nAura content lives directly on the frame it affects. Open Player, Target, Focus, Boss, or Arena Frames > Auras for Buffs, Debuffs, and Custom 1–3. Party/Raid filters and lists live in Group Frames > Auras. For content changes, name the frame and Buff or Debuff lane: broad filters select aura groups, Hide Permanent handles auras with no timer, and exact SpellID lists hide individual auras where Blizzard permits identity filtering. Cooldown/stack text, swipe, duration bars, colors, size, and growth are presentation only.\nExamples: hide player buffs with no timer; show only dispellable raid debuffs; list arena buff blacklist; set target buff icon size to 30.\nYou can ask: Open Target | Open Player | Open Boss Frames | Open Arena Frames | Open Group Auras | Open Aura Style",
+            text = "Auras, buffs, and debuffs help\nAura content lives directly on the frame it affects. Open Player, Target, Focus, Boss, or Arena Frames > Auras for Buffs, Debuffs, and Custom 1–3. Party/Raid filters and lists live in Frames > Party/Raid Frames > Auras. For content changes, name the frame and Buff or Debuff lane: broad filters select aura groups, Hide Permanent handles auras with no timer, and exact SpellID lists hide individual auras where Blizzard permits identity filtering. Cooldown/stack text, swipe, duration bars, colors, size, and growth are presentation only. The shared icon shape, border, and shadow theme lives at Appearance > Auras.\nExamples: hide player buffs with no timer; show only dispellable raid debuffs; list arena buff blacklist; set target buff icon size to 30.\nYou can ask: Open Target | Open Player | Open Boss Frames | Open Arena Frames | Open Group Auras | Open Global Aura Appearance",
             status = "applied",
             summary = "Assistant auras help",
         }
@@ -2741,7 +2941,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptDefinitionIntent(norm)
     then
         return {
-            text = "Cooldown display help\nCooldown swipe is the radial overlay that shows time remaining on an icon. Cooldown text is the number shown on top of the icon. MSUF can configure aura cooldown swipe, cooldown text size, offsets, and related aura styling options.\nExamples: turn on target buff cooldown swipe; set aura cooldown text size to 14; move target buff cooldown text up; open aura style.\nYou can ask: Open Aura Style | Open Auras",
+            text = "Cooldown display help\nCooldown swipe is the radial overlay that shows time remaining on an icon. Cooldown text is the number shown on top of the icon. MSUF configures Aura cooldown swipe, text size, and offsets on the affected frame's Auras > Style controls.\nExamples: turn on target buff cooldown swipe; set player debuff cooldown text size to 14; move arena buff cooldown text up.\nName Player, Target, Focus, Boss, Arena, Party, or Raid before opening or changing it. Global Aura Appearance only controls the icon theme.\nYou can ask: Open Target | Open Player | Open Arena Frames | Open Group Auras",
             status = "applied",
             summary = "Assistant cooldown display help",
         }
@@ -2750,7 +2950,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptDefinitionIntent(norm)
     then
         return {
-            text = "Aura stack help\nA stack count shows how many times the same aura is applied. MSUF can control aura stack text visibility, size, X/Y offsets, and styling where the aura page exposes those options.\nExamples: set target buff stack text size to 14; move target debuff stack text right 3; open aura style.\nYou can ask: Open Aura Style | Open Auras",
+            text = "Aura stack help\nA stack count shows how many times the same aura is applied. MSUF controls Aura stack text visibility, size, X/Y offsets, and styling on the affected frame's Auras > Style controls.\nExamples: set target buff stack text size to 14; move arena debuff stack text right 3.\nName Player, Target, Focus, Boss, Arena, Party, or Raid before opening or changing it. Global Aura Appearance only controls the icon theme.\nYou can ask: Open Target | Open Player | Open Arena Frames | Open Group Auras",
             status = "applied",
             summary = "Assistant aura stack help",
         }
@@ -2759,7 +2959,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptDefinitionIntent(norm)
     then
         return {
-            text = "Growth direction help\nGrowth direction controls where new frames or icons are added: left, right, up, down, or into columns depending on the MSUF area. It matters for group frame layout and aura icon layout.\nExamples: set party growth direction to down; set target buffs per row to 8; make raid frames grow right; open group layout.\nYou can ask: Open Group Layout | Open Auras",
+            text = "Growth direction help\nGrowth direction controls where new frames or icons are added: left, right, up, down, or into columns depending on the MSUF area. It matters for group frame layout and aura icon layout.\nExamples: set party growth direction to down; set target buffs per row to 8; make raid frames grow right; open group layout.\nYou can ask: Open Group Layout | Open Target | Open Group Auras",
             status = "applied",
             summary = "Assistant growth direction help",
         }
@@ -2867,7 +3067,7 @@ local function DirectHelpAnswer(query, opts)
         and not LocationLaneOwnsQuestion(norm)
     then
         return {
-            text = "Dispel help\nMSUF has separate dispel features. Party/Raid/Mythic Raid use Group Frames > Dispel Overlay. Player/Target/Focus/Boss/Arena use Bars > UnitFrame Dispel Overlay and the global/scoped Dispel Border. Aura Filters decide which dispellable debuffs are shown as icons. UnitFrame Dispel Border/Overlay need at least one UnitFrame aura container enabled.\nExamples: turn on party dispel overlay; set raid dispel overlay to max; set arena dispel overlay opacity to 80; set dispel border detects to dispellable by me; show only dispellable raid debuffs.\nYou can ask: Open Group Dispel Overlay | Open Bars | Open Aura Filters",
+            text = "Dispel help\nMSUF has separate dispel features. Party/Raid/Mythic Raid use Frames > Party/Raid Frames > Dispel Overlay. Player/Target/Focus/Boss/Arena use Bars > UnitFrame Dispel Overlay and the global/scoped Dispel Border. The affected frame's Aura Options decide which dispellable debuffs are shown as icons. UnitFrame Dispel Border/Overlay need at least one UnitFrame aura container enabled.\nExamples: turn on party dispel overlay; set raid dispel overlay to max; set arena dispel overlay opacity to 80; set dispel border detects to dispellable by me; show only dispellable raid debuffs.\nYou can ask: Open Group Dispel Overlay | Open Bars | Open Arena Frames | Open Group Auras",
             status = "applied",
             summary = "Assistant dispel help",
         }
@@ -2922,7 +3122,7 @@ local function DirectHelpAnswer(query, opts)
         and not LocationLaneOwnsQuestion(norm)
     then
         return {
-            text = "Group Status & Indicators help\nIn Group Frames > Status & Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, and corner indicators. Spell Indicators are in Group Frames > Auras.\nExamples: show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Status & Indicators",
+            text = "Group Status & Indicators help\nIn Frames > Party/Raid Frames > Status & Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, and corner indicators. Spell Indicators are in Frames > Party/Raid Frames > Auras.\nExamples: show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant group status and indicators help",
         }
@@ -2936,7 +3136,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group health and text help\nIn Group Frames > Layout, I can help with group health, resource bars, role visibility, text slots, text font sizes, range fade, transparency, and frame geometry. Dispel Overlay and Debuff Stripe share the Dispel Overlay page.\nExamples: change party health text; hide healer resource bars in raid frames; set raid range fade to 40.\nYou can ask: Open Group Layout | Open Group Dispel Overlay | Open Colors",
+            text = "Group health and text help\nIn Frames > Party/Raid Frames > Layout, I can help with group health, resource bars, role visibility, text slots, text font sizes, range fade, transparency, and frame geometry. Dispel Overlay and Debuff Stripe share the Dispel Overlay page.\nExamples: change party health text; hide healer resource bars in raid frames; set raid range fade to 40.\nYou can ask: Open Group Layout | Open Group Dispel Overlay | Open Colors",
             status = "applied",
             summary = "Assistant group health text help",
         }
@@ -3093,7 +3293,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "where", "help", "how", "show", "hide", "turn on", "turn off", "enable", "disable" })
     then
         return {
-            text = "Group role Resource Bar help\nGroup Frames > Layout can show or hide Resource Bars by role through the Tank, Healer, and DPS options.\nExamples: hide healer resource bars in raid frames; show tank resources in party frames; hide DPS resources in raid frames.\nYou can ask: Open Group Layout",
+            text = "Group role Resource Bar help\nFrames > Party/Raid Frames > Layout can show or hide Resource Bars by role through the Tank, Healer, and DPS options.\nExamples: hide healer resource bars in raid frames; show tank resources in party frames; hide DPS resources in raid frames.\nYou can ask: Open Group Layout",
             status = "applied",
             summary = "Assistant group role power help",
         }

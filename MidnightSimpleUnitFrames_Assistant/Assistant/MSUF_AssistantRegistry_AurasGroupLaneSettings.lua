@@ -488,7 +488,7 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             AddGFAuraAliases(aliases, scope, lane, "sorting")
             RegisterGFAuraEnum(scope, lane, "SortMethod", "sortMethod", laneInfo.label .. " Sort Method",
                 AURA_SORT_METHOD_VALUES[lane], AURA_SORT_METHOD_ALIASES[lane] or {}, "DEFAULT", aliases, "visual", {
-                    page = lane == "buff" and "auras3_buffs" or "auras3_debuffs",
+                    page = "gf_auras",
                     exactAliases = GFSortExactAliases(scope, lane, false),
                     description = "Chooses the native Blizzard AuraContainer comparator for this group Aura lane; it does not enable or disable the lane.",
                 })
@@ -501,7 +501,7 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
                 key = "gf_" .. scope .. ".auras." .. lane .. ".sortReverse",
                 label = UNIT_LABELS[scope] .. " " .. laneInfo.label .. " Sort Order",
                 category = UNIT_LABELS[scope] .. " / Group Auras",
-                page = lane == "buff" and "auras3_buffs" or "auras3_debuffs",
+                page = "gf_auras",
                 description = "Uses the native normal or reversed AuraContainer order without changing lane visibility.",
                 unit = scope,
                 frameType = "groupAura",

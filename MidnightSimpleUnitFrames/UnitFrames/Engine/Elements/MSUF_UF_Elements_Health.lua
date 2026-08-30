@@ -12,12 +12,15 @@ local UnitHealthMax = C and C.UnitHealthMax or UnitHealthMax
 local UnitHealthPercent = C and C.UnitHealthPercent or UnitHealthPercent
 local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C and C.SCALE_100
+local REVERSE_TO_100 = _G.CurveConstants and _G.CurveConstants.ReverseTo100
 local CreateLossTrail = C and C.CreateLossTrail
+local SnapBarInterpolation = C and C.SnapBarInterpolation
 local SetBarSmoothing = C and C.SetBarSmoothing
 local ApplyHealthStatusColor = C and C.ApplyHealthStatusColor
 local ApplyBackgrounds = C and C.ApplyBackgrounds
 local ApplyBarGradient = C and C.ApplyBarGradient
 local PrepareHealthGradientCurve = C and C.PrepareHealthGradientCurve
+local RefreshHealthBarBackgroundColor = _G.MSUF_RefreshHealthBarBackgroundColor
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local math_max = math.max
 local ExportPublic = MSUF.ExportPublic or function(name, value)
@@ -85,6 +88,21 @@ local function SetColor(frame, force)
   frame._msufHealthStatusGone = nil
 end
 
+local function BackgroundColorMode(health)
+  local mode = health and health.backgroundColorMode
+  if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
+    return mode
+  end
+  if health and health.backgroundClassColor == true then return "class" end
+  if health and health.backgroundMatchHealth == true then return "match_health" end
+  return "custom"
+end
+
+local function BackgroundRuntimeColorEnabledForSpec(spec)
+  local mode = BackgroundColorMode(spec and spec.health)
+  return mode == "match_health" or mode == "health_gradient"
+end
+
 local function RuntimeColorEnabled(frame)
   local health = frame and frame.MSUFSpec and frame.MSUFSpec.health
   local mode = health and health.mode
@@ -95,6 +113,7 @@ local function RuntimeColorEnabledForSpec(spec)
   local health = spec and spec.health
   local mode = health and health.mode
   return mode ~= "dark" and mode ~= "unified"
+    or BackgroundRuntimeColorEnabledForSpec(spec)
 end
 
 local function RuntimeColorNeedsIdentityForSpec(spec)
@@ -109,7 +128,7 @@ local function RuntimeColorOnHealthEvent(frame, value, valueSecret)
     local health = frame.MSUFSpec and frame.MSUFSpec.health
     gradient = health and health.mode == "gradient" or false
   end
-  if gradient == true then
+  if gradient == true or (frame and frame._msufHealthBackgroundGradient == true) then
     return true
   end
   if frame and frame._msufHealthStatusGone == true then
@@ -122,22 +141,120 @@ local function RuntimeColorOnHealthEvent(frame, value, valueSecret)
   return type(value) == "number" and value <= 0
 end
 
-local function ApplyRuntimeColor(frame, event, unit, hp, maxHP)
+local function ApplyRuntimeColor(frame, event, unit, hp, maxHP, backgroundForce)
   local bar = frame and frame.hpBar
   local runtimeEnabled = frame and frame._msufHealthRuntimeColorEnabled
   if runtimeEnabled == nil and frame then
     runtimeEnabled = RuntimeColorEnabled(frame)
   end
-  if not (bar and ApplyHealthStatusColor and runtimeEnabled == true) then
-    return false
+  local foregroundApplied = false
+  if bar and ApplyHealthStatusColor and runtimeEnabled == true then
+    if frame._msufHealthRuntimeGradient == true
+      and frame._msufHealthBackgroundGradient == true then
+      -- ApplyHealthStatusColor sets a plain freshness sentinel alongside its
+      -- potentially secret RGB result. Clear only that sentinel first so the
+      -- background cannot reuse a stale alive gradient on a gone-state pass.
+      frame._msufGradStashAt = nil
+    end
+    if issecretvalue(maxHP) ~= true
+      and maxHP == nil
+      and issecretvalue(hp) ~= true
+      and type(hp) == "number" then
+      maxHP = 100
+    end
+    ApplyHealthStatusColor(bar, frame, unit or frame.MSUFUnitKey, hp, maxHP, nil, event)
+    foregroundApplied = true
   end
-  if issecretvalue(maxHP) ~= true
-    and maxHP == nil
-    and issecretvalue(hp) ~= true
-    and type(hp) == "number" then
-    maxHP = 100
+
+  local backgroundApplied = false
+  if frame and frame._msufHealthBackgroundColorDynamic == true
+    and type(RefreshHealthBarBackgroundColor) == "function" then
+    backgroundApplied = RefreshHealthBarBackgroundColor(
+      frame, event, unit or frame.MSUFUnitKey, hp, maxHP, nil, backgroundForce) == true
   end
-  ApplyHealthStatusColor(bar, frame, unit or frame.MSUFUnitKey, hp, maxHP, nil, event)
+  return foregroundApplied or backgroundApplied
+end
+
+local function SetHealthBackgroundValue(frame, unit, percent, percentSecret, animate)
+  local backgroundBar = frame and frame.healthBackgroundBar
+  if not (backgroundBar and frame._msufHealthBackgroundFillMissing == true) then return false end
+
+  local missing
+  if percent ~= nil then
+    if percentSecret == nil then percentSecret = issecretvalue(percent) == true end
+    if percentSecret ~= true and IsFiniteNumber(percent) then
+      missing = 100 - percent
+    end
+  end
+  if missing == nil and UnitHealthPercent and REVERSE_TO_100 and unit then
+    missing = UnitHealthPercent(unit, true, REVERSE_TO_100)
+  end
+
+  local secret = issecretvalue(missing) == true
+  if not secret then
+    if not IsFiniteNumber(missing) then missing = 0 end
+    if missing < 0 then missing = 0 elseif missing > 100 then missing = 100 end
+  end
+  if backgroundBar._msufHealthMissingMinMax ~= 100 then
+    backgroundBar:SetMinMaxValues(0, 100)
+    backgroundBar._msufHealthMissingMinMax = 100
+  end
+  if secret
+    or backgroundBar._msufHealthMissingValue ~= missing
+    or backgroundBar._msufHealthMissingUnit ~= unit then
+    local interp = animate == true and frame.hpBar and frame.hpBar._msufSmoothInterp or nil
+    if interp then backgroundBar:SetValue(missing, interp) else backgroundBar:SetValue(missing) end
+    if secret then
+      backgroundBar._msufHealthMissingValue = nil
+      backgroundBar._msufHealthMissingUnit = nil
+    else
+      backgroundBar._msufHealthMissingValue = missing
+      backgroundBar._msufHealthMissingUnit = unit
+    end
+  end
+  return true
+end
+
+local function ApplyHealthBackgroundFillMode(frame, health)
+  local backgroundBar = frame and frame.healthBackgroundBar
+  if not (backgroundBar and frame.hpBar) then return false end
+  local missing = health and health.backgroundFillMode == "missing"
+  frame._msufHealthBackgroundFillMissing = missing == true
+
+  backgroundBar:ClearAllPoints()
+  backgroundBar:SetAllPoints(missing and frame.hpBar or frame)
+  local orientation = frame.hpBar._msufOrientation or "HORIZONTAL"
+  if backgroundBar.SetOrientation and backgroundBar._msufOrientation ~= orientation then
+    backgroundBar:SetOrientation(orientation)
+    backgroundBar._msufOrientation = orientation
+  end
+  local reverse = frame.hpBar._msufReverseFill == true
+  local backgroundReverse = reverse
+  if missing then backgroundReverse = not reverse end
+  if backgroundBar.SetReverseFill and backgroundBar._msufReverseFill ~= backgroundReverse then
+    backgroundBar:SetReverseFill(backgroundReverse)
+    backgroundBar._msufReverseFill = backgroundReverse
+  end
+
+  if missing then
+    -- Keep the missing interval on a native StatusBar for secret-safe values.
+    if frame._msufIsGroupFrame == true and SnapBarInterpolation then
+      -- A settings/cold apply can arrive while the foreground is still easing.
+      -- Finish that old target before the inverse bar is seeded so both native
+      -- StatusBars start from one coherent visual state.
+      SnapBarInterpolation(frame.hpBar)
+    end
+    backgroundBar._msufHealthMissingValue = nil
+    backgroundBar._msufHealthMissingUnit = nil
+    SetHealthBackgroundValue(frame, frame.MSUFUnitKey, nil, nil, false)
+  else
+    backgroundBar._msufHealthMissingValue = nil
+    backgroundBar._msufHealthMissingUnit = nil
+    backgroundBar:SetMinMaxValues(0, 100)
+    backgroundBar._msufHealthMissingMinMax = 100
+    backgroundBar:SetValue(100)
+  end
+  if backgroundBar.Show then backgroundBar:Show() end
   return true
 end
 
@@ -162,9 +279,20 @@ end
 
 function Health.Create(frame, spec)
   if frame.hpBar then return end
-  local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
-  bg:SetAllPoints(frame)
+  local backgroundBar = CreateFrame("StatusBar", nil, frame)
+  backgroundBar:SetAllPoints(frame)
+  backgroundBar:SetMinMaxValues(0, 100)
+  backgroundBar:SetValue(100)
+  backgroundBar:SetStatusBarTexture((spec and spec.health and spec.health.backgroundTexture)
+    or (spec and spec.backgroundTexture) or WHITE)
+  if backgroundBar.EnableMouse then backgroundBar:EnableMouse(false) end
+  if backgroundBar.SetFrameLevel and frame.GetFrameLevel then
+    backgroundBar:SetFrameLevel(frame:GetFrameLevel() or 0)
+  end
+  local bg = backgroundBar:GetStatusBarTexture()
+  if bg.SetDrawLayer then bg:SetDrawLayer("BACKGROUND", -7) end
   bg:SetColorTexture(0.02, 0.02, 0.025, spec and spec.backgroundAlpha or 0.72)
+  frame.healthBackgroundBar = backgroundBar
   frame.bg = bg
   frame.hpBarBG = bg
   frame.healthBg = bg
@@ -194,11 +322,21 @@ function Health.Apply(frame, spec)
   frame.Health = frame.hpBar
   frame.health = frame.hpBar
   frame.healthBg = frame.hpBarBG or frame.bg
+  if frame.healthBackgroundBar and frame.healthBackgroundBar.SetFrameLevel and frame.GetFrameLevel then
+    local level = frame:GetFrameLevel() or 0
+    if frame.healthBackgroundBar._msufFrameLevel ~= level then
+      frame.healthBackgroundBar:SetFrameLevel(level)
+      frame.healthBackgroundBar._msufFrameLevel = level
+    end
+  end
   Health.Layout(frame, spec)
   frame._msufIsGroupFrame = spec and spec.scope == "group" or nil
   local h = spec and spec.health or nil
   local mode = h and h.mode
-  if mode == "gradient" and PrepareHealthGradientCurve then
+  local backgroundColorMode = BackgroundColorMode(h)
+  local backgroundGradient = backgroundColorMode == "health_gradient"
+  local backgroundDynamic = backgroundGradient or backgroundColorMode == "match_health"
+  if (mode == "gradient" or backgroundGradient) and PrepareHealthGradientCurve then
     frame._msufHealthGradientCurve = PrepareHealthGradientCurve(h)
   else
     -- A text-only health gradient lazily seeds this on its next update. Clear
@@ -208,6 +346,11 @@ function Health.Apply(frame, spec)
   end
   frame._msufHealthRuntimeColorEnabled = mode ~= "dark" and mode ~= "unified"
   frame._msufHealthRuntimeGradient = mode == "gradient"
+  frame._msufHealthBackgroundColorMode = backgroundColorMode
+  frame._msufHealthBackgroundColorDynamic = backgroundDynamic
+  frame._msufHealthBackgroundGradient = backgroundGradient
+  frame._msufHealthBgDynamic = backgroundDynamic
+  frame._msufHealthRuntimeColorUpdateEnabled = frame._msufHealthRuntimeColorEnabled or backgroundDynamic
   SetTexture(frame.hpBar, h and h.texture or spec and spec.texture or WHITE)
   SetTexture(frame.healthLossTrail, h and h.texture or spec and spec.texture or WHITE)
   if frame.hpBar.SetOrientation then
@@ -237,6 +380,7 @@ function Health.Apply(frame, spec)
       frame.healthLossTrail._msufReverseFill = reverse
     end
   end
+  ApplyHealthBackgroundFillMode(frame, h)
   frame.hpBar._msufMinMax = nil
   frame.hpBar._msufHealthValue = nil
   frame.hpBar._msufHealthMax = nil
@@ -261,7 +405,7 @@ function Health.Apply(frame, spec)
   -- reset the live texture while leaving our last-value cache intact, so never
   -- let that cache suppress the saved background opacity here.
   if ApplyBackgrounds then ApplyBackgrounds(frame, true, false, true) end
-  ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.MSUFUnitKey)
+  ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.MSUFUnitKey, nil, nil, true)
   if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
     _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
   end
@@ -298,10 +442,8 @@ local function UpdatePercent(frame, unit, animate)
   if secret
     or bar._msufHealthPercentValue ~= pct
     or bar._msufHealthPercentUnit ~= unit then
-    -- Restricted values cannot be deduplicated, but they must keep the
-    -- configured native interpolation: SetValue accepts secret values with an
-    -- interpolation mode (only the enum itself must stay plain), and stripping
-    -- it here turned smoothing off exactly in combat, where values are secret.
+    -- Restricted values cannot be deduplicated, but SetValue accepts them with
+    -- the configured native interpolation mode.
     local interp = animate == true and bar._msufSmoothInterp or nil
     if interp then
       bar:SetValue(pct, interp)
@@ -318,6 +460,7 @@ local function UpdatePercent(frame, unit, animate)
       bar._msufHealthPercentUnit = unit
     end
   end
+  SetHealthBackgroundValue(frame, unit, pct, secret, animate)
   local rt = frame._msufTextRuntime
   if rt and (animate ~= true or rt.healthDefersUnitHealthText ~= true)
     and (rt.healthNeedsPercent == true or rt.healthColorByHealth == true) then
@@ -409,7 +552,10 @@ local function UpdateAbsolute(frame, event, unit)
   else
     maxHP = bar._msufHealthMax
   end
-  return UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, event == "UNIT_HEALTH")
+  local value, maximum, percentReady, hpSecret, maxSecret =
+    UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, event == "UNIT_HEALTH")
+  SetHealthBackgroundValue(frame, unit, nil, nil, event == "UNIT_HEALTH")
+  return value, maximum, percentReady, hpSecret, maxSecret
 end
 
 local function NotifyHealthState(frame, event, unit, hp, hpSecret)
@@ -475,7 +621,7 @@ local function UpdateSingle(frame, event, unit)
 
   local ok, pct, maxValue, percentReady, pctSecret = UpdatePercent(frame, unit, event == "UNIT_HEALTH")
   if ok then
-    if frame._msufHealthRuntimeColorEnabled ~= false
+    if frame._msufHealthRuntimeColorUpdateEnabled ~= false
       and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
@@ -490,7 +636,7 @@ local function UpdateSingle(frame, event, unit)
   end
 
   local hp, maxHP, absolutePercentReady, hpSecret = UpdateAbsolute(frame, event, unit)
-  if frame._msufHealthRuntimeColorEnabled ~= false
+  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
@@ -514,7 +660,7 @@ local function UpdateSingleAbsolute(frame, event, unit)
   if not (frame and frame.hpBar and unit) then return end
 
   local hp, maxHP, percentReady, hpSecret = UpdateAbsolute(frame, event, unit)
-  if frame._msufHealthRuntimeColorEnabled ~= false
+  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
@@ -541,7 +687,7 @@ local function UpdateSingleCurrent(frame, event, unit)
   -- retained by the absolute bar path between its own invalidation events, so
   -- steady health ticks avoid the extra UnitHealthPercent call entirely.
   local hp, maxHP, _, hpSecret = UpdateAbsolute(frame, event, unit)
-  if frame._msufHealthRuntimeColorEnabled ~= false
+  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
@@ -566,7 +712,7 @@ local function UpdateGroup(frame, event, unit)
 
   local ok, pct, maxValue, percentReady, pctSecret = UpdatePercent(frame, unit, event == "UNIT_HEALTH")
   if ok then
-    if frame._msufHealthRuntimeColorEnabled ~= false
+    if frame._msufHealthRuntimeColorUpdateEnabled ~= false
       and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
     end
@@ -575,7 +721,7 @@ local function UpdateGroup(frame, event, unit)
   end
 
   local hp, maxHP, absolutePercentReady, hpSecret = UpdateAbsolute(frame, event, unit)
-  if frame._msufHealthRuntimeColorEnabled ~= false
+  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
@@ -623,6 +769,18 @@ local function UpdateGroupPercentLean(frame, event, unit)
       bar._msufHealthPercentUnit = unit
     end
   end
+  SetHealthBackgroundValue(frame, unit, pct, secret, event == "UNIT_HEALTH")
+
+  -- A background-only health gradient can stay on the folded group lane: its
+  -- native curve is independent of the foreground color, so refresh it before
+  -- the alive/static foreground early return. Match-health waits until after a
+  -- dynamic foreground repaint and is therefore handled by ApplyRuntimeColor.
+  if event == "UNIT_HEALTH"
+    and frame._msufHealthBackgroundGradient == true
+    and frame._msufHealthRuntimeGradient ~= true
+    and type(RefreshHealthBarBackgroundColor) == "function" then
+    RefreshHealthBarBackgroundColor(frame, event, unit, pct, 100)
+  end
 
   -- UNIT_HEALTH text writers are deferred dirty markers and immediately
   -- discard dispatch payloads. For the common alive/static-color member there
@@ -640,7 +798,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
     return pct, nil, true
   end
 
-  if frame._msufHealthRuntimeColorEnabled ~= false
+  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, secret)) then
     if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
   end
@@ -693,7 +851,7 @@ end
 
 local function UpdateIdentityBackground(frame)
   local health = frame and frame.MSUFSpec and frame.MSUFSpec.health
-  if not (health and health.backgroundClassColor == true and ApplyBackgrounds) then return false end
+  if not (health and BackgroundColorMode(health) == "class" and ApplyBackgrounds) then return false end
   ApplyBackgrounds(frame, true, false)
   return true
 end
@@ -797,7 +955,10 @@ function Health.RefreshColor(frameOrUnit, event)
     frame = UF.frames and UF.frames[frameOrUnit]
   end
   if not (frame and frame.hpBar) then return false end
-  if ApplyRuntimeColor(frame, event or "MSUF_COLOR_CHANGE", frame.MSUFUnitKey) then
+  local foregroundDynamic = frame._msufHealthRuntimeColorEnabled
+  if foregroundDynamic == nil then foregroundDynamic = RuntimeColorEnabled(frame) end
+  if foregroundDynamic ~= true then SetColor(frame, true) end
+  if ApplyRuntimeColor(frame, event or "MSUF_COLOR_CHANGE", frame.MSUFUnitKey, nil, nil, true) then
     return true
   end
   SetColor(frame, true)

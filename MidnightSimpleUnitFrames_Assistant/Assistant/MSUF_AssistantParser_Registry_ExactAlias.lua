@@ -699,6 +699,16 @@ end
 -- identified by its complete label or alias.  Keeping this beside the exact
 -- alias matcher preserves intent guards and companion changes while avoiding
 -- a second fuzzy search that could redirect a very specific command.
+local function LeadingAuraSortDirectionValue(setting, text)
+    local key = tostring(setting and setting.key or "")
+    if not key:match("%.sortReverse$") then return nil end
+    local normalized = Normalize(text)
+    if normalized:match("^reverse%s+") or normalized:match("^reversed%s+") then
+        return "REVERSE"
+    end
+    return nil
+end
+
 function P.PlanForExactRegistrySetting(setting, text, raw)
     if type(setting) ~= "table" then return nil end
     local guarded = GuardedSettingResponse(setting, text, raw)
@@ -721,6 +731,7 @@ function P.PlanForExactRegistrySetting(setting, text, raw)
         and RelativeNumberDeltaForText(setting, text) or nil
     local value
     if relativeDelta == nil then value = ValueForRegistrySetting(setting, text, raw) end
+    if value == nil then value = LeadingAuraSortDirectionValue(setting, text) end
     if value == nil and relativeDelta == nil then
         return MissingValueResponse and MissingValueResponse({ { setting = setting, score = 30000 } }, raw) or nil
     end
@@ -838,6 +849,7 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
                 if guarded then return guarded end
                 local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
                 local value
+                local leadingAuraSortDirection
                 if relativeDelta == nil then
                     -- Full-phrase mode derives booleans from the command verb
                     -- ("turn on X no ellipsis" is true even though the alias
@@ -846,6 +858,8 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
                         value = forcedBooleanValue
                     else
                         value = ValueForRegistrySetting(setting, text, raw)
+                        leadingAuraSortDirection = LeadingAuraSortDirectionValue(setting, text)
+                        if value == nil then value = leadingAuraSortDirection end
                         -- An enum's value has to be stated OUTSIDE the
                         -- control's own name: "change player font outline"
                         -- contains "outline" only as the label's last word,
@@ -862,7 +876,9 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
                         then
                             local own = Compact(tostring(setting.label or "") .. " " .. tostring(setting.attribute or ""))
                             local valueCompact = Compact(tostring(value))
-                            if valueCompact ~= "" and own:find(valueCompact, 1, true) then
+                            if leadingAuraSortDirection == nil
+                                and valueCompact ~= "" and own:find(valueCompact, 1, true)
+                            then
                                 value = nil
                             end
                         end

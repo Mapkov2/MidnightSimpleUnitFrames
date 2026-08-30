@@ -650,6 +650,33 @@ local function BuildFollowup(text, ctx)
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
 
+    -- A fully named setting starts a new subject even when its final noun is
+    -- also useful as contextual shorthand. For example, after editing Player
+    -- text, "make combo point separators wider" must resolve the explicitly
+    -- named Class Resource control; only a bare "make the separator wider"
+    -- should inherit the retained Player subject. Reuse the strict full-label
+    -- matcher so this exception cannot turn an ordinary vague follow-up into a
+    -- different setting guess.
+    if #units == 0 and #groups == 0 and subjectPropertyFollowup
+        and type(P.ParseRegistryExactAliasShortcut) == "function"
+    then
+        local explicitSetting = P.ParseRegistryExactAliasShortcut(text, text, {
+            minTokens = 3,
+            fullPhrase = true,
+        })
+        -- Relative adjectives such as "wider" or "smaller" sit outside the
+        -- setting's exact alias, so the full-phrase pass intentionally cannot
+        -- consume them. A second exact-alias scan may do so, but still demands
+        -- a specific three-token control name; vague "make it wider" replies
+        -- therefore remain contextual.
+        if not explicitSetting then
+            explicitSetting = P.ParseRegistryExactAliasShortcut(text, text, {
+                minTokens = 3,
+            })
+        end
+        if explicitSetting then return explicitSetting end
+    end
+
     local function FollowupSiblingKey(key, direction)
         key = tostring(key or "")
         if direction == "left" or direction == "right" then
@@ -1213,7 +1240,9 @@ local function BuildFollowup(text, ctx)
     end
 
     local textAreaTargetPrefixes = TextAreaTargetPrefixes(text)
-    if #units == 0 and #groups == 0 and targetReplayIntent and #textAreaTargetPrefixes > 0 then
+    if #units == 0 and #groups == 0 and targetReplayIntent and #textAreaTargetPrefixes > 0
+        and ContextSubjectRecent(ctx, 3)
+    then
         local textAreaChanges = {}
         local seenTextAreaKeys = {}
         for i = 1, #ctx.lastChangeBundle do
@@ -1263,6 +1292,7 @@ local function BuildFollowup(text, ctx)
     end
 
     local textSlotFollowupShouldHandle = #units == 0 and #groups == 0 and BundleHasTextSlotPrevious()
+        and ContextSubjectRecent(ctx, 3)
         and (
             ContainsAny(text, FollowupData.HIDE_REFERENCE_TERMS)
             or (followDirection and ContainsAny(text, FollowupData.TEXT_SLOT_MOVE_TERMS))
@@ -1547,7 +1577,14 @@ local function BuildFollowup(text, ctx)
 
     local auraObjectFollowupReference = HasAuraObjectFollowupReference(text) or bareDirectionalFollowup
     local auraReplayReference = targetReplayIntent or explicitFollowupReference or bareDirectionalFollowup
-    if #units == 0 and #groups == 0 and not explicitAuraBulkScope and targetReplayIntent and auraObjectFollowupReference then
+    local bareAuraContinuation = wordCount <= 2 and (
+        text == "again" or text == "more" or text == "less"
+        or text == "same" or text == "opposite" or text == "other way"
+    )
+    local auraContextMaxTurns = bareAuraContinuation and 1 or 3
+    if #units == 0 and #groups == 0 and not explicitAuraBulkScope and targetReplayIntent
+        and auraObjectFollowupReference and ContextSubjectRecent(ctx, auraContextMaxTurns)
+    then
         local targetLane = RequestedAuraMirrorLane(text)
         if targetLane then
             local mirrorChanges = {}
@@ -1565,7 +1602,9 @@ local function BuildFollowup(text, ctx)
             end
         end
     end
-    if #units == 0 and #groups == 0 and not explicitAuraBulkScope and auraReplayReference and auraObjectFollowupReference then
+    if #units == 0 and #groups == 0 and not explicitAuraBulkScope and auraReplayReference
+        and auraObjectFollowupReference and ContextSubjectRecent(ctx, auraContextMaxTurns)
+    then
         local targetAttr = AuraLaneFollowupTargetAttr(text, followDirection)
         if targetAttr then
             local auraChanges = {}
@@ -1736,7 +1775,7 @@ local function BuildFollowup(text, ctx)
         return tostring(info.unit) .. "." .. attr
     end
 
-    if #units == 0 and #groups == 0 then
+    if #units == 0 and #groups == 0 and ContextSubjectRecent(ctx, 3) then
         local hideTextSlot = ContainsAny(text, FollowupData.HIDE_REFERENCE_TERMS)
         local moveTextSlot = followDirection and ContainsAny(text, FollowupData.TEXT_SLOT_MOVE_TERMS)
         local resizeTextSlot = ContainsAny(text, FollowupData.TEXT_SLOT_RESIZE_TERMS)
@@ -1777,7 +1816,13 @@ local function BuildFollowup(text, ctx)
         end
     end
 
-    if #units == 0 and #groups == 0 and exactValueIntent then
+    -- A bare value has no subject of its own.  Treat it as ellipsis only on
+    -- the immediately adjacent retained subject, matching the fast submit
+    -- lane's safety rule.  Persisted lastChangeBundle data may be much older
+    -- after help or navigation turns and must not silently regain write power.
+    if #units == 0 and #groups == 0 and exactValueIntent
+        and ContextSubjectRecent(ctx, 1)
+    then
         local exactChanges = {}
         for i = 1, #ctx.lastChangeBundle do
             local prev = ctx.lastChangeBundle[i]
@@ -1809,6 +1854,7 @@ local function BuildFollowup(text, ctx)
         and (positiveIntent or negativeIntent or neutralIntent or oppositeIntent or reverseCorrectionIntent
             or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or leftIntent or rightIntent
             or relativeNumberIntent)
+        and ContextSubjectRecent(ctx, 1)
         and (not commandIntent or explicitFollowupReference or bareDirectionalFollowup)
         and (not genericContextEligible or genericTargetAttr == nil)
     then
@@ -1879,12 +1925,15 @@ local function BuildFollowup(text, ctx)
             }
         end
     end
-    if #units == 0 and #groups == 0 and (targetReplayIntent or pureNumberIntent) then
+    if #units == 0 and #groups == 0 and (targetReplayIntent or pureNumberIntent)
+        and ContextSubjectRecent(ctx, targetReplayIntent and 3 or 1)
+    then
         local colorFollowup = A._BuildColorTokenFollowup(text, ctx)
         if colorFollowup then return colorFollowup end
     end
     if #units == 0 and #groups == 0 then return nil end
     if not targetReplayIntent then return nil end
+    if not ContextSubjectRecent(ctx, 3) then return nil end
 
     local function GlobalScopeForGroup(scope)
         if scope == "party" then return "gf_party" end

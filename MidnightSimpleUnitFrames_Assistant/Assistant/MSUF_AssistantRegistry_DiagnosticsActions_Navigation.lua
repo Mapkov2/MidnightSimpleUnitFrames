@@ -19,58 +19,30 @@ M = ctx.M or M
 
 if not (Registry and type(Registry.RegisterAction) == "function") then return end
 
-local PAGE_LABEL_OVERRIDES = {
-    home = "Dashboard",
-    profiles = "Profiles",
-    gameplay = "Gameplay",
-    classpower = "Class Resources",
-    modules = "Modules",
-    search = "Search",
-    opt_castbar = "Cast Bars",
-    opt_bars = "Bars",
-    opt_colors = "Colors",
-    opt_fonts = "Fonts",
-    opt_misc = "Miscellaneous",
-    gf_layout = "Group Layout",
-    gf_bars = "Group Dispel Overlay",
-    gf_indicators = "Group Status & Indicators",
-    gf_auras = "Group Auras",
-    auras3 = "Auras",
-    auras3_buffs = "Aura Buffs",
-    auras3_debuffs = "Aura Debuffs",
-    auras3_filters = "Aura Filters",
-    auras3_styling = "Aura Style",
-    uf_player = "Player",
-    uf_target = "Target",
-    uf_focus = "Focus",
-    uf_pet = "Pet",
-    uf_boss = "Boss",
-    uf_targettarget = "Target of Target",
-    uf_focustarget = "Focus Target",
-}
-
 local function DashboardPageLabel(page)
     page = tostring(page or "")
     if page ~= "" and A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(page, "MSUF page") end
-    if page ~= "" and PAGE_LABEL_OVERRIDES[page] then return PAGE_LABEL_OVERRIDES[page] end
     if page ~= "" then return "MSUF page" end
     return "Dashboard"
 end
 
-local LEGACY_AURA_CONTENT_PAGES = {
-    auras3 = true,
-    auras3_buffs = true,
-    auras3_debuffs = true,
-    auras3_custom = true,
-    auras3_filters = true,
-    auras3_rendering = true,
+local RETIRED_AURA_PAGE_ALIASES = {
+    auras3 = { label = "Auras", kind = "root" },
+    auras3_custom = { label = "Custom Auras", kind = "content" },
+    auras3_filters = { label = "Aura Filters", kind = "filters" },
+    auras3_rendering = { label = "Aura Styling", kind = "global_style" },
 }
 
 local function ResolveAuraContentRoute(page, args)
-    if not LEGACY_AURA_CONTENT_PAGES[page] then return page, args and args.query end
+    local retired = RETIRED_AURA_PAGE_ALIASES[page]
+    if not retired then return page, args and args.query, nil end
     local context = A.GetContext and A.GetContext() or nil
     local explicitSettingKey = tostring(args and args.settingKey or "")
-    local contextSettingKey = tostring(context and context.lastSetting or "")
+    local contextTurn = context and tonumber(context.turnSerial or context.lastTurnSerial) or nil
+    local contextSubjectTurn = context and tonumber(context.lastSubjectTurn or context.lastMentionedTurn) or nil
+    local contextRecent = contextTurn and contextSubjectTurn
+        and contextTurn - contextSubjectTurn >= 0 and contextTurn - contextSubjectTurn <= 3
+    local contextSettingKey = contextRecent and tostring(context and context.lastSetting or "") or ""
     local settingKey = explicitSettingKey ~= "" and explicitSettingKey or contextSettingKey
     local query = tostring(args and args.query or args and args.label or "")
     local queryLower = query:lower()
@@ -89,13 +61,29 @@ local function ResolveAuraContentRoute(page, args)
             or (queryLower:find("focus", 1, true) and "focus")
             or (queryLower:find("target", 1, true) and "target")
             or (queryLower:find("boss", 1, true) and "boss")
+            or (queryLower:find("arena", 1, true) and "arena")
             or (queryLower:find("player", 1, true) and "player")
             or ""
     end
     if scope == "" then
         scope = contextSettingKey:match("^auras3%.([^.]+)%.")
             or contextSettingKey:match("^gf_([^.]+)%.auras%.")
-            or tostring(context and context.lastUnit or "")
+            or (contextRecent and tostring(context and context.lastUnit or "") or "")
+    end
+    if scope == "" then
+        local activePage = tostring(M and M.activeKey or "")
+        scope = (activePage == "gf_auras" and "group")
+            or activePage:match("^uf_(player)$")
+            or activePage:match("^uf_(target)$")
+            or activePage:match("^uf_(focus)$")
+            or activePage:match("^uf_(boss)$")
+            or activePage:match("^uf_(arena)$")
+            or ""
+    end
+    if scope ~= "group" and scope ~= "party" and scope ~= "raid" and scope ~= "mythicraid"
+        and scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "arena"
+    then
+        scope = ""
     end
     if lane == "" then
         lane = (explicitSettingKey ~= "" and (explicitSettingKey:match("^auras3%.[^.]+%.([^.]+)%.")
@@ -108,17 +96,96 @@ local function ResolveAuraContentRoute(page, args)
             or contextSettingKey:match("^gf_[^.]+%.auras%.([^.]+)%.")
             or ""
     end
-    local auraContext = settingKey:find("^auras3%.") or settingKey:find("^gf_[^.]+%.auras%.")
-    if page == "auras3" and not auraContext and scope == "" then return "auras3_styling", query end
-    if scope == "party" or scope == "raid" or scope == "mythicraid" then
-        return "gf_auras", table.concat({ scope, lane, page == "auras3_filters" and "filters" or "", query }, " ")
+    if retired.kind == "global_style" then return "auras3_styling", query, retired.label end
+    local localAuraScope = settingKey:match("^auras3%.([^.]+)%.")
+    local auraContext = (localAuraScope == "player" or localAuraScope == "target"
+        or localAuraScope == "focus" or localAuraScope == "boss" or localAuraScope == "arena")
+        or settingKey:find("^gf_[^.]+%.auras%.")
+    if retired.kind == "root" and not auraContext and scope == ""
+        and (queryLower:find("global", 1, true) or queryLower:find("icon theme", 1, true))
+    then
+        return "auras3_styling", query, retired.label
+    end
+    if (retired.kind == "root" or retired.kind == "content" or retired.kind == "filters")
+        and not auraContext and scope == ""
+    then
+        return nil, query, retired.label
+    end
+    if scope == "group" or scope == "party" or scope == "raid" or scope == "mythicraid" then
+        return "gf_auras", table.concat({ scope, lane, retired.kind == "filters" and "filters" or "", query }, " "), retired.label
     end
     if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "arena" then scope = "player" end
-    local tool = page == "auras3_filters" and "filters"
+    local tool = retired.kind == "filters" and "filters"
         or (queryLower:find("blacklist", 1, true) and "blacklist")
         or (queryLower:find("filter", 1, true) and "filters")
         or ""
-    return "uf_" .. scope, table.concat({ scope, lane, tool, query }, " ")
+    return "uf_" .. scope, table.concat({ scope, lane, tool, query }, " "), retired.label
+end
+
+function A.ResolveCanonicalMenuRoute(page, args)
+    local routedPage, routedQuery, retiredLabel = ResolveAuraContentRoute(tostring(page or ""), args)
+    local canonical
+    if A and type(A.ResolveRegisteredMenuPage) == "function" then
+        canonical = A.ResolveRegisteredMenuPage(routedPage)
+    elseif A and type(A.IsKnownPageKey) == "function" and A.IsKnownPageKey(routedPage) then
+        canonical = routedPage
+    end
+    if type(canonical) ~= "string" or canonical == "" then return nil, routedQuery, retiredLabel end
+    return canonical, routedQuery, retiredLabel
+end
+
+local function AuraWorkspaceTool(query)
+    local norm = tostring(query or ""):lower()
+    if norm:find("blacklist", 1, true) or norm:find("hidden aura", 1, true) then return "blacklist" end
+    if norm:find("filter", 1, true) or norm:find("ignore list", 1, true) then return "filters" end
+    if norm:find("order", 1, true) or norm:find("sort", 1, true) then return "behavior" end
+    if norm:find("style", 1, true) or norm:find("appearance", 1, true)
+        or norm:find("cooldown", 1, true) or norm:find("stack", 1, true)
+        or norm:find("duration", 1, true) or norm:find("border", 1, true)
+        or norm:find("shadow", 1, true)
+    then
+        return "style"
+    end
+    return "layout"
+end
+
+-- The canonical frame page is only half of an Aura destination. Menu2's
+-- search bridge owns the finite selector route for the Buff/Debuff workspace;
+-- describe that route through its existing prepare contract so the page is
+-- built with the requested lane active. Bare/unscoped Auras never reach this
+-- helper with a lane, preserving the no-guess clarification path.
+local function AuraWorkspaceTarget(page, args, query)
+    local lane = tostring(args and args.lane or ""):lower()
+    if lane == "buffs" then lane = "buff" end
+    if lane == "debuffs" then lane = "debuff" end
+    if lane ~= "buff" and lane ~= "debuff" then return nil, nil end
+
+    local tool = AuraWorkspaceTool(query)
+    local unit = tostring(page or ""):match("^uf_(player)$")
+        or tostring(page or ""):match("^uf_(target)$")
+        or tostring(page or ""):match("^uf_(focus)$")
+        or tostring(page or ""):match("^uf_(boss)$")
+        or tostring(page or ""):match("^uf_(arena)$")
+    if unit then
+        return {
+            pageKey = page,
+            prepareKind = "unitAuraWorkspace",
+            prepareValue = lane .. "_" .. tool,
+        }, lane == "buff" and "Buffs" or "Debuffs"
+    end
+    if page ~= "gf_auras" then return nil, nil end
+
+    local scope = tostring(args and args.scope or ""):lower()
+    if scope ~= "party" and scope ~= "raid" and scope ~= "mythicraid" then
+        scope = tostring(M and M.gfScope or ""):lower()
+    end
+    if scope ~= "party" and scope ~= "raid" and scope ~= "mythicraid" then return nil, nil end
+    local scopeLabel = scope == "party" and "Party" or (scope == "raid" and "Raid" or "Mythic Raid")
+    return {
+        pageKey = page,
+        prepareKind = "groupAuraWorkspace",
+        prepareValue = table.concat({ scope, lane, tool }, "_"),
+    }, scopeLabel .. (lane == "buff" and " Buffs" or " Debuffs")
 end
 
 Registry:RegisterAction({
@@ -130,33 +197,65 @@ Registry:RegisterAction({
         local page = args and args.page
         if type(page) ~= "string" or page == "" then return false, "Which page do you want me to open?" end
         local requestedPage = page
-        local routedQuery
-        page, routedQuery = ResolveAuraContentRoute(page, args)
+        local routedQuery, retiredLabel
+        page, routedQuery, retiredLabel = A.ResolveCanonicalMenuRoute(page, args)
+        if type(page) ~= "string" or page == "" then
+            if retiredLabel then
+                return false, "Which Aura area do you mean: Player, Target, Focus, Boss, Arena, Party, or Raid Auras, or Global Aura Appearance for the shared icon theme?"
+            end
+            return false, "That MSUF menu destination is not available in this build."
+        end
+        -- Resolve history while the previous page is still active. Retired
+        -- contextual Aura aliases use that owner context; resolving them after
+        -- the destination opens can turn the back entry into the new page.
         local previousPage = M and M.activeKey
+        local canonicalPreviousPage
+        if type(previousPage) == "string" and previousPage ~= ""
+            and type(A.ResolveCanonicalMenuRoute) == "function"
+        then
+            canonicalPreviousPage = A.ResolveCanonicalMenuRoute(previousPage)
+        elseif type(previousPage) == "string" and previousPage ~= "" then
+            canonicalPreviousPage = previousPage
+        end
         local label = DashboardPageLabel(page)
         local opened = false
+        local workspaceFocused = false
+        local workspaceTarget, workspaceLabel
         local bridge = M and M.SearchBridge
         local query = routedQuery or (args and args.query)
+        workspaceTarget, workspaceLabel = AuraWorkspaceTarget(page, args, query)
+        if workspaceTarget and (type(query) ~= "string" or query == "") then query = workspaceLabel end
         if bridge and type(bridge.OpenSearchTarget) == "function" and type(query) == "string" and query ~= "" then
-            bridge.OpenSearchTarget(page, query, label, args and args.anchor)
+            local called, bridgeOpened = bridge.OpenSearchTarget(
+                page, query, label, args and args.anchor, nil, workspaceTarget)
             opened = M and M.activeKey == page
+            workspaceFocused = workspaceTarget ~= nil and called == true
+                and bridgeOpened ~= false and opened
         end
         if not opened and M and type(M.Open) == "function" then
-            opened = M.Open(page) ~= false
-        elseif not opened and M and type(M.SelectPage) == "function" then
-            opened = M.SelectPage(page) ~= false
+            local accepted = M.Open(page) ~= false
+            opened = accepted and M.activeKey == page
+        end
+        if not opened and M and type(M.SelectPage) == "function" then
+            local accepted = M.SelectPage(page) ~= false
+            opened = accepted and M.activeKey == page
         end
         if opened then
-            if previousPage and previousPage ~= page and A.Workflow and type(A.Workflow.PushNavigationPage) == "function" then
-                A.Workflow.PushNavigationPage(previousPage)
+            if canonicalPreviousPage and canonicalPreviousPage ~= page
+                and A.Workflow and type(A.Workflow.PushNavigationPage) == "function"
+            then
+                A.Workflow.PushNavigationPage(canonicalPreviousPage)
             end
-            local requestedLabel = requestedPage ~= page and PAGE_LABEL_OVERRIDES[requestedPage] or nil
+            local requestedLabel = requestedPage ~= page and retiredLabel or nil
             if requestedLabel then
                 return true, "Opened " .. label .. " and focused " .. tostring(requestedLabel) .. "."
             end
+            if workspaceFocused and workspaceLabel then
+                return true, "Opened " .. label .. " and focused " .. tostring(workspaceLabel) .. "."
+            end
             return true, "Opened " .. label .. "."
         end
-        return false, "Open the MSUF menu first so I can navigate the Dashboard."
+        return false, "I could not open " .. label .. ". Reopen the MSUF menu and try again."
     end,
 })
 
@@ -170,13 +269,53 @@ Registry:RegisterAction({
         if type(settingKey) ~= "string" or settingKey == "" then
             return false, "Which exact MSUF option do you want me to open?"
         end
+        -- Registry page hints are useful bootstrap data, but some local Aura
+        -- settings used to name the still-real global Buff/Debuff appearance
+        -- pages. Resolve the setting object through the canonical owner before
+        -- opening it. Global icon-theme controls keep their real global page;
+        -- only metadata that proves UnitFrame/GroupFrame ownership can move a
+        -- request away from those pages.
+        local page = args and args.page
+        local requestedPage = page
+        local setting = type(Registry.GetSetting) == "function" and Registry:GetSetting(settingKey) or nil
+        local resolver = A.ResolveMenuPageForSetting
+            or (A.Knowledge and A.Knowledge.ResolveSettingPage)
+        local contextualAuraOwnerMissing = false
+        if type(setting) == "table" and type(resolver) == "function" then
+            local ok, resolved = pcall(resolver, setting)
+            if ok and type(resolved) == "string" and resolved ~= "" then
+                page = resolved
+            elseif ok and setting.contextualMenuState == "auraContent" then
+                -- Nil is intentional for contextual Aura controls when no
+                -- concrete owner page is active. Never fall back to the stale
+                -- compatibility page supplied by old metadata.
+                page = nil
+                contextualAuraOwnerMissing = true
+            end
+        end
+        local retiredLabel
+        if type(page) == "string" and page ~= "" and type(A.ResolveCanonicalMenuRoute) == "function" then
+            local canonical
+            canonical, _, retiredLabel = A.ResolveCanonicalMenuRoute(page, { settingKey = settingKey })
+            page = canonical
+        end
+        if contextualAuraOwnerMissing
+            or ((RETIRED_AURA_PAGE_ALIASES[tostring(requestedPage or "")] or retiredLabel)
+                and (type(page) ~= "string" or page == ""))
+        then
+            return false, "Which Aura frame owns this control: Player, Target, Focus, Boss, Arena, Party, or Raid? Open that frame's Auras workspace or name its scope and lane, then try again."
+        end
+        if type(requestedPage) == "string" and requestedPage ~= ""
+            and (type(page) ~= "string" or page == "")
+        then
+            return false, "That MSUF menu destination is not available in this build."
+        end
         local open = _G.MSUF_OpenExactSettingControl or (M and M.OpenExactSettingControl)
         if type(open) ~= "function" then
             -- Not being able to scroll the menu there is no reason to withhold
             -- the answer: name the control and its page so the player can
             -- reach it themselves.
             local label = args and args.label
-            local page = args and args.page
             local detail = ""
             if type(label) == "string" and label ~= "" then
                 detail = " " .. label .. (type(page) == "string" and page ~= ""
@@ -185,7 +324,7 @@ Registry:RegisterAction({
             return false, "The exact-control navigation bridge is not available yet, so I could not scroll the menu there."
                 .. detail .. " Reopen the MSUF menu and try again, or ask me to change it directly."
         end
-        return open(settingKey, args and args.label, args and args.page)
+        return open(settingKey, args and args.label, page)
     end,
 })
 

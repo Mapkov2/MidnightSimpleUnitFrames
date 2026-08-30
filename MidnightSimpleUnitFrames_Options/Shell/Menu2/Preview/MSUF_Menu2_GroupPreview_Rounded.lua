@@ -303,7 +303,11 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     end
     mock._roundedBg:ClearAllPoints()
     mock._roundedBg:SetAllPoints(mock)
-    mock._roundedBg:SetColorTexture(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, conf.bgA or 0.88)
+    -- The live core Group frame has no second body-color plate beneath the
+    -- Health background. Keep the helper plate transparent in missing-only
+    -- mode so it cannot bleed through a translucent foreground fill.
+    mock._roundedBg:SetColorTexture(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09,
+        (gen and gen.barBgFillMode == "missing") and 0 or (conf.bgA or 0.88))
     mock._roundedBg:Show()
     edgeSize = Round(edgeSize)
     if edgeSize > 0 then

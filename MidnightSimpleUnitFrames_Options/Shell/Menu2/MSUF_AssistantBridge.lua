@@ -53,10 +53,6 @@ local function ScheduleBridgeNextFrame(owner, key, callback, onError)
             return true
         end
     end
-    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        local scheduled = pcall(_G.C_Timer.After, 0, Run)
-        if scheduled then return true end
-    end
     -- The caller owns the synchronous fallback so it can perform the same
     -- rollback if loading itself fails.
     return false

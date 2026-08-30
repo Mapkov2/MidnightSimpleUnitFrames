@@ -13,6 +13,32 @@ local PreviewHelpers = MenuState.PreviewHelpers or {}
 local CPPreview = MenuState.ClassPowerPreview or {}
 local CastbarPreview = MSUF.UFPreviewCastbar or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
+local function PreviewBackgroundColorMode(health, general)
+    local mode = health and health.backgroundColorMode or general and general.barBgColorMode
+    if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
+        return mode
+    end
+    if (health and health.backgroundClassColor == true) or (general and general.barBgClassColor == true) then return "class" end
+    if (health and health.backgroundMatchHealth == true) or (general and general.barBgMatchHPColor == true) then return "match_health" end
+    return "custom"
+end
+
+local function ApplyPreviewHealthBackgroundFill(mock, missing, vertical, reverse, healthFraction)
+    local backgroundBar = mock and mock.healthBackgroundBar
+    local bar = mock and mock.healthBar
+    if not (backgroundBar and bar) then return end
+    backgroundBar:ClearAllPoints()
+    backgroundBar:SetAllPoints(missing == true and bar or mock)
+    if backgroundBar.SetOrientation then backgroundBar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL") end
+    local backgroundReverse = reverse
+    if missing == true then backgroundReverse = not reverse end
+    if backgroundBar.SetReverseFill then backgroundBar:SetReverseFill(backgroundReverse) end
+    if backgroundBar.SetMinMaxValues then backgroundBar:SetMinMaxValues(0, 1) end
+    local pct = tonumber(healthFraction) or 0
+    if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
+    local missingValue = missing == true and (1 - pct) or 1
+    backgroundBar:SetValue(missingValue)
+end
 -- Mirrors the live relief renderer. FULL overlays cache their resolved anchor
 -- extents before this runs, avoiding stale configured portraitWidth/Height.
 local PREVIEW_RING_OPENING_INFLATE = 0.0952380952
@@ -2189,8 +2215,6 @@ function Preview.Refresh(box, reason)
     mock.healthBar:ClearAllPoints()
     mock.healthBar:SetPoint("TOPLEFT", mock, "TOPLEFT", 0, 0)
     mock.healthBar:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", 0, S(box._runtimeHealthPowerInset))
-    mock.hpBG:ClearAllPoints()
-    mock.hpBG:SetAllPoints(mock)
     local hpReverse = (runtimeSpec and runtimeSpec.health and runtimeSpec.health.reverse == true) or (not (runtimeSpec and runtimeSpec.health) and conf.reverseFillBars == true)
     local hpAreaW = max(1, sw)
     local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
@@ -2201,13 +2225,16 @@ function Preview.Refresh(box, reason)
     -- this Refresh function sits at Lua's 200 active-local limit.
     if (runtimeSpec and runtimeSpec.health and runtimeSpec.health.vertical == true) or (not (runtimeSpec and runtimeSpec.health) and conf.verticalFillBars == true) then
         if mock.healthBar.SetOrientation then mock.healthBar:SetOrientation("VERTICAL") end
+        mock.healthBar._msufOrientation = "VERTICAL"
         mock.tempMaxHealthBg:Hide()
         mock.tempMaxHealth:Hide()
     else
         if mock.healthBar.SetOrientation then mock.healthBar:SetOrientation("HORIZONTAL") end
+        mock.healthBar._msufOrientation = "HORIZONTAL"
         RenderTempMaxHealth(mock, runtimeSpec, conf, g, key, hpReverse, hpAreaW, SetTex)
     end
     if mock.healthBar.SetReverseFill then mock.healthBar:SetReverseFill(hpReverse) end
+    mock.healthBar._msufReverseFill = hpReverse
     if mock.healthBar.SetMinMaxValues then mock.healthBar:SetMinMaxValues(0, 1) end
     mock.healthBar:SetValue(hpFrac)
     -- Query after SetValue, exactly like Group Preview: the client owns this
@@ -2288,26 +2315,37 @@ function Preview.Refresh(box, reason)
     if not hr then hr, hg, hb = R.HealthColor(key, data) end
     local hbr, hbg, hbb, hba
     local healthBg = runtimeSpec and runtimeSpec.health and runtimeSpec.health.background
+    mock._msufPreviewBackgroundColorMode = PreviewBackgroundColorMode(runtimeSpec and runtimeSpec.health, g)
     if healthBg then
         hbr, hbg, hbb, hba = healthBg.r or hr, healthBg.g or hg, healthBg.b or hb, healthBg.a or 0.85
-        if runtimeSpec.health.backgroundClassColor == true then
+        if mock._msufPreviewBackgroundColorMode == "health_gradient" and MSUF.UFBarTextCommon
+            and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
+            hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(runtimeSpec.health, hpFrac)
+        elseif mock._msufPreviewBackgroundColorMode == "class" then
             hbr, hbg, hbb = R.ClassColor((data.isPlayer and data.class)
                 or ((D.LiveUnitData and D.LiveUnitData("player") or {}).class)
                 or (UNIT_DATA.player and UNIT_DATA.player.class))
-        elseif runtimeSpec.health.backgroundMatchHealth == true then
+        elseif mock._msufPreviewBackgroundColorMode == "match_health" then
             hbr, hbg, hbb = R.DarkMatchHPColor(hr, hg, hb)
         end
     else
         hbr, hbg, hbb, hba = R.HealthBackgroundColor(hr, hg, hb, data, conf)
+        if mock._msufPreviewBackgroundColorMode == "health_gradient" and MSUF.UFBarTextCommon
+            and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
+            hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(g, hpFrac)
+        end
     end
     -- Alpha follows the current menu value immediately. The compiled spec
     -- still owns the live texture/RGB mode, but may lag one debounced apply
     -- while a slider is being edited.
     hba = select(4, R.HealthBackgroundColor(hr, hg, hb, data, conf))
-    -- Match the live background owner: color and configured opacity are one
-    -- vertex-color operation, while the region alpha remains neutral.
+    -- Match the live background owner: color and configured opacity stay in
+    -- the vertex color while the native StatusBar owns fill geometry.
     mock.hpBG:SetVertexColor(hbr, hbg, hbb, hba)
-    mock.hpBG:SetAlpha(1)
+    ApplyPreviewHealthBackgroundFill(mock,
+        (runtimeSpec and runtimeSpec.health and runtimeSpec.health.backgroundFillMode == "missing")
+            or (not (runtimeSpec and runtimeSpec.health) and g and g.barBgFillMode == "missing"),
+        mock.healthBar._msufOrientation == "VERTICAL", hpReverse, hpFrac)
     mock.healthBar:SetStatusBarColor(hr, hg, hb, 1)
     local healthFillAlpha = max(0, min(1, tonumber(conf and conf.hpBarAlpha)
         or tonumber(runtimeSpec and runtimeSpec.alpha and runtimeSpec.alpha.hpAlpha) or 1))

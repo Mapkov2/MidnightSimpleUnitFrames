@@ -130,7 +130,6 @@ end
 local function _RefreshAllBarBackgroundVisuals(colorsAlreadyRefreshed)
     local applyBg = _G.MSUF_ApplyBarBackgroundVisual
     local refreshHP = _G.MSUF_UFCore_RefreshHealthBarColor
-    local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
     local UF = MSUF and MSUF.UF
     local frames = UF and UF.frames
     if type(frames) ~= "table" or type(applyBg) ~= "function" then return end
@@ -141,9 +140,6 @@ local function _RefreshAllBarBackgroundVisuals(colorsAlreadyRefreshed)
                 refreshHP(frame)
             end
             applyBg(frame)
-            if type(syncMissing) == "function" then
-                syncMissing(frame)
-            end
         end
     end
 end
@@ -497,22 +493,65 @@ local function ResetClassBarBgColor()
     g.classBarBgR, g.classBarBgG, g.classBarBgB, g.classBarBgA = nil, nil, nil, nil; PushVisualUpdates()
 end
 
---- - Bar BG Match HP -
-local function GetBarBgMatchHP() return (_general() or {}).barBgMatchHPColor and true or false end
+--- - Health Bar Background Fill / Color Mode -
+local BAR_BG_FILL_MODES = { full = true, missing = true }
+local BAR_BG_COLOR_MODES = { custom = true, match_health = true, class = true, health_gradient = true }
+
+local function ResolveBarBgFillMode(g)
+    local mode = g and g.barBgFillMode
+    return BAR_BG_FILL_MODES[mode] and mode or "full"
+end
+
+local function ResolveBarBgColorMode(g)
+    local mode = g and g.barBgColorMode
+    if BAR_BG_COLOR_MODES[mode] then return mode end
+    if g and g.barBgClassColor == true then return "class" end
+    if g and g.barBgMatchHPColor == true then return "match_health" end
+    return "custom"
+end
+
+local function SetStoredBarBgColorMode(g, mode)
+    if not (g and BAR_BG_COLOR_MODES[mode]) then return false end
+    g.barBgColorMode = mode
+    -- Keep the retired toggle storage coherent for imports and third-party
+    -- callers that still use the public compatibility APIs below.
+    g.barBgMatchHPColor = mode == "match_health"
+    g.barBgClassColor = mode == "class"
+    return true
+end
+
+local function GetBarBgFillMode() return ResolveBarBgFillMode(_general()) end
+local function SetBarBgFillMode(mode)
+    local g = _general()
+    if not (g and BAR_BG_FILL_MODES[mode]) then return false end
+    g.barBgFillMode = mode
+    PushVisualUpdates()
+    return true
+end
+
+local function GetBarBgColorMode() return ResolveBarBgColorMode(_general()) end
+local function SetBarBgColorMode(mode)
+    local g = _general()
+    if not SetStoredBarBgColorMode(g, mode) then return false end
+    PushVisualUpdates()
+    return true
+end
+
+local function GetBarBgMatchHP() return ResolveBarBgColorMode(_general()) == "match_health" end
 local function SetBarBgMatchHP(v)
     local g = _general()
     if g then
-        g.barBgMatchHPColor = v and true or false
-        if v then g.barBgClassColor = false end
+        local current = ResolveBarBgColorMode(g)
+        SetStoredBarBgColorMode(g, v and "match_health" or (current == "match_health" and "custom" or current))
         PushVisualUpdates()
     end
 end
-local function GetBarBgClassColor() return (_general() or {}).barBgClassColor and true or false end
+local function GetBarBgClassColor() return ResolveBarBgColorMode(_general()) == "class" end
 local function SetBarBgClassColor(v)
     local g = _general()
     if g then
-        g.barBgClassColor = v and true or false
-        if v then g.barBgMatchHPColor = false end
+        local current = ResolveBarBgColorMode(g)
+        SetStoredBarBgColorMode(g, v and "class" or (current == "class" and "custom" or current))
         PushVisualUpdates()
     end
 end
@@ -655,6 +694,10 @@ MSUF._colorsAPI = {
     GetClassBarBgColor              = GetClassBarBgColor,
     SetClassBarBgColor              = SetClassBarBgColor,
     ResetClassBarBgColor            = ResetClassBarBgColor,
+    GetBarBgFillMode                = GetBarBgFillMode,
+    SetBarBgFillMode                = SetBarBgFillMode,
+    GetBarBgColorMode               = GetBarBgColorMode,
+    SetBarBgColorMode               = SetBarBgColorMode,
     GetBarBgMatchHP                 = GetBarBgMatchHP,
     SetBarBgMatchHP                 = SetBarBgMatchHP,
     GetBarBgClassColor              = GetBarBgClassColor,

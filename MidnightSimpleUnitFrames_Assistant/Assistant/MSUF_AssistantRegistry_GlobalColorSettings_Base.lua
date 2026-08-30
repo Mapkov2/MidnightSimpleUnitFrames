@@ -85,59 +85,112 @@ function A.GlobalRegistry.RegisterBaseColorSettings(ctx)
     end, { category = "Colors / Bar Background", attribute = "barBackgroundTint", defaultR = 0, defaultG = 0, defaultB = 0, apply = ApplyColors })
 
     Registry:RegisterSetting({
-        key = "general.barBgMatchHPColor",
-        label = "Background Follows HP Color",
+        key = "general.barBgFillMode",
+        label = "Background Fill",
         category = "Colors / Bar Background",
         unit = "global",
         frameType = "colors",
-        attribute = "barBackgroundFollowsHP",
-        type = "boolean",
-        aliases = { "background follows hp color", "bar background follows hp", "background matches hp" },
+        attribute = "barBackgroundFillMode",
+        type = "enum",
+        aliases = {
+            "background fill", "health background fill", "bar background fill",
+            "missing health fill", "missing hp fill", "background filling",
+            "hintergrund fuellung", "fehlende gesundheit fuellung", "fehlende hp fuellung",
+        },
+        values = { "full", "missing" },
+        valueLabels = { full = "Full bar", missing = "Missing health only" },
+        valueAliases = {
+            full = "full", ["full bar"] = "full", ["whole bar"] = "full", ["entire bar"] = "full",
+            normal = "full", ["normal fill"] = "full", ["voller balken"] = "full", ["ganzer balken"] = "full",
+            missing = "missing", ["missing health"] = "missing", ["missing health only"] = "missing",
+            ["missing hp"] = "missing", ["missing hp only"] = "missing", ["health deficit"] = "missing",
+            ["fehlende gesundheit"] = "missing", ["fehlende hp"] = "missing", ["nur fehlende gesundheit"] = "missing",
+        },
+        dbScopes = { { scope = "general", dbKey = "barBgFillMode" } },
+        dbScopesReplace = true,
         get = function()
-            local fn = ColorAPI().GetBarBgMatchHP
-            if type(fn) == "function" then return fn() == true end
-            return GeneralDB().barBgMatchHPColor == true
+            local fn = ColorAPI().GetBarBgFillMode
+            local value = type(fn) == "function" and fn() or GeneralDB().barBgFillMode
+            return value == "missing" and "missing" or "full"
         end,
         set = function(value)
-            local fn = ColorAPI().SetBarBgMatchHP
-            if type(fn) == "function" then
-                fn(value and true or false)
-            else
-                local g = GeneralDB()
-                g.barBgMatchHPColor = value and true or false
-                if value then g.barBgClassColor = false end
-            end
+            value = value == "missing" and "missing" or "full"
+            local fn = ColorAPI().SetBarBgFillMode
+            if type(fn) == "function" then fn(value) else GeneralDB().barBgFillMode = value end
         end,
         apply = ApplyColors,
         combatSafe = false,
+        description = "Chooses whether the health background covers the full bar or only the missing-health region.",
     })
 
     Registry:RegisterSetting({
-        key = "general.barBgClassColor",
-        label = "Health Background Follows Class Color",
+        key = "general.barBgColorMode",
+        label = "Background Color",
         category = "Colors / Bar Background",
         unit = "global",
         frameType = "colors",
-        attribute = "barBackgroundFollowsClass",
-        type = "boolean",
-        aliases = { "health background follows class color", "bar background class color", "background follows class color" },
+        attribute = "barBackgroundColorMode",
+        type = "enum",
+        aliases = {
+            "background color mode", "background colour mode", "health background color mode",
+            "health background colour mode", "bar background color source", "bar background colour source",
+            "background follows hp color", "bar background follows hp", "background matches hp",
+            "health background follows class color", "bar background class color", "background follows class color",
+            "hintergrund farbmodus", "gesundheitsleisten hintergrundfarbe",
+        },
+        values = { "custom", "match_health", "class", "health_gradient" },
+        valueLabels = {
+            custom = "Custom tint", match_health = "Match health bar",
+            class = "Class color", health_gradient = "Health gradient",
+        },
+        valueAliases = {
+            custom = "custom", ["custom tint"] = "custom", ["custom color"] = "custom",
+            ["custom colour"] = "custom", ["eigene farbe"] = "custom", benutzerdefiniert = "custom",
+            ["match health"] = "match_health", ["match health bar"] = "match_health",
+            ["same as health"] = "match_health", ["follow health"] = "match_health",
+            ["background follows hp color"] = "match_health", ["bar background follows hp"] = "match_health",
+            ["background matches hp"] = "match_health", ["wie gesundheitsleiste"] = "match_health",
+            class = "class", ["class color"] = "class", ["class colour"] = "class",
+            ["health background follows class color"] = "class", ["bar background class color"] = "class",
+            ["background follows class color"] = "class", ["klassenfarbe"] = "class",
+            ["health gradient"] = "health_gradient", ["hp gradient"] = "health_gradient",
+            ["health color gradient"] = "health_gradient", ["health colour gradient"] = "health_gradient",
+            ["gesundheitsverlauf"] = "health_gradient",
+        },
+        -- The two booleans are retained only as synchronized import/API
+        -- projections. One reviewed enum owns all three persisted fields.
+        dbScopes = {
+            { scope = "general", dbKey = "barBgColorMode" },
+            { scope = "general", dbKey = "barBgMatchHPColor" },
+            { scope = "general", dbKey = "barBgClassColor" },
+        },
+        dbScopesReplace = true,
         get = function()
-            local fn = ColorAPI().GetBarBgClassColor
-            if type(fn) == "function" then return fn() == true end
-            return GeneralDB().barBgClassColor == true
+            local fn = ColorAPI().GetBarBgColorMode
+            local g = GeneralDB()
+            local value = type(fn) == "function" and fn() or g.barBgColorMode
+            if value == "custom" or value == "match_health" or value == "class" or value == "health_gradient" then
+                return value
+            end
+            if g.barBgClassColor == true then return "class" end
+            if g.barBgMatchHPColor == true then return "match_health" end
+            return "custom"
         end,
         set = function(value)
-            local fn = ColorAPI().SetBarBgClassColor
+            if value ~= "match_health" and value ~= "class" and value ~= "health_gradient" then value = "custom" end
+            local fn = ColorAPI().SetBarBgColorMode
             if type(fn) == "function" then
-                fn(value and true or false)
+                fn(value)
             else
                 local g = GeneralDB()
-                g.barBgClassColor = value and true or false
-                if value then g.barBgMatchHPColor = false end
+                g.barBgColorMode = value
+                g.barBgMatchHPColor = value == "match_health"
+                g.barBgClassColor = value == "class"
             end
         end,
         apply = ApplyColors,
         combatSafe = false,
+        description = "Chooses the health-background color source independently from the foreground health bar.",
     })
 
     RegisterGeneralBoolean("darkBgCustomColor", "darkModeCustomBackgroundColor", "Custom Color In Dark Mode", false, {

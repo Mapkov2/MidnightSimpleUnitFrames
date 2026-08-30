@@ -12,6 +12,41 @@ local F = M.Fallbacks or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local wipe = _G.wipe or function(tbl) for key in pairs(tbl) do tbl[key] = nil end return tbl end
+function Render._HealthBackgroundColorMode(health, general)
+    local mode = health and health.backgroundColorMode or general and general.barBgColorMode
+    if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
+        return mode
+    end
+    if (health and health.backgroundClassColor == true) or (general and general.barBgClassColor == true) then return "class" end
+    if (health and health.backgroundMatchHealth == true) or (general and general.barBgMatchHPColor == true) then return "match_health" end
+    return "custom"
+end
+function Render._MatchHealthBackgroundColor(r, g, b, general)
+    if general and general.darkMode == true and general.darkBgCustomColor ~= true then
+        local brightness = tonumber(general.darkBgBrightness)
+        if brightness then
+            if brightness < 0 then brightness = 0 elseif brightness > 1 then brightness = 1 end
+            return r * brightness, g * brightness, b * brightness
+        end
+    end
+    return r, g, b
+end
+function Render._ApplyHealthBackgroundFill(mock, missing, reverse, healthFraction)
+    local backgroundBar = mock and mock._healthBgBar
+    local bar = mock and mock._health
+    if not (backgroundBar and bar) then return end
+    backgroundBar:ClearAllPoints()
+    backgroundBar:SetAllPoints(missing == true and bar or mock)
+    if backgroundBar.SetOrientation then backgroundBar:SetOrientation("HORIZONTAL") end
+    local backgroundReverse = reverse
+    if missing == true then backgroundReverse = not reverse end
+    if backgroundBar.SetReverseFill then backgroundBar:SetReverseFill(backgroundReverse) end
+    if backgroundBar.SetMinMaxValues then backgroundBar:SetMinMaxValues(0, 1) end
+    local pct = tonumber(healthFraction) or 0
+    if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
+    local missingValue = missing == true and (1 - pct) or 1
+    backgroundBar:SetValue(missingValue)
+end
 local function ResolvePreviewNameGeometry(conf, runtimeText, baselineOffset)
     conf, runtimeText = conf or {}, runtimeText or {}
     local x = tonumber(conf.nameOffsetX)
@@ -1995,6 +2030,7 @@ function Render.Install(box, ctx, deps)
         FrameStrataRank = FrameStrataRank,
         Layers = Layers,
         issecretvalue = issecretvalue,
+        HealthBackgroundRenderer = Render,
     }
     local function SuspendSpellPreviewRoot(root)
         if not root then return end
@@ -2418,7 +2454,10 @@ function Render.Install(box, ctx, deps)
         mock:SetBackdrop({ bgFile = WHITE8X8 })
         local bgAlpha = conf.hpBgAlpha or 0.85
         if runtimeSpec and runtimeSpec.backgroundAlpha ~= nil then bgAlpha = runtimeSpec.backgroundAlpha end
-        mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, bgAlpha)
+        mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09,
+            (runtimeHealth.backgroundFillMode == "missing"
+                or (not runtimeSpec and _G.MSUF_DB and _G.MSUF_DB.general
+                    and _G.MSUF_DB.general.barBgFillMode == "missing")) and 0 or bgAlpha)
         mock:SetBackdropBorderColor(0, 0, 0, 0)
         local cls = (scene.liveData and scene.liveData.class)
             or self._msufGFRenderState.GF_PREVIEW_CLASSES[((kind == "party" and 5 or 2) % #self._msufGFRenderState.GF_PREVIEW_CLASSES) + 1]
@@ -2451,7 +2490,10 @@ function Render.Install(box, ctx, deps)
         if mock._health.SetMinMaxValues then mock._health:SetMinMaxValues(0, 1) end
         mock._health:SetValue(hpPct)
         local hpReverse = runtimeHealth.reverse == true or (not runtimeSpec and conf.reverseFill == true)
+        local gen = _G.MSUF_DB and _G.MSUF_DB.general
         if mock._health.SetReverseFill then mock._health:SetReverseFill(hpReverse) end
+        mock._health._msufOrientation = "HORIZONTAL"
+        mock._health._msufReverseFill = hpReverse
         if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradient then
             MSUF.UFBarTextCommon.ApplyBarGradient(mock, mock._health,
                 runtimeHealth.barGradient, "_msufGFPreviewHealthGradients")
@@ -2459,12 +2501,20 @@ function Render.Install(box, ctx, deps)
         mock._healthBg:SetTexture(bgTex)
         local hbCfg = runtimeHealth.background or {}
         local hbr, hbg, hbb = hbCfg.r or conf.bgR or 0.06, hbCfg.g or conf.bgG or 0.06, hbCfg.b or conf.bgB or 0.07
-        local gen = _G.MSUF_DB and _G.MSUF_DB.general
-        if runtimeHealth.backgroundMatchHealth == true then hbr, hbg, hbb = hr or hbr, hg or hbg, hb or hbb end
-        if runtimeHealth.backgroundClassColor == true or (not runtimeSpec and gen and gen.barBgClassColor) then
+        mock._msufGFPreviewBackgroundColorMode = S.HealthBackgroundRenderer._HealthBackgroundColorMode(runtimeHealth, gen)
+        if mock._msufGFPreviewBackgroundColorMode == "health_gradient" and MSUF.UFBarTextCommon
+            and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
+            hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(runtimeHealth, hpPct)
+        elseif mock._msufGFPreviewBackgroundColorMode == "match_health" then
+            hbr, hbg, hbb = S.HealthBackgroundRenderer._MatchHealthBackgroundColor(hr or hbr, hg or hbg, hb or hbb, gen)
+        elseif mock._msufGFPreviewBackgroundColorMode == "class" then
             hbr, hbg, hbb = ClassColor(cls, hbr, hbg, hbb)
         end
         mock._healthBg:SetVertexColor(hbr, hbg, hbb, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or 0.85)
+        S.HealthBackgroundRenderer._ApplyHealthBackgroundFill(mock,
+            runtimeHealth.backgroundFillMode == "missing"
+                or (not runtimeSpec and gen and gen.barBgFillMode == "missing"),
+            hpReverse, hpPct)
         local tempMaxShown
         if runtimeSpec then
             tempMaxShown = runtimeTempMaxHealth.enabled == true

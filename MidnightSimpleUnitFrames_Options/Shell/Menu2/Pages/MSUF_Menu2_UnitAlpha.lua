@@ -53,7 +53,7 @@ local function BuildAlpha(ctx, builder, unit)
             end
             return mode
         end
-        W.AttachContextColorReferences(healthCard, function()
+        local function HealthColorRefs()
             local mode = EffectiveHealthMode()
             local refs = {}
             if mode == "gradient" then
@@ -63,16 +63,26 @@ local function BuildAlpha(ctx, builder, unit)
             elseif mode == "class" then
                 refs = { unit == "pet" and "unit.pet" or "health.current" }
             end
-            local general = GetGeneral()
-            if general.barBgMatchHPColor ~= true and general.barBgClassColor ~= true then
-                refs[#refs + 1] = "bar.background_tint"
-            end
+            refs[#refs + 1] = "health.background.current"
             return refs
-        end, {
+        end
+        local function HealthColorContext()
+            return { unit = unit, healthMode = EffectiveHealthMode() }
+        end
+        local function HealthColorShortcutRelevant()
+            local resolver = M.ResolveContextColorReferences
+            if type(resolver) ~= "function" then return false end
+            local targets = resolver(HealthColorRefs(), HealthColorContext())
+            local count = type(targets) == "table" and #targets or 0
+            return count > 0 and count <= 6
+        end
+        W.AttachContextColorReferences(healthCard, HealthColorRefs, {
             title = "Health Bar Colors",
             note = "Colors follow this frame's effective Health Color Scheme.",
             historySource = "menu:unit-alpha-health-colors",
-            context = function() return { unit = unit, healthMode = EffectiveHealthMode() } end,
+            maxTargets = 6,
+            context = HealthColorContext,
+            isRelevant = HealthColorShortcutRelevant,
         })
         W.AttachContextColorReferences(resourceCard, function()
             local refs = { "power.current" }

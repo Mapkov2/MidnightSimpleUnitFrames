@@ -748,12 +748,16 @@ end
 
 local function SettingPage(setting)
     if type(setting) ~= "table" then return nil end
-    local page = setting.page
     local resolver = A.ResolveMenuPageForSetting
         or (A.Knowledge and A.Knowledge.ResolveSettingPage)
-    if (page == nil or page == "") and type(resolver) == "function" then
+    local page
+    -- Relationship groups must use the same canonical owner as navigation;
+    -- raw Registry page hints are only a fallback before that resolver loads.
+    if type(resolver) == "function" then
         local ok, resolved = pcall(resolver, setting)
         if ok then page = resolved end
+    else
+        page = setting.page
     end
     page = tostring(page or "")
     return page ~= "" and page or nil

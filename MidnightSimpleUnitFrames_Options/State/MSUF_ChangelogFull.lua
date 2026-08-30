@@ -8,12 +8,53 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "918344CAB47C77387A07215BB01FB3D60E4A4547F48819DF90A5685BFBDB1293",
-    currentVersion = "6.13",
+    sourceSha256 = "B4F214B2C691CE37D146E3AF503F0D528967AA312A6AEF68BC735D923E1FFD75",
+    currentVersion = "6.14-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.12",
-    rangeLabel = "6.12 -> 6.13",
+    previousVersion = "6.13",
+    rangeLabel = "6.13 -> 6.14-beta1",
     entries = {
+        {
+            version = "6.14-beta1",
+            date = "2026-08-30",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Health-bar backgrounds can now fill the full bar or only missing health. The background can be colored independently with Custom tint, Match health bar, Class color, or Health gradient, with matching Unit Frame, Group Frame, and preview rendering.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "background fill missing health only",
+                                label = "Background Fill",
+                                sectionId = "colors_background",
+                                controlId = "menu2.opt.colors.advanced.background.fill.mode",
+                                settingKey = "general.barBgFillMode",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added Full bar and Missing health only background-fill modes plus independent health-background color sources, while migrating existing profiles without changing their current appearance.",
+                        "The Assistant now routes Aura content and filter requests to the Unit or Group Frame that owns them, exposes the See New Features destination directly, and presents ambiguous controls with readable menu breadcrumbs instead of internal identifiers.",
+                        "Unit Frame tooltips react immediately when their configured modifier key is pressed or released while the frame remains hovered.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Player Castbar interrupt feedback survives the client event order where the cast stops before the interrupted result arrives, without reviving stale casts.",
+                        "State Tint controls appear and disappear immediately when their master toggles change instead of requiring the Colors page to be reopened.",
+                        "Assistant queues, history, undo, pending choices, workflows, and deferred callbacks are now isolated to the profile that created them, preventing stale work from crossing a profile switch or surviving beyond its conversational context.",
+                        "Immediate and deferred Assistant mutations now share the same failure-recovery path so partial work rolls back consistently.",
+                        "General Aura guidance no longer competes with frame-local Aura owners, and question-shaped duration-filter requests retain their safe executable choices.",
+                        "Aura-name fallback updates skip redundant unit-scan setup when no unresolved additions can benefit from it.",
+                    },
+                },
+            },
+        },
         {
             version = "6.13",
             date = "2026-08-28",

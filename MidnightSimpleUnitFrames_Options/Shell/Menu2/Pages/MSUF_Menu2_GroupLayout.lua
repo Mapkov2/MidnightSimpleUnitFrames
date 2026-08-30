@@ -74,10 +74,6 @@ local function CurrentGroupEffectiveHealthMode()
     if mode == "GRADIENT" and general.enableHealthGradient == false then return "CLASS" end
     return mode
 end
-local function GroupBackgroundUsesDerivedColor()
-    local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or {}
-    return general.barBgMatchHPColor == true or general.barBgClassColor == true
-end
 local function CurrentGroupHealthColorRefs()
     local mode = CurrentGroupHealthMode()
     local references
@@ -94,9 +90,7 @@ local function CurrentGroupHealthColorRefs()
     else
         references = { "group.health" }
     end
-    if not GroupBackgroundUsesDerivedColor() then
-        references[#references + 1] = "group.background"
-    end
+    references[#references + 1] = "health.background.current"
     return references
 end
 local function GroupHealthColorNote(sharedNote)
@@ -110,7 +104,15 @@ local function CurrentGroupHealthColorContext()
         unit = "player",
         unitKey = "player",
         healthMode = CurrentGroupHealthMode(),
+        group = true,
     }
+end
+local function CurrentGroupHealthColorShortcutRelevant()
+    local resolver = M.ResolveContextColorReferences
+    if type(resolver) ~= "function" then return false end
+    local targets = resolver(CurrentGroupHealthColorRefs(), CurrentGroupHealthColorContext())
+    local count = type(targets) == "table" and #targets or 0
+    return count > 0 and count <= 7
 end
 local function RefreshFrameBasicsProviderHeader(section)
     local provider = FrameProvider(CurrentScope())
@@ -170,7 +172,7 @@ local function BuildGFGeneralSection(ctx, b)
             title = "Group Frame Colors",
             note = function() return GroupHealthColorNote("Shared by Party, Raid and Mythic Raid.") end,
             historySource = "menu:group-frame-basics-colors",
-            maxTargets = 5,
+            maxTargets = 7,
             offsetY = -10,
             context = CurrentGroupHealthColorContext,
         })
@@ -324,7 +326,9 @@ local function BuildGFTransparencySection(ctx, b)
                 return GroupHealthColorNote("Foreground follows the selected group color mode; editable group colors are shared by Party, Raid and Mythic Raid.")
             end,
             historySource = "menu:group-transparency-colors",
+            maxTargets = 7,
             context = CurrentGroupHealthColorContext,
+            isRelevant = CurrentGroupHealthColorShortcutRelevant,
         })
     end
     local function AddAlphaSlider(parent, width, spec)

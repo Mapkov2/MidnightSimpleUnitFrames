@@ -114,6 +114,36 @@ local function ActiveProfileValue()
     return value
 end
 
+local function StampBundleProfile(bundle)
+    if type(bundle) ~= "table" then return bundle end
+    bundle.assistantProfileName = ActiveProfileValue()
+    bundle.assistantProfileDB = rawget(_G, "MSUF_DB")
+    return bundle
+end
+
+local function BundleMatchesProfile(bundle, profileName, profileDB)
+    return type(bundle) == "table"
+        and bundle.assistantProfileName == profileName
+        and bundle.assistantProfileDB == profileDB
+end
+
+function A.RebindUndoForProfile(profileName, profileDB)
+    profileName = tostring(profileName or ActiveProfileValue())
+    profileDB = profileDB ~= nil and profileDB or rawget(_G, "MSUF_DB")
+    local function KeepCurrentProfile(stack)
+        stack = type(stack) == "table" and stack or {}
+        for i = #stack, 1, -1 do
+            if not BundleMatchesProfile(stack[i], profileName, profileDB) then
+                table.remove(stack, i)
+            end
+        end
+        return stack
+    end
+    A.undoStack = KeepCurrentProfile(A.undoStack)
+    A.redoStack = KeepCurrentProfile(A.redoStack)
+    return A.undoStack, A.redoStack
+end
+
 local function ProfileAliasName(globalDB, db)
     local profiles = type(globalDB) == "table" and globalDB.profiles or nil
     if type(profiles) ~= "table" or type(db) ~= "table" then return nil end
@@ -659,6 +689,19 @@ function A.ResumePendingBroadApply()
     return ArmUndoNextFrame()
 end
 
+function A.CancelPendingBroadApplyForProfileBoundary()
+    local state = A._broadApplyState
+    local callbackCount = type(state) == "table" and #(state.callbacks or {}) or 0
+    -- Runtime refresh callbacks are valid only for the DB snapshot that
+    -- scheduled them. The core profile switch already applies the incoming
+    -- profile, so replaying these old callbacks is both redundant and unsafe.
+    A._broadApplyState = nil
+    A.undoNextFramePending = {}
+    A.undoNextFrameOrder = {}
+    A.undoNextFrameQueued = nil
+    return callbackCount
+end
+
 local function BroadApply(reason)
     -- Undo may touch several domains at once. Use broad scheduled refreshers rather than
     -- guessing which specific runtime owned each restored DB key.
@@ -759,6 +802,7 @@ function A.PushUndo(bundle)
     then
         return false
     end
+    StampBundleProfile(bundle)
     A.undoStack = A.undoStack or {}
     A.redoStack = A.redoStack or {}
     A.undoStack[#A.undoStack + 1] = bundle
@@ -1000,8 +1044,7 @@ function A.RestoreSnapshot(snapshot, reason)
 end
 
 function A.UndoLast()
-    A.undoStack = A.undoStack or {}
-    A.redoStack = A.redoStack or {}
+    A.RebindUndoForProfile(ActiveProfileValue(), rawget(_G, "MSUF_DB"))
     local bundle = A.undoStack[#A.undoStack]
     if not bundle then
         -- Players reach this by saying "that is not what I wanted", so it has to
@@ -1037,13 +1080,13 @@ function A.UndoLast()
         return false, "I could not safely undo that Assistant change, so I kept it on the undo stack. " .. tostring(restoreError or "")
     end
     table.remove(A.undoStack)
+    StampBundleProfile(bundle)
     A.redoStack[#A.redoStack + 1] = bundle
     return true, "Done. Reverted the last Assistant change."
 end
 
 function A.RedoLast()
-    A.undoStack = A.undoStack or {}
-    A.redoStack = A.redoStack or {}
+    A.RebindUndoForProfile(ActiveProfileValue(), rawget(_G, "MSUF_DB"))
     local bundle = A.redoStack[#A.redoStack]
     if not bundle then
         return false, "I have no Assistant change to redo."
@@ -1075,6 +1118,7 @@ function A.RedoLast()
         return false, "I could not safely redo that Assistant change, so I kept it on the redo stack. " .. tostring(restoreError or "")
     end
     table.remove(A.redoStack)
+    StampBundleProfile(bundle)
     A.undoStack[#A.undoStack + 1] = bundle
     return true, "Done. Reapplied the Assistant change."
 end

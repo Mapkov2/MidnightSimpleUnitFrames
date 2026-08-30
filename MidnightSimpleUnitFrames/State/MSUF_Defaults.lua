@@ -2059,7 +2059,7 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- Persisted completion marker for the broad default-fill/repair pass below.
 --- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
 --- one-shot repair; current profiles can then be repaired exactly once again.
-local MSUF_DEFAULTS_CURRENT_REVISION = 14
+local MSUF_DEFAULTS_CURRENT_REVISION = 15
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 local MSUF_DEFAULTS_CLASS_POWER_PREVIEW_GUIDES_REVISION = 9
 local MSUF_DEFAULTS_PLAYER_DEFENSIVE_SHAPE_REVISION = 10
@@ -2702,6 +2702,28 @@ end
     --- foreground can stay in Dark/Unified/Gradient mode.
     if g.barBgClassColor == nil then
         g.barBgClassColor = false
+    end
+    --- Background fill geometry and color source are independent. Migrate the
+    --- two legacy booleans into the canonical mode without changing existing
+    --- profiles; invalid imported values fail back to the current full/custom
+    --- appearance.
+    if g.barBgFillMode ~= "full" and g.barBgFillMode ~= "missing" then
+        g.barBgFillMode = "full"
+    end
+    do
+        local mode = g.barBgColorMode
+        if mode ~= "custom" and mode ~= "match_health" and mode ~= "class" and mode ~= "health_gradient" then
+            if g.barBgClassColor == true then
+                mode = "class"
+            elseif g.barBgMatchHPColor == true then
+                mode = "match_health"
+            else
+                mode = "custom"
+            end
+        end
+        g.barBgColorMode = mode
+        g.barBgMatchHPColor = mode == "match_health"
+        g.barBgClassColor = mode == "class"
     end
     if g.enableGradient == nil then
         g.enableGradient = false
@@ -5080,7 +5102,10 @@ local function MSUF_Defaults_IsCurrentProfileDB(db)
     if type(g.fontKey) ~= "string" or g.fontKey == ""
         or db.shortenNames == nil
         or db.bars.barBackgroundAlpha == nil
-        or db.gameplay.enableCombatTimer == nil then
+        or db.gameplay.enableCombatTimer == nil
+        or (g.barBgFillMode ~= "full" and g.barBgFillMode ~= "missing")
+        or (g.barBgColorMode ~= "custom" and g.barBgColorMode ~= "match_health"
+            and g.barBgColorMode ~= "class" and g.barBgColorMode ~= "health_gradient") then
         return false
     end
     return true

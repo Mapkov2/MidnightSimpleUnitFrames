@@ -414,6 +414,20 @@ local function DarkTint(general, r, g, b)
   return r or 0, g or 0, b or 0
 end
 
+local function ResolveBarBackgroundFillMode(general)
+  return general and general.barBgFillMode == "missing" and "missing" or "full"
+end
+
+local function ResolveBarBackgroundColorMode(general)
+  local mode = general and general.barBgColorMode
+  if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
+    return mode
+  end
+  if general and general.barBgClassColor == true then return "class" end
+  if general and general.barBgMatchHPColor == true then return "match_health" end
+  return "custom"
+end
+
 local function ResolveHealthBackground(general, bars, health, dst, conf)
   dst = dst or {}
   local r, g, b, tintAlpha
@@ -424,7 +438,7 @@ local function ResolveHealthBackground(general, bars, health, dst, conf)
     r, g, b = DarkTint(general, Number(general and general.classBarBgR, 0), Number(general and general.classBarBgG, 0), Number(general and general.classBarBgB, 0))
     tintAlpha = Number(general and general.classBarBgA, 1)
   end
-  if general and general.barBgMatchHPColor == true and health then
+  if ResolveBarBackgroundColorMode(general) == "match_health" and health then
     r, g, b = DarkTint(general, health.r, health.g, health.b)
   end
   -- Color opacity is an explicit user-controlled multiplier whose neutral
@@ -2017,8 +2031,10 @@ local function CompileUnitHealth(out, db, conf, general, bars)
     CopyColor(health, general.unifiedBarR or 0.1, general.unifiedBarG or 0.6, general.unifiedBarB or 0.9, 1)
   end
   health.background = ResolveHealthBackground(general, bars, health, health.background or {}, conf)
-  health.backgroundMatchHealth = general.barBgMatchHPColor == true
-  health.backgroundClassColor = general.barBgClassColor == true
+  health.backgroundFillMode = ResolveBarBackgroundFillMode(general)
+  health.backgroundColorMode = ResolveBarBackgroundColorMode(general)
+  health.backgroundMatchHealth = health.backgroundColorMode == "match_health"
+  health.backgroundClassColor = health.backgroundColorMode == "class"
   return health
 end
 
@@ -2440,8 +2456,10 @@ local function BuildSettingsCache(db)
   cache.barBackgroundAlpha = ResolveBgAlpha(general, bars)
   cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA = healthBg.r, healthBg.g, healthBg.b, healthBg.a
   cache.powerBgTintR, cache.powerBgTintG, cache.powerBgTintB, cache.powerBgTintA = powerBg.r, powerBg.g, powerBg.b, powerBg.a
-  cache.barBgClassColor = general.barBgClassColor == true
-  cache.barBgMatchHPColor = general.barBgMatchHPColor == true
+  cache.barBgFillMode = ResolveBarBackgroundFillMode(general)
+  cache.barBgColorMode = ResolveBarBackgroundColorMode(general)
+  cache.barBgClassColor = cache.barBgColorMode == "class"
+  cache.barBgMatchHPColor = cache.barBgColorMode == "match_health"
   cache.powerBarBgMatchHPColor = general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true
   cache.petFrameColorEnabled = PetFrameColorEnabled(general)
   cache.petFrameColorR = Number(general.petFrameColorR, 0)

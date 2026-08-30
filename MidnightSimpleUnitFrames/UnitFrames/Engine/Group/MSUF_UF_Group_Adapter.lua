@@ -257,7 +257,10 @@ do
     -- field read and returns before TooltipAllowed / scheduling any timer.
     local tooltips = MSUF.Tooltips
     if not tooltips or tooltips.hoverInert then return end
-    if not TooltipAllowed() then return end
+    if not TooltipAllowed() then
+      if tooltips.TrackUnitHover then tooltips.TrackUnitHover(self, StoredAttrUnit(self)) end
+      return
+    end
     local token = (self._msufGFTooltipToken or 0) + 1
     self._msufGFTooltipToken = token
     pendingFrame, pendingToken = self, token

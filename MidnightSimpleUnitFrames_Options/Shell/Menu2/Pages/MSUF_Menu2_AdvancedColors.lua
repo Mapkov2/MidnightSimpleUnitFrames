@@ -46,9 +46,9 @@ local COLOR_SETTING_KEY_BY_PATH = {
     ["auras.dispel.disease.color"] = "general.dispelTypeColorOverrides.Disease",
     ["auras.dispel.poison.color"] = "general.dispelTypeColorOverrides.Poison",
     ["auras.dispel.bleed.color"] = "general.dispelTypeColorOverrides.Bleed",
+    ["background.color_mode"] = "general.barBgColorMode",
     ["background.dark_mode_custom_color"] = "general.darkBgCustomColor",
-    ["background.follow_class_color"] = "general.barBgClassColor",
-    ["background.follow_health_color"] = "general.barBgMatchHPColor",
+    ["background.fill_mode"] = "general.barBgFillMode",
     ["bar.outline_color"] = "general.barOutlineColor",
     ["bar.power_background_match_health"] = "general.powerBarBgMatchBarColor",
     ["bar.purge_border_color"] = "general.purgeBorderColor",
@@ -297,8 +297,19 @@ local function ApplyColors()
     return RequestGeneral("MSUF2_COLORS", { preview = true, applyAll = false, colors = true })
 end
 
+function M.RefreshActiveHealthBackgroundInlinePreview()
+    if M.activeKey ~= "opt_colors" then return false end
+    local entry = M.cache and M.cache.opt_colors
+    if not entry or entry._msuf2Invalidated == true then return false end
+    if entry.wrapper and entry.wrapper.IsShown and not entry.wrapper:IsShown() then return false end
+    local refresh = entry and entry._msuf2HealthBackgroundInlinePreviewRefresh
+    if type(refresh) ~= "function" then return false end
+    refresh()
+    return true
+end
 local function ApplyUnitframeColorWithReload()
     ApplyColors()
+    M.RefreshActiveHealthBackgroundInlinePreview()
 end
 local function ApplyCastbarColors()
     M.RequestGeneralApply("MSUF2_CASTBAR_COLORS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
@@ -457,6 +468,196 @@ local function ApiValue(name, fallback, ...)
     end
     if type(fallback) == "function" then return fallback() end
     return fallback
+end
+M.ColorsBackgroundMode = M.ColorsBackgroundMode or {}
+function M.ColorsBackgroundMode.GetFill()
+    local value = ApiValue("GetBarBgFillMode", function() return G().barBgFillMode end)
+    value = type(value) == "string" and value:lower() or nil
+    return value == "missing" and "missing" or "full"
+end
+function M.ColorsBackgroundMode.SetFill(value)
+    value = type(value) == "string" and value:lower() or nil
+    value = value == "missing" and "missing" or "full"
+    if not ApiCall("SetBarBgFillMode", value) then
+        G().barBgFillMode = value
+        ApplyUnitframeColorWithReload()
+    end
+end
+function M.ColorsBackgroundMode.GetColor()
+    local general = G()
+    local value = ApiValue("GetBarBgColorMode", function() return general.barBgColorMode end)
+    value = type(value) == "string" and value:lower() or nil
+    if value == "custom" or value == "match_health" or value == "class" or value == "health_gradient" then
+        return value
+    end
+    if general.barBgClassColor == true then return "class" end
+    if general.barBgMatchHPColor == true then return "match_health" end
+    return "custom"
+end
+function M.ColorsBackgroundMode.SetColor(value)
+    value = type(value) == "string" and value:lower() or nil
+    if value ~= "match_health" and value ~= "class" and value ~= "health_gradient" then value = "custom" end
+    if not ApiCall("SetBarBgColorMode", value) then
+        local general = G()
+        general.barBgColorMode = value
+        general.barBgMatchHPColor = value == "match_health"
+        general.barBgClassColor = value == "class"
+        ApplyUnitframeColorWithReload()
+    end
+end
+function M.RefreshHealthBackgroundInlinePreview(preview)
+    if type(preview) ~= "table" then return false end
+    local bar, backgroundBar, background = preview.bar, preview.backgroundBar, preview.background
+    if not (bar and backgroundBar and background) then return false end
+
+    local pct = tonumber(preview.healthFraction) or 0.62
+    pct = max(0, min(1, pct))
+    local db = _G.MSUF_DB or {}
+    local general = type(db.general) == "table" and db.general or {}
+    local bars = type(db.bars) == "table" and db.bars or {}
+    local player = type(db.player) == "table" and db.player or {}
+    local model = MSUF.UFPreview and MSUF.UFPreview.Model or {}
+    local classToken
+    if type(_G.UnitClass) == "function" then
+        local _, token = _G.UnitClass("player")
+        classToken = token
+    end
+    local classTokenSecret = type(_G.issecretvalue) == "function" and _G.issecretvalue(classToken) == true
+    if classTokenSecret or type(classToken) ~= "string" or classToken == "" then classToken = nil end
+    local data = preview.data or {}
+    data.hp, data.isPlayer, data.class = pct, true, classToken
+    preview.data = data
+
+    -- Resolve the fixed Player sample from the just-edited DB/API values. The
+    -- compiled settings cache intentionally trails picker writes by one
+    -- coalesced apply and would make this inline preview appear stuck.
+    local classR, classG, classB
+    local colorsAPI = ColorAPI()
+    if classToken and type(colorsAPI.GetClassColor) == "function" then
+        classR, classG, classB = colorsAPI.GetClassColor(classToken)
+    end
+    if type(classR) ~= "number" or type(classG) ~= "number" or type(classB) ~= "number" then
+        local override = classToken and type(db.classColors) == "table" and db.classColors[classToken] or nil
+        classR, classG, classB = tonumber(override and (override.r or override[1])),
+            tonumber(override and (override.g or override[2])), tonumber(override and (override.b or override[3]))
+    end
+    if type(classR) ~= "number" or type(classG) ~= "number" or type(classB) ~= "number" then
+        local classColor = classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
+        classR, classG, classB = classColor and classColor.r or 0.12, classColor and classColor.g or 0.62,
+            classColor and classColor.b or 0.95
+    end
+
+    local colorMode = M.ColorsBackgroundMode.GetColor()
+    local healthMode = type(player.healthColorMode) == "string" and player.healthColorMode:lower() or nil
+    if healthMode ~= "class" and healthMode ~= "gradient" and healthMode ~= "dark" and healthMode ~= "unified" then
+        healthMode = type(general.barMode) == "string" and general.barMode:lower() or nil
+        if healthMode ~= "class" and healthMode ~= "gradient" and healthMode ~= "dark" and healthMode ~= "unified" then
+            healthMode = general.useClassColors == true and "class" or "dark"
+        end
+        if healthMode == "gradient" and general.enableHealthGradient == false then healthMode = "class" end
+    end
+
+    local gradientR, gradientG, gradientB
+    if healthMode == "gradient" or colorMode == "health_gradient" then
+        local gradientHealth = preview.gradientHealth or {}
+        gradientHealth.gradientLowR = tonumber(general.healthGradientLowR) or 1
+        gradientHealth.gradientLowG = tonumber(general.healthGradientLowG) or 0
+        gradientHealth.gradientLowB = tonumber(general.healthGradientLowB) or 0
+        gradientHealth.gradientMidR = tonumber(general.healthGradientMidR) or 1
+        gradientHealth.gradientMidG = tonumber(general.healthGradientMidG) or 1
+        gradientHealth.gradientMidB = tonumber(general.healthGradientMidB) or 0
+        gradientHealth.gradientHighR = tonumber(general.healthGradientHighR) or 0
+        gradientHealth.gradientHighG = tonumber(general.healthGradientHighG) or 1
+        gradientHealth.gradientHighB = tonumber(general.healthGradientHighB) or 0
+        preview.gradientHealth = gradientHealth
+        local common = MSUF.UFBarTextCommon
+        if common and type(common.PreviewHealthGradientColor) == "function" then
+            gradientR, gradientG, gradientB = common.PreviewHealthGradientColor(gradientHealth, pct)
+        elseif type(model.GradientPreviewColor) == "function" then
+            gradientR, gradientG, gradientB = model.GradientPreviewColor(pct, gradientHealth)
+        end
+    end
+
+    local hr, hg, hb
+    if healthMode == "class" then
+        hr, hg, hb = classR, classG, classB
+    elseif healthMode == "gradient" and type(gradientR) == "number"
+        and type(gradientG) == "number" and type(gradientB) == "number" then
+        hr, hg, hb = gradientR, gradientG, gradientB
+    elseif healthMode == "unified" then
+        hr, hg, hb = tonumber(general.unifiedBarR) or 0.10, tonumber(general.unifiedBarG) or 0.60,
+            tonumber(general.unifiedBarB) or 0.90
+    else
+        local gray = tonumber(general.darkBarGray or general.darkBgBrightness) or 0.07
+        if gray > 1 then gray = gray / 100 end
+        gray = max(0, min(1, gray))
+        hr, hg, hb = tonumber(general.darkBarR) or gray, tonumber(general.darkBarG) or gray,
+            tonumber(general.darkBarB) or gray
+    end
+
+    local br, bg, bb, tintAlpha
+    local getTint = _G.MSUF_GetBarBackgroundTintRGBA
+    if type(getTint) == "function" then
+        br, bg, bb, tintAlpha = getTint()
+    else
+        br, bg, bb, tintAlpha = tonumber(general.classBarBgR) or 0, tonumber(general.classBarBgG) or 0,
+            tonumber(general.classBarBgB) or 0, tonumber(general.classBarBgA) or 1
+        local darkTint = MSUF.Bars and MSUF.Bars._DarkTint
+        if type(darkTint) == "function" then br, bg, bb = darkTint(general, br, bg, bb) end
+    end
+
+    if colorMode == "match_health" then
+        local darkTint = MSUF.Bars and MSUF.Bars._DarkTint
+        if type(darkTint) == "function" then br, bg, bb = darkTint(general, hr, hg, hb)
+        else br, bg, bb = hr, hg, hb end
+    elseif colorMode == "class" then
+        if classToken then br, bg, bb = classR, classG, classB end
+    elseif colorMode == "health_gradient" then
+        br, bg, bb = gradientR or br, gradientG or bg, gradientB or bb
+    end
+
+    local backgroundAlpha = tonumber(player.hpBgAlpha)
+    if backgroundAlpha == nil then
+        local percent = tonumber(bars.barBackgroundAlpha)
+        backgroundAlpha = percent and (percent / 100) or tonumber(general.barBackgroundAlpha) or 0.9
+    end
+    backgroundAlpha = max(0, min(1, backgroundAlpha)) * max(0, min(1, tonumber(tintAlpha) or 1))
+    local foregroundAlpha = max(0, min(1, tonumber(player.hpBarAlpha) or 1))
+    local foregroundTexture = type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()
+        or "Interface\\Buttons\\WHITE8X8"
+    local backgroundTexture = type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()
+        or foregroundTexture
+
+    if bar.SetMinMaxValues then bar:SetMinMaxValues(0, 1) end
+    if bar.SetValue then bar:SetValue(pct) end
+    if bar.SetStatusBarTexture then bar:SetStatusBarTexture(foregroundTexture) end
+    if bar.SetStatusBarColor then bar:SetStatusBarColor(hr, hg, hb, 1) end
+    local fillTexture = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+    if fillTexture and fillTexture.SetAlpha then fillTexture:SetAlpha(foregroundAlpha) end
+    if background.SetTexture then background:SetTexture(backgroundTexture) end
+    if background.SetVertexColor then background:SetVertexColor(br, bg, bb, backgroundAlpha) end
+
+    local fillMode = M.ColorsBackgroundMode.GetFill()
+    if backgroundBar.SetMinMaxValues then backgroundBar:SetMinMaxValues(0, 1) end
+    if backgroundBar.SetReverseFill then backgroundBar:SetReverseFill(fillMode == "missing") end
+    local missingValue = fillMode == "missing" and (1 - pct) or 1
+    if backgroundBar.SetValue then backgroundBar:SetValue(missingValue) end
+
+    if preview.percent and preview.percent.SetText then preview.percent:SetText(floor((pct * 100) + 0.5) .. "%") end
+    if preview.mode and preview.mode.SetText then
+        local fillLabel = fillMode == "missing" and "Missing health only" or "Full bar"
+        local colorLabel = colorMode == "match_health" and "Match health bar"
+            or colorMode == "class" and "Class color"
+            or colorMode == "health_gradient" and "Health gradient" or "Custom tint"
+        local translate = M.TranslateText or M.Tr
+        if type(translate) == "function" then fillLabel, colorLabel = translate(fillLabel), translate(colorLabel) end
+        preview.mode:SetText(fillLabel .. "  |  " .. colorLabel)
+    end
+    preview.resolvedFillMode, preview.resolvedColorMode = fillMode, colorMode
+    local resolved = preview.resolvedBackground or {}
+    resolved[1], resolved[2], resolved[3], resolved[4] = br, bg, bb, backgroundAlpha
+    preview.resolvedBackground = resolved
+    return true
 end
 local function ApiRGB(name, dr, dg, db, ...)
     local fn = ColorAPI()[name]
@@ -908,9 +1109,13 @@ local function BuildGroupFrameColors(ctx, b)
         function(value) SetGroupValue("healthColorMode", value or "CLASS", "MSUF2_GROUP_HEALTH_FALLBACK", "visual") end,
         Meta("group_frame.health.fallback_mode"))
 
+    local RefreshStateTintControls = M.RefreshProxy()
     ValueSwitchAt(ctx, state, "Dead / Offline Background", 12, -10, min(320, cardW - 32),
         function() return GroupBool("deadBgEnabled", false) end,
-        function(value) SetGroupValue("deadBgEnabled", value and true or false, "MSUF2_GROUP_DEAD_BG", "visual") end,
+        function(value)
+            SetGroupValue("deadBgEnabled", value and true or false, "MSUF2_GROUP_DEAD_BG", "visual")
+            RefreshStateTintControls()
+        end,
         Meta("group_frame.state.dead_offline.enabled"))
     local deadColor = GroupColorAt(ctx, state, "Background color", 12, -48, "deadBg", 0.60, 0.05, 0.05)
     local deadAlpha = GroupAlphaSlider(ctx, state, "Dead/offline opacity", 12, -86, max(220, cardW - 58), "deadBgA", 0.90)
@@ -926,13 +1131,13 @@ local function BuildGroupFrameColors(ctx, b)
     GroupColorAt(ctx, highlights, "Group Border Color", 12, -86, "groupBorder", 0.38, 0.68, 1.00)
     GroupAlphaSlider(ctx, highlights, "Group border opacity", 12, -128, max(220, cardW - 58), "groupBorderA", 0.95)
     GroupColorAt(ctx, highlights, "Corner aggro color", 12, -174, "ciAggroColor", 1.00, 0.55, 0.00)
-    M.BindGateGroup(ctx, nil, {
+    RefreshStateTintControls = RefreshStateTintControls(M.BindGateGroup(ctx, nil, {
         { controls = healthColor, on = function()
             local current = GroupBarMode()
             return current == "dark" or current == "unified" or current == "CUSTOM"
         end },
         { controls = { deadColor, deadAlpha, offline }, on = function() return GroupBool("deadBgEnabled", false) end },
-    })
+    }))
 end
 local function NPCColorAt(ctx, section, row, x, y, apply)
     return ColorValueAt(ctx, section, row.label, x, y,
@@ -1720,11 +1925,17 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         ColorValueAt(ctx, classColors, COLOR_DATA.CLASS_LABELS[token] or token, 12 + col * classColW, -34 - row * 36,
             function() return ClassColorRGB(token) end,
             function(r, g, c)
-                if not ApiCall("SetClassColor", token, r, g, c) then ApplyUnitframeColorWithReload() end
+                if ApiCall("SetClassColor", token, r, g, c) then
+                    M.RefreshActiveHealthBackgroundInlinePreview()
+                else
+                    ApplyUnitframeColorWithReload()
+                end
             end, classLabelW, 44, Meta("class_bar.token." .. tostring(token)), { cdr, cdg, cdb })
     end
     CH.ButtonAt(classColors, "Reset all class colors", 12, classResetY, 190, function()
-        if not ApiCall("ResetAllClassColors") then
+        if ApiCall("ResetAllClassColors") then
+            M.RefreshActiveHealthBackgroundInlinePreview()
+        else
             DB().classColors = nil
             ApplyUnitframeColorWithReload()
         end
@@ -2045,7 +2256,11 @@ local function ContextClassColor(context)
     local target = ContextTarget("unit.class.current", (COLOR_DATA.CLASS_LABELS[token] or token) .. " class color",
         function() return ClassColorRGB(token) end,
         function(r, g, b)
-            if not ApiCall("SetClassColor", token, r, g, b) then ApplyUnitframeColorWithReload() end
+            if ApiCall("SetClassColor", token, r, g, b) then
+                M.RefreshActiveHealthBackgroundInlinePreview()
+            else
+                ApplyUnitframeColorWithReload()
+            end
         end,
         { historyLabel = "Class color" })
     local state = ContextStoredState(DB, { "classColors" }, ApplyUnitframeColorWithReload)
@@ -2260,6 +2475,20 @@ FixedContextFactory("health.unified", function() return ContextGeneral("health.u
 FixedContextFactory("health.gradient.low", function() return ContextGeneral("health.gradient.low", "Health gradient - low", "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload) end)
 FixedContextFactory("health.gradient.mid", function() return ContextGeneral("health.gradient.mid", "Health gradient - middle", "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload) end)
 FixedContextFactory("health.gradient.high", function() return ContextGeneral("health.gradient.high", "Health gradient - high", "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload) end)
+ContextFactory("health.background.current", function(context)
+    local mode = M.ColorsBackgroundMode.GetColor()
+    if mode == "health_gradient" then
+        return {
+            CONTEXT_COLOR_FACTORIES["health.gradient.low"](),
+            CONTEXT_COLOR_FACTORIES["health.gradient.mid"](),
+            CONTEXT_COLOR_FACTORIES["health.gradient.high"](),
+        }
+    end
+    if mode ~= "custom" then return nil end
+    local id = context and context.group == true and "group.background" or "bar.background_tint"
+    local factory = CONTEXT_COLOR_FACTORIES[id]
+    return type(factory) == "function" and factory(context) or nil
+end)
 ContextFactory("health.current", function(context)
     local mode = ContextHealthMode(context)
     if mode == "gradient" then
@@ -2826,40 +3055,100 @@ end
 
 local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     if part ~= "appearance" then
-    local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 226, false)
-    LabelAt(background, "Tint applies in all bar modes, including Dark Mode.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
-    LabelAt(background, "Opacity is multiplied by Unitframes > Opacity > Background. Set both to 100% for a solid background.", 12, -24, 660, "GameFontHighlightSmall", T.colors.muted)
-    ApiOrGeneralColorAt(ctx, background, "Bar background tint", 12, -46, "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0, ApplyUnitframeColorWithReload)
-    ValueToggleAt(ctx, background, "Background follows HP color", 12, -86,
-        function() return ApiValue("GetBarBgMatchHP", function() return G().barBgMatchHPColor == true end) end,
-        function(v)
-            if not ApiCall("SetBarBgMatchHP", v) then
-                G().barBgMatchHPColor = v and true or false
-                if v then G().barBgClassColor = false end
-                ApplyUnitframeColorWithReload()
+    local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 332, false)
+    LabelAt(background, "Fill and color mode affect only the health background; foreground health coloring stays independent.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Texture comes from Bars; preview uses Player background opacity multiplied by tint opacity.", 12, -24, 660, "GameFontHighlightSmall", T.colors.muted)
+    local refreshBackgroundPreview
+    local function SetBackgroundFill(value)
+        M.ColorsBackgroundMode.SetFill(value)
+        if refreshBackgroundPreview then refreshBackgroundPreview() end
+    end
+    local function SetBackgroundColorMode(value)
+        M.ColorsBackgroundMode.SetColor(value)
+        if refreshBackgroundPreview then refreshBackgroundPreview() end
+    end
+    ValueDropdownAt(ctx, background, "Background Fill", 12, -46,
+        ValueTextPairs "full=Full bar|missing=Missing health only", 300,
+        M.ColorsBackgroundMode.GetFill, SetBackgroundFill, Meta("background.fill_mode"))
+    ValueDropdownAt(ctx, background, "Background Color", 340, -46,
+        ValueTextPairs "custom=Custom tint|match_health=Match health bar|class=Class color|health_gradient=Health gradient", 320,
+        M.ColorsBackgroundMode.GetColor, SetBackgroundColorMode, Meta("background.color_mode"))
+
+    local previewWidth = max(300, min(648, (background._msuf2Width or ctx.width or 720) - 24))
+    local previewPanel = T.Panel(background, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.92 }, T.colors.borderSoft)
+    previewPanel:SetPoint("TOPLEFT", background, "TOPLEFT", 12, -104)
+    previewPanel:SetSize(previewWidth, 66)
+    local previewLabel = T.Font(previewPanel, "GameFontNormalSmall", TrText("Preview"), T.colors.muted)
+    previewLabel:SetPoint("TOPLEFT", previewPanel, "TOPLEFT", 12, -8)
+    local previewMode = T.Font(previewPanel, "GameFontHighlightSmall", "", T.colors.muted)
+    previewMode:SetPoint("TOPRIGHT", previewPanel, "TOPRIGHT", -12, -8)
+    previewMode:SetJustifyH("RIGHT")
+    local previewTrack = T.Panel(previewPanel, nil, { 0.006, 0.012, 0.024, 1 }, T.colors.borderSoft)
+    previewTrack:SetPoint("TOPLEFT", previewPanel, "TOPLEFT", 12, -28)
+    previewTrack:SetPoint("TOPRIGHT", previewPanel, "TOPRIGHT", -12, -28)
+    previewTrack:SetHeight(22)
+    local previewBackgroundBar = CreateFrame("StatusBar", nil, previewTrack)
+    previewBackgroundBar:SetPoint("TOPLEFT", previewTrack, "TOPLEFT", 1, -1)
+    previewBackgroundBar:SetPoint("BOTTOMRIGHT", previewTrack, "BOTTOMRIGHT", -1, 1)
+    previewBackgroundBar:SetMinMaxValues(0, 1)
+    previewBackgroundBar:SetValue(1)
+    previewBackgroundBar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    previewBackgroundBar:EnableMouse(false)
+    if previewBackgroundBar.SetFrameLevel and previewTrack.GetFrameLevel then
+        previewBackgroundBar:SetFrameLevel(previewTrack:GetFrameLevel() or 0)
+    end
+    local previewBackground = previewBackgroundBar:GetStatusBarTexture()
+    if previewBackground.SetDrawLayer then previewBackground:SetDrawLayer("BACKGROUND", -7) end
+    local previewBar = CreateFrame("StatusBar", nil, previewTrack)
+    previewBar:SetPoint("TOPLEFT", previewTrack, "TOPLEFT", 1, -1)
+    previewBar:SetPoint("BOTTOMRIGHT", previewTrack, "BOTTOMRIGHT", -1, 1)
+    previewBar:SetMinMaxValues(0, 1)
+    previewBar:SetValue(0.62)
+    previewBar:EnableMouse(false)
+    if previewBar.SetFrameLevel and previewBackgroundBar.GetFrameLevel then
+        previewBar:SetFrameLevel((previewBackgroundBar:GetFrameLevel() or 0) + 1)
+    end
+    local previewPercent = T.Font(previewBar, "GameFontHighlightSmall", "62%", { 1, 1, 1, 0.95 })
+    previewPercent:SetPoint("CENTER", previewBar, "CENTER", 0, 0)
+    local previewState = {
+        bar = previewBar, backgroundBar = previewBackgroundBar, background = previewBackground,
+        percent = previewPercent, mode = previewMode, healthFraction = 0.62,
+    }
+    refreshBackgroundPreview = function()
+        if previewPanel.IsVisible and not previewPanel:IsVisible() then return false end
+        return M.RefreshHealthBackgroundInlinePreview(previewState)
+    end
+    local function ApplyBackgroundColorPreview()
+        ApplyColors()
+        refreshBackgroundPreview()
+    end
+    ColorValueAt(ctx, background, "Bar background tint", 12, -188,
+        function() return ApiRGB("GetClassBarBgColor", 0, 0, 0) end,
+        function(r, g, c, a)
+            local nextAlpha = type(a) == "number" and a or nil
+            local ok = nextAlpha ~= nil and ApiCall("SetClassBarBgColor", r, g, c, nextAlpha)
+                or ApiCall("SetClassBarBgColor", r, g, c)
+            if not ok then
+                SetGeneralRGB("classBarBg", r, g, c, nextAlpha)
+                ApplyColors()
             end
+            refreshBackgroundPreview()
         end,
-        Meta("background.follow_health_color"))
-    ValueToggleAt(ctx, background, "Health background follows class color", 12, -114,
-        function() return ApiValue("GetBarBgClassColor", function() return G().barBgClassColor == true end) end,
-        function(v)
-            if not ApiCall("SetBarBgClassColor", v) then
-                G().barBgClassColor = v and true or false
-                if v then G().barBgMatchHPColor = false end
-                ApplyUnitframeColorWithReload()
-            end
-        end,
-        Meta("background.follow_class_color"))
-    ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -142,
+        nil, nil, Meta("general.classBarBg"), { 0, 0, 0 })
+    ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -228,
         function() return G().darkBgCustomColor == true end,
-        function(v) G().darkBgCustomColor = v and true or false; ApplyUnitframeColorWithReload() end,
+        function(v) G().darkBgCustomColor = v and true or false; ApplyBackgroundColorPreview() end,
         Meta("background.dark_mode_custom_color"))
-    CH.ButtonAt(background, "Reset to black", 12, -184, 140, function()
+    CH.ButtonAt(background, "Reset to black", 12, -274, 140, function()
         if not ApiCall("ResetClassBarBgColor") then
             ClearRGB(G(), "classBarBg")
             ApplyUnitframeColorWithReload()
         end
+        refreshBackgroundPreview()
     end, "background.reset_to_black")
+    if M.TrackCollapsibleRefresh then M.TrackCollapsibleRefresh(ctx, background, refreshBackgroundPreview)
+    elseif M.TrackRefresh then M.TrackRefresh(ctx, refreshBackgroundPreview) end
+    if ctx.entry then ctx.entry._msuf2HealthBackgroundInlinePreviewRefresh = refreshBackgroundPreview end
     end
     if part == "background" then return end
     local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 290, true)
@@ -3468,6 +3757,7 @@ local function BuildColors(ctx)
     M.ColorsOnPainterCategory = nil
     M.ColorsSetPainterCategory = nil
     M.ColorsEnsureCategoryBuilt = nil
+    if ctx and ctx.entry then ctx.entry._msuf2HealthBackgroundInlinePreviewRefresh = nil end
     b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
     BuildColorPainter(ctx, b)
 
@@ -3632,4 +3922,4 @@ local function BuildColors(ctx)
     b:RelayoutCollapsibles()
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 21 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 23 })

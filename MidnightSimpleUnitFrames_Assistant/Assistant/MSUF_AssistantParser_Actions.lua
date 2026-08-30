@@ -37,6 +37,7 @@ local TextMatchesAlias = P.TextMatchesAlias
 local ExtractColor = P.ExtractColor
 local DetectDirection = P.DetectDirection
 local PageForText = P.PageForText
+local AuraWorkspaceNavigationArgs = P.AuraWorkspaceNavigationArgs
 local WantsFullUnitCopy = P.WantsFullUnitCopy
 local CopyScopesForText = P.CopyScopesForText
 local WantsFullGroupCopy = P.WantsFullGroupCopy
@@ -1847,10 +1848,16 @@ local function ParseOpen(text, raw)
     local page, label = PageForText(text)
     if not page then return nil end
     local action = Registry and Registry:GetAction("open_page")
+    local args = { page = page, label = label, query = raw or text }
+    if type(AuraWorkspaceNavigationArgs) == "function" then
+        local scope, lane = AuraWorkspaceNavigationArgs(page, text)
+        if scope then args.scope = scope end
+        if lane then args.lane = lane end
+    end
     return action and {
         kind = "action",
         action = action,
-        args = { page = page, label = label, query = raw or text },
+        args = args,
         label = "Open " .. label,
         summary = "Navigates the Dashboard.",
     } or nil

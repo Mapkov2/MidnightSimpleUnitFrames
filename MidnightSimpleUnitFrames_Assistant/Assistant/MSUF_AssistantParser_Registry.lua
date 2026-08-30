@@ -4569,7 +4569,7 @@ P.ParseGroupColumnLayoutShortcut = function(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "I found multiple matches for that layout wording, but MSUF does not expose a columns setting for Boss or ordinary unit frames. Did you mean Boss Frame spacing/size, or Group Frames > Layout > Max Columns? I did not change anything.",
+            text = "I found multiple matches for that layout wording, but MSUF does not expose a columns setting for Boss or ordinary unit frames. Did you mean Boss Frame spacing/size, or Frames > Party/Raid Frames > Layout > Max Columns? I did not change anything.",
             summary = "Separates unit-frame layout from group-frame column controls without inheriting the visible Party scope.",
         }
     end

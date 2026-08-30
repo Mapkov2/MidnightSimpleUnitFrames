@@ -1670,21 +1670,56 @@ local function ParseGlobalBarBackgroundFastShortcut(normalized, raw)
 
     local key
     local value
-    if ContainsAny(normalized, P.RootPhrases[223]) then
+    if ContainsAny(normalized, P.RootPhrases[821]) then
+        local enabled = DetectBoolean(normalized)
+        key = "general.barBgFillMode"
+        if ContainsAny(normalized, P.RootPhrases[822]) then
+            value = enabled == false and "full" or "missing"
+        elseif ContainsAny(normalized, P.RootPhrases[823]) then
+            value = enabled == false and "missing" or "full"
+        else
+            return nil
+        end
+    elseif ContainsAny(normalized, P.RootPhrases[224]) then
+        key = "general.barBgColorMode"
+        value = DetectBoolean(normalized)
+        local setting = A.Registry and A.Registry:GetSetting(key)
+        if value == false then
+            local current = setting and type(setting.get) == "function" and setting.get() or "custom"
+            value = current == "match_health" and "custom" or current
+        else
+            value = "match_health"
+        end
+    elseif ContainsAny(normalized, P.RootPhrases[225]) then
+        key = "general.barBgColorMode"
+        value = DetectBoolean(normalized)
+        local setting = A.Registry and A.Registry:GetSetting(key)
+        if value == false then
+            local current = setting and type(setting.get) == "function" and setting.get() or "custom"
+            value = current == "class" and "custom" or current
+        else
+            value = "class"
+        end
+    elseif ContainsAny(normalized, P.RootPhrases[824]) then
+        key = "general.barBgColorMode"
+        if ContainsAny(normalized, P.RootPhrases[828]) then
+            value = "health_gradient"
+        elseif ContainsAny(normalized, P.RootPhrases[826]) then
+            value = "match_health"
+        elseif ContainsAny(normalized, P.RootPhrases[827]) then
+            value = "class"
+        elseif ContainsAny(normalized, P.RootPhrases[825]) then
+            value = "custom"
+        else
+            return nil
+        end
+    elseif ContainsAny(normalized, P.RootPhrases[223]) then
         key = "general.classBarBgColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
         local r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
-    elseif ContainsAny(normalized, P.RootPhrases[224]) then
-        key = "general.barBgMatchHPColor"
-        value = DetectBoolean(normalized)
-        if value == nil then value = true end
-    elseif ContainsAny(normalized, P.RootPhrases[225]) then
-        key = "general.barBgClassColor"
-        value = DetectBoolean(normalized)
-        if value == nil then value = true end
     else
         return nil
     end
@@ -5631,7 +5666,7 @@ local function ParseHumanSafetyGuidanceShortcut(normalized)
         examples = "open party frames; set party buff count to 4; set party frame spacing to 8; turn on party range fade"
     elseif ContainsAny(normalized, P.RootPhrases[615]) then
         area = "auras"
-        examples = "open aura filters; set target buff icon count to 8; set target debuff filter to RAID; set party buff icon size to 24"
+        examples = "open target auras; open group auras; set target buff icon count to 8; set target debuff filter to RAID; set party buff icon size to 24"
     elseif ContainsAny(normalized, P.RootPhrases[616]) then
         area = "bars"
         examples = "open bars; turn on gradient from right for all unitframes; set gradient strength to 0.45; set bar texture to Minimalist"
@@ -5855,11 +5890,18 @@ function A.ParseSimpleChange(text, ctxOverride)
     -- owner before exact aliases and text visibility in compound fragments.
     local nameDots = P.ParseNameShorteningDotsShortcut
         and P.ParseNameShorteningDotsShortcut(normalized, ctx, raw)
+    -- The custom-anchor picker is an explicit workflow, not text for the
+    -- Custom Anchor Frame field. Keep the immediate mutation path in parity
+    -- with A.Parse so "start player custom anchor picker" opens the picker
+    -- instead of storing the literal word "picker" as a frame name.
+    local customAnchorWorkflow = P.ParseCustomAnchorWorkflow
+        and P.ParseCustomAnchorWorkflow(normalized)
     -- An exact full registry label is stronger evidence than a broad topical
     -- shortcut.  Resolve it first so words such as "anchor", "name", "scale",
     -- or "power text" cannot redirect a generated or human exact-label command
     -- to the parent frame control.
-    local exactFullAlias = (P.ParseTargetGateLoadConditionShortcut and P.ParseTargetGateLoadConditionShortcut(normalized))
+    local exactFullAlias = customAnchorWorkflow
+        or (P.ParseTargetGateLoadConditionShortcut and P.ParseTargetGateLoadConditionShortcut(normalized))
         or (P.ParseRegistryExactAliasShortcut
             and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true }))
     if normalized:find(" text anchor ", 1, true) and not normalized:find("custom value", 1, true) then exactFullAlias = nil end
@@ -8136,9 +8178,10 @@ function A.Parse(text, ctxOverride)
                 label = args.open == false and "Close changelog" or "Toggle changelog"
                 summary = "Changes whether the Dashboard changelog is open."
             else
-                actionKey = "open_dashboard_panel"
+                actionKey = "open_changelog"
+                args.panel = nil
                 label = "Open changelog"
-                summary = "Opens the Dashboard changelog."
+                summary = "Opens the full See New Features page."
             end
         elseif P.ContainsAny(normalized, P.RootPhrases[752]) then
             if P.ContainsAny(normalized, P.RootPhrases[753]) then

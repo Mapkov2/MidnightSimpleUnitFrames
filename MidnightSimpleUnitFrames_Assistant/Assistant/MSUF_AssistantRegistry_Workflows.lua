@@ -35,6 +35,29 @@ local function SafeContext()
     return A.context
 end
 
+local PENDING_FLOW_MAX_AGE_TURNS = 1
+
+local function ContextTurn(ctx)
+    return tonumber(ctx and (ctx.turnSerial or ctx.lastTurnSerial)) or 0
+end
+
+local function MarkContextFlow(ctx)
+    if type(ctx) == "table" then ctx.pendingFlowTurn = ContextTurn(ctx) end
+end
+
+local function ClearContextFlow(ctx)
+    if type(ctx) ~= "table" then return end
+    ctx.pendingFlow = nil
+    ctx.pendingFlowTurn = nil
+end
+
+local function SerializedFlowIsFresh(ctx)
+    local createdTurn = tonumber(ctx and ctx.pendingFlowTurn)
+    if createdTurn == nil then return false end
+    local age = ContextTurn(ctx) - createdTurn
+    return age >= 0 and age <= PENDING_FLOW_MAX_AGE_TURNS
+end
+
 local function NativeGuidedTourIsActive()
     local tour = MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
     if type(tour) ~= "table" or type(tour.IsActive) ~= "function" then return false end
@@ -44,7 +67,10 @@ end
 
 local function SetContextFlow(flow)
     local ctx = SafeContext()
-    if ctx then ctx.pendingFlow = flow end
+    if ctx then
+        ctx.pendingFlow = flow
+        MarkContextFlow(ctx)
+    end
 end
 
 local function SerializablePendingFlow(kind, data)
@@ -73,13 +99,27 @@ end
 function A.ClearPendingFlow()
     A.pendingFlow = nil
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingFlow = nil end
+    ClearContextFlow(ctx)
+end
+
+function A.TouchPendingFlow()
+    local ctx = A.GetContext and A.GetContext()
+    if type(ctx) == "table" and (type(A.pendingFlow) == "table" or type(ctx.pendingFlow) == "table") then
+        MarkContextFlow(ctx)
+        return true
+    end
+    return false
 end
 
 function A.Workflow.PendingFlow()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingFlow) == "table" then return A.pendingFlow end
     local ctx = A.GetContext and A.GetContext()
     if type(ctx) == "table" and type(ctx.pendingFlow) == "table" then
+        if not SerializedFlowIsFresh(ctx) then
+            ClearContextFlow(ctx)
+            return nil
+        end
         A.pendingFlow = ctx.pendingFlow
         return A.pendingFlow
     end

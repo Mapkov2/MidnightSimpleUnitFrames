@@ -1112,7 +1112,8 @@ local function FailurePageHints(query)
         local detail = "Choose " .. tostring(scope or "the intended frame") .. " as the editing scope, then look for " .. control .. "."
         AddFailurePageHint(hints, seen, page, pageLabel, detail)
         if FailureContainsAny(normalized, { " filter ", " blacklist ", " whitelist ", " hide ", " show only " }) then
-            AddFailurePageHint(hints, seen, "auras3_filters", "Aura Filters", "Check the relevant aura filter or list for " .. tostring(scope or "that frame") .. ".")
+            AddFailurePageHint(hints, seen, page, pageLabel,
+                "Check the relevant Buff, Debuff, or Custom Aura filter on " .. tostring(scope or "that frame") .. ".")
         end
     elseif FailureContainsAny(normalized, { " cast bar ", " castbar ", " casting bar " }) then
         AddFailurePageHint(hints, seen, "opt_castbar", "Cast Bars", "Look for the " .. tostring(scope or "matching frame") .. " cast-bar control.")
@@ -1308,12 +1309,13 @@ function AP.CompleteAssistantJob(job, result)
     return ok
 end
 
-function A.CancelJobs(match, reason)
+function A.CancelJobs(match, reason, opts)
     local jobs = A._assistantJobs
     if type(jobs) ~= "table" or #jobs == 0 then
         ClearCombatDeferredJobsIfIdle()
         return 0
     end
+    opts = type(opts) == "table" and opts or {}
     local removed = 0
     for i = #jobs, 1, -1 do
         local job = jobs[i]
@@ -1321,18 +1323,67 @@ function A.CancelJobs(match, reason)
             job.cancelled = true
             job.cancelReason = tostring(reason or "cancelled")
             table.remove(jobs, i)
-            AP.CompleteAssistantJob(job, {
-                text = "Stopped. I cancelled the assistant work that was still running.",
-                status = "info",
-                summary = "Cancelled running Assistant work.",
-                cancelled = true,
-                suppressAssistantRecord = true,
-            })
+            if opts.suppressCallbacks == true then
+                -- A profile epoch boundary must not execute a callback captured
+                -- by the old profile merely to announce its cancellation.
+                job.callback = nil
+                job._callbackCompleted = true
+            else
+                AP.CompleteAssistantJob(job, {
+                    text = "Stopped. I cancelled the assistant work that was still running.",
+                    status = "info",
+                    summary = "Cancelled running Assistant work.",
+                    cancelled = true,
+                    suppressAssistantRecord = true,
+                })
+            end
             removed = removed + 1
         end
     end
     if removed > 0 then ClearCombatDeferredJobsIfIdle() end
     return removed
+end
+
+local PROFILE_BOUND_EXECUTABLE_JOB_LABELS = {
+    ["assistant.submit"] = true,
+    ["assistant.queue.flush"] = true,
+    ["assistant.broad_apply"] = true,
+}
+
+function A.CancelProfileBoundExecutableWork(reason)
+    reason = tostring(reason or "profile-boundary")
+    local current = A._assistantCurrentJob
+    if type(A.CancelPendingBroadApplyForProfileBoundary) == "function" then
+        A.CancelPendingBroadApplyForProfileBoundary()
+    end
+    local queuedRemoved = 0
+    if type(A.ClearQueuedPlansForProfileBoundary) == "function" then
+        queuedRemoved = tonumber((A.ClearQueuedPlansForProfileBoundary(reason))) or 0
+    elseif type(A.queuedPlans) == "table" then
+        queuedRemoved = #A.queuedPlans
+        A.queuedPlans = {}
+        A._queueFlushRunning = nil
+    end
+
+    local jobsRemoved = 0
+    if type(A.CancelJobs) == "function" then
+        jobsRemoved = A.CancelJobs(function(job)
+            -- The explicit profile-owner handoff can run re-entrantly when the
+            -- currently executing Assistant action is the profile switch itself.
+            -- Let that one step return its honest result; external/spec switches
+            -- occur between job slices, where _assistantCurrentJob is nil and
+            -- every executable continuation is cancelled here.
+            return job ~= current
+                and PROFILE_BOUND_EXECUTABLE_JOB_LABELS[tostring(job and job.label or "")] == true
+        end, reason, { suppressCallbacks = true })
+    end
+    if jobsRemoved > 0 and type(A.SetBusy) == "function" then A.SetBusy(false) end
+    A._profileBoundaryWorkCancellation = (queuedRemoved > 0 or jobsRemoved > 0) and {
+        reason = reason,
+        queuedPlans = queuedRemoved,
+        jobs = jobsRemoved,
+    } or nil
+    return queuedRemoved, jobsRemoved
 end
 
 function ScheduleJobPump()
@@ -1576,6 +1627,11 @@ function A.SetMenuRuntimeActive(active, reason)
         A._refreshPending = nil
         return false
     end
+
+    -- A combat-time or external profile swap intentionally skips the explicit
+    -- Assistant handoff. Rebind at the first safe menu activation, before any
+    -- suspended callback, job, broad apply, or queue can resume against it.
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
 
     if type(A.ResumePendingBroadApply) == "function" then A.ResumePendingBroadApply() end
     ResumeAfterCombatCallbacks()
@@ -1965,6 +2021,33 @@ local function ChoiceText(choices)
 end
 A._ChoiceTextForTest = ChoiceText
 
+-- Executable conversation state may survive a UI rebuild, but it must not
+-- regain write authority after unrelated turns.  A state created on turn N is
+-- still valid for the player's immediately following reply (turn N + 1),
+-- including that reply after /reload.  Older serialized state fails closed.
+function AP.PendingContextTurn(ctx)
+    return tonumber(ctx and (ctx.turnSerial or ctx.lastTurnSerial)) or 0
+end
+
+function AP.MarkPendingContextState(ctx, field)
+    if type(ctx) ~= "table" then return end
+    ctx[field .. "Turn"] = AP.PendingContextTurn(ctx)
+end
+
+function AP.ClearPendingContextState(ctx, field)
+    if type(ctx) ~= "table" then return end
+    ctx[field] = nil
+    ctx[field .. "Turn"] = nil
+end
+
+function AP.PendingContextStateIsFresh(ctx, field)
+    if type(ctx) ~= "table" then return false end
+    local createdTurn = tonumber(ctx[field .. "Turn"])
+    if createdTurn == nil then return false end
+    local age = AP.PendingContextTurn(ctx) - createdTurn
+    return age >= 0 and age <= 1
+end
+
 local function SerializeChoices(choices)
     local out = {}
     for i = 1, #(choices or {}) do
@@ -2017,6 +2100,12 @@ local function SerializeChoices(choices)
         }
     end
     return out
+end
+
+function AP.StoreSerializedPendingChoices(ctx, field, choices)
+    if type(ctx) ~= "table" then return end
+    ctx[field] = SerializeChoices(choices)
+    AP.MarkPendingContextState(ctx, field)
 end
 
 local function RehydrateChoices(serialized)
@@ -2098,7 +2187,7 @@ end
 function AP.ClearPendingCandidates()
     A.pendingCandidates = nil
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingCandidates = nil end
+    AP.ClearPendingContextState(ctx, "pendingCandidates")
 end
 
 function AP.SetPendingCandidates(choices)
@@ -2108,34 +2197,44 @@ function AP.SetPendingCandidates(choices)
     end
     A.pendingCandidates = choices
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingCandidates = SerializeChoices(choices) end
+    AP.StoreSerializedPendingChoices(ctx, "pendingCandidates", choices)
     return choices
 end
 
 function AP.CurrentPendingCandidates()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingCandidates) == "table" and #A.pendingCandidates > 0 then return A.pendingCandidates end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.pendingCandidates) == "table" then
+        if not AP.PendingContextStateIsFresh(ctx, "pendingCandidates") then
+            AP.ClearPendingContextState(ctx, "pendingCandidates")
+            return nil
+        end
         local candidates = RehydrateChoices(ctx.pendingCandidates)
         if #candidates > 0 then
             A.pendingCandidates = candidates
             return candidates
         end
-        ctx.pendingCandidates = nil
+        AP.ClearPendingContextState(ctx, "pendingCandidates")
     end
     return nil
 end
 
 local function CurrentPendingChoices()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then return A.pendingChoices end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.pendingChoices) == "table" then
+        if not AP.PendingContextStateIsFresh(ctx, "pendingChoices") then
+            AP.ClearPendingContextState(ctx, "pendingChoices")
+            return nil
+        end
         local choices = RehydrateChoices(ctx.pendingChoices)
         if #choices > 0 then
             A.pendingChoices = choices
             return choices
         end
-        ctx.pendingChoices = nil
+        AP.ClearPendingContextState(ctx, "pendingChoices")
     end
     return nil
 end
@@ -2228,7 +2327,7 @@ end
 local function ClearSelectedPendingResult()
     A.pendingSelectedResult = nil
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingSelectedResult = nil end
+    AP.ClearPendingContextState(ctx, "pendingSelectedResult")
 end
 
 local function SetSelectedPendingResult(item, index)
@@ -2240,20 +2339,32 @@ local function SetSelectedPendingResult(item, index)
     selected.index = tonumber(index)
     A.pendingSelectedResult = selected
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingSelectedResult = SerializeResultSelection(selected, selected.index) end
+    if ctx then
+        ctx.pendingSelectedResult = SerializeResultSelection(selected, selected.index)
+        AP.MarkPendingContextState(ctx, "pendingSelectedResult")
+        -- Selecting a result starts a new adjacent referent turn.  Keep the
+        -- result list alive for one reply so "set it to ..." can resolve the
+        -- exact selected control without reviving an older search later.
+        if type(ctx.pendingResults) == "table" then AP.MarkPendingContextState(ctx, "pendingResults") end
+    end
     return selected
 end
 
 local function CurrentSelectedPendingResult()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingSelectedResult) == "table" then return A.pendingSelectedResult end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.pendingSelectedResult) == "table" then
+        if not AP.PendingContextStateIsFresh(ctx, "pendingSelectedResult") then
+            AP.ClearPendingContextState(ctx, "pendingSelectedResult")
+            return nil
+        end
         local selected = RehydrateResultSelection(ctx.pendingSelectedResult)
         if selected then
             A.pendingSelectedResult = selected
             return selected
         end
-        ctx.pendingSelectedResult = nil
+        AP.ClearPendingContextState(ctx, "pendingSelectedResult")
     end
     return nil
 end
@@ -2266,7 +2377,7 @@ local function ClearPendingResults()
     A.pendingResults = nil
     ClearSelectedPendingResult()
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingResults = nil end
+    AP.ClearPendingContextState(ctx, "pendingResults")
 end
 
 function A.SetPendingResults(results)
@@ -2278,20 +2389,29 @@ function A.SetPendingResults(results)
     ClearSelectedPendingResult()
     A.pendingResults = hydrated
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingResults = SerializeResults(hydrated) end
+    if ctx then
+        ctx.pendingResults = SerializeResults(hydrated)
+        AP.MarkPendingContextState(ctx, "pendingResults")
+    end
     return hydrated
 end
 
 local function CurrentPendingResults()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingResults) == "table" and #A.pendingResults > 0 then return A.pendingResults end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.pendingResults) == "table" then
+        if not AP.PendingContextStateIsFresh(ctx, "pendingResults") then
+            AP.ClearPendingContextState(ctx, "pendingResults")
+            ClearSelectedPendingResult()
+            return nil
+        end
         local results = RehydrateResults(ctx.pendingResults)
         if #results > 0 then
             A.pendingResults = results
             return results
         end
-        ctx.pendingResults = nil
+        AP.ClearPendingContextState(ctx, "pendingResults")
     end
     return nil
 end
@@ -2739,7 +2859,7 @@ ClearPendingChoices = function()
     A.pendingChoices = nil
     AP.ClearPendingCandidates()
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingChoices = nil end
+    AP.ClearPendingContextState(ctx, "pendingChoices")
 end
 
 function A.SetPendingChoices(choices)
@@ -2750,7 +2870,7 @@ function A.SetPendingChoices(choices)
     A.pendingChoices = choices
     AP.SetPendingCandidates(choices)
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
+    AP.StoreSerializedPendingChoices(ctx, "pendingChoices", A.pendingChoices)
     return ChoiceText(A.pendingChoices)
 end
 
@@ -2958,50 +3078,53 @@ local function FindExactDisplayedChoice(text, choices)
     return nil
 end
 
-local PENDING_PAGE_LABEL_OVERRIDES = {
-    home = "Dashboard",
-    profiles = "Profiles",
-    gameplay = "Gameplay",
-    classpower = "Class Resources",
-    modules = "Modules",
-    search = "Search",
-    opt_castbar = "Cast Bars",
-    opt_bars = "Bars",
-    opt_colors = "Colors",
-    opt_fonts = "Fonts",
-    opt_misc = "Miscellaneous",
-    gf_layout = "Group Layout",
-    gf_bars = "Group Dispel Overlay",
-    gf_indicators = "Group Status & Indicators",
-    gf_auras = "Group Auras",
-    auras3 = "Auras",
-    auras3_buffs = "Aura Buffs",
-    auras3_debuffs = "Aura Debuffs",
-    auras3_custom = "Custom Auras",
-    auras3_filters = "Aura Filters",
-    auras3_styling = "Aura Style",
-    uf_player = "Player",
-    uf_target = "Target",
-    uf_focus = "Focus",
-    uf_pet = "Pet",
-    uf_boss = "Boss",
-    uf_arena = "Arena",
-    uf_targettarget = "Target of Target",
-    uf_focustarget = "Focus Target",
-}
-
 local function PendingPageLabel(page)
     page = tostring(page or "")
     if page == "" then return nil end
     if A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(page, "MSUF page") end
-    if PENDING_PAGE_LABEL_OVERRIDES[page] then return PENDING_PAGE_LABEL_OVERRIDES[page] end
+    if M and type(M.GetMenuPageLabel) == "function" then return M.GetMenuPageLabel(page) end
     return "MSUF page"
+end
+
+function AP.CanonicalAssistantPage(page, args)
+    page = tostring(page or "")
+    if page == "" then return nil end
+    if type(A.ResolveCanonicalMenuRoute) == "function" then
+        local canonical = A.ResolveCanonicalMenuRoute(page, type(args) == "table" and args or {})
+        if canonical then return canonical end
+        if page == "auras3" or page == "auras3_custom" or page == "auras3_filters"
+            or page == "auras3_rendering"
+        then
+            return nil
+        end
+        -- The core Assistant can load before Menu2's page registry. In that
+        -- state a page supplied by the setting resolver is still authoritative;
+        -- once Menu2 is present, unknown destinations fail closed.
+        if type(M and M.pages) == "table" and next(M.pages) ~= nil then return nil end
+        return page
+    end
+    if type(A.IsKnownPageKey) == "function" and not A.IsKnownPageKey(page) then return nil end
+    return page
 end
 
 local function PendingResultPageLabel(item)
     if type(item) ~= "table" then return nil end
-    if item.page and tostring(item.page) ~= "" then return PendingPageLabel(item.page) end
-    if item.kind == "page" and item.key and tostring(item.key) ~= "" then return PendingPageLabel(item.key) end
+    if item.setting then
+        local settingPage = type(A.ResolveMenuPageForSetting) == "function"
+            and A.ResolveMenuPageForSetting(item.setting) or nil
+        if settingPage then return PendingPageLabel(settingPage) end
+    end
+    if item.page and tostring(item.page) ~= "" then
+        local page = AP.CanonicalAssistantPage(item.page, {
+            settingKey = item.settingKey or (item.setting and item.setting.key),
+            actionKey = item.actionKey or (item.action and item.action.key),
+        })
+        if page then return PendingPageLabel(page) end
+    end
+    if item.kind == "page" and item.key and tostring(item.key) ~= "" then
+        local page = AP.CanonicalAssistantPage(item.key, {})
+        if page then return PendingPageLabel(page) end
+    end
     if item.action or item.actionKey or item.kind == "action" or item.kind == "diagnostic" then return "Assistant" end
     return nil
 end
@@ -3079,20 +3202,48 @@ end
 
 local function PendingSettingPage(setting)
     if type(setting) ~= "table" then return nil end
+    local unit = tostring(setting.unit or ""):lower()
+    local frameType = tostring(setting.frameType or "")
+    if setting.contextualMenuState == "auraContent" then
+        local active = tostring(M and M.activeKey or "")
+        if active == "gf_auras" or active == "uf_player" or active == "uf_target"
+            or active == "uf_focus" or active == "uf_boss" or active == "uf_arena"
+        then
+            return active
+        end
+        return nil
+    end
+    -- Aura content is owned by the frame page even when older registry
+    -- metadata names a real global appearance page. Unit/group ownership is
+    -- more specific than that legacy hint and keeps follow-ups beside the
+    -- control that actually changes this setting.
+    if frameType == "groupAura" or tostring(setting.key or ""):match("^gf_[^%.]+%.auras%.") then
+        return "gf_auras"
+    end
+    if frameType == "aura" then
+        if unit:match("^boss") then return "uf_boss" end
+        if unit:match("^arena") then return "uf_arena" end
+        if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
+    end
     local explicitPage = tostring(setting.page or "")
-    if explicitPage ~= "" then return explicitPage end
-    local unit = tostring(setting.unit or "")
-    if unit ~= "" then
-        if unit == "targettarget" then return "uf_targettarget" end
-        if unit == "focustarget" then return "uf_focustarget" end
+    if explicitPage ~= "" then
+        if type(A.ResolveCanonicalMenuRoute) == "function" then
+            local canonical = A.ResolveCanonicalMenuRoute(explicitPage, { settingKey = setting.key })
+            if canonical then return canonical end
+        elseif type(A.IsKnownPageKey) ~= "function" or A.IsKnownPageKey(explicitPage) then
+            return explicitPage
+        end
+    end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "pet" or unit == "boss" or unit == "arena" then
         return "uf_" .. unit
     end
+    if unit == "targettarget" then return "uf_targettarget" end
+    if unit == "focustarget" then return "uf_focustarget" end
     local category = NormalizeReply(setting.category or "")
     -- Class-resource colors are edited on the Colors page even though their
     -- runtime owner is classPower.  Keep follow-ups on the same concrete page
     -- selected by the Registry/Knowledge resolver.
     if category:find("color", 1, true) or category:find("colour", 1, true) then return "opt_colors" end
-    local frameType = tostring(setting.frameType or "")
     if frameType == "group" then return PendingGroupSettingPage(setting) end
     if frameType == "castbar" then return "opt_castbar" end
     if frameType == "fonts" then return "opt_fonts" end
@@ -3102,12 +3253,7 @@ local function PendingSettingPage(setting)
     if frameType == "modules" then return "modules" end
     if frameType == "groupAura" then return "gf_auras" end
     if frameType == "aura" then
-        local unit = tostring(setting and setting.unit or "target"):lower()
-        if unit == "party" or unit == "raid" or unit == "mythicraid" or unit:match("^gf_") then return "gf_auras" end
-        if unit:match("^boss") then return "uf_boss" end
-        if unit:match("^arena") then return "uf_arena" end
-        if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
-        return "uf_target"
+        return "auras3_styling"
     end
     if category:find("castbar", 1, true) or category:find("cast bar", 1, true) then return "opt_castbar" end
     if category:find("font", 1, true) then return "opt_fonts" end
@@ -3129,7 +3275,7 @@ end
 local function PendingChoicePage(choice)
     if type(choice) ~= "table" then return nil end
     if (choice.action or choice.actionKey) and type(choice.args) == "table" and type(choice.args.page) == "string" then
-        return choice.args.page, nil
+        return AP.CanonicalAssistantPage(choice.args.page, choice.args), nil
     end
     local setting = PendingChoicePrimarySetting(choice)
     return PendingSettingPage(setting)
@@ -5609,8 +5755,12 @@ end
 
 function A._PendingResultRelatedPageForItem(item)
     if type(item) ~= "table" then return nil end
-    if item.page and item.page ~= "" then return item.page end
     if item.setting then return PendingSettingPage(item.setting) end
+    if item.page and item.page ~= "" then
+        return AP.CanonicalAssistantPage(item.page, {
+            actionKey = item.actionKey or (item.action and item.action.key),
+        })
+    end
     return nil
 end
 
@@ -5843,12 +5993,17 @@ local function PendingResultOpenResult(item, index)
         return { text = "Tell me which result to open, for example 'open result 1'.", result = "ambiguous" }
     end
     SetSelectedPendingResult(item, index)
-    local page = item.page
+    local settingKey = (item.kind == "setting" or item.setting)
+        and (item.settingKey or item.key or (item.setting and item.setting.key)) or nil
+    local page = item.setting and PendingSettingPage(item.setting)
+        or AP.CanonicalAssistantPage(item.page, {
+            settingKey = settingKey,
+            actionKey = item.actionKey or (item.action and item.action.key),
+        })
     local label = PendingResultPageLabel(item) or PendingPageLabel(page)
     if not page then
         return { text = "I can explain result " .. tostring(index or 1) .. ", but I do not know a direct MSUF page to open for it.", result = "info" }
     end
-    local settingKey = (item.kind == "setting" or item.setting) and (item.settingKey or item.key or (item.setting and item.setting.key)) or nil
     local actionKey = settingKey and "open_setting_control" or "open_page"
     local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction(actionKey) or nil
     if not action then
@@ -6621,7 +6776,11 @@ function A.OpenColorSettingPickerForSetting(setting, page, label)
     local settingKey = tostring(setting.key or "")
     if settingKey == "" then return false, "missing_setting_key" end
 
-    page = tostring(page or setting.page or "")
+    local requestedPage = tostring(page or "")
+    local resolveSettingPage = A.ResolveMenuPageForSetting
+    page = type(resolveSettingPage) == "function" and tostring(resolveSettingPage(setting) or "") or ""
+    if page == "" then page = requestedPage ~= "" and requestedPage or tostring(setting.page or "") end
+    page = AP.CanonicalAssistantPage(page, { settingKey = settingKey }) or ""
     label = tostring(label or setting.label or settingKey)
     local schema = A.ControlSchema
     if page == "" and schema and type(schema.GetBySettingKey) == "function" then
@@ -6646,6 +6805,7 @@ function A.OpenColorSettingPickerForSetting(setting, page, label)
         page = tostring(item and item.page or "")
         if label == settingKey and item and item.label then label = tostring(item.label) end
     end
+    page = AP.CanonicalAssistantPage(page, { settingKey = settingKey }) or ""
     if page == "" then return false, "missing_page" end
 
     local openPicker = _G.MSUF_OpenExactColorSettingPicker
@@ -7633,16 +7793,29 @@ end
 
 function A._PendingConfirmationPage(plan)
     if type(plan) ~= "table" then return nil end
-    if type(plan.args) == "table" and type(plan.args.page) == "string" and plan.args.page ~= "" then return plan.args.page end
+    if type(plan.args) == "table" and type(plan.args.page) == "string" and plan.args.page ~= "" then
+        if type(A.ResolveCanonicalMenuRoute) == "function" then
+            return A.ResolveCanonicalMenuRoute(plan.args.page, plan.args)
+        end
+        return plan.args.page
+    end
+    if type(plan.changes) == "table" and plan.changes[1] and plan.changes[1].setting then
+        local page = PendingSettingPage(plan.changes[1].setting)
+        if page then return page end
+    end
     local actionKey = tostring(plan.actionKey or (plan.action and plan.action.key) or ""):lower()
     local label = NormalizeReply((plan.label or "") .. " " .. (plan.summary or "") .. " " .. (plan.action and plan.action.label or ""))
     if actionKey:find("profile", 1, true) or label:find("profile", 1, true) then return "profiles" end
-    if actionKey:find("aura", 1, true) or label:find("aura", 1, true) or label:find("buff", 1, true) or label:find("debuff", 1, true) then return "auras3" end
+    if actionKey:find("aura", 1, true) or label:find("aura", 1, true) or label:find("buff", 1, true) or label:find("debuff", 1, true) then
+        local scope = tostring(type(plan.args) == "table" and plan.args.scope or ""):lower()
+        if scope == "party" or scope == "raid" or scope == "mythicraid" then return "gf_auras" end
+        if scope == "player" or scope == "target" or scope == "focus" then return "uf_" .. scope end
+        if scope:match("^boss") then return "uf_boss" end
+        if scope:match("^arena") then return "uf_arena" end
+        return "auras3_styling"
+    end
     if actionKey:find("castbar", 1, true) or label:find("castbar", 1, true) or label:find("cast bar", 1, true) then return "opt_castbar" end
     if actionKey:find("editmode", 1, true) or label:find("edit mode", 1, true) then return "home" end
-    if type(plan.changes) == "table" and plan.changes[1] and plan.changes[1].setting then
-        return PendingSettingPage(plan.changes[1].setting)
-    end
     return nil
 end
 
@@ -7789,10 +7962,76 @@ function AP.PendingTopicSwitchRequest(text)
     return kind == "changes" or kind == "action" or kind == "answer" or kind == "diagnostic"
 end
 
+-- Blocking choices and workflows should not make ordinary conversation look
+-- broken.  This classifier is deliberately exact: a greeting or meta request
+-- by itself changes topic, while "hello, set target width to 300" remains a
+-- real command and is handled by the ordinary fresh-command escape.
+function AP.PendingConversationTopicSwitch(text)
+    local router = A.RouterPrivate or {}
+    local norm = type(router.Normalize) == "function" and router.Normalize(text) or NormalizeReply(text)
+    if norm == "" then return false end
+    if type(router.IsGreetingOnly) == "function" and router.IsGreetingOnly(norm) then return true end
+    if type(router.IsThanksOnly) == "function" and router.IsThanksOnly(norm) then return true end
+    if type(router.IMMEDIATE_SHORT_CONVERSATION) == "table"
+        and router.IMMEDIATE_SHORT_CONVERSATION[norm]
+    then
+        return true
+    end
+    if type(router.IsDirectAiIdentityQuestion) == "function" and router.IsDirectAiIdentityQuestion(norm) then return true end
+    if type(router.LooksLikeAssistantIdentityQuestion) == "function" and router.LooksLikeAssistantIdentityQuestion(norm) then return true end
+    if type(A.RouterIsAdjacentJokeFollowup) == "function" and A.RouterIsAdjacentJokeFollowup(norm) then return true end
+    for i = 1, #(type(router.IMMEDIATE_CONVERSATION_PHRASES) == "table" and router.IMMEDIATE_CONVERSATION_PHRASES or {}) do
+        local phrase = type(router.Normalize) == "function"
+            and router.Normalize(router.IMMEDIATE_CONVERSATION_PHRASES[i])
+            or NormalizeReply(router.IMMEDIATE_CONVERSATION_PHRASES[i])
+        if norm == phrase then return true end
+    end
+    return false
+end
+
+-- A pure conversation turn starts a new topic instead of answering a pending
+-- mutation prompt.  Keep the type-specific flags so HandleInput can explain
+-- exactly what was abandoned after the normal conversation reply is built.
+function AP.DropPendingStateForConversation(text)
+    if not AP.PendingConversationTopicSwitch(text) then return nil end
+    local pendingFlow = A.Workflow and type(A.Workflow.PendingFlow) == "function"
+        and A.Workflow.PendingFlow() or nil
+    local hadConfirmation = A.pendingConfirmation ~= nil
+    local hadChoices = CurrentPendingChoices() ~= nil
+    local hadFlow = type(pendingFlow) == "table"
+    if not hadConfirmation and not hadChoices and not hadFlow then return nil end
+
+    A._droppedPendingConfirmation = hadConfirmation and true or nil
+    A._droppedPendingChoice = hadChoices and true or nil
+    A._droppedPendingFlow = hadFlow and true or nil
+    if type(A.CancelPendingMutationState) == "function" then
+        A.CancelPendingMutationState()
+    else
+        A.pendingConfirmation = nil
+        ClearPendingConfirmationContext()
+        ClearPendingChoices()
+        if type(A.ClearPendingFlow) == "function" then A.ClearPendingFlow() end
+    end
+    if type(A.TryImmediateConversationReply) == "function" then
+        return A.TryImmediateConversationReply(text)
+    end
+    return nil
+end
+
 local function HandlePending(text)
+    local conversationResult = AP.DropPendingStateForConversation(text)
+    if conversationResult then return conversationResult end
     if type(A.HandlePendingFlow) == "function" then
         local flowResult = A.HandlePendingFlow(text)
-        if flowResult then return flowResult end
+        if flowResult then
+            if type(A.TouchPendingFlow) == "function"
+                and A.Workflow and type(A.Workflow.PendingFlow) == "function"
+                and type(A.Workflow.PendingFlow()) == "table"
+            then
+                A.TouchPendingFlow()
+            end
+            return flowResult
+        end
     end
     if A.pendingConfirmation then
         if IsChoiceAbort(text) then
@@ -7915,6 +8154,10 @@ function A.HandleCommandInput(text)
         or (type(router.IsExplicitNavigationCommand) == "function" and router.IsExplicitNavigationCommand(text))
         or (type(router.LooksLikeGuidedTourRequest) == "function" and router.LooksLikeGuidedTourRequest(text))
         or (type(router.IsCurrentPageHelpRequest) == "function" and router.IsCurrentPageHelpRequest(text))
+        -- A question-shaped permanent/no-duration request is intentionally
+        -- parsed into two executable choices; it is a guided mutation, not a
+        -- read-only setting lookup despite its "what filter" opener.
+        or (type(router.IsAuraDurationFilterQuestion) == "function" and router.IsAuraDurationFilterQuestion(text))
         or (type(A.RouterHasPendingAssistantState) == "function" and A.RouterHasPendingAssistantState())
     )
     if not explicitReadOnlyAction
@@ -7979,7 +8222,7 @@ function A.HandleCommandInput(text)
         A.pendingChoices = parsed.choices or {}
         AP.SetPendingCandidates(A.pendingChoices)
         local ctx = A.GetContext and A.GetContext()
-        if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
+        AP.StoreSerializedPendingChoices(ctx, "pendingChoices", A.pendingChoices)
         local choiceText = ChoiceText(A.pendingChoices)
         if type(parsed.choiceIntro) == "string" and Trim(parsed.choiceIntro) ~= "" then
             choiceText = Trim(parsed.choiceIntro) .. "\n" .. choiceText
@@ -8056,7 +8299,7 @@ function AP.ExecuteBarOutlineColorSemanticPlan(plan)
         A.pendingChoices = plan.choices or {}
         AP.SetPendingCandidates(A.pendingChoices)
         local ctx = A.GetContext and A.GetContext()
-        if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
+        AP.StoreSerializedPendingChoices(ctx, "pendingChoices", A.pendingChoices)
         local choiceText = ChoiceText(A.pendingChoices)
         if type(plan.choiceIntro) == "string" and Trim(plan.choiceIntro) ~= "" then
             choiceText = Trim(plan.choiceIntro) .. "\n" .. choiceText
@@ -8088,6 +8331,8 @@ function A.HandleInput(text, handleOpts)
     local hadPendingResults = CurrentPendingResults() ~= nil
     A._pendingResultFollowupHandled = nil
     A._droppedPendingConfirmation = nil
+    A._droppedPendingChoice = nil
+    A._droppedPendingFlow = nil
     A._assistantValueClamps = nil
     local result
     local routed, routeResult
@@ -8166,7 +8411,17 @@ function A.HandleInput(text, handleOpts)
         result.text = tostring(result.text or "")
             .. "\nI dropped the confirmation that was waiting, because you moved on to something else. Nothing was applied."
     end
+    if A._droppedPendingChoice and type(result) == "table" then
+        result.text = tostring(result.text or "")
+            .. "\nI cleared the earlier choice list because you changed the topic. Nothing from that list was applied."
+    end
+    if A._droppedPendingFlow and type(result) == "table" then
+        result.text = tostring(result.text or "")
+            .. "\nI cleared the earlier Assistant step because you changed the topic. Nothing from that step was applied."
+    end
     A._droppedPendingConfirmation = nil
+    A._droppedPendingChoice = nil
+    A._droppedPendingFlow = nil
     return result
 end
 
@@ -9498,7 +9753,7 @@ function AP.TryImmediateMutationResult(text, opts)
         A.pendingChoices = plan.choices or {}
         AP.SetPendingCandidates(A.pendingChoices)
         local activeContext = A.GetContext and A.GetContext()
-        if activeContext then activeContext.pendingChoices = SerializeChoices(A.pendingChoices) end
+        AP.StoreSerializedPendingChoices(activeContext, "pendingChoices", A.pendingChoices)
         local choiceText = ChoiceText(A.pendingChoices)
         if type(plan.choiceIntro) == "string" and Trim(plan.choiceIntro) ~= "" then
             choiceText = Trim(plan.choiceIntro) .. "\n" .. choiceText
@@ -9580,6 +9835,9 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     local result = NormalizePlanResult(AP.LongInputResult(text)
         or AP.TrySubmitBatch(text, batchParts, { turnSerialAdvanced = true })
         or A.HandleInput(text, { skipTurnSerialAdvance = true }))
+    if type(AP.ResolveUnresolvedMutationResult) == "function" then
+        result = AP.ResolveUnresolvedMutationResult(text, result)
+    end
     AP.RecordAssistantResult(result)
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.submit")
@@ -9589,9 +9847,7 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     return result
 end
 
-function A.Submit(text)
-    local ok, result = xpcall(function()
-        local produced = AP.SubmitNow(text)
+function AP.ResolveUnresolvedMutationResult(text, produced)
         -- Last word before the reply leaves: dozens of specialised lanes can
         -- claim a sentence and then hand back a list, an article or an
         -- apology. When the sentence's own subject resolves to exactly ONE
@@ -9712,10 +9968,19 @@ function A.Submit(text)
                 local okPlan, planned = pcall(A.ExecutePlan, plan, {})
                 local plannedStatus = okPlan and type(planned) == "table"
                     and tostring(planned.status or planned.result or "") or ""
-                if plannedStatus == "applied" or plannedStatus == "changed" then return planned end
+                if plannedStatus == "applied" or plannedStatus == "changed" then
+                    ClearPendingChoices()
+                    ClearPendingResults()
+                    return planned
+                end
             end
         end
         return produced
+end
+
+function A.Submit(text)
+    local ok, result = xpcall(function()
+        return AP.ResolveUnresolvedMutationResult(text, AP.SubmitNow(text))
     end, AP.AssistantJobErrorHandler)
     if ok then
         -- Every submit path funnels through here, so this is the one place that
@@ -9771,6 +10036,7 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
         steps[#steps + 1] = A.CoroutineStep(function()
             finalResult = AP.TrySubmitBatch(text, parts, { turnSerialAdvanced = true })
                 or AP.BatchPlanFailure(parts)
+            finalResult = AP.ResolveUnresolvedMutationResult(text, finalResult)
         end)
         steps[#steps + 1] = function()
             Complete(finalResult or AP.BatchPlanFailure(parts))
@@ -9781,6 +10047,7 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
             finalResult = AP.LongInputResult(text) or A.HandleInput(text, {
                 skipTurnSerialAdvance = opts.turnSerialAdvanced == true,
             })
+            finalResult = AP.ResolveUnresolvedMutationResult(text, finalResult)
         end)
         steps[#steps + 1] = function()
             Complete(finalResult)
@@ -9857,12 +10124,14 @@ function AP.SubmitDeferredNow(text, callback)
     if not batchParts then
         local immediate = AP.TryImmediateSubmitResult(text)
         if immediate then
+            immediate = AP.ResolveUnresolvedMutationResult(text, immediate)
             AP.RunSubmitCallback(callback, immediate, "assistant.immediate.callback", text)
             return immediate
         end
         if not deferredExistenceQuestion and not deferredNpcBarColor and not deferredNamedLookup then
             local immediateMutation = AP.TryImmediateMutationResult(text)
             if immediateMutation then
+                immediateMutation = AP.ResolveUnresolvedMutationResult(text, immediateMutation)
                 AP.RunSubmitCallback(callback, immediateMutation, "assistant.immediate-mutation.callback", text)
                 return immediateMutation
             end
@@ -9913,6 +10182,10 @@ function A.StartNewTask()
     if type(context) == "table" then
         for key in pairs(context) do context[key] = nil end
     end
+    A.lastAssistantHelpContext = nil
+    A.lastAssistantPlanningContext = nil
+    A._helpContextRestored = nil
+    A._planningContextRestored = nil
     if type(A.ClearRouterTransientCaches) == "function" then A.ClearRouterTransientCaches() end
     if A.Parser and type(A.Parser.ClearRegistryCandidateFuzzyCache) == "function" then A.Parser.ClearRegistryCandidateFuzzyCache() end
     if A.Parser and type(A.Parser.ClearActionAliasFuzzyCache) == "function" then A.Parser.ClearActionAliasFuzzyCache() end

@@ -83,6 +83,32 @@ function A.DashboardRegistry.RegisterNavigationActions(ctx)
     })
 
     Registry:RegisterAction({
+        key = "open_changelog",
+        label = "Open See New Features",
+        type = "navigation",
+        page = "changelog",
+        aliases = {
+            "open changelog", "show changelog", "open change log", "show change log",
+            "open release notes", "show release notes", "oeffne changelog", "changelog oeffnen",
+        },
+        combatSafe = true,
+        run = function()
+            local opened
+            if M and type(M.OpenSeeNewFeatures) == "function" then
+                opened = M.OpenSeeNewFeatures() ~= false
+            elseif M and type(M.Open) == "function" and type(M.pages) == "table" and M.pages.changelog then
+                opened = M.Open("changelog") ~= false
+            elseif M and type(M.SelectPage) == "function" and type(M.pages) == "table" and M.pages.changelog then
+                opened = M.SelectPage("changelog") ~= false
+            end
+            if opened and M and M.activeKey == "changelog" then
+                return true, "Opened See New Features."
+            end
+            return false, "Open the MSUF menu first so I can navigate to See New Features."
+        end,
+    })
+
+    Registry:RegisterAction({
         key = "set_dashboard_panel",
         label = "Set Dashboard Panel",
         type = "navigation",
@@ -90,7 +116,8 @@ function A.DashboardRegistry.RegisterNavigationActions(ctx)
             "open dashboard panel", "close dashboard panel", "toggle dashboard panel",
             "open recovery tools", "close recovery tools", "toggle recovery tools",
             "open scaling tools", "close scaling tools", "toggle scaling tools",
-            "open changelog", "close changelog", "toggle changelog",
+            "open dashboard changelog", "close dashboard changelog", "toggle dashboard changelog",
+            "open changelog preview", "close changelog preview", "toggle changelog preview",
         },
         parseAliasArgs = ParseDashboardPanelAliasArgs,
         combatSafe = true,

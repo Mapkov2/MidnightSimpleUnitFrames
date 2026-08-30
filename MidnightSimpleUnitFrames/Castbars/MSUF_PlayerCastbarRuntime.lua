@@ -39,6 +39,7 @@ local ACTIVE_DURATION_OPTIONS = {
     skipTimeText = true,
     skipShow = true,
 }
+local INTERRUPT_IDENTITY_GRACE = 0.25
 
 local function DisableFrameOnUpdate(frame)
     if not frame or not frame.SetScript then return end
@@ -391,6 +392,18 @@ local function HasActivePlayerCast(frame)
     return state and state.active == true or false
 end
 
+local function MarkPlayerStateInactive(frame)
+    local state = frame and frame._msufPlayerState
+    if state then state.active = false end
+end
+
+local function ClearPendingPlayerInterrupt(frame)
+    if not frame then return end
+    frame._msufPlayerInterruptCastUnit = nil
+    frame._msufPlayerInterruptCastGUID = nil
+    frame._msufPlayerInterruptCastDeadline = nil
+end
+
 local function ActiveCastBarIDMatches(frame, castBarID)
     if not frame then return false end
     if not castBarID then return true end
@@ -504,6 +517,7 @@ local function ApplyActiveCast(
     frame._msufChanNilSince = nil
     frame._msufCastNilSince = nil
     frame._msufHardStopNilSince = nil
+    ClearPendingPlayerInterrupt(frame)
     StoreActiveCastIdentity(frame, isChannel and nil or castGUID, spellID, castBarID)
     frame.MSUF_castDuration = isChannel and nil or durationObj
     frame.MSUF_channelDuration = isChannel and durationObj or nil
@@ -648,6 +662,18 @@ local CHANNEL_START_EVENTS = {
 }
 
 local function StopPlayerCastbar(frame)
+    -- Some player terminal sequences deliver STOP before INTERRUPTED. Preserve
+    -- the real displayed cast's identity for that short event burst before the
+    -- normal stop cleanup clears it. Instant/GCD casts never populate this.
+    local interruptUnit = frame._msufActiveCastUnit
+    local interruptCastGUID = frame._msufActiveCastGUID
+    if interruptUnit ~= nil and interruptCastGUID ~= nil then
+        frame._msufPlayerInterruptCastUnit = interruptUnit
+        frame._msufPlayerInterruptCastGUID = interruptCastGUID
+        frame._msufPlayerInterruptCastDeadline = _G.GetTime() + INTERRUPT_IDENTITY_GRACE
+    end
+    MarkPlayerStateInactive(frame)
+
     frame._msufSoftResyncToken = (frame._msufSoftResyncToken or 0) + 1
     frame._msufSoftResyncScheduledToken = nil
     frame._msufChanNilSince = nil
@@ -814,6 +840,10 @@ end
 local function ShowInterruptFeedback(frame, label)
     if not frame or not frame.statusBar then return end
 
+    MarkPlayerStateInactive(frame)
+    frame._msufSoftResyncToken = (frame._msufSoftResyncToken or 0) + 1
+    frame._msufSoftResyncScheduledToken = nil
+    ClearPendingPlayerInterrupt(frame)
     EnsureDBLazy()
     local playerDB = (_G.MSUF_DB and _G.MSUF_DB.player) or {}
     if playerDB.showInterrupt == false then
@@ -880,8 +910,10 @@ local function DisablePlayerCastbar(frame)
     ReleaseRuntimeActive(frame)
     if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
     frame.interruptFeedbackEndTime = nil
+    MarkPlayerStateInactive(frame)
     ClearActiveCastIdentity(frame)
     frame._msufActiveCastUnit = nil
+    ClearPendingPlayerInterrupt(frame)
     if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
     if frame.latencyBar then frame.latencyBar:Hide() end
     frame:Hide()
@@ -889,6 +921,9 @@ end
 
 local function HandleEmpowerEvent(frame, event, ...)
     if event == "UNIT_SPELLCAST_EMPOWER_START" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        if event == "UNIT_SPELLCAST_EMPOWER_START" then
+            ClearPendingPlayerInterrupt(frame)
+        end
         CallEmpowerStart(frame, select(3, ...))
         return true
     elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
@@ -938,7 +973,13 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
         and (event == "UNIT_SPELLCAST_FAILED"
             or event == "UNIT_SPELLCAST_INTERRUPTED"
             or event == "UNIT_SPELLCAST_CHANNEL_STOP")
-        and not HasActivePlayerCast(frame) then
+        and not HasActivePlayerCast(frame)
+        and not (event == "UNIT_SPELLCAST_INTERRUPTED"
+            and eventUnit == frame._msufPlayerInterruptCastUnit
+            and frame._msufPlayerInterruptCastGUID ~= nil
+            and select(2, ...) == frame._msufPlayerInterruptCastGUID
+            and frame._msufPlayerInterruptCastDeadline ~= nil
+            and _G.GetTime() <= frame._msufPlayerInterruptCastDeadline) then
         return
     end
     if event == "UNIT_SPELLCAST_START"
@@ -991,6 +1032,10 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             CastPlayerCastbar(frame)
             return
         elseif event == "UNIT_SPELLCAST_STOP" then
+            if frame.interruptFeedbackEndTime
+                and _G.GetTime() < frame.interruptFeedbackEndTime then
+                return
+            end
             if not ActiveUnitMatches(frame, eventUnit) then return end
             local castBarID = select(4, ...)
             if not ActiveCastBarIDMatches(frame, castBarID) then return end

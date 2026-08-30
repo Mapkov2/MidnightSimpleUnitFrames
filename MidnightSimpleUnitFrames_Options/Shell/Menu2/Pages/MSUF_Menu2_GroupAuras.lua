@@ -232,7 +232,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
         end
     end
     local sharedLane = lane == "debuff" and "debuff" or "buff"
-    local openStyle = T.Button(section, "Shared Aura Style", 150, 22)
+    local openStyle = T.Button(section, "Global Aura Appearance", 170, 22)
     openStyle:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, layout.footerY)
     if T.CenterButtonLabel then T.CenterButtonLabel(openStyle) end
     openStyle:SetScript("OnClick", function()
@@ -240,13 +240,13 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
         M.SetMenuStateValue("auraStyleGFLane", sharedLane)
         if M.SelectPage then M.SelectPage("auras3_styling") end
     end)
-    RegisterAuraControl(ctx, openStyle, "Shared Aura Style", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
+    RegisterAuraControl(ctx, openStyle, "Global Aura Appearance", "button", "group-workspace.open-aura-style", "navigation", "auras3_styling")
     if type(M.AddTooltip) == "function" then
-        M.AddTooltip(openStyle, "Shared Aura Style",
+        M.AddTooltip(openStyle, "Global Aura Appearance",
             "Opens the global Aura icon theme: border, shadow, colors, lane padding and native Player weapon enchants. This GroupFrame's individual Style stays here.",
             { hook = true, titleAsLine = true })
     end
-    W.Text(section, "Ordering and individual Style are edited here. Shared icon theme: Appearance > Aura Style.",
+    W.Text(section, "Ordering and individual Style are edited here. Global icon theme: Appearance > Auras.",
         16, layout.footerY - 8, sectionW - 198, MUTED)
 end
 local function NativeAuraKey(groupKey)

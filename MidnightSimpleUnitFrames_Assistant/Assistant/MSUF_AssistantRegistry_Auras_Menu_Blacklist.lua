@@ -12,6 +12,29 @@ M.Assistant = A
 
 A.AurasRegistry = A.AurasRegistry or {}
 
+local function ActiveAuraContentWorkspace(Menu)
+    local page = tostring(Menu and Menu.activeKey or "")
+    local ownsAuraContent = page == "gf_auras"
+        or page == "uf_player" or page == "uf_target"
+        or page == "uf_focus" or page == "uf_boss" or page == "uf_arena"
+    return ownsAuraContent and page or nil
+end
+
+local function RefreshAuraContentWorkspace(Menu)
+    local page = ActiveAuraContentWorkspace(Menu)
+    -- These two registry entries model selectors inside a frame-owned Aura
+    -- editor. They must never manufacture Player ownership when no such
+    -- workspace is active; the conversational layer can then ask for scope.
+    if not page then return false end
+    if type(Menu.InvalidatePage) == "function" then Menu.InvalidatePage(page) end
+    if type(Menu.SelectPage) == "function" then
+        Menu.SelectPage(page)
+    elseif type(Menu.Open) == "function" then
+        Menu.Open(page)
+    end
+    if type(Menu.Refresh) == "function" then Menu.Refresh() end
+end
+
 function A.AurasRegistry.RegisterBlacklistMenuSettings(ctx)
     if type(ctx) ~= "table" then return end
 
@@ -28,6 +51,7 @@ function A.AurasRegistry.RegisterBlacklistMenuSettings(ctx)
         category = "Menu / Auras",
         unit = "shared",
         frameType = "aura",
+        contextualMenuState = "auraContent",
         attribute = "auraBlacklistPreset",
         type = "enum",
         aliases = { "aura blacklist preset", "blacklist preset", "aura preset group", "aura blacklist group preset" },
@@ -38,10 +62,7 @@ function A.AurasRegistry.RegisterBlacklistMenuSettings(ctx)
             Menu.auraBlacklistPreset = tostring(value or "RAID_BUFFS")
             Menu.auraBlacklistSpell = nil
         end,
-        apply = function()
-            if type(Menu.SelectPage) == "function" then Menu.SelectPage("auras3_filters") elseif type(Menu.Open) == "function" then Menu.Open("auras3_filters") end
-            if type(Menu.Refresh) == "function" then Menu.Refresh() end
-        end,
+        apply = function() RefreshAuraContentWorkspace(Menu) end,
         combatSafe = true,
     })
 
@@ -51,16 +72,14 @@ function A.AurasRegistry.RegisterBlacklistMenuSettings(ctx)
         category = "Menu / Auras",
         unit = "shared",
         frameType = "aura",
+        contextualMenuState = "auraContent",
         attribute = "auraBlacklistSpell",
         type = "string",
         aliases = { "aura blacklist spell", "blacklist spell", "selected aura blacklist spell", "aura spell preset" },
         valuePrefixes = { "aura blacklist spell", "blacklist spell", "selected aura blacklist spell", "aura spell preset" },
         get = function() return tostring(Menu.auraBlacklistSpell or "") end,
         set = function(value) Menu.auraBlacklistSpell = tostring(value or "") end,
-        apply = function()
-            if type(Menu.SelectPage) == "function" then Menu.SelectPage("auras3_filters") elseif type(Menu.Open) == "function" then Menu.Open("auras3_filters") end
-            if type(Menu.Refresh) == "function" then Menu.Refresh() end
-        end,
+        apply = function() RefreshAuraContentWorkspace(Menu) end,
         combatSafe = true,
     })
 end

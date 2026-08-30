@@ -483,7 +483,7 @@ local function BuildMisc(ctx)
         Meta("mouseover.size", "setting", { min = 1, max = 16, step = 1, format = "%d px" }))
     W.MoveWidget(size, mouseover, mouseoverRightX, -58, mouseoverRightW, "CENTER")
     local mouseoverHelp = W.Text(mouseover,
-        "Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Global Style > Colors > Unit Frames.",
+        "Soft gradient gives the whole frame a clear, portrait-safe hover cue. Solid border keeps a crisp edge. Choose its color in Appearance > Colors > Unit Frames.",
         mouseoverLeftX, -142, mouseoverW - 68, T.colors.muted)
     if mouseoverHelp.SetWordWrap then mouseoverHelp:SetWordWrap(true) end
     local function RefreshMouseoverControls()

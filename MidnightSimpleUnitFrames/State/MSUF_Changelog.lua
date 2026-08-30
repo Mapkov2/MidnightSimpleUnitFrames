@@ -8,12 +8,53 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "918344CAB47C77387A07215BB01FB3D60E4A4547F48819DF90A5685BFBDB1293",
-    currentVersion = "6.13",
-    historyFromVersion = "6.1",
-    previousVersion = "6.12",
-    rangeLabel = "6.12 -> 6.13",
+    sourceSha256 = "B4F214B2C691CE37D146E3AF503F0D528967AA312A6AEF68BC735D923E1FFD75",
+    currentVersion = "6.14-beta1",
+    historyFromVersion = "6.11",
+    previousVersion = "6.13",
+    rangeLabel = "6.13 -> 6.14-beta1",
     entries = {
+        {
+            version = "6.14-beta1",
+            date = "2026-08-30",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Health-bar backgrounds can now fill the full bar or only missing health. The background can be colored independently with Custom tint, Match health bar, Class color, or Health gradient, with matching Unit Frame, Group Frame, and preview rendering.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "background fill missing health only",
+                                label = "Background Fill",
+                                sectionId = "colors_background",
+                                controlId = "menu2.opt.colors.advanced.background.fill.mode",
+                                settingKey = "general.barBgFillMode",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added Full bar and Missing health only background-fill modes plus independent health-background color sources, while migrating existing profiles without changing their current appearance.",
+                        "The Assistant now routes Aura content and filter requests to the Unit or Group Frame that owns them, exposes the See New Features destination directly, and presents ambiguous controls with readable menu breadcrumbs instead of internal identifiers.",
+                        "Unit Frame tooltips react immediately when their configured modifier key is pressed or released while the frame remains hovered.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Player Castbar interrupt feedback survives the client event order where the cast stops before the interrupted result arrives, without reviving stale casts.",
+                        "State Tint controls appear and disappear immediately when their master toggles change instead of requiring the Colors page to be reopened.",
+                        "Assistant queues, history, undo, pending choices, workflows, and deferred callbacks are now isolated to the profile that created them, preventing stale work from crossing a profile switch or surviving beyond its conversational context.",
+                        "Immediate and deferred Assistant mutations now share the same failure-recovery path so partial work rolls back consistently.",
+                        "General Aura guidance no longer competes with frame-local Aura owners, and question-shaped duration-filter requests retain their safe executable choices.",
+                        "Aura-name fallback updates skip redundant unit-scan setup when no unresolved additions can benefit from it.",
+                    },
+                },
+            },
+        },
         {
             version = "6.13",
             date = "2026-08-28",
@@ -211,68 +252,6 @@ local data = {
                         "Aura menu search now opens the Filters tool correctly for Player Defensives and Target Dots instead of falling back to Setup.",
                         "Rounded Unit Frames no longer read the protected parent of Blizzard-owned dispel-overlay textures; the safe owner is captured before the region becomes forbidden and reused when masks are applied.",
                         "Group Frame previews keep their generated character names when ordinary player-unit events refresh the dummy frames outside Edit Mode.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.1",
-            date = "2026-08-19",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "The Raid Group indicator now has its own Size slider in Status icons, on every frame that can show it. It used to render at the frame's name font size with no way to change it; an untouched profile keeps that size, so nothing moves until you drag the slider.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "raid group size",
-                                label = "Size",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.selected.size",
-                                settingKey = "player.raidGroupNameSize",
-                                prepareKind = "unitStatus",
-                                prepareValue = "raidgroupname",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Separated the Augmentation Evoker resources: Ebon Might now renders on the Player power bar, Essence is an ordinary Class Resource, and Mana moves to Alternative Mana. The Ebon Might bar takes its height, position, texture, background, border and text from the Player Power settings; only its fill colour still comes from the Ebon Might colour entry.",
-                        "Class Resource width, offsets, pixel snapping and cooldown anchoring finally apply to an Augmentation Evoker's Essence bar; it used to silently copy the power bar's width and anchor and ignore those settings.",
-                        "Turning the Player Power bar off now also turns off the Ebon Might display instead of leaving an empty bar behind.",
-                        "Ebon Might's bar and duration text follow live setting changes instead of freezing at the values they had when the native aura slot was first created.",
-                        "Added a Power width slider to the Class Resources > Player Power card, where Width mode \"Manual\" previously had no width to set. Dragging it releases *Sync width to Class Resource*, because that sync outranks an explicit width.",
-                        "Switching the Active profile now offers a UI reload: frames re-apply at once, but settings that are only read at load time otherwise keep the old profile's values until the next reload.",
-                        "The group preview LAYERS chips now apply to the preview frames drawn on screen as well as to the preview box in the menu, and Shift-click solo shows only that one element on them.",
-                        "Cooldown and stack numbers on the preview's aura icons follow the CD/Stack chip, and the chip is greyed out when no enabled aura lane prints a timer or stack count.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Power text on the Target, Focus, Pet and Boss frames follows the unit you are actually on again. With *Colour power text by type* enabled the colour was resolved once and then kept across every target change, so a Focus or Rage target could stay on the previous target's colour, or sit on Mana blue for the rest of the session (#125). Frames with the power bar switched off were affected the most, because they had no bar to take fresh resource data from.",
-                        "Power text no longer falls back to the Mana colour when a unit reports no resource at all. It renders the configured text colour instead, which is what those slots show with colour by power type switched off.",
-                        "Boss frames no longer freeze at the range fade they happened to have when the pull started. Boss units have no range event of their own, so the periodic check behind *Enable Range Fade* now keeps running in combat instead of stopping at the encounter start.",
-                        "The range fade check now retires completely once nothing is left to sample. Only units MSUF has no range event for keep the timer running, so a state without such a unit costs nothing while idle instead of waking up every 0.75 to 2 seconds.",
-                        "The Assistant can see and set the Power width slider again. Its generated control schema had not been rebuilt since the slider landed, so the one control added this cycle was missing from everything the Assistant can reach by name.",
-                        "The Assistant can now drive the Active auras on this frame dropdown in the blacklist workspace. It was the only control in that section it could not see, so a live scan could be started and blocked by hand but not by request.",
-                        "Aura name resolution compiles its alias list once per container instead of rebuilding an iterator on every event, which is the hot path whenever the client falls back to a full aura update in a raid.",
-                        "The over-absorb glow decides once per render pass whether the absorb value is protected, instead of re-checking it at every branch that writes to the bar.",
-                        "Fixed a spell indicator's health-bar highlight covering the player name and the aura icons on live Group Frames, while the menu preview drew the same effect correctly underneath (#123). The effect rode along whenever its native aura container was re-levelled, so opening the settings or changing zone could flip the order either way; it now keeps the Layer it was configured with.",
-                        "Full-Frame effect previews in the Group preview and in Edit Mode now paint through the same renderer the frames use, so Glow shows its real halo instead of four flat edges and Pulse animates with its live opacity.",
-                        "Changing a spell indicator's Display as shape now re-gates that section right away; controls belonging to the previous shape, such as Icon Effect, could stay visible until an unrelated click refreshed the page.",
-                        "Colour changes on the Colors page now repaint the Resources strip in the preview immediately instead of leaving it on the previous colours until the tab was rebuilt.",
-                        "Fixed a raid frame block not staying where it was placed in Edit Mode: the saved position was converted between two internal formats with mismatched roster counts and drifted by up to 162 pixels, and a click that never moved could permanently lock the conversion out.",
-                        "Long castbar spell names are now shortened with a visible ellipsis that respects the bar width instead of being clipped by the renderer at an unpredictable spot (#121); a 23-character name could previously disappear completely under a 25-character limit, because the client cuts a bounded line at a glyph-dependent position.",
-                        "Turning off a castbar's cast time hands those pixels back to the spell name instead of leaving the gap reserved, so names truncate far less often.",
-                        "Fixed an Augmentation Evoker's player health bar shrinking by the extra composite height, and the power bar showing frozen Mana numbers under the Ebon Might duration text.",
-                        "If the UI starts in combat and the native aura container cannot be created, an Augmentation Evoker's power bar falls back to a normal Mana bar and retries after combat instead of showing an empty bar.",
-                        "The raid preview shows the correct group number on each preview frame instead of numbering members 1-5 within every group.",
-                        "The power colour swatch on the Global Fonts page shows an Augmentation Evoker's real power token instead of a hard-coded Essence colour.",
-                        "The castbar name shortening no longer builds a cache key string on every text write.",
                     },
                 },
             },

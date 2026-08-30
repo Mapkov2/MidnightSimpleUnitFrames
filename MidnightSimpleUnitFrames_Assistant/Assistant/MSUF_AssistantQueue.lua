@@ -95,6 +95,29 @@ function A.QueuePlan(plan)
     return true
 end
 
+function A.ClearQueuedPlansForProfileBoundary(reason)
+    local removed = QueueCount()
+    -- Replace the array rather than draining it through replay. Any already
+    -- scheduled queue step reads A.queuedPlans again and therefore fails closed
+    -- instead of retaining an executable plan owned by the previous profile.
+    A.queuedPlans = {}
+    A._queueFlushRunning = nil
+    local result
+    if removed > 0 then
+        result = {
+            text = "I cleared " .. tostring(removed) .. " paused Assistant change"
+                .. (removed == 1 and "" or "s")
+                .. " because the active profile changed. Nothing was replayed.",
+            status = "info",
+            result = "info",
+            summary = "Cancelled profile-bound queued Assistant changes.",
+            cancelled = true,
+            reason = tostring(reason or "profile-boundary"),
+        }
+    end
+    return removed, SetQueueStatus("idle", result)
+end
+
 function A.HasQueuedPlans()
     return type(A.queuedPlans) == "table" and #A.queuedPlans > 0
 end

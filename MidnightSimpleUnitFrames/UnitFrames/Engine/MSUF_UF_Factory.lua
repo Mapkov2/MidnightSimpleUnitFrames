@@ -660,8 +660,9 @@ ApplyBossPhysicalBarGeometry = function(frame)
   if not setRect(frame.hpBar, left, hpBottom, right, top, frame) then
     return false
   end
-  if frame.bg then
-    setRect(frame.bg, left, hpBottom, right, top, frame)
+  local healthBackground = frame.healthBackgroundBar or frame.bg
+  if healthBackground and frame._msufHealthBackgroundFillMissing ~= true then
+    setRect(healthBackground, left, hpBottom, right, top, frame)
   end
 
   if powerEnabled and not powerDetached then

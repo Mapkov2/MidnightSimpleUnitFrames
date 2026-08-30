@@ -811,16 +811,14 @@ local function BuildBasics(ctx, builder, unit, label)
                     refs = { unit == "pet" and "unit.pet" or "health.current" }
                 end
             end
-            if general.barBgMatchHPColor ~= true and general.barBgClassColor ~= true then
-                refs[#refs + 1] = "bar.background_tint"
-            end
+            refs[#refs + 1] = "health.background.current"
             refs[#refs + 1] = "bar.health_loss"
             return refs
         end, {
             title = M.Format("%s Health Colors", UnitTopLabel(unit)),
             note = "Colors follow this frame's effective Health Color Scheme.",
             historySource = "menu:unit-frame-basics-health-colors",
-            maxTargets = 5,
+            maxTargets = 7,
             context = function()
                 local context = { unit = unit, healthMode = EffectiveHealthMode() }
                 if unit == "pet" and GetGeneral().petFrameUsePlayerClassColor == true and type(_G.UnitClass) == "function" then
