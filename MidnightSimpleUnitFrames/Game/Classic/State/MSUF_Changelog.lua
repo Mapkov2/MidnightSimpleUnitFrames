@@ -8,10 +8,98 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.5-alpha3",
-    previousVersion = "6.5-alpha2",
-    rangeLabel = "6.5-alpha2 -> 6.5-alpha3",
+    currentVersion = "6.5-alpha5",
+    previousVersion = "6.5-alpha4",
+    rangeLabel = "6.5-alpha4 -> 6.5-alpha5",
     entries = {
+        {
+            version = "6.5-alpha5",
+            date = "2026-08-30",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Synchronized the unified Mainline, Vanilla, Mists and TBC package with the released Retail 6.13 source, including the complete published 6.13 feature and bugfix set while retaining every client-specific API owner.",
+                        "Added the curated MSUF Highlights Group Buff filter with 122 important offensive, support, defensive and healer cooldowns. New and Factory-reset profiles use it by default; existing profiles keep their current filter and can opt in.",
+                        "Added the option to keep the Focus castbar visible beside the compact Focus Kick interrupt icon.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "MSUF Highlights uses one shared immutable catalog and exact-ID candidate filtering without a MiniAuras dependency, polling or recurring roster scans.",
+                        "The Assistant now understands German negative determiners, colloquial removal requests and double negatives, can switch supported MSUF or Blizzard Unit Frames globally, and retries zero-result setting searches with registered synonyms.",
+                        "Assistant Aura actions accept enchant-related inputs and route Aura filter and blacklist requests more precisely; exact searches recognize registry aliases and complete portrait-control labels.",
+                        "Typed HEX colors in the compact color picker now commit on Enter through the same apply path as the visual picker.",
+                        "Removed the experimental built-in Rogue APEX developer helper and its retired settings, menu controls, Assistant registrations and generated metadata.",
+                        "The Group Frame preview roster now includes B3NZII.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "The Player Castbar ignores interrupted or failed terminal events when no real cast is active, preventing false interrupted flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle and Empower feedback.",
+                        "Focus interrupt and cast trackers reinitialize after the active profile and frames become available during startup, follow the icon lifecycle and clear stale Focus cast ownership when the combined display is disabled.",
+                        "Party Frames honor the configured Units per column and Max columns values instead of forcing a single secure column, including future combat-safe secure-header capacity.",
+                        "Live Party, Raid and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; unavailable protected geometry fails closed.",
+                        "Party-style Arena Group Frames fail open to Blizzard's secure roster while the Arena or Shuffle roster is temporarily incomplete instead of publishing an unusable partial name list.",
+                        "Group Range Fade re-queries the bound member on native range events in PvP instances and refreshes its event route when the instance context changes.",
+                        "Unit Range Fade reuses unchanged poll sets across movement and identity edges instead of rebuilding or duplicating scheduler work.",
+                        "Player Power current-value text retains its resolved resource identity through form, vehicle and explicit Mana handoffs.",
+                        "The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition without adding polling or permanent update work.",
+                        "Aura-name fallback scans coalesce to one pending unit scan and skip update-only or removal-only events that cannot resolve a new alias.",
+                        "Heal-prediction stripes use a specialized full-health path and avoid redundant secret checks and overflow work.",
+                        "Assistant ambiguity handling fails closed for conflicting colors, cross-frame wording, contradictory movement, partial compound commands and misleading numbers in control labels instead of applying unrelated settings.",
+                        "Exact setting, location and purpose questions outrank generic concept guidance so profile-copy, Aura, status-indicator, castbar and frame-specific requests reach their precise owner.",
+                        "Safe Assistant questions preserve their original polarity and capability intent across page-context routing instead of becoming setting changes.",
+                        "Read-only Assistant requests stay off broad mutation indexes, explicit numeric movement remains on bounded routes, and clarification choices survive repeated classification.",
+                        "The Assistant's unloaded-Menu Group copy path mirrors the native chunked health and power fill fields while excluding anchor and migration-only state.",
+                        "Exact-ID group buffs remain available on follower-dungeon Party NPCs under Blizzard's Retail group-member identity contract instead of being hidden by the old assist gate.",
+                        "Durationless curated states such as Shroud recipient membership bypass generic Hide Permanent and Maximum Duration restrictions, while every other Group Aura filter keeps the saved restrictions.",
+                        "Exact-ID candidate filters are installed before any broad native filter transition, avoiding an intermediate unrestricted Helpful-aura refresh.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.5-alpha4",
+            date = "2026-08-17",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added dedicated Arena Frames for arena1-3 with their own castbars, auras, Edit Mode movers, options page and Assistant coverage, including match preparation, stealth and trinket tracking.",
+                        "Added the MidnightSkin theme bridge so the MSUF menu and the Edit Mode popup chrome follow the active UI theme.",
+                        "Synchronized the unified Mainline, Vanilla, Mists and TBC package with the MSUF 6.08 and 6.09 feature and fix set while retaining every client-specific API owner.",
+                        "Added dynamic Custom Priority ordering for Dots on target and the Custom 1-3 aura containers, keeping the configured spell order compact as tracked auras appear or expire.",
+                        "Added a combat aura scanner to the blacklist workspace that captures blockable auras during combat and reopens the menu with the collected list.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Reworked the menu UX with focus-section chips, a dashboard jump hub, search ranking and palette fixes, guarded destructive actions and explanations for disabled controls, with menu strings in all twelve locales.",
+                        "Moved aura ordering into dedicated, scope-aware Ordering workspaces for Unit Frames, Group Frames, custom aura containers and external defensives.",
+                        "Extended the Maximum duration filter to every aura lane on unit and group frames, including Buffs, Tracked Buffs and External Defensives.",
+                        "Added an optional Boss Number status indicator for boss frames.",
+                        "Separated the Augmentation Evoker resources so Ebon Might renders on the Player power bar, Essence stays an ordinary Class Resource and Mana moves to Alternative Mana.",
+                        "Added the Show spell IDs in aura tooltips toggle, with a guarded no-op on clients where the underlying option does not exist.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed the CPU spike when an arena match starts.",
+                        "Group frames preserve raid groups without overwriting the configured sort mode.",
+                        "Fixed external-defensive aura filters on Classic clients and kept only-mine auras filtered out of range checks.",
+                        "Isolated the Classic aura backend load graph from the Mainline manifest.",
+                        "Reused the cached absorb protection state and prebuilt alias scan lists on the prediction and aura hot paths.",
+                        "Fixed gameplay mover offsets drifting on scaled anchors and the combat timer not being movable while its position was unlocked.",
+                        "Aura scanning respects Blizzard's instanced-content restrictions instead of erroring, and reports how many auras the client hides as secret.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha3",
             date = "2026-08-13",

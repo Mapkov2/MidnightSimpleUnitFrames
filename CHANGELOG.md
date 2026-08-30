@@ -1,5 +1,44 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha5 - 2026-08-30
+
+### Highlights
+
+- Synchronized the unified Mainline, Vanilla, Mists and TBC package with the released Retail 6.13 source, including the complete published 6.13 feature and bugfix set while retaining every client-specific API owner.
+- Added the curated **MSUF Highlights** Group Buff filter with 122 important offensive, support, defensive and healer cooldowns. New and Factory-reset profiles use it by default; existing profiles keep their current filter and can opt in.
+- Added the option to keep the Focus castbar visible beside the compact Focus Kick interrupt icon.
+
+### Changes
+
+- MSUF Highlights uses one shared immutable catalog and exact-ID candidate filtering without a MiniAuras dependency, polling or recurring roster scans.
+- The Assistant now understands German negative determiners, colloquial removal requests and double negatives, can switch supported MSUF or Blizzard Unit Frames globally, and retries zero-result setting searches with registered synonyms.
+- Assistant Aura actions accept enchant-related inputs and route Aura filter and blacklist requests more precisely; exact searches recognize registry aliases and complete portrait-control labels.
+- Typed HEX colors in the compact color picker now commit on Enter through the same apply path as the visual picker.
+- Removed the experimental built-in Rogue APEX developer helper and its retired settings, menu controls, Assistant registrations and generated metadata.
+- The Group Frame preview roster now includes B3NZII.
+
+### Fixes & Performance
+
+- The Player Castbar ignores interrupted or failed terminal events when no real cast is active, preventing false interrupted flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle and Empower feedback.
+- Focus interrupt and cast trackers reinitialize after the active profile and frames become available during startup, follow the icon lifecycle and clear stale Focus cast ownership when the combined display is disabled.
+- Party Frames honor the configured Units per column and Max columns values instead of forcing a single secure column, including future combat-safe secure-header capacity.
+- Live Party, Raid and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; unavailable protected geometry fails closed.
+- Party-style Arena Group Frames fail open to Blizzard's secure roster while the Arena or Shuffle roster is temporarily incomplete instead of publishing an unusable partial name list.
+- Group Range Fade re-queries the bound member on native range events in PvP instances and refreshes its event route when the instance context changes.
+- Unit Range Fade reuses unchanged poll sets across movement and identity edges instead of rebuilding or duplicating scheduler work.
+- Player Power current-value text retains its resolved resource identity through form, vehicle and explicit Mana handoffs.
+- The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition without adding polling or permanent update work.
+- Aura-name fallback scans coalesce to one pending unit scan and skip update-only or removal-only events that cannot resolve a new alias.
+- Heal-prediction stripes use a specialized full-health path and avoid redundant secret checks and overflow work.
+- Assistant ambiguity handling fails closed for conflicting colors, cross-frame wording, contradictory movement, partial compound commands and misleading numbers in control labels instead of applying unrelated settings.
+- Exact setting, location and purpose questions outrank generic concept guidance so profile-copy, Aura, status-indicator, castbar and frame-specific requests reach their precise owner.
+- Safe Assistant questions preserve their original polarity and capability intent across page-context routing instead of becoming setting changes.
+- Read-only Assistant requests stay off broad mutation indexes, explicit numeric movement remains on bounded routes, and clarification choices survive repeated classification.
+- The Assistant's unloaded-Menu Group copy path mirrors the native chunked health and power fill fields while excluding anchor and migration-only state.
+- Exact-ID group buffs remain available on follower-dungeon Party NPCs under Blizzard's Retail group-member identity contract instead of being hidden by the old assist gate.
+- Durationless curated states such as Shroud recipient membership bypass generic Hide Permanent and Maximum Duration restrictions, while every other Group Aura filter keeps the saved restrictions.
+- Exact-ID candidate filters are installed before any broad native filter transition, avoiding an intermediate unrestricted Helpful-aura refresh.
+
 ## 6.5-alpha4 - 2026-08-17
 
 ### Highlights
