@@ -9768,6 +9768,9 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     local result = NormalizePlanResult(AP.LongInputResult(text)
         or AP.TrySubmitBatch(text, batchParts, { turnSerialAdvanced = true })
         or A.HandleInput(text, { skipTurnSerialAdvance = true }))
+    if type(AP.ResolveUnresolvedMutationResult) == "function" then
+        result = AP.ResolveUnresolvedMutationResult(text, result)
+    end
     AP.RecordAssistantResult(result)
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.submit")
@@ -9777,9 +9780,7 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     return result
 end
 
-function A.Submit(text)
-    local ok, result = xpcall(function()
-        local produced = AP.SubmitNow(text)
+function AP.ResolveUnresolvedMutationResult(text, produced)
         -- Last word before the reply leaves: dozens of specialised lanes can
         -- claim a sentence and then hand back a list, an article or an
         -- apology. When the sentence's own subject resolves to exactly ONE
@@ -9900,10 +9901,19 @@ function A.Submit(text)
                 local okPlan, planned = pcall(A.ExecutePlan, plan, {})
                 local plannedStatus = okPlan and type(planned) == "table"
                     and tostring(planned.status or planned.result or "") or ""
-                if plannedStatus == "applied" or plannedStatus == "changed" then return planned end
+                if plannedStatus == "applied" or plannedStatus == "changed" then
+                    ClearPendingChoices()
+                    ClearPendingResults()
+                    return planned
+                end
             end
         end
         return produced
+end
+
+function A.Submit(text)
+    local ok, result = xpcall(function()
+        return AP.ResolveUnresolvedMutationResult(text, AP.SubmitNow(text))
     end, AP.AssistantJobErrorHandler)
     if ok then
         -- Every submit path funnels through here, so this is the one place that
@@ -9959,6 +9969,7 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
         steps[#steps + 1] = A.CoroutineStep(function()
             finalResult = AP.TrySubmitBatch(text, parts, { turnSerialAdvanced = true })
                 or AP.BatchPlanFailure(parts)
+            finalResult = AP.ResolveUnresolvedMutationResult(text, finalResult)
         end)
         steps[#steps + 1] = function()
             Complete(finalResult or AP.BatchPlanFailure(parts))
@@ -9969,6 +9980,7 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
             finalResult = AP.LongInputResult(text) or A.HandleInput(text, {
                 skipTurnSerialAdvance = opts.turnSerialAdvanced == true,
             })
+            finalResult = AP.ResolveUnresolvedMutationResult(text, finalResult)
         end)
         steps[#steps + 1] = function()
             Complete(finalResult)
@@ -10045,12 +10057,14 @@ function AP.SubmitDeferredNow(text, callback)
     if not batchParts then
         local immediate = AP.TryImmediateSubmitResult(text)
         if immediate then
+            immediate = AP.ResolveUnresolvedMutationResult(text, immediate)
             AP.RunSubmitCallback(callback, immediate, "assistant.immediate.callback", text)
             return immediate
         end
         if not deferredExistenceQuestion and not deferredNpcBarColor and not deferredNamedLookup then
             local immediateMutation = AP.TryImmediateMutationResult(text)
             if immediateMutation then
+                immediateMutation = AP.ResolveUnresolvedMutationResult(text, immediateMutation)
                 AP.RunSubmitCallback(callback, immediateMutation, "assistant.immediate-mutation.callback", text)
                 return immediateMutation
             end
