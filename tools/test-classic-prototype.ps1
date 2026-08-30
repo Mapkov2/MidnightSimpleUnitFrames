@@ -361,9 +361,15 @@ if ($retailReferenceRootFull) {
     foreach ($path in $retailMappedPaths) { [void]$expectedAddonPaths.Add($path) }
     foreach ($path in $ownedAddonPaths) { [void]$expectedAddonPaths.Add($path) }
     $actualAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($target in $targets) {
-        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $root $target.Folder) -Recurse -File -Force) {
-            $relative = $file.FullName.Substring($rootFull.Length + 1).Replace('\', '/')
+    $addonFolders = @($targets | ForEach-Object { $_.Folder })
+    $versionableAddonPaths = @(& git -C $root ls-files --cached --others --exclude-standard -- @addonFolders 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to enumerate versionable Classic addon files:`n$($versionableAddonPaths -join "`n")"
+    }
+    foreach ($relative in $versionableAddonPaths) {
+        $relative = $relative.Replace('\', '/')
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $root $relative))
+        if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
             [void]$actualAddonPaths.Add($relative)
         }
     }
