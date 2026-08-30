@@ -1,6 +1,6 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.14-beta1 - 2026-08-30
+## 6.14 - 2026-08-30
 
 ### Highlights
 
@@ -21,6 +21,7 @@
 - Immediate and deferred Assistant mutations now share the same failure-recovery path so partial work rolls back consistently.
 - General Aura guidance no longer competes with frame-local Aura owners, and question-shaped duration-filter requests retain their safe executable choices.
 - Aura-name fallback updates skip redundant unit-scan setup when no unresolved additions can benefit from it.
+- Opening Unit Frame Power settings no longer errors while building the detached-bar **Text on detached bar** control.
 
 ## 6.13 - 2026-08-28
 

@@ -8,14 +8,14 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "B4F214B2C691CE37D146E3AF503F0D528967AA312A6AEF68BC735D923E1FFD75",
-    currentVersion = "6.14-beta1",
+    sourceSha256 = "5931C27E88B4F99D58898705292A469E12A8D79FB0AB325FD81DACEEA582625B",
+    currentVersion = "6.14",
     historyFromVersion = "6.02",
     previousVersion = "6.13",
-    rangeLabel = "6.13 -> 6.14-beta1",
+    rangeLabel = "6.13 -> 6.14",
     entries = {
         {
-            version = "6.14-beta1",
+            version = "6.14",
             date = "2026-08-30",
             sections = {
                 {
@@ -51,6 +51,7 @@ local data = {
                         "Immediate and deferred Assistant mutations now share the same failure-recovery path so partial work rolls back consistently.",
                         "General Aura guidance no longer competes with frame-local Aura owners, and question-shaped duration-filter requests retain their safe executable choices.",
                         "Aura-name fallback updates skip redundant unit-scan setup when no unresolved additions can benefit from it.",
+                        "Opening Unit Frame Power settings no longer errors while building the detached-bar Text on detached bar control.",
                     },
                 },
             },
