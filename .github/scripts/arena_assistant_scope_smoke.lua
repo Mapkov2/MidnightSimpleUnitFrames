@@ -66,6 +66,34 @@ AssertContains(auraFilteringSource,
 AssertContains(auraFilteringSource,
     'or unit == "boss" or unit == "arena" then',
     "Aura filtering unit gate omitted Arena")
+AssertContains(auraFilteringSource,
+    '"boss filters", "arena filters"',
+    "Aura filter-master intent omitted Arena")
+AssertContains(auraFilteringSource, "local scopes = UNIT_SCOPE_ORDER",
+    "Aura filter-master fallback did not use the complete unit scope order")
+
+local arenaFilterSetting = {
+    key = "auras3.arena.buff.filtersEnabled",
+    get = function() return false end,
+}
+namespace.Assistant.Registry = {
+    GetSetting = function(_, key)
+        if key == arenaFilterSetting.key then return arenaFilterSetting end
+        return nil
+    end,
+}
+assert(loadfile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser_AuraFiltering.lua"))(
+    "MidnightSimpleUnitFrames_Assistant", namespace
+)
+local arenaFilterPlan = parserCore.ParseAuraFilteringConversationShortcut(
+    "enable filters for arena buffs", {}
+)
+assert(type(arenaFilterPlan) == "table" and arenaFilterPlan.kind == "changes",
+    "Arena filter-master request did not produce an executable change plan")
+assert(type(arenaFilterPlan.changes) == "table" and #arenaFilterPlan.changes == 1
+        and arenaFilterPlan.changes[1].setting == arenaFilterSetting
+        and arenaFilterPlan.changes[1].value == true,
+    "Arena filter-master request targeted the wrong setting or value")
 
 local parserSource = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser.lua")
 AssertContains(parserSource, 'units = { "player", "target", "focus", "boss", "arena" }',
