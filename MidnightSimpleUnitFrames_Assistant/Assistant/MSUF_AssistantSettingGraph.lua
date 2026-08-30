@@ -726,7 +726,7 @@ local function ApplyConflicts(state)
         if provider.provider == "auraFilterSpecs" then
             for _, spec in ipairs(data.AURA_FILTER_BOOLEAN_SPECS or {}) do
                 for _, conflictLeaf in ipairs(spec.conflicts or {}) do
-                    for _, scope in ipairs({ "player", "target", "focus", "boss" }) do
+                    for _, scope in ipairs(data.AURA_SCOPES or { "player", "target", "focus", "boss", "arena" }) do
                         local from = table.concat({ "auras3", scope, spec.lane, "filter", spec.key }, ".")
                         local to = table.concat({ "auras3", scope, spec.lane, "filter", conflictLeaf }, ".")
                         AddEdge(state, {
@@ -787,7 +787,7 @@ end
 
 local ASSOCIATION_STOP_WORDS = {
     bars = true, bar = true, setting = true, option = true, global = true,
-    player = true, target = true, focus = true, boss = true, party = true, raid = true,
+    player = true, target = true, focus = true, boss = true, arena = true, party = true, raid = true,
 }
 
 local function AssociationDescriptor(setting, key)

@@ -467,7 +467,7 @@ Data.ROOT_PARSER = {
         [220] = { "power background matches hp", "power bar background matches hp", "power background follows hp" },
         [221] = { "color", "colour", "tint", "texture", "opacity", "alpha" },
         [222] = {
-        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "target of target", "focustarget", "focus target",
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
         "castbar", "cast bar", "class power", "class resource", "power bar", "mana bar",
         "power background", "mana background", "resource background",
@@ -502,7 +502,7 @@ Data.ROOT_PARSER = {
         [245] = { "raid", "mythic raid", "mythicraid" },
         [246] = { "group frame", "group frames", "all groups", "all group frames" },
         [247] = {
-        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "target of target", "focustarget", "focus target",
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
         "power", "mana", "resource", "class resource", "class power", "castbar", "cast bar",
     },
@@ -530,7 +530,7 @@ Data.ROOT_PARSER = {
     },
         [261] = { "reset", "restore", "default", "defaults", "zuruecksetzen" },
         [262] = {
-        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "target of target", "focustarget", "focus target",
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
         "reset", "restore", "default", "defaults", "mode",
         "aura", "auras", "buff", "buffs",
@@ -980,7 +980,7 @@ Data.ROOT_PARSER = {
         [552] = { "height", "size", "thickness", "tall" },
         [553] = {
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "focustarget",
         "text", "font", "name", "power text", "health text", "hp text", "mana text",
         "class power", "class resource", "class resources", "castbar", "cast bar",
         "aura", "auras", "buff", "buffs", "debuff", "debuffs",
@@ -994,7 +994,7 @@ Data.ROOT_PARSER = {
     },
         [556] = {
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "focustarget",
         "castbar", "cast bar", "class power", "class resource", "class resources",
         "detached power", "second hp", "player hp", "absorb", "heal absorb",
         "gradient", "color", "colour", "opacity", "alpha", "outline", "border",
@@ -1009,7 +1009,7 @@ Data.ROOT_PARSER = {
         [558] = { "gradient strength", "bar gradient strength", "health gradient strength", "power gradient strength" },
         [559] = {
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "focustarget",
         "castbar", "cast bar", "class power", "class resource", "class resources",
         "detached power", "second hp", "player hp", "absorb", "heal absorb",
         "texture", "color", "colour", "opacity", "alpha", "outline", "border",
@@ -1043,7 +1043,7 @@ Data.ROOT_PARSER = {
     },
         [567] = {
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "focustarget",
         "aura", "auras", "buff", "debuff", "corner", "stripe", "filter",
     },
         [568] = { "detects", "trigger", "detection" },
@@ -1067,7 +1067,7 @@ Data.ROOT_PARSER = {
     },
         [579] = {
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "focustarget",
         "class power", "class resource", "class resources", "detached power",
         "color", "colour", "font", "size", "offset", "anchor", "position",
     },
@@ -1087,7 +1087,7 @@ Data.ROOT_PARSER = {
     },
         [586] = {
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "focustarget",
         "combat", "timer", "crosshair", "totem",
         "name text", "hp text", "health text", "power text", "mana text",
         "class power", "class resource", "class resources", "castbar", "cast bar",
@@ -1144,7 +1144,7 @@ Data.ROOT_PARSER = {
     },
         [612] = {
         "msuf", "ui", "frame", "frames", "unitframe", "unitframes", "unit frame", "unit frames",
-        "bar", "bars", "party", "raid", "mythic", "target", "player", "focus", "boss",
+        "bar", "bars", "party", "raid", "mythic", "target", "player", "focus", "boss", "arena",
         "aura", "auras", "buff", "buffs", "debuff", "debuffs", "text",
     },
         [613] = { "raid", "mythic" },
@@ -1196,6 +1196,7 @@ Data.ROOT_PARSER = {
         [653] = { "target", "target castbar", "target cast bar", "ziel" },
         [654] = { "focus", "focus castbar", "focus cast bar", "fokus" },
         [655] = { "boss", "boss castbar", "boss castbars", "boss cast bar", "boss cast bars" },
+        [818] = { "arena", "arenas", "arena castbar", "arena castbars", "arena cast bar", "arena cast bars" },
         [656] = { "castbar", "cast bar", "zauberleiste" },
         [657] = {
             "interrupt shake", "shake on interrupt", "shake strength",
@@ -1521,7 +1522,7 @@ Data.ROOT_PARSER = {
             "from off to on", "from on to off", "off to on", "on to off",
         },
         [809] = {
-        "player frame", "target frame", "focus frame", "pet frame", "boss frame",
+        "player frame", "target frame", "focus frame", "pet frame", "boss frame", "arena frame", "arena frames",
         "targettarget frame", "target target frame", "target of target frame",
         "focustarget frame", "focus target frame", "unit frame", "unit frames",
     },

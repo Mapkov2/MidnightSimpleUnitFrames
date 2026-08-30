@@ -126,7 +126,7 @@ end
 -- the control path, so the same path there really is the same stored value.
 local SCOPE_PAGES = {
     uf_player = true, uf_target = true, uf_focus = true, uf_pet = true,
-    uf_targettarget = true, uf_focustarget = true, uf_boss = true,
+    uf_targettarget = true, uf_focustarget = true, uf_boss = true, uf_arena = true,
 }
 
 -- Longest first: "target of target" has to be claimed before the bare "target"
@@ -143,6 +143,7 @@ local UNIT_PAGE_ALIASES = {
     { alias = " focus ", page = "uf_focus" },
     { alias = " pet ", page = "uf_pet" },
     { alias = " boss ", page = "uf_boss" },
+    { alias = " arena ", page = "uf_arena" },
 }
 
 -- Which unit frames did the request actually name? Nil means "no unit named",

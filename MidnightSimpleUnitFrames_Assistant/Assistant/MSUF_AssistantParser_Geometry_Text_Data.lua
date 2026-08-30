@@ -129,7 +129,7 @@ Data.GEOMETRY_TEXT_PARSER = {
         [52] = { "it", "that", "this", "selected", "same" },
         [53] = {
         "name", "name text", "unit name", "unitframe name", "unit frame name",
-        "name label", "player name", "target name", "focus name", "pet name", "boss name",
+        "name label", "player name", "target name", "focus name", "pet name", "boss name", "arena name",
     },
         [54] = { "text", "unit text", "unitframe text", "unit frame text", "frame text" },
         [55] = { "unitframe", "unit frame", "frame", "middle of", "center of", "centre of" },
@@ -149,7 +149,7 @@ Data.GEOMETRY_TEXT_PARSER = {
     },
         [59] = {
         "name", "names", "name text", "unit name", "unitframe name", "unit frame name",
-        "name label", "player name", "target name", "focus name", "pet name", "boss name",
+        "name label", "player name", "target name", "focus name", "pet name", "boss name", "arena name",
         "party name", "party names", "raid name", "raid names", "mythic raid name", "mythic raid names", "group name", "group names",
     },
         [60] = { "offset", "position", "pos", "x", "y", "move", "nudge", "shift", "left", "right", "up", "down" },
@@ -163,7 +163,7 @@ Data.GEOMETRY_TEXT_PARSER = {
     },
         [65] = {
         "name", "name text", "unit name", "unitframe name", "unit frame name",
-        "names", "name label", "player name", "target name", "focus name", "pet name", "boss name",
+        "names", "name label", "player name", "target name", "focus name", "pet name", "boss name", "arena name",
         "party name", "party names", "raid name", "raid names", "group name", "group names",
     },
         [66] = { "put", "place", "set", "move", "position", "stick", "keep" },

@@ -124,6 +124,7 @@ local UNIT_FRAME = Enum({
 }, {
     ["target of target"] = "targettarget", tot = "targettarget",
     ["focus target"] = "focustarget", boss1 = "boss", bosses = "boss",
+    arena1 = "arena", arena2 = "arena", arena3 = "arena", arenas = "arena",
 })
 local EDIT_UNIT = Enum({
     "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
@@ -131,12 +132,13 @@ local EDIT_UNIT = Enum({
 }, {
     ["target of target"] = "targettarget", tot = "targettarget",
     ["focus target"] = "focustarget", boss1 = "boss", bosses = "boss",
+    arena1 = "arena", arena2 = "arena", arena3 = "arena", arenas = "arena",
     group = "party", ["mythic raid"] = "mythicraid",
     priority = "gf_priority", ["priority frame"] = "gf_priority", ["priority frames"] = "gf_priority",
     ["pinned frame"] = "gf_priority", ["pinned frames"] = "gf_priority",
 })
 local CASTBAR_UNIT = Enum({ "player", "target", "focus", "boss", "arena" }, {
-    boss1 = "boss", bosses = "boss", arena1 = "arena", arenas = "arena",
+    boss1 = "boss", bosses = "boss", arena1 = "arena", arena2 = "arena", arena3 = "arena", arenas = "arena",
 })
 local GROUP_SCOPE = Enum({ "party", "raid", "mythicraid" }, {
     group = "party", ["mythic raid"] = "mythicraid", mythic = "mythicraid",
@@ -144,12 +146,18 @@ local GROUP_SCOPE = Enum({ "party", "raid", "mythicraid" }, {
 local GROUP_AURA_SCOPE = Enum({ "party", "raid" }, {
     group = "party", mythicraid = "raid", ["mythic raid"] = "raid", mythic = "raid",
 })
-local AURA_UNIT_INPUT_SCOPE = Enum({ "player", "target", "focus", "boss" })
-local AURA_CUSTOM_CONTAINER_SCOPE = Enum({ "player", "target", "focus", "boss" })
-local AURA_DIAGNOSTIC_SCOPE = Enum({ "player", "target", "focus", "boss", "party", "raid", "mythicraid" }, {
+local AURA_UNIT_INPUT_SCOPE = Enum({ "player", "target", "focus", "boss", "arena" }, {
+    arena1 = "arena", arena2 = "arena", arena3 = "arena", arenas = "arena",
+})
+local AURA_CUSTOM_CONTAINER_SCOPE = Enum({ "player", "target", "focus", "boss", "arena" }, {
+    arena1 = "arena", arena2 = "arena", arena3 = "arena", arenas = "arena",
+})
+local AURA_DIAGNOSTIC_SCOPE = Enum({ "player", "target", "focus", "boss", "arena", "party", "raid", "mythicraid" }, {
+    arena1 = "arena", arena2 = "arena", arena3 = "arena", arenas = "arena",
     group = "party", ["mythic raid"] = "mythicraid", mythic = "mythicraid",
 })
-local AURA_ROUTE_SCOPE = Enum({ "shared", "player", "target", "focus", "boss", "party", "raid", "mythicraid" }, {
+local AURA_ROUTE_SCOPE = Enum({ "shared", "player", "target", "focus", "boss", "arena", "party", "raid", "mythicraid" }, {
+    arena1 = "arena", arena2 = "arena", arena3 = "arena", arenas = "arena",
     global = "shared", all = "shared", group = "party", ["mythic raid"] = "mythicraid", mythic = "mythicraid",
 })
 local AURA_LANE = Enum({ "buff", "debuff", "both" }, {
@@ -163,6 +171,7 @@ local GLOBAL_SCOPE = Enum({
 }, {
     party = "gf_party", group = "gf_party", gfparty = "gf_party",
     raid = "gf_raid", mythicraid = "gf_raid", mythic = "gf_raid", gfraid = "gf_raid",
+    arena1 = "arena", arena2 = "arena", arena3 = "arena", arenas = "arena",
     ["target of target"] = "targettarget", tot = "targettarget", ["focus target"] = "focustarget",
 })
 

@@ -1061,6 +1061,7 @@ local function FailureScopeLabel(text)
     if FailureContainsAny(text, { " focus " }) then return "Focus" end
     if FailureContainsAny(text, { " pet " }) then return "Pet" end
     if FailureContainsAny(text, { " boss " }) then return "Boss" end
+    if FailureContainsAny(text, { " arena " }) then return "Arena" end
     if FailureContainsAny(text, { " party " }) then return "Party" end
     if FailureContainsAny(text, { " raid " }) then return "Raid" end
     if FailureContainsAny(text, { " player ", " my ", " self " }) then return "Player" end
@@ -1097,7 +1098,7 @@ local function FailurePageHints(query)
         local sharedAppearance = FailureContainsAny(normalized,
             { " appearance ", " shared ", " theme ", " icon shape ", " icon border ", " icon shadow " })
         local unitPage = scope == "Target" and "uf_target" or scope == "Focus" and "uf_focus"
-            or scope == "Boss" and "uf_boss" or "uf_player"
+            or scope == "Boss" and "uf_boss" or scope == "Arena" and "uf_arena" or "uf_player"
         local page = groupScope and "gf_auras" or sharedAppearance and "auras3_styling" or unitPage
         local pageLabel = groupScope and "Group Auras" or sharedAppearance and "Global Aura Appearance"
             or tostring(scope or "Player") .. " UnitFrame"
@@ -1148,7 +1149,7 @@ local function FailurePageHints(query)
     if #hints == 0 and scope then
         local pages = {
             Player = { "uf_player", "Player" }, Target = { "uf_target", "Target" }, Focus = { "uf_focus", "Focus" },
-            Pet = { "uf_pet", "Pet" }, Boss = { "uf_boss", "Boss Frames" },
+            Pet = { "uf_pet", "Pet" }, Boss = { "uf_boss", "Boss Frames" }, Arena = { "uf_arena", "Arena Frames" },
             ["Target of Target"] = { "uf_targettarget", "Target of Target" }, ["Focus Target"] = { "uf_focustarget", "Focus Target" },
         }
         local match = pages[scope]
@@ -2453,6 +2454,7 @@ function AP.IsSpatialRelationshipIntent(text)
         "under the", "under my", "under player", "under target", "under focus",
         "above frame", "below frame", "under frame", "over frame",
         "above boss", "below boss", "under boss", "over boss",
+        "above arena", "below arena", "under arena", "over arena",
         "above pet", "below pet", "under pet", "over pet",
     }
     for i = 1, #phrases do
@@ -7584,7 +7586,11 @@ function A.ExecutePlan(plan, opts)
                 dependencies[#dependencies + 1] = { setting = setting, value = value }
             end
         end
-        for _, owner in ipairs({ "player.buff", "player.debuff", "target.buff", "target.debuff", "focus.buff", "focus.debuff", "boss.buff", "boss.debuff" }) do
+        for _, owner in ipairs({
+            "player.buff", "player.debuff", "target.buff", "target.debuff",
+            "focus.buff", "focus.debuff", "boss.buff", "boss.debuff",
+            "arena.buff", "arena.debuff",
+        }) do
             local need = unitScopes[owner]
             if need then
                 if need.enable then
@@ -9251,6 +9257,7 @@ function AP.TryImmediateMutationResult(text, opts)
                 or normalized:find("target", 1, true)
                 or normalized:find("focus", 1, true)
                 or normalized:find("boss", 1, true)
+                or normalized:find("arena", 1, true)
                 or normalized:find("party", 1, true)
                 or normalized:find("raid", 1, true)
                 or normalized:find("group", 1, true)))

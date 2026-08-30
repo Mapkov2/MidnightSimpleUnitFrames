@@ -113,7 +113,7 @@ function A.DiagnosticsRegistry.BuildAuraDiagnostic(ctx)
             return AppendFixChoices(label .. " group aura check:\n" .. table.concat(issues, "\n"), choices)
         end
 
-        if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then scope = "target" end
+        if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "arena" then scope = "target" end
         local label = ScopeLabel(scope)
         local root = Registry:GetSetting("auras3.enabled")
         if root and type(root.get) == "function" and root.get() == false then

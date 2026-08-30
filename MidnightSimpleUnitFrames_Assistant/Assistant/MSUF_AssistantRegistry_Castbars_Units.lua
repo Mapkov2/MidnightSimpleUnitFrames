@@ -23,7 +23,7 @@ function A.CastbarsRegistry.RegisterUnitSettings(ctx)
     local RegisterGeneralEnumSetting = ctx.RegisterGeneralEnumSetting
     local RegisterCastbarUnitGeneralBoolean = ctx.RegisterCastbarUnitGeneralBoolean
     local RegisterPlayerCastbarProvider = ctx.RegisterPlayerCastbarProvider
-    local RegisterBossCastbarDetachSetting = ctx.RegisterBossCastbarDetachSetting
+    local RegisterCastbarDetachSetting = ctx.RegisterCastbarDetachSetting
 
     if type(AddAliasesForUnit) ~= "function" then return end
     if type(RegisterUnitCastbarBoolean) ~= "function" or type(RegisterGeneralNumber) ~= "function" then return end
@@ -86,8 +86,9 @@ function A.CastbarsRegistry.RegisterUnitSettings(ctx)
         RegisterGeneralNumber(keys.y, unit, "castbar", "offsetY", "Castbar Y", 0, -1000, 1000, aliases)
     end
 
-    if type(RegisterBossCastbarDetachSetting) == "function" then
-        RegisterBossCastbarDetachSetting()
+    if type(RegisterCastbarDetachSetting) == "function" then
+        RegisterCastbarDetachSetting("boss")
+        RegisterCastbarDetachSetting("arena")
     end
 
     if type(RegisterPlayerCastbarProvider) == "function" then

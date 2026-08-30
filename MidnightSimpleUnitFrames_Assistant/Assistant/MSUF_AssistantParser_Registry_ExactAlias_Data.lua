@@ -39,6 +39,7 @@ Data.REGISTRY_EXACT_ALIAS = {
         focus = true,
         pet = true,
         boss = true,
+        arena = true,
         party = true,
         raid = true,
         frame = true,

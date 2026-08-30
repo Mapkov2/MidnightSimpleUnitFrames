@@ -143,7 +143,7 @@ R.NAV_HELP_TERMS = {    "open", "go to", "where", "where is", "where are", "find
     "oeffne", "wo", "wo ist", "finde", "suche", "hilfe", "warum", "wie", "was", "was ist", "was kann", "was kannst",
 }
 R.EXPLICIT_DOMAIN_TERMS = {    "unitframe", "unitframes", "unit frame", "unit frames",
-    "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target", "party", "raid", "group", "group frames",
+    "player", "target", "focus", "pet", "boss", "arena", "targettarget", "target of target", "focustarget", "focus target", "party", "raid", "group", "group frames",
     "spieler", "ziel", "fokus", "begleiter", "gruppe", "gruppenframes",
     "castbar", "cast bar", "auras", "aura", "buff", "debuff", "profile", "profiles", "class resource", "class power", "gameplay",
     "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus",
@@ -170,6 +170,7 @@ R.PAGE_CONTEXT = {    uf_player = { prefix = "player", label = "Player" },
     uf_targettarget = { prefix = "targettarget", label = "Target of Target" },
     uf_focustarget = { prefix = "focustarget", label = "Focus Target" },
     uf_boss = { prefix = "boss", label = "Boss Frames" },
+    uf_arena = { prefix = "arena", label = "Arena Frames" },
     opt_castbar = { prefix = "castbar", label = "Cast Bars" },
     opt_bars = { prefix = "bar", label = "Bars" },
     opt_colors = { prefix = "color", label = "Colors" },
@@ -1487,7 +1488,7 @@ R.CORRECTION_RETARGET_PATTERNS = {
 -- Scope words that a correction can replace inside the previous request.
 R.CORRECTION_SCOPE_TOKENS = {
     "target of target", "focus target", "mythic raid", "npcs", "npc",
-    "player", "target", "focus", "pet", "boss", "party", "raid",
+    "player", "target", "focus", "pet", "boss", "arena", "party", "raid",
 }
 
 function R.CorrectionRetargetSubject(text)
@@ -1687,13 +1688,13 @@ function R.TryFullFrameAuraEffectRequest(text)
     end
     if not scope then
         return R.FullFrameAuraEffectClarification(nil, laneLabel,
-            "Which Unit Frame should I change: Player, Target, Focus, or Boss?")
+            "Which Unit Frame should I change: Player, Target, Focus, Boss, or Arena?")
     end
     if scope ~= "shared" and scope ~= "player" and scope ~= "target"
-        and scope ~= "focus" and scope ~= "boss"
+        and scope ~= "focus" and scope ~= "boss" and scope ~= "arena"
     then
         return R.FullFrameAuraEffectClarification(nil, laneLabel,
-            "Aura Full-Frame Effects are available for Player, Target, Focus, and Boss, not "
+            "Aura Full-Frame Effects are available for Player, Target, Focus, Boss, and Arena, not "
                 .. tostring(scopeLabel or scope) .. ".")
     end
 
@@ -1953,7 +1954,7 @@ function R.ReviewedSemanticMutationKind(text)
     local unitScope, anchorValue = norm:match(
         "^set%s+(.+)%s+name%s+anchor%s+to%s+(%S+)$")
     local reviewedUnitScopes = {
-        player = true, target = true, focus = true, pet = true, boss = true,
+        player = true, target = true, focus = true, pet = true, boss = true, arena = true,
         targettarget = true, focustarget = true,
         ["target of target"] = true, ["focus target"] = true,
     }
@@ -3029,7 +3030,7 @@ end
 
 R.LOCAL_WOW_UI_TERMS = {    "gcd", "global cooldown", "global cool down",
     "unit frame", "unit frames", "unitframe", "unitframes", "player frame", "target frame",
-    "focus frame", "pet frame", "boss frame", "boss frames",
+    "focus frame", "pet frame", "boss frame", "boss frames", "arena frame", "arena frames",
     "party frame", "party frames", "raid frame", "raid frames", "group frame", "group frames",
     "nameplate", "nameplates", "enemy nameplate", "enemy nameplates",
     "aura", "auras", "buff", "buffs", "debuff", "debuffs",
@@ -3210,7 +3211,7 @@ function R.LooksLikeGuidedTourRequest(text)    local norm = R.Normalize(text)
 end
 
 R.SCOPED_HELP_SCOPE_TERMS = {    "player", "player frame", "target", "target frame", "focus", "focus frame", "pet", "pet frame",
-    "boss", "boss frame", "boss frames", "castbar", "castbars", "cast bar", "cast bars",
+    "boss", "boss frame", "boss frames", "arena", "arena frame", "arena frames", "castbar", "castbars", "cast bar", "cast bars",
     "bar", "bars", "texture", "textures", "color", "colors", "font", "fonts",
     "profile", "profiles", "group", "group frame", "group frames", "party", "party frame",
     "party frames", "raid", "raid frame", "raid frames", "layout", "health text",
@@ -3466,7 +3467,7 @@ R.CREATION_GUIDES = {
                 .. "\n3. Place it:  set player custom aura 1 y offset to 20  and  set player custom aura 1 x offset to 0"
                 .. "\n4. Size it:  set player custom aura 1 icon size to 30,  set player custom aura 1 per row to 4,  set player custom aura 1 spacing to 2"
                 .. "\n5. Cap how many show at once:  set player custom aura 1 max icons to 8"
-                .. "\nSwap 'player' for target, focus or boss, and 1 for 2-4. To see what a container currently holds, ask 'list player custom aura 1'. To start over, say 'reset player custom aura 1'."
+                .. "\nSwap 'player' for target, focus, boss or arena, and 1 for 2-4. To see what a container currently holds, ask 'list player custom aura 1'. To start over, say 'reset player custom aura 1'."
                 .. "\nI can also just open the page for you -- say 'open player auras'."
         end,
     },
@@ -4217,7 +4218,7 @@ R.NATURAL_GENERIC_PROBLEM_TOPICS = {    "frame", "frames", "unit frame", "unit f
     "einstellungen", "optionen",
 }
 
-R.NATURAL_CONCRETE_VISIBILITY_TOPICS = {    "player", "target", "focus", "pet", "boss", "party", "raid", "mythic raid",
+R.NATURAL_CONCRETE_VISIBILITY_TOPICS = {    "player", "target", "focus", "pet", "boss", "arena", "party", "raid", "mythic raid",
     "spieler", "ziel", "fokus", "begleiter", "gruppe", "schlachtzug",
     "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs",
     "castbar", "cast bar", "zauberleiste",
@@ -4262,7 +4263,7 @@ R.READABILITY_PROBLEM_TERMS = {    "too small", "too tiny", "too big", "too larg
 R.READABILITY_AURA_TERMS = {    "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs", "icon", "icons",
 }
 
-R.READABILITY_CASTBAR_TERMS = {    "cast", "casts", "boss cast", "boss casts", "castbar", "castbars", "cast bar", "cast bars", "zauberleiste", "zauberleisten",
+R.READABILITY_CASTBAR_TERMS = {    "cast", "casts", "boss cast", "boss casts", "arena cast", "arena casts", "castbar", "castbars", "cast bar", "cast bars", "zauberleiste", "zauberleisten",
 }
 
 R.READABILITY_GROUP_TERMS = {    "party", "party frame", "party frames", "raid", "raid frame", "raid frames",
@@ -4289,7 +4290,7 @@ R.READABILITY_MENU_TERMS = {    "menu", "dashboard", "options", "config", "assis
 }
 
 R.READABILITY_FRAME_TERMS = {    "frame", "frames", "unit frame", "unit frames", "unitframe", "unitframes",
-    "player", "target", "focus", "boss", "spieler", "ziel", "fokus",
+    "player", "target", "focus", "boss", "arena", "spieler", "ziel", "fokus",
 }
 
 function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
@@ -4347,6 +4348,8 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
         local openAction = "Open Auras"
         if R.ContainsAny(norm, { "party", "raid", "mythic raid", "group" }) then
             openAction = "Open Group Auras"
+        elseif R.ContainsAny(norm, { "arena" }) then
+            openAction = R.ContainsAny(norm, { "debuff", "debuffs" }) and "Open Arena Debuffs" or "Open Arena Buffs"
         elseif R.ContainsAny(norm, { "target" }) then
             openAction = R.ContainsAny(norm, { "debuff", "debuffs" }) and "Open Target Debuffs" or "Open Target Buffs"
         elseif R.ContainsAny(norm, { "focus" }) then
@@ -4370,7 +4373,7 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.READABILITY_CASTBAR_TERMS) then
         return R.ReadabilityReply(
             "Cast bar readability help",
-            "For cast bars, I can adjust Player, Target, Focus, and Boss cast bar size, text, icon, position, fill direction, and preview settings.",
+            "For cast bars, I can adjust Player, Target, Focus, Boss, and Arena cast bar size, text, icon, position, fill direction, and preview settings.",
             "set target cast bar height to 24; make focus cast bar wider; open cast bars.",
             "Open Cast Bars | Check target cast bar"
         )
@@ -4411,7 +4414,7 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
         end
         return R.ReadabilityReply(
             "Name shortening help",
-            "Unit-frame names are shortened per font scope, not per frame: Shared Name Shortening covers every frame that follows Shared (including Player), and Target, Focus, Pet, Boss and the two -of-target frames can override it. Name Max Length sets how many letters survive, Name Truncation Style which end is kept, and Name No Ellipsis whether the trailing '..' is dropped. A wider frame also fits more of the name before shortening applies.",
+            "Unit-frame names are shortened per font scope, not per frame: Shared Name Shortening covers every frame that follows Shared (including Player), and Target, Focus, Pet, Boss, Arena and the two -of-target frames can override it. Name Max Length sets how many letters survive, Name Truncation Style which end is kept, and Name No Ellipsis whether the trailing '..' is dropped. A wider frame also fits more of the name before shortening applies.",
             "turn off shared name shortening; set shared name max length to 12; set target name truncation style to right; make target frame wider.",
             "Open Fonts | Open Player"
         )
@@ -4514,7 +4517,7 @@ function R.TrySignalProblemShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.SIGNAL_INTERRUPT_TERMS) then
         return R.SignalProblemReply(
             "Interrupt visibility help",
-            "For interrupts and kicks, MSUF can improve Target, Focus, and Boss cast bars with Interrupt Ready indicators, Focus Kick Tracker, interrupt colors, and interrupt shake.",
+            "For interrupts and kicks, MSUF can improve Target, Focus, Boss, and Arena cast bars with Interrupt Ready indicators, Focus Kick Tracker, interrupt colors, and interrupt shake.",
             "show kick ready on target; show focus kick tracker; set uninterruptible cast color red; set target cast bar height to 24.",
             "Open Cast Bars | Explain Interrupt Ready"
         )
@@ -4584,7 +4587,7 @@ R.COLOR_CONTRAST_GROUP_TERMS = {    "party", "party frame", "party frames", "rai
 }
 
 R.COLOR_CONTRAST_FRAME_TERMS = {    "frame", "frames", "unit frame", "unit frames", "unitframe", "unitframes",
-    "player", "target", "focus", "boss", "health bar", "power bar", "bar", "bars",
+    "player", "target", "focus", "boss", "arena", "health bar", "power bar", "bar", "bars",
     "spieler", "ziel", "fokus",
 }
 
@@ -4704,6 +4707,7 @@ R.VISIBILITY_FOCUSTARGET_TERMS = { "focustarget", "focus target", "focus target 
 R.VISIBILITY_FOCUS_TERMS = { "focus", "focus frame", "focus unitframe", "fokus", "fokus frame", "fokus rahmen" }
 R.VISIBILITY_PET_TERMS = { "pet", "pet frame", "pet unitframe", "begleiter", "begleiter frame", "begleiter rahmen" }
 R.VISIBILITY_BOSS_TERMS = { "boss", "boss frame", "boss frames", "boss rahmen" }
+R.VISIBILITY_ARENA_TERMS = { "arena", "arena frame", "arena frames", "arena unitframe", "arena rahmen" }
 R.VISIBILITY_CLASSPOWER_TERMS = {    "class resource", "class resources", "class power", "class powers",
     "combo point", "combo points", "holy power", "resource bar", "resource bars",
 }
@@ -4880,7 +4884,7 @@ end
 -- Blizzard raid frames and keep their own commands.
 R.GLOBAL_FRAME_SWITCH_UNIT_KEYS = {
     "player.enabled", "target.enabled", "focus.enabled", "pet.enabled",
-    "boss.enabled", "targettarget.enabled", "focustarget.enabled",
+    "boss.enabled", "arena.enabled", "targettarget.enabled", "focustarget.enabled",
 }
 
 function R.GlobalFrameSwitchIntent(text)
@@ -5583,7 +5587,7 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
     if R.ContainsAny(norm, { "castbar texture", "cast bar texture" }) and asksLocation then
         return R.VisualSettingReply(
             "Castbar Texture setting location",
-            "Castbar Texture lives in Cast Bars. Use it for the shared Player, Target, Focus, and Boss castbar fill texture; Castbar Background Texture is beside it for the background.",
+            "Castbar Texture lives in Cast Bars. Use it for the shared Player, Target, Focus, Boss, and Arena castbar fill texture; Castbar Background Texture is beside it for the background.",
             "open cast bars; set castbar texture to Blizzard; set castbar background texture to Blizzard.",
             "Open Cast Bars | set castbar texture to Blizzard"
         )
@@ -5721,9 +5725,14 @@ function R.GroupScopeFromText(norm)
 end
 
 function R.UnitScopeFromText(norm)
-    if R.ContainsAny(norm, { "player", "player frame", "my frame" }) then return "player", "Player" end
     if R.ContainsAny(norm, { "target of target", "targettarget" }) then return "targettarget", "Target of Target" end
     if R.ContainsAny(norm, { "focus target", "focustarget" }) then return "focustarget", "Focus Target" end
+    -- Arena controls can contain another unit noun (for example "arena
+    -- castbar target name" or "arena debuff player filter"). Preserve the
+    -- owning Arena scope before considering those component/filter words as
+    -- standalone Player/Target/Focus scopes.
+    if R.ContainsAny(norm, { "arena", "arena frame", "arena frames" }) then return "arena", "Arena" end
+    if R.ContainsAny(norm, { "player", "player frame", "my frame" }) then return "player", "Player" end
     if R.ContainsAny(norm, { "target", "target frame" }) then return "target", "Target" end
     if R.ContainsAny(norm, { "focus", "focus frame" }) then return "focus", "Focus" end
     if R.ContainsAny(norm, { "pet", "pet frame" }) then return "pet", "Pet" end
@@ -5736,6 +5745,7 @@ function R.UnitFrameScopeFromText(norm)
     if R.ContainsAny(norm, { "target of target frame", "target of target", "targettarget" }) then return "targettarget", "Target of Target" end
     if R.ContainsAny(norm, { "focus target frame", "focus target", "focustarget" }) then return "focustarget", "Focus Target" end
     if R.ContainsAny(norm, { "player frame", "my frame" }) then return "player", "Player" end
+    if R.ContainsAny(norm, { "arena frame", "arena frames", "arena" }) then return "arena", "Arena" end
     if R.ContainsAny(norm, { "target frame" }) then return "target", "Target" end
     if R.ContainsAny(norm, { "focus frame" }) then return "focus", "Focus" end
     if R.ContainsAny(norm, { "pet frame" }) then return "pet", "Pet" end
@@ -6249,6 +6259,18 @@ function R.AuraGrowthNamedScopes(norm)
             local cut
             for at in segment:gmatch("()%f[%a]to%f[%A]") do cut = at end
             if cut then subject = segment:sub(1, cut - 1) end
+            -- Arena Custom Aura 4 calls its control "Dots on target" (also
+            -- phrased "target dots"). Here, Target is part of the control
+            -- name rather than a second frame scope. Strip it only inside the
+            -- Arena-owned clause so a separate "and target ..." clause still
+            -- remains a genuine multi-scope request.
+            local subjectNorm = R.Normalize(subject)
+            if R.ContainsAny(subjectNorm, { "arena", "arena frame", "arena frames" })
+                and R.ContainsAny(subjectNorm, { "dots on target", "target dots" })
+            then
+                subject = subject:gsub("dots%s+on%s+target", "dots")
+                    :gsub("target%s+dots", "dots")
+            end
             subjects[#subjects + 1] = subject
         end
         if #subjects > 0 then norm = R.Normalize(table.concat(subjects, " ")) end
@@ -6267,6 +6289,7 @@ function R.AuraGrowthNamedScopes(norm)
     if R.ContainsAny(direct, { "target", "target frame" }) then Add("target", "Target") end
     if R.ContainsAny(direct, { "focus", "focus frame" }) then Add("focus", "Focus") end
     if R.ContainsAny(direct, { "boss", "boss frame", "boss frames" }) then Add("boss", "Boss") end
+    if R.ContainsAny(direct, { "arena", "arena frame", "arena frames" }) then Add("arena", "Arena") end
     if R.ContainsAny(direct, { "party", "party frame", "party frames", "group frame", "group frames" }) then
         Add("party", "Party")
     end
@@ -6999,6 +7022,7 @@ end
 
 function R.VisibilityUnitForText(norm)    if R.ContainsAny(norm, R.VISIBILITY_TARGETTARGET_TERMS) then return "targettarget" end
     if R.ContainsAny(norm, R.VISIBILITY_FOCUSTARGET_TERMS) then return "focustarget" end
+    if R.ContainsAny(norm, R.VISIBILITY_ARENA_TERMS) then return "arena" end
     if R.ContainsAny(norm, R.VISIBILITY_TARGET_TERMS) then return "target" end
     if R.ContainsAny(norm, R.VISIBILITY_FOCUS_TERMS) then return "focus" end
     if R.ContainsAny(norm, R.VISIBILITY_PET_TERMS) then return "pet" end
@@ -7013,12 +7037,12 @@ function R.VisibilityAuraLaneForText(norm)    if R.ContainsAny(norm, R.VISIBILIT
 end
 
 function R.VisibilityAuraScopeForText(group, unit)    if group then return group end
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit end
     if not unit then return "target" end
     return nil
 end
 
-function R.VisibilityCastbarUnitForText(unit)    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+function R.VisibilityCastbarUnitForText(unit)    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit end
     if not unit then return "target" end
     return nil
 end
@@ -7159,7 +7183,7 @@ function R.AuraFilterScopeFromText(norm)
     if R.ContainsAny(norm, { "shared", "global", "shared aura", "shared auras", "all unit auras" }) then return "shared", "Shared", false end
     local groupScope, groupLabel = R.GroupScopeFromText(norm)
     local unit, unitLabel = R.UnitScopeFromText(norm)
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit, unitLabel, false end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit, unitLabel, false end
     if groupScope then return groupScope, groupLabel, true end
     return nil, nil, false
 end
@@ -7325,6 +7349,7 @@ end
 local function LiveColorUnit(norm)
     if R.ContainsAny(norm, { "target of target", "targettarget" }) then return "targettarget", "Target of Target" end
     if R.ContainsAny(norm, { "focus target", "focustarget" }) then return "focustarget", "Focus Target" end
+    if R.ContainsAny(norm, { "arena", "arena frame", "arena frames", "arena health", "arena bar" }) then return "arena1", "Arena" end
     if R.ContainsAny(norm, { "target", "target frame", "target health", "target bar" }) then return "target", "Target" end
     if R.ContainsAny(norm, { "focus", "focus frame", "focus health", "focus bar" }) then return "focus", "Focus" end
     if R.ContainsAny(norm, { "player", "player frame", "my frame", "my health bar" }) then return "player", "Player" end
@@ -7787,7 +7812,7 @@ function R.AuraRaidFilterRecommendationReply(norm)
     lines[#lines + 1] = "- DPS personal tracking: use Player on target debuffs when you only care about your own DoTs."
     lines[#lines + 1] = "- Defensive cooldown tracking: use BigDefensive for non-player major defensives, BigDefensivePlayer for yours, or ExternalDefensive for externals."
     lines[#lines + 1] = "I would not start with Include Nameplate-only. Use that only when you know a specific aura appears on nameplates but is missing from MSUF."
-    lines[#lines + 1] = "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane."
+    lines[#lines + 1] = "MSUF detail: Player/Target/Focus/Boss/Arena use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane."
     lines[#lines + 1] = "Examples: set raid debuff filter to Raid; set raid debuff filter to RAID_PLAYER_DISPELLABLE; set target debuffs to any dispel type; set target buffs to Important."
     return {
         kind = "answer",
@@ -8122,7 +8147,7 @@ end
 A.RouterCastbarProblemTerms = A.RouterCastbarProblemTerms or {
     castbar = {
         "castbar", "castbars", "cast bar", "cast bars", "casting bar",
-        "player cast", "target cast", "focus cast", "boss cast",
+        "player cast", "target cast", "focus cast", "boss cast", "arena cast",
         "cast color", "cast colours", "cast colors", "interruptible", "uninterruptible",
         "non interruptible", "noninterruptible", "focus kick", "kick tracker", "interrupt tracker",
     },
@@ -8158,7 +8183,7 @@ end
 
 function R.CastbarUnitFromText(norm)
     local unit, label = R.UnitScopeFromText(norm)
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit, label end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit, label end
     return nil, nil
 end
 
@@ -8188,7 +8213,7 @@ function A.RouterTryUnsupportedUnitCastbarShortcut(text, coreHandler)
 
     local reply = A.RouterCastbarProblemReply(
         unitLabel .. " cast bar help",
-        unitLabel .. " does not have its own separate cast bar toggle in MSUF. Cast bar controls are available for Player, Target, Focus, and Boss. For " .. unitLabel .. " readability, use its normal frame options, or tune the " .. fallbackUnitLabel .. " cast bar when that is the cast signal you want to see.",
+        unitLabel .. " does not have its own separate cast bar toggle in MSUF. Cast bar controls are available for Player, Target, Focus, Boss, and Arena. For " .. unitLabel .. " readability, use its normal frame options, or tune the " .. fallbackUnitLabel .. " cast bar when that is the cast signal you want to see.",
         "open " .. unitLabel:lower() .. "; open cast bars; show " .. fallbackUnitLabel:lower() .. " cast bar; set " .. fallbackUnitLabel:lower() .. " cast bar height to 24.",
         "Open " .. unitLabel .. " | Open Cast Bars | show " .. fallbackUnitLabel:lower() .. " cast bar"
     )
@@ -8354,7 +8379,7 @@ A.RouterTryCastbarProblemShortcut = function(text, coreHandler)
         return A.RouterCastbarProblemReply(
             "Cast bar preview help",
             "Cast bar previews are controlled in Cast Bars and MSUF Edit Mode. If preview or test casts do not appear, check the relevant cast bar visibility first, then use preview controls out of combat.",
-            "preview target cast bar; preview boss cast bar; open cast bars; enter edit mode.",
+            "preview target cast bar; preview boss cast bar; preview arena cast bar; open cast bars; enter edit mode.",
             "Open Cast Bars | Enter Edit Mode | Check target cast bar"
         )
     end
@@ -8382,8 +8407,8 @@ A.RouterTryCastbarProblemShortcut = function(text, coreHandler)
         if not unit then
             unit = R.VisibilityCastbarUnitForText and R.VisibilityCastbarUnitForText(R.VisibilityUnitForText(norm)) or nil
         end
-        if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" then unit = "target" end
-        unitLabel = unitLabel or (unit == "player" and "Player" or unit == "focus" and "Focus" or unit == "boss" and "Boss" or "Target")
+        if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" and unit ~= "arena" then unit = "target" end
+        unitLabel = unitLabel or (unit == "player" and "Player" or unit == "focus" and "Focus" or unit == "boss" and "Boss" or unit == "arena" and "Arena" or "Target")
         if type(coreHandler) == "function" then
             local result = coreHandler("diagnose " .. unit .. " castbar")
             if result and not A.RouterIsUnknownResult(result) then return R.AsReadOnlyResult(result) end
@@ -8916,7 +8941,7 @@ function R.TryTextMovementConversation(text, coreHandler)
     return R.TextMovementGuidance(intent, false)
 end
 
--- Cast-bar root movement has four reviewed per-unit X/Y settings. Resolve
+-- Cast-bar root movement has five reviewed per-unit X/Y settings. Resolve
 -- that small fixed family directly instead of asking the generic registry
 -- parser to build its exact, light-candidate, and full-alias indices on the
 -- first Assistant request. Component words deliberately fail closed so
@@ -8948,7 +8973,7 @@ function R.CastbarMovementIntent(text)
 
     local unit, unitLabel = R.UnitScopeFromText(actionable)
     if not unit then unit, unitLabel = R.UnitScopeFromText(norm) end
-    if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" then return nil end
+    if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" and unit ~= "arena" then return nil end
 
     local hasLeft = R.ContainsAny(actionable, { "left", "to the left" })
     local hasRight = R.ContainsAny(actionable, { "right", "to the right" })
@@ -9071,7 +9096,7 @@ function R.TryCastbarMovementConversation(text)
 end
 
 -- Cast-bar detail movement has a small, fixed ownership matrix: each of the
--- four supported cast bars exposes independent X/Y offsets for its icon,
+-- five supported cast bars exposes independent X/Y offsets for its icon,
 -- spell text, and time text. Resolve that matrix before the root cast-bar
 -- shortcut so a natural request such as "move boss castbar icon down 5"
 -- cannot silently lose "icon" and move the whole cast bar instead.
@@ -9095,6 +9120,11 @@ local CASTBAR_COMPONENT_MOVEMENT_KEYS = {
         icon = { x = "general.bossCastIconOffsetX", y = "general.bossCastIconOffsetY", position = "general.bossCastIconPosition" },
         spell = { x = "general.bossCastTextOffsetX", y = "general.bossCastTextOffsetY" },
         time = { x = "general.bossCastTimeOffsetX", y = "general.bossCastTimeOffsetY" },
+    },
+    arena = {
+        icon = { x = "general.arenaCastIconOffsetX", y = "general.arenaCastIconOffsetY", position = "general.arenaCastIconPosition" },
+        spell = { x = "general.arenaCastTextOffsetX", y = "general.arenaCastTextOffsetY" },
+        time = { x = "general.arenaCastTimeOffsetX", y = "general.arenaCastTimeOffsetY" },
     },
 }
 
@@ -9593,6 +9623,7 @@ function R.UnitPageFollowupResults(unit, unitLabel, description)
         focus = "uf_focus",
         pet = "uf_pet",
         boss = "uf_boss",
+        arena = "uf_arena",
         targettarget = "uf_targettarget",
         focustarget = "uf_focustarget",
     }
@@ -9787,7 +9818,7 @@ end
 
 A.RouterUnitFrameProblemTerms = A.RouterUnitFrameProblemTerms or {
     unit = {
-        "player frame", "target frame", "focus frame", "pet frame", "boss frame", "boss frames",
+        "player frame", "target frame", "focus frame", "pet frame", "boss frame", "boss frames", "arena frame", "arena frames",
         "target of target", "target of target frame", "focus target", "focus target frame",
         "unit frame", "unit frames", "unitframe", "unitframes",
     },
@@ -9841,9 +9872,9 @@ A.RouterTryUnitFrameProblemShortcut = function(text, coreHandler)
     if mentionsPortrait and (R.HasNaturalProblemTerm(norm) or R.ContainsAny(norm, { "wrong", "style", "position", "too" })) then
         return A.RouterUnitFrameProblemReply(
             "Portrait help",
-            "Portrait visibility, style, side, and keep-visible behavior are configured on the relevant unit-frame page. Name the unit when you want a concrete change, because Player, Target, Focus, Pet, Boss, Target of Target, and Focus Target can differ.",
+            "Portrait visibility, style, side, and keep-visible behavior are configured on the relevant unit-frame page. Name the unit when you want a concrete change, because Player, Target, Focus, Pet, Boss, Arena, Target of Target, and Focus Target can differ.",
             "show player portrait; set target portrait position left; open target.",
-            "Open Player | Open Target | Open Boss Frames"
+            "Open Player | Open Target | Open Boss Frames | Open Arena Frames"
         )
     end
 
@@ -9911,6 +9942,7 @@ end
 
 function R.IndicatorUnitFromText(norm)
     if R.ContainsAny(norm, { "player", "player frame", "my frame" }) then return "player", "Player" end
+    if R.ContainsAny(norm, { "arena", "arena frame", "arena frames" }) then return "arena", "Arena Frames" end
     if R.ContainsAny(norm, { "target", "target frame" }) then return "target", "Target" end
     if R.ContainsAny(norm, { "focus", "focus frame" }) then return "focus", "Focus" end
     if R.ContainsAny(norm, { "boss", "boss frame", "boss frames" }) then return "boss", "Boss Frames" end
@@ -10041,7 +10073,7 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
         else
             reply = A.RouterIndicatorProblemReply(
                 settingLabel .. " position setting location",
-                settingLabel .. " position lives with the relevant frame scope. Unit-frame indicators are in the Status Icons section for Player, Target, Focus, Pet, and Boss pages. Party, Raid, and Mythic Raid indicators live in Group Status & Indicators.",
+                settingLabel .. " position lives with the relevant frame scope. Unit-frame indicators are in the Status Icons section for Player, Target, Focus, Pet, Boss, and Arena pages. Party, Raid, and Mythic Raid indicators live in Group Status & Indicators.",
                 "open target; open group status and indicators; move raid " .. settingNoun .. " up 4.",
                 "Open Group Status & Indicators | Open Player | Open Target"
             )
@@ -10162,9 +10194,9 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
     if R.HasNaturalProblemTerm(norm) then
         return A.RouterIndicatorProblemReply(
             "Indicator visibility help",
-            "Indicator visibility depends on the relevant unit or group scope. Unit-frame indicators live on Player/Target/Focus/Boss pages, while Party/Raid/Mythic Raid indicators live in Group Status & Indicators.",
+            "Indicator visibility depends on the relevant unit or group scope. Unit-frame indicators live on Player/Target/Focus/Boss/Arena pages, while Party/Raid/Mythic Raid indicators live in Group Status & Indicators.",
             "show raid marker on target; show raid ready check icon; show player rested indicator.",
-            "Open Group Status & Indicators | Open Player | Open Target | Open Boss Frames"
+            "Open Group Status & Indicators | Open Player | Open Target | Open Boss Frames | Open Arena Frames"
         )
     end
 
@@ -12126,6 +12158,7 @@ A.RouterSafePlanningTerms = A.RouterSafePlanningTerms or {
     vagueTarget = {
         "make target important", "prioritize target", "make focus important",
         "prioritize focus", "make boss important", "prioritize boss",
+        "make arena important", "prioritize arena",
     },
 }
 
@@ -12210,7 +12243,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         if R.ContainsAny(norm, { "unit frame", "unit frames", "group frame", "group frames" }) then
             return A.RouterSafePlanningReply(
                 "Unit and group frame comparison",
-                "Unit frames cover individual units such as Player, Target, Focus, Pet, Boss, Target of Target, and Focus Target. Group frames cover Party, Raid, and Mythic Raid members. Tune unit frames for the units you interact with; tune group frames for party and raid status.",
+                "Unit frames cover individual units such as Player, Target, Focus, Pet, Boss, Arena, Target of Target, and Focus Target. Group frames cover Party, Raid, and Mythic Raid members. Tune unit frames for the units you interact with; tune group frames for party and raid status.",
                 "open player; open target; open group layout; open group dispel overlay.",
                 "Open Player | Open Target | Open Group Layout | Open Group Dispel Overlay"
             )
@@ -12412,7 +12445,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
     end
 
     if R.ContainsAny(norm, { "less cluttered", "cluttered", "too noisy", "too busy", "clean this up", "clean that up", "clean it up" })
-        and not R.ContainsAny(norm, { "player", "target", "focus", "boss", "party", "raid", "group", "aura", "auras", "buff", "buffs", "debuff", "debuffs", "cast", "castbar", "cast bar", "text" })
+        and not R.ContainsAny(norm, { "player", "target", "focus", "boss", "arena", "party", "raid", "group", "aura", "auras", "buff", "buffs", "debuff", "debuffs", "cast", "castbar", "cast bar", "text" })
     then
         return A.RouterSafePlanningReply(
             "Clutter planning",
@@ -12425,9 +12458,9 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
     if R.ContainsAny(norm, terms.vagueTarget) then
         return A.RouterSafePlanningReply(
             "Priority frame planning",
-            "Tell me what Target, Focus, or Boss signal should be more important: size, position, cast bar, debuffs, raid marker, range fade, or text. I can tune that exact MSUF area once it is named.",
-            "make target frame wider; set target debuff icon size to 30; show focus kick tracker; open boss frames.",
-            "Open Target | Open Focus | Open Boss Frames | Open Cast Bars"
+            "Tell me what Target, Focus, Boss, or Arena signal should be more important: size, position, cast bar, debuffs, raid marker, range fade, or text. I can tune that exact MSUF area once it is named.",
+            "make target frame wider; set target debuff icon size to 30; show focus kick tracker; open arena frames.",
+            "Open Target | Open Focus | Open Boss Frames | Open Arena Frames | Open Cast Bars"
         )
     end
 
@@ -12919,12 +12952,13 @@ R.PAGE_LOCATION_TERMS = {    { label = "Support Links", terms = { "support link"
     { label = "Target of Target", terms = { "target of target", "targettarget" } },
     { label = "Focus Target", terms = { "focus target", "focustarget" } },
     { label = "Boss Frames", terms = { "boss frame", "boss frames", "bosses" } },
-    { label = "Cast Bars", terms = { "cast bar", "cast bars", "castbar", "castbars", "boss casts", "target casts", "focus casts" } },
+    { label = "Arena Frames", terms = { "arena frame", "arena frames" } },
+    { label = "Cast Bars", terms = { "cast bar", "cast bars", "castbar", "castbars", "boss casts", "arena casts", "target casts", "focus casts" } },
     { label = "Class Resources", terms = { "class power", "class powers", "class resource", "class resources", "combo point", "combo points", "holy power" } },
     { label = "Aura Filters", terms = { "aura filter", "aura filters", "hidden auras", "blacklist", "whitelist" } },
     { label = "Aura Style", terms = { "aura style", "aura styling", "aura cooldown text", "aura stack text" } },
-    { label = "Aura Buffs", terms = { "aura buff", "aura buffs", "unit buff", "unit buffs", "target buff", "target buffs", "player buff", "player buffs", "focus buff", "focus buffs" } },
-    { label = "Aura Debuffs", terms = { "aura debuff", "aura debuffs", "unit debuff", "unit debuffs", "target debuff", "target debuffs", "player debuff", "player debuffs", "focus debuff", "focus debuffs" } },
+    { label = "Aura Buffs", terms = { "aura buff", "aura buffs", "unit buff", "unit buffs", "target buff", "target buffs", "player buff", "player buffs", "focus buff", "focus buffs", "arena buff", "arena buffs" } },
+    { label = "Aura Debuffs", terms = { "aura debuff", "aura debuffs", "unit debuff", "unit debuffs", "target debuff", "target debuffs", "player debuff", "player debuffs", "focus debuff", "focus debuffs", "arena debuff", "arena debuffs" } },
     { label = "Auras", terms = { "aura", "auras", "buff", "buffs", "debuff", "debuffs" } },
     { label = "Miscellaneous", terms = { "misc", "miscellaneous", "tooltip", "tooltips", "minimap", "menu language", "blizzard frames" } },
     { label = "Modules", terms = { "module", "modules", "advanced", "style module", "msuf style", "dropdown style" } },
@@ -12974,7 +13008,8 @@ function R.TryPageOptionLocationShortcut(text, coreHandler)
     if not label then return nil end
     local command = "open " .. label
     if label == "Aura Buffs" or label == "Aura Debuffs" then
-        local unit = R.ContainsAny(norm, { "target" }) and "target"
+        local unit = R.ContainsAny(norm, { "arena" }) and "arena"
+            or (R.ContainsAny(norm, { "target" }) and "target")
             or (R.ContainsAny(norm, { "focus" }) and "focus")
             or (R.ContainsAny(norm, { "player" }) and "player")
         if unit then
@@ -13040,6 +13075,10 @@ R.BROAD_SETTING_EXPLAIN_SUBJECTS = {
     ["a boss frame"] = true,
     ["boss frame"] = true,
     ["boss frames"] = true,
+    ["an arena frame"] = true,
+    ["a arena frame"] = true,
+    ["arena frame"] = true,
+    ["arena frames"] = true,
     ["a power bar"] = true,
     ["power bar"] = true,
     ["a health bar"] = true,
@@ -13869,14 +13908,14 @@ function R.IsBroadTroubleshootingSubject(subject)
     subject = R.Normalize(subject)
     if subject == "" then return true end
     local broad = {
-        "player buffs", "target buffs", "focus buffs", "boss buffs", "party buffs", "raid buffs", "mythic raid buffs",
-        "player debuffs", "target debuffs", "focus debuffs", "boss debuffs", "party debuffs", "raid debuffs", "mythic raid debuffs",
-        "player cast bar", "target cast bar", "focus cast bar", "boss cast bar",
-        "player castbar", "target castbar", "focus castbar", "boss castbar",
+        "player buffs", "target buffs", "focus buffs", "boss buffs", "arena buffs", "party buffs", "raid buffs", "mythic raid buffs",
+        "player debuffs", "target debuffs", "focus debuffs", "boss debuffs", "arena debuffs", "party debuffs", "raid debuffs", "mythic raid debuffs",
+        "player cast bar", "target cast bar", "focus cast bar", "boss cast bar", "arena cast bar",
+        "player castbar", "target castbar", "focus castbar", "boss castbar", "arena castbar",
         "class resource", "class resources", "class power", "class powers",
         "frames", "unit frames", "unitframes", "profile", "profiles",
         "player frame", "target frame", "focus frame", "pet frame",
-        "boss frame", "boss frames", "party frames", "raid frames",
+        "boss frame", "boss frames", "arena frame", "arena frames", "party frames", "raid frames",
         "group frame", "group frames", "mythic raid frames",
     }
     for i = 1, #broad do
@@ -14548,7 +14587,7 @@ function R.RegistryLocationPrefersSpecialistGuidance(text)
     end
     local scopes = {
         ["player"] = true, ["target"] = true, ["focus"] = true, ["pet"] = true,
-        ["target of target"] = true, ["focus target"] = true, ["boss"] = true,
+        ["target of target"] = true, ["focus target"] = true, ["boss"] = true, ["arena"] = true,
         ["party"] = true, ["raid"] = true, ["mythic raid"] = true,
     }
     local families = {
@@ -14951,6 +14990,7 @@ function R.OpenEndedManualSettingEntries(subject)
         or subject:match("^(focus)%s+name%s+font$")
         or subject:match("^(pet)%s+name%s+font$")
         or subject:match("^(boss)%s+name%s+font$")
+        or subject:match("^(arena)%s+name%s+font$")
     local keys
     if scope then
         keys = { "general.fontKey", "fontScope." .. scope .. ".override", scope .. ".nameFontSize" }
@@ -14960,6 +15000,7 @@ function R.OpenEndedManualSettingEntries(subject)
             or subject:match("^(focus)%s+portrait%s+style$")
             or subject:match("^(pet)%s+portrait%s+style$")
             or subject:match("^(boss)%s+portrait%s+style$")
+            or subject:match("^(arena)%s+portrait%s+style$")
         if scope then
             keys = {
                 scope .. ".portraitClassStyle", scope .. ".portraitBorderStyle",
@@ -14971,6 +15012,7 @@ function R.OpenEndedManualSettingEntries(subject)
                 or subject:match("^(focus)%s+portrait$")
                 or subject:match("^(pet)%s+portrait$")
                 or subject:match("^(boss)%s+portrait$")
+                or subject:match("^(arena)%s+portrait$")
             if scope then
                 keys = {
                     scope .. ".portraitMode", scope .. ".portraitRender",
@@ -14994,6 +15036,7 @@ function R.OpenEndedManualSettingEntries(subject)
             or subject:match("^(focus)%s+name%s+position$")
             or subject:match("^(pet)%s+name%s+position$")
             or subject:match("^(boss)%s+name%s+position$")
+            or subject:match("^(arena)%s+name%s+position$")
         if scope then
             keys = { scope .. ".nameTextAnchor", scope .. ".nameOffsetX", scope .. ".nameOffsetY" }
         end
@@ -15004,6 +15047,7 @@ function R.OpenEndedManualSettingEntries(subject)
             or subject:match("^(focus)%s+frame%s+color$")
             or subject:match("^(pet)%s+frame%s+color$")
             or subject:match("^(boss)%s+frame%s+color$")
+            or subject:match("^(arena)%s+frame%s+color$")
         if scope then
             keys = {
                 scope .. ".healthColorMode", "barScope." .. scope .. ".barOutlineColor",
@@ -15016,12 +15060,15 @@ function R.OpenEndedManualSettingEntries(subject)
             or subject:match("^(target)%s+cast%s*bar$")
             or subject:match("^(focus)%s+cast%s*bar$")
             or subject:match("^(boss)%s+cast%s*bar$")
+            or subject:match("^(arena)%s+cast%s*bar$")
         if scope == "target" then
             keys = { "general.enableTargetCastbar", "general.castbarTargetBarWidth", "general.castbarTargetBarHeight" }
         elseif scope == "focus" then
             keys = { "general.enableFocusCastbar", "general.castbarFocusBarWidth", "general.castbarFocusBarHeight" }
         elseif scope == "boss" then
             keys = { "general.enableBossCastbar", "general.bossCastbarWidth", "general.bossCastbarHeight" }
+        elseif scope == "arena" then
+            keys = { "general.enableArenaCastbar", "general.arenaCastbarWidth", "general.arenaCastbarHeight" }
         end
     end
     if not keys then
@@ -15029,6 +15076,7 @@ function R.OpenEndedManualSettingEntries(subject)
             or subject:match("^(target)%s+frame%s+growth$")
             or subject:match("^(focus)%s+frame%s+growth$")
             or subject:match("^(boss)%s+frame%s+growth$")
+            or subject:match("^(arena)%s+frame%s+growth$")
         if scope then
             keys = { "auras3." .. scope .. ".buff.growth", "auras3." .. scope .. ".debuff.growth" }
         end
@@ -15049,11 +15097,13 @@ function R.OpenEndedManualSettingEntries(subject)
             or subject:match("^(focus)%s+health%s+text$")
             or subject:match("^(pet)%s+health%s+text$")
             or subject:match("^(boss)%s+health%s+text$")
+            or subject:match("^(arena)%s+health%s+text$")
             or subject:match("^(player)%s+hp%s+text$")
             or subject:match("^(target)%s+hp%s+text$")
             or subject:match("^(focus)%s+hp%s+text$")
             or subject:match("^(pet)%s+hp%s+text$")
             or subject:match("^(boss)%s+hp%s+text$")
+            or subject:match("^(arena)%s+hp%s+text$")
         if scope then
             keys = {
                 scope .. ".showHP", scope .. ".hpFontSize",
@@ -15170,7 +15220,7 @@ function R.OpenEndedSettingEntries(subject, norm)
     local canonical = subject:gsub("%s+text%s+size$", " font size")
     local leadingScope, scopedTail = canonical:match("^(%S+)%s+(.+)$")
     local recognizedScope = leadingScope == "player" or leadingScope == "target"
-        or leadingScope == "focus" or leadingScope == "boss"
+        or leadingScope == "focus" or leadingScope == "boss" or leadingScope == "arena"
     if recognizedScope and (scopedTail == "castbar texture" or scopedTail == "cast bar texture") then
         canonical = "castbar texture"
     elseif recognizedScope and scopedTail == "power bar texture" then
@@ -15526,7 +15576,7 @@ local function UniqueExactMutationEntry(subject)
     local leadingScope, scopedTail = subject:match("^(%S+)%s+(.+)$")
     if scopedTail == "power bar texture"
         and (leadingScope == "player" or leadingScope == "target"
-            or leadingScope == "focus" or leadingScope == "boss")
+            or leadingScope == "focus" or leadingScope == "boss" or leadingScope == "arena")
     then
         return nil
     end
@@ -16764,6 +16814,7 @@ local DIRECT_NAVIGATION_PAGE_SUBJECTS = {
     ["focus"] = "open focus", ["focus frame"] = "open focus", ["focus unit frame"] = "open focus",
     ["pet"] = "open pet", ["pet frame"] = "open pet", ["pet unit frame"] = "open pet",
     ["boss"] = "open boss", ["boss frame"] = "open boss", ["boss frames"] = "open boss",
+    ["arena"] = "open arena", ["arena frame"] = "open arena", ["arena frames"] = "open arena",
     ["target of target"] = "open target of target", ["target of target frame"] = "open target of target",
     ["focus target"] = "open focus target", ["focus target frame"] = "open focus target",
     ["targettarget"] = "open target of target", ["targettarget frame"] = "open target of target",
@@ -16803,6 +16854,7 @@ local DIRECT_NAVIGATION_PAGE_SUBJECTS = {
     ["target buffs"] = "open target buffs", ["target debuffs"] = "open target debuffs",
     ["focus buffs"] = "open focus buffs", ["focus debuffs"] = "open focus debuffs",
     ["boss buffs"] = "open boss buffs", ["boss debuffs"] = "open boss debuffs",
+    ["arena buffs"] = "open arena buffs", ["arena debuffs"] = "open arena debuffs",
 }
 
 function R.BroadPageNavigationCanonical(text)
@@ -17456,6 +17508,7 @@ function R.RegistryVisibilityCurrentValueSettingKey(subject, norm)
     if R.ContainsAny(subject, { "focus frame", "focus unit frame" }) then return "focus.enabled" end
     if R.ContainsAny(subject, { "pet frame", "pet unit frame" }) then return "pet.enabled" end
     if R.ContainsAny(subject, { "boss frame", "boss frames", "boss unit frame", "boss unit frames" }) then return "boss.enabled" end
+    if R.ContainsAny(subject, { "arena frame", "arena frames", "arena unit frame", "arena unit frames" }) then return "arena.enabled" end
     if R.ContainsAny(subject, { "target of target frame", "target of target unit frame", "targettarget frame", "tot frame" }) then return "targettarget.enabled" end
     if R.ContainsAny(subject, { "focus target frame", "focus target unit frame", "focustarget frame" }) then return "focustarget.enabled" end
     return nil
@@ -17498,6 +17551,7 @@ end
 R.CROSS_FRAME_TEXT_UNIT_TERMS = {
     { unit = "targettarget", label = "Target of Target", terms = { "target of target", "targettarget", "targets target", "tot" } },
     { unit = "focustarget", label = "Focus Target", terms = { "focus target", "focustarget" } },
+    { unit = "arena", label = "Arena", terms = { "arena", "arena frame", "arena frames" } },
     { unit = "player", label = "Player", terms = { "player", "player frame", "my frame", "self" } },
     { unit = "target", label = "Target", terms = { "target", "target frame" } },
     { unit = "focus", label = "Focus", terms = { "focus", "focus frame" } },
@@ -18757,7 +18811,7 @@ function R.TryGeneralGuidanceShortcut(text, coreHandler)    local norm = R.Norma
 end
 
 R.GROUP_AURA_CONTEXT_BLOCKERS = {    "unitframe", "unitframes", "unit frame", "unit frames",
-    "target of target", "focus target", "player", "target", "focus", "pet", "boss",
+    "target of target", "focus target", "player", "target", "focus", "pet", "boss", "arena",
     "party", "raid", "mythic raid", "party frames", "raid frames",
     "castbar", "cast bar", "profile", "profiles", "class resource", "class power", "gameplay",
     "edit mode", "editmode", "bearbeitungsmodus",
@@ -18795,7 +18849,7 @@ function R.ShouldSkipContext(text)    local norm = R.Normalize(text)
     }) then return true end
     if R.ContainsAny(norm, {
         "unitframe", "unitframes", "unit frame", "unit frames",
-        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
+        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss", "arena",
         "party", "raid", "party frames", "raid frames", "group frames",
     }) then return true end
     local parser = A.Parser or {}
@@ -20166,7 +20220,8 @@ function A.RouteInput(text, coreHandler)
                 "zaubername", "zeit text", "zeittext",
             })
             if normalized:match("%d") and hasCastbar and hasGermanSize and hasText and not hasSpecificText then
-                local scope = normalized:match("%f[%a](player)%f[%A]")
+                local scope = normalized:match("%f[%a](arena)%f[%A]")
+                    or normalized:match("%f[%a](player)%f[%A]")
                     or normalized:match("%f[%a](target)%f[%A]")
                     or normalized:match("%f[%a](focus)%f[%A]")
                     or normalized:match("%f[%a](boss)%f[%A]")
@@ -20909,7 +20964,7 @@ function A.RouteInput(text, coreHandler)
         or R.ContainsAny(normForScope, { "resource numbers", "resource number", "resource text", "resource texts" })
     local hasExplicitScope = R.ContainsAny(normForScope, {
         "unitframe", "unitframes", "unit frame", "unit frames",
-        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
+        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss", "arena",
         "party", "raid", "party frames", "raid frames", "group frames",
     })
         or hasClassPowerScope

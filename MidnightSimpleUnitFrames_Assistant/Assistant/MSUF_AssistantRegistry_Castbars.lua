@@ -52,7 +52,7 @@ local RegisterUnitCastbarBoolean = CastbarCore.RegisterUnitCastbarBoolean
 local RegisterGeneralNumber = CastbarCore.RegisterGeneralNumber
 local RegisterGeneralEnumSetting = CastbarCore.RegisterGeneralEnumSetting
 local RegisterCastbarUnitGeneralBoolean = CastbarCore.RegisterCastbarUnitGeneralBoolean
-local RegisterBossCastbarDetachSetting = CastbarCore.RegisterBossCastbarDetachSetting
+local RegisterCastbarDetachSetting = CastbarCore.RegisterCastbarDetachSetting
 local RegisterPlayerCastbarProvider = CastbarCore.RegisterPlayerCastbarProvider
 
 local RegisterCastbarUnitSettings = A.CastbarsRegistry and A.CastbarsRegistry.RegisterUnitSettings
@@ -65,7 +65,7 @@ if type(RegisterCastbarUnitSettings) == "function" then
         RegisterGeneralNumber = RegisterGeneralNumber,
         RegisterGeneralEnumSetting = RegisterGeneralEnumSetting,
         RegisterCastbarUnitGeneralBoolean = RegisterCastbarUnitGeneralBoolean,
-        RegisterBossCastbarDetachSetting = RegisterBossCastbarDetachSetting,
+        RegisterCastbarDetachSetting = RegisterCastbarDetachSetting,
         RegisterPlayerCastbarProvider = RegisterPlayerCastbarProvider,
     })
 end

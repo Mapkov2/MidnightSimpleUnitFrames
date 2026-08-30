@@ -399,6 +399,7 @@ local function ScopeLabels(tail)
         { label = "focus", terms = { "focus", "fokus" } },
         { label = "pet", terms = { "pet", "begleiter" } },
         { label = "boss", terms = { "boss" } },
+        { label = "arena", terms = { "arena" } },
         { label = "target of target", terms = { "targettarget", "target of target", "tot", "ziel des ziels" } },
         { label = "focus target", terms = { "focustarget", "focus target", "fokus ziel" } },
     }
@@ -3200,7 +3201,7 @@ function P.ParseCompound(normalized, raw, normalParsed)
             local hay = " " .. tostring(P.Normalize and P.Normalize(text) or text):lower() .. " "
             local phrasesByUnit = {
                 player = { "player" }, target = { "target" }, focus = { "focus" },
-                pet = { "pet" }, boss = { "boss" },
+                pet = { "pet" }, boss = { "boss" }, arena = { "arena" },
                 targettarget = { "target of target", "targets target", "tot" },
                 focustarget = { "focus target", "focuss target" },
             }

@@ -33,7 +33,7 @@ function A.RegistryCoreBuilders.BuildAuraApplyHelpers(ctx)
     -- exact Unit lane tables too; writing auras3.shared here would resurrect
     -- the retired Shared-inheritance architecture whenever Options is absent.
     local UNIT_FLAGS = {
-        player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss",
+        player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena",
     }
     local LANE_SPECS = {
         buff = {
@@ -94,6 +94,7 @@ function A.RegistryCoreBuilders.BuildAuraApplyHelpers(ctx)
     local function NormalizeUnit(unit)
         unit = tostring(unit or "player"):lower()
         if unit == "boss" or unit:match("^boss[1-5]$") then return "boss" end
+        if unit == "arena" or unit:match("^arena[1-3]$") then return "arena" end
         if unit == "target" or unit == "focus" then return unit end
         return "player"
     end
@@ -102,13 +103,18 @@ function A.RegistryCoreBuilders.BuildAuraApplyHelpers(ctx)
         unit = NormalizeUnit(unit)
         if unit == "boss" then
             for i = 1, 5 do callback("boss" .. tostring(i)) end
+        elseif unit == "arena" then
+            for i = 1, 3 do callback("arena" .. tostring(i)) end
         else
             callback(unit)
         end
     end
 
     local function ReadRuntimeUnit(unit)
-        return NormalizeUnit(unit) == "boss" and "boss1" or NormalizeUnit(unit)
+        unit = NormalizeUnit(unit)
+        if unit == "boss" then return "boss1" end
+        if unit == "arena" then return "arena1" end
+        return unit
     end
 
     local function UnitRecord(unit, create)

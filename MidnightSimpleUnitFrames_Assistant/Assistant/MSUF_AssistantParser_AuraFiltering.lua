@@ -30,7 +30,7 @@ local GROUP_LABELS = {
     party = "Party", raid = "Raid", mythicraid = "Mythic Raid",
 }
 
-local UNIT_SCOPE_ORDER = { "player", "target", "focus", "boss" }
+local UNIT_SCOPE_ORDER = { "player", "target", "focus", "boss", "arena" }
 local GROUP_SCOPE_ORDER = { "party", "raid", "mythicraid" }
 
 local UNIT_FILTER_KEYS = {
@@ -224,6 +224,7 @@ local function ExplicitDestinationUnit(text)
         { "focus", { "on focus", "on the focus", "focus frame", "focus buff", "focus buffs", "focus debuff", "focus debuffs", "focus aura", "focus auras", "in focus", "in the focus", "for focus frame" } },
         { "player", { "on player", "on the player", "player frame", "player buff", "player buffs", "player debuff", "player debuffs", "player aura", "player auras", "in player", "in the player", "for player frame" } },
         { "boss", { "on boss frame", "on the boss frame", "boss frame", "boss buff", "boss buffs", "boss debuff", "boss debuffs", "boss aura", "boss auras", "in boss frame", "for boss frame" } },
+        { "arena", { "on arena frame", "on the arena frame", "arena frame", "arena frames", "arena buff", "arena buffs", "arena debuff", "arena debuffs", "arena aura", "arena auras", "in arena frame", "for arena frame" } },
     }
     for i = 1, #specs do
         if HasAny(text, specs[i][2]) then return specs[i][1] end
@@ -245,9 +246,9 @@ local function ResolveScope(text, ctx)
     local chosen
     for i = 1, #units do
         local unit = units[i]
-        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then
             if not chosen then chosen = unit end
-            if unit ~= "boss" then chosen = unit; break end
+            if unit ~= "boss" and unit ~= "arena" then chosen = unit; break end
         end
     end
     if chosen then return "unit", chosen, true end
@@ -380,6 +381,8 @@ local function FindFilterSpec(text)
             "focus buff", "focus buffs", "focus debuff", "focus debuffs",
             "player buff", "player buffs", "player debuff", "player debuffs",
             "boss frame buff", "boss frame buffs", "boss frame debuff", "boss frame debuffs",
+            "arena frame buff", "arena frame buffs", "arena frame debuff", "arena frame debuffs",
+            "arena buff", "arena buffs", "arena debuff", "arena debuffs",
         })
     then
         return FilterSpecByID("raid")
@@ -816,13 +819,14 @@ local function FilterMasterIntent(text)
     if not HasAny(text, { "filter", "filters", "filtering", "filter master" }) then return nil end
     if FindFilterSpec(text) then return nil end
     local scopeEvidence = HasAny(text, {
-        "player filters", "target filters", "focus filters", "boss filters",
-        "player aura", "target aura", "focus aura", "boss aura",
+        "player filters", "target filters", "focus filters", "boss filters", "arena filters",
+        "player aura", "target aura", "focus aura", "boss aura", "arena aura",
         "player buff", "player buffs", "player debuff", "player debuffs",
         "target buff", "target buffs", "target debuff", "target debuffs",
         "focus buff", "focus buffs", "focus debuff", "focus debuffs",
         "boss buff", "boss buffs", "boss debuff", "boss debuffs",
-        "for player", "for target", "for focus", "for boss",
+        "arena buff", "arena buffs", "arena debuff", "arena debuffs",
+        "for player", "for target", "for focus", "for boss", "for arena",
     })
     if not scopeEvidence then return nil end
     if HasAny(text, { "turn off", "disable" }) then return false end
@@ -880,7 +884,7 @@ local function FilterMasterPlan(text, ctx)
     if kind == "unit" and scope then return PlanFor(scope) end
 
     local choices = {}
-    local scopes = { "player", "target", "focus", "boss" }
+    local scopes = UNIT_SCOPE_ORDER
     for i = 1, #scopes do
         local unitScope = scopes[i]
         AddChoice(choices, ChoiceFromPlan(PlanFor(unitScope), ScopeLabel("unit", unitScope)))

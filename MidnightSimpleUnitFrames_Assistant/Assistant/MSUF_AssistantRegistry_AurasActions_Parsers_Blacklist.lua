@@ -40,6 +40,7 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         if AuraActionContainsAny(normalized, {
             "player aura", "player auras", "target aura", "target auras",
             "focus aura", "focus auras", "boss aura", "boss auras",
+            "arena aura", "arena auras", "arena buff", "arena buffs", "arena debuff", "arena debuffs",
         }) then
             return false
         end

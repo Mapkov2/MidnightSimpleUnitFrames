@@ -32,7 +32,7 @@ function A.AurasRegistry.BuildActionParsers(ctx)
         if not scope and type(P.AuraBlacklistScope) == "function" then scope = P.AuraBlacklistScope(normalized) end
         if scope == nil then return nil end
         scope = AuraScopeFromArg(scope)
-        if scope == "player" or scope == "target" or scope == "focus" or scope == "boss"
+        if scope == "player" or scope == "target" or scope == "focus" or scope == "boss" or scope == "arena"
             or scope == "party" or scope == "raid" then
             return scope
         end

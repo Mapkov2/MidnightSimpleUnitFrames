@@ -24,7 +24,7 @@ function A.RegistryCoreBuilders.BuildUnitAuraAdvancedHelpers(ctx)
     end
 
     local function FallbackFilters(scope, create)
-        if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then return nil end
+        if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "arena" then return nil end
         local auras = EnsureAuraFallbackDB()
         local unit = AuraRuntimeUnit(scope)
         local pu = auras.perUnit and auras.perUnit[unit]

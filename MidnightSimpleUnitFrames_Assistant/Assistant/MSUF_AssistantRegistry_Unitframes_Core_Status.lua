@@ -65,6 +65,11 @@ function A.UnitframesRegistry.BuildStatusCoreContext(ctx)
         if level then
             if unit == "boss" and _G.MSUF_BossTestMode and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
                 _G.MSUF_ApplyBossUnitframePreviewState(true, reason or "MSUF_ASSISTANT_STATUS")
+            elseif unit == "arena"
+                and (_G.MSUF_ArenaTestMode or _G.MSUF2_ArenaUnitframePreviewActive)
+                and type(_G.MSUF_ApplyArenaUnitframePreviewState) == "function"
+            then
+                _G.MSUF_ApplyArenaUnitframePreviewState(true, reason or "MSUF_ASSISTANT_STATUS")
             end
         end
         ApplyUnit(unit, reason or "MSUF_ASSISTANT_STATUS", { preview = true, text = true, fonts = level })

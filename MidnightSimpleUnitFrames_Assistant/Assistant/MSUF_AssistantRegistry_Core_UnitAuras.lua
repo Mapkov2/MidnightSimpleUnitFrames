@@ -25,6 +25,7 @@ function A.RegistryCoreBuilders.BuildUnitAuraHelpers(ctx)
 
     local function AuraRuntimeUnit(unit)
         if unit == "boss" or unit == "boss1" or unit == "boss2" or unit == "boss3" or unit == "boss4" or unit == "boss5" then return "boss1" end
+        if unit == "arena" or unit == "arena1" or unit == "arena2" or unit == "arena3" then return "arena1" end
         if unit == "target" or unit == "focus" then return unit end
         if unit == "player" then return "player" end
         return nil

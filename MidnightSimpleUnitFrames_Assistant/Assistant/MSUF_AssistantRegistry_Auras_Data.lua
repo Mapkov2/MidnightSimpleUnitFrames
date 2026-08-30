@@ -15,7 +15,7 @@ local Data = A.AurasRegistryData or {}
 A.AurasRegistryData = Data
 
 Data.AURA_UNITS = { "player", "target", "focus", "boss", "arena" }
-Data.AURA_SCOPES = { "player", "target", "focus", "boss" }
+Data.AURA_SCOPES = { "player", "target", "focus", "boss", "arena" }
 Data.AURA_LANES = {
     { key = "buff", label = "Buff", plural = "Buffs" },
     { key = "debuff", label = "Debuff", plural = "Debuffs" },
@@ -177,8 +177,8 @@ Data.GF_AURA_FILTER_ALIASES = {
 }
 Data.AURA_SCOPE_ALIASES = {}
 
-Data.AURA_EDIT_SCOPES = { "player", "target", "focus", "boss", "party", "raid" }
-Data.AURA_EDIT_SCOPE_VALUES = { "player", "target", "focus", "boss", "party", "raid" }
+Data.AURA_EDIT_SCOPES = { "player", "target", "focus", "boss", "arena", "party", "raid" }
+Data.AURA_EDIT_SCOPE_VALUES = { "player", "target", "focus", "boss", "arena", "party", "raid" }
 Data.AURA_EDIT_SCOPE_ALIASES = {
     player = "player",
     spieler = "player",
@@ -192,6 +192,10 @@ Data.AURA_EDIT_SCOPE_ALIASES = {
     boss3 = "boss",
     boss4 = "boss",
     boss5 = "boss",
+    arena = "arena",
+    arena1 = "arena",
+    arena2 = "arena",
+    arena3 = "arena",
     party = "party",
     group = "party",
     gruppe = "party",

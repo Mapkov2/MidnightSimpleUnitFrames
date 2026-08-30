@@ -1715,7 +1715,7 @@ local function ParseDarkModeCustomColorFastShortcut(normalized)
 end
 
 local GLOBAL_BAR_COLOR_SCOPE_BLOCKERS = {
-    "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+    "player", "target", "focus", "pet", "boss", "arena", "targettarget", "target of target", "focustarget", "focus target",
     "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
     "castbar", "cast bar", "class power", "class resource",
 }
@@ -3987,6 +3987,7 @@ if not P.InitUnsupportedAuraCommand then
                 "aura blacklist", "blacklist aura", "blacklist spell", "hidden aura", "hidden auras",
                 "player aura", "player auras", "target aura", "target auras",
                 "focus aura", "focus auras", "boss aura", "boss auras",
+                "arena aura", "arena auras", "arena buff", "arena buffs", "arena debuff", "arena debuffs",
                 "unit aura", "unit auras",
             }
         end
@@ -4257,7 +4258,7 @@ A._ParseHumanIndicatorMoveFastShortcut = function(text)
     -- every request anyway. Only a word owned by exactly one spec can name it.
     local SUBJECT_WORD_STOPLIST = {
         icon = true, text = true, indicator = true, symbol = true, status = true,
-        player = true, target = true, focus = true, pet = true, boss = true,
+        player = true, target = true, focus = true, pet = true, boss = true, arena = true,
         party = true, raid = true, group = true, frame = true, name = true,
         number = true, incoming = true, check = true, state = true,
     }
@@ -7522,6 +7523,8 @@ function A.Parse(text, ctxOverride)
         elseif P.ContainsAny(normalized, P.RootPhrases[652]) then
             key = "general.kickReadySize"
             value = P.FirstNumber(normalized)
+        elseif P.ContainsAny(normalized, P.RootPhrases[818]) then
+            key = "general.kickReadyShowArena"
         elseif P.ContainsAny(normalized, P.RootPhrases[653]) then
             key = "general.kickReadyShowTarget"
         elseif P.ContainsAny(normalized, P.RootPhrases[654]) then

@@ -114,6 +114,7 @@ function A.GlobalRegistry.RegisterCastbarColorSettings(ctx)
         { unit = "target", prefix = "castbarTarget", label = "Target" },
         { unit = "focus",  prefix = "castbarFocus",  label = "Focus" },
         { unit = "boss",   prefix = "bossCast",      label = "Boss" },
+        { unit = "arena",  prefix = "arenaCast",     label = "Arena" },
     }
     local CASTBAR_TEXT_DETAILS = {
         { detail = "SpellName",  label = "Spell Name",  nouns = { "spell name text color", "spell text color", "spell name color" } },

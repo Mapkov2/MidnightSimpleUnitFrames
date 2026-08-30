@@ -1802,6 +1802,7 @@ local function UnitPageKey(unit)
     if unit == "focustarget" then return "uf_focustarget" end
     if unit == "pet" then return "uf_pet" end
     if unit == "boss" then return "uf_boss" end
+    if unit == "arena" then return "uf_arena" end
     return nil
 end
 
@@ -2158,7 +2159,7 @@ local function NonMutatingIntentAnswer(text)
         title = "Combat Crosshair visibility help"
     elseif HasAnyExactPhrase(normalized, { "buff", "buffs", "debuff", "debuffs", "aura", "auras", "auren" }) then
         title = "Aura visibility troubleshooting"
-    elseif HasAnyExactPhrase(normalized, { "party", "raid", "boss", "frame", "frames", "rahmen" }) then
+    elseif HasAnyExactPhrase(normalized, { "party", "raid", "boss", "arena", "frame", "frames", "rahmen" }) then
         title = "Frame visibility troubleshooting"
     end
     return {

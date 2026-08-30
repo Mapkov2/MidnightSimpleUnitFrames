@@ -559,7 +559,7 @@ local function BuildGeneratedReport(scopeArg)
     elseif IsValidScope(scopeArg) then
         AppendGeneratedReport(lines, scopeArg, covered)
     else
-        lines[#lines + 1] = "Unknown scope '" .. tostring(scopeArg or "") .. "'. Use player, target, focus, pet, boss, party, raid, mythicraid, bars, general, gameplay, or all."
+        lines[#lines + 1] = "Unknown scope '" .. tostring(scopeArg or "") .. "'. Use player, target, focus, pet, boss, arena, party, raid, mythicraid, bars, general, gameplay, or all."
     end
     return table.concat(lines, "\n")
 end

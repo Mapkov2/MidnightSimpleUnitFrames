@@ -1432,7 +1432,7 @@ function P.ParseHumanAnchorTarget(text, raw)
         end
         if value == nil then return nil end
         if #units == 1 and value == units[1] then return nil end
-        if #units > 1 and (value == "player" or value == "target" or value == "targettarget" or value == "focustarget" or value == "focus" or value == "pet" or value == "boss") then
+        if #units > 1 and (value == "player" or value == "target" or value == "targettarget" or value == "focustarget" or value == "focus" or value == "pet" or value == "boss" or value == "arena") then
             local filtered = {}
             for i = 1, #units do
                 if units[i] ~= value then filtered[#filtered + 1] = units[i] end
@@ -2645,7 +2645,7 @@ function A._ParseGroupAnchorTargetShortcut(text)
                 units = { unitPage }
             end
             if #units == 1 and value == units[1] then return nil end
-            if #units > 1 and (value == "player" or value == "target" or value == "targettarget" or value == "focustarget" or value == "focus" or value == "pet" or value == "boss") then
+            if #units > 1 and (value == "player" or value == "target" or value == "targettarget" or value == "focustarget" or value == "focus" or value == "pet" or value == "boss" or value == "arena") then
                 local filtered = {}
                 for i = 1, #units do
                     if units[i] ~= value then filtered[#filtered + 1] = units[i] end
@@ -3323,6 +3323,7 @@ local CASTBAR_DETAIL_PREFIXES = {
     target = "castbarTarget",
     focus = "castbarFocus",
     boss = "bossCast",
+    arena = "arenaCast",
 }
 
 local CASTBAR_ROOT_FIELDS = {
@@ -3330,6 +3331,7 @@ local CASTBAR_ROOT_FIELDS = {
     target = { width = "castbarTargetBarWidth", height = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY" },
     focus = { width = "castbarFocusBarWidth", height = "castbarFocusBarHeight", x = "castbarFocusOffsetX", y = "castbarFocusOffsetY" },
     boss = { width = "bossCastbarWidth", height = "bossCastbarHeight", x = "bossCastbarOffsetX", y = "bossCastbarOffsetY" },
+    arena = { width = "arenaCastbarWidth", height = "arenaCastbarHeight", x = "arenaCastbarOffsetX", y = "arenaCastbarOffsetY" },
 }
 
 local function CastbarDetailUnitsOrCurrentPage(text)
@@ -3342,7 +3344,7 @@ local function CastbarDetailUnitsOrCurrentPage(text)
     if #filtered > 0 then return filtered end
     local pageUnit = CurrentPageUnit()
     if pageUnit and CASTBAR_DETAIL_PREFIXES[pageUnit] then return { pageUnit } end
-    return { "player", "target", "focus", "boss" }
+    return { "player", "target", "focus", "boss", "arena" }
 end
 
 local function CastbarRootUnitsOrCurrentPage(text)
@@ -3355,7 +3357,7 @@ local function CastbarRootUnitsOrCurrentPage(text)
     if #filtered > 0 then return filtered end
     local pageUnit = CurrentPageUnit()
     if pageUnit and CASTBAR_ROOT_FIELDS[pageUnit] then return { pageUnit } end
-    return { "player", "target", "focus", "boss" }
+    return { "player", "target", "focus", "boss", "arena" }
 end
 
 local function CastbarSizeDirection(text)

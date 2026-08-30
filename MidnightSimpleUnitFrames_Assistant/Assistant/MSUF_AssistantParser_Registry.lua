@@ -3024,7 +3024,7 @@ P.BARE_FONT_TEXT_COLOR_MODES = P.BARE_FONT_TEXT_COLOR_MODES or {
 P.BARE_FONT_SCOPE_PREFIXES = P.BARE_FONT_SCOPE_PREFIXES or {
     "target of target", "focus target", "mythic raid",
     "targettarget", "focustarget", "global", "shared", "player",
-    "target", "focus", "pet", "boss", "party", "raid",
+    "target", "focus", "pet", "boss", "arena", "party", "raid",
 }
 
 -- Value-less text-color commands are exact control requests, not permission to
@@ -5585,7 +5585,7 @@ P.ParseGroupFrameColorShortcut = function(text, raw)
     return P.ColorShortcutResponse(changes, target.title, concrete, "Changes a Group Frame color option.")
 end
 
-local STATUS_TEST_UNITS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local STATUS_TEST_UNITS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
 
 local function StatusTestModeValue(text)
     if ContainsAny(text, RegistryPhrases[396]) then
@@ -6125,7 +6125,7 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
 end
 
 local FULL_REGISTRY_ALIAS_FALLBACK_TERMS = {
-    "player", "target", "focus", "pet", "boss", "party", "raid", "mythicraid", "mythic raid",
+    "player", "target", "focus", "pet", "boss", "arena", "party", "raid", "mythicraid", "mythic raid",
     "unitframe", "unitframes", "unit frame", "unit frames", "frame", "frames", "group", "group frames",
     "castbar", "cast bar", "aura", "buff", "debuff", "profile", "class power", "class resource",
     "health", "hp", "power", "mana", "name", "text", "font", "bar", "portrait", "indicator", "status icon",
@@ -6135,7 +6135,7 @@ local FULL_REGISTRY_ALIAS_FALLBACK_TERMS = {
 }
 
 local FULL_REGISTRY_ALIAS_SUBJECT_TERMS = {
-    "player", "target", "focus", "pet", "boss", "party", "raid", "mythicraid", "mythic raid",
+    "player", "target", "focus", "pet", "boss", "arena", "party", "raid", "mythicraid", "mythic raid",
     "unitframe", "unitframes", "unit frame", "unit frames", "frame", "frames", "group", "group frames",
     "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs", "profile",
     "class power", "class resource", "resource", "gameplay", "crosshair", "totem",

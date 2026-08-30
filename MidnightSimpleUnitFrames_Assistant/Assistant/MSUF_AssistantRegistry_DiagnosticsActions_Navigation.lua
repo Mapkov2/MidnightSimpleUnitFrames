@@ -113,7 +113,7 @@ local function ResolveAuraContentRoute(page, args)
     if scope == "party" or scope == "raid" or scope == "mythicraid" then
         return "gf_auras", table.concat({ scope, lane, page == "auras3_filters" and "filters" or "", query }, " ")
     end
-    if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then scope = "player" end
+    if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "arena" then scope = "player" end
     local tool = page == "auras3_filters" and "filters"
         or (queryLower:find("blacklist", 1, true) and "blacklist")
         or (queryLower:find("filter", 1, true) and "filters")

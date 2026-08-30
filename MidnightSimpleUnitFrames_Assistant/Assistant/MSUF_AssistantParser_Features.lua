@@ -89,6 +89,7 @@ local function UnitForPage(page)
     if page == "uf_targettarget" then return "targettarget" end
     if page == "uf_focustarget" then return "focustarget" end
     if page == "uf_boss" then return "boss" end
+    if page == "uf_arena" then return "arena" end
     return nil
 end
 
@@ -3229,7 +3230,7 @@ local NAME_SHORTENING_LOCATION_TERMS = {
 }
 
 local NAME_SHORTENING_SCOPE_ORDER = {
-    "shared", "target", "targettarget", "focus", "focustarget", "pet", "boss",
+    "shared", "target", "targettarget", "focus", "focustarget", "pet", "boss", "arena",
     "gf_party", "gf_raid", "gf_mythicraid",
 }
 

@@ -22,12 +22,12 @@ function A.DiagnosticsRegistry.BuildFrameDiagnostics(ctx)
     if type(LowOpacity) ~= "function" or type(AddFixChoice) ~= "function" or type(AppendFixChoices) ~= "function" then return nil end
 
     local function UnitDefaultWidth(unit)
-        if unit == "boss" or unit == "focus" then return 180 end
+        if unit == "boss" or unit == "arena" or unit == "focus" then return 180 end
         return 275
     end
 
     local function UnitDefaultHeight(unit)
-        if unit == "boss" or unit == "focus" then return 30 end
+        if unit == "boss" or unit == "arena" or unit == "focus" then return 30 end
         return 40
     end
 
@@ -121,6 +121,8 @@ function A.DiagnosticsRegistry.BuildFrameDiagnostics(ctx)
             issues[#issues + 1] = "Focus Target only appears when your focus has a target."
         elseif unit == "boss" then
             issues[#issues + 1] = "Boss frames also require boss units from the encounter or preview context."
+        elseif unit == "arena" then
+            issues[#issues + 1] = "Arena frames require Arena opponent units, match preparation, or the Arena preview context."
         end
         if #issues == 0 then
             return label .. " frame is enabled in MSUF and has no obvious hidden-size or opacity problem. Open " .. label .. " settings or Edit Mode to inspect position."

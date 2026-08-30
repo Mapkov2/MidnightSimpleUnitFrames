@@ -171,6 +171,14 @@ local CANONICAL_PATH_OWNERS = {
         relativePoint = "boss.point",
         shortenNameShowDots = "fontScope.boss.shortenNameNoEllipsis",
     },
+    arena = {
+        -- Arena is filled from the same legacy text defaults as the other
+        -- unit frames. These fields are fallback mirrors of the visible text
+        -- controls, not independent settings.
+        hpTextMode = "arena.textRight",
+        powerTextMode = "arena.powerTextRight",
+        showPower = "arena.showPowerText",
+    },
     gf_party = {
         barBgTexture = "barScope.gf_party.barBackgroundTexture",
         -- Legacy 0/1 mirror of the group aggro-border toggle. GetHighlightVal

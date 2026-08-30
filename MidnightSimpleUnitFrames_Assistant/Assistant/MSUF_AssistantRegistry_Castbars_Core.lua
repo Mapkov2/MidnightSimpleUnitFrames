@@ -134,8 +134,16 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
         })
     end
 
-    local function RegisterBossCastbarDetachSetting()
-        local ownedKeys = { "bossCastbarDetached", "bossCastbarOffsetX", "bossCastbarOffsetY" }
+    local function RegisterCastbarDetachSetting(unit)
+        local detachSpecs = {
+            boss = { key = "bossCastbarDetached", label = "Boss" },
+            arena = { key = "arenaCastbarDetached", label = "Arena" },
+        }
+        local spec = detachSpecs[unit]
+        local keys = CASTBAR_KEYS[unit]
+        if not spec or type(keys) ~= "table" then return end
+
+        local ownedKeys = { spec.key, keys.x, keys.y }
         local function CaptureOwnerState()
             local general = GeneralDB()
             local state = { fields = {} }
@@ -148,7 +156,7 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
         end
         local function RestoreOwnerState(state, reason)
             if type(state) ~= "table" or type(state.fields) ~= "table" then
-                error("invalid boss castbar attachment transaction state")
+                error("invalid " .. unit .. " castbar attachment transaction state")
             end
             local general = GeneralDB()
             for i = 1, #ownedKeys do
@@ -160,45 +168,47 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
                     general[key] = nil
                 end
             end
-            ApplyCastbar(reason or "MSUF_ASSISTANT_BOSS_CASTBAR_ATTACHMENT_RESTORE", "boss")
+            ApplyCastbar(reason or "MSUF_ASSISTANT_CASTBAR_ATTACHMENT_RESTORE", unit)
             return true
         end
+        local unitLabel = spec.label
+        local lowerUnit = unitLabel:lower()
         Registry:RegisterSetting({
-            key = "general.bossCastbarDetached",
-            label = "Boss Cast Bar Detached",
-            category = "Boss / Cast Bar / Position",
-            unit = "boss",
+            key = "general." .. spec.key,
+            label = unitLabel .. " Cast Bar Detached",
+            category = unitLabel .. " / Cast Bar / Position",
+            unit = unit,
             frameType = "castbar",
             attribute = "detached",
             type = "boolean",
             aliases = {
-                "boss castbar detached", "boss cast bar detached", "detach boss castbar", "detach boss cast bar",
-                "boss castbar attached", "boss cast bar attached", "attach boss castbar", "attach boss cast bar",
-                "boss castbar anchor", "boss cast bar anchor", "boss castbar attachment", "boss cast bar attachment",
+                lowerUnit .. " castbar detached", lowerUnit .. " cast bar detached", "detach " .. lowerUnit .. " castbar", "detach " .. lowerUnit .. " cast bar",
+                lowerUnit .. " castbar attached", lowerUnit .. " cast bar attached", "attach " .. lowerUnit .. " castbar", "attach " .. lowerUnit .. " cast bar",
+                lowerUnit .. " castbar anchor", lowerUnit .. " cast bar anchor", lowerUnit .. " castbar attachment", lowerUnit .. " cast bar attachment",
             },
             exactAliases = {
-                "detach boss castbar", "detach boss cast bar", "detach the boss castbar", "detach the boss cast bar",
-                "attach boss castbar", "attach boss cast bar", "attach the boss castbar", "attach the boss cast bar",
-                "anchor boss castbar to boss frame", "anchor boss cast bar to boss frame",
-                "dock boss castbar to boss frame", "dock boss cast bar to boss frame",
+                "detach " .. lowerUnit .. " castbar", "detach " .. lowerUnit .. " cast bar", "detach the " .. lowerUnit .. " castbar", "detach the " .. lowerUnit .. " cast bar",
+                "attach " .. lowerUnit .. " castbar", "attach " .. lowerUnit .. " cast bar", "attach the " .. lowerUnit .. " castbar", "attach the " .. lowerUnit .. " cast bar",
+                "anchor " .. lowerUnit .. " castbar to " .. lowerUnit .. " frame", "anchor " .. lowerUnit .. " cast bar to " .. lowerUnit .. " frame",
+                "dock " .. lowerUnit .. " castbar to " .. lowerUnit .. " frame", "dock " .. lowerUnit .. " cast bar to " .. lowerUnit .. " frame",
             },
             valueAliases = {
                 detach = true, detached = true, undock = true, separate = true,
                 attach = false, attached = false, anchor = false, anchored = false, dock = false, docked = false,
             },
             dbScopes = {
-                { scope = "general", dbKey = "bossCastbarDetached" },
-                { scope = "general", dbKey = "bossCastbarOffsetX" },
-                { scope = "general", dbKey = "bossCastbarOffsetY" },
+                { scope = "general", dbKey = spec.key },
+                { scope = "general", dbKey = keys.x },
+                { scope = "general", dbKey = keys.y },
             },
             dbScopesReplace = true,
-            get = function() return GeneralDB().bossCastbarDetached == true end,
+            get = function() return GeneralDB()[spec.key] == true end,
             set = function(value)
                 local setAnchored = _G.MSUF_EM_SetCastbarAnchoredToUnit
                 if type(setAnchored) ~= "function" then
                     error("MSUF castbar attachment controller is unavailable")
                 end
-                setAnchored("boss", value ~= true)
+                setAnchored(unit, value ~= true)
             end,
             -- The Edit Mode owner applies and refreshes synchronously. Keep the
             -- transaction Apply phase idempotent instead of applying twice.
@@ -206,7 +216,7 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
             captureTransactionState = CaptureOwnerState,
             restoreTransactionState = RestoreOwnerState,
             combatSafe = false,
-            description = "Detaches the Boss cast bar from the Boss frame or attaches it again while preserving Edit Mode placement semantics.",
+            description = "Detaches the " .. unitLabel .. " cast bar from the " .. unitLabel .. " frame or attaches it again while preserving Edit Mode placement semantics.",
         })
     end
 
@@ -237,7 +247,7 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
         RegisterGeneralNumber = RegisterGeneralNumber,
         RegisterGeneralEnumSetting = RegisterGeneralEnumSetting,
         RegisterCastbarUnitGeneralBoolean = RegisterCastbarUnitGeneralBoolean,
-        RegisterBossCastbarDetachSetting = RegisterBossCastbarDetachSetting,
+        RegisterCastbarDetachSetting = RegisterCastbarDetachSetting,
         RegisterPlayerCastbarProvider = RegisterPlayerCastbarProvider,
     }
 end

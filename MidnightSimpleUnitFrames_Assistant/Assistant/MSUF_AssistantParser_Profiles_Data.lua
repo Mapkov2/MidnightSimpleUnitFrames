@@ -131,7 +131,7 @@ Data.PROFILE_PARSER = {
     PROFILE_EXPORT_CASTBAR_TERMS = { "castbar", "castbars", "zauberleiste", "zauberleisten" },
     PROFILE_EXPORT_GAMEPLAY_TERMS = { "gameplay", "combat timer", "crosshair", "totem frame", "spielhilfe", "kampftimer", "fadenkreuz", "totemrahmen" },
     PROFILE_EXPORT_GROUPFRAME_TERMS = { "group frame", "group frames", "groupframe", "party", "raid", "mythicraid", "gruppenframes", "gruppen frames", "gruppenrahmen", "gruppe" },
-    PROFILE_EXPORT_UNITFRAME_TERMS = { "unitframe", "unitframes", "unit frame", "unit frames", "player", "target", "focus", "boss", "pet", "einheitenfenster", "spieler", "ziel", "fokus" },
+    PROFILE_EXPORT_UNITFRAME_TERMS = { "unitframe", "unitframes", "unit frame", "unit frames", "player", "target", "focus", "boss", "arena", "pet", "einheitenfenster", "spieler", "ziel", "fokus" },
 
     PROFILE_RESTORE_ACTION_TERMS = { "restore", "recover", "rollback", "use backup", "use last backup", "load backup", "load last backup", "switch to backup", "switch to last backup" },
     PROFILE_BACKUP_TERMS = { "backup", "backup profile", "profile backup", "last backup" },

@@ -73,7 +73,7 @@ Data.COMPOUND_PARSER = {
     SCOPE_REMOVE_TERMS = {
         "targettarget", "target of target", "tot", "ziel des ziels", "focustarget", "focus target", "fokus ziel",
         "mythic raid", "mythicraid", "player", "spieler", "self", "ich", "target", "ziel", "focus", "fokus",
-        "pet", "begleiter", "boss", "party", "raid", "frame", "frames", "unitframe", "unitframes",
+        "pet", "begleiter", "boss", "arena", "party", "raid", "frame", "frames", "unitframe", "unitframes",
         "group frame", "group frames", "gruppenframe", "gruppenframes",
         "and", "und",
     },
@@ -156,11 +156,11 @@ Data.COMPOUND_PARSER = {
         { term = "icon", item = "icon" },
     },
     BOOLEAN_CHAIN_SCOPE_WORDS = {
-        player = true, target = true, focus = true, pet = true, boss = true, party = true, raid = true,
+        player = true, target = true, focus = true, pet = true, boss = true, arena = true, party = true, raid = true,
         targettarget = true, focustarget = true,
     },
     CHAIN_SCOPE_WORDS = {
-        player = true, target = true, focus = true, pet = true, boss = true, party = true, raid = true,
+        player = true, target = true, focus = true, pet = true, boss = true, arena = true, party = true, raid = true,
         targettarget = true, focustarget = true,
     },
     SLOT_WORDS = { left = true, right = true, center = true },

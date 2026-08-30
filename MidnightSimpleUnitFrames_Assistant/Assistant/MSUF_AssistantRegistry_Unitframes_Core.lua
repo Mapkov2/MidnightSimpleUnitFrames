@@ -25,7 +25,7 @@ function A.UnitframesRegistry.BuildCoreContext(ctx)
     local CallGlobal = ctx.CallGlobal
     local ClampNumber = ctx.ClampNumber
     local UnitframeData = ctx.UnitframeData
-    local UNIT_KEYS = ctx.UNIT_KEYS or { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+    local UNIT_KEYS = ctx.UNIT_KEYS or { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return nil end
     if type(AddAliasesForUnit) ~= "function" or type(UnitDB) ~= "function" then return nil end

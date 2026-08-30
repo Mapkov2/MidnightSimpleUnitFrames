@@ -3233,7 +3233,7 @@ local function BuildCastbarColors(ctx, b, CH)
         if type(write) == "function" then write(DetailUnit(), suffix, r, g, bcol) end
         ApplyCastbarColors()
     end
-    LabelAt(detail, "Each castbar text can override the shared castbar text color. Target text exists on Target and Focus only.",
+    LabelAt(detail, "Each castbar text can override the shared castbar text color. Target text exists on Target, Focus, Boss, and Arena.",
         12, -8, detailW - 28, "GameFontHighlightSmall", T.colors.muted)
     local detailUnitDropdown = ValueDropdownAt(ctx, detail, "Editing:", 12, -44,
         ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss|arena=Arena", min(260, detailW - 32),
@@ -3266,7 +3266,7 @@ local function BuildCastbarColors(ctx, b, CH)
         ApplyCastbarColors()
     end, "castbar.text_color.reset")
     M.TrackRefresh(ctx, function()
-        SetControlEnabled(detailTargetColor, DetailUnit() == "target" or DetailUnit() == "focus")
+        SetControlEnabled(detailTargetColor, DetailUnit() ~= "player")
     end)
 end
 

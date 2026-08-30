@@ -12,7 +12,7 @@ M.Assistant = A
 
 A.GlobalRegistry = A.GlobalRegistry or {}
 
-local PORTRAIT_COLOR_UNITS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local PORTRAIT_COLOR_UNITS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
 local DISPEL_COLOR_ROWS = {
     { key = "Magic", label = "Magic Dispel Color", dr = 0.20, dg = 0.60, db = 1.00, aliases = { "magic dispel color", "magic debuff color", "magic aura color" } },
     { key = "Curse", label = "Curse Dispel Color", dr = 0.60, dg = 0.00, db = 1.00, aliases = { "curse dispel color", "curse debuff color", "curse aura color" } },

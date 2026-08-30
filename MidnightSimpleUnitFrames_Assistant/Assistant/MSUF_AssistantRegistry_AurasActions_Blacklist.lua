@@ -37,7 +37,7 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
     if type(ParseAuraBlacklistSummaryAliasArgs) ~= "function" or type(RegisterBlacklistSummaryAction) ~= "function" then return end
 
     local function UnitScope(scope)
-        return scope == "player" or scope == "target" or scope == "focus" or scope == "boss"
+        return scope == "player" or scope == "target" or scope == "focus" or scope == "boss" or scope == "arena"
     end
 
     local function Lanes(lane)
@@ -62,7 +62,7 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
             return nil, nil, "Open Aura Filters first so I can edit the native hidden-aura list."
         end
         if not UnitScope(scope) then
-            return nil, nil, "Choose Player, Target, Focus, or Boss so I know which unit-frame aura list to edit."
+            return nil, nil, "Choose Player, Target, Focus, Boss, or Arena so I know which unit-frame aura list to edit."
         end
         return Model, scope
     end
@@ -138,12 +138,15 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
             "allow all aura blacklist spells", "remove all aura blacklist spells",
             "empty aura blacklist", "reset aura blacklist", "delete all aura blacklist spells",
             "clear player aura blacklist", "clear target aura blacklist", "clear focus aura blacklist", "clear boss aura blacklist",
+            "clear arena aura blacklist",
             "empty player aura blacklist", "empty target aura blacklist", "empty focus aura blacklist", "empty boss aura blacklist",
+            "empty arena aura blacklist",
             "reset player aura blacklist", "reset target aura blacklist", "reset focus aura blacklist", "reset boss aura blacklist",
+            "reset arena aura blacklist",
             "allow all player aura blacklist spells", "allow all target aura blacklist spells",
-            "allow all focus aura blacklist spells", "allow all boss aura blacklist spells",
+            "allow all focus aura blacklist spells", "allow all boss aura blacklist spells", "allow all arena aura blacklist spells",
             "delete all player aura blacklist spells", "delete all target aura blacklist spells",
-            "delete all focus aura blacklist spells", "delete all boss aura blacklist spells",
+            "delete all focus aura blacklist spells", "delete all boss aura blacklist spells", "delete all arena aura blacklist spells",
         },
         parseAliasArgs = ParseAuraBlacklistClearAliasArgs,
         run = function(args)

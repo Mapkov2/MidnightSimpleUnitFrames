@@ -1174,7 +1174,7 @@ local PAGE_HELP = {
     opt_castbar = {
         title = "Cast Bars help",
         lines = {
-            "You can change Player, Target, Focus, and Boss cast bar visibility, size, position, icons, text, colors, textures, and the detail options shown in the MSUF menu.",
+            "You can change Player, Target, Focus, Boss, and Arena cast bar visibility, size, position, icons, text, colors, textures, and the detail options shown in the MSUF menu.",
             "Examples: disable target cast bar; set target cast bar height 18; turn off target cast bar icon; set cast bar text color red.",
             "Cast bar source examples: use MSUF player cast bar; use Blizzard player cast bar; hide target cast bar; use MSUF focus cast bar.",
         },
@@ -1203,12 +1203,12 @@ local PAGE_HELP = {
         },
         actions = { "Export Current Profile", "Copy Wago Profiles Link", "Import Profile" },
     },
-    auras3 = { title = "Auras help", lines = { "Aura Options and Aura Style live on the frame they affect. Open UnitFrames > Auras for Player/Target/Focus/Boss, or Group Frames > Auras for Party/Raid.", "Aura Options controls content, filters, lists, and layout. Aura Style controls that frame's zoom, timers, stacks, duration bar, ordering, pandemic warning, and Full-Frame effect.", "Appearance > Aura Style is only the global icon theme selected by Aura product: Buffs, Debuffs, Player Defensives, or Dots on Target." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
+    auras3 = { title = "Auras help", lines = { "Aura Options and Aura Style live on the frame they affect. Open UnitFrames > Auras for Player/Target/Focus/Boss/Arena, or Group Frames > Auras for Party/Raid.", "Aura Options controls content, filters, lists, and layout. Aura Style controls that frame's zoom, timers, stacks, duration bar, ordering, pandemic warning, and Full-Frame effect.", "Appearance > Aura Style is only the global icon theme selected by Aura product: Buffs, Debuffs, Player Defensives, or Dots on Target." }, actions = { "Open Target", "Open Player", "Open Arena Frames", "Open Group Auras" } },
     auras3_styling = { title = "Global Aura Appearance help", lines = { "Appearance > Auras is global by Aura type. Select Buffs, Debuffs, Player Defensives, or Dots on Target to preview and edit that product's icon theme.", "Frame-specific cooldown text, stack text, duration bars, pandemic warnings, ordering, and Full-Frame effects stay under the owning UnitFrame or GroupFrame > Auras > Style.", "Group Spell Icons keep their own local Style, but their icon shape, border, and shadow use the global Buff Appearance." }, actions = { "Open Auras", "Open Player", "Open Group Auras" } },
     auras3_buffs = { title = "Aura Buffs help", lines = { "Open the affected UnitFrame > Auras > Buffs for its Options and frame-local Style; use Group Frames > Auras for Party/Raid Buffs.", "Appearance > Aura Style > Buffs contains only the global Buff icon theme." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
     auras3_debuffs = { title = "Aura Debuffs help", lines = { "Open the affected UnitFrame > Auras > Debuffs for its Options and frame-local Style; use Group Frames > Auras for Party/Raid Debuffs.", "Appearance > Aura Style > Debuffs contains only the global Debuff icon theme." }, actions = { "Open Target", "Open Focus", "Open Group Auras" } },
     auras3_custom = { title = "Custom Auras help", lines = { "Every supported UnitFrame has Custom 1, Custom 2, Custom 3, and its special Player Defensives or Dots on Target container under Auras.", "Setup, lists, layout, deep Style, pandemic warning, and Full-Frame effects remain local to that UnitFrame. Only the corresponding icon theme is global under Appearance > Aura Style." }, actions = { "Open Aura Style", "Open Target", "Open Player" } },
-    auras3_filters = { title = "Aura Filter help", lines = { "There is no standalone Aura Filters page anymore. Filters and Black-/Whitelists live directly beside the Buff, Debuff, or Custom container they affect.", "Start with scope and lane: Player/Target/Focus/Boss Buffs or Debuffs, or Party/Raid Buffs or Debuffs. Unit filter toggles inherit from Shared unless that unit uses custom rules; group lanes use their own filter token.", "Hide Permanent removes every no-duration aura in that lane. Exact SpellID blacklists remove one spell where Blizzard permits identity filtering; group category blacklists expand to the same live exact-SpellID exclusions. Timer text, swipe, and duration bars are style only." }, actions = { "Open Target", "Open Group Auras" } },
+    auras3_filters = { title = "Aura Filter help", lines = { "There is no standalone Aura Filters page anymore. Filters and Black-/Whitelists live directly beside the Buff, Debuff, or Custom container they affect.", "Start with scope and lane: Player/Target/Focus/Boss/Arena Buffs or Debuffs, or Party/Raid Buffs or Debuffs. Unit filter toggles inherit from Shared unless that unit uses custom rules; group lanes use their own filter token.", "Hide Permanent removes every no-duration aura in that lane. Exact SpellID blacklists remove one spell where Blizzard permits identity filtering; group category blacklists expand to the same live exact-SpellID exclusions. Timer text, swipe, and duration bars are style only." }, actions = { "Open Target", "Open Arena Frames", "Open Group Auras" } },
     gf_layout = { title = "Group Layout help", lines = { "You can change group frame basics, text, resource bars, transparency, geometry, sorting, scaling, anchoring, Party/Raid/Mythic Raid behavior, and visibility options.", "Examples: 'set raid health text size to 14', 'hide healer resource bars in raid frames', 'set raid scale for 20 players to 80', or 'set party growth direction to down'." }, actions = { "Open Group Layout", "Open Colors" } },
     gf_bars = {
         title = "Group Dispel Overlay help",
@@ -2110,7 +2110,7 @@ local function ComplementaryAddonAnswer(query)
             text = table.concat({
                 "Addon overlap and compatibility with MSUF",
                 "MSUF does not keep a reliable offline blacklist of incompatible addons. Most conflicts come from two addons trying to own the same UI surface.",
-                "Keep MSUF as the only owner of Player, Target, Party, Raid, and Boss frames. Disable duplicate unit frames, aura or cast overlays, resource displays, cooldown displays, and frame movers in the companion addon.",
+                "Keep MSUF as the only owner of Player, Target, Party, Raid, Boss, and Arena frames. Disable duplicate unit frames, aura or cast overlays, resource displays, cooldown displays, and frame movers in the companion addon.",
                 "For Enhance QoL (EQoL), disable EQoL Unit Frames and every EQoL resource bar, aura container, group/raid overlay, or mover that duplicates the MSUF surface you use.",
                 "For WeakAuras, keep alerts that add information and remove groups that redraw MSUF frames, auras, cast bars, or resources.",
                 "If an addon still fails after overlap is removed, test the two addons alone and check both current Retail/Midnight changelogs. This is bundled offline guidance, not a live compatibility scan.",
@@ -2145,7 +2145,7 @@ local function ComplementaryAddonAnswer(query)
             "Useful with overlapping modules disabled:",
             "8. WeakAuras - custom alerts and overlays. Avoid groups that duplicate MSUF unit-frame auras, cast bars, or resource displays.",
             "9. Enhance QoL (EQoL) - useful modular quality-of-life tools. Disable EQoL Unit Frames, and turn off any EQoL resource bars, aura containers, group/raid overlays, or movers that duplicate the MSUF surface you use.",
-            "Compatibility rule: keep MSUF as the only addon that owns Player, Target, Party, Raid, and Boss frames. Disable overlapping unit-frame modules and avoid duplicate aura, cast, cooldown, or frame-mover overlays.",
+            "Compatibility rule: keep MSUF as the only addon that owns Player, Target, Party, Raid, Boss, and Arena frames. Disable overlapping unit-frame modules and avoid duplicate aura, cast, cooldown, or frame-mover overlays.",
             "This is bundled offline guidance, not a live compatibility scan. Check each addon's current Retail/Midnight file and changelog before installing.",
         }, "\n"),
         status = "info",
@@ -2485,7 +2485,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "what", "what are", "can msuf", "change", "help", "explain", "enemy", "where" })
     then
         return {
-            text = "Nameplates help\nNameplates are the floating bars above units in the 3D world. MSUF focuses on unit frames, group frames, cast bars, auras, class resources, and gameplay helpers; it does not replace Blizzard nameplates. For enemy nameplate behavior, use Blizzard nameplate settings or a nameplate addon. In MSUF, I can still help with Target, Focus, Boss frames, enemy NPC colors, cast bars, and aura visibility.\nExamples: open target; open boss frames; set enemy NPC color red; make target cast bar bigger.\nYou can ask: Open Target | Open Boss Frames | Open Colors",
+            text = "Nameplates help\nNameplates are the floating bars above units in the 3D world. MSUF focuses on unit frames, group frames, cast bars, auras, class resources, and gameplay helpers; it does not replace Blizzard nameplates. For enemy nameplate behavior, use Blizzard nameplate settings or a nameplate addon. In MSUF, I can still help with Target, Focus, Boss, and Arena frames, enemy NPC colors, cast bars, and aura visibility.\nExamples: open target; open arena frames; set enemy NPC color red; make target cast bar bigger.\nYou can ask: Open Target | Open Boss Frames | Open Arena Frames | Open Colors",
             status = "applied",
             summary = "Assistant nameplates help",
         }
@@ -2557,7 +2557,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Unit Frames help\nUnit frames are the UI frames for important units such as Player, Target, Focus, Pet, Boss, Target of Target, and Focus Target. MSUF can configure their visibility, size, position, health and power bars, text, portraits, auras, cast bars, range fade, colors, and related status options.\nExamples: open player; open target; set target width to 240; hide player name; why is target frame hidden?\nYou can ask: Open Player | Open Target | Open Focus | Open Boss Frames",
+            text = "Unit Frames help\nUnit frames are the UI frames for important units such as Player, Target, Focus, Pet, Boss, Arena, Target of Target, and Focus Target. MSUF can configure their visibility, size, position, health and power bars, text, portraits, auras, cast bars, range fade, colors, and related status options.\nExamples: open player; open arena frames; set target width to 240; hide player name; why is target frame hidden?\nYou can ask: Open Player | Open Target | Open Focus | Open Boss Frames | Open Arena Frames",
             status = "applied",
             summary = "Assistant unit frames help",
         }
@@ -2581,7 +2581,7 @@ local function DirectHelpAnswer(query, opts)
         and not LocationLaneOwnsQuestion(norm)
     then
         return {
-            text = "Auras, buffs, and debuffs help\nAura content lives directly on the frame it affects. Open Player, Target, Focus, or Boss Frames > Auras for Buffs, Debuffs, and Custom 1–3. Party/Raid filters and lists live in Group Frames > Auras. For content changes, name the frame and Buff or Debuff lane: broad filters select aura groups, Hide Permanent handles auras with no timer, and exact SpellID lists hide individual auras where Blizzard permits identity filtering. Cooldown/stack text, swipe, duration bars, colors, size, and growth are presentation only.\nExamples: hide player buffs with no timer; show only dispellable raid debuffs; list target buff blacklist; set target buff icon size to 30.\nYou can ask: Open Target | Open Player | Open Boss Frames | Open Group Auras | Open Aura Style",
+            text = "Auras, buffs, and debuffs help\nAura content lives directly on the frame it affects. Open Player, Target, Focus, Boss, or Arena Frames > Auras for Buffs, Debuffs, and Custom 1–3. Party/Raid filters and lists live in Group Frames > Auras. For content changes, name the frame and Buff or Debuff lane: broad filters select aura groups, Hide Permanent handles auras with no timer, and exact SpellID lists hide individual auras where Blizzard permits identity filtering. Cooldown/stack text, swipe, duration bars, colors, size, and growth are presentation only.\nExamples: hide player buffs with no timer; show only dispellable raid debuffs; list arena buff blacklist; set target buff icon size to 30.\nYou can ask: Open Target | Open Player | Open Boss Frames | Open Arena Frames | Open Group Auras | Open Aura Style",
             status = "applied",
             summary = "Assistant auras help",
         }
@@ -2826,7 +2826,7 @@ local function DirectHelpAnswer(query, opts)
             and A.RouterTryCastbarSpecialSettingShortcut(norm) ~= nil)
     then
         return {
-            text = "Interrupt help\nMSUF can make interrupts easier to read through Cast Bar options: Interrupt Ready indicators, Focus Kick Tracker, cast bar colors, interrupt shake, and Target/Focus/Boss cast bar visibility. It cannot decide when to interrupt, but it can make the relevant frame feedback clearer.\nExamples: show kick ready on target; show focus kick tracker; turn on shake on interrupt; set uninterruptible cast color red.\nYou can ask: Open Cast Bars | Explain Interrupt Ready",
+            text = "Interrupt help\nMSUF can make interrupts easier to read through Cast Bar options: Interrupt Ready indicators, Focus Kick Tracker, cast bar colors, interrupt shake, and Target/Focus/Boss/Arena cast bar visibility. It cannot decide when to interrupt, but it can make the relevant frame feedback clearer.\nExamples: show kick ready on arena; show focus kick tracker; turn on shake on interrupt; set uninterruptible cast color red.\nYou can ask: Open Cast Bars | Explain Interrupt Ready",
             status = "applied",
             summary = "Assistant interrupt help",
         }
@@ -2867,7 +2867,7 @@ local function DirectHelpAnswer(query, opts)
         and not LocationLaneOwnsQuestion(norm)
     then
         return {
-            text = "Dispel help\nMSUF has separate dispel features. Party/Raid/Mythic Raid use Group Frames > Dispel Overlay. Player/Target/Focus/Boss use Bars > UnitFrame Dispel Overlay and the global/scoped Dispel Border. Aura Filters decide which dispellable debuffs are shown as icons. UnitFrame Dispel Border/Overlay need at least one UnitFrame aura container enabled.\nExamples: turn on party dispel overlay; set raid dispel overlay to max; set target dispel overlay opacity to 80; set dispel border detects to dispellable by me; show only dispellable raid debuffs.\nYou can ask: Open Group Dispel Overlay | Open Bars | Open Aura Filters",
+            text = "Dispel help\nMSUF has separate dispel features. Party/Raid/Mythic Raid use Group Frames > Dispel Overlay. Player/Target/Focus/Boss/Arena use Bars > UnitFrame Dispel Overlay and the global/scoped Dispel Border. Aura Filters decide which dispellable debuffs are shown as icons. UnitFrame Dispel Border/Overlay need at least one UnitFrame aura container enabled.\nExamples: turn on party dispel overlay; set raid dispel overlay to max; set arena dispel overlay opacity to 80; set dispel border detects to dispellable by me; show only dispellable raid debuffs.\nYou can ask: Open Group Dispel Overlay | Open Bars | Open Aura Filters",
             status = "applied",
             summary = "Assistant dispel help",
         }
@@ -2969,7 +2969,7 @@ local function DirectHelpAnswer(query, opts)
         and not LocationLaneOwnsQuestion(norm)
     then
         return {
-            text = "Unit frame text help\nPlayer, Target, Focus, Pet, Target of Target, Focus Target, and Boss pages offer name, health, power, level, status, font-size, anchor, slot, and offset text options when that unit supports them.\nExamples: move target HP text left; set target power text to percent; make player name text bigger; open target text options.\nYou can ask: Open Player | Open Target | Open Boss Frames",
+            text = "Unit frame text help\nPlayer, Target, Focus, Pet, Target of Target, Focus Target, Boss, and Arena pages offer name, health, power, level, status, font-size, anchor, slot, and offset text options when that unit supports them.\nExamples: move target HP text left; set arena power text to percent; make player name text bigger; open arena text options.\nYou can ask: Open Player | Open Target | Open Boss Frames | Open Arena Frames",
             status = "applied",
             summary = "Assistant unit text help",
         }
@@ -2987,7 +2987,7 @@ local function DirectHelpAnswer(query, opts)
         and not LocationLaneOwnsQuestion(norm)
     then
         return {
-            text = "Cast Bars help\nIn Cast Bars, I can help with Player, Target, Focus, and Boss cast bars: visibility, size, position, fill direction, textures, text, interrupt-ready indicators, cast colors, and preview options.\nExamples: open cast bars; set target cast bar height to 24; move focus cast bar down; make boss cast bars wider; change cast bar texture.\nYou can ask: Open Cast Bars",
+            text = "Cast Bars help\nIn Cast Bars, I can help with Player, Target, Focus, Boss, and Arena cast bars: visibility, size, position, fill direction, textures, text, interrupt-ready indicators, cast colors, and preview options.\nExamples: open cast bars; set arena cast bar height to 24; move focus cast bar down; make boss cast bars wider; change cast bar texture.\nYou can ask: Open Cast Bars",
             status = "applied",
             summary = "Assistant cast bars help",
         }
@@ -2998,7 +2998,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Cast Bar text help\nIn Cast Bars, I can help with cast bar text size, X/Y offsets, visibility, and related cast bar details.\nExamples: move target cast bar text left; set focus cast bar text size to 14; make boss cast bar text bigger.\nYou can ask: Open Cast Bars",
+            text = "Cast Bar text help\nIn Cast Bars, I can help with cast bar text size, X/Y offsets, visibility, and related cast bar details.\nExamples: move target cast bar text left; set arena cast bar text size to 14; make boss cast bar text bigger.\nYou can ask: Open Cast Bars",
             status = "applied",
             summary = "Assistant cast bar text help",
         }
@@ -3111,7 +3111,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "explain", "what is", "what does", "where", "where is", "where do", "help", "mean", "indicator", "icon", "border" })
     then
         return {
-            text = "Interrupt Ready Indicator help\nInterrupt Ready can show whether your interrupt is ready on Target, Focus, or Boss cast bars. Its style, anchor, size, auto-size, offsets, and ready/not-ready colors are Cast Bar options.\nExamples: show kick ready on target; put kick ready indicator left; move interrupt ready down by 3; make kick ready icon bigger.\nYou can ask: Open Cast Bars",
+            text = "Interrupt Ready Indicator help\nInterrupt Ready can show whether your interrupt is ready on Target, Focus, Boss, or Arena cast bars. Its style, anchor, size, auto-size, offsets, and ready/not-ready colors are Cast Bar options.\nExamples: show kick ready on arena; put kick ready indicator left; move interrupt ready down by 3; make kick ready icon bigger.\nYou can ask: Open Cast Bars",
             status = "applied",
             summary = "Assistant interrupt ready help",
         }
@@ -3611,7 +3611,7 @@ end
 K.TOPIC_GUIDANCE = {
     { terms = { "buff", "buffs", "debuff", "debuffs", "aura", "auras", "dispel", "purge" },
       title = "That sounds like auras",
-      body = "Buffs, debuffs and aura filtering live on the frame they belong to: Player, Target, Focus and Boss each have their own aura lanes, and Party/Raid aura filters live under Group Frames.",
+      body = "Buffs, debuffs and aura filtering live on the frame they belong to: Player, Target, Focus, Boss and Arena each have their own aura lanes, and Party/Raid aura filters live under Group Frames.",
       examples = "open target; hide player buffs with no timer; show only dispellable raid debuffs; set target buff icon size to 30" },
     -- Ordered before cast bars: "click casting" contains "casting" and was
     -- being routed to the cast-bar topic.
@@ -3677,10 +3677,10 @@ K.TOPIC_GUIDANCE = {
     -- Last on purpose: the unit nouns are the most generic terms here, so every
     -- more specific topic above ("player buff", "target castbar") must win
     -- first. This is the catch-all for a request that names only a frame.
-    { terms = { "player", "target", "focus", "pet", "boss", "targettarget", "focustarget", "frame", "frames", "unitframe" },
+    { terms = { "player", "target", "focus", "pet", "boss", "arena", "targettarget", "focustarget", "frame", "frames", "unitframe" },
       title = "That sounds like the unit frames",
-      body = "Player, Target, Focus, Pet, Boss, Target of Target and Focus Target each have their own page: size and position, health and power bars, name and status text, portrait, auras and cast bar.",
-      examples = "open player; set target width to 250; hide player name; set focus name font size to 14" },
+      body = "Player, Target, Focus, Pet, Boss, Arena, Target of Target and Focus Target each have their own page: size and position, health and power bars, name and status text, portrait, auras and cast bar.",
+      examples = "open player; set target width to 250; hide player name; set arena name font size to 14" },
 }
 
 -- Longest visible label contained in the query wins, so "Combat Crosshair Size"

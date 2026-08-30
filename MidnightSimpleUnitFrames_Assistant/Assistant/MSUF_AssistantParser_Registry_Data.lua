@@ -299,7 +299,7 @@ Data.REGISTRY_PARSER = {
         [94] = { "color", "colors", "colour", "colours", "tint", "farbe", "farben" },
         [95] = { "set", "change", "make", "turn", "use", "to " },
         [96] = {
-        "player", "target", "focus", "pet", "boss", "party", "raid", "mythic raid", "mythicraid",
+        "player", "target", "focus", "pet", "boss", "arena", "party", "raid", "mythic raid", "mythicraid",
         "health", "hp", "power", "mana", "energy", "rage", "focus power", "class resource", "class power",
         "class color", "class colour", "warrior", "paladin", "hunter", "rogue", "priest", "death knight",
         "shaman", "mage", "warlock", "monk", "druid", "demon hunter", "evoker",
@@ -425,7 +425,7 @@ Data.REGISTRY_PARSER = {
         [174] = { "power color", "power colour", "power colors", "power colours", "power bar color", "power bar colour" },
         [175] = { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" },
         [176] = {
-        "player", "target", "focus", "boss", "party", "raid", "mythic raid",
+        "player", "target", "focus", "boss", "arena", "party", "raid", "mythic raid",
         "buff player filter", "debuff player filter", "raid filter", "raid in combat",
         "nameplate", "cancelable", "not cancelable", "dispellable", "crowd control",
         "external defensive", "big defensive", "only", "show only",
@@ -508,7 +508,7 @@ Data.REGISTRY_PARSER = {
     },
         [220] = {
         "unitframe", "unit frame", "unitframes", "unit frames", "all units", "all unitframes", "all unit frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+        "player", "target", "focus", "pet", "boss", "arena", "targettarget", "target of target", "focustarget", "focus target",
     },
         [221] = {
         "group frame", "group frames", "all groups", "all group frames", "party", "raid", "mythic raid", "mythicraid",

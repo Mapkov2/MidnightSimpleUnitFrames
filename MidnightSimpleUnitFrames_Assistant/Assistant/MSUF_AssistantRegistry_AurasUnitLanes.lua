@@ -454,7 +454,7 @@ function A.AurasRegistry.RegisterUnitLaneSettings(ctx)
     local AURA_LANE_GROWTH_VALUES = ctx.AURA_LANE_GROWTH_VALUES
     local AURA_LANE_GROWTH_ALIASES = ctx.AURA_LANE_GROWTH_ALIASES
     local unitPages = {
-        player = "uf_player", target = "uf_target", focus = "uf_focus", boss = "uf_boss",
+        player = "uf_player", target = "uf_target", focus = "uf_focus", boss = "uf_boss", arena = "uf_arena",
     }
     local AuraReadLaneGrowthPair = ctx.AuraReadLaneGrowthPair
     local AuraWriteLaneGrowthPair = ctx.AuraWriteLaneGrowthPair

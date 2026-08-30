@@ -2686,7 +2686,7 @@ local FRAME_RECOVERY_SYMPTOM_TERMS = {
 }
 local FRAME_RECOVERY_SUBJECT_TERMS = {
     "frame", "frames", "unitframe", "unitframes", "unit frame", "unit frames",
-    "player frame", "target frame", "focus frame", "pet frame", "boss frame",
+    "player frame", "target frame", "focus frame", "pet frame", "boss frame", "arena frame", "arena frames",
     "group frame", "group frames", "party frame", "raid frame",
     "health bar", "health bars", "hp bar", "power bar",
     "my ui", "the ui", "msuf", "everything", "anything", "all my frames",

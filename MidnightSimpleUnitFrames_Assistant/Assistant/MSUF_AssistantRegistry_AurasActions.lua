@@ -61,7 +61,7 @@ Registry:RegisterAction({
             return false
         end
         local parsed = {}
-        for _, scope in ipairs({ "player", "target", "focus", "boss" }) do
+        for _, scope in ipairs({ "player", "target", "focus", "boss", "arena" }) do
             if normalized:find("%f[%a]" .. scope .. "%f[%A]") then
                 parsed.scope = scope
                 break
@@ -74,8 +74,8 @@ Registry:RegisterAction({
     end,
     run = function(args)
         local scope = tostring(args and args.scope or ""):lower()
-        if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then
-            return false, "Choose Player, Target, Focus, or Boss so I know which Custom Aura container to reset."
+        if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "arena" then
+            return false, "Choose Player, Target, Focus, Boss, or Arena so I know which Custom Aura container to reset."
         end
 
         local model = AuraModel()

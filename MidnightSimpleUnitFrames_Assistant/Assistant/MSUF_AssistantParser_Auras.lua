@@ -32,6 +32,12 @@ local Compact = P.Compact
 local DetectDirection = P.DetectDirection
 local DetectBoolean = P.DetectBoolean
 
+local AuraRegistryData = A.AurasRegistryData or {}
+local AURA_UNIT_SCOPES = AuraRegistryData.AURA_SCOPES
+    or { "player", "target", "focus", "boss", "arena" }
+local AURA_UNIT_SCOPE_SET = {}
+for i = 1, #AURA_UNIT_SCOPES do AURA_UNIT_SCOPE_SET[AURA_UNIT_SCOPES[i]] = true end
+
 local function IsAuraSortRequest(text)
     text = " " .. tostring(text or "") .. " "
     local hasLane = text:find(" buff", 1, true)
@@ -75,7 +81,7 @@ local function AuraBlacklistScope(text)
     local units = DetectUnits(text)
     for i = 1, #units do
         local unit = units[i]
-        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+        if AURA_UNIT_SCOPE_SET[unit] then return unit end
     end
     return nil
 end
@@ -87,7 +93,7 @@ local function AuraBlacklistLane(text)
     return "both"
 end
 
-local AURA_GEOMETRY_UNITS = { "player", "target", "focus", "boss" }
+local AURA_GEOMETRY_UNITS = AURA_UNIT_SCOPES
 local AURA_GEOMETRY_GROUPS = { "party", "raid", "mythicraid" }
 
 local function AddAuraGeometryScope(out, kind, key)
@@ -478,7 +484,7 @@ local function AuraEditScopeForText(text)
     if ContainsAny(text, AurasPhrases[42]) then return "raid" end
     local units = DetectUnits(text)
     for i = 1, #units do
-        if units[i] == "player" or units[i] == "target" or units[i] == "focus" or units[i] == "boss" then return units[i] end
+        if AURA_UNIT_SCOPE_SET[units[i]] then return units[i] end
     end
     local groups = DetectGroups(text)
     for i = 1, #groups do
@@ -501,7 +507,7 @@ local function AuraShortcutScopes(text)
     local units = DetectUnits(text)
     for i = 1, #units do
         local unit = units[i]
-        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+        if AURA_UNIT_SCOPE_SET[unit] then
             AddAuraGeometryScope(out, "unit", unit)
         end
     end
@@ -519,7 +525,7 @@ local function AuraShortcutScopes(text)
     local scope = AuraEditScopeForText(text)
     if scope == "party" or scope == "raid" then
         AddAuraGeometryScope(out, "group", scope)
-    elseif scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then
+    elseif AURA_UNIT_SCOPE_SET[scope] then
         AddAuraGeometryScope(out, "unit", scope)
     end
     return #out > 0 and out or nil
@@ -670,7 +676,7 @@ local function AuraFilterDisplayScope(text)
     local units = DetectUnits(text)
     for i = 1, #units do
         local unit = units[i]
-        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+        if AURA_UNIT_SCOPE_SET[unit] then
             return "unit", unit, unit:gsub("^%l", string.upper)
         end
     end
@@ -694,7 +700,7 @@ local function AuraFilterGuidanceRecommendation()
         "- DPS personal tracking: use Player on target debuffs when you only care about your own DoTs.",
         "- Group cooldown tracking: use MSUF Highlights for MSUF's curated defensive, healer, and major offensive/support cooldown buffs regardless of caster.",
         "- Narrow defensive tracking: use BigDefensive for major defensives, BigDefensivePlayer for your own, or ExternalDefensive for externals.",
-        "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane.",
+        "MSUF detail: Player/Target/Focus/Boss/Arena use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane.",
         "Examples: set raid debuff filter to Raid; set raid debuff filter to RAID_PLAYER_DISPELLABLE; set target debuffs to any dispel type; set target buffs to Important.",
     }
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Recommends beginner-friendly aura filters for raid use." }
@@ -855,8 +861,7 @@ local function AuraStyleScopes(text)
         local out = {}
         for i = 1, #scopes do
             local scope = scopes[i]
-            if scope.kind == "unit"
-                and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss")
+            if scope.kind == "unit" and AURA_UNIT_SCOPE_SET[scope.key]
             then
                 AddAuraGeometryScope(out, "unit", scope.key)
             elseif scope.kind == "group" and (scope.key == "party" or scope.key == "raid" or scope.key == "mythicraid") then
@@ -983,7 +988,7 @@ local function ParseAuraStyleNumberShortcut(text)
                     end
                 end
             end
-        elseif scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+        elseif scope.kind == "unit" and AURA_UNIT_SCOPE_SET[scope.key] then
             if lanes then
                 for j = 1, #lanes do
                     local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. lanes[j] .. "." .. spec.key)
@@ -1074,7 +1079,7 @@ local function ParseAuraStyleAnchorShortcut(text)
                     end
                 end
             end
-        elseif scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+        elseif scope.kind == "unit" and AURA_UNIT_SCOPE_SET[scope.key] then
             if lanes then
                 for j = 1, #lanes do
                     local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. lanes[j] .. "." .. attr)
@@ -1137,7 +1142,7 @@ local function ParseUnitAuraTooltipShortcut(text)
     local changes = {}
     for i = 1, #scopes do
         local scope = scopes[i]
-        if scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+        if scope.kind == "unit" and AURA_UNIT_SCOPE_SET[scope.key] then
             for j = 1, #lanes do
                 AddAuraRegisteredChange(changes, "auras3." .. tostring(scope.key) .. "." .. tostring(lanes[j]) .. ".showTooltip", value, "Aura Tooltips")
             end
@@ -1180,7 +1185,7 @@ local function ParseAuraExclusiveFilterShortcut(text)
         local units = DetectUnits(text)
         for i = 1, #units do
             local unit = units[i]
-            if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+            if AURA_UNIT_SCOPE_SET[unit] then
                 scopes[#scopes + 1] = unit
             end
         end
@@ -1189,7 +1194,7 @@ local function ParseAuraExclusiveFilterShortcut(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Which UnitFrame Aura scope should use that exclusive filter: Player, Target, Focus, or Boss?",
+            text = "Which UnitFrame Aura scope should use that exclusive filter: Player, Target, Focus, Boss, or Arena?",
             summary = "Asks for a concrete Aura scope before changing an exclusive filter.",
         }
     end
@@ -1354,7 +1359,7 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             local lanes = AuraShortcutLanes(text)
             for i = 1, #laneUnits do
                 local unit = laneUnits[i]
-                if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+                if AURA_UNIT_SCOPE_SET[unit] then
                     for j = 1, #lanes do
                         AddAuraRegisteredChange(changes,
                             "auras3." .. tostring(unit) .. "." .. tostring(lanes[j]) .. ".filtersEnabled", value)
@@ -1431,7 +1436,7 @@ local function ParseAuraDirectSettingShortcut(text, raw)
                 local changes = {}
                 for i = 1, #laneUnits do
                     local unit = laneUnits[i]
-                    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+                    if AURA_UNIT_SCOPE_SET[unit] then
                         local setting = Registry and Registry:GetSetting("auras3." .. tostring(unit) .. "." .. lane .. "." .. attr)
                         if setting then
                             changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta }
@@ -1464,7 +1469,7 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             local changes = {}
             for i = 1, #laneUnits do
                 local unit = laneUnits[i]
-                if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+                if AURA_UNIT_SCOPE_SET[unit] then
                     AddAuraRegisteredChange(changes, "auras3." .. tostring(unit) .. "." .. lane .. ".visible", value)
                 end
             end
@@ -1521,7 +1526,7 @@ local function UnitAuraFilterExplicitScope(text)
     local playerIsFilterValue = ContainsAny(text, AurasPhrases[153])
     for i = 1, #units do
         local unit = units[i]
-        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+        if AURA_UNIT_SCOPE_SET[unit] then
             if not (unit == "player" and playerIsFilterValue and #units > 1) then return unit end
         end
     end
@@ -1539,7 +1544,7 @@ local function UnitAuraFilterSpecForText(text)
     local specs = data.AURA_FILTER_BOOLEAN_SPECS or {}
     local compactText = Compact(text)
     local scopeStripped = " " .. Normalize(text) .. " "
-    for _, word in ipairs({ "target", "focus", "boss" }) do
+    for _, word in ipairs({ "target", "focus", "boss", "arena" }) do
         scopeStripped = scopeStripped:gsub(" " .. word .. " ", " ")
     end
     scopeStripped = Trim(scopeStripped:gsub("%s+", " "))
@@ -1769,7 +1774,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Which UnitFrame Aura scope should use that live filter: Player, Target, Focus, or Boss? Example: 'show only dispellable target debuffs'.",
+            text = "Which UnitFrame Aura scope should use that live filter: Player, Target, Focus, Boss, or Arena? Example: 'show only dispellable arena debuffs'.",
             summary = "Asks for a unit aura scope before changing live filters.",
         }
     end

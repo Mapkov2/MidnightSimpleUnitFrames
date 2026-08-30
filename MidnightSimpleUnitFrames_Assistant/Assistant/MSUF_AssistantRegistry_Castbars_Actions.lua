@@ -28,7 +28,7 @@ local CASTBAR_PREVIEW_TYPES = { normal = true, channel = true, empowered = true 
 local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit == "boss1" or unit == "bosses" then unit = "boss" end
-    if unit == "arena1" or unit == "arenas" then unit = "arena" end
+    if unit == "arena1" or unit == "arena2" or unit == "arena3" or unit == "arenas" then unit = "arena" end
     return CASTBAR_PREVIEW_UNITS[unit] and unit or "player"
 end
 
@@ -66,7 +66,7 @@ Registry:RegisterAction({
     aliases = {
         "preview castbar", "castbar preview", "show castbar preview", "castbar vorschau", "zauberleiste vorschau",
         "preview player castbar", "preview target castbar", "preview focus castbar", "preview boss castbar", "preview arena castbar",
-        "spieler zauberleiste vorschau", "ziel zauberleiste vorschau", "fokus zauberleiste vorschau", "boss zauberleiste vorschau",
+        "spieler zauberleiste vorschau", "ziel zauberleiste vorschau", "fokus zauberleiste vorschau", "boss zauberleiste vorschau", "arena zauberleiste vorschau",
         "preview channel castbar", "preview empowered castbar", "preview castbar interrupt",
         "kanalisierte zauberleiste vorschau", "empowered zauberleiste vorschau", "unterbrochene zauberleiste vorschau",
     },
@@ -104,7 +104,7 @@ Registry:RegisterAction({
         "start player castbar test", "start target castbar test", "start focus castbar test", "start boss castbar test", "start arena castbar test",
         "stop player castbar test", "stop target castbar test", "stop focus castbar test", "stop boss castbar test", "stop arena castbar test",
         "zauberleisten testmodus", "spieler zauberleisten test", "ziel zauberleisten test",
-        "fokus zauberleisten test", "boss zauberleisten test",
+        "fokus zauberleisten test", "boss zauberleisten test", "arena zauberleisten test",
     },
     combatSafe = false,
     run = function(args)

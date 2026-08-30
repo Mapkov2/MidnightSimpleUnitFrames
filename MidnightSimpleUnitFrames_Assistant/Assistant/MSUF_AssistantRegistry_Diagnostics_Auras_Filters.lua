@@ -100,7 +100,7 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
         local db = _G.MSUF_DB
         local auras = type(db) == "table" and db.auras3 or nil
         local perUnit = type(auras) == "table" and auras.perUnit or nil
-        local runtimeUnit = scope == "boss" and "boss1" or scope
+        local runtimeUnit = scope == "boss" and "boss1" or (scope == "arena" and "arena1" or scope)
         local unit = type(perUnit) == "table" and perUnit[runtimeUnit] or nil
         local root = type(unit) == "table" and unit.blacklist or nil
         if type(root) ~= "table" then return nil end
