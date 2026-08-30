@@ -57,8 +57,11 @@ calculator would be less correct and more expensive.
 
 ## Client boundaries
 
-- Mainline loads one direct unit-frame manifest with the same Lua module count
-  and order as the source Retail checkout. It never parses `Game/Classic`,
+- Mainline preserves every Core, Options, and Assistant Retail Lua path in its
+  original order. Its only additional Lua loads are the four explicitly owned
+  Arena modules: `MSUF_ArenaCastbars.lua`, `MSUF_ArenaCastbars_Preview.lua`,
+  `MSUF_Feature_ArenaMatch.lua`, and `MSUF_Feature_ArenaTrinkets.lua`. No other
+  owned file may enter Mainline, and it never parses `Game/Classic`,
   `Game/Vanilla`, `Game/Mists`, or `Game/TBC`.
 - Vanilla, Mists, and TBC load their own aura datasets, group indicator datasets,
   ClassPower providers, Blizzard-frame ownership, and compatibility adapters.
@@ -88,21 +91,40 @@ graphs, Lua 5.1 syntax, client bootstrap, Blizzard resource ownership,
 ClassPower providers, legacy cast/channel tuples, native prediction events,
 Classic aura compilation/rendering/filter plans, group indicator datasets,
 forbidden Blizzard namespace writes, and the zero-overhead Retail load graph.
-When the adjacent Retail checkout is present, the parity gate compares the
-current Core, Options, and Assistant Mainline load sequences and Lua blobs
-against that working tree; otherwise it falls back to this repository's HEAD.
-When the local UI mirror is present it also runs
+The parity gate requires the current Retail Git checkout whenever reviewed
+overrides exist. It divides the addon inventory into three disjoint classes:
+
+- Normal mapped Retail paths (`R minus P`) remain byte-identical to the current
+  Retail Git blobs.
+- `tools/classic-retail-overrides.tsv` is `P`: each sorted, unique
+  `path<TAB>Retail-base-blob` row permits Classic to differ at that existing
+  Retail path only while the recorded base blob still equals current Retail.
+- `tools/classic-owned-addon-paths.txt` is `O`: sorted, unique additive files
+  owned entirely by Classic. `O` cannot collide with `R` or `P`.
+
+The current boundary contains 1,508 exact Retail paths, 160 reviewed overrides,
+and 176 Classic-owned files. The complete addon inventory must equal `R union O`;
+`P` is a strict subset of `R`, not another source of files. Mainline preserves
+the Retail Lua path sequence, accepts hash differences only at `P`, and accepts
+additional Lua only for the four Arena files declared in `O`. The gate reports
+exact, override, and owned counts separately. When the local UI mirror is
+present it also runs
 `tools/audit-classic-ui-source.ps1` against the relevant Blizzard client branches.
 
-`tools/classic-owned-addon-paths.txt` is the exact additive ownership boundary
-used by the automated Retail sync. Before copying, the sync proves that every
-non-owned Classic destination still equals the previously recorded Retail
-source, rejects undeclared additions and Retail/Classic path collisions, and
-hashes every owned file. The same hashes and the exact `Retail + Classic-owned`
-inventory are checked again after the full gate and before a commit. A
-Classic-only behavior must therefore live in a client TOC/XML path from this
-manifest; changing a mirrored Mainline file now fails closed instead of being
-silently overwritten.
+Both manifests and every referenced Classic file must be tracked, normalized,
+ordinal-sorted, unique without case collisions, and mutually disjoint. Missing
+or malformed manifests, a stale `P` base blob, an undeclared path, ownership
+collision, mirrored-byte drift, Mainline order/load leakage, or final inventory
+drift fails closed before an automated commit or push. The sync also protects
+owned and overridden bytes across copying and the complete existing full gate.
+
+When Retail changes a path in `P`, do not merely replace its recorded blob.
+Review the old-to-new Retail delta, manually rebase that delta into the Classic
+override without losing its intentional behavior, run the ownership suite and
+the complete Classic gate, and only then update the TSV blob. If the divergence
+is no longer required, remove the `P` row and restore normal byte-identical
+mirroring. A new Retail path colliding with `O` likewise requires an explicit
+ownership decision and reviewed rebase; it is never resolved automatically.
 
 The manifest deliberately retains the 48 `Media/Shapes` files plus
 `Runtime/MSUF_UIThemeBridge.lua` and `MSUF_Menu2_ThemeSkin.lua` from the old

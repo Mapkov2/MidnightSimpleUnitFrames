@@ -19,6 +19,7 @@ tools/
 !/tools/
 /tools/*
 !/tools/classic-owned-addon-paths.txt
+!/tools/classic-retail-overrides.tsv
 # Verification suite (smokes, static checks, Assistant release gate). Runs on
 # this machine only; CI is packaging-only and never invokes these.
 .github/scripts/tests/

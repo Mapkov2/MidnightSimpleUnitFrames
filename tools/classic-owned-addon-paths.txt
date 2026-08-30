@@ -1,3 +1,7 @@
+MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua
+MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua
+MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua
+MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_DataShared.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Menu_Compat.lua

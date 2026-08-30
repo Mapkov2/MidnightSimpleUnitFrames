@@ -259,39 +259,96 @@ foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
     }
 }
 
+function Test-AddonRelativePath {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+    foreach ($target in $targets) {
+        if ($RelativePath.StartsWith($target.Folder + '/', [StringComparison]::Ordinal)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Assert-NormalizedAddonPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if ([string]::IsNullOrWhiteSpace($RelativePath) -or
+        $RelativePath -cne $RelativePath.Trim() -or
+        $RelativePath.Contains([char]92) -or
+        $RelativePath.StartsWith('/') -or
+        $RelativePath.EndsWith('/') -or
+        $RelativePath.Contains('//') -or
+        $RelativePath.IndexOfAny([char[]](0..31)) -ge 0 -or
+        $RelativePath -match '(^|/)[.][.]?(?:/|$)' -or
+        -not (Test-AddonRelativePath -RelativePath $RelativePath)) {
+        throw "$Label is not a normalized path below an addon root: $RelativePath"
+    }
+}
+
+function Assert-TrackedFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    & git -C $root ls-files --error-unmatch -- $RelativePath 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label must be tracked: $RelativePath"
+    }
+}
+
+function Assert-OrdinalPathOrder {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Paths,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $sorted = [string[]]$Paths.Clone()
+    [Array]::Sort($sorted, [StringComparer]::Ordinal)
+    for ($index = 0; $index -lt $Paths.Count; $index++) {
+        if ($Paths[$index] -cne $sorted[$index]) {
+            throw "$Label must use ordinal path sorting"
+        }
+    }
+}
+
+function Convert-RetailPath {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+    foreach ($target in $targets) {
+        if ($RelativePath -ceq ($target.Folder + "/" + $target.Base + ".toc")) {
+            return $target.Folder + "/" + $target.Base + "_Mainline.toc"
+        }
+    }
+    return $RelativePath
+}
+
+$addonFolders = @($targets | ForEach-Object { $_.Folder })
+$trackedAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$trackedAddonPathLines = @(& git -C $root ls-files -- @addonFolders 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to enumerate tracked Classic addon files: $($trackedAddonPathLines -join ', ')"
+}
+foreach ($trackedPath in $trackedAddonPathLines) {
+    [void]$trackedAddonPaths.Add($trackedPath.Replace([char]92, [char]47))
+}
+
 $ownershipManifestRelative = "tools/classic-owned-addon-paths.txt"
 $ownershipManifestPath = Join-Path $root $ownershipManifestRelative
 if (-not (Test-Path -LiteralPath $ownershipManifestPath -PathType Leaf)) {
     throw "Classic ownership manifest is missing: $ownershipManifestRelative"
 }
-& git -C $root ls-files --error-unmatch -- $ownershipManifestRelative 2>$null | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    throw "Classic ownership manifest must be tracked: $ownershipManifestRelative"
-}
+Assert-TrackedFile -RelativePath $ownershipManifestRelative -Label "Classic ownership manifest"
 $ownedAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $ownedAddonPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
-$ownershipLines = @([IO.File]::ReadAllLines($ownershipManifestPath))
+$ownershipLines = [string[]][IO.File]::ReadAllLines($ownershipManifestPath)
 if ($ownershipLines.Count -eq 0) { throw "Classic ownership manifest is empty" }
 foreach ($ownedPath in $ownershipLines) {
-    $isAddonPath = $false
-    foreach ($target in $targets) {
-        if ($ownedPath.StartsWith($target.Folder + '/', [StringComparison]::Ordinal)) {
-            $isAddonPath = $true
-            break
-        }
-    }
-    if ([string]::IsNullOrWhiteSpace($ownedPath) -or
-        $ownedPath -cne $ownedPath.Trim() -or
-        $ownedPath.Contains('\') -or
-        $ownedPath.StartsWith('/') -or
-        $ownedPath.EndsWith('/') -or
-        $ownedPath.Contains('//') -or
-        $ownedPath -match '(^|/)\.\.?(?:/|$)' -or
-        -not $isAddonPath) {
-        throw "Invalid Classic ownership path: $ownedPath"
-    }
+    Assert-NormalizedAddonPath -RelativePath $ownedPath -Label "Classic ownership entry"
     if ($ownedAddonPathCase.ContainsKey($ownedPath)) {
         throw "Duplicate or case-colliding Classic ownership path: $($ownedAddonPathCase[$ownedPath]) versus $ownedPath"
+    }
+    if (-not $trackedAddonPaths.Contains($ownedPath)) {
+        throw "Classic ownership entry must name a tracked addon file: $ownedPath"
     }
     $ownedFullPath = [IO.Path]::GetFullPath((Join-Path $root $ownedPath))
     if (-not (Test-Path -LiteralPath $ownedFullPath -PathType Leaf)) {
@@ -300,54 +357,154 @@ foreach ($ownedPath in $ownershipLines) {
     $ownedAddonPathCase.Add($ownedPath, $ownedPath)
     [void]$ownedAddonPaths.Add($ownedPath)
 }
-$sortedOwnershipLines = [string[]]$ownershipLines.Clone()
-[Array]::Sort($sortedOwnershipLines, [StringComparer]::Ordinal)
-for ($index = 0; $index -lt $ownershipLines.Count; $index++) {
-    if ($ownershipLines[$index] -cne $sortedOwnershipLines[$index]) {
-        throw "Classic ownership manifest must use ordinal path sorting"
+Assert-OrdinalPathOrder -Paths $ownershipLines -Label "Classic ownership manifest"
+
+$overrideManifestRelative = "tools/classic-retail-overrides.tsv"
+$overrideManifestPath = Join-Path $root $overrideManifestRelative
+if (-not (Test-Path -LiteralPath $overrideManifestPath -PathType Leaf)) {
+    throw "Classic Retail override manifest is missing: $overrideManifestRelative"
+}
+Assert-TrackedFile -RelativePath $overrideManifestRelative -Label "Classic Retail override manifest"
+$overrideBaseBlobs = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+$overridePathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+$overrideLines = [string[]][IO.File]::ReadAllLines($overrideManifestPath)
+if ($overrideLines.Count -eq 0) { throw "Classic Retail override manifest is empty" }
+$overridePathsInOrder = [Collections.Generic.List[string]]::new()
+foreach ($overrideLine in $overrideLines) {
+    $fields = $overrideLine.Split([char]9)
+    if ($fields.Count -ne 2) {
+        throw "Classic Retail override entry must be path<TAB>Retail-base-blob: $overrideLine"
     }
+    $overridePath = $fields[0]
+    $baseBlob = $fields[1]
+    Assert-NormalizedAddonPath -RelativePath $overridePath -Label "Classic Retail override entry"
+    if ($baseBlob -cnotmatch '^[0-9a-f]{40}$') {
+        throw "Classic Retail override base must be a lowercase SHA-1 Git blob: $overrideLine"
+    }
+    if ($overridePathCase.ContainsKey($overridePath)) {
+        throw "Duplicate or case-colliding Classic Retail override path: $($overridePathCase[$overridePath]) versus $overridePath"
+    }
+    if ($ownedAddonPathCase.ContainsKey($overridePath)) {
+        throw "Classic ownership and Retail override manifests must be disjoint: $overridePath"
+    }
+    if (-not $trackedAddonPaths.Contains($overridePath)) {
+        throw "Classic Retail override entry must name a tracked addon file: $overridePath"
+    }
+    $overrideFullPath = [IO.Path]::GetFullPath((Join-Path $root $overridePath))
+    if (-not (Test-Path -LiteralPath $overrideFullPath -PathType Leaf)) {
+        throw "Classic Retail override file is missing: $overridePath"
+    }
+    $overridePathCase.Add($overridePath, $overridePath)
+    $overrideBaseBlobs.Add($overridePath, $baseBlob)
+    $overridePathsInOrder.Add($overridePath)
+}
+Assert-OrdinalPathOrder -Paths $overridePathsInOrder.ToArray() -Label "Classic Retail override manifest"
+
+if ($overrideBaseBlobs.Count -gt 0 -and -not $retailReferenceRootFull) {
+    throw "Retail overrides require -RetailReferenceRoot so their recorded base blobs can be checked against current Retail Git HEAD"
 }
 
 if ($retailReferenceRootFull) {
-    $retailCanonicalCount = 0
-    $retailTocCount = 0
     $retailMappedPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $retailTargetFolders = @($targets | ForEach-Object { $_.Folder })
-    $retailTrackedPaths = @(& git -C $retailReferenceRootFull ls-tree -r --name-only HEAD -- @retailTargetFolders 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to enumerate tracked Retail addon files:`n$($retailTrackedPaths -join "`n")"
+    $retailMappedSources = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    $retailMappedBlobs = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    $retailMappedPathOrder = [Collections.Generic.List[string]]::new()
+    $retailExactCount = 0
+    $retailOverrideCount = 0
+    $retailOverrideDifferenceCount = 0
+    $retailExactTocCount = 0
+    $retailOverrideTocCount = 0
+
+    $referenceGitRoot = (& git -C $retailReferenceRootFull rev-parse --show-toplevel 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { throw "Retail reference is not a Git checkout: $retailReferenceRootFull" }
+    $referenceGitRootFull = [IO.Path]::GetFullPath($referenceGitRoot).TrimEnd([char]92, [char]47)
+    $pathComparison = if ([IO.Path]::DirectorySeparatorChar -eq [char]92) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
     }
-    foreach ($relativePath in $retailTrackedPaths) {
-        $relativePath = $relativePath.Replace('\', '/')
-        $candidateRelativePath = $relativePath
-        $isRetailToc = $false
-        foreach ($target in $targets) {
-            if ($relativePath -eq ($target.Folder + "/" + $target.Base + ".toc")) {
-                $candidateRelativePath = $target.Folder + "/" + $target.Base + "_Mainline.toc"
-                $isRetailToc = $true
-                break
-            }
+    if (-not $referenceGitRootFull.Equals($retailReferenceRootFull, $pathComparison)) {
+        throw "RetailReferenceRoot must be the Git repository root: $retailReferenceRootFull"
+    }
+    $retailStatus = @(& git -C $retailReferenceRootFull status --porcelain --untracked-files=all 2>&1)
+    if ($LASTEXITCODE -ne 0) { throw "Unable to inspect Retail reference status" }
+    if ($retailStatus.Count -ne 0) {
+        throw "Retail reference checkout must be clean so its load graph and Git HEAD describe the same source"
+    }
+
+    $retailTreeLines = @(& git -C $retailReferenceRootFull ls-tree -r HEAD -- @addonFolders 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to enumerate tracked Retail addon files: $($retailTreeLines -join ', ')"
+    }
+    $retailMappedPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $retailTocSources = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($treeLine in $retailTreeLines) {
+        if ($treeLine -notmatch '^(\d+)\s+blob\s+([0-9a-f]+)\t(.+)$') {
+            throw "Unexpected Retail Git tree entry: $treeLine"
         }
-        if (-not $retailMappedPaths.Add($candidateRelativePath)) {
-            throw "Retail mapping collision at $candidateRelativePath"
+        if ($Matches[1] -cne '100644') {
+            throw "Retail addon tree may contain only regular non-executable files: $treeLine"
         }
-        $referencePath = Join-Path $retailReferenceRootFull $relativePath
+        $retailBlob = $Matches[2].ToLowerInvariant()
+        $relativePath = $Matches[3].Replace([char]92, [char]47)
+        Assert-NormalizedAddonPath -RelativePath $relativePath -Label "Retail Git tree entry"
+        $candidateRelativePath = Convert-RetailPath -RelativePath $relativePath
+        if ($retailMappedPathCase.ContainsKey($candidateRelativePath)) {
+            throw "Retail mapping collision: $($retailMappedPathCase[$candidateRelativePath]) versus $relativePath at $candidateRelativePath"
+        }
+        $retailMappedPathCase.Add($candidateRelativePath, $relativePath)
+        [void]$retailMappedPaths.Add($candidateRelativePath)
+        $retailMappedSources.Add($candidateRelativePath, $relativePath)
+        $retailMappedBlobs.Add($candidateRelativePath, $retailBlob)
+        $retailMappedPathOrder.Add($candidateRelativePath)
+        if ($relativePath.EndsWith('.toc', [StringComparison]::OrdinalIgnoreCase)) {
+            [void]$retailTocSources.Add($relativePath)
+        }
         $candidatePath = Join-Path $root $candidateRelativePath
         if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
-            throw "Canonical Retail file is missing from Classic repository: $candidateRelativePath"
-        }
-        $referenceHash = (Get-FileHash -LiteralPath $referencePath -Algorithm SHA256).Hash
-        $candidateHash = (Get-FileHash -LiteralPath $candidatePath -Algorithm SHA256).Hash
-        if ($referenceHash -ne $candidateHash) {
-            throw "Canonical Retail file differs in Classic repository: $candidateRelativePath"
-        }
-        if ($isRetailToc) {
-            $retailTocCount++
-        } else {
-            $retailCanonicalCount++
+            throw "Mapped Retail file is missing from Classic repository: $candidateRelativePath"
         }
     }
-    if ($retailTocCount -ne 3) { throw "Expected exactly three tracked Retail TOCs, found $retailTocCount" }
+
+    $expectedRetailTocs = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($target in $targets) {
+        [void]$expectedRetailTocs.Add($target.Folder + "/" + $target.Base + ".toc")
+    }
+    if (-not $retailTocSources.SetEquals($expectedRetailTocs)) {
+        throw "Retail tree must contain exactly the three unsuffixed addon TOCs; found: $($retailTocSources -join ', ')"
+    }
+
+    foreach ($overridePath in $overrideBaseBlobs.Keys) {
+        if (-not $retailMappedPaths.Contains($overridePath)) {
+            throw "Classic Retail override path is not a mapped current Retail path: $overridePath"
+        }
+        $currentRetailBlob = $retailMappedBlobs[$overridePath]
+        if ($currentRetailBlob -cne $overrideBaseBlobs[$overridePath]) {
+            throw "Retail base changed for Classic override $overridePath`: recorded=$($overrideBaseBlobs[$overridePath]) current=$currentRetailBlob; manually rebase and review the override before updating the manifest"
+        }
+    }
+
+    $candidateBlobLines = @($retailMappedPathOrder.ToArray() | & git -C $root hash-object --stdin-paths 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $candidateBlobLines.Count -ne $retailMappedPathOrder.Count) {
+        throw "Unable to hash every mapped Classic candidate: expected=$($retailMappedPathOrder.Count) actual=$($candidateBlobLines.Count)"
+    }
+    for ($index = 0; $index -lt $retailMappedPathOrder.Count; $index++) {
+        $candidateRelativePath = $retailMappedPathOrder[$index]
+        $candidateBlob = $candidateBlobLines[$index].Trim().ToLowerInvariant()
+        $retailBlob = $retailMappedBlobs[$candidateRelativePath]
+        $isToc = $retailMappedSources[$candidateRelativePath].EndsWith('.toc', [StringComparison]::OrdinalIgnoreCase)
+        if ($overrideBaseBlobs.ContainsKey($candidateRelativePath)) {
+            $retailOverrideCount++
+            if ($isToc) { $retailOverrideTocCount++ }
+            if ($candidateBlob -cne $retailBlob) { $retailOverrideDifferenceCount++ }
+        } else {
+            if ($candidateBlob -cne $retailBlob) {
+                throw "Mapped Retail path differs without an explicit Classic override: $candidateRelativePath"
+            }
+            $retailExactCount++
+            if ($isToc) { $retailExactTocCount++ }
+        }
+    }
     foreach ($ownedPath in $ownedAddonPaths) {
         foreach ($retailPath in $retailMappedPaths) {
             if ($ownedPath.Equals($retailPath, [StringComparison]::OrdinalIgnoreCase) -or
@@ -361,25 +518,34 @@ if ($retailReferenceRootFull) {
     foreach ($path in $retailMappedPaths) { [void]$expectedAddonPaths.Add($path) }
     foreach ($path in $ownedAddonPaths) { [void]$expectedAddonPaths.Add($path) }
     $actualAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $addonFolders = @($targets | ForEach-Object { $_.Folder })
+    $actualAddonPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
     $versionableAddonPaths = @(& git -C $root ls-files --cached --others --exclude-standard -- @addonFolders 2>&1)
     if ($LASTEXITCODE -ne 0) {
-        throw "Unable to enumerate versionable Classic addon files:`n$($versionableAddonPaths -join "`n")"
+        throw "Unable to enumerate versionable Classic addon files: $($versionableAddonPaths -join ', ')"
     }
     foreach ($relative in $versionableAddonPaths) {
-        $relative = $relative.Replace('\', '/')
+        $relative = $relative.Replace([char]92, [char]47)
+        Assert-NormalizedAddonPath -RelativePath $relative -Label "Classic addon inventory entry"
+        if ($actualAddonPathCase.ContainsKey($relative)) {
+            throw "Case-colliding Classic addon inventory paths: $($actualAddonPathCase[$relative]) versus $relative"
+        }
         $fullPath = [IO.Path]::GetFullPath((Join-Path $root $relative))
         if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
+            $actualAddonPathCase.Add($relative, $relative)
             [void]$actualAddonPaths.Add($relative)
         }
     }
     if (-not $actualAddonPaths.SetEquals($expectedAddonPaths)) {
-        $missing = @($expectedAddonPaths | Where-Object { -not $actualAddonPaths.Contains($_) })
-        $unexpected = @($actualAddonPaths | Where-Object { -not $expectedAddonPaths.Contains($_) })
-        throw "Classic addon inventory must equal Retail plus explicit Classic ownership. Missing=[$($missing -join ', ')] Unexpected=[$($unexpected -join ', ')]"
+        $missing = [string[]]@($expectedAddonPaths | Where-Object { -not $actualAddonPaths.Contains($_) })
+        $unexpected = [string[]]@($actualAddonPaths | Where-Object { -not $expectedAddonPaths.Contains($_) })
+        [Array]::Sort($missing, [StringComparer]::Ordinal)
+        [Array]::Sort($unexpected, [StringComparer]::Ordinal)
+        throw "Classic addon inventory must equal mapped Retail union explicit Classic ownership. Missing=[$($missing -join ', ')] Unexpected=[$($unexpected -join ', ')]"
     }
-    Write-Host "Canonical Retail source parity: $retailCanonicalCount files plus $retailTocCount Mainline TOCs match byte-for-byte"
-    Write-Host "Classic ownership inventory: $($ownedAddonPaths.Count) additive files preserved exactly"
+    Write-Host "Retail exact paths: $retailExactCount mapped paths ($retailExactTocCount Mainline TOCs) match current Retail Git blobs byte-for-byte"
+    Write-Host "Retail override paths: $retailOverrideCount mapped paths ($retailOverrideTocCount Mainline TOCs) are pinned to current Retail base blobs; $retailOverrideDifferenceCount currently differ"
+    Write-Host "Classic-owned paths: $($ownedAddonPaths.Count) additive tracked files are declared"
+    Write-Host "Classic addon inventory: $($actualAddonPaths.Count) paths equal mapped Retail $($retailMappedPaths.Count) union owned $($ownedAddonPaths.Count)"
 }
 
 # Retail's load graph must never enter a Classic/Vanilla/Mists/TBC implementation
@@ -410,11 +576,10 @@ foreach ($path in $mainlineLoaded) {
     }
 }
 
-# Strong Retail parity gate: resolve the current adjacent Retail TOCs (or HEAD
-# when that checkout is unavailable) and the new Mainline TOCs in load order,
-# then compare every Lua blob. Relocated files are allowed; extra code, omitted
-# code, or a changed shared module is not. This makes the "zero Retail overhead"
-# claim mechanical rather than relying only on client guards.
+# Strong Mainline gate: preserve every Retail Lua path in order, permit content
+# differences only for reviewed P entries, and permit additional Lua loads only
+# for the four explicit Arena files in O. Client compatibility trees remain
+# unreachable from Mainline.
 function Get-CurrentLuaLoadHashes {
     param([Parameter(Mandatory = $true)][string]$TocPath)
     $hashes = [Collections.Generic.List[string]]::new()
@@ -527,31 +692,131 @@ $retailParityTargets = @(
         Current = "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant_Mainline.toc"
     }
 )
-$currentRetailHashCount = 0
-foreach ($parityTarget in $retailParityTargets) {
-    $referenceHashes = if ($retailReferenceRootFull) {
-        Get-CurrentLuaLoadHashes (Join-Path $retailReferenceRootFull $parityTarget.Reference)
-    } else {
-        Get-HeadLuaLoadHashes $parityTarget.Reference
+$mainlineOwnedLuaExtras = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($extraPath in @(
+    "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
+    "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
+    "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
+    "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"
+)) {
+    if (-not $ownedAddonPaths.Contains($extraPath)) {
+        throw "Mainline Arena addition must be declared in Classic ownership: $extraPath"
     }
+    if ($overrideBaseBlobs.ContainsKey($extraPath)) {
+        throw "Mainline Arena addition cannot also be a Retail override: $extraPath"
+    }
+    [void]$mainlineOwnedLuaExtras.Add($extraPath)
+}
+
+function Get-RepositoryRelativePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryFull,
+        [Parameter(Mandatory = $true)][string]$FullPath,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $resolved = [IO.Path]::GetFullPath($FullPath)
+    $comparison = if ([IO.Path]::DirectorySeparatorChar -eq [char]92) {
+        [StringComparison]::OrdinalIgnoreCase
+    } else {
+        [StringComparison]::Ordinal
+    }
+    $prefix = $RepositoryFull.TrimEnd([char]92, [char]47) + [IO.Path]::DirectorySeparatorChar
+    if (-not $resolved.StartsWith($prefix, $comparison)) {
+        throw "$Label escaped its repository root: $resolved"
+    }
+    return $resolved.Substring($prefix.Length).Replace([char]92, [char]47)
+}
+
+$currentRetailHashCount = 0
+$mainlineExactLuaCount = 0
+$mainlineOverrideLuaCount = 0
+$actualMainlineOwnedLuaExtras = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($parityTarget in $retailParityTargets) {
     $currentHashes = Get-CurrentLuaLoadHashes (Join-Path $root $parityTarget.Current)
     $currentPaths = Get-CurrentLuaLoadPaths (Join-Path $root $parityTarget.Current)
-    if ($referenceHashes.Count -ne $currentHashes.Count) {
-        throw "$($parityTarget.Label) Mainline Lua load count changed: reference=$($referenceHashes.Count), prototype=$($currentHashes.Count)"
+    if ($currentHashes.Count -ne $currentPaths.Count) {
+        throw "$($parityTarget.Label) Mainline Lua hash/path inventory is inconsistent"
     }
-    for ($index = 0; $index -lt $referenceHashes.Count; $index++) {
-        $currentRelative = $currentPaths[$index].Substring($rootFull.Length).TrimStart('\', '/').Replace('\', '/')
-        if ($currentRelative -match '(^|/)Game/Classic/' -or $currentRelative -match '_Classic\.lua$') {
+    $currentRelativePaths = [Collections.Generic.List[string]]::new()
+    foreach ($currentPath in $currentPaths) {
+        $currentRelative = Get-RepositoryRelativePath -RepositoryFull $rootFull -FullPath $currentPath -Label "$($parityTarget.Label) Mainline path"
+        if ($currentRelative -match '(^|/)Game/(Classic|Vanilla|Mists|TBC)/' -or $currentRelative -match '_Classic[.]lua$') {
             throw "$($parityTarget.Label) Mainline loads a Classic-only blob: $currentRelative"
         }
-        if ($referenceHashes[$index] -ne $currentHashes[$index]) {
-            throw "$($parityTarget.Label) Mainline Lua load sequence/content changed at index $index ($currentRelative)"
-        }
+        $currentRelativePaths.Add($currentRelative)
     }
-    $currentRetailHashCount += $currentHashes.Count
+
+    if ($retailReferenceRootFull) {
+        $referencePaths = Get-CurrentLuaLoadPaths (Join-Path $retailReferenceRootFull $parityTarget.Reference)
+        $referenceRelativePaths = [Collections.Generic.List[string]]::new()
+        foreach ($referencePath in $referencePaths) {
+            $referenceRelative = Get-RepositoryRelativePath -RepositoryFull $retailReferenceRootFull -FullPath $referencePath -Label "$($parityTarget.Label) Retail reference path"
+            if (-not $retailMappedBlobs.ContainsKey($referenceRelative)) {
+                throw "$($parityTarget.Label) Retail load path is outside the mapped Retail inventory: $referenceRelative"
+            }
+            $referenceRelativePaths.Add($referenceRelative)
+        }
+
+        $currentIndex = 0
+        for ($referenceIndex = 0; $referenceIndex -lt $referenceRelativePaths.Count; $referenceIndex++) {
+            $referenceRelative = $referenceRelativePaths[$referenceIndex]
+            while ($currentIndex -lt $currentRelativePaths.Count -and
+                $currentRelativePaths[$currentIndex] -cne $referenceRelative) {
+                $extraPath = $currentRelativePaths[$currentIndex]
+                if (-not $mainlineOwnedLuaExtras.Contains($extraPath)) {
+                    throw "$($parityTarget.Label) Mainline inserted or reordered an undeclared Lua path before Retail index $referenceIndex`: $extraPath"
+                }
+                if (-not $actualMainlineOwnedLuaExtras.Add($extraPath)) {
+                    throw "Mainline Arena addition is loaded more than once across addon TOCs: $extraPath"
+                }
+                $currentIndex++
+            }
+            if ($currentIndex -ge $currentRelativePaths.Count) {
+                throw "$($parityTarget.Label) Mainline omitted Retail Lua path at index $referenceIndex`: $referenceRelative"
+            }
+            $currentBlob = $currentHashes[$currentIndex].Trim().ToLowerInvariant()
+            $referenceBlob = $retailMappedBlobs[$referenceRelative]
+            if ($currentBlob -cne $referenceBlob -and -not $overrideBaseBlobs.ContainsKey($referenceRelative)) {
+                throw "$($parityTarget.Label) Mainline Lua blob differs without a P override at Retail index $referenceIndex`: $referenceRelative"
+            }
+            if ($overrideBaseBlobs.ContainsKey($referenceRelative)) {
+                $mainlineOverrideLuaCount++
+            } else {
+                $mainlineExactLuaCount++
+            }
+            $currentIndex++
+        }
+        while ($currentIndex -lt $currentRelativePaths.Count) {
+            $extraPath = $currentRelativePaths[$currentIndex]
+            if (-not $mainlineOwnedLuaExtras.Contains($extraPath)) {
+                throw "$($parityTarget.Label) Mainline appends an undeclared Lua path: $extraPath"
+            }
+            if (-not $actualMainlineOwnedLuaExtras.Add($extraPath)) {
+                throw "Mainline Arena addition is loaded more than once across addon TOCs: $extraPath"
+            }
+            $currentIndex++
+        }
+        $currentRetailHashCount += $referenceRelativePaths.Count
+    } else {
+        $referenceHashes = Get-HeadLuaLoadHashes $parityTarget.Reference
+        if ($referenceHashes.Count -ne $currentHashes.Count) {
+            throw "$($parityTarget.Label) Mainline Lua load count changed: reference=$($referenceHashes.Count), prototype=$($currentHashes.Count)"
+        }
+        for ($index = 0; $index -lt $referenceHashes.Count; $index++) {
+            if ($referenceHashes[$index] -ne $currentHashes[$index]) {
+                throw "$($parityTarget.Label) Mainline Lua load sequence/content changed at index $index ($($currentRelativePaths[$index]))"
+            }
+        }
+        $mainlineExactLuaCount += $referenceHashes.Count
+        $currentRetailHashCount += $referenceHashes.Count
+    }
 }
-# Classic-only features live behind the Vanilla/Mists/TBC manifests. Mainline
-# has no parity allowlist: every loaded Lua blob must match Retail exactly.
+if (-not $actualMainlineOwnedLuaExtras.SetEquals($mainlineOwnedLuaExtras)) {
+    $missingMainlineOwned = [string[]]@($mainlineOwnedLuaExtras | Where-Object { -not $actualMainlineOwnedLuaExtras.Contains($_) })
+    [Array]::Sort($missingMainlineOwned, [StringComparer]::Ordinal)
+    throw "Mainline must load exactly the four declared Arena additions; missing=[$($missingMainlineOwned -join ', ')]"
+}
+# Other Classic-only features remain behind the Vanilla/Mists/TBC manifests.
 $textureRuntimePath = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Effects/MSUF_UF_TextureLayer.lua"
 $textureOptionsPath = Join-Path $root "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer_Classic.lua"
 $textureDefaultsPath = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua"
@@ -749,4 +1014,7 @@ if (Test-Path -LiteralPath $uiMirror -PathType Container) {
 
 Write-Host "Client TOCs: 12 manifests passed (Mainline, Vanilla, Mists, TBC)"
 Write-Host "XML load graph: $($seenXml.Count) manifests resolved"
-Write-Host "Retail zero-overhead load graph: $($mainlineLoaded.Count) core files, $currentRetailHashCount Lua blobs across Core/Options/Assistant match $retailReferenceLabel"
+Write-Host "Mainline exact Lua: $mainlineExactLuaCount Retail paths retain order and Git blobs"
+Write-Host "Mainline override Lua: $mainlineOverrideLuaCount Retail paths retain order with reviewed P blobs"
+Write-Host "Mainline owned Lua: $($actualMainlineOwnedLuaExtras.Count) declared O Arena additions; no Game/Classic load"
+Write-Host "Retail zero-overhead load graph: $($mainlineLoaded.Count) core files, $currentRetailHashCount Retail Lua paths across Core/Options/Assistant validated against $retailReferenceLabel"
