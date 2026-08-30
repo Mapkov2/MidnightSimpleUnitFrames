@@ -227,7 +227,7 @@ _MSUF_GetBgKeys("HP")
 _MSUF_GetBgKeys("Power")
 _MSUF_GetBgKeys("Frame")
 
-local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret)
+local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret, force)
     if not t then return end
     local k = _MSUF_GetBgKeys(prefix)
     if colorSecret == true then
@@ -238,20 +238,20 @@ local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret)
         frame[k.r], frame[k.g], frame[k.b], frame[k.a] = nil, nil, nil, nil
         return
     end
-    if frame[k.r] ~= cr or frame[k.g] ~= cg or frame[k.b] ~= cb or frame[k.a] ~= ca then
+    if force == true or frame[k.r] ~= cr or frame[k.g] ~= cg or frame[k.b] ~= cb or frame[k.a] ~= ca then
         t:SetVertexColor(cr, cg, cb, ca)
         frame[k.r], frame[k.g], frame[k.b], frame[k.a] = cr, cg, cb, ca
     end
 end
 
-local function _MSUF_ApplyBgToTexture(frame, tex, t, prefix, cr, cg, cb, ca, colorSecret)
+local function _MSUF_ApplyBgToTexture(frame, tex, t, prefix, cr, cg, cb, ca, colorSecret, force)
     if not t or not tex then return end
     local k = _MSUF_GetBgKeys(prefix)
     if frame[k.tex] ~= tex then
         t:SetTexture(tex)
         frame[k.tex] = tex
     end
-    _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret)
+    _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret, force)
 end
 
 MSUF.Bars._MatchHPColor = function(frame, gen, cache, defR, defG, defB)
@@ -354,6 +354,24 @@ local function _MSUF_ResolveGlobalBackgroundAlpha(cache, bars)
     return 0.9
 end
 
+local HEALTH_BACKGROUND_COLOR_MODES = {
+    custom = true,
+    match_health = true,
+    class = true,
+    health_gradient = true,
+}
+
+local function _MSUF_ResolveHealthBackgroundColorMode(frame, cache, gen)
+    local health = frame and frame.MSUFSpec and frame.MSUFSpec.health
+    local mode = health and health.backgroundColorMode
+    if HEALTH_BACKGROUND_COLOR_MODES[mode] == true then return mode end
+    if health and health.backgroundClassColor == true then return "class" end
+    if health and health.backgroundMatchHealth == true then return "match_health" end
+    if (cache and cache.barBgClassColor) or (gen and gen.barBgClassColor) then return "class" end
+    if (cache and cache.barBgMatchHPColor) or (gen and gen.barBgMatchHPColor) then return "match_health" end
+    return "custom"
+end
+
 local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
     local r, gg, b, a, colorSecret
     if cache then
@@ -362,9 +380,10 @@ local function _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
         r, gg, b, a = MSUF_GetBarBackgroundTintRGBA()
     end
 
-    if (cache and cache.barBgClassColor) or (gen and gen.barBgClassColor) then
+    local colorMode = _MSUF_ResolveHealthBackgroundColorMode(frame, cache, gen)
+    if colorMode == "class" then
         r, gg, b = MSUF.Bars._ClassBackgroundColor(frame, r, gg, b)
-    elseif frame and (cache and cache.barBgMatchHPColor or (gen and gen.barBgMatchHPColor)) and frame.hpBar and frame.hpBar.GetStatusBarColor then
+    elseif colorMode == "match_health" and frame and frame.hpBar and frame.hpBar.GetStatusBarColor then
         r, gg, b, colorSecret = MSUF.Bars._MatchHPColor(frame, gen, cache, r, gg, b)
     end
 
@@ -389,6 +408,58 @@ local function MSUF_GetEffectiveHealthBarBackgroundTintRGBA(frame)
     return _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
 end
 ExportPublic("MSUF_GetEffectiveHealthBarBackgroundTintRGBA", MSUF_GetEffectiveHealthBarBackgroundTintRGBA)
+
+-- Refresh only a dynamic health-background color. Geometry remains owned by
+-- the Health element, while this runtime owns texture tint caches and the
+-- secret-safe VertexColor pass-through used by both dynamic color modes.
+local function MSUF_RefreshHealthBarBackgroundColor(frame, event, unit, hp, maxHP, calc, force)
+    if not frame then return false end
+    local health = frame.MSUFSpec and frame.MSUFSpec.health
+    local colorMode = _MSUF_ResolveHealthBackgroundColorMode(frame)
+    if colorMode ~= "match_health" and colorMode ~= "health_gradient" then return false end
+
+    local background = frame.hpBarBG or frame.healthBg or frame.bg
+    if not background then return false end
+    local prefix = frame.hpBarBG and "HP" or "Frame"
+    local r, gg, b, a, colorSecret
+
+    if colorMode == "match_health" then
+        if not (frame.hpBar and frame.hpBar.GetStatusBarColor) then return false end
+        local getCache = _MSUF_ResolveGetCache()
+        local cache = getCache and getCache() or nil
+        local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
+        local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
+        r, gg, b, a, colorSecret = _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
+    else
+        if health and health.mode == "gradient" and frame._msufGradStashAt ~= nil then
+            -- The Health element repaints the foreground first, so both regions
+            -- can share one native curve evaluation and the same secret RGB.
+            -- The timestamp is ordinary data; never inspect the stashed RGB.
+            r, gg, b = frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB
+        else
+            local common = MSUF.UFBarTextCommon
+            local gradientColor = common and common.GradientColor
+            if type(gradientColor) ~= "function" then return false end
+            r, gg, b = gradientColor(unit or frame.MSUFUnitKey or frame.unit, calc, frame, hp, maxHP, event)
+        end
+        colorSecret = MSUF_HasAnySecretColor(r, gg, b)
+        if colorSecret ~= true
+            and (type(r) ~= "number" or type(gg) ~= "number" or type(b) ~= "number") then
+            return false
+        end
+        local healthBg = health and health.background
+        a = healthBg and healthBg.a
+        if type(a) ~= "number" then
+            a = frame.MSUFSpec and frame.MSUFSpec.backgroundAlpha or 0.9
+        end
+        a = MSUF_Clamp01(a)
+    end
+
+    _MSUF_ApplyBgColor(frame, background, prefix, r, gg, b, a, colorSecret, force)
+    return true
+end
+ExportPublic("MSUF_RefreshHealthBarBackgroundColor", MSUF_RefreshHealthBarBackgroundColor)
+MSUF.Bars.RefreshHealthBarBackgroundColor = MSUF_RefreshHealthBarBackgroundColor
 
 local function MSUF_ApplyBarBackgroundVisual(frame)
     if not frame then return end
@@ -446,6 +517,8 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
     if (not frame.hpBarBG) and (not frame.powerBarBG) and frame.bg then
         _MSUF_ApplyBgToTexture(frame, hpTex, frame.bg, "Frame", r, gg, b, a)
     end
+    MSUF_RefreshHealthBarBackgroundColor(
+        frame, "MSUF_BACKGROUND_VISUAL", frame.MSUFUnitKey or frame.unit, nil, nil, nil, true)
 end
 
 ExportPublic("MSUF_ApplyBarBackgroundVisual", MSUF_ApplyBarBackgroundVisual)

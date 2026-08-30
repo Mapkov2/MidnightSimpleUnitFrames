@@ -2098,10 +2098,23 @@ local function BuildPreview(parent, panel, width, height)
     mock.sizeTag:SetPoint("BOTTOM", mock.bounds, "TOP", 0, 2)
     mock.sizeTag:SetTextColor(0.62, 0.84, 0.94, 0.95)
     if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 0.62, 0.84, 0.94, 0.95 }, 0) end
-    -- Use the same native StatusBar ownership as the live frame and Group
-    -- Preview. The old unit preview stretched a free-standing Texture as its
-    -- fill; that left a separate full-frame surface which could render black
-    -- instead of showing the selected statusbar/background media.
+    -- Runtime uses a native inverse StatusBar for secret-safe missing values
+    -- and suppresses its exact 0% fill-texture endpoint. Keep the preview on
+    -- the same ownership model.
+    mock.healthBackgroundBar = CreateFrame("StatusBar", nil, mock)
+    mock.healthBackgroundBar:SetAllPoints(mock)
+    mock.healthBackgroundBar:SetMinMaxValues(0, 1)
+    mock.healthBackgroundBar:SetValue(1)
+    mock.healthBackgroundBar:SetStatusBarTexture(TEX_W8)
+    mock.healthBackgroundBar:EnableMouse(false)
+    if mock.healthBackgroundBar.SetFrameLevel and mock.GetFrameLevel then
+        mock.healthBackgroundBar:SetFrameLevel(mock:GetFrameLevel() or 0)
+    end
+    mock.hpBG = mock.healthBackgroundBar:GetStatusBarTexture()
+    if mock.hpBG.SetDrawLayer then mock.hpBG:SetDrawLayer("BACKGROUND", -7) end
+    mock.hpBG:SetVertexColor(0, 0, 0, 0)
+    mock.bg, mock.hpBarBG, mock.healthBg = mock.hpBG, mock.hpBG, mock.hpBG
+
     mock.healthBar = CreateFrame("StatusBar", nil, mock)
     mock.healthBar:SetAllPoints(mock)
     mock.healthBar:SetMinMaxValues(0, 1)
@@ -2112,13 +2125,6 @@ local function BuildPreview(parent, panel, width, height)
     mock.healthFill = mock.hp
     if mock.hp and mock.hp.SetDrawLayer then mock.hp:SetDrawLayer("ARTWORK", 0) end
     if mock.hp then mock.hp:SetAlpha(0) end
-    -- Live Health.Create owns the background on the root frame and insets only
-    -- the StatusBar fill for embedded power. Keep that exact separation here.
-    mock.hpBG = mock:CreateTexture(nil, "BACKGROUND", nil, -7)
-    mock.hpBG:SetAllPoints(mock)
-    mock.hpBG:SetTexture(TEX_W8)
-    mock.hpBG:SetVertexColor(0, 0, 0, 0)
-    mock.bg, mock.hpBarBG, mock.healthBg = mock.hpBG, mock.hpBG, mock.hpBG
     MockTexture("tempMaxHealthBg", "ARTWORK", TEX_W8, { 0, 0, 0, 0.65 }, "color", mock.healthBar)
     MockTexture("tempMaxHealth", "ARTWORK", TEX_W8, { 0.70, 0.10, 0.10, 1 }, nil, mock.healthBar)
     MockTexture("healPred", "ARTWORK", TEX_W8, { 0, 1, 0.4, 0.55 }, nil, mock.healthBar)

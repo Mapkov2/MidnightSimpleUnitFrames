@@ -336,6 +336,25 @@ local function GlobalHealthMode(cache, general)
   return mode
 end
 
+local function BackgroundFillMode(cache, general)
+  local mode = cache and cache.barBgFillMode or general and general.barBgFillMode
+  return mode == "missing" and "missing" or "full"
+end
+
+local function BackgroundColorMode(cache, general)
+  local mode = cache and cache.barBgColorMode or general and general.barBgColorMode
+  if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
+    return mode
+  end
+  if (cache and cache.barBgClassColor == true) or (general and general.barBgClassColor == true) then
+    return "class"
+  end
+  if (cache and cache.barBgMatchHPColor == true) or (general and general.barBgMatchHPColor == true) then
+    return "match_health"
+  end
+  return "custom"
+end
+
 --- Resolve the effective health-color model once per compile. Runtime visual
 --- code receives concrete mode/color fields instead of profile fallback logic.
 local function ResolveHealthVisual(conf)
@@ -346,6 +365,8 @@ local function ResolveHealthVisual(conf)
   if not mode then
     mode = GlobalHealthMode(cache, general) or NormalizeHealthMode(conf.healthColorMode) or "class"
   end
+  local backgroundFillMode = BackgroundFillMode(cache, general)
+  local backgroundColorMode = BackgroundColorMode(cache, general)
 
   local out = {
     mode = mode == "custom" and "unified" or mode,
@@ -355,8 +376,10 @@ local function ResolveHealthVisual(conf)
     lossR = Clamp01(general and general.healthLossColorR, 1),
     lossG = Clamp01(general and general.healthLossColorG, 0.55),
     lossB = Clamp01(general and general.healthLossColorB, 0.08),
-    backgroundMatchHealth = (cache and cache.barBgMatchHPColor == true) or (general and general.barBgMatchHPColor == true) or false,
-    backgroundClassColor = (cache and cache.barBgClassColor == true) or (general and general.barBgClassColor == true) or false,
+    backgroundFillMode = backgroundFillMode,
+    backgroundColorMode = backgroundColorMode,
+    backgroundMatchHealth = backgroundColorMode == "match_health",
+    backgroundClassColor = backgroundColorMode == "class",
     npcClassColorBar = (cache and cache.npcClassColorBar == true) or (general and general.npcClassColorBar == true) or false,
     gradientLowR = Num(cache and cache.healthGradientLowR or general and general.healthGradientLowR, 1),
     gradientLowG = Num(cache and cache.healthGradientLowG or general and general.healthGradientLowG, 0),
@@ -2001,6 +2024,8 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       texture = texture,
       backgroundTexture = bgTexture,
       background = CompileBarBackground(conf),
+      backgroundFillMode = healthVisual.backgroundFillMode,
+      backgroundColorMode = healthVisual.backgroundColorMode,
       backgroundMatchHealth = healthVisual.backgroundMatchHealth == true,
       backgroundClassColor = healthVisual.backgroundClassColor == true,
       npcClassColorBar = healthVisual.npcClassColorBar == true,
@@ -2113,6 +2138,8 @@ local function RefreshColorDomain(kind, base, conf)
   health.gradientMidR, health.gradientMidG, health.gradientMidB = healthVisual.gradientMidR, healthVisual.gradientMidG, healthVisual.gradientMidB
   health.gradientHighR, health.gradientHighG, health.gradientHighB = healthVisual.gradientHighR, healthVisual.gradientHighG, healthVisual.gradientHighB
   health.background = CompileBarBackground(conf)
+  health.backgroundFillMode = healthVisual.backgroundFillMode
+  health.backgroundColorMode = healthVisual.backgroundColorMode
   health.backgroundMatchHealth = healthVisual.backgroundMatchHealth == true
   health.backgroundClassColor = healthVisual.backgroundClassColor == true
   health.npcClassColorBar = healthVisual.npcClassColorBar == true

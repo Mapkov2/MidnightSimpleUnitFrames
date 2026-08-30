@@ -1537,20 +1537,25 @@ local function ApplyBackgrounds(frame, health, power, force)
   local hb = spec.health and spec.health.background
   if health and frame.bg and hb then
     local r, g, b = hb.r, hb.g, hb.b
-    if spec.health.backgroundClassColor == true then
+    if spec.health.backgroundColorMode == "class" or spec.health.backgroundClassColor == true then
       local bars = MSUF.Bars
       local resolveClass = bars and bars._ClassBackgroundColor
       if type(resolveClass) == "function" then
         r, g, b = resolveClass(frame, r, g, b)
       end
-    elseif frame._msufHealthBgDynamic == true and frame.hpBar and frame.hpBar.GetStatusBarColor then
-      local cr, cg, cb = frame.hpBar:GetStatusBarColor()
-      if type(cr) == "number" and type(cg) == "number" and type(cb) == "number" then
-        r, g, b = cr, cg, cb
-      end
     end
     ApplyTextureColor(frame.bg, spec.health.backgroundTexture, r, g, b, hb.a or spec.backgroundAlpha or 0.9, force)
     frame._msufHPBgTex = spec.health.backgroundTexture
+    if frame._msufHealthBgDynamic == true then
+      local refreshBackground = _G.MSUF_RefreshHealthBarBackgroundColor
+      if type(refreshBackground) == "function" then
+        -- ApplyTextureColor owns the cold texture/fallback pass and has its own
+        -- cache. Force the dynamic runtime owner afterwards so a matching old
+        -- runtime cache cannot leave that fallback tint visible.
+        refreshBackground(
+          frame, "MSUF_BACKGROUND_APPLY", frame.MSUFUnitKey or frame.unit, nil, nil, nil, true)
+      end
+    end
   end
   local pb = spec.power and spec.power.background
   if power and frame.powerBarBG and pb then

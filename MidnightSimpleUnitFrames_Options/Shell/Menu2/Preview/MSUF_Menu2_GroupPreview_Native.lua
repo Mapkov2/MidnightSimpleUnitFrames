@@ -1737,11 +1737,19 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         help = "Pans this exact Group preview canvas by an explicit X/Y delta.",
         command = box._msuf2PanCommand,
     })
+    mock._healthBgBar = CreateFrame("StatusBar", nil, mock)
+    mock._healthBgBar:SetMinMaxValues(0, 1)
+    mock._healthBgBar:SetValue(1)
+    mock._healthBgBar:SetStatusBarTexture(R.WHITE8X8)
+    mock._healthBgBar:EnableMouse(false)
+    if mock._healthBgBar.SetFrameLevel and mock.GetFrameLevel then
+        mock._healthBgBar:SetFrameLevel(mock:GetFrameLevel() or 0)
+    end
+    mock._healthBg = mock._healthBgBar:GetStatusBarTexture()
+    if mock._healthBg.SetDrawLayer then mock._healthBg:SetDrawLayer("BACKGROUND", -7) end
     mock._health = CreateFrame("StatusBar", nil, mock)
     mock._health:SetMinMaxValues(0, 1)
     mock._health:SetValue(0.72)
-    mock._healthBg = mock._health:CreateTexture(nil, "BACKGROUND")
-    mock._healthBg:SetAllPoints()
     mock._tempMaxHealth = CreateFrame("StatusBar", nil, mock)
     mock._tempMaxHealth:SetMinMaxValues(0, 1)
     mock._tempMaxHealth:SetValue(0.20)
