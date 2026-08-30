@@ -266,7 +266,7 @@ end
 ---
 --- The loaded files own unrelated machinery, so the load-time budget is pinned
 --- to the one long-standing listener (the tooltip hover-inert watcher and its
---- three events). A command that quietly brings its own event frame breaks this.
+--- three idle events). A command that quietly brings its own event frame breaks this.
 --- ---------------------------------------------------------------------------
 local LOAD_BUDGET = { frames = 1, events = 3, timers = 0, hooks = 0 }
 for key, allowed in pairs(LOAD_BUDGET) do
