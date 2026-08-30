@@ -2019,6 +2019,33 @@ local function ChoiceText(choices)
 end
 A._ChoiceTextForTest = ChoiceText
 
+-- Executable conversation state may survive a UI rebuild, but it must not
+-- regain write authority after unrelated turns.  A state created on turn N is
+-- still valid for the player's immediately following reply (turn N + 1),
+-- including that reply after /reload.  Older serialized state fails closed.
+function AP.PendingContextTurn(ctx)
+    return tonumber(ctx and (ctx.turnSerial or ctx.lastTurnSerial)) or 0
+end
+
+function AP.MarkPendingContextState(ctx, field)
+    if type(ctx) ~= "table" then return end
+    ctx[field .. "Turn"] = AP.PendingContextTurn(ctx)
+end
+
+function AP.ClearPendingContextState(ctx, field)
+    if type(ctx) ~= "table" then return end
+    ctx[field] = nil
+    ctx[field .. "Turn"] = nil
+end
+
+function AP.PendingContextStateIsFresh(ctx, field)
+    if type(ctx) ~= "table" then return false end
+    local createdTurn = tonumber(ctx[field .. "Turn"])
+    if createdTurn == nil then return false end
+    local age = AP.PendingContextTurn(ctx) - createdTurn
+    return age >= 0 and age <= 1
+end
+
 local function SerializeChoices(choices)
     local out = {}
     for i = 1, #(choices or {}) do
@@ -2071,6 +2098,12 @@ local function SerializeChoices(choices)
         }
     end
     return out
+end
+
+function AP.StoreSerializedPendingChoices(ctx, field, choices)
+    if type(ctx) ~= "table" then return end
+    ctx[field] = SerializeChoices(choices)
+    AP.MarkPendingContextState(ctx, field)
 end
 
 local function RehydrateChoices(serialized)
@@ -2152,7 +2185,7 @@ end
 function AP.ClearPendingCandidates()
     A.pendingCandidates = nil
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingCandidates = nil end
+    AP.ClearPendingContextState(ctx, "pendingCandidates")
 end
 
 function AP.SetPendingCandidates(choices)
@@ -2162,34 +2195,44 @@ function AP.SetPendingCandidates(choices)
     end
     A.pendingCandidates = choices
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingCandidates = SerializeChoices(choices) end
+    AP.StoreSerializedPendingChoices(ctx, "pendingCandidates", choices)
     return choices
 end
 
 function AP.CurrentPendingCandidates()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingCandidates) == "table" and #A.pendingCandidates > 0 then return A.pendingCandidates end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.pendingCandidates) == "table" then
+        if not AP.PendingContextStateIsFresh(ctx, "pendingCandidates") then
+            AP.ClearPendingContextState(ctx, "pendingCandidates")
+            return nil
+        end
         local candidates = RehydrateChoices(ctx.pendingCandidates)
         if #candidates > 0 then
             A.pendingCandidates = candidates
             return candidates
         end
-        ctx.pendingCandidates = nil
+        AP.ClearPendingContextState(ctx, "pendingCandidates")
     end
     return nil
 end
 
 local function CurrentPendingChoices()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then return A.pendingChoices end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.pendingChoices) == "table" then
+        if not AP.PendingContextStateIsFresh(ctx, "pendingChoices") then
+            AP.ClearPendingContextState(ctx, "pendingChoices")
+            return nil
+        end
         local choices = RehydrateChoices(ctx.pendingChoices)
         if #choices > 0 then
             A.pendingChoices = choices
             return choices
         end
-        ctx.pendingChoices = nil
+        AP.ClearPendingContextState(ctx, "pendingChoices")
     end
     return nil
 end
@@ -2282,7 +2325,7 @@ end
 local function ClearSelectedPendingResult()
     A.pendingSelectedResult = nil
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingSelectedResult = nil end
+    AP.ClearPendingContextState(ctx, "pendingSelectedResult")
 end
 
 local function SetSelectedPendingResult(item, index)
@@ -2294,20 +2337,32 @@ local function SetSelectedPendingResult(item, index)
     selected.index = tonumber(index)
     A.pendingSelectedResult = selected
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingSelectedResult = SerializeResultSelection(selected, selected.index) end
+    if ctx then
+        ctx.pendingSelectedResult = SerializeResultSelection(selected, selected.index)
+        AP.MarkPendingContextState(ctx, "pendingSelectedResult")
+        -- Selecting a result starts a new adjacent referent turn.  Keep the
+        -- result list alive for one reply so "set it to ..." can resolve the
+        -- exact selected control without reviving an older search later.
+        if type(ctx.pendingResults) == "table" then AP.MarkPendingContextState(ctx, "pendingResults") end
+    end
     return selected
 end
 
 local function CurrentSelectedPendingResult()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingSelectedResult) == "table" then return A.pendingSelectedResult end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.pendingSelectedResult) == "table" then
+        if not AP.PendingContextStateIsFresh(ctx, "pendingSelectedResult") then
+            AP.ClearPendingContextState(ctx, "pendingSelectedResult")
+            return nil
+        end
         local selected = RehydrateResultSelection(ctx.pendingSelectedResult)
         if selected then
             A.pendingSelectedResult = selected
             return selected
         end
-        ctx.pendingSelectedResult = nil
+        AP.ClearPendingContextState(ctx, "pendingSelectedResult")
     end
     return nil
 end
@@ -2320,7 +2375,7 @@ local function ClearPendingResults()
     A.pendingResults = nil
     ClearSelectedPendingResult()
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingResults = nil end
+    AP.ClearPendingContextState(ctx, "pendingResults")
 end
 
 function A.SetPendingResults(results)
@@ -2332,20 +2387,29 @@ function A.SetPendingResults(results)
     ClearSelectedPendingResult()
     A.pendingResults = hydrated
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingResults = SerializeResults(hydrated) end
+    if ctx then
+        ctx.pendingResults = SerializeResults(hydrated)
+        AP.MarkPendingContextState(ctx, "pendingResults")
+    end
     return hydrated
 end
 
 local function CurrentPendingResults()
+    if type(A.EnsureDB) == "function" then A.EnsureDB() end
     if type(A.pendingResults) == "table" and #A.pendingResults > 0 then return A.pendingResults end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.pendingResults) == "table" then
+        if not AP.PendingContextStateIsFresh(ctx, "pendingResults") then
+            AP.ClearPendingContextState(ctx, "pendingResults")
+            ClearSelectedPendingResult()
+            return nil
+        end
         local results = RehydrateResults(ctx.pendingResults)
         if #results > 0 then
             A.pendingResults = results
             return results
         end
-        ctx.pendingResults = nil
+        AP.ClearPendingContextState(ctx, "pendingResults")
     end
     return nil
 end
@@ -2792,7 +2856,7 @@ ClearPendingChoices = function()
     A.pendingChoices = nil
     AP.ClearPendingCandidates()
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingChoices = nil end
+    AP.ClearPendingContextState(ctx, "pendingChoices")
 end
 
 function A.SetPendingChoices(choices)
@@ -2803,7 +2867,7 @@ function A.SetPendingChoices(choices)
     A.pendingChoices = choices
     AP.SetPendingCandidates(choices)
     local ctx = A.GetContext and A.GetContext()
-    if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
+    AP.StoreSerializedPendingChoices(ctx, "pendingChoices", A.pendingChoices)
     return ChoiceText(A.pendingChoices)
 end
 
@@ -7836,10 +7900,76 @@ function AP.PendingTopicSwitchRequest(text)
     return kind == "changes" or kind == "action" or kind == "answer" or kind == "diagnostic"
 end
 
+-- Blocking choices and workflows should not make ordinary conversation look
+-- broken.  This classifier is deliberately exact: a greeting or meta request
+-- by itself changes topic, while "hello, set target width to 300" remains a
+-- real command and is handled by the ordinary fresh-command escape.
+function AP.PendingConversationTopicSwitch(text)
+    local router = A.RouterPrivate or {}
+    local norm = type(router.Normalize) == "function" and router.Normalize(text) or NormalizeReply(text)
+    if norm == "" then return false end
+    if type(router.IsGreetingOnly) == "function" and router.IsGreetingOnly(norm) then return true end
+    if type(router.IsThanksOnly) == "function" and router.IsThanksOnly(norm) then return true end
+    if type(router.IMMEDIATE_SHORT_CONVERSATION) == "table"
+        and router.IMMEDIATE_SHORT_CONVERSATION[norm]
+    then
+        return true
+    end
+    if type(router.IsDirectAiIdentityQuestion) == "function" and router.IsDirectAiIdentityQuestion(norm) then return true end
+    if type(router.LooksLikeAssistantIdentityQuestion) == "function" and router.LooksLikeAssistantIdentityQuestion(norm) then return true end
+    if type(A.RouterIsAdjacentJokeFollowup) == "function" and A.RouterIsAdjacentJokeFollowup(norm) then return true end
+    for i = 1, #(type(router.IMMEDIATE_CONVERSATION_PHRASES) == "table" and router.IMMEDIATE_CONVERSATION_PHRASES or {}) do
+        local phrase = type(router.Normalize) == "function"
+            and router.Normalize(router.IMMEDIATE_CONVERSATION_PHRASES[i])
+            or NormalizeReply(router.IMMEDIATE_CONVERSATION_PHRASES[i])
+        if norm == phrase then return true end
+    end
+    return false
+end
+
+-- A pure conversation turn starts a new topic instead of answering a pending
+-- mutation prompt.  Keep the type-specific flags so HandleInput can explain
+-- exactly what was abandoned after the normal conversation reply is built.
+function AP.DropPendingStateForConversation(text)
+    if not AP.PendingConversationTopicSwitch(text) then return nil end
+    local pendingFlow = A.Workflow and type(A.Workflow.PendingFlow) == "function"
+        and A.Workflow.PendingFlow() or nil
+    local hadConfirmation = A.pendingConfirmation ~= nil
+    local hadChoices = CurrentPendingChoices() ~= nil
+    local hadFlow = type(pendingFlow) == "table"
+    if not hadConfirmation and not hadChoices and not hadFlow then return nil end
+
+    A._droppedPendingConfirmation = hadConfirmation and true or nil
+    A._droppedPendingChoice = hadChoices and true or nil
+    A._droppedPendingFlow = hadFlow and true or nil
+    if type(A.CancelPendingMutationState) == "function" then
+        A.CancelPendingMutationState()
+    else
+        A.pendingConfirmation = nil
+        ClearPendingConfirmationContext()
+        ClearPendingChoices()
+        if type(A.ClearPendingFlow) == "function" then A.ClearPendingFlow() end
+    end
+    if type(A.TryImmediateConversationReply) == "function" then
+        return A.TryImmediateConversationReply(text)
+    end
+    return nil
+end
+
 local function HandlePending(text)
+    local conversationResult = AP.DropPendingStateForConversation(text)
+    if conversationResult then return conversationResult end
     if type(A.HandlePendingFlow) == "function" then
         local flowResult = A.HandlePendingFlow(text)
-        if flowResult then return flowResult end
+        if flowResult then
+            if type(A.TouchPendingFlow) == "function"
+                and A.Workflow and type(A.Workflow.PendingFlow) == "function"
+                and type(A.Workflow.PendingFlow()) == "table"
+            then
+                A.TouchPendingFlow()
+            end
+            return flowResult
+        end
     end
     if A.pendingConfirmation then
         if IsChoiceAbort(text) then
@@ -8026,7 +8156,7 @@ function A.HandleCommandInput(text)
         A.pendingChoices = parsed.choices or {}
         AP.SetPendingCandidates(A.pendingChoices)
         local ctx = A.GetContext and A.GetContext()
-        if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
+        AP.StoreSerializedPendingChoices(ctx, "pendingChoices", A.pendingChoices)
         local choiceText = ChoiceText(A.pendingChoices)
         if type(parsed.choiceIntro) == "string" and Trim(parsed.choiceIntro) ~= "" then
             choiceText = Trim(parsed.choiceIntro) .. "\n" .. choiceText
@@ -8103,7 +8233,7 @@ function AP.ExecuteBarOutlineColorSemanticPlan(plan)
         A.pendingChoices = plan.choices or {}
         AP.SetPendingCandidates(A.pendingChoices)
         local ctx = A.GetContext and A.GetContext()
-        if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
+        AP.StoreSerializedPendingChoices(ctx, "pendingChoices", A.pendingChoices)
         local choiceText = ChoiceText(A.pendingChoices)
         if type(plan.choiceIntro) == "string" and Trim(plan.choiceIntro) ~= "" then
             choiceText = Trim(plan.choiceIntro) .. "\n" .. choiceText
@@ -8135,6 +8265,8 @@ function A.HandleInput(text, handleOpts)
     local hadPendingResults = CurrentPendingResults() ~= nil
     A._pendingResultFollowupHandled = nil
     A._droppedPendingConfirmation = nil
+    A._droppedPendingChoice = nil
+    A._droppedPendingFlow = nil
     A._assistantValueClamps = nil
     local result
     local routed, routeResult
@@ -8213,7 +8345,17 @@ function A.HandleInput(text, handleOpts)
         result.text = tostring(result.text or "")
             .. "\nI dropped the confirmation that was waiting, because you moved on to something else. Nothing was applied."
     end
+    if A._droppedPendingChoice and type(result) == "table" then
+        result.text = tostring(result.text or "")
+            .. "\nI cleared the earlier choice list because you changed the topic. Nothing from that list was applied."
+    end
+    if A._droppedPendingFlow and type(result) == "table" then
+        result.text = tostring(result.text or "")
+            .. "\nI cleared the earlier Assistant step because you changed the topic. Nothing from that step was applied."
+    end
     A._droppedPendingConfirmation = nil
+    A._droppedPendingChoice = nil
+    A._droppedPendingFlow = nil
     return result
 end
 
@@ -9544,7 +9686,7 @@ function AP.TryImmediateMutationResult(text, opts)
         A.pendingChoices = plan.choices or {}
         AP.SetPendingCandidates(A.pendingChoices)
         local activeContext = A.GetContext and A.GetContext()
-        if activeContext then activeContext.pendingChoices = SerializeChoices(A.pendingChoices) end
+        AP.StoreSerializedPendingChoices(activeContext, "pendingChoices", A.pendingChoices)
         local choiceText = ChoiceText(A.pendingChoices)
         if type(plan.choiceIntro) == "string" and Trim(plan.choiceIntro) ~= "" then
             choiceText = Trim(plan.choiceIntro) .. "\n" .. choiceText
@@ -9959,6 +10101,10 @@ function A.StartNewTask()
     if type(context) == "table" then
         for key in pairs(context) do context[key] = nil end
     end
+    A.lastAssistantHelpContext = nil
+    A.lastAssistantPlanningContext = nil
+    A._helpContextRestored = nil
+    A._planningContextRestored = nil
     if type(A.ClearRouterTransientCaches) == "function" then A.ClearRouterTransientCaches() end
     if A.Parser and type(A.Parser.ClearRegistryCandidateFuzzyCache) == "function" then A.Parser.ClearRegistryCandidateFuzzyCache() end
     if A.Parser and type(A.Parser.ClearActionAliasFuzzyCache) == "function" then A.Parser.ClearActionAliasFuzzyCache() end

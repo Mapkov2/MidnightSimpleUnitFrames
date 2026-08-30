@@ -178,6 +178,80 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
             or norm:match("^where%s+") ~= nil or norm:match("^how%s+") ~= nil
     end
 
+    local function LooksLikeFreshProfileTopic(text)
+        local parser = A.Parser or {}
+        local norm = type(parser.ActionableText) == "function" and Normalize(parser.ActionableText(text)) or Normalize(text)
+        local runtime = A.RuntimePrivate or {}
+        if type(runtime.PendingConversationTopicSwitch) == "function"
+            and runtime.PendingConversationTopicSwitch(text)
+        then
+            return true
+        end
+        if LooksLikeFreshPendingTopic(norm) then return true end
+        return norm:match("^copy%s+profile%s*") ~= nil
+            or norm:match("^copy%s+current%s+profile%s*") ~= nil
+            or norm:match("^rename%s+profile%s*") ~= nil
+            or norm:match("^create%s+profile%s*") ~= nil
+            or norm:match("^delete%s+profile%s*") ~= nil
+            or norm:match("^switch%s+profile%s*") ~= nil
+            or norm:match("^switch%s+to%s+profile%s*") ~= nil
+            or norm:match("^import%s+") ~= nil or norm:match("^export%s+") ~= nil
+            or norm:match("^help%s*") ~= nil or norm:match("^diagnose%s+") ~= nil
+            or norm:match("^what%s+") ~= nil or norm:match("^why%s+") ~= nil
+            or norm:match("^who%s+") ~= nil or norm:match("^when%s+") ~= nil
+            or norm:match("^which%s+") ~= nil
+    end
+
+    local function IsReferentialProfileDestinationReply(text, kind)
+        local norm = Normalize(text)
+        if norm == "" then return false end
+        local common = {
+            "call it ", "name it ", "use name ", "use profile name ", "profile name ",
+            "new profile name ", "new profile ", "destination profile ", "destination ",
+            "to profile ", "to ", "nenn es ", "nenne es ", "name ist ", "profilname ",
+            "zu profil ", "zu ", "nach profil ", "nach ", "als ",
+        }
+        local specific = kind == "profileCopyDestination" and {
+            "copy it to ", "copy to ", "copy profile to ", "kopiere es nach ", "kopiere nach ",
+        } or {
+            "rename it to ", "rename to ", "rename profile to ", "benenne es um in ",
+            "benenne es um zu ", "benenne es in ", "umbenennen in ", "umbenennen zu ",
+            "in profile ", "in ",
+        }
+        for i = 1, #specific do
+            if norm:sub(1, #specific[i]) == specific[i] then return true end
+        end
+        for i = 1, #common do
+            if norm:sub(1, #common[i]) == common[i] then return true end
+        end
+        return false
+    end
+
+    local function LooksLikeBareProfileDestination(text)
+        local raw = Trim(text)
+        local norm = Normalize(raw)
+        if raw == "" or #raw > 40 then return false end
+        if raw:find("[%.%!%?;]$") then return false end
+        local words = 0
+        for _ in norm:gmatch("%S+") do words = words + 1 end
+        if words == 0 or words > 4 then return false end
+        -- A bare short name remains convenient ("Raid Backup"). Sentence-
+        -- shaped text must use an explicit "call it ..." wrapper so ordinary
+        -- conversation cannot silently become a profile destination.
+        local conversationalWords = {
+            i = true, im = true, am = true, ive = true, had = true, have = true,
+            was = true, were = true, we = true, you = true, your = true, they = true,
+            who = true, what = true, why = true, where = true, when = true, which = true, how = true,
+            can = true, could = true, would = true, should = true, did = true, does = true,
+            hello = true, hi = true, hey = true, thanks = true, thank = true,
+            chatting = true, today = true, yesterday = true,
+        }
+        for word in norm:gmatch("%S+") do
+            if conversationalWords[word] then return false end
+        end
+        return true
+    end
+
     local function IsReferentialPendingValueReply(text)
         local parser = A.Parser or {}
         local norm = type(parser.ActionableText) == "function" and Normalize(parser.ActionableText(text)) or Normalize(text)
@@ -655,6 +729,14 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
             return { text = message, status = ok and "applied" or "failed" }
         end
         if flow.kind == "profileCopyDestination" then
+            local referential = IsReferentialProfileDestinationReply(text, flow.kind)
+            if not referential and (LooksLikeFreshProfileTopic(text)
+                or not LooksLikeBareProfileDestination(text))
+            then
+                A.ClearPendingFlow()
+                A._droppedPendingFlow = true
+                return nil
+            end
             local source = DisplayProfileName(flow.source)
             local dest = OriginalDestination(text, flow.kind)
             if dest == "" then return { text = "What should the destination profile be called? Example: 'call it Raid Backup'. Say 'cancel' or 'never mind' to stop.", status = "confirmation_needed" } end
@@ -671,6 +753,14 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
             })
         end
         if flow.kind == "profileRenameDestination" then
+            local referential = IsReferentialProfileDestinationReply(text, flow.kind)
+            if not referential and (LooksLikeFreshProfileTopic(text)
+                or not LooksLikeBareProfileDestination(text))
+            then
+                A.ClearPendingFlow()
+                A._droppedPendingFlow = true
+                return nil
+            end
             local dest = OriginalDestination(text, flow.kind)
             if dest == "" then return { text = "What should the new profile be called? Examples: 'to Raid Renamed' or 'named Raid Renamed'. Say 'cancel' or 'never mind' to stop.", status = "confirmation_needed" } end
             A.ClearPendingFlow()

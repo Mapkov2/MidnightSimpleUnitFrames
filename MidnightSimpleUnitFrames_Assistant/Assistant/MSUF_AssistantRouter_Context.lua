@@ -341,7 +341,7 @@ function R.TryContextlessReferenceClarification(text)
             "Simple explanation help",
             "Name the MSUF setting, page, or result you want explained. Without that context, I would only be guessing.",
             "what is range fade; explain target buff cooldown text; open cast bars.",
-            "Open Player | Open Auras | Open Cast Bars"
+            "Open Player | Open Target | Open Group Auras | Open Cast Bars"
         )
     end
 
@@ -508,7 +508,98 @@ local function PlanningItemsText(items)
     return table.concat(lines, "\n")
 end
 
+local PLANNING_CONTEXT_MAX_ITEMS = 8
+local PLANNING_CONTEXT_MAX_TEXT_BYTES = 4096
+local PLANNING_CONTEXT_FIELDS = { "title", "body", "examples", "actions", "selectedIndex" }
+local PLANNING_ITEM_FIELDS = { "label", "command", "navigation", "reason" }
+
+local function PlanningScalar(value)
+    local valueType = type(value)
+    if valueType == "string" then
+        return value:sub(1, PLANNING_CONTEXT_MAX_TEXT_BYTES)
+    end
+    if valueType == "number" or valueType == "boolean" then return value end
+    return nil
+end
+
+function A.RouterPersistPlanningContext()
+    local saved = A.GetContext and A.GetContext()
+    if type(saved) ~= "table" then return end
+    local live = A.lastAssistantPlanningContext
+    if type(live) ~= "table" then
+        saved.planningContext = nil
+        return
+    end
+
+    local stored = {}
+    for i = 1, #PLANNING_CONTEXT_FIELDS do
+        local field = PLANNING_CONTEXT_FIELDS[i]
+        local value = PlanningScalar(live[field])
+        if value ~= nil then stored[field] = value end
+    end
+    local items = {}
+    for i = 1, math.min(#(type(live.items) == "table" and live.items or {}), PLANNING_CONTEXT_MAX_ITEMS) do
+        local source = live.items[i]
+        if type(source) == "table" then
+            local item = {}
+            for j = 1, #PLANNING_ITEM_FIELDS do
+                local field = PLANNING_ITEM_FIELDS[j]
+                local value = PlanningScalar(source[field])
+                if value ~= nil then item[field] = value end
+            end
+            if next(item) ~= nil then items[#items + 1] = item end
+        end
+    end
+    if #items > 0 then stored.items = items end
+    local selected = tonumber(stored.selectedIndex)
+    if selected and (selected < 1 or selected > #items or selected % 1 ~= 0) then
+        stored.selectedIndex = nil
+    end
+    saved.planningContext = next(stored) ~= nil and stored or nil
+end
+
+function A.RouterRestorePlanningContext()
+    if type(A.lastAssistantPlanningContext) == "table" then return A.lastAssistantPlanningContext end
+    if A._planningContextRestored == true then return nil end
+    A._planningContextRestored = true
+    local saved = A.GetContext and A.GetContext()
+    local stored = type(saved) == "table" and saved.planningContext or nil
+    if type(stored) ~= "table" then return nil end
+
+    local live = {}
+    for i = 1, #PLANNING_CONTEXT_FIELDS do
+        local field = PLANNING_CONTEXT_FIELDS[i]
+        local value = PlanningScalar(stored[field])
+        if value ~= nil then live[field] = value end
+    end
+    local items = {}
+    for i = 1, math.min(#(type(stored.items) == "table" and stored.items or {}), PLANNING_CONTEXT_MAX_ITEMS) do
+        local source = stored.items[i]
+        if type(source) == "table" then
+            local item = {}
+            for j = 1, #PLANNING_ITEM_FIELDS do
+                local field = PLANNING_ITEM_FIELDS[j]
+                local value = PlanningScalar(source[field])
+                if value ~= nil then item[field] = value end
+            end
+            if next(item) ~= nil then items[#items + 1] = item end
+        end
+    end
+    if #items > 0 then live.items = items end
+    local selected = tonumber(live.selectedIndex)
+    if selected and (selected < 1 or selected > #items or selected % 1 ~= 0) then
+        live.selectedIndex = nil
+    end
+    if next(live) == nil then
+        saved.planningContext = nil
+        return nil
+    end
+    A.lastAssistantPlanningContext = live
+    return live
+end
+
 A.RouterSafePlanningReply = function(title, body, examples, actions, planItems, summary)
+    A.RouterRestorePlanningContext()
     A.RouterClearPendingResultsForRoute()
     -- A full planning request starts a new topic just like a new search. Do
     -- not leave a previous setting/repair choice live behind the read-only
@@ -530,6 +621,7 @@ A.RouterSafePlanningReply = function(title, body, examples, actions, planItems, 
         items = planItems,
         selectedIndex = previous and previous.title == title and previous.selectedIndex or nil,
     }
+    A.RouterPersistPlanningContext()
 
     local parts = { title, body }
     local planText = PlanningItemsText(planItems)
@@ -598,13 +690,16 @@ function R.IsExactSafePlanningFollowup(norm)
 end
 
 function R.ClearStalePlanningContextForInput(text)
+    A.RouterRestorePlanningContext()
     if type(A.lastAssistantPlanningContext) ~= "table" then return end
     local norm = R.Normalize(text)
     if norm == "" or R.IsExactSafePlanningFollowup(norm) then return end
     A.lastAssistantPlanningContext = nil
+    A.RouterPersistPlanningContext()
 end
 
 A.RouterTrySafePlanningFollowup = function(text, coreHandler)
+    A.RouterRestorePlanningContext()
     local ctx = type(A.lastAssistantPlanningContext) == "table" and A.lastAssistantPlanningContext or nil
     if not ctx then return nil end
     local norm = R.Normalize(text)
@@ -663,6 +758,7 @@ A.RouterTrySafePlanningFollowup = function(text, coreHandler)
             }
         end
         ctx.selectedIndex = index
+        A.RouterPersistPlanningContext()
         return {
             text = title .. "\nStart with " .. tostring(index) .. ". " .. tostring(item.label or "MSUF step") .. ".\nWhy: " .. ItemReason(item) .. "\nThis is navigation advice only; I did not change a setting.",
             status = "info",
@@ -677,6 +773,7 @@ A.RouterTrySafePlanningFollowup = function(text, coreHandler)
         local item = items[index]
         if item and item.navigation == true and item.command and type(coreHandler) == "function" then
             ctx.selectedIndex = index
+            A.RouterPersistPlanningContext()
             local result = coreHandler(item.command)
             if result and not A.RouterIsUnknownResult(result) then return R.AsNavigationResult(result) end
         end
@@ -733,7 +830,7 @@ A.RouterTrySafePlanningFollowup = function(text, coreHandler)
 end
 
 function R.ContextlessGuidanceReply()    return {
-        text = "I need a little more MSUF context before I choose or open something. Name the area, page, setting, or result number you mean.\nUseful next prompts: Guided Setup | Run Checks | Open Auras | Open Cast Bars | explain result 1 | why are target buffs hidden",
+        text = "I need a little more MSUF context before I choose or open something. Name the area, page, setting, or result number you mean.\nUseful next prompts: Guided Setup | Run Checks | Open Target | Open Group Auras | Open Global Aura Appearance | Open Cast Bars | explain result 1 | why are target buffs hidden",
         status = "info",
         summary = "Assistant context guidance",
     }
