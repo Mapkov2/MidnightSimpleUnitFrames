@@ -17,29 +17,6 @@ if type(C) ~= "table" then return end
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS or {}
 
-local PAGE_LABEL_OVERRIDES = {
-    home = "Dashboard",
-    profiles = "Profiles",
-    gameplay = "Gameplay",
-    classpower = "Class Resources",
-    modules = "Modules",
-    search = "Search",
-    opt_castbar = "Cast Bars",
-    opt_bars = "Bars",
-    opt_colors = "Colors",
-    opt_fonts = "Fonts",
-    opt_misc = "Miscellaneous",
-    gf_layout = "Group Layout",
-    gf_bars = "Group Dispel Overlay",
-    gf_indicators = "Group Status & Indicators",
-    gf_auras = "Group Auras",
-    auras3 = "Auras",
-    auras3_buffs = "Aura Buffs",
-    auras3_debuffs = "Aura Debuffs",
-    auras3_filters = "Aura Filters",
-    auras3_styling = "Aura Style",
-}
-
 local function UnitForPage(page)
     if page == "uf_player" then return "player" end
     if page == "uf_target" then return "target" end
@@ -55,7 +32,7 @@ local function PageLabel(page, fallback)
     page = tostring(page or "")
     if page ~= "" then
         if A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(page, "current area") end
-        if PAGE_LABEL_OVERRIDES[page] then return PAGE_LABEL_OVERRIDES[page] end
+        if M and type(M.GetMenuPageLabel) == "function" then return M.GetMenuPageLabel(page) end
         return "current area"
     end
     fallback = tostring(fallback or "")
@@ -127,7 +104,7 @@ local function ScopeHelpExamples(frameType, unit, group, page)
             "switch profile to Healer",
         }
     end
-    if frameType == "aura" or page == "auras3" then
+    if frameType == "aura" then
         return {
             "show player buffs",
             "set target debuff size 32",

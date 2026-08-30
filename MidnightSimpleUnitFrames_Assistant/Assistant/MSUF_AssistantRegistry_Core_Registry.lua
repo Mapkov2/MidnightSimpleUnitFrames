@@ -410,7 +410,7 @@ export_profile profile_summary
 DefineActionPolicies([[
 assistant.panel.close cancel_custom_anchor_picker dashboard_page_back dashboard_page_forward
     menu_search_clear menu_search_query menu_window_close menu_window_maximize menu_window_minimize menu_window_restore
-open_dashboard_panel open_page open_setting_control open_profile_import open_recovery_tools support_links_summary
+open_changelog open_dashboard_panel open_page open_setting_control open_profile_import open_recovery_tools support_links_summary
 set_dashboard_panel set_menu_selector_state set_nav_search_intro set_nav_section
 ]], {
     mutability = "navigation",

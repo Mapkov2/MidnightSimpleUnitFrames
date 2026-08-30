@@ -531,7 +531,7 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                 function() return AuraReadLaneSortMethod(settingScope, settingLane) end,
                 function(value) AuraWriteLaneSortMethod(settingScope, settingLane, value) end,
                 false, {
-                    page = settingLane == "buff" and "auras3_buffs" or "auras3_debuffs",
+                    page = "uf_" .. settingScope,
                     exactAliases = AuraSortExactAliases(settingScope, settingLane, false),
                     description = "Chooses the native Blizzard AuraContainer comparator for this Aura lane; it does not enable or disable the lane.",
                 })
@@ -545,7 +545,7 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                 function() return AuraReadLaneSortDirection(settingScope, settingLane) end,
                 function(value) AuraWriteLaneSortDirection(settingScope, settingLane, value) end,
                 false, {
-                    page = settingLane == "buff" and "auras3_buffs" or "auras3_debuffs",
+                    page = "uf_" .. settingScope,
                     exactAliases = AuraSortExactAliases(settingScope, settingLane, true),
                     description = "Uses the native normal or reversed AuraContainer order without changing lane visibility.",
                 })

@@ -204,8 +204,6 @@ Data.AURA_EDIT_SCOPE_ALIASES = {
 Data.AURA_LANE_MENU_VALUES = { "buff", "debuff" }
 Data.AURA_STYLE_LANE_ALIASES = { "aura style lane", "aura style tab", "aura style filter type", "aura buffs tab", "aura debuffs tab", "buff aura style", "debuff aura style" }
 Data.AURA_STYLE_LANE_EXACT_ALIASES = { "aura style lane", "aura style tab", "aura buffs tab", "aura debuffs tab" }
-Data.AURA_FILTER_LANE_ALIASES = { "aura filter lane", "aura filter tab", "aura filter type", "aura buff filters tab", "aura debuff filters tab", "buff aura filters", "debuff aura filters" }
-Data.AURA_FILTER_LANE_EXACT_ALIASES = { "aura filter lane", "aura filter tab", "aura buff filters tab", "aura debuff filters tab" }
 Data.AURA_LANE_MENU_ALIASES = {
     buff = "buff",
     buffs = "buff",
@@ -215,26 +213,6 @@ Data.AURA_LANE_MENU_ALIASES = {
     debuffs = "debuff",
     debufftab = "debuff",
     ["debuff tab"] = "debuff",
-}
-
-Data.AURA_UX_MODE_VALUES = { "basic", "advanced" }
-Data.AURA_UX_MODE_ALIASES = {
-    "aura settings view", "aura view", "aura settings mode", "show aura settings",
-    "basic aura settings", "advanced aura settings", "all aura settings",
-}
-Data.AURA_UX_MODE_EXACT_ALIASES = {
-    "aura settings view", "aura view", "aura settings mode", "show aura settings",
-    "basic aura settings", "advanced aura settings", "all aura settings",
-    "basic aura options", "advanced aura options", "all aura options",
-}
-Data.AURA_UX_MODE_VALUE_ALIASES = {
-    basic = "basic",
-    simple = "basic",
-    normal = "basic",
-    advanced = "advanced",
-    all = "advanced",
-    allsettings = "advanced",
-    ["all settings"] = "advanced",
 }
 
 Data.AURA_RELATIVE_SIZE_NOUNS = {

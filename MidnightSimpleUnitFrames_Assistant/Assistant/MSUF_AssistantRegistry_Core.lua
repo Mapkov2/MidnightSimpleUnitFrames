@@ -162,50 +162,48 @@ local function LooksLocalizedAssistantLabel(label)
     return false
 end
 
-local PAGE_DISPLAY_LABELS = {
-    home = "Dashboard",
-    profiles = "Profiles",
-    gameplay = "Gameplay",
-    classpower = "Class Resources",
-    modules = "Modules",
-    search = "Search",
-
-    opt_castbar = "Cast Bars",
-    opt_bars = "Bars",
-    opt_colors = "Colors",
-    opt_fonts = "Fonts",
-    opt_misc = "Miscellaneous",
-
-    gf_layout = "Group Layout",
-    gf_bars = "Group Dispel Overlay",
-    gf_indicators = "Group Status & Indicators",
-    gf_auras = "Group Auras",
-
-    auras3 = "Auras",
-    auras3_buffs = "Aura Buffs",
-    auras3_debuffs = "Aura Debuffs",
-    auras3_custom = "Custom Auras",
-    auras3_filters = "Aura Filters",
-    auras3_styling = "Aura Style",
-
-    uf_player = "Player",
-    uf_target = "Target",
-    uf_focus = "Focus",
-    uf_pet = "Pet",
-    uf_boss = "Boss Frames",
-    uf_targettarget = "Target of Target",
-    uf_focustarget = "Focus Target",
-}
-
-function A.DisplayPageLabel(page, fallback)
+-- Menu2 owns page registration, aliases, labels, and breadcrumbs. Keep these
+-- lookups late-bound because the Assistant is load-on-demand and test harnesses
+-- can install the current Menu2 model after this registry core has loaded.
+local function RegisteredMenuPage(page)
     page = tostring(page or "")
-    if page ~= "" and PAGE_DISPLAY_LABELS[page] then return PAGE_DISPLAY_LABELS[page] end
-    return tostring(fallback or "MSUF page")
+    if page == "" then return nil, nil end
+    local aliases = M and M.ALIASES
+    local canonical = type(aliases) == "table" and aliases[page] or nil
+    if type(canonical) == "string" and canonical ~= "" then page = canonical end
+    local pages = M and M.pages
+    local spec = type(pages) == "table" and pages[page] or nil
+    if type(spec) ~= "table" then return nil, nil end
+    return page, spec
+end
+
+function A.ResolveRegisteredMenuPage(page)
+    return RegisteredMenuPage(page)
 end
 
 function A.IsKnownPageKey(page)
-    page = tostring(page or "")
-    return PAGE_DISPLAY_LABELS[page] ~= nil
+    return RegisteredMenuPage(page) ~= nil
+end
+
+function A.DisplayPageLabel(page, fallback)
+    local canonical, spec = RegisteredMenuPage(page)
+    if not canonical then return tostring(fallback or "MSUF page") end
+    if M and type(M.GetMenuPageLabel) == "function" then
+        local label = M.GetMenuPageLabel(canonical)
+        if type(label) == "string" and label ~= "" then return label end
+    end
+    if type(spec.title) == "string" and spec.title ~= "" then return spec.title end
+    return tostring(fallback or "MSUF page")
+end
+
+function A.DisplayPageBreadcrumb(page, fallback)
+    local canonical = RegisteredMenuPage(page)
+    if not canonical then return tostring(fallback or "MSUF page") end
+    if M and type(M.GetMenuBreadcrumb) == "function" then
+        local breadcrumb = M.GetMenuBreadcrumb(canonical)
+        if type(breadcrumb) == "string" and breadcrumb ~= "" then return breadcrumb end
+    end
+    return A.DisplayPageLabel(canonical, fallback)
 end
 
 function A.DisplayUnitLabel(unit)

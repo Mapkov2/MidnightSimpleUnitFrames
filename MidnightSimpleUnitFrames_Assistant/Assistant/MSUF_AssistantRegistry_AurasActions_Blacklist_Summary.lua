@@ -49,7 +49,9 @@ function A.AurasRegistry.RegisterBlacklistSummaryAction(ctx)
         parseAliasArgs = ParseAuraBlacklistSummaryAliasArgs,
         run = function(args)
             local Model = AuraModel()
-            if not (Model and type(Model.BlacklistSummary) == "function") then return false, "Open Aura Filters first so I can show the hidden-aura list." end
+            if not (Model and type(Model.BlacklistSummary) == "function") then
+                return false, "The frame-local Aura data is unavailable right now, so I cannot show the hidden-aura list. No settings were changed."
+            end
             local scope = args and args.scope
             if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then
                 return false, "Choose Player, Target, Focus, or Boss so I know which native hidden-aura list to show."

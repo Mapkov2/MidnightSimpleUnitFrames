@@ -45,7 +45,6 @@ Registry:RegisterAction({
     key = "reset_aura_custom_container",
     label = "Reset Custom Aura Container",
     description = "Returns one unit-frame Custom Aura container to its defaults, including its whitelist, filters, layout, and appearance.",
-    page = "auras3",
     type = "reset",
     combatSafe = false,
     confirmRequired = true,

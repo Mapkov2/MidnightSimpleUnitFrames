@@ -30,7 +30,6 @@ local ContentWidth = C.ContentWidth
 local ContentHeight = C.ContentHeight
 local DASHBOARD_ROUTE_RECOVERY = C.DASHBOARD_ROUTE_RECOVERY
 local DASHBOARD_ROUTE_SCALING = C.DASHBOARD_ROUTE_SCALING
-local DASHBOARD_ROUTE_CHANGELOG = C.DASHBOARD_ROUTE_CHANGELOG
 local Lines = M.Lines or function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end
 local KeySetFromWords = M.KeySetFromWords or function(text)
     local out = {}
@@ -651,7 +650,6 @@ false=import current profile|import to current|current profile import
 local DASHBOARD_ROUTE_TERMS = {
     { DASHBOARD_ROUTE_RECOVERY, "discord|factory reset|fullreset|print help|display recovery|recovery tools|recover menu|reset all|help reset|copy discord|support discord" },
     { DASHBOARD_ROUTE_SCALING, "scaling|ui scale|menu scale|msuf frame scale|msuf menu scale|make menu bigger|make menu smaller|options too big|options too small|resize window|groesser|kleiner|skalierung" },
-    { DASHBOARD_ROUTE_CHANGELOG, "changelog|change log|release notes|patch notes|version notes|what changed|latest changes|aenderungen|anderungen" },
 }
 
 local function SearchRouteUnitStatusSelection(route, unit, normalized)
@@ -694,7 +692,12 @@ local SEARCH_UNIT_BY_PAGE = {
     uf_boss = "boss",
 }
 
-local SEARCH_AURA_ROUTE_PAGES = KeySetFromWords "auras3 auras3_buffs auras3_debuffs auras3_custom auras3_rendering auras3_styling"
+-- Only the real global Appearance workspaces belong here.  The retired
+-- `auras3`/`auras3_rendering` routes no longer exist, while Custom and Filters
+-- are compatibility landings that point players back to the owning frame.
+-- Feeding any of those through the global-style section router creates a
+-- plausible breadcrumb for a section that is not present on the destination.
+local SEARCH_AURA_ROUTE_PAGES = KeySetFromWords "auras3_buffs auras3_debuffs auras3_styling"
 
 local SEARCH_ROUTE_SECTION_ROWS = {
     unit = [[
@@ -720,10 +723,10 @@ portrait=portrait|class icon|2d portrait|avatar|face
 text=text|name text|health text|hp text|power text|font size|text slot|delimiter|hide percent
 power=resource bar|power bar|mana bar|role power|smooth fill|tank power|healer power|dps power
 range=range fade|range check|distance check|out of range
-layout=layout|growth|direction|spacing|columns|rows|width|height
+layout_advanced=layout|growth|direction|spacing|columns|rows|width|height
 sorting=sorting|sort|role order|player first|groups first
 scaling=frame scaling|scale|smooth health fill|smooth fill|party smooth fill|raid smooth fill
-border=transparency|alpha|opacity|fade
+transparency=transparency|alpha|opacity|fade
 anchor=anchoring|anchor|position|move party|move raid|x offset|y offset
 ]],
     gf_bars = [[
@@ -731,8 +734,7 @@ dispel=dispel overlay|overlay style|overlay detects|overlay priority|health bar 
 dstripe=debuff stripe|stripe edge|stripe height|stripe opacity
 ]],
     gf_auras = [[
-buffs=buffs|buff|hots|own buffs|healer buffs|buff position|buff size|buff layer
-debuffs=debuffs|debuff|boss debuff|raid debuff|debuff position|debuff size|debuff layer
+auras=buffs|buff|hots|own buffs|healer buffs|buff position|buff size|buff layer|debuffs|debuff|boss debuff|raid debuff|debuff position|debuff size|debuff layer
 si=spell indicators|custom spell|spell id|indicator spell|healer hots indicators|placed spell icons
 si_style=spell icon style|spell indicator style|spell icon zoom|spell icon scale|spell icon shape|spell icon opacity|spell icon tooltip|spell icon cooldown|spell icon swipe|spell icon duration bar|spell icon stack
 ]],
@@ -780,7 +782,6 @@ misc_startup=startup|welcome|welcome message|version check|versioncheck|notices
 misc_mouseover_highlight=mouseover highlight|hover highlight|hover gradient|hover border|highlight style|highlight size
 misc_tooltips=tooltips|tooltip|unitframe tooltips|group frame tooltips|mouseover tooltip|modifier tooltip
 misc_blizzard_frames=blizzard frames|default frames
-misc_range_fade=range fade|range check|distance check|out of range
 ]],
     classpower = [[
 classpower_display=layout|display|combo points|holy power|soul shards|chi|essence|runes
@@ -791,17 +792,6 @@ classpower_detached_power=detached power|detached power bar|alternate power|dual
 classpower_player_hp=player hp bar|second player hp bar|duplicate hp|duplicate health|class resource hp|class resources hp|shared hp text|smooth fill|hp shape|follow player power|orb size|hp orb|health orb|hp color|class color|dark mode|hp gradient
 classpower_alt_mana=alternative mana|alt mana|mana bar
 ]],
-    auras3_filters = [[
-Filter Rules=filters|inclusive filter|exclusive filter|only mine|own buffs|own debuffs|dispellable|stealable|buff filter|debuff filter
-Blacklist=blacklist|ignore list|spell id|blacklist presets
-Group Frame Filters=inclusive filter|exclusive filter|base filter|category blacklist|declassified
-]],
-    auras3_custom = [[
-Displays=custom aura|custom display|new display|tracked aura|unitframe aura
-Detection=spell id|spellid|exact spell|only mine|buff type|debuff type
-Icon & Placement=icon|square|bar|number|hidden sensor|anchor|offset|layer|strata
-Full-Frame Effect=full frame|health tint|border|glow|pulse|name overlay|effect strata|priority
-]],
     auras3_default = [[
 Aura Type=buffs|debuffs|buff|debuff|back|style
 Unit Aura Text=stack size|cooldown size|stack anchor|timer text|unit aura text
@@ -810,7 +800,7 @@ Group Frame Styling=group frame aura style|stack font|cooldown font|cooldown swi
     opt_colors = [[
 colors_font=global font color|font color
 colors_classes=class bar colors|class color|class colored
-colors_background=bar background tint|background color|backdrop|missing health|dark mode|preserve hp color
+colors_background=bar background tint|background fill|full bar|missing health only|background color mode|custom tint|match health bar|class color|health gradient|background color|backdrop|missing health|dark mode
 colors_appearance=unitframe global coloring|appearance|dark mode
 colors_unit=unitframe colors|unit frame colors|reaction color
 colors_npc_type=npc type colors|npc color

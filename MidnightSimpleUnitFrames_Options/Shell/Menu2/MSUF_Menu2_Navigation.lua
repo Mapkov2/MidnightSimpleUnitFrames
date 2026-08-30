@@ -124,8 +124,15 @@ local function NavigationIndex()
     return groups, pages
 end
 
+local AUXILIARY_PAGE_LABELS = {
+    changelog = "See New Features",
+    guided_setup = "Guided Setup",
+    search = "Search",
+}
+
 function M.GetMenuPageLabel(pageKey)
     pageKey = tostring(pageKey or "")
+    if AUXILIARY_PAGE_LABELS[pageKey] then return AUXILIARY_PAGE_LABELS[pageKey] end
     local _, pages = NavigationIndex()
     local item = pages[pageKey]
     if item and item.label then return item.label end
@@ -137,6 +144,7 @@ function M.GetMenuBreadcrumb(pageKey)
     if pageKey == "" or pageKey == "menu_chrome" then return "MSUF menu" end
     if pageKey == "guided_setup" then return "Dashboard > Guided Setup" end
     if pageKey == "search" then return "MSUF menu > Search" end
+    if pageKey == "changelog" then return "MSUF menu > See New Features" end
 
     local groups, pages = NavigationIndex()
     local primaryKey = (M.navPrimaryForKey and M.navPrimaryForKey[pageKey]) or pageKey

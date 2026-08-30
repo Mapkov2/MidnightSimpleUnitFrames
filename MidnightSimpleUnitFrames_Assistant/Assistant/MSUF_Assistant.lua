@@ -1111,7 +1111,8 @@ local function FailurePageHints(query)
         local detail = "Choose " .. tostring(scope or "the intended frame") .. " as the editing scope, then look for " .. control .. "."
         AddFailurePageHint(hints, seen, page, pageLabel, detail)
         if FailureContainsAny(normalized, { " filter ", " blacklist ", " whitelist ", " hide ", " show only " }) then
-            AddFailurePageHint(hints, seen, "auras3_filters", "Aura Filters", "Check the relevant aura filter or list for " .. tostring(scope or "that frame") .. ".")
+            AddFailurePageHint(hints, seen, page, pageLabel,
+                "Check the relevant Buff, Debuff, or Custom Aura filter on " .. tostring(scope or "that frame") .. ".")
         end
     elseif FailureContainsAny(normalized, { " cast bar ", " castbar ", " casting bar " }) then
         AddFailurePageHint(hints, seen, "opt_castbar", "Cast Bars", "Look for the " .. tostring(scope or "matching frame") .. " cast-bar control.")
@@ -3075,49 +3076,53 @@ local function FindExactDisplayedChoice(text, choices)
     return nil
 end
 
-local PENDING_PAGE_LABEL_OVERRIDES = {
-    home = "Dashboard",
-    profiles = "Profiles",
-    gameplay = "Gameplay",
-    classpower = "Class Resources",
-    modules = "Modules",
-    search = "Search",
-    opt_castbar = "Cast Bars",
-    opt_bars = "Bars",
-    opt_colors = "Colors",
-    opt_fonts = "Fonts",
-    opt_misc = "Miscellaneous",
-    gf_layout = "Group Layout",
-    gf_bars = "Group Dispel Overlay",
-    gf_indicators = "Group Status & Indicators",
-    gf_auras = "Group Auras",
-    auras3 = "Auras",
-    auras3_buffs = "Aura Buffs",
-    auras3_debuffs = "Aura Debuffs",
-    auras3_custom = "Custom Auras",
-    auras3_filters = "Aura Filters",
-    auras3_styling = "Aura Style",
-    uf_player = "Player",
-    uf_target = "Target",
-    uf_focus = "Focus",
-    uf_pet = "Pet",
-    uf_boss = "Boss",
-    uf_targettarget = "Target of Target",
-    uf_focustarget = "Focus Target",
-}
-
 local function PendingPageLabel(page)
     page = tostring(page or "")
     if page == "" then return nil end
     if A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(page, "MSUF page") end
-    if PENDING_PAGE_LABEL_OVERRIDES[page] then return PENDING_PAGE_LABEL_OVERRIDES[page] end
+    if M and type(M.GetMenuPageLabel) == "function" then return M.GetMenuPageLabel(page) end
     return "MSUF page"
+end
+
+function AP.CanonicalAssistantPage(page, args)
+    page = tostring(page or "")
+    if page == "" then return nil end
+    if type(A.ResolveCanonicalMenuRoute) == "function" then
+        local canonical = A.ResolveCanonicalMenuRoute(page, type(args) == "table" and args or {})
+        if canonical then return canonical end
+        if page == "auras3" or page == "auras3_custom" or page == "auras3_filters"
+            or page == "auras3_rendering"
+        then
+            return nil
+        end
+        -- The core Assistant can load before Menu2's page registry. In that
+        -- state a page supplied by the setting resolver is still authoritative;
+        -- once Menu2 is present, unknown destinations fail closed.
+        if type(M and M.pages) == "table" and next(M.pages) ~= nil then return nil end
+        return page
+    end
+    if type(A.IsKnownPageKey) == "function" and not A.IsKnownPageKey(page) then return nil end
+    return page
 end
 
 local function PendingResultPageLabel(item)
     if type(item) ~= "table" then return nil end
-    if item.page and tostring(item.page) ~= "" then return PendingPageLabel(item.page) end
-    if item.kind == "page" and item.key and tostring(item.key) ~= "" then return PendingPageLabel(item.key) end
+    if item.setting then
+        local settingPage = type(A.ResolveMenuPageForSetting) == "function"
+            and A.ResolveMenuPageForSetting(item.setting) or nil
+        if settingPage then return PendingPageLabel(settingPage) end
+    end
+    if item.page and tostring(item.page) ~= "" then
+        local page = AP.CanonicalAssistantPage(item.page, {
+            settingKey = item.settingKey or (item.setting and item.setting.key),
+            actionKey = item.actionKey or (item.action and item.action.key),
+        })
+        if page then return PendingPageLabel(page) end
+    end
+    if item.kind == "page" and item.key and tostring(item.key) ~= "" then
+        local page = AP.CanonicalAssistantPage(item.key, {})
+        if page then return PendingPageLabel(page) end
+    end
     if item.action or item.actionKey or item.kind == "action" or item.kind == "diagnostic" then return "Assistant" end
     return nil
 end
@@ -3195,20 +3200,47 @@ end
 
 local function PendingSettingPage(setting)
     if type(setting) ~= "table" then return nil end
+    local unit = tostring(setting.unit or ""):lower()
+    local frameType = tostring(setting.frameType or "")
+    if setting.contextualMenuState == "auraContent" then
+        local active = tostring(M and M.activeKey or "")
+        if active == "gf_auras" or active == "uf_player" or active == "uf_target"
+            or active == "uf_focus" or active == "uf_boss"
+        then
+            return active
+        end
+        return nil
+    end
+    -- Aura content is owned by the frame page even when older registry
+    -- metadata names a real global appearance page. Unit/group ownership is
+    -- more specific than that legacy hint and keeps follow-ups beside the
+    -- control that actually changes this setting.
+    if frameType == "groupAura" or tostring(setting.key or ""):match("^gf_[^%.]+%.auras%.") then
+        return "gf_auras"
+    end
+    if frameType == "aura" then
+        if unit:match("^boss") then return "uf_boss" end
+        if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
+    end
     local explicitPage = tostring(setting.page or "")
-    if explicitPage ~= "" then return explicitPage end
-    local unit = tostring(setting.unit or "")
-    if unit ~= "" then
-        if unit == "targettarget" then return "uf_targettarget" end
-        if unit == "focustarget" then return "uf_focustarget" end
+    if explicitPage ~= "" then
+        if type(A.ResolveCanonicalMenuRoute) == "function" then
+            local canonical = A.ResolveCanonicalMenuRoute(explicitPage, { settingKey = setting.key })
+            if canonical then return canonical end
+        elseif type(A.IsKnownPageKey) ~= "function" or A.IsKnownPageKey(explicitPage) then
+            return explicitPage
+        end
+    end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "pet" or unit == "boss" then
         return "uf_" .. unit
     end
+    if unit == "targettarget" then return "uf_targettarget" end
+    if unit == "focustarget" then return "uf_focustarget" end
     local category = NormalizeReply(setting.category or "")
     -- Class-resource colors are edited on the Colors page even though their
     -- runtime owner is classPower.  Keep follow-ups on the same concrete page
     -- selected by the Registry/Knowledge resolver.
     if category:find("color", 1, true) or category:find("colour", 1, true) then return "opt_colors" end
-    local frameType = tostring(setting.frameType or "")
     if frameType == "group" then return PendingGroupSettingPage(setting) end
     if frameType == "castbar" then return "opt_castbar" end
     if frameType == "fonts" then return "opt_fonts" end
@@ -3218,11 +3250,7 @@ local function PendingSettingPage(setting)
     if frameType == "modules" then return "modules" end
     if frameType == "groupAura" then return "gf_auras" end
     if frameType == "aura" then
-        local unit = tostring(setting and setting.unit or "target"):lower()
-        if unit == "party" or unit == "raid" or unit == "mythicraid" or unit:match("^gf_") then return "gf_auras" end
-        if unit:match("^boss") then return "uf_boss" end
-        if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
-        return "uf_target"
+        return "auras3_styling"
     end
     if category:find("castbar", 1, true) or category:find("cast bar", 1, true) then return "opt_castbar" end
     if category:find("font", 1, true) then return "opt_fonts" end
@@ -3244,7 +3272,7 @@ end
 local function PendingChoicePage(choice)
     if type(choice) ~= "table" then return nil end
     if (choice.action or choice.actionKey) and type(choice.args) == "table" and type(choice.args.page) == "string" then
-        return choice.args.page, nil
+        return AP.CanonicalAssistantPage(choice.args.page, choice.args), nil
     end
     local setting = PendingChoicePrimarySetting(choice)
     return PendingSettingPage(setting)
@@ -5724,8 +5752,12 @@ end
 
 function A._PendingResultRelatedPageForItem(item)
     if type(item) ~= "table" then return nil end
-    if item.page and item.page ~= "" then return item.page end
     if item.setting then return PendingSettingPage(item.setting) end
+    if item.page and item.page ~= "" then
+        return AP.CanonicalAssistantPage(item.page, {
+            actionKey = item.actionKey or (item.action and item.action.key),
+        })
+    end
     return nil
 end
 
@@ -5958,12 +5990,17 @@ local function PendingResultOpenResult(item, index)
         return { text = "Tell me which result to open, for example 'open result 1'.", result = "ambiguous" }
     end
     SetSelectedPendingResult(item, index)
-    local page = item.page
+    local settingKey = (item.kind == "setting" or item.setting)
+        and (item.settingKey or item.key or (item.setting and item.setting.key)) or nil
+    local page = item.setting and PendingSettingPage(item.setting)
+        or AP.CanonicalAssistantPage(item.page, {
+            settingKey = settingKey,
+            actionKey = item.actionKey or (item.action and item.action.key),
+        })
     local label = PendingResultPageLabel(item) or PendingPageLabel(page)
     if not page then
         return { text = "I can explain result " .. tostring(index or 1) .. ", but I do not know a direct MSUF page to open for it.", result = "info" }
     end
-    local settingKey = (item.kind == "setting" or item.setting) and (item.settingKey or item.key or (item.setting and item.setting.key)) or nil
     local actionKey = settingKey and "open_setting_control" or "open_page"
     local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction(actionKey) or nil
     if not action then
@@ -6736,7 +6773,11 @@ function A.OpenColorSettingPickerForSetting(setting, page, label)
     local settingKey = tostring(setting.key or "")
     if settingKey == "" then return false, "missing_setting_key" end
 
-    page = tostring(page or setting.page or "")
+    local requestedPage = tostring(page or "")
+    local resolveSettingPage = A.ResolveMenuPageForSetting
+    page = type(resolveSettingPage) == "function" and tostring(resolveSettingPage(setting) or "") or ""
+    if page == "" then page = requestedPage ~= "" and requestedPage or tostring(setting.page or "") end
+    page = AP.CanonicalAssistantPage(page, { settingKey = settingKey }) or ""
     label = tostring(label or setting.label or settingKey)
     local schema = A.ControlSchema
     if page == "" and schema and type(schema.GetBySettingKey) == "function" then
@@ -6761,6 +6802,7 @@ function A.OpenColorSettingPickerForSetting(setting, page, label)
         page = tostring(item and item.page or "")
         if label == settingKey and item and item.label then label = tostring(item.label) end
     end
+    page = AP.CanonicalAssistantPage(page, { settingKey = settingKey }) or ""
     if page == "" then return false, "missing_page" end
 
     local openPicker = _G.MSUF_OpenExactColorSettingPicker
@@ -7744,16 +7786,28 @@ end
 
 function A._PendingConfirmationPage(plan)
     if type(plan) ~= "table" then return nil end
-    if type(plan.args) == "table" and type(plan.args.page) == "string" and plan.args.page ~= "" then return plan.args.page end
+    if type(plan.args) == "table" and type(plan.args.page) == "string" and plan.args.page ~= "" then
+        if type(A.ResolveCanonicalMenuRoute) == "function" then
+            return A.ResolveCanonicalMenuRoute(plan.args.page, plan.args)
+        end
+        return plan.args.page
+    end
+    if type(plan.changes) == "table" and plan.changes[1] and plan.changes[1].setting then
+        local page = PendingSettingPage(plan.changes[1].setting)
+        if page then return page end
+    end
     local actionKey = tostring(plan.actionKey or (plan.action and plan.action.key) or ""):lower()
     local label = NormalizeReply((plan.label or "") .. " " .. (plan.summary or "") .. " " .. (plan.action and plan.action.label or ""))
     if actionKey:find("profile", 1, true) or label:find("profile", 1, true) then return "profiles" end
-    if actionKey:find("aura", 1, true) or label:find("aura", 1, true) or label:find("buff", 1, true) or label:find("debuff", 1, true) then return "auras3" end
+    if actionKey:find("aura", 1, true) or label:find("aura", 1, true) or label:find("buff", 1, true) or label:find("debuff", 1, true) then
+        local scope = tostring(type(plan.args) == "table" and plan.args.scope or ""):lower()
+        if scope == "party" or scope == "raid" or scope == "mythicraid" then return "gf_auras" end
+        if scope == "player" or scope == "target" or scope == "focus" then return "uf_" .. scope end
+        if scope:match("^boss") then return "uf_boss" end
+        return "auras3_styling"
+    end
     if actionKey:find("castbar", 1, true) or label:find("castbar", 1, true) or label:find("cast bar", 1, true) then return "opt_castbar" end
     if actionKey:find("editmode", 1, true) or label:find("edit mode", 1, true) then return "home" end
-    if type(plan.changes) == "table" and plan.changes[1] and plan.changes[1].setting then
-        return PendingSettingPage(plan.changes[1].setting)
-    end
     return nil
 end
 
@@ -8092,6 +8146,10 @@ function A.HandleCommandInput(text)
         or (type(router.IsExplicitNavigationCommand) == "function" and router.IsExplicitNavigationCommand(text))
         or (type(router.LooksLikeGuidedTourRequest) == "function" and router.LooksLikeGuidedTourRequest(text))
         or (type(router.IsCurrentPageHelpRequest) == "function" and router.IsCurrentPageHelpRequest(text))
+        -- A question-shaped permanent/no-duration request is intentionally
+        -- parsed into two executable choices; it is a guided mutation, not a
+        -- read-only setting lookup despite its "what filter" opener.
+        or (type(router.IsAuraDurationFilterQuestion) == "function" and router.IsAuraDurationFilterQuestion(text))
         or (type(A.RouterHasPendingAssistantState) == "function" and A.RouterHasPendingAssistantState())
     )
     if not explicitReadOnlyAction

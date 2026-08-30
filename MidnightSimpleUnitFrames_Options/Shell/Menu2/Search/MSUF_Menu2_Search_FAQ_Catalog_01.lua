@@ -28,8 +28,8 @@ if type(Data.RegisterFAQProvider) == "function" then
             { "Wago profile hub", false, "home", "MSUF2_SEARCH_TARGET_DASHBOARD_WAGO", "Wago profile hub Browse and share Wago profiles", SearchKeywordList(SEARCH_DASHBOARD_WAGO_KEYWORDS, "wago profiles|browse wago profiles|share wago profiles|wago profile hub|wago link"), 320, },
             { "Support MSUF Development", false, "home", "MSUF2_SEARCH_TARGET_DASHBOARD_SUPPORT", "Support MSUF Development Patreon PayPal Ko-fi GitHub support links donate repository", SearchKeywordList(SEARCH_DASHBOARD_SUPPORT_KEYWORDS, "support links|donate|donation|support development|support msuf|patreon|paypal|ko-fi|kofi|github|repository"), 660, },
             { "Scaling", false, "home", "MSUF2_SEARCH_TARGET_DASHBOARD_SCALING", "Scaling UI Scale MSUF Frame Scale MSUF Menu Scale Apply Revert resize window bigger smaller", SearchKeywordList(SEARCH_DASHBOARD_SCALING_KEYWORDS, "scaling|ui scale|menu scale|msuf frame scale|msuf menu scale|make menu bigger|make menu smaller|resize window|options too big|options too small"), 760, DASHBOARD_ROUTE_SCALING, },
-            { "Changelog", false, "home", "MSUF2_SEARCH_TARGET_DASHBOARD_CHANGELOG", "Changelog release notes patch notes version changes beta notes", SearchKeywordList(SEARCH_DASHBOARD_CHANGELOG_KEYWORDS, "changelog|change log|release notes|patch notes|version notes|what changed|latest changes|beta notes"), 760, DASHBOARD_ROUTE_CHANGELOG, },
-            { "Highlight Borders", "Open Global Style > Bars. Textures & Gradient controls shared bar textures; Frame Outline and Highlight Borders control borders.", "opt_bars", false, "Highlight Borders Border Modes Dispel border Dispel border detects Highlight Priority Aggro border Purge border Boss target border", SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "where are highlight borders|where is dispel border|where is dispel overlay|change dispel highlight|change aggro highlight|highlight border settings|priority dispel aggro target focus"), 780, },
+            { "See New Features", "Opens the full in-game release history and feature links.", "changelog", false, "See New Features Changelog release notes patch notes version changes beta notes", SearchKeywordList(SEARCH_DASHBOARD_CHANGELOG_KEYWORDS, "see new features|changelog|change log|release notes|patch notes|version notes|what changed|latest changes|beta notes"), 760, },
+            { "Highlight Borders", "Open Appearance > Bars. Textures & Gradient controls shared bar textures; Frame Outline and Highlight Borders control borders.", "opt_bars", false, "Highlight Borders Border Modes Dispel border Dispel border detects Highlight Priority Aggro border Purge border Boss target border", SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "where are highlight borders|where is dispel border|where is dispel overlay|change dispel highlight|change aggro highlight|highlight border settings|priority dispel aggro target focus"), 780, },
             { "Dispel Overlay", "Tints the health bar when a configured debuff condition is active.", "gf_bars", false, "Dispel Overlay Overlay detects Overlay style Show on current health only Overlay opacity health bar tint dispellable debuff any debuff", SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "where is dispel overlay|health bar changes color for dispel|raid frame tint dispel|party frame tint dispel|party overlay any debuff"), 740, },
             { "Debuff Stripe", "Shows a thin colored stripe for debuffs matched by the debuff filter.", "gf_bars", false, "Debuff Stripe Stripe edge Stripe height Stripe opacity debuff filter colored stripe", SearchKeywordList(SEARCH_DEBUFF_STRIPE_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "where is debuff stripe|thin debuff indicator|colored line for debuffs|raid debuff line"), 730, },
         },
@@ -96,10 +96,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I move party or raid frames?",
-                a = "Open Group Frames > Layout. Use Layout, Frame Scaling, and Anchoring for party/raid position," ..
+                a = "Open Frames > Party/Raid Frames > Layout. Use Layout, Frame Scaling, and Anchoring for party/raid position," ..
                     " growth, spacing, size, and anchor behavior.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout > Anchoring",
+                t = "Opens: Frames > Party/Raid Frames > Layout > Anchoring",
                 x = "Anchoring Layout Frame Scaling growth direction spacing columns position move party raid",
                 k = SearchKeywordList(
                     "move raid frames|move party frames|move group frames|raidframes position|partyframes position",
@@ -110,11 +110,11 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I turn off party or raid frames?",
-                a = "Open Group Frames > Layout, choose Party, Raid, or Mythic at the top, then turn off Use MSUF" ..
+                a = "Open Frames > Party/Raid Frames > Layout, choose Party, Raid, or Mythic at the top, then turn off Use MSUF" ..
                     " group frames. Use If this switch is off to choose whether Blizzard frames show normally or" ..
                     " both frame systems stay hidden.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout > Frame Basics",
+                t = "Opens: Frames > Party/Raid Frames > Layout > Frame Basics",
                 x = "General Use MSUF group frames If this switch is off enable disable turn off hide raid party" ..
                     " mythic",
                 k = SearchKeywordList(
@@ -130,8 +130,8 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I resize a unit frame?",
-                a = "Open that unit page and use Frame Basics for width, height, and scale. Text size is in Global" ..
-                    " Style > Fonts or the unit Text section.",
+                a = "Open that unit page and use Frame Basics for width, height, and scale. Text size is in" ..
+                    " Appearance > Fonts or the unit Text section.",
                 p = "uf_player",
                 t = "Opens: Player > Frame Basics",
                 x = "Frame Basics width height scale size player target focus boss pet",
@@ -144,10 +144,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I resize party or raid frames?",
-                a = "Open Group Frames > Layout. Frame Basics/Layout controls frame width, height, spacing, columns," ..
+                a = "Open Frames > Party/Raid Frames > Layout. Frame Basics/Layout controls frame width, height, spacing, columns," ..
                     " and growth; Frame Scaling controls scale behavior.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout",
+                t = "Opens: Frames > Party/Raid Frames > Layout",
                 x = "General Layout Frame Scaling width height spacing columns growth scale",
                 k = SearchKeywordList(
                     "resize raid frames|resize party frames|resize group frames|raid frame size|party frame size",
@@ -170,10 +170,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change castbars?",
-                a = "Use the unit page for per-unit castbar toggles and Global Style > Castbar for shared textures," ..
+                a = "Use the unit page for per-unit castbar toggles and Appearance > Cast Bars for shared textures," ..
                     " direction, text, and interrupt options.",
                 p = "opt_castbar",
-                t = "Opens: Global Style > Castbar",
+                t = "Opens: Appearance > Cast Bars",
                 x = "Castbar Textures & Outline Focus Kick Interrupt Ready Indicator",
                 k = SearchKeywordList(
                     "castbar|cast bar|interrupt|focus kick|channel ticks|zauberleiste|castbar texture",
@@ -183,10 +183,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where are Evoker empowered cast settings?",
-                a = "Open Global Style > Castbar and use Empowered Casts for Evoker stage color, stage blink, and" ..
+                a = "Open Appearance > Cast Bars and use Empowered Casts for Evoker stage color, stage blink, and" ..
                     " blink timing.",
                 p = "opt_castbar",
-                t = "Opens: Global Style > Castbar > Empowered Casts",
+                t = "Opens: Appearance > Cast Bars > Empowered Casts",
                 x = "Empowered Casts Evoker stage blink empower hold release",
                 k = SearchKeywordList(
                     "evoker castbar|evoker cast bar|empowered casts|empower|empower stage|stage blink|hold cast",
@@ -196,10 +196,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where are Demon Hunter interrupt and castbar settings?",
-                a = "Open Global Style > Castbar for Focus Kick and Interrupt Ready Indicator. Per-unit castbar" ..
+                a = "Open Appearance > Cast Bars for Focus Kick and Interrupt Ready Indicator. Per-unit castbar" ..
                     " interrupt toggles are on each unit page.",
                 p = "opt_castbar",
-                t = "Opens: Global Style > Castbar > Interrupt Ready Indicator",
+                t = "Opens: Appearance > Cast Bars > Interrupt Ready Indicator",
                 x = "Interrupt Ready Indicator Focus Kick Demon Hunter devour consume magic disrupt kick",
                 k = SearchKeywordList(
                     "devour demonhunter castbar|devour demon hunter castbar|dh castbar|demon hunter interrupt",
@@ -210,16 +210,18 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I make missing health white in Dark Mode?",
-                a = "Set Bar Background Tint to white and enable Custom color in Dark Mode. If black, enable" ..
-                    " Preserve HP color on all unit frames.",
+                a = "Set Background Fill to Missing health only and Background Color to Custom tint. Then set" ..
+                    " Bar Background Tint to white and enable Custom color in Dark Mode.",
                 p = "opt_colors",
-                t = "Opens: Global Style > Colors > Bar Background Tint > Preserve HP color on all unit frames",
-                x = "Bar Background Tint Custom color in Dark Mode Preserve HP color missing health white background",
+                t = "Opens: Appearance > Colors > Bar Background Tint > Background Fill",
+                x = "Background Fill Missing health only Background Color Custom tint Bar Background Tint" ..
+                    " Custom color in Dark Mode missing health white background",
                 k = SearchKeywordList(
                     "is there a way to change the background color of unit frames|change background color unit frames",
                     "unit frame background color|missing health white|missing hp white|dark mode white background",
+                    "background fill|missing health only|background color mode|custom tint|health gradient",
                     "custom color in dark mode|bar background tint white|singular global color",
-                    "background color dark mode|preserve hp color|hp track black|target frame background black",
+                    "background color dark mode|hp track black|target frame background black",
                     "empty health area black|backgroud color|backgrond color|backround color|bg color white",
                     "hintergrund weiss"
                 ),
@@ -227,17 +229,18 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change my background?",
-                a = "For bar backgrounds: Bar Background Tint. White in Dark Mode needs Custom color in Dark Mode;" ..
-                    " black track? check Preserve HP color.",
+                a = "Choose Background Fill and Background Color under Bar Background Tint. Texture stays under" ..
+                    " Appearance > Bars, while each frame's Transparency > Background controls opacity.",
                 p = "opt_colors",
-                t = "Opens: Global Style > Colors > Bar Background Tint",
-                x = "Bar Background Tint Custom color in Dark Mode background backgrond backround bg backdrop" ..
-                    " opacity alpha",
+                t = "Opens: Appearance > Colors > Bar Background Tint",
+                x = "Background Fill Background Color Custom tint Match health bar Class color Health gradient" ..
+                    " Bar Background Tint Custom color in Dark Mode background texture opacity alpha",
                 k = SearchKeywordList(
                     "how do i change my backgrond|how do i change my background|change background|change backgrond",
                     "backround|backgroud|background color|bar background|background tint|bg color|backdrop|opacity",
-                    "alpha|transparent background|hintergrund|custom color in dark mode|missing health white",
-                    "dark mode background|preserve hp color|hp track black"
+                    "background fill|full bar|missing health only|background color mode|custom tint|match health bar",
+                    "class color|health gradient|background texture|alpha|transparent background|hintergrund",
+                    "custom color in dark mode|missing health white|dark mode background|hp track black"
                 ),
                 y = 70,
             },

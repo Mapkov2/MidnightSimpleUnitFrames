@@ -1072,24 +1072,198 @@ local function DisplayLabel(descriptor)
     return attribute:sub(1, 1):upper() .. attribute:sub(2):lower()
 end
 
+local COMPACT_CONTROL_SEGMENT_LABELS = {
+    cooldowntextsize = "Cooldown Text Size",
+    stacktextsize = "Stack Text Size",
+    portraitborderstyle = "Portrait Border Style",
+    fontoutline = "Font Outline",
+    borderopacity = "Border Opacity",
+    tintopacity = "Tint Opacity",
+    fullframe = "Full Frame",
+    customcontainer = "Custom Container",
+}
+
+-- Control paths and state ids are stable descriptor data, but their raw form is
+-- implementation vocabulary. Convert only readable segments; if a compact
+-- identifier has no known word boundary, leave it out and let the final ordinal
+-- disambiguator do its display-only job instead of showing an internal id.
+local function HumanDescriptorSegment(value)
+    value = Trim(value):lower()
+    if value == "" or value == "*" or value == "base" then return "" end
+    local compact = value:gsub("[-_ ]", "")
+    if COMPACT_CONTROL_SEGMENT_LABELS[compact] then return COMPACT_CONTROL_SEGMENT_LABELS[compact] end
+    if value:match("^[a-z]+$") and #value > 12 then return "" end
+    value = value:gsub("[-_]+", " "):gsub("(%a)(%d+)", "%1 %2")
+    value = value:gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+    if value == "" or value:find("[^%w ]") then return "" end
+    return (value:gsub("(%a)([%w]*)", function(first, rest)
+        return first:upper() .. rest
+    end))
+end
+
 -- The first control-path segment that differs between two look-alike rows, as
--- a short human hint ("overlay" vs "symbol").
+-- a short human hint ("Overlay" vs "Symbol").
 local function DistinguishingSegment(row, other)
     local mine, theirs = {}, {}
     for segment in tostring(row and row.controlPath or ""):gmatch("[^/]+") do mine[#mine + 1] = segment end
     for segment in tostring(other and other.controlPath or ""):gmatch("[^/]+") do theirs[#theirs + 1] = segment end
     for i = 1, #mine do
-        if mine[i] ~= theirs[i] then return (mine[i]:gsub("[-_]", " ")) end
+        if mine[i] ~= theirs[i] then return HumanDescriptorSegment(mine[i]) end
     end
     return ""
 end
 
+local function CanonicalMenuBreadcrumb(pageKey)
+    pageKey = tostring(pageKey or "")
+    local function HumanMenuText(value)
+        value = Trim(value)
+        if value == "" or value == pageKey or Normalize(value) == Normalize(pageKey) then return "" end
+        return value
+    end
+    if type(M.GetMenuBreadcrumb) == "function" then
+        local breadcrumb = HumanMenuText(M.GetMenuBreadcrumb(pageKey))
+        if breadcrumb ~= "" then return breadcrumb end
+    end
+    if type(M.GetMenuPageLabel) == "function" then
+        local label = HumanMenuText(M.GetMenuPageLabel(pageKey))
+        if label ~= "" then return label end
+    end
+    -- Headless/runtime fixtures can have the real registered page model but no
+    -- rendering API. A page title is still human-facing Menu2 data and is safer
+    -- than ever exposing pageKey in a choice.
+    local spec = type(M.pages) == "table" and M.pages[pageKey] or nil
+    local title = type(spec) == "table" and HumanMenuText(spec.title) or ""
+    if title ~= "" then return title end
+    return "MSUF options"
+end
+
+local function DescriptorLocationHint(row)
+    local page = CanonicalMenuBreadcrumb(row and row.pageKey)
+    if page ~= "" and page ~= "MSUF options" then return page end
+    -- Generated help carries a human breadcrumb even when Menu2's breadcrumb
+    -- functions are unavailable. Keep the extraction deliberately narrow so
+    -- arbitrary help prose never becomes a choice identity.
+    local help = tostring(row and row.help or "")
+    local location = help:match("Available on the (.-) page")
+    return Trim(location or "")
+end
+
+local function DescriptorStateHint(row)
+    for state in tostring(row and row.states or ""):gmatch("[^,]+") do
+        state = Trim(state)
+        if state ~= "" and state ~= "*" and state ~= "base" then
+            local words = {}
+            for segment in state:gmatch("[^_%-]+") do
+                local normalized = segment:lower()
+                if normalized ~= "unit" and normalized ~= "group" and normalized ~= "compat" then
+                    local human = HumanDescriptorSegment(segment)
+                    if human ~= "" then words[#words + 1] = human end
+                end
+            end
+            if #words > 0 then return table.concat(words, " ") end
+        end
+    end
+    -- Context ids are normally CLASS-SPECID. The class name is readable; the
+    -- numeric spec id is not, so it is intentionally discarded.
+    for context in tostring(row and row.contexts or ""):gmatch("[^,]+") do
+        local class = Trim(context):match("^([A-Za-z_]+)%-%d+$")
+        if class then
+            local human = HumanDescriptorSegment(class)
+            if human ~= "" then return human end
+        end
+    end
+    return ""
+end
+
+local function ChoiceBaseLabel(row)
+    local label = tostring(DisplayLabel(row) ~= "" and DisplayLabel(row)
+        or row.matchedValue or "")
+    if label == tostring(row.semanticId or "") or label == tostring(row.controlId or "")
+        or label == tostring(row.pageKey or "") or label:find("^setting:")
+        or label:find("^action:") or label:find("^menu2%.")
+    then label = "" end
+    local page = CanonicalMenuBreadcrumb(row.pageKey)
+    if label == "" then label = "Option" end
+    if page == "" or label:find(page, 1, true) or page:find(label, 1, true) then return label end
+    return label .. " - " .. page
+end
+
+local function AddChoiceHint(out, seen, baseLabel, hint)
+    hint = Trim(hint)
+    local normalized = Normalize(hint)
+    if hint == "" or normalized == "" or seen[normalized]
+        or Normalize(baseLabel):find(normalized, 1, true)
+    then return end
+    seen[normalized] = true
+    out[#out + 1] = hint
+end
+
+-- Make the complete shortlist unique, not merely each row relative to the
+-- first collision it encounters. This matters for 3+ candidates where two rows
+-- share a page and lane while a third differs only by page. Exact setting or
+-- semantic identity remains on the choice object; these labels are display
+-- text only and never participate in execution.
+local function UniqueChoiceLabels(rows, count)
+    local bases, hints, details, cursors, labels = {}, {}, {}, {}, {}
+    for i = 1, count do
+        local row = rows[i]
+        local base = ChoiceBaseLabel(row)
+        bases[i], hints[i], details[i], cursors[i] = base, {}, {}, 1
+        local seen = {}
+        AddChoiceHint(hints[i], seen, base, DescriptorLocationHint(row))
+        for otherIndex = 1, count do
+            if otherIndex ~= i and ChoiceBaseLabel(rows[otherIndex]) == base then
+                AddChoiceHint(hints[i], seen, base, DistinguishingSegment(row, rows[otherIndex]))
+            end
+        end
+        local lane = tostring(row and row.controlPath or ""):match("/lane/([^/]+)")
+        AddChoiceHint(hints[i], seen, base, HumanDescriptorSegment(lane))
+        local tail = tostring(row and row.controlPath or ""):match("([^/]+)$")
+        AddChoiceHint(hints[i], seen, base, HumanDescriptorSegment(tail))
+        AddChoiceHint(hints[i], seen, base, DescriptorStateHint(row))
+        labels[i] = base
+    end
+
+    local function Render(index)
+        if #details[index] == 0 then return bases[index] end
+        return bases[index] .. " (" .. table.concat(details[index], "; ") .. ")"
+    end
+
+    while true do
+        local counts, duplicate = {}, false
+        for i = 1, count do counts[labels[i]] = (counts[labels[i]] or 0) + 1 end
+        local progressed = false
+        for i = 1, count do
+            if counts[labels[i]] > 1 then
+                duplicate = true
+                local hint = hints[i][cursors[i]]
+                if hint then
+                    cursors[i] = cursors[i] + 1
+                    details[i][#details[i] + 1] = hint
+                    labels[i] = Render(i)
+                    progressed = true
+                end
+            end
+        end
+        if not duplicate or not progressed then break end
+    end
+
+    local counts = {}
+    for i = 1, count do counts[labels[i]] = (counts[labels[i]] or 0) + 1 end
+    for i = 1, count do
+        if counts[labels[i]] > 1 then
+            -- Last-resort fail-closed display suffix. The index is the same
+            -- deterministic shortlist ordinal the player selects; no internal
+            -- page key, control id, semantic id, or context id leaks into text.
+            details[i][#details[i] + 1] = "Choice " .. tostring(i)
+            labels[i] = Render(i)
+        end
+    end
+    return labels
+end
+
 local function PageBreadcrumb(descriptor)
-    local pageKey = tostring(descriptor and descriptor.pageKey or "")
-    local page = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(pageKey)
-        or pageKey:gsub("_", " ")
-    if page == "" then page = "MSUF options" end
-    return tostring(page)
+    return CanonicalMenuBreadcrumb(descriptor and descriptor.pageKey)
 end
 
 local function HumanPath(descriptor)
@@ -1536,9 +1710,9 @@ local function ModeListResult(normalized)
     local lines = { "I can start or open " .. tostring(#modes) .. " test and preview controls in your current context:" }
     for i = 1, limit do
         local mode = modes[i]
-        local page = tostring(mode.pageKey or ""):gsub("_", " ")
+        local page = CanonicalMenuBreadcrumb(mode.pageKey)
         lines[#lines + 1] = tostring(i) .. ". " .. tostring(mode.label or mode.semanticId)
-            .. (page ~= "" and (" - " .. page) or "")
+            .. (page ~= "MSUF options" and (" - " .. page) or "")
     end
     if limit < #modes then lines[#lines + 1] = "Ask 'list all test modes' to show the complete inventory." end
     return { text = table.concat(lines, "\n"), status = "info", summary = "MSUF test and preview modes", modes = modes }
@@ -1955,37 +2129,14 @@ function Schema.TryConversation(text)
         -- is space-padded for whole-phrase matching and is not what the value
         -- parser expects.
         local valueText = Normalize(text)
-        -- Candidates in this lane routinely share one label ("Opacity" on three
-        -- different aura pages). A numbered list of identical names is no more
-        -- answerable than no list at all, so every entry carries the page that
-        -- tells them apart.
-        local function ChoiceBaseLabel(row)
-            local label = tostring(DisplayLabel(row) ~= "" and DisplayLabel(row)
-                or row.matchedValue or row.semanticId or "")
-            local pageKey = tostring(row.pageKey or "")
-            local page = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(pageKey)
-                or pageKey:gsub("_", " ")
-            page = tostring(page or "")
-            if label == "" then return page ~= "" and page or "Option" end
-            if page == "" or label:find(page, 1, true) or page:find(label, 1, true) then return label end
-            return label .. " - " .. page
-        end
-
-        local function ChoiceLabel(row, rowIndex)
-            local label = ChoiceBaseLabel(row)
-            for otherIndex = 1, count do
-                if otherIndex ~= rowIndex and ChoiceBaseLabel(results[otherIndex]) == label then
-                    local hint = DistinguishingSegment(row, results[otherIndex])
-                    if hint ~= "" then return label .. " (" .. hint .. ")" end
-                end
-            end
-            return label
-        end
-
+        -- Candidates in this lane routinely share one label ("Opacity" on
+        -- several Aura pages). Build the whole display set together so every
+        -- numbered entry is answerable even when three or more rows collide.
+        local choiceLabels = UniqueChoiceLabels(results, count)
         local choices = {}
         for i = 1, count do
             local row = results[i]
-            local label = ChoiceLabel(row, i)
+            local label = choiceLabels[i]
             local settingKey = Trim(row.settingKey)
             local setting = settingKey ~= "" and Registry and type(Registry.GetSetting) == "function"
                 and Registry:GetSetting(settingKey) or nil

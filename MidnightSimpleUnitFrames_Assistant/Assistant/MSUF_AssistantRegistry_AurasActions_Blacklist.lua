@@ -59,7 +59,7 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         local Model = AuraModel()
         local scope = args and args.scope
         if not (Model and type(Model.AddBlacklistSpell) == "function") then
-            return nil, nil, "Open Aura Filters first so I can edit the native hidden-aura list."
+            return nil, nil, "The frame-local Aura data is unavailable right now, so I cannot edit the hidden-aura list. No settings were changed."
         end
         if not UnitScope(scope) then
             return nil, nil, "Choose Player, Target, Focus, or Boss so I know which unit-frame aura list to edit."

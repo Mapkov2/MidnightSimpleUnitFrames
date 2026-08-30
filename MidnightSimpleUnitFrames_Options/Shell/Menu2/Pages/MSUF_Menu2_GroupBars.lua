@@ -995,7 +995,7 @@ local function BuildGFDebuffStripeSection(ctx, b)
     local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripeCard, "Debuff Stripe", stripeCardW - 62, -24, 0, "HIDDEN"), "debuffStripeEnabled", false, "visual")
     local stripeEdge = ScopeDropdown(ctx, stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260, "debuffStripeEdge", "BOTTOM", "visual", 16, -74, min(260, stripeCardW - 32))
     local stripeHeight = ScopeSlider(ctx, stripeCard, "Stripe height", 1, 8, 1, 300, "debuffStripeHeight", 3, "visual", 16, -126, min(360, stripeCardW - 72))
-    local stripeHint = W.Text(stripeCard, "Color and opacity are in Global Style > Colors > Group Frame Colors.", 16, -176, stripeCardW - 32, T.colors.muted)
+    local stripeHint = W.Text(stripeCard, "Color and opacity are in Appearance > Colors > Group Frame Colors.", 16, -176, stripeCardW - 32, T.colors.muted)
     if stripeHint.SetWordWrap then stripeHint:SetWordWrap(true) end
     local stripeControls = { stripeEdge, stripeHeight }
     local function RefreshStripeState()

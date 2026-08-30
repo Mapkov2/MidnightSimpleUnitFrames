@@ -1320,16 +1320,6 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
         return AuraDirectSettingChange("menu.auraStyleGFLane", value, "Aura Style Lane")
     end
-    if ContainsAny(text, AurasPhrases[99]) then
-        local setting = Registry and Registry:GetSetting("menu.auraFilterLane")
-        local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
-        return AuraDirectSettingChange("menu.auraFilterLane", value, "Aura Filter Lane")
-    end
-    if ContainsAny(text, AurasPhrases[100]) then
-        local setting = Registry and Registry:GetSetting("menu.aurasUXMode")
-        local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
-        return AuraDirectSettingChange("menu.aurasUXMode", value, "Aura Options View")
-    end
     if ContainsAny(text, AurasPhrases[101]) then
         local compactText = Compact(text)
         for i = 1, #AURA_BLACKLIST_PRESETS do

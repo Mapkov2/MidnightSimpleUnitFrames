@@ -316,7 +316,7 @@ local function BuildIndicatorsSection(ctx, b)
     if focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     local focusControls = {}
     AddScopeSlider(focusControls, focusCard, "Border Thickness", 1, 6, 1, rightW, "hlFocusSize", 2, "visual", -88)
-    local focusColorHint = W.Text(focusCard, "Focus color is in Global Style > Colors > Group Frame Colors.", 16, -142, rightW - 32, T.colors.muted)
+    local focusColorHint = W.Text(focusCard, "Focus color is in Appearance > Colors > Group Frame Colors.", 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
     local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -486, leftW, 202)
     if W.AttachContextColorReferences then
@@ -332,7 +332,7 @@ local function BuildIndicatorsSection(ctx, b)
     local groupBorderControls = {}
     AddScopeSlider(groupBorderControls, groupBorderCard, "Border Thickness", 1, 12, 1, leftW, "groupBorderSize", 1, "visual", -66)
     AddScopeSlider(groupBorderControls, groupBorderCard, "Padding", 0, 40, 1, leftW, "groupBorderPadding", 2, "visual", -116)
-    local groupBorderColorHint = W.Text(groupBorderCard, "Border color and opacity are in Global Style > Colors > Group Frame Colors.", 16, -168, leftW - 32, T.colors.muted)
+    local groupBorderColorHint = W.Text(groupBorderCard, "Border color and opacity are in Appearance > Colors > Group Frame Colors.", 16, -168, leftW - 32, T.colors.muted)
     if groupBorderColorHint.SetWordWrap then groupBorderColorHint:SetWordWrap(true) end
     local function RefreshIndicatorsState()
         local groupNumberEnabled = Bool(CurrentScope(), "showGroupNumber", false)
@@ -1617,7 +1617,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         VT("BOTTOM", "Bottom", "TOP", "Top"), "durationBarPosition", "BOTTOM")
     local durationDirection = BindChoice("Fill Mode", rightX + halfRight + 12, -674, halfRight,
         VT("REMAINING", "Remaining", "ELAPSED", "Elapsed"), "durationBarDirection", "REMAINING")
-    W.Text(section, Tr("Shape, border and shadow: Appearance > Aura Style > Buffs. All controls here remain Group-scope aware."),
+    W.Text(section, Tr("Shape, border and shadow: Appearance > Auras > Buffs. All controls here remain Group-scope aware."),
         leftX, -814, innerW, T.colors.muted)
 
     if M.AddTooltip then

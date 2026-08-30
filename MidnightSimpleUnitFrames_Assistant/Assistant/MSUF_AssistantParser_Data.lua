@@ -1541,5 +1541,36 @@ Data.ROOT_PARSER = {
         "redo", "redo last", "redo that", "redo this", "reapply", "reapply that",
         "apply it again", "do it again", "repeat undo", "wiederholen", "erneut anwenden",
     },
+        [821] = {
+        "background fill", "health background fill", "bar background fill", "background filling",
+        "missing health fill", "missing hp fill", "hintergrund fuellung",
+        "fehlende gesundheit fuellung", "fehlende hp fuellung",
+    },
+        [822] = {
+        "missing health", "missing hp", "missing health only", "missing hp only", "health deficit",
+        "only missing", "fehlende gesundheit", "fehlende hp", "nur fehlende gesundheit",
+    },
+        [823] = {
+        "full bar", "whole bar", "entire bar", "normal fill", "complete bar",
+        "voller balken", "ganzer balken",
+    },
+        [824] = {
+        "background color mode", "background colour mode", "health background color",
+        "health background colour", "bar background color source", "bar background colour source",
+        "background color source", "background colour source", "hintergrund farbmodus",
+    },
+        [825] = {
+        "custom tint", "custom background", "custom color", "custom colour",
+        "eigene farbe", "benutzerdefiniert",
+    },
+        [826] = {
+        "match health", "match hp", "same as health", "same as hp", "follow health", "follow hp",
+        "wie gesundheitsleiste", "wie hp leiste",
+    },
+        [827] = { "class color", "class colour", "class tint", "klassenfarbe" },
+        [828] = {
+        "health gradient", "hp gradient", "health color gradient", "health colour gradient",
+        "gesundheitsverlauf", "gesundheits gradient",
+    },
     },
 }

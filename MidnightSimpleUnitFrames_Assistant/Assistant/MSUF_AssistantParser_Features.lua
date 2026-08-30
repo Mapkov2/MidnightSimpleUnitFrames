@@ -2780,13 +2780,13 @@ local function ParseSupportWorkflow(text, raw)
     end
 
     if ContainsAny(text, FeaturesPhrases[329]) then
-        local action = Registry and Registry:GetAction("open_dashboard_panel")
+        local action = Registry and Registry:GetAction("open_changelog")
         return action and {
             kind = "action",
             action = action,
-            args = { panel = "changelog" },
+            args = {},
             label = "Open changelog",
-            summary = "Opens the Dashboard changelog.",
+            summary = "Opens the full See New Features page.",
         } or nil
     end
 
@@ -3607,7 +3607,8 @@ local function NameShorteningDotsDomainChoices(scope, noEllipsis, auraFirst, sta
             AddPage("opt_fonts", "Shortened-name ellipsis", "name shortening no ellipsis")
         end
     end
-    local auraPage = scope and scope:find("^gf_") and "gf_auras" or "auras3"
+    local auraPage = scope and scope:find("^gf_") and "gf_auras"
+        or (scope and scope ~= "shared" and ("uf_" .. tostring(scope)) or "uf_player")
     local indicatorPage = scope and scope:find("^gf_") and "gf_indicators"
         or (scope and scope ~= "shared" and ("uf_" .. tostring(scope)) or "uf_player")
     if auraFirst then AddPage(auraPage, "DoTs / debuff auras", "debuff aura filters") end

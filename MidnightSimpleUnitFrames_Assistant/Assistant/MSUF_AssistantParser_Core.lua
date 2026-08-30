@@ -1113,6 +1113,15 @@ local UNIT_ORDER = { "targettarget", "focustarget", "player", "target", "focus",
 local GROUP_ORDER = { "mythicraid", "party", "raid" }
 local ALL_UNITFRAMES = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
 local ALL_GROUPS = { "party", "raid", "mythicraid" }
+local UNIT_PAGE_KEYS = {
+    player = "uf_player",
+    target = "uf_target",
+    focus = "uf_focus",
+    targettarget = "uf_targettarget",
+    focustarget = "uf_focustarget",
+    pet = "uf_pet",
+    boss = "uf_boss",
+}
 -- These term buckets are shared across parser shards so "castbar", "class power", "group",
 -- and global bar commands do not each invent their own meaning for the same words.
 local CLASS_POWER_TERMS = {
@@ -1153,17 +1162,19 @@ local PAGE_TEXT_TARGETS = {
     { page = "classpower", label = "Class Resources", terms = CLASS_POWER_TERMS },
 
     { page = "gf_indicators", label = "Group Status & Indicators", terms = { "group status and indicators", "group indicators", "group indicator", "party indicators", "raid indicators", "group status icons", "raid status icons", "ready check", "summon icon", "role icon", "leader icon", "assist icon" } },
-    { page = "gf_auras", label = "Group Auras", terms = { "group auras", "group aura", "party auras", "raid auras", "group buffs", "group debuffs", "party buffs", "raid debuffs" } },
+    { page = "gf_auras", label = "Group Auras", terms = { "group auras", "group aura", "party auras", "party aura", "raid auras", "raid aura", "group buff", "group buffs", "group debuff", "group debuffs", "party buff", "party buffs", "party debuff", "party debuffs", "raid buff", "raid buffs", "raid debuff", "raid debuffs" } },
     { page = "gf_bars", label = "Group Dispel Overlay", terms = { "group dispel", "group dispel overlay", "party dispel overlay", "raid dispel overlay", "dispel overlay", "debuff stripe", "group effects", "party effects", "raid effects" } },
     { page = "gf_priority", label = "Priority Frames", terms = { "priority frames", "priority frame", "priority strip", "pinned frames", "pinned frame", "extra party frames", "extra raid frames", "co tank frames", "co-tank frames", "off tank frames", "off-tank frames", "prioritaetsframes", "prioritaetsrahmen" } },
     { page = "gf_layout", label = "Group Layout", terms = { "group layout", "party layout", "raid layout", "group health", "group text", "group resource", "group power", "group bars", "group range", "range fade", "party health", "party text", "party bars", "raid health", "raid text", "raid bars", "health and text", "group settings", "party settings", "raid settings", "group frames", "groupframes", "party frames", "raid frames", "mythic raid", "mythicraid", "gruppenframes", "group", "party", "raid" } },
 
-    { page = "auras3_filters", label = "Aura Filters", terms = { "aura filters", "aura filter", "filters", "blacklist", "aura blacklist", "blocked auras" } },
-    { page = "auras3_styling", label = "Aura Style", terms = { "aura style", "aura styling", "aura cooldown text", "aura borders" } },
-    { page = "auras3_debuffs", label = "Aura Debuffs", terms = { "debuff", "debuffs", "debuff settings", "debuff style" } },
-    { page = "auras3_custom", label = "Custom Auras", terms = { "custom aura", "custom auras", "tracked aura", "spell id aura", "full frame aura", "aura glow" } },
-    { page = "auras3_buffs", label = "Aura Buffs", terms = { "buff", "buffs", "buff settings", "buff style" } },
-    { page = "auras3", label = "Auras", terms = { "aura", "auras", "auren", "aura settings", "auren einstellungen" } },
+    { page = "auras3_styling", label = "Global Aura Appearance", auraRoute = "global_style", terms = { "global aura appearance", "global aura style", "aura icon theme", "buff icon theme", "debuff icon theme", "global aura icon", "global aura border", "global aura shadow" } },
+    { page = "opt_colors", label = "Colors", terms = { "aura cooldown text color", "aura cooldown safe color", "aura cooldown safe text color", "aura cooldown warning color", "aura cooldown warning text color", "aura cooldown urgent color", "aura cooldown urgent text color", "aura timer safe color", "aura timer warning color", "aura timer urgent color", "aura cooldown color buckets", "aura timer color buckets", "aura cooldown safe seconds", "aura cooldown warning seconds", "aura cooldown urgent seconds", "aura timer safe seconds", "aura timer warning seconds", "aura timer urgent seconds" } },
+    { page = "uf_player", label = "Frame Auras", auraRoute = "local", terms = { "aura filters", "aura filter", "filters", "blacklist", "aura blacklist", "blocked auras", "aura cooldown text", "cooldown text", "aura stack text", "stack text", "aura duration", "duration bar", "aura ordering", "aura order", "aura sorting", "aura sort" } },
+    { page = "auras3_styling", label = "Aura Style", auraRoute = "style", terms = { "aura style", "aura styling", "aura borders" } },
+    { page = "auras3_debuffs", label = "Aura Debuffs", auraRoute = "lane", terms = { "debuff", "debuffs", "debuff settings", "debuff style" } },
+    { page = "uf_player", label = "Player Auras", auraRoute = "content", terms = { "custom aura", "custom auras", "tracked aura", "spell id aura", "full frame aura", "aura glow" } },
+    { page = "auras3_buffs", label = "Aura Buffs", auraRoute = "lane", terms = { "buff", "buffs", "buff settings", "buff style" } },
+    { page = "auras3_styling", label = "Auras", auraRoute = "chooser", terms = { "aura", "auras", "auren", "aura settings", "aura options", "auren einstellungen" } },
 
     { page = "opt_castbar", label = "Cast Bars", terms = { "castbar", "castbars", "zauberleiste" } },
     { page = "opt_colors", label = "Colors", terms = { "colors", "colours", "color palette", "aura colors", "aura timer colors", "farben" } },
@@ -1770,10 +1781,139 @@ local function DetectAttribute(text, frameType)
     return nil
 end
 
+local function ExplicitCustomAuraNavigationPage(text)
+    local subject = text:match("^open%s+(.+)$")
+        or text:match("^show%s+me%s+(.+)$")
+        or text:match("^show%s+(.+)$")
+        or text:match("^go%s+to%s+(.+)$")
+        or text:match("^take%s+me%s+to%s+(.+)$")
+    if not subject then return nil end
+    subject = subject:gsub("^the%s+", "")
+        :gsub("%s+page$", ""):gsub("%s+menu$", "")
+        :gsub("%s+options$", ""):gsub("%s+settings$", "")
+    local scope = subject:match("^(.-)%s+custom%s+auras?%s*[123]?$")
+    if scope == "player" then return "uf_player", "Player Auras" end
+    if scope == "target" then return "uf_target", "Target Auras" end
+    if scope == "focus" then return "uf_focus", "Focus Auras" end
+    if scope == "boss" then return "uf_boss", "Boss Auras" end
+    if scope == "party" or scope == "raid" or scope == "mythic raid"
+        or scope == "mythicraid" or scope == "group"
+    then
+        return "gf_auras", "Group Auras"
+    end
+    return nil
+end
+
+-- A canonical UnitFrame/GroupFrame page still contains more than one Aura
+-- lane. Carry the proven scope and lane beside broad page navigation so Menu2
+-- can select the matching workspace instead of merely opening the frame page.
+-- An unscoped request deliberately returns no owner; PageForText remains the
+-- authority that decides whether active/recent Aura context is sufficient.
+local function AuraWorkspaceNavigationArgs(page, text)
+    local hasDebuff = ContainsAny(text, { "debuff", "debuffs", "harmful aura", "harmful auras" })
+    local hasBuff = ContainsAny(text, { "buff", "buffs", "helpful aura", "helpful auras" })
+    local lane
+    if hasBuff and hasDebuff then
+        lane = "both"
+    elseif hasDebuff then
+        lane = "debuff"
+    elseif hasBuff then
+        lane = "buff"
+    end
+    if not lane then return nil, nil end
+
+    local unit = tostring(page or ""):match("^uf_(player)$")
+        or tostring(page or ""):match("^uf_(target)$")
+        or tostring(page or ""):match("^uf_(focus)$")
+        or tostring(page or ""):match("^uf_(boss)$")
+    if unit then return unit, lane end
+    if page ~= "gf_auras" then return nil, nil end
+
+    local groups = DetectGroups(text)
+    -- Party/Raid/Mythic Raid is a finite owner. A phrase such as "all group
+    -- frames" intentionally carries no single scope and therefore must not be
+    -- collapsed to Party just because it is first in ALL_GROUPS.
+    if #groups == 1 then return groups[1], lane end
+    return nil, lane
+end
+
 local function PageForText(text)
+    -- A group-scope word such as "raid" also names Group Layout, and "Raid
+    -- Filter" is a real unit Custom-Aura toggle.  Explicit page navigation to
+    -- scoped Custom Auras must resolve the owning frame first so neither broad
+    -- Group Layout nor an exact filter alias can steal the destination.
+    local customPage, customLabel = ExplicitCustomAuraNavigationPage(text)
+    if customPage then return customPage, customLabel end
     for i = 1, #PAGE_TEXT_TARGETS do
         local spec = PAGE_TEXT_TARGETS[i]
-        if ContainsAny(text, spec.terms) then return spec.page, spec.label end
+        if ContainsAny(text, spec.terms) then
+            if spec.auraRoute then
+                local groups = DetectGroups(text)
+                if groups[1] then return "gf_auras", "Group Auras" end
+                local units = DetectUnits(text)
+                local unit = units[1]
+                if unit and (unit == "player" or unit == "target" or unit == "focus" or unit == "boss") then
+                    local unitLabel = A and type(A.DisplayUnitLabel) == "function" and A.DisplayUnitLabel(unit) or unit
+                    return UNIT_PAGE_KEYS[unit], tostring(unitLabel) .. " Auras"
+                end
+                -- These are the real global Buff/Debuff Appearance page names.
+                -- Keep them independently reachable when the player says Aura
+                -- Buffs/Aura Debuffs or explicitly says global; bare "buffs"
+                -- still needs an owning frame or recent Aura context.
+                if spec.auraRoute == "lane" and ContainsAny(text, {
+                    "global buff", "global buffs", "global debuff", "global debuffs",
+                    "aura buff", "aura buffs", "aura debuff", "aura debuffs",
+                }) then
+                    return spec.page, spec.label
+                end
+                if spec.auraRoute == "content" or spec.auraRoute == "local"
+                    or spec.auraRoute == "lane" or spec.auraRoute == "chooser"
+                then
+                    local activePage = tostring(M and M.activeKey or "")
+                    if activePage == "gf_auras" then return activePage, "Group Auras" end
+                    if activePage == "uf_player" or activePage == "uf_target"
+                        or activePage == "uf_focus" or activePage == "uf_boss"
+                    then
+                        return activePage, A.DisplayPageLabel and A.DisplayPageLabel(activePage, "Unit Auras") or "Unit Auras"
+                    end
+                    local context = A and type(A.GetContext) == "function" and A.GetContext() or nil
+                    local turn = type(context) == "table" and tonumber(context.turnSerial or context.lastTurnSerial) or nil
+                    local subjectTurn = type(context) == "table" and tonumber(context.lastSubjectTurn or context.lastMentionedTurn) or nil
+                    if turn and subjectTurn and turn - subjectTurn >= 0 and turn - subjectTurn <= 3 then
+                        local frameType = tostring(context.lastFrameType or "")
+                        local contextUnit = tostring(context.lastUnit or ""):lower()
+                        if frameType == "groupAura" then return "gf_auras", "Group Auras" end
+                        if frameType == "aura" and (contextUnit == "player" or contextUnit == "target"
+                            or contextUnit == "focus" or contextUnit:match("^boss"))
+                        then
+                            local contextPage = contextUnit:match("^boss") and "uf_boss" or ("uf_" .. contextUnit)
+                            return contextPage, A.DisplayPageLabel and A.DisplayPageLabel(contextPage, "Unit Auras") or "Unit Auras"
+                        end
+                        local lastSetting = tostring(context.lastSetting or "")
+                        local setting = lastSetting ~= "" and Registry and type(Registry.GetSetting) == "function"
+                            and Registry:GetSetting(lastSetting) or nil
+                        if type(setting) == "table" then
+                            local settingFrameType = tostring(setting.frameType or "")
+                            local settingUnit = tostring(setting.unit or ""):lower()
+                            if settingFrameType == "groupAura" or lastSetting:match("^gf_[^%.]+%.auras%.") then
+                                return "gf_auras", "Group Auras"
+                            end
+                            if settingFrameType == "aura" and (settingUnit == "player" or settingUnit == "target"
+                                or settingUnit == "focus" or settingUnit:match("^boss"))
+                            then
+                                local settingPage = settingUnit:match("^boss") and "uf_boss" or ("uf_" .. settingUnit)
+                                return settingPage, A.DisplayPageLabel and A.DisplayPageLabel(settingPage, "Unit Auras") or "Unit Auras"
+                            end
+                        end
+                    end
+                    -- Frame-local Aura requests need a frame. Returning no page
+                    -- lets the conversation layer ask for Player/Target/Focus/
+                    -- Boss or Party/Raid instead of guessing a global page.
+                    return nil, nil
+                end
+            end
+            return spec.page, spec.label
+        end
     end
     return nil, nil
 end
@@ -1781,7 +1921,7 @@ end
 local function FrameTypeForPage(page)
     if page == "profiles" then return "profiles" end
     if page == "opt_castbar" then return "castbar" end
-    if page == "auras3" or page == "auras3_buffs" or page == "auras3_debuffs" or page == "auras3_custom" or page == "auras3_rendering" or page == "auras3_styling" or page == "auras3_filters" then return "aura" end
+    if page == "auras3_buffs" or page == "auras3_debuffs" or page == "auras3_styling" then return "aura" end
     if page == "gf_layout" or page == "gf_bars" or page == "gf_auras" or page == "gf_indicators" or page == "gf_priority" then return "group" end
     if page == "opt_colors" then return "colors" end
     if page == "opt_fonts" then return "fonts" end
@@ -1793,14 +1933,7 @@ local function FrameTypeForPage(page)
 end
 
 local function UnitPageKey(unit)
-    if unit == "player" then return "uf_player" end
-    if unit == "target" then return "uf_target" end
-    if unit == "focus" then return "uf_focus" end
-    if unit == "targettarget" then return "uf_targettarget" end
-    if unit == "focustarget" then return "uf_focustarget" end
-    if unit == "pet" then return "uf_pet" end
-    if unit == "boss" then return "uf_boss" end
-    return nil
+    return UNIT_PAGE_KEYS[unit]
 end
 
 -- Classify prompts that describe a problem, request information, or ask for a
@@ -2120,7 +2253,7 @@ local function NonMutatingIntentAnswer(text)
         return {
             kind = "answer",
             status = "info",
-            text = "Aura filter planning\nI will not guess which buffs or debuffs are useless or important, because that depends on class, content, and preference. Open Aura Filters to inspect the available live filters, or name an exact filter and scope. I did not change any aura visibility setting.",
+            text = "Aura filter planning\nI will not guess which buffs or debuffs are useless or important, because that depends on class, content, and preference. Name Player, Target, Focus, Boss, Party, or Raid plus Buffs or Debuffs, then inspect that frame's Aura Options or name one exact filter. I did not change any aura visibility setting.",
             summary = "Keeps a subjective aura request read-only until the user chooses a concrete filter.",
         }
     end
@@ -2204,6 +2337,7 @@ P.DetectFrameType = DetectFrameType
 P.DetectDirection = DetectDirection
 P.DetectAttribute = DetectAttribute
 P.PageForText = PageForText
+P.AuraWorkspaceNavigationArgs = AuraWorkspaceNavigationArgs
 P.FrameTypeForPage = FrameTypeForPage
 P.UnitPageKey = UnitPageKey
 P.NonMutatingIntent = NonMutatingIntent

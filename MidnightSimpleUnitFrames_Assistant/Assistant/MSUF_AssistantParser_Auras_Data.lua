@@ -161,7 +161,9 @@ Data.AURAS_PARSER = {
         [97] = { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" },
         [98] = { "aura style lane", "aura style tab", "aura buffs tab", "aura debuffs tab" },
         [99] = { "aura filter lane", "aura filter tab", "aura buff filters tab", "aura debuff filters tab" },
-        [100] = { "aura settings view", "aura view", "aura settings mode", "basic aura settings", "advanced aura settings", "all aura settings" },
+        -- Retired Aura basic/advanced view.  Keep the numeric slot empty so
+        -- the generated phrase indices after it remain stable.
+        [100] = {},
         [101] = { "aura blacklist preset", "blacklist preset", "hidden aura preset" },
         [102] = {},
         [103] = { "custom aura caps", "custom caps", "aura caps override", "aura limits override", "custom aura layout", "custom layout", "aura layout override", "custom aura ignore", "custom ignore", "aura ignore list override" },

@@ -17,7 +17,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             ]])
 
         return Data.FAQRows({
-            { l = "Why can I not change something in combat?", a = "WoW blocks some protected frame changes in combat. Leave combat, then apply layout, anchoring, enable/disable, profile, or protected-frame changes.", p = "opt_misc", t = "Opens: Global Style > Miscellaneous", x = "combat lockdown protected frames settings in combat out of combat", k = "combat lockdown|cannot change in combat|can't change in combat|protected frame|blocked in combat|in combat settings|combat error|leave combat|why can't i move in combat", y = 50 },
+            { l = "Why can I not change something in combat?", a = "WoW blocks some protected frame changes in combat. Leave combat, then apply layout, anchoring, enable/disable, profile, or protected-frame changes.", p = "opt_misc", t = "Opens: Appearance > Miscellaneous", x = "combat lockdown protected frames settings in combat out of combat", k = "combat lockdown|cannot change in combat|can't change in combat|protected frame|blocked in combat|in combat settings|combat error|leave combat|why can't i move in combat", y = 50 },
         },
         {
             {
@@ -48,10 +48,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Why are party or raid frames not showing?",
-                a = "Open Group Frames > Layout. Check enable/show behavior, player/solo visibility, layout mode," ..
+                a = "Open Frames > Party/Raid Frames > Layout. Check enable/show behavior, player/solo visibility, layout mode," ..
                     " frame scaling, and anchoring.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout > Frame Basics",
+                t = "Opens: Frames > Party/Raid Frames > Layout > Frame Basics",
                 x = "General Layout show hide player solo party raid enable frame scaling anchoring",
                 k = SearchKeywordList(
                     "party frames not showing|raid frames not showing|group frames missing|party frames gone",
@@ -62,10 +62,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where do I make names shorter?",
-                a = "Open Global Style > Fonts > Name Shortening for unit names. Castbar spell name shortening is in" ..
-                    " Global Style > Castbar > Name Shortening.",
+                a = "Open Appearance > Fonts > Name Shortening for unit names. Castbar spell name shortening is in" ..
+                    " Appearance > Cast Bars > Name Shortening.",
                 p = "opt_fonts",
-                t = "Opens: Global Style > Fonts > Name Shortening",
+                t = "Opens: Appearance > Fonts > Name Shortening",
                 x = "Name Shortening names too long max name length castbar spell name shortening",
                 k = SearchKeywordList(
                     "name too long|names too long|shorten names|name shortening|long names|cut names|truncate names",
@@ -75,11 +75,11 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Why are group names still shortened when name shortening is off?",
-                a = "Global Style > Fonts has Shared settings plus per-scope font overrides. If Party or Raid uses" ..
+                a = "Appearance > Fonts has Shared settings plus per-scope font overrides. If Party or Raid uses" ..
                     " custom font settings, its Name Shortening can stay enabled even when Shared is off. Select" ..
                     " Party/Raid in Fonts or reset the font override.",
                 p = "opt_fonts",
-                t = "Opens: Global Style > Fonts > Name Shortening / scope override",
+                t = "Opens: Appearance > Fonts > Name Shortening / scope override",
                 x = "Name Shortening Use custom settings for this scope Overrides Party Raid group frame name" ..
                     " truncation font override shared changes",
                 k = SearchKeywordList(
@@ -131,10 +131,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I show party or raid frames while solo?",
-                a = "Open Group Frames > Layout and check the solo/player visibility options. That is where MSUF" ..
+                a = "Open Frames > Party/Raid Frames > Layout and check the solo/player visibility options. That is where MSUF" ..
                     " controls whether party-style frames appear when you are alone.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout > Frame Basics",
+                t = "Opens: Frames > Party/Raid Frames > Layout > Frame Basics",
                 x = "General show solo show player party raid group frames visibility",
                 k = SearchKeywordList(
                     "show party frames while solo|show raid frames while solo|solo raid frames|solo party frames",
@@ -145,10 +145,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I hide myself from party or raid frames?",
-                a = "Open Group Frames > Layout. Frame Basics and Sorting control player/self visibility and how" ..
+                a = "Open Frames > Party/Raid Frames > Layout. Frame Basics and Sorting control player/self visibility and how" ..
                     " player units are ordered in group frames.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout > Frame Basics",
+                t = "Opens: Frames > Party/Raid Frames > Layout > Frame Basics",
                 x = "General Show player Player first in role Sorting party raid self visibility",
                 k = SearchKeywordList(
                     "hide myself from party|hide player in party|hide self in party frames",
@@ -159,9 +159,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I show only my HoTs or buffs on party frames?",
-                a = "Open Group Frames > Auras > Buffs, then configure the native Player/Only Mine filter and placement there.",
+                a = "Open Frames > Party/Raid Frames > Auras > Buffs, then configure the native Player/Only Mine filter and placement there.",
                 p = "gf_auras",
-                t = "Opens: Group Frames > Auras",
+                t = "Opens: Frames > Party/Raid Frames > Auras",
                 x = "Buffs own buffs only mine HoTs healer buffs group frames",
                 k = SearchKeywordList(
                     "show only my buffs party|only my hots|only my HoTs|track my hots|track my heals|show my rejuv",
@@ -212,13 +212,13 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "How do I show only dispellable debuffs?", "Open the affected UnitFrame > Auras > Debuffs and enable the native Dispellable rule. For Party/Raid use Group Frames > Auras > Debuffs.", "uf_target", "Opens: Target > Auras", "Filters Status Indicators dispel magic curse poison disease debuffs debuff type border group frames", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "only dispellable debuffs|dispellable debuffs|dispel debuffs|magic debuff|curse debuff|poison debuff|disease debuff|debuff type border|debuff color border|show dispels|healer dispels"), 260, },
+            { "How do I show only dispellable debuffs?", "Open the affected UnitFrame > Auras > Debuffs and enable the native Dispellable rule. For Party/Raid use Frames > Party/Raid Frames > Auras > Debuffs.", "uf_target", "Opens: Target > Auras", "Filters Status Indicators dispel magic curse poison disease debuffs debuff type border group frames", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "only dispellable debuffs|dispellable debuffs|dispel debuffs|magic debuff|curse debuff|poison debuff|disease debuff|debuff type border|debuff color border|show dispels|healer dispels"), 260, },
         },
         {
             {
                 l = "How do I move or resize target, focus, or boss castbars?",
                 a = "Use MSUF Edit Mode to drag supported castbars. Per-unit castbar enable/icon/text options are on" ..
-                    " each unit page; shared castbar style is in Global Style > Castbar.",
+                    " each unit page; shared castbar style is in Appearance > Cast Bars.",
                 p = "home",
                 t = "Opens: Dashboard > MSUF Edit Mode",
                 x = "MSUF Edit Mode move castbars target castbar focus castbar boss castbar player castbar resize",
@@ -232,9 +232,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "How do I stop castbars covering party or raid frames?",
                 a = "MSUF group frames do not use per-player castbars over the health frame. For MSUF castbar" ..
-                    " positioning, use MSUF Edit Mode and Global Style > Castbar.",
+                    " positioning, use MSUF Edit Mode and Appearance > Cast Bars.",
                 p = "opt_castbar",
-                t = "Opens: Global Style > Castbar",
+                t = "Opens: Appearance > Cast Bars",
                 x = "Castbar position edit mode group frames party raid castbars over health",
                 k = SearchKeywordList(
                     "party castbar covering health|raid castbar over frame|castbar covers party frame",
@@ -246,7 +246,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "Why can I not unlock or drag buffs and debuffs?",
                 a = "MSUF Edit Mode moves frames and supported castbars. Aura icon placement is controlled from each" ..
-                    " unit page > Auras or Group Frames > Auras.",
+                    " unit page > Auras or Frames > Party/Raid Frames > Auras.",
                 p = "uf_player",
                 t = "Opens: Player > Auras",
                 x = "Auras aura position buffs debuffs edit mode drag unlock frames",
@@ -259,10 +259,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I make raid frames cleaner for healing?",
-                a = "Use Group Frames > Layout for frame size and spacing, Auras for Buff/Debuff placement, and" ..
+                a = "Use Frames > Party/Raid Frames > Layout for frame size and spacing, Auras for Buff/Debuff placement, and" ..
                     " Status & Indicators for fixed-position status icons.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout / Auras / Status & Indicators",
+                t = "Opens: Frames > Party/Raid Frames > Layout / Auras / Status & Indicators",
                 x = "Layout Auras Buffs Debuffs Status Indicators healer clean raid frames HoTs fixed positions",
                 k = SearchKeywordList(
                     "clean raid frames|healer raid frames|minimal raid frames|declutter raid frames",
@@ -273,10 +273,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change dead, offline, AFK, or ready-check indicators?",
-                a = "Open Group Frames > Status & Indicators for status icons, role/leader/assist, ready check, focus glow," ..
+                a = "Open Frames > Party/Raid Frames > Status & Indicators for status icons, role/leader/assist, ready check, focus glow," ..
                     " and other group-frame state indicators.",
                 p = "gf_indicators",
-                t = "Opens: Group Frames > Status & Indicators > Status Icons",
+                t = "Opens: Frames > Party/Raid Frames > Status & Indicators > Status Icons",
                 x = "Status Icons ready check dead ghost offline afk dnd leader assist role icon",
                 k = SearchKeywordList(
                     "dead icon|offline icon|afk icon|dnd icon|ghost icon|ready check icon|leader icon|assist icon",
@@ -286,10 +286,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I hide realm names or shorten player names?",
-                a = "Open Global Style > Fonts > Name Shortening. It controls name shortening globally; unit text" ..
+                a = "Open Appearance > Fonts > Name Shortening. It controls name shortening globally; unit text" ..
                     " placement is on each unit page > Text.",
                 p = "opt_fonts",
-                t = "Opens: Global Style > Fonts > Name Shortening",
+                t = "Opens: Appearance > Fonts > Name Shortening",
                 x = "Name Shortening realm names short names player names font text",
                 k = SearchKeywordList(
                     "hide realm names|remove realm names|short names|shorten player names|names too long",
@@ -299,9 +299,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I get class-colored health bars or names?",
-                a = "Open Global Style > Colors for class bar colors, unitframe colors, and Group Frame Colors.",
+                a = "Open Appearance > Colors for class bar colors, unitframe colors, and Group Frame Colors.",
                 p = "opt_colors",
-                t = "Opens: Global Style > Colors > Class Bar Colors",
+                t = "Opens: Appearance > Colors > Class Bar Colors",
                 x = "Class Bar Colors Unitframe Colors Group Health Colors class colored names health bars",
                 k = SearchKeywordList(
                     "class colored health|class colored names|class color names|class color health bars",

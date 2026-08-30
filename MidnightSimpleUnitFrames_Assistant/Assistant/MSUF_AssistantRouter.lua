@@ -183,11 +183,9 @@ R.PAGE_CONTEXT = {    uf_player = { prefix = "player", label = "Player" },
     gf_bars = { prefix = "group dispel overlay", label = "Group Dispel Overlay" },
     gf_indicators = { prefix = "group indicator", label = "Group Status & Indicators" },
     gf_auras = { prefix = "group aura", label = "Group Auras" },
-    auras3 = { prefix = "aura", label = "Auras" },
     auras3_buffs = { prefix = "aura buff", label = "Aura Buffs" },
     auras3_debuffs = { prefix = "aura debuff", label = "Aura Debuffs" },
     auras3_styling = { prefix = "aura style", label = "Aura Style" },
-    auras3_filters = { prefix = "aura filter", label = "Aura Filters" },
 }
 
 R.GROUP_CONTEXT_PAGES = {    gf_layout = true,
@@ -281,6 +279,14 @@ function R.IsExactGenericDiagnosticRequest(text)
         or norm == "show msuf status"
         or norm == "assistant status"
         or norm == "show assistant status"
+        or norm == "assistant current step"
+        or norm == "current assistant step"
+        or norm == "current step"
+        or norm == "show current step"
+        or norm == "show assistant current step"
+        or norm == "assistant step status"
+        or norm == "step status"
+        or norm == "what is the current step"
         or norm == "diagnostic report"
         or norm == "show diagnostic report"
         or norm == "diagnostik"
@@ -3724,7 +3730,7 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         "erzaehl mir etwas ueber auren", "erzaehle mir etwas ueber auren", "rede ueber auren",
     }) then
         return {
-            text = "Auras are in the MSUF Auras pages. I can guide or change lane visibility, no-expiration filtering, live filter tokens, exact SpellID/category lists, Custom Aura include lists, icon size/count/growth, cooldown and stack text, and visibility checks. Ask: open auras; filter target debuffs to ones I can dispel; hide permanent player buffs; why are target buffs hidden?",
+            text = "Aura Options and Style live on the frame they affect: Player, Target, Focus, Boss, or Group Auras for Party/Raid. Global Aura Appearance only controls the shared icon theme. I can guide or change lane visibility, no-expiration filtering, live filter tokens, exact SpellID/category lists, Custom Aura include lists, icon size/count/growth, cooldown and stack text, and visibility checks. Ask: open target auras; open group auras; open global aura appearance; why are target buffs hidden?",
             status = "info",
             summary = "Auras help",
         }
@@ -4344,7 +4350,7 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     end
 
     if R.ContainsAny(norm, R.READABILITY_AURA_TERMS) then
-        local openAction = "Open Auras"
+        local openAction = "Open Target | Open Group Auras"
         if R.ContainsAny(norm, { "party", "raid", "mythic raid", "group" }) then
             openAction = "Open Group Auras"
         elseif R.ContainsAny(norm, { "target" }) then
@@ -4361,7 +4367,7 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
             openAction .. " | Check target buffs"
         )
         if type(A.lastAssistantHelpContext) == "table" then
-            A.lastAssistantHelpContext.nextStep = "Start with the least destructive visible setting: open Auras and adjust the named lane's Icon Size first. Then tune spacing or count only if the icons are still crowded."
+            A.lastAssistantHelpContext.nextStep = "Start with the least destructive visible setting: name the affected frame, open that frame's Auras controls, and adjust the named lane's Icon Size first. Then tune spacing or count only if the icons are still crowded."
             A.RouterPersistHelpContext()
         end
         return reply
@@ -4523,9 +4529,9 @@ function R.TrySignalProblemShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.SIGNAL_DISPEL_TERMS) then
         return R.SignalProblemReply(
             "Dispel visibility help",
-            "For dispels, start with Aura Filters and Group Status & Indicators. MSUF can show dispellable debuffs, dispel borders, debuff stripes, group-frame health overlays, and group-frame aura visibility.",
-            "show only dispellable debuffs; open aura filters; test dispel border; set raid range fade to 40.",
-            "Open Aura Filters | Open Group Status & Indicators | Open Group Auras"
+            "For dispels, start with the affected frame's Aura Options and Group Status & Indicators. MSUF can show dispellable debuffs, dispel borders, debuff stripes, group-frame health overlays, and group-frame aura visibility.",
+            "show only dispellable raid debuffs; open target debuff filters; test dispel border; set raid range fade to 40.",
+            "Open Target | Open Group Status & Indicators | Open Group Auras"
         )
     end
 
@@ -4603,7 +4609,7 @@ function R.TryColorContrastShortcut(text)    local norm = R.Normalize(text)
             "Aura color and opacity help",
             "For aura readability, I can adjust aura cooldown text colors, stack text, icon sizing, and content filters. Exact hidden-aura lists are live too, subject to Blizzard's identity-filter restrictions. For faded or hard-to-read icons, start by naming the scope and lane.",
             "set aura safe timer color to white; set target buff icon size to 30; check target buffs.",
-            "Open Auras | Check target buffs"
+            "Open Target | Open Group Auras | Check target buffs"
         )
     end
 
@@ -6204,9 +6210,9 @@ function R.AuraScopeForDetailText(norm)
     return nil, nil, false
 end
 
-function R.AuraDetailPageForScope(groupScope, lane)
+function R.AuraDetailPageForScope(groupScope, lane, scopeLabel)
     if groupScope then return "Group Auras" end
-    return lane == "buff" and "Aura Buffs" or "Aura Debuffs"
+    return scopeLabel or "Player"
 end
 
 R.AURA_GROWTH_MUTATION_PHRASES = {
@@ -6499,6 +6505,8 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
     local wantsOn = R.WantsVisibilityOn(norm)
     local scope, scopeLabel, isGroupScope = R.AuraScopeForDetailText(norm)
     local lane, laneLabel, lanePlural = R.AuraLaneFromText(norm)
+    local auraOwnerPage = isGroupScope and "Group Auras" or scopeLabel
+    local auraOwnerCommand = isGroupScope and "open group auras" or (scope and ("open " .. scope) or nil)
 
     if R.AuraSpecificSpellRequest(norm) and scope and type(coreHandler) == "function" then
         local P = A.Parser or {}
@@ -6508,17 +6516,17 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
                 local laneText = lane and (" " .. laneLabel) or ""
                 return A.RouterAuraDetailReply(
                     scopeLabel .. laneText .. " hidden aura setting location",
-                    "Exact aura hiding is a live SpellID list in Aura Filters. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", choose the lane, then add or remove the exact SpellID. Blizzard may restrict identity filtering for some unit/reaction combinations. I did not change the frame or its power text.",
-                    "open aura filters; set " .. scope .. (lane and (" " .. lane:lower() .. " ") or " ") .. "raid filter on.",
-                    "Open Aura Filters | Check " .. scopeLabel .. " Auras"
+                    "Exact aura hiding is a live SpellID list in " .. auraOwnerPage .. " Aura Options. Open that workspace, choose the " .. scopeLabel .. " lane, then add or remove the exact SpellID. Blizzard may restrict identity filtering for some unit/reaction combinations. I did not change the frame or its power text.",
+                    auraOwnerCommand .. "; set " .. scope .. (lane and (" " .. lane:lower() .. " ") or " ") .. "raid filter on.",
+                    "Open " .. auraOwnerPage .. " | Check " .. scopeLabel .. " Auras"
                 )
             end
             local laneText = lane and (" " .. lane:lower() .. "s") or " auras"
             return A.RouterAuraDetailReply(
                 scopeLabel .. (lane and (" " .. laneLabel) or " Aura") .. " specific spell filter",
                 "That looks like one specific aura (" .. tostring(value) .. "), not a request to hide the whole " .. scopeLabel .. " frame or lane. I can add an exact SpellID exclusion after you confirm the frame and Buff/Debuff lane; Blizzard may restrict identity filtering on some units. I did not change the frame.",
-                "open aura filters; set " .. scope .. (lane and (" " .. lane:lower()) or "") .. " raid filter on; where can I adjust " .. scope .. laneText .. " filters.",
-                "Open Aura Filters | Check " .. scopeLabel .. " Auras",
+                auraOwnerCommand .. "; set " .. scope .. (lane and (" " .. lane:lower()) or "") .. " raid filter on; where can I adjust " .. scope .. laneText .. " filters.",
+                "Open " .. auraOwnerPage .. " | Check " .. scopeLabel .. " Auras",
                 "info"
             )
         end
@@ -6528,8 +6536,8 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
         return A.RouterAuraDetailReply(
             scopeLabel .. " " .. laneLabel .. " specific icon filter",
             "That sounds like one specific " .. laneLabel:lower() .. " icon, not the whole " .. scopeLabel .. " " .. lanePlural .. " lane. Give me its SpellID and I can use the exact exclusion list when Blizzard permits identity filtering. I will not hide all " .. scopeLabel .. " " .. lanePlural .. " for one icon name.",
-            "open aura filters; set " .. scope .. " " .. lane:lower() .. " raid filter on; where can I adjust " .. scope .. " " .. lane:lower() .. " filters.",
-            "Open Aura Filters | Check " .. scopeLabel .. " " .. laneLabel,
+            auraOwnerCommand .. "; set " .. scope .. " " .. lane:lower() .. " raid filter on; where can I adjust " .. scope .. " " .. lane:lower() .. " filters.",
+            "Open " .. auraOwnerPage .. " | Check " .. scopeLabel .. " " .. laneLabel,
             "info"
         )
     end
@@ -6569,18 +6577,18 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
             local locationLabel = broadCooldownText and "Cooldown Text" or "Stack Text"
             return A.RouterAuraDetailReply(
                 scopeLabel .. " Aura " .. locationLabel .. " setting location",
-                scopeLabel .. " Aura " .. locationLabel .. " lives in Aura Style. Use Aura Style for cooldown/stack text size, visibility, anchor, and offsets for that unit scope, separate from Buff/Debuff icon layout.",
-                command .. "; open aura style.",
-                "Open Aura Style | " .. command
+                scopeLabel .. " Aura " .. locationLabel .. " lives under " .. scopeLabel .. " > Auras > Style. Cooldown/stack text size, visibility, anchor, and offsets are frame-local, separate from that lane's Aura Options.",
+                command .. "; open " .. scope .. ".",
+                "Open " .. scopeLabel .. " | " .. command
             )
         end
-        local result = R.CoreControl(coreHandler, command, scopeLabel .. " Aura " .. settingLabel .. " is in Aura Style.", "info")
+        local result = R.CoreControl(coreHandler, command, scopeLabel .. " Aura " .. settingLabel .. " is under " .. scopeLabel .. " > Auras > Style.", "info")
         if result then return result end
     end
 
     if not lane or not scope then return nil end
 
-    local page = R.AuraDetailPageForScope(isGroupScope, lane)
+    local page = R.AuraDetailPageForScope(isGroupScope, lane, scopeLabel)
     local function locationReply(settingLabel, command)
         return A.RouterAuraDetailReply(
             scopeLabel .. " " .. laneLabel .. " " .. settingLabel .. " setting location",
@@ -6604,7 +6612,7 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
             command = "turn on " .. scope .. " " .. lane .. " player filter"
         end
         if asksLocation then return locationReply("Player Filter", command) end
-        local result = run(command, scopeLabel .. " " .. laneLabel .. " Player Filter is in Aura Filters.")
+        local result = run(command, scopeLabel .. " " .. laneLabel .. " Player Filter is in " .. auraOwnerPage .. " Aura Options.")
         if result then return result end
     end
 
@@ -6616,7 +6624,7 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
             command = "turn on " .. scope .. " debuff dispellable filter"
         end
         if asksLocation then return locationReply("Dispellable Filter", command) end
-        local result = run(command, scopeLabel .. " Debuff Dispellable Filter is in Aura Filters.")
+        local result = run(command, scopeLabel .. " Debuff Dispellable Filter is in " .. auraOwnerPage .. " Aura Options.")
         if result then return result end
     end
 
@@ -6710,27 +6718,31 @@ A.RouterTryAuraSettingShortcut = function(norm, coreHandler)
     end
 
     if asksLocation and R.ContainsAny(norm, { "blacklist", "whitelist", "hidden aura", "hidden spell", "spell blacklist", "spell filter", "filter" }) then
+        local workspacePage = groupScope and "gf_auras" or ("uf_" .. tostring(unit))
+        local workspaceLabel = groupScope and "Group Auras" or scopeLabel
+        local openCommand = groupScope and "open group auras" or ("open " .. tostring(unit))
         local reply = A.RouterAuraProblemReply(
             scopeLabel .. " " .. laneLabel .. " Filter setting location",
-            scopeLabel .. " " .. laneLabel .. " filtering lives in Aura Filters. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", set Aura Filter Lane to " .. lanePlural .. ", then choose live tokens, Hide Permanent, or an exact SpellID list. Lane visibility and timer styling are separate controls.",
-            "open aura filters; set aura editing scope to " .. scope .. "; set aura filter lane to " .. lane:lower() .. "s; set " .. scope .. " " .. lane:lower() .. " raid filter on.",
-            "Open Aura Filters | Check " .. scopeLabel .. " " .. laneLabel
+            scopeLabel .. " " .. laneLabel .. " filtering lives on " .. workspaceLabel .. " under Auras > " .. lanePlural .. " > Filters/Blacklist. Choose live tokens, Hide Permanent, or an exact SpellID there. Lane visibility and timer styling are separate controls.",
+            openCommand .. "; set " .. scope .. " " .. lane:lower() .. " raid filter on; blacklist spell 12345 in " .. scope .. " " .. lane:lower() .. "s.",
+            "Open " .. workspaceLabel .. " | Check " .. scopeLabel .. " " .. laneLabel
         )
         reply.status = "info"
         reply.result = "info"
-        reply.searchResults = R.PageFollowupResults("auras3_filters", "Aura Filters", scopeLabel .. " " .. laneLabel .. " filtering lives in Aura Filters.")
+        reply.searchResults = R.PageFollowupResults(workspacePage, workspaceLabel,
+            scopeLabel .. " " .. laneLabel .. " filtering lives in this frame's Auras workspace.")
         return reply
     end
 
-    local page = groupScope and "Group Auras" or (lane == "buff" and "Aura Buffs" or "Aura Debuffs")
+    local page = groupScope and "Group Auras" or scopeLabel
     local settingLabel = scopeLabel .. " " .. laneLabel .. (kind == "visibility" and "s" or (" " .. kindLabel))
     local commandNoun = scope .. " " .. lane .. (kind == "visibility" and " visibility" or (" " .. kindLabel:lower()))
     if groupScope then commandNoun = scope .. " " .. lane .. (kind == "visibility" and "s" or (" " .. kindLabel:lower())) end
 
     if asksLocation then
-        local body = page .. " help: " .. settingLabel .. " lives on " .. page .. ". Open " .. page .. " and use the " .. settingLabel .. " control for that frame or group scope."
+        local body = page .. " Auras help: " .. settingLabel .. " lives under " .. page .. " > Auras. Open " .. page .. " and use the " .. settingLabel .. " control for that frame or group scope."
         if kind == "layout" then
-            body = page .. " help: " .. scopeLabel .. " " .. lanePlural .. " layout lives on " .. page .. ". Open " .. page .. " and use anchor, growth, X/Y offset, icon size, and per-row controls for that lane."
+            body = page .. " Auras help: " .. scopeLabel .. " " .. lanePlural .. " layout lives under " .. page .. " > Auras. Open " .. page .. " and use anchor, growth, X/Y offset, icon size, and per-row controls for that lane."
         end
         local navigationResult
         if displayOnly and type(coreHandler) == "function" then
@@ -7051,7 +7063,7 @@ A.RouterAuraProblemTerms = A.RouterAuraProblemTerms or {
 
 A.RouterAuraProblemReply = function(title, body, examples, actions)
     return {
-        text = tostring(title or "Aura help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open auras; check target buffs.") .. "\nYou can ask: " .. tostring(actions or "Open Auras | Open Aura Filters | Check target buffs"),
+        text = tostring(title or "Aura help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open target auras; open group auras; check target buffs.") .. "\nYou can ask: " .. tostring(actions or "Open Target | Open Group Auras | Check target buffs"),
         status = "info",
         summary = "Assistant aura help",
     }
@@ -7734,7 +7746,7 @@ function R.LooksLikeLiveUnitColorQuestion(text)
         })
 end
 
-function R.AuraDurationFilterQuestionReply(norm)
+function R.IsAuraDurationFilterQuestion(norm)
     norm = R.Normalize(norm)
     local durationIntent = R.ContainsAny(norm, {
         "permanent", "no timer", "without timer", "no duration", "without duration", "timeless",
@@ -7743,7 +7755,12 @@ function R.AuraDurationFilterQuestionReply(norm)
     local questionIntent = R.ContainsAny(norm, {
         "can you", "could you", "would you", "how can", "how do", "what filter", "which filter", "what are my choices",
     })
-    if not durationIntent or not auraIntent or not questionIntent then return nil end
+    return durationIntent and auraIntent and questionIntent
+end
+
+function R.AuraDurationFilterQuestionReply(norm)
+    norm = R.Normalize(norm)
+    if not R.IsAuraDurationFilterQuestion(norm) then return nil end
 
     local lane, laneLabel = R.AuraLaneFromText(norm)
     lane = lane or "buff"
@@ -7795,7 +7812,7 @@ function R.AuraRaidFilterRecommendationReply(norm)
         result = "info",
         text = table.concat(lines, "\n"),
         summary = "Recommends beginner-friendly aura filters for raid use.",
-        searchResults = R.PageFollowupResults and R.PageFollowupResults("auras3_filters", "Aura Filters", "Aura filter recommendations live in Aura Filters.") or nil,
+        searchResults = R.PageFollowupResults and R.PageFollowupResults("gf_auras", "Group Auras", "Raid filter recommendations are edited in Group Auras.") or nil,
     }
 end
 
@@ -7821,9 +7838,9 @@ function R.AuraFilterOverviewReply(norm)
         kind = "knowledge",
         title = "Aura filters, in normal words",
         examples = examples,
-        actions = "Open Aura Filters",
+        actions = "Open Target | Open Player | Open Group Auras",
         clarification = "Name the exact frame and Buff or Debuff lane before I change a live filter, so I do not guess wrong.",
-        nextStep = "Open Aura Filters to inspect the lists, or name a frame and lane before applying a live filter.",
+        nextStep = "Open the affected frame's Auras workspace to inspect its list, or name a frame and lane before applying a live filter.",
     }
     A.RouterPersistHelpContext()
     return {
@@ -7832,7 +7849,7 @@ function R.AuraFilterOverviewReply(norm)
         result = "info",
         text = table.concat(lines, "\n"),
         summary = "Explains aura filters for beginners.",
-        searchResults = R.PageFollowupResults and R.PageFollowupResults("auras3_filters", "Aura Filters", "Aura filters live on the Aura Filters page.") or nil,
+        searchResults = R.PageFollowupResults and R.PageFollowupResults("uf_target", "Target", "Target Aura filters live in the Target frame's Auras workspace.") or nil,
     }
 end
 
@@ -7944,6 +7961,12 @@ A.RouterTryAuraFilterStatusShortcut = function(norm)
     norm = R.Normalize(norm)
     if not R.AuraFilterStatusWantsAnswer(norm) then return nil end
 
+    -- Question-shaped permanent/no-duration requests are guided mutations, not
+    -- status reads. The Aura filtering planner offers the two safe executable
+    -- choices and owns the follow-up; answering here would strand that intent
+    -- in a read-only list of the lane's current filters.
+    if R.IsAuraDurationFilterQuestion and R.IsAuraDurationFilterQuestion(norm) then return nil end
+
     -- A question that names one exact control is about that control. Filter
     -- vocabulary appears inside plenty of unrelated labels ("Gameplay Enable
     -- Nameplate Counter"), and answering those with the generic aura-filter
@@ -7980,7 +8003,7 @@ A.RouterTryAuraFilterStatusShortcut = function(norm)
                 "Aura filter explanation",
                 R.AuraFilterEffectSentence(effect) .. "\nTo tell you whether it is active, name the scope and lane, for example Target Debuffs or Party Buffs.",
                 "what active target debuff filters do I have; is player buff raid filter on; set target debuff dispellable filter on.",
-                "Open Aura Filters | Check Target Debuffs"
+                "Open Target | Open Group Auras | Check Target Debuffs"
             )
         end
     end
@@ -8009,8 +8032,8 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
         local reply = A.RouterAuraProblemReply(
             "Masque aura skinning",
             "MSUF 6.0 deliberately does not register its aura buttons with Masque. Masque remains available to other addons, but it cannot skin MSUF auras. In MSUF, I can still change aura icon size, caps, borders, cooldown text, stack text, duration bars, and live filters.",
-            "open auras; set target buff icon size to 30; set aura cooldown text size to 14; open aura style.",
-            "Open Auras | Open Aura Style | Open Aura Filters"
+            "open target auras; set target buff icon size to 30; set target buff cooldown text size to 14; open global aura appearance.",
+            "Open Target | Open Global Aura Appearance | Open Group Auras"
         )
         reply.status = "info"
         reply.result = "info"
@@ -8037,13 +8060,13 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
         local scope = groupScope or unit or "target"
         local scopeLabel = groupLabel or unitLabel or "Target"
         local textLabel = R.ContainsAny(norm, { "stack text", "stack count", "count text" }) and "Stack Text" or "Cooldown Text"
-        local page = groupScope and "Group Auras" or "Aura Style"
-        local pageBody = groupScope and (page .. " and Aura Style") or "Aura Style"
+        local page = groupScope and "Group Auras" or scopeLabel
+        local pageBody = groupScope and "Group Auras > Style" or (scopeLabel .. " > Auras > Style")
         local reply = A.RouterAuraProblemReply(
             scopeLabel .. " Aura " .. textLabel .. " setting location",
-            scopeLabel .. " aura " .. textLabel .. " controls live in " .. pageBody .. ". Use cooldown/stack text visibility, font size, color, anchor, and offset controls there; lane-specific Buff/Debuff pages still control which icons are shown.",
-            "open aura style; set target buff cooldown text size to 14; show target buff stack text.",
-            "Open Aura Style | Open Auras | Open Aura Filters"
+            scopeLabel .. " aura " .. textLabel .. " controls live in " .. pageBody .. ". Use cooldown/stack text visibility, font size, color, anchor, and offset controls there; that same frame's Aura Options control which icons are shown.",
+            "open " .. scope:lower() .. "; set target buff cooldown text size to 14; show target buff stack text.",
+            "Open " .. page .. " | Check target buffs"
         )
         reply.status = "info"
         reply.result = "info"
@@ -8062,8 +8085,8 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
         return A.RouterAuraProblemReply(
             "Aura filter help",
             "Aura filters depend on the exact scope and lane: unit buffs, unit debuffs, group buffs, or group debuffs. Choose the frame/group and lane, then a goal: only mine, raid relevance, dispellable/CC, defensives, only timed, show all, or an exact SpellID/category list. I can guide that one choice at a time.",
-            "open aura filters; set aura editing scope to target; set target debuff dispellable filter on; check target buffs.",
-            "Open Aura Filters | Open Auras | Check target buffs | Open Group Auras"
+            "open target debuff filters; set target debuff dispellable filter on; check target buffs; open group auras.",
+            "Open Target | Check target buffs | Open Group Auras"
         )
     end
 
@@ -8071,8 +8094,8 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
         return A.RouterAuraProblemReply(
             "Aura layout help",
             "Aura position, side, growth direction, anchor, icon count, and offsets are scoped by frame and lane. Name the exact frame and buff/debuff lane when you want me to change it.",
-            "set target debuffs grow down; set target buff anchor to top right; open auras.",
-            "Open Auras | Open Group Auras | Check target buffs"
+            "set target debuffs grow down; set target buff anchor to top right; open target auras.",
+            "Open Target | Open Group Auras | Check target buffs"
         )
     end
 
@@ -8080,8 +8103,8 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
         return A.RouterAuraProblemReply(
             "Aura text visibility help",
             "Aura cooldown and stack text are separate from normal frame text. If they are missing, check aura cooldown text, stack text, font size, color, and lane-specific aura visibility for the affected frame.",
-            "set target buff cooldown text size to 14; show target buff stack text; open auras.",
-            "Open Auras | Open Aura Filters | Check target buffs"
+            "set target buff cooldown text size to 14; show target buff stack text; open target auras.",
+            "Open Target | Open Group Auras | Check target buffs"
         )
     end
 
@@ -12027,7 +12050,7 @@ A.RouterTryDecisionGuidanceShortcut = function(text, coreHandler)
             "Simple explanation help",
             "Name the MSUF setting, page, or result you want explained. Without that context, I would only be guessing.",
             "what is range fade; explain target buff cooldown text; open cast bars.",
-            "Open Player | Open Auras | Open Cast Bars"
+            "Open Player | Open Target | Open Group Auras | Open Cast Bars"
         )
     end
 
@@ -12251,16 +12274,16 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             return A.RouterSafePlanningReply(
                 "Aura text and cooldown comparison",
                 "Cooldown swipe is the radial visual cooldown overlay on an icon. Cooldown text is the timer number. Stack text is the stack count. Use swipe for quick visual timing, cooldown text for exact seconds, and stack text for aura stack decisions.",
-                "open auras; set target buff cooldown text size to 14; show target buff cooldown swipe; set target buff stack text size to 12.",
-                "Open Auras | Open Aura Style | Open Colors"
+                "open target auras; set target buff cooldown text size to 14; show target buff cooldown swipe; set target buff stack text size to 12.",
+                "Open Target | Open Group Auras | Open Colors"
             )
         end
         if R.ContainsAny(norm, { "growth direction", "anchor", "anchor point", "x offset", "y offset" }) then
             return A.RouterSafePlanningReply(
                 "Positioning option comparison",
                 "Anchor chooses what an element attaches to. X and Y offsets move it away from that anchor. Growth direction controls where repeated icons or groups add new entries. Set anchors first, then offsets, then growth direction.",
-                "open auras; move target buffs right 5; set raid growth direction down; set ready check anchor top right.",
-                "Open Auras | Open Group Layout | Open Group Status & Indicators"
+                "open target auras; move target buffs right 5; set raid growth direction down; set ready check anchor top right.",
+                "Open Target | Open Group Layout | Open Group Status & Indicators"
             )
         end
         if R.ContainsAny(norm, { "menu scale", "ui scale", "wow ui scale", "msuf frame scale", "frame scale" }) then
@@ -12299,8 +12322,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             return A.RouterSafePlanningReply(
                 "Aura system comparison",
                 "Aura layout controls where icons appear, how they grow, size, spacing, text, and caps. Content filters decide which buffs or debuffs appear: live tokens, permanent/no-expiration rules, exact SpellID/category lists, and Custom Aura include lists. Tune layout when icons look wrong; tune filtering when the wrong aura groups appear.",
-                "open auras; open aura filters; show only dispellable debuffs; set target debuff raid filter on.",
-                "Open Auras | Open Aura Filters | Check Target Buffs"
+                "open target auras; open group auras; show only dispellable raid debuffs; set target debuff raid filter on.",
+                "Open Target | Open Group Auras | Check Target Buffs"
             )
         end
         if R.ContainsAny(norm, { "castbar", "cast bar", "unit frame", "unit frames" }) then
@@ -12319,7 +12342,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
                 "Healer tracking guidance",
                 "Healers usually need readable Party/Raid health, range fade, dispellable debuffs, incoming heals, important buffs/debuffs, ready checks, and enough cast-bar information for interrupts or dangerous casts.",
                 "open group layout; open group dispel overlay; open group auras; show only dispellable debuffs; set raid range fade to 40.",
-                "Open Group Layout | Open Group Dispel Overlay | Open Group Auras | Open Aura Filters"
+                "Open Group Layout | Open Group Dispel Overlay | Open Group Auras"
             )
         end
         if R.ContainsAny(norm, { "tank", "tanks", "tanking" }) then
@@ -12334,7 +12357,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             "DPS tracking guidance",
             "DPS usually need Target and Focus readability, cast bars, class resources, important personal buffs/debuffs, enemy debuffs, interrupt feedback, and compact group context without clutter.",
             "open class resources; open cast bars; show focus kick tracker; set target debuff icon size to 30.",
-            "Open Class Resources | Open Cast Bars | Open Aura Filters | Open Target"
+            "Open Class Resources | Open Cast Bars | Open Target | Open Focus"
         )
     end
 
@@ -12374,8 +12397,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         return A.RouterSafePlanningReply(
             "Why Aura Filters matter",
             "Aura Filters reduce noise without disabling the whole lane. You can use player-only, raid, exclusive, dispellable, permanent/no-expiration, exact SpellID/category, or Custom Aura rules while keeping the lane visible. If the goal is unclear, I will ask for frame, Buffs/Debuffs, then what should remain.",
-            "open aura filters; show only dispellable debuffs; set target debuff raid filter on.",
-            "Open Aura Filters | Open Auras | Check Target Buffs"
+            "open target debuff filters; show only dispellable raid debuffs; set target debuff raid filter on.",
+            "Open Target | Open Group Auras | Check Target Buffs"
         )
     end
 
@@ -12383,8 +12406,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         return A.RouterSafePlanningReply(
             "Aura placement planning",
             "For most setups, Target and Focus should show important enemy debuffs and casts; Party/Raid should show healing-relevant debuffs, dispels, and critical group status; Player can show personal buffs and debuffs. Tell me the frame and aura type before I change visibility.",
-            "open auras; open group auras; show only dispellable debuffs; set target debuff icon size to 30.",
-            "Open Auras | Open Group Auras | Open Aura Filters"
+            "open target auras; open group auras; show only dispellable raid debuffs; set target debuff icon size to 30.",
+            "Open Target | Open Group Auras"
         )
     end
 
@@ -12397,8 +12420,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         return A.RouterSafePlanningReply(
             "Aura filter planning",
             "I will not guess which buffs or debuffs are useless or important, because that depends on class, content, and preference. I can guide you through frame, Buffs/Debuffs, and a goal such as only mine, raid relevance, dispellable, only timed, show all, or an exact SpellID/category rule.",
-            "open aura filters; show only dispellable debuffs; set target debuff raid filter on; set target debuff icon size to 30.",
-            "Open Aura Filters | Open Auras | Check Target Buffs"
+            "open target debuff filters; show only dispellable raid debuffs; set target debuff raid filter on; set target debuff icon size to 30.",
+            "Open Target | Open Group Auras | Check Target Buffs"
         )
     end
 
@@ -12406,8 +12429,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         return A.RouterSafePlanningReply(
             "Information density planning",
             "Reduce MSUF clutter by lowering aura counts first, then tuning aura filters, optional group status and indicators, and text density. I will not hide broad UI categories from a vague 'important info' request.",
-            "open aura filters; set target buff icon count to 8; make raid frames easier to read; open group status and indicators.",
-            "Open Aura Filters | Open Auras | Open Group Status & Indicators | Guided Setup"
+            "open target auras; set target buff icon count to 8; make raid frames easier to read; open group status and indicators.",
+            "Open Target | Open Group Auras | Open Group Status & Indicators | Guided Setup"
         )
     end
 
@@ -12417,8 +12440,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         return A.RouterSafePlanningReply(
             "Clutter planning",
             "Name the MSUF area that feels cluttered before I change anything. Once the area is clear, I can reduce icon count, spacing, text size, aura filters, indicators, or cast-bar detail without guessing.",
-            "make raid frames easier to read; make target buffs less noisy; open aura filters; open group status and indicators.",
-            "Guided Setup | Open Aura Filters | Open Group Status & Indicators | What Can I Change Here"
+            "make raid frames easier to read; make target buffs less noisy; open target auras; open group status and indicators.",
+            "Guided Setup | Open Target | Open Group Auras | Open Group Status & Indicators | What Can I Change Here"
         )
     end
 
@@ -12435,8 +12458,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         return A.RouterSafePlanningReply(
             "Minimal UI planning",
             "For a minimal MSUF setup, start by keeping Player, Target, Focus, Cast Bars, and core Party/Raid information readable, then reduce aura counts and optional indicators. I will not hide broad systems from a vague minimal-ui request.",
-            "guided setup; open aura filters; set target buff icon count to 8; open group status and indicators.",
-            "Guided Setup | Open Aura Filters | Open Group Status & Indicators | Run Checks"
+            "guided setup; open target auras; set target buff icon count to 8; open group status and indicators.",
+            "Guided Setup | Open Target | Open Group Auras | Open Group Status & Indicators | Run Checks"
         )
     end
 
@@ -12685,9 +12708,9 @@ function R.RoleGuidanceReply(text)    local norm = R.Normalize(text)
         }
     elseif role == "dps" then
         detail = "For DPS, prioritize Target, Focus, cast bars, class resources, important buffs/debuffs, and enough group visibility without clutter."
-        focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Layout."
+        focus = "Start in Target, Focus, Cast Bars, Class Resources, and Group Layout; Buff/Debuff filters live inside the affected Target or Focus Aura Options."
         examples = "show focus kick tracker; show kick ready on target; open class resources; set target buff icon size to 30."
-        actions = "Open Cast Bars | Open Class Resources | Open Aura Filters | Open Target"
+        actions = "Open Cast Bars | Open Class Resources | Open Target | Open Focus"
         reasons = {
             "Cast Bars expose the immediate interrupt and dangerous-cast information that most DPS decisions depend on.",
             "Class Resources come next because they affect rotation readability without changing group information.",
@@ -12730,29 +12753,29 @@ function R.ClassGuidanceReply(text)    local norm = R.Normalize(text)
 
     if classSpec.key == "rogue" then
         detail = "For Rogue UI, prioritize Class Resources, Target/Focus cast bars, important buffs/debuffs, and compact group visibility."
-        focus = "Start in Class Resources, Cast Bars, Aura Filters, Target, and Focus."
+        focus = "Start in Class Resources, Cast Bars, Target, and Focus; their Buff/Debuff filters live inside each frame's Aura Options."
         examples = "open class resources; show focus kick tracker; set target debuff icon size to 30."
-        actions = "Open Class Resources | Open Cast Bars | Open Aura Filters"
+        actions = "Open Class Resources | Open Cast Bars | Open Target | Open Focus"
     elseif classSpec.key == "shaman" then
         detail = "For Shaman UI, prioritize the Totem/Statue frame, Class Resources, Target/Focus cast bars, important buffs/debuffs, and group status if you heal."
-        focus = "Start in Gameplay, Class Resources, Cast Bars, Aura Filters, and Group Layout."
+        focus = "Start in Gameplay, Class Resources, Cast Bars, Target/Focus Aura Options, and Group Layout."
         examples = "show totem frame; make totem icons bigger; open class resources; set target debuff icon size to 30."
-        actions = "Open Gameplay | Open Class Resources | Open Cast Bars | Open Aura Filters"
+        actions = "Open Gameplay | Open Class Resources | Open Cast Bars | Open Target | Open Focus"
     elseif role == "healer" then
         detail = "For " .. label .. " healing UI, prioritize readable Party/Raid frames, dispel visibility, range fade, cast bars, important auras, and Class Resources where MSUF exposes them."
-        focus = "Start in Group Layout, Group Dispel Overlay, Group Status & Indicators, Group Auras, Aura Filters, Cast Bars, and Class Resources."
+        focus = "Start in Group Layout, Group Dispel Overlay, Group Status & Indicators, Group Auras, Cast Bars, and Class Resources."
         examples = "set raid range fade to 40; show only dispellable debuffs; set raid health text size to 14; open class resources."
         actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Status & Indicators | Open Group Auras | Open Class Resources"
     elseif role == "tank" then
         detail = "For " .. label .. " tank UI, prioritize Target, Target of Target, Boss frames, cast bars, debuffs, threat/status readability, and Class Resources where MSUF exposes them."
-        focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, Aura Filters, and Class Resources."
+        focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, the affected frame's Aura Options, and Class Resources."
         examples = "show target of target; open boss frames; set target cast bar height to 24; open class resources."
         actions = "Open Target | Open Target of Target | Open Boss Frames | Open Cast Bars"
     else
         detail = "For " .. label .. " UI, prioritize Player/Target readability, Cast Bars, Class Resources, important buffs/debuffs, and enough group visibility for the content you play."
-        focus = "Start in Player, Target, Cast Bars, Class Resources, Aura Filters, and Group Layout."
-        examples = "open class resources; open cast bars; set target debuff icon size to 30; open aura filters."
-        actions = "Open Class Resources | Open Cast Bars | Open Aura Filters | Open Target"
+        focus = "Start in Player, Target, Cast Bars, Class Resources, the affected frame's Aura Options, and Group Layout."
+        examples = "open class resources; open cast bars; set target debuff icon size to 30; open target auras."
+        actions = "Open Class Resources | Open Cast Bars | Open Target | Open Group Auras"
     end
 
     return A.RouterSafePlanningReply(
@@ -12776,17 +12799,17 @@ function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
     local detail, focus, examples, actions
     if context == "mythic+" then
         detail = "For Mythic+ and dungeon UI, prioritize Target/Focus cast bars, interrupts, boss frames, Party readability, dispel visibility, and important buffs/debuffs."
-        focus = "Start in Cast Bars, Group Layout, Group Dispel Overlay, Group Auras, Aura Filters, Target, and Focus."
+        focus = "Start in Cast Bars, Group Layout, Group Dispel Overlay, Group Auras, Target, and Focus; unit Buff/Debuff filters live inside those unit pages."
         examples = "show focus kick tracker; show kick ready on target; set party range fade to 40; set target debuff icon size to 30."
-        actions = "Open Cast Bars | Open Group Layout | Open Group Dispel Overlay | Open Group Auras | Open Aura Filters"
+        actions = "Open Cast Bars | Open Group Layout | Open Group Dispel Overlay | Open Group Auras | Open Target | Open Focus"
     elseif context == "pvp" then
         detail = "For PvP UI, prioritize Target, Focus, cast bars, class resources, key debuffs, trinket-adjacent visibility, and clean group frames without hiding critical text."
-        focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Status & Indicators."
-        examples = "show focus kick tracker; show kick ready on focus; open aura filters; make class resources wider."
-        actions = "Open Cast Bars | Open Focus | Open Aura Filters | Open Class Resources"
+        focus = "Start in Target, Focus, Cast Bars, Class Resources, their Aura Options, and Group Status & Indicators."
+        examples = "show focus kick tracker; show kick ready on focus; open focus auras; make class resources wider."
+        actions = "Open Cast Bars | Open Target | Open Focus | Open Class Resources"
     elseif context == "solo" then
         detail = "For solo and open-world UI, prioritize readable Player/Target frames, class resources, simple cast bars, Combat Timer, and only the auras you actively track."
-        focus = "Start in Player, Target, Class Resources, Gameplay, Cast Bars, and Aura Filters."
+        focus = "Start in Player, Target, Class Resources, Gameplay, Cast Bars, and the affected frame's Aura Options."
         examples = "open player; open class resources; show combat timer; set target buff icon size to 28."
         actions = "Open Player | Open Target | Open Class Resources | Open Gameplay"
     else
@@ -12823,9 +12846,9 @@ function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
 
     if role == "healer" and context == "mythic+" then
         detail = "For Mythic+ healing, prioritize Party health clarity, dispel visibility, range fade, Target/Focus cast feedback, and important buffs/debuffs."
-        focus = "Start in Group Layout, Group Dispel Overlay, Group Auras, Cast Bars, Aura Filters, and Focus."
+        focus = "Start in Group Layout, Group Dispel Overlay, Group Auras, Cast Bars, and Focus Aura Options."
         examples = "turn on party click casting; set party range fade to 40; show only dispellable debuffs; show focus kick tracker."
-        actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Auras | Open Cast Bars | Open Aura Filters"
+        actions = "Open Group Layout | Open Group Dispel Overlay | Open Group Auras | Open Cast Bars | Open Focus"
     elseif role == "healer" and context == "raid" then
         detail = "For raid healing, prioritize Raid/Mythic Raid health text, range fade, dispel overlays, debuff visibility, ready checks, and auras that affect healing decisions."
         focus = "Start in Group Layout, Group Dispel Overlay, Group Status & Indicators, and Group Auras."
@@ -12843,22 +12866,22 @@ function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Boss Frames | Open Target | Open Target of Target | Open Cast Bars"
     elseif role == "dps" and context == "mythic+" then
         detail = "For Mythic+ DPS, prioritize Target/Focus cast bars, interrupt-ready feedback, class resources, important debuffs, and compact Party awareness."
-        focus = "Start in Cast Bars, Class Resources, Target, Focus, Aura Filters, and Group Layout."
+        focus = "Start in Cast Bars, Class Resources, Target, Focus, their Aura Options, and Group Layout."
         examples = "show focus kick tracker; show kick ready on target; open class resources; set target debuff icon size to 30."
-        actions = "Open Cast Bars | Open Class Resources | Open Aura Filters | Open Focus"
+        actions = "Open Cast Bars | Open Class Resources | Open Target | Open Focus"
     elseif role == "dps" and context == "raid" then
         detail = "For raid DPS, prioritize Boss frames, cast bars, class resources, Target/Focus readability, important debuffs, and lighter Raid visibility."
-        focus = "Start in Boss Frames, Cast Bars, Class Resources, Target, Focus, and Aura Filters."
+        focus = "Start in Boss Frames, Cast Bars, Class Resources, Target, Focus, and the affected frame's Aura Options."
         examples = "open boss frames; show kick ready on target; open class resources; set target debuff icon size to 30."
-        actions = "Open Boss Frames | Open Cast Bars | Open Class Resources | Open Aura Filters"
+        actions = "Open Boss Frames | Open Cast Bars | Open Class Resources | Open Target | Open Focus"
     elseif context == "pvp" then
         detail = "For PvP with this role, prioritize Target and Focus readability, cast bars, class resources, key debuffs, interrupt feedback, and compact group status."
-        focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Status & Indicators."
-        examples = "show focus kick tracker; show kick ready on focus; open aura filters; make class resources wider."
-        actions = "Open Focus | Open Cast Bars | Open Aura Filters | Open Class Resources"
+        focus = "Start in Target, Focus, Cast Bars, Class Resources, their Aura Options, and Group Status & Indicators."
+        examples = "show focus kick tracker; show kick ready on focus; open focus auras; make class resources wider."
+        actions = "Open Target | Open Focus | Open Cast Bars | Open Class Resources"
     elseif context == "solo" then
         detail = "For solo play with this role, prioritize readable Player/Target frames, class resources, simple cast bars, Combat Timer, and a small set of useful auras."
-        focus = "Start in Player, Target, Class Resources, Cast Bars, Gameplay, and Aura Filters."
+        focus = "Start in Player, Target, Class Resources, Cast Bars, Gameplay, and the affected frame's Aura Options."
         examples = "open player; open class resources; show combat timer; set target buff icon size to 28."
         actions = "Open Player | Open Target | Open Class Resources | Open Gameplay"
     else
@@ -12973,19 +12996,21 @@ function R.TryPageOptionLocationShortcut(text, coreHandler)
     local label = R.PageLocationLabelForText(norm)
     if not label then return nil end
     local command = "open " .. label
+    local headingLabel = label
     if label == "Aura Buffs" or label == "Aura Debuffs" then
         local unit = R.ContainsAny(norm, { "target" }) and "target"
             or (R.ContainsAny(norm, { "focus" }) and "focus")
             or (R.ContainsAny(norm, { "player" }) and "player")
         if unit then
             command = "open " .. unit .. " " .. (label == "Aura Buffs" and "buffs" or "debuffs")
+            headingLabel = unit:sub(1, 1):upper() .. unit:sub(2)
         end
     end
     local result = coreHandler(command)
     if not result or A.RouterIsUnknownResult(result) then return nil end
     result = R.AsNavigationResult(result)
     local heading = R.ContainsAny(norm, { "looking for" })
-        and (tostring(label) .. " help") or ("Opened " .. tostring(label))
+        and (tostring(headingLabel) .. " Auras help") or ("Opened " .. tostring(headingLabel))
     result.text = heading .. "\n" .. tostring(result.text or "")
     return result
 end
@@ -14422,6 +14447,12 @@ function R.RegistryActionItemForKey(actionKey, page)
         and registry:GetAction(actionKey) or nil
     if not action then return nil end
     page = tostring(action.page or action.pageKey or page or "")
+    if page ~= "" and type(A.ResolveCanonicalMenuRoute) == "function" then
+        local canonical = A.ResolveCanonicalMenuRoute(page, { actionKey = action.key })
+        page = tostring(canonical or "")
+    elseif page ~= "" and type(A.ResolveRegisteredMenuPage) == "function" then
+        page = tostring(A.ResolveRegisteredMenuPage(page) or "")
+    end
     if page == "" then page = nil end
     local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
     return {
@@ -15254,7 +15285,7 @@ function R.OpenEndedLikelyPage(subject, norm)
         if groupScope then
             page, label, detail = "gf_auras", "Group Auras", "Party and Raid aura controls live in Group Auras."
         elseif R.ContainsAny(subject, { "appearance", "shared", "theme", "icon shape", "icon border", "icon shadow" }) then
-            page, label, detail = "auras3_styling", "Global Aura Appearance", "The global Aura icon theme is selected by Aura product in Appearance > Aura Style."
+            page, label, detail = "auras3_styling", "Global Aura Appearance", "The global Aura icon theme is selected by Aura product in Appearance > Auras."
         else
             local unit, unitLabel = R.UnitScopeFromText(norm)
             if unit and unitLabel then
@@ -16803,10 +16834,46 @@ local DIRECT_NAVIGATION_PAGE_SUBJECTS = {
     ["target buffs"] = "open target buffs", ["target debuffs"] = "open target debuffs",
     ["focus buffs"] = "open focus buffs", ["focus debuffs"] = "open focus debuffs",
     ["boss buffs"] = "open boss buffs", ["boss debuffs"] = "open boss debuffs",
+    ["party buffs"] = "open party buffs", ["party debuffs"] = "open party debuffs",
+    ["raid buffs"] = "open raid buffs", ["raid debuffs"] = "open raid debuffs",
+    ["mythic raid buffs"] = "open mythic raid buffs",
+    ["mythic raid debuffs"] = "open mythic raid debuffs",
 }
+
+A.RouterScopedCustomAuraNavigationSpec = function(text)
+    local norm = R.Normalize(text)
+    local subject = norm:match("^open%s+(.+)$")
+        or norm:match("^show%s+me%s+(.+)$")
+        or norm:match("^show%s+(.+)$")
+        or norm:match("^go%s+to%s+(.+)$")
+        or norm:match("^take%s+me%s+to%s+(.+)$")
+        or norm:match("^direct%s+me%s+to%s+(.+)$")
+        or norm:match("^bring%s+me%s+to%s+(.+)$")
+        or norm:match("^lead%s+me%s+to%s+(.+)$")
+        or norm:match("^jump%s+to%s+(.+)$")
+        or norm:match("^navigate%s+to%s+(.+)$")
+    if not subject then return nil end
+    subject = R.Trim(subject:gsub("^the%s+", "")
+        :gsub("%s+page$", ""):gsub("%s+menu$", "")
+        :gsub("%s+options$", ""):gsub("%s+settings$", ""))
+    local scope = subject:match("^(.-)%s+custom%s+auras?%s*[123]?$")
+    if scope == "player" then return { command = "open player", page = "uf_player", label = "Player" } end
+    if scope == "target" then return { command = "open target", page = "uf_target", label = "Target" } end
+    if scope == "focus" then return { command = "open focus", page = "uf_focus", label = "Focus" } end
+    if scope == "boss" then return { command = "open boss", page = "uf_boss", label = "Boss" } end
+    if scope == "party" or scope == "raid" or scope == "mythic raid"
+        or scope == "mythicraid" or scope == "group"
+    then
+        return { command = "open group auras", page = "gf_auras", label = "Group Auras", group = true }
+    end
+    return nil
+end
 
 function R.BroadPageNavigationCanonical(text)
     local norm = R.Normalize(text)
+    local customAura = A.RouterScopedCustomAuraNavigationSpec
+        and A.RouterScopedCustomAuraNavigationSpec(norm) or nil
+    if customAura then return customAura.command end
     local subject = norm:match("^open%s+(.+)$")
         or norm:match("^take%s+me%s+to%s+(.+)$")
         or norm:match("^direct%s+me%s+to%s+(.+)$")
@@ -16830,9 +16897,31 @@ function A.RouterIsBroadPageNavigationRequest(text)
 end
 
 function R.TryBroadPageNavigation(text, coreHandler)
-    local canonical = R.BroadPageNavigationCanonical(text)
+    local customAura = A.RouterScopedCustomAuraNavigationSpec
+        and A.RouterScopedCustomAuraNavigationSpec(text) or nil
+    local canonical = customAura and customAura.command or R.BroadPageNavigationCanonical(text)
     if not canonical or type(coreHandler) ~= "function" then return nil end
-    return coreHandler(canonical)
+    local result = coreHandler(canonical)
+    if customAura and type(result) == "table" and not A.RouterIsUnknownResult(result)
+        and tostring(result.status or result.result or "") ~= "failed"
+    then
+        local detail
+        if customAura.group then
+            detail = "Party, Raid, and Mythic Raid do not have Custom Aura 1-3 containers. Their Buff and Debuff filters and exact/category lists live here in Group Auras."
+        else
+            local breadcrumb = type(A.DisplayPageBreadcrumb) == "function"
+                and A.DisplayPageBreadcrumb(customAura.page, customAura.label) or customAura.label
+            detail = "Custom Aura 1-3 live under " .. tostring(breadcrumb) .. " > Auras."
+        end
+        local body = tostring(result.text or "")
+        if not body:find(detail, 1, true) then
+            result.text = body ~= "" and (body .. "\n" .. detail) or detail
+        end
+        result.summary = customAura.group
+            and "Opened Group Auras and explained the group Custom-Aura boundary."
+            or "Opened the scoped UnitFrame Custom-Aura workspace."
+    end
+    return result
 end
 
 function R.TryDirectSettingNavigation(text, coreHandler)
@@ -17050,11 +17139,15 @@ local function SettingBrowserSpec(subject)
 end
 
 local function SettingBrowserResolvedPage(setting)
-    local page = setting and setting.page
     local resolver = A.ResolveMenuPageForSetting or (A.Knowledge and A.Knowledge.ResolveSettingPage)
-    if (page == nil or page == "") and type(resolver) == "function" then
+    local page
+    -- Registry page hints may outlive a Menu2 move. Once the canonical owner
+    -- resolver is loaded it has sole precedence; the raw hint is bootstrap-only.
+    if type(resolver) == "function" then
         local ok, value = pcall(resolver, setting)
         if ok then page = value end
+    else
+        page = setting and setting.page
     end
     page = tostring(page or "")
     return page ~= "" and page or nil
@@ -17217,7 +17310,7 @@ function R.LastChangedSettingItem()
     local setting = registry and type(registry.GetSetting) == "function" and registry:GetSetting(key) or nil
     if not setting then return nil, ctx end
 
-    local page = setting.page or R.FallbackPageForSetting(setting)
+    local page = R.FallbackPageForSetting(setting)
     local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
     local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or key)
     return {
@@ -17418,7 +17511,7 @@ function R.RegistrySettingItemForKey(settingKey)
         end
     end
 
-    local page = setting.page or R.FallbackPageForSetting(setting)
+    local page = R.FallbackPageForSetting(setting)
     local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
     local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or settingKey)
     return {
@@ -17790,8 +17883,8 @@ function A.RouterTryCrossFrameVisualRequestShortcut(text, coreHandler)
         examples = "show " .. subjectLabel:lower() .. " cast bar; open cast bars; open " .. subjectLabel:lower() .. "."
         actions = "Open Cast Bars | Open " .. subjectLabel .. " | Open " .. frameLabel
     elseif fieldLabel == "buffs" or fieldLabel == "debuffs" or fieldLabel == "auras" then
-        examples = "show " .. subjectLabel:lower() .. " " .. fieldLabel .. "; show " .. frameLabel:lower() .. " " .. fieldLabel .. "; open auras."
-        actions = "Open Auras | Open " .. subjectLabel .. " | Open " .. frameLabel
+        examples = "show " .. subjectLabel:lower() .. " " .. fieldLabel .. "; show " .. frameLabel:lower() .. " " .. fieldLabel .. "; open " .. subjectLabel:lower() .. "."
+        actions = "Open " .. subjectLabel .. " | Open " .. frameLabel
     else
         examples = "show " .. subjectLabel:lower() .. " " .. fieldLabel .. "; show " .. frameLabel:lower() .. " " .. fieldLabel .. "; open " .. subjectLabel:lower() .. "."
         actions = "Open " .. subjectLabel .. " | Open " .. frameLabel
@@ -18665,7 +18758,7 @@ end
 R.VAGUE_OPEN_PICK_PAGES = {
     { page = "uf_player", label = "Player" },
     { page = "opt_castbar", label = "Cast Bars" },
-    { page = "auras3", label = "Auras" },
+    { page = "auras3_styling", label = "Auras" },
     { page = "gf_layout", label = "Group Layout" },
     { page = "profiles", label = "Profiles" },
 }
@@ -19236,6 +19329,14 @@ end
 function A.RouteInput(text, coreHandler)
     text = R.Trim(text)
     if text == "" then return nil end
+    -- The router owns pending workflows before the core handler sees them, so
+    -- pure conversation must escape here as well.  The shared helper clears
+    -- only blocking mutation state and then builds the ordinary social/meta
+    -- reply; concrete fresh commands continue through their normal route.
+    if A.RuntimePrivate and type(A.RuntimePrivate.DropPendingStateForConversation) == "function" then
+        local conversationResult = A.RuntimePrivate.DropPendingStateForConversation(text)
+        if conversationResult then return conversationResult end
+    end
     -- A concrete ecosystem question starts a new topic. Handle it before any
     -- pending confirmation or free-form workflow can reinterpret an addon name
     -- as "yes", a profile destination, or a setting value.
@@ -19278,7 +19379,18 @@ function A.RouteInput(text, coreHandler)
         and A.Workflow.PendingFlow() or nil
     if type(pendingFlow) == "table" and type(A.HandlePendingFlow) == "function" then
         local pendingResult = A.HandlePendingFlow(text)
-        if pendingResult then return pendingResult end
+        if pendingResult then
+            -- A clarification re-prompt is a new adjacent flow turn. Refresh
+            -- the persisted marker so reloading after that prompt still lets
+            -- the player answer it once, without reviving an older workflow.
+            if type(A.TouchPendingFlow) == "function"
+                and A.Workflow and type(A.Workflow.PendingFlow) == "function"
+                and type(A.Workflow.PendingFlow()) == "table"
+            then
+                A.TouchPendingFlow()
+            end
+            return pendingResult
+        end
     end
     -- "Does MSUF have X?" asks whether a capability exists; it is never a
     -- request to change one. This has to run ahead of the mutation
@@ -19426,6 +19538,95 @@ function A.RouteInput(text, coreHandler)
         return coreCache[value] ~= false and coreCache[value] or nil
     end
 
+    -- This question shape names a concrete frame, lane, and duration-filter
+    -- goal even though it starts with "what filter". Hand it to the mutation
+    -- planner before broad knowledge/advisory lanes classify it as read-only;
+    -- the planner still fails closed by offering choices rather than writing.
+    if hasCore and R.IsAuraDurationFilterQuestion and R.IsAuraDurationFilterQuestion(text) then
+        local guided = Core(text)
+        if guided and not A.RouterIsUnknownResult(guided) then return guided end
+    end
+
+    local function NavigateAuraOwner(ownerPage)
+        local registry = A.Registry
+        local openAction = registry and type(registry.GetAction) == "function"
+            and registry:GetAction("open_page") or nil
+        if not (openAction and type(openAction.run) == "function") then return nil end
+        local label = type(A.DisplayPageLabel) == "function"
+            and A.DisplayPageLabel(ownerPage, "Aura workspace") or "Aura workspace"
+        local navArgs = { page = ownerPage, label = label, query = text }
+        local parser = A.Parser or {}
+        if type(parser.AuraWorkspaceNavigationArgs) == "function" then
+            local scope, lane = parser.AuraWorkspaceNavigationArgs(ownerPage, R.Normalize(text))
+            if scope then navArgs.scope = scope end
+            if lane then navArgs.lane = lane end
+        end
+        local ok, message = openAction.run(navArgs)
+        return {
+            text = tostring(message or (ok and ("Opened " .. tostring(label) .. ".")
+                or ("I could not open " .. tostring(label) .. "."))),
+            status = ok and "navigated" or "failed",
+            result = ok and "navigated" or "failed",
+            summary = "Navigates to the owning frame's Aura workspace.",
+        }
+    end
+
+    -- Cooldown/stack/duration/ordering/filter controls are owned by a concrete
+    -- UnitFrame or GroupFrame Aura workspace. With no explicit, active, or
+    -- recent Aura owner, stop before fuzzy exact-control lookup can mistake
+    -- those words for a global color or appearance control.
+    if not hasBlockingPending and A.Knowledge
+        and type(A.Knowledge.ResolveFrameLocalAuraPage) == "function"
+    then
+        local auraNorm = R.Normalize(text)
+        local auraConceptOnly = R.ContainsAny(auraNorm, {
+            " vs ", " versus ", "difference between", "compare ", "comparison",
+            "what is ", "what are ", "what does ", "what do ",
+            "what aura filter", "what aura filters", "which aura filter", "what filters are available",
+            "explain ", "tell me about ", "why use ",
+        }) or (auraNorm:match("^how%s+do%s+.+%s+work") ~= nil)
+        local hiddenPresetConcept = auraConceptOnly
+            and R.ContainsAny(auraNorm, { "hidden aura preset", "hidden-aura preset", "blacklist preset" })
+            and not R.ContainsAny(auraNorm, { "set to", "current value", "currently", "which value" })
+        if hiddenPresetConcept then
+            return {
+                text = "Hidden Aura Preset help\nA hidden-aura preset is a predefined SpellID set. Applying one adds its missing SpellIDs to the selected frame's Buff or Debuff blacklist; it does not replace existing entries or affect every Aura frame. The concept is the same for every frame, but opening, applying, or inspecting one requires Player, Target, Focus, Boss, Party, or Raid plus Buffs or Debuffs. I did not change anything.",
+                status = "info",
+                result = "info",
+                summary = "Explains frame- and lane-local hidden-aura presets without guessing a scope.",
+            }
+        end
+        local ownerPage, frameLocalAura = A.Knowledge.ResolveFrameLocalAuraPage(
+            text, { currentPage = M and M.activeKey })
+        if frameLocalAura and not ownerPage and not auraConceptOnly
+            and type(A.Knowledge.AuraScopeClarification) == "function"
+        then
+            return A.Knowledge.AuraScopeClarification()
+        end
+        if frameLocalAura and ownerPage and R.IsExplicitNavigationCommand(text) then
+            local navigation = NavigateAuraOwner(ownerPage)
+            if navigation then return navigation end
+        end
+    end
+
+    -- The retired generic Auras landing no longer owns any controls. Bare
+    -- navigation chooses an active/recent frame workspace when that context is
+    -- trustworthy; otherwise it asks local-vs-global instead of opening the
+    -- unrelated global icon-theme page.
+    if not hasBlockingPending and A.Knowledge
+        and type(A.Knowledge.ResolveAuraLandingPage) == "function"
+    then
+        local ownerPage, auraLanding = A.Knowledge.ResolveAuraLandingPage(
+            text, { currentPage = M and M.activeKey })
+        if auraLanding and not ownerPage and type(A.Knowledge.AuraLandingClarification) == "function" then
+            return A.Knowledge.AuraLandingClarification()
+        end
+        if auraLanding and ownerPage then
+            local navigation = NavigateAuraOwner(ownerPage)
+            if navigation then return navigation end
+        end
+    end
+
     -- Guided-tour wording is an explicit onboarding action, not a page-help or
     -- fuzzy setting query. Resolve it before those read-only lanes can consume
     -- phrases such as "show me around MSUF" as generic guidance.
@@ -19533,7 +19734,7 @@ function A.RouteInput(text, coreHandler)
                     return {
                         text = typedPinMutation
                             and "I kept the whole request unchanged. Set the Priority Frames hover hotkey, then hover the player's MSUF Party or Raid frame and press it to pin or unpin that current group member."
-                            or "I kept the character-specific pins unchanged. Open Group Frames > Priority and use the Manual pins controls for Clear, Remove, or Reorder.",
+                            or "I kept the character-specific pins unchanged. Open Frames > Party/Raid Frames > Priority and use the Manual pins controls for Clear, Remove, or Reorder.",
                         status = "info",
                         result = "info",
                         summary = typedPinMutation and "Priority pins require a live hovered group unit."
@@ -20454,7 +20655,9 @@ function A.RouteInput(text, coreHandler)
             local parser = A.Parser or {}
             local intent = type(parser.NonMutatingIntent) == "function"
                 and parser.NonMutatingIntent(R.Normalize(text)) or nil
-            if intent == "lookup" or intent == "capability" then
+            local guidedAuraDuration = R.IsAuraDurationFilterQuestion
+                and R.IsAuraDurationFilterQuestion(text)
+            if (intent == "lookup" or intent == "capability") and not guidedAuraDuration then
                 -- The knowledge lane normally answers these, but it sits below
                 -- the mutation lanes, so consult it here rather than replacing
                 -- a real answer ("why would I use a focus frame") with a
