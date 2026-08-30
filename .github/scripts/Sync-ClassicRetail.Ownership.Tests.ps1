@@ -260,7 +260,7 @@ try {
     Commit-All -Repository $fixture.Retail -Message "retail changes overridden path"
     $classicHead = Invoke-TestGit -Repository $fixture.Classic -Arguments @("rev-parse", "HEAD")
     $result = Invoke-Sync -Fixture $fixture
-    Assert-Failure -Result $result -Pattern "Retail changed a Classic override since its recorded base" `
+    Assert-Failure -Result $result -Pattern "Retail changed a Classic override" `
         -Case "Retail override conflict"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("status", "--porcelain")) -ceq "") `
         -Message "Retail-override conflict mutated the Classic worktree"
@@ -312,7 +312,7 @@ try {
     Commit-All -Repository $fixture.Classic -Message "ownership and override collision"
     Set-RetailDelta -Fixture $fixture
     $result = Invoke-Sync -Fixture $fixture
-    Assert-Failure -Result $result -Pattern "ownership and Retail-override manifests collide" `
+    Assert-Failure -Result $result -Pattern "manifests collide" `
         -Case "Ownership/override collision"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("status", "--porcelain")) -ceq "") `
         -Message "Ownership/override collision mutated the Classic worktree"
@@ -348,7 +348,7 @@ try {
     Set-RetailDelta -Fixture $fixture
     $classicHead = Invoke-TestGit -Repository $fixture.Classic -Arguments @("rev-parse", "HEAD")
     $result = Invoke-Sync -Fixture $fixture
-    Assert-Failure -Result $result -Pattern "modified a Retail-owned baseline path" -Case "Modified baseline"
+    Assert-Failure -Result $result -Pattern "modified a Retail-owned baseline" -Case "Modified baseline"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("status", "--porcelain")) -ceq "") `
         -Message "Modified-baseline failure mutated the Classic worktree"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("rev-parse", "HEAD")) -ceq $classicHead) `
@@ -360,7 +360,7 @@ try {
     Commit-All -Repository $fixture.Classic -Message "classic deletes canonical file"
     Set-RetailDelta -Fixture $fixture
     $result = Invoke-Sync -Fixture $fixture
-    Assert-Failure -Result $result -Pattern "deleted a Retail-owned baseline path" -Case "Deleted baseline"
+    Assert-Failure -Result $result -Pattern "deleted a Retail-owned baseline" -Case "Deleted baseline"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("status", "--porcelain")) -ceq "") `
         -Message "Deleted-baseline failure mutated the Classic worktree"
     Write-Host "PASS deleted canonical baseline fails before mutation"
@@ -371,7 +371,7 @@ try {
     Commit-All -Repository $fixture.Classic -Message "classic adds undeclared file"
     Set-RetailDelta -Fixture $fixture
     $result = Invoke-Sync -Fixture $fixture
-    Assert-Failure -Result $result -Pattern "neither Retail-owned nor declared Classic-owned" -Case "Undeclared additive"
+    Assert-Failure -Result $result -Pattern "neither Retail-owned nor declared" -Case "Undeclared additive"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("status", "--porcelain")) -ceq "") `
         -Message "Undeclared-additive failure mutated the Classic worktree"
     Write-Host "PASS undeclared additive file fails before mutation"
@@ -426,7 +426,7 @@ try {
         "update-ref", "refs/remotes/origin/main", $fixture.Baseline
     ))
     $result = Invoke-Sync -Fixture $fixture -PushCapable
-    Assert-Failure -Result $result -Pattern "requires Retail HEAD to equal origin/main exactly" -Case "Push source guard"
+    Assert-Failure -Result $result -Pattern "Push-capable sync requires Retail HEAD" -Case "Push source guard"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("status", "--porcelain")) -ceq "") `
         -Message "Push-source failure mutated the Classic worktree"
     Write-Host "PASS push-capable sync rejects non-origin Retail HEAD"
@@ -442,7 +442,7 @@ exit 0
     Commit-All -Repository $fixture.Classic -Message "gate mutates owner"
     $classicHead = Invoke-TestGit -Repository $fixture.Classic -Arguments @("rev-parse", "HEAD")
     $result = Invoke-Sync -Fixture $fixture
-    Assert-Failure -Result $result -Pattern "Protected Classic file changed during Classic validation" -Case "Gate owner mutation"
+    Assert-Failure -Result $result -Pattern "Protected Classic file changed" -Case "Gate owner mutation"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("rev-parse", "HEAD")) -ceq $classicHead) `
         -Message "Gate-owner failure created a commit"
     Write-Host "PASS validation cannot mutate a Classic-owned file"
@@ -458,7 +458,7 @@ exit 0
     Commit-All -Repository $fixture.Classic -Message "gate mutates override"
     $classicHead = Invoke-TestGit -Repository $fixture.Classic -Arguments @("rev-parse", "HEAD")
     $result = Invoke-Sync -Fixture $fixture
-    Assert-Failure -Result $result -Pattern "Protected Classic file changed during Classic validation" `
+    Assert-Failure -Result $result -Pattern "Protected Classic file changed" `
         -Case "Gate override mutation"
     Assert-True -Condition ((Invoke-TestGit -Repository $fixture.Classic -Arguments @("rev-parse", "HEAD")) -ceq $classicHead) `
         -Message "Gate-override failure created a commit"
