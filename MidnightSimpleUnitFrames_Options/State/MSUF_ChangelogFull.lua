@@ -8,12 +8,47 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "5931C27E88B4F99D58898705292A469E12A8D79FB0AB325FD81DACEEA582625B",
-    currentVersion = "6.14",
+    sourceSha256 = "FCCDC8DC6BBF74EE3DD306FF3EBC77A70A6AABE2AF95B44F22C707FAB10D3C72",
+    currentVersion = "6.15-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.13",
-    rangeLabel = "6.13 -> 6.14",
+    previousVersion = "6.14",
+    rangeLabel = "6.14 -> 6.15-beta1",
     entries = {
+        {
+            version = "6.15-beta1",
+            date = "2026-09-01",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Absorbs and heal prediction can now stay visible when Unit Frame health opacity is reduced. Enable Keep Absorbs + Prediction Visible per frame to preserve these overlays independently from the health fill.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "keep absorbs prediction visible",
+                                label = "Keep Absorbs + Prediction Visible",
+                                sectionId = "transparency",
+                                controlId = "menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars",
+                                settingKey = "player.alphaExcludePredictionBars",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added the matching Keep Absorbs + Prediction Visible option for Party and Raid Frames, including profile copy, defaults, previews, search, and Assistant support.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview now preserve the configured health and prediction opacity instead of resetting fills to full opacity.",
+                        "Detached Player Power bars attached or width-synced to Class Resources keep using the controller-maintained hidden anchor, preventing width or position jumps when shapeshifting hides the visible Class Resource bar.",
+                    },
+                },
+            },
+        },
         {
             version = "6.14",
             date = "2026-08-30",

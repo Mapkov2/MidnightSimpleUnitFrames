@@ -1,5 +1,21 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.15-beta1 - 2026-09-01
+
+### Highlights
+
+- **Absorbs and heal prediction can now stay visible when Unit Frame health opacity is reduced.** Enable **Keep Absorbs + Prediction Visible** per frame to preserve these overlays independently from the health fill.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"transparency","controlId":"menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars","settingKey":"player.alphaExcludePredictionBars","prepareKind":"","prepareValue":"","query":"keep absorbs prediction visible","label":"Keep Absorbs + Prediction Visible"} -->
+
+### Changes
+
+- Added the matching **Keep Absorbs + Prediction Visible** option for Party and Raid Frames, including profile copy, defaults, previews, search, and Assistant support.
+
+### Fixes & Performance
+
+- Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview now preserve the configured health and prediction opacity instead of resetting fills to full opacity.
+- Detached Player Power bars attached or width-synced to Class Resources keep using the controller-maintained hidden anchor, preventing width or position jumps when shapeshifting hides the visible Class Resource bar.
+
 ## 6.14 - 2026-08-30
 
 ### Highlights
