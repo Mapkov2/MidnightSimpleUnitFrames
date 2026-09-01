@@ -30,7 +30,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $tag = $env:CLASSIC_METADATA_TAG
-          if ($tag -notmatch '^classic-cfmeta-(?<file>\d+)-v(?<version>\d+(?:\.\d+)*-alpha(?<number>\d+)(?:-r\d+)?$') {
+          if ($tag -notmatch '^classic-cfmeta-(?<file>\d+)-v(?<version>\d+(?:\.\d+)*-alpha(?<number>\d+))(?:-r\d+)?$') {
             throw "Metadata correction tag must use 'classic-cfmeta-<file>-v<version>-alpha<number>[-r<revision>]'. Got: $tag"
           }
           $fileId = $Matches["file"]
