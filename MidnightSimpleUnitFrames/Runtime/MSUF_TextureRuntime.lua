@@ -97,46 +97,57 @@ local function ScheduleApplyCommit()
 end
 
 local _iterState = {}
-local PREDICTION_REFRESH_ELEMENTS = { "Prediction" }
+local PREDICTION_REFRESH_ELEMENTS = { "Prediction", "Alpha" }
 
 local function RefreshPredictionElements(reason, scope, skipUnitFrames)
-    local refreshed = false
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.RefreshPredictionBars) == "function" then
+        return UF.RefreshPredictionBars(scope, reason or "MSUF2_ABSORB_TEXTURE", skipUnitFrames) or false
+    end
+    local kindA = GroupKindsForScope(scope)
+    if skipUnitFrames ~= true and not kindA and UF and type(UF.RefreshElements) == "function" then
+        return UF.RefreshElements(NormalizeScope(scope), PREDICTION_REFRESH_ELEMENTS, reason or "MSUF2_ABSORB_TEXTURE") or false
+    end
+    return false
+end
+
+local function RefreshGroupBarVisuals(scope)
     local kindA, kindB = GroupKindsForScope(scope)
     local normalized = NormalizeScope(scope)
-    local UF = MSUF and MSUF.UF
-    if skipUnitFrames ~= true and not kindA and UF and type(UF.RefreshElements) == "function" then
-        refreshed = UF.RefreshElements(normalized, PREDICTION_REFRESH_ELEMENTS, reason or "MSUF2_ABSORB_TEXTURE") or refreshed
-    end
     local GF = MSUF and MSUF.GF
-    if GF and type(GF.RefreshVisuals) == "function" then
-        if kindA then
-            refreshed = GF.RefreshVisuals(kindA, GF.DIRTY_VISUAL) or refreshed
-            if kindB then refreshed = GF.RefreshVisuals(kindB, GF.DIRTY_VISUAL) or refreshed end
-        elseif not normalized then
-            refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
-        end
+    if not (GF and type(GF.RefreshVisuals) == "function") then return false end
+    local refreshed = false
+    if kindA then
+        refreshed = GF.RefreshVisuals(kindA, GF.DIRTY_VISUAL) or refreshed
+        if kindB then refreshed = GF.RefreshVisuals(kindB, GF.DIRTY_VISUAL) or refreshed end
+    elseif not normalized then
+        refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
     end
     return refreshed
 end
 
 local function _ApplyTexCached(sb, tex)
-    if not sb or not tex then return end
+    if not sb or not tex then return false end
     if sb.MSUF_cachedStatusbarTexture ~= tex then
         sb:SetStatusBarTexture(tex)
         sb.MSUF_cachedStatusbarTexture = tex
         sb._msufTexture = tex
+        sb._msufAlphaStatusTextureObject = nil
+        sb._msufGFStatusBarTextureWidget = nil
         local applyAlpha = (MSUF.Bars and MSUF.Bars._ApplyOverlayTextureAlpha) or _G.MSUF_ApplyOverlayTextureAlpha
         if type(applyAlpha) == "function" then
             applyAlpha(sb)
         end
+        return true
     end
+    return false
 end
 
 local function _Iter_ApplyAllBarTex(f)
     local S = _iterState
     local spec = f and f.MSUFSpec
     local hpTex = (spec and spec.health and spec.health.texture) or (spec and spec.texture) or S.texHP
-    _ApplyTexCached(f.hpBar, hpTex)
+    local healthTextureChanged = _ApplyTexCached(f.hpBar, hpTex)
     if S.applyBg then S.applyBg(f) end
 
     -- The compiler owns the full power-texture precedence (global bars value ->
@@ -149,6 +160,12 @@ local function _Iter_ApplyAllBarTex(f)
     if not (f.targetPowerBar and f.targetPowerBar._msufPowerShapeActive == true) then
         _ApplyTexCached(f.targetPowerBar, pbTex)
     end
+    if healthTextureChanged then
+        local UF = MSUF and MSUF.UF
+        if UF and type(UF.ApplyAlphaFrame) == "function" then
+            UF.ApplyAlphaFrame(f, "MSUF_FORCE_UPDATE")
+        end
+    end
 end
 
 --- Immediate refresh path used by the deferred wrapper and direct callers. Keep
@@ -156,14 +173,25 @@ end
 local function UpdateAllBarTextures(scope, skipUnitFrames, skipCastbars)
     local kindA = GroupKindsForScope(scope)
     if kindA then
-        RefreshPredictionElements("MSUF2_BAR_TEXTURE", scope)
+        -- GroupVisuals owns group health/power/bar media. A bar-texture apply
+        -- therefore keeps the full visual mask; the narrow Prediction+Alpha
+        -- follower is only sufficient for prediction/absorb-only refreshes.
+        RefreshGroupBarVisuals(scope)
         return
     end
 
     -- Refresh the scoped specs before reading frame.MSUFSpec below. Prediction
     -- owns the same Health/Power config dependency, so doing it first gives the
     -- direct texture pass current data without a second deferred full apply.
-    RefreshPredictionElements("MSUF2_BAR_TEXTURE", scope, skipUnitFrames)
+    if not NormalizeScope(scope) then
+        local UF = MSUF and MSUF.UF
+        if skipUnitFrames ~= true and UF and type(UF.RefreshElements) == "function" then
+            UF.RefreshElements(nil, PREDICTION_REFRESH_ELEMENTS, "MSUF2_BAR_TEXTURE")
+        end
+        RefreshGroupBarVisuals(nil)
+    else
+        RefreshPredictionElements("MSUF2_BAR_TEXTURE", scope, skipUnitFrames)
+    end
 
     if skipUnitFrames ~= true then
         local getBarTexture = _G.MSUF_GetBarTexture

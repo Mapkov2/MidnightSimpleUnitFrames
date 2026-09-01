@@ -120,6 +120,13 @@ local function BuildAlpha(ctx, builder, unit)
             SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true })
         end,
         SettingMeta(ctx, "transparency.alpha_exclude_text_portrait", unit, "alphaExcludeTextPortrait"))
+    local excludePrediction = W.ToggleAt(optionsCard, "Keep Absorbs + Prediction Visible", 16, -112, optionsW - 32)
+    M.BindBoolWidget(ctx, excludePrediction,
+        function() return ReadBool(unit, "alphaExcludePredictionBars", false) end,
+        function(v)
+            SetBool(unit, "alphaExcludePredictionBars", v, "MSUF2_ALPHA_EXCLUDE_PREDICTION", { alpha = true, preview = true })
+        end,
+        SettingMeta(ctx, "transparency.alpha_exclude_prediction_bars", unit, "alphaExcludePredictionBars"))
 
     -- Out of Combat tab: whole-frame fade while out of combat. The slider is
     -- greyed while the toggle is off; runtime min-composes with range fade.

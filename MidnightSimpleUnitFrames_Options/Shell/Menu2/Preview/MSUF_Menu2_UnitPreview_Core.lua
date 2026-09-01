@@ -683,6 +683,12 @@ local function PreviewAlphaState(conf, runtimeSpec)
     -- one transaction behind the preview refresh.
     local hp = Clamp01(conf and conf.hpBarAlpha, runtimeAlpha and runtimeAlpha.hpAlpha or 1)
     local power = Clamp01(conf and conf.powerBarAlpha, runtimePower and runtimePower.alpha or 1)
+    local excludePredictionBars
+    if conf and conf.alphaExcludePredictionBars ~= nil then
+        excludePredictionBars = conf.alphaExcludePredictionBars == true
+    else
+        excludePredictionBars = runtimeAlpha and runtimeAlpha.excludePredictionBars == true
+    end
     local excludeTextPortrait
     if conf and conf.alphaExcludeTextPortrait ~= nil then
         excludeTextPortrait = conf.alphaExcludeTextPortrait == true
@@ -690,11 +696,13 @@ local function PreviewAlphaState(conf, runtimeSpec)
         excludeTextPortrait = runtimeAlpha and runtimeAlpha.excludeTextPortrait == true
     end
     local fg = excludeTextPortrait and 1 or hp
+    local prediction = excludePredictionBars and 1 or hp
     return {
         flat = false,
         frame = 1,
         fg = fg,
         hp = hp,
+        prediction = prediction,
         power = power,
         text = fg,
         portrait = fg,
@@ -727,9 +735,9 @@ function Core.ApplyPreviewTransparency(box, conf, runtimeSpec)
     end
     -- Render owns health media and opacity. Dependent overlays/text/portrait
     -- and power remain independently composited, matching the live element.
-    Core.SetRegionAlpha(mock.healPred, (alpha.flat and alpha.frame or alpha.hp) * healthMul)
-    Core.SetRegionAlpha(mock.absorb, (alpha.flat and alpha.frame or alpha.hp) * healthMul)
-    Core.SetRegionAlpha(mock.healAbsorb, (alpha.flat and alpha.frame or alpha.hp) * healthMul)
+    Core.SetRegionAlpha(mock.healPred, (alpha.flat and alpha.frame or alpha.prediction) * healthMul)
+    Core.SetRegionAlpha(mock.absorb, (alpha.flat and alpha.frame or alpha.prediction) * healthMul)
+    Core.SetRegionAlpha(mock.healAbsorb, (alpha.flat and alpha.frame or alpha.prediction) * healthMul)
     Core.SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or 1)
     Core.SetRegionAlpha(mock.power, alpha.flat and alpha.frame or alpha.power)
     Core.SetRegionAlpha(mock.classPower, alpha.flat and alpha.frame or alpha.power)

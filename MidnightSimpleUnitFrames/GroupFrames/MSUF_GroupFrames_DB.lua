@@ -460,9 +460,10 @@ local PARTY_DEFAULTS = {
     nameTextLayer     = 5,
     textLayer         = 5,
     powerTextLayer    = 2,
-    --- Unified alpha: keep text + portrait opaque while bars dim (HP/background
-    --- opacity live in hpBarAlpha / hpBgAlpha above).
+    --- Unified alpha exclusions keep selected informational elements opaque while
+    --- bars dim (HP/background opacity live in hpBarAlpha / hpBgAlpha above).
     alphaExcludeTextPortrait = false,
+    alphaExcludePredictionBars = false,
     --- Group Frame heal prediction is edited in Global Style > Bars using the
     --- Party/Raid bar scopes. hlOverride gates local values; otherwise the
     --- shared UnitFrame heal-prediction toggle is the fallback.
@@ -2427,7 +2428,8 @@ end
 
 --- Alpha is now unified and coldpath: per-frame `hpBarAlpha` (HP fill) and
 --- `hpBgAlpha` (background texture, baked into the bar background colour), plus the
---- `alphaExcludeTextPortrait` toggle. No combat-state alpha, no layer modes -- the
+--- `alphaExcludeTextPortrait` / `alphaExcludePredictionBars` toggles. No
+--- combat-state alpha, no layer modes -- the
 --- old GF.GetAlphaPair / GF.GetEffective*Alpha / GF.HasCombatAlpha helpers were
 --- removed. HP-fill opacity is applied in MSUF_UF_Group_Visuals.UpdateHealthFade.
 

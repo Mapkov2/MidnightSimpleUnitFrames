@@ -1543,6 +1543,7 @@ local function CompileAlpha(conf)
     active = hpAlpha < 1,
     hpAlpha = hpAlpha,
     excludeTextPortrait = conf and conf.alphaExcludeTextPortrait == true,
+    excludePredictionBars = conf and conf.alphaExcludePredictionBars == true,
     -- Out-of-combat fade: composed by GroupRangeFade (CoreAlpha) rather than
     -- the shared Alpha element; externalOoc keeps the element's frame lane
     -- untouched so the group composer never reads a stale ooc value.

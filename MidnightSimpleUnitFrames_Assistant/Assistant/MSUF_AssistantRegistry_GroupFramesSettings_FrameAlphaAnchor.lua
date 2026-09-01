@@ -87,6 +87,16 @@ function A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings(ctx, scope)
     RegisterGroupBoolean(scope, "alphaExcludeTextPortrait", "alphaExcludeTextPortrait", "Keep Text & Portrait Visible", false, "visual", aliases)
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "keep absorbs visible")
+    AddAliasesForUnit(aliases, scope, "keep absorb visible")
+    AddAliasesForUnit(aliases, scope, "keep shields visible")
+    AddAliasesForUnit(aliases, scope, "keep prediction visible")
+    AddAliasesForUnit(aliases, scope, "keep absorbs and prediction visible")
+    AddAliasesForUnit(aliases, scope, "exclude absorbs from opacity")
+    AddAliasesForUnit(aliases, scope, "exclude prediction from opacity")
+    RegisterGroupBoolean(scope, "alphaExcludePredictionBars", "alphaExcludePredictionBars", "Keep Absorbs + Prediction Visible", false, "visual", aliases)
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "fade out of combat")
     AddAliasesForUnit(aliases, scope, "out of combat fade")
     AddAliasesForUnit(aliases, scope, "ooc fade")
