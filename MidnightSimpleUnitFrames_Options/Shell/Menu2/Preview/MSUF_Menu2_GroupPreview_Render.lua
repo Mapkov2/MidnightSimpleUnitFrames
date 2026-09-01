@@ -1444,6 +1444,7 @@ local function FinalizeScene(scene)
     if mock._health and mock._health.SetAlpha then mock._health:SetAlpha(healthMul) end
     if mock._healPred and mock._healPred.SetAlpha then mock._healPred:SetAlpha(healthMul) end
     if mock._absorb and mock._absorb.SetAlpha then mock._absorb:SetAlpha(healthMul) end
+    if mock._healAbsorb and mock._healAbsorb.SetAlpha then mock._healAbsorb:SetAlpha(healthMul) end
     for i = 1, #(box._handleList or {}) do
         local handle = box._handleList[i]
         if handle and handle.SetAlpha and handle.GetParent and handle:GetParent() ~= mock then
@@ -2486,6 +2487,14 @@ function Render.Install(box, ctx, deps)
         -- Live parity: the engine dims the fill texture (Elements_Alpha), never
         -- the status-bar color's alpha channel, which the client drops on refill.
         local hpFillAlpha = tonumber(groupVisual.hpBarAlpha) or tonumber(conf.hpBarAlpha) or 1
+        local runtimeAlpha = runtimeSpec and runtimeSpec.alpha
+        local alphaExcludePredictionBars
+        if conf and conf.alphaExcludePredictionBars ~= nil then
+            alphaExcludePredictionBars = conf.alphaExcludePredictionBars == true
+        else
+            alphaExcludePredictionBars = runtimeAlpha and runtimeAlpha.excludePredictionBars == true
+        end
+        local predictionFillAlpha = alphaExcludePredictionBars and 1 or hpFillAlpha
         mock._health:SetStatusBarColor(hr, hg, hb)
         if mock._health.SetMinMaxValues then mock._health:SetMinMaxValues(0, 1) end
         mock._health:SetValue(hpPct)
@@ -2558,7 +2567,7 @@ function Render.Install(box, ctx, deps)
             runtimePrediction.healR or (gen and gen.healPredictionColorR) or 0,
             runtimePrediction.healG or (gen and gen.healPredictionColorG) or 1,
             runtimePrediction.healB or (gen and gen.healPredictionColorB) or 0,
-            (runtimePrediction.healA or (gen and gen.healPredictionColorA) or 0.45) * hpFillAlpha
+            (runtimePrediction.healA or (gen and gen.healPredictionColorA) or 0.45) * predictionFillAlpha
         )
         mock._healPred:ClearAllPoints()
         if (healPredMode == 3 or healPredMode == 4) and hpTex then
@@ -2585,7 +2594,7 @@ function Render.Install(box, ctx, deps)
             runtimePrediction.absorbR or (gen and gen.absorbBarColorR) or 1,
             runtimePrediction.absorbG or (gen and gen.absorbBarColorG) or 1,
             runtimePrediction.absorbB or (gen and gen.absorbBarColorB) or 1,
-            (runtimePrediction.absorbA or (gen and gen.absorbBarOpacity) or (gen and gen.absorbBarColorA) or 0.75) * hpFillAlpha
+            (runtimePrediction.absorbA or (gen and gen.absorbBarOpacity) or (gen and gen.absorbBarColorA) or 0.75) * predictionFillAlpha
         )
         local absorbMode = tonumber(runtimePrediction.absorbAnchorMode) or tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
         if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
@@ -2636,7 +2645,7 @@ function Render.Install(box, ctx, deps)
             runtimePrediction.healAbsorbR or (gen and gen.healAbsorbBarColorR) or 0.7,
             runtimePrediction.healAbsorbG or (gen and gen.healAbsorbBarColorG) or 0,
             runtimePrediction.healAbsorbB or (gen and gen.healAbsorbBarColorB) or 0,
-            (runtimePrediction.healAbsorbA or (gen and gen.healAbsorbBarOpacity) or (gen and gen.healAbsorbBarColorA) or 1) * hpFillAlpha
+            (runtimePrediction.healAbsorbA or (gen and gen.healAbsorbBarOpacity) or (gen and gen.healAbsorbBarColorA) or 1) * predictionFillAlpha
         )
         if hpReverse then
             mock._healAbsorb:SetPoint("TOPLEFT", hpTex or mock._health, "TOPLEFT", 0, 0)

@@ -837,8 +837,8 @@ local function HookRangeSettleVisibility(frame)
   frame:HookScript("OnHide", RangeSettleOnHide)
 end
 
-local function SetAlphaCached(region, alpha, key)
-  if region and region.SetAlpha and region[key] ~= alpha then
+local function SetAlphaCached(region, alpha, key, force)
+  if region and region.SetAlpha and (force == true or region[key] ~= alpha) then
     region:SetAlpha(alpha)
     region[key] = alpha
   end
@@ -877,8 +877,8 @@ local function SetStatusAlpha(bar, alpha, key)
   end
 end
 
-local function SetTextureAlpha(tex, alpha, key)
-  SetAlphaCached(tex, alpha, key)
+local function SetTextureAlpha(tex, alpha, key, force)
+  SetAlphaCached(tex, alpha, key, force)
 end
 
 local function SetStatusAlphaFromBoolean(bar, value, inAlpha, outAlpha)
@@ -934,11 +934,15 @@ local function ApplyDirectHealthRangeAlpha(frame, alpha)
   SetTextureAlpha(frame.hpBarBG, alpha, "_msufGFRangeHealthBg")
 end
 
-local function ApplyPredictionRangeAlpha(frame, alpha)
-  alpha = (tonumber(frame and frame._msufAlphaLastHP) or 1) * (tonumber(alpha) or 1)
-  SetTextureAlpha(StatusTexture(frame.incomingHealBar), alpha, "_msufGFRangePredict")
-  SetTextureAlpha(StatusTexture(frame.absorbBar), alpha, "_msufGFRangePredict")
-  SetTextureAlpha(StatusTexture(frame.healAbsorbBar), alpha, "_msufGFRangePredict")
+local function PredictionBaseAlpha(frame)
+  return tonumber(frame and frame._msufAlphaLastPrediction) or 1
+end
+
+local function ApplyPredictionRangeAlpha(frame, alpha, force)
+  alpha = PredictionBaseAlpha(frame) * (tonumber(alpha) or 1)
+  SetTextureAlpha(StatusTexture(frame.incomingHealBar), alpha, "_msufGFRangePredict", force)
+  SetTextureAlpha(StatusTexture(frame.absorbBar), alpha, "_msufGFRangePredict", force)
+  SetTextureAlpha(StatusTexture(frame.healAbsorbBar), alpha, "_msufGFRangePredict", force)
 end
 
 local function ApplyHealthRangeAlpha(frame, alpha)
@@ -984,7 +988,7 @@ local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha,
   end
   applied = SetTextureAlphaFromBoolean(frame.bg, value, inAlpha, outAlpha) or applied
   applied = SetTextureAlphaFromBoolean(frame.hpBarBG, value, inAlpha, outAlpha) or applied
-  local predictionAlpha = tonumber(frame and frame._msufAlphaLastHP) or 1
+  local predictionAlpha = PredictionBaseAlpha(frame)
   local predictionIn = predictionAlpha * inAlpha
   local predictionOut = predictionAlpha * outAlpha
   applied = SetTextureAlphaFromBoolean(StatusTexture(frame.incomingHealBar), value, predictionIn, predictionOut) or applied
@@ -997,6 +1001,41 @@ local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha,
     frame._msufGFRangeHealthBoolOut = nil
   end
   return applied
+end
+
+-- Prediction can create or replace its StatusBars without any range state
+-- changing. Recompose only the three prediction fill textures from the range
+-- state already cached by this element; do not query range or restart settle.
+function GroupRangeFade.RecomposePredictionAlpha(frame)
+  if not frame then
+    return false
+  end
+
+  local inAlpha = frame._msufGFRangeHealthBoolIn
+  local outAlpha = frame._msufGFRangeHealthBoolOut
+  if inAlpha ~= nil and outAlpha ~= nil then
+    local value = frame._msufGFRangeHealthBool
+    local base = PredictionBaseAlpha(frame)
+    local predictionIn = base * inAlpha
+    local predictionOut = base * outAlpha
+    local applied = false
+    applied = SetTextureAlphaFromBoolean(StatusTexture(frame.incomingHealBar), value, predictionIn, predictionOut) or applied
+    applied = SetTextureAlphaFromBoolean(StatusTexture(frame.absorbBar), value, predictionIn, predictionOut) or applied
+    applied = SetTextureAlphaFromBoolean(StatusTexture(frame.healAbsorbBar), value, predictionIn, predictionOut) or applied
+    if applied then
+      return true
+    end
+
+    local safe = SafeBool(value)
+    if safe ~= nil then
+      ApplyPredictionRangeAlpha(frame, safe and inAlpha or outAlpha, true)
+      return true
+    end
+    return false
+  end
+
+  ApplyPredictionRangeAlpha(frame, frame._msufGFRangeHealthAlpha, true)
+  return true
 end
 
 local function CoreAlpha(frame)

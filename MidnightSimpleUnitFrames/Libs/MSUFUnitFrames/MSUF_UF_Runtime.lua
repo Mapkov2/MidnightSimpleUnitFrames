@@ -444,7 +444,8 @@ function UF.RefreshHealthLayout()
   return UF.RefreshElements(nil, REVERSE_FILL_ELEMENTS, "MSUF_REVERSE_FILL")
 end
 
-local PREDICTION_ELEMENTS = { "Prediction" }
+local PREDICTION_ELEMENTS = { "Prediction", "Alpha" }
+local GROUP_PREDICTION_ELEMENTS = { "Prediction" }
 local TEMP_MAX_HEALTH_ELEMENTS = { "TempMaxHealth" }
 
 local function GroupPredictionScopeMatches(kind, scope)
@@ -469,11 +470,15 @@ local function InvalidateGroupPredictionSpecs(GF, scope)
   end
 end
 
-function UF.RefreshPredictionBars(scope, reason)
+function UF.RefreshPredictionBars(scope, reason, skipUnitFrames)
   reason = reason or "MSUF2_ABSORB"
-  local did = UF.RefreshElements(scope == "shared" and nil or scope, PREDICTION_ELEMENTS, reason) or false
+  local did = false
+  if skipUnitFrames ~= true then
+    did = UF.RefreshElements(scope == "shared" and nil or scope, PREDICTION_ELEMENTS, reason) or false
+  end
   local GF = MSUF and MSUF.GF
-  if GF and type(GF.ForEachFrame) == "function" and type(GF.CompileSpec) == "function" and type(UF.ApplyElementToFrame) == "function" then
+  if GF and type(GF.ForEachFrame) == "function" and type(GF.CompileSpec) == "function"
+    and (type(UF.ApplyElementsToFrame) == "function" or type(UF.ApplyElementToFrame) == "function") then
     InvalidateGroupPredictionSpecs(GF, scope)
     GF.ForEachFrame(function(frame, unit, kind)
       if GroupPredictionScopeMatches(kind, scope) ~= true then return end
@@ -481,7 +486,21 @@ function UF.RefreshPredictionBars(scope, reason)
       local spec = GF.CompileSpec(kind, frame, unit)
       if spec then
         UF.SetFrameSpec(frame, spec, unit)
-        UF.ApplyElementToFrame(frame, "Prediction", spec, reason)
+        if type(UF.ApplyElementsToFrame) == "function" then
+          UF.ApplyElementsToFrame(frame, GROUP_PREDICTION_ELEMENTS, spec, reason)
+        else
+          UF.ApplyElementToFrame(frame, "Prediction", spec, reason)
+        end
+        local alpha = UF.elements and UF.elements.Alpha
+        local applyPredictionAlpha = UF.ApplyPredictionAlphaFills
+          or (alpha and alpha.ApplyPredictionFills)
+        if type(applyPredictionAlpha) == "function" then
+          applyPredictionAlpha(frame, spec, true)
+        end
+        local range = UF.elements and UF.elements.GroupRangeFade
+        if range and type(range.RecomposePredictionAlpha) == "function" then
+          range.RecomposePredictionAlpha(frame)
+        end
         did = true
       end
     end, true)

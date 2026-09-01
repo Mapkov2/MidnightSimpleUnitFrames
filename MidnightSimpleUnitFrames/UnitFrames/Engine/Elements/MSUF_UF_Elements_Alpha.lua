@@ -183,6 +183,7 @@ local TEXT_ALPHA_FIELDS = {
   "statusIndicatorText",
   "statusAFKTimerText",
 }
+local HEALTH_GRADIENT_FIELDS = { "left", "right", "up", "down" }
 
 local function StatusBarTexture(bar)
   if not (bar and bar.GetStatusBarTexture) then
@@ -214,9 +215,18 @@ local function SetPortraitLayerAlpha(frame, alpha, force)
   SetAlphaCached(frame and frame.portrait, 1, "_msufAlphaPortraitTexture", force)
 end
 
-local function ApplyHealthFillAlpha(frame, alpha, force)
+local function ApplyCoreHealthFillAlpha(frame, alpha, force)
   SetStatusBarFillAlpha(frame.hpBar or frame.Health, alpha, "_msufAlphaHealth", force)
   SetStatusBarFillAlpha(frame.healthLossTrail, alpha, "_msufAlphaHealthLoss", force)
+  local gradients = frame.hpGradients
+  if gradients then
+    for i = 1, #HEALTH_GRADIENT_FIELDS do
+      SetAlphaCached(gradients[HEALTH_GRADIENT_FIELDS[i]], alpha, "_msufAlphaHealthGradient", force)
+    end
+  end
+end
+
+local function ApplyPredictionFillAlpha(frame, alpha, force)
   SetStatusBarFillAlpha(frame.incomingHealBar, alpha, "_msufAlphaPrediction", force)
   SetStatusBarFillAlpha(frame.absorbBar, alpha, "_msufAlphaPrediction", force)
   SetStatusBarFillAlpha(frame.healAbsorbBar, alpha, "_msufAlphaPrediction", force)
@@ -263,7 +273,8 @@ local function ApplyRangeOnly(frame, mul, force)
   end
   SetFrameAlpha(frame, 1)
   ApplyCastbarRangeAlpha(frame, 1, force)
-  ApplyHealthFillAlpha(frame, mul, force)
+  ApplyCoreHealthFillAlpha(frame, mul, force)
+  ApplyPredictionFillAlpha(frame, mul, force)
   return true
 end
 
@@ -281,13 +292,15 @@ local function ResetFrameLayers(frame, force)
   end
   SetFrameAlpha(frame, 1)
   ApplyCastbarRangeAlpha(frame, 1, force)
-  ApplyHealthFillAlpha(frame, 1, force)
+  ApplyCoreHealthFillAlpha(frame, 1, force)
+  ApplyPredictionFillAlpha(frame, 1, force)
   SetTextLayerAlpha(frame, 1, force)
   SetPortraitLayerAlpha(frame, 1, force)
   frame._msufAlphaActive = nil
   frame._msufAlphaEffective = nil
   frame._msufAlphaLastFrame = nil
   frame._msufAlphaLastHP = nil
+  frame._msufAlphaLastPrediction = nil
   frame._msufAlphaLastFG = nil
 end
 
@@ -323,26 +336,54 @@ local function ApplyAlpha(frame, cfg, force)
   -- min-composed: the strongest whole-frame fade wins, values never compound.
   local frameAlpha = wholeFrame and mul or 1
   if oocMul < frameAlpha then frameAlpha = oocMul end
-  local hpAlpha = hp * (wholeFrame and 1 or mul)
+  local healthLayerMul = wholeFrame and 1 or mul
+  local hpAlpha = hp * healthLayerMul
+  local predictionBase = cfg and cfg.excludePredictionBars == true and 1 or hp
+  local predictionAlpha = predictionBase * healthLayerMul
   frame._msufAlphaEffective = frameAlpha
 
   if not force
     and frame._msufAlphaLastFrame == frameAlpha
     and frame._msufAlphaLastHP == hpAlpha
+    and frame._msufAlphaLastPrediction == predictionAlpha
     and frame._msufAlphaLastFG == foregroundAlpha then
     return
   end
 
   SetFrameAlpha(frame, frameAlpha)
   ApplyCastbarRangeAlpha(frame, mul, force)
-  ApplyHealthFillAlpha(frame, hpAlpha, force)
+  ApplyCoreHealthFillAlpha(frame, hpAlpha, force)
+  ApplyPredictionFillAlpha(frame, predictionAlpha, force)
   SetTextLayerAlpha(frame, foregroundAlpha, force)
   SetPortraitLayerAlpha(frame, foregroundAlpha, force)
 
   frame._msufAlphaActive = true
   frame._msufAlphaLastFrame = frameAlpha
   frame._msufAlphaLastHP = hpAlpha
+  frame._msufAlphaLastPrediction = predictionAlpha
   frame._msufAlphaLastFG = foregroundAlpha
+end
+
+-- GroupRangeFade owns every group-frame/core lane. Prediction-only refreshes
+-- still need Alpha to stamp a newly-created fill and pick up the current
+-- exclusion toggle, but must not reset frame, health, text, portrait, castbar,
+-- range, offline, or ooc alpha state.
+function Alpha.ApplyPredictionFills(frame, spec, force)
+  if not frame then
+    return false
+  end
+  spec = spec or frame.MSUFSpec
+  CompileAlphaRuntime(frame, spec)
+  local cfg = frame._msufAlphaRuntimeCfg
+  local hp = ConfiguredHPAlpha(cfg)
+  local predictionAlpha = cfg and cfg.excludePredictionBars == true and 1 or hp
+  ApplyPredictionFillAlpha(frame, predictionAlpha, force == true)
+  frame._msufAlphaLastPrediction = predictionAlpha
+  return true
+end
+
+UF.ApplyPredictionAlphaFills = function(frame, spec, force)
+  return Alpha.ApplyPredictionFills(frame, spec, force)
 end
 
 function Alpha.IsEnabled(frame, spec)
@@ -380,6 +421,7 @@ function Alpha.Disable(frame)
   OocTrackFrame(frame, false)
   frame._msufAlphaLastFrame = nil
   frame._msufAlphaLastHP = nil
+  frame._msufAlphaLastPrediction = nil
   frame._msufAlphaLastFG = nil
   frame._msufAlphaEffective = nil
   frame._msufAlphaRuntimeCfg = nil

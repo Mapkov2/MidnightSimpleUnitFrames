@@ -934,8 +934,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     MSUF_Defaults_ApplyPredictionBarBaseline(db)
 
     --- Unified alpha defaults: HP fill opacity, power fill opacity, background
-    --- texture opacity, and a toggle to keep text + portrait opaque while bars dim.
-    --- Group frames still use the HP/background subset.
+    --- texture opacity, plus opt-in exclusions for informational frame elements.
+    --- Group frames still use the HP/background subset plus prediction exclusion.
     local function EnsureUnitAlphaDefaults(conf)
         if not conf then  return end
         if conf.hpBarAlpha == nil then conf.hpBarAlpha = 1 end
@@ -943,6 +943,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         if conf.hpBgAlpha == nil then conf.hpBgAlpha = 0.85 end
         if conf.powerBarBgAlpha == nil then conf.powerBarBgAlpha = conf.hpBgAlpha or 0.85 end
         if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
+        if conf.alphaExcludePredictionBars == nil then conf.alphaExcludePredictionBars = false end
         if conf.oocFadeEnabled == nil then conf.oocFadeEnabled = false end
         if conf.oocFadeAlpha == nil then conf.oocFadeAlpha = 0.5 end
     end
@@ -1001,6 +1002,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureUnitAlphaDefaults(db.boss)
     EnsureUnitAlphaDefaults(db.targettarget)
     EnsureUnitAlphaDefaults(db.tot)
+    for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
+        SetDefault(db[key], "alphaExcludePredictionBars", false)
+    end
     --- Older exports may omit screen positions; in that case provide stable
     --- center anchors without touching positions included by the compact export.
     EnsureFreshUnitframeScreenPosition(db.player, -260, 80)
@@ -4800,6 +4804,7 @@ local function fill(key, defaults)
         if u.hpBgAlpha == nil then u.hpBgAlpha = 0.85 end
         if u.powerBarBgAlpha == nil then u.powerBarBgAlpha = u.hpBgAlpha or 0.85 end
         if u.alphaExcludeTextPortrait == nil then u.alphaExcludeTextPortrait = false end
+        if u.alphaExcludePredictionBars == nil then u.alphaExcludePredictionBars = false end
         --- Out-of-combat fade: whole-frame alpha while out of combat (min-composed
         --- with range fade at runtime; strongest fade wins). Off by default.
         if u.oocFadeEnabled == nil then u.oocFadeEnabled = false end

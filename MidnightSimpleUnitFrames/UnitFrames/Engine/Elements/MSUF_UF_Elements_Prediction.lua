@@ -188,6 +188,8 @@ local function SetTextureCached(bar, texture)
     bar._msufTexture = texture
     bar.MSUF_cachedStatusbarTexture = texture
     bar._msufPredictionStatusTexture = nil
+    bar._msufAlphaStatusTextureObject = nil
+    bar._msufGFStatusBarTextureWidget = nil
   end
 end
 

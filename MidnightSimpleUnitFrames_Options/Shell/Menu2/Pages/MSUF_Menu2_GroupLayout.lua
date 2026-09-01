@@ -347,6 +347,9 @@ local function BuildGFTransparencySection(ctx, b)
     BindScopeToggle(ctx,
         AttachGroupFocus(W.ToggleAt(opacityOptionsCard, "Keep text + portrait visible", 16, -62, transparencyRightW - 32), "bars"),
         "alphaExcludeTextPortrait", false, "visual", "field.alphaExcludeTextPortrait")
+    BindScopeToggle(ctx,
+        AttachGroupFocus(W.ToggleAt(opacityOptionsCard, "Keep Absorbs + Prediction Visible", 16, -112, transparencyRightW - 32), "bars"),
+        "alphaExcludePredictionBars", false, "visual", "field.alphaExcludePredictionBars")
 
     -- Out of Combat tab: whole-member-frame fade; min-composed with range and
     -- offline fades at runtime (strongest fade wins). Slider greys while off.

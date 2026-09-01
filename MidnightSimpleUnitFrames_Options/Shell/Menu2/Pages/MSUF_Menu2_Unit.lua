@@ -292,7 +292,7 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     healthBarGradientColorR healthBarGradientColorG healthBarGradientColorB
     powerBarGradientColorR powerBarGradientColorG powerBarGradientColorB
 ]]
-local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
+local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars oocFadeEnabled oocFadeAlpha rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
 -- Keep this as a WL literal (even though the shared prefix list is empty) so
 -- unit_copy_coverage_smoke.lua can audit the dynamically-prefixed suffix set.
 local COPY_TEXLAYER_FIELDS = WL [[]]
