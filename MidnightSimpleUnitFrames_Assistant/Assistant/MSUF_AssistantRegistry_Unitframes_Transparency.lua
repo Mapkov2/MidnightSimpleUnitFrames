@@ -67,6 +67,13 @@ function A.UnitframesRegistry.RegisterTransparencyAndRangeSettings(ctx, unit)
             "keep text visible", "keep text portrait visible", "keep text and portrait visible",
             "exclude text from opacity", "keep portrait visible", "exclude portrait from opacity"
         ), { category = "Transparency", alpha = true })
+    RegisterUnitBooleanSetting(unit, "alphaExcludePredictionBars", "alphaExcludePredictionBars",
+        "Keep Absorbs + Prediction Visible", false,
+        MakeAliases(unit,
+            "keep absorbs visible", "keep absorb visible", "keep shields visible",
+            "keep prediction visible", "keep absorbs and prediction visible",
+            "exclude absorbs from opacity", "exclude prediction from opacity"
+        ), { category = "Transparency", alpha = true })
     RegisterUnitBooleanSetting(unit, "oocFadeEnabled", "oocFadeEnabled",
         "Fade Frame Out of Combat", false,
         MakeAliases(unit,

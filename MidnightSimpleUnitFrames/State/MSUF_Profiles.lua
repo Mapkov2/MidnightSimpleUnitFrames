@@ -4019,7 +4019,7 @@ local function MSUF_IsAuraGeneralKey(key)
     return (type(key) == "string") and (MSUF_AURA_GENERAL_KEYS[key] == true)
 end
 -- Unified, coldpath alpha keys: HP fill opacity, power fill opacity, background
--- opacity, and a toggle to keep text + portrait opaque. Note hpBarAlpha,
+-- opacity, and opt-in exclusions for informational elements. Note hpBarAlpha,
 -- powerBarAlpha, hpBgAlpha, and powerBarBgAlpha are NOT colour keys here
 -- (MSUF_IsColorKey matches "bg"); listing them keeps them travelling with unitframe
 -- settings rather than colour settings.
@@ -4029,6 +4029,7 @@ local MSUF_UNITFRAME_ALPHA_KEYS = {
     hpBgAlpha = true,
     powerBarBgAlpha = true,
     alphaExcludeTextPortrait = true,
+    alphaExcludePredictionBars = true,
 }
 local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     hpBarAlpha = 1,
@@ -4036,6 +4037,7 @@ local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     hpBgAlpha = 0.85,
     powerBarBgAlpha = 0.85,
     alphaExcludeTextPortrait = false,
+    alphaExcludePredictionBars = false,
 }
 local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }
 local function MSUF_IsUnitframeAlphaKey(key)

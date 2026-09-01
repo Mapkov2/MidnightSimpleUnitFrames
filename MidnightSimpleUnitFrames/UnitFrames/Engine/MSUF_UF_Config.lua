@@ -900,6 +900,7 @@ local function CompileAlpha(out, conf, general, key)
   local hpAlpha = Clamp01(conf.hpBarAlpha, 1)
   alpha.hpAlpha = hpAlpha
   alpha.excludeTextPortrait = conf.alphaExcludeTextPortrait == true
+  alpha.excludePredictionBars = conf.alphaExcludePredictionBars == true
   alpha.active = hpAlpha < 1
 
   -- Out-of-combat fade: whole-frame multiplier applied only while out of

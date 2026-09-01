@@ -791,7 +791,10 @@ local function ApplyBarGradient(frame, bar, spec, storeKey)
   return grads
 end
 
-local BAR_GRADIENT_ELEMENTS = { "Health", "Power" }
+-- Health/Power own gradient creation and retargeting. Alpha must run after
+-- both so a newly-created overlay immediately inherits the configured fill
+-- opacity instead of remaining at its default alpha until the next full apply.
+local BAR_GRADIENT_ELEMENTS = { "Health", "Power", "Alpha" }
 
 local function NormalizeGradientScope(scope)
   scope = tostring(scope or ""):lower()

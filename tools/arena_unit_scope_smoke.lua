@@ -72,6 +72,9 @@ Check(profiles:find('lk:find("arenacast", 1, true)', 1, true),
     "MSUF_IsCastbarKey no longer recognizes arenaCast keys")
 Check(profiles:find('"arena", "arena1", "arena2", "arena3",', 1, true),
     "profile text-scope ledger lost the arena scopes")
+Check(profiles:find("alphaExcludePredictionBars = true", 1, true)
+        and profiles:find("alphaExcludePredictionBars = false", 1, true),
+    "Arena profile alpha ownership lost the prediction-bar exclusion setting")
 
 -- 4) Castbars ------------------------------------------------------------------
 local anchors = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarAnchors.lua")
@@ -236,6 +239,14 @@ local loadConditions = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements
 Check(loadConditions:find("local function ArenaPrepForcesUnit", 1, true)
         and loadConditions:find("_G.MSUF_ArenaPrepVisibilityCount", 1, true),
     "arena prep is not slot-bounded in the secure visibility owner")
+local structuralPreviewElements = loadConditions:match(
+    "local BOSS_PREVIEW_REFRESH_ELEMENTS = (%b{})")
+Check(structuralPreviewElements and not structuralPreviewElements:find('"Alpha"', 1, true),
+    "arena preview structural refresh still owns alpha")
+Check(loadConditions:find("local function ReapplyArenaPreviewAlpha", 1, true)
+        and loadConditions:find("if active then ReapplyArenaPreviewAlpha(refreshReason) end", 1, true)
+        and loadConditions:find("ReapplyArenaPreviewAlpha(refreshReason)\n  RefreshArenaAuras()", 1, true),
+    "arena preview no longer reapplies configured alpha after full and light seeds")
 Check(match:find('uf.RefreshVisibilityDrivers("arena")', 1, true),
     "arena prep no longer swaps away from RegisterUnitWatch visibility")
 Check(match:find("previousCount == opponentCount", 1, true),

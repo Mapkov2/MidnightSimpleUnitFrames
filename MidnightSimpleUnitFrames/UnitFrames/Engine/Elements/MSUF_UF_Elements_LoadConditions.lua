@@ -59,7 +59,6 @@ local ARENA_PREVIEW_UNITS = {
   arena3 = true,
 }
 local BOSS_PREVIEW_REFRESH_ELEMENTS = {
-  "Alpha",
   "Health",
   "Power",
   "Text",
@@ -69,6 +68,7 @@ local BOSS_PREVIEW_REFRESH_ELEMENTS = {
   "Portrait",
   "Borders",
 }
+local BOSS_PREVIEW_ALPHA_ELEMENTS = { "Alpha" }
 
 local LoadConditions = {}
 local bossPreviewAppliedActive
@@ -622,6 +622,17 @@ local function ApplyBossPreviewFrames(active)
   end
 end
 
+local function ReapplyBossPreviewAlpha(reason)
+  if type(UF.RefreshElements) ~= "function" then
+    return false
+  end
+  -- ApplyBossPreviewFrames deliberately seeds missing/range-hidden bars at 1
+  -- so the synthetic data can be painted. Alpha is the final owner: restoring
+  -- it here keeps both full and light preview applies at the configured value.
+  return UF.RefreshElements("boss", BOSS_PREVIEW_ALPHA_ELEMENTS,
+    reason or "MSUF_BOSS_PREVIEW_ALPHA")
+end
+
 local function BossPreviewFramesReady(active)
   local frames = UF.frames
   if type(frames) ~= "table" then
@@ -690,6 +701,7 @@ function UF.ApplyBossPreviewState(active, reason)
   local refreshReason = reason or "MSUF_BOSS_PREVIEW"
   if CanUseLightBossPreviewApply(active, refreshReason) then
     ApplyBossPreviewFrames(active)
+    if active then ReapplyBossPreviewAlpha(refreshReason) end
     return true
   end
 
@@ -709,6 +721,7 @@ function UF.ApplyBossPreviewState(active, reason)
   if active then
     ApplyBossPreviewFrames(true)
   end
+  ReapplyBossPreviewAlpha(refreshReason)
   RefreshBossAuras()
   if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
     _G.MSUF_UpdateBossCastbarPreview()
@@ -937,6 +950,14 @@ local function ApplyArenaPreviewFrames(active)
   end
 end
 
+local function ReapplyArenaPreviewAlpha(reason)
+  if type(UF.RefreshElements) ~= "function" then
+    return false
+  end
+  return UF.RefreshElements("arena", BOSS_PREVIEW_ALPHA_ELEMENTS,
+    reason or "MSUF_ARENA_PREVIEW_ALPHA")
+end
+
 local function ArenaPreviewFramesReady(active)
   local frames = UF.frames
   if type(frames) ~= "table" then
@@ -1005,6 +1026,7 @@ function UF.ApplyArenaPreviewState(active, reason)
   local refreshReason = reason or "MSUF_ARENA_PREVIEW"
   if CanUseLightArenaPreviewApply(active, refreshReason) then
     ApplyArenaPreviewFrames(active)
+    if active then ReapplyArenaPreviewAlpha(refreshReason) end
     return true
   end
 
@@ -1018,6 +1040,7 @@ function UF.ApplyArenaPreviewState(active, reason)
   if active then
     ApplyArenaPreviewFrames(true)
   end
+  ReapplyArenaPreviewAlpha(refreshReason)
   RefreshArenaAuras()
   if type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
     _G.MSUF_UpdateArenaCastbarPreview()

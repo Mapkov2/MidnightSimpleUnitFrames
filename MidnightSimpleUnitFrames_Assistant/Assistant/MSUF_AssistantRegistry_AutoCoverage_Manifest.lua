@@ -19,17 +19,18 @@ M.Assistant = A
 local Manifest = A.AutoCoverageManifest or {}
 A.AutoCoverageManifest = Manifest
 
--- Defaults generated offline on 2026-08-30 from the current factory profile
+-- Defaults generated offline on 2026-09-01 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 5087 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 5087
+-- 5098 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 5098
 Manifest.requiredScopes = {
     "arena", "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
 }
 Manifest.defaults = {
     arena = {
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = false,
         bossLayoutMode = "VERTICAL_DOWN",
         chunkedFill = false,
@@ -464,6 +465,7 @@ Manifest.defaults = {
         absorbBarOpacity = 1,
         absorbBarTexture = "MSUF Smooth v2",
         absorbTextMode = 2,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorMyPoint = "CENTER",
         anchorRelPoint = "CENTER",
@@ -839,6 +841,7 @@ Manifest.defaults = {
         absorbBarOpacity = 1,
         absorbBarTexture = "MSUF Smooth v2",
         absorbTextMode = 2,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorMyPoint = "CENTER",
         anchorRelPoint = "CENTER",
@@ -1210,6 +1213,7 @@ Manifest.defaults = {
         width = 190,
     },
     focustarget = {
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = false,
         chunkedFill = false,
         eliteIconAnchor = "TOPRIGHT",
@@ -2178,6 +2182,7 @@ Manifest.defaults = {
         aggroMode = "ALL",
         aggroOutlineMode = 1,
         aggroR = 1,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorPoint = "TOPLEFT",
         assistIcon = false,
@@ -2579,6 +2584,7 @@ Manifest.defaults = {
         aggroMode = "ALL",
         aggroOutlineMode = 1,
         aggroR = 1,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorPoint = "LEFT",
         anchorToFrame = "FREE",
@@ -3055,6 +3061,7 @@ Manifest.defaults = {
         aggroMode = "ALL",
         aggroOutlineMode = 1,
         aggroR = 1,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorPoint = "TOPLEFT",
         assistIcon = false,
@@ -3459,6 +3466,7 @@ Manifest.defaults = {
         absorbBarOpacity = 1,
         absorbBarTexture = "MSUF Smooth v2",
         absorbTextMode = 2,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorMyPoint = "CENTER",
         anchorRelPoint = "CENTER",
@@ -3859,6 +3867,7 @@ Manifest.defaults = {
         absorbTextMode = 2,
         aggroMode = "HEALER",
         aggroOutlineMode = 0,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorMyPoint = "CENTER",
         anchorRelPoint = "CENTER",
@@ -4303,6 +4312,7 @@ Manifest.defaults = {
         absorbTextMode = 2,
         aggroMode = "ALL",
         aggroOutlineMode = 0,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorMyPoint = "CENTER",
         anchorRelPoint = "CENTER",
@@ -4746,6 +4756,7 @@ Manifest.defaults = {
         absorbBarOpacity = 1,
         absorbBarTexture = "MSUF Smooth v2",
         absorbTextMode = 2,
+        alphaExcludePredictionBars = false,
         alphaExcludeTextPortrait = true,
         anchorMyPoint = "CENTER",
         anchorRelPoint = "CENTER",
@@ -5146,4 +5157,4 @@ Manifest.defaults = {
     },
 }
 
--- top-level scalar paths: 5087
+-- top-level scalar paths: 5098

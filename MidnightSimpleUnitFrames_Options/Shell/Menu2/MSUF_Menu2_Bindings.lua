@@ -1283,7 +1283,7 @@ local GROUP_COLOR_KEYS = KSW [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
     gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
     tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
-    alphaExcludeTextPortrait deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
+    alphaExcludeTextPortrait alphaExcludePredictionBars deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
     debuffStripeAlpha debuffStripeColorR debuffStripeColorG debuffStripeColorB targetR targetG targetB
     hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB groupBorderA
     ciAggroColorR ciAggroColorG ciAggroColorB

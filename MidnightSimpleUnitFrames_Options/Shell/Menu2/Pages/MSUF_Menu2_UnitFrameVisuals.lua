@@ -756,7 +756,7 @@ local function BuildPower(ctx, builder, unit)
         ReviewedMeta(ctx, "power.detached", "setting", "compound",
             "Enabling detached power seeds its required geometry and Player synchronization defaults."))
     local detachedTextFields = BuildPowerControls(detachedCard, AddDetachedControl, {
-        { "toggle", "Text on detached bar", 16, -62, detachedLeftW, "detachedPowerBarTextOnBar", false, "MSUF2_POWER_DETACHED_TEXT", nil,
+        { "toggle", "Text on detached bar", 16, -62, detachedLeftW, "detachedPowerBarTextOnBar", false, "MSUF2_POWER_DETACHED_TEXT",
         function()
             return ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", true))
                 and ReadBool(unit, "detachedPowerBarTextOnBar", false)
