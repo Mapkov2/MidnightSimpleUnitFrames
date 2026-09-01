@@ -1,0 +1,107 @@
+name: Correct MSUF Classic CurseForge game versions
+run-name: Correct CurseForge file from ${{ github.ref_name }}
+
+on:
+  push:
+    tags:
+      - "classic-cfmeta-*"
+
+permissions:
+  contents: read
+
+jobs:
+  update-file:
+    if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames'
+    runs-on: ubuntu-latest
+    env:
+      CLASSIC_METADATA_TAG: ${{ github.ref_name }}
+      CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
+
+    steps:
+      - name: Check out metadata correction tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Validate correction target
+        id: target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = $env:CLASSIC_METADATA_TAG
+          if ($tag -notmatch '^classic-cfmeta-(?<file>\d+)-v(?<version>\d+(?:\.\d+)*-alpha(?<number>\d+))$') {
+            throw "Metadata correction tag must use 'classic-cfmeta-<file>-v<version>-alpha<number>'. Got: $tag"
+          }
+          $fileId = $Matches["file"]
+          $version = $Matches["version"]
+          $alphaNumber = [int]$Matches["number"]
+
+          git fetch --no-tags origin "+refs/heads/classic:refs/remotes/origin/classic"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not fetch origin/classic for metadata correction validation."
+          }
+          $tagCommit = (git rev-list -n 1 "refs/tags/$tag" 2>$null).Trim()
+          $classicCommit = (git rev-parse "refs/remotes/origin/classic" 2>$null).Trim()
+          if ([string]::IsNullOrWhiteSpace($tagCommit) -or [string]::IsNullOrWhiteSpace($classicCommit) -or $tagCommit -ne $classicCommit) {
+            throw "Metadata correction tag '$tag' must point at current origin/classic. Tag=$tagCommit Classic=$classicCommit"
+          }
+
+          $sourceVersion = (Get-Content -LiteralPath "VERSION" -Raw).Trim()
+          if ($sourceVersion -ne $version) {
+            throw "VERSION '$sourceVersion' does not match metadata correction version '$version'."
+          }
+
+          $base = $version -replace '-alpha\d+$', ''
+          $displayName = "MSUF_${base}A$alphaNumber"
+          "CF_FILE_ID=$fileId" >> $env:GITHUB_ENV
+          "CF_DISPLAY_NAME=$displayName" >> $env:GITHUB_ENV
+          "file_id=$fileId" >> $env:GITHUB_OUTPUT
+          "display_name=$displayName" >> $env:GITHUB_OUTPUT
+          Write-Host "Validated metadata correction for CurseForge file $fileId at origin/classic $classicCommit."
+
+      - name: Update existing CurseForge file
+        id: curseforge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
+            throw "Missing CurseForge secret CF_API_KEY (or CURSEFORGE fallback)."
+          }
+
+          $gameVersionNames = @("12.0.7", "12.1.0", "1.15.9", "2.5.6", "5.5.4")
+          $metadata = [ordered]@{
+            fileID = [long]$env:CF_FILE_ID
+            displayName = $env:CF_DISPLAY_NAME
+            gameVersionNames = $gameVersionNames
+            releaseType = "alpha"
+          } | ConvertTo-Json -Depth 4 -Compress
+
+          $headers = @{
+            "X-Api-Token" = $env:CF_API_KEY
+            Accept = "application/json"
+          }
+          $result = Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://wow.curseforge.com/api/projects/1384660/update-file" `
+            -Headers $headers `
+            -Form @{ metadata = $metadata }
+
+          if (-not $result -or [string]$result.id -ne [string]$env:CF_FILE_ID) {
+            throw "CurseForge did not confirm metadata correction for file $env:CF_FILE_ID."
+          }
+          "updated_file_id=$($result.id)" >> $env:GITHUB_OUTPUT
+          Write-Host "CurseForge file $($result.id) now targets [$($gameVersionNames -join ', ')] as '$env:CF_DISPLAY_NAME' / alpha."
+
+      - name: Write correction summary
+        shell: pwsh
+        run: |
+          @"
+          ## CurseForge file metadata corrected
+
+          - File: ``${{ steps.curseforge.outputs.updated_file_id }}``
+          - Display name: ``$env:CF_DISPLAY_NAME``
+          - Game versions: ``12.0.7``, ``12.1.0``, ``1.15.9``, ``2.5.6``, ``5.5.4``
+          - Release type: ``alpha``
+          - No new file was uploaded.
+          "@ >> $env:GITHUB_STEP_SUMMARY
