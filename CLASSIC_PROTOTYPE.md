@@ -1,10 +1,11 @@
 # MSUF Classic 6.5 Alpha Build
 
 This local branch was created from Retail `main` commit `7cf4e711` and is now
-synchronized with the released Retail 6.0 RC10 source snapshot. The 6.5 Alpha line
-adds the complete responsive texture-layer design system, 100 editable looks,
-50 original assets, class-fantasy recipes, modular no-portrait layouts and Edge
-Softness while retaining all RC10 functional fixes. It follows the same
+synchronized through the released Retail 6.15-beta1 source snapshot at
+`b67dc922`. The first public 6.5 Alpha combines the complete responsive
+texture-layer design system, 100 editable looks, 50 original assets,
+class-fantasy recipes, modular no-portrait layouts and Edge Softness with the
+current Retail feature and bug-fix set. It follows the same
 multi-client packaging shape used by ElvUI: client-suffixed TOCs plus a real
 `Game/Shared`, `Game/Classic`, `Game/Mainline`, `Game/Vanilla`, `Game/Mists`, and `Game/TBC`
 source boundary.
