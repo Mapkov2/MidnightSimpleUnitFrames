@@ -1,0 +1,182 @@
+name: MSUF Classic CurseForge Alpha
+run-name: Publish ${{ github.ref_name }} to CurseForge
+
+on:
+  push:
+    tags:
+      - "classic-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish-classic:
+    if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames'
+    runs-on: ubuntu-latest
+    env:
+      CLASSIC_RELEASE_TAG: ${{ github.ref_name }}
+      CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
+
+    steps:
+      - name: Check out Classic release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Validate Classic tag and branch freshness
+        id: release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = $env:CLASSIC_RELEASE_TAG
+          if ($tag -notmatch '^classic-v(?<version>\d+(?:\.\d+)*-alpha(?<number>\d+))$') {
+            throw "Classic CurseForge releases require tag 'classic-v<version>-alpha<number>'. Got: $tag"
+          }
+          $version = $Matches["version"]
+          $alphaNumber = [int]$Matches["number"]
+
+          git fetch --no-tags origin "+refs/heads/classic:refs/remotes/origin/classic"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not fetch origin/classic for release freshness validation."
+          }
+
+          $tagCommit = (git rev-list -n 1 "refs/tags/$tag" 2>$null)
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tagCommit)) {
+            throw "Could not resolve Classic release tag '$tag' to a commit."
+          }
+          $classicCommit = (git rev-parse "refs/remotes/origin/classic" 2>$null)
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($classicCommit)) {
+            throw "Could not resolve origin/classic to a commit."
+          }
+
+          $tagCommit = $tagCommit.Trim()
+          $classicCommit = $classicCommit.Trim()
+          if ($tagCommit -ne $classicCommit) {
+            throw "Refusing Classic release tag '$tag' at $tagCommit; current origin/classic is $classicCommit."
+          }
+
+          $base = $version -replace '-alpha\d+$', ''
+          $releaseName = "MSUF_${base}A$alphaNumber"
+
+          "CLASSIC_RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+          "CLASSIC_RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
+          Write-Host "Classic tag '$tag' is current at origin/classic $classicCommit."
+
+      - name: Validate CurseForge publishing configuration
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
+            throw "Missing CurseForge secret CF_API_KEY (or CURSEFORGE fallback)."
+          }
+
+      - name: Build and validate Classic multi-client package
+        shell: pwsh
+        run: |
+          & "./.github/scripts/build_classic_release_package.ps1" `
+            -ReleaseVersion $env:CLASSIC_RELEASE_TAG `
+            -OutputDirectory "dist"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Classic release package build failed."
+          }
+
+      - name: Upload Classic alpha to CurseForge
+        id: curseforge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          function Get-TocField {
+            param(
+              [Parameter(Mandatory = $true)][string]$Content,
+              [Parameter(Mandatory = $true)][string]$Name
+            )
+
+            $matches = [regex]::Matches($Content, "(?m)^##\s+$([regex]::Escape($Name)):\s*(.+?)\s*$")
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one '$Name' field in Core Classic TOC; found $($matches.Count)."
+            }
+            return $matches[0].Groups[1].Value.Trim()
+          }
+
+          $expectedProjectId = "1384660"
+          $coreClassicTocs = @(
+            "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Vanilla.toc",
+            "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_TBC.toc",
+            "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mists.toc"
+          )
+          $projectIds = @(
+            foreach ($tocPath in $coreClassicTocs) {
+              if (-not (Test-Path -LiteralPath $tocPath -PathType Leaf)) {
+                throw "Core Classic TOC is missing: $tocPath"
+              }
+              $tocContent = Get-Content -LiteralPath $tocPath -Raw
+              Get-TocField -Content $tocContent -Name "X-Curse-Project-ID"
+            }
+          )
+          $uniqueProjectIds = @($projectIds | Sort-Object -Unique)
+          if ($uniqueProjectIds.Count -ne 1 -or $uniqueProjectIds[0] -ne $expectedProjectId) {
+            throw "Core Classic TOCs must all declare CurseForge project $expectedProjectId. Got: $($projectIds -join ', ')"
+          }
+          $projectId = $uniqueProjectIds[0]
+
+          $zips = @(Get-ChildItem -LiteralPath "dist" -Filter "*.zip" -File)
+          if ($zips.Count -ne 1) {
+            throw "Expected exactly one validated Classic release zip; found $($zips.Count)."
+          }
+          $zip = $zips[0]
+          $changelogPath = "dist/RELEASE_NOTES_CLASSIC_CF.html"
+          if (-not (Test-Path -LiteralPath $changelogPath -PathType Leaf)) {
+            throw "Classic CurseForge HTML changelog is missing: $changelogPath"
+          }
+          $changelog = Get-Content -LiteralPath $changelogPath -Raw
+          if ([string]::IsNullOrWhiteSpace($changelog)) {
+            throw "Classic CurseForge HTML changelog is empty."
+          }
+
+          $gameVersionNames = @("1.15.9", "2.5.6", "5.5.4")
+          $metadata = [ordered]@{
+            changelog = $changelog
+            changelogType = "html"
+            displayName = $env:CLASSIC_RELEASE_NAME
+            gameVersionNames = $gameVersionNames
+            releaseType = "alpha"
+          } | ConvertTo-Json -Depth 5 -Compress
+
+          $headers = @{
+            "X-Api-Token" = $env:CF_API_KEY
+            Accept = "application/json"
+          }
+          $form = @{
+            metadata = $metadata
+            file = $zip
+          }
+          $result = Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://wow.curseforge.com/api/projects/$projectId/upload-file" `
+            -Headers $headers `
+            -Form $form
+
+          $fileId = if ($result -and $result.id) { [string]$result.id } else { "" }
+          if ([string]::IsNullOrWhiteSpace($fileId)) {
+            throw "CurseForge accepted no file ID for Classic release upload."
+          }
+
+          "file_id=$fileId" >> $env:GITHUB_OUTPUT
+          Write-Host "CurseForge Classic alpha upload accepted: project $projectId, file $fileId, release '$env:CLASSIC_RELEASE_NAME', versions [$($gameVersionNames -join ', ')]."
+
+      - name: Write Classic release summary
+        shell: pwsh
+        run: |
+          @"
+          ## MSUF Classic CurseForge alpha
+
+          - Tag: ``$env:CLASSIC_RELEASE_TAG``
+          - Version: ``$env:CLASSIC_RELEASE_VERSION``
+          - CurseForge project: ``1384660``
+          - CurseForge file: ``${{ steps.curseforge.outputs.file_id }}``
+          - Game versions: ``1.15.9``, ``2.5.6``, ``5.5.4``
+          - Release type: ``alpha``
+          "@ >> $env:GITHUB_STEP_SUMMARY
