@@ -354,6 +354,16 @@ local function FrameWidth(frame)
   return nil
 end
 
+local function ClassPowerAnchorWidth()
+  local anchor = _G.MSUF_ClassPowerContainer
+  if not (anchor and anchor.GetWidth) then return nil end
+  if anchor._msufAnchorOnly == true then
+    local width = Number(anchor:GetWidth(), nil)
+    return width and width > 1 and width or nil
+  end
+  return FrameWidth(anchor)
+end
+
 local function ResolveCooldownWidthFrame(name)
   if type(name) ~= "string" or name == "" then return nil end
   local resolver = _G.MSUF_GetEffectiveCooldownFrame
@@ -400,9 +410,9 @@ end
 --      detached, so it can never stand for "the user chose this". "Manual", the
 --      default, resolves to no frame name at all and leaves the rest of this
 --      chain byte-identical to what an untouched profile already had.
---   2. a live Class Resource bar, while this frame opted into matching it. That
---      is a local checkbox on the same card as the width slider, so its effect
---      is visible where it is configured.
+--   2. a live Class Resource bar, or its controller-maintained hidden anchor,
+--      while this frame opted into matching it. That is a local checkbox on the
+--      same card as the width slider, so its effect is visible where configured.
 --   3. a Detached width configured for this frame.
 --   4. the shared Class Resources width mode (Cooldown Viewer source and the
 --      predicted class width) as the sync fallback. It lives on another page and
@@ -412,7 +422,7 @@ local function ResolveDetachedWidth(frame, power)
   local bar = frame and frame.targetPowerBar
   local width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar)
   if width == nil and power.detachedSyncClass == true then
-    width = FrameWidth(_G.MSUF_ClassPowerContainer)
+    width = ClassPowerAnchorWidth()
   end
   width = width or Number(power.detachedWidthExplicit, nil)
   if width == nil and power.detachedSyncClass == true then
@@ -427,9 +437,7 @@ Power.ResolveDetachedWidth = ResolveDetachedWidth
 
 local function ResolveDetachedAnchor(power)
   local anchor = _G.MSUF_ClassPowerContainer
-  if power.detachedAnchorClass == true
-    and anchor and anchor.GetWidth and anchor:GetWidth() > 1
-    and (not anchor.IsShown or anchor:IsShown()) then
+  if power.detachedAnchorClass == true and ClassPowerAnchorWidth() then
     return anchor, "TOP", "BOTTOM"
   end
   if power.detachedAnchorMode == "LEGACY_TOPLEFT" then
@@ -626,10 +634,9 @@ function Power.RefreshDetachedExternalWidth(frame, sourceName, power)
   return RefreshDetachedWidthOnly(frame, bar, power)
 end
 
--- The live Class Resource bar is matched only while it is actually shown, and no
--- cooldown-width observer watches that frame. Class Resources calls this on its
--- own show/hide transitions so a synced bar picks the class width up and returns
--- to the configured Detached width when the class bar goes away.
+-- The live Class Resource bar and its controller-maintained hidden anchor have
+-- no cooldown-width observer. Class Resources calls this on its own show/hide
+-- transitions so a synced bar re-resolves the correct width exactly once.
 function Power.RefreshDetachedSyncedWidth(frame, power)
   power = power or SpecPower(frame)
   if not (power and power.detachedSyncClass == true) then return false end
