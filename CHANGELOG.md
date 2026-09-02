@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.15-beta2 - 2026-09-02
+
+### Highlights
+
+- **Raid and Mythic Raid role sorting can now span the entire raid.** Enable **Sort roles across entire raid** under Frames > Party/Raid Frames > Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group, including with Preserve raid groups.
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- Added **Sort roles across entire raid** to Raid and Mythic Raid sorting with defaults, profile copy, locales, search, and Assistant support. By Role with Preserve raid groups and Group + Role follow the raid-wide order; Party is unaffected.
+- The Boss Preview now renders incoming heal, absorb, and heal-absorb bars plus the absorb text so prediction settings can be judged without a live boss.
+
+### Fixes & Performance
+
+- Raid role sorting stays fully out of combat: the raid-wide order is rebuilt only when roles or the roster change outside combat, and Blizzard's secure header applies it natively.
+- Tidied the Group Layout Sorting card so the Sort Mode dropdown and its toggles sit evenly inside the card.
+
 ## 6.15-beta1 - 2026-09-01
 
 ### Highlights
