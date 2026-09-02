@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "BE24306D0595B879363D14CA4237158F28A173842F522BE80C4E05A185E1AB0F"
-Search.StaticIndexRecordCount = 2879
+Search.StaticIndexSourceSha256 = "199E89C6C984617E8A3366F098025DA194830C8A1CA2184DC9E4EB950192E111"
+Search.StaticIndexRecordCount = 2880
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -528,6 +528,7 @@ gf_layout	Size override	slider			Layout > Portrait	size override	idgf_layoutme
 gf_layout	Smooth fill	toggle			Layout > Field	smooth fill	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowersmoothfill	power			smooth fill layout field group layout field powersmoothfill gf layout toggle
 gf_layout	Smooth health fill	toggle			Layout > Field	smooth health fill	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Esmoothfill	general			smooth health fill layout field group layout field smoothfill gf layout toggle
 gf_layout	Sort by Role	toggle			Layout > Field	sort by role	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Esortbyrole	sorting			sort by role layout field group layout field sortbyrole gf layout toggle
+gf_layout	Sort roles across entire raid	toggle			Layout > Field	sort roles across entire raid	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Esortrolesacrossraid	sorting			sort roles across entire raid layout field group layout field sortrolesacrossraid gf layout toggle
 gf_layout	Spacing	slider			Layout > Field	spacing	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Espacing	layout_advanced			spacing layout field group layout field spacing gf layout slider
 gf_layout	Square	dropdown			Layout > Portrait	square	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eportrait%2Eportraitshape	portrait			square layout portrait group layout portrait portraitshape gf layout dropdown
 gf_layout	Tank	dragrow			Role Priority > Row	tank	idgf_layoutmenu2%2Egf_layout%2Egroup%2Esorting%2Erole_priority%2Erow%2Etank	sorting			tank role priority row group sorting role priority row tank gf layout dragrow

@@ -5198,6 +5198,9 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "всегда видна"
 L["hidden on this character"] = "скрыто на этом персонаже"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "Скрывает каждое заклинание из белого списка, которое этот персонаж не может применить, не оставляя пустоты. Один белый список подходит всем персонажам: маг сохраняет «Чародейский разум», разбойник — яды. Ничто не сообщает, какому классу принадлежит ID заклинания, поэтому баф от флакона выглядит так же, как чужое классовое заклинание — защитите такие записи привязанным предметом или кнопкой «Всегда показывать». MSUF перепроверяет это только при реальном изменении книги заклинаний или талантов и никогда в бою."
+L["Sort roles across entire raid"] = "Сортировать роли по всему рейду"
+L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "Упорядочивает танков, лекарей и бойцов по всему рейду, а не внутри каждой рейдовой группы. Только для рейда и эпохального рейда: действует для сортировки по роли вместе с сохранением рейдовых групп, а также для режима Группа + Роль."
+L["Raid-wide roles"] = "Роли по всему рейду"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

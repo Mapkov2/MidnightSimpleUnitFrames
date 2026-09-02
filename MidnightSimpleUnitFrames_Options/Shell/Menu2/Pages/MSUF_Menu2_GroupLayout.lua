@@ -431,7 +431,7 @@ local function BuildGFGeometrySection(ctx, b)
 end
 
 local function BuildGFSortingSection(ctx, b)
-    local sorting = b:CollapsibleSection("sorting", "Sorting", 236, false)
+    local sorting = b:CollapsibleSection("sorting", "Sorting", 254, false)
     local sortingW = sorting._msuf2Width or b.width or 720
     local sortingGap = 16
     local sortingLeftX = 20
@@ -439,10 +439,10 @@ local function BuildGFSortingSection(ctx, b)
     local sortingLeftW = floor((sortingInnerW - sortingGap) * 0.52)
     local sortingRightX = sortingLeftX + sortingLeftW + sortingGap
     local sortingRightW = sortingInnerW - sortingLeftW - sortingGap
-    local sortCard = W.ControlCard(sorting, "Sort mode", nil, sortingLeftX, -38, sortingLeftW, 174)
-    local roleCard = W.ControlCard(sorting, "Role Priority", "Drag rows with mouse to reorder.", sortingRightX, -38, sortingRightW, 174)
+    local sortCard = W.ControlCard(sorting, "Sort mode", nil, sortingLeftX, -38, sortingLeftW, 192)
+    local roleCard = W.ControlCard(sorting, "Role Priority", "Drag rows with mouse to reorder.", sortingRightX, -38, sortingRightW, 192)
     local sortMode = W.Dropdown(sortCard, "Sort Mode", SORT_MODES, min(260, sortingLeftW - 32))
-    W.MoveWidget(sortMode, sortCard, 16, -62, min(260, sortingLeftW - 32), "LEFT")
+    W.MoveWidget(sortMode, sortCard, 16, -28, min(260, sortingLeftW - 32), "LEFT")
     if sortMode._msuf2Title then
         sortMode._msuf2Title:ClearAllPoints()
         sortMode._msuf2Title:SetPoint("LEFT", sortMode, "RIGHT", 8, 0)
@@ -464,7 +464,7 @@ local function BuildGFSortingSection(ctx, b)
             if refreshSortingControls then refreshSortingControls() end
         end,
         ControlMeta(ctx, "field.sortMode"))
-    local roleSort = W.ToggleAt(sortCard, "Sort by Role", 16, -110, sortingLeftW - 32)
+    local roleSort = W.ToggleAt(sortCard, "Sort by Role", 16, -86, sortingLeftW - 32)
     M.BindBoolWidget(ctx, roleSort,
         function()
             local conf = Conf(CurrentScope())
@@ -479,7 +479,15 @@ local function BuildGFSortingSection(ctx, b)
             if refreshSortingControls then refreshSortingControls() end
         end,
         ControlMeta(ctx, "field.sortByRole"))
-    local playerFirst = BindScopeToggle(ctx, W.ToggleAt(sortCard, "Player first in role", 16, -144, sortingLeftW - 32), "playerFirstInRole", false, "rebuild")
+    local playerFirst = BindScopeToggle(ctx, W.ToggleAt(sortCard, "Player first in role", 16, -116, sortingLeftW - 32), "playerFirstInRole", false, "rebuild")
+    --- Raid/Mythic only: By Role with Preserve raid groups (and Group + Role) sort
+    --- roles inside each raid group; this orders them across the entire raid.
+    local raidWideRoles = BindScopeToggle(ctx, W.ToggleAt(sortCard, "Sort roles across entire raid", 16, -146, sortingLeftW - 32), "sortRolesAcrossRaid", false, "rebuild")
+    if M.AddTooltip then
+        M.AddTooltip(raidWideRoles, "Sort roles across entire raid",
+            "Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role.",
+            { hook = true, labelHit = true })
+    end
     local roleRows = BuildRoleOrderRows(ctx, roleCard, {
         x = 16,
         y = -66,
@@ -493,14 +501,20 @@ local function BuildGFSortingSection(ctx, b)
         if sortMode.SetValue then sortMode:SetValue(currentMode) end
         if roleSort.SetChecked then roleSort:SetChecked(enabled) end
         SetOptionEnabled(playerFirst, enabled)
+        local raidWideEligible = CurrentScope() ~= "party" and (enabled or currentMode == "GROUP_ROLE")
+        SetOptionEnabled(raidWideRoles, raidWideEligible)
         if roleRows then
             if roleRows.Refresh then roleRows.Refresh() end
             if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(enabled) end
         end
-        SetSectionBadgesAndStatus(sorting, {
+        local badges = {
             { text = OptionText(SORT_MODES, currentMode, "Index"), kind = "info" },
             { text = enabled and "Role order" or "Simple order", kind = enabled and "accent" or "muted" },
-        })
+        }
+        if raidWideEligible and Bool(CurrentScope(), "sortRolesAcrossRaid", false) then
+            badges[#badges + 1] = { text = "Raid-wide roles", kind = "accent" }
+        end
+        SetSectionBadgesAndStatus(sorting, badges)
     end
     TrackSectionRefresh(ctx, sorting, refreshSortingControls)
 end

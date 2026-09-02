@@ -5200,6 +5200,9 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "始終可見"
 L["hidden on this character"] = "在此角色上隱藏"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "隱藏白名單中這個角色無法施放的每個法術，且不留空位。這樣一份白名單就能服務你的所有角色：法師保留奧術智慧，盜賊保留毒藥。沒有任何介面告知法術 ID 屬於哪個職業，因此藥劑增益看起來與其他職業的法術完全一樣 — 請用綁定物品或清單中的「始終顯示」保護它們。MSUF 僅在法術書或天賦真正變化時重新檢查，戰鬥中絕不檢查。"
+L["Sort roles across entire raid"] = "依整個團隊排序角色"
+L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "在整個團隊範圍內排序坦克、治療與輸出，而不是在每個團隊小隊內部排序。僅限團隊與傳奇團隊：適用於搭配「保留團隊小隊」的按角色排序，以及組+角色排序。"
+L["Raid-wide roles"] = "全團角色排序"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

@@ -5579,6 +5579,9 @@ L["Lets the self-cast filter decide about this entry again. It will be hidden on
 L["always shown"] = "toujours affiché"
 L["hidden on this character"] = "masqué sur ce personnage"
 L["Hides every whitelisted spell this character cannot cast, without leaving a gap. One whitelist can then serve all your characters: the Mage keeps Arcane Intellect, the Rogue keeps the poisons. Nothing reports which class owns a Spell ID, so a flask buff looks exactly like a foreign class ability here - protect those with a bound item, or with Always show on the row in the Whitelist. MSUF re-checks this only when your spellbook or talents actually change, never during combat."] = "Masque chaque sort de la liste blanche que ce personnage ne peut pas lancer, sans laisser de trou. Une seule liste blanche sert alors tous vos personnages : le mage garde Intelligence arcanique, le voleur garde ses poisons. Rien n'indique à quelle classe appartient un ID de sort : un buff de flacon ressemble donc exactement à un sort d'une autre classe. Protégez-les avec un objet lié ou avec Toujours afficher sur la ligne. MSUF ne revérifie cela que lorsque votre grimoire ou vos talents changent réellement, jamais en combat."
+L["Sort roles across entire raid"] = "Trier les rôles sur tout le raid"
+L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "Classe les tanks, les soigneurs et les DPS sur l'ensemble du raid au lieu de chaque groupe de raid. Raid et Raid mythique uniquement : s'applique à Par rôle avec Préserver les groupes de raid, et à Groupe + Rôle."
+L["Raid-wide roles"] = "Rôles sur tout le raid"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

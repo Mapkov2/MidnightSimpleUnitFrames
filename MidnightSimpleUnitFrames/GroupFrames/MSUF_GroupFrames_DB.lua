@@ -622,6 +622,9 @@ local PARTY_DEFAULTS = {
     sortByRole        = false,
     roleOrder         = "TANK,HEALER,DAMAGER",
     playerFirstInRole   = false,
+    --- Raid/Mythic only: order roles across the entire raid instead of within
+    --- each raid group (preserved blocks fill from the raid-wide role order).
+    sortRolesAcrossRaid = false,
 }
 
 local RAID_DEFAULTS = {}
