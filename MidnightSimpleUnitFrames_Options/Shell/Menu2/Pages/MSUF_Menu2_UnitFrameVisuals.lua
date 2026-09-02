@@ -757,15 +757,7 @@ local function BuildPower(ctx, builder, unit)
             "Enabling detached power seeds its required geometry and Player synchronization defaults."))
     local detachedTextFields = BuildPowerControls(detachedCard, AddDetachedControl, {
         { "toggle", "Text on detached bar", 16, -62, detachedLeftW, "detachedPowerBarTextOnBar", false, "MSUF2_POWER_DETACHED_TEXT",
-        function()
-            return ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", true))
-                and ReadBool(unit, "detachedPowerBarTextOnBar", false)
-        end,
-        function(v)
-            if v and not ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", true)) then
-                SetBool(unit, "showPowerText", true, "MSUF2_SHOW_POWER_TEXT", POWER_TEXT_OPTS)
-            end
-        end, POWER_TEXT_OPTS },
+        nil, nil, POWER_TEXT_OPTS },
     })
     detachedTextToggle = detachedTextFields and detachedTextFields.detachedPowerBarTextOnBar
     local sliderTop = -116

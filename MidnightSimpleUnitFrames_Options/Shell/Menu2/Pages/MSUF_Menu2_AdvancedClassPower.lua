@@ -852,13 +852,12 @@ function Page:CreateControlKinds()
         detachedTextOnBar = function(_, parent, source, apply, spec)
             local control, key, default = W.Toggle(parent, spec[3]), spec[4], spec[5]
             apply = spec[6] or apply
-            M.BindBoolWidget(self.ctx, control, function() return PlayerPowerTextShown(source()) and BoolValue(source(), key, default) end,
+            M.BindBoolWidget(self.ctx, control, function() return BoolValue(source(), key, default) end,
                 function(value)
                     local function Write()
                         local player, changed = source(), false
                         value = value and true or false
                         if player[key] ~= value then player[key], changed = value, true end
-                        if value and player.showPowerText ~= true then SetPlayerPowerTextShown(player, true); changed = true end
                         if changed then apply() end
                         return changed
                     end
