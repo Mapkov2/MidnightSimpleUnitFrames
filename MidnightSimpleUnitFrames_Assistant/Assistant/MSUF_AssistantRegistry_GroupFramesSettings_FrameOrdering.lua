@@ -143,6 +143,15 @@ function A.GroupFramesRegistry.RegisterFrameOrderingSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "player first")
     RegisterGroupBoolean(scope, "playerFirstInRole", "playerFirstInRole", "Player First in Role", false, "rebuild", aliases)
 
+    -- Raid/Mythic only in the engine; registered for every group scope like
+    -- preserveRaidGroups so a copied Party value stays visible and harmless.
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "sort roles across entire raid", "rollen raidweit sortieren")
+    AddAliasesForUnit(aliases, scope, "sort roles across raid")
+    AddAliasesForUnit(aliases, scope, "raid wide role sorting")
+    AddAliasesForUnit(aliases, scope, "roles across the whole raid")
+    RegisterGroupBoolean(scope, "sortRolesAcrossRaid", "sortRolesAcrossRaid", "Sort Roles Across Entire Raid", false, "rebuild", aliases)
+
     aliases = {}
     AddAliasesForUnit(aliases, scope, "role priority order")
     AddAliasesForUnit(aliases, scope, "role order")

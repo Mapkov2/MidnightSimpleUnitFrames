@@ -285,6 +285,7 @@ local GROUP_LAYOUT_ATTRS = {
     sortMode = true,
     sortByRole = true,
     playerFirstInRole = true,
+    sortRolesAcrossRaid = true,
     roleOrder = true,
     frameScaleMode = true,
     frameScaleEnabled = true,
@@ -3385,7 +3386,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "where", "where is", "where do", "what", "explain", "help", "sorting", "sort" })
     then
         return {
-            text = "Group role sorting help\nIn Group Layout, I can help with group frame sorting. MSUF can sort party/raid groups with the sort options for that group target.\nExamples: set raid sort to role; set party sort to group; put player first in role.\nYou can ask: Open Group Layout",
+            text = "Group role sorting help\nIn Group Layout, I can help with group frame sorting. MSUF can sort party/raid groups with the sort options for that group target.\nExamples: set raid sort to role; set party sort to group; put player first in role; sort raid roles across the entire raid.\nYou can ask: Open Group Layout",
             status = "applied",
             summary = "Assistant group role sorting help",
         }

@@ -1388,6 +1388,12 @@ local function ParseGroupOrderingFastShortcut(normalized)
         attr = "playerFirstInRole"
         value = DetectBoolean(normalized)
         if value == nil then value = not ContainsAny(normalized, P.RootPhrases[189]) end
+    elseif ContainsAny(normalized, P.RootPhrases[829]) then
+        -- "sort roles across the raid" also contains the Sort-by-Role phrase
+        -- "sort roles"; the raid-wide toggle must win before that lane.
+        attr = "sortRolesAcrossRaid"
+        value = DetectBoolean(normalized)
+        if value == nil then value = not ContainsAny(normalized, P.RootPhrases[187]) end
     elseif ContainsAny(normalized, P.RootPhrases[186]) then
         attr = "sortByRole"
         value = DetectBoolean(normalized)
