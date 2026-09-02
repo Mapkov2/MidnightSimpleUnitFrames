@@ -367,6 +367,7 @@ local OpenPreviewHandleSettings
 local MenuTheme
 local function RefreshHandleSelectionVisuals(box)
     if not box then return end
+    if not box._selectedHandle and Preview.RestoreQueuedHandle(box) then return end
     local guidesOn = PreviewGuidesVisible(box)
     local selected = box._selectedHandle
     if selected and selected.IsShown and not selected:IsShown() then selected = nil; box._selectedHandle = nil end
@@ -592,12 +593,15 @@ function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     end
     if state then menu[state] = menu[state] or {}; menu[state][unit] = tab end
     local textureSlot = section == "texture_layer" and (tonumber(key:match("^texLayer(%d)$")) or 1)
+    local textureSlotChanged = false
     if textureSlot then
         menu.unitTexLayerSlot = menu.unitTexLayerSlot or {}
         menu.unitTexLayerTab = menu.unitTexLayerTab or {}
+        textureSlotChanged = (tonumber(menu.unitTexLayerSlot[unit]) or 1) ~= textureSlot
         menu.unitTexLayerSlot[unit] = textureSlot
         menu.unitTexLayerTab[unit] = "placement"
     end
+    return textureSlotChanged
 end
 OpenPreviewHandleSettings = function(handle, source)
     if not handle then return false end
@@ -606,7 +610,7 @@ OpenPreviewHandleSettings = function(handle, source)
     local menu = _G.MSUF2 or M2
     local unit = box and box.key or "player"
     local section = Preview.ResolveUnitHandleSection(handle, unit)
-    Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
+    local textureSlotChanged = Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     if fields.statusRefresh then
         local selected = NormalizeStatusPreviewId(handle._key)
         Preview.selectedStatusId = selected
@@ -651,10 +655,19 @@ OpenPreviewHandleSettings = function(handle, source)
             -- The Aura workspace captures its selected container while the
             -- Unit page is built. Refreshers cannot replace that cached
             -- container, so rebuild only when this preview opens another one.
-            if (lane ~= previousAuraLane or previousAuraTool ~= "layout") and type(menu.InvalidatePage) == "function" then
+            if (lane ~= previousAuraLane or previousAuraTool ~= "layout")
+                and type(menu.InvalidatePage) == "function"
+            then
+                Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox = unit, handle._key, box
+                Preview._restoreSourceShowSerial = tonumber(box and box._msuf2PreviewShowSerial) or 0
                 menu.InvalidatePage(pageKey)
             end
-            return menu.SelectPage(pageKey) ~= false
+            local selected = menu.SelectPage(pageKey) ~= false
+            if selected then Preview.RestoreQueuedHandle(Preview.active)
+            else
+                Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox, Preview._restoreSourceShowSerial = nil, nil, nil, nil
+            end
+            return selected
         end
         return false
     end
@@ -682,6 +695,12 @@ OpenPreviewHandleSettings = function(handle, source)
     local sectionId = UNIT_SECTION_IDS[section or ""] or UNIT_SECTION_IDS.text
     local pageKey = box and (box._msuf2PinnedPreviewPageKey or ("uf_" .. tostring(box.key or "player"))) or nil
     if menu and type(menu.SelectPage) == "function" and pageKey then
+        -- Texture controls are intentionally bound to one slot for their whole
+        -- lifetime. Opening another texture handle must therefore rebuild the
+        -- cached Unit page before it is focused.
+        if textureSlotChanged and type(menu.InvalidatePage) == "function" then
+            menu.InvalidatePage(pageKey)
+        end
         ExportPublic("MSUF_EM2_MenuFocusRequest", {
             key = box and box.key,
             component = handle._key,
@@ -949,6 +968,19 @@ local function FindUnitPreviewHandle(box, handleKey)
         if handle and handle._key == handleKey then return handle end
     end
     return nil
+end
+function Preview.RestoreQueuedHandle(box)
+    local sameSourceGeneration = box and box == Preview._restoreSourceBox
+        and (tonumber(box._msuf2PreviewShowSerial) or 0) <= (tonumber(Preview._restoreSourceShowSerial) or 0)
+    if not (box and not sameSourceGeneration and SelectPreviewHandle and Preview._restoreHandleKey
+        and tostring(box.key) == tostring(Preview._restoreHandleUnit)
+        and (not box.IsShown or box:IsShown()))
+    then return false end
+    local handle = FindUnitPreviewHandle(box, Preview._restoreHandleKey)
+    if not (handle and handle._msufPlaced ~= false and (not handle.IsShown or handle:IsShown())) then return false end
+    Preview._restoreHandleUnit, Preview._restoreHandleKey, Preview._restoreSourceBox, Preview._restoreSourceShowSerial = nil, nil, nil, nil
+    SelectPreviewHandle(handle, true)
+    return true
 end
 local function RestoreUnitPreviewSelection(box, previous)
     if not box then return end
@@ -2079,10 +2111,23 @@ local function BuildPreview(parent, panel, width, height)
     mock.sizeTag:SetPoint("BOTTOM", mock.bounds, "TOP", 0, 2)
     mock.sizeTag:SetTextColor(0.62, 0.84, 0.94, 0.95)
     if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 0.62, 0.84, 0.94, 0.95 }, 0) end
-    -- Use the same native StatusBar ownership as the live frame and Group
-    -- Preview. The old unit preview stretched a free-standing Texture as its
-    -- fill; that left a separate full-frame surface which could render black
-    -- instead of showing the selected statusbar/background media.
+    -- Runtime uses a native inverse StatusBar for secret-safe missing values
+    -- and suppresses its exact 0% fill-texture endpoint. Keep the preview on
+    -- the same ownership model.
+    mock.healthBackgroundBar = CreateFrame("StatusBar", nil, mock)
+    mock.healthBackgroundBar:SetAllPoints(mock)
+    mock.healthBackgroundBar:SetMinMaxValues(0, 1)
+    mock.healthBackgroundBar:SetValue(1)
+    mock.healthBackgroundBar:SetStatusBarTexture(TEX_W8)
+    mock.healthBackgroundBar:EnableMouse(false)
+    if mock.healthBackgroundBar.SetFrameLevel and mock.GetFrameLevel then
+        mock.healthBackgroundBar:SetFrameLevel(mock:GetFrameLevel() or 0)
+    end
+    mock.hpBG = mock.healthBackgroundBar:GetStatusBarTexture()
+    if mock.hpBG.SetDrawLayer then mock.hpBG:SetDrawLayer("BACKGROUND", -7) end
+    mock.hpBG:SetVertexColor(0, 0, 0, 0)
+    mock.bg, mock.hpBarBG, mock.healthBg = mock.hpBG, mock.hpBG, mock.hpBG
+
     mock.healthBar = CreateFrame("StatusBar", nil, mock)
     mock.healthBar:SetAllPoints(mock)
     mock.healthBar:SetMinMaxValues(0, 1)
@@ -2093,13 +2138,6 @@ local function BuildPreview(parent, panel, width, height)
     mock.healthFill = mock.hp
     if mock.hp and mock.hp.SetDrawLayer then mock.hp:SetDrawLayer("ARTWORK", 0) end
     if mock.hp then mock.hp:SetAlpha(0) end
-    -- Live Health.Create owns the background on the root frame and insets only
-    -- the StatusBar fill for embedded power. Keep that exact separation here.
-    mock.hpBG = mock:CreateTexture(nil, "BACKGROUND", nil, -7)
-    mock.hpBG:SetAllPoints(mock)
-    mock.hpBG:SetTexture(TEX_W8)
-    mock.hpBG:SetVertexColor(0, 0, 0, 0)
-    mock.bg, mock.hpBarBG, mock.healthBg = mock.hpBG, mock.hpBG, mock.hpBG
     MockTexture("tempMaxHealthBg", "ARTWORK", TEX_W8, { 0, 0, 0, 0.65 }, "color", mock.healthBar)
     MockTexture("tempMaxHealth", "ARTWORK", TEX_W8, { 0.70, 0.10, 0.10, 1 }, nil, mock.healthBar)
     MockTexture("healPred", "ARTWORK", TEX_W8, { 0, 1, 0.4, 0.55 }, nil, mock.healthBar)
@@ -2127,6 +2165,9 @@ local function BuildPreview(parent, panel, width, height)
     mock.classPower.segmentBgs = {}
     mock.classPower.segmentEdges = {}
     mock.classPower.runeTexts = {}
+    mock.classPower.textOwner = CreateFrame("Frame", nil, mock.classPower)
+    mock.classPower.textOwner:SetAllPoints(mock.classPower)
+    if mock.classPower.textOwner.EnableMouse then mock.classPower.textOwner:EnableMouse(false) end
     local function ClassPowerTexture(bucket, index, layer, subLevel, hidden)
         local tex = mock.classPower:CreateTexture(nil, layer, nil, subLevel)
         tex:SetTexture(TEX_W8)
@@ -2138,7 +2179,7 @@ local function BuildPreview(parent, panel, width, height)
         ClassPowerTexture("segmentBgs", i, "BACKGROUND")
         ClassPowerTexture("segments", i, "ARTWORK", nil, false)
         ClassPowerTexture("segmentEdges", i, "OVERLAY")
-        local rfs = MakeFS(mock.classPower, "OVERLAY", 8)
+        local rfs = MakeFS(mock.classPower.textOwner, "OVERLAY", 8)
         rfs:SetJustifyH("CENTER")
         if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
         if rfs.SetShadowColor then rfs:SetShadowColor(0, 0, 0, 1) end
@@ -2146,7 +2187,7 @@ local function BuildPreview(parent, panel, width, height)
         rfs:Hide()
         mock.classPower.runeTexts[i] = rfs
     end
-    mock.classPower.text = MakeFS(mock.classPower, "OVERLAY", 12)
+    mock.classPower.text = MakeFS(mock.classPower.textOwner, "OVERLAY", 12)
     mock.classPower.text:SetJustifyH("CENTER")
     if mock.classPower.text.SetJustifyV then mock.classPower.text:SetJustifyV("MIDDLE") end
     mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", 0, 0)
@@ -2336,6 +2377,7 @@ local function BuildPreview(parent, panel, width, height)
         end
     end
     box:SetScript("OnShow", function(self)
+        self._msuf2PreviewShowSerial = (tonumber(self._msuf2PreviewShowSerial) or 0) + 1
         Preview.active = self
         if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
         RefreshPreviewAnimationButton(self)

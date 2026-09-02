@@ -75,12 +75,25 @@ Data.STATUS_CONTROL_SPECS = {
         aliases = { "level", "level indicator", "level text" },
     },
     {
+        value = "bossNumber", label = "Boss Number", show = "showBossNumberIndicator",
+        defaultShow = false, size = "bossNumberIndicatorSize", defaultSize = 14,
+        anchor = "bossNumberIndicatorAnchor", defaultAnchor = "TOPLEFT",
+        x = "bossNumberIndicatorOffsetX", defaultX = 4,
+        y = "bossNumberIndicatorOffsetY", defaultY = -4,
+        layer = "bossNumberIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RefreshStatusIndicators", units = { boss = true },
+        aliases = { "boss number", "boss index", "boss frame number", "boss number text" },
+    },
+    {
         value = "raidgroupname", label = "Raid Group Name", show = "showRaidGroupInName",
-        defaultShow = false, size = "nameFontSize", defaultSize = 14,
+        defaultShow = false, size = "raidGroupNameSize", defaultSize = 14,
         anchor = "raidGroupNameAnchor", defaultAnchor = "NAMERIGHT",
         x = "raidGroupNameOffsetX", defaultX = 3, y = "raidGroupNameOffsetY", defaultY = 0,
         layer = "raidGroupNameLayer", defaultLayer = 5, legacyLayer = "nameTextLayer",
         refresh = "MSUF_RefreshRaidGroupNameFrames", inlineName = true, nameAnchors = true,
+        -- Unwritten raidGroupNameSize renders at the frame's name font size, so
+        -- report that rather than a bare default nobody is looking at.
+        sizeFallback = "nameFontSize",
         units = { player = true, target = true, targettarget = true, focustarget = true, focus = true },
         aliases = {
             "raid group name", "raid group", "group number in name",
@@ -189,6 +202,22 @@ Data.STATUS_CONTROL_SPECS = {
             "pvp flag", "pvp flag indicator", "pvp indicator", "pvp icon",
             "pvp flag icon", "pvp status", "pvp status indicator",
             "pvp status icon", "war mode indicator", "flagged indicator",
+        },
+    },
+    {
+        value = "stance", label = "Stance Text",
+        show = "showStanceIndicator", defaultShow = false,
+        size = "stanceIndicatorSize", defaultSize = 12,
+        anchor = "stanceIndicatorAnchor", defaultAnchor = "TOP",
+        x = "stanceIndicatorOffsetX", defaultX = 0, y = "stanceIndicatorOffsetY", defaultY = -2,
+        layer = "stanceIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestStatusIconsRefreshForCurrent", statusRuntime = true,
+        units = { player = true },
+        description = "Shows the name of your active stance, form, or aura from the stance bar as text on the player frame (for example a warrior stance, paladin aura, or druid form). Updates only when the stance changes.",
+        aliases = {
+            "stance text", "stance indicator", "active stance", "stance name",
+            "shapeshift form text", "form text", "warrior stance text",
+            "paladin aura text", "druid form text",
         },
     },
 }
