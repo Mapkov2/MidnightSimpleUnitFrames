@@ -1,5 +1,23 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha3 - 2026-09-02
+
+### Highlights
+
+- **Vanilla, Mists, and TBC now run the synchronized Retail 6.15 engine.** The Classic flavors load the shared Player castbar runtime with its STOP/INTERRUPTED fixes, and their group headers, Blizzard group-frame handoff, unit config, class resources, and defaults were ported from Retail 6.15-beta2, including **Sort roles across entire raid**.
+
+### Changes
+
+- Retired the stale Classic player-castbar duplicate; the Classic client manifests load `Castbars/MSUF_PlayerCastbarRuntime.lua` directly and the gate keeps it that way.
+- Ported the Retail group-frame engine into the Classic group headers: physical preserved raid groups with one secure header per subgroup, the saved sort preference, the runtime footprint clamp, configured party columns, arena roster handling, and the raid-wide role order.
+- Ported the Retail class-power runtime (Augmentation split, explicit player mana source, resource text modes, secret-safe text) plus the unit config and defaults additions (health background fill and color modes, status indicators, GCD anchor, group highlight filter defaults) into the Classic flavors.
+- Added the Arena page preview to the Classic Unit page and refreshed the Classic-owned Unit Preview view, search keywords, and Assistant status registrations from Retail.
+- Rebased the Classic overrides for the Retail Text on detached bar fix and re-derived the Classic search index source hash.
+
+### Fixes & Performance
+
+- The Classic raid-manager, castbar, and arena smokes pin the ported contracts, and the Classic gate passes on the synchronized tree.
+
 ## 6.5-alpha2 - 2026-09-02
 
 ### Highlights

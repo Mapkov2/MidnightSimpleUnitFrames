@@ -8,12 +8,40 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "90D0D08F10D8B647D290BD9A9DC68B4781B850F01146E5B7A25401E655525E90",
-    currentVersion = "6.5-alpha2",
-    historyFromVersion = "6.0-RC17",
-    previousVersion = "6.5-alpha1",
-    rangeLabel = "6.5-alpha1 -> 6.5-alpha2",
+    sourceSha256 = "A1B8B615922BC57FE1419382E5F6ECB85403B7965D7E601A6A47B5164B41B781",
+    currentVersion = "6.5-alpha3",
+    historyFromVersion = "6.0-RC18",
+    previousVersion = "6.5-alpha2",
+    rangeLabel = "6.5-alpha2 -> 6.5-alpha3",
     entries = {
+        {
+            version = "6.5-alpha3",
+            date = "2026-09-02",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Vanilla, Mists, and TBC now run the synchronized Retail 6.15 engine. The Classic flavors load the shared Player castbar runtime with its STOP/INTERRUPTED fixes, and their group headers, Blizzard group-frame handoff, unit config, class resources, and defaults were ported from Retail 6.15-beta2, including Sort roles across entire raid.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Retired the stale Classic player-castbar duplicate; the Classic client manifests load Castbars/MSUF_PlayerCastbarRuntime.lua directly and the gate keeps it that way.",
+                        "Ported the Retail group-frame engine into the Classic group headers: physical preserved raid groups with one secure header per subgroup, the saved sort preference, the runtime footprint clamp, configured party columns, arena roster handling, and the raid-wide role order.",
+                        "Ported the Retail class-power runtime (Augmentation split, explicit player mana source, resource text modes, secret-safe text) plus the unit config and defaults additions (health background fill and color modes, status indicators, GCD anchor, group highlight filter defaults) into the Classic flavors.",
+                        "Added the Arena page preview to the Classic Unit page and refreshed the Classic-owned Unit Preview view, search keywords, and Assistant status registrations from Retail.",
+                        "Rebased the Classic overrides for the Retail Text on detached bar fix and re-derived the Classic search index source hash.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "The Classic raid-manager, castbar, and arena smokes pin the ported contracts, and the Classic gate passes on the synchronized tree.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha2",
             date = "2026-09-02",
@@ -164,35 +192,6 @@ local data = {
                         "Fixed Player Defensives being re-enabled by Menu normalization after the user disabled them. Runtime, Menu preview and Edit Mode now honor the same master switch, while tracked Target DoTs keep their disabled configuration preview.",
                         "Fixed Player search routes treating the layer substring inside player as a Text section request. Portrait and other exact results no longer open an unrelated accordion or rebuild the page unnecessarily.",
                         "Fixed explicit guided-setup phrases containing topics such as profiles being consumed by text creation guidance instead of opening the native guided setup.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC17",
-            date = "2026-08-09",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Fresh and reset profiles now start from the native 6.0 Aura model. Focus Auras are enabled by default with 3 Buff and 4 Debuff slots, matching the useful Target/Boss baseline while keeping the Focus-specific placement.",
-                        "Edit Mode X/Y fields now use one visual screen-center contract for Unit Frames, Castbars, Auras, Group Frames and external elements. Resizing an element keeps the displayed position stable.",
-                        "Retired Assistant controls for old Auras2 reminders and incompatible quick presets now report that they are unavailable instead of accepting writes that cannot affect Auras3.",
-                        "Classic accepts only 6.0 profile schema 600. Older or unversioned profiles are removed from the active profile list and kept in a recoverable SavedVariables archive instead of being migrated through the Retail 5.x compatibility path; legacy imports are rejected.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed legacy Unit and Group Aura fields being restored into current profiles. The one-time native-model repair removes retired state while preserving the visible first icon position and size for upgraded and imported profiles.",
-                        "Fixed Aura layout and style ownership drifting between live frames, the menu, Edit Mode and the Assistant. Lane gaps, sorting, text, swipes, duration bars, tooltips and shared/per-frame overrides now read and write the same owner without reviving dormant values.",
-                        "Fixed Dispel Border, Overlay and Symbol depending on another UnitFrame's Auras or a shared Bars owner. Each supported UnitFrame now owns its Dispel settings and automatically enables its Aura sensor; both icon caps may remain at 0.",
-                        "Fixed Aura icons intercepting clicks. Only normal Player Buffs keep Right-click cancellation; every other Unit and Group Aura remains click-through while configured tooltips still work.",
-                        "Fixed cooldown swipes being hidden or out of sync in menu and Edit Mode previews. Edit Mode now follows the existing menu animation clock, adds no second driver and remains paused in combat.",
-                        "Fixed Copy To reporting success when nothing was copied or when Copy to All was cancelled. Unsupported Aura destinations are reported accurately, Player Defensive and Target DoT-only style fields stay with their product, and Group Spell Indicator caches are refreshed after a copy.",
-                        "Fixed PvP indicator paths staying compiled after War Mode was disabled during its deactivation timer. Context recompiles remain event-driven and are skipped in combat.",
-                        "Fixed Group Frame screen clamping adding a grid-size-dependent offset, so the same Anchor Point and X/Y identify the same position for Party and Raid.",
-                        "Fixed stale Edit Mode SavedVariables making Player or Boss castbar previews reappear after logout or reload.",
                     },
                 },
             },
