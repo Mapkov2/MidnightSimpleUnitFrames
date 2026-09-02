@@ -1006,6 +1006,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureUnitAlphaDefaults(db.tot)
     for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
         SetDefault(db[key], "alphaExcludePredictionBars", false)
+        --- Raid/Mythic-only sorting toggle, seeded on every group scope like the
+        --- GroupFrames PARTY_DEFAULTS so the factory snapshot carries it explicitly.
+        SetDefault(db[key], "sortRolesAcrossRaid", false)
     end
     --- Older exports may omit screen positions; in that case provide stable
     --- center anchors without touching positions included by the compact export.

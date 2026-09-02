@@ -618,8 +618,8 @@ local function ResolveGroupFilter(conf)
   return nil
 end
 
-local function GroupFilterAllows(conf, groupIndex, classFile, role)
-  local groupLimit = PreservedRaidGroupLimit(conf)
+local function GroupFilterAllows(conf, groupIndex, classFile, role, ignoreGroupLimit)
+  local groupLimit = ignoreGroupLimit ~= true and PreservedRaidGroupLimit(conf) or nil
   groupIndex = tonumber(groupIndex)
   if groupLimit and groupIndex and groupIndex > groupLimit then
     return false
@@ -710,7 +710,7 @@ local function IsPlayerUnit(unit)
   return false
 end
 
-local function AddNameListEntry(entries, unit, index, conf, raidIndex)
+local function AddNameListEntry(entries, unit, index, conf, raidIndex, ignoreGroupLimit)
   local name, subgroup, classFile, role
   if raidIndex then
     if not GetRaidRosterInfo then return false end
@@ -730,7 +730,7 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex)
     name = UnitFullName(unit)
     if not name then return false end
   end
-  if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role) then return true end
+  if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role, ignoreGroupLimit) then return true end
   entries[#entries + 1] = {
     name = name,
     role = role,
@@ -857,10 +857,15 @@ local function BuildRaidFreezeNameList(kind, conf, mode, descending, subgroupInd
     return nil
   end
 
+  --- A preserved block normally shows subgroup N. Under the raid-wide role
+  --- order (mode ROLE on a preserved block) block N shows roster positions
+  --- (N-1)*5+1 .. N*5 of the complete role-sorted raid instead, so the group
+  --- limit acts as a block cap below and must not exclude members by subgroup.
+  local raidWideBlocks = subgroupIndex ~= nil and mode == "ROLE"
   local entries = {}
   local rosterComplete = true
   for i = 1, count do
-    if AddNameListEntry(entries, "raid" .. i, i, conf, i) ~= true then
+    if AddNameListEntry(entries, "raid" .. i, i, conf, i, raidWideBlocks) ~= true then
       rosterComplete = false
     end
   end
@@ -898,12 +903,29 @@ local function BuildRaidFreezeNameList(kind, conf, mode, descending, subgroupInd
   end)
 
   local names, seen = {}, {}
-  for i = 1, #entries do
-    local entry = entries[i]
-    local name = entry.name
-    if (subgroupIndex == nil or entry.group == subgroupIndex) and name and not seen[name] then
-      seen[name] = true
-      names[#names + 1] = name
+  if raidWideBlocks then
+    local blockLimit = PreservedRaidGroupLimit(conf) or 8
+    if subgroupIndex <= blockLimit then
+      local first, last = (subgroupIndex - 1) * 5 + 1, subgroupIndex * 5
+      local position = 0
+      for i = 1, #entries do
+        local name = entries[i].name
+        if name and not seen[name] then
+          seen[name] = true
+          position = position + 1
+          if position > last then break end
+          if position >= first then names[#names + 1] = name end
+        end
+      end
+    end
+  else
+    for i = 1, #entries do
+      local entry = entries[i]
+      local name = entry.name
+      if (subgroupIndex == nil or entry.group == subgroupIndex) and name and not seen[name] then
+        seen[name] = true
+        names[#names + 1] = name
+      end
     end
   end
   if #names == 0 then
@@ -931,8 +953,18 @@ local function ResolveSortMode(key, conf)
   -- Preserve raid groups is an independent layout contract. Derive the
   -- effective group-aware mode without overwriting the user's saved sort mode,
   -- so disabling the option restores the previous INDEX/NAME/ROLE behavior.
+  -- Sort roles across the entire raid (Raid/Mythic only) removes the subgroup
+  -- dimension from a role sort: preserved blocks then fill from one raid-wide
+  -- role order (mode ROLE, sliced per block in BuildRaidFreezeNameList) and
+  -- the flat Group + Role layout becomes the plain raid-wide ROLE order.
   if key ~= "party" and conf.preserveRaidGroups == true then
-    mode = (mode == "ROLE" or mode == "GROUP_ROLE") and "GROUP_ROLE" or "GROUP"
+    if mode == "ROLE" or mode == "GROUP_ROLE" then
+      mode = conf.sortRolesAcrossRaid == true and "ROLE" or "GROUP_ROLE"
+    else
+      mode = "GROUP"
+    end
+  elseif key ~= "party" and mode == "GROUP_ROLE" and conf.sortRolesAcrossRaid == true then
+    mode = "ROLE"
   end
   if key == "party" and (mode == "GROUP" or mode == "GROUP_ROLE") then
     mode = conf.sortByRole == true and "ROLE" or "INDEX"
@@ -984,7 +1016,9 @@ end
 local function BuildPreservedSortState(kind, conf, groupIndex)
   local mode = ResolveSortMode("raid", conf)
   local nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true, groupIndex)
-  local nativeRole = not nameList and mode == "GROUP_ROLE"
+  -- The raid-wide role order (mode ROLE) needs the complete-roster nameList;
+  -- until it is readable the block keeps its native per-subgroup role sort.
+  local nativeRole = not nameList and (mode == "GROUP_ROLE" or mode == "ROLE")
   return {
     mode = mode,
     sortMethod = nameList and "NAMELIST" or "INDEX",
@@ -1425,7 +1459,7 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     changed = SetAttrIfChanged(header, "groupFilter", groupFilter) or changed
     changed = ApplySortAttributes(header, sortState) or changed
   end
-  return changed, shouldHide
+  return changed, shouldHide, sortState
 end
 
 local function PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
@@ -1444,6 +1478,19 @@ local function PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spa
   end
   header:ClearAllPoints()
   header:SetPoint(point, anchor, point, x, y)
+end
+
+--- A preserved block normally stands for subgroup <groupIndex>, so the user's
+--- group filter decides whether it may show. Under the raid-wide role order the
+--- block holds roster positions instead of a subgroup: every block up to the
+--- configured group cap stays allowed and an unused one publishes an empty
+--- nameList. Without the complete-roster nameList the block falls back to its
+--- native subgroup, so the subgroup filter applies again.
+local function PreservedBlockAllowed(conf, sortState, groupIndex)
+  if sortState and sortState.mode == "ROLE" and sortState.sortMethod == "NAMELIST" then
+    return groupIndex <= (PreservedRaidGroupLimit(conf) or 8)
+  end
+  return RaidGroupAllowed(conf, groupIndex)
 end
 
 local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH)
@@ -1474,8 +1521,8 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
     if header:GetParent() ~= anchor then header:SetParent(anchor) end
     header._msufGFKind = kind
     header._msufRaidGroupIndex = groupIndex
-    header._msufPreservedGroupAllowed = RaidGroupAllowed(conf, groupIndex)
-    local _, wasHiddenForLayout = ConfigureHeader(header, "raid", kind, conf, w, h, spacing, layoutCount, groupIndex)
+    local _, wasHiddenForLayout, sortState = ConfigureHeader(header, "raid", kind, conf, w, h, spacing, layoutCount, groupIndex)
+    header._msufPreservedGroupAllowed = PreservedBlockAllowed(conf, sortState, groupIndex)
     PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
 
     if wasHiddenForLayout and header._msufPreservedGroupAllowed == true then
