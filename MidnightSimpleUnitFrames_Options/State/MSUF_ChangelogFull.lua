@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "FCCDC8DC6BBF74EE3DD306FF3EBC77A70A6AABE2AF95B44F22C707FAB10D3C72",
-    currentVersion = "6.15-beta1",
+    sourceSha256 = "B5520429E4ABDE963DB170CE99F531E99503EFD705F078BF47C5C27E07AF4E5E",
+    currentVersion = "6.15-beta2",
     historyFromVersion = "6.02",
-    previousVersion = "6.14",
-    rangeLabel = "6.14 -> 6.15-beta1",
+    previousVersion = "6.15-beta1",
+    rangeLabel = "6.15-beta1 -> 6.15-beta2",
     entries = {
+        {
+            version = "6.15-beta2",
+            date = "2026-09-02",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Raid and Mythic Raid role sorting can now span the entire raid. Enable Sort roles across entire raid under Frames > Party/Raid Frames > Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group, including with Preserve raid groups.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Added Sort roles across entire raid to Raid and Mythic Raid sorting with defaults, profile copy, locales, search, and Assistant support. By Role with Preserve raid groups and Group + Role follow the raid-wide order; Party is unaffected.",
+                        "The Boss Preview now renders incoming heal, absorb, and heal-absorb bars plus the absorb text so prediction settings can be judged without a live boss.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Raid role sorting stays fully out of combat: the raid-wide order is rebuilt only when roles or the roster change outside combat, and Blizzard's secure header applies it natively.",
+                        "Tidied the Group Layout Sorting card so the Sort Mode dropdown and its toggles sit evenly inside the card.",
+                    },
+                },
+            },
+        },
         {
             version = "6.15-beta1",
             date = "2026-09-01",
