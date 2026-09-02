@@ -3156,6 +3156,7 @@ local PENDING_GROUP_LAYOUT_ATTRS = {
     sortMode = true,
     sortByRole = true,
     playerFirstInRole = true,
+    sortRolesAcrossRaid = true,
     roleOrder = true,
     frameScaleMode = true,
     frameScaleEnabled = true,

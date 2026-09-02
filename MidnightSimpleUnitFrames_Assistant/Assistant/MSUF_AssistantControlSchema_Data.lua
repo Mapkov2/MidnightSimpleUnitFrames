@@ -5,7 +5,7 @@ MSUF.Assistant = MSUF.Assistant or {}
 local Data = { version = 3 }
 Data.columns = { 'semanticId', 'controlId', 'familyId', 'memberKey', 'pageKey', 'controlPath', 'classification', 'kind', 'settingKey', 'actionKey', 'navigationKey', 'safety', 'valueKind', 'min', 'max', 'step', 'percentIsValue', 'confirmRequired', 'identityStable', 'label', 'help', 'values', 'actionFixedArgs', 'actionInputArg', 'actionInputKind', 'actionInputDomain', 'storageUnit', 'displayUnit', 'displayScale', 'states', 'contexts' }
 Data.collectionStates = {
-    { 'base', 2719 },
+    { 'base', 2720 },
     { 'unit_player_buff_layout', 235 },
     { 'unit_player_buff_behavior', 229 },
     { 'unit_player_buff_filters', 241 },
@@ -242,7 +242,7 @@ Data.collectionStates = {
     { 'compat_buff_appearance', 16 },
     { 'compat_debuff_appearance', 14 },
 }
-Data.collectionUnionControls = 4117
+Data.collectionUnionControls = 4118
 Data.contexts = {
     { 'WARRIOR-71', 'WARRIOR', 1, 71, 'Arms', 'enUS' },
     { 'WARRIOR-72', 'WARRIOR', 2, 72, 'Fury', 'enUS' },
@@ -2584,6 +2584,7 @@ Data.records = {
     { 'setting:gf_layout/group/layout/field/smoothfill@gf_layout/group/layout/field/smoothfill', 'menu2.gf_layout.group.field.smoothfill', '', '', 'gf_layout', 'group/layout/field/smoothfill', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Smooth health fill', 'Turns Smooth health fill on or off. Available on the Frames > Party/Raid Frames page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/sortbyrole@gf_layout/group/layout/field/sortbyrole', 'menu2.gf_layout.group.field.sortbyrole', '', '', 'gf_layout', 'group/layout/field/sortbyrole', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Sort by Role', 'Turns Sort by Role on or off. Available on the Frames > Party/Raid Frames page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/sortmode@gf_layout/group/layout/field/sortmode', 'menu2.gf_layout.group.field.sortmode', '', '', 'gf_layout', 'group/layout/field/sortmode', 'setting', 'dropdown', '', '', '', 'direct', 'enum', '', '', '', '0', '0', '1', 'Sort Mode', 'Selects Sort Mode. Available on the Frames > Party/Raid Frames page. Available choices: Alphabetical, By Raid Group, By Role, Group + Role, Index (Default).', 's:NAME\030Alphabetical\031s:GROUP\030By Raid Group\031s:ROLE\030By Role\031s:GROUP_ROLE\030Group + Role\031s:INDEX\030Index (Default)', '', '', '', '', '', '', '', 'base', '*' },
+    { 'setting:gf_layout/group/layout/field/sortrolesacrossraid@gf_layout/group/layout/field/sortrolesacrossraid', 'menu2.gf_layout.group.field.sortrolesacrossraid', '', '', 'gf_layout', 'group/layout/field/sortrolesacrossraid', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Sort roles across entire raid', 'Turns Sort roles across entire raid on or off. Available on the Frames > Party/Raid Frames page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/spacing@gf_layout/group/layout/field/spacing', 'menu2.gf_layout.group.field.spacing', '', '', 'gf_layout', 'group/layout/field/spacing', 'setting', 'slider', '', '', '', 'direct', 'number', '0', '60', '1', '0', '0', '1', 'Spacing', 'Adjusts Spacing. Available on the Frames > Party/Raid Frames page. Allowed range: 0 to 60 in increments of 1.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/textdelimiter@gf_layout/group/layout/field/textdelimiter', 'menu2.gf_layout.group.field.textdelimiter', '', '', 'gf_layout', 'group/layout/field/textdelimiter', 'setting', 'dropdown', '', '', '', 'direct', 'enum', '', '', '', '0', '0', '1', 'Delimiter', 'Selects Delimiter. Available on the Frames > Party/Raid Frames page. Available choices: -, /, :, Double Space, Space, |.', 's: - \030-\031s: / \030/\031s: : \030:\031s:  \030Double Space\031s: \030Space\031s: | \030|', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/textlayer@gf_layout/group/layout/field/textlayer', 'menu2.gf_layout.group.field.textlayer', '', '', 'gf_layout', 'group/layout/field/textlayer', 'setting', 'slider', '', '', '', 'direct', 'number', '0', '30', '1', '0', '0', '1', 'HP layer', 'Adjusts HP layer. Available on the Frames > Party/Raid Frames page. Allowed range: 0 to 30 in increments of 1.', '', '', '', '', '', '', '', '', 'base', '*' },

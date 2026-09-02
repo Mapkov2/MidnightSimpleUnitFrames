@@ -5213,6 +5213,9 @@ L["Arena spacing"] = "競技場間距"
 L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "光環設定僅適用於玩家、目標、焦點、首領和競技場框架。"
 L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "施法條設定僅適用於玩家、目標、焦點、首領和競技場框架。"
 L["MSUF Arena Frames"] = "MSUF 競技場框架"
+L["Sort roles across entire raid"] = "依整個團隊排序角色"
+L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "在整個團隊範圍內排序坦克、治療與輸出，而不是在每個團隊小隊內部排序。僅限團隊與傳奇團隊：適用於搭配「保留團隊小隊」的按角色排序，以及組+角色排序。"
+L["Raid-wide roles"] = "全團角色排序"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

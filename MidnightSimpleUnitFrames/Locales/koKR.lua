@@ -5173,6 +5173,9 @@ L["Arena spacing"] = "투기장 간격"
 L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "오라 설정은 플레이어, 대상, 주시 대상, 우두머리, 투기장 프레임에서만 사용할 수 있습니다."
 L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "시전 바 설정은 플레이어, 대상, 주시 대상, 우두머리, 투기장 프레임에서만 사용할 수 있습니다."
 L["MSUF Arena Frames"] = "MSUF 투기장 프레임"
+L["Sort roles across entire raid"] = "공격대 전체 기준으로 역할 정렬"
+L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "각 공격대 그룹 내부가 아니라 공격대 전체를 기준으로 방어 전담, 치유 전담, 공격 전담을 정렬합니다. 공격대 및 신화 공격대 전용: 공격대 그룹 유지와 함께 사용하는 역할별 정렬과 그룹 + 역할 정렬에 적용됩니다."
+L["Raid-wide roles"] = "공격대 전체 역할"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

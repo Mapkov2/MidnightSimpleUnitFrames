@@ -5592,6 +5592,9 @@ L["Arena spacing"] = "Espacement d'arène"
 L["Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Les réglages des auras ne sont disponibles que pour les cadres Joueur, Cible, Focalisation, Boss et Arène."
 L["Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."] = "Les réglages de la barre d'incantation ne sont disponibles que pour les cadres Joueur, Cible, Focalisation, Boss et Arène."
 L["MSUF Arena Frames"] = "MSUF Cadres d'arène"
+L["Sort roles across entire raid"] = "Trier les rôles sur tout le raid"
+L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "Classe les tanks, les soigneurs et les DPS sur l'ensemble du raid au lieu de chaque groupe de raid. Raid et Raid mythique uniquement : s'applique à Par rôle avec Préserver les groupes de raid, et à Groupe + Rôle."
+L["Raid-wide roles"] = "Rôles sur tout le raid"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

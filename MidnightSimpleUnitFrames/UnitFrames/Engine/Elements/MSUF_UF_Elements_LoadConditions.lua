@@ -61,6 +61,7 @@ local ARENA_PREVIEW_UNITS = {
 local BOSS_PREVIEW_REFRESH_ELEMENTS = {
   "Health",
   "Power",
+  "Prediction",
   "Text",
   "NameText",
   "HealthText",
@@ -69,6 +70,7 @@ local BOSS_PREVIEW_REFRESH_ELEMENTS = {
   "Borders",
 }
 local BOSS_PREVIEW_ALPHA_ELEMENTS = { "Alpha" }
+local BOSS_PREVIEW_ABSORB = 125000
 
 local LoadConditions = {}
 local bossPreviewAppliedActive
@@ -496,7 +498,12 @@ local function ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
     return
   end
   rt.healthMissing = nil
+  rt.healthAbsorb = BOSS_PREVIEW_ABSORB
+  rt._lastAbsorbTextValue = nil
   text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.MSUFUnitKey, BossPreviewPercent, rt.healthNeedsPercent, rt)
+  if (rt.healthAbsorbSlotCount or 0) > 0 then
+    text.UpdateTextSlots(rt.healthAbsorbSlots, rt.healthAbsorbSlotCount, nil, nil, frame.MSUFUnitKey, nil, false, rt)
+  end
 
   text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, BossPreviewPowerPercent, rt.powerNeedsPercent, rt)
 end
@@ -526,6 +533,7 @@ local function ApplyBossPreviewFrameData(frame, index)
   SetBarPreview(frame.hpBar or frame.Health, hp, hpMax, r, g, b, a)
   frame._msufAlphaLastHP = nil
   SetBarPreview(frame.targetPowerBar or frame.powerBar or frame.Power, power, powerMax, 0.05, 0.64, 0.92)
+  if UF.ApplyPredictionPreview then UF.ApplyPredictionPreview(frame, BossPreviewPercent(frame.MSUFUnitKey)) end
   ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
 end
 
@@ -553,6 +561,9 @@ local function ClearBossPreviewFrameForRuntime(frame, restoreVisuals)
   frame._msufAlphaLastFrame = nil
   frame._msufAlphaLastHP = nil
   frame._msufAlphaLastFG = nil
+  if UF.ClearPredictionPreview then UF.ClearPredictionPreview(frame) end
+  local rt = frame._msufTextRuntime
+  if rt then rt.healthAbsorb, rt._lastAbsorbTextValue = nil, nil end
 
   local healthBar = frame.hpBar or frame.Health
   InvalidateBossPreviewBar(healthBar, restoreVisuals)

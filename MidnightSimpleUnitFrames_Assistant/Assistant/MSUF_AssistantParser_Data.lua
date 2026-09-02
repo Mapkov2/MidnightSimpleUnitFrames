@@ -1573,5 +1573,11 @@ Data.ROOT_PARSER = {
         "health gradient", "hp gradient", "health color gradient", "health colour gradient",
         "gesundheitsverlauf", "gesundheits gradient",
     },
+        [829] = {
+        "sort roles across", "roles across the", "role sorting across", "roles raid wide",
+        "roles raid-wide", "raid wide role", "raid-wide role", "raidwide role",
+        "rollen raidweit", "raidweit sortieren", "ignore raid groups when sorting",
+        "ignore groups when sorting", "sort roles ignoring groups", "role order across the raid",
+    },
     },
 }
