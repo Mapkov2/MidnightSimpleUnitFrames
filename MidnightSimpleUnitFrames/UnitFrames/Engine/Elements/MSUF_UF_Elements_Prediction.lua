@@ -68,6 +68,9 @@ local TEST_MAX = 100
 local TEST_INCOMING = 20
 local TEST_ABSORB = 25
 local TEST_HEAL_ABSORB = 15
+local PREVIEW_INCOMING = 14
+local PREVIEW_ABSORB = 10
+local PREVIEW_HEAL_ABSORB = 7
 local OVER_ABSORB_TEXTURE = "Interface\\RaidFrame\\Shield-Overshield"
 local OVER_ABSORB_GLOW_W = 16
 local OVER_ABSORB_GLOW_OFFSET = 7
@@ -1773,6 +1776,11 @@ function Prediction.Disable(frame)
   if DeactivatePredictionLifecycle then DeactivatePredictionLifecycle(frame) end
 end
 
+function Prediction.ClearPreview(frame)
+  SuspendPrediction(frame, true)
+end
+UF.ClearPredictionPreview = Prediction.ClearPreview
+
 -- Rare compatibility path for absorb-follow combined with an independently
 -- anchored incoming-heal bar. It refreshes only the one calculator-clamped
 -- absorb value; incoming heals and heal absorbs remain prediction-event-only.
@@ -2344,6 +2352,58 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
   end
 end
 
+local function ApplyPreviewValues(frame, cfg, unit, showHeal, showAbsorb, showHealAbsorb,
+  healthValue, incomingValue, absorbValue, healAbsorbValue)
+  healthValue = healthValue or TEST_MAX
+  incomingValue = incomingValue or TEST_INCOMING
+  absorbValue = absorbValue or TEST_ABSORB
+  healAbsorbValue = healAbsorbValue or TEST_HEAL_ABSORB
+  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
+  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+  if showHeal and frame.incomingHealBar then
+    LayoutBar(frame, frame.incomingHealBar, 1, healMode, frame._msufPredictionHealReverse, nil,
+      frame._msufPredictionHealHeight, frame._msufPredictionHealOffsetY)
+    ShowValue(frame.incomingHealBar, TEST_MAX, incomingValue)
+  elseif frame.incomingHealBar then
+    HideBar(frame.incomingHealBar)
+  end
+  if showAbsorb and frame.absorbBar then
+    if absorbMode == 3 or absorbMode == 4 then
+      local follow = VisibleFollowBar(cfg, frame.incomingHealBar)
+      LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow,
+        frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
+    end
+    ShowValue(frame.absorbBar, TEST_MAX, absorbValue)
+    UpdateOverAbsorbGlow(frame, cfg, unit, healthValue, TEST_MAX, absorbValue, true, true)
+  elseif frame.absorbBar then
+    HideBar(frame.absorbBar)
+    HideOverAbsorbGlow(frame)
+  end
+  if showHealAbsorb and frame.healAbsorbBar then
+    LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true,
+      frame._msufPredictionHealAbsorbMode,
+      frame._msufPredictionHealAbsorbHeight, frame._msufPredictionHealAbsorbOffsetY)
+    ShowValue(frame.healAbsorbBar, TEST_MAX, healAbsorbValue)
+  elseif frame.healAbsorbBar then
+    HideBar(frame.healAbsorbBar)
+  end
+end
+
+function Prediction.ApplyPreview(frame, healthValue)
+  local cfg = frame and frame._msufPredictionRuntimeCfg
+  if not (cfg and cfg.enabled == true) then return false end
+  if cfg.test == true then
+    UpdateFull(frame, "MSUF_PREDICTION_PREVIEW", frame.MSUFUnitKey)
+    return true
+  end
+  frame._msufPredictionDisabled = nil
+  ApplyPreviewValues(frame, cfg, frame.MSUFUnitKey,
+    cfg.heal == true, cfg.absorb == true, cfg.healAbsorb == true,
+    healthValue, PREVIEW_INCOMING, PREVIEW_ABSORB, PREVIEW_HEAL_ABSORB)
+  return true
+end
+UF.ApplyPredictionPreview = Prediction.ApplyPreview
+
 UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedActive)
   if boundUnit == true then
     unit = frame.MSUFUnitKey
@@ -2394,41 +2454,12 @@ UpdateFull = function(frame, event, unit, seedHP, seedMaxHP, boundUnit, trustedA
   end
   frame._msufPredictionDisabled = nil
 
-  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
-
   if trustedActive ~= true and cfg.test == true then
     local explicitTests = cfg.healTest ~= nil or cfg.absorbTest ~= nil or cfg.healAbsorbTest ~= nil
-    local testHeal = cfg.healTest == true or not explicitTests
-    local testAbsorb = cfg.absorbTest == true or not explicitTests
-    local testHealAbsorb = cfg.healAbsorbTest == true or not explicitTests
-    if testHeal and frame.incomingHealBar then
-      LayoutBar(frame, frame.incomingHealBar, 1, healMode, frame._msufPredictionHealReverse, nil,
-        frame._msufPredictionHealHeight, frame._msufPredictionHealOffsetY)
-      ShowValue(frame.incomingHealBar, TEST_MAX, TEST_INCOMING)
-    elseif frame.incomingHealBar then
-      HideBar(frame.incomingHealBar)
-    end
-    if testAbsorb and frame.absorbBar then
-      if absorbMode == 3 or absorbMode == 4 then
-        local follow = VisibleFollowBar(cfg, frame.incomingHealBar)
-        LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow,
-          frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
-      end
-      ShowValue(frame.absorbBar, TEST_MAX, TEST_ABSORB)
-      UpdateOverAbsorbGlow(frame, cfg, unit, TEST_MAX, TEST_MAX, TEST_ABSORB, true, true)
-    elseif frame.absorbBar then
-      HideBar(frame.absorbBar)
-      HideOverAbsorbGlow(frame)
-    end
-    if testHealAbsorb and frame.healAbsorbBar then
-      LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true,
-        frame._msufPredictionHealAbsorbMode,
-        frame._msufPredictionHealAbsorbHeight, frame._msufPredictionHealAbsorbOffsetY)
-      ShowValue(frame.healAbsorbBar, TEST_MAX, TEST_HEAL_ABSORB)
-    elseif frame.healAbsorbBar then
-      HideBar(frame.healAbsorbBar)
-    end
+    ApplyPreviewValues(frame, cfg, unit,
+      cfg.healTest == true or not explicitTests,
+      cfg.absorbTest == true or not explicitTests,
+      cfg.healAbsorbTest == true or not explicitTests)
     return
   end
 
