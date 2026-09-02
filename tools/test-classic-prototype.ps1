@@ -179,6 +179,23 @@ foreach ($target in $targets) {
 
 }
 
+# Player castbar event handling is client-neutral. Classic flavors must load
+# the synchronized Retail runtime directly so STOP/INTERRUPTED ordering fixes
+# cannot drift in an unreviewed duplicate again.
+foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
+    $coreFlavorToc = Join-Path $root "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_$flavor.toc"
+    $coreFlavorEntries = @(Get-Content -LiteralPath $coreFlavorToc)
+    if ([Array]::IndexOf($coreFlavorEntries, "Castbars\MSUF_PlayerCastbarRuntime.lua") -lt 0) {
+        throw "$flavor must load the synchronized Castbars/MSUF_PlayerCastbarRuntime.lua"
+    }
+    if ($coreFlavorEntries -match 'Game\\Classic\\Castbars\\MSUF_PlayerCastbarRuntime[.]lua') {
+        throw "$flavor still loads the stale Classic player-castbar duplicate"
+    }
+}
+if (Test-Path -LiteralPath (Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_PlayerCastbarRuntime.lua")) {
+    throw "Classic player-castbar duplicate must remain retired"
+}
+
 $coreMists = Get-Content -LiteralPath (Join-Path $root "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mists.toc")
 $compatIndex = [Array]::IndexOf($coreMists, "Game\Shared\Initialize.lua")
 $classicCompatIndex = [Array]::IndexOf($coreMists, "Game\Classic\Initialize.lua")
@@ -190,8 +207,14 @@ if ($compatIndex -lt 0 -or $classicCompatIndex -lt 0 -or $bootstrapIndex -lt 0 `
 
 $groupOwnershipPath = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_Blizzard.lua"
 $groupOwnershipSource = Get-Content -LiteralPath $groupOwnershipPath -Raw
-if ($groupOwnershipSource -notmatch 'CompactRaidFrameManager_UpdateShown\(manager\)') {
-    throw "Classic CompactRaidFrameManager refresh must receive its manager self argument"
+if ($groupOwnershipSource -notmatch 'HardHideFrame\(_G\.PartyFrame\)' -or
+    $groupOwnershipSource -notmatch 'HardHideFrame\(_G\.CompactRaidFrameContainer\)' -or
+    $groupOwnershipSource -match 'PartyMemberFramePool\s*,\s*function' -or
+    $groupOwnershipSource -match 'memberUnitFrames\s*,\s*function') {
+    throw "Classic Blizzard ownership must hide only PartyFrame and CompactRaidFrameContainer owners"
+}
+if ($groupOwnershipSource -notmatch 'function GF\.RestoreBlizzardGroupFrames\(\)[\s\S]*?return false') {
+    throw "Classic Blizzard CompactUnitFrame ownership handoff must remain reload-only"
 }
 if ($groupOwnershipSource -notmatch 'raidManagerMode' -or
     $groupOwnershipSource -notmatch 'manager\.toggleButton\s+or\s+_G\.CompactRaidFrameManagerToggleButton') {

@@ -33,6 +33,7 @@ local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
+local GetNumArenaOpponentSpecs = GetNumArenaOpponentSpecs
 local GetRaidRosterInfo = GetRaidRosterInfo
 local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
@@ -40,6 +41,7 @@ local IsInRaid = IsInRaid
 GF.headers = GF.headers or {}
 GF.anchors = GF.anchors or {}
 GF._headerPool = GF._headerPool or {}
+GF.raidGroupHeaders = GF.raidGroupHeaders or {}
 GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 
 local NIL_ATTR = {}
@@ -47,6 +49,15 @@ local BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
 
 local IsUnitToken = UF and UF.IsUnitToken or function(unit)
   return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
+end
+
+local function LiveGroupKind()
+  if type(GF.GetLiveGroupKind) == "function" then return GF.GetLiveGroupKind() end
+  if IsInRaid and IsInRaid() then
+    return type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
+  end
+  if IsInGroup and IsInGroup() then return "party" end
+  return nil
 end
 
 local VALID_POINTS = {
@@ -99,8 +110,53 @@ local function RetireHeader(header)
   if header.Hide then header:Hide() end
 end
 
+function GF.ForEachHeader(key, fn)
+  if type(fn) ~= "function" then return false end
+  local first = GF.headers and GF.headers[key]
+  if key == "raid" and first and first._msufRaidGroupIndex then
+    local matched = false
+    for i = 1, first._msufRaidGroupCount or 0 do
+      local header = GF.raidGroupHeaders[i]
+      if header and fn(header, i) then matched = true end
+    end
+    return matched
+  end
+  if first then
+    return fn(first, nil) and true or false
+  end
+  return false
+end
+
+function GF.ShowHeaders(key)
+  local shown = false
+  GF.ForEachHeader(key, function(header)
+    local allowed = key ~= "raid" or header._msufRaidGroupIndex == nil
+      or header._msufPreservedGroupAllowed == true
+    if allowed then
+      header:Show()
+      shown = true
+    else
+      header:Hide()
+    end
+  end)
+  return shown
+end
+
+local function RetirePreservedRaidHeaders()
+  local first = GF.headers and GF.headers.raid
+  if not (first and first._msufRaidGroupIndex) then return false end
+  for i = 1, first._msufRaidGroupCount or 0 do
+    RetireHeader(GF.raidGroupHeaders[i])
+  end
+  GF.headers.raid = nil
+  return true
+end
+
 function GF.RetireHeader(key)
   if not (GF.headers and key) then return false end
+  if key == "raid" and RetirePreservedRaidHeaders() then
+    return true
+  end
   local header = GF.headers[key]
   if not header then
     if key == "priority" then
@@ -250,6 +306,7 @@ function GF.ResolveAnchorFrame(conf, owner)
 end
 
 local function AnchorPoint(conf)
+  if GF.GetAnchorPoint then return GF.GetAnchorPoint(conf) end
   local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
   if not VALID_POINTS[point] then
     point = "CENTER"
@@ -257,10 +314,12 @@ local function AnchorPoint(conf)
   return point
 end
 
-local function RelativeAnchorPoint(conf, fallback)
-  local point = conf and conf.relativePoint or fallback or "CENTER"
-  if not VALID_POINTS[point] then point = fallback or "CENTER" end
-  return point
+--- Both sides of a group anchor come from the single visible Anchor Point; see
+--- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
+local function ResolveAnchorPoint(kind, conf, parent)
+  if GF.ResolveAnchorPoint then return GF.ResolveAnchorPoint(kind, conf, parent) end
+  local point = AnchorPoint(conf)
+  return point, point
 end
 
 local function PointFraction(point)
@@ -331,7 +390,7 @@ local function ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX
   anchor:SetPoint(point, parent, relativePoint, (offsetX or 0) + dx, (offsetY or 0) + dy)
 end
 
-local function EnsureAnchor(key, conf, totalW, totalH)
+local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
   local anchor = GF.anchors[key]
   local desiredParent = ResolvePetBattleFrameHider()
   if not anchor then
@@ -341,23 +400,56 @@ local function EnsureAnchor(key, conf, totalW, totalH)
   elseif anchor.GetParent and anchor.SetParent and anchor:GetParent() ~= desiredParent then
     anchor:SetParent(desiredParent)
   end
-  if anchor.SetClampedToScreen and anchor._msufScreenClampEnabled ~= true then
+  anchor._msufOwnedAnchorRoot = true
+  if key == "priority" and anchor.SetClampedToScreen and anchor._msufScreenClampEnabled ~= true then
     anchor:SetClampedToScreen(true)
     anchor._msufScreenClampEnabled = true
   end
   anchor:SetSize(totalW, totalH)
   anchor:ClearAllPoints()
-  local point = AnchorPoint(conf)
-  local relativePoint = RelativeAnchorPoint(conf, point)
   local parent, missingAnchorName, rejectedAnchorName = GF.ResolveAnchorFrame(conf, anchor)
   anchor._msufMissingAnchorName = missingAnchorName
   anchor._msufRejectedAnchorName = rejectedAnchorName
   if missingAnchorName and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
     _G.MSUF_ScheduleLateAnchorReanchor()
   end
-  anchor:SetPoint(point, parent, relativePoint, conf.offsetX or 0, conf.offsetY or 0)
   anchor:Show()
-  ClampAnchorOnScreen(anchor, point, relativePoint, parent, conf.offsetX or 0, conf.offsetY or 0, totalW, totalH)
+  -- The Anchor Point owns both sides of a group anchor; resolving it can retire
+  -- a legacy relativePoint into the offsets, so read those afterwards.
+  local point, relativePoint = ResolveAnchorPoint(key, conf, parent)
+  local offsetX, offsetY = conf.offsetX or 0, conf.offsetY or 0
+  if key ~= "priority" then
+    local footprintClamped = runtimeClampInsets and GF.ConfigureAnchorFootprintScreenClamp
+      and GF.ConfigureAnchorFootprintScreenClamp(anchor,
+        runtimeClampInsets.left, runtimeClampInsets.right,
+        runtimeClampInsets.top, runtimeClampInsets.bottom)
+    if not footprintClamped and GF.ConfigureAnchorPointScreenClamp then
+      GF.ConfigureAnchorPointScreenClamp(anchor, point, totalW, totalH)
+    end
+  end
+  -- Resolve, apply and clamp in the logical anchor's coordinate space. An
+  -- external parent stays live so the header follows provider movement out of
+  -- combat; the Factory combat-edge freeze severs the link while a fight
+  -- lasts.
+  anchor:SetPoint(point, parent, relativePoint, offsetX, offsetY)
+  if key == "priority" then
+    ClampAnchorOnScreen(anchor, point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
+  end
+  local ownedParent = parent == UIParent or (parent and parent._msufOwnedAnchorRoot == true)
+  local resolvable = ownedParent or anchor:GetCenter() ~= nil
+  if not resolvable then
+    -- Never leave a secure group header attached to a provider whose geometry
+    -- is temporarily unreadable: it would render nowhere. Keep the legacy
+    -- offsets on UIParent and let the bounded late-anchor pass retry once the
+    -- provider has settled.
+    anchor:ClearAllPoints()
+    anchor:SetPoint(point, UIParent, relativePoint, offsetX, offsetY)
+    if parent ~= UIParent and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+      _G.MSUF_ScheduleLateAnchorReanchor()
+    end
+  end
+  anchor._msufStableExternalAnchor = (not ownedParent and resolvable) and parent or nil
+  anchor._msufExternalAnchorFrozen = nil
   return anchor
 end
 
@@ -421,6 +513,17 @@ local function PreservedRaidGroupLimit(conf)
   return ClampInt(conf.maxColumns, 8, 1, 8)
 end
 
+function GF.GetPreservedRaidGroupCount(conf)
+  local groups = PreservedRaidGroupLimit(conf) or 8
+  if IsInRaid and IsInRaid() and GetNumGroupMembers and GetRaidRosterInfo then
+    for index = 1, GetNumGroupMembers() or 0 do
+      local subgroup = tonumber((select(3, GetRaidRosterInfo(index)))) or 0
+      if subgroup > groups then groups = subgroup end
+    end
+  end
+  return groups > 8 and 8 or groups
+end
+
 local function RaidGroupingOrder(conf)
   local limit = PreservedRaidGroupLimit(conf)
   if not limit or limit >= 8 then
@@ -434,7 +537,7 @@ local function RaidGroupingOrder(conf)
 end
 
 local function RequiredHeaderColumns(kind, conf, count)
-  if kind == "party" then return 1 end
+  if kind == "party" then return ClampInt(conf and conf.maxColumns, 1, 1, 8) end
   count = floor((tonumber(count) or 0) + 0.5)
   if count < 1 then return 1 end
   if conf and conf.preserveRaidGroups == true then
@@ -544,6 +647,25 @@ local function GroupFilterAllows(conf, groupIndex, classFile, role)
   return true
 end
 
+local function RaidGroupAllowed(conf, groupIndex)
+  local filter = conf and conf.groupFilter
+  if type(filter) == "table" then
+    local value = filter[groupIndex]
+    return value ~= false and (value ~= nil or filter[tostring(groupIndex)] ~= false)
+  elseif type(filter) == "string" then
+    local hasGroups = false
+    for token in filter:gmatch("[^,]+") do
+      local group = tonumber(token)
+      if group and group >= 1 and group <= 8 then
+        hasGroups = true
+        if group == groupIndex then return true end
+      end
+    end
+    return not hasGroups
+  end
+  return true
+end
+
 local function UnitFullName(unit)
   if not (unit and UnitName) then return nil end
   local name, realm = UnitName(unit)
@@ -589,22 +711,26 @@ local function IsPlayerUnit(unit)
 end
 
 local function AddNameListEntry(entries, unit, index, conf, raidIndex)
-  if UnitMissing(unit) then
-    return
+  local name, subgroup, classFile, role
+  if raidIndex then
+    if not GetRaidRosterInfo then return false end
+    -- SecureGroupHeader_Update compares nameList entries against the exact name
+    -- returned by GetRaidRosterInfo(). Use that same authoritative snapshot:
+    -- UnitExists/UnitName can lag one roster dispatch and must never make a
+    -- complete raid header silently publish a partial NAMELIST.
+    local assignedRole
+    name, _, subgroup, _, _, classFile, _, _, _, _, _, assignedRole = GetRaidRosterInfo(raidIndex)
+    if issecretvalue(name) == true or type(name) ~= "string" or name == "" then return false end
+    role = (assignedRole == "TANK" or assignedRole == "HEALER" or assignedRole == "DAMAGER")
+      and assignedRole or UnitRole(unit)
+  else
+    if UnitMissing(unit) then return false end
+    role = UnitRole(unit)
+    classFile = UnitClassFile(unit)
+    name = UnitFullName(unit)
+    if not name then return false end
   end
-  local subgroup
-  local role = UnitRole(unit)
-  local classFile = UnitClassFile(unit)
-  if raidIndex and GetRaidRosterInfo then
-    subgroup = select(3, GetRaidRosterInfo(raidIndex))
-    if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role) then
-      return
-    end
-  end
-  local name = UnitFullName(unit)
-  if not name then
-    return
-  end
+  if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role) then return true end
   entries[#entries + 1] = {
     name = name,
     role = role,
@@ -612,6 +738,44 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex)
     player = IsPlayerUnit(unit),
     group = subgroup or 0,
   }
+  return true
+end
+
+--- Arena teams can replace party unit identities between rounds while the
+--- advertised match size is already stable. Only GetNumArenaOpponentSpecs is
+--- a fixed pre-match size; Blizzard documents GetNumArenaOpponents as whoever
+--- currently happens to be present, so neither it nor a transient subgroup
+--- count may authorize a filtering NAMELIST. Nil means normal non-Arena Party
+--- behavior; false means Arena scope without a readable fixed size, which must
+--- fail open to SecureGroupHeader's native roster path.
+local function ArenaPartyExpectedCompanionCount()
+  if type(GF.IsArenaPartyContext) ~= "function" or GF.IsArenaPartyContext() ~= true then
+    return nil
+  end
+
+  local known = false
+  local count = GetNumSubgroupMembers and GetNumSubgroupMembers() or nil
+  if issecretvalue(count) ~= true and type(count) == "number" then
+    count = floor(count + 0.5)
+    if count < 0 then count = 0 elseif count > 4 then count = 4 end
+    -- A transient subgroup count can itself be partial during a Shuffle swap;
+    -- only a positive fixed opponent-spec count may prove this list complete.
+  else
+    count = 0
+  end
+
+  local arenaSize = GetNumArenaOpponentSpecs and GetNumArenaOpponentSpecs() or nil
+  if issecretvalue(arenaSize) ~= true and type(arenaSize) == "number" then
+    arenaSize = floor(arenaSize + 0.5)
+    if arenaSize > 0 then
+      local companions = arenaSize - 1
+      if companions > 4 then companions = 4 end
+      if companions > count then count = companions end
+      known = true
+    end
+  end
+
+  return known and count or false
 end
 
 local function BuildPlayerFirstRoleNameList(key, kind, conf)
@@ -620,16 +784,27 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf)
   end
   local entries = {}
   if kind == "party" then
-    local inGroup = IsInGroup and IsInGroup()
-    local inRaid = IsInRaid and IsInRaid()
-    if inGroup and not inRaid then
+    local liveKind = LiveGroupKind()
+    if liveKind == "party" then
+      local expectedCompanions = ArenaPartyExpectedCompanionCount()
+      if expectedCompanions == false then return nil end
+      local arenaRosterComplete = true
       if conf.showPlayer ~= false then
-        AddNameListEntry(entries, "player", 0, conf)
+        if AddNameListEntry(entries, "player", 0, conf) ~= true then
+          arenaRosterComplete = false
+        end
       end
-      for i = 1, 4 do
-        AddNameListEntry(entries, "party" .. i, i, conf)
+      local companionLimit = expectedCompanions ~= nil and expectedCompanions or 4
+      for i = 1, companionLimit do
+        if AddNameListEntry(entries, "party" .. i, i, conf) ~= true then
+          arenaRosterComplete = false
+        end
       end
-    elseif conf.showSolo == true and conf.showPlayer ~= false then
+      -- In Arena only, never publish a partial list: Blizzard treats nameList
+      -- as a hard filter and would hide the newly assigned Shuffle teammate.
+      -- PvE keeps its established four-token scan byte-for-byte in behavior.
+      if expectedCompanions ~= nil and arenaRosterComplete ~= true then return nil end
+    elseif liveKind == nil and conf.showSolo == true and conf.showPlayer ~= false then
       AddNameListEntry(entries, "player", 0, conf)
     end
   else
@@ -673,7 +848,7 @@ local function EntryRolePriority(entry, priority)
   return priority and priority[entry and entry.role] or 999
 end
 
-local function BuildRaidFreezeNameList(kind, conf, mode, descending)
+local function BuildRaidFreezeNameList(kind, conf, mode, descending, subgroupIndex)
   if not IsRaidLikeKind(kind) then
     return nil
   end
@@ -683,10 +858,16 @@ local function BuildRaidFreezeNameList(kind, conf, mode, descending)
   end
 
   local entries = {}
+  local rosterComplete = true
   for i = 1, count do
-    AddNameListEntry(entries, "raid" .. i, i, conf, i)
+    if AddNameListEntry(entries, "raid" .. i, i, conf, i) ~= true then
+      rosterComplete = false
+    end
   end
-  if #entries == 0 then
+  -- A partial nameList is a filter, not merely an ordering hint: Blizzard will
+  -- omit every roster name absent from it. Fall back to its native complete
+  -- roster path until all authoritative names are available.
+  if not rosterComplete or #entries == 0 then
     return nil
   end
 
@@ -718,13 +899,17 @@ local function BuildRaidFreezeNameList(kind, conf, mode, descending)
 
   local names, seen = {}, {}
   for i = 1, #entries do
-    local name = entries[i].name
-    if name and not seen[name] then
+    local entry = entries[i]
+    local name = entry.name
+    if (subgroupIndex == nil or entry.group == subgroupIndex) and name and not seen[name] then
       seen[name] = true
       names[#names + 1] = name
     end
   end
   if #names == 0 then
+    -- Empty is authoritative for a complete subgroup roster; nil would reveal
+    -- the whole group through the native fallback filter.
+    if subgroupIndex ~= nil then return "" end
     return nil
   end
   return table_concat(names, ",")
@@ -791,6 +976,21 @@ local function BuildSortState(key, kind, conf)
     sortDir = (nameList and key ~= "party") and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
     groupBy = groupBy,
     groupingOrder = groupingOrder,
+    nameList = nameList,
+    playerFirst = conf.playerFirstInRole == true,
+  }
+end
+
+local function BuildPreservedSortState(kind, conf, groupIndex)
+  local mode = ResolveSortMode("raid", conf)
+  local nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true, groupIndex)
+  local nativeRole = not nameList and mode == "GROUP_ROLE"
+  return {
+    mode = mode,
+    sortMethod = nameList and "NAMELIST" or "INDEX",
+    sortDir = nameList and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
+    groupBy = nativeRole and "ASSIGNEDROLE" or nil,
+    groupingOrder = nativeRole and RoleOrder(conf) or nil,
     nameList = nameList,
     playerFirst = conf.playerFirstInRole == true,
   }
@@ -929,12 +1129,27 @@ local function GroupBorderPreviewOwned(anchorKind)
   return active.raid == true or active.mythicraid == true
 end
 
+local function GroupBorderScopeActive(anchorKind, conf)
+  if type(conf) ~= "table" or conf.enabled ~= true then return false end
+  local liveKind = LiveGroupKind()
+  if anchorKind == "party" then
+    if liveKind == "party" then return true end
+    return liveKind == nil and conf.showSolo == true
+  end
+  if anchorKind == "raid" or anchorKind == "mythicraid" then
+    return liveKind == anchorKind
+  end
+  return false
+end
+
 local function ApplyGroupBorderForKey(key)
   local anchor = GF.anchors and GF.anchors[key]
   if not anchor then return end
   local anchorKind = anchor._msufGFKind or (key == "party" and "party" or "raid")
   local conf = GF.GetConf and GF.GetConf(anchorKind) or {}
-  local enabled = conf.groupBorderEnabled == true and not GroupBorderPreviewOwned(anchorKind)
+  local enabled = conf.groupBorderEnabled == true
+    and GroupBorderScopeActive(anchorKind, conf)
+    and not GroupBorderPreviewOwned(anchorKind)
   ApplyGroupBorder(anchor, conf, enabled)
 end
 
@@ -949,20 +1164,205 @@ function GF.ApplyGroupBorder(kind)
   end
 end
 
-local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount)
+--- Get a region rectangle in one shared screen coordinate space. Retail
+--- exposes GetScaledRect; the fallback keeps the same contract for older
+--- clients and for the standalone smoke harnesses.
+local function HasSecretGeometry(...)
+  for i = 1, select("#", ...) do
+    local value = select(i, ...)
+    if issecretvalue(value) == true then return true end
+  end
+  return false
+end
+
+local function GetScaledRegionRect(region)
+  if not region then return nil end
+  local left, bottom, width, height
+  if region.GetScaledRect then
+    left, bottom, width, height = region:GetScaledRect()
+    if HasSecretGeometry(left, bottom, width, height) then return nil, nil, nil, nil, true end
+  else
+    if not region.GetRect then return nil end
+    left, bottom, width, height = region:GetRect()
+    if HasSecretGeometry(left, bottom, width, height) then return nil, nil, nil, nil, true end
+    local scale = region.GetEffectiveScale and region:GetEffectiveScale() or 1
+    if HasSecretGeometry(scale) then return nil, nil, nil, nil, true end
+    if left and bottom and width and height and type(scale) == "number" and scale > 0 then
+      left, bottom, width, height = left * scale, bottom * scale, width * scale, height * scale
+    end
+  end
+  if type(left) ~= "number" or type(bottom) ~= "number"
+    or type(width) ~= "number" or type(height) ~= "number"
+    or width <= 0 or height <= 0 then
+    return nil
+  end
+  return left, bottom, left + width, bottom + height, false
+end
+
+local function AddScaledRectToFootprint(footprint, left, bottom, right, top)
+  footprint.left = footprint.left and math.min(footprint.left, left) or left
+  footprint.bottom = footprint.bottom and math.min(footprint.bottom, bottom) or bottom
+  footprint.right = footprint.right and math.max(footprint.right, right) or right
+  footprint.top = footprint.top and math.max(footprint.top, top) or top
+end
+
+local function AddRegionToFootprint(footprint, region)
+  if not region then return false end
+  local left, bottom, right, top, secret = GetScaledRegionRect(region)
+  if secret then
+    footprint.secret = true
+    return false
+  end
+  if not left then return false end
+  AddScaledRectToFootprint(footprint, left, bottom, right, top)
+  return true
+end
+
+local function AddHeaderToFootprint(footprint, header)
+  if not header then return false end
+  local left, bottom, right, top, secret = GetScaledRegionRect(header)
+  if secret then
+    footprint.secret = true
+    return false
+  end
+  --- Blizzard sizes an empty SecureGroupHeader to 0.1 x 0.1. Do not let
+  --- allowed-but-empty preserved groups become distant pseudo-pixels in the
+  --- visible union.
+  if not left or right - left <= 0.5 or top - bottom <= 0.5 then return false end
+  AddScaledRectToFootprint(footprint, left, bottom, right, top)
+  return true
+end
+
+local function RuntimeGroupBorderActive(kind, conf, anchor)
+  return conf.groupBorderEnabled == true
+    and GroupBorderScopeActive(anchor._msufGFKind or kind, conf)
+    and not GroupBorderPreviewOwned(anchor._msufGFKind or kind)
+end
+
+local function RuntimeFootprintPadding(kind, conf, anchor)
+  local padding = 0
+  if conf.borderEnabled ~= false and GF.GetBarOutlineThickness then
+    local outline = GF.GetBarOutlineThickness(kind)
+    if issecretvalue(outline) == true then return nil, true end
+    outline = math.max(0, tonumber(outline) or 0)
+    padding = math.max(padding, outline)
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local textureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil
+      and conf.barOutlineTexture or (bars and bars.barOutlineTexture)
+    local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+    if outline > 0 and issecretvalue(textureKey) ~= true and type(textureKey) == "string"
+      and styles and type(styles.ResolveFrame) == "function"
+      and type(styles.EdgeSize) == "function" then
+      local mode, resolvedKey, texture = styles.ResolveFrame(textureKey)
+      if mode == styles.FRAME_BORDER and texture then
+        local edgeSize = styles.EdgeSize(resolvedKey, outline)
+        if issecretvalue(edgeSize) == true then return nil, true end
+        padding = math.max(padding, (tonumber(edgeSize) or outline * 2) * 0.5)
+      end
+    end
+  end
+  if RuntimeGroupBorderActive(kind, conf, anchor) then
+    local groupPadding = conf.groupBorderPadding
+    if issecretvalue(groupPadding) == true then return nil, true end
+    padding = math.max(padding, tonumber(groupPadding) or 2)
+  end
+  if padding <= 0 then return 0, false end
+  local scale = anchor.GetEffectiveScale and anchor:GetEffectiveScale() or 1
+  if HasSecretGeometry(scale) then return nil, true end
+  if type(scale) ~= "number" or scale <= 0 then scale = 1 end
+  return padding * scale, false
+end
+
+--- The persisted anchor contract remains point-based. Only the live runtime
+--- root receives a transient full-footprint selection, after Blizzard has
+--- produced the secure header rectangles. Re-running SetupHeader always starts
+--- from the saved point clamp, so corrections cannot accumulate.
+local function ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)
+  if key == "priority" or InCombat() or _G.MSUF_UnitEditModeActive == true
+    or GroupBorderPreviewOwned(key) then
+    return false
+  end
+
+  local footprint, hasRenderedRegion = {}, false
+  if key == "raid" and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then
+    local first = GF.headers.raid
+    for i = 1, first._msufRaidGroupCount or 0 do
+      local header = GF.raidGroupHeaders[i]
+      if header and header._msufPreservedGroupAllowed == true then
+        hasRenderedRegion = AddHeaderToFootprint(footprint, header) or hasRenderedRegion
+      end
+    end
+  else
+    hasRenderedRegion = AddHeaderToFootprint(footprint, GF.headers[key])
+  end
+  --- The logical anchor's estimate may intentionally reserve empty preserved
+  --- subgroups. It is only visible when the group-block border is enabled;
+  --- otherwise the settled header union is the complete rendered grid. The
+  --- anchor is also the only rendered region for an empty bordered group.
+  if RuntimeGroupBorderActive(kind, conf, anchor) then
+    hasRenderedRegion = AddRegionToFootprint(footprint, anchor) or hasRenderedRegion
+  end
+  if footprint.secret == true or not hasRenderedRegion
+    or not (footprint.left and footprint.right and footprint.bottom and footprint.top) then
+    return false
+  end
+
+  local anchorLeft, anchorBottom, anchorRight, anchorTop, anchorRectSecret = GetScaledRegionRect(anchor)
+  if anchorRectSecret or not anchorLeft then return false end
+  local anchorScale = anchor.GetEffectiveScale and anchor:GetEffectiveScale() or 1
+  if HasSecretGeometry(anchorScale) or type(anchorScale) ~= "number" or anchorScale <= 0 then return false end
+
+  local padding, paddingSecret = RuntimeFootprintPadding(kind, conf, anchor)
+  if paddingSecret then return false end
+  local selectionLeft, selectionRight = footprint.left - padding, footprint.right + padding
+  local selectionBottom, selectionTop = footprint.bottom - padding, footprint.top + padding
+  local left = (selectionLeft - anchorLeft) / anchorScale
+  local right = (selectionRight - anchorRight) / anchorScale
+  local top = (selectionTop - anchorTop) / anchorScale
+  local bottom = (selectionBottom - anchorBottom) / anchorScale
+
+  --- An oversized profile cannot fit on its short axis. Keep that axis on the
+  --- configured logical point while still protecting the other, fit-capable
+  --- axis; this avoids a size-dependent tug-of-war for intentionally huge grids.
+  local screenLeft, screenBottom, screenRight, screenTop, screenRectSecret = GetScaledRegionRect(UIParent)
+  if not screenRectSecret and screenLeft then
+    local fx, fy = PointFraction(AnchorPoint(conf))
+    local half = 0.5
+    if selectionRight - selectionLeft > screenRight - screenLeft then
+      local width = (anchorRight - anchorLeft) / anchorScale
+      left, right = width * fx - half, -width * (1 - fx) + half
+    end
+    if selectionTop - selectionBottom > screenTop - screenBottom then
+      local height = (anchorTop - anchorBottom) / anchorScale
+      top, bottom = -height * (1 - fy) + half, height * fy - half
+    end
+  end
+
+  EnsureAnchor(key, conf, totalW, totalH, {
+    left = left, right = right, top = top, bottom = bottom,
+  })
+  return true
+end
+
+local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex)
   local buttonTemplate = ButtonTemplate()
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing, conf.groupGrowth)
-  local upc = ClampInt(conf.unitsPerColumn, kind == "party" and 5 or 5, 1, 40)
-  local requiredColumns = RequiredHeaderColumns(kind, conf, layoutCount)
-  local columns = requiredColumns
+  local upc = ClampInt(conf.unitsPerColumn, 5, 1, preservedGroupIndex and 5 or 40)
+  local columns = preservedGroupIndex and floor((5 + upc - 1) / upc)
+    or RequiredHeaderColumns(kind, conf, layoutCount)
   local initialWidth = floor((w or 80) + 0.5)
   local initialHeight = floor((h or 32) + 0.5)
   local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
     or AttrChanged(header, "initial-height", initialHeight)
   local secureInitChanged = AttrChanged(header, "_msufSecureInitVersion", SECURE_INIT_VERSION)
   local initCfg = (sizeChanged or secureInitChanged) and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
-  local sortState = BuildSortState(key, kind, conf)
-  local groupFilter = sortState.sortMethod == "NAMELIST" and nil or (key == "party" and nil or ResolveGroupFilter(conf))
+  local sortState = preservedGroupIndex and BuildPreservedSortState(kind, conf, preservedGroupIndex)
+    or BuildSortState(key, kind, conf)
+  local groupFilter
+  if sortState.sortMethod ~= "NAMELIST" then
+    groupFilter = preservedGroupIndex and tostring(preservedGroupIndex)
+      or (key == "party" and nil or ResolveGroupFilter(conf))
+  end
   local childAnchorTopologyChanged = AttrChanged(header, "point", point)
     or AttrChanged(header, "columnAnchorPoint", columnAnchor)
     or AttrChanged(header, "unitsPerColumn", upc)
@@ -1026,6 +1426,73 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     changed = ApplySortAttributes(header, sortState) or changed
   end
   return changed, shouldHide
+end
+
+local function PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
+  if not (header and anchor) then return end
+  local growth = conf.growth or "DOWN"
+  local offset = groupIndex - 1
+  local point, x, y
+  if growth == "DOWN" or growth == "UP" then
+    local reverse = conf.groupGrowth == "LEFT"
+    point = (growth == "UP" and "BOTTOM" or "TOP") .. (reverse and "RIGHT" or "LEFT")
+    x, y = (reverse and -1 or 1) * offset * (blockW + spacing), 0
+  else
+    local reverse = conf.groupGrowth == "UP"
+    point = (reverse and "BOTTOM" or "TOP") .. (growth == "LEFT" and "RIGHT" or "LEFT")
+    x, y = 0, (reverse and 1 or -1) * offset * (blockH + spacing)
+  end
+  header:ClearAllPoints()
+  header:SetPoint(point, anchor, point, x, y)
+end
+
+local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH)
+  local flat = GF.headers.raid
+  if flat and flat._msufRaidGroupIndex == nil then
+    RetireHeader(flat)
+    GF._headerPool.raid = flat
+    GF.headers.raid = nil
+  end
+
+  local primary = ClampInt(conf.unitsPerColumn, 5, 1, 5)
+  local blockColumns = floor((5 + primary - 1) / primary)
+  local vertical = conf.growth ~= "LEFT" and conf.growth ~= "RIGHT"
+  local blockW = vertical and (blockColumns * w + (blockColumns - 1) * spacing)
+    or (primary * w + (primary - 1) * spacing)
+  local blockH = vertical and (primary * h + (primary - 1) * spacing)
+    or (blockColumns * h + (blockColumns - 1) * spacing)
+  local groupCount = GF.GetPreservedRaidGroupCount(conf)
+  local headers = GF.raidGroupHeaders
+
+  for groupIndex = 1, groupCount do
+    local header = headers[groupIndex]
+    if not header then
+      header = CreateFrame("Frame", HeaderName("raid"), anchor, "SecureGroupHeaderTemplate")
+      headers[groupIndex] = header
+    end
+
+    if header:GetParent() ~= anchor then header:SetParent(anchor) end
+    header._msufGFKind = kind
+    header._msufRaidGroupIndex = groupIndex
+    header._msufPreservedGroupAllowed = RaidGroupAllowed(conf, groupIndex)
+    local _, wasHiddenForLayout = ConfigureHeader(header, "raid", kind, conf, w, h, spacing, layoutCount, groupIndex)
+    PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
+
+    if wasHiddenForLayout and header._msufPreservedGroupAllowed == true then
+      local coalescedShow = GF.ScheduleScan and BeginHeaderLayoutRebind(header)
+      header:Show()
+      EndHeaderLayoutRebind(header, coalescedShow)
+    elseif header._msufPreservedGroupAllowed ~= true then
+      RetireHeader(header)
+    end
+  end
+
+  for groupIndex = groupCount + 1, #headers do RetireHeader(headers[groupIndex]) end
+
+  headers[1]._msufRaidGroupCount = groupCount
+  GF.headers.raid = headers[1]
+  ApplyRuntimeFootprintScreenClamp("raid", kind, conf, anchor, totalW, totalH)
+  return headers[1], false
 end
 
 local PRIORITY_SECURE_INIT_VERSION = 1
@@ -1236,6 +1703,12 @@ function GF.SetupHeader(key, kind)
   anchor._msufGFDragCenterToGridY = 0
   ApplyGroupBorderForKey(key)
 
+  if key == "raid" and conf.preserveRaidGroups == true then
+    return SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH)
+  elseif key == "raid" and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then
+    RetirePreservedRaidHeaders()
+  end
+
   local header = GF.headers[key]
   local newHeader = false
   local reused = false
@@ -1299,11 +1772,16 @@ function GF.SetupHeader(key, kind)
   end
   EndHeaderLayoutRebind(header, coalescedShow)
   -- Attribute writes on a hidden header only update the secure layout recipe.
-  -- Scanning children is needed for new/reused headers, explicit roster forces,
-  -- or when a visible header was hide/show cycled and may have retargeted children.
+  -- SecureGroupHeaderTemplate births its managed children from OnShow, so a
+  -- new/reused hidden header cannot consume the scan here. Runtime shows it and
+  -- performs the one required scan afterward. A visible hide/show rebind can be
+  -- scanned synchronously here and reports that work as already handled.
   local needsChildScan = newHeader or reused or GF._forceScanHeaders == true or wasHiddenForLayout == true
-  if GF.ScheduleScan and needsChildScan then
+  local scanHandled = false
+  if GF.ScheduleScan and needsChildScan and header.IsShown and header:IsShown() then
     GF.ScheduleScan(key, kind)
+    scanHandled = true
   end
-  return header, needsChildScan
+  ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW, totalH)
+  return header, scanHandled
 end

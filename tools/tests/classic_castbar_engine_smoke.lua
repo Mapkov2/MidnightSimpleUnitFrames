@@ -65,19 +65,21 @@ _G.MSUF_DB.general.castbarHideTradeSkills = true
 local hidden = engine:BuildState("player")
 assert(hidden.active == false and hidden.castType == "NONE", "Classic tradeskill cast filter failed")
 
-local runtimeFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_PlayerCastbarRuntime.lua", "rb"))
+local runtimeFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua", "rb"))
 local runtimeSource = runtimeFile:read("*a")
 runtimeFile:close()
 local impl = assert(runtimeSource:find("local function PlayerCastbarOnEventImpl", 1, true),
     "player castbar event implementation missing")
 local interrupted = assert(runtimeSource:find('if event == "UNIT_SPELLCAST_INTERRUPTED" then', impl, true),
     "player castbar interrupted branch missing")
-local activeGuard = assert(runtimeSource:find("if not HasActivePlayerCast(frame) then return end", interrupted, true),
-    "player castbar interrupted branch has no active-cast guard")
 local unitGuard = assert(runtimeSource:find("if not ActiveUnitMatches(frame, eventUnit) then return end", interrupted, true),
     "player castbar interrupted branch has no unit guard")
-assert(activeGuard < unitGuard,
-    "player castbar accepted interrupted feedback before proving an active cast")
+assert(not runtimeSource:sub(interrupted, unitGuard):find("HasActivePlayerCast", 1, true),
+    "late player interrupt feedback still requires an API-active cast after STOP")
+assert(runtimeSource:find("frame._msufPlayerInterruptCastGUID = interruptCastGUID", 1, true)
+    and runtimeSource:find("select(2, ...) == frame._msufPlayerInterruptCastGUID", 1, true)
+    and runtimeSource:find("_G.GetTime() <= frame._msufPlayerInterruptCastDeadline", 1, true),
+    "player castbar does not retain and verify the stopped cast identity")
 
 local previewFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua", "rb"))
 local previewSource = previewFile:read("*a")

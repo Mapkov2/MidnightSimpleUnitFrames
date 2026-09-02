@@ -86,6 +86,7 @@ local DEFAULTS = {
   focustarget = { width = 180, height = 30, x = 260, y = 180, showName = true, showPower = false },
   pet = { width = 220, height = 30, x = -275, y = -250, showName = true, showPower = true },
   boss = { width = 180, height = 30, x = 500, y = 180, showName = true, showPower = false },
+  arena = { width = 180, height = 30, x = 360, y = -40, showName = true, showPower = true },
 }
 
 local POWER_KEYS = {
@@ -93,6 +94,7 @@ local POWER_KEYS = {
   target = "showTargetPowerBar",
   focus = "showFocusPowerBar",
   boss = "showBossPowerBar",
+  arena = "showArenaPowerBar",
 }
 
 local function IsCooldownViewerFrameName(frameName)
@@ -104,6 +106,7 @@ local CASTBAR_KEYS = {
   target = "enableTargetCastbar",
   focus = "enableFocusCastbar",
   boss = "enableBossCastbar",
+  arena = "enableArenaCastbar",
 }
 
 local RANGE_KEYS = {
@@ -113,6 +116,7 @@ local RANGE_KEYS = {
   focustarget = true,
   pet = true,
   boss = true,
+  arena = true,
 }
 
 local CLASS_TOKENS = {
@@ -413,6 +417,20 @@ local function DarkTint(general, r, g, b)
   return r or 0, g or 0, b or 0
 end
 
+local function ResolveBarBackgroundFillMode(general)
+  return general and general.barBgFillMode == "missing" and "missing" or "full"
+end
+
+local function ResolveBarBackgroundColorMode(general)
+  local mode = general and general.barBgColorMode
+  if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
+    return mode
+  end
+  if general and general.barBgClassColor == true then return "class" end
+  if general and general.barBgMatchHPColor == true then return "match_health" end
+  return "custom"
+end
+
 local function ResolveHealthBackground(general, bars, health, dst, conf)
   dst = dst or {}
   local r, g, b, tintAlpha
@@ -423,7 +441,7 @@ local function ResolveHealthBackground(general, bars, health, dst, conf)
     r, g, b = DarkTint(general, Number(general and general.classBarBgR, 0), Number(general and general.classBarBgG, 0), Number(general and general.classBarBgB, 0))
     tintAlpha = Number(general and general.classBarBgA, 1)
   end
-  if general and general.barBgMatchHPColor == true and health then
+  if ResolveBarBackgroundColorMode(general) == "match_health" and health then
     r, g, b = DarkTint(general, health.r, health.g, health.b)
   end
   -- Color opacity is an explicit user-controlled multiplier whose neutral
@@ -869,6 +887,13 @@ local function CompileRange(out, conf, general, key)
   range.active = out.enabled ~= false and range.enabled == true
   range.alpha = Clamp01(conf.rangeFadeAlpha or general.rangeFadeAlpha, 0.4)
   range.layerMode = NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode or general.rangeFadeLayerMode)
+  local updateRate = math.floor(Number(conf.rangeFadeUpdateRate, 0) + 0.5)
+  if key ~= "boss" or updateRate < 1 then
+    updateRate = 0
+  elseif updateRate > 20 then
+    updateRate = 20
+  end
+  range.updateRate = updateRate
 end
 
 local function CompileAlpha(out, conf, general, key)
@@ -878,6 +903,7 @@ local function CompileAlpha(out, conf, general, key)
   local hpAlpha = Clamp01(conf.hpBarAlpha, 1)
   alpha.hpAlpha = hpAlpha
   alpha.excludeTextPortrait = conf.alphaExcludeTextPortrait == true
+  alpha.excludePredictionBars = conf.alphaExcludePredictionBars == true
   alpha.active = hpAlpha < 1
 
   -- Out-of-combat fade: whole-frame multiplier applied only while out of
@@ -1065,7 +1091,8 @@ local function StatusAllowed(key, id)
     return key == "player" or key == "target"
   elseif id == "pvp" then
     return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
-  elseif id == "resting" then
+      or key == "arena"
+  elseif id == "resting" or id == "stance" then
     return key == "player"
   elseif id == "raidGroup" then
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
@@ -1136,15 +1163,17 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("assist", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "assistIconStyle", "BLIZZARD", "leaderIconStyle" }, nil, { "assistIconCustomIcon", "" }),
   PrefixedStatusDef("raidMarker", "showRaidMarker", true, "raidMarker", 18, "TOPLEFT", 16, 3, 7, nil, nil, { "raidMarkerCustomIcon", "" }),
   PrefixedStatusDef("level", "showLevelIndicator", true, "levelIndicator", 14, "NAMERIGHT", 0, 0, 7),
+  PrefixedStatusDef("bossNumber", "showBossNumberIndicator", false, "bossNumberIndicator", 14, "TOPLEFT", 4, -4, 7),
   PrefixedStatusDef("race", "showRaceIndicator", false, "raceIndicator", 14, "NAMERIGHT", 0, 0, 7),
   PrefixedStatusDef("classText", "showClassTextIndicator", false, "classTextIndicator", 14, "NAMERIGHT", 0, 0, 7),
-  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
+  StatusEntryDef("raidGroup", "showRaidGroupInName", false, "raidGroupNameSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "raidGroupNameLayer", 5, { "raidGroupNameStyle", "PAREN" }, nil, nil, "nameTextLayer", "raidGroupName"),
   PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
   PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
-  PrefixedStatusDef("resting", "showRestingIndicator", false, "restedStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("resting", "showRestingIndicator", true, "restedStateIndicator", 39, "TOPLEFT", -40, 50, 25, { "restedStateIndicatorIconStyle", "BLIZZARD" }, { "restedStateIndicatorSymbol", "rested_blizzard_animated", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
   PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
   PrefixedStatusDef("petHappiness", "showPetHappinessIndicator", true, "petHappinessIndicator", 24, "RIGHT", -7, -4, 7),
+  PrefixedStatusDef("stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", 0, -2, 7),
 }
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {
@@ -1199,16 +1228,18 @@ local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSi
 end
 
 local LOAD_CONDITION_KEYS = {
-  { "hideMounted", "HideMounted" },
-  { "hideOutOfCombat", "HideOutOfCombat" },
-  { "hideSolo", "HideSolo" },
-  { "hideInVehicle", "HideInVehicle" },
+  { "hideInHousing", "HideInHousing" },
+  { "hideInCombat", "HideInCombat" },
   { "hideInGroup", "HideInGroup" },
   { "hideInInstance", "HideInInstance" },
+  { "hideInVehicle", "HideInVehicle" },
+  { "hideMounted", "HideMounted" },
+  { "hideNoTarget", "HideNoTarget" },
+  { "hideOutOfCombat", "HideOutOfCombat" },
+  { "hideOutOfCombatNoTarget", "HideOutOfCombatNoTarget" },
   { "hideResting", "HideResting" },
-  { "hideInCombat", "HideInCombat" },
+  { "hideSolo", "HideSolo" },
   { "hideStealthed", "HideStealthed" },
-  { "hideInHousing", "HideInHousing" },
 }
 
 local function CompileLoadConditions(out, conf)
@@ -1373,9 +1404,12 @@ local function FontFlagsFromGlobal()
   return "OUTLINE"
 end
 
-local function ComposeFontFlags(outline, monochrome)
+local function ComposeFontFlags(outline, monochrome, slug)
   local flags = ""
   outline = tostring(outline or "OUTLINE"):upper()
+  if slug == true then
+    return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
+  end
   if outline == "THICKOUTLINE" then
     flags = "THICKOUTLINE"
   elseif outline ~= "NONE" and outline ~= "" then
@@ -1390,6 +1424,7 @@ end
 local function ResolveFontFlags(general, conf)
   local outline = "OUTLINE"
   local monochrome = general and general.fontMonochrome == true
+  local slug = general and general.fontSlug == true
   if general and general.noOutline then
     outline = "NONE"
   elseif general and general.boldText then
@@ -1404,12 +1439,16 @@ local function ResolveFontFlags(general, conf)
     if conf.fontMonochrome ~= nil then
       monochrome = conf.fontMonochrome == true
     end
+    if conf.fontSlug ~= nil then
+      slug = conf.fontSlug == true
+    end
   end
   if not (conf and conf.fontOverride == true)
-    and not (general and (general.noOutline or general.boldText or general.fontMonochrome)) then
+    and not (general and (general.noOutline or general.boldText or general.fontMonochrome or general.fontSlug)) then
     return FontFlagsFromGlobal()
   end
-  return ComposeFontFlags(outline, monochrome)
+  if slug then monochrome = false end
+  return ComposeFontFlags(outline, monochrome, slug)
 end
 
 local function ResolveFontTextAlpha(general, conf)
@@ -1449,7 +1488,7 @@ local ResolveFontShadowMetrics = _G.MSUF_ResolveFontShadowMetrics or function(op
   return opacity, distance, -distance
 end
 
-local function ResolveFontShadow(general, conf)
+local function ResolveFontShadow(general, conf, flags)
   local enabled = not (general and general.textBackdrop == false)
   local alpha, x, y = ResolveFontShadowMetrics(general and general.fontShadowOpacity,
     general and general.fontShadowDistance, general and general.fontShadowStrength)
@@ -1460,6 +1499,7 @@ local function ResolveFontShadow(general, conf)
         conf.fontShadowStrength, alpha, x)
     end
   end
+  if tostring(flags or ""):upper():find("SLUG", 1, true) then enabled = false end
   return enabled, alpha, x, y
 end
 
@@ -1525,6 +1565,12 @@ local function CastbarEnabled(unit, key, general)
   return not (general and general[castbarKey] == false)
 end
 
+local function IsGlobalCooldownAnchorEnabled(general)
+  local isEnabled = _G.MSUF_IsCooldownAnchorEnabled
+  if type(isEnabled) == "function" then return isEnabled(general) == true end
+  return general and general.anchorToCooldown == true or false
+end
+
 local function ResolveAnchorSettings(conf, general)
   local anchorFrameName = conf and conf.anchorFrameName
   if anchorFrameName == "UI_Parent" then anchorFrameName = "UIParent" end
@@ -1544,7 +1590,7 @@ local function ResolveAnchorSettings(conf, general)
     return nil, anchorToUnitframe, false
   end
 
-  if general and general.anchorToCooldown == true then
+  if IsGlobalCooldownAnchorEnabled(general) then
     return "EssentialCooldownViewer", "GLOBAL", true
   end
 
@@ -1570,6 +1616,13 @@ local function CompileUnitPortrait(out, conf, general)
   local portraitOverride = Number(conf.portraitSizeOverride, Number(conf.portraitSize, 0))
   local portraitAutoSize = max(16, Number(out.height, 30) - 4)
   local portraitSize = portraitOverride > 0 and max(1, portraitOverride) or portraitAutoSize
+  local portraitSizeMode = conf.portraitSizeMode
+  if portraitSizeMode ~= "UNIFORM" and portraitSizeMode ~= "SEPARATE" then
+    -- Legacy UnitFrames gave a positive uniform override priority. With Auto
+    -- size, positive axis values were the only signal for non-square geometry.
+    portraitSizeMode = portraitOverride > 0 and "UNIFORM"
+      or ((Number(conf.portraitWidth, 0) > 0 or Number(conf.portraitHeight, 0) > 0) and "SEPARATE" or "UNIFORM")
+  end
   out.portrait.enabled = portraitMode ~= "OFF"
   out.portrait.side = portraitMode == "RIGHT" and "RIGHT" or "LEFT"
   out.portrait.render = NormalizePortraitRender(conf.portraitRender)
@@ -1577,17 +1630,20 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.castSpellIcon = conf.portraitCastSpellIcon == true
   out.portrait.shape = NormalizePortraitShape(conf.portraitShape)
   out.portrait.size = portraitSize
+  out.portrait.sizeMode = portraitSizeMode
   out.portrait.x = Number(conf.portraitOffsetX, 0)
   out.portrait.y = Number(conf.portraitOffsetY, 0)
-  --- A positive size override is the explicit square contract. Width/height
-  --- are the advanced non-square mode and only take over while size is Auto
-  --- (0); otherwise stale per-axis values made the visible Size slider inert.
+  --- The explicit mode keeps both value sets intact while making their
+  --- precedence unambiguous. This also lets users return to their previous
+  --- uniform or non-square geometry without destructive slider resets.
   local portraitWidth = Number(conf.portraitWidth, 0)
   local portraitHeight = Number(conf.portraitHeight, 0)
-  if portraitOverride > 0 then
+  if portraitSizeMode == "UNIFORM" then
     out.portrait.width = portraitSize
     out.portrait.height = portraitSize
   else
+    -- A zero axis inherits the retained uniform value. Switching modes is
+    -- therefore visually stable, while Size = 0 still resolves to Auto.
     out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitSize
     out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitSize
   end
@@ -1614,6 +1670,12 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.border.g = Number(general.portraitBorderColorG, 1)
   out.portrait.border.b = Number(general.portraitBorderColorB, 1)
   out.portrait.border.a = Number(general.portraitBorderColorA, 1)
+  local portraitEdgeSoftnessLevel = min(15, max(0,
+    floor((Number(conf.portraitEdgeSoftness, 0) / 2) + 0.5)))
+  if out.portrait.shape == "BLIZZARD" or out.portrait.border.style ~= "NONE" then
+    portraitEdgeSoftnessLevel = 0
+  end
+  out.portrait.edgeSoftnessLevel = portraitEdgeSoftnessLevel
   out.portrait.bg = out.portrait.bg or {}
   out.portrait.bg.enabled = conf.portraitBgEnabled == true
   out.portrait.bg.r = Number(general.portraitBgColorR, 0.05)
@@ -1635,13 +1697,16 @@ local function CompileUnitStatus(out, conf, general, key)
   status.useMidnight = StatusBool(conf, general, "statusIconsUseMidnightStyle", false)
 
   local levelSize = Number(conf.nameFontSize or general.nameFontSize, out.nameFontSize)
+  -- raidGroupNameSize ships unseeded on purpose: an untouched profile keeps
+  -- the inline group number at the frame's name font size, exactly as it looked
+  -- while the two shared one key.
   local raidGroupSize = out.nameFontSize
   local statusTextSize = out.nameFontSize + 2
   for i = 1, #UNIT_STATUS_ENTRY_DEFS do
     local def = UNIT_STATUS_ENTRY_DEFS[i]
     local id = def[1]
     local fallbackSize = statusTextSize
-    if id == "level" or id == "race" or id == "classText" then
+    if id == "level" or id == "bossNumber" or id == "race" or id == "classText" or id == "stance" then
       fallbackSize = levelSize
     elseif id == "raidGroup" then
       fallbackSize = raidGroupSize
@@ -1665,6 +1730,23 @@ local function CompileUnitStatus(out, conf, general, key)
   statusText.showDead, statusText.showGhost = deadText.enabled, ghostText.enabled
   statusText.showAFK, statusText.showDND = afkText.enabled, dndText.enabled
   statusText.dead, statusText.ghost, statusText.afk, statusText.dnd = deadText, ghostText, afkText, dndText
+
+  -- AFK timer companion region: independent placement, but it only renders
+  -- while the AFK state text is active, so it needs no own show-state keys.
+  local afkTimer = statusText.afkTimer or {}
+  statusText.afkTimer = afkTimer
+  local afkTimerShow = conf and conf.statusAFKTimerEnabled
+  if afkTimerShow == nil then afkTimerShow = general and general.statusAFKTimerEnabled end
+  afkTimer.enabled = afkTimerShow == true
+  afkTimer.size = StatusNumber(conf, general, "statusAFKTimerSize", 12)
+  afkTimer.anchor = StatusString(conf, general, "statusAFKTimerAnchor", "CENTER")
+  afkTimer.x = StatusNumber(conf, general, "statusAFKTimerOffsetX", 0)
+  afkTimer.y = StatusNumber(conf, general, "statusAFKTimerOffsetY", -14)
+  afkTimer.layer = ClampStatusLayer(StatusNumber(conf, general, "statusAFKTimerLayer", 7), 7)
+  ApplyStatusColor(afkTimer, conf, general, "statusAFKTimer")
+  if afkTimer.colorR == nil then
+    afkTimer.colorR, afkTimer.colorG, afkTimer.colorB = afkText.colorR, afkText.colorG, afkText.colorB
+  end
 
   local pvp = status.pvp
   if pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then
@@ -1690,8 +1772,18 @@ local function ResolveUnitContext(db, unit)
   end
   local general = type(db.general) == "table" and db.general or {}
   local bars = type(db.bars) == "table" and db.bars or {}
-  local bossIndex = unit and unit:match("^boss(%d+)$")
+  -- Arena frames use the same stacked container model as Boss frames.
+  local bossIndex = unit and (unit:match("^boss(%d+)$") or unit:match("^arena(%d+)$"))
   return key, def, conf, general, bars, bossIndex
+end
+
+--- Unit frames canonically store HP-text visibility in showHP. Older imports
+--- may only carry showHPText, so use that alias strictly when the canonical
+--- field is absent. Never let a stale alias override an explicit current value.
+local function UnitHealthTextEnabled(conf)
+  local enabled = conf.showHP
+  if enabled == nil then enabled = conf.showHPText end
+  return enabled ~= false
 end
 
 local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
@@ -1700,9 +1792,15 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   out.enabled = conf.enabled ~= false
   out.width = Number(conf.width or conf.frameWidth, def.width)
   out.height = Number(conf.height or conf.frameHeight, def.height)
-  local globalCooldownAnchor
-  out.anchorFrameName, out.anchorToUnitframe, globalCooldownAnchor = ResolveAnchorSettings(conf, general)
-  local ecvRule = globalCooldownAnchor and ECV_ANCHORS[key] or nil
+  local cooldownViewerAnchor
+  out.anchorFrameName, out.anchorToUnitframe, cooldownViewerAnchor = ResolveAnchorSettings(conf, general)
+  -- 5.77 stored Utility/Buff viewer positions as CENTER-to-CENTER offsets.
+  -- Only EssentialCooldownViewer owns the specialized edge-anchor rules.
+  -- Keep this distinction in the cold config compile so legacy coordinates
+  -- retain their exact screen geometry without adding runtime event work.
+  local essentialCooldownAnchor = cooldownViewerAnchor
+    and out.anchorFrameName == "EssentialCooldownViewer"
+  local ecvRule = essentialCooldownAnchor and ECV_ANCHORS[key] or nil
   if ecvRule then
     out.point = ecvRule[1]
     out.relativePoint = ecvRule[2]
@@ -1731,7 +1829,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   else
     out.showName = def.showName ~= false
   end
-  out.showHealthText = conf.showHP ~= false and conf.showHPText ~= false
+  out.showHealthText = UnitHealthTextEnabled(conf)
   if conf.showPowerText ~= nil then
     out.showPowerText = conf.showPowerText ~= false
   elseif conf.showPower ~= nil then
@@ -1749,7 +1847,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   ResolveTextColor(general, out.textColor)
   out.textColor.a = ResolveFontTextAlpha(general, conf)
   do
-    local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(general, conf)
+    local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(general, conf, out.fontFlags)
     out.fontShadow = shadowEnabled
     out.fontShadowAlpha = shadowAlpha
     out.fontShadowX = shadowX
@@ -1795,6 +1893,13 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.powerLeft = NormalizePowerTextMode(conf.powerTextLeft, "NONE")
   text.powerCenter = NormalizePowerTextMode(conf.powerTextCenter, "NONE")
   text.powerRight = NormalizePowerTextMode(conf.powerTextRight or conf.powerTextMode or general.powerTextMode, "CURPERCENT")
+  -- Augmentation Evoker hands the Player Power bar to Ebon Might, whose remaining
+  -- duration is written by Blizzard's native duration binding. Power value slots
+  -- would keep whatever the last Mana update left behind, so drop them entirely
+  -- and let the native text own the bar.
+  if key == "player" and _G.MSUF_AugEvokerActive == true then
+    text.powerLeft, text.powerCenter, text.powerRight = "NONE", "NONE", "NONE"
+  end
   text.powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")
   text.powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol")
   text.powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol")
@@ -1864,7 +1969,11 @@ local function CompileUnitHealth(out, db, conf, general, bars)
   health.backgroundTexture = out.backgroundTexture
   health.reverse = conf.reverseFillBars == true
   health.vertical = conf.verticalFillBars == true
-  health.smooth = conf.smoothFill == true
+  health.chunked = conf.chunkedFill == true
+  health.smooth = conf.smoothFill == true and health.chunked ~= true
+  health.lossR = Clamp01(general.healthLossColorR, 1)
+  health.lossG = Clamp01(general.healthLossColorG, 0.55)
+  health.lossB = Clamp01(general.healthLossColorB, 0.08)
   health.mode = ResolveUnitBarMode(conf, general)
   health.gradient = general.enableHealthGradient ~= false
   health.gradientLowR = Number(general.healthGradientLowR, 1)
@@ -1899,8 +2008,10 @@ local function CompileUnitHealth(out, db, conf, general, bars)
     CopyColor(health, general.unifiedBarR or 0.1, general.unifiedBarG or 0.6, general.unifiedBarB or 0.9, 1)
   end
   health.background = ResolveHealthBackground(general, bars, health, health.background or {}, conf)
-  health.backgroundMatchHealth = general.barBgMatchHPColor == true
-  health.backgroundClassColor = general.barBgClassColor == true
+  health.backgroundFillMode = ResolveBarBackgroundFillMode(general)
+  health.backgroundColorMode = ResolveBarBackgroundColorMode(general)
+  health.backgroundMatchHealth = health.backgroundColorMode == "match_health"
+  health.backgroundClassColor = health.backgroundColorMode == "class"
   return health
 end
 
@@ -1980,15 +2091,17 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   elseif power.borderThickness > 10 then
     power.borderThickness = 10
   end
-  -- Class-Resources-owned edge strength for the Player detached *shapes*
-  -- (ROUND/CRYSTAL/ORB). The rectangular bar keeps the per-unit border toggle
-  -- and thickness above in both attached and detached mode, so the unit page
-  -- controls stay authoritative once the bar is detached.
-  power.detachedOutline = Number(bars.detachedPowerBarOutline, power.borderThickness)
-  if power.detachedOutline < 0 then
-    power.detachedOutline = 0
-  elseif power.detachedOutline > 8 then
-    power.detachedOutline = 8
+  -- Class Resources owns the outline of every detached Player power shape,
+  -- including BAR. Other units keep their per-unit power border controls.
+  power.detachedOutline = key == "player"
+    and Number(bars.detachedPowerBarOutline, power.borderThickness)
+    or nil
+  if power.detachedOutline ~= nil then
+    if power.detachedOutline < 0 then
+      power.detachedOutline = 0
+    elseif power.detachedOutline > 8 then
+      power.detachedOutline = 8
+    end
   end
   power.borderR = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
   power.borderG = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)
@@ -2008,10 +2121,18 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
   power.reverse = health.reverse == true
   power.vertical = health.vertical == true
-  if conf.powerSmoothFill ~= nil then
-    power.smooth = conf.powerSmoothFill == true
+  power.lossR = Clamp01(general.powerLossColorR, 0.70)
+  power.lossG = Clamp01(general.powerLossColorG, 0.90)
+  power.lossB = Clamp01(general.powerLossColorB, 1)
+  if conf.powerChunkedFill ~= nil then
+    power.chunked = conf.powerChunkedFill == true
   else
-    power.smooth = unit == "player" and bars.smoothPowerBar == true or false
+    power.chunked = unit == "player" and bars.chunkedPowerBar == true or false
+  end
+  if conf.powerSmoothFill ~= nil then
+    power.smooth = conf.powerSmoothFill == true and power.chunked ~= true
+  else
+    power.smooth = unit == "player" and bars.smoothPowerBar == true and power.chunked ~= true or false
   end
 end
 
@@ -2054,6 +2175,14 @@ local function CompileUnitPrediction(out, conf, general, key)
 end
 
 local function CompileUnitDispel(out, conf, general)
+  -- These controls live on the individual Player/Target/Focus/Boss pages and
+  -- are independent of the Bars override gate.  general.* is retained only as
+  -- a compatibility fallback for profiles predating per-unit ownership.
+  local function UnitDispelValue(key, fallback)
+    if conf and conf[key] ~= nil then return conf[key] end
+    if general and general[key] ~= nil then return general[key] end
+    return fallback
+  end
   local dispel = out.dispel or {}
   out.dispel = dispel
   dispel.r = 0.25
@@ -2062,28 +2191,28 @@ local function CompileUnitDispel(out, conf, general)
   dispel.a = 1
   local overlay = out.dispelOverlay or {}
   out.dispelOverlay = overlay
-  overlay.enabled = ScopedValue(conf, general, "unitDispelOverlayEnabled", false) == true
-  overlay.trigger = NormalizeDispelOverlayTrigger(ScopedValue(conf, general, "unitDispelOverlayTrigger", "BORDER"))
-  overlay.style = NormalizeDispelOverlayStyle(ScopedValue(conf, general, "unitDispelOverlayStyle", "FULL"))
-  overlay.onHealth = ScopedValue(conf, general, "unitDispelOverlayOnHealth", true) ~= false
-  overlay.alpha = Clamp01(ScopedValue(conf, general, "unitDispelOverlayAlpha", 0.35), 0.35)
+  overlay.enabled = UnitDispelValue("unitDispelOverlayEnabled", false) == true
+  overlay.trigger = NormalizeDispelOverlayTrigger(UnitDispelValue("unitDispelOverlayTrigger", "BORDER"))
+  overlay.style = NormalizeDispelOverlayStyle(UnitDispelValue("unitDispelOverlayStyle", "FULL"))
+  overlay.onHealth = UnitDispelValue("unitDispelOverlayOnHealth", true) ~= false
+  overlay.alpha = Clamp01(UnitDispelValue("unitDispelOverlayAlpha", 0.35), 0.35)
   -- Dispel-type symbol indicator. Auras3 normalizes/clamps every field, so this
   -- only has to forward the raw scoped values.
   local symbol = out.dispelSymbol or {}
   out.dispelSymbol = symbol
-  symbol.enabled = ScopedValue(conf, general, "unitDispelSymbolEnabled", false) == true
-  symbol.style = ScopedValue(conf, general, "unitDispelSymbolStyle", "BLIZZARD")
-  symbol.mode = ScopedValue(conf, general, "unitDispelSymbolMode", "ALL")
-  symbol.trigger = ScopedValue(conf, general, "unitDispelSymbolTrigger", "BORDER")
-  symbol.size = ScopedValue(conf, general, "unitDispelSymbolSize", 14)
-  symbol.spacing = ScopedValue(conf, general, "unitDispelSymbolSpacing", 2)
-  symbol.growth = ScopedValue(conf, general, "unitDispelSymbolGrowth", "RIGHT")
-  symbol.anchor = ScopedValue(conf, general, "unitDispelSymbolAnchor", "TOPRIGHT")
-  symbol.x = ScopedValue(conf, general, "unitDispelSymbolX", 0)
-  symbol.y = ScopedValue(conf, general, "unitDispelSymbolY", 0)
-  symbol.alpha = Clamp01(ScopedValue(conf, general, "unitDispelSymbolAlpha", 1), 1)
-  symbol.layer = ScopedValue(conf, general, "unitDispelSymbolLayer", 8)
-  symbol.strata = ScopedValue(conf, general, "unitDispelSymbolStrata", "AUTO")
+  symbol.enabled = UnitDispelValue("unitDispelSymbolEnabled", false) == true
+  symbol.style = UnitDispelValue("unitDispelSymbolStyle", "BLIZZARD")
+  symbol.mode = UnitDispelValue("unitDispelSymbolMode", "ALL")
+  symbol.trigger = UnitDispelValue("unitDispelSymbolTrigger", "BORDER")
+  symbol.size = UnitDispelValue("unitDispelSymbolSize", 14)
+  symbol.spacing = UnitDispelValue("unitDispelSymbolSpacing", 2)
+  symbol.growth = UnitDispelValue("unitDispelSymbolGrowth", "RIGHT")
+  symbol.anchor = UnitDispelValue("unitDispelSymbolAnchor", "TOPRIGHT")
+  symbol.x = UnitDispelValue("unitDispelSymbolX", 0)
+  symbol.y = UnitDispelValue("unitDispelSymbolY", 0)
+  symbol.alpha = Clamp01(UnitDispelValue("unitDispelSymbolAlpha", 1), 1)
+  symbol.layer = UnitDispelValue("unitDispelSymbolLayer", 8)
+  symbol.strata = UnitDispelValue("unitDispelSymbolStrata", "AUTO")
 end
 
 local function CompileUnitBorder(out, conf, general, bars)
@@ -2098,14 +2227,15 @@ local function CompileUnitBorder(out, conf, general, bars)
   local outlineLayer = conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or bars.barOutlineLayer
   border.layer = max(0, min(30, floor((tonumber(outlineLayer) or 0) + 0.5)))
   border.strata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
-  -- Optional outline texture. Resolved to a file path at compile time; nil
-  -- keeps the solid-color edges. Rounded Frames ignores this and keeps its
-  -- tinted rounded edge, so the outline color stays authoritative there.
-  border.texture = nil
+  -- Optional typed outline media. True borders use eight-piece edgeFile
+  -- geometry; statusbar textures keep the historic four stretched edges.
+  -- Rounded Frames ignores both and keeps its tinted rounded edge.
+  border.textureMode, border.textureKey, border.texture = nil, nil, nil
   local outlineTextureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil and conf.barOutlineTexture or bars.barOutlineTexture
-  if type(outlineTextureKey) == "string" and outlineTextureKey ~= "" then
-    border.texture = ResolveStatusbarTextureKey(outlineTextureKey, nil)
-    if border.texture == WHITE then border.texture = nil end
+  local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles
+  if type(outlineTextureKey) == "string" and outlineTextureKey ~= ""
+    and styles and type(styles.ResolveFrame) == "function" then
+    border.textureMode, border.textureKey, border.texture = styles.ResolveFrame(outlineTextureKey)
   end
   border.r = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
   border.g = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)
@@ -2146,6 +2276,7 @@ local function CompileUnitTail(out, unit, key, conf, general, bars)
   local A3 = MSUF.MSUF_Auras3
   out.auras.enabled = (A3 and A3.UnitFrameAuraEnabled and A3.UnitFrameAuraEnabled(unit) == true)
     or (out.border and out.border.dispel == true)
+    or (out.border and out.border.purge == true and (unit == "target" or unit == "focus"))
     or (out.dispelOverlay and out.dispelOverlay.enabled == true)
     or (out.dispelSymbol and out.dispelSymbol.enabled == true)
     or false
@@ -2222,6 +2353,12 @@ local function MSUF_GetBossLayoutDelta(index, conf)
 end
 ExportPublic("MSUF_GetBossLayoutDelta", MSUF_GetBossLayoutDelta)
 
+ExportPublic("MSUF_GetArenaLayoutDelta", function(index, conf)
+  local db = EnsureDB()
+  conf = conf or (db and db.arena) or {}
+  return BossLayoutDelta(conf, index, DEFAULTS.arena)
+end)
+
 function Config.RefreshUnit(unit)
   if not (unit and UF.IsManagedUnit and UF.IsManagedUnit(unit)) then
     return nil
@@ -2296,8 +2433,10 @@ local function BuildSettingsCache(db)
   cache.barBackgroundAlpha = ResolveBgAlpha(general, bars)
   cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA = healthBg.r, healthBg.g, healthBg.b, healthBg.a
   cache.powerBgTintR, cache.powerBgTintG, cache.powerBgTintB, cache.powerBgTintA = powerBg.r, powerBg.g, powerBg.b, powerBg.a
-  cache.barBgClassColor = general.barBgClassColor == true
-  cache.barBgMatchHPColor = general.barBgMatchHPColor == true
+  cache.barBgFillMode = ResolveBarBackgroundFillMode(general)
+  cache.barBgColorMode = ResolveBarBackgroundColorMode(general)
+  cache.barBgClassColor = cache.barBgColorMode == "class"
+  cache.barBgMatchHPColor = cache.barBgColorMode == "match_health"
   cache.powerBarBgMatchHPColor = general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true
   cache.petFrameColorEnabled = PetFrameColorEnabled(general)
   cache.petFrameColorR = Number(general.petFrameColorR, 0)

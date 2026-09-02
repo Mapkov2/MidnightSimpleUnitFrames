@@ -149,7 +149,7 @@ Castbars\MSUF_CastbarRuntime.lua
 Castbars\MSUF_CastbarChannelTicks.lua
 Castbars\MSUF_CastbarFrames.lua
 Castbars\MSUF_CastbarAnchors.lua
-Game\Classic\Castbars\MSUF_PlayerCastbarRuntime.lua
+Castbars\MSUF_PlayerCastbarRuntime.lua
 Castbars\MSUF_CastbarPreviewEdit.lua
 Castbars\MSUF_CastbarPreviews.lua
 Castbars\MSUF_CastbarVisuals.lua

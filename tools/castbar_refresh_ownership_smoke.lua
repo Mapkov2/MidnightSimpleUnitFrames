@@ -150,6 +150,18 @@ assert(contains(driver, "C_Timer.After(feedbackDuration, self._msufInterruptHide
 assert(contains(player, "C_Timer.After(0, frame._msufSoftResyncCB)"))
 assert(contains(player, "C_Timer.After(duration, frame._msufPlayerInterruptHideCB)"))
 assert(not contains(player, "HideIfNoLongerCasting({"), "player interrupt callback must not allocate an owner table")
+assert(contains(player, "local INTERRUPT_IDENTITY_GRACE = 0.25"),
+    "player interrupt feedback must retain a bounded STOP-before-INTERRUPTED identity window")
+assert(contains(player, "frame._msufPlayerInterruptCastGUID = interruptCastGUID")
+    and contains(player, "select(2, ...) == frame._msufPlayerInterruptCastGUID")
+    and contains(player, "_G.GetTime() <= frame._msufPlayerInterruptCastDeadline"),
+    "player interrupt feedback must match the stopped cast GUID before accepting the late terminal event")
+local playerEventStart = assert(player:find("local function PlayerCastbarOnEventImpl", 1, true))
+local playerInterruptStart = assert(player:find('if event == "UNIT_SPELLCAST_INTERRUPTED" then', playerEventStart, true))
+local playerInterruptEnd = assert(player:find("if not frame.isEmpower then", playerInterruptStart, true))
+local playerInterruptBody = player:sub(playerInterruptStart, playerInterruptEnd - 1)
+assert(not contains(playerInterruptBody, "HasActivePlayerCast"),
+    "late player interrupt feedback must not require an API-active cast after STOP")
 
 assert(contains(interruptReady, "EvaluateColorValueFromBoolean"),
     "secret interrupt colors must use the allocation-free scalar evaluator")

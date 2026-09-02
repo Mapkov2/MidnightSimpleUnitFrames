@@ -9,7 +9,6 @@ MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua
 MidnightSimpleUnitFrames/Game/Classic/BlizzardFrames.lua
 MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua
-MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_PlayerCastbarRuntime.lua
 MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Constants.lua
 MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Controller.lua
 MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Core.lua

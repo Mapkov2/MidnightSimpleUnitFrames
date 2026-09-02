@@ -35,7 +35,6 @@ function manager:GetParent() return _G.UIParent end
 function manager:HookScript(kind, callback) self.hooks[kind] = callback end
 
 local mouseFoci = {}
-local updateShownSelf
 
 _G.MSUF_NS = {
     GF = {
@@ -54,7 +53,6 @@ _G.hooksecurefunc = function() end
 _G.C_Timer = { After = function(_, callback) callback() end }
 _G.CompactRaidFrameManager = manager
 _G.CompactRaidFrameManagerToggleButton = button
-_G.CompactRaidFrameManager_UpdateShown = function(self) updateShownSelf = self end
 
 local path = root .. "/MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_Blizzard.lua"
 local chunk = assert(loadfile(path))
@@ -98,7 +96,8 @@ configs.party.enabled = false
 configs.party.showSolo = false
 configs.party.raidManagerMode = "SHOW"
 assert(GF.ApplyBlizzardGroupFrameOwnership("classic-signature-smoke") == true, "ownership apply failed")
-assert(updateShownSelf == manager, "Classic CompactRaidFrameManager_UpdateShown must receive manager self")
+assert(GF.RestoreBlizzardGroupFrames() == false,
+    "protected Blizzard CompactUnitFrame ownership must remain reload-only")
 
 -- Preserve raid groups must be an effective header mode, not just a saved
 -- checkbox that leaves an already-valid INDEX sort untouched.
@@ -170,13 +169,21 @@ headerConf.preserveRaidGroups = true
 header = assert(GF.SetupHeader("raid", "raid"), "preserved Classic raid header did not rebuild")
 assert(header:GetAttribute("_msufSortMode") == "GROUP",
     "Preserve raid groups did not derive GROUP from INDEX")
-assert(header:GetAttribute("nameList") == "Member2,Member4,Member1,Member3",
-    "Preserve raid groups did not keep subgroup members together")
+assert(header._msufRaidGroupIndex == 1 and header:GetAttribute("nameList") == "Member2,Member4",
+    "Preserve raid groups did not build the physical subgroup-one header")
+local secondGroup = assert(GF.raidGroupHeaders and GF.raidGroupHeaders[2],
+    "Preserve raid groups did not build the physical subgroup-two header")
+assert(secondGroup._msufRaidGroupIndex == 2
+    and secondGroup:GetAttribute("nameList") == "Member1,Member3",
+    "Preserve raid groups did not keep subgroup-two members together")
 
 headerConf.sortMode = "ROLE"
 header = assert(GF.SetupHeader("raid", "raid"), "group-role Classic raid header did not rebuild")
 assert(header:GetAttribute("_msufSortMode") == "GROUP_ROLE",
     "Preserve raid groups did not derive GROUP_ROLE from ROLE")
+assert(header:GetAttribute("nameList") == "Member4,Member2"
+    and secondGroup:GetAttribute("nameList") == "Member3,Member1",
+    "Preserved physical raid groups did not apply role order inside each subgroup")
 
 headerConf.preserveRaidGroups = false
 header = assert(GF.SetupHeader("raid", "raid"), "restored Classic raid header did not rebuild")

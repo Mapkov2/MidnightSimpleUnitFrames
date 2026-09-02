@@ -46,6 +46,20 @@ Check(core:find('AddEventHandler(frame, "ARENA_OPPONENT_UPDATE", ArenaOpponentId
 Check(core:find("QueueDependentIdentity(frame, event)", 1, true),
     "arena opponent updates lost their burst coalescer")
 
+-- Classic clients load their own config compiler. Keep its indexed Arena
+-- scope in step with the shared core instead of only validating Mainline.
+local classicConfig = Read("MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_Config.lua")
+for _, marker in ipairs({
+    "arena = { width = 180, height = 30",
+    'arena = "showArenaPowerBar"',
+    'arena = "enableArenaCastbar"',
+    'unit:match("^arena(%d+)$")',
+    'ExportPublic("MSUF_GetArenaLayoutDelta"',
+}) do
+    Check(classicConfig:find(marker, 1, true),
+        "Classic config compiler lost its Arena contract: " .. marker)
+end
+
 -- 2) State seeding -----------------------------------------------------------
 local defaults = Read("MidnightSimpleUnitFrames/State/MSUF_Defaults.lua")
 Check(defaults:find('fill("arena", {', 1, true),
@@ -191,6 +205,34 @@ for _, marker in ipairs({
 }) do
     Check(menuPagePreview:find(marker, 1, true),
         "Menu2 does not coordinate the Arena castbar-page preview: " .. marker)
+end
+
+-- Vanilla, TBC, and Mists load the Classic Menu2 page variant. It must expose
+-- the same Arena page/castbar/aura/preview surface as Mainline.
+local classicUnitMenu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua")
+for _, marker in ipairs({
+    'uf_arena = { unit = "arena"',
+    "arena = {",
+    'KSW("player target focus boss arena")',
+    'WL("arena1 arena2 arena3")',
+    'if key:match("^arena") then return "arena" end',
+    "local function SetArenaPagePreviewActive(active)",
+    "SetArenaPagePreviewActive = SetArenaPagePreviewActive",
+}) do
+    Check(classicUnitMenu:find(marker, 1, true),
+        "Classic Menu2 Arena page contract is incomplete: " .. marker)
+end
+
+local unitSections = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+for _, marker in ipairs({
+    "UNIT_PAGE_FOR_UNIT[pageInfo.unit] = pageKey",
+    "local pageKey = UNIT_PAGE_FOR_UNIT[tabUnit]",
+    "M.SelectPage(pageKey)",
+    "for key, info in pairs(UNIT_PAGES) do",
+    "M.RegisterPage(key, {",
+}) do
+    Check(unitSections:find(marker, 1, true),
+        "Arena tab click can no longer reach its registered Menu2 page: " .. marker)
 end
 
 local searchRouting = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua")

@@ -24,10 +24,8 @@ local function CoreUnitFrame(unit)
 end
 
 local function CP_IsUsableCooldownAnchorFrame(frame)
-    if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true then return false end
-    if frame.IsShown and not frame:IsShown() then return false end
-    local width = frame:GetWidth()
-    return type(width) == "number" and width > 0
+    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+    return type(getSize) == "function" and getSize(frame) ~= nil
 end
 
 local builders = _G.MSUF_CP_CORE_BUILDERS
@@ -93,6 +91,21 @@ local function ClearShapeEdge(bar)
     end
 end
 
+local function CP_ResolveTextLayerLevel(frame, bars)
+    local textLayer = tonumber(bars and bars.classPowerTextLayer) or 5
+    if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
+    textLayer = math.floor(textLayer + 0.5)
+    local layers = MSUF.UF and MSUF.UF.Layers
+    if layers and type(layers.TextLevel) == "function" then
+        return layers.TextLevel(frame, textLayer, 5)
+    end
+    if layers and type(layers.ElementLevel) == "function" then
+        return layers.ElementLevel(textLayer, 5, 8)
+    end
+    local baseLevel = frame and frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or 0
+    return baseLevel + 10
+end
+
 --- BUILD is the only block that creates ClassPower frames. It is cold-path code:
 --- create reusable bars and text once, then let layout/runtime reuse them.
 builders.BUILD = function(E)
@@ -102,11 +115,29 @@ builders.BUILD = function(E)
     local CP_ResolveTexture = E.CP_ResolveTexture
     local math_floor = E.math_floor or math.floor
 
+    local function CP_EnsureTextFrame()
+        if CP.textFrame then return CP.textFrame end
+        local c = CP.container
+        if not c then return nil end
+
+        local tf = CreateFrame("Frame", nil, c)
+        tf:SetAllPoints(c)
+        local textLevel = CP_ResolveTextLayerLevel(c, _cpDB.bars)
+        tf:SetFrameLevel(textLevel)
+        tf._msufFrameLevelStamp = textLevel
+        if tf.SetFrameStrata and c.GetFrameStrata then tf:SetFrameStrata(c:GetFrameStrata()) end
+        if tf.EnableMouse then tf:EnableMouse(false) end
+        CP.textFrame = tf
+        return tf
+    end
+
     local function CP_EnsureRuneText(bar)
         if not bar then return nil, false end
         if bar._runeText then return bar._runeText, false end
+        local tf = CP_EnsureTextFrame()
+        if not tf then return nil, false end
 
-        local rfs = bar:CreateFontString(nil, "OVERLAY")
+        local rfs = tf:CreateFontString(nil, "OVERLAY")
         rfs:SetPoint("CENTER", bar, "CENTER", 0, 0)
         rfs:SetJustifyH("CENTER")
         if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
@@ -121,13 +152,8 @@ builders.BUILD = function(E)
 
     local function CP_EnsureMainText()
         if CP.text then return CP.text, false end
-        local c = CP.container
-        if not c then return nil, false end
-
-        local tf = CreateFrame("Frame", nil, c)
-        tf:SetAllPoints(c)
-        tf:SetFrameLevel(c:GetFrameLevel() + 10)
-        CP.textFrame = tf
+        local tf = CP_EnsureTextFrame()
+        if not tf then return nil, false end
 
         local fs = tf:CreateFontString(nil, "OVERLAY")
         fs:SetPoint("CENTER", tf, "CENTER", 0, 0)
@@ -199,6 +225,7 @@ builders.BUILD = function(E)
         --- Parent to the player frame so ClassPower follows scale, strata, and
         --- secure visibility rules from the owning unit frame.
         local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame)
+        c._msufOwnedAnchorRoot = true
         local b = _cpDB.bars or {}
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
@@ -286,11 +313,18 @@ builders.LAYOUT = function(E)
                 CP.container:SetFrameLevel(targetLevel)
                 CP.container._msufFrameLevelStamp = targetLevel
             end
-            if CP.textFrame and CP.textFrame.SetFrameLevel then
-                local textLevel = targetLevel + 10
-                if CP.textFrame._msufFrameLevelStamp ~= textLevel then
-                    CP.textFrame:SetFrameLevel(textLevel)
-                    CP.textFrame._msufFrameLevelStamp = textLevel
+        end
+        if CP.textFrame and CP.textFrame.SetFrameLevel then
+            local textLevel = CP_ResolveTextLayerLevel(CP.container, b)
+            if CP.textFrame._msufFrameLevelStamp ~= textLevel then
+                CP.textFrame:SetFrameLevel(textLevel)
+                CP.textFrame._msufFrameLevelStamp = textLevel
+            end
+            if CP.textFrame.SetFrameStrata and CP.container.GetFrameStrata then
+                local textStrata = CP.container:GetFrameStrata()
+                if CP.textFrame._msufFrameStrataStamp ~= textStrata then
+                    CP.textFrame:SetFrameStrata(textStrata)
+                    CP.textFrame._msufFrameStrataStamp = textStrata
                 end
             end
         end
@@ -326,11 +360,9 @@ builders.LAYOUT = function(E)
                 userW = cachedW
             else
                 local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
-                if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() then
-                    local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
-                    if type(cdmWidthFn) == "function" then
-                        userW = cdmWidthFn(cdmFrame, CP.container)
-                    end
+                local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
+                if type(cdmWidthFn) == "function" then
+                    userW = cdmWidthFn(cdmFrame, CP.container)
                 end
             end
             if not userW or userW < 30 then
@@ -364,54 +396,59 @@ builders.LAYOUT = function(E)
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
 
-        --- Direct cooldown anchoring against Blizzard's EditMode-managed
-        --- viewer stays a secure-frame edge case: in combat we can only reuse
-        --- a cached screen position. Third-party anchor proxies (Skiron
-        --- bridge) are insecure MSUF-owned frames, so anchoring to them is
-        --- legal during lockdown and preferred over the cached snapshot.
-        local lockdownProxy
-        if inLockdown and b.classPowerAnchorToCooldown == true and type(_G.MSUF_GetEffectiveCooldownFrame) == "function" then
-            local proxy = _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")
-            if proxy
-                and proxy._msufStableAnchorProxy == true
-                and not (proxy.IsProtected and proxy:IsProtected())
-                and CP_IsUsableCooldownAnchorFrame(proxy)
-            then
-                lockdownProxy = proxy
-            end
-        end
-        local cachedCooldownAnchor = false
-        if inLockdown and not lockdownProxy and b.classPowerAnchorToCooldown == true then
-            CP.container:SetSize(userW, h)
+        --- Out of combat the container keeps a live link to the Cooldown
+        --- Manager provider so it follows ArcUI/Skiron/Blizzard movement 1:1.
+        --- The Factory combat-edge freeze severs that link on
+        --- PLAYER_REGEN_DISABLED; during lockdown the last screen point stays
+        --- frozen while internal segment/value layout continues to update.
+        local positionFrozen = inLockdown
+        local positionDeferred = false
+        CP.container:SetSize(userW, h)
+        if inLockdown and CP.container._msufPositionInitialized ~= true
+            and b.classPowerAnchorToCooldown == true then
             if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                 and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
             then
                 CP.container._msufDirectCooldownAnchor = true
                 CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
-                cachedCooldownAnchor = true
+                CP.container._msufPositionInitialized = true
+            end
+        end
+        if inLockdown and CP.container._msufPositionInitialized ~= true then
+            positionDeferred = true
+            if CP.container._msufPositionReanchorRequested ~= true then
+                CP.container._msufPositionReanchorRequested = true
+                RequestUFReanchorAfterCombat()
             end
         end
 
-        if not cachedCooldownAnchor then
-            CP.container:ClearAllPoints()
-            CP.container:SetSize(userW, h)
-        end
-        if b.classPowerAnchorToCooldown == true and not cachedCooldownAnchor then
-            local ecv = lockdownProxy
-                or (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
+        if not positionFrozen then CP.container:ClearAllPoints() end
+        if b.classPowerAnchorToCooldown == true and not positionFrozen then
+            local ecv = not inLockdown and (
+                (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
                 or _G["EssentialCooldownViewer"]
+            ) or nil
             local anchorFrame = nil
             if CP_IsUsableCooldownAnchorFrame(ecv) then
-                if not inLockdown or ecv == lockdownProxy then
-                    anchorFrame = ecv
-                end
+                anchorFrame = ecv
             end
             if anchorFrame then
                 CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
-                CP.container._msufDirectCooldownAnchor = true
-                CP.container._msufHardLockPoint = "TOP"
-                if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
-                    _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", "TOP")
+                if CP.container:GetCenter() ~= nil then
+                    --- The link stays live; the provider chain resolves to a
+                    --- real rect, so the container renders and follows it.
+                    CP.container._msufDirectCooldownAnchor = true
+                    CP.container._msufHardLockPoint = "TOP"
+                    CP.container._msufStableExternalAnchor = anchorFrame
+                    if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
+                        _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", "TOP")
+                    end
+                else
+                    CP.container:ClearAllPoints()
+                    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                    CP.container._msufDirectCooldownAnchor = nil
+                    CP.container._msufHardLockPoint = nil
+                    CP.container._msufStableExternalAnchor = nil
                 end
             else
                 if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
@@ -424,18 +461,25 @@ builders.LAYOUT = function(E)
                     CP.container._msufDirectCooldownAnchor = nil
                     CP.container._msufHardLockPoint = nil
                 end
+                CP.container._msufStableExternalAnchor = nil
             end
         else
-            if not cachedCooldownAnchor then
+            if not positionFrozen then
                 CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
                 CP.container._msufDirectCooldownAnchor = nil
                 CP.container._msufHardLockPoint = nil
+                CP.container._msufStableExternalAnchor = nil
             end
+        end
+        if not inLockdown then
+            CP.container._msufPositionInitialized = true
+            CP.container._msufPositionReanchorRequested = nil
+            CP.container._msufExternalAnchorFrozen = nil
         end
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
-        CP._layoutDirty = nil
-        ExportPublic("MSUF_ClassPowerLayoutDirty", nil)
+        CP._layoutDirty = positionDeferred and true or nil
+        ExportPublic("MSUF_ClassPowerLayoutDirty", positionDeferred and true or nil)
         if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
@@ -447,7 +491,7 @@ builders.LAYOUT = function(E)
         --- mode divides one row into stable segments and optional separators.
         if shapeMode then
             if CP._outline then CP._outline:Hide() end
-        elseif outlineThick > 0 then
+        elseif outlineThick > 0 and CP._msufRoundedOutlineSuppressed ~= true then
             if not CP._outline then
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
                 local ol = CreateFrame("Frame", nil, CP.container, tpl)
@@ -630,6 +674,9 @@ builders.LAYOUT = function(E)
         CP.currentMax = maxPower
         CP.height = h
 
+        local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
+        if type(applyRounded) == "function" then applyRounded() end
+
         --- Detached player power can anchor to ClassPower. If ClassPower's
         --- anchor dimensions changed, ask the power-bar embed layout to refresh
         --- outside combat or mark it dirty for the post-combat pass.
@@ -678,26 +725,53 @@ builders.PRESENTATION = function(E)
     local _cpFontRev = 0
 
     local function CDM_GetScaledWidth(cdmFrame, targetFrame)
-        if not cdmFrame or not cdmFrame.GetWidth then return nil end
-        local w = cdmFrame:GetWidth()
-        if not w or w < 1 then return nil end
-        local cdmScale = (cdmFrame.GetEffectiveScale and cdmFrame:GetEffectiveScale()) or 1
-        local tgtScale = (targetFrame and targetFrame.GetEffectiveScale and targetFrame:GetEffectiveScale()) or 1
-        if cdmScale <= 0 then cdmScale = 1 end
-        if tgtScale <= 0 then tgtScale = 1 end
-        if cdmScale == tgtScale then return math_floor(w + 0.5) end
-        return math_floor(w * cdmScale / tgtScale + 0.5)
+        local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
+        local width = type(getScaledWidth) == "function" and getScaledWidth(cdmFrame, targetFrame) or nil
+        return width and math_floor(width + 0.5) or nil
     end
 
     local function CP_ApplyTextOffset()
         local fs = CP.text
         local tf = CP.textFrame
-        if not fs or not tf then return end
         local b = _cpDB.bars
         local ox = (b and tonumber(b.classPowerTextOffsetX)) or 0
         local oy = (b and tonumber(b.classPowerTextOffsetY)) or 0
-        fs:ClearAllPoints()
-        fs:SetPoint("CENTER", tf, "CENTER", ox, oy)
+        local function ApplyOffset(region, anchor)
+            if not (region and anchor) then return end
+            if region._msufCPTextAnchor ~= anchor or region._msufCPTextOffsetX ~= ox
+                or region._msufCPTextOffsetY ~= oy then
+                region._msufCPTextAnchor = anchor
+                region._msufCPTextOffsetX, region._msufCPTextOffsetY = ox, oy
+                region:ClearAllPoints()
+                region:SetPoint("CENTER", anchor, "CENTER", ox, oy)
+            end
+        end
+        ApplyOffset(fs, tf)
+        for i = 1, (CP.maxBars or 0) do
+            local bar = CP.bars[i]
+            ApplyOffset(bar and bar._runeText, bar)
+        end
+    end
+
+    local function ApplyClassPowerTextStyle(region, r, g, b, a, useShadow, shadowAlpha, shadowX, shadowY)
+        if not region then return end
+        if region._msufCPTextColorR ~= r or region._msufCPTextColorG ~= g
+            or region._msufCPTextColorB ~= b or region._msufCPTextColorA ~= a then
+            region._msufCPTextColorR, region._msufCPTextColorG = r, g
+            region._msufCPTextColorB, region._msufCPTextColorA = b, a
+            region:SetTextColor(r, g, b, a)
+        end
+        local targetShadowAlpha = useShadow and shadowAlpha or 0
+        local targetShadowX = useShadow and shadowX or 0
+        local targetShadowY = useShadow and shadowY or 0
+        if useShadow and region._msufCPShadowAlpha ~= targetShadowAlpha then
+            region:SetShadowColor(0, 0, 0, targetShadowAlpha)
+        end
+        if region._msufCPShadowX ~= targetShadowX or region._msufCPShadowY ~= targetShadowY then
+            region:SetShadowOffset(targetShadowX, targetShadowY)
+        end
+        region._msufCPShadowAlpha = targetShadowAlpha
+        region._msufCPShadowX, region._msufCPShadowY = targetShadowX, targetShadowY
     end
 
     local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
@@ -797,17 +871,13 @@ builders.PRESENTATION = function(E)
             end
         end
 
-        if fs then
-            fs:SetTextColor(tr, tg, tb, textAlpha)
-
-            if useShadow then
-                fs:SetShadowColor(0, 0, 0, shadowAlpha)
-                fs:SetShadowOffset(shadowX, shadowY)
-            else
-                fs:SetShadowOffset(0, 0)
-            end
-            CP_ApplyTextOffset()
+        ApplyClassPowerTextStyle(fs, tr, tg, tb, textAlpha, useShadow, shadowAlpha, shadowX, shadowY)
+        for i = 1, (CP.maxBars or 0) do
+            local bar = CP.bars[i]
+            ApplyClassPowerTextStyle(bar and bar._runeText, tr, tg, tb, textAlpha,
+                useShadow, shadowAlpha, shadowX, shadowY)
         end
+        CP_ApplyTextOffset()
     end
 
     local function CP_ApplyColors(powerType)
@@ -861,6 +931,8 @@ builders.PRESENTATION = function(E)
             CP.bgTex:SetTexture(activeBgPath)
             CP._msufCPBgTexturePath = activeBgPath
         end
+        local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
+        if type(applyRounded) == "function" then applyRounded() end
     end
 
     return {
@@ -898,7 +970,6 @@ builders.RUNTIME = function(env)
     local math_floor = env.math_floor
     local C_Timer = env.C_Timer
 
-    local GetTrackedPlayerAura = env.GetTrackedPlayerAura
     local GetPlayerFrame = env.GetPlayerFrame
     local CP_EnsureBars = env.CP_EnsureBars
     local CP_Layout = env.CP_Layout
@@ -910,42 +981,14 @@ builders.RUNTIME = function(env)
     local CP_RefreshEventBindings = env.CP_RefreshEventBindings
     local ThrottledFullRefresh = env.ThrottledFullRefresh
     local FullRefresh = env.FullRefresh
-    local SetTimerBarOnUpdate = env.SetTimerBarOnUpdate
     local CP_SyncRuntimeOnUpdates = env.CP_SyncRuntimeOnUpdates
     local CP_ShouldUseLiteBindings = env.CP_ShouldUseLiteBindings
-    local CP_UpdateValues_TimerBar = env.CP_UpdateValues_TimerBar
     local CP_UpdateValues_Stagger = env.CP_UpdateValues_Stagger
     local OnWarlockCastStart = env.OnWarlockCastStart
     local OnWarlockCastEnd = env.OnWarlockCastEnd
     local OnTipOfTheSpearSpellCast = env.OnTipOfTheSpearSpellCast
     local OnSpellTrackerReset = env.OnSpellTrackerReset
     local AcceptPowerToken = env.AcceptPowerToken
-
-    --- Devourer's segment count is the only dynamic one on a single-bar mode: it
-    --- follows Void Metamorphosis and the collapsing star cost.
-    --- Two things keep this off the hot path. The value update already resolves
-    --- the meta state on every aura event, so CP.dhInMeta is reused instead of
-    --- querying the aura API a second time - outside meta that aura is absent,
-    --- which means a cache miss and a real GetPlayerAuraBySpellID call. And the
-    --- out-of-meta maximum is a static spell value, so it is memoized; only the
-    --- collapsing star cost is re-read, because it can change while meta is up.
-    local function ResolveDevourerVisibleMax()
-        local resolver = CPConst and CPConst.ResolveDevourerSegments
-        if type(resolver) ~= "function" then return 1 end
-        local inMeta = CP.dhInMeta
-        if inMeta == nil then
-            inMeta = (type(GetTrackedPlayerAura) == "function")
-                and (GetTrackedPlayerAura(CPK.SPELL.VOID_METAMORPHOSIS) ~= nil)
-                or false
-            CP.dhInMeta = inMeta
-        end
-        if inMeta == false and CP._dhSegMeta == false and CP._dhSegCount then
-            return CP._dhSegCount
-        end
-        local segCount = resolver(inMeta, NotSecret)
-        CP._dhSegCount, CP._dhSegMeta = segCount, inMeta
-        return segCount
-    end
 
     --- Resolve the visible segment count for the active render mode. This is
     --- intentionally separate from layout so rare max-power changes can be
@@ -959,7 +1002,7 @@ builders.RUNTIME = function(env)
         if mode == CPK.MODE.RUNE_CD then
             maxP = 6
         elseif mode == CPK.MODE.AURA_SINGLE then
-            maxP = (powerType == "SOUL_FRAGMENTS") and ResolveDevourerVisibleMax() or 1
+            maxP = 1
         elseif mode == CPK.MODE.CONTINUOUS or mode == CPK.MODE.SIGNED_CONTINUOUS
             or mode == CPK.MODE.STAGGER or mode == CPK.MODE.TIMER_BAR then
             maxP = 1
@@ -1013,7 +1056,11 @@ builders.RUNTIME = function(env)
             end
         end
 
-        if CP.renderMode == CPK.MODE.SEGMENTED then
+        if PLAYER_CLASS == "ROGUE"
+            and CP.renderMode == CPK.MODE.SEGMENTED
+            and CP.powerType == PT.ComboPoints
+            and CP.visual and CP.visual.showCharged == true
+        then
             RefreshChargedPoints()
         end
 
@@ -1110,27 +1157,11 @@ builders.RUNTIME = function(env)
     end
 
     --- Aura-backed class resources keep their own player-only UNIT_AURA traffic.
-    --- UnitFrame aura display is native AuraContainer-owned in 12.1 and does
-    --- not share this path. Keep the branch narrow: segmented aura resources,
-    --- timer bars, and stagger each have a dedicated value updater.
+    --- Ebon Might is native AuraContainer-owned in 12.1 and never enters this
+    --- path; only segmented aura resources and Stagger update here.
     local function OnAuraUpdate(unit)
         if CP.visible and CP.isAuraPower then
             RunActiveUpdate(CP.powerType, CP.currentMax)
-            if CP.renderMode == CPK.MODE.AURA_SINGLE and CP.powerType == "SOUL_FRAGMENTS" then
-                --- Devourer: the value update above already resolved the meta
-                --- state, so the segment count costs comparisons rather than
-                --- another aura query. Only an actual change re-lays out, and
-                --- entering/leaving Void Metamorphosis is the only trigger.
-                local segCount = ResolveDevourerVisibleMax()
-                if segCount ~= CP.currentMax then
-                    RefreshVisibleModeLight(segCount)
-                end
-            end
-        end
-        if CP.visible and CP.renderMode == CPK.MODE.TIMER_BAR then
-            CP.tbCachedQ = -1
-            local timerActive = CP_UpdateValues_TimerBar and CP_UpdateValues_TimerBar(CP.powerType, CP.currentMax)
-            CP_SyncRuntimeOnUpdates(timerActive)
         end
         if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
             RunActiveUpdate(CP.powerType, CP.currentMax)
@@ -1189,8 +1220,10 @@ builders.SPECIALS = function(env)
     local GetTime = env.GetTime
     local math_min = env.math_min
     local C_SpellBook = env.C_SpellBook
+    local C_Timer = env.C_Timer
     local RunActiveUpdate = env.RunActiveUpdate
     local RunAuraSegmentedUpdate = env.RunAuraSegmentedUpdate
+    local tipExpiryGeneration = 0
 
     --- Warlock shard prediction is speculative UI only; it is cleared on cast
     --- end and never writes profile/runtime structure.
@@ -1212,44 +1245,75 @@ builders.SPECIALS = function(env)
         RunActiveUpdate()
     end
 
-    --- Tip of the Spear is tracked from spell casts because the visible stack
-    --- state can lead aura refreshes. The authoritative aura update still gets
-    --- a chance to correct the display afterward.
+    local function ResetTipState(render)
+        tipExpiryGeneration = tipExpiryGeneration + 1
+        CP.spStacks = 0
+        CP.spExpires = nil
+        if render and CP.visible and CP.powerType == "TIP_OF_THE_SPEAR" then
+            RunAuraSegmentedUpdate()
+        end
+    end
+
+    local function ScheduleTipExpiry()
+        tipExpiryGeneration = tipExpiryGeneration + 1
+        local generation = tipExpiryGeneration
+        if not (C_Timer and type(C_Timer.After) == "function") then return end
+        C_Timer.After(TIP.DURATION + 0.05, function()
+            if generation ~= tipExpiryGeneration then return end
+            if CP.spExpires and GetTime() >= CP.spExpires then
+                ResetTipState(true)
+            end
+        end)
+    end
+
+    local function NormalizeExpiredTipState()
+        if CP.spExpires and GetTime() >= CP.spExpires then
+            ResetTipState(false)
+        end
+    end
+
+    --- Secret-safe contract: Tip is derived exclusively from successful
+    --- player casts. No aura lookup, UNIT_AURA parsing, polling, or OnUpdate.
     local function OnTipOfTheSpearSpellCast(spellID)
+        local isRelevant = spellID == TIP.KILL_COMMAND
+            or spellID == TIP.TAKEDOWN
+            or TIP.SPENDERS[spellID] == true
+        if not isRelevant then return end
         local known = C_SpellBook and C_SpellBook.IsSpellKnown
         if not known then return end
         if not known(TIP.TALENT_ID) then return end
+        NormalizeExpiredTipState()
         if spellID == TIP.KILL_COMMAND then
             local gain = known(TIP.PRIMAL_SURGE) and 2 or 1
             CP.spStacks = math_min(TIP.MAX_STACKS, CP.spStacks + gain)
             CP.spExpires = GetTime() + TIP.DURATION
-            CP.spLocalUntil = GetTime() + 0.35
-            CP.spCachedQ = -1
+            ScheduleTipExpiry()
             RunAuraSegmentedUpdate()
             return
         end
         if spellID == TIP.TAKEDOWN and known(TIP.TWIN_FANG) then
-            CP.spStacks = math_min(TIP.MAX_STACKS, CP.spStacks + 2)
+            --- Twin Fangs grants three, then its impact spends one. Resolve the
+            --- net result here so same-frame event ordering cannot leave +1.
+            CP.spStacks = math_min(TIP.MAX_STACKS,
+                CP.spStacks + (TIP.TWIN_FANG_GAIN or 3)) - 1
             CP.spExpires = GetTime() + TIP.DURATION
-            CP.spLocalUntil = GetTime() + 0.35
-            CP.spCachedQ = -1
+            ScheduleTipExpiry()
             RunAuraSegmentedUpdate()
             return
         end
         if TIP.SPENDERS[spellID] and CP.spStacks > 0 then
+            if spellID == TIP.TAKEDOWN_HIT and known(TIP.TWIN_FANG) then return end
             CP.spStacks = CP.spStacks - 1
-            if CP.spStacks == 0 then CP.spExpires = nil end
-            CP.spLocalUntil = GetTime() + 0.35
-            CP.spCachedQ = -1
+            if CP.spStacks == 0 then
+                tipExpiryGeneration = tipExpiryGeneration + 1
+                CP.spExpires = nil
+            end
             RunAuraSegmentedUpdate()
         end
     end
 
     local function OnSpellTrackerReset()
-        CP.spStacks = 0
-        CP.spExpires = nil
-        CP.spLocalUntil = nil
-        CP.spCachedQ = -1
+        ResetTipState(false)
     end
 
     return {
