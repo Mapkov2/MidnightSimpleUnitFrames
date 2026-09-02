@@ -8,10 +8,38 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.5-alpha1",
-    previousVersion = "6.0-RC18",
-    rangeLabel = "6.0-RC18 -> 6.5-alpha1",
+    sourceSha256 = "90D0D08F10D8B647D290BD9A9DC68B4781B850F01146E5B7A25401E655525E90",
+    currentVersion = "6.5-alpha2",
+    historyFromVersion = "6.0-RC17",
+    previousVersion = "6.5-alpha1",
+    rangeLabel = "6.5-alpha1 -> 6.5-alpha2",
     entries = {
+        {
+            version = "6.5-alpha2",
+            date = "2026-09-02",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Raid and Mythic Raid role sorting can now span the entire raid. Enable Sort roles across entire raid under Frames > Party/Raid Frames > Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group, including with Preserve raid groups.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Synchronized the shared addon source with Retail 6.15-beta2 (348b3643): raid-wide role sorting with defaults, profile copy, locales, search and Assistant support, plus the Boss Preview now rendering incoming heal, absorb and heal-absorb bars with the absorb text.",
+                        "Rebased the explicit Classic Retail overrides (locales, defaults, Assistant parser and manifest, generated schema and search index) onto that snapshot while keeping the Arena-aware inventories.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Raid role sorting stays fully out of combat: the raid-wide order is rebuilt only when roles or the roster change outside combat, and the secure header applies it natively.",
+                        "Tidied the Group Layout Sorting card so the Sort Mode dropdown and its toggles sit evenly inside the card.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha1",
             date = "2026-09-01",
