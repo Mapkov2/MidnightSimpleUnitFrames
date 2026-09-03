@@ -1,9 +1,9 @@
-## Interface: 120100, 120105
+## Interface: 120007, 120100, 120105
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.15-beta3
+## Version: 6.15-beta4
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI, EllesmereUI, Grid2, Details

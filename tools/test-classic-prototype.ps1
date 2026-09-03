@@ -48,7 +48,7 @@ $targets = @(
     @{ Folder = "MidnightSimpleUnitFrames_Assistant"; Base = "MidnightSimpleUnitFrames_Assistant" }
 )
 $clients = @(
-    @{ Suffix = "Mainline"; Interface = "120100, 120105" },
+    @{ Suffix = "Mainline"; Interface = "120007, 120100, 120105" },
     @{ Suffix = "Vanilla"; Interface = "11509" },
     @{ Suffix = "Mists"; Interface = "50504" },
     @{ Suffix = "TBC"; Interface = "20506" }

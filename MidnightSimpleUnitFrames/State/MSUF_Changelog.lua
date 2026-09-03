@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "6978A5ED2C27E6C2EC397B4FFCEE55E7721A94A84BB212E9E9C5AE51B772DBE7",
-    currentVersion = "6.15-beta3",
-    historyFromVersion = "6.14",
-    previousVersion = "6.15-beta2",
-    rangeLabel = "6.15-beta2 -> 6.15-beta3",
+    sourceSha256 = "5BD913A98C548684CDF7DAAFA6FF1D12F4A10767D1B1BE6C2006D475D47C1D1E",
+    currentVersion = "6.15-beta4",
+    historyFromVersion = "6.15-beta1",
+    previousVersion = "6.15-beta3",
+    rangeLabel = "6.15-beta3 -> 6.15-beta4",
     entries = {
+        {
+            version = "6.15-beta4",
+            date = "2026-09-04",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Retail Aura displays recover instead of remaining disabled when a full refresh exceeds the Lua execution budget.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Retired the complete pre-6.0 profile conversion path and its legacy import controls. Every MSUF 6.x schema-600 profile and the 6.x Wago envelope remain supported; older or unversioned stored profiles are archived instead of being normalized into the active profile list.",
+                        "Added the Retail 12.1.5 Aura, castbar, scheduling, tooltip-caster and native pixel-rounding contracts while retaining explicit TOC compatibility with Retail 12.0.7 and 12.1.0.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Full Aura refreshes batch identity-event topology once and arm their next-frame recovery before synchronous work, so a script ran too long abort cannot leave every later Aura refresh permanently latched as pending.",
+                        "Shared next-frame and delayed-signal scheduling replace repeated one-shot timer allocation on supported clients, with the existing timer fallback retained for Retail 12.0.7 and 12.1.0.",
+                    },
+                },
+            },
+        },
         {
             version = "6.15-beta3",
             date = "2026-09-03",
@@ -106,48 +135,6 @@ local data = {
                     bullets = {
                         "Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview now preserve the configured health and prediction opacity instead of resetting fills to full opacity.",
                         "Detached Player Power bars attached or width-synced to Class Resources keep using the controller-maintained hidden anchor, preventing width or position jumps when shapeshifting hides the visible Class Resource bar.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.14",
-            date = "2026-08-30",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Health-bar backgrounds can now fill the full bar or only missing health. The background can be colored independently with Custom tint, Match health bar, Class color, or Health gradient, with matching Unit Frame, Group Frame, and preview rendering.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "background fill missing health only",
-                                label = "Background Fill",
-                                sectionId = "colors_background",
-                                controlId = "menu2.opt.colors.advanced.background.fill.mode",
-                                settingKey = "general.barBgFillMode",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added Full bar and Missing health only background-fill modes plus independent health-background color sources, while migrating existing profiles without changing their current appearance.",
-                        "The Assistant now routes Aura content and filter requests to the Unit or Group Frame that owns them, exposes the See New Features destination directly, and presents ambiguous controls with readable menu breadcrumbs instead of internal identifiers.",
-                        "Unit Frame tooltips react immediately when their configured modifier key is pressed or released while the frame remains hovered.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Player Castbar interrupt feedback survives the client event order where the cast stops before the interrupted result arrives, without reviving stale casts.",
-                        "State Tint controls appear and disappear immediately when their master toggles change instead of requiring the Colors page to be reopened.",
-                        "Assistant queues, history, undo, pending choices, workflows, and deferred callbacks are now isolated to the profile that created them, preventing stale work from crossing a profile switch or surviving beyond its conversational context.",
-                        "Immediate and deferred Assistant mutations now share the same failure-recovery path so partial work rolls back consistently.",
-                        "General Aura guidance no longer competes with frame-local Aura owners, and question-shaped duration-filter requests retain their safe executable choices.",
-                        "Aura-name fallback updates skip redundant unit-scan setup when no unresolved additions can benefit from it.",
-                        "Opening Unit Frame Power settings no longer errors while building the detached-bar Text on detached bar control.",
                     },
                 },
             },

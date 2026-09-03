@@ -1,8 +1,8 @@
-## Interface: 120100, 120105
+## Interface: 120007, 120100, 120105
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Assistant
 ## Notes: Load-on-demand Assistant for Midnight Simple Unit Frames.
 ## Author: Mapko
-## Version: 6.15-beta3
+## Version: 6.15-beta4
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames, MidnightSimpleUnitFrames_Options
 ## LoadOnDemand: 1

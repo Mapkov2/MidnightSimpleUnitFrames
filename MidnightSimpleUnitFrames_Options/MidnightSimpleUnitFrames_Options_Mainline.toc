@@ -1,9 +1,9 @@
-## Interface: 120100, 120105
+## Interface: 120007, 120100, 120105
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options
 ## Notes: Load-on-demand configuration UI for Midnight Simple Unit Frames.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.15-beta3
+## Version: 6.15-beta4
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1
