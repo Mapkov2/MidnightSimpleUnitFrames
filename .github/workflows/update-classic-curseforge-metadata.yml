@@ -73,7 +73,7 @@ jobs:
             "X-Api-Token" = $env:CF_API_KEY
             Accept = "application/json"
           }
-          $gameVersionNames = @("12.1.0", "12.1.5", "1.15.9", "2.5.6", "5.5.4")
+          $gameVersionNames = @("12.0.7", "12.1.0", "12.1.5", "1.15.9", "2.5.6", "5.5.4")
           $versionResponse = Invoke-RestMethod `
             -Method Get `
             -Uri "https://wow.curseforge.com/api/game/versions" `
@@ -118,7 +118,7 @@ jobs:
 
           - File: ``${{ steps.curseforge.outputs.updated_file_id }}``
           - Display name: ``$env:CF_DISPLAY_NAME``
-          - Game versions: ``12.1.0``, ``12.1.5``, ``1.15.9``, ``2.5.6``, ``5.5.4``
+          - Game versions: ``12.0.7``, ``12.1.0``, ``12.1.5``, ``1.15.9``, ``2.5.6``, ``5.5.4``
           - Release type: ``alpha``
           - No new file was uploaded.
           "@ >> $env:GITHUB_STEP_SUMMARY

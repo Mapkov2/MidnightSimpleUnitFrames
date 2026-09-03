@@ -1,5 +1,21 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha7 - 2026-09-04
+
+### Highlights
+
+- **Aura displays recover instead of remaining disabled when a full refresh exceeds the Lua execution budget.**
+
+### Changes
+
+- Retired the complete pre-6.0 profile conversion path and its legacy import controls. Every MSUF 6.x schema-600 profile and the 6.x Wago envelope remain supported; older or unversioned stored profiles are archived instead of being normalized into the active profile list.
+- The unified package accepts Retail 12.0.7, 12.1.0 and 12.1.5 while retaining the client-specific Vanilla, TBC and Mists manifests.
+
+### Fixes & Performance
+
+- Full Aura refreshes batch identity-event topology once and arm their next-frame recovery before synchronous work, so a `script ran too long` abort cannot leave every later Aura refresh permanently latched as pending.
+- Pre-6 profile fallback code no longer runs in current profiles or imports, reducing cold-path work and maintenance surface without changing any supported 6.x profile.
+
 ## 6.5-alpha6 - 2026-09-03
 
 ### Highlights

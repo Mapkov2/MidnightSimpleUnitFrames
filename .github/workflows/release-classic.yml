@@ -136,7 +136,7 @@ jobs:
             throw "Classic CurseForge HTML changelog is empty."
           }
 
-          $gameVersionNames = @("12.1.0", "12.1.5", "1.15.9", "2.5.6", "5.5.4")
+          $gameVersionNames = @("12.0.7", "12.1.0", "12.1.5", "1.15.9", "2.5.6", "5.5.4")
           $metadata = [ordered]@{
             changelog = $changelog
             changelogType = "html"
@@ -177,6 +177,6 @@ jobs:
           - Version: ``$env:CLASSIC_RELEASE_VERSION``
           - CurseForge project: ``1384660``
           - CurseForge file: ``${{ steps.curseforge.outputs.file_id }}``
-          - Game versions: ``12.1.0``, ``12.1.5``, ``1.15.9``, ``2.5.6``, ``5.5.4``
+          - Game versions: ``12.0.7``, ``12.1.0``, ``12.1.5``, ``1.15.9``, ``2.5.6``, ``5.5.4``
           - Release type: ``alpha``
           "@ >> $env:GITHUB_STEP_SUMMARY
