@@ -1,5 +1,21 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha6 - 2026-09-03
+
+### Highlights
+
+- **The unified package now supports both Retail 12.1.0 and 12.1.5.** Retail 12.1.0 keeps the established aura, timer and pixel-layout paths, while Retail 12.1.5 automatically activates the newer native paths when those APIs are present.
+
+### Changes
+
+- Declared both `120100` and `120105` in all three Mainline manifests and restored Retail 12.1.0 to the CurseForge compatibility metadata.
+- Added a dedicated Retail 12.1.0 fallback smoke covering keyed delayed scheduling, the unavailable aura-caster tooltip CVar and every newly adopted 12.1.5-only method boundary.
+
+### Fixes & Performance
+
+- Retail 12.1.0 no longer requires **Load out of date AddOns** for the Alpha 5 runtime changes.
+- The 12.1.0 compatibility path remains event-driven and uses the existing `C_Timer.After` scheduler fallback without polling; Retail 12.1.5 retains the allocation-saving native `TimedSignalMap` path.
+
 ## 6.5-alpha5 - 2026-09-03
 
 ### Highlights
