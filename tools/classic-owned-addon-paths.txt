@@ -15,7 +15,6 @@ MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Core.lua
 MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Modes.lua
 MidnightSimpleUnitFrames/Game/Classic/Features/MSUF_ClientVersionWarning.lua
 MidnightSimpleUnitFrames/Game/Classic/Initialize.lua
-MidnightSimpleUnitFrames/Game/Classic/MSUF_ProfilePolicy.lua
 MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Effects/MSUF_UF_TextureLayer.lua

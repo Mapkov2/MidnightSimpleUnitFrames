@@ -11,7 +11,7 @@ MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
 Search.StaticIndexSourceSha256 = "04D7BC5D59DF1CA8C1FCA85A2AAF6080E70DD4C20AE28E075D3F36CFEB6989E2"
-Search.StaticIndexRecordCount = 2765
+Search.StaticIndexRecordCount = 2764
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Shared > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Estylebordercolor-alpha	aura_style_shared_buff_icon_style			border alpha shared icon style auras style shared icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Shared > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Eborder-style	aura_style_shared_buff_icon_style			border style shared icon style auras style shared icon style border style auras3 buffs dropdown
@@ -912,7 +912,6 @@ profiles	Create profile	button		create_profile	Advanced > Profile	create profile
 profiles	Default profile	dropdown		set_new_character_profile	Character > Default	default profile	idprofilesmenu2%2Eprofiles%2Eadvanced%2Enew%2Echaracter%2Edefault%2Eprofile	profiles_management			default profile character default profiles advanced new character default profile profiles dropdown set new character profile
 profiles	Delete current profile	button		delete_profile	Profile > Delete	delete current profile	idprofilesmenu2%2Eprofiles%2Eadvanced%2Eprofile%2Edelete%2Ecurrent	profiles_management			delete current profile profile delete profiles advanced profile delete current profiles button delete profile
 profiles	Export	button		export_profile	Advanced > Export	export	idprofilesmenu2%2Eprofiles%2Eadvanced%2Eexport%2Egenerate	profiles_io			export advanced export profiles advanced export generate profiles button export profile
-profiles	Import Legacy	button		import_legacy_profile_string	Advanced > Import	import legacy	idprofilesmenu2%2Eprofiles%2Eadvanced%2Eimport%2Elegacy	profiles_io			import legacy advanced import profiles advanced import legacy profiles button import legacy profile string
 profiles	Import to current profile	button		import_profile_string	Advanced > Import	import to current profile	idprofilesmenu2%2Eprofiles%2Eadvanced%2Eimport%2Eexecute	profiles_io			import to current profile advanced import profiles advanced import execute profiles button import profile string
 profiles	Reset to defaults	button		reset_profile	Profile > Reset	reset to defaults	idprofilesmenu2%2Eprofiles%2Eadvanced%2Eprofile%2Ereset%2Ecurrent	profiles_management			reset to defaults profile reset profiles advanced profile reset current profiles button reset profile
 uf_boss	2D portrait	dropdown	boss.portraitRender		Unit > Portrait	2d portrait	iduf_bossmenu2%2Euf_boss%2Eunit%2Eportrait%2Eportraitrender	portrait			2d portrait unit portrait unit portrait portraitrender uf boss dropdown boss portraitrender

@@ -239,7 +239,6 @@ Data.PROFILE_PARSER = {
     PROFILE_SWITCH_SHORT_TERMS = { "switch to", "wechsel zu" },
     PROFILE_SWITCH_SHORT_PREFIXES = { "switch to ", "wechsel zu " },
     PROFILE_IMPORT_ACTION_TERMS = { "import", "importiere", "paste", "einfuegen", "einfuege" },
-    PROFILE_LEGACY_IMPORT_TERMS = { "legacy import", "import legacy", "old profile import", "legacy profile" },
     PROFILE_MAPPING_TERMS = {
         "profile mapping", "profile mappings", "spec profile mapping", "spec profile mappings",
         "broken profile mapping", "broken profile mappings", "broken spec mapping", "broken spec mappings",

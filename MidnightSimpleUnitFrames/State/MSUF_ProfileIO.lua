@@ -9,7 +9,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
 end
---- Simple Lua-table serializer (legacy fallback / debug). Keep it deterministic and safe-ish.
+--- Simple deterministic Lua-table serializer used when compact codecs are unavailable.
 local function SerializeLuaTable(tbl)
     local function ser(v, indent)
         local t = type(v)
@@ -38,7 +38,7 @@ local function SerializeLuaTable(tbl)
     end
     return "return " .. ser(tbl, "")
 end
---- Public: serialize the active DB (legacy)
+--- Public: serialize the active DB.
 local function MSUF_SerializeDB()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then
@@ -52,7 +52,7 @@ local function Proxy_ExportSelectionToString(kind)
     if type(real) == "function" then
         return real(kind)
     end
-    --- fallback: legacy dump
+    --- Fallback: schema-600 table dump.
     return MSUF_SerializeDB()
 end
 local function Proxy_ImportFromString(str)
@@ -61,13 +61,6 @@ local function Proxy_ImportFromString(str)
         return real(str)
     end
     print("|cffff0000MSUF:|r Import failed: profiles system not loaded.")
- end
-local function Proxy_ImportLegacyFromString(str)
-    local real = _G.MSUF_Profiles_ImportLegacyFromString
-    if type(real) == "function" then
-        return real(str)
-    end
-    print("|cffff0000MSUF:|r Legacy import failed: profiles system not loaded.")
  end
 --- External API (Wago UI Packs / other tools):
 --- We expose stable globals that can export/import a SPECIFIC profile by key without switching the active profile.
@@ -92,14 +85,12 @@ ExportPublic("MSUF_SerializeDB", _G.MSUF_SerializeDB or MSUF_SerializeDB)
 --- we still want the buttons to work. So we install thin proxies.
 ExportPublic("MSUF_ExportSelectionToString", _G.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString)
 ExportPublic("MSUF_ImportFromString", _G.MSUF_ImportFromString or Proxy_ImportFromString)
-ExportPublic("MSUF_ImportLegacyFromString", _G.MSUF_ImportLegacyFromString or Proxy_ImportLegacyFromString)
 ExportPublic("MSUF_ExportExternal", _G.MSUF_ExportExternal or Proxy_ExportExternal)
 ExportPublic("MSUF_ImportExternal", _G.MSUF_ImportExternal or Proxy_ImportExternal)
 if type(MSUF) == "table" then
     MSUF.MSUF_SerializeDB = MSUF.MSUF_SerializeDB or MSUF_SerializeDB
     MSUF.MSUF_ExportSelectionToString = MSUF.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString
     MSUF.MSUF_ImportFromString = MSUF.MSUF_ImportFromString or Proxy_ImportFromString
-    MSUF.MSUF_ImportLegacyFromString = MSUF.MSUF_ImportLegacyFromString or Proxy_ImportLegacyFromString
     MSUF.MSUF_ExportExternal = MSUF.MSUF_ExportExternal or Proxy_ExportExternal
     MSUF.MSUF_ImportExternal = MSUF.MSUF_ImportExternal or Proxy_ImportExternal
 end

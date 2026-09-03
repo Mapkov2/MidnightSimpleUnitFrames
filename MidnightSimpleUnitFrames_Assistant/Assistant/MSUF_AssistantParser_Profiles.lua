@@ -1140,19 +1140,18 @@ local function ParseProfile(text, raw)
     local backupRestoreClarification = BuildProfileBackupRestoreClarification(text)
     if backupRestoreClarification then return backupRestoreClarification end
     if compact and (hasProfileWord or ContainsAny(text, ProfileData.PROFILE_IMPORT_ACTION_TERMS) or rawLower:find("^msuf%d+:")) then
-        local legacy = ContainsAny(text, ProfileData.PROFILE_LEGACY_IMPORT_TERMS)
         local newName = ImportNewProfileName(rawText, compactStart, endIndex, text)
         if not newName then
             local missingName = BuildMissingImportNewProfileNameAnswer(text)
             if missingName then return missingName end
         end
-        local action = Registry and Registry:GetAction(legacy and "import_legacy_profile_string" or (newName and "import_profile_string_new" or "import_profile_string"))
+        local action = Registry and Registry:GetAction(newName and "import_profile_string_new" or "import_profile_string")
         return action and {
             kind = "action",
             action = action,
             args = newName and { value = compact, name = newName } or { value = compact },
             confirmRequired = true,
-            label = legacy and "Import legacy profile string" or (newName and ("Import profile string as " .. tostring(newName)) or "Import profile string"),
+            label = newName and ("Import profile string as " .. tostring(newName)) or "Import profile string",
             summary = newName and "Imports profile data into a new profile." or "Imports profile data into the active profile.",
         } or nil
     end

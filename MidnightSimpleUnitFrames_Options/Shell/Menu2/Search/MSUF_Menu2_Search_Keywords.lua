@@ -40,7 +40,7 @@ Data.KEYWORDS = {
     classpower = "class resources combo points holy power soul shards chi maelstrom eclipse essence evoker runes runic power stagger brewmaster resource prediction auto hide detached power bar alternative mana behavior style quick actions class power resource bar alternate mana monk druid rogue paladin warlock death knight hide percent sign hide percent symbol percent sign prozentzeichen",
     gameplay = "gameplay combat timer combat state combat enter combat leave combat crosshair crosshair size thickness in range out of range melee range spell totem frame totems statue frame statue icons player totems click cast click cast clickthrough click-through focus target modifier mouseover interaction targeting spells mouse buttons keybind modifier ctrl shift alt fadenkreuz target sound target lost mouseover heal click casting",
     modules = "modules style skins optional modules compatibility portrait decoration minimap compartment addon compartment",
-    profiles = "profiles profile management spec profiles specialization auto switch create copy delete reset import export legacy import wago active profile share string profile string backup restore",
+    profiles = "profiles profile management spec profiles specialization auto switch create copy delete reset import export wago active profile share string profile string backup restore",
 }
 
 for _, row in ipairs({

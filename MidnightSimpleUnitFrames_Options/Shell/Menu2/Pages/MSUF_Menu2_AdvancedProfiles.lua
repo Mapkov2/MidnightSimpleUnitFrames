@@ -23,7 +23,6 @@ local PROFILE_ACTION_BY_PATH = {
     ["profile.reset_current"] = "reset_profile",
     ["profile.delete_current"] = "delete_profile",
     ["export.generate"] = "export_profile",
-    ["import.legacy"] = "import_legacy_profile_string",
     ["import.execute"] = "import_profile_string",
     ["profiles.browse_wago"] = "copy_wago_profiles_link",
     ["new_character.default_profile"] = "set_new_character_profile",
@@ -33,7 +32,6 @@ local PROFILE_ACTION_INPUT_BY_PATH = {
     ["new_character.default_profile"] = "name",
     ["profile.create"] = "name",
     ["profile.copy_current"] = "name",
-    ["import.legacy"] = "value",
     ["import.execute"] = "value",
 }
 local function ProfilesMeta(path, classification, exact)
@@ -1046,20 +1044,6 @@ local function BuildProfiles(ctx)
         SyncBlizzEMFlag()
     end)
     SyncBlizzEMFlag()
-    local legacy = ProfileButton(actionsCard, "Import Legacy", function()
-        if BlockCombatAction() then return end
-        local text = blob:GetText()
-        if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
-            M.profileImportString = text
-            CallMSUF("MSUF_ImportLegacyFromString", text)
-            ClearProfileHistory()
-            M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true, applyAll = false, notify = false })
-            RefreshAfterProfileChange(ctx)
-            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Legacy profile imported"), "ok", 1.7) end
-        elseif M.ShowStatusFeedback then
-            M.ShowStatusFeedback(M.Tr("Legacy import unavailable"), "danger", 1.8)
-        end
-    end, nil, "import.legacy", true, nil, nil, nil, ioButtonW)
     local wago = ProfileButton(actionsCard, "Browse Wago Profiles", function()
         if not CallMSUF("MSUF_ShowCopyLink", "Wago MSUF Profiles", WAGO_PROFILES_URL) then
             -- The box mirrors the menu state, so the fallback has to move the state as well or
@@ -1074,7 +1058,7 @@ local function BuildProfiles(ctx)
     MoveWidget(blob, stringCard, 20, -142, blobW)
     WrapMultilineProfileInput(blob, stringCard, 20, -166, blobW, ioWide and 220 or 162)
     PlaceActionRow(actionsCard, 20, export, import, -82)
-    PlaceActionRow(actionsCard, 20, legacy, wago, -126)
+    MoveWidget(wago, actionsCard, 20, -126, ioButtonW)
     MoveWidget(importProfileName, actionsCard, 20, -230, importNameW)
     StyleProfileInput(importProfileName, importNameW, 28, false)
     local importModeHelp = W.Text(actionsCard, "", 20, -336, max(220, actionsCardW - 40), T.colors.muted)
