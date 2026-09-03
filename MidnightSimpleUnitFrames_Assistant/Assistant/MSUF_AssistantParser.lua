@@ -5502,6 +5502,7 @@ local function ParseGlobalUIShellPriorityShortcut(normalized, raw)
         { key = "general.unitTooltipMode", label = "Show Unitframe Tooltips", terms = { "show unitframe tooltips", "unitframe tooltips", "unit frame tooltips" } },
         { key = "general.unitTooltipModifier", label = "Tooltip Modifier", terms = { "tooltip modifier" } },
         { key = "general.tooltipShowAuraSpellIDs", label = "Aura Tooltip Spell IDs", terms = { "aura tooltip spell ids", "spell ids in aura tooltips", "spell ids in tooltips", "tooltip spell ids", "spell id in tooltip" } },
+        { key = "general.tooltipShowAuraCasterNames", label = "Aura Tooltip Caster Names", terms = { "aura tooltip caster names", "caster names in aura tooltips", "tooltip caster names", "aura caster", "wirkername im aura tooltip" } },
         { key = "general.styleEnabled", label = "MSUF Style", terms = { "msuf style" } },
         { key = "general.dropdownStyleMode", label = "Dropdown Style", terms = { "dropdown style", "dropdown mode" } },
     }

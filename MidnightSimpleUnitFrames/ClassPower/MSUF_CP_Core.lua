@@ -226,6 +226,9 @@ builders.BUILD = function(E)
         --- Parent to the player frame so ClassPower follows scale, strata, and
         --- secure visibility rules from the owning unit frame.
         local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame)
+        -- Native pixel rounding (12.1.5); the pips anchor against this rect.
+        local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+        if type(roundLayout) == "function" then roundLayout(c, true) end
         c._msufOwnedAnchorRoot = true
         local b = _cpDB.bars or {}
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5

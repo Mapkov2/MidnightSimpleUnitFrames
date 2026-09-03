@@ -764,7 +764,15 @@ function UF.GetSecureHeaderUnitButtonTemplate()
 end
 
 function UF.CreateSecureUnitButton(name, parent)
-  return CreateFrame("Button", name, parent or ResolvePetBattleFrameHider(), UF.GetSecureUnitButtonTemplate())
+  local button = CreateFrame("Button", name, parent or ResolvePetBattleFrameHider(), UF.GetSecureUnitButtonTemplate())
+  -- 12.1.5 rounds layout natively when the region carries the attribute, which
+  -- keeps the button rect the children anchor to on whole pixels at any UI
+  -- scale. The secure template makes this button protected and
+  -- SetRoundLayoutToNearestPixel is a protected function, so it is set here at
+  -- creation and never from a refresh path.
+  local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+  if type(roundLayout) == "function" then roundLayout(button, true) end
+  return button
 end
 
 function UF.RegisterClickCastFrame(frame)

@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "D44207557AF90D38C9E3DDEDE3C341F40FCD242AD8B6EFEB3D04E967B8F8DAB5"
-Search.StaticIndexRecordCount = 3268
+Search.StaticIndexSourceSha256 = "C2B77EB558A483B0D48AA083245FA49465CA63A3DEF8A130C6AC1FA42BF624C6"
+Search.StaticIndexRecordCount = 3269
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -931,6 +931,7 @@ opt_misc	Show MSUF button in game menu	toggle	general.showGameMenuButton		Game >
 opt_misc	Show MSUF minimap icon	toggle	general.showMinimapIcon		Show > Minimap	show msuf minimap icon	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eshow%2Eminimap%2Eicon	misc_blizzard_frames			show msuf minimap icon show minimap opt misc global setting show minimap icon opt misc toggle general showminimapicon
 opt_misc	Show navigation icons	toggle	general.showNavigationIcons		Show > Navigation	show navigation icons	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eshow%2Enavigation%2Eicons	misc_menu_behavior			show navigation icons show navigation opt misc global setting show navigation icons opt misc toggle general shownavigationicons
 opt_misc	Show preview drag hint animation	toggle	general.previewDragHintAnimationEnabled		Hint > Animation	show preview drag hint animation	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Epreview%2Edrag%2Ehint%2Eanimation%2Eenabled	misc_menu_behavior			show preview drag hint animation hint animation opt misc global setting preview drag hint animation enabled opt misc toggle general previewdraghintanimationenabled
+opt_misc	Show caster names in aura tooltips	toggle	general.tooltipShowAuraCasterNames		Aura > Caster	show caster names in aura tooltips	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Etooltip%2Eshow%2Eaura%2Ecaster%2Enames	misc_tooltips			show caster names in aura tooltips aura caster opt misc global setting tooltip show aura caster names opt misc toggle general tooltipshowauracasternames
 opt_misc	Show spell IDs in aura tooltips	toggle	general.tooltipShowAuraSpellIDs		Aura > Spell	show spell ids in aura tooltips	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Etooltip%2Eshow%2Eaura%2Espell%2Eids	misc_tooltips			show spell ids in aura tooltips aura spell opt misc global setting tooltip show aura spell ids opt misc toggle general tooltipshowauraspellids
 opt_misc	Show unitframe tooltips	dropdown	general.unitTooltipMode		Tooltips > Visibility	show unitframe tooltips	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Etooltips%2Evisibility%2Emode	misc_tooltips			show unitframe tooltips tooltips visibility opt misc global tooltips visibility mode opt misc dropdown general unittooltipmode
 opt_misc	Show welcome message	toggle	general.showWelcomeMessage		Show > Welcome	show welcome message	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eshow%2Ewelcome%2Emessage	misc_startup			show welcome message show welcome opt misc global setting show welcome message opt misc toggle general showwelcomemessage
