@@ -9537,6 +9537,21 @@ function AP.TryImmediateMutationResult(text, opts)
     if not plan and auraFilteringIntent and parser.ParseAuraFilteringConversationShortcut then
         plan = parser.ParseAuraFilteringConversationShortcut(normalized, ctx, text)
     end
+    -- A sentence about one unit frame resolves against that frame's own
+    -- controls before any follow-up or single-noun shortcut below can read one
+    -- word out of it ("zoom in ON my player portrait" is not Portrait Position
+    -- = on). Warm-index only: the resolver builds a per-unit index on first
+    -- use, which the synchronous preflight has no budget for; a cold request
+    -- takes the deferred path, where the Router hands it to A.Parse anyway.
+    if not plan and type(parser.UnitScopedNaturalPlan) == "function"
+        and type(parser.UnitScopeFromNaturalText) == "function"
+        and type(parser.UnitScopeIndexReady) == "function"
+    then
+        local scopedUnit = parser.UnitScopeFromNaturalText(normalized)
+        if scopedUnit and parser.UnitScopeIndexReady(scopedUnit) then
+            plan = parser.UnitScopedNaturalPlan(normalized, text, ctx)
+        end
+    end
     if not plan and AP.LastChangeBundleIsImmediate(ctx)
         and AP.LooksLikeImmediateLastChangeFollowup(normalized)
         and type(parser.BuildFollowup) == "function"

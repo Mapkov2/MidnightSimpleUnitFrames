@@ -3105,8 +3105,14 @@ end
 -- into a Party lane clause and a Raid lane clause -- each an unrelated write.
 -- ParseCompound asks this only once a multi-change plan exists.
 local function WholeSentenceIsOneControl(text)
-    return type(P.WholeCommandNamesOneSetting) == "function"
-        and P.WholeCommandNamesOneSetting(text) ~= nil
+    if type(P.WholeCommandNamesOneSetting) == "function" and P.WholeCommandNamesOneSetting(text) ~= nil then
+        return true
+    end
+    -- A sentence about one unit frame that resolves, whole, to one of that
+    -- frame's controls ("make the player health bar fill from the right" is
+    -- Reverse Fill Direction) is not a compound either, however its pieces
+    -- parse ("fill" -> Smooth Health Fill, "right" -> an absorb anchor).
+    return type(P.UnitScopedNaturalPlan) == "function" and P.UnitScopedNaturalPlan(text, text) ~= nil
 end
 
 local function BarePlanFor(text)

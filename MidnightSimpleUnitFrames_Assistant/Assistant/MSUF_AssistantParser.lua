@@ -4653,6 +4653,9 @@ end
 local function ParseUnitRootVisibilityShortcut(text)
     if not ContainsAny(text, P.RootPhrases[547]) then return nil end
     if ContainsAny(text, UNIT_ROOT_FRAME_DETAIL_BLOCKERS) then return nil end
+    -- "show who interrupted my cast on the player frame" names the frame as a
+    -- place; the subject is something on it, never the frame's own toggle.
+    if type(P.UnitFrameLocativeVeto) == "function" and P.UnitFrameLocativeVeto(text) then return nil end
     local value = UnitRootVisibilityValue(text)
     if value == nil then return nil end
     local units = DetectUnits and DetectUnits(text) or {}
@@ -6152,6 +6155,19 @@ function A.Parse(text, ctxOverride)
         exactFullAlias.raw = raw
         exactFullAlias.normalized = normalized
         return exactFullAlias
+    end
+    -- A sentence about ONE unit frame that describes the result in the
+    -- player's own words ("put the portrait on the left of my player frame",
+    -- "hide my player frame while mounted") is resolved against that unit's
+    -- own controls before any single-noun lane can claim it for the wrong
+    -- control. The resolver fails closed, so a nil here changes nothing.
+    if type(P.UnitScopedNaturalPlan) == "function" then
+        local unitScoped = P.UnitScopedNaturalPlan(normalized, raw, ctx)
+        if unitScoped then
+            unitScoped.raw = raw
+            unitScoped.normalized = normalized
+            return unitScoped
+        end
     end
     if P.ParseRegistryActionAliasShortcut and normalized:find("blacklist", 1, true)
         and (normalized:find("what is", 1, true) or normalized:find("show", 1, true)
