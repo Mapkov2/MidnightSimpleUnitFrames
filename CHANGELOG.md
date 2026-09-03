@@ -1,5 +1,26 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha5 - 2026-09-03
+
+### Highlights
+
+- **Retail 12.1.5 support is now built into the unified Classic package.** Aura Pandemic pulses use Blizzard's native animation ownership, bursty delayed work is consolidated through the new keyed scheduler, and native pixel rounding keeps supported frames aligned without recurring layout work.
+
+### Changes
+
+- Updated all Mainline manifests to Interface `120105`; Vanilla, Mists and TBC retain their client-specific interfaces and now report version `6.5-alpha5`.
+- Added the Retail 12.1.5 Pandemic contracts to MSUF aura containers, including duplicate-safe region ownership, native active animations and Edit Mode preview suppression.
+- Added the **Show aura caster names** tooltip setting across defaults, runtime, Menu, search and Assistant control coverage.
+- Rebuilt the generated search and Assistant schema data and refreshed the explicit Classic Retail override manifest for the synchronized source.
+- Updated the CurseForge release metadata so the Mainline flavor targets Retail `12.1.5` alongside Vanilla `1.15.9`, TBC `2.5.6` and Mists `5.5.4`.
+
+### Fixes & Performance
+
+- Consolidated aura refreshes and castbar latency, interrupt and resync callbacks onto one `TimedSignalMap` scheduler, preserving keyed replacement while reducing independent timer allocation and callback churn.
+- Applied native nearest-pixel layout rounding to supported aura containers, castbars, status bars, unit frames and group frames.
+- Hardened Pandemic-region refreshes against duplicate registration and kept the native pulse active only while an aura is inside its Pandemic window.
+- Added a focused Retail 12.1.5 runtime smoke and extended the complete Classic gate; all static, bootstrap, drift and packaging checks pass on the release tree.
+
 ## 6.5-alpha4 - 2026-09-03
 
 ### Highlights
