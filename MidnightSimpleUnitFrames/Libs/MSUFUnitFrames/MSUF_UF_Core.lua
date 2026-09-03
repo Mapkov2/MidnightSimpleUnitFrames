@@ -2916,7 +2916,14 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
   local A3 = MSUF and MSUF.MSUF_Auras3
   local active = frame._msufActiveElements
   if active and active.Auras == true and A3 and type(A3.OnFrameUnitChanged) == "function" then
+    -- One rebind re-registers every native owner of this frame. Batch the
+    -- identity event topology the way GF.ScanHeader does so the shared driver
+    -- and the four-token shards resync once per rebind, not once per owner.
+    local batchTopology = type(A3._BeginDirectIdentityEventTopologyBatch) == "function"
+      and type(A3._EndDirectIdentityEventTopologyBatch) == "function"
+    if batchTopology then A3._BeginDirectIdentityEventTopologyBatch() end
     A3.OnFrameUnitChanged(frame, oldUnit, newUnit)
+    if batchTopology then A3._EndDirectIdentityEventTopologyBatch() end
   end
   return true
 end

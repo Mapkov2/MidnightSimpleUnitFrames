@@ -23,12 +23,103 @@ local canaccesstable = _G.canaccesstable
 
 local containersByUnit = {}
 local framesByUnit = {}
+local activeContainerCounts = {}
+local activeWorkCounts = {}
+local eventRegisteredByUnit = {}
 local pendingScopes = {}
 local refreshPending = false
 local fallbackUnitsA, fallbackUnitsB = {}, {}
 local pendingFallbackUnits = fallbackUnitsA
 local fallbackDriver
 local fallbackDriverArmed = false
+local OnEvent
+
+local function SyncUnitEvent(unit)
+    local wantsEvent = (activeContainerCounts[unit] or 0) > 0
+    local frame = framesByUnit[unit]
+    if wantsEvent then
+        if not frame then
+            frame = CreateFrame("Frame")
+            frame:SetScript("OnEvent", OnEvent)
+            framesByUnit[unit] = frame
+        end
+        if eventRegisteredByUnit[unit] ~= true then
+            frame:RegisterUnitEvent("UNIT_AURA", unit)
+            eventRegisteredByUnit[unit] = true
+        end
+    elseif frame and eventRegisteredByUnit[unit] == true then
+        frame:UnregisterAllEvents()
+        eventRegisteredByUnit[unit] = nil
+    end
+end
+
+local function SetContainerCountedActive(container, active)
+    local unit = container and container._msufA3AuraAliasUnit
+    if not unit then return end
+    active = active == true
+    local wasActive = container._msufA3AuraAliasCountedActive == true
+    if wasActive == active then return end
+    container._msufA3AuraAliasCountedActive = active or nil
+    local count = activeContainerCounts[unit] or 0
+    if active then
+        activeContainerCounts[unit] = count + 1
+    elseif count > 1 then
+        activeContainerCounts[unit] = count - 1
+    else
+        activeContainerCounts[unit] = nil
+    end
+    SyncUnitEvent(unit)
+end
+
+local function ClearFallbackUnit(unit)
+    fallbackUnitsA[unit] = nil
+    fallbackUnitsB[unit] = nil
+    if fallbackDriverArmed and not next(fallbackUnitsA) and not next(fallbackUnitsB) then
+        if fallbackDriver and fallbackDriver.SetScript then
+            fallbackDriver:SetScript("OnUpdate", nil)
+        end
+        fallbackDriverArmed = false
+    end
+end
+
+local function SetContainerHasActiveWork(container, hasWork)
+    local unit = container and container._msufA3AuraAliasUnit
+    if not unit then return end
+    hasWork = hasWork == true
+    local hadWork = container._msufA3AuraAliasHasActiveWork == true
+    if hadWork == hasWork then return end
+    container._msufA3AuraAliasHasActiveWork = hasWork or nil
+    local count = activeWorkCounts[unit] or 0
+    if hasWork then
+        activeWorkCounts[unit] = count + 1
+    elseif count > 1 then
+        activeWorkCounts[unit] = count - 1
+    else
+        activeWorkCounts[unit] = nil
+        ClearFallbackUnit(unit)
+    end
+end
+
+local function SyncContainerActiveWork(container)
+    local scanNames = container and container._msufA3AuraAliasScanNames
+    SetContainerHasActiveWork(container,
+        container and container._msufA3AuraAliasActive == true
+            and scanNames and scanNames[1] ~= nil)
+end
+
+local function SyncContainerActivity(container)
+    local active = container and container._msufA3AuraAliasActive == true
+    SetContainerCountedActive(container, active)
+    SyncContainerActiveWork(container)
+end
+
+local function RebuildContainerScanNames(container)
+    local names = container and container._msufA3AuraAliasNames
+    local scanNames = container and container._msufA3AuraAliasScanNames
+    if not (names and scanNames) then return end
+    for i = #scanNames, 1, -1 do scanNames[i] = nil end
+    for name in pairs(names) do scanNames[#scanNames + 1] = name end
+end
 
 local function FlushScopes()
     refreshPending = false
@@ -119,6 +210,7 @@ local function RemoveScanName(container, name)
             local last = #scanNames
             scanNames[i] = scanNames[last]
             scanNames[last] = nil
+            SyncContainerActiveWork(container)
             return true
         end
     end
@@ -149,11 +241,15 @@ local function ResolveAuraData(container, auraData)
 end
 
 local function ScanContainer(container)
-    if not (container and GetAuraDataBySpellName) then return false end
+    if not container then return false end
     local lane = container._msufA3NativeLaneConfig
     local names = container._msufA3AuraAliasNames
     local scanNames = container._msufA3AuraAliasScanNames
-    if not (lane and names and scanNames) then return false end
+    if container._msufA3AuraAliasActive ~= true
+        or not (lane and names and scanNames and GetAuraDataBySpellName) then
+        SyncContainerActiveWork(container)
+        return false
+    end
     local changed = false
     local unit, nativeFilter = container.unit, lane.nativeFilter
     local i = 1
@@ -176,6 +272,7 @@ local function ScanContainer(container)
             i = i + 1
         end
     end
+    SyncContainerActiveWork(container)
     return changed
 end
 
@@ -190,37 +287,33 @@ local function FlushFallbackScans()
     for unit in pairs(batch) do
         batch[unit] = nil
         local containers = containersByUnit[unit]
-        if containers then
+        if containers and (activeWorkCounts[unit] or 0) > 0 then
             for container in pairs(containers) do
                 local scanNames = container._msufA3AuraAliasScanNames
-                if scanNames and scanNames[1] then ScanContainer(container) end
+                if container._msufA3AuraAliasActive == true
+                    and scanNames and scanNames[1] then
+                    ScanContainer(container)
+                end
             end
         end
     end
 end
 
--- Callers own the pending gate so same-frame bursts skip this helper entirely;
--- unregister clears both batches before a unit can lose its final owner.
+-- Callers own the active-work and pending gates so same-frame bursts skip this
+-- helper entirely; unregister clears both batches before a unit can lose its
+-- final owner.
 local function QueueFallbackScan(unit, containers)
-    containers = containers or containersByUnit[unit]
-    local hasWork = false
-    if containers then
-        for container in pairs(containers) do
-            local scanNames = container._msufA3AuraAliasScanNames
-            if scanNames and scanNames[1] then
-                hasWork = true
-                break
-            end
-        end
-    end
-    if not hasWork then return end
     pendingFallbackUnits[unit] = true
     if fallbackDriverArmed then return end
     if not fallbackDriver and CreateFrame then fallbackDriver = CreateFrame("Frame") end
     if not (fallbackDriver and fallbackDriver.SetScript) then
         pendingFallbackUnits[unit] = nil
-        if containers then
-            for container in pairs(containers) do ScanContainer(container) end
+        for container in pairs(containers) do
+            local scanNames = container._msufA3AuraAliasScanNames
+            if container._msufA3AuraAliasActive == true
+                and scanNames and scanNames[1] then
+                ScanContainer(container)
+            end
         end
         return
     end
@@ -228,11 +321,12 @@ local function QueueFallbackScan(unit, containers)
     fallbackDriver:SetScript("OnUpdate", FlushFallbackScans)
 end
 
-local function OnEvent(_, _, unit, updateInfo)
+OnEvent = function(_, _, unit, updateInfo)
     local containers = containersByUnit[unit]
-    if not containers then return end
+    if not containers or (activeContainerCounts[unit] or 0) <= 0 then return end
     if issecretvalue(updateInfo) or type(updateInfo) ~= "table"
         or (canaccesstable and canaccesstable(updateInfo) == false) then
+        if (activeWorkCounts[unit] or 0) <= 0 then return end
         if pendingFallbackUnits[unit] then return end
         QueueFallbackScan(unit, containers)
         return
@@ -240,6 +334,7 @@ local function OnEvent(_, _, unit, updateInfo)
 
     local isFullUpdate = updateInfo.isFullUpdate
     if issecretvalue(isFullUpdate) or isFullUpdate == true then
+        if (activeWorkCounts[unit] or 0) <= 0 then return end
         if pendingFallbackUnits[unit] then return end
         QueueFallbackScan(unit, containers)
         return
@@ -250,6 +345,7 @@ local function OnEvent(_, _, unit, updateInfo)
     -- spell-name alias, so it needs neither a fallback scan nor any work here.
     local added = updateInfo.addedAuras
     if issecretvalue(added) then
+        if (activeWorkCounts[unit] or 0) <= 0 then return end
         if pendingFallbackUnits[unit] then return end
         QueueFallbackScan(unit, containers)
         return
@@ -257,38 +353,76 @@ local function OnEvent(_, _, unit, updateInfo)
     if added == nil then return end
     if type(added) ~= "table"
         or (canaccesstable and canaccesstable(added) == false) then
+        if (activeWorkCounts[unit] or 0) <= 0 then return end
         if pendingFallbackUnits[unit] then return end
         QueueFallbackScan(unit, containers)
         return
     end
     for i = 1, #added do
         for container in pairs(containers) do
-            local _, resolvedName = ResolveAuraData(container, added[i])
-            if resolvedName then RemoveScanName(container, resolvedName) end
+            if container._msufA3AuraAliasActive == true then
+                local _, resolvedName = ResolveAuraData(container, added[i])
+                if resolvedName then RemoveScanName(container, resolvedName) end
+            end
         end
     end
 end
 
+function Resolver.SetContainerActive(container, active)
+    if not container then return false end
+    active = active ~= false
+    if container._msufA3AuraAliasActive == active then return false end
+    container._msufA3AuraAliasActive = active
+    if not container._msufA3AuraAliasUnit then return true end
+    if active then
+        if container._msufA3AuraAliasNeedsActivationScan == true then
+            RebuildContainerScanNames(container)
+            container._msufA3AuraAliasNeedsActivationScan = nil
+        end
+        SetContainerCountedActive(container, true)
+        -- Identity reactivation must be authoritative immediately: an Aura may
+        -- already be present even though no UNIT_AURA edge occurred while this
+        -- owner was intentionally inactive.
+        ScanContainer(container)
+    else
+        -- Incremental UNIT_AURA learning is intentionally suspended while the
+        -- native identity owner is ineligible. Rebuild the existing dense plan
+        -- on activation so a same-name Aura variant cannot be missed.
+        container._msufA3AuraAliasNeedsActivationScan = true
+        SyncContainerActivity(container)
+    end
+    return true
+end
+
 function Resolver.UnregisterContainer(container)
+    if not container then return end
     local unit = container and container._msufA3AuraAliasUnit
-    if not unit then return end
-    local containers = containersByUnit[unit]
-    if containers then
-        containers[container] = nil
-        if not next(containers) then
-            containersByUnit[unit] = nil
-            pendingFallbackUnits[unit] = nil
-            fallbackUnitsA[unit] = nil
-            fallbackUnitsB[unit] = nil
-            local frame = framesByUnit[unit]
-            if frame then frame:UnregisterAllEvents() end
-            framesByUnit[unit] = nil
+    if unit then
+        local containers = containersByUnit[unit]
+        if containers then
+            SetContainerHasActiveWork(container, false)
+            SetContainerCountedActive(container, false)
+            containers[container] = nil
+            if not next(containers) then
+                containersByUnit[unit] = nil
+                activeContainerCounts[unit] = nil
+                activeWorkCounts[unit] = nil
+                ClearFallbackUnit(unit)
+                local frame = framesByUnit[unit]
+                if frame and eventRegisteredByUnit[unit] == true then frame:UnregisterAllEvents() end
+                framesByUnit[unit] = nil
+                eventRegisteredByUnit[unit] = nil
+            end
         end
     end
     container._msufA3AuraAliasUnit = nil
     container._msufA3AuraAliasLane = nil
     container._msufA3AuraAliasNames = nil
     container._msufA3AuraAliasScanNames = nil
+    container._msufA3AuraAliasHasActiveWork = nil
+    container._msufA3AuraAliasCountedActive = nil
+    container._msufA3AuraAliasNeedsActivationScan = nil
+    container._msufA3AuraAliasActive = nil
 end
 
 function Resolver.SyncContainer(container)
@@ -296,11 +430,24 @@ function Resolver.SyncContainer(container)
     local unit = container and container.unit
     -- Identity/layout refreshes frequently re-register an already live native
     -- owner with the exact same compiled lane. Preserve its resolved-name set,
-    -- UNIT_AURA registration, and exhausted fallback list in that case. A new
-    -- compiled lane table or unit still takes the full unregister/rebuild path.
+    -- active-work registration, and exhausted fallback list in that case. A
+    -- new compiled lane table or unit still takes the full rebuild path.
     if container and container._msufA3AuraAliasLane == lane
         and container._msufA3AuraAliasUnit == unit then
+        if lane and lane.identityCandidateMode ~= "assist"
+            and lane.identityCandidateMode ~= "hostile"
+            and container._msufA3AuraAliasActive ~= true then
+            Resolver.SetContainerActive(container, true)
+        end
         return true
+    end
+    local active = container and container._msufA3AuraAliasActive ~= false
+    -- Identity activity belongs to assist/hostile owners only. If a reused
+    -- native container becomes neutral, it must not inherit the prior lane's
+    -- inactive polarity.
+    if not (lane and (lane.identityCandidateMode == "assist"
+        or lane.identityCandidateMode == "hostile")) then
+        active = true
     end
     Resolver.UnregisterContainer(container)
     local spellIDs = lane and lane.nameAliasSpellIDs
@@ -331,13 +478,8 @@ function Resolver.SyncContainer(container)
     container._msufA3AuraAliasLane = lane
     container._msufA3AuraAliasNames = names
     container._msufA3AuraAliasScanNames = scanNames
-    local frame = framesByUnit[unit]
-    if not frame then
-        frame = CreateFrame("Frame")
-        frame:SetScript("OnEvent", OnEvent)
-        frame:RegisterUnitEvent("UNIT_AURA", unit)
-        framesByUnit[unit] = frame
-    end
+    container._msufA3AuraAliasActive = active
+    SetContainerCountedActive(container, active)
     ScanContainer(container)
     return true
 end

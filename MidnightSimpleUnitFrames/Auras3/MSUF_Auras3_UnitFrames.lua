@@ -32,6 +32,13 @@ local table_concat, table_sort = table.concat, table.sort
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local FrameLayers = UF.Layers or {}
 local DISPEL_OVERLAY_EFFECT_OFFSET = tonumber(FrameLayers.DISPEL_OVERLAY_EFFECT_OFFSET) or 12
+-- Dispel/Purge border sensors share the Frame Outline's 0..30 Layer and the
+-- Borders element's highlight detail (Layers.BorderOffset: 8 + (OVER_NATIVE_
+-- DISPEL - NORMAL)), so the live Cleanse border lands exactly where the
+-- Cleanse test border draws instead of the topmost Layer slot.
+local BORDER_SENSOR_DETAIL = 8
+    + ((tonumber(FrameLayers.FRAME_BORDER_OVER_NATIVE_DISPEL_OFFSET) or 50)
+        - (tonumber(FrameLayers.FRAME_BORDER_NORMAL_OFFSET) or 35))
 local AURA_ICON_BASE_OFFSET = tonumber(FrameLayers.AURA_ICON_BASE_OFFSET) or 64
 local UNIT_AURA_BASE_OFFSET = tonumber(FrameLayers.UNIT_AURA_BASE_OFFSET) or 10
 local CreateFrame = _G.CreateFrame
@@ -2112,14 +2119,32 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     elseif visual == "symbol" then
         kind, rootKey = "dispelSymbol", "DispelSymbolSensor"
     end
-    local priorityDetail = 14
+    -- Dispel and Purge borders sit in the Frame Outline Layer band at the
+    -- Borders-element highlight detail; the configured highlight priority
+    -- still orders them inside that band (first entry on top).
+    local priorityDetail = BORDER_SENSOR_DETAIL - 2
     local priorityOrder = border and border.prioEnabled == true and border.prioOrder
         or A3.DEFAULT_NATIVE_HIGHLIGHT_PRIORITY
     local priorityKey = visual == "purge" and "purge" or (visual == "border" and "dispel" or nil)
     if priorityKey and type(priorityOrder) == "table" then
         for index = 1, #priorityOrder do
-            if priorityOrder[index] == priorityKey then priorityDetail = 17 - index; break end
+            if priorityOrder[index] == priorityKey then priorityDetail = BORDER_SENSOR_DETAIL + 1 - index; break end
         end
+    end
+    local borderLayer = Round(ClampNumber(border and border.layer, 0, 0, 30))
+    -- Blizzard's dispel filters are not reaction-scoped: RAID_PLAYER_DISPELLABLE
+    -- explicitly includes auras on enemies and DISPELLABLE is any typed debuff
+    -- on any unit, which is why Blizzard's own frames wrap every dispel read in
+    -- UnitCanAssist. Unit Frame dispel visuals therefore carry the exact-ID
+    -- "assist" identity polarity: valid only while the unit is assistable (see
+    -- the Unit identity gate). Everything else keeps its historical ungated
+    -- behaviour: the helpful Purge sensor (Blizzard shows isStealable without
+    -- a reaction check), "cast by me" HARMFUL|PLAYER sensors (their auras live
+    -- on enemies), and every Group sensor (party/raid tokens are assistable by
+    -- definition and the presence gate already owns offline/phase visibility).
+    local identityCandidateMode
+    if not groupMode and visual ~= "purge" and trigger ~= "PLAYER_CAST" then
+        identityCandidateMode = "assist"
     end
     return {
         sensor = true,
@@ -2127,6 +2152,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         rootKey = rootKey,
         unit = unit,
         enabled = true,
+        identityCandidateMode = identityCandidateMode,
         nativeFilter = nativeFilter,
         candidateFilters = visual == "purge" and { isStealable = true } or nil,
         candidateFilterSignature = visual == "purge" and "isStealable:true" or nil,
@@ -2162,7 +2188,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         y = symbolY,
         layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30))
             or (visual == "symbol" and (30 + ClampNumber(symbol.layer, 8, 0, 30)))
-            or (visual == "overlay" and ClampNumber(groupMode and overlay.dispelOverlayLayer or overlay.layer, 0, 0, 30) or 45),
+            or (visual == "overlay" and ClampNumber(groupMode and overlay.dispelOverlayLayer or overlay.layer, 0, 0, 30) or borderLayer),
         detail = priorityDetail,
         strata = NormalizeFrameStrata(strata, "AUTO"),
         trigger = trigger,
@@ -2342,7 +2368,14 @@ local function CompileGroupLane(unit, source, kind, groupKind, portraitShape, sh
     local hasExactIDs = hasIncludeIDs
         or candidateFilters and candidateFilters.excludeSpellIDs ~= nil
     local identityCandidateMode
-    if kind == "trackedBuff" or kind == "external" then
+    if (kind == "trackedBuff" or kind == "external")
+        -- Exact-ID HELPFUL lanes on party/raid tokens follow the same
+        -- 12.1.0.69465 contract as the Buff branch below: Blizzard applies
+        -- their include filters unconditionally, so the assist gate could only
+        -- hide correct content while costing a second native owner per group
+        -- unit plus the UNIT_FLAGS shard. Ungated lanes fold into the shared
+        -- GroupSlots container. Older clients keep the fail-closed gate.
+        and type(_G.UnitIsPlayerControlledOrGroupMember) ~= "function" then
         identityCandidateMode = "assist"
     elseif hasIncludeIDs and nativeFilter:find("HARMFUL", 1, true) ~= nil then
         identityCandidateMode = "hostile"
@@ -4706,12 +4739,16 @@ local EFFECT_ROOT_KEYS = {
     "TargetDotEffects", "TargetDotEffectsAssist", "TargetDotEffectsHostile",
 }
 
-local function BuildDispelSensorRootConfig(sensors)
+-- One native owner per identity polarity: the container is the alpha sink of
+-- the Unit identity gate, so assist-gated dispel visuals and the ungated
+-- Purge / "cast by me" sensors can never share one. Group sensors carry no
+-- polarity and keep their single neutral owner.
+local function BuildDispelSensorRootConfig(sensors, identityCandidateMode, rootKey)
     if type(sensors) ~= "table" then return nil end
     local list, structuralParts, layoutParts, unit, maxCount, layer
     for i = 1, #DISPEL_SENSOR_ORDER do
         local sensor = sensors[DISPEL_SENSOR_ORDER[i]]
-        if sensor and sensor.enabled == true then
+        if sensor and sensor.enabled == true and sensor.identityCandidateMode == identityCandidateMode then
             if not list then
                 list, structuralParts, layoutParts = {}, {}, {}
                 unit = sensor.unit
@@ -4730,13 +4767,15 @@ local function BuildDispelSensorRootConfig(sensors)
         sensor = true,
         sensorRoot = true,
         kind = "dispelSensors",
-        rootKey = "DispelSensor",
+        rootKey = rootKey or "DispelSensor",
         unit = unit,
         enabled = true,
         sensors = list,
         max = maxCount,
         layer = layer,
-        _msufA3StructuralSignature = table_concat(structuralParts, "\029"),
+        identityCandidateMode = identityCandidateMode,
+        _msufA3StructuralSignature = "identity:" .. tostring(identityCandidateMode or "neutral")
+            .. "\029" .. table_concat(structuralParts, "\029"),
         _msufA3LayoutSignature = table_concat(layoutParts, "\029"),
     }
 end
@@ -4747,8 +4786,26 @@ local function GetDispelSensorRootConfig(cfg)
     if cached ~= nil then
         return cached ~= false and cached or nil
     end
-    cached = BuildDispelSensorRootConfig(cfg.sensors)
+    -- Group owners compile neutral sensors; Unit Frames compile their harmful
+    -- dispel visuals as the assist-polarity owner at the historical root key.
+    local identityCandidateMode
+    if cfg.group ~= true then identityCandidateMode = "assist" end
+    cached = BuildDispelSensorRootConfig(cfg.sensors, identityCandidateMode, "DispelSensor")
     cfg.sensorRoot = cached or false
+    return cached
+end
+
+-- Unit Frame sensors without polarity (the helpful Purge sensor and any
+-- "cast by me" HARMFUL|PLAYER sensor) keep their historical ungated behaviour
+-- in a second owner, so the assist gate on DispelSensor can never hide them.
+local function GetNeutralDispelSensorRootConfig(cfg)
+    if not cfg or cfg.group == true then return nil end
+    local cached = cfg.neutralSensorRoot
+    if cached ~= nil then
+        return cached ~= false and cached or nil
+    end
+    cached = BuildDispelSensorRootConfig(cfg.sensors, nil, "DispelSensorNeutral")
+    cfg.neutralSensorRoot = cached or false
     return cached
 end
 
@@ -7420,8 +7477,23 @@ end
 A3._SetUnitAuraIdentityOwnerReady = function(container, canAssist, ready)
     if not A3._ContainerOwnsUnitAuraIdentityGate(container) then return false end
     local config = container._msufA3NativeLaneConfig
-    local visible = ready == true and A3._UnitAuraIdentityOwnerVisible(container, canAssist)
+    local polarityVisible = A3._UnitAuraIdentityOwnerVisible(container, canAssist)
+    local visible = ready == true and polarityVisible
     local any = SetAssistAlpha(container, visible, tonumber(config.alpha) or 1)
+    -- Alpha only hides the output: a HELPFUL exact-ID owner on an enemy target
+    -- (or a HARMFUL one on a friend) would otherwise stay registered for
+    -- UNIT_AURA and keep parsing every delta into an invisible slot. Follow the
+    -- known polarity with Blizzard's own enable flag: SetEnabled(false) drops
+    -- the registration, SetEnabled(true) is Blizzard's full reparse, and the
+    -- reveal above still owns the visible alpha. Only live registered owners
+    -- take this path; creation keeps enabling inside RegisterNativeContainer.
+    if container._msufA3NativeRegistered == true and type(container.SetEnabled) == "function" then
+        container:SetEnabled(polarityVisible == true)
+    end
+    local resolver = A3.AuraNameResolver
+    if resolver and type(resolver.SetContainerActive) == "function" then
+        resolver.SetContainerActive(container, polarityVisible == true)
+    end
     if container._msufA3SpellIndicatorRoot == true then
         any = SpellIndicatorsRuntime.ApplyUnitIdentityGate(
             container, canAssist, ready) or any
@@ -9424,6 +9496,12 @@ RegisterNativeContainer = function(container, forceRefresh)
         -- so that cold layout/config work cannot expose the wrong polarity.
         if container._msufA3DirectIdentityUnitGated == true then
             A3._SeedUnitAuraIdentityOwner(container, container.unit)
+        elseif type(container.IsEnabled) == "function" and container:IsEnabled() == false
+            and type(container.SetEnabled) == "function"
+            and not IsLiveGroupAuraFrame(container._msufA3ParentFrame) then
+            -- A Unit owner that lost its identity polarity keeps the disabled
+            -- flag written by its last gate pass; ungated owners stay enabled.
+            container:SetEnabled(true)
         end
         if A3.AuraNameResolver then A3.AuraNameResolver.SyncContainer(container) end
         return true
@@ -9442,8 +9520,11 @@ RegisterNativeContainer = function(container, forceRefresh)
     -- removed) instead of an MSUF forced reparse. SetEnabled is a secure
     -- delegate (safe to call directly) and is idempotent.
     container:SetEnabled(true)
-    A3._RegisterDirectIdentityRefreshContainer(container)
+    -- The identity seed runs inside registration and may immediately disable an
+    -- ineligible exact-ID owner. Mark lifecycle ownership first so that initial
+    -- seed uses the same SetEnabled gate as every later identity refresh.
     container._msufA3NativeRegistered = true
+    A3._RegisterDirectIdentityRefreshContainer(container)
     container._msufA3NativeRegistrationPending = nil
     if A3.AuraNameResolver then A3.AuraNameResolver.SyncContainer(container) end
     return true
@@ -9862,6 +9943,11 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
             any = true
             ok = RefreshNativeContainer(root.DispelSensor, forceRefresh, sensorRoot, parentFrame) and ok
         end
+        local neutralSensorRoot = GetNeutralDispelSensorRootConfig(cfg)
+        if neutralSensorRoot then
+            any = true
+            ok = RefreshNativeContainer(root.DispelSensorNeutral, forceRefresh, neutralSensorRoot, parentFrame) and ok
+        end
     end
     for i = group and 4 or 1, #EFFECT_ROOT_FIELDS do
         local spellIndicatorRoot = cfg[EFFECT_ROOT_FIELDS[i]]
@@ -9902,6 +9988,7 @@ local function HideState(frame)
     A3._HideLane(root.GroupAuraAssist)
     A3._HideLane(root.GroupAuraHostile)
     A3._HideLane(root.DispelSensor)
+    A3._HideLane(root.DispelSensorNeutral)
     A3._HideLane(root.DispelBorderSensor)
     A3._HideLane(root.DispelOverlaySensor)
     A3._HideLane(root.DispelCornerSensor)
@@ -9944,6 +10031,7 @@ local function HideState(frame)
     root.GroupAuraAssist = nil
     root.GroupAuraHostile = nil
     root.DispelSensor = nil
+    root.DispelSensorNeutral = nil
     root.DispelBorderSensor = nil
     root.DispelOverlaySensor = nil
     root.DispelCornerSensor = nil
@@ -9980,6 +10068,7 @@ local function ApplyConfig(frame, cfg, reason)
     local group = cfg.group == true
     local groupSlots = group and GetGroupSlotsRootConfig(cfg)
     local sensorRoot = not group and GetDispelSensorRootConfig(cfg) or nil
+    local neutralSensorRoot = not group and GetNeutralDispelSensorRootConfig(cfg) or nil
     local forceRecreate = false
     local ok = true
     local lanesOk = true
@@ -10011,6 +10100,8 @@ local function ApplyConfig(frame, cfg, reason)
     else
         if sensorRoot and sensorRoot.enabled and not ApplyDispelSensorRoot(root, sensorRoot, frame, forceRecreate) then ok = false end
         if not (sensorRoot and sensorRoot.enabled) then A3._HideLane(root.DispelSensor) end
+        if neutralSensorRoot and neutralSensorRoot.enabled and not ApplyDispelSensorRoot(root, neutralSensorRoot, frame, forceRecreate) then ok = false end
+        if not (neutralSensorRoot and neutralSensorRoot.enabled) then A3._HideLane(root.DispelSensorNeutral) end
     end
     for i = firstEffectRoot, #EFFECT_ROOT_FIELDS do
         local spellIndicatorRoot = cfg[EFFECT_ROOT_FIELDS[i]]
@@ -10100,6 +10191,13 @@ local function RootCanReuseContainersForConfig(root, cfg)
             local current = root.DispelSensor
             if not (current and current._msufA3StructuralSignature == sensorRoot._msufA3StructuralSignature) then return false end
         elseif root.DispelSensor and root.DispelSensor.IsShown and root.DispelSensor:IsShown() == true then
+            return false
+        end
+        local neutralSensorRoot = GetNeutralDispelSensorRootConfig(cfg)
+        if neutralSensorRoot then
+            local current = root.DispelSensorNeutral
+            if not (current and current._msufA3StructuralSignature == neutralSensorRoot._msufA3StructuralSignature) then return false end
+        elseif root.DispelSensorNeutral and root.DispelSensorNeutral.IsShown and root.DispelSensorNeutral:IsShown() == true then
             return false
         end
     end
