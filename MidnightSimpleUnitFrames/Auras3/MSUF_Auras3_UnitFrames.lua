@@ -10654,16 +10654,29 @@ A3._DoRefreshAll = function()
     ApplyAuraTooltipStyle()
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
+    -- One full refresh can rebuild every Unit and Group Aura owner. Keep the
+    -- shared identity-event topology batched across that complete cold pass;
+    -- the inner UF/GF batches then remain cheap nested scopes and the shard
+    -- registrations are reconciled exactly once at the outer boundary.
+    A3._BeginDirectIdentityEventTopologyBatch()
     A3._RequestUnitNow("*")
+    A3._EndDirectIdentityEventTopologyBatch()
     return true
 end
 
 A3._FlushCoalescedRefreshAll = function()
-    local pending = A3._refreshAllPending == true
+    -- A hard Lua-budget abort skips the normal batch epilogue. These scopes
+    -- are synchronous by contract, so any depth surviving to the next frame is
+    -- stale and must be drained before a merged retry rebuilds the topology.
+    while directIdentityEventTopologyBatchDepth > 0 do
+        A3._EndDirectIdentityEventTopologyBatch()
+    end
+    local pending = A3._refreshAllPending == true or A3._refreshAllIncomplete == true
     A3._refreshAllPending = nil
+    A3._refreshAllIncomplete = nil
     A3._refreshAllCoalescing = nil
     if pending then
-        return A3._DoRefreshAll()
+        return A3.RefreshAll()
     end
     return true
 end
@@ -10702,12 +10715,19 @@ function A3.RefreshAll()
         return true
     end
     A3._refreshAllCoalescing = true
-    A3._DoRefreshAll()
+    -- Arm the unlock before entering the expensive synchronous pass. If WoW
+    -- aborts that pass with "script ran too long", the next-frame callback can
+    -- still clear the latch (and service a merged retry) instead of leaving all
+    -- later Aura refreshes permanently stuck as pending.
     if RunNextFrame then
         RunNextFrame(A3._FlushCoalescedRefreshAll)
     elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushCoalescedRefreshAll)
-    else
+    end
+    A3._refreshAllIncomplete = true
+    A3._DoRefreshAll()
+    A3._refreshAllIncomplete = nil
+    if not RunNextFrame and not (C_Timer and C_Timer.After) then
         A3._refreshAllCoalescing = nil
     end
     return true
