@@ -1,8 +1,8 @@
 # MSUF Classic 6.5 Alpha Build
 
 This local branch was created from Retail `main` commit `7cf4e711` and is now
-synchronized through Retail main `1815151a` (the released 6.15-beta2 snapshot
-`348b3643` plus the Text on detached bar fix). The public 6.5 Alpha line combines the complete responsive
+synchronized through the released Retail 6.15-beta3 source snapshot at
+`44de569e`. The public 6.5 Alpha line combines the complete responsive
 texture-layer design system, 100 editable looks, 50 original assets,
 class-fantasy recipes, modular no-portrait layouts and Edge Softness with the
 current Retail feature and bug-fix set. It follows the same

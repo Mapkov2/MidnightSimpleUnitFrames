@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha4 - 2026-09-03
+
+### Highlights
+
+- **The Assistant now understands requests that name one unit frame and then describe the result.** "Show the PvP flag on my target frame", "put the portrait on the left of my player frame" or "the name on my player frame is too small" resolve against that frame's own controls; the new unit-scope parser is registered in the Vanilla, Mists, and TBC runtime manifests as well.
+
+### Changes
+
+- Synchronized the shared addon source with Retail 6.15-beta3 (`44de569e`): the unit-scope Assistant lanes and their question shortcut, the identity-gated native aura owners, the Cleanse and Purge border layer band, the secret-safe dead and offline health background, and the preserved raid roster snapshot.
+- Ported the Retail preserved-raid header refactor into the Classic group headers: one authoritative roster snapshot per out-of-combat setup feeds both the per-block name lists and the roster-derived block count, and the geometry bridge takes that count instead of running its own sweep.
+- Rebased the explicit Classic Retail overrides (Auras3 unit frames, the unit-frame core, the Mainline TOC, and the four Assistant parser and router files) onto that snapshot.
+
+### Fixes & Performance
+
+- Raids using more subgroups than the configured column limit lay out the same number of blocks they fill.
+- The Classic gate passes on the synchronized tree.
+
 ## 6.5-alpha3 - 2026-09-02
 
 ### Highlights

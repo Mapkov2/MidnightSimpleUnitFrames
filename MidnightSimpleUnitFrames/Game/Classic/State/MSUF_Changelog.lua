@@ -8,12 +8,39 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "A1B8B615922BC57FE1419382E5F6ECB85403B7965D7E601A6A47B5164B41B781",
-    currentVersion = "6.5-alpha3",
-    historyFromVersion = "6.0-RC18",
-    previousVersion = "6.5-alpha2",
-    rangeLabel = "6.5-alpha2 -> 6.5-alpha3",
+    sourceSha256 = "21CA958F268867742D62C9A86ACD132ED34FD3A028B42C964EE1C385188C5A77",
+    currentVersion = "6.5-alpha4",
+    historyFromVersion = "6.5-alpha1",
+    previousVersion = "6.5-alpha3",
+    rangeLabel = "6.5-alpha3 -> 6.5-alpha4",
     entries = {
+        {
+            version = "6.5-alpha4",
+            date = "2026-09-03",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "The Assistant now understands requests that name one unit frame and then describe the result. \"Show the PvP flag on my target frame\", \"put the portrait on the left of my player frame\" or \"the name on my player frame is too small\" resolve against that frame's own controls; the new unit-scope parser is registered in the Vanilla, Mists, and TBC runtime manifests as well.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Synchronized the shared addon source with Retail 6.15-beta3 (44de569e): the unit-scope Assistant lanes and their question shortcut, the identity-gated native aura owners, the Cleanse and Purge border layer band, the secret-safe dead and offline health background, and the preserved raid roster snapshot.",
+                        "Ported the Retail preserved-raid header refactor into the Classic group headers: one authoritative roster snapshot per out-of-combat setup feeds both the per-block name lists and the roster-derived block count, and the geometry bridge takes that count instead of running its own sweep.",
+                        "Rebased the explicit Classic Retail overrides (Auras3 unit frames, the unit-frame core, the Mainline TOC, and the four Assistant parser and router files) onto that snapshot.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Raids using more subgroups than the configured column limit lay out the same number of blocks they fill.",
+                        "The Classic gate passes on the synchronized tree.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha3",
             date = "2026-09-02",
@@ -167,31 +194,6 @@ local data = {
                         "Opening Unit Frame Power settings no longer errors while building the detached-bar Text on detached bar control.",
                         "Health gradients, texture changes, prediction refreshes, Group Range Fade and Boss Preview preserve the configured health and prediction opacity instead of resetting fills to full opacity.",
                         "Detached Player Power bars attached or width-synced to Class Resources keep using the controller-maintained hidden anchor, preventing width or position jumps when shapeshifting hides the visible Class Resource bar.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-RC18",
-            date = "2026-08-09",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added a versioned nickname-provider API for Unit and Group Frames. Providers are priority ordered, cached, event-driven and deferred safely across combat; the bundled Northern Sky Raid Tools adapter now uses the same public contract.",
-                        "Documented the supported Nickname and Edit Mode provider APIs for addon authors in the README.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Fixed Boss Frame health, power, background and border geometry moving or leaving the screen after a combat reload (#77). Pixel-snapped regions now remain attached to their secure frame owner.",
-                        "Fixed Boss castbar spell-name shortening being ignored at runtime and in Edit Mode previews (#78), including the renderer-only path required for secret combat values.",
-                        "Fixed Edit Mode always showing the Boss castbar leading-edge spark even when the setting was disabled (#79). The animation no longer overrides the cold style owner every tick.",
-                        "Fixed detached Boss castbars appearing outside the Unit Preview (#80). The preview projects the applied runtime relationship without changing the saved absolute position.",
-                        "Fixed Player Defensives being re-enabled by Menu normalization after the user disabled them. Runtime, Menu preview and Edit Mode now honor the same master switch, while tracked Target DoTs keep their disabled configuration preview.",
-                        "Fixed Player search routes treating the layer substring inside player as a Text section request. Portrait and other exact results no longer open an unrelated accordion or rebuild the page unnecessarily.",
-                        "Fixed explicit guided-setup phrases containing topics such as profiles being consumed by text creation guidance instead of opening the native guided setup.",
                     },
                 },
             },
