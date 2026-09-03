@@ -145,10 +145,16 @@ assert(not contains(driver, "ScheduleTargetFocusChanged")
     and not contains(driver, "_msufTargetFocusRefreshQueued")
     and not contains(driver, "_msufTargetFocusRefreshCallback"),
     "target/focus identity retained a zero-delay scheduler")
-assert(contains(driver, "C_Timer.After(0, self._msufInactiveRecheckCB)"))
-assert(contains(driver, "C_Timer.After(feedbackDuration, self._msufInterruptHideCB)"))
-assert(contains(player, "C_Timer.After(0, frame._msufSoftResyncCB)"))
-assert(contains(player, "C_Timer.After(duration, frame._msufPlayerInterruptHideCB)"))
+assert(contains(driver, "RunNextFrame(self._msufInactiveRecheckCB)"),
+    "inactive recheck must use the shared next-frame queue")
+assert(contains(driver, "ScheduleDelayed(self._msufInterruptHideCB, feedbackDuration)"),
+    "interrupt feedback must use the keyed 12.1.5 delayed scheduler")
+assert(contains(driver, "ScheduleDelayed(frame._msufStartRetryCB, 0.05)"),
+    "cast start retry must use the keyed 12.1.5 delayed scheduler")
+assert(contains(player, "RunNextFrame(frame._msufSoftResyncCB)"),
+    "player soft resync must use the shared next-frame queue")
+assert(contains(player, "ScheduleDelayed(frame._msufPlayerInterruptHideCB, duration)"),
+    "player interrupt feedback must use the keyed 12.1.5 delayed scheduler")
 assert(not contains(player, "HideIfNoLongerCasting({"), "player interrupt callback must not allocate an owner table")
 assert(contains(player, "local INTERRUPT_IDENTITY_GRACE = 0.25"),
     "player interrupt feedback must retain a bounded STOP-before-INTERRUPTED identity window")

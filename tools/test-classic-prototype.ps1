@@ -48,7 +48,7 @@ $targets = @(
     @{ Folder = "MidnightSimpleUnitFrames_Assistant"; Base = "MidnightSimpleUnitFrames_Assistant" }
 )
 $clients = @(
-    @{ Suffix = "Mainline"; Interface = "120007, 120100" },
+    @{ Suffix = "Mainline"; Interface = "120105" },
     @{ Suffix = "Vanilla"; Interface = "11509" },
     @{ Suffix = "Mists"; Interface = "50504" },
     @{ Suffix = "TBC"; Interface = "20506" }
@@ -158,7 +158,10 @@ foreach ($target in $targets) {
             throw "$tocName has version '$($versions[$client.Suffix])', expected '$expectedClientVersion'"
         }
         if ($client.Suffix -eq "Mainline" -and $retailReferenceRootFull) {
-            $referenceMetadata = @(Get-Content -LiteralPath $referenceToc | Where-Object { $_ -match '^## ' })
+            $referenceMetadata = @(Get-Content -LiteralPath $referenceToc | Where-Object { $_ -match '^## ' } |
+                ForEach-Object {
+                    if ($_ -match '^## Interface:') { "## Interface: $($client.Interface)" } else { $_ }
+                })
             $currentMetadata = @($content | Where-Object { $_ -match '^## ' })
             if ($referenceMetadata.Count -ne $currentMetadata.Count -or
                 @(Compare-Object $referenceMetadata $currentMetadata).Count -ne 0) {
@@ -953,6 +956,9 @@ if ($lua) {
     $classicCastbarVisualSmoke = Join-Path $root "tools/tests/classic_castbar_visual_compat_smoke.lua"
     & $lua.Source $classicCastbarVisualSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic castbar visual compatibility smoke failed" }
+    $ptr1215RuntimeSmoke = Join-Path $root ".github/scripts/ptr_12_1_5_runtime_smoke.lua"
+    & $lua.Source $ptr1215RuntimeSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "PTR 12.1.5 runtime smoke failed" }
     $castbarOwnershipSmoke = Join-Path $root "tools/castbar_refresh_ownership_smoke.lua"
     & $lua.Source $castbarOwnershipSmoke
     if ($LASTEXITCODE -ne 0) { throw "Shared castbar refresh ownership smoke failed" }

@@ -7,7 +7,7 @@ WOW_PROJECT_BURNING_CRUSADE_CLASSIC = 5
 WOW_PROJECT_MISTS_CLASSIC = 19
 
 local specs = {
-    Mainline = { project = WOW_PROJECT_MAINLINE, interface = 120100, classic = false },
+    Mainline = { project = WOW_PROJECT_MAINLINE, interface = 120105, classic = false },
     Vanilla = { project = WOW_PROJECT_CLASSIC, interface = 11509, classic = true },
     Mists = { project = WOW_PROJECT_MISTS_CLASSIC, interface = 50504, classic = true },
     TBC = { project = WOW_PROJECT_BURNING_CRUSADE_CLASSIC, interface = 20506, classic = true },
