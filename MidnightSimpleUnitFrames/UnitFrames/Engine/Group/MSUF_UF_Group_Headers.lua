@@ -267,7 +267,7 @@ function GF.GetLiveLayoutCount(kind)
   return ConfiguredCount(kind, conf)
 end
 
-local function LayoutParts(kind, conf, configuredCount)
+local function LayoutParts(kind, conf, configuredCount, preservedGroupCount)
   local w, h, spacing = 80, 32, 1
   if GF.GetScaledFrameMetrics then
     w, h, spacing = GF.GetScaledFrameMetrics(kind)
@@ -277,7 +277,7 @@ local function LayoutParts(kind, conf, configuredCount)
   local count = configuredCount or ConfiguredCount(kind, conf)
   local dx, dy, totalW, totalH = 0, 0, w, h
   if GF.GetGridMetrics then
-    dx, dy, totalW, totalH = GF.GetGridMetrics(kind, count)
+    dx, dy, totalW, totalH = GF.GetGridMetrics(kind, count, preservedGroupCount)
   end
   return w, h, spacing, dx or 0, dy or 0, totalW or w, totalH or h, count
 end
@@ -513,15 +513,21 @@ local function PreservedRaidGroupLimit(conf)
   return ClampInt(conf.maxColumns, 8, 1, 8)
 end
 
-function GF.GetPreservedRaidGroupCount(conf)
+local function ResolvePreservedRaidGroupCount(conf, maxRosterGroup)
   local groups = PreservedRaidGroupLimit(conf) or 8
+  if maxRosterGroup and maxRosterGroup > groups then groups = maxRosterGroup end
+  return groups > 8 and 8 or groups
+end
+
+function GF.GetPreservedRaidGroupCount(conf)
+  local maxRosterGroup = 0
   if IsInRaid and IsInRaid() and GetNumGroupMembers and GetRaidRosterInfo then
     for index = 1, GetNumGroupMembers() or 0 do
       local subgroup = tonumber((select(3, GetRaidRosterInfo(index)))) or 0
-      if subgroup > groups then groups = subgroup end
+      if subgroup > maxRosterGroup then maxRosterGroup = subgroup end
     end
   end
-  return groups > 8 and 8 or groups
+  return ResolvePreservedRaidGroupCount(conf, maxRosterGroup)
 end
 
 local function RaidGroupingOrder(conf)
@@ -710,26 +716,7 @@ local function IsPlayerUnit(unit)
   return false
 end
 
-local function AddNameListEntry(entries, unit, index, conf, raidIndex, ignoreGroupLimit)
-  local name, subgroup, classFile, role
-  if raidIndex then
-    if not GetRaidRosterInfo then return false end
-    -- SecureGroupHeader_Update compares nameList entries against the exact name
-    -- returned by GetRaidRosterInfo(). Use that same authoritative snapshot:
-    -- UnitExists/UnitName can lag one roster dispatch and must never make a
-    -- complete raid header silently publish a partial NAMELIST.
-    local assignedRole
-    name, _, subgroup, _, _, classFile, _, _, _, _, _, assignedRole = GetRaidRosterInfo(raidIndex)
-    if issecretvalue(name) == true or type(name) ~= "string" or name == "" then return false end
-    role = (assignedRole == "TANK" or assignedRole == "HEALER" or assignedRole == "DAMAGER")
-      and assignedRole or UnitRole(unit)
-  else
-    if UnitMissing(unit) then return false end
-    role = UnitRole(unit)
-    classFile = UnitClassFile(unit)
-    name = UnitFullName(unit)
-    if not name then return false end
-  end
+local function AppendNameListEntry(entries, unit, index, conf, name, subgroup, classFile, role, ignoreGroupLimit)
   if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role, ignoreGroupLimit) then return true end
   entries[#entries + 1] = {
     name = name,
@@ -739,6 +726,32 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex, ignoreGro
     group = subgroup or 0,
   }
   return true
+end
+
+local function AddRaidNameListEntry(entries, raidIndex, conf, ignoreGroupLimit, name, subgroup, classFile, assignedRole)
+  -- SecureGroupHeader_Update compares nameList entries against the exact name
+  -- returned by GetRaidRosterInfo(). Use that same authoritative snapshot:
+  -- UnitExists/UnitName can lag one roster dispatch and must never make a
+  -- complete raid header silently publish a partial NAMELIST.
+  if issecretvalue(name) == true or type(name) ~= "string" or name == "" then return false end
+  local unit = "raid" .. raidIndex
+  local role = (assignedRole == "TANK" or assignedRole == "HEALER" or assignedRole == "DAMAGER")
+    and assignedRole or UnitRole(unit)
+  return AppendNameListEntry(entries, unit, raidIndex, conf, name, subgroup, classFile, role, ignoreGroupLimit)
+end
+
+local function AddNameListEntry(entries, unit, index, conf, raidIndex, ignoreGroupLimit)
+  if raidIndex then
+    if not GetRaidRosterInfo then return false end
+    local name, _, subgroup, _, _, classFile, _, _, _, _, _, assignedRole = GetRaidRosterInfo(raidIndex)
+    return AddRaidNameListEntry(entries, raidIndex, conf, ignoreGroupLimit, name, subgroup, classFile, assignedRole)
+  end
+  if UnitMissing(unit) then return false end
+  local role = UnitRole(unit)
+  local classFile = UnitClassFile(unit)
+  local name = UnitFullName(unit)
+  if not name then return false end
+  return AppendNameListEntry(entries, unit, index, conf, name, nil, classFile, role, ignoreGroupLimit)
 end
 
 --- Arena teams can replace party unit identities between rounds while the
@@ -848,35 +861,40 @@ local function EntryRolePriority(entry, priority)
   return priority and priority[entry and entry.role] or 999
 end
 
-local function BuildRaidFreezeNameList(kind, conf, mode, descending, subgroupIndex)
+local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlocks)
+  local groupCount = ResolvePreservedRaidGroupCount(conf)
   if not IsRaidLikeKind(kind) then
-    return nil
+    return nil, groupCount
   end
   local count = GetNumGroupMembers and GetNumGroupMembers() or 0
-  if count <= 0 then
-    return nil
+  if count <= 0 or not GetRaidRosterInfo then
+    return nil, groupCount
   end
 
-  --- A preserved block normally shows subgroup N. Under the raid-wide role
-  --- order (mode ROLE on a preserved block) block N shows roster positions
-  --- (N-1)*5+1 .. N*5 of the complete role-sorted raid instead, so the group
-  --- limit acts as a block cap below and must not exclude members by subgroup.
-  local raidWideBlocks = subgroupIndex ~= nil and mode == "ROLE"
+  local ignoreGroupLimit = preservedBlocks == true and mode == "ROLE"
   local entries = {}
   local rosterComplete = true
+  local maxRosterGroup = 0
+  local trackRosterGroups = IsInRaid and IsInRaid()
   for i = 1, count do
-    if AddNameListEntry(entries, "raid" .. i, i, conf, i, raidWideBlocks) ~= true then
+    local name, _, subgroup, _, _, classFile, _, _, _, _, _, assignedRole = GetRaidRosterInfo(i)
+    if trackRosterGroups and issecretvalue(subgroup) ~= true then
+      local numericGroup = tonumber(subgroup) or 0
+      if numericGroup > maxRosterGroup then maxRosterGroup = numericGroup end
+    end
+    if AddRaidNameListEntry(entries, i, conf, ignoreGroupLimit, name, subgroup, classFile, assignedRole) ~= true then
       rosterComplete = false
     end
   end
+  groupCount = ResolvePreservedRaidGroupCount(conf, maxRosterGroup)
   -- A partial nameList is a filter, not merely an ordering hint: Blizzard will
   -- omit every roster name absent from it. Fall back to its native complete
   -- roster path until all authoritative names are available.
   if not rosterComplete or #entries == 0 then
-    return nil
+    return nil, groupCount
   end
 
-  local priority = RolePriority(conf)
+  local priority = (mode == "ROLE" or mode == "GROUP_ROLE") and RolePriority(conf) or nil
   local function SortBefore(a, b)
     if mode == "NAME" and a.name ~= b.name then
       return a.name < b.name
@@ -901,37 +919,21 @@ local function BuildRaidFreezeNameList(kind, conf, mode, descending, subgroupInd
     end
     return SortBefore(a, b)
   end)
+  return entries, groupCount
+end
 
+local function BuildRaidFreezeNameList(kind, conf, mode, descending)
+  local entries = BuildRaidFreezeEntries(kind, conf, mode, descending, false)
+  if not entries then return nil end
   local names, seen = {}, {}
-  if raidWideBlocks then
-    local blockLimit = PreservedRaidGroupLimit(conf) or 8
-    if subgroupIndex <= blockLimit then
-      local first, last = (subgroupIndex - 1) * 5 + 1, subgroupIndex * 5
-      local position = 0
-      for i = 1, #entries do
-        local name = entries[i].name
-        if name and not seen[name] then
-          seen[name] = true
-          position = position + 1
-          if position > last then break end
-          if position >= first then names[#names + 1] = name end
-        end
-      end
-    end
-  else
-    for i = 1, #entries do
-      local entry = entries[i]
-      local name = entry.name
-      if (subgroupIndex == nil or entry.group == subgroupIndex) and name and not seen[name] then
-        seen[name] = true
-        names[#names + 1] = name
-      end
+  for i = 1, #entries do
+    local name = entries[i].name
+    if name and not seen[name] then
+      seen[name] = true
+      names[#names + 1] = name
     end
   end
   if #names == 0 then
-    -- Empty is authoritative for a complete subgroup roster; nil would reveal
-    -- the whole group through the native fallback filter.
-    if subgroupIndex ~= nil then return "" end
     return nil
   end
   return table_concat(names, ",")
@@ -970,6 +972,66 @@ local function ResolveSortMode(key, conf)
     mode = conf.sortByRole == true and "ROLE" or "INDEX"
   end
   return mode
+end
+
+local function BuildPreservedRaidSortSnapshot(kind, conf)
+  local mode = ResolveSortMode("raid", conf)
+  local entries, groupCount = BuildRaidFreezeEntries(kind, conf, mode, conf.sortDescending == true, true)
+  local nameLists
+  if entries then
+    nameLists = {}
+    if mode == "ROLE" then
+      -- Raid-wide role order is already sorted. Deduplicate once, then assign
+      -- each authoritative name directly to its preserved five-slot block.
+      local blockLimit = PreservedRaidGroupLimit(conf) or 8
+      local seen, position = {}, 0
+      for i = 1, #entries do
+        local name = entries[i].name
+        if name and not seen[name] then
+          seen[name] = true
+          position = position + 1
+          local block = floor((position - 1) / 5) + 1
+          if block <= blockLimit and block <= groupCount then
+            local names = nameLists[block]
+            if not names then names = {}; nameLists[block] = names end
+            names[#names + 1] = name
+          end
+        end
+      end
+    else
+      -- Group-preserving modes share the same sorted roster and distribute it
+      -- once. Name de-duplication remains local to each subgroup as before.
+      local seenByGroup = {}
+      for i = 1, #entries do
+        local entry = entries[i]
+        local groupIndex, name = entry.group, entry.name
+        if type(groupIndex) == "number" and groupIndex >= 1 and groupIndex <= groupCount and name then
+          local seen = seenByGroup[groupIndex]
+          if not seen then seen = {}; seenByGroup[groupIndex] = seen end
+          if not seen[name] then
+            seen[name] = true
+            local names = nameLists[groupIndex]
+            if not names then names = {}; nameLists[groupIndex] = names end
+            names[#names + 1] = name
+          end
+        end
+      end
+    end
+    for groupIndex = 1, groupCount do
+      local names = nameLists[groupIndex]
+      -- Empty is authoritative for a complete subgroup/block roster. Nil is
+      -- reserved for an incomplete snapshot and the native fail-open path.
+      nameLists[groupIndex] = names and table_concat(names, ",") or ""
+    end
+  end
+  local nativeGroupingOrder = not nameLists and (mode == "GROUP_ROLE" or mode == "ROLE")
+    and RoleOrder(conf) or nil
+  return {
+    mode = mode,
+    groupCount = groupCount,
+    nameLists = nameLists,
+    nativeGroupingOrder = nativeGroupingOrder,
+  }
 end
 
 local function BuildSortState(key, kind, conf)
@@ -1013,9 +1075,9 @@ local function BuildSortState(key, kind, conf)
   }
 end
 
-local function BuildPreservedSortState(kind, conf, groupIndex)
-  local mode = ResolveSortMode("raid", conf)
-  local nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true, groupIndex)
+local function BuildPreservedSortState(conf, groupIndex, snapshot)
+  local mode = snapshot.mode
+  local nameList = snapshot.nameLists and snapshot.nameLists[groupIndex] or nil
   -- The raid-wide role order (mode ROLE) needs the complete-roster nameList;
   -- until it is readable the block keeps its native per-subgroup role sort.
   local nativeRole = not nameList and (mode == "GROUP_ROLE" or mode == "ROLE")
@@ -1024,7 +1086,7 @@ local function BuildPreservedSortState(kind, conf, groupIndex)
     sortMethod = nameList and "NAMELIST" or "INDEX",
     sortDir = nameList and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
     groupBy = nativeRole and "ASSIGNEDROLE" or nil,
-    groupingOrder = nativeRole and RoleOrder(conf) or nil,
+    groupingOrder = nativeRole and snapshot.nativeGroupingOrder or nil,
     nameList = nameList,
     playerFirst = conf.playerFirstInRole == true,
   }
@@ -1374,7 +1436,7 @@ local function ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW,
   return true
 end
 
-local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex)
+local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex, preservedSortSnapshot)
   local buttonTemplate = ButtonTemplate()
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing, conf.groupGrowth)
   local upc = ClampInt(conf.unitsPerColumn, 5, 1, preservedGroupIndex and 5 or 40)
@@ -1386,7 +1448,7 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     or AttrChanged(header, "initial-height", initialHeight)
   local secureInitChanged = AttrChanged(header, "_msufSecureInitVersion", SECURE_INIT_VERSION)
   local initCfg = (sizeChanged or secureInitChanged) and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
-  local sortState = preservedGroupIndex and BuildPreservedSortState(kind, conf, preservedGroupIndex)
+  local sortState = preservedGroupIndex and BuildPreservedSortState(conf, preservedGroupIndex, preservedSortSnapshot)
     or BuildSortState(key, kind, conf)
   local groupFilter
   if sortState.sortMethod ~= "NAMELIST" then
@@ -1489,7 +1551,7 @@ local function PreservedBlockAllowed(conf, sortState, groupIndex)
   return RaidGroupAllowed(conf, groupIndex)
 end
 
-local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH)
+local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH, sortSnapshot)
   local flat = GF.headers.raid
   if flat and flat._msufRaidGroupIndex == nil then
     RetireHeader(flat)
@@ -1504,7 +1566,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
     or (primary * w + (primary - 1) * spacing)
   local blockH = vertical and (primary * h + (primary - 1) * spacing)
     or (blockColumns * h + (blockColumns - 1) * spacing)
-  local groupCount = GF.GetPreservedRaidGroupCount(conf)
+  local groupCount = sortSnapshot.groupCount
   local headers = GF.raidGroupHeaders
 
   for groupIndex = 1, groupCount do
@@ -1517,7 +1579,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
     if header:GetParent() ~= anchor then header:SetParent(anchor) end
     header._msufGFKind = kind
     header._msufRaidGroupIndex = groupIndex
-    local _, wasHiddenForLayout, sortState = ConfigureHeader(header, "raid", kind, conf, w, h, spacing, layoutCount, groupIndex)
+    local _, wasHiddenForLayout, sortState = ConfigureHeader(header, "raid", kind, conf, w, h, spacing, layoutCount, groupIndex, sortSnapshot)
     header._msufPreservedGroupAllowed = PreservedBlockAllowed(conf, sortState, groupIndex)
     PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
 
@@ -1733,11 +1795,18 @@ function GF.SetupHeader(key, kind)
   end
   if GF.EnsureDB then GF.EnsureDB() end
   local conf = GF.GetConf and GF.GetConf(kind) or {}
+  -- This snapshot exists only inside one out-of-combat protected-header setup.
+  -- Reuse its roster-derived block count for layout as well as name sorting so
+  -- no second GetRaidRosterInfo sweep is hidden in the geometry helpers.
+  local preservedSortSnapshot = key == "raid" and conf.preserveRaidGroups == true
+    and BuildPreservedRaidSortSnapshot(kind, conf) or nil
   local layoutCount = ConfiguredCount(kind, conf)
   if GF.EnsureStableGridPosition then
-    GF.EnsureStableGridPosition(kind, layoutCount, conf)
+    GF.EnsureStableGridPosition(kind, layoutCount, conf,
+      preservedSortSnapshot and preservedSortSnapshot.groupCount or nil)
   end
-  local w, h, spacing, _, _, totalW, totalH = LayoutParts(kind, conf, layoutCount)
+  local w, h, spacing, _, _, totalW, totalH = LayoutParts(kind, conf, layoutCount,
+    preservedSortSnapshot and preservedSortSnapshot.groupCount or nil)
   local anchor = EnsureAnchor(key, conf, totalW, totalH)
   anchor.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or (kind == "party" and "gf_party" or "gf_raid")
   anchor._msufIsGroupFrame = true
@@ -1747,7 +1816,8 @@ function GF.SetupHeader(key, kind)
   ApplyGroupBorderForKey(key)
 
   if key == "raid" and conf.preserveRaidGroups == true then
-    return SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH)
+    return SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH,
+      preservedSortSnapshot)
   elseif key == "raid" and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then
     RetirePreservedRaidHeaders()
   end

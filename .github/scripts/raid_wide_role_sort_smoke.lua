@@ -64,6 +64,8 @@ local roster = {
 }
 local liveKind = "raid"
 local partyNames = { player = "Player", party1 = "AllyA", party2 = "AllyB" }
+local raidRosterInfoCalls = 0
+local inCombat = false
 
 local MSUF = {
     GF = {},
@@ -79,7 +81,7 @@ local MSUF = {
 _G.MSUF_NS = MSUF
 _G.MSUF = MSUF
 _G.UIParent = TestFrame("UIParent")
-_G.InCombatLockdown = function() return false end
+_G.InCombatLockdown = function() return inCombat end
 _G.GetNumGroupMembers = function() return liveKind == "raid" and #roster or 3 end
 _G.GetNumSubgroupMembers = function() return liveKind == "raid" and 4 or 2 end
 _G.GetNumArenaOpponentSpecs = function() return 0 end
@@ -87,6 +89,7 @@ _G.GetNumArenaOpponents = function() return 0 end
 _G.IsInGroup = function() return true end
 _G.IsInRaid = function() return liveKind == "raid" end
 _G.GetRaidRosterInfo = function(index)
+    raidRosterInfoCalls = raidRosterInfoCalls + 1
     local member = roster[index]
     if not member then return nil end
     return member.name, 0, member.group, 80, "Mage", "MAGE", "Zone", true, false, nil, false, member.role
@@ -127,21 +130,52 @@ MSUF.GF.EnsureDB = function() end
 MSUF.GF.GetConf = function() return conf end
 MSUF.GF.GetLiveGroupKind = function() return liveKind end
 MSUF.GF.GetScaledFrameMetrics = function() return 80, 32, 1 end
-MSUF.GF.GetGridMetrics = function(_, count) return 0, 0, 80, 32, count end
+MSUF.GF.GetGridMetrics = function(_, count, preservedGroupCount)
+    -- Mirror the production geometry bridge: without the setup-local count it
+    -- would perform its own full authoritative roster scan.
+    local groups = preservedGroupCount
+    if groups == nil and conf.preserveRaidGroups == true then
+        groups = MSUF.GF.GetPreservedRaidGroupCount(conf)
+    end
+    return 0, 0, 80 * (groups or 1), 32, count
+end
 MSUF.GF.ScheduleScan = function() end
 MSUF.GF.BeginHeaderLayoutRebind = function() return true end
 MSUF.GF.EndHeaderLayoutRebind = function() return true end
 MSUF.GF.UntrackFrame = function() end
 MSUF.GF.GetConfigDBKey = function(kind) return "gf_" .. kind end
 
+local nativeTableSort = table.sort
+local raidSortCalls = 0
+table.sort = function(...)
+    raidSortCalls = raidSortCalls + 1
+    return nativeTableSort(...)
+end
 local headerChunk, headerErr = loadfile(headerPath)
 assert(headerChunk, headerErr)
 headerChunk("MidnightSimpleUnitFrames", MSUF)
+table.sort = nativeTableSort
 local GF = MSUF.GF
 
 local function SetupRaid()
-    return assert(GF.SetupHeader("raid", "raid"), "raid header missing")
+    local callsBefore = raidRosterInfoCalls
+    local sortsBefore = raidSortCalls
+    local header = assert(GF.SetupHeader("raid", "raid"), "raid header missing")
+    assert(raidRosterInfoCalls - callsBefore == #roster,
+        "raid setup must read each authoritative roster entry exactly once")
+    local sortDelta = raidSortCalls - sortsBefore
+    assert(sortDelta <= 1, "raid setup sorted the same roster more than once")
+    return header, sortDelta
 end
+
+-- The secure gate must reject combat before the setup-local roster snapshot,
+-- its sort, or the geometry bridge can perform any work.
+inCombat = true
+local combatRosterCalls, combatSortCalls = raidRosterInfoCalls, raidSortCalls
+assert(GF.SetupHeader("raid", "raid") == nil, "combat setup did not defer protected headers")
+assert(raidRosterInfoCalls == combatRosterCalls, "combat setup read the authoritative raid roster")
+assert(raidSortCalls == combatSortCalls, "combat setup sorted a preserved raid snapshot")
+inCombat = false
 
 local function Block(index)
     return assert(GF.raidGroupHeaders[index], "preserved block " .. index .. " missing")
@@ -157,7 +191,8 @@ local function AssertBlock(index, nameList, allowed, message)
 end
 
 -- Baseline: preserved groups + By Role keep today's per-subgroup role order.
-SetupRaid()
+local _, baselineSorts = SetupRaid()
+assert(baselineSorts == 1, "complete preserved raid setup did not sort its one roster snapshot")
 assert(Block(1).attributes._msufSortMode == "GROUP_ROLE", "preserved By Role must resolve to GROUP_ROLE by default")
 AssertBlock(1, "Tank1,Heal1,Dps1,Dps2,Dps3", true, "baseline")
 AssertBlock(2, "Tank2,Heal2,Dps4,Dps5,Dps6", true, "baseline")
