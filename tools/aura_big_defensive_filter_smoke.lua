@@ -97,6 +97,30 @@ assert(has(runtime, 'type(_G.UnitIsPlayerControlledOrGroupMember) ~= "function"'
 assert(has(runtime, 'return unitCanAssist("player", unit, true, true)')
     and has(runtime, 'return unitCanAssist("player", unit)'),
     "identity candidate checks do not select the Retail/Classic UnitCanAssist contract")
+local refreshAllStart = assert(runtime:find("A3._DoRefreshAll = function()", 1, true))
+local refreshAllStop = assert(runtime:find("A3._FlushCoalescedRefreshAll = function()", refreshAllStart, true))
+local refreshAllBody = runtime:sub(refreshAllStart, refreshAllStop - 1)
+local beginTopology = assert(refreshAllBody:find("A3._BeginDirectIdentityEventTopologyBatch()", 1, true))
+local applyAll = assert(refreshAllBody:find('A3._RequestUnitNow("*")', 1, true))
+local endTopology = assert(refreshAllBody:find("A3._EndDirectIdentityEventTopologyBatch()", 1, true))
+assert(beginTopology < applyAll and applyAll < endTopology,
+    "full Aura refresh does not batch identity-event topology")
+local flushStop = assert(runtime:find("function A3._FlushDeferredAuraRuntime()", refreshAllStop, true))
+local flushBody = runtime:sub(refreshAllStop, flushStop - 1)
+assert(has(flushBody, "while directIdentityEventTopologyBatchDepth > 0 do")
+    and has(flushBody, "A3._refreshAllIncomplete == true")
+    and has(flushBody, "return A3.RefreshAll()"),
+    "aborted Aura refresh cannot unwind and retry on the next frame")
+local publicRefreshStart = assert(runtime:find("function A3.RefreshAll()", refreshAllStop, true))
+local publicRefreshStop = assert(runtime:find("function A3.RefreshRoundedDispelOverlayMasks()", publicRefreshStart, true))
+local publicRefreshBody = runtime:sub(publicRefreshStart, publicRefreshStop - 1)
+local scheduleUnlock = publicRefreshBody:find("RunNextFrame(A3._FlushCoalescedRefreshAll)", 1, true)
+local runRefresh = publicRefreshBody:find("A3._DoRefreshAll()", 1, true)
+assert(scheduleUnlock and runRefresh and scheduleUnlock < runRefresh,
+    "Aura RefreshAll does not arm its coalescing unlock before synchronous work")
+assert(has(publicRefreshBody, "A3._refreshAllIncomplete = true")
+    and has(publicRefreshBody, "A3._refreshAllIncomplete = nil"),
+    "Aura RefreshAll does not expose an interrupted pass to its unlock callback")
 
 local mixedRoot = assert(spellRuntime.CompileSlots("target", {
     enabled = true,
