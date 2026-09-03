@@ -296,6 +296,7 @@
     <Script file="Assistant\MSUF_AssistantParser_Registry.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Registry_ExactAlias_Data.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Registry_ExactAlias.lua"/>
+    <Script file="Assistant\MSUF_AssistantParser_UnitScope.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Features_Data.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Features.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Geometry_Data.lua"/>
