@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.15-beta4 - 2026-09-04
+
+### Highlights
+
+- **Retail Aura displays recover instead of remaining disabled when a full refresh exceeds the Lua execution budget.**
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- Retired the complete pre-6.0 profile conversion path and its legacy import controls. Every MSUF 6.x schema-600 profile and the 6.x Wago envelope remain supported; older or unversioned stored profiles are archived instead of being normalized into the active profile list.
+- Added the Retail 12.1.5 Aura, castbar, scheduling, tooltip-caster and native pixel-rounding contracts while retaining explicit TOC compatibility with Retail 12.0.7 and 12.1.0.
+
+### Fixes & Performance
+
+- Full Aura refreshes batch identity-event topology once and arm their next-frame recovery before synchronous work, so a `script ran too long` abort cannot leave every later Aura refresh permanently latched as pending.
+- Shared next-frame and delayed-signal scheduling replace repeated one-shot timer allocation on supported clients, with the existing timer fallback retained for Retail 12.0.7 and 12.1.0.
+
 ## 6.15-beta3 - 2026-09-03
 
 ### Highlights

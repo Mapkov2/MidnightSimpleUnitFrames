@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "6978A5ED2C27E6C2EC397B4FFCEE55E7721A94A84BB212E9E9C5AE51B772DBE7",
-    currentVersion = "6.15-beta3",
+    sourceSha256 = "5BD913A98C548684CDF7DAAFA6FF1D12F4A10767D1B1BE6C2006D475D47C1D1E",
+    currentVersion = "6.15-beta4",
     historyFromVersion = "6.02",
-    previousVersion = "6.15-beta2",
-    rangeLabel = "6.15-beta2 -> 6.15-beta3",
+    previousVersion = "6.15-beta3",
+    rangeLabel = "6.15-beta3 -> 6.15-beta4",
     entries = {
+        {
+            version = "6.15-beta4",
+            date = "2026-09-04",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Retail Aura displays recover instead of remaining disabled when a full refresh exceeds the Lua execution budget.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Retired the complete pre-6.0 profile conversion path and its legacy import controls. Every MSUF 6.x schema-600 profile and the 6.x Wago envelope remain supported; older or unversioned stored profiles are archived instead of being normalized into the active profile list.",
+                        "Added the Retail 12.1.5 Aura, castbar, scheduling, tooltip-caster and native pixel-rounding contracts while retaining explicit TOC compatibility with Retail 12.0.7 and 12.1.0.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Full Aura refreshes batch identity-event topology once and arm their next-frame recovery before synchronous work, so a script ran too long abort cannot leave every later Aura refresh permanently latched as pending.",
+                        "Shared next-frame and delayed-signal scheduling replace repeated one-shot timer allocation on supported clients, with the existing timer fallback retained for Retail 12.0.7 and 12.1.0.",
+                    },
+                },
+            },
+        },
         {
             version = "6.15-beta3",
             date = "2026-09-03",
