@@ -8,12 +8,44 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "B5520429E4ABDE963DB170CE99F531E99503EFD705F078BF47C5C27E07AF4E5E",
-    currentVersion = "6.15-beta2",
-    historyFromVersion = "6.13",
-    previousVersion = "6.15-beta1",
-    rangeLabel = "6.15-beta1 -> 6.15-beta2",
+    sourceSha256 = "6978A5ED2C27E6C2EC397B4FFCEE55E7721A94A84BB212E9E9C5AE51B772DBE7",
+    currentVersion = "6.15-beta3",
+    historyFromVersion = "6.14",
+    previousVersion = "6.15-beta2",
+    rangeLabel = "6.15-beta2 -> 6.15-beta3",
     entries = {
+        {
+            version = "6.15-beta3",
+            date = "2026-09-03",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "The Assistant now understands requests that name one unit frame and then describe the result. \"Show the PvP flag on my target frame\", \"put the portrait on the left of my player frame\" or \"the name on my player frame is too small\" resolve against that frame's own controls instead of the frame's master toggle or a single matching word.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Questions about one control of one unit frame are answered with that control - its page, what it does and its current value - instead of a page-level overview. \"Don't show raid markers on my player frame\" is read as a hide command, and \"upwards\"/\"downwards\" now reach the movement lanes.",
+                        "Out of range opacity, Texture Layer opacity and Portrait opacity are no longer written to the health bar's opacity.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Aura owners that cannot be visible for the current unit stop parsing every UNIT_AURA update: the native registration is dropped while the owner is ineligible and Blizzard's own reparse restores it, and the spell-name resolver only listens per unit while an active owner still has names to resolve.",
+                        "Cleanse and Purge borders draw in the Frame Outline layer band at the Borders highlight detail, so the live border lands exactly where the Cleanse test border draws.",
+                        "Unit Frame dispel borders follow Blizzard's own assist check and only appear on units you can dispel; the Purge marker and \"cast by me\" sensors keep their previous behaviour, and exact-ID group aura lanes drop a native owner per unit on 12.1.",
+                        "The dead and offline health background now follows secret health values on Group Frames instead of lagging behind the real state.",
+                        "Preserved raid groups take one authoritative roster snapshot per header setup instead of one per block, and the number of laid-out blocks follows the roster so a raid using more subgroups than the configured column limit no longer fills a different grid than it draws.",
+                    },
+                },
+            },
+        },
         {
             version = "6.15-beta2",
             date = "2026-09-02",
@@ -116,80 +148,6 @@ local data = {
                         "General Aura guidance no longer competes with frame-local Aura owners, and question-shaped duration-filter requests retain their safe executable choices.",
                         "Aura-name fallback updates skip redundant unit-scan setup when no unresolved additions can benefit from it.",
                         "Opening Unit Frame Power settings no longer errors while building the detached-bar Text on detached bar control.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.13",
-            date = "2026-08-28",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Party and Raid Frames now have a curated MSUF Highlights Buff filter. It shows 122 important offensive, support, defensive, and healer cooldowns from every group member, including short player effects such as Shadow Dance and shared states such as Shroud, while leaving common rotational buffs out. New and Factory-reset profiles use it by default; existing profiles keep their current filter and can opt in.",
-                            link = {
-                                pageKey = "gf_auras",
-                                query = "msuf highlights buff filter",
-                                label = "MSUF Highlights",
-                                sectionId = "auras",
-                                controlId = "menu2.gf_auras.auras.group-workspace.lane.buff.tool-selector",
-                                settingKey = "gf_party.auras.buff.filterToken",
-                                prepareKind = "groupAuraWorkspace",
-                                prepareValue = "party_buff_filters",
-                            },
-                        },
-                        {
-                            text = "Focus Kick can now stay visible beside the Focus castbar. The new option keeps the compact interrupt icon while restoring the matching Focus castbar and its normal cast ownership.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "show castbar with focus kick icon",
-                                label = "Show castbar with Focus Kick icon",
-                                sectionId = "castbar_focus_kick",
-                                controlId = "menu2.opt.castbar.global.focus.kick.focus.kick.show.castbar",
-                                settingKey = "general.focusKickShowCastbar",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "MSUF Highlights uses one shared immutable catalog and Blizzard's native exact-ID candidate filtering, with no MiniAuras dependency, polling, or recurring roster scans.",
-                        "The Assistant now understands German negative determiners, colloquial removal requests, and double negatives, can switch all supported MSUF or Blizzard Unit Frames globally, and retries zero-result setting searches with registered synonyms.",
-                        "Assistant Aura actions accept enchant-related inputs and route Aura filter and blacklist requests more precisely.",
-                        "Exact Assistant searches recognize registry aliases and complete portrait-control labels.",
-                        "Typed HEX colors in the compact color picker now commit on Enter through the same apply path as the visual picker.",
-                        "Removed the experimental built-in Rogue APEX developer helper and its retired settings, menu controls, Assistant registrations, and generated metadata.",
-                        "The Group Frame preview roster now includes B3NZII.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "The Player Castbar now ignores interrupted or failed terminal events when no real cast is active, preventing false \"Interrupted\" flashes during rapid instant-cast spam while preserving normal cast, channel, vehicle, and Empower feedback.",
-                        "Focus interrupt and cast trackers reinitialize after the active profile and frames become available during startup.",
-                        "Focus Kick castbar state follows the icon lifecycle and clears stale Focus cast ownership when the combined display is disabled.",
-                        "Party Frames now honor the configured Units per column and Max columns values instead of forcing a single secure column, including future combat-safe secure-header capacity.",
-                        "Live Party, Raid, and Mythic Group Frame blocks clamp their actual rendered footprint across scale and anchor combinations without rewriting SavedVariables; Edit Mode and previews keep the configured point semantics, and unavailable protected geometry fails closed.",
-                        "Party-style Arena Group Frames fail open to Blizzard's secure roster while the Arena or Shuffle roster is temporarily incomplete instead of publishing an unusable partial name list.",
-                        "Group Range Fade re-queries the bound member on native range events in PvP instances and refreshes its event route when the instance context changes.",
-                        "Unit Range Fade reuses unchanged poll sets across movement and identity edges instead of rebuilding or duplicating scheduler work.",
-                        "Player Power current-value text retains its resolved resource identity through form, vehicle, and explicit Mana handoffs.",
-                        "The Player Resting indicator refreshes when its frame becomes visible after a hidden zoning transition, without adding polling or permanent update work.",
-                        "Aura-name fallback scans coalesce to one pending unit scan and skip update-only or removal-only events that cannot resolve a new alias.",
-                        "Heal-prediction stripes use a specialized full-health path and avoid redundant secret checks and overflow work.",
-                        "Assistant ambiguity handling fails closed for conflicting colors, cross-frame wording, contradictory movement, partial compound commands, and misleading numbers in control labels instead of applying unrelated settings.",
-                        "Exact setting, location, and purpose questions outrank generic concept guidance so profile-copy, Aura, status-indicator, castbar, and frame-specific requests reach their precise owner.",
-                        "Safe Assistant questions preserve their original polarity and capability intent across page-context routing instead of becoming setting changes.",
-                        "Full portrait control wording resolves to the intended Unit or Group Frame portrait control.",
-                        "Read-only Assistant definition, location, relationship, and diagnostic requests stay off broad mutation indexes, while explicit numeric movement remains on bounded routes.",
-                        "Assistant clarification choices survive repeated classification instead of being lost through a cached provisional read-only result.",
-                        "The Assistant's unloaded-Menu Group copy path now mirrors the native chunked health and power fill fields while excluding anchor and migration-only state.",
-                        "Exact-ID group buffs remain available on follower-dungeon Party NPCs under Blizzard's Retail group-member identity contract instead of being hidden by the old assist gate.",
-                        "Durationless curated states such as Shroud recipient membership bypass generic Hide Permanent and Maximum Duration restrictions, while every other Group Aura filter keeps the saved restrictions.",
-                        "Exact-ID candidate filters are installed before any broad native filter transition, avoiding an intermediate unrestricted Helpful-aura refresh.",
                     },
                 },
             },

@@ -1023,10 +1023,17 @@ local function RestoreHealthBackground(frame)
 end
 
 local function ResolveGone(frame, cfg, unit, seedHP, event)
-  if not IsUnitToken(unit) then
-    return false
-  end
   local healthEvent = event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH"
+  if healthEvent then
+    if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
+      -- Health/Prediction calculator values are the authoritative transition
+      -- signal. UnitIsDeadOrGhost can lag behind a positive AI health snapshot.
+      return seedHP <= 0
+    end
+    local dead, known = ReadDeadCached(frame, unit)
+    return known == true and dead == true
+  end
+
   local state = frame and frame._msufUnitState
   local stateReady = state and state.ready == true
     and state.unit == unit
@@ -1049,8 +1056,6 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
     end
   end
   if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
-    -- Health/Prediction calculator values are the authoritative transition
-    -- signal. UnitIsDeadOrGhost can lag behind a positive AI health snapshot.
     return seedHP <= 0
   end
   local deadKnown = stateFresh and state.deadKnown == true

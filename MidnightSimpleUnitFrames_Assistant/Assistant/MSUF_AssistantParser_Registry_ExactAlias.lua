@@ -826,9 +826,29 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
             forcedBooleanValue = boolFromVerb
         end
     else
+        -- A sentence about one unit frame is resolved against that frame's
+        -- own controls first: the floating window below reads "target frame"
+        -- out of "show the pvp flag on my target frame" and would answer for
+        -- Target Frame Enabled.
+        if type(P.UnitScopeFromNaturalText) == "function" and type(P.UnitScopedNaturalPlan) == "function"
+            and P.UnitScopeFromNaturalText(text)
+        then
+            local scoped = P.UnitScopedNaturalPlan(text, raw)
+            if scoped then return scoped end
+        end
         AddMatches(matches, seen, index, tokens, minTokens)
         local relation = AliasRelationText(text)
         if relation ~= text then AddMatches(matches, seen, index, Tokens(relation), minTokens) end
+        -- The frame's master toggle never owns a sentence that only places
+        -- something on that frame or says more than the frame's name.
+        if #matches > 0 and type(P.UnitFrameLocativeVeto) == "function" and P.UnitFrameLocativeVeto(text) then
+            local kept = {}
+            for i = 1, #matches do
+                local key = tostring(matches[i].setting and matches[i].setting.key or "")
+                if not key:match("^[%w_]+%.enabled$") then kept[#kept + 1] = matches[i] end
+            end
+            matches = kept
+        end
     end
     if #matches == 0 then return nil end
 

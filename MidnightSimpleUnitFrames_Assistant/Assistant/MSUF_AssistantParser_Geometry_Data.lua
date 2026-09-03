@@ -445,6 +445,10 @@ Data.GEOMETRY_PARSER = {
         -- "which unit frame alpha do you want me to change?".
         "frame border", "frame outline", "shield bar", "absorb bar", "absorbs",
         "heal absorb", "healing absorb",
+        -- Range fade, the texture layer and the portrait own their opacity:
+        -- "set the target out of range opacity to 30%" was written to the
+        -- HP bar's opacity.
+        "out of range", "range fade", "texture layer", "portrait",
     },
         [220] = { "power bar", "powerbar", "power opacity", "power alpha", "mana bar", "mana opacity", "mana alpha", "resource bar", "resource opacity", "resource alpha" },
         [221] = { "background", "backdrop", "track", "hp track", "health track", "bg", "bar background" },

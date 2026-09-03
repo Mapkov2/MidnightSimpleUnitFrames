@@ -1052,13 +1052,16 @@ function GF.GetEffectivePowerHeight(kind, unit, role, conf)
     return (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (tonumber(conf and conf.powerHeight) or 0)
 end
 
-local function GetRaidGroupLayoutParts(conf, count)
+local function GetRaidGroupLayoutParts(conf, count, preservedGroupCount)
     local upc = math_floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
     if upc < 1 then upc = 1 elseif upc > 40 then upc = 40 end
     local primary = math_min(upc, 5)
     local groups = math_floor((tonumber(conf and conf.maxColumns) or 8) + 0.5)
     if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
-    if type(GF.GetPreservedRaidGroupCount) == "function" then
+    if preservedGroupCount ~= nil then
+        groups = tonumber(preservedGroupCount) or groups
+        if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+    elseif type(GF.GetPreservedRaidGroupCount) == "function" then
         groups = tonumber(GF.GetPreservedRaidGroupCount(conf)) or groups
         if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
     end
@@ -1086,13 +1089,13 @@ function GF.GetVisibleLayoutCount(kind, count, conf)
     return math_min(count, upc * columns)
 end
 
-function GF.GetPreservedRaidGridMetrics(kind, count)
+function GF.GetPreservedRaidGridMetrics(kind, count, preservedGroupCount)
     local conf = GF.GetConf(kind)
     local w, h, sp = GF.GetScaledFrameMetrics(kind)
     local growth = conf.growth or "DOWN"
 
     count = tonumber(count) or 0
-    local upc, primary, maxGroups, blockColumns = GetRaidGroupLayoutParts(conf, count)
+    local upc, primary, maxGroups, blockColumns = GetRaidGroupLayoutParts(conf, count, preservedGroupCount)
     local groups = (count > 0) and math_ceil(count / 5) or maxGroups
     if groups < 1 then groups = 1 end
     groups = math_min(maxGroups, groups)
@@ -1134,10 +1137,10 @@ function GF.GetPreservedRaidGridMetrics(kind, count)
     return dx, dy, totalW, totalH, w, h, sp, growth, upc, count, firstDX, firstDY, primary, groups, blockColumns, blockW, blockH
 end
 
-function GF.GetGridMetrics(kind, count)
+function GF.GetGridMetrics(kind, count, preservedGroupCount)
     local conf = GF.GetConf(kind)
     if IsRaidLikeKind(kind) and conf.preserveRaidGroups == true and GF.GetPreservedRaidGridMetrics then
-        return GF.GetPreservedRaidGridMetrics(kind, count)
+        return GF.GetPreservedRaidGridMetrics(kind, count, preservedGroupCount)
     end
 
     local w, h, sp = GF.GetScaledFrameMetrics(kind)
@@ -1191,7 +1194,7 @@ end
 --- origin-to-center delta. That made the stored point a count-dependent corner
 --- in practice. Convert only when a group is actually about to be displayed so
 --- the current live/preview count preserves the exact legacy on-screen bounds.
-function GF.EnsureStableGridPosition(kind, count, conf)
+function GF.EnsureStableGridPosition(kind, count, conf, preservedGroupCount)
     conf = conf or (GF.GetConf and GF.GetConf(kind))
     if type(conf) ~= "table" then return false end
     if conf.positionMode == STABLE_GRID_POSITION_MODE then return false end
@@ -1201,7 +1204,7 @@ function GF.EnsureStableGridPosition(kind, count, conf)
     -- (live header, Edit Mode, preview) otherwise supplies a different count
     -- than the migration did, and the difference is written to disk for good.
     local pinnedCount = tonumber(conf.positionMigrationCount)
-    local dx, dy = GF.GetGridMetrics(kind, pinnedCount or count)
+    local dx, dy = GF.GetGridMetrics(kind, pinnedCount or count, preservedGroupCount)
     local fallbackX = IsRaidLikeKind(kind) and -500 or -400
     conf.offsetX = (tonumber(conf.offsetX) or fallbackX) - (tonumber(dx) or 0)
     conf.offsetY = (tonumber(conf.offsetY) or 0) - (tonumber(dy) or 0)

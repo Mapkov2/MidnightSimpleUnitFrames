@@ -177,7 +177,7 @@ end
 
 local function SetHealthBackgroundValue(frame, unit, percent, percentSecret, animate)
   local backgroundBar = frame and frame.healthBackgroundBar
-  if not (backgroundBar and frame._msufHealthBackgroundFillMissing == true) then return false end
+  if not backgroundBar then return false end
 
   local missing
   if percent ~= nil then
@@ -460,7 +460,9 @@ local function UpdatePercent(frame, unit, animate)
       bar._msufHealthPercentUnit = unit
     end
   end
-  SetHealthBackgroundValue(frame, unit, pct, secret, animate)
+  if frame._msufHealthBackgroundFillMissing == true then
+    SetHealthBackgroundValue(frame, unit, pct, secret, animate)
+  end
   local rt = frame._msufTextRuntime
   if rt and (animate ~= true or rt.healthDefersUnitHealthText ~= true)
     and (rt.healthNeedsPercent == true or rt.healthColorByHealth == true) then
@@ -554,7 +556,9 @@ local function UpdateAbsolute(frame, event, unit)
   end
   local value, maximum, percentReady, hpSecret, maxSecret =
     UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, event == "UNIT_HEALTH")
-  SetHealthBackgroundValue(frame, unit, nil, nil, event == "UNIT_HEALTH")
+  if frame._msufHealthBackgroundFillMissing == true then
+    SetHealthBackgroundValue(frame, unit, nil, nil, event == "UNIT_HEALTH")
+  end
   return value, maximum, percentReady, hpSecret, maxSecret
 end
 
@@ -769,7 +773,9 @@ local function UpdateGroupPercentLean(frame, event, unit)
       bar._msufHealthPercentUnit = unit
     end
   end
-  SetHealthBackgroundValue(frame, unit, pct, secret, event == "UNIT_HEALTH")
+  if frame._msufHealthBackgroundFillMissing == true then
+    SetHealthBackgroundValue(frame, unit, pct, secret, event == "UNIT_HEALTH")
+  end
 
   -- A background-only health gradient can stay on the folded group lane: its
   -- native curve is independent of the foreground color, so refresh it before
@@ -803,15 +809,20 @@ local function UpdateGroupPercentLean(frame, event, unit)
     if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
   end
 
-  -- Steady alive tick with a plain percent and no visible gone label feeds the
-  -- gone-state sink directly; every other case keeps the full notify contract.
+  -- A steady alive or secret tick with no visible gone label feeds the
+  -- gone-state sink directly. Secret values keep the same nil seed that the
+  -- full notifier would produce; every visible status transition retains that
+  -- notifier contract.
   if event == "UNIT_HEALTH"
-    and not secret
-    and pct > 0
     and frame._msufStatusTextValue == nil
-    and frame._msufStatusTextHealthRefresh ~= true then
+    and frame._msufStatusTextHealthRefresh ~= true
+    and (secret or pct > 0) then
     local goneState = frame._msufUpdateGroupVisualsGoneState
-    if goneState then goneState(frame, event, unit, pct) end
+    if goneState then
+      local seedHP
+      if not secret then seedHP = pct end
+      goneState(frame, event, unit, seedHP)
+    end
   else
     NotifyHealthState(frame, event, unit, pct, secret)
   end
