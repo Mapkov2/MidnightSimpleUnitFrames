@@ -1920,6 +1920,19 @@ function R.IsExplicitMutationRefusal(text)
         -- refusal detectors from replacing the dedicated clarification.
         return false
     end
+    -- "don't show raid markers on my player frame" is a hide command about a
+    -- concrete control on one frame, not a refusal to act. "don't hide X"
+    -- stays a refusal: it asks to leave things as they are.
+    do
+        local parser = A.Parser
+        local action = R.ExplicitMutationRefusalAction(text)
+        if type(action) == "string" and (action:match("^show%s") or action:match("^display%s"))
+            and type(parser) == "table" and type(parser.UnitScopedNaturalPlan) == "function"
+            and parser.UnitScopedNaturalPlan(text, text)
+        then
+            return false
+        end
+    end
     return R.ExplicitMutationRefusalAction(text) ~= nil
         or R.HasContradictoryMutationConsent(text)
 end
@@ -2445,6 +2458,20 @@ function R.EnumValueAppearsInText(setting, value, norm)
 end
 
 function R.NamedBooleanIntentPlan(text)
+    -- A sentence about one unit frame resolves against that frame's own
+    -- controls; the longest-run lookup below would otherwise settle on
+    -- "target frame" (Target Frame Enabled) for "show the pvp flag on my
+    -- target frame".
+    do
+        local parser = A.Parser
+        if type(parser) == "table" and type(parser.UnitScopedNaturalPlan) == "function" then
+            local scoped = parser.UnitScopedNaturalPlan(text, text)
+            if scoped then
+                scoped.raw, scoped.sourceText = text, text
+                return scoped
+            end
+        end
+    end
     -- "on all frames" / "everywhere" names EVERY scope; one scoped control can
     -- never satisfy it, and rescuing "turn off the dots on all frames" as
     -- Party Name No Ellipsis discarded the pending which-dots clarification.
@@ -2571,6 +2598,14 @@ function R.NamedBooleanIntentPlan(text)
         end
     end
     if type(setting) ~= "table" or type(setting.set) ~= "function" then return nil end
+    -- The frame's master toggle never owns a sentence that only places
+    -- something on that frame or says more than the frame's name.
+    if tostring(setting.key or ""):match("^[%w_]+%.enabled$")
+        and A.Parser and type(A.Parser.UnitFrameLocativeVeto) == "function"
+        and A.Parser.UnitFrameLocativeVeto(text)
+    then
+        return nil
+    end
     -- Any type, not just booleans: once the subject resolves to exactly one
     -- control, the rest of the sentence is its value ("anchor the heal absorb
     -- bar to the left side"). Only when no value can be read does the boolean
@@ -2738,6 +2773,21 @@ end
 function R.ComputeFailClosedReadOnlyRequest(text)
     local norm = R.StripResponseLanguageDirective(text)
     if norm == "" then return true end
+    -- "the name on my player frame is too small" reads like a problem report,
+    -- but when the unit-scope resolver places that complaint on exactly one
+    -- control with a direction, it is a change request with its remedy
+    -- stated. Cheap pre-check first; the resolver only runs for that shape.
+    if R.ContainsAny(norm, {
+        "too small", "too tiny", "too big", "too large", "too thin", "too narrow", "too wide", "too short",
+        "too tall", "too thick", "too transparent", "too faint", "hard to read", "hard to see",
+    }) then
+        local parser = A.Parser
+        if type(parser) == "table" and type(parser.UnitScopedNaturalPlan) == "function"
+            and parser.UnitScopedNaturalPlan(norm, text)
+        then
+            return false
+        end
+    end
     if R.IsSubjectiveSafePlanningRequest(norm) then return true end
     if type(R.AuraGrowthMutationAmbiguity) == "function" and R.AuraGrowthMutationAmbiguity(norm) then
         return true
@@ -18396,6 +18446,119 @@ function A.RouterLocationLaneReply(text)
     return reply
 end
 
+-- A question about one unit frame whose words name exactly one of that
+-- frame's controls is answered with that control: its page, what it does,
+-- and its current value. The generic page articles ("Player Frame Text
+-- setting location", "Unit Frames help") only tell the player to go and look.
+A.RouterTryUnitScopedQuestionShortcut = function(text)
+    local parser = A.Parser
+    if type(parser) ~= "table" or type(parser.UnitScopedQuestionKey) ~= "function" then return nil end
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    -- A text AREA named with a generic verb ("where can I hide player name
+    -- text") gets the text lane's overview of visibility, slots, format and
+    -- size; only a named property of it is one control.
+    if R.ContainsAny(norm, { "name text", "health text", "hp text", "power text", "mana text", "status text" })
+        and not R.ContainsAny(norm, {
+            "size", "font", "anchor", "offset", "color", "colour", "decimal", "abbreviat", "percent", "sign",
+            "delimiter", "separator", "layer", "order", "reverse", "throttle", "spacer",
+        })
+    then
+        return nil
+    end
+    local key, setting, literal, generic = parser.UnitScopedQuestionKey(norm)
+    if not key or not literal or type(setting) ~= "table" then return nil end
+    -- "what is X" / "what does X do" ask what the control IS; "what setting
+    -- detaches X" / "which option" ask WHERE it is and belong with the
+    -- location questions.
+    local definitional = (norm:match("^what%s") or norm:match("^whats%s") or norm:match("^explain%s")
+        or norm:match("^tell%s+me%s") or norm:match("^describe%s")) ~= nil
+        and not (norm:match("^what%s+setting") or norm:match("^what%s+option") or norm:match("^what%s+control")
+            or norm:match("^whats%s+the%s+setting") or norm:match("^what%s+is%s+the%s+setting")
+            or norm:match("^what%s+is%s+the%s+option") or norm:match("^what%s+is%s+the%s+control"))
+    -- With no frame named, only a question shaped around a SETTING is
+    -- answered here ("what does embed power bar into health mean", "what does
+    -- the dead text setting do"); "what is dispel" / "what is a bar texture"
+    -- ask about a concept and keep their Knowledge articles.
+    if generic then
+        local settingShaped = definitional and (norm:match("%s+mean%s*$") or norm:match("%s+do%s*$")
+            or norm:match("%f[%a]setting%f[%A]") or norm:match("%f[%a]option%f[%A]") or norm:match("%f[%a]control%f[%A]")
+            or norm:match("^explain%s") or norm:match("^describe%s"))
+        if not settingShaped then return nil end
+    end
+    -- "how do I hide player name?" is pinned to the text lane's overview of
+    -- visibility, slots, format and size; the bare visibility toggle only
+    -- answers a definitional question about itself.
+    local keyAttribute = tostring(key:match("([^.]+)$") or "")
+    local textPowerFamily = keyAttribute == "showName" or keyAttribute == "showHP" or keyAttribute == "showPowerText"
+        or keyAttribute == "showPowerBar" or keyAttribute == "powerBarDetached" or keyAttribute == "embedPowerBarIntoHealth"
+        or keyAttribute == "playerPowerSource" or keyAttribute:match("^powerBar") ~= nil
+        or keyAttribute:match("^detachedPower") ~= nil
+    if textPowerFamily and not definitional then return nil end
+    local item = type(R.RegistrySettingItemForKey) == "function" and R.RegistrySettingItemForKey(key) or nil
+    if not item then return nil end
+    -- A definitional question about a control on a named frame is answered by
+    -- the registry explanation lane, seeded with the resolved control on top
+    -- of its search neighbours, so the reply keeps that lane's purpose,
+    -- choices and "Related nearby settings" lines.
+    if definitional and not generic and type(A.RouterTryRegistrySettingExplainShortcut) == "function" then
+        local entries = { { item = item, score = 10000, rawScore = 10000 } }
+        local subject = type(R.RegistryExplainSubject) == "function" and R.RegistryExplainSubject(norm) or ""
+        local neighbours = type(R.RegistrySettingSearchEntries) == "function"
+            and R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16) or nil
+        for i = 1, #(neighbours or {}) do
+            local neighbour = neighbours[i]
+            if neighbour and neighbour.item and tostring(neighbour.item.key or "") ~= key then
+                entries[#entries + 1] = neighbour
+            end
+        end
+        local explained = A.RouterTryRegistrySettingExplainShortcut(text, nil, entries)
+        if explained then return explained end
+    end
+    if not generic and type(R.LooksLikeRegistrySettingLocationQuestion) == "function" and R.LooksLikeRegistrySettingLocationQuestion(norm)
+        and type(A.RouterTryRegistrySettingLocationShortcut) == "function"
+    then
+        local located = A.RouterTryRegistrySettingLocationShortcut(text, nil, { { item = item, score = 10000, rawScore = 10000 } })
+        if located then return located end
+    end
+    local label = tostring(item.label or setting.label or key)
+    local pageLabel = tostring(item.pageLabel or "MSUF page")
+    -- A how/where question gets the location title every other lane uses;
+    -- a definitional question leads with the control's name and purpose.
+    local lines = { definitional and (label .. " explanation") or (label .. " setting location") }
+    local description = setting.description
+    if type(description) == "string" and R.Trim(description) ~= "" then
+        lines[#lines + 1] = R.Trim(description)
+    end
+    local typeText = type(R.RegistrySettingTypeText) == "function"
+        and R.RegistrySettingTypeText(tostring(item.controlType or setting.type or "setting"), item) or nil
+    if generic then
+        local plainLabel = label:gsub("^[Pp]layer%s+", "")
+        lines[1] = plainLabel
+        lines[#lines + 1] = plainLabel .. " exists on every unit frame page (Player, Target, Focus, Pet, Boss, Target of Target, Focus Target); the Player copy lives on " .. pageLabel .. (typeText and (". It is " .. tostring(typeText)) or "") .. "."
+    else
+        lines[#lines + 1] = label .. " lives on " .. pageLabel .. (typeText and (". It is " .. tostring(typeText)) or "") .. "."
+    end
+    local current = type(R.OpenEndedSettingCurrentValue) == "function" and R.OpenEndedSettingCurrentValue(setting) or nil
+    if current ~= nil and tostring(current) ~= "" then
+        lines[#lines + 1] = "Current value: " .. tostring(current) .. ". I did not change it from this question."
+    else
+        lines[#lines + 1] = "I did not change it from this question."
+    end
+    local example = type(R.RegistrySettingExample) == "function" and R.RegistrySettingExample(item) or nil
+    if example and example ~= "" then lines[#lines + 1] = "Examples: open " .. pageLabel:lower() .. "; " .. example .. "." end
+    lines[#lines + 1] = "You can ask: Open " .. pageLabel .. " | Explain Result 1" .. (example and (" | " .. example) or "")
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Assistant unit-frame setting explanation",
+        searchResults = type(R.RegistryLocationResultFollowups) == "function"
+            and R.RegistryLocationResultFollowups({ { item = item } }, 1) or nil,
+        selectPendingResult = 1,
+    }
+end
+
 function R.ResolveLocationLaneReply(text)
     local marker = type(A.Parser) == "table" and type(A.Parser.MarkerLocationAnswer) == "function"
         and A.Parser.MarkerLocationAnswer(text) or nil
@@ -18437,6 +18600,17 @@ function R.ResolveLocationLaneReply(text)
         and type(A.RouterTryCastbarSettingShortcut) == "function"
         and A.RouterTryCastbarSettingShortcut(resolverNorm) or nil
     if castbarSetting then return castbarSetting end
+    -- "where do i change the player portrait position" is about the
+    -- portrait's own position control, not the frame's X/Y position the
+    -- movement lane describes; an element noun hands the question to the
+    -- unit-scoped control lane first.
+    if R.ContainsAny(resolverNorm, { "portrait", "texture layer", "raid marker", "leader icon", "level indicator",
+        "dead text", "combat indicator", "rested indicator", "pvp flag", "dispel symbol", "stance text" })
+        and type(A.RouterTryUnitScopedQuestionShortcut) == "function"
+    then
+        local elementScoped = A.RouterTryUnitScopedQuestionShortcut(text)
+        if elementScoped then return elementScoped end
+    end
     local movement = type(A.RouterTryMovementSettingShortcut) == "function"
         and A.RouterTryMovementSettingShortcut(text) or nil
     if movement then return movement end
@@ -18445,7 +18619,26 @@ function R.ResolveLocationLaneReply(text)
     if visual then return visual end
     local frameSetting = type(A.RouterTryUnitFrameSettingShortcut) == "function"
         and A.RouterTryUnitFrameSettingShortcut(text) or nil
-    if frameSetting then return frameSetting end
+    if frameSetting then
+        -- The frame lane's specific replies (Leader/Assist Icon, Width and
+        -- Height, ...) stand. Its page-level overviews ("Player Frame Text
+        -- setting location", "Target Status Text setting location", "Target
+        -- Size setting location") only send the player to a page; when the
+        -- question names exactly one control of that frame, answer with it.
+        local title = tostring(frameSetting.text or ""):match("^([^\n]*)") or ""
+        local overview = title:match(" Frame Text setting location$") or title:match(" Status Text setting location$")
+            or title:match(" Size setting location$") or title:match(" Position setting location$")
+        if overview and type(A.RouterTryUnitScopedQuestionShortcut) == "function" then
+            local unitScoped = A.RouterTryUnitScopedQuestionShortcut(text)
+            if unitScoped then return unitScoped end
+        end
+        return frameSetting
+    end
+    -- A question that names exactly one control of one unit frame gets that
+    -- control's page, purpose and value before the aura and text overviews.
+    local unitScoped = type(A.RouterTryUnitScopedQuestionShortcut) == "function"
+        and A.RouterTryUnitScopedQuestionShortcut(text) or nil
+    if unitScoped then return unitScoped end
     local auraDetail = type(A.RouterTryAuraDetailSettingShortcut) == "function"
         and A.RouterTryAuraDetailSettingShortcut(R.Normalize(text)) or nil
     if auraDetail then return auraDetail end
@@ -19458,6 +19651,44 @@ function A.RouteInput(text, coreHandler)
     if not hasBlockingPending and R.TryFeatureExistenceQuestion then
         local existence = R.TryFeatureExistenceQuestion(text, coreHandler)
         if existence then return existence end
+    end
+
+    -- A definitional or how-to question ("what does embed power bar into
+    -- health mean", "how do i hide the player frame when mounted") that names
+    -- exactly one control of one unit frame is answered with that control
+    -- before a concept article can generalise it away.
+    if not hasBlockingPending and type(A.RouterTryUnitScopedQuestionShortcut) == "function" then
+        local questionNorm = R.Normalize(text)
+        -- Only definitional shapes here; "where"/"how" questions run the
+        -- location lane chain, where the specialised lanes keep precedence.
+        if questionNorm:match("^what%s") or questionNorm:match("^whats%s") or questionNorm:match("^explain%s")
+            or questionNorm:match("^tell%s+me%s") or questionNorm:match("^describe%s")
+        then
+            local unitQuestion = A.RouterTryUnitScopedQuestionShortcut(text)
+            if unitQuestion then return unitQuestion end
+        end
+    end
+
+    -- A sentence about ONE unit frame that the unit-scope resolver can place
+    -- on exactly one of that frame's controls goes straight to the parser.
+    -- Every topic lane below (readability, colour, movement, open-ended
+    -- ideas) would otherwise answer it first with an article or a guess.
+    if not hasBlockingPending and type(A.ExecutePlan) == "function" then
+        local parser = A.Parser
+        local scopedPlan = type(parser) == "table" and type(parser.UnitScopedNaturalPlan) == "function"
+            and parser.UnitScopedNaturalPlan(text, text) or nil
+        if type(scopedPlan) == "table" and scopedPlan.kind == "changes" then
+            -- Execute the resolved plan itself. Running the whole core handler
+            -- here instead let an earlier parser lane park a clarification
+            -- (the name-shortening "which dots?" list for "... style to dots")
+            -- as pending state, which then outranked every lane below.
+            scopedPlan.raw, scopedPlan.sourceText = text, text
+            local scopedOk, scopedResult = pcall(A.ExecutePlan, scopedPlan, { sourceText = text })
+            if not scopedOk then error(scopedResult, 0) end
+            if type(scopedResult) == "table" and not A.RouterIsUnknownResult(scopedResult) then
+                return scopedResult
+            end
+        end
     end
 
     -- The MSUF/Blizzard global frame switch is one atomic command even when

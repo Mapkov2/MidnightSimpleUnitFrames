@@ -71,6 +71,8 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     manaanzeige = "mana bar", manaleiste = "mana bar", manabalken = "mana bar",
     energieleiste = "power bar", energieanzeige = "power bar",
     haustierrahmen = "pet frame", haustier = "pet",
+    -- "nudge the frame upwards": the movement lanes read the bare direction.
+    upwards = "up", downwards = "down", upward = "up", downward = "down",
     wat = "what",
     whta = "what",
     wich = "which",
