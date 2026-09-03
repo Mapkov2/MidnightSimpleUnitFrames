@@ -48,7 +48,7 @@ $targets = @(
     @{ Folder = "MidnightSimpleUnitFrames_Assistant"; Base = "MidnightSimpleUnitFrames_Assistant" }
 )
 $clients = @(
-    @{ Suffix = "Mainline"; Interface = "120105" },
+    @{ Suffix = "Mainline"; Interface = "120100, 120105" },
     @{ Suffix = "Vanilla"; Interface = "11509" },
     @{ Suffix = "Mists"; Interface = "50504" },
     @{ Suffix = "TBC"; Interface = "20506" }
@@ -959,6 +959,9 @@ if ($lua) {
     $ptr1215RuntimeSmoke = Join-Path $root ".github/scripts/ptr_12_1_5_runtime_smoke.lua"
     & $lua.Source $ptr1215RuntimeSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "PTR 12.1.5 runtime smoke failed" }
+    $retail1210FallbackSmoke = Join-Path $root ".github/scripts/retail_12_1_0_fallback_smoke.lua"
+    & $lua.Source $retail1210FallbackSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Retail 12.1.0 fallback smoke failed" }
     $castbarOwnershipSmoke = Join-Path $root "tools/castbar_refresh_ownership_smoke.lua"
     & $lua.Source $castbarOwnershipSmoke
     if ($LASTEXITCODE -ne 0) { throw "Shared castbar refresh ownership smoke failed" }
