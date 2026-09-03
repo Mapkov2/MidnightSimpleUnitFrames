@@ -1,5 +1,25 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.15-beta3 - 2026-09-03
+
+### Highlights
+
+- **The Assistant now understands requests that name one unit frame and then describe the result.** "Show the PvP flag on my target frame", "put the portrait on the left of my player frame" or "the name on my player frame is too small" resolve against that frame's own controls instead of the frame's master toggle or a single matching word.
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- Questions about one control of one unit frame are answered with that control - its page, what it does and its current value - instead of a page-level overview. "Don't show raid markers on my player frame" is read as a hide command, and "upwards"/"downwards" now reach the movement lanes.
+- Out of range opacity, Texture Layer opacity and Portrait opacity are no longer written to the health bar's opacity.
+
+### Fixes & Performance
+
+- Aura owners that cannot be visible for the current unit stop parsing every UNIT_AURA update: the native registration is dropped while the owner is ineligible and Blizzard's own reparse restores it, and the spell-name resolver only listens per unit while an active owner still has names to resolve.
+- Cleanse and Purge borders draw in the Frame Outline layer band at the Borders highlight detail, so the live border lands exactly where the Cleanse test border draws.
+- Unit Frame dispel borders follow Blizzard's own assist check and only appear on units you can dispel; the Purge marker and "cast by me" sensors keep their previous behaviour, and exact-ID group aura lanes drop a native owner per unit on 12.1.
+- The dead and offline health background now follows secret health values on Group Frames instead of lagging behind the real state.
+- Preserved raid groups take one authoritative roster snapshot per header setup instead of one per block, and the number of laid-out blocks follows the roster so a raid using more subgroups than the configured column limit no longer fills a different grid than it draws.
+
 ## 6.15-beta2 - 2026-09-02
 
 ### Highlights
