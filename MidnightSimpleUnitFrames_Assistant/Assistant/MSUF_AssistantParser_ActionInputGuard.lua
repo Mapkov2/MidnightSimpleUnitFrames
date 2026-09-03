@@ -71,7 +71,6 @@ local ACTION_PROMPTS = {
     aura_group_blacklist_add_spell = "Which group scope and which spell do you want to blacklist?",
     aura_group_blacklist_remove_spell = "Which group scope and which spell do you want to remove from the blacklist?",
     aura_group_category_blacklist_set = "Which group scope and Aura category do you want to change?",
-    import_legacy_profile_string = "Paste the legacy profile string you want to import.",
     import_profile_string = "Paste the profile string you want to import.",
     import_profile_string_new = "Paste the profile string you want to import as a new profile.",
     move_group_spell_indicator_order = "Which tracked spell do you want to move, and to which list position?",

@@ -180,7 +180,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I import, export, or switch profiles?",
-                a = "Open Profiles for active profile, spec auto-switching, import/export strings, legacy imports," ..
+                a = "Open Profiles for active profile, spec auto-switching, 6.x import/export strings," ..
                     " and reset options.",
                 p = "profiles",
                 t = "Opens: Profiles > Import & Export",

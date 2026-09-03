@@ -751,7 +751,7 @@ placement=priority placement|attach priority|right of group|left of group|above 
     profiles = [[
 profiles_management=profile management|active profile|rename|copy profile|reset profile
 profiles_specs=spec profiles|specialization|auto switch
-profiles_io=export|import|wago|legacy import|profile string|backup|share profile
+profiles_io=export|import|wago|profile string|backup|share profile
 ]],
     opt_bars = [[
 bars_textures=textures|texture|gradient|bar texture|background texture

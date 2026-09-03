@@ -35,14 +35,14 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Why did my profile or import look wrong?",
-                a = "Open Profiles. Check active profile, spec profiles, import/export, and legacy imports. Large" ..
+                a = "Open Profiles. Check active profile, spec profiles, and 6.x import/export. Large" ..
                     " imports may need a reload.",
                 p = "profiles",
                 t = "Opens: Profiles > Profile Management / Import & Export",
-                x = "Profile Management Specialization Profiles Spec Profiles Backup Transfer Export Import legacy imports active profile reload",
+                x = "Profile Management Specialization Profiles Spec Profiles Backup Transfer Export Import active profile reload",
                 k = SearchKeywordList(
                     "profile wrong|profile missing|profile gone|import failed|import looks wrong|wago import wrong",
-                    "profile not loading|spec profile wrong|active profile|legacy import|copy profile"
+                    "profile not loading|spec profile wrong|active profile|copy profile"
                 ),
                 y = 55,
             },

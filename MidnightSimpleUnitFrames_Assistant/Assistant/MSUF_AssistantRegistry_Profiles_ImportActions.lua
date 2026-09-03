@@ -95,23 +95,4 @@ function A.ProfileRegistry.RegisterProfileImportActions(ctx)
         end,
     })
 
-    Registry:RegisterAction({
-        key = "import_legacy_profile_string",
-        label = "Import Legacy Profile String",
-        type = "profile",
-        combatSafe = false,
-        confirmRequired = true,
-        captureSnapshot = true,
-        captureProfileSnapshot = true,
-        run = function(args)
-            local value = args and args.value
-            if type(value) ~= "string" or value == "" then return false, "Add the legacy profile string you want to import." end
-            local fn = _G.MSUF_ImportLegacyFromString
-            if type(fn) ~= "function" then return false, "Open Profiles first, then send the legacy import text." end
-            if fn(value) == false then return false, "I kept the profile as it was. Add the corrected legacy import text when ready." end
-            if Assistant and type(Assistant.ApplyBroad) == "function" then Assistant.ApplyBroad("MSUF_ASSISTANT_PROFILE_LEGACY_IMPORT") end
-            if Assistant and type(Assistant.CloseLargeTextPanel) == "function" then Assistant.CloseLargeTextPanel() end
-            return true, "Done. Imported the legacy profile string."
-        end,
-    })
 end

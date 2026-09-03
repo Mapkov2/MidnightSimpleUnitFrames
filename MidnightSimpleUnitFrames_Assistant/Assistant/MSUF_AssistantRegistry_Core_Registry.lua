@@ -498,7 +498,7 @@ set_group_spell_indicator_multi_spec dashboard.globalUiScale.disable
 -- These mutate only the active profile but already use the owner-aware
 -- profile snapshot path (which also preserves the active profile binding).
 DefineActionPolicies([[
-import_legacy_profile_string import_profile_string menu_history_reset_session recover_frames
+import_profile_string menu_history_reset_session recover_frames
 reset_profile
 ]], {
     mutability = "savedState",

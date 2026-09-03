@@ -30,18 +30,18 @@ local MSUF_PROFILE_IMPORT_LIMITS = {
     nodes = 250000,
 }
 
---- Parse the narrow Lua-table syntax emitted by the legacy serializer without
+--- Parse the narrow Lua-table syntax emitted by the text serializer without
 --- compiling or executing user input. Supported values are tables, finite
 --- numbers, quoted strings, booleans, and nil. Functions, expressions,
 --- metatables, long strings, and arbitrary identifiers are rejected.
-local function MSUF_ProfileIO_ParseLegacyTable(str)
-    if type(str) ~= "string" then return nil, "legacy import must be text" end
-    if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil, "legacy import is too large" end
+local function MSUF_ProfileIO_ParseTableLiteral(str)
+    if type(str) ~= "string" then return nil, "profile import must be text" end
+    if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil, "profile import is too large" end
 
     local state = { text = str, pos = 1, len = #str, nodes = 0, stringBytes = 0 }
     local parseValue
     local function Fail(message)
-        return nil, tostring(message or "invalid legacy table") .. " at byte " .. tostring(state.pos)
+        return nil, tostring(message or "invalid profile table") .. " at byte " .. tostring(state.pos)
     end
     local function SkipSpace()
         while state.pos <= state.len do
@@ -65,7 +65,7 @@ local function MSUF_ProfileIO_ParseLegacyTable(str)
     end
     local function CountNode()
         state.nodes = state.nodes + 1
-        if state.nodes > MSUF_PROFILE_IMPORT_LIMITS.nodes then return false, "legacy table has too many values" end
+        if state.nodes > MSUF_PROFILE_IMPORT_LIMITS.nodes then return false, "profile table has too many values" end
         return true
     end
     local function ParseIdentifier()
@@ -89,7 +89,7 @@ local function MSUF_ProfileIO_ParseLegacyTable(str)
                 local value = table.concat(out)
                 state.stringBytes = state.stringBytes + #value
                 if state.stringBytes > MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
-                    return nil, "legacy table strings are too large"
+                    return nil, "profile table strings are too large"
                 end
                 return value
             end
@@ -137,7 +137,7 @@ local function MSUF_ProfileIO_ParseLegacyTable(str)
         return value
     end
     local function ParseTable(depth)
-        if depth > MSUF_PROFILE_IMPORT_LIMITS.depth then return nil, "legacy table is too deep" end
+        if depth > MSUF_PROFILE_IMPORT_LIMITS.depth then return nil, "profile table is too deep" end
         state.pos = state.pos + 1
         local tbl, arrayIndex = {}, 1
         while true do
@@ -217,14 +217,14 @@ local function MSUF_ProfileIO_ParseLegacyTable(str)
     local value
     value, why = parseValue(1)
     if why then return nil, why end
-    if type(value) ~= "table" then return nil, "legacy import must contain a table" end
+    if type(value) ~= "table" then return nil, "profile import must contain a table" end
     ok, why = SkipSpace()
     if not ok then return nil, why end
     if state.pos <= state.len then return Fail("unexpected trailing input") end
     return value
 end
-local function MSUF_ProfileIO_LoadLegacyChunk(str)
-    local tbl, err = MSUF_ProfileIO_ParseLegacyTable(str)
+local function MSUF_ProfileIO_LoadTableLiteral(str)
+    local tbl, err = MSUF_ProfileIO_ParseTableLiteral(str)
     if not tbl then return nil, err end
     -- Preserve the old internal callable contract without compiling input.
     return function() return tbl end
@@ -529,16 +529,16 @@ end
 --- Compact codec (backward compatible)
 --- New export format (preferred):
 --- MSUF4: base64(CBOR(table)) using Blizzard C_EncodingUtil
---- Legacy import formats supported:
+--- Compatible import transports:
 --- MSUF3: base64(CBOR(table)) using Blizzard C_EncodingUtil
 --- MSUF2: LibDeflate 'print-safe' encoding of deflate-compressed payload (common Wago/WA style)
 --- MSUF2: base64(deflate(CBOR(table))) from earlier internal experiments
 --- Design goals:
 --- * Export always uses Blizzard (MSUF4) when available.
---- * Import accepts MSUF4 + MSUF3 + legacy MSUF2 variants automatically.
+--- * Import accepts MSUF4 + MSUF3 + MSUF2 variants automatically.
 --- * For MSUF2 print-safe, we decode the print alphabet ourselves and then use Blizzard
 --- DecompressString when available (no bundled LibDeflate needed).
---- * Never fall back to legacy loadstring() for MSUF2/MSUF3/MSUF4 prefixes.
+--- * Never fall back to table-literal parsing for MSUF2/MSUF3/MSUF4 prefixes.
 do
     local function GetEncodingUtil()
         local E = _G.C_EncodingUtil
@@ -717,7 +717,7 @@ do
     end
     --- Container routing avoids a blind try/catch chain: the three
     --- supported wire formats are self-identifying. AceSerializer strings start
-    --- with "^1", very old MSUF exports are a Lua table literal "{...}", and
+    --- with "^1", text fallback exports are a Lua table literal "{...}", and
     --- everything else is MSUF's own CBOR envelope. Each chosen decoder still
     --- fails closed on malformed bytes.
     TryDeserialize = function(E, payload)
@@ -734,7 +734,7 @@ do
         end
         local trimmed = payload:match("^%s*(.-)%s*$")
         if trimmed and trimmed:sub(1, 1) == "{" and trimmed:sub(-1) == "}" then
-            local fn = MSUF_ProfileIO_LoadLegacyChunk(trimmed)
+            local fn = MSUF_ProfileIO_LoadTableLiteral(trimmed)
             if not fn then return nil end
             local t = fn()
             if type(t) == "table" then return t end
@@ -1438,7 +1438,7 @@ do
     EnsureFrame()
 end
 ---
---- Profile Export / Import (Selection-based, with legacy import button)
+--- Profile Export / Import (selection-based)
 --- New snapshot format (Lua table):
 --- return {
 --- addon = "MSUF",
@@ -1451,8 +1451,8 @@ end
 --- Import behavior:
 --- - If the snapshot matches the format above: apply only the selected category into the
 --- CURRENT ACTIVE profile (keeps everything else unchanged).
---- - Legacy import (old "return { ... }" profile dump) remains available via
---- MSUF_ImportLegacyFromString(str).
+--- - Text snapshots emitted by the serializer remain supported when they carry
+---   the same schema-600 contract.
 ---
 local function MSUF_WipeTable(t)
     if not t then  return end
@@ -2011,7 +2011,6 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacy
 end
 
 local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA = 600
-local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
 --- This revision describes the normalization performed by
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
@@ -2644,18 +2643,6 @@ local function MSUF_ProfileIO_MigrateSplitStatusText(profile)
     return changed
 end
 
-local function MSUF_ProfileIO_ProfileHasLegacySignals(profile)
-    if type(profile) ~= "table" then return false end
-    if type(profile.auras2) == "table" then return true end
-    for i = 1, #MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS do
-        local scope = profile[MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS[i]]
-        if type(scope) == "table" and (scope.anchorMyPoint ~= nil or scope.anchorRelPoint ~= nil) then
-            return true
-        end
-    end
-    return false
-end
-
 local function MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
     local auras = type(profile) == "table" and profile.auras3 or nil
     local perUnit = type(auras) == "table" and auras.perUnit or nil
@@ -2682,7 +2669,7 @@ local function MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile)
     return false
 end
 
-local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
+local function MSUF_ProfileIO_ProfileNeedsNormalization(profile)
     if type(profile) ~= "table" then return false end
     if MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false) then return true end
     if profile.auras ~= nil or type(profile.auras2) == "table" then return true end
@@ -2702,16 +2689,6 @@ local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
             end
         end
     end
-    local translatedAuras = auras
-        and auras._msufAuras3TranslatedFromLegacyAuras2 == true
-    local legacyVisualProfile = translatedAuras
-        or profile._msufLegacy55FrameOutlineBackground_v1 == true
-    if translatedAuras
-        and profile._msufLegacy55FrameOutlineBackground_v1 ~= true then return true end
-    if legacyVisualProfile and profile._msufLegacy55PowerTextVisibility_v1 ~= true then return true end
-    if legacyVisualProfile and profile._msufLegacy55UnitTextSlots_v1 ~= true then return true end
-    if legacyVisualProfile and profile._msufLegacy55GroupTextGeometry_v1 ~= true then return true end
-    if legacyVisualProfile and profile._msufLegacy55GroupNameAnchorRoot_v1 ~= true then return true end
     if MSUF_ProfileIO_AuraOverridesNeedRepair(profile) then return true end
     if MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile) then return true end
     for i = 1, #MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS do
@@ -2723,209 +2700,6 @@ local function MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile)
         end
     end
     return false
-end
-
-MSUF.ProfileIOMaterializeLegacy55UnitTextSlots = function(profile)
-    if type(profile) ~= "table" or profile._msufLegacy55UnitTextSlots_v1 == true then return false end
-
-    local changed = false
-    local general = type(profile.general) == "table" and profile.general or nil
-    local function MigrateHealthMode(value)
-        if value == "FULL_ONLY" then return "CURRENT" end
-        if value == "PERCENT_ONLY" then return "PERCENT" end
-        if value == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
-        if value == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
-        return value
-    end
-    local function MigratePowerMode(value)
-        if value == "FULL_SLASH_MAX" then return "CURMAX" end
-        if value == "FULL_ONLY" then return "CURRENT" end
-        if value == "PERCENT_ONLY" then return "PERCENT" end
-        if value == "FULL_PLUS_PERCENT" or value == "PERCENT_PLUS_FULL" then return "CURPERCENT" end
-        return value
-    end
-    local hpMode = MigrateHealthMode(general and general.hpTextMode) or "CURPERCENT"
-    local powerMode = MigratePowerMode(general and general.powerTextMode) or "CURPERCENT"
-    if general then
-        if general.hpTextMode ~= hpMode then
-            general.hpTextMode = hpMode
-            changed = true
-        end
-        if general.powerTextMode ~= powerMode then
-            general.powerTextMode = powerMode
-            changed = true
-        end
-    end
-
-    -- These are the exact values the 5.57 loader materialized when an older
-    -- exported profile still only carried hpTextMode/powerTextMode. Do this in
-    -- the import pipeline before 6.0 defaults can assign a different slot.
-    local defaults = {
-        hpTextMode = hpMode,
-        hpTextReverse = general and general.hpTextReverse == true or false,
-        powerTextMode = powerMode,
-        hpTextLeftOffsetX = 0,
-        hpTextLeftOffsetY = 0,
-        hpTextCenterOffsetX = 0,
-        hpTextCenterOffsetY = 0,
-        hpTextRightOffsetX = 0,
-        hpTextRightOffsetY = 0,
-        powerTextLeftOffsetX = 0,
-        powerTextLeftOffsetY = 0,
-        powerTextCenterOffsetX = 0,
-        powerTextCenterOffsetY = 0,
-        powerTextRightOffsetX = 0,
-        powerTextRightOffsetY = 0,
-        hpTextSeparator = general and general.hpTextSeparator ~= nil and general.hpTextSeparator or "-",
-        powerTextSeparator = general and general.powerTextSeparator ~= nil and general.powerTextSeparator
-            or (general and general.hpTextSeparator ~= nil and general.hpTextSeparator or "-"),
-        nameTextLayer = tonumber(general and general.nameTextLayer) or 5,
-        hpTextLayer = tonumber(general and (general.hpTextLayer or general.textLayer)) or 5,
-        powerTextLayer = tonumber(general and general.powerTextLayer) or 2,
-    }
-    local units = {
-        "player", "target", "focus", "targettarget", "focustarget", "pet", "boss",
-        "boss1", "boss2", "boss3", "boss4", "boss5",
-    }
-    for i = 1, #units do
-        local conf = profile[units[i]]
-        if type(conf) == "table" then
-            for field, fallback in pairs(defaults) do
-                if conf[field] == nil then
-                    conf[field] = fallback
-                    changed = true
-                end
-            end
-            local unitHpMode = MigrateHealthMode(conf.hpTextMode) or hpMode
-            local unitPowerMode = MigratePowerMode(conf.powerTextMode) or powerMode
-            if conf.hpTextMode ~= unitHpMode then
-                conf.hpTextMode = unitHpMode
-                changed = true
-            end
-            if conf.powerTextMode ~= unitPowerMode then
-                conf.powerTextMode = unitPowerMode
-                changed = true
-            end
-            if conf.textLeft == nil and conf.textCenter == nil and conf.textRight == nil then
-                conf.textLeft, conf.textCenter, conf.textRight = "NONE", "NONE", unitHpMode
-                changed = true
-            else
-                if conf.textLeft == nil then conf.textLeft = "NONE"; changed = true end
-                if conf.textCenter == nil then conf.textCenter = "NONE"; changed = true end
-                if conf.textRight == nil then conf.textRight = hpMode; changed = true end
-            end
-            if conf.powerTextLeft == nil and conf.powerTextCenter == nil and conf.powerTextRight == nil then
-                conf.powerTextLeft, conf.powerTextCenter, conf.powerTextRight = "NONE", "NONE", unitPowerMode
-                changed = true
-            else
-                if conf.powerTextLeft == nil then conf.powerTextLeft = "NONE"; changed = true end
-                if conf.powerTextCenter == nil then conf.powerTextCenter = "NONE"; changed = true end
-                if conf.powerTextRight == nil then conf.powerTextRight = powerMode; changed = true end
-            end
-            if conf.hpPowerTextOverride ~= nil then
-                conf.hpPowerTextOverride = nil
-                changed = true
-            end
-        end
-    end
-    if general and general._msufUFTextPerUnitMigrated_v4325 ~= true then
-        general._msufUFTextPerUnitMigrated_v4325 = true
-        changed = true
-    end
-    profile._msufLegacy55UnitTextSlots_v1 = true
-    changed = true
-    return changed
-end
-
-MSUF.ProfileIOMaterializeLegacy55GroupTextGeometry = function(profile)
-    if type(profile) ~= "table" or profile._msufLegacy55GroupTextGeometry_v1 == true then return false end
-
-    local changed = false
-    -- 5.57 resolved every missing Group Frame text coordinate against these
-    -- values. In 6.0 the Name X factory default is intentionally 28 to reserve
-    -- the status-icon lane, so letting the new defaults fill an omitted legacy
-    -- field visibly moves imported names. Materialize the old coordinate set
-    -- before EnsureDB runs while preserving every explicit profile value.
-    local defaults = {
-        nameAnchor = "LEFT",
-        nameOffsetX = 0,
-        nameOffsetY = 0,
-        hpOffsetX = 0,
-        hpOffsetY = 0,
-        hpTextLeftOffsetX = 0,
-        hpTextLeftOffsetY = 0,
-        hpTextCenterOffsetX = 0,
-        hpTextCenterOffsetY = 0,
-        hpTextRightOffsetX = 0,
-        hpTextRightOffsetY = 0,
-        powerOffsetX = 0,
-        powerOffsetY = 0,
-        powerTextLeftOffsetX = 0,
-        powerTextLeftOffsetY = 0,
-        powerTextCenterOffsetX = 0,
-        powerTextCenterOffsetY = 0,
-        powerTextRightOffsetX = 0,
-        powerTextRightOffsetY = 0,
-    }
-    local scopes = { "gf_party", "gf_raid", "gf_mythicraid" }
-    for i = 1, #scopes do
-        local conf = profile[scopes[i]]
-        if type(conf) == "table" then
-            for field, fallback in pairs(defaults) do
-                if conf[field] == nil then
-                    conf[field] = fallback
-                    changed = true
-                end
-            end
-        end
-    end
-    profile._msufLegacy55GroupTextGeometry_v1 = true
-    return true
-end
-
-MSUF.ProfileIOMaterializeLegacy55GroupNameAnchorRoot = function(profile)
-    if type(profile) ~= "table" or profile._msufLegacy55GroupNameAnchorRoot_v1 == true then return false end
-
-    -- 5.73 positioned Group names against barGroup, the complete visual slot.
-    -- The native 6.0 text element normally uses the Health bar instead, whose
-    -- bottom edge is raised by an embedded Power bar. Keep the legacy anchor
-    -- root explicit so identical saved offsets remain visually identical while
-    -- native 6.0 profiles retain their current Health-relative semantics.
-    local scopes = { "gf_party", "gf_raid", "gf_mythicraid" }
-    for i = 1, #scopes do
-        local conf = profile[scopes[i]]
-        if type(conf) == "table" and conf._msufLegacyNameAnchorToFrame ~= true then
-            conf._msufLegacyNameAnchorToFrame = true
-        end
-    end
-    profile._msufLegacy55GroupNameAnchorRoot_v1 = true
-    return true
-end
-
-local function MSUF_ProfileIO_DetectProfileSchema(profile, context)
-    local schema = tonumber(profile and profile._msufProfileSchema)
-    if schema and schema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then return schema end
-    --- A stored 6.x profile may need a newer normalization revision without
-    --- becoming a 5.x profile again. Keep schema identity separate from the
-    --- repair fast path so stale aliases cannot trigger broad legacy rewrites.
-    if schema and type(context) == "table" and context.trustNormalizationMarker == true then return schema end
-    if schema and not MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile) then return schema end
-    if MSUF_ProfileIO_ProfileHasLegacySignals(profile) then
-        return MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56
-    end
-    local contextSchema = type(context) == "table" and tonumber(context.schema) or nil
-    -- MSUF 5.57 snapshots used the outer snapshot schema `1`, including
-    -- category-only exports that do not carry an Aura2 root or other full-
-    -- profile legacy signals. Treat every positive pre-6.0 snapshot schema as
-    -- legacy so partial Unit/Group imports receive the same compatibility pass
-    -- as a complete 5.57 profile.
-    if contextSchema and contextSchema > 0 and contextSchema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
-        return MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56
-    end
-    if contextSchema and contextSchema >= MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 then
-        return contextSchema
-    end
-    return MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
 end
 
 local function MSUF_ProfileIO_NormalizeLegacyRootNameShortening(profile, createGeneral)
@@ -2998,103 +2772,6 @@ local function MSUF_ProfileIO_NormalizeAuraLayoutTable(tbl)
     end
     for i = 1, #MSUF_PROFILEIO_AURA_STRING_KEYS do
         changed = MSUF_ProfileIO_UpperStringField(tbl, MSUF_PROFILEIO_AURA_STRING_KEYS[i]) or changed
-    end
-    return changed
-end
-
-MSUF.ProfileIONormalizeLegacy55VisualCompatibility = function(profile, legacyProfile, context)
-    if type(profile) ~= "table" then return false end
-
-    local translatedAuras = type(profile.auras3) == "table"
-        and profile.auras3._msufAuras3TranslatedFromLegacyAuras2 == true
-    local storedLegacyVisualProfile = profile._msufLegacy55FrameOutlineBackground_v1 == true
-    if legacyProfile ~= true and translatedAuras ~= true and storedLegacyVisualProfile ~= true then return false end
-
-    local changed = false
-    local general = type(profile.general) == "table" and profile.general or nil
-    local legacyRangeFadePortrait = general and general.rangeFadePortrait
-    local units = {
-        "player", "target", "focus", "targettarget", "focustarget", "pet", "boss",
-        "boss1", "boss2", "boss3", "boss4", "boss5",
-    }
-    local powerTextDefaults60 = {
-        player = true, target = true, focus = false,
-        targettarget = false, focustarget = false, pet = true,
-        boss = true, boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-    }
-    local repairPreviouslySeededPowerText = profile._msufLegacy55PowerTextVisibility_v1 ~= true
-        and (translatedAuras == true or storedLegacyVisualProfile == true)
-    for i = 1, #units do
-        local unit = units[i]
-        local conf = profile[unit]
-        if type(conf) == "table" and legacyRangeFadePortrait ~= nil and conf.rangeFadeLayerMode == nil then
-            -- 5.57 could keep the portrait opaque while its other range-faded
-            -- frame layers dimmed. 6.0 has two supported ownership modes; map
-            -- the old toggle to the closest loss-minimizing equivalent instead
-            -- of silently falling back to whole-frame fade.
-            conf.rangeFadeLayerMode = legacyRangeFadePortrait == true and "frame" or "health"
-            changed = true
-        end
-        if type(conf) == "table" and conf.showPower ~= nil then
-            local legacyShown = conf.showPower ~= false
-            local currentShown = conf.showPowerText ~= false
-            if conf.showPowerText == nil
-                or (repairPreviouslySeededPowerText
-                    and currentShown == powerTextDefaults60[unit]
-                    and currentShown ~= legacyShown) then
-                -- Native 5.5 owned Power Text visibility through showPower.
-                -- 6.0 split that state into showPowerText, then its nil-only
-                -- defaults could seed the opposite value before compilation.
-                conf.showPowerText = legacyShown
-                changed = true
-            end
-        end
-        if type(conf) == "table" and conf.detachedPowerBarAnchorMode == nil
-            and (conf.powerBarDetached ~= nil
-                or conf.detachedPowerBarOffsetX ~= nil or conf.detachedPowerBarOffsetY ~= nil
-                or conf.detachedPowerBarWidth ~= nil or conf.detachedPowerBarHeight ~= nil) then
-            -- 5.5 interpreted detached offsets from the unit frame's left
-            -- edge. 6.0 defaults to a centered TOP/BOTTOM relationship.
-            conf.detachedPowerBarAnchorMode = "LEGACY_TOPLEFT"
-            changed = true
-        end
-    end
-    if profile._msufLegacy55PowerTextVisibility_v1 ~= true then
-        profile._msufLegacy55PowerTextVisibility_v1 = true
-        changed = true
-    end
-    changed = MSUF.ProfileIOMaterializeLegacy55UnitTextSlots(profile) or changed
-    changed = MSUF.ProfileIOMaterializeLegacy55GroupTextGeometry(profile) or changed
-    changed = MSUF.ProfileIOMaterializeLegacy55GroupNameAnchorRoot(profile) or changed
-
-    local bars = profile.bars
-    if type(bars) ~= "table" then
-        bars = {}
-        profile.bars = bars
-        changed = true
-    end
-    if bars.barOutlineStrata ~= "BACKGROUND" then
-        bars.barOutlineStrata = "BACKGROUND"
-        changed = true
-    end
-    -- Scope overrides win over bars.barOutlineStrata when Highlight Override
-    -- is active. Pin existing legacy scopes too, so no migrated page can fall
-    -- back to AUTO after the global value has been corrected.
-    local outlineScopes = {
-        "player", "target", "focus", "targettarget", "focustarget", "pet", "boss",
-        "boss1", "boss2", "boss3", "boss4", "boss5",
-        "gf_party", "gf_raid", "gf_mythicraid",
-    }
-    for i = 1, #outlineScopes do
-        local conf = profile[outlineScopes[i]]
-        if type(conf) == "table" and conf.barOutlineStrata ~= "BACKGROUND" then
-            conf.barOutlineStrata = "BACKGROUND"
-            changed = true
-        end
-    end
-    if profile._msufLegacy55FrameOutlineBackground_v1 ~= true then
-        profile._msufLegacy55FrameOutlineBackground_v1 = true
-        changed = true
     end
     return changed
 end
@@ -3503,9 +3180,8 @@ end
 
 --- Dynamic Group Aura scaling never persisted the roster count that selected
 --- its 1.00/0.85/0.70 factor. Capture the live count once on this cold
---- translation path, using the same API and thresholds as both 5.57 and the
---- current Group compiler. Missing/invalid API data deliberately resolves to
---- zero: both runtimes select 1.00 for every count <= 15.
+--- translation path, using the same API and thresholds as the current Group
+--- compiler. Missing/invalid API data deliberately resolves to zero.
 local function MSUF_ProfileIO_AuraResetCurrentGroupCount()
     local getter = _G.GetNumGroupMembers
     if type(getter) ~= "function" then return 0 end
@@ -3539,28 +3215,23 @@ local function MSUF_ProfileIO_AuraResetGroupGrowth(value, fallback)
     return "RIGHTDOWN"
 end
 
-local function MSUF_ProfileIO_AuraResetGroupLaneMetrics(
-    conf, laneName, sizeOverride, groupCount, legacyGeometry)
+local function MSUF_ProfileIO_AuraResetGroupLaneMetrics(conf, laneName, sizeOverride, groupCount)
     local spec = MSUF_PROFILEIO_GROUP_AURA_RESET_LANES[laneName]
     local root = type(conf) == "table" and type(conf.auras) == "table" and conf.auras or {}
     local group = type(root[spec.groupKey]) == "table" and root[spec.groupKey] or {}
     local isRaid = conf and conf._msufAuraResetScope ~= "gf_party"
     local defaultSize = isRaid and spec.defaultSizeRaid or spec.defaultSizeParty
     local dynamicScale = MSUF_ProfileIO_AuraResetGroupDynamicScale(root, groupCount)
-    -- 5.57's custom renderer scaled icon size only; its spacing and container
-    -- offsets used frameScale alone. The current compiler applies dynamicScale
-    -- to size, spacing, x, and y. Preserve each source model exactly.
-    local layoutScale = legacyGeometry == true and 1 or dynamicScale
     local iconScale = MSUF_ProfileIO_AuraResetNumber(group.iconScale, 100, 20, 300) / 100
     local rawSize = sizeOverride ~= nil and sizeOverride
         or (MSUF_ProfileIO_AuraResetNumber(group.size, defaultSize) * iconScale)
     rawSize = rawSize * dynamicScale
     local size = MSUF_ProfileIO_AuraResetNumber(
         MSUF_ProfileIO_AuraResetGroupRound(rawSize), defaultSize,
-        legacyGeometry == true and 8 or 1, 256)
+        1, 256)
     local spacing = MSUF_ProfileIO_AuraResetNumber(group.spacing, 1, 0, 64)
     spacing = MSUF_ProfileIO_AuraResetNumber(
-        MSUF_ProfileIO_AuraResetGroupRound(spacing * layoutScale), 1, 0, 64)
+        MSUF_ProfileIO_AuraResetGroupRound(spacing * dynamicScale), 1, 0, 64)
     local maxCount = MSUF_ProfileIO_AuraResetNumber(group.max,
         laneName == "externals" and 2 or MSUF_ProfileIO_AuraResetNumber(conf and conf.auraMaxIcons, spec.defaultMax),
         0, 80)
@@ -3577,97 +3248,27 @@ local function MSUF_ProfileIO_AuraResetGroupLaneMetrics(
         padding = 0,
         xSign = xSign,
         ySign = ySign,
-        x = MSUF_ProfileIO_AuraResetGroupRound((tonumber(group.x) or 0) * layoutScale),
-        y = MSUF_ProfileIO_AuraResetGroupRound((tonumber(group.y) or 0) * layoutScale),
+        x = MSUF_ProfileIO_AuraResetGroupRound((tonumber(group.x) or 0) * dynamicScale),
+        y = MSUF_ProfileIO_AuraResetGroupRound((tonumber(group.y) or 0) * dynamicScale),
         anchor = anchor,
     }
 end
 
-local function MSUF_ProfileIO_AuraResetSnapshotGroup(conf, scope, legacyProfile, groupCount)
+local function MSUF_ProfileIO_AuraResetSnapshotGroup(conf, scope, groupCount)
     if type(conf) ~= "table" then return nil end
-    if type(conf.auras) ~= "table" then
-        if legacyProfile ~= true then return nil end
-        -- Flat 5.x Group settings were Blizzard-owned by default. Blizzard did
-        -- not persist a movable lane position, so preserve only the effective
-        -- visible sizes and let the new native factory own every position.
-        return {
-            -- Aura2's flat auraIconSize fed only dormant custom tables. The
-            -- default BLIZZARD owner rendered Buffs/Debuffs at its own 20 px.
-            buff = { size = 20, sizeOnly = true },
-            debuff = { size = 20, sizeOnly = true },
-            externals = {
-                size = conf.aurasEnabled ~= nil and 28 or (scope == "gf_party" and 28 or 24),
-                sizeOnly = true,
-            },
-        }
-    end
+    if type(conf.auras) ~= "table" then return nil end
     local proxy = { auras = conf.auras, auraMaxIcons = conf.auraMaxIcons, _msufAuraResetScope = scope }
     local snapshot = {}
-    local legacyRenderer = tostring(conf.auras.renderer or "BLIZZARD"):upper()
-    local legacyCustom = legacyProfile == true
-        and legacyRenderer ~= "BLIZZARD"
-        and legacyRenderer ~= "MIXED"
-        and legacyRenderer ~= "BOTH"
-        and legacyRenderer ~= "CUSTOM_BLIZZARD"
-        and legacyRenderer ~= "CUSTOM+BLIZZARD"
-    local legacyTypes = type(conf.auras.blizzardTypes) == "table" and conf.auras.blizzardTypes or nil
-    local legacyBlizzardSize = MSUF_ProfileIO_AuraResetNumber(conf.auras.blizzardIconSize,
-        20, legacyProfile == true and 8 or 1, 256)
-    local dynamicScale = MSUF_ProfileIO_AuraResetGroupDynamicScale(conf.auras, groupCount)
     for i = 1, #MSUF_PROFILEIO_GROUP_AURA_RESET_LANE_ORDER do
         local laneName = MSUF_PROFILEIO_GROUP_AURA_RESET_LANE_ORDER[i]
-        local legacyTypeKey = laneName == "buff" and "buffs"
-            or laneName == "debuff" and "debuffs" or "externals"
-        local laneWasCustom = legacyProfile ~= true or legacyCustom
-            or (legacyTypes and legacyTypes[legacyTypeKey] ~= nil
-                and legacyTypes[legacyTypeKey] ~= true)
-        if not laneWasCustom then
-            local nativeSize = legacyBlizzardSize
-            if laneName == "externals" then
-                local group = type(conf.auras.externals) == "table" and conf.auras.externals or nil
-                nativeSize = MSUF_ProfileIO_AuraResetNumber(group and group.size, 28, 8, 256)
-            end
-            -- 5.57 passed the same dynamic factor into its Blizzard-owned
-            -- container sizing; frameScale remains outside the Aura tree and
-            -- therefore survives this profile-only cut independently.
-            nativeSize = MSUF_ProfileIO_AuraResetNumber(
-                MSUF_ProfileIO_AuraResetGroupRound(nativeSize * dynamicScale),
-                nativeSize, legacyProfile == true and 8 or 1, 256)
-            snapshot[laneName] = { size = nativeSize, sizeOnly = true }
-        else
-            local legacySize
-            local legacyGroup
-            if legacyProfile == true then
-                local spec = MSUF_PROFILEIO_GROUP_AURA_RESET_LANES[laneName]
-                legacyGroup = type(conf.auras[spec.groupKey]) == "table" and conf.auras[spec.groupKey] or nil
-                local legacyFallback = laneName == "buff" and 22
-                    or laneName == "debuff" and 20 or 28
-                legacySize = legacyGroup and legacyGroup.size
-                    or legacyFallback
-                legacySize = MSUF_ProfileIO_AuraResetNumber(legacySize,
-                    legacyFallback, 8, 256)
-            end
-            local metrics = MSUF_ProfileIO_AuraResetGroupLaneMetrics(
-                proxy, laneName, legacySize, groupCount, legacyProfile)
-            local dx, dy
-            if legacyProfile == true then
-                local growth = tostring(legacyGroup and legacyGroup.growth or ""):upper()
-                if growth == "CENTER_H" or growth == "CENTER_V" then
-                    metrics.anchor = "CENTER"
-                end
-                local parts = MSUF_PROFILEIO_UNIT_AURA_RESET_ANCHORS[metrics.anchor]
-                    or MSUF_PROFILEIO_UNIT_AURA_RESET_ANCHORS.CENTER
-                dx, dy = -parts[1] * metrics.size, -parts[2] * metrics.size
-            else
-                dx, dy = MSUF_ProfileIO_AuraResetFirstOffset(metrics, metrics.anchor)
-            end
-            snapshot[laneName] = {
-                size = metrics.size,
-                anchor = metrics.anchor,
-                firstX = metrics.x + dx,
-                firstY = metrics.y + dy,
-            }
-        end
+        local metrics = MSUF_ProfileIO_AuraResetGroupLaneMetrics(proxy, laneName, nil, groupCount)
+        local dx, dy = MSUF_ProfileIO_AuraResetFirstOffset(metrics, metrics.anchor)
+        snapshot[laneName] = {
+            size = metrics.size,
+            anchor = metrics.anchor,
+            firstX = metrics.x + dx,
+            firstY = metrics.y + dy,
+        }
     end
     return snapshot
 end
@@ -3686,7 +3287,7 @@ local function MSUF_ProfileIO_AuraResetRebaseGroupLane(state, scope, laneName, s
     }
 end
 
-local function MSUF_ProfileIO_ResetGroupAuras(profile, legacyProfile, groupCount)
+local function MSUF_ProfileIO_ResetGroupAuras(profile, groupCount)
     if type(profile) ~= "table" then return false end
     local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalGroupAuraState)
         or _G.MSUF_CreateCanonicalGroupAuraState
@@ -3703,8 +3304,7 @@ local function MSUF_ProfileIO_ResetGroupAuras(profile, legacyProfile, groupCount
                 if groupCount == nil and sourceAuras and sourceAuras.dynamicScale == true then
                     groupCount = MSUF_ProfileIO_AuraResetCurrentGroupCount()
                 end
-                local snapshot = MSUF_ProfileIO_AuraResetSnapshotGroup(
-                    conf, scope, legacyProfile, groupCount)
+                local snapshot = MSUF_ProfileIO_AuraResetSnapshotGroup(conf, scope, groupCount)
                 if canonical == nil then
                     local ok, value = MSUF_ProfileIO_RunProtected(
                         "canonical Group Aura reset", createCanonical, true)
@@ -3753,22 +3353,13 @@ MSUF_PROFILEIO_AURA_RESETTERS.ResetUnit = MSUF_ProfileIO_ResetUnitAuras
 MSUF_PROFILEIO_AURA_RESETTERS.ResetGroup = MSUF_ProfileIO_ResetGroupAuras
 end
 
-local function MSUF_ProfileIO_NormalizeLegacyAuras(profile, legacyProfile, forceScopeRepair)
+local function MSUF_ProfileIO_NormalizeProfileAuras(profile)
     if type(profile) ~= "table" then return false end
-    -- A 6.0 beta profile can still carry a translated-from-5.x marker, which
-    -- makes the broad compatibility classifier return `legacyProfile=true`.
-    -- Its Group Aura geometry was nevertheless rendered by the 6.0 host-grid
-    -- compiler. Only a genuinely pre-600 declared profile uses the 5.x direct
-    -- 1x1-container formula.
-    local hadAuras3 = type(profile.auras3) == "table" and next(profile.auras3) ~= nil
-    local legacyGroupGeometry = legacyProfile == true
-        and (tonumber(profile._msufProfileSchema) or 0) < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
-        and not hadAuras3
     local changed = MSUF_PROFILEIO_AURA_RESETTERS.ResetUnit(profile)
-    changed = MSUF_PROFILEIO_AURA_RESETTERS.ResetGroup(profile, legacyGroupGeometry) or changed
+    changed = MSUF_PROFILEIO_AURA_RESETTERS.ResetGroup(profile) or changed
     local auras = profile.auras3
     if type(auras) ~= "table" then return changed end
-    local repairAuraOverrides = legacyProfile == true or MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
+    local repairAuraOverrides = MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
     changed = MSUF_ProfileIO_NormalizeAuraLayoutTable(auras.shared) or changed
     if type(auras.perUnit) == "table" then
         for _, unitCfg in pairs(auras.perUnit) do
@@ -3797,12 +3388,12 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     --- Only internal callers operating on an already-stored profile may trust
     --- the persisted marker. Import payloads are deliberately never trusted:
     --- an external table can contain copied/spoofed internal metadata and must
-    --- still receive the complete validation and legacy-repair pass.
+    --- still receive the complete schema-600 normalization pass.
     if context.trustNormalizationMarker == true
         and tonumber(profile._msufProfileSchema) == MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
         and tonumber(profile._msufProfileNormalizationRevision) == MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION
         and type(profile.general) == "table"
-        and not MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile) then
+        and not MSUF_ProfileIO_ProfileNeedsNormalization(profile) then
         return profile, false
     end
     local changed = false
@@ -3826,14 +3417,9 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
             changed = true
         end
     end
-    local schema = MSUF_ProfileIO_DetectProfileSchema(profile, context)
-    local legacyProfile = schema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
-    local declaredSchema = tonumber(profile._msufProfileSchema)
-    local preferLegacyAliases = legacyProfile
-        and (declaredSchema == nil or declaredSchema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA)
     MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
     if context.normalizePositions ~= false then
-        local _, aliasesChanged = MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacyAliases)
+        local _, aliasesChanged = MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, false)
         changed = aliasesChanged or changed
     end
     changed = MSUF_ProfileIO_NormalizeLegacyRootNameShortening(profile, context.createGeneral ~= false) or changed
@@ -3847,28 +3433,12 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
         if type(scope) == "table" then
             local isGroupScope = key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid"
             local inferFontOverride = key ~= "general"
-            if legacyProfile and isGroupScope and scope.fontOverride == nil then
-                -- 5.57 always stored local Group name-shortening values, but
-                -- they only owned runtime behavior when fontOverride was
-                -- explicitly true. Inferring the override from those dormant
-                -- fields switches imported names from the global 5.57 layout
-                -- to 6.0's local clipping layout and changes their position.
-                -- Persist false inside the selected Group scope. A group-only
-                -- import does not copy root migration markers into MSUF_DB, so
-                -- leaving this nil would let a later current-schema defaults
-                -- pass infer true again from nameMaxChars/nameNoEllipsis.
-                scope.fontOverride = false
-                inferFontOverride = false
-                changed = true
-            end
             changed = MSUF_ProfileIO_NormalizeTextScope(scope, isGroupScope, inferFontOverride) or changed
             changed = MSUF_ProfileIO_NormalizeStatusScope(scope, isGroupScope) or changed
         end
     end
     changed = MSUF_ProfileIO_MigrateSplitStatusText(profile) or changed
-    changed = MSUF.ProfileIONormalizeLegacy55VisualCompatibility(profile, legacyProfile, context) or changed
-    changed = MSUF_ProfileIO_NormalizeLegacyAuras(
-        profile, legacyProfile, context.trustNormalizationMarker ~= true) or changed
+    changed = MSUF_ProfileIO_NormalizeProfileAuras(profile) or changed
     changed = MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true) or changed
     local normalizeLayers = _G.MSUF_NormalizeNumericLayers
     if type(normalizeLayers) ~= "function" and type(MSUF) == "table" then
@@ -3885,9 +3455,6 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
         if profile._msufProfileNormalizationRevision ~= MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION then
             profile._msufProfileNormalizationRevision = MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION
             changed = true
-        end
-        if schema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
-            profile._msufLegacyProfileSchema = nil
         end
     end
     return profile, changed
@@ -4489,6 +4056,37 @@ local function MSUF_ProfileIO_SelectWagoFullSnapshot(snapshot)
     return snapshot
 end
 
+local function MSUF_ProfileIO_SelectSupportedProfile(decoded)
+    local policy = type(MSUF) == "table" and MSUF.ProfilePolicy or nil
+    local selectSupported = type(policy) == "table" and policy.SelectSupportedDecodedProfile or nil
+    if type(selectSupported) == "function" then
+        return selectSupported(decoded)
+    end
+    if type(decoded) == "table"
+        and tonumber(decoded._msufProfileSchema) == MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
+        return decoded
+    end
+    if type(decoded) == "table"
+        and decoded.addon == "MSUF"
+        and tonumber(decoded.fmt) == 2
+        and tonumber(decoded.schema) == MSUF_PROFILEIO_WAGO_SCHEMA
+        and type(decoded.kind) == "string"
+        and type(decoded.payload) == "table"
+        and decoded[MSUF_PROFILEIO_WAGO_FULL_KEY] == nil then
+        return decoded
+    end
+    local snapshot = MSUF_ProfileIO_SelectWagoFullSnapshot(decoded)
+    if type(snapshot) == "table"
+        and snapshot.addon == "MSUF"
+        and tonumber(snapshot.fmt) == 2
+        and tonumber(snapshot.schema) == MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
+        and type(snapshot.kind) == "string"
+        and type(snapshot.payload) == "table" then
+        return snapshot
+    end
+    return nil
+end
+
 local function MSUF_CopyGroupFramePayload()
     local payload = {}
     if type(MSUF_DB) ~= "table" then
@@ -4791,8 +4389,10 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if not copied or type(stagedSnapshot) ~= "table" then
         return false, "profile staging failed: " .. tostring(stagedSnapshot)
     end
-    snapshot = stagedSnapshot
-    snapshot = MSUF_ProfileIO_SelectWagoFullSnapshot(snapshot)
+    snapshot = MSUF_ProfileIO_SelectSupportedProfile(stagedSnapshot)
+    if not snapshot then
+        return false, "MSUF 6.x profile required (schema 600)"
+    end
     local kind = snapshot.kind
     if kind == "groupframes" then
         kind = "groupframe"
@@ -4990,26 +4590,30 @@ function MSUF_ExportSelectionToString(kind)
     return MSUF_SerializeLuaTable(snap)
 end
 
-local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
+local function MSUF_ApplyFullProfileToActiveProfile(tbl)
     if type(tbl) ~= "table" then
-        print("|cffff0000MSUF:|r Legacy import failed: not a table.")
+        print("|cffff0000MSUF:|r Profile import failed: not a table.")
+        return false
+    end
+    if tonumber(tbl._msufProfileSchema) ~= MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
+        print("|cffff0000MSUF:|r Import failed: MSUF 6.x profile required (schema 600).")
         return false
     end
     local valid, validationError = MSUF.ProfileIOValidateImportValue(tbl)
     if not valid then
-        print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(validationError))
+        print("|cffff0000MSUF:|r Profile import failed: " .. tostring(validationError))
         return false
     end
-    local prepared, staged = MSUF_ProfileIO_RunProtected("legacy import staging", function()
+    local prepared, staged = MSUF_ProfileIO_RunProtected("profile import staging", function()
         local copy = MSUF_DeepCopy(tbl)
         MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
-            source = "legacy_import",
+            source = "profile_import",
             markProfile = true,
         })
         return copy
     end)
     if not prepared or type(staged) ~= "table" then
-        print("|cffff0000MSUF:|r Legacy import failed during staging: " .. tostring(staged))
+        print("|cffff0000MSUF:|r Profile import failed during staging: " .. tostring(staged))
         return false
     end
     tbl = staged
@@ -5035,14 +4639,13 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
-    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_LEGACY_IMPORT", true)
-    MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_LEGACY_IMPORT", MSUF_ActiveProfile, MSUF_DB)
-    print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
+    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
+    MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
+    print("|cff00ff00MSUF:|r Profile imported into the active profile.")
     MSUF_ProfileIO_ReportImportWarnings()
     return true
 end
---- New import: understands snapshots (fmt=2) and applies selection into active profile.
---- New import: understands MSUF2/MSUF3/MSUF4 compact strings, snapshots (fmt=2), and legacy full dumps.
+--- Imports schema-600 MSUF2/MSUF3/MSUF4 strings or safe text snapshots.
 function MSUF_ImportFromString(str)
     MSUF_ProfileIO_ResetImportWarnings()
     if not str or not str:match("%S") then
@@ -5054,7 +4657,11 @@ function MSUF_ImportFromString(str)
     if type(tryDec) == "function" then
         local decoded = tryDec(str)
         if type(decoded) == "table" then
-            local tbl = decoded
+            local tbl = MSUF_ProfileIO_SelectSupportedProfile(decoded)
+            if not tbl then
+                print("|cffff0000MSUF:|r Import failed: MSUF 6.x profile required (schema 600).")
+                return false
+            end
             --- Snapshot format?
             if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
                 local okApply, why = MSUF_ApplySnapshotToActiveProfile(tbl)
@@ -5066,8 +4673,7 @@ function MSUF_ImportFromString(str)
                 end
                  return okApply == true
             end
-            --- Otherwise treat decoded table as legacy full-profile dump.
-            return MSUF_ApplyLegacyTableToActiveProfile(tbl)
+            return MSUF_ApplyFullProfileToActiveProfile(tbl)
         end
     end
     --- If this looks like a compact MSUF2/MSUF3/MSUF4 string, NEVER attempt loadstring.
@@ -5076,20 +4682,23 @@ function MSUF_ImportFromString(str)
         print("|cffff0000MSUF:|r Import failed: could not decode compact profile string (" .. prefix .. ").")
          return false
     end
-    --- OLD PATH (Lua table string)
-    local func, err = MSUF_ProfileIO_LoadLegacyChunk(str)
+    local func, err = MSUF_ProfileIO_LoadTableLiteral(str)
     if not func then
         print("|cffff0000MSUF:|r Import failed: " .. tostring(err))
          return false
     end
-    -- LoadLegacyChunk wraps a sandboxed literal parser that reports failure by
+    -- LoadTableLiteral wraps a sandboxed literal parser that reports failure by
     -- returning nil plus a reason; it does not raise.
     local tbl = func()
     if type(tbl) ~= "table" then
         print("|cffff0000MSUF:|r Import failed: not a table.")
          return false
     end
-    --- Snapshot format?
+    tbl = MSUF_ProfileIO_SelectSupportedProfile(tbl)
+    if not tbl then
+        print("|cffff0000MSUF:|r Import failed: MSUF 6.x profile required (schema 600).")
+        return false
+    end
     if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
         local okApply, why = MSUF_ApplySnapshotToActiveProfile(tbl)
         if okApply then
@@ -5100,54 +4709,7 @@ function MSUF_ImportFromString(str)
         end
          return okApply == true
     end
-    --- Otherwise treat it as legacy full-profile dump.
-    return MSUF_ApplyLegacyTableToActiveProfile(tbl)
- end
---- Legacy import: replaces the entire ACTIVE profile with the provided table.
-function MSUF_ImportLegacyFromString(str)
-    MSUF_ProfileIO_ResetImportWarnings()
-    if not str or not str:match("%S") then
-        print("|cffff0000MSUF:|r Legacy import failed (empty string).")
-         return false
-    end
-    local function ImportDecodedLegacyTable(tbl)
-        if type(tbl) == "table" and tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" then
-            tbl = MSUF_ProfileIO_SelectWagoFullSnapshot(tbl)
-            local kind = (tbl.kind == "groupframes") and "groupframe" or tbl.kind
-            if kind == "all" then
-                return MSUF_ApplyLegacyTableToActiveProfile(tbl.payload)
-            end
-            local okApply, why = MSUF_ApplySnapshotToActiveProfile(tbl)
-            if okApply then
-                print("|cff00ff00MSUF:|r Imported " .. tostring(tbl.kind) .. " settings into the active profile.")
-                MSUF_ProfileIO_ReportImportWarnings()
-            else
-                print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(why))
-            end
-            return okApply
-        end
-        return MSUF_ApplyLegacyTableToActiveProfile(tbl)
-    end
-    --- NEW: allow MSUF2: strings in legacy import
-    local tryDec = _G.MSUF_TryDecodeCompactString
-    if type(tryDec) == "function" then
-        local decoded = tryDec(str)
-        if type(decoded) == "table" then
-            return ImportDecodedLegacyTable(decoded)
-        end
-    end
-    --- If this looks like a compact MSUF2/MSUF3/MSUF4 string, NEVER attempt loadstring.
-    local prefix = str:match("^%s*(MSUF%d+):")
-    if prefix == "MSUF2" or prefix == "MSUF3" or prefix == "MSUF4" then
-        print("|cffff0000MSUF:|r Legacy import failed: could not decode compact profile string (" .. prefix .. ").")
-         return false
-    end
-    local func, err = MSUF_ProfileIO_LoadLegacyChunk(str)
-    if not func then
-        print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(err))
-         return false
-    end
-    return ImportDecodedLegacyTable(func())
+    return MSUF_ApplyFullProfileToActiveProfile(tbl)
  end
 ---
 --- External Wago UI Packs API (stateless by profileKey)
@@ -5388,18 +4950,16 @@ function MSUF_ImportExternal(profileString, profileKey)
     if type(tryDec) == "function" then
         local decoded = tryDec(profileString)
         if type(decoded) == "table" then
-            local tbl = decoded
-            --- Snapshot format? (fmt=2)
+            local tbl = MSUF_ProfileIO_SelectSupportedProfile(decoded)
+            if not tbl then
+                return false, "MSUF 6.x profile required (schema 600)"
+            end
             if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
-                tbl = MSUF_ProfileIO_SelectWagoFullSnapshot(tbl)
-                --- For external import we treat snapshot.payload as the full profile table when kind == "all".
                 if tbl.kind == "all" then
                     return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl.payload)
                 end
-                --- If some tool ever passes a partial snapshot, store the whole decoded table as-is (safer than half-applying).
-                return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
+                return false, "external import requires a full profile snapshot"
             end
-            --- Otherwise treat decoded table as a full profile dump.
             return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
         end
     end
@@ -5408,8 +4968,8 @@ function MSUF_ImportExternal(profileString, profileKey)
     if prefix == "MSUF2" or prefix == "MSUF3" or prefix == "MSUF4" then
         return false, "could not decode compact profile string (" .. tostring(prefix) .. ")"
     end
-    --- Optional legacy table-string support (last resort).
-    local func = MSUF_ProfileIO_LoadLegacyChunk(profileString)
+    --- Safe table-literal support for schema-600 text snapshots.
+    local func = MSUF_ProfileIO_LoadTableLiteral(profileString)
     if not func then
          return false, "invalid lua table string"
     end
@@ -5417,12 +4977,15 @@ function MSUF_ImportExternal(profileString, profileKey)
     if type(tbl) ~= "table" then
          return false, "lua decode failed"
     end
+    tbl = MSUF_ProfileIO_SelectSupportedProfile(tbl)
+    if not tbl then
+        return false, "MSUF 6.x profile required (schema 600)"
+    end
     if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
-        tbl = MSUF_ProfileIO_SelectWagoFullSnapshot(tbl)
         if tbl.kind == "all" then
             return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl.payload)
         end
-        return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
+        return false, "external import requires a full profile snapshot"
     end
     return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
 end
@@ -5432,12 +4995,10 @@ ExportPublic("MSUF_Profiles_ImportExternal", MSUF_ImportExternal)
 --- Globals for the Options module.
 ExportPublic("MSUF_ExportSelectionToString", MSUF_ExportSelectionToString)
 ExportPublic("MSUF_ImportFromString", MSUF_ImportFromString)
-ExportPublic("MSUF_ImportLegacyFromString", MSUF_ImportLegacyFromString)
 --- Always expose the real implementations under stable, explicit names.
 --- This lets other modules (or load-order proxies) call the correct logic even if _G.MSUF_ImportFromString was set earlier.
 ExportPublic("MSUF_Profiles_ExportSelectionToString", MSUF_ExportSelectionToString)
 ExportPublic("MSUF_Profiles_ImportFromString", MSUF_ImportFromString)
-ExportPublic("MSUF_Profiles_ImportLegacyFromString", MSUF_ImportLegacyFromString)
 ExportPublic("MSUF_ProfileIO_TranslateProfileToCurrent", MSUF_ProfileIO_TranslateProfileToCurrent)
 ExportPublic("MSUF_ProfileIO_TranslateProfilesToCurrent", MSUF_ProfileIO_TranslateProfilesToCurrent)
 ExportPublic("MSUF_CreateProfile", MSUF_CreateProfile)
@@ -5450,7 +5011,6 @@ ExportPublic("MSUF_GetAllProfiles", MSUF_GetAllProfiles)
 if type(MSUF) == "table" then
     MSUF.MSUF_ExportSelectionToString = MSUF_ExportSelectionToString
     MSUF.MSUF_ImportFromString        = MSUF_ImportFromString
-    MSUF.MSUF_ImportLegacyFromString  = MSUF_ImportLegacyFromString
     MSUF.MSUF_ProfileIO_TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent
     MSUF.MSUF_ProfileIO_TranslateProfilesToCurrent = MSUF_ProfileIO_TranslateProfilesToCurrent
 end

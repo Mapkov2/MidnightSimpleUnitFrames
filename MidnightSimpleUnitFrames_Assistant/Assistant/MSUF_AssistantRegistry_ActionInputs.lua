@@ -494,7 +494,7 @@ DefineObject("set_spec_profile", { spec = SPEC_VALUE, name = NAME }, { required 
 -- "None" clears the choice, so the name is required but may be the sentinel.
 DefineObject("set_new_character_profile", { name = NAME }, { required = { "name" } })
 DefineObject("export_profile", { kind = PROFILE_EXPORT_KIND })
-DefineObject("import_profile_string import_legacy_profile_string", {
+DefineObject("import_profile_string", {
     value = IMPORT_TEXT,
 }, { required = { "value" } })
 DefineObject("import_profile_string_new", {
