@@ -218,6 +218,10 @@ end
 
 local function CreatePlayerCastbarFrame()
     local frame = CreateFrame("Frame", "MSUF_PlayerCastBar", UIParent)
+    -- Native pixel rounding for the castbar rect (12.1.5). Root only: the
+    -- rounded-corner art below deliberately runs with pixel snapping off.
+    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+    if type(roundLayout) == "function" then roundLayout(frame, true) end
     frame:SetClampedToScreen(true)
     frame.unit = "player"
     frame:SetSize(200, 18)
@@ -233,6 +237,8 @@ local function CreatePlayerCastbarFrame()
     frame.icon = icon
 
     local statusBar = CreateFrame("StatusBar", nil, frame)
+    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+    if type(roundLayout) == "function" then roundLayout(statusBar, true) end
     statusBar:SetPoint("LEFT", icon, "RIGHT", 0, 0)
     statusBar:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
     statusBar:SetPoint("TOP", frame, "TOP", 0, 0)

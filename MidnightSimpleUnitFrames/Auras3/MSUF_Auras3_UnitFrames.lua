@@ -304,6 +304,16 @@ function A3.BindPandemicRegion(button, lane)
     then
         return false
     end
+    -- 12.1.5 asserts when the same region is added twice (AddDisplayElement).
+    -- Both registrations below hand Blizzard a region that is cached on the
+    -- button, so a repeated styling pass over a live button would submit the
+    -- identical object. Reset the list first and rebuild it in full here. The
+    -- frame-effect marker has to fall with it, or BindPandemicFrameEffect's own
+    -- idempotence guard would skip the re-registration and leave it unbound.
+    if type(button.ClearPandemicRegions) == "function" then
+        button:ClearPandemicRegions()
+        button._msufA3PandemicFrameEffectRegion = nil
+    end
     local bound = false
     if lane.pandemicVisualEnabled ~= false then
         local region = A3.ApplyPandemicVisual(button, lane, false)
@@ -4476,17 +4486,21 @@ end
 local NATIVE_AURA_CONTAINER_METHODS = {
     "SetUnit",
     "SetEnabled",
+    "SetEditModePreviewEnabled",
     "AddAuraGroup",
+    "SetAuraGroupEnabled",
     "SetAuraGroupFilterString",
     "SetAuraGroupLayout",
     "SetAuraGroupMaxFrameCount",
     "SetAuraGroupCandidateFilters",
     "SetAuraGroupSortMethod",
     "AddAuraSlot",
+    "SetAuraSlotEnabled",
     "SetAuraSlotFilterString",
     "SetAuraSlotCandidateFilters",
     "SetAuraSlotSortMethod",
     "AddItemEnchantment",
+    "SetItemEnchantmentEnabled",
     -- PTR 7 flow layout API (replaced SetAuraLayout{AnchorPoint,GrowthDirection,RowWidth}).
     "SetFlowLayoutAnchorPoint",
     "SetFlowLayoutGrowthDirection",
@@ -4504,6 +4518,11 @@ local NATIVE_AURA_BUTTON_METHODS = {
     "ClearDurationText",
     "SetApplicationCount",
     "ClearApplicationCount",
+    "SetCasterName",
+    "ClearCasterName",
+    "AddPandemicEnterAnimation",
+    "AddPandemicActiveAnimation",
+    "AddPandemicLeaveAnimation",
     -- PTR 7 names; the SetAuraBorder/SetAuraSymbol aliases are deprecated and
     -- flagged for removal after 12.1.
     "AddDispelTypeTexture",
@@ -4547,6 +4566,13 @@ end
 
 local function ConfigureNativeAuraContainer(container, unit)
     container:SetUnit(unit)
+    -- 12.1.5's CustomAuraContainerTemplate ships editModePreviewEnabled = true,
+    -- so a container swaps to Blizzard's preview aura source while the player is
+    -- in Edit Mode and draws its own icons underneath the MSUF-owned previews.
+    -- MSUF owns that surface end to end; opt out once at creation.
+    if type(container.SetEditModePreviewEnabled) == "function" then
+        container:SetEditModePreviewEnabled(false)
+    end
     container:SetEnabled(true)
 end
 
@@ -4555,6 +4581,9 @@ local function EnsureRoot(frame)
     local root = frame.Auras
     if root and root._msufA3NativeRoot == true then return root end
     root = CreateFrame("Frame", nil, frame)
+    -- Native pixel rounding (12.1.5) for the root the aura containers sit in.
+    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+    if type(roundLayout) == "function" then roundLayout(root, true) end
     root._msufA3NativeRoot = true
     root:SetAllPoints(frame)
     root:SetScript("OnShow", function(self)
@@ -6413,6 +6442,10 @@ local function CreateNativeAuraContainer(root, parentOverride)
         if container.Hide then container:Hide() end
         return nil
     end
+    -- Round the native owner itself. Rounding only the MSUF root does not cover
+    -- AuraContainer's own flow/slot layout mutations.
+    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+    if type(roundLayout) == "function" then roundLayout(container, true) end
     -- Event registrations on CustomAuraContainerTemplate are intrinsic and
     -- carry Blizzard's forbidden EventRegistrations aspect. Leave the static
     -- AURA_DATA_PROVIDER_SWITCH subscription entirely Blizzard-owned; addon
@@ -7566,7 +7599,9 @@ A3._ScheduleUnitAuraIdentityReveal = function(unit, revision)
     units[unit] = revision
     if A3._unitAuraIdentityRevealPending == true then return true end
     A3._unitAuraIdentityRevealPending = true
-    if C_Timer and C_Timer.After then
+    if RunNextFrame then
+        RunNextFrame(A3._FlushUnitAuraIdentityReveal)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushUnitAuraIdentityReveal)
     else
         A3._FlushUnitAuraIdentityReveal()
@@ -7639,7 +7674,9 @@ A3._ScheduleGroupAuraAssistReveal = function(unit, revision)
     units[unit] = revision
     if A3._groupAuraAssistRevealPending == true then return true end
     A3._groupAuraAssistRevealPending = true
-    if C_Timer and C_Timer.After then
+    if RunNextFrame then
+        RunNextFrame(A3._FlushGroupAuraAssistReveal)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushGroupAuraAssistReveal)
     else
         A3._FlushGroupAuraAssistReveal()
@@ -7683,7 +7720,9 @@ A3._ScheduleGroupAuraAssistRefresh = function(unit, revision)
     units[unit] = revision
     if A3._groupAuraAssistRefreshPending == true then return true end
     A3._groupAuraAssistRefreshPending = true
-    if C_Timer and C_Timer.After then
+    if RunNextFrame then
+        RunNextFrame(A3._FlushScheduledGroupAuraAssistRefresh)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushScheduledGroupAuraAssistRefresh)
     else
         A3._FlushScheduledGroupAuraAssistRefresh()
@@ -7796,7 +7835,9 @@ A3._ScheduleGroupAuraAssistRefreshAll = function(checkIdentity, forceRefresh)
     if forceRefresh == true then A3._groupAuraAssistRefreshAllForce = true end
     if A3._groupAuraAssistRefreshAllPending == true then return true end
     A3._groupAuraAssistRefreshAllPending = true
-    if C_Timer and C_Timer.After then
+    if RunNextFrame then
+        RunNextFrame(A3._FlushScheduledGroupAuraAssistRefreshAll)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushScheduledGroupAuraAssistRefreshAll)
     else
         A3._FlushScheduledGroupAuraAssistRefreshAll()
@@ -8192,7 +8233,9 @@ A3._QueueGroupAuraPresenceRefreshAllFlush = function()
         or A3._groupAuraPresenceRefreshAllTimerPending == true
         or InCombat() then return false end
     A3._groupAuraPresenceRefreshAllTimerPending = true
-    if C_Timer and C_Timer.After then
+    if RunNextFrame then
+        RunNextFrame(A3._FlushScheduledGroupAuraPresenceRefreshAll)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushScheduledGroupAuraPresenceRefreshAll)
     else
         A3._FlushScheduledGroupAuraPresenceRefreshAll()
@@ -8586,7 +8629,9 @@ A3._QueueDirectIdentityRefreshAllFlush = function()
         or A3._directIdentityRefreshTimerPending == true
         or InCombat() then return false end
     A3._directIdentityRefreshTimerPending = true
-    if C_Timer and C_Timer.After then
+    if RunNextFrame then
+        RunNextFrame(A3._FlushScheduledDirectIdentityRefreshAll)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushScheduledDirectIdentityRefreshAll)
     else
         A3._FlushScheduledDirectIdentityRefreshAll()
@@ -8615,7 +8660,9 @@ A3._QueueDeferredDirectIdentityColdWork = function()
     -- one-shot timer.
     A3._groupAuraPresenceRefreshAllTimerPending = true
     A3._directIdentityRefreshTimerPending = true
-    if C_Timer and C_Timer.After then
+    if RunNextFrame then
+        RunNextFrame(A3._FlushDeferredDirectIdentityColdWork)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushDeferredDirectIdentityColdWork)
     else
         A3._FlushDeferredDirectIdentityColdWork()
@@ -8676,7 +8723,9 @@ A3._ScheduleDirectIdentityEventRefresh = function(unit, nonGroupOnly)
     if units[unit] ~= "all" then units[unit] = requestedMode end
     if A3._directIdentityEventRefreshPending == true then return true end
     A3._directIdentityEventRefreshPending = true
-    if C_Timer and C_Timer.After then
+    if RunNextFrame then
+        RunNextFrame(A3._FlushScheduledDirectIdentityEventRefresh)
+    elseif C_Timer and C_Timer.After then
         C_Timer.After(0, A3._FlushScheduledDirectIdentityEventRefresh)
     else
         A3._FlushScheduledDirectIdentityEventRefresh()

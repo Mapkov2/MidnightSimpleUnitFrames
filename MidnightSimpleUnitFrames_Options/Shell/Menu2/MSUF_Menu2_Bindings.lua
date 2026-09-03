@@ -1263,6 +1263,7 @@ local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget fo
 local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier tooltipShowAuraSpellIDs
+    tooltipShowAuraCasterNames
     showMinimapIcon showNavigationIcons previewDragHintAnimationEnabled playTargetSelectLostSounds ellesmereEditModeIntegration
     nsrtNicknameIntegration
     highlightEnabled highlightStyle highlightThickness

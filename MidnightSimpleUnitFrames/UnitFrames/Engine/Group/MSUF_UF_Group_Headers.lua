@@ -1124,7 +1124,7 @@ end
 
 local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
 local SECURE_AURA_CONTAINER_TEMPLATE = "CustomAuraContainerTemplate"
-local SECURE_INIT_VERSION = 7
+local SECURE_INIT_VERSION = 8
 
 local function ButtonTemplate()
   if UF and type(UF.GetSecureHeaderUnitButtonTemplate) == "function" then
@@ -1140,6 +1140,7 @@ local function BuildInitialConfigFunction(w, h)
 self:ClearAllPoints()
 self:SetWidth(%.3f)
 self:SetHeight(%.3f)
+if self.SetRoundLayoutToNearestPixel then self:SetRoundLayoutToNearestPixel(true) end
 self:SetAttribute('type1', nil)
 self:SetAttribute('*type1', 'target')
 self:SetAttribute('type2', nil)
@@ -1573,6 +1574,12 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
     local header = headers[groupIndex]
     if not header then
       header = CreateFrame("Frame", HeaderName("raid"), anchor, "SecureGroupHeaderTemplate")
+      -- 12.1.5 keeps the header rect on whole pixels in native code, which is
+      -- what the secure template anchors its managed children against.
+      -- SetRoundLayoutToNearestPixel is protected, so it is set here at
+      -- creation and never from a refresh path.
+      local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+      if type(roundLayout) == "function" then roundLayout(header, true) end
       headers[groupIndex] = header
     end
 
@@ -1750,6 +1757,12 @@ function GF.SetupPriorityHeader(kind, nameList, count)
   end
   if not header then
     header = CreateFrame("Frame", HeaderName("priority"), anchor, "SecureGroupHeaderTemplate")
+    -- 12.1.5 keeps the header rect on whole pixels in native code, which is
+    -- what the secure template anchors its managed children against.
+    -- SetRoundLayoutToNearestPixel is protected, so it is set here at
+    -- creation and never from a refresh path.
+    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+    if type(roundLayout) == "function" then roundLayout(header, true) end
     GF.headers.priority = header
     newHeader = true
   end
@@ -1846,6 +1859,12 @@ function GF.SetupHeader(key, kind)
 
   if not header then
     header = CreateFrame("Frame", HeaderName(key), anchor, "SecureGroupHeaderTemplate")
+    -- 12.1.5 keeps the header rect on whole pixels in native code, which is
+    -- what the secure template anchors its managed children against.
+    -- SetRoundLayoutToNearestPixel is protected, so it is set here at
+    -- creation and never from a refresh path.
+    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+    if type(roundLayout) == "function" then roundLayout(header, true) end
     GF.headers[key] = header
     newHeader = true
   end

@@ -83,6 +83,9 @@ end
 function G.MSUF_BuildCastbarFrameElements(frame)
     local barHeight = 18
 
+    local roundLayout = G.MSUF_SetRoundLayoutToNearestPixel
+    if type(roundLayout) == "function" then roundLayout(frame, true) end
+
     frame:SetHeight(barHeight)
     if (not frame:GetWidth()) or frame:GetWidth() == 0 then
         frame:SetWidth(250)
@@ -93,6 +96,7 @@ function G.MSUF_BuildCastbarFrameElements(frame)
     frame.background:SetColorTexture(0, 0, 0, 0)
 
     local statusBar = CreateFrame("StatusBar", nil, frame)
+    if type(roundLayout) == "function" then roundLayout(statusBar, true) end
     statusBar:SetPoint("LEFT", frame, "LEFT", barHeight + 1, 0)
     statusBar:SetSize(frame:GetWidth() - barHeight - 1, frame:GetHeight())
     statusBar:SetStatusBarTexture(CastbarTexture())
