@@ -152,7 +152,7 @@ end
 
 local MenuTimer = {}
 function MenuTimer.After(delay, callback)
-    Runtime:Schedule(delay, callback, "C_Timer.After")
+    return Runtime:Schedule(delay, callback, "C_Timer.After")
 end
 function MenuTimer.NewTimer(delay, callback)
     return Runtime:Schedule(delay, callback, "C_Timer.NewTimer")
