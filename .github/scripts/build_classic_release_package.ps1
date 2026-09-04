@@ -300,6 +300,8 @@ $sourceVersion = [IO.File]::ReadAllText((Join-Path $repoRoot 'VERSION')).Trim()
 if ($sourceVersion -ne $release) {
     throw "VERSION '$sourceVersion' does not match Classic release '$release'."
 }
+& (Join-Path $PSScriptRoot "assert-classic-6-5-release-line.ps1") `
+    -RepositoryRoot $repoRoot -ReleaseVersion $release
 $outputRoot = Resolve-RepoOutputPath $OutputDirectory
 $expectedTocRelativePaths = @(
     foreach ($addon in $addonNames) {

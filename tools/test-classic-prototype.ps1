@@ -54,6 +54,8 @@ $clients = @(
     @{ Suffix = "TBC"; Interface = "20506" }
 )
 $expectedVersion = (Get-Content -LiteralPath (Join-Path $root "VERSION") -Raw).Trim()
+& (Join-Path $root ".github/scripts/assert-classic-6-5-release-line.ps1") `
+    -RepositoryRoot $root -ReleaseVersion $expectedVersion
 
 # Writing addon-owned fallbacks into Blizzard's C_* namespace taints the table
 # and can surface later as ADDON_ACTION_FORBIDDEN at UseAction(). Compatibility
