@@ -4484,23 +4484,21 @@ local function ConfigureStandaloneAuraDurationText(owner, fs, lane, duration, en
 end
 
 local NATIVE_AURA_CONTAINER_METHODS = {
+    -- Keep the required surface at Retail 12.1. Later client additions are
+    -- capability-checked where used so this beta remains loadable on 12.1.
     "SetUnit",
     "SetEnabled",
-    "SetEditModePreviewEnabled",
     "AddAuraGroup",
-    "SetAuraGroupEnabled",
     "SetAuraGroupFilterString",
     "SetAuraGroupLayout",
     "SetAuraGroupMaxFrameCount",
     "SetAuraGroupCandidateFilters",
     "SetAuraGroupSortMethod",
     "AddAuraSlot",
-    "SetAuraSlotEnabled",
     "SetAuraSlotFilterString",
     "SetAuraSlotCandidateFilters",
     "SetAuraSlotSortMethod",
     "AddItemEnchantment",
-    "SetItemEnchantmentEnabled",
     -- PTR 7 flow layout API (replaced SetAuraLayout{AnchorPoint,GrowthDirection,RowWidth}).
     "SetFlowLayoutAnchorPoint",
     "SetFlowLayoutGrowthDirection",
@@ -4508,6 +4506,8 @@ local NATIVE_AURA_CONTAINER_METHODS = {
 }
 
 local NATIVE_AURA_BUTTON_METHODS = {
+    -- These are the Retail 12.1 requirements. Caster-name and native Pandemic
+    -- animation methods arrive later and remain optional at their call sites.
     "SetIcon",
     "ClearIcon",
     "SetDurationCooldown",
@@ -4518,11 +4518,6 @@ local NATIVE_AURA_BUTTON_METHODS = {
     "ClearDurationText",
     "SetApplicationCount",
     "ClearApplicationCount",
-    "SetCasterName",
-    "ClearCasterName",
-    "AddPandemicEnterAnimation",
-    "AddPandemicActiveAnimation",
-    "AddPandemicLeaveAnimation",
     -- PTR 7 names; the SetAuraBorder/SetAuraSymbol aliases are deprecated and
     -- flagged for removal after 12.1.
     "AddDispelTypeTexture",

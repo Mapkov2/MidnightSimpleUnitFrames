@@ -77,6 +77,29 @@ for i = 1, #intentionallyExcluded do
 end
 
 local runtime = readFile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
+local requiredContainerStart = assert(runtime:find("local NATIVE_AURA_CONTAINER_METHODS = {", 1, true))
+local requiredButtonStart = assert(runtime:find("local NATIVE_AURA_BUTTON_METHODS = {", requiredContainerStart, true))
+local requiredContractStop = assert(runtime:find("local function ValidateNativeAuraContainerContract", requiredButtonStart, true))
+local requiredContainerMethods = runtime:sub(requiredContainerStart, requiredButtonStart - 1)
+local requiredButtonMethods = runtime:sub(requiredButtonStart, requiredContractStop - 1)
+for _, methodName in ipairs({
+    "SetEditModePreviewEnabled", "SetAuraGroupEnabled", "SetAuraSlotEnabled", "SetItemEnchantmentEnabled",
+}) do
+    assert(not has(requiredContainerMethods, '"' .. methodName .. '"'),
+        "Retail 12.1 AuraContainer contract requires later method " .. methodName)
+end
+for _, methodName in ipairs({
+    "SetCasterName", "ClearCasterName", "AddPandemicEnterAnimation",
+    "AddPandemicActiveAnimation", "AddPandemicLeaveAnimation",
+}) do
+    assert(not has(requiredButtonMethods, '"' .. methodName .. '"'),
+        "Retail 12.1 AuraButton contract requires later method " .. methodName)
+end
+assert(has(runtime, 'if type(container.SetEditModePreviewEnabled) == "function" then'),
+    "later Edit Mode preview API is not capability-gated")
+local spellIndicatorSource = readFile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
+assert(has(spellIndicatorSource, 'and type(button.AddPandemicActiveAnimation) == "function"'),
+    "later Pandemic animation API is not capability-gated")
 assert(has(runtime, "ConfigureCuratedBigDefensiveLane(lane)"), "runtime does not compile curated Big Defensive lanes")
 assert(has(runtime, "SyncCuratedBigDefensiveContainer(container)"), "identity refresh does not switch safe Big Defensive variants")
 assert(has(runtime, "if playerScoped then filter = filter .. \"|PLAYER\" end"), "Player modifier is not explicit")
