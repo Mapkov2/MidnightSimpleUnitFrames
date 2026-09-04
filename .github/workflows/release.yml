@@ -256,6 +256,16 @@ jobs:
           }
           $tagRequestsCurseForgeBeta = -not [string]::IsNullOrWhiteSpace($tagContents) -and
             [regex]::IsMatch($tagContents, '(?im)^\s*curseforge-channel\s*:\s*beta\s*$')
+          $curseForgeGameVersion = ""
+          if (-not [string]::IsNullOrWhiteSpace($tagContents)) {
+            $gameVersionMatches = [regex]::Matches($tagContents, '(?im)^\s*curseforge-game-version\s*:\s*(\d+\.\d+\.\d+)\s*$')
+            if ($gameVersionMatches.Count -gt 1) {
+              throw "Release tag '$tag' declares curseforge-game-version more than once."
+            }
+            if ($gameVersionMatches.Count -eq 1) {
+              $curseForgeGameVersion = $gameVersionMatches[0].Groups[1].Value
+            }
+          }
           $releaseName = $env:RELEASE_NAME_INPUT
           if ([string]::IsNullOrWhiteSpace($releaseName)) {
             $tagSubject = git for-each-ref "refs/tags/$tag" --format='%(contents:subject)' 2>$null
@@ -328,11 +338,13 @@ jobs:
           "CF_RELEASE_TYPE=$curseForgeType" >> $env:GITHUB_ENV
           "RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
           "CURSEFORGE_DISPLAY_NAME=$curseForgeDisplayName" >> $env:GITHUB_ENV
+          "CURSEFORGE_GAME_VERSION=$curseForgeGameVersion" >> $env:GITHUB_ENV
           "release_is_prerelease=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "github_make_latest=$(if ($isPrerelease) { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
           "curseforge_display_name=$curseForgeDisplayName" >> $env:GITHUB_OUTPUT
-          Write-Host "Release $tag uses name '$releaseName', CurseForge name '$curseForgeDisplayName', Wago stability '$wagoStability', and CurseForge type '$curseForgeType' (CurseForge beta override=$tagRequestsCurseForgeBeta)."
+          $curseForgeGameVersionLabel = if ($curseForgeGameVersion) { $curseForgeGameVersion } else { "highest declared TOC interface" }
+          Write-Host "Release $tag uses name '$releaseName', CurseForge name '$curseForgeDisplayName', Wago stability '$wagoStability', CurseForge type '$curseForgeType', and CurseForge game version '$curseForgeGameVersionLabel' (CurseForge beta override=$tagRequestsCurseForgeBeta)."
 
       - name: Enforce prerelease channels for prerelease tags
         shell: pwsh
@@ -790,7 +802,15 @@ jobs:
           if (-not $interfaces) {
             throw "No numeric retail interface found in TOC."
           }
+          $declaredRetailPatches = @($interfaces | ForEach-Object { Convert-RetailInterfaceToPatch -Interface $_ })
           $retailPatch = Convert-RetailInterfaceToPatch -Interface (($interfaces | Measure-Object -Maximum).Maximum)
+          if (-not [string]::IsNullOrWhiteSpace($env:CURSEFORGE_GAME_VERSION)) {
+            $requestedRetailPatch = $env:CURSEFORGE_GAME_VERSION.Trim()
+            if ($requestedRetailPatch -notin $declaredRetailPatches) {
+              throw "CurseForge game version '$requestedRetailPatch' is absent from the declared TOC interfaces [$($declaredRetailPatches -join ', ')]."
+            }
+            $retailPatch = $requestedRetailPatch
+          }
 
           $changelogPath = "dist/RELEASE_NOTES_CF.html"
           $changelogType = "html"
