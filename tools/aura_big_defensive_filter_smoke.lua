@@ -107,10 +107,33 @@ assert(beginTopology < applyAll and applyAll < endTopology,
     "full Aura refresh does not batch identity-event topology")
 local flushStop = assert(runtime:find("function A3._FlushDeferredAuraRuntime()", refreshAllStop, true))
 local flushBody = runtime:sub(refreshAllStop, flushStop - 1)
-assert(has(flushBody, "while directIdentityEventTopologyBatchDepth > 0 do")
+assert(has(flushBody, "DrainDirectIdentityEventTopologyBatch()")
     and has(flushBody, "A3._refreshAllIncomplete == true")
     and has(flushBody, "return A3.RefreshAll()"),
     "aborted Aura refresh cannot unwind and retry on the next frame")
+assert(not has(flushBody, "directIdentityEventTopologyBatchDepth"),
+    "refresh recovery reads the NativeRuntime-private topology depth")
+assert(has(runtime, "DrainDirectIdentityEventTopologyBatch = DrainDirectIdentityEventTopologyBatch"),
+    "NativeRuntime does not export its topology recovery helper")
+assert(has(runtime, "local DrainDirectIdentityEventTopologyBatch = NativeRuntime.DrainDirectIdentityEventTopologyBatch"),
+    "public Aura orchestration does not retain the topology recovery helper")
+local topologyStart = assert(runtime:find("local directIdentityRefreshEventFrame", 1, true))
+local topologyStop = assert(runtime:find("local function DirectIdentityRefreshEventsAlreadyCover", topologyStart, true))
+local topologyBlock = runtime:sub(topologyStart, topologyStop - 1)
+local topologyLoader = loadstring or load
+local topologyChunk, topologyLoadError = topologyLoader([[
+local A3 = {}
+]] .. topologyBlock .. [[
+return A3._BeginDirectIdentityEventTopologyBatch,
+    A3._EndDirectIdentityEventTopologyBatch,
+    DrainDirectIdentityEventTopologyBatch
+]], "@aura_topology_recovery")
+assert(topologyChunk, topologyLoadError)
+local beginBatch, endBatch, drainBatch = topologyChunk()
+assert(beginBatch() == 1 and beginBatch() == 2, "topology batch depth did not increment")
+assert(drainBatch() == true, "topology recovery did not drain an interrupted batch")
+assert(endBatch() == false and drainBatch() == false,
+    "topology recovery left a stale batch depth")
 local publicRefreshStart = assert(runtime:find("function A3.RefreshAll()", refreshAllStop, true))
 local publicRefreshStop = assert(runtime:find("function A3.RefreshRoundedDispelOverlayMasks()", publicRefreshStart, true))
 local publicRefreshBody = runtime:sub(publicRefreshStart, publicRefreshStop - 1)
