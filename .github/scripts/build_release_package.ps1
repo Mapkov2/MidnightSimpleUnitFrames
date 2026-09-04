@@ -382,6 +382,9 @@ if ([string]::IsNullOrWhiteSpace($release)) {
     throw "Release version cannot be empty."
 }
 
+& (Join-Path $PSScriptRoot "assert-retail-12-1-release-line.ps1") `
+    -RepositoryRoot $repoRoot -ReleaseVersion $release
+
 $addonNames = @(
     "MidnightSimpleUnitFrames",
     "MidnightSimpleUnitFrames_Assistant",

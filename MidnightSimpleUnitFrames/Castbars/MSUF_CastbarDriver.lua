@@ -15,9 +15,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local C_Timer = _G.C_Timer
-local RunNextFrame = _G.MSUF_RunNextFrame
-local ScheduleAfter = _G.MSUF_ScheduleAfter
-local CancelScheduled = _G.MSUF_CancelScheduled
 local GetTime = _G.GetTime
 local GetCVar = _G.GetCVar
 local UnitExists = _G.UnitExists
@@ -35,20 +32,6 @@ local tostring = tostring
 local castbarEngine = MSUF.Castbars and MSUF.Castbars.Engine
 local castbarRuntime = MSUF.MSUF_CastbarRuntime or _G.MSUF_CastbarRuntime
 local ApplyInterruptValues = castbarRuntime and castbarRuntime.ApplyInterruptValues
-
-local function ScheduleDelayed(callback, delay)
-    if type(ScheduleAfter) == "function" then
-        return ScheduleAfter(callback, delay, callback)
-    end
-    C_Timer.After(delay, callback)
-    return true
-end
-
-local function CancelDelayed(callback)
-    if callback and type(CancelScheduled) == "function" then
-        CancelScheduled(callback)
-    end
-end
 
 local function CastbarEngine()
     if castbarEngine then return castbarEngine end
@@ -617,10 +600,6 @@ local function ClearStopExpectation(frame)
     frame._msufStopTimer1 = nil
     frame._msufStopTimer2 = nil
     frame._msufStopTimer3 = nil
-    CancelDelayed(frame._msufStopCB_chanT1)
-    CancelDelayed(frame._msufStopCB_chanT2)
-    CancelDelayed(frame._msufStopCB_castT1)
-    CancelDelayed(frame._msufStopCB_failsafe)
 end
 
 local function ClearStartRetry(frame)
@@ -629,7 +608,6 @@ local function ClearStartRetry(frame)
     frame._msufStartRetryToken = -1
     frame._msufStartRetryTimer = nil
     frame._msufStartRetryPending = nil
-    CancelDelayed(frame._msufStartRetryCB)
 end
 
 local function StopDriverFrame(frame, reason)
@@ -677,7 +655,7 @@ local function EnsureDriverCallbacks(frame)
         end
 
         frame._msufStopTimer2 = true
-        ScheduleDelayed(frame._msufStopCB_chanT2, frame._msufStopT2 or 0.08)
+        C_Timer.After(frame._msufStopT2 or 0.08, frame._msufStopCB_chanT2)
     end
 
     frame._msufStopCB_chanT2 = function()
@@ -775,7 +753,7 @@ local function EnsureDriverCallbacks(frame)
 
         local now = (type(GetTime) == "function") and GetTime() or 0
         if deadline and deadline > now then
-            ScheduleDelayed(frame._msufInterruptHideCB, deadline - now)
+            C_Timer.After(deadline - now, frame._msufInterruptHideCB)
             return
         end
 
@@ -1039,16 +1017,16 @@ local function ScheduleStopConfirmation(frame, castType)
 
         frame._msufStopT2 = secondDelay
         frame._msufStopTimer1 = true
-        ScheduleDelayed(frame._msufStopCB_chanT1, firstDelay)
+        C_Timer.After(firstDelay, frame._msufStopCB_chanT1)
         frame._msufStopTimer3 = true
-        ScheduleDelayed(frame._msufStopCB_failsafe, failsafeDelay)
+        C_Timer.After(failsafeDelay, frame._msufStopCB_failsafe)
         return
     end
 
     frame._msufStopTimer1 = true
-    ScheduleDelayed(frame._msufStopCB_castT1, 0.12)
+    C_Timer.After(0.12, frame._msufStopCB_castT1)
     frame._msufStopTimer3 = true
-    ScheduleDelayed(frame._msufStopCB_failsafe, 0.40)
+    C_Timer.After(0.40, frame._msufStopCB_failsafe)
 end
 
 HandleUnitDeathEvent = function(frame, event)
@@ -1180,7 +1158,7 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
             if not frame._msufStartRetryPending then
                 frame._msufStartRetryPending = true
                 frame._msufStartRetryTimer = true
-                ScheduleDelayed(frame._msufStartRetryCB, 0.05)
+                C_Timer.After(0.05, frame._msufStartRetryCB)
             end
         end
         return
@@ -1465,11 +1443,7 @@ local function CreateCastBar(frameName, unit)
             self._msufInactiveRecheckToken = self._msufHideToken
             if not self._msufInactiveRecheckPending then
                 self._msufInactiveRecheckPending = true
-                if type(RunNextFrame) == "function" then
-                    RunNextFrame(self._msufInactiveRecheckCB)
-                else
-                    C_Timer.After(0, self._msufInactiveRecheckCB)
-                end
+                C_Timer.After(0, self._msufInactiveRecheckCB)
             end
         end
 
@@ -1540,7 +1514,7 @@ local function CreateCastBar(frameName, unit)
         self._msufInterruptHideDeadline = ((type(GetTime) == "function") and GetTime() or 0) + feedbackDuration
         if not self._msufInterruptHidePending then
             self._msufInterruptHidePending = true
-            ScheduleDelayed(self._msufInterruptHideCB, feedbackDuration)
+            C_Timer.After(feedbackDuration, self._msufInterruptHideCB)
         end
     end
 
@@ -1548,9 +1522,6 @@ local function CreateCastBar(frameName, unit)
         HideChannelHasteMarkers(self)
         if self.interrupted then return end
 
-        -- The earliest confirmation wins. Retire the remaining native signal
-        -- keys so the later failsafe cannot rebuild the same idle state.
-        ClearStopExpectation(self)
         ClearFrameOnUpdate(self)
         _G.MSUF_CB_ResetStateOnStop(self, "SUCCEEDED")
         PublishState(self, nil, "SUCCEEDED")

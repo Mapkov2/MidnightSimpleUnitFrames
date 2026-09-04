@@ -46,8 +46,6 @@ local ABBREV_SAMPLES = { 123, 12345, 123456, 1234567, 12345678, 1234567890 }
 local MENU_WRITE_OPTS = { preview = false, applyAll = false, notify = false }
 local MOUSEOVER_WRITE_OPTS = { preview = false, applyAll = false, mouseoverHighlight = true }
 local PREVIEW_FALSE = { preview = false }
-local IS_MAINLINE = _G.WOW_PROJECT_ID == nil or _G.WOW_PROJECT_MAINLINE == nil
-    or _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE
 local function NormalizeTooltipMode(mode)
     if mode == "OOC" or mode == "MODIFIER" or mode == "NEVER" then return mode end
     if mode == "OFF" then return "NEVER" end
@@ -550,18 +548,6 @@ local function BuildMisc(ctx)
                 _G.MSUF_ApplyTooltipSpellIDs(v and true or false)
             end
         end)
-    if IS_MAINLINE then
-        local tooltipCasterNames = BindMiscToggle(tooltips, "Show caster names in aura tooltips", "tooltipShowAuraCasterNames", false,
-            "MSUF2_TOOLTIP_CASTER_NAMES", 14, -252, 360, PREVIEW_FALSE,
-            function(v)
-                if type(_G.MSUF_ApplyTooltipCasterNames) == "function" then
-                    _G.MSUF_ApplyTooltipCasterNames(v and true or false)
-                end
-            end)
-        M.AddTooltip(tooltipCasterNames, "Aura tooltip caster names",
-            "On: aura tooltips name who applied the aura, coloured by reaction or class, through the game's own 12.1.5 option, and MSUF re-enables it after every login. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; turning this switch off clears the option once.",
-            { hook = true })
-    end
     M.AddTooltip(tooltipSpellIDs, "Aura tooltip spell IDs",
         "On: aura tooltips show the numeric spell ID through the game's own 12.1 option, and MSUF re-enables that option after every login because the game forgets it between sessions. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; turning this switch off clears the option once.",
         { hook = true })

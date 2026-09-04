@@ -204,20 +204,6 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
             if type(fn) == "function" then fn() end
         end,
     })
-    if _G.WOW_PROJECT_ID == nil or _G.WOW_PROJECT_MAINLINE == nil
-        or _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE then
-        RegisterGeneralBoolean("tooltipShowAuraCasterNames", "tooltipShowAuraCasterNames", "Aura Tooltip Caster Names", false, {
-            "aura tooltip caster names", "caster names in aura tooltips", "tooltip caster names",
-            "show caster names in aura tooltips", "hide caster names in aura tooltips",
-            "wirkername im aura tooltip", "zauberer im aura tooltip", "aura wirker anzeigen",
-        }, {
-            category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_TOOLTIP_CASTER_NAMES",
-            apply = function()
-                local fn = _G.MSUF_ApplyTooltipCasterNames
-                if type(fn) == "function" then fn() end
-            end,
-        })
-    end
     RegisterGeneralBoolean("nsrtNicknameIntegration", "nsrtNicknameIntegration", "NSRT Nickname Integration", true, {
         "nsrt nicknames", "nsrt nickname integration", "northern sky raid tools nicknames", "use nsrt nicknames",
         "disable nsrt nicknames", "show character names instead of nsrt nicknames", "nsrt spitznamen", "nsrt namen deaktivieren",

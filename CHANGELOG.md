@@ -1,5 +1,38 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.15 - 2026-09-04
+
+### Highlights
+
+- **Absorbs and heal prediction can now stay visible when the health bar is faded into the background.** Enable **Keep Absorbs + Prediction Visible** per Unit Frame or for Party and Raid Frames to keep these overlays at full opacity independently from the health fill.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"transparency","controlId":"menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars","settingKey":"player.alphaExcludePredictionBars","prepareKind":"","prepareValue":"","query":"keep absorbs prediction visible","label":"Keep Absorbs + Prediction Visible"} -->
+- **Raid and Mythic Raid role sorting can now span the entire raid.** Enable **Sort roles across entire raid** under Group Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"sorting","controlId":"menu2.gf_layout.group.field.sortrolesacrossraid","settingKey":"gf_raid.sortRolesAcrossRaid","prepareKind":"groupScope","prepareValue":"raid","query":"sort roles across entire raid","label":"Sort roles across entire raid"} -->
+
+### Changes
+
+- Added **Keep Absorbs + Prediction Visible** to Unit Frames and Party/Raid Frames, including profile copy, defaults, previews, search, and Assistant support.
+- Added **Sort roles across entire raid** for Raid and Mythic Raid Frames, including defaults, profile copy, locales, search, and Assistant support. Role sorting can now span the full raid with Preserve raid groups or Group + Role, while Party remains unchanged.
+- The Boss Preview now displays incoming heals, absorbs, heal absorbs, and absorb text so prediction settings can be reviewed without a live boss.
+- The Assistant now understands plain-language requests about a specific Unit Frame and resolves questions, hide commands, movement directions, and opacity controls against the named frame and control.
+- Retired pre-6.0 profile conversion and import controls. Existing MSUF 6.x profiles and 6.x Wago imports remain supported; older or unversioned stored profiles are archived instead of entering the active profile list.
+- See New Features can now open the exact Player Aura workspace used by the current Aura highlight.
+
+### Fixes & Performance
+
+- Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview now preserve the configured health and prediction opacity instead of resetting prediction fills to full or faded health opacity.
+- Assistant requests for Out of range opacity, Texture Layer opacity, and Portrait opacity now update their own controls instead of changing health-bar opacity.
+- Detached Player Power bars attached or width-synced to Class Resources retain their controller-managed anchor while the Class Resource bar is hidden, preventing position and width jumps after shapeshifting.
+- **Text on detached bar** now controls only Power-text placement. It no longer appears disabled merely because Power text is hidden and no longer enables **Show power text** by itself.
+- Aura owners that cannot be visible for the current unit stop parsing `UNIT_AURA`; their native registration and unresolved-name work resume only when the owner becomes eligible again.
+- Cleanse and Purge borders now use the same Frame Outline layer as their preview, Unit Frame dispel borders follow Blizzard's assist rules, and Purge, cast-by-me, and Retail exact-ID Group Aura ownership retain their intended behavior.
+- Group Frame dead and offline backgrounds now follow secret health updates without lagging behind the unit's real state.
+- Preserved raid groups build and sort one authoritative roster snapshot per secure-header setup. Their rendered block count now follows the same roster, preventing the filled and displayed grids from disagreeing when more subgroups are present than the configured column limit.
+- The Group Layout Sorting card now aligns its Sort Mode dropdown and dependent toggles consistently.
+- Interrupted full Aura refreshes arm their recovery before synchronous work and can no longer leave later refreshes stuck as pending after a Lua execution-budget abort.
+- Aura recovery remains inside the native factory runtime and preserves the Retail 12.1 hook contracts across refreshes, preventing Aura displays from remaining empty after an interrupted update.
+- Class Resource previews can schedule refreshes again after Menu lifecycle cancellation, so movement and position controls continue updating after settings changes.
+
 ## 6.15-beta5 - 2026-09-04
 
 ### Highlights
@@ -9,7 +42,7 @@
 
 ### Changes
 
-- The CurseForge Beta is explicitly published for Retail 12.1.0 while the source retains guarded compatibility with the newer 12.1.5 native contracts.
+- The CurseForge Beta is explicitly published for Retail 12.1.0.
 
 ### Fixes & Performance
 
@@ -27,12 +60,10 @@
 ### Changes
 
 - Retired the complete pre-6.0 profile conversion path and its legacy import controls. Every MSUF 6.x schema-600 profile and the 6.x Wago envelope remain supported; older or unversioned stored profiles are archived instead of being normalized into the active profile list.
-- Added the Retail 12.1.5 Aura, castbar, scheduling, tooltip-caster and native pixel-rounding contracts while retaining explicit TOC compatibility with Retail 12.0.7 and 12.1.0.
 
 ### Fixes & Performance
 
 - Full Aura refreshes batch identity-event topology once and arm their next-frame recovery before synchronous work, so a `script ran too long` abort cannot leave every later Aura refresh permanently latched as pending.
-- Shared next-frame and delayed-signal scheduling replace repeated one-shot timer allocation on supported clients, with the existing timer fallback retained for Retail 12.0.7 and 12.1.0.
 
 ## 6.15-beta3 - 2026-09-03
 

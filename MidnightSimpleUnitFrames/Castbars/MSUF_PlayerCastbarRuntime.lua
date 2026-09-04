@@ -15,9 +15,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local C_Timer = _G.C_Timer
-local RunNextFrame = _G.MSUF_RunNextFrame
-local ScheduleAfter = _G.MSUF_ScheduleAfter
-local CancelScheduled = _G.MSUF_CancelScheduled
 local type = type
 local tonumber = tonumber
 local tostring = tostring
@@ -25,14 +22,6 @@ local select = select
 local math_max = math.max
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local castbarEngine
-
-local function ScheduleDelayed(callback, delay)
-    if type(ScheduleAfter) == "function" then
-        return ScheduleAfter(callback, delay, callback)
-    end
-    C_Timer.After(delay, callback)
-    return true
-end
 
 local function CastbarEngine()
     if castbarEngine then return castbarEngine end
@@ -233,11 +222,7 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
     if not statusWidth or statusWidth <= 1 then
         latencyQueue[#latencyQueue + 1] = frame
         latencyQueue[#latencyQueue + 1] = generation
-        if type(RunNextFrame) == "function" then
-            RunNextFrame(FlushLatencyQueue)
-        else
-            C_Timer.After(0, FlushLatencyQueue)
-        end
+        C_Timer.After(0, FlushLatencyQueue)
         return
     end
 
@@ -504,9 +489,6 @@ local function InvalidatePlayerInterruptHide(frame)
     frame._msufHideToken = (frame._msufHideToken or 0) + 1
     frame._msufPlayerInterruptHideToken = nil
     frame._msufPlayerInterruptHideDeadline = nil
-    if frame._msufPlayerInterruptHideCB and type(CancelScheduled) == "function" then
-        CancelScheduled(frame._msufPlayerInterruptHideCB)
-    end
 end
 
 local function ApplyActiveCast(
@@ -794,11 +776,7 @@ local function ScheduleSoftResync(frame)
     end
     if not frame._msufSoftResyncPending then
         frame._msufSoftResyncPending = true
-        if type(RunNextFrame) == "function" then
-            RunNextFrame(frame._msufSoftResyncCB)
-        else
-            C_Timer.After(0, frame._msufSoftResyncCB)
-        end
+        C_Timer.After(0, frame._msufSoftResyncCB)
     end
 end
 
@@ -848,7 +826,7 @@ local function EnsureInterruptHideCallback(frame)
 
         local now = _G.GetTime()
         if deadline and deadline > now then
-            ScheduleDelayed(frame._msufPlayerInterruptHideCB, deadline - now)
+            C_Timer.After(deadline - now, frame._msufPlayerInterruptHideCB)
             return
         end
 
@@ -920,7 +898,7 @@ local function ShowInterruptFeedback(frame, label)
     EnsureInterruptHideCallback(frame)
     if not frame._msufPlayerInterruptHidePending then
         frame._msufPlayerInterruptHidePending = true
-        ScheduleDelayed(frame._msufPlayerInterruptHideCB, duration)
+        C_Timer.After(duration, frame._msufPlayerInterruptHideCB)
     end
 end
 

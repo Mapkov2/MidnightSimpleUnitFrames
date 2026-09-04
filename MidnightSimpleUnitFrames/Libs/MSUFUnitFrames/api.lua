@@ -242,10 +242,6 @@ function Framework:Spawn(unit, overrideName)
   local frame = CreateFrame(
     "Button", name, FrameParent(),
     "SecureUnitButtonTemplate, PingableUnitFrameTemplate")
-  -- Native pixel rounding for the button rect (12.1.5). Protected function, so
-  -- it is set at creation and out of combat; not recursive by design.
-  local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-  if type(roundLayout) == "function" then roundLayout(frame, true) end
   if frame.SetAttribute then
     frame:SetAttribute("unit", unit)
     frame:SetAttribute("*type1", "target")

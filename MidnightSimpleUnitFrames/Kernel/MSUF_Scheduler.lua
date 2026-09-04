@@ -146,97 +146,6 @@ function Scheduler.ScheduleOnce(key, fn)
     QueueNextFrame(key, fn)
 end
 
---- Delayed keyed scheduling.
----
---- 12.1.5 ships TimedSignalMap: one native callback map drives many keyed
---- deadlines, and a key is rescheduled by signalling it again instead of being
---- cancelled and recreated. That drops the per-call closure and timer object
---- C_Timer.After allocates, which is what matters here - the dense callers fire
---- in bursts (target swap, roster change, menu refresh), not steadily.
----
---- One numeric signal key is registered per logical key and kept for the
---- session. TimerUtil retains registered callbacks for the map's lifetime, so
---- registering per call would leak; after the first use a reschedule costs one
---- SignalAfter plus one table store and allocates nothing. Keys are therefore
---- meant to be stable identities (a string, a module table, a frame), never a
---- value minted per call.
-local delayedPending = Scheduler.delayedPending or {}
-local delayedKeys = Scheduler.delayedKeys or {}
-local delayedGenerations = Scheduler.delayedGenerations or {}
-Scheduler.delayedPending = delayedPending
-Scheduler.delayedKeys = delayedKeys
-Scheduler.delayedGenerations = delayedGenerations
-
-local signalMap = Scheduler.signalMap
-if signalMap == nil then
-    local timerUtil = _G.TimerUtil
-    if timerUtil and type(timerUtil.CreateTimedSignalCallbackMap) == "function" then
-        signalMap = timerUtil.CreateTimedSignalCallbackMap()
-    else
-        signalMap = false
-    end
-    Scheduler.signalMap = signalMap
-end
-
-local function RunDelayed(key)
-    local fn = delayedPending[key]
-    if fn == nil then return end
-    delayedPending[key] = nil
-    InvokeCallback(fn)
-end
-
---- Schedule fn under key after delay seconds. A second call for the same key
---- replaces both the pending function and its deadline, which is the debounce
---- shape most C_Timer.After callers hand-rolled with a guard flag.
-function Scheduler.ScheduleAfter(key, delay, fn)
-    if type(fn) ~= "function" then return false end
-    key = key or fn
-    delay = tonumber(delay) or 0
-    if delay < 0 then delay = 0 end
-    delayedPending[key] = fn
-
-    if signalMap then
-        local signalKey = delayedKeys[key]
-        if signalKey == nil then
-            signalKey = signalMap:RegisterCallback(function() RunDelayed(key) end)
-            delayedKeys[key] = signalKey
-        end
-        signalMap:SignalAfter(signalKey, delay)
-        return true
-    end
-
-    -- Without TimedSignalMap a pending C_Timer.After cannot be replaced, so a
-    -- generation counter retires the stale one instead of cancelling it.
-    local generation = (delayedGenerations[key] or 0) + 1
-    delayedGenerations[key] = generation
-    if C_Timer and C_Timer.After then
-        C_Timer.After(delay, function()
-            if delayedGenerations[key] ~= generation then return end
-            RunDelayed(key)
-        end)
-        return true
-    end
-    RunDelayed(key)
-    return true
-end
-
-function Scheduler.CancelScheduled(key)
-    if key == nil then return false end
-    local had = delayedPending[key] ~= nil
-    delayedPending[key] = nil
-    local signalKey = delayedKeys[key]
-    if signalMap and signalKey ~= nil then
-        signalMap:CancelSignal(signalKey)
-    else
-        delayedGenerations[key] = (delayedGenerations[key] or 0) + 1
-    end
-    return had
-end
-
-function Scheduler.IsScheduled(key)
-    return key ~= nil and delayedPending[key] ~= nil
-end
-
 local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
@@ -245,6 +154,4 @@ end
 ExportPublic("MSUF_Scheduler", Scheduler)
 ExportPublic("MSUF_RunNextFrame", Scheduler.RunNextFrame)
 ExportPublic("MSUF_ScheduleOnce", Scheduler.ScheduleOnce)
-ExportPublic("MSUF_ScheduleAfter", Scheduler.ScheduleAfter)
-ExportPublic("MSUF_CancelScheduled", Scheduler.CancelScheduled)
 ExportPublic("MSUF_Core_RunNextFrame", _G.MSUF_Core_RunNextFrame or Scheduler.RunNextFrame)

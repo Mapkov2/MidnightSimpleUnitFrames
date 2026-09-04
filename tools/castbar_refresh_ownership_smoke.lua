@@ -120,9 +120,9 @@ assert(not contains(driver, "ScheduleTargetFocusChanged")
     and not contains(driver, "_msufTargetFocusRefreshCallback"),
     "target/focus identity retained a zero-delay scheduler")
 assert(contains(driver, "C_Timer.After(0, self._msufInactiveRecheckCB)"))
-assert(contains(driver, "ScheduleDelayed(self._msufInterruptHideCB, feedbackDuration)"))
+assert(contains(driver, "C_Timer.After(feedbackDuration, self._msufInterruptHideCB)"))
 assert(contains(player, "C_Timer.After(0, frame._msufSoftResyncCB)"))
-assert(contains(player, "ScheduleDelayed(frame._msufPlayerInterruptHideCB, duration)"))
+assert(contains(player, "C_Timer.After(duration, frame._msufPlayerInterruptHideCB)"))
 assert(not contains(player, "HideIfNoLongerCasting({"), "player interrupt callback must not allocate an owner table")
 
 assert(contains(interruptReady, "EvaluateColorValueFromBoolean"),

@@ -881,33 +881,6 @@ do
         return true
     end
 
-    --- 12.1.5 rounds layout in native code when a region carries the attribute,
-    --- and it re-rounds on every layout change instead of only when MSUF_Snap's
-    --- cached step is invalidated. SetRoundLayoutToNearestPixel is a protected
-    --- function: on a protected frame - every secure unit button and every
-    --- group header - it is refused under combat lockdown, so callers set it
-    --- once at creation and never from a refresh path.
-    ---
-    --- Deliberately NOT recursive. MSUF turns pixel snapping off on purpose for
-    --- its rounded-corner art, aura masks and logo textures; the recursive
-    --- PixelUtil helper walks every child and would round exactly those back
-    --- on. Rounding the root is what aligns the rect the children anchor to.
-    ---
-    --- Returns false on clients without the API, which leaves MSUF_Snap as the
-    --- sole authority there.
-    local function MSUF_SetRoundLayoutToNearestPixel(frame, enabled)
-        if not (frame and type(frame.SetRoundLayoutToNearestPixel) == "function") then
-            return false
-        end
-        if InCombatLockdown and InCombatLockdown()
-            and type(frame.IsProtected) == "function" and frame:IsProtected()
-        then
-            return false
-        end
-        frame:SetRoundLayoutToNearestPixel(enabled ~= false)
-        return true
-    end
-
     local function MSUF_Snap(frame, v)
         if type(v) ~= "number" then
             return v
@@ -931,7 +904,6 @@ do
     end
 
     ExportPublic("MSUF_Snap", MSUF_Snap)
-    ExportPublic("MSUF_SetRoundLayoutToNearestPixel", MSUF_SetRoundLayoutToNearestPixel)
     ExportPublic("MSUF_Scale", MSUF_Scale)
     ExportPublic("MSUF_UpdatePixelPerfect", MSUF_UpdatePixelPerfect)
     ExportPublic("MSUF_GetPhysicalPixelSize", MSUF_GetPhysicalPixelSize)

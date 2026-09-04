@@ -2532,11 +2532,6 @@ end
 if g.tooltipShowAuraSpellIDs == nil then
     g.tooltipShowAuraSpellIDs = false
 end
---- 12.1.5 caster names in aura tooltips (Runtime/MSUF_TooltipSpellIDs.lua).
---- Off by default for the same reason: MSUF must not claim the CVar unopted.
-if g.tooltipShowAuraCasterNames == nil then
-    g.tooltipShowAuraCasterNames = false
-end
 --- EllesmereUI may own the visible Unlock Mode shell while MSUF keeps its own
 --- profile geometry and preview transaction. Users can opt out only when the
 --- EllesmereUI integration is actually available.

@@ -946,21 +946,6 @@ function Runtime.HideIconEffects(parentFrame)
     parentFrame._msufA3SpellIndicatorIconEffectButtons = nil
 end
 
-local function EnsurePandemicPulse(root)
-    if not root then return nil end
-    local pulse = root._msufA3PandemicActivePulse
-    if pulse then return pulse end
-    pulse = root:CreateAnimationGroup()
-    local alpha = pulse:CreateAnimation("Alpha")
-    alpha:SetFromAlpha(0.45)
-    alpha:SetToAlpha(1)
-    alpha:SetDuration(0.7)
-    if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
-    pulse:SetLooping("BOUNCE")
-    root._msufA3PandemicActivePulse = pulse
-    return pulse
-end
-
 local ForgetReminderEnchantPlaceholder
 
 function Runtime.HideMissing(parentFrame)
@@ -1272,7 +1257,7 @@ local function ForgetButtonFrameEffect(button, parentFrame)
     return false
 end
 
-local function ApplyButtonFrameEffect(button, slot, parentFrame, nativePandemic)
+local function ApplyButtonFrameEffect(button, slot, parentFrame)
     if not (button and slot and parentFrame) then return false end
     local effect = slot.frameEffect
     if type(effect) ~= "table" then
@@ -1331,7 +1316,7 @@ local function ApplyButtonFrameEffect(button, slot, parentFrame, nativePandemic)
             Round((ClampNumber(effect.thickness, 3, 1, 16) + 2) * 2.5) + FRAME_GLOW_INSET)
     else
         LayoutEdges(button, parentFrame, target, effect)
-        if kind == "pulse" and nativePandemic ~= true then StartPulse(root) end
+        if kind == "pulse" then StartPulse(root) end
     end
 
     parentFrame._msufA3SpellIndicatorEffectButtons = parentFrame._msufA3SpellIndicatorEffectButtons or {}
@@ -1410,25 +1395,12 @@ function Runtime.BindPandemicFrameEffect(button, effect, parentFrame)
     effect = NormalizeFrameEffect(effect)
     if not effect then return false end
     if button._msufA3PandemicFrameEffectRegion then return true end
-    local nativePulse = tostring(effect.type or "none"):lower() == "pulse"
-        and type(button.AddPandemicActiveAnimation) == "function"
-    if not ApplyButtonFrameEffect(button,
-        { frameEffect = effect, strata = effect.strata }, parentFrame, nativePulse) then return false end
+    if not ApplyButtonFrameEffect(button, { frameEffect = effect, strata = effect.strata }, parentFrame) then return false end
     local region = button._msufA3SpellIndicatorEffectRoot
     if not region then return false end
     region:Hide()
     button:AddPandemicRegion(region)
     button._msufA3PandemicFrameEffectRegion = region
-    -- 12.1.5 owns Pandemic animation lifecycle in native code. Register the
-    -- looping pulse once; do not query or play it afterward because Blizzard
-    -- seals QueryAnimationProgress and AddAnimations on inbound groups.
-    if nativePulse and button._msufA3PandemicActivePulseBound ~= true then
-        local pulse = EnsurePandemicPulse(region)
-        if pulse then
-            button:AddPandemicActiveAnimation(pulse)
-            button._msufA3PandemicActivePulseBound = true
-        end
-    end
     return true
 end
 
