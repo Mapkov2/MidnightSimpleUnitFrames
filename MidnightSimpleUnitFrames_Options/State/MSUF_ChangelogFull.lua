@@ -8,12 +8,71 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "F92434FAE6914BABA1734C36E75C3CE639BE696F3949D91175AF9971E4FEB829",
-    currentVersion = "6.5-alpha9",
+    sourceSha256 = "9E0EB66494E7C4A6F67AA405C69B9D6DD1728D190FBF5C3EDA78403F8577BB7E",
+    currentVersion = "6.5-alpha10",
     historyFromVersion = "6.5-alpha1",
-    previousVersion = "6.5-alpha8",
-    rangeLabel = "6.5-alpha8 -> 6.5-alpha9",
+    previousVersion = "6.5-alpha9",
+    rangeLabel = "6.5-alpha9 -> 6.5-alpha10",
     entries = {
+        {
+            version = "6.5-alpha10",
+            date = "2026-09-04",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Absorbs and heal prediction can now stay visible when the health bar is faded into the background. Enable Keep Absorbs + Prediction Visible per Unit Frame or for Party and Raid Frames to keep these overlays at full opacity independently from the health fill.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "keep absorbs prediction visible",
+                                label = "Keep Absorbs + Prediction Visible",
+                                sectionId = "transparency",
+                                controlId = "menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars",
+                                settingKey = "player.alphaExcludePredictionBars",
+                            },
+                        },
+                        {
+                            text = "Raid and Mythic Raid role sorting can now span the entire raid. Enable Sort roles across entire raid under Group Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group.",
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "sort roles across entire raid",
+                                label = "Sort roles across entire raid",
+                                sectionId = "sorting",
+                                controlId = "menu2.gf_layout.group.field.sortrolesacrossraid",
+                                settingKey = "gf_raid.sortRolesAcrossRaid",
+                                prepareKind = "groupScope",
+                                prepareValue = "raid",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Synchronized the complete Retail 6.15-beta6 feature and fix set into the unified Alpha package.",
+                        "Added Keep Absorbs + Prediction Visible to Unit Frames and Party/Raid Frames, including profile copy, defaults, previews, search, and Assistant support.",
+                        "Added Sort roles across entire raid for Raid and Mythic Raid Frames, including defaults, profile copy, locales, search, and Assistant support. Party sorting remains unchanged.",
+                        "The Boss Preview now displays incoming heals, absorbs, heal absorbs, and absorb text so prediction settings can be reviewed without a live boss.",
+                        "The Assistant now resolves requests about a specific Unit Frame and its opacity, visibility, movement, portrait, texture, and text controls more precisely.",
+                        "Retired pre-6.0 profile conversion and import controls while preserving every supported MSUF 6.x profile and Wago import.",
+                        "The Mainline flavor retains its Retail 12.1.5 native Aura, scheduler, tooltip-caster, and pixel-rounding paths. Arena Frames and the Vanilla 1.15.9, TBC 2.5.6, and Mists 5.5.4 client flavors remain included.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview preserve the configured health and prediction opacity.",
+                        "Detached Player Power bars attached or width-synced to Class Resources keep their controller-managed anchor while the Class Resource bar is hidden.",
+                        "Aura owners that cannot be visible stop parsing UNIT_AURA; registration and unresolved-name work resume when the owner becomes eligible again.",
+                        "Cleanse and Purge borders share the Frame Outline layer, Unit Frame dispel borders follow Blizzard's assist rules, and exact-ID Group Aura ownership remains intact.",
+                        "Group Frame dead and offline backgrounds follow secret health updates, and preserved raid groups build and sort from one authoritative roster snapshot per secure-header setup.",
+                        "Interrupted full Aura refreshes arm recovery before synchronous work, retain the Retail 12.1.5 native contracts, and no longer leave later refreshes pending.",
+                        "Class Resource previews can schedule refreshes again after Menu lifecycle cancellation.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha9",
             date = "2026-09-04",
