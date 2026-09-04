@@ -1,5 +1,21 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha9 - 2026-09-04
+
+### Highlights
+
+- **The unified Alpha now carries the current Retail 12.1.5 Aura and Class Resource paths.** Its Mainline flavor keeps the newer native Aura contracts while the Vanilla, TBC and Mists flavors retain their client-owned fallbacks.
+
+### Changes
+
+- CurseForge now presents this Alpha for Retail 12.1.5 together with Vanilla 1.15.9, TBC 2.5.6 and Mists 5.5.4; Retail 12.1.0 remains on the separate Beta track.
+
+### Fixes & Performance
+
+- Native Aura hook recovery stays inside the factory-owned runtime, preserving the 12.1 contract floor without reintroducing the missing-global Aura failure.
+- Class Resource previews reacquire their current controls after a Menu rebuild, so preview movement continues to work after settings change.
+- Extended the Aura and Menu interaction smokes for the synchronized Retail paths.
+
 ## 6.5-alpha8 - 2026-09-04
 
 ### Highlights
