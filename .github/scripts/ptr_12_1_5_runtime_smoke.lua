@@ -111,15 +111,34 @@ local function Read(relative)
 end
 
 local auras = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
+local requiredContainerStart = assert(auras:find("local NATIVE_AURA_CONTAINER_METHODS = {", 1, true))
+local requiredButtonStart = assert(auras:find("local NATIVE_AURA_BUTTON_METHODS = {", requiredContainerStart, true))
+local requiredContractStop = assert(auras:find("local function ValidateNativeAuraContainerContract", requiredButtonStart, true))
+local requiredContainer = auras:sub(requiredContainerStart, requiredButtonStart - 1)
+local requiredButton = auras:sub(requiredButtonStart, requiredContractStop - 1)
 for _, contract in ipairs({
-    "SetEditModePreviewEnabled", "SetAuraGroupEnabled", "SetAuraSlotEnabled",
-    "SetItemEnchantmentEnabled", "SetCasterName", "AddPandemicActiveAnimation",
+    "SetEditModePreviewEnabled", "SetAuraGroupEnabled", "SetAuraSlotEnabled", "SetItemEnchantmentEnabled",
 }) do
-    assert(auras:find(contract, 1, true), "missing 12.1.5 AuraContainer contract: " .. contract)
+    assert(not requiredContainer:find(contract, 1, true),
+        "12.1.5-only AuraContainer method became a Retail 12.1 requirement: " .. contract)
 end
+for _, contract in ipairs({
+    "SetCasterName", "ClearCasterName", "AddPandemicEnterAnimation",
+    "AddPandemicActiveAnimation", "AddPandemicLeaveAnimation",
+}) do
+    assert(not requiredButton:find(contract, 1, true),
+        "12.1.5-only AuraButton method became a Retail 12.1 requirement: " .. contract)
+end
+assert(auras:find('type(container.SetEditModePreviewEnabled) == "function"', 1, true),
+    "12.1.5 Edit Mode aura-preview opt-out is not capability-gated")
+assert(auras:find('type(button.ClearPandemicRegions) == "function"', 1, true),
+    "12.1.5 Pandemic region reset is not capability-gated")
+assert(auras:find("MSUF_SetRoundLayoutToNearestPixel", 1, true),
+    "12.1.5 native pixel rounding is not applied to AuraContainer ownership")
 local effects = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
-assert(effects:find("AddPandemicActiveAnimation", 1, true),
-    "Pandemic pulse is not bound to the native animation lifecycle")
+assert(effects:find('type(button.AddPandemicActiveAnimation) == "function"', 1, true)
+    and effects:find("button:AddPandemicActiveAnimation(pulse)", 1, true),
+    "12.1.5 Pandemic pulse is not capability-gated on the native animation lifecycle")
 local tooltip = Read("MidnightSimpleUnitFrames/Runtime/MSUF_TooltipSpellIDs.lua")
 assert(tooltip:find("tooltipShowAuraCasterNames", 1, true),
     "12.1.5 aura caster tooltip CVar is missing")
