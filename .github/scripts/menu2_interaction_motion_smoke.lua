@@ -59,4 +59,53 @@ local settle = assert(window:match(
 assert(settle:find("C_Timer.After(0, Settle)", 1, true),
     "required first-open text/layout settle was removed with interaction motion")
 
+-- Class Resources coalesces preview movement through MenuRuntime. Lifecycle
+-- teardown may cancel that task; the next request must replace the inactive
+-- task so resource selection, X/Y sliders, and mouse drag can repaint again.
+local support = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua")
+assert(support:find('return Runtime:Schedule(delay, callback, "C_Timer.After")', 1, true),
+    "MenuTimer.After does not return its cancellable MenuRuntime task")
+
+local classPowerPreview = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua")
+classPowerPreview = classPowerPreview:gsub("\r\n", "\n")
+local requestBody = assert(classPowerPreview:match(
+    "(local function RequestClassPowerPreviewRefresh%b()%s*.-)%s*local function SetPreviewSummary"
+), "Class Resources preview refresh function missing")
+local pending = {}
+local menuTimer = {}
+function menuTimer.After(_, callback)
+    local task = { active = true, callback = callback }
+    pending[#pending + 1] = task
+    return task
+end
+local previewEnv = setmetatable({
+    M = { MenuTimer = menuTimer },
+    C_Timer = menuTimer,
+    CP_PREVIEW_REFRESH_DELAY = 0.05,
+    tonumber = tonumber,
+    type = type,
+}, { __index = _G })
+local requestChunk = assert(loadstring(requestBody .. "\nreturn RequestClassPowerPreviewRefresh"))
+setfenv(requestChunk, previewEnv)
+local RequestClassPowerPreviewRefresh = requestChunk()
+local refreshReasons = {}
+local previewBox = {}
+function previewBox:IsShown() return true end
+function previewBox:_msufCPPreviewHostShown() return true end
+function previewBox:Refresh(reason) refreshReasons[#refreshReasons + 1] = reason end
+
+RequestClassPowerPreviewRefresh(previewBox, "FIRST")
+assert(#pending == 1 and previewBox._msufCPRefreshQueued == pending[1],
+    "Class Resources preview did not retain its cancellable refresh task")
+pending[1].active = false
+RequestClassPowerPreviewRefresh(previewBox, "AFTER_RESUME")
+assert(#pending == 2 and previewBox._msufCPRefreshQueued == pending[2],
+    "cancelled Class Resources preview refresh still blocks a later request")
+pending[2].active = false
+pending[2].callback()
+assert(#refreshReasons == 1 and refreshReasons[1] == "AFTER_RESUME",
+    "recovered Class Resources preview did not repaint the newest state")
+assert(previewBox._msufCPRefreshQueued == nil and previewBox._msufCPRefreshReason == nil,
+    "completed Class Resources preview refresh left stale queue state")
+
 io.write("menu2_interaction_motion_smoke: ok\n")

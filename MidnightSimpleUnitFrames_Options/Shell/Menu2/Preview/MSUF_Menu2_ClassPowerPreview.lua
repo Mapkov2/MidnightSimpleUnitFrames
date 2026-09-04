@@ -91,7 +91,14 @@ end
 local function RequestClassPowerPreviewRefresh(box, reason)
     if not (box and box.Refresh) then return end
     box._msufCPRefreshReason = reason or box._msufCPRefreshReason
-    if box._msufCPRefreshQueued then return end
+    local queued = box._msufCPRefreshQueued
+    if queued then
+        -- MenuRuntime can cancel a pending MenuTimer task when the menu is
+        -- quiesced. Do not let that cancelled task permanently suppress every
+        -- later Class Resources refresh after the menu resumes.
+        if type(queued) ~= "table" or queued.active ~= false then return end
+        box._msufCPRefreshQueued = nil
+    end
     box._msufCPRefreshQueued = true
     box._msufCPRefreshSerial = (tonumber(box._msufCPRefreshSerial) or 0) + 1
     local serial = box._msufCPRefreshSerial
@@ -105,7 +112,13 @@ local function RequestClassPowerPreviewRefresh(box, reason)
         box:Refresh(refreshReason or "CLASSPOWER_PREVIEW_REFRESH")
     end
     if C_Timer and C_Timer.After then
-        C_Timer.After(CP_PREVIEW_REFRESH_DELAY, Run)
+        local task = C_Timer.After(CP_PREVIEW_REFRESH_DELAY, Run)
+        if box._msufCPRefreshQueued then
+            -- The MenuTimer facade returns its cancellable task. A nil result
+            -- means the lifecycle rejected the schedule (for example during a
+            -- combat transition), so leave the queue open for the next request.
+            box._msufCPRefreshQueued = (C_Timer == M.MenuTimer and task == nil) and nil or (task or true)
+        end
     else
         Run()
     end
