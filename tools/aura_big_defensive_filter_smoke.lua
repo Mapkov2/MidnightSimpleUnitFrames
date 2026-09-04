@@ -77,6 +77,29 @@ for i = 1, #intentionallyExcluded do
 end
 
 local runtime = readFile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
+local requiredContainerStart = assert(runtime:find("local NATIVE_AURA_CONTAINER_METHODS = {", 1, true))
+local requiredButtonStart = assert(runtime:find("local NATIVE_AURA_BUTTON_METHODS = {", requiredContainerStart, true))
+local requiredContractStop = assert(runtime:find("local function ValidateNativeAuraContainerContract", requiredButtonStart, true))
+local requiredContainerMethods = runtime:sub(requiredContainerStart, requiredButtonStart - 1)
+local requiredButtonMethods = runtime:sub(requiredButtonStart, requiredContractStop - 1)
+for _, methodName in ipairs({
+    "SetEditModePreviewEnabled", "SetAuraGroupEnabled", "SetAuraSlotEnabled", "SetItemEnchantmentEnabled",
+}) do
+    assert(not has(requiredContainerMethods, '"' .. methodName .. '"'),
+        "Retail 12.1 AuraContainer contract requires later method " .. methodName)
+end
+for _, methodName in ipairs({
+    "SetCasterName", "ClearCasterName", "AddPandemicEnterAnimation",
+    "AddPandemicActiveAnimation", "AddPandemicLeaveAnimation",
+}) do
+    assert(not has(requiredButtonMethods, '"' .. methodName .. '"'),
+        "Retail 12.1 AuraButton contract requires later method " .. methodName)
+end
+assert(has(runtime, 'if type(container.SetEditModePreviewEnabled) == "function" then'),
+    "later Edit Mode preview API is not capability-gated")
+local spellIndicatorSource = readFile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua")
+assert(has(spellIndicatorSource, 'and type(button.AddPandemicActiveAnimation) == "function"'),
+    "later Pandemic animation API is not capability-gated")
 assert(has(runtime, "ConfigureCuratedBigDefensiveLane(lane)"), "runtime does not compile curated Big Defensive lanes")
 assert(has(runtime, "SyncCuratedBigDefensiveContainer(container)"), "identity refresh does not switch safe Big Defensive variants")
 assert(has(runtime, "if playerScoped then filter = filter .. \"|PLAYER\" end"), "Player modifier is not explicit")
@@ -107,17 +130,33 @@ assert(beginTopology < applyAll and applyAll < endTopology,
     "full Aura refresh does not batch identity-event topology")
 local flushStop = assert(runtime:find("function A3._FlushDeferredAuraRuntime()", refreshAllStop, true))
 local flushBody = runtime:sub(refreshAllStop, flushStop - 1)
-assert(has(flushBody, "A3._DrainDirectIdentityEventTopologyBatch()")
-    and not has(flushBody, "directIdentityEventTopologyBatchDepth")
+assert(has(flushBody, "DrainDirectIdentityEventTopologyBatch()")
     and has(flushBody, "A3._refreshAllIncomplete == true")
     and has(flushBody, "return A3.RefreshAll()"),
     "aborted Aura refresh cannot unwind and retry on the next frame")
-local drainStart = assert(runtime:find("A3._DrainDirectIdentityEventTopologyBatch = function()", 1, true))
-local drainStop = assert(runtime:find("end\n", drainStart, true))
-local drainBody = runtime:sub(drainStart, drainStop)
-assert(has(drainBody, "while directIdentityEventTopologyBatchDepth > 0 do")
-    and has(drainBody, "A3._EndDirectIdentityEventTopologyBatch()"),
-    "Aura topology recovery does not close over its private batch depth")
+assert(not has(flushBody, "directIdentityEventTopologyBatchDepth"),
+    "refresh recovery reads the NativeRuntime-private topology depth")
+assert(has(runtime, "DrainDirectIdentityEventTopologyBatch = DrainDirectIdentityEventTopologyBatch"),
+    "NativeRuntime does not export its topology recovery helper")
+assert(has(runtime, "local DrainDirectIdentityEventTopologyBatch = NativeRuntime.DrainDirectIdentityEventTopologyBatch"),
+    "public Aura orchestration does not retain the topology recovery helper")
+local topologyStart = assert(runtime:find("local directIdentityRefreshEventFrame", 1, true))
+local topologyStop = assert(runtime:find("local function DirectIdentityRefreshEventsAlreadyCover", topologyStart, true))
+local topologyBlock = runtime:sub(topologyStart, topologyStop - 1)
+local topologyLoader = loadstring or load
+local topologyChunk, topologyLoadError = topologyLoader([[
+local A3 = {}
+]] .. topologyBlock .. [[
+return A3._BeginDirectIdentityEventTopologyBatch,
+    A3._EndDirectIdentityEventTopologyBatch,
+    DrainDirectIdentityEventTopologyBatch
+]], "@aura_topology_recovery")
+assert(topologyChunk, topologyLoadError)
+local beginBatch, endBatch, drainBatch = topologyChunk()
+assert(beginBatch() == 1 and beginBatch() == 2, "topology batch depth did not increment")
+assert(drainBatch() == true, "topology recovery did not drain an interrupted batch")
+assert(endBatch() == false and drainBatch() == false,
+    "topology recovery left a stale batch depth")
 local publicRefreshStart = assert(runtime:find("function A3.RefreshAll()", refreshAllStop, true))
 local publicRefreshStop = assert(runtime:find("function A3.RefreshRoundedDispelOverlayMasks()", publicRefreshStart, true))
 local publicRefreshBody = runtime:sub(publicRefreshStart, publicRefreshStop - 1)
