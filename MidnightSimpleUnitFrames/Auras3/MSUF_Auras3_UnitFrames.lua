@@ -9084,6 +9084,17 @@ A3._EndDirectIdentityEventTopologyBatch = function()
     return SyncDirectIdentityRefreshEvents(frame)
 end
 
+--- The coalesced full-refresh callback is declared after this topology scope.
+--- Keep the batch counter private and expose one closure for interrupted-pass
+--- recovery instead of accidentally resolving the local name as a Lua global.
+A3._DrainDirectIdentityEventTopologyBatch = function()
+    local hadBatch = directIdentityEventTopologyBatchDepth > 0
+    while directIdentityEventTopologyBatchDepth > 0 do
+        A3._EndDirectIdentityEventTopologyBatch()
+    end
+    return hadBatch
+end
+
 local function DirectIdentityRefreshEventsAlreadyCover(unit)
     if directIdentityRefreshRegisteredEvents.PLAYER_ENTERING_WORLD == nil
         or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA == nil
@@ -10668,9 +10679,7 @@ A3._FlushCoalescedRefreshAll = function()
     -- A hard Lua-budget abort skips the normal batch epilogue. These scopes
     -- are synchronous by contract, so any depth surviving to the next frame is
     -- stale and must be drained before a merged retry rebuilds the topology.
-    while directIdentityEventTopologyBatchDepth > 0 do
-        A3._EndDirectIdentityEventTopologyBatch()
-    end
+    A3._DrainDirectIdentityEventTopologyBatch()
     local pending = A3._refreshAllPending == true or A3._refreshAllIncomplete == true
     A3._refreshAllPending = nil
     A3._refreshAllIncomplete = nil
