@@ -1,5 +1,18 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha8 - 2026-09-04
+
+### Highlights
+
+- **Restored Auras when the unified Alpha is used on Retail.** The next-frame recovery callback now closes over the private identity-topology batch state instead of reading a missing Lua global.
+- **Restored Mists Monk Class Resources after changing settings.** Mistweaver and Windwalker Chi can refresh normally again instead of stopping on a missing Retail-only Ebon Might method.
+
+### Fixes & Performance
+
+- Classic now installs its absent Ebon Might callbacks as one-time no-op contracts during ClassPower initialization, preventing repeated nil checks and keeping the ordinary ClassPower apply path allocation-free.
+- Interrupted full Aura refreshes now drain their private topology batch through a scope-owned closure; Lua 5.1 bytecode verification guards against compiling that state as a global again.
+- Added regression coverage for Mists Monk Chi resolution and the Classic controller's optional Ebon lifecycle contract.
+
 ## 6.5-alpha7 - 2026-09-04
 
 ### Highlights
