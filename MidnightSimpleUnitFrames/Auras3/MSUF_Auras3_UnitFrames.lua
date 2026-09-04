@@ -4503,23 +4503,21 @@ local function ConfigureStandaloneAuraDurationText(owner, fs, lane, duration, en
 end
 
 local NATIVE_AURA_CONTAINER_METHODS = {
+    -- Keep the required surface at Retail 12.1. Later client additions are
+    -- capability-checked where used so this beta remains loadable on 12.1.
     "SetUnit",
     "SetEnabled",
-    "SetEditModePreviewEnabled",
     "AddAuraGroup",
-    "SetAuraGroupEnabled",
     "SetAuraGroupFilterString",
     "SetAuraGroupLayout",
     "SetAuraGroupMaxFrameCount",
     "SetAuraGroupCandidateFilters",
     "SetAuraGroupSortMethod",
     "AddAuraSlot",
-    "SetAuraSlotEnabled",
     "SetAuraSlotFilterString",
     "SetAuraSlotCandidateFilters",
     "SetAuraSlotSortMethod",
     "AddItemEnchantment",
-    "SetItemEnchantmentEnabled",
     -- PTR 7 flow layout API (replaced SetAuraLayout{AnchorPoint,GrowthDirection,RowWidth}).
     "SetFlowLayoutAnchorPoint",
     "SetFlowLayoutGrowthDirection",
@@ -4527,6 +4525,8 @@ local NATIVE_AURA_CONTAINER_METHODS = {
 }
 
 local NATIVE_AURA_BUTTON_METHODS = {
+    -- These are the Retail 12.1 requirements. Caster-name and native Pandemic
+    -- animation methods arrive later and remain optional at their call sites.
     "SetIcon",
     "ClearIcon",
     "SetDurationCooldown",
@@ -4537,11 +4537,6 @@ local NATIVE_AURA_BUTTON_METHODS = {
     "ClearDurationText",
     "SetApplicationCount",
     "ClearApplicationCount",
-    "SetCasterName",
-    "ClearCasterName",
-    "AddPandemicEnterAnimation",
-    "AddPandemicActiveAnimation",
-    "AddPandemicLeaveAnimation",
     -- PTR 7 names; the SetAuraBorder/SetAuraSymbol aliases are deprecated and
     -- flagged for removal after 12.1.
     "AddDispelTypeTexture",
@@ -9084,17 +9079,13 @@ A3._EndDirectIdentityEventTopologyBatch = function()
     return SyncDirectIdentityRefreshEvents(frame)
 end
 
---- The coalesced full-refresh callback is declared after this topology scope.
---- Keep the batch counter private and expose one closure for interrupted-pass
---- recovery instead of accidentally resolving the local name as a Lua global.
-A3._DrainDirectIdentityEventTopologyBatch = function()
-    local hadBatch = directIdentityEventTopologyBatchDepth > 0
+local function DrainDirectIdentityEventTopologyBatch()
+    local drained = directIdentityEventTopologyBatchDepth > 0
     while directIdentityEventTopologyBatchDepth > 0 do
         A3._EndDirectIdentityEventTopologyBatch()
     end
-    return hadBatch
+    return drained
 end
-
 local function DirectIdentityRefreshEventsAlreadyCover(unit)
     if directIdentityRefreshRegisteredEvents.PLAYER_ENTERING_WORLD == nil
         or directIdentityRefreshRegisteredEvents.ZONE_CHANGED_NEW_AREA == nil
@@ -10368,6 +10359,7 @@ return {
     ReasonRequiresApply = ReasonRequiresAuraApply,
     ApplyGroupAssistGate = ApplyGroupAuraAssistGate,
     CreateClassPowerAuraSensor = CreateClassPowerAuraSensor,
+    DrainDirectIdentityEventTopologyBatch = DrainDirectIdentityEventTopologyBatch,
 }
 end)()
 
@@ -10382,6 +10374,7 @@ local FrameAppliedConfigIsCurrent = NativeRuntime.FrameConfigIsCurrent
 local RootCanReuseContainersForConfig = NativeRuntime.CanReuseContainers
 local ReasonRequiresAuraApply = NativeRuntime.ReasonRequiresApply
 local ApplyGroupAuraAssistGate = NativeRuntime.ApplyGroupAssistGate
+local DrainDirectIdentityEventTopologyBatch = NativeRuntime.DrainDirectIdentityEventTopologyBatch
 
 function A3.SetUnitFrameOwner(unit, frame, owns)
     if not unit then return end
@@ -10679,7 +10672,7 @@ A3._FlushCoalescedRefreshAll = function()
     -- A hard Lua-budget abort skips the normal batch epilogue. These scopes
     -- are synchronous by contract, so any depth surviving to the next frame is
     -- stale and must be drained before a merged retry rebuilds the topology.
-    A3._DrainDirectIdentityEventTopologyBatch()
+    DrainDirectIdentityEventTopologyBatch()
     local pending = A3._refreshAllPending == true or A3._refreshAllIncomplete == true
     A3._refreshAllPending = nil
     A3._refreshAllIncomplete = nil
