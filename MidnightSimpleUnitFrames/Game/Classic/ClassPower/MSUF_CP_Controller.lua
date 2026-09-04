@@ -1702,6 +1702,16 @@ CP.ebonNative = CP_CallBuilder(CPCoreBuilders.EBON_MIGHT, {
     GetTextLevel = CP.GetEbonTextLevel,
 })
 
+--- Classic flavors do not load the Retail-only Ebon Might builder. Keep the
+--- controller's cold-path lifecycle contract callable so ordinary ClassPower
+--- refreshes (including Mists Monk Chi) cannot abort on an absent Evoker API.
+if type(CP.SetEbonSensorActive) ~= "function" then
+    CP.SetEbonSensorActive = function() return false end
+end
+if type(CP.ApplyEbonTextStyle) ~= "function" then
+    CP.ApplyEbonTextStyle = function() end
+end
+
 --- The Power element calls this once its bar is laid out and skinned, which is
 --- also the only moment the host is guaranteed to exist. Creating the native
 --- container is a restricted operation, so a combat-time call just arms the

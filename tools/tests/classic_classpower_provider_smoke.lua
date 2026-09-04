@@ -42,7 +42,11 @@ assert(powerType == "MISTS_ARCANE_CHARGES" and mode == MODE.AURA_SEGMENTED and a
 powerType, mode = resolve(mists, "PRIEST", 3)
 assert(powerType == PT.ShadowOrbs and mode == MODE.SEGMENTED)
 powerType, mode = resolve(mists, "MONK", 2)
-assert(powerType == PT.Chi and mode == MODE.SEGMENTED)
+assert(powerType == PT.Chi and mode == MODE.SEGMENTED,
+    "Mists Mistweaver Chi resolution regressed")
+powerType, mode = resolve(mists, "MONK", 3)
+assert(powerType == PT.Chi and mode == MODE.SEGMENTED,
+    "Mists Windwalker Chi resolution regressed")
 powerType, mode = resolve(mists, "WARLOCK", 2)
 assert(powerType == PT.DemonicFury and mode == MODE.CONTINUOUS)
 powerType, mode = resolve(mists, "WARLOCK", 3)
@@ -75,5 +79,18 @@ powerType, mode = resolve(vanilla, "ROGUE", nil, PT.Energy)
 assert(powerType == PT.ComboPoints and mode == MODE.SEGMENTED)
 powerType, mode = resolve(vanilla, "PALADIN", nil, PT.Mana)
 assert(powerType == nil and mode == MODE.NONE)
+
+local controllerPath = repo .. "/MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Controller.lua"
+local controllerFile = assert(io.open(controllerPath, "rb"))
+local controllerSource = controllerFile:read("*a")
+controllerFile:close()
+assert(controllerSource:find('if type%(CP%.SetEbonSensorActive%) ~= "function" then'),
+    "Classic controller lacks its Ebon sensor fallback contract")
+assert(controllerSource:find('CP%.SetEbonSensorActive = function%(%) return false end'),
+    "Classic controller does not install the no-op Ebon sensor")
+assert(controllerSource:find('if type%(CP%.ApplyEbonTextStyle%) ~= "function" then'),
+    "Classic controller lacks its Ebon text fallback contract")
+assert(controllerSource:find('CP%.ApplyEbonTextStyle = function%(%) end'),
+    "Classic controller does not install the no-op Ebon text styler")
 
 print("client ClassPower providers smoke passed")
