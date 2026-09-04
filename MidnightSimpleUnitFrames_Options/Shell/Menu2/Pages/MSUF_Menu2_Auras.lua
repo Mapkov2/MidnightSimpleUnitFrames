@@ -4738,6 +4738,8 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         -- highlights and search deep-links use these to open the exact
         -- workspace view instead of flashing an unrelated control.
         local exactViews = {
+            buff_layout = { tab = "buff", tool = "layout",
+                settingKey = "auras3." .. tostring(unit) .. ".buff.visible" },
             custom1_reminder = { tab = "custom1", tool = "setup",
                 settingKey = "auras3." .. tostring(unit) .. ".custom1.placed.reminderEnabled" },
         }
