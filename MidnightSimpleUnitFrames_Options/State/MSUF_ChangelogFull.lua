@@ -8,12 +8,50 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "5BD913A98C548684CDF7DAAFA6FF1D12F4A10767D1B1BE6C2006D475D47C1D1E",
-    currentVersion = "6.15-beta4",
+    sourceSha256 = "D55CAF7AC6118F8FFB3469BD4028A68D2CB65222FC072DA32AE27F9E01F6DDE4",
+    currentVersion = "6.15-beta5",
     historyFromVersion = "6.02",
-    previousVersion = "6.15-beta3",
-    rangeLabel = "6.15-beta3 -> 6.15-beta4",
+    previousVersion = "6.15-beta4",
+    rangeLabel = "6.15-beta4 -> 6.15-beta5",
     entries = {
+        {
+            version = "6.15-beta5",
+            date = "2026-09-04",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Auras are visible and recover reliably again in the Retail 12.1 Beta. Open Player Auras at Buffs > Layout to review the visible Aura lane.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "player buff aura layout visible",
+                                label = "Player Auras",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_player.auras.unit-workspace.container-selector",
+                                settingKey = "auras3.player.buff.visible",
+                                prepareKind = "unitAuraWorkspace",
+                                prepareValue = "buff_layout",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The CurseForge Beta is explicitly published for Retail 12.1.0 while the source retains guarded compatibility with the newer 12.1.5 native contracts.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Aura recovery remains inside its factory-owned runtime and retains the native 12.1 hook contracts across refreshes, preventing Aura displays from staying empty after an interrupted update.",
+                        "Class Resource previews can schedule refreshes again after Menu lifecycle cancellation, so their movement and position controls continue to update after settings changes.",
+                        "Extended the Aura and Menu interaction smokes for both fixes.",
+                    },
+                },
+            },
+        },
         {
             version = "6.15-beta4",
             date = "2026-09-04",

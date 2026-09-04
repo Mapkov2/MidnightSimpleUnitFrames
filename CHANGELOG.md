@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.15-beta5 - 2026-09-04
+
+### Highlights
+
+- **Auras are visible and recover reliably again in the Retail 12.1 Beta.** Open Player Auras at Buffs > Layout to review the visible Aura lane.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.container-selector","settingKey":"auras3.player.buff.visible","prepareKind":"unitAuraWorkspace","prepareValue":"buff_layout","query":"player buff aura layout visible","label":"Player Auras"} -->
+
+### Changes
+
+- The CurseForge Beta is explicitly published for Retail 12.1.0 while the source retains guarded compatibility with the newer 12.1.5 native contracts.
+
+### Fixes & Performance
+
+- Aura recovery remains inside its factory-owned runtime and retains the native 12.1 hook contracts across refreshes, preventing Aura displays from staying empty after an interrupted update.
+- Class Resource previews can schedule refreshes again after Menu lifecycle cancellation, so their movement and position controls continue to update after settings changes.
+- Extended the Aura and Menu interaction smokes for both fixes.
+
 ## 6.15-beta4 - 2026-09-04
 
 ### Highlights
