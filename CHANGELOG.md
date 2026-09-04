@@ -4,11 +4,13 @@
 
 ### Highlights
 
-- **The unified Alpha now carries the current Retail 12.1.5 Aura and Class Resource paths.** Its Mainline flavor keeps the newer native Aura contracts while the Vanilla, TBC and Mists flavors retain their client-owned fallbacks.
+- **The unified Alpha now carries the current Retail 12.1.5 Aura path.** Its Mainline flavor keeps the newer native Aura contracts while the Vanilla, TBC and Mists flavors retain their client-owned fallbacks.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.container-selector","settingKey":"auras3.player.buff.visible","prepareKind":"unitAuraWorkspace","prepareValue":"buff_layout","query":"player buff aura layout visible","label":"Player Auras"} -->
 
 ### Changes
 
 - CurseForge now presents this Alpha for Retail 12.1.5 together with Vanilla 1.15.9, TBC 2.5.6 and Mists 5.5.4; Retail 12.1.0 remains on the separate Beta track.
+- Synchronized the current Class Resource preview-recovery fix while retaining the client-owned resource implementations for Vanilla, TBC and Mists.
 
 ### Fixes & Performance
 
