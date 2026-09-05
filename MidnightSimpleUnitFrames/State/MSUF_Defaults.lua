@@ -3037,6 +3037,7 @@ end
     --- UnitFrame dispel overlay (health-bar tint driven by native 12.1 aura visual state)
     if g.dispelOutlineMode == nil then g.dispelOutlineMode = 1 end
     if g.dispelBorderTrigger == nil then g.dispelBorderTrigger = "DISPEL_TYPE" end
+    if g.dispelBorderShowOn == nil then g.dispelBorderShowOn = "BOTH" end
     if g.unitDispelOverlayEnabled == nil then g.unitDispelOverlayEnabled = false end
     if g.unitDispelOverlayStyle == nil then g.unitDispelOverlayStyle = "FULL" end
     if g.unitDispelOverlayOnHealth == nil then g.unitDispelOverlayOnHealth = true end

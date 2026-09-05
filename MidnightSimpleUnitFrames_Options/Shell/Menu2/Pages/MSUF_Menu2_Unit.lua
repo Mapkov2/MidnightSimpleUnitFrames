@@ -276,7 +276,7 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill chunkedFill healthColorMode
     hlOverride barTexture barBackgroundTexture barBgTexture
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
-    highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger
+    highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger dispelBorderShowOn
     unitDispelOverlayEnabled unitDispelOverlayStyle unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
     unitDispelSymbolEnabled unitDispelSymbolStyle unitDispelSymbolMode unitDispelSymbolTrigger
     unitDispelSymbolSize unitDispelSymbolSpacing unitDispelSymbolGrowth unitDispelSymbolAnchor

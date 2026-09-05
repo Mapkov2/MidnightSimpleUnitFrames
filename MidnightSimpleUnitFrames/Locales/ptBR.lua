@@ -5108,6 +5108,12 @@ L["Hides every whitelisted spell this character cannot cast, without leaving a g
 L["Sort roles across entire raid"] = "Ordenar funções em toda a raide"
 L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "Ordena tanques, curandeiros e DPS em toda a raide em vez de dentro de cada grupo da raide. Somente Raide e Raide Mítica: aplica-se a Por função junto com Preservar grupos de raide, e a Grupo + Função."
 L["Raid-wide roles"] = "Funções em toda a raide"
+
+-- Dispel border unit filter.
+L["Show on"] = "Mostrar em"
+L["Friendly"] = "Aliado"
+L["Enemy"] = "Inimigo"
+L["Both"] = "Ambos"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

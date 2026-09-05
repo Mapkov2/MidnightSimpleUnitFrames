@@ -5163,6 +5163,12 @@ L["Hides every whitelisted spell this character cannot cast, without leaving a g
 L["Sort roles across entire raid"] = "공격대 전체 기준으로 역할 정렬"
 L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "각 공격대 그룹 내부가 아니라 공격대 전체를 기준으로 방어 전담, 치유 전담, 공격 전담을 정렬합니다. 공격대 및 신화 공격대 전용: 공격대 그룹 유지와 함께 사용하는 역할별 정렬과 그룹 + 역할 정렬에 적용됩니다."
 L["Raid-wide roles"] = "공격대 전체 역할"
+
+-- Dispel border unit filter.
+L["Show on"] = "표시 대상"
+L["Friendly"] = "우호적"
+L["Enemy"] = "적대적"
+L["Both"] = "모두"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

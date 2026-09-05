@@ -1857,6 +1857,7 @@ local function CompileBorderSpec(kind, conf, general)
       or ScopedValue(conf, general, "hlAggroSize", nil)
   end
   local dispelBorderTrigger = ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE")
+  local dispelShowOn = ScopedValue(conf, general, "dispelBorderShowOn", "BOTH")
   local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
   local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
   local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
@@ -1894,6 +1895,7 @@ local function CompileBorderSpec(kind, conf, general)
     purgeB = Num(general.hlPurgeColorB or general.purgeBorderColorB, 0.00),
     dispel = dispelBorderEnabled == true,
     dispelTrigger = NormalizeDispelDetectTrigger(dispelBorderTrigger),
+    dispelShowOn = (dispelShowOn == "FRIENDLY" or dispelShowOn == "ENEMY") and dispelShowOn or "BOTH",
     prioEnabled = prioEnabled,
     prioOrder = prioOrder,
   }

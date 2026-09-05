@@ -5203,6 +5203,12 @@ L["Hides every whitelisted spell this character cannot cast, without leaving a g
 L["Sort roles across entire raid"] = "依整個團隊排序角色"
 L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "在整個團隊範圍內排序坦克、治療與輸出，而不是在每個團隊小隊內部排序。僅限團隊與傳奇團隊：適用於搭配「保留團隊小隊」的按角色排序，以及組+角色排序。"
 L["Raid-wide roles"] = "全團角色排序"
+
+-- Dispel border unit filter.
+L["Show on"] = "顯示對象"
+L["Friendly"] = "友方"
+L["Enemy"] = "敵方"
+L["Both"] = "雙方"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

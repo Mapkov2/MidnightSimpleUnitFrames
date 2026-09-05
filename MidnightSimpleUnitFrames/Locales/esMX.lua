@@ -5341,6 +5341,12 @@ L["Hides every whitelisted spell this character cannot cast, without leaving a g
 L["Sort roles across entire raid"] = "Ordenar roles en toda la banda"
 L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "Ordena tanques, sanadores y DPS en toda la banda en lugar de dentro de cada grupo de banda. Solo Banda y Banda mítica: se aplica a Por rol junto con Conservar grupos de banda, y a Grupo + Rol."
 L["Raid-wide roles"] = "Roles en toda la banda"
+
+-- Dispel border unit filter.
+L["Show on"] = "Mostrar en"
+L["Friendly"] = "Amistoso"
+L["Enemy"] = "Enemigo"
+L["Both"] = "Ambos"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

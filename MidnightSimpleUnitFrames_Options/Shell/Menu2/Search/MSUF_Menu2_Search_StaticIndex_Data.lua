@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "60498BA1E99A88B7CE955C460810A3886BFC8EEC0C3C4BAE3CFAC4C394E56DB3"
-Search.StaticIndexRecordCount = 2880
+Search.StaticIndexSourceSha256 = "23B61A54FFEA294E1C7CB0AD69939FF63E68131273BAD84DC38796E3718E6330"
+Search.StaticIndexRecordCount = 2881
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -636,6 +636,7 @@ opt_bars	Bar height (0 = full)	slider			Absorb > Negative	bar height 0 full	ido
 opt_bars	Bar height (0 = full)	slider			Absorb > Positive	bar height 0 full	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eabsorb%2Epositive%2Eheight	bars_absorb			bar height 0 full absorb positive opt bars global absorb positive height opt bars slider
 opt_bars	Bar height (0 = full)	slider			Heal > Prediction	bar height 0 full	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eabsorb%2Eheal%2Eprediction%2Eheight	bars_absorb			bar height 0 full heal prediction opt bars global absorb heal prediction height opt bars slider
 opt_bars	Bar outline thickness	slider			Global > Outline	bar outline thickness	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eoutline%2Ethickness	bars_outline			bar outline thickness global outline opt bars global outline thickness opt bars slider
+opt_bars	Both	dropdown			Dispel > Show	both	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Ehighlight%2Edispel%2Eshow%2Eon	bars_highlight			both dispel show opt bars global highlight dispel show on opt bars dropdown
 opt_bars	Castbars	toggle	bars.roundedCastbars		Rounded > Rounded	castbars	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Erounded%2Erounded%2Ecastbars	bars_rounded			castbars rounded rounded opt bars global rounded rounded castbars opt bars toggle bars roundedcastbars
 opt_bars	Chunked power loss	toggle			Power > Chunked	chunked power loss	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Epower%2Echunked%2Efill	bars_power			chunked power loss power chunked opt bars global power chunked fill opt bars toggle
 opt_bars	Class resources	toggle	bars.roundedClassResources		Rounded > Class	class resources	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Erounded%2Erounded%2Eclass%2Eresources	bars_rounded			class resources rounded class opt bars global rounded rounded class resources opt bars toggle bars roundedclassresources

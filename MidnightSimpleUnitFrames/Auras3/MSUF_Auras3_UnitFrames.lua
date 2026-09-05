@@ -2145,6 +2145,18 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     if not groupMode and visual ~= "purge" and trigger ~= "PLAYER_CAST" and trigger ~= "DISPEL_TYPE" then
         identityCandidateMode = "assist"
     end
+    -- This is an additional unit filter for the border only. Keep the native
+    -- trigger and every other visual's identity policy independent.
+    if visual == "border" then
+        local showOn = border and border.dispelShowOn
+        if showOn == "FRIENDLY" then
+            identityCandidateMode = "assist"
+        elseif showOn == "ENEMY" then
+            -- Ability-scoped Unit cleansing already requires a friendly unit.
+            if identityCandidateMode == "assist" then return nil end
+            identityCandidateMode = "hostile"
+        end
+    end
     return {
         sensor = true,
         kind = kind,
@@ -4746,13 +4758,13 @@ local EFFECT_ROOT_KEYS = {
 -- One native owner per identity polarity: the container is the alpha sink of
 -- the Unit identity gate, so assist-gated cleanse visuals and the ungated
 -- "Any dispel type" / Purge / "cast by me" sensors can never share one.
--- Group sensors carry no polarity and keep their single neutral owner.
-local function BuildDispelSensorRootConfig(sensors, identityCandidateMode, rootKey)
+-- Group sensors use the existing neutral/assist/hostile owner partitions.
+local function BuildDispelSensorRootConfig(sensors, identityCandidateMode, rootKey, preview)
     if type(sensors) ~= "table" then return nil end
     local list, structuralParts, layoutParts, unit, maxCount, layer
     for i = 1, #DISPEL_SENSOR_ORDER do
         local sensor = sensors[DISPEL_SENSOR_ORDER[i]]
-        if sensor and sensor.enabled == true and sensor.identityCandidateMode == identityCandidateMode then
+        if sensor and sensor.enabled == true and (preview or sensor.identityCandidateMode == identityCandidateMode) then
             if not list then
                 list, structuralParts, layoutParts = {}, {}, {}
                 unit = sensor.unit
@@ -4794,21 +4806,24 @@ local function GetDispelSensorRootConfig(cfg)
     -- cleanse visuals as the assist-polarity owner at the historical root key.
     local identityCandidateMode
     if cfg.group ~= true then identityCandidateMode = "assist" end
-    cached = BuildDispelSensorRootConfig(cfg.sensors, identityCandidateMode, "DispelSensor")
+    cached = BuildDispelSensorRootConfig(cfg.sensors, identityCandidateMode, "DispelSensor",
+        cfg.group == true and cfg.groupAssistGate ~= true)
     cfg.sensorRoot = cached or false
     return cached
 end
 
--- Unit Frame sensors without polarity ("Any dispel type", helpful Purge and
--- "cast by me") use a separate owner so the assist gate cannot hide them.
-local function GetNeutralDispelSensorRootConfig(cfg)
+-- Keep neutral and enemy-only sensors separate from friendly cleansing and
+-- from each other: one container's identity alpha/enable gate covers all slots.
+local function GetUnitDispelSensorRootConfig(cfg, identityCandidateMode)
     if not cfg or cfg.group == true then return nil end
-    local cached = cfg.neutralSensorRoot
+    local cacheKey = identityCandidateMode == "hostile" and "hostileSensorRoot" or "neutralSensorRoot"
+    local rootKey = identityCandidateMode == "hostile" and "DispelSensorHostile" or "DispelSensorNeutral"
+    local cached = cfg[cacheKey]
     if cached ~= nil then
         return cached ~= false and cached or nil
     end
-    cached = BuildDispelSensorRootConfig(cfg.sensors, nil, "DispelSensorNeutral")
-    cfg.neutralSensorRoot = cached or false
+    cached = BuildDispelSensorRootConfig(cfg.sensors, identityCandidateMode, rootKey)
+    cfg[cacheKey] = cached or false
     return cached
 end
 
@@ -5097,7 +5112,8 @@ end
 -- false, while ordinary token-only Buffs/Debuffs must remain visible. Keep
 -- those two gate classes in separate native owners.
 local function BuildGroupAuraOwner(cfg, assistMode, includeFixed, rootKey, spellRootOverride)
-    local sensorRoot = includeFixed and assistMode == nil and GetDispelSensorRootConfig(cfg) or nil
+    local sensorRoot = assistMode ~= nil and BuildDispelSensorRootConfig(cfg.sensors, assistMode)
+        or (includeFixed and assistMode == nil and GetDispelSensorRootConfig(cfg)) or nil
     local spellRoot = spellRootOverride
     if spellRoot == nil and includeFixed and cfg.groupAssistGate ~= true then
         spellRoot = SpellIndicatorsRuntime.RootConfig(cfg)
@@ -9981,10 +9997,15 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
             any = true
             ok = RefreshNativeContainer(root.DispelSensor, forceRefresh, sensorRoot, parentFrame) and ok
         end
-        local neutralSensorRoot = GetNeutralDispelSensorRootConfig(cfg)
+        local neutralSensorRoot = GetUnitDispelSensorRootConfig(cfg)
         if neutralSensorRoot then
             any = true
             ok = RefreshNativeContainer(root.DispelSensorNeutral, forceRefresh, neutralSensorRoot, parentFrame) and ok
+        end
+        local hostileSensorRoot = GetUnitDispelSensorRootConfig(cfg, "hostile")
+        if hostileSensorRoot then
+            any = true
+            ok = RefreshNativeContainer(root.DispelSensorHostile, forceRefresh, hostileSensorRoot, parentFrame) and ok
         end
     end
     for i = group and 4 or 1, #EFFECT_ROOT_FIELDS do
@@ -10027,6 +10048,7 @@ local function HideState(frame)
     A3._HideLane(root.GroupAuraHostile)
     A3._HideLane(root.DispelSensor)
     A3._HideLane(root.DispelSensorNeutral)
+    A3._HideLane(root.DispelSensorHostile)
     A3._HideLane(root.DispelBorderSensor)
     A3._HideLane(root.DispelOverlaySensor)
     A3._HideLane(root.DispelCornerSensor)
@@ -10070,6 +10092,7 @@ local function HideState(frame)
     root.GroupAuraHostile = nil
     root.DispelSensor = nil
     root.DispelSensorNeutral = nil
+    root.DispelSensorHostile = nil
     root.DispelBorderSensor = nil
     root.DispelOverlaySensor = nil
     root.DispelCornerSensor = nil
@@ -10106,7 +10129,8 @@ local function ApplyConfig(frame, cfg, reason)
     local group = cfg.group == true
     local groupSlots = group and GetGroupSlotsRootConfig(cfg)
     local sensorRoot = not group and GetDispelSensorRootConfig(cfg) or nil
-    local neutralSensorRoot = not group and GetNeutralDispelSensorRootConfig(cfg) or nil
+    local neutralSensorRoot = not group and GetUnitDispelSensorRootConfig(cfg) or nil
+    local hostileSensorRoot = not group and GetUnitDispelSensorRootConfig(cfg, "hostile") or nil
     local forceRecreate = false
     local ok = true
     local lanesOk = true
@@ -10140,6 +10164,8 @@ local function ApplyConfig(frame, cfg, reason)
         if not (sensorRoot and sensorRoot.enabled) then A3._HideLane(root.DispelSensor) end
         if neutralSensorRoot and neutralSensorRoot.enabled and not ApplyDispelSensorRoot(root, neutralSensorRoot, frame, forceRecreate) then ok = false end
         if not (neutralSensorRoot and neutralSensorRoot.enabled) then A3._HideLane(root.DispelSensorNeutral) end
+        if hostileSensorRoot and hostileSensorRoot.enabled and not ApplyDispelSensorRoot(root, hostileSensorRoot, frame, forceRecreate) then ok = false end
+        if not (hostileSensorRoot and hostileSensorRoot.enabled) then A3._HideLane(root.DispelSensorHostile) end
     end
     for i = firstEffectRoot, #EFFECT_ROOT_FIELDS do
         local spellIndicatorRoot = cfg[EFFECT_ROOT_FIELDS[i]]
@@ -10231,11 +10257,18 @@ local function RootCanReuseContainersForConfig(root, cfg)
         elseif root.DispelSensor and root.DispelSensor.IsShown and root.DispelSensor:IsShown() == true then
             return false
         end
-        local neutralSensorRoot = GetNeutralDispelSensorRootConfig(cfg)
+        local neutralSensorRoot = GetUnitDispelSensorRootConfig(cfg)
         if neutralSensorRoot then
             local current = root.DispelSensorNeutral
             if not (current and current._msufA3StructuralSignature == neutralSensorRoot._msufA3StructuralSignature) then return false end
         elseif root.DispelSensorNeutral and root.DispelSensorNeutral.IsShown and root.DispelSensorNeutral:IsShown() == true then
+            return false
+        end
+        local hostileSensorRoot = GetUnitDispelSensorRootConfig(cfg, "hostile")
+        if hostileSensorRoot then
+            local current = root.DispelSensorHostile
+            if not (current and current._msufA3StructuralSignature == hostileSensorRoot._msufA3StructuralSignature) then return false end
+        elseif root.DispelSensorHostile and root.DispelSensorHostile.IsShown and root.DispelSensorHostile:IsShown() == true then
             return false
         end
     end
