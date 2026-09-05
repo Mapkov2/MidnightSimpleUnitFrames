@@ -1,5 +1,33 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.15 - 2026-09-05
+
+### Highlights
+
+- **Absorbs and heal prediction can stay visible when the health bar is faded into the background.** Enable **Keep Absorbs + Prediction Visible** per Unit Frame or for Party and Raid Frames to keep these overlays at full opacity independently from the health fill.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"transparency","controlId":"menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars","settingKey":"player.alphaExcludePredictionBars","prepareKind":"","prepareValue":"","query":"keep absorbs prediction visible","label":"Keep Absorbs + Prediction Visible"} -->
+- **Raid and Mythic Raid role sorting can span the entire raid.** Enable **Sort roles across entire raid** under Group Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"sorting","controlId":"menu2.gf_layout.group.field.sortrolesacrossraid","settingKey":"gf_raid.sortRolesAcrossRaid","prepareKind":"groupScope","prepareValue":"raid","query":"sort roles across entire raid","label":"Sort roles across entire raid"} -->
+
+### Changes
+
+- The Boss Preview displays incoming heals, absorbs, heal absorbs, and absorb text so prediction settings can be reviewed without a live boss.
+- The Assistant understands plain-language requests about a specific Unit Frame and resolves questions, hide commands, movement directions, and opacity controls against the named frame and control.
+- Retired pre-6.0 profile conversion and import controls. Existing MSUF 6.x profiles and 6.x Wago imports remain supported; older or unversioned stored profiles are archived instead of entering the active profile list.
+
+### Fixes & Performance
+
+- Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview preserve the configured health and prediction opacity.
+- Detached Player Power bars attached or width-synced to Class Resources retain their position and width when shapeshifting hides the Class Resource bar.
+- **Text on detached bar** controls Power-text placement independently from **Show power text**.
+- Class Resource previews keep responding to movement and position controls after Menu lifecycle cancellation.
+- Interrupted Aura refreshes recover instead of leaving Aura displays empty or later refreshes stuck as pending.
+- Cleanse and Purge borders use the same Frame Outline layer as their preview, and Unit Frame dispel borders follow Blizzard's assist rules.
+- Group Frame dead and offline backgrounds follow the unit's current state without delayed health-background updates.
+- Preserved raid groups use one roster snapshot for sorting and layout, preventing the filled and displayed grids from disagreeing when more subgroups are present than the configured column limit.
+- Assistant requests for Out of range opacity, Texture Layer opacity, and Portrait opacity update their own controls.
+- Reduced repeated work and temporary allocations in health gradients, dynamic backgrounds, protected text, Aura fallback scans, and Range Fade timers while preserving their update behavior.
+
 ## 6.15-beta7 - 2026-09-05
 
 ### Highlights
