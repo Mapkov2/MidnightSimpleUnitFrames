@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "CC50B5F1CCB7B22400F85898F61F0908A37A79A9223704550F16834306A654DC"
-Search.StaticIndexRecordCount = 2879
+Search.StaticIndexSourceSha256 = "60498BA1E99A88B7CE955C460810A3886BFC8EEC0C3C4BAE3CFAC4C394E56DB3"
+Search.StaticIndexRecordCount = 2880
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -937,6 +937,7 @@ opt_misc	Style	dropdown	general.highlightStyle		Global > Mouseover	style	idopt_
 opt_misc	Tint menu surfaces	toggle	general.menuAccentTintSurfaces		Accent > Tint	tint menu surfaces	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Emenu%2Eaccent%2Etint%2Esurfaces	misc_menu_behavior			tint menu surfaces accent tint opt misc global setting menu accent tint surfaces opt misc toggle general menuaccenttintsurfaces
 opt_misc	Tooltip anchor	dropdown	general.unitTooltipAnchor		Global > Tooltips	tooltip anchor	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Etooltips%2Eanchor	misc_tooltips			tooltip anchor global tooltips opt misc global tooltips anchor opt misc dropdown general unittooltipanchor
 opt_misc	Tooltip source	dropdown	general.unitTooltipProvider		Global > Tooltips	tooltip source	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Etooltips%2Eprovider	misc_tooltips			tooltip source global tooltips opt misc global tooltips provider opt misc dropdown general unittooltipprovider
+opt_misc	Use MapkoSkin for MSUF menus	toggle	general.mapkoSkinMenus		Mapko > Skin	use mapkoskin for msuf menus	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Emapko%2Eskin%2Emenus	misc_mapkoskin			use mapkoskin for msuf menus mapko skin opt misc global setting mapko skin menus opt misc toggle general mapkoskinmenus
 opt_misc	Use NSRT nicknames on MSUF frames	toggle	general.nsrtNicknameIntegration		Nsrt > Nickname	use nsrt nicknames on msuf frames	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Ensrt%2Enickname%2Eintegration	misc_nickname_integration			use nsrt nicknames on msuf frames nsrt nickname opt misc global setting nsrt nickname integration opt misc toggle general nsrtnicknameintegration
 profiles	Active profile	dropdown		switch_profile	Active > Profile	active profile	idprofilesmenu2%2Eprofiles%2Eadvanced%2Eactive%2Eprofile%2Eselect	profiles_management			active profile active profile profiles advanced active profile select profiles dropdown switch profile
 profiles	Auto-switch profile by specialization	toggle	profiles.specAutoSwitch		Auto > Switch	auto switch profile by specialization	idprofilesmenu2%2Eprofiles%2Eadvanced%2Especialization%2Eauto%2Eswitch%2Eenabled	profiles_specs			auto switch profile by specialization auto switch profiles advanced specialization auto switch enabled profiles toggle profiles specautoswitch

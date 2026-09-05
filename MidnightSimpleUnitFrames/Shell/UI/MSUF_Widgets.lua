@@ -192,6 +192,7 @@ function UI.Color(key, fallback)
 end
 
 function UI.ApplyGradient(frame, material, opts)
+    if MSUF.MenuSkin and MSUF.MenuSkin.Surface(frame, material, UI.ApplyGradient, material, opts, 2) then return frame end
     local theme = UI.GetMenu2Theme()
     if theme and theme.ApplyGradient then return theme.ApplyGradient(frame, material or "card", opts) end
     if not (frame and frame.CreateTexture) then return frame end
@@ -226,6 +227,7 @@ local function SetBackdrop(frame, bg, edge)
 end
 
 function UI.ApplyMaterial(frame, material)
+    if MSUF.MenuSkin and MSUF.MenuSkin.Surface(frame, material, UI.ApplyMaterial, material, nil, 5) then return frame end
     local theme = UI.GetMenu2Theme()
     if theme and theme.ApplyMaterial then return theme.ApplyMaterial(frame, material or "card") end
     local bgKey = material == "popup" and "popup" or "card"
@@ -246,6 +248,7 @@ function UI.Font(parent, template, text, color, role)
     end
     fs:SetText(Tr(text or ""))
     local c = color or UI.Color("text", UI.colors.text)
+    if MSUF.MenuSkin then MSUF.MenuSkin.TrackText(fs, c) end
     fs:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
     if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.35) end
@@ -261,6 +264,9 @@ local function CenterLabel(btn)
 end
 
 local function FallbackButtonVisual(btn, active, hover)
+    if btn._msufUIWindowAction then
+        if MSUF.MenuSkin and MSUF.MenuSkin.WindowAction(btn, btn._msufUIWindowAction, FallbackButtonVisual, active, hover) then return end
+    elseif MSUF.MenuSkin and MSUF.MenuSkin.Button(btn, active, hover, FallbackButtonVisual) then return end
     local fill, edge, label = btn._msufUIFill, btn._msufUIEdge, btn._label
     if not fill or not edge then return end
     local enabled = not (btn.IsEnabled and not btn:IsEnabled())
@@ -322,6 +328,8 @@ function UI.Button(parent, text, width, height, opts)
     btn._msufUIDanger = opts.variant == "danger"
     btn._msufUIPrimary = opts.variant == "primary"
     btn._msufUISuccess = opts.variant == "success"
+    btn._msufUIWindowAction = opts.windowAction
+    if opts.windowAction then btn._msufUICloseLabel = btn._label end
     function btn:SetText(value)
         self._label:SetText(Tr(value or ""))
     end
@@ -365,6 +373,7 @@ function UI.EditBox(editBox)
         editBox._msuf2RoundedEditColor = { 0.018, 0.024, 0.050, 0.980 }
     end
     if theme and theme.SkinEditBox then return theme.SkinEditBox(editBox) end
+    if MSUF.MenuSkin and MSUF.MenuSkin.Surface(editBox, "input", UI.EditBox, nil, nil, 7) then return editBox end
     return SetBackdrop(editBox, { 0.018, 0.024, 0.050, 0.980 }, UI.Color("borderSoft", UI.colors.borderSoft))
 end
 
@@ -375,7 +384,7 @@ function UI.CloseButton(parent, onClick)
         if onClick then btn:SetScript("OnClick", onClick) end
         return btn
     end
-    local btn = UI.Button(parent, "x", 24, 24, { skipHistory = true, align = "CENTER", variant = "danger", onClick = onClick })
+    local btn = UI.Button(parent, "x", 24, 24, { skipHistory = true, align = "CENTER", variant = "danger", windowAction = "close", onClick = onClick })
     return btn
 end
 

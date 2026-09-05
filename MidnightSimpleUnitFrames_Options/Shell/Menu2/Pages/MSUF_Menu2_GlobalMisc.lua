@@ -355,6 +355,12 @@ local function BuildMisc(ctx)
     M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
     local accentHelp = W.Text(menuBehavior, "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, -330, menuBehaviorW - 70, T.colors.muted)
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
+    local mapkoSkin = b:CollapsibleSection("misc_mapkoskin", "MapkoSkin", 108, true)
+    BindMiscToggle(mapkoSkin, "Use MapkoSkin for MSUF menus", "mapkoSkinMenus", true,
+        "MSUF2_MAPKOSKIN_MENUS", 14, -42, 360, MENU_WRITE_OPTS,
+        function() if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end end)
+    W.Text(mapkoSkin, "Requires MapkoSkin API 2.1. Disabling restores the MSUF look; unit frames and profile colors are unchanged.",
+        30, -76, menuBehaviorW - 70, T.colors.muted)
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
     BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360, nil,

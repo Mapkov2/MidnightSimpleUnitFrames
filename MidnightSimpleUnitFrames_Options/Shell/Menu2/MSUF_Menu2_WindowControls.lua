@@ -128,6 +128,8 @@ end
 
 local function PaintWindowControlButton(btn, hover, down)
     if not btn then return end
+    if MSUF.MenuSkin and MSUF.MenuSkin.WindowAction(btn, btn._msuf2ControlKind,
+        PaintWindowControlButton, hover, down) then return end
     local alpha = (btn.IsEnabled and not btn:IsEnabled()) and 0.42 or 1
     local close = btn._msuf2ControlKind == "close"
     if btn._msuf2ControlGroup then
