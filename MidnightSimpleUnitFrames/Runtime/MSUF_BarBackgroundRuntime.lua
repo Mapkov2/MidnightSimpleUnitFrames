@@ -139,6 +139,11 @@ local function MSUF_HasAnySecretColor(r, g, b)
     end
     return MSUF_IsSecretValue(r) or MSUF_IsSecretValue(g) or MSUF_IsSecretValue(b)
 end
+-- Resolve this capability once. Retail's native predicate already returns an
+-- ordinary boolean, so its hot path needs no intermediate Lua call/type gate.
+if type(hasanysecretvalues) == "function" then
+    MSUF_HasAnySecretColor = hasanysecretvalues
+end
 
 MSUF.Bars._DarkTint = function(g, r, gg, b)
     if g and g.darkMode and not g.darkBgCustomColor then
@@ -223,13 +228,13 @@ local function _MSUF_GetBgKeys(prefix)
 end
 
 --- Pre-warm the known prefixes so the runtime path does not allocate keys.
-_MSUF_GetBgKeys("HP")
+local HP_BG_KEYS = _MSUF_GetBgKeys("HP")
 _MSUF_GetBgKeys("Power")
-_MSUF_GetBgKeys("Frame")
+local FRAME_BG_KEYS = _MSUF_GetBgKeys("Frame")
 
-local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret, force)
+local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca, colorSecret, force, keys)
     if not t then return end
-    local k = _MSUF_GetBgKeys(prefix)
+    local k = keys or _MSUF_GetBgKeys(prefix)
     if colorSecret == true then
         -- Blizzard permits secret VertexColor arguments on SetVertexColor.
         -- Forward opaque values without Lua comparisons and keep them out of
@@ -415,7 +420,12 @@ ExportPublic("MSUF_GetEffectiveHealthBarBackgroundTintRGBA", MSUF_GetEffectiveHe
 local function MSUF_RefreshHealthBarBackgroundColor(frame, event, unit, hp, maxHP, calc, force)
     if not frame then return false end
     local health = frame.MSUFSpec and frame.MSUFSpec.health
-    local colorMode = _MSUF_ResolveHealthBackgroundColorMode(frame)
+    -- Compiled specs already select the dynamic mode. Legacy callers retain
+    -- the full resolver, without paying for it on every compiled health tick.
+    local colorMode = health and health.backgroundColorMode
+    if colorMode ~= "match_health" and colorMode ~= "health_gradient" then
+        colorMode = _MSUF_ResolveHealthBackgroundColorMode(frame)
+    end
     if colorMode ~= "match_health" and colorMode ~= "health_gradient" then return false end
 
     local background = frame.hpBarBG or frame.healthBg or frame.bg
@@ -452,10 +462,25 @@ local function MSUF_RefreshHealthBarBackgroundColor(frame, event, unit, hp, maxH
         if type(a) ~= "number" then
             a = frame.MSUFSpec and frame.MSUFSpec.backgroundAlpha or 0.9
         end
-        a = MSUF_Clamp01(a)
+        -- Cache only the ordinary configuration input, never health-derived
+        -- RGB. Checking the input also handles in-place live alpha edits and
+        -- spec replacement without a separate invalidation lifecycle.
+        if frame._msufHealthBgAlphaInput ~= a then
+            frame._msufHealthBgAlphaInput = a
+            frame._msufHealthBgAlpha = MSUF_Clamp01(a)
+        end
+        a = frame._msufHealthBgAlpha
     end
 
-    _MSUF_ApplyBgColor(frame, background, prefix, r, gg, b, a, colorSecret, force)
+    local keys = frame.hpBarBG and HP_BG_KEYS or FRAME_BG_KEYS
+    if colorSecret == true then
+        -- A restricted color always needs a native write; forward it directly
+        -- and invalidate the same plain cache used by the general painter.
+        background:SetVertexColor(r, gg, b, a)
+        frame[keys.r], frame[keys.g], frame[keys.b], frame[keys.a] = nil, nil, nil, nil
+    else
+        _MSUF_ApplyBgColor(frame, background, prefix, r, gg, b, a, false, force, keys)
+    end
     return true
 end
 ExportPublic("MSUF_RefreshHealthBarBackgroundColor", MSUF_RefreshHealthBarBackgroundColor)
