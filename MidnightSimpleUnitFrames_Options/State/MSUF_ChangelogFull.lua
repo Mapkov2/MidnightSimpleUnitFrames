@@ -8,12 +8,53 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9E0EB66494E7C4A6F67AA405C69B9D6DD1728D190FBF5C3EDA78403F8577BB7E",
-    currentVersion = "6.5-alpha10",
+    sourceSha256 = "8CF8E561840ADBDDAC76B482D3D048C3B53E121333FA25FE50F4AC0340CC5AD3",
+    currentVersion = "6.5-alpha11",
     historyFromVersion = "6.5-alpha1",
-    previousVersion = "6.5-alpha9",
-    rangeLabel = "6.5-alpha9 -> 6.5-alpha10",
+    previousVersion = "6.5-alpha10",
+    rangeLabel = "6.5-alpha10 -> 6.5-alpha11",
     entries = {
+        {
+            version = "6.5-alpha11",
+            date = "2026-09-05",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Busy group combat now spends less time updating health gradients, dynamic backgrounds, protected text, Aura fallback state, and Range Fade timers. Existing colors, status transitions, unresolved-Aura discovery, and range sampling behavior are preserved.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "health gradient",
+                                label = "Health Gradient",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
+                                settingKey = "general.enableHealthGradient",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Synchronized the complete Retail 6.15-beta7 performance set into the unified Alpha package.",
+                        "The Mainline flavor keeps its Retail 12.1.5 native Aura, scheduler, tooltip-caster, and pixel-rounding paths. Arena Frames and the Vanilla 1.15.9, TBC 2.5.6, and Mists 5.5.4 flavors remain included.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Health gradients reuse bounded native scalar curves for their RGB channels, avoid per-update ColorMixin allocation, and keep constant channels out of the native evaluation path.",
+                        "Group health updates avoid a repeated dynamic-background refresh and an empty color handoff after the background has already been painted.",
+                        "Dynamic health backgrounds cache stable alpha inputs and known cache keys, use the native secret-value predicate when available, and forward protected colors directly to their supported rendering sink.",
+                        "Protected current, maximum, and percentage text modes use compiled single-value writers instead of the general multi-value formatter.",
+                        "Unresolved Aura fallback scans avoid resynchronizing an unchanged active-work state while later discovery, owner reactivation, and unregister cleanup remain intact.",
+                        "Group death-background updates skip cache probes that cannot be reused outside an active frame dispatch while retaining fresh native death and resurrection checks.",
+                        "Range Fade keeps an earlier timer when its logical deadline moves later, reducing timer replacement churn without moving range checks or alpha changes forward.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha10",
             date = "2026-09-04",

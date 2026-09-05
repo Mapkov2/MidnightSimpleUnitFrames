@@ -8,12 +8,53 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9E0EB66494E7C4A6F67AA405C69B9D6DD1728D190FBF5C3EDA78403F8577BB7E",
-    currentVersion = "6.5-alpha10",
-    historyFromVersion = "6.5-alpha7",
-    previousVersion = "6.5-alpha9",
-    rangeLabel = "6.5-alpha9 -> 6.5-alpha10",
+    sourceSha256 = "8CF8E561840ADBDDAC76B482D3D048C3B53E121333FA25FE50F4AC0340CC5AD3",
+    currentVersion = "6.5-alpha11",
+    historyFromVersion = "6.5-alpha8",
+    previousVersion = "6.5-alpha10",
+    rangeLabel = "6.5-alpha10 -> 6.5-alpha11",
     entries = {
+        {
+            version = "6.5-alpha11",
+            date = "2026-09-05",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Busy group combat now spends less time updating health gradients, dynamic backgrounds, protected text, Aura fallback state, and Range Fade timers. Existing colors, status transitions, unresolved-Aura discovery, and range sampling behavior are preserved.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "health gradient",
+                                label = "Health Gradient",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
+                                settingKey = "general.enableHealthGradient",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Synchronized the complete Retail 6.15-beta7 performance set into the unified Alpha package.",
+                        "The Mainline flavor keeps its Retail 12.1.5 native Aura, scheduler, tooltip-caster, and pixel-rounding paths. Arena Frames and the Vanilla 1.15.9, TBC 2.5.6, and Mists 5.5.4 flavors remain included.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Health gradients reuse bounded native scalar curves for their RGB channels, avoid per-update ColorMixin allocation, and keep constant channels out of the native evaluation path.",
+                        "Group health updates avoid a repeated dynamic-background refresh and an empty color handoff after the background has already been painted.",
+                        "Dynamic health backgrounds cache stable alpha inputs and known cache keys, use the native secret-value predicate when available, and forward protected colors directly to their supported rendering sink.",
+                        "Protected current, maximum, and percentage text modes use compiled single-value writers instead of the general multi-value formatter.",
+                        "Unresolved Aura fallback scans avoid resynchronizing an unchanged active-work state while later discovery, owner reactivation, and unregister cleanup remain intact.",
+                        "Group death-background updates skip cache probes that cannot be reused outside an active frame dispatch while retaining fresh native death and resurrection checks.",
+                        "Range Fade keeps an earlier timer when its logical deadline moves later, reducing timer replacement churn without moving range checks or alpha changes forward.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha10",
             date = "2026-09-04",
@@ -129,32 +170,6 @@ local data = {
                         "Classic now installs its absent Ebon Might callbacks as one-time no-op contracts during ClassPower initialization, preventing repeated nil checks and keeping the ordinary ClassPower apply path allocation-free.",
                         "Interrupted full Aura refreshes now drain their private topology batch through a scope-owned closure; Lua 5.1 bytecode verification guards against compiling that state as a global again.",
                         "Added regression coverage for Mists Monk Chi resolution and the Classic controller's optional Ebon lifecycle contract.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-alpha7",
-            date = "2026-09-04",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Aura displays recover instead of remaining disabled when a full refresh exceeds the Lua execution budget.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Retired the complete pre-6.0 profile conversion path and its legacy import controls. Every MSUF 6.x schema-600 profile and the 6.x Wago envelope remain supported; older or unversioned stored profiles are archived instead of being normalized into the active profile list.",
-                        "The unified package accepts Retail 12.0.7, 12.1.0 and 12.1.5 while retaining the client-specific Vanilla, TBC and Mists manifests.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Full Aura refreshes batch identity-event topology once and arm their next-frame recovery before synchronous work, so a script ran too long abort cannot leave every later Aura refresh permanently latched as pending.",
-                        "Pre-6 profile fallback code no longer runs in current profiles or imports, reducing cold-path work and maintenance surface without changing any supported 6.x profile.",
                     },
                 },
             },
