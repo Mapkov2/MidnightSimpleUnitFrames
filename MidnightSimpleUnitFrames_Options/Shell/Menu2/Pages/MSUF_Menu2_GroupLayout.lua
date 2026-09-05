@@ -483,21 +483,6 @@ local function BuildGFSortingSection(ctx, b)
     --- Raid/Mythic only: By Role with Preserve raid groups (and Group + Role) sort
     --- roles inside each raid group; this orders them across the entire raid.
     local raidWideRoles = BindScopeToggle(ctx, W.ToggleAt(sortCard, "Sort roles across entire raid", 16, -146, sortingLeftW - 32), "sortRolesAcrossRaid", false, "rebuild")
-    raidWideRoles._msuf2ExactTargetKinds = { groupScope = true }
-    raidWideRoles._msuf2ExactTargetContracts = {
-        groupScope = {
-            raid = "gf_raid.sortRolesAcrossRaid",
-            mythicraid = "gf_mythicraid.sortRolesAcrossRaid",
-        },
-    }
-    raidWideRoles._msuf2PrepareExactSearchTarget = function(_, exactTarget)
-        if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "groupScope" then return false end
-        local scope = tostring(exactTarget.prepareValue or "")
-        local settingKey = raidWideRoles._msuf2ExactTargetContracts.groupScope[scope]
-        if not settingKey or tostring(exactTarget.settingKey or "") ~= settingKey then return false end
-        M.SetMenuStateValue("gfScope", scope)
-        return CurrentScope() == scope
-    end
     if M.AddTooltip then
         M.AddTooltip(raidWideRoles, "Sort roles across entire raid",
             "Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role.",
