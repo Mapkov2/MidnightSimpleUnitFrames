@@ -1,5 +1,18 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.151 - 2026-09-06
+
+### Highlights
+
+- **Highlight borders work reliably again on rounded frames and respect the configured border thickness.**
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_rounded","controlId":"menu2.opt.bars.global.rounded.rounded.frames.enabled","settingKey":"bars.roundedFramesEnabled","prepareKind":"","prepareValue":"","query":"rounded frame texture","label":"Rounded frame texture"} -->
+
+### Fixes
+
+- Restored rounded highlight startup and layering, including support for border thickness up to 30.
+- Dispel and Purge borders now apply their configured thickness on all frame shapes and refresh immediately after Menu changes.
+- Group Frame highlight detection keeps working when Aura icons are disabled, and Any dispel type also works on enemy units.
+
 ## 6.15 - 2026-09-05
 
 ### Highlights
