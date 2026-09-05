@@ -728,7 +728,10 @@ local function ArmPollTimer()
     CancelPollTimer()
     return
   end
-  if pollQueued and pollNextAt == nextAt then return end
+  -- Keep an earlier wake-up when movement postpones the logical deadline.
+  -- The callback checks that deadline before sampling, so bursts need no
+  -- cancel/recreate pair per edge and never move a range evaluation forward.
+  if pollQueued and pollNextAt <= nextAt then return end
   if pollTimer then CancelPollTimer() end
   local delay = nextAt - PollClock()
   if delay < 0 then delay = 0 end
@@ -741,8 +744,10 @@ PollTimerCallback = function()
   pollTimer = nil
   if not pollQueued then return end
   local now = PollClock()
-  if pollNextAt and now < pollNextAt then
-    pollTimer = NewTimer(pollNextAt - now, PollTimerCallback)
+  local nextAt = NextPollDeadline()
+  if nextAt and now < nextAt then
+    pollNextAt = nextAt
+    pollTimer = NewTimer(nextAt - now, PollTimerCallback)
     return
   end
   pollQueued = false

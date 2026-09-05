@@ -382,12 +382,16 @@ end
 UF.ReadConnectedCached = ReadConnectedCached
 
 local function ReadDeadCached(frame, unit, state)
-  state = state or FreshUnitState(frame, unit)
+  -- Group health ticks have no shared dispatch. Neither cache can serve them;
+  -- keep their native death read while skipping both empty cache probes.
+  -- Explicit snapshots retain their existing priority even outside a dispatch.
+  local dispatchActive = frame and frame._msufDispatchActive == true
+  if dispatchActive then state = state or FreshUnitState(frame, unit) end
   if state and state.deadKnown == true then
     return state.dead == true, true
   end
 
-  local dispatchState = IdentityDispatchState(frame, unit)
+  local dispatchState = dispatchActive and IdentityDispatchState(frame, unit) or nil
   if dispatchState and dispatchState.identityDeadRead == true then
     return dispatchState.dead == true, dispatchState.deadKnown == true
   end

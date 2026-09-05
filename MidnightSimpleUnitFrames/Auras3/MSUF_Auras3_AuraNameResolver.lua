@@ -272,7 +272,12 @@ local function ScanContainer(container)
             i = i + 1
         end
     end
-    SyncContainerActiveWork(container)
+    -- An unresolved active list keeps exactly the same work registration.
+    -- Cold registration/reactivation and exhausting the list still synchronize
+    -- immediately, including callbacks that changed the container lifecycle.
+    if scanNames[1] == nil or container._msufA3AuraAliasHasActiveWork ~= true then
+        SyncContainerActiveWork(container)
+    end
     return changed
 end
 

@@ -24,6 +24,7 @@ local afterCallbacks = {}
 local driverFrames = {}
 local rangeCalls = 0
 local focusRangeCalls = 0
+local speedCalls = 0
 local targetCanAttack = false
 local targetMembershipChecks = 0
 local membershipChecks = 0
@@ -128,7 +129,7 @@ _G.UnitIsDeadOrGhost = function() return false end
 _G.UnitInRange = function() return nil, false end
 _G.UnitClass = function() return "Warlock", "WARLOCK" end
 _G.IsPlayerSpell = function(spellID) return spellID == 234153 end
-_G.GetUnitSpeed = function() return 0 end
+_G.GetUnitSpeed = function() speedCalls = speedCalls + 1; return 0 end
 _G.GetTime = function() return now end
 _G.InCombatLockdown = function() return true end
 _G.issecretvalue = function() return false end
@@ -193,9 +194,25 @@ expect(near(activeTimer() and activeTimer().delay, 0.05),
 registeredElement.Apply(bossFrame, {
   range = { active = true, alpha = 0.4, updateRate = 0 },
 })
+-- A retained early timer is only a wake-up. It must not evaluate any unit,
+-- movement gate or membership before the new logical deadline.
+local function expectLogicalDeadline(due, label)
+  local timer = activeTimer()
+  expect(timer, label .. " lost the timer")
+  if timer.due < due - 0.0001 then
+    local bossBefore, focusBefore = rangeCalls, focusRangeCalls
+    local speedBefore, membershipBefore = speedCalls, membershipChecks
+    fireActiveTimer()
+    expect(rangeCalls == bossBefore and focusRangeCalls == focusBefore
+        and speedCalls == speedBefore and membershipChecks == membershipBefore,
+      label .. " early wake-up performed range work")
+  end
+  expect(near(activeTimer() and activeTimer().due, due), label .. " changed the logical deadline")
+end
+local standardDeadline = now + 2.0
 local standardTimer = activeTimer()
 expect(standardTimer, "Standard mode did not keep the adaptive Boss heartbeat")
-expect(near(standardTimer.delay, 2.0), "Standard idle mode must retain the existing 2 second heartbeat")
+expectLogicalDeadline(standardDeadline, "Standard idle 2 second heartbeat")
 local callsBeforeStandardTick = rangeCalls
 local focusCallsBeforeStandardTick = focusRangeCalls
 fireActiveTimer()
@@ -205,8 +222,8 @@ expect(focusRangeCalls == focusCallsBeforeStandardTick,
   "Standard idle heartbeat changed another unit's speed-gated evaluation")
 
 -- A movement edge changes only the adaptive cadence. It must evaluate every
--- fallback unit immediately and replace the outstanding one-shot timer once,
--- without rebuilding membership and arming an intermediate stale cadence.
+-- fallback unit immediately. Earlier deadlines replace the timer once;
+-- later deadlines retain its wake-up without changing the sampling cadence.
 now = now + 0.1
 local timersBeforeMoveStart = #timers
 local rangeCallsBeforeMoveStart = rangeCalls
@@ -228,10 +245,9 @@ rangeDriver.OnEvent(rangeDriver, "PLAYER_STOPPED_MOVING")
 expect(rangeCalls == rangeCallsBeforeMoveStop + 1
     and focusRangeCalls == focusCallsBeforeMoveStop + 1,
   "movement stop must immediately evaluate each fallback unit once")
-expect(#timers == timersBeforeMoveStop + 1,
-  "movement stop must replace the one-shot timer exactly once")
-expect(near(activeTimer() and activeTimer().delay, 2.0),
-  "movement stop must restore the existing 2 second cadence")
+expect(#timers == timersBeforeMoveStop,
+  "movement stop recreated a timer for a later deadline")
+expectLogicalDeadline(now + 2.0, "movement stop 2 second cadence")
 
 -- A real membership mutation can still be pending when a movement event wins
 -- the same-frame race. Rebuild that dirty set before evaluating, but retain the
