@@ -1301,6 +1301,7 @@ local function NPCColor(kind)
 end
 
 local healthGradientCurve
+local healthGradientChannels
 local HEALTH_GRADIENT_CURVE_CACHE_LIMIT = 8
 local healthGradientCurveCache = {}
 local healthGradientCurveCacheCount = 0
@@ -1314,6 +1315,16 @@ local function GradientStops(health)
   return 1, 0, 0, 1, 1, 0, 0, 1, 0
 end
 
+local function CreateGradientChannel(low, mid, high, curveType)
+  if low == mid and mid == high then return nil end
+  local curve = C_CurveUtil.CreateCurve()
+  if curveType and curve.SetType then curve:SetType(curveType) end
+  curve:AddPoint(0, low)
+  curve:AddPoint(0.5, mid)
+  curve:AddPoint(1, high)
+  return curve
+end
+
 local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
   if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
     -- Unit/group specs normally share the same global gradient stops. Reuse
@@ -1325,7 +1336,7 @@ local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
       if cached[1] == lr and cached[2] == lg and cached[3] == lb
         and cached[4] == mr and cached[5] == mg and cached[6] == mb
         and cached[7] == hr and cached[8] == hg and cached[9] == hb then
-        return cached[10]
+        return cached[10], cached[11]
       end
     end
 
@@ -1334,7 +1345,20 @@ local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
     curve:AddPoint(0.5, CreateColor(mr, mg, mb, 1))
     curve:AddPoint(1, CreateColor(hr, hg, hb, 1))
 
-    local entry = { lr, lg, lb, mr, mg, mb, hr, hg, hb, curve }
+    -- Numeric curves return native scalar values instead of allocating a
+    -- ColorMixin on every health event. Only configured (non-secret) stops are
+    -- inspected here. Constant channels need no native evaluation at all.
+    local channels
+    if C_CurveUtil.CreateCurve then
+      local curveType = curve.GetType and curve:GetType()
+      channels = {
+        r = lr, g = lg, b = lb,
+        rCurve = CreateGradientChannel(lr, mr, hr, curveType),
+        gCurve = CreateGradientChannel(lg, mg, hg, curveType),
+        bCurve = CreateGradientChannel(lb, mb, hb, curveType),
+      }
+    end
+    local entry = { lr, lg, lb, mr, mg, mb, hr, hg, hb, curve, channels }
     if healthGradientCurveCacheCount < HEALTH_GRADIENT_CURVE_CACHE_LIMIT then
       healthGradientCurveCacheCount = healthGradientCurveCacheCount + 1
       healthGradientCurveCache[healthGradientCurveCacheCount] = entry
@@ -1345,7 +1369,7 @@ local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
         healthGradientCurveCacheNext = 1
       end
     end
-    return curve
+    return curve, channels
   end
   return false
 end
@@ -1357,20 +1381,21 @@ local function HealthGradientCurve(health)
       and health._msufGradientLowR == lr and health._msufGradientLowG == lg and health._msufGradientLowB == lb
       and health._msufGradientMidR == mr and health._msufGradientMidG == mg and health._msufGradientMidB == mb
       and health._msufGradientHighR == hr and health._msufGradientHighG == hg and health._msufGradientHighB == hb then
-      return health._msufGradientCurve
+      return health._msufGradientCurve, health._msufGradientChannels
     end
-    local curve = CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
+    local curve, channels = CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
     health._msufGradientCurve = curve
+    health._msufGradientChannels = channels
     health._msufGradientLowR, health._msufGradientLowG, health._msufGradientLowB = lr, lg, lb
     health._msufGradientMidR, health._msufGradientMidG, health._msufGradientMidB = mr, mg, mb
     health._msufGradientHighR, health._msufGradientHighG, health._msufGradientHighB = hr, hg, hb
-    return curve
+    return curve, channels
   end
   if healthGradientCurve ~= nil then
-    return healthGradientCurve
+    return healthGradientCurve, healthGradientChannels
   end
-  healthGradientCurve = CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
-  return healthGradientCurve
+  healthGradientCurve, healthGradientChannels = CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
+  return healthGradientCurve, healthGradientChannels
 end
 
 local function GradientFromValues(health, hp, maxHP)
@@ -1398,15 +1423,36 @@ local function GradientFromValues(health, hp, maxHP)
 end
 
 local function GradientColor(unit, calc, frame)
-  local spec = frame and frame.MSUFSpec
-  local health = spec and spec.health or nil
   -- Health.Apply seeds this for health-gradient frames. Text-only gradient
   -- consumers seed it on their first update. The spec apply path clears or
   -- replaces it, so the hot event path does not need nine stop comparisons.
   local curve = frame and frame._msufHealthGradientCurve
+  local channels = frame and frame._msufHealthGradientChannels
   if curve == nil then
-    curve = HealthGradientCurve(health)
-    if frame then frame._msufHealthGradientCurve = curve end
+    local spec = frame and frame.MSUFSpec
+    curve, channels = HealthGradientCurve(spec and spec.health)
+    if frame then
+      frame._msufHealthGradientCurve, frame._msufHealthGradientChannels = curve, channels
+    end
+  end
+  if channels then
+    local r, g, b = channels.r, channels.g, channels.b
+    if calc and calc.EvaluateCurrentHealthPercent then
+      if channels.rCurve then r = calc:EvaluateCurrentHealthPercent(channels.rCurve) end
+      if channels.gCurve then g = calc:EvaluateCurrentHealthPercent(channels.gCurve) end
+      if channels.bCurve then b = calc:EvaluateCurrentHealthPercent(channels.bCurve) end
+      return r, g, b, true
+    elseif issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
+      and UnitHealthPercent then
+      -- Keep the exact unit-token guard inline on this native hot path.
+      -- The API evaluates each curve in Blizzard's permitted native context.
+      -- Never compare, calculate with, or feed the returned secret components
+      -- into another curve from Lua; forward them straight to the color sink.
+      if channels.rCurve then r = UnitHealthPercent(unit, true, channels.rCurve) end
+      if channels.gCurve then g = UnitHealthPercent(unit, true, channels.gCurve) end
+      if channels.bCurve then b = UnitHealthPercent(unit, true, channels.bCurve) end
+      return r, g, b, true
+    end
   end
   if calc and curve and calc.EvaluateCurrentHealthPercent then
     -- EvaluateCurrentHealthPercent owns the secret percentage evaluation.
