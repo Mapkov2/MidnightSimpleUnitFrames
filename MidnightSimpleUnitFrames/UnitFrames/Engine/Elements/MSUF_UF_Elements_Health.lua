@@ -141,7 +141,7 @@ local function RuntimeColorOnHealthEvent(frame, value, valueSecret)
   return type(value) == "number" and value <= 0
 end
 
-local function ApplyRuntimeColor(frame, event, unit, hp, maxHP, backgroundForce)
+local function ApplyRuntimeColor(frame, event, unit, hp, maxHP, backgroundForce, backgroundApplied)
   local bar = frame and frame.hpBar
   local runtimeEnabled = frame and frame._msufHealthRuntimeColorEnabled
   if runtimeEnabled == nil and frame then
@@ -166,8 +166,7 @@ local function ApplyRuntimeColor(frame, event, unit, hp, maxHP, backgroundForce)
     foregroundApplied = true
   end
 
-  local backgroundApplied = false
-  if frame and frame._msufHealthBackgroundColorDynamic == true
+  if not backgroundApplied and frame and frame._msufHealthBackgroundColorDynamic == true
     and type(RefreshHealthBarBackgroundColor) == "function" then
     backgroundApplied = RefreshHealthBarBackgroundColor(
       frame, event, unit or frame.MSUFUnitKey, hp, maxHP, nil, backgroundForce) == true
@@ -337,12 +336,13 @@ function Health.Apply(frame, spec)
   local backgroundGradient = backgroundColorMode == "health_gradient"
   local backgroundDynamic = backgroundGradient or backgroundColorMode == "match_health"
   if (mode == "gradient" or backgroundGradient) and PrepareHealthGradientCurve then
-    frame._msufHealthGradientCurve = PrepareHealthGradientCurve(h)
+    frame._msufHealthGradientCurve, frame._msufHealthGradientChannels = PrepareHealthGradientCurve(h)
   else
     -- A text-only health gradient lazily seeds this on its next update. Clear
     -- the frame cache on every spec apply so changed colour stops are visible
     -- immediately without rechecking all nine values in the event hot path.
     frame._msufHealthGradientCurve = nil
+    frame._msufHealthGradientChannels = nil
   end
   frame._msufHealthRuntimeColorEnabled = mode ~= "dark" and mode ~= "unified"
   frame._msufHealthRuntimeGradient = mode == "gradient"
@@ -781,11 +781,12 @@ local function UpdateGroupPercentLean(frame, event, unit)
   -- native curve is independent of the foreground color, so refresh it before
   -- the alive/static foreground early return. Match-health waits until after a
   -- dynamic foreground repaint and is therefore handled by ApplyRuntimeColor.
+  local backgroundApplied
   if event == "UNIT_HEALTH"
     and frame._msufHealthBackgroundGradient == true
     and frame._msufHealthRuntimeGradient ~= true
     and type(RefreshHealthBarBackgroundColor) == "function" then
-    RefreshHealthBarBackgroundColor(frame, event, unit, pct, 100)
+    backgroundApplied = RefreshHealthBarBackgroundColor(frame, event, unit, pct, 100) == true
   end
 
   -- UNIT_HEALTH text writers are deferred dirty markers and immediately
@@ -804,9 +805,12 @@ local function UpdateGroupPercentLean(frame, event, unit)
     return pct, nil, true
   end
 
-  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
+  if (not backgroundApplied or frame._msufHealthRuntimeColorEnabled ~= false)
+    and frame._msufHealthRuntimeColorUpdateEnabled ~= false
     and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, secret)) then
-    if not ApplyRuntimeColor(frame, event, unit, pct, 100) then SetColor(frame) end
+    -- A gone/status consumer can prevent the early return above. Its color
+    -- handoff must retain the background-only result without evaluating it twice.
+    if not ApplyRuntimeColor(frame, event, unit, pct, 100, nil, backgroundApplied) then SetColor(frame) end
   end
 
   -- A steady alive or secret tick with no visible gone label feeds the

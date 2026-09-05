@@ -843,6 +843,42 @@ local function CompileSecretWriter(slot)
   local pattern = slot.secretPattern
   local delimiter = slot.delimiter
 
+  -- A single-value slot has no runtime format dispatch or unused value needs.
+  -- Keep NUM_OPTS live inside the abbreviated writers: changing number style
+  -- must affect existing compiled slots without a new frame/spec application.
+  if code == 1 then
+    return function(_, cur, _, _, _, _, curSecret)
+      if curSecret == nil then curSecret = issecretvalue(cur) == true end
+      if fn then
+        local opts = abbreviates and NUM_OPTS or nil
+        cur = curSecret == true and fn(cur, opts) or fn(FiniteNumberOr(cur, 0), opts)
+      elseif curSecret ~= true then
+        cur = FiniteNumberOr(cur, 0)
+      end
+      fs._aText, fs._aTextPlain = nil, nil
+      fs:SetFormattedText(pattern, cur)
+    end
+  elseif code == 2 then
+    return function(_, _, maxValue, _, _, _, _, maxSecret)
+      if maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
+      if fn then
+        local opts = abbreviates and NUM_OPTS or nil
+        maxValue = maxSecret == true and fn(maxValue, opts) or fn(FiniteNumberOr(maxValue, 0), opts)
+      elseif maxSecret ~= true then
+        maxValue = FiniteNumberOr(maxValue, 0)
+      end
+      fs._aText, fs._aTextPlain = nil, nil
+      fs:SetFormattedText(pattern, maxValue)
+    end
+  elseif code == 5 then
+    return function(_, _, _, pct, _, _, _, _, pctSecret)
+      if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
+      if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
+      fs._aText, fs._aTextPlain = nil, nil
+      fs:SetFormattedText(pattern, pct)
+    end
+  end
+
   return function(_, cur, maxValue, pct, _, _, curSecret, maxSecret, pctSecret)
     if needsCur and curSecret == nil then curSecret = issecretvalue(cur) == true end
     if needsMax and maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
