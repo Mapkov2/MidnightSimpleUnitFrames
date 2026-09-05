@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.15-beta7 - 2026-09-05
+
+### Highlights
+
+- **Busy group combat now spends less time updating health gradients, dynamic backgrounds, protected text, Aura fallback state, and Range Fade timers.** Existing colors, status transitions, unresolved-Aura discovery, and range sampling behavior are preserved.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_appearance","controlId":"menu2.opt.colors.advanced.appearance.gradient.enabled","settingKey":"general.enableHealthGradient","prepareKind":"","prepareValue":"","query":"health gradient","label":"Health Gradient"} -->
+
+### Fixes & Performance
+
+- Health gradients now reuse bounded native scalar curves for their RGB channels, avoid per-update ColorMixin allocation, and keep constant channels out of the native evaluation path.
+- Group health updates no longer repeat an already completed dynamic-background refresh or enter an empty color handoff after the background has been painted.
+- Dynamic health backgrounds cache stable alpha inputs and known cache keys, use the native secret-value predicate when available, and forward protected colors directly to their supported rendering sink.
+- Protected current, maximum, and percentage text modes now use compiled single-value writers instead of the general multi-value formatter.
+- Unresolved Aura fallback scans no longer resynchronize an unchanged active-work state, while later Aura discovery, owner reactivation, and unregister cleanup remain intact.
+- Group death-background updates skip cache probes that cannot be reused outside an active frame dispatch while retaining fresh native death and resurrection checks.
+- Range Fade keeps an earlier timer when its logical deadline moves later, reducing timer replacement churn without moving range checks or alpha changes forward.
+
 ## 6.15-beta6 - 2026-09-04
 
 ### Highlights

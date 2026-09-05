@@ -8,12 +8,46 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "D4E06F289AA22B2D84CF10D096A3B96107DAAE09336C38C48D2354E1CE75F2D3",
-    currentVersion = "6.15-beta6",
+    sourceSha256 = "2DEAB0E75FCB11F9EDF602B097DA2CF814E32AE80D4068F883F4B3EA1BC8A17A",
+    currentVersion = "6.15-beta7",
     historyFromVersion = "6.02",
-    previousVersion = "6.14",
-    rangeLabel = "6.14 -> 6.15-beta6",
+    previousVersion = "6.15-beta6",
+    rangeLabel = "6.15-beta6 -> 6.15-beta7",
     entries = {
+        {
+            version = "6.15-beta7",
+            date = "2026-09-05",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Busy group combat now spends less time updating health gradients, dynamic backgrounds, protected text, Aura fallback state, and Range Fade timers. Existing colors, status transitions, unresolved-Aura discovery, and range sampling behavior are preserved.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "health gradient",
+                                label = "Health Gradient",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
+                                settingKey = "general.enableHealthGradient",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Health gradients now reuse bounded native scalar curves for their RGB channels, avoid per-update ColorMixin allocation, and keep constant channels out of the native evaluation path.",
+                        "Group health updates no longer repeat an already completed dynamic-background refresh or enter an empty color handoff after the background has been painted.",
+                        "Dynamic health backgrounds cache stable alpha inputs and known cache keys, use the native secret-value predicate when available, and forward protected colors directly to their supported rendering sink.",
+                        "Protected current, maximum, and percentage text modes now use compiled single-value writers instead of the general multi-value formatter.",
+                        "Unresolved Aura fallback scans no longer resynchronize an unchanged active-work state, while later Aura discovery, owner reactivation, and unregister cleanup remain intact.",
+                        "Group death-background updates skip cache probes that cannot be reused outside an active frame dispatch while retaining fresh native death and resurrection checks.",
+                        "Range Fade keeps an earlier timer when its logical deadline moves later, reducing timer replacement churn without moving range checks or alpha changes forward.",
+                    },
+                },
+            },
+        },
         {
             version = "6.15-beta6",
             date = "2026-09-04",
