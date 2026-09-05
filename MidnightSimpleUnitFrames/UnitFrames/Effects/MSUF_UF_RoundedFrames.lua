@@ -32,6 +32,7 @@ local MASK_PATH_1X = MASK_ROOT .. "rounded_bar_1x.tga"
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local ROUNDED_MEDIA_SLICE_MARGIN = 9.5
 local DEFAULT_ROUNDED_STRENGTH = 3
+local MAX_HIGHLIGHT_BORDER_THICKNESS = 30
 
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
@@ -237,7 +238,7 @@ end
 
 local function LayoutRoundedEdge(edge, anchor, thickness, padOverride)
   if not (edge and anchor) then return false end
-  local pad = padOverride and ClampEdgeSize(padOverride, 1, 16) or RoundedEdgeLayoutPad(thickness, 1)
+  local pad = padOverride and ClampEdgeSize(padOverride, 1, MAX_HIGHLIGHT_BORDER_THICKNESS) or RoundedEdgeLayoutPad(thickness, 1)
   if pad <= 0 then
     edge:Hide()
     return false
@@ -519,7 +520,7 @@ local function ShowRoundedEdgeStack(owner, baseEdge, poolKey)
     if baseEdge then baseEdge:Show() end
     return
   end
-  local count = ClampEdgeSize(stack._msufCount, 1, 16)
+  local count = ClampEdgeSize(stack._msufCount, 1, MAX_HIGHLIGHT_BORDER_THICKNESS)
   for i = 1, count do
     local edge = (i == 1) and baseEdge or stack[i]
     if edge and edge.Show then edge:Show() end
@@ -528,7 +529,7 @@ end
 
 local function SetRoundedEdgeStackAlpha(owner, baseEdge, poolKey, alpha)
   local stack = owner and owner[poolKey]
-  local count = ClampEdgeSize(stack and stack._msufCount, 1, 16)
+  local count = ClampEdgeSize(stack and stack._msufCount, 1, MAX_HIGHLIGHT_BORDER_THICKNESS)
   for i = 1, count do
     local edge = (i == 1) and baseEdge or stack and stack[i]
     if edge and edge.SetAlpha then
@@ -540,7 +541,7 @@ end
 local function SetRoundedEdgeStackAlphaFromBoolean(owner, baseEdge, poolKey, value)
   if not (baseEdge and baseEdge.SetAlphaFromBoolean) then return false end
   local stack = owner and owner[poolKey]
-  local count = ClampEdgeSize(stack and stack._msufCount, 1, 16)
+  local count = ClampEdgeSize(stack and stack._msufCount, 1, MAX_HIGHLIGHT_BORDER_THICKNESS)
   for i = 1, count do
     local edge = (i == 1) and baseEdge or stack and stack[i]
     if edge then
@@ -566,7 +567,7 @@ local function SetRoundedMouseoverStackColor(owner, baseEdge, poolKey, r, g, b, 
     return SetRoundedEdgeStackColor(owner, baseEdge, poolKey, r, g, b, a)
   end
   local stack = owner and owner[poolKey]
-  local count = ClampEdgeSize(stack and stack._msufCount, 1, 16)
+  local count = ClampEdgeSize(stack and stack._msufCount, 1, MAX_HIGHLIGHT_BORDER_THICKNESS)
   for i = 1, count do
     local edge = (i == 1) and baseEdge or stack and stack[i]
     if edge and edge.SetVertexColor then
@@ -578,19 +579,33 @@ end
 local function EnsureRoundedHoverContainer(owner, parent, key)
   if not (owner and parent) then return nil end
   local container = owner[key]
-  if container then return container end
-  if not (CreateFrame and CanCreateRoundedRegion(container)) then return nil end
-  container = CreateFrame("Frame", nil, parent)
-  container:SetAllPoints(parent)
-  if container.EnableMouse then container:EnableMouse(false) end
-  container:Hide()
-  owner[key] = container
+  if not container then
+    if not (CreateFrame and CanCreateRoundedRegion(container)) then return nil end
+    container = CreateFrame("Frame", nil, parent)
+    container:SetAllPoints(parent)
+    if container.EnableMouse then container:EnableMouse(false) end
+    container:Hide()
+    owner[key] = container
+  end
+  -- Match Highlight.EnsureHighlight's owner + 5 band. A newly-created child
+  -- otherwise inherits only parent + 1 and can sit below the health surfaces.
+  -- Hover events only show/hide this prewarmed container during combat.
+  if not IsCombatLocked() and owner.GetFrameLevel and container.SetFrameLevel then
+    local level = owner:GetFrameLevel()
+    if not issecretvalue(level) then
+      level = (level or 0) + 5
+      if container._msufRoundedHoverLevel ~= level then
+        container:SetFrameLevel(level)
+        container._msufRoundedHoverLevel = level
+      end
+    end
+  end
   return container
 end
 
 local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness, poolKey, maskedKey, layer, subLevel)
   if not (owner and parent and baseEdge and anchor) then return false end
-  local count = ClampEdgeSize(thickness, 0, 16)
+  local count = ClampEdgeSize(thickness, 0, MAX_HIGHLIGHT_BORDER_THICKNESS)
   if count <= 0 then
     HideRoundedEdgeStack(owner, baseEdge, poolKey)
     return false
@@ -966,7 +981,7 @@ local function ApplyUnitRoundedHoverEdge(f, enabled)
 
   local anchor = f
   if f.highlightBorder and f.highlightBorder.Hide then f.highlightBorder:Hide() end
-  container = container or EnsureRoundedHoverContainer(f, f, "_msufRUF_HoverContainer")
+  container = EnsureRoundedHoverContainer(f, f, "_msufRUF_HoverContainer")
   if not container then return nil end
   if not edge then
     if not CanCreateRoundedRegion(edge) then return nil end
@@ -1477,6 +1492,15 @@ end
 local MODERN_BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
 
 local function SetModernBorderEdgesSuppressed(f, suppressed)
+  if not f then return end
+  if suppressed then
+    -- The shared Borders renderer owns the active outline, including its
+    -- normal fallback. Do not leave a legacy background ring underneath it.
+    HideRoundedEdgeStack(f, f._msufRUF_Edge, "_msufRUF_EdgeStack")
+    HideRoundedEdgeStack(f, f._msufRGF_Edge, "_msufRGF_EdgeStack")
+  else
+    HideRoundedEdgeStack(f, f._msufRoundedBorderEdge, "_msufRoundedBorderEdgeStack")
+  end
   local edges = f and f.MSUFBorderEdges
   if type(edges) ~= "table" then return end
   if suppressed then
@@ -1509,8 +1533,8 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
     return false
   end
 
-  local edgeKey = group and "_msufRGF_Edge" or "_msufRUF_Edge"
-  local stackKey = group and "_msufRGF_EdgeStack" or "_msufRUF_EdgeStack"
+  local edgeKey = "_msufRoundedBorderEdge"
+  local stackKey = "_msufRoundedBorderEdgeStack"
   local maskedKey = group and "_msufRGF_MaskedTextures" or "_msufRUF_MaskedTextures"
   local edge = f[edgeKey]
   if shown ~= true then
@@ -1519,19 +1543,30 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
     return true
   end
 
-  thickness = ClampEdgeSize(thickness, 0, 16)
+  thickness = ClampEdgeSize(thickness, 0, MAX_HIGHLIGHT_BORDER_THICKNESS)
   if thickness <= 0 then
     SetModernBorderEdgesSuppressed(f, true)
     HideRoundedEdgeStack(f, edge, stackKey)
     return true
   end
 
-  local parent = group and (f.barGroup or f) or f
+  -- Borders already seats this host at the resolved outline/priority level.
+  -- Keep rounded geometry anchored to the original body, but render on that
+  -- same host so a highlight cannot disappear behind the health/background.
+  -- The separate pool never needs reparenting during a combat transition.
+  local parent = f.MSUFBorderOverlay
+  if not parent then
+    SetModernBorderEdgesSuppressed(f, false)
+    return false
+  end
   local anchor = group and (f.barGroup or f) or f
-  local layer = "BACKGROUND"
-  local subLevel = group and -8 or -7
+  local layer = "OVERLAY"
+  local subLevel = 0
   if not edge then
-    if not CanCreateRoundedRegion(edge) then return false end
+    if not CanCreateRoundedRegion(edge) then
+      SetModernBorderEdgesSuppressed(f, false)
+      return false
+    end
     edge = parent:CreateTexture(nil, layer, nil, subLevel)
     SE_SnapOff(edge)
     f[edgeKey] = edge
@@ -1582,7 +1617,7 @@ local function ApplyGroupRoundedHoverEdge(f, enabled)
   end
   local parent = f.barGroup or f
   if f.highlightBorder and f.highlightBorder.Hide then f.highlightBorder:Hide() end
-  container = container or EnsureRoundedHoverContainer(f, parent, "_msufRGF_HoverContainer")
+  container = EnsureRoundedHoverContainer(f, parent, "_msufRGF_HoverContainer")
   if not container then return nil end
   if not edge then
     if not CanCreateRoundedRegion(edge) then return nil end
@@ -1787,6 +1822,25 @@ local function MaskOverlayList(f, overlays, group, anchor)
   end
 end
 
+-- Build the same rounded ring as Borders, once in the native initializer.
+-- Auras3 hands every piece to Blizzard for color/visibility; no mutable rounded
+-- registry may retain these regions after that handoff.
+local function PrepareFrozenDispelBorder(f, owner, thickness)
+  if not (f and owner and RoundedFrameEnabled(f)) then return nil end
+  if not CanCreateRoundedRegion(nil) then return nil end
+  UpdateRoundedMediaState()
+  local anchor = FrameIsGroup(f) and (f.barGroup or f) or f
+  local regions = {}
+  for i = 1, ClampEdgeSize(thickness, 1, MAX_HIGHLIGHT_BORDER_THICKNESS) do
+    local edge = owner:CreateTexture(nil, "OVERLAY")
+    SE_SnapOff(edge)
+    SetRoundedEdgeTexture(edge, roundedEdgePath)
+    LayoutRoundedEdge(edge, anchor, i, i)
+    regions[i] = edge
+  end
+  return regions
+end
+
 -- Blizzard makes native CustomAuraButton display regions immutable to addon
 -- layout code in AddDispelTypeTexture(). Give a fresh region its final mask
 -- before that handoff, then deliberately retain no mutable registry entry for
@@ -1951,8 +2005,7 @@ local function ApplyToUnitFrame(f)
   f._msufRUF_SuppressMouseover = RoundedMouseoverEnabled() and true or nil
 
   BeginMaskRefresh(f, "_msufRUF_MaskedTextures")
-  ApplyUnitRoundedEdge(f, true)
-  PrewarmAndApplyModernBorderVisual(f)
+  if not PrewarmAndApplyModernBorderVisual(f) then ApplyUnitRoundedEdge(f, true) end
   ApplyUnitRoundedHoverEdge(f, RoundedMouseoverEnabled())
   ApplyPowerRoundedEdge(f, roundPower)
   RefreshSpellIndicatorRoundedEdges(f, true)
@@ -2068,8 +2121,7 @@ ApplyToGroupFrame = function(f, kind)
   end
 
   BeginMaskRefresh(f, "_msufRGF_MaskedTextures")
-  ApplyGroupRoundedEdge(f, true)
-  PrewarmAndApplyModernBorderVisual(f)
+  if not PrewarmAndApplyModernBorderVisual(f) then ApplyGroupRoundedEdge(f, true) end
   ApplyGroupRoundedHoverEdge(f, mouseoverEnabled)
   ApplyPowerRoundedEdge(f, roundPower)
   RefreshSpellIndicatorRoundedEdges(f, true)
@@ -2300,6 +2352,9 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_PrepareDispelOverlay", function(frame, region, owner)
     return PrepareFrozenDispelOverlayMask(frame, region, owner)
   end)
+  ExportPublic("MSUF_RoundedUF_PrepareDispelBorder", function(frame, owner, thickness)
+    return PrepareFrozenDispelBorder(frame, owner, thickness)
+  end)
   ExportPublic("MSUF_RoundedUF_OnDispelOverlayChanged", function(frame, region)
     return ApplyDispelOverlayMask(frame, region)
   end)
@@ -2361,6 +2416,7 @@ local ROUNDED_CALLBACK_NAMES = {
   "MSUF_RoundedUF_OnPowerBorderChanged",
   "MSUF_RoundedUF_OnUnitDispelOverlayChanged",
   "MSUF_RoundedUF_PrepareDispelOverlay",
+  "MSUF_RoundedUF_PrepareDispelBorder",
   "MSUF_RoundedUF_OnDispelOverlayChanged",
   "MSUF_RoundedUF_OnGroupFrameApplied",
   "MSUF_RoundedUF_OnGroupBackdropAlphaChanged",
@@ -2468,7 +2524,9 @@ do
             end
           end
           if IsEnabled() then
-            HookOnce()
+            -- Login must bind the Borders/Power callbacks as well as export
+            -- the global hooks; the module registry is not initialized here.
+            SetRoundedCallbacksActive(true)
             f:RegisterEvent("PLAYER_LOGIN")
           end
           if f.UnregisterEvent then f:UnregisterEvent("ADDON_LOADED") end
@@ -2476,7 +2534,7 @@ do
       elseif event == "PLAYER_LOGIN" then
         if f.UnregisterEvent then f:UnregisterEvent("PLAYER_LOGIN") end
         if IsEnabled() then
-          HookOnce()
+          SetRoundedCallbacksActive(true)
           _G.C_Timer.After(0, ApplyAll)
         end
       elseif event == "PLAYER_REGEN_ENABLED" then

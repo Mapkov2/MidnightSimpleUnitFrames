@@ -76,9 +76,10 @@ assert(not pcall(mask.ClearAllPoints),
     "test mask did not model the post-AddDispelTypeTexture forbidden state")
 
 local auras = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
-local overlayBranch = assert(auras:match(
-    'if sensor%.visual == "overlay" then(.-)elseif sensor%.visual == "purge" then'
-), "native dispel overlay branch missing")
+local initializerStart = assert(auras:find("local function PrepareDispelSensorButton", 1, true))
+local initializerEnd = assert(auras:find("--- Dispel-overlay preview", initializerStart, true))
+local overlayStart = assert(auras:find('if sensor%.visual == "overlay" then%s+region:SetTexture%(', initializerStart))
+local overlayBranch = auras:sub(overlayStart, initializerEnd - 1)
 local prepareCall = assert(overlayBranch:find(
     "PrepareRoundedDispelOverlayRegion(parentFrame, region, button)", 1, true),
     "native dispel overlay is not prepared with its explicit owner")
