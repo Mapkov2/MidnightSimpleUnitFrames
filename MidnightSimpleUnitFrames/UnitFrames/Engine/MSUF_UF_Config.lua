@@ -1270,7 +1270,8 @@ local function CompileLoadConditions(out, conf)
     load[def[1]] = enabled
     active = active or enabled
   end
-  load.active = active
+  load.showWhenInjured = Bool(conf.loadCondShowWhenInjured, false)
+  load.active = active or load.showWhenInjured
 
   load.unitlessEvents = ResetList(load.unitlessEvents)
   if load.active then

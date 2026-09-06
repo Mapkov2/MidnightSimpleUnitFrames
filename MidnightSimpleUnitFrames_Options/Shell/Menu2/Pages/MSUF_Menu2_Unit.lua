@@ -301,7 +301,7 @@ for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
         COPY_TEXLAYER_FIELDS[#COPY_TEXLAYER_FIELDS + 1] = texP .. texBase
     end
 end
-local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInCombat loadCondHideInGroup loadCondHideInInstance loadCondHideInVehicle loadCondHideMounted loadCondHideNoTarget loadCondHideOutOfCombat loadCondHideOutOfCombatNoTarget loadCondHideResting loadCondHideSolo loadCondHideStealthed loadCondActive]]
+local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInCombat loadCondHideInGroup loadCondHideInInstance loadCondHideInVehicle loadCondHideMounted loadCondHideNoTarget loadCondHideOutOfCombat loadCondHideOutOfCombatNoTarget loadCondHideResting loadCondHideSolo loadCondHideStealthed loadCondShowWhenInjured loadCondActive]]
 --- Size only. Placement (offsetX/offsetY, point/relativePoint, anchorFrameName and
 --- anchorToUnitframe) must never travel through Copy To: two unit frames sharing a
 --- placement land exactly on top of each other, and the covered one is then
@@ -1119,7 +1119,7 @@ local function NormalizeBossLayoutMode(value, legacyInvert)
 end
 local function UpdateLoadActive(unit)
     local conf = GetConf(unit)
-    local active = false
+    local active = conf.loadCondShowWhenInjured == true
     for i = 1, #LOAD_CONDITIONS do
         if conf[LOAD_CONDITIONS[i].key] == true then
             active = true

@@ -432,7 +432,7 @@ local function EnsureBar(frame, key, levelOffset)
   if bar then
     return bar
   end
-  bar = CreateFrame("StatusBar", nil, frame)
+  bar = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
   bar:SetMinMaxValues(0, 1)
   bar:SetValue(0)
   bar._msufMax = 1
@@ -496,7 +496,7 @@ local function EnsureOverAbsorbGlow(frame)
   -- consume that value directly: zero draws nothing and every positive absorb
   -- clamps to the complete Blizzard edge texture. This avoids branching on a
   -- protected value and also gives the glow a frame level above the HP bar.
-  holder = CreateFrame("StatusBar", nil, frame)
+  holder = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
   if holder.EnableMouse then holder:EnableMouse(false) end
   holder:SetMinMaxValues(0, 1)
   holder:SetValue(0)
@@ -986,7 +986,7 @@ local function EnsureOverflowClip(frame, hpBar, vertical, reverse, alongSize)
   local clip = frame._msufPredictionOverflowClip
   if not clip then
     if not CreateFrame or frame._msufPredictionOverflowUnsupported == true then return nil end
-    local created = CreateFrame("Frame", nil, frame)
+    local created = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
     -- Without native clipping the host cannot bound anything, so keep the
     -- previous behaviour (parent straight to the frame) instead of adding an
     -- inert layer, and stop rebuilding a host that can never work.
@@ -1045,7 +1045,7 @@ end
 -- Hot-path guards read the host without building or moving it; a still missing
 -- host simply reports a stale layout and lets LayoutBar create it.
 local function OverflowParent(frame)
-  return frame._msufPredictionOverflowClip or frame
+  return frame._msufPredictionOverflowClip or frame._msufHealthVisualRoot or frame
 end
 
 local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, height, offsetY)
@@ -1064,7 +1064,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   local parent = hpBar
   if mode == 4 then
     parent = EnsureOverflowClip(frame, hpBar, vertical,
-      frame._msufPredictionHpReverse == true, width) or frame
+      frame._msufPredictionHpReverse == true, width) or frame._msufHealthVisualRoot or frame
   end
   local parentCurrent = not bar.GetParent or bar:GetParent() == parent
   height = height or 0

@@ -8,6 +8,7 @@ MSUF = MSUF or (_G.MSUF_NS or {})
 local C_Timer = _G.C_Timer
 local type = type
 local pcall = pcall
+local xpcall = xpcall
 
 local function ReportCallbackError(err)
     local handler = _G.geterrorhandler and _G.geterrorhandler()
@@ -18,11 +19,6 @@ local function ReportCallbackError(err)
     if type(_G.print) == "function" then
         _G.print("|cffffd700MSUF Scheduler:|r", tostring(err))
     end
-end
-
-local function InvokeCallback(fn)
-    local ok, err = pcall(fn)
-    if not ok then ReportCallbackError(err) end
 end
 
 local Scheduler = MSUF.Scheduler or {}
@@ -89,7 +85,11 @@ function FlushNextFrame()
         if key ~= nil then
             local cb = pending[key]
             pending[key] = nil
-            if type(cb) == "function" then InvokeCallback(cb) end
+            -- Report while the callback stack still exists. Reporting after a
+            -- pcall returned erased the useful frames from BugSack timeouts.
+            -- The nested pcall above runs only on failure and protects the
+            -- queue even when a third-party error handler itself throws.
+            if type(cb) == "function" then xpcall(cb, ReportCallbackError) end
         end
     end
 

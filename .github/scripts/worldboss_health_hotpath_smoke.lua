@@ -30,12 +30,12 @@ _G.CreateColor = function(r, g, b, a)
 end
 local function Lerp(a, b, t) return a + (b - a) * t end
 local function NewCurve(color)
-    local curve = { points = {}, color = color, curveType = color and "linear" or "unset" }
+    local curve = { points = {}, color = color, curveType = color and 0 or -1 }
     function curve:GetType() return self.curveType end
     function curve:SetType(value) self.curveType = value end
     function curve:AddPoint(x, y) self.points[#self.points + 1] = { x, y } end
     function curve:Evaluate(x)
-        assert(self.curveType == "linear", "scalar curve did not retain color-curve interpolation")
+        assert(self.curveType == 0, "scalar curve did not retain color-curve interpolation")
         assert(not rawequal(x, SECRET), "secret percentage passed to Lua curve evaluation")
         local points = self.points
         local left, right = points[1], points[2]
@@ -154,12 +154,13 @@ end }
 frame.hpBarBG, frame.MSUFUnitKey = background, "target"
 custom.backgroundColorMode, custom.background = "health_gradient", { a = 0.42 }
 local Refresh = ns.Bars.RefreshHealthBarBackgroundColor
+local GradientRefresh = ns.Bars.RefreshHealthGradientBackground or Refresh
 local alphaClamps = 0
 for i = 1, 50 do
-    local name, fn = debug.getupvalue(Refresh, i)
+    local name, fn = debug.getupvalue(GradientRefresh, i)
     if not name then break end
     if name == "MSUF_Clamp01" then
-        debug.setupvalue(Refresh, i, function(value)
+        debug.setupvalue(GradientRefresh, i, function(value)
             alphaClamps = alphaClamps + 1
             return fn(value)
         end)
@@ -299,5 +300,89 @@ assert(applyFrame._msufHealthGradientCurve == nil and applyFrame._msufHealthGrad
     "non-gradient Apply retained a stale text-only gradient cache")
 common.GradientColor("party1", nil, applyFrame)
 assert(applyFrame._msufHealthGradientChannels, "text-only gradient did not prepare after Apply")
+
+-- The selected Health lane and the public legacy entry must produce identical
+-- native writes across in-place edits, region replacement and secret recovery.
+-- This same fixture can run against an immutable source root for comparison.
+local function ExerciseBackgroundLane(useSelected)
+    local log, nativeReads = {}, scalarReads + colorReads
+    local function Record(value)
+        if rawequal(value, SECRET) then return "secret" end
+        if type(value) == "number" then return string.format("%.9f", value) end
+        return tostring(value)
+    end
+    local function Region(name)
+        return { SetVertexColor = function(_, rr, gg, bb, aa)
+            log[#log + 1] = table.concat({ name, Record(rr), Record(gg), Record(bb), Record(aa) }, ":")
+        end }
+    end
+    local Element
+    _G.MSUF_RefreshHealthBarBackgroundColor = Refresh
+    local laneNS = { Bars = ns.Bars, UF = { RegisterElement = function(_, element) Element = element end },
+        UFBarTextCommon = { WHITE = "white", SCALE_100 = {},
+            UnitHealthPercent = function() return healthPct end,
+            PrepareHealthGradientCurve = common.PrepareHealthGradientCurve,
+            ApplyHealthStatusColor = function() end } }
+    Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua", laneNS)
+    Element.Layout = Noop
+    local h = { mode = "unified", backgroundColorMode = "health_gradient", background = { a = 0.4 } }
+    local f = { MSUFUnitKey = "party1", MSUFSpec = { scope = "group", health = h }, hpBarBG = Region("hp"),
+        hpBar = { SetStatusBarTexture = Noop, SetStatusBarColor = Noop,
+            GetStatusBarColor = function() return 0.2, 0.4, 0.8 end, SetValue = Noop, SetMinMaxValues = Noop } }
+    local function Apply()
+        Element.Apply(f, f.MSUFSpec)
+        local selected = f._msufHealthBackgroundRefresh
+        if ns.Bars.RefreshHealthGradientBackground then
+            assert(selected == (h.backgroundColorMode == "health_gradient" and GradientRefresh or Refresh),
+                "Health.Apply selected the wrong background painter")
+        end
+        if not useSelected then f._msufHealthBackgroundRefresh = Refresh end
+    end
+    local function Tick(force)
+        local refresh = useSelected and f._msufHealthBackgroundRefresh or Refresh
+        local result = (refresh or Refresh)(f, "UNIT_HEALTH", "party1", nil, nil, nil, force)
+        log[#log + 1] = "result:" .. tostring(result)
+    end
+    opaque, pct, healthPct = false, 0.37, 37
+    Apply()
+    -- Both installed update routes must identify their fresh percent sample.
+    -- Public health already read by the bar needs no native gradient reread.
+    local readsBefore = scalarReads + colorReads
+    Element.UpdateValueGroupPercentLean(f, "UNIT_HEALTH", "party1")
+    Element.UpdateValueSinglePercent(f, "UNIT_HEALTH", "party1")
+    assert(scalarReads + colorReads == readsBefore, "Health dispatch reread public health for its gradient")
+    Tick(); Tick() -- ordinary cache hit
+    h.background.a = 1.7; Tick()
+    h.background = nil; f.MSUFSpec.backgroundAlpha = 0.27; Tick()
+    f.hpBarBG = Region("replacement"); Tick(true)
+    h.mode, f._msufGradStashAt = "gradient", 123
+    f._msufGradStashR, f._msufGradStashG, f._msufGradStashB = 0.6, 0.7, 0.8
+    Tick() -- reuse the foreground's native result
+    f._msufGradStashR, f._msufGradStashG, f._msufGradStashB = SECRET, SECRET, SECRET
+    Tick(); Tick()
+    f._msufGradStashAt, h.mode, opaque = nil, "unified", true
+    Tick(); Tick()
+    f.healthBg, f.hpBarBG = Region("alternate"), nil
+    Tick(); Tick()
+    f.bg, f.healthBg = Region("frame"), nil
+    Tick(); opaque = false; Tick()
+    h.backgroundColorMode = "custom"; Tick() -- stale selected lane must fail closed
+    h.backgroundColorMode = "match_health"; Tick(); Tick() -- live mode fallback
+    Apply(); Tick()
+    h = { mode = "unified", backgroundColorMode = "health_gradient", background = { a = 0.61 } }
+    f.MSUFSpec = { scope = "group", health = h }; Tick() -- new spec before Apply
+    Apply(); Tick()
+    f.bg = nil; Tick() -- absent region remains harmless
+    return table.concat(log, "\n"), scalarReads + colorReads - nativeReads
+end
+local publicLog, publicReads = ExerciseBackgroundLane(false)
+local selectedLog, selectedReads = ExerciseBackgroundLane(true)
+assert(selectedLog == publicLog and selectedReads == publicReads,
+    "selected background lane diverged from the public native-write contract")
+if arg and arg[2] then
+    local output = assert(io.open(arg[2], "wb"))
+    output:write(selectedLog, "\nnative_reads:", selectedReads, "\n")
+    output:close()
+end
 
 print("worldboss_health_hotpath_smoke: ok (gradient parity, allocation contract, secret forwarding, status transitions)")

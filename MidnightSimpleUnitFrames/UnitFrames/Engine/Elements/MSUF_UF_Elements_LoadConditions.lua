@@ -27,6 +27,10 @@ local type = type
 local tonumber = tonumber
 
 local EMPTY_EVENTS = {}
+local HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
+local UnitHealthPercent = _G.UnitHealthPercent
+local CurveAPI = _G.C_CurveUtil
+local LuaCurveType = _G.Enum and _G.Enum.LuaCurveType
 local FALLBACK_EVENTS = {
   "PLAYER_ENTERING_WORLD",
   "PLAYER_REGEN_DISABLED",
@@ -68,6 +72,61 @@ local BOSS_PREVIEW_ALPHA_ELEMENTS = { "Alpha" }
 local BOSS_PREVIEW_ABSORB = 125000
 
 local LoadConditions = {}
+local healthVisibilityCurve
+
+local function HealthVisibilityEnabled(frame, spec)
+  return frame and frame._msufHealthVisualRoot and type(frame.MSUFUnitKey) == "string"
+    and spec and spec.load and spec.load.showWhenInjured == true
+    and UnitHealthPercent ~= nil and CurveAPI and CurveAPI.CreateCurve ~= nil
+    and LuaCurveType and LuaCurveType.Step ~= nil
+end
+
+local function ApplyHealthAlpha(frame)
+  -- Only Edit Mode bypasses the HP gate so the frame remains editable.
+  -- Combat and target state must never reveal a full-health unit.
+  -- Secret health is evaluated inside Blizzard's native curve and passed
+  -- straight to SetAlpha (upstream/live 12.1).
+  if _G.MSUF_UnitEditModeActive == true
+    or (BOSS_PREVIEW_UNITS[frame.MSUFUnitKey] and (_G.MSUF_BossTestMode == true
+      or _G.MSUF2_BossUnitframePreviewActive == true)) then
+    frame._msufHealthVisualRoot:SetAlpha(1)
+    if frame._msufHealthIndependentVisualRoot then frame._msufHealthIndependentVisualRoot:SetAlpha(1) end
+    return
+  end
+  local alpha = UnitHealthPercent(frame.MSUFUnitKey, false, healthVisibilityCurve)
+  frame._msufHealthVisualRoot:SetAlpha(alpha)
+  if frame._msufHealthIndependentVisualRoot then frame._msufHealthIndependentVisualRoot:SetAlpha(alpha) end
+end
+
+local function RefreshHealthAlpha(frame)
+  if frame and frame._msufLoadHealthAlphaApply then
+    ApplyHealthAlpha(frame)
+  end
+end
+
+local function ClearHealthAlpha(frame)
+  if not (frame and frame._msufLoadHealthAlphaApply) then return end
+  frame._msufLoadHealthAlphaApply = nil
+  frame._msufHealthVisualRoot:SetAlpha(1)
+  if frame._msufHealthIndependentVisualRoot then frame._msufHealthIndependentVisualRoot:SetAlpha(1) end
+end
+
+local function ConfigureHealthAlpha(frame, spec)
+  if not HealthVisibilityEnabled(frame, spec) then
+    ClearHealthAlpha(frame)
+    return
+  end
+  if not healthVisibilityCurve then
+    local curve = CurveAPI.CreateCurve()
+    curve:SetType(LuaCurveType.Step)
+    curve:AddPoint(0, 1)
+    curve:AddPoint(1, 0)
+    healthVisibilityCurve = curve
+  end
+  frame._msufLoadHealthAlphaApply = ApplyHealthAlpha
+  RefreshHealthAlpha(frame)
+end
+
 local bossPreviewAppliedActive
 local bossPreviewCombatCleanupPending
 local BOSS_PREVIEW_LIGHT_REASONS = {
@@ -144,9 +203,11 @@ local function BuildRuntimeVisibility(frame, spec)
     end
     if load.hideResting == true then n = n + 1; rules[n] = "[resting] hide" end
     if load.hideInCombat == true then n = n + 1; rules[n] = "[combat] hide" end
-    if load.hideOutOfCombat == true then n = n + 1; rules[n] = "[nocombat] hide" end
-    if load.hideNoTarget == true then n = n + 1; rules[n] = "[@target,noexists] hide" end
-    if load.hideOutOfCombatNoTarget == true then n = n + 1; rules[n] = "[nocombat,@target,noexists] hide" end
+    if not HealthVisibilityEnabled(frame, spec) then
+      if load.hideOutOfCombat == true then n = n + 1; rules[n] = "[nocombat] hide" end
+      if load.hideNoTarget == true then n = n + 1; rules[n] = "[@target,noexists] hide" end
+      if load.hideOutOfCombatNoTarget == true then n = n + 1; rules[n] = "[nocombat,@target,noexists] hide" end
+    end
     if load.hideStealthed == true then n = n + 1; rules[n] = "[stealth] hide" end
     if load.hideSolo == true then n = n + 1; rules[n] = "[nogroup] hide" end
     if load.hideInGroup == true then n = n + 1; rules[n] = "[group] hide" end
@@ -283,6 +344,16 @@ local function RegisterVisibility(frame, spec)
   return true
 end
 
+function LoadConditions.GetEvents(frame, spec)
+  return HealthVisibilityEnabled(frame, spec) and HEALTH_EVENTS or EMPTY_EVENTS
+end
+
+LoadConditions.UpdateHealthVisibility = RefreshHealthAlpha
+function LoadConditions.SelectEventUpdate(frame, spec, event, update)
+  if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then return RefreshHealthAlpha end
+  return update
+end
+
 function LoadConditions.GetUnitlessEvents(frame, spec)
   local load = spec and spec.load
   if not load or load.active ~= true then
@@ -295,10 +366,13 @@ function LoadConditions.GetUnitlessEvents(frame, spec)
 end
 
 function LoadConditions.Apply(frame, spec)
+  ConfigureHealthAlpha(frame, spec)
   RegisterVisibility(frame, spec)
 end
 
 function LoadConditions.Update(frame, event)
+  RefreshHealthAlpha(frame)
+  if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then return end
   if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
     -- Instance/housing checks are resolved into the visibility expression, so
     -- these zone boundaries must rebuild it. RegisterVisibility already defers
@@ -326,6 +400,7 @@ function LoadConditions.Disable(frame)
   if not frame then
     return
   end
+  ClearHealthAlpha(frame)
   if UnregisterStateDriver and InCombatLockdown and InCombatLockdown() then
     UF.MarkDirty(frame.MSUFUnitKey)
     if UF.Factory and UF.Factory.EnsureDeferredDriver then
@@ -352,7 +427,9 @@ function LoadConditions.Disable(frame)
   return true
 end
 
-UF.RegisterElement("LoadConditions", LoadConditions)
+-- Reuse Core's existing identity/OnShow plan so a target, focus, pet, or boss
+-- replacement refreshes its HP gate even without a UNIT_HEALTH notification.
+UF.RegisterElement("LoadConditions", LoadConditions, { identity = true })
 
 function UF.RefreshVisibilityDrivers(unit)
   return UF.RefreshElements(unit, { "LoadConditions" }, "MSUF_LOAD_CONDITIONS")
@@ -616,6 +693,9 @@ local function ApplyBossPreviewFrames(active)
 end
 
 local function ReapplyBossPreviewAlpha(reason)
+  for i = 1, 5 do
+    RefreshHealthAlpha(UF.frames and UF.frames["boss" .. i])
+  end
   if type(UF.RefreshElements) ~= "function" then
     return false
   end

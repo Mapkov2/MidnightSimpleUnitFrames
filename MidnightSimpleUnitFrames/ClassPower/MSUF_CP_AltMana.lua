@@ -77,7 +77,7 @@ builders.ALT_MANA = function(E)
     local function AM_Create(playerFrame)
         if AM.container then return end
 
-        local c = CreateFrame("Frame", "MSUF_AltManaContainer", playerFrame)
+        local c = CreateFrame("Frame", "MSUF_AltManaContainer", playerFrame._msufHealthVisualRoot or playerFrame)
         local layers = MSUF.UF and MSUF.UF.Layers
         local layer = _cpDB.bars and _cpDB.bars.classPowerFrameLevelOffset
         c:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(layer, 5, 0)

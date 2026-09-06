@@ -975,9 +975,10 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   local colorByHealth = rt.healthColorByHealth == true
   local needHPValue = needsCurrent
   local needMaxValue = needsMax
-  local hpMissing = issecretvalue(hp) ~= true and hp == nil
-  local maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
-  local colorNeedsPercent = colorByHealth and (hpMissing or maxMissing)
+  local hpSecret = issecretvalue(hp) == true
+  local hpMaxSecret = issecretvalue(hpMax) == true
+  local colorNeedsPercent = colorByHealth
+    and ((not hpSecret and hp == nil) or (not hpMaxSecret and hpMax == nil))
   local pctOverride, pctOverrideSet
   if needsPercent or colorNeedsPercent then
     pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
@@ -1098,8 +1099,8 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     return
   end
 
-  local hpSecret = issecretvalue(hp) == true
-  local hpMaxSecret = issecretvalue(hpMax) == true
+  -- Reclassify only after replacing a value below; the incoming pair was
+  -- already checked for the color/value decision above.
   if (needHPValue and not hpSecret and hp == nil) or (needMaxValue and not hpMaxSecret and hpMax == nil) then
     local cachedHP, cachedMax = ReadHealthValuesCached(frame, unit)
     if needHPValue and not hpSecret and hp == nil then
@@ -1129,7 +1130,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   end
 
   if (needsPercent or colorNeedsPercent) and pctOverrideSet ~= true then
-    pctOverride = PercentFromValues(hp, hpMax)
+    if not hpSecret and not hpMaxSecret then pctOverride = PercentFromValues(hp, hpMax) end
     pctOverrideSet = pctOverride ~= nil
     if pctOverrideSet ~= true and HealthPercentAvailable then
       pctOverride = HealthPercent(unit)
@@ -1137,7 +1138,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
   end
   UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
-  UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+  UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet, hpSecret, hpMaxSecret)
 end
 
 local function UpdateAbsorbRuntime(frame, event, unit, skipCombinedRefresh)
@@ -1298,9 +1299,8 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   local needsPercent = rt.powerNeedsPercent == true
   local needsCurrent = rt.powerNeedsCurrent == true
   local needsMax = rt.powerNeedsMax == true
-  local percentNeedsValues = false
-  local needPowerValue = needsCurrent or percentNeedsValues
-  local needMaxValue = needsMax or percentNeedsValues
+  local needPowerValue = needsCurrent
+  local needMaxValue = needsMax
 
   if rt.powerPlain == true then
     if (needPowerValue and power == nil) or (needMaxValue and powerMax == nil) then
@@ -1387,7 +1387,8 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   end
 
   local powerSecret = issecretvalue(power) == true
-  local powerMaxSecret = issecretvalue(powerMax) == true
+  -- powerMaxSecret was established before seeding the maximum cache. Neither
+  -- metadata nor text-color updates replace this value.
   if not powerSecret and not powerMaxSecret
     and ((needPowerValue and power == nil) or (needMaxValue and powerMax == nil)) then
     local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needMaxValue and powerMax == nil, animate)
@@ -1408,7 +1409,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   if needsPercent then
     pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
     if pctOverrideSet ~= true then
-      pctOverride = PercentFromValues(power, powerMax)
+      if not powerSecret and not powerMaxSecret then pctOverride = PercentFromValues(power, powerMax) end
       pctOverrideSet = pctOverride ~= nil
       if pctOverrideSet ~= true and PowerPercentAvailable then
         pctOverride = PowerPercent(unit)
@@ -1416,7 +1417,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       end
     end
   end
-  UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
+  UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet, powerSecret, powerMaxSecret)
 end
 
 Text.RuntimeHotFunctions = {

@@ -1,13 +1,19 @@
--- Public slot compilation preserves native arguments, including live styles.
+-- Public slot compilation preserves displayed values, opaque arguments and live
+-- styles. An optional baseline source can retain the older formatted-only calls.
 local root = arg and arg[1] or "."
 local source = arg and arg[2] or root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua"
+local formattedBaseline = arg and arg[3] == "formatted"
+local output = arg and arg[4] and assert(io.open(arg[4], "wb"))
+local workOutput = arg and arg[5] and assert(io.open(arg[5], "wb"))
+local workByMode = {}
 local function Forbidden() error("secret value inspected in Lua") end
 local meta = { __eq = Forbidden, __lt = Forbidden, __le = Forbidden, __tostring = Forbidden,
     __add = Forbidden, __sub = Forbidden, __mul = Forbidden, __div = Forbidden, __index = Forbidden }
 local secretCur, secretMax, secretPct = setmetatable({}, meta), setmetatable({}, meta), setmetatable({}, meta)
-local shortCur, shortMax, fullCur, fullMax = {}, {}, {}, {}
+local shortCur, shortMax, fullCur, fullMax = setmetatable({}, meta), setmetatable({}, meta), setmetatable({}, meta), setmetatable({}, meta)
 local function IsSecret(v)
     return rawequal(v, secretCur) or rawequal(v, secretMax) or rawequal(v, secretPct)
+        or rawequal(v, shortCur) or rawequal(v, shortMax) or rawequal(v, fullCur) or rawequal(v, fullMax)
 end
 _G.issecretvalue = IsSecret
 local shape = {
@@ -41,7 +47,19 @@ local function Expected(v, kind, short, available, options)
     return (short and "short:" or "full:") .. tostring(Finite(v)) .. (short and options and options.name or "")
 end
 
-local checks = 0
+local modes = {}
+for mode in pairs(shape) do modes[#modes+1] = mode end
+table.sort(modes)
+local secretNames = {
+    [secretCur] = "<secret-cur>", [secretMax] = "<secret-max>", [secretPct] = "<secret-pct>",
+    [shortCur] = "<short-cur>", [shortMax] = "<short-max>",
+    [fullCur] = "<full-cur>", [fullMax] = "<full-max>",
+}
+local function OutputValue(value)
+    if IsSecret(value) then return secretNames[value] end
+    return tostring(value)
+end
+local checks, formattedWrites, directWrites = 0, 0, 0
 for _, available in ipairs({ true, false }) do
     _G.AbbreviateNumbers, _G.AbbreviateLargeNumbers, _G.ShortenNumber, _G.BreakUpLargeNumbers = nil, nil, nil, nil
     local nativeCalls, nativeOptions, callback, options = 0, nil, nil, nil
@@ -58,7 +76,8 @@ for _, available in ipairs({ true, false }) do
     }
     local ns = { UFText = Text, Apply = {}, NumberFormat = { Register = function(fn) callback = fn end } }
     assert(loadfile(source))("MidnightSimpleUnitFrames", ns)
-    for mode, order in pairs(shape) do
+    for _, mode in ipairs(modes) do
+        local order = shape[mode]
         for _, short in ipairs({ true, false }) do
             for _, decimals in ipairs({ 0, 1 }) do
                 for _, hidePercent in ipairs({ true, false }) do
@@ -66,6 +85,16 @@ for _, available in ipairs({ true, false }) do
                     function fs:SetFormattedText(pattern, ...)
                         self.writes = self.writes + 1
                         self.pattern, self.args, self.argCount = pattern, { ... }, select("#", ...)
+                        self.method = "formatted"
+                        formattedWrites = formattedWrites + 1
+                    end
+                    function fs:SetText(value, ...)
+                        assert(select("#", ...) == 0, "SetText received unused format arguments")
+                        assert(type(value) == "string" or IsSecret(value), "direct writer received an unformatted number")
+                        self.writes = self.writes + 1
+                        self.pattern, self.args, self.argCount = "%s", { value }, 1
+                        self.method = "direct"
+                        directWrites = directWrites + 1
                     end
                     local frame = { hpTextCenter = fs }
                     local spec = { showHealthText = true, showPowerText = false }
@@ -77,7 +106,7 @@ for _, available in ipairs({ true, false }) do
                     local slot = assert(rt.healthSlots[1])
                     assert(slot.short == short and type(slot.secretWriter) == "function")
                     local writer = slot.secretWriter
-                    for _, newOptions in ipairs({ false, { name = "A" }, { name = "B" } }) do
+                    for _, newOptions in ipairs({ false, { name = "A" }, { name = "B" }, { name = "1.234,5 %" }, { name = "1,234.5 %%s" } }) do
                         options = newOptions or nil
                         callback(options) -- existing writer must see this without recompilation
                         for _, values in ipairs(cases) do
@@ -95,13 +124,34 @@ for _, available in ipairs({ true, false }) do
                                 fs._aText, fs._aTextPlain = secretCur, true
                                 local cs, ms, ps
                                 if explicitFlags then cs, ms, ps = IsSecret(values.cur), IsSecret(values.max), IsSecret(values.pct) end
+                                local instructions = 0
+                                if workOutput then
+                                    debug.sethook(function()
+                                        local info = debug.getinfo(2, "S")
+                                        if info and info.source == "@" .. source then instructions = instructions + 1 end
+                                    end, "", 1)
+                                end
                                 writer(slot, values.cur, values.max, values.pct, false, nil, cs, ms, ps)
+                                if workOutput then
+                                    debug.sethook()
+                                    workByMode[mode] = (workByMode[mode] or 0) + instructions
+                                end
                                 assert(fs._aText == nil and fs._aTextPlain == nil, "secret output entered the plain text cache")
+                                local direct = not formattedBaseline and available
+                                    and (mode == "CURRENT" or mode == "FULLVALUE" or mode == "MAX")
+                                assert(fs.method == (direct and "direct" or "formatted"), mode .. ": unexpected native setter")
                                 assert(fs.pattern == table.concat(patterns), mode .. ": pattern changed")
                                 assert(fs.argCount == #expected, mode .. ": argument arity changed")
                                 for i, value in ipairs(expected) do assert(Same(value, fs.args[i]), mode .. ": native argument changed") end
                                 assert(nativeCalls == before + numericCalls, "unused value was formatted")
                                 if numericCalls > 0 then assert(rawequal(nativeOptions, short and options or nil), "live number-style options changed") end
+                                if output then
+                                    -- Canonical opaque arguments permit byte-for-byte baseline
+                                    -- comparison without coercing or comparing secret results.
+                                    output:write(mode, "\t", fs.pattern)
+                                    for i = 1, fs.argCount do output:write("\t", OutputValue(fs.args[i])) end
+                                    output:write("\n")
+                                end
                                 checks = checks + 1
                             end
                         end
@@ -114,4 +164,10 @@ for _, available in ipairs({ true, false }) do
         end
     end
 end
-print("worldboss13_secret_writer_smoke: ok (" .. checks .. " native-call parity cases)")
+if output then output:close() end
+if workOutput then
+    for _, mode in ipairs(modes) do workOutput:write(mode, "\t", workByMode[mode] or 0, "\n") end
+    workOutput:close()
+end
+print("worldboss13_secret_writer_smoke: ok (" .. checks .. " output parity cases; "
+    .. formattedWrites .. " formatted writes; " .. directWrites .. " direct writes)")

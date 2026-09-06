@@ -95,6 +95,22 @@ local function SetFrameAlpha(frame, alpha)
   frame._msufLastAlpha = alpha
 end
 
+-- Stable rendering parents, created before normal unitframe elements. External
+-- anchors and the secure button retain ordinary alpha and their original parent.
+function UF.EnsureHealthVisualRoot(frame, independent)
+  local key = independent and "_msufHealthIndependentVisualRoot" or "_msufHealthVisualRoot"
+  if frame[key] then return frame[key] end
+  if InCombatLockdown and InCombatLockdown() then return nil end
+  local root = CreateFrame("Frame", nil, frame)
+  root:SetAllPoints(frame)
+  root:SetFrameLevel(frame:GetFrameLevel())
+  root:EnableMouse(false)
+  if independent then root:SetIgnoreParentAlpha(true) end
+  frame[key] = root
+  if frame._msufLoadHealthAlphaApply then frame._msufLoadHealthAlphaApply(frame) end
+  return root
+end
+
 local function SetAlphaCached(obj, alpha, field, force)
   if not (obj and obj.SetAlpha) then
     return

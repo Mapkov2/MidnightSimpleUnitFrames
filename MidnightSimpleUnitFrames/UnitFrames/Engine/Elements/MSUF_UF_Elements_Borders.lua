@@ -79,7 +79,7 @@ local BORDER_LEVEL_OVER_NATIVE_DISPEL = Layers.FRAME_BORDER_OVER_NATIVE_DISPEL_O
 local function EnsureBorderOverlay(parent)
   local overlay = parent.MSUFBorderOverlay
   if not overlay then
-    overlay = CreateFrame("Frame", nil, parent)
+    overlay = CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent)
     overlay:SetAllPoints(parent)
     overlay:EnableMouse(false)
     parent.MSUFBorderOverlay = overlay

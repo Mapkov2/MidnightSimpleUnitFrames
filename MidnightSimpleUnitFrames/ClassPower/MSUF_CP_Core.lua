@@ -225,7 +225,7 @@ builders.BUILD = function(E)
 
         --- Parent to the player frame so ClassPower follows scale, strata, and
         --- secure visibility rules from the owning unit frame.
-        local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame)
+        local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame._msufHealthVisualRoot or playerFrame)
         c._msufOwnedAnchorRoot = true
         local b = _cpDB.bars or {}
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5

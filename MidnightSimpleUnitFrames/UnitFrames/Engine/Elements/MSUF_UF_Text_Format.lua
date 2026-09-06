@@ -65,7 +65,9 @@ end
 
 local function FiniteNumberOr(value, fallback)
   if type(value) == "number" then
-    return IsFiniteNumber(value) and value or fallback
+    -- The type is already known. Avoid a second type query/helper call for
+    -- every public health, power and percent value sent to a native formatter.
+    return value == value and (value - value) == 0 and value or fallback
   end
   if value == nil then
     return fallback
@@ -847,6 +849,18 @@ local function CompileSecretWriter(slot)
   -- Keep NUM_OPTS live inside the abbreviated writers: changing number style
   -- must affect existing compiled slots without a new frame/spec application.
   if code == 1 then
+    -- Native number formatters already return a string. For an exact "%s"
+    -- slot, SetText accepts that same opaque result without formatting it again.
+    -- Select this at compile time; numeric fallbacks keep their original writer.
+    if fn and pattern == "%s" then
+      return function(_, cur, _, _, _, _, curSecret)
+        if curSecret == nil then curSecret = issecretvalue(cur) == true end
+        local opts = abbreviates and NUM_OPTS or nil
+        cur = curSecret == true and fn(cur, opts) or fn(FiniteNumberOr(cur, 0), opts)
+        fs._aText, fs._aTextPlain = nil, nil
+        fs:SetText(cur)
+      end
+    end
     return function(_, cur, _, _, _, _, curSecret)
       if curSecret == nil then curSecret = issecretvalue(cur) == true end
       if fn then
@@ -859,6 +873,15 @@ local function CompileSecretWriter(slot)
       fs:SetFormattedText(pattern, cur)
     end
   elseif code == 2 then
+    if fn and pattern == "%s" then
+      return function(_, _, maxValue, _, _, _, _, maxSecret)
+        if maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
+        local opts = abbreviates and NUM_OPTS or nil
+        maxValue = maxSecret == true and fn(maxValue, opts) or fn(FiniteNumberOr(maxValue, 0), opts)
+        fs._aText, fs._aTextPlain = nil, nil
+        fs:SetText(maxValue)
+      end
+    end
     return function(_, _, maxValue, _, _, _, _, maxSecret)
       if maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
       if fn then
@@ -876,6 +899,25 @@ local function CompileSecretWriter(slot)
       if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
       fs._aText, fs._aTextPlain = nil, nil
       fs:SetFormattedText(pattern, pct)
+    end
+  elseif code == 6 or code == 7 then
+    -- Current + percent is a common two-value slot. Its maximum is unused, so
+    -- compile that fact instead of walking the general three-value dispatcher.
+    -- Number-style options stay live, as in the single-value writers above.
+    local currentFirst = code == 6
+    return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
+      if curSecret == nil then curSecret = issecretvalue(cur) == true end
+      if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
+      if fn then
+        local opts = abbreviates and NUM_OPTS or nil
+        cur = curSecret == true and fn(cur, opts) or fn(FiniteNumberOr(cur, 0), opts)
+      elseif curSecret ~= true then
+        cur = FiniteNumberOr(cur, 0)
+      end
+      if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
+      fs._aText, fs._aTextPlain = nil, nil
+      if currentFirst then fs:SetFormattedText(pattern, cur, delimiter, pct)
+      else fs:SetFormattedText(pattern, pct, delimiter, cur) end
     end
   end
 
@@ -901,20 +943,10 @@ local function CompileSecretWriter(slot)
     -- The format mode is fixed when the slot is compiled. Dispatching the
     -- native call here avoids a second Lua function call for every secret text
     -- write while retaining one shared normalization path for all modes.
-    if code == 1 then
-      fs:SetFormattedText(pattern, cur)
-    elseif code == 2 then
-      fs:SetFormattedText(pattern, maxValue)
-    elseif code == 3 then
+    if code == 3 then
       fs:SetFormattedText(pattern, cur, delimiter, maxValue)
     elseif code == 4 then
       fs:SetFormattedText(pattern, maxValue, delimiter, cur)
-    elseif code == 5 then
-      fs:SetFormattedText(pattern, pct)
-    elseif code == 6 then
-      fs:SetFormattedText(pattern, cur, delimiter, pct)
-    elseif code == 7 then
-      fs:SetFormattedText(pattern, pct, delimiter, cur)
     elseif code == 8 then
       fs:SetFormattedText(pattern, cur, delimiter, maxValue, delimiter, pct)
     elseif code == 9 then
@@ -1438,7 +1470,7 @@ local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, nee
   end
 end
 
-UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsPercent, rt, pctOverride, pctOverrideSet)
+UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsPercent, rt, pctOverride, pctOverrideSet, curSecret, maxSecret)
   if not slots or not count or count <= 0 then
     return
   end
@@ -1450,8 +1482,11 @@ UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsP
       pct = percentFn(unit)
     end
   end
-  local curSecret = issecretvalue(cur) == true
-  local maxSecret = issecretvalue(max) == true
+  -- Runtime readers can pass the classification of these exact values. It is
+  -- local to this synchronous write, never retained across events or rereads.
+  -- Standalone slot callers still classify their own inputs once here.
+  if curSecret == nil then curSecret = issecretvalue(cur) == true end
+  if maxSecret == nil then maxSecret = issecretvalue(max) == true end
   local pctSecret = needsPercent == true and issecretvalue(pct) == true or false
   local pctKnown = needsPercent == true and (pctSecret or pct ~= nil)
   for i = 1, count do

@@ -358,7 +358,7 @@ end
 
 local function CreateLossTrail(parent, texture, initialValue)
   if not parent then return nil end
-  local trail = CreateFrame("StatusBar", nil, parent)
+  local trail = CreateFrame("StatusBar", nil, parent._msufHealthVisualRoot or parent)
   trail:SetMinMaxValues(0, 100)
   trail:SetValue(initialValue or 0)
   trail:SetStatusBarTexture(texture or WHITE)
@@ -1307,6 +1307,51 @@ local function CreateGradientChannel(low, mid, high, curveType)
   return curve
 end
 
+local function CompileGradientReaders(channels)
+  -- These are immutable configuration values. Bind them once per cached curve,
+  -- rather than looking up the channel plan for every unit event. Native results
+  -- remain opaque: only the ordinary configuration chooses which reads run.
+  local r, g, b = channels.r, channels.g, channels.b
+  local rc, gc, bc = channels.rCurve, channels.gCurve, channels.bCurve
+  local gr, br, bg = channels.gFromR, channels.bFromR, channels.bFromG
+  if not rc and not gc and not bc then
+    local function ConstantColor() return r, g, b, true end
+    channels.ReadUnit, channels.ReadCalculator = ConstantColor, ConstantColor
+    return
+  elseif rc and gc and bc and not gr and not br and not bg then
+    channels.ReadUnit = function(unit)
+      return UnitHealthPercent(unit, true, rc), UnitHealthPercent(unit, true, gc), UnitHealthPercent(unit, true, bc), true
+    end
+    channels.ReadCalculator = function(calc)
+      return calc:EvaluateCurrentHealthPercent(rc), calc:EvaluateCurrentHealthPercent(gc), calc:EvaluateCurrentHealthPercent(bc), true
+    end
+    return
+  elseif rc and gc and not bc and not gr then
+    -- Default red/yellow/green gradient: two independent channels, fixed blue.
+    channels.ReadUnit = function(unit)
+      return UnitHealthPercent(unit, true, rc), UnitHealthPercent(unit, true, gc), b, true
+    end
+    channels.ReadCalculator = function(calc)
+      return calc:EvaluateCurrentHealthPercent(rc), calc:EvaluateCurrentHealthPercent(gc), b, true
+    end
+    return
+  end
+  channels.ReadUnit = function(unit)
+    local rr, gg, bb = r, g, b
+    if rc then rr = UnitHealthPercent(unit, true, rc) end
+    if gr then gg = rr elseif gc then gg = UnitHealthPercent(unit, true, gc) end
+    if br then bb = rr elseif bg then bb = gg elseif bc then bb = UnitHealthPercent(unit, true, bc) end
+    return rr, gg, bb, true
+  end
+  channels.ReadCalculator = function(calc)
+    local rr, gg, bb = r, g, b
+    if rc then rr = calc:EvaluateCurrentHealthPercent(rc) end
+    if gr then gg = rr elseif gc then gg = calc:EvaluateCurrentHealthPercent(gc) end
+    if br then bb = rr elseif bg then bb = gg elseif bc then bb = calc:EvaluateCurrentHealthPercent(bc) end
+    return rr, gg, bb, true
+  end
+end
+
 local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
   if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
     -- Unit/group specs normally share the same global gradient stops. Reuse
@@ -1339,6 +1384,19 @@ local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
         gCurve = CreateGradientChannel(lg, mg, hg, curveType),
         bCurve = CreateGradientChannel(lb, mb, hb, curveType),
       }
+      -- Compile equal channels and public-value interpolation once. These are
+      -- ordinary configured stops; secret health/RGB never enter comparisons.
+      channels.gFromR = channels.gCurve ~= nil and lr == lg and mr == mg and hr == hg
+      channels.bFromR = channels.bCurve ~= nil and lr == lb and mr == mb and hr == hb
+      channels.bFromG = not channels.bFromR and channels.bCurve ~= nil
+        and lg == lb and mg == mb and hg == hb
+      if curveType == 0 then -- Enum.LuaCurveType.Linear
+        channels.linear = true
+        channels.mr, channels.mg, channels.mb = mr, mg, mb
+        channels.dr1, channels.dg1, channels.db1 = mr - lr, mg - lg, mb - lb
+        channels.dr2, channels.dg2, channels.db2 = hr - mr, hg - mg, hb - mb
+      end
+      CompileGradientReaders(channels)
     end
     local entry = { lr, lg, lb, mr, mg, mb, hr, hg, hb, curve, channels }
     if healthGradientCurveCacheCount < HEALTH_GRADIENT_CURVE_CACHE_LIMIT then
@@ -1404,7 +1462,7 @@ local function GradientFromValues(health, hp, maxHP)
   return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t, true
 end
 
-local function GradientColor(unit, calc, frame)
+local function GradientColor(unit, calc, frame, hp, maxHP, event, percentReady)
   -- Health.Apply seeds this for health-gradient frames. Text-only gradient
   -- consumers seed it on their first update. The spec apply path clears or
   -- replaces it, so the hot event path does not need nine stop comparisons.
@@ -1418,22 +1476,33 @@ local function GradientColor(unit, calc, frame)
     end
   end
   if channels then
-    local r, g, b = channels.r, channels.g, channels.b
     if calc and calc.EvaluateCurrentHealthPercent then
-      if channels.rCurve then r = calc:EvaluateCurrentHealthPercent(channels.rCurve) end
-      if channels.gCurve then g = calc:EvaluateCurrentHealthPercent(channels.gCurve) end
-      if channels.bCurve then b = calc:EvaluateCurrentHealthPercent(channels.bCurve) end
-      return r, g, b, true
+      return channels.ReadCalculator(calc)
     elseif issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
       and UnitHealthPercent then
       -- Keep the exact unit-token guard inline on this native hot path.
       -- The API evaluates each curve in Blizzard's permitted native context.
       -- Never compare, calculate with, or feed the returned secret components
       -- into another curve from Lua; forward them straight to the color sink.
-      if channels.rCurve then r = UnitHealthPercent(unit, true, channels.rCurve) end
-      if channels.gCurve then g = UnitHealthPercent(unit, true, channels.gCurve) end
-      if channels.bCurve then b = UnitHealthPercent(unit, true, channels.bCurve) end
-      return r, g, b, true
+      if percentReady == true and channels.linear
+        and issecretvalue(hp) ~= true and type(hp) == "number" and (hp - hp) == 0
+        and issecretvalue(maxHP) ~= true and type(maxHP) == "number" and maxHP > 0 and (maxHP - maxHP) == 0 then
+        -- Only the Health owner's fresh percent sample can replace a unit
+        -- query. Absolute hp/max arguments may contain an event-cached maximum
+        -- and are deliberately not used. Calculators retain their own sample.
+        local pct = hp / maxHP
+        if pct == pct and (pct - pct) == 0 then
+          if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
+          if pct <= 0.5 then
+            local t = pct * 2
+            return channels.r + channels.dr1 * t, channels.g + channels.dg1 * t, channels.b + channels.db1 * t, true
+          end
+          local t = (pct - 0.5) * 2
+          return channels.mr + channels.dr2 * t, channels.mg + channels.dg2 * t,
+            channels.mb + channels.db2 * t, true
+        end
+      end
+      return channels.ReadUnit(unit)
     end
   end
   if calc and curve and calc.EvaluateCurrentHealthPercent then
@@ -1480,7 +1549,7 @@ local function PreviewHealthGradientColor(health, pct)
   return 0.2, 0.8, 0.2, false
 end
 
-local function HealthColor(frame, unit, hp, maxHP, calc, event)
+local function HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or {}
   local state = RefreshUnitState(frame, unit, spec, event or "UNIT_HEALTH")
@@ -1499,7 +1568,7 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   if health.mode == "dark" or health.mode == "unified" then
     return health.r or 1, health.g or 1, health.b or 1
   elseif health.mode == "gradient" then
-    return GradientColor(unit, calc, frame, hp, maxHP)
+    return GradientColor(unit, calc, frame, hp, maxHP, event, percentReady)
   end
 
   if spec and spec.key == "pet" then
@@ -1541,10 +1610,10 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   return health.r or 0.1, health.g or 0.6, health.b or 0.9
 end
 
-local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event)
+local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event, percentReady)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or {}
-  local r, g, b, raw = HealthColor(frame, unit, hp, maxHP, calc, event)
+  local r, g, b, raw = HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
   if raw == SECRET_NATIVE_CLASS_COLOR then
     -- UnitClass can return an identity-restricted token for player units.
     -- C_ClassColor and SetStatusBarColor explicitly accept this secret
