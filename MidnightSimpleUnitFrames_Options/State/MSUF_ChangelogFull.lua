@@ -8,12 +8,42 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "7DE4780C00962CA6C9EE1D285B00A221D316CFC97DDA420263621E0957C8E051",
-    currentVersion = "6.15",
+    sourceSha256 = "EE3102C27FCA47B1989F052C0D3220103EFFD5DDC2CF4D5428E8D86081B14D91",
+    currentVersion = "6.151",
     historyFromVersion = "6.02",
-    previousVersion = "6.14",
-    rangeLabel = "6.14 -> 6.15",
+    previousVersion = "6.02",
+    rangeLabel = "6.02 -> 6.151",
     entries = {
+        {
+            version = "6.151",
+            date = "2026-09-06",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Highlight borders work reliably again on rounded frames and respect the configured border thickness.",
+                            link = {
+                                pageKey = "opt_bars",
+                                query = "rounded frame texture",
+                                label = "Rounded frame texture",
+                                sectionId = "bars_rounded",
+                                controlId = "menu2.opt.bars.global.rounded.rounded.frames.enabled",
+                                settingKey = "bars.roundedFramesEnabled",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Restored rounded highlight startup and layering, including support for border thickness up to 30.",
+                        "Dispel and Purge borders now apply their configured thickness on all frame shapes and refresh immediately after Menu changes.",
+                        "Group Frame highlight detection keeps working when Aura icons are disabled, and Any dispel type also works on enemy units.",
+                    },
+                },
+            },
+        },
         {
             version = "6.15",
             date = "2026-09-05",
