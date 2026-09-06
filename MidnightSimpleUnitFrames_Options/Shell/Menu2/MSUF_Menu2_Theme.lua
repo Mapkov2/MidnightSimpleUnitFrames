@@ -6,6 +6,7 @@ local T = M.Theme or {}
 M.Theme = T
 local WL = M.WordList
 local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+local MenuSkin = MSUF.MenuSkin
 
 local InvokeThemeBoundary = M.InvokeBoundary or pcall
 
@@ -461,6 +462,7 @@ function T.ApplyMenuFont(fs, bump, role)
     return fs
 end
 function T.StyleFontString(fs, color, bump, role)
+    if MenuSkin then MenuSkin.TrackText(fs, color or T.colors.text) end
     if not fs then return fs end
     RegisterPageFontString(fs)
     if role ~= nil then fs._msuf2FontRole = role end
@@ -616,6 +618,7 @@ local BACKDROP_INFO = {
 }
 function T.ApplyBackdrop(frame, bg, border)
     if not frame then return frame end
+    if MenuSkin and MenuSkin.Surface(frame, "panel", T.ApplyBackdrop, bg, border, 1) then return frame end
     if frame.SetBackdrop then
         if frame._msuf2BackdropInfoApplied ~= BACKDROP_INFO then
             frame:SetBackdrop(BACKDROP_INFO)
@@ -1377,6 +1380,7 @@ function T.PlayNeonFlash(frame, kind, opts)
 end
 function T.ApplyGlass(frame, variant)
     if not (frame and frame.CreateTexture) then return frame end
+    if MenuSkin and MenuSkin.Surface(frame, variant, T.ApplyGlass, variant, nil, 3) then return frame end
     if T.ApplyGradient and T.gradients and T.gradients[variant or "card"] then T.ApplyGradient(frame, variant or "card", { key = "_msuf2MaterialGradient" }) end
     local spec = GLASS_VARIANTS[variant or "card"] or GLASS_VARIANTS.card
     -- Accent selection may change hue, never renderer ownership or geometry.
@@ -1429,6 +1433,7 @@ function T.ApplyGlass(frame, variant)
 end
 function T.ApplyPlasticDepth(frame, variant)
     if not (frame and frame.CreateTexture) then return frame end
+    if MenuSkin and MenuSkin.Surface(frame, variant, T.ApplyPlasticDepth, variant, nil, 2) then return frame end
     if frame._msuf2PanelAssetApplied then
         HideFrameTexture(frame, "_msuf2PlasticTop")
         HideFrameTexture(frame, "_msuf2PlasticBottom")
@@ -1501,6 +1506,7 @@ local function DynamicGradientFromColor(color)
 end
 function T.ApplyGradient(frame, token, opts)
     if not (frame and frame.CreateTexture) then return frame end
+    if MenuSkin and MenuSkin.Surface(frame, token, T.ApplyGradient, token, opts, 2) then return frame end
     opts = opts or {}
     local spec = ResolveGradientSpec(token) or DynamicGradientFromColor(T.colors.panel2)
     local key = opts.key or spec.key or "_msuf2MaterialGradient"
@@ -1529,6 +1535,7 @@ function T.ApplyGradient(frame, token, opts)
 end
 function T.ApplyMaterial(frame, material)
     if not frame then return frame end
+    if MenuSkin and MenuSkin.Surface(frame, material, T.ApplyMaterial, material, nil, 5) then return frame end
     local spec = type(material) == "table" and material or (T.materials and T.materials[material or "card"])
     if type(spec) ~= "table" then return frame end
     if spec.bg or spec.border then T.ApplyBackdrop(frame, spec.bg or T.colors.panel, spec.border or T.colors.borderSoft) end
@@ -1543,6 +1550,7 @@ function T.ApplyMaterial(frame, material)
     return frame
 end
 function T.ApplySurface(frame, material, glass)
+    if MenuSkin and MenuSkin.Surface(frame, glass or material, T.ApplySurface, material, glass, 6) then return frame end
     if T.ApplyMaterial then return T.ApplyMaterial(frame, material) end
     return T.ApplyGlass and T.ApplyGlass(frame, glass or (type(material) == "table" and material.glass) or material) or frame
 end
@@ -1838,6 +1846,7 @@ local SLIDER_STYLE_HOOKS = {
     OnSizeChanged = function(self) if self._msuf2UpdateFill then self:_msuf2UpdateFill() end; if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end end,
 }
 function T.StyleSlider(slider)
+    if MenuSkin then MenuSkin.TrackPaint(slider, T.StyleSlider) end
     if not slider then return end
     slider.__msufPeelSliderSkinned = true
     slider._msuf2SliderStyled = true
@@ -1955,6 +1964,7 @@ function T.StyleSlider(slider)
 end
 function T.StyleCheckmark(checkButton)
     if not checkButton then return end
+    if MenuSkin then MenuSkin.TrackPaint(checkButton, T.StyleCheckmark) end
     local UI = MSUF and MSUF.UI
     local styleText = (_G and _G.MSUF_StyleToggleText) or (MSUF and MSUF.MSUF_StyleToggleText) or (UI and UI.StyleToggleText)
     if type(styleText) == "function" then styleText(checkButton) end
@@ -2069,6 +2079,7 @@ function T.SkinEditBox(editBox)
         editBox._msuf2EditEdges = edges
     end
     local function PaintEditBox(self, focused)
+        if MenuSkin and MenuSkin.Surface(self, "input", PaintEditBox, focused, nil, 7) then return end
         local enabled = not (self.IsEnabled and not self:IsEnabled())
         local alpha = enabled and 1 or 0.60
         local roundedFill = self._msuf2RoundedEditFill
@@ -2110,11 +2121,11 @@ function T.SkinEditBox(editBox)
     T.StyleFontString(fs, T.colors.text, 1)
     editBox:HookScript("OnEditFocusGained", function(self)
         PaintEditBox(self, true)
-        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95) end
+        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill and not (MenuSkin and MenuSkin.Owns(self)) then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95) end
     end)
     editBox:HookScript("OnEditFocusLost", function(self)
         PaintEditBox(self, false)
-        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1) end
+        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill and not (MenuSkin and MenuSkin.Owns(self)) then self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1) end
     end)
     editBox:HookScript("OnEnable", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
     editBox:HookScript("OnDisable", function(self) PaintEditBox(self, false) end)
@@ -2453,6 +2464,11 @@ local function SetNavActiveFX(btn, active, hover)
     SetSuperellipsePartsShown(fx.sheenEdge, false)
 end
 local function ButtonVisual(btn, active, hover)
+    if MenuSkin and MenuSkin.Button(btn, active, hover, ButtonVisual) then
+        HideNavPillArt(btn)
+        SetNavActiveFX(btn, false)
+        return
+    end
     local c = T.colors
     local fill = btn._msuf2Fill
     local edge = btn._msuf2Edge
@@ -2767,6 +2783,7 @@ function T.FitButtonWidth(btn, minWidth, maxWidth)
 end
 local function CloseButtonVisual(btn, hover, down)
     if not btn then return end
+    if MenuSkin and MenuSkin.WindowAction(btn, "close", CloseButtonVisual, hover, down) then return end
     local fill = btn._msuf2CloseFill
     local edge = btn._msuf2CloseEdge
     local lineA = btn._msuf2CloseLineA
@@ -3142,6 +3159,7 @@ end
 do
     local function ApplySavedAccent()
         if type(T.ApplyMenuAccent) == "function" then T.ApplyMenuAccent() end
+        if MenuSkin then MenuSkin.BindColors(T.colors) end
     end
     if type(_G.IsLoggedIn) == "function" and _G.IsLoggedIn() then
         ApplySavedAccent()

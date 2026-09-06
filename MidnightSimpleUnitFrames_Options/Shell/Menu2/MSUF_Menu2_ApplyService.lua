@@ -964,6 +964,12 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
     elseif needsGroupBorderRefresh then
         RefreshGroupBarVisuals(borderDirty, scope)
     end
+    if opt and opt.dispelPurgeBorder == true then
+        -- Borders-only element masks cannot update the native AuraContainer
+        -- regions. Refresh their scope after both spec owners above so changed
+        -- thickness/trigger/color reaches the frozen sensor initializer.
+        ApplyAuraScope(scope or "shared", opt.reason or "MSUF2_DISPEL_BORDER")
+    end
     return castbarTexturesApplied
 end
 

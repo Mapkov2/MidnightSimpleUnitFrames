@@ -964,6 +964,13 @@ if ($lua) {
     $retail1210FallbackSmoke = Join-Path $root ".github/scripts/retail_12_1_0_fallback_smoke.lua"
     & $lua.Source $retail1210FallbackSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Retail 12.1.0 fallback smoke failed" }
+    $roundedHighlightSmoke = Join-Path $root ".github/scripts/rounded_border_highlight_smoke.lua"
+    & $lua.Source $roundedHighlightSmoke
+    if ($LASTEXITCODE -ne 0) { throw "Rounded border highlight startup smoke failed" }
+    & $lua.Source $roundedHighlightSmoke --startup-disabled
+    if ($LASTEXITCODE -ne 0) { throw "Rounded border highlight enable smoke failed" }
+    & $lua.Source (Join-Path $root ".github/scripts/rounded_forbidden_mask_owner_smoke.lua")
+    if ($LASTEXITCODE -ne 0) { throw "Rounded native aura ownership smoke failed" }
     $castbarOwnershipSmoke = Join-Path $root "tools/castbar_refresh_ownership_smoke.lua"
     & $lua.Source $castbarOwnershipSmoke
     if ($LASTEXITCODE -ne 0) { throw "Shared castbar refresh ownership smoke failed" }

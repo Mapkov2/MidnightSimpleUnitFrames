@@ -2206,6 +2206,7 @@ end
 local switchOffRehueChecked
 local function RefreshSwitchVisual(button, hover)
     if not button then return end
+    if MSUF.MenuSkin then MSUF.MenuSkin.TrackPaint(button, RefreshSwitchVisual, hover) end
     if not switchOffRehueChecked then
         switchOffRehueChecked = true
         if T.MenuAccentRehueLiteral then
@@ -2222,6 +2223,11 @@ local function RefreshSwitchVisual(button, hover)
     local bg = checked and onBg or SWITCH_BG_OFF
     local br = checked and onEdge or SWITCH_EDGE_OFF
     local kb = checked and onKnob or SWITCH_KNOB_OFF
+    if MSUF.MenuSkin and MSUF.MenuSkin.IsActive() then
+        bg = checked and T.colors.checkActive or T.colors.checkInactive
+        br = checked and T.colors.checkActiveEdge or T.colors.checkInactiveEdge
+        kb = checked and T.colors.title or T.colors.muted
+    end
     local mul = enabled and (pressed and 1.10 or hover and 1.08 or 1) or 1
     local alpha = enabled and 1 or 0.58
     if button._msuf2SwitchFill then button._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] * alpha) end

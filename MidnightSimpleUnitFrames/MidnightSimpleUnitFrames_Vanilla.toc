@@ -6,7 +6,7 @@
 ## Version: 6.5-alpha11
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics
+## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, MapkoSkin
 ## X-MSUF-Client: Vanilla
 ## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
@@ -71,6 +71,7 @@ Kernel\MSUF_Modules.lua
 Kernel\MSUF_EventBus.lua
 Kernel\MSUF_Scheduler.lua
 Shell\UI\MSUF_Widgets.lua
+Shell\UI\MSUF_MapkoSkin.lua
 Shell\UI\MSUF_AnchorPicker.lua
 Shell\UI\MSUF_EditPopupUI.lua
 Shell\UI\EditMode\MSUF_EditMode_Layout.lua

@@ -59,7 +59,6 @@ local MAX_CONFIGURABLE_DEBUFF_DURATION = 180
 -- Use a practically unreachable finite ceiling so this behaves as an
 -- "exclude permanent" rule without dropping normal long-duration auras.
 local MAX_FINITE_AURA_DURATION = 2147483647
-local MSUF_AURA_SENSOR_EDGE_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\msuf_frame_edge_thin_256x64.tga"
 -- Aura icon shape module. The unit-frame chunk sits close to the Lua
 -- 200-local ceiling, so every shape constant and helper lives on one
 -- table instead of costing a main-chunk local each.
@@ -2153,18 +2152,14 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         end
     end
     local borderLayer = Round(ClampNumber(border and border.layer, 0, 0, 30))
-    -- Blizzard's dispel filters are not reaction-scoped: RAID_PLAYER_DISPELLABLE
-    -- explicitly includes auras on enemies and DISPELLABLE is any typed debuff
-    -- on any unit, which is why Blizzard's own frames wrap every dispel read in
-    -- UnitCanAssist. Unit Frame dispel visuals therefore carry the exact-ID
-    -- "assist" identity polarity: valid only while the unit is assistable (see
-    -- the Unit identity gate). Everything else keeps its historical ungated
-    -- behaviour: the helpful Purge sensor (Blizzard shows isStealable without
-    -- a reaction check), "cast by me" HARMFUL|PLAYER sensors (their auras live
-    -- on enemies), and every Group sensor (party/raid tokens are assistable by
-    -- definition and the presence gate already owns offline/phase visibility).
+    -- Native dispel filters are not reaction-scoped. "Dispellable by me/group"
+    -- keeps the assist identity gate for friendly cleansing, but "Any dispel
+    -- type" intentionally includes typed harmful auras on enemies. Like Purge
+    -- and "cast by me", it must use the neutral owner so the assist gate cannot
+    -- disable its native sensor. Group sensors stay neutral; their presence
+    -- gate already owns offline/phase visibility.
     local identityCandidateMode
-    if not groupMode and visual ~= "purge" and trigger ~= "PLAYER_CAST" then
+    if not groupMode and visual ~= "purge" and trigger ~= "PLAYER_CAST" and trigger ~= "DISPEL_TYPE" then
         identityCandidateMode = "assist"
     end
     return {
@@ -3915,7 +3910,12 @@ local function ResolveGroupFrameConfig(frame, unit)
             or (trackedBuff and trackedBuff.enabled == true)
             or (debuff and debuff.enabled == true)
             or (external and external.enabled == true)
+    end
 
+    -- Frame highlights have their own compiled enable flags. In particular,
+    -- inherited Cleanse borders must work with every aura icon lane and Dispel
+    -- Overlay disabled; source.enabled only gates the icon lanes above.
+    if type(unit) == "string" and unit ~= "" then
         local dispelBorder = CompileDispelSensor(unit, spec, true, "border")
         local dispelOverlay = CompileDispelSensor(unit, spec, true, "overlay")
         local dispelCorner = CompileDispelSensor(unit, spec, true, "corner")
@@ -4787,9 +4787,9 @@ local EFFECT_ROOT_KEYS = {
 }
 
 -- One native owner per identity polarity: the container is the alpha sink of
--- the Unit identity gate, so assist-gated dispel visuals and the ungated
--- Purge / "cast by me" sensors can never share one. Group sensors carry no
--- polarity and keep their single neutral owner.
+-- the Unit identity gate, so assist-gated cleanse visuals and the ungated
+-- "Any dispel type" / Purge / "cast by me" sensors can never share one.
+-- Group sensors carry no polarity and keep their single neutral owner.
 local function BuildDispelSensorRootConfig(sensors, identityCandidateMode, rootKey)
     if type(sensors) ~= "table" then return nil end
     local list, structuralParts, layoutParts, unit, maxCount, layer
@@ -4833,8 +4833,8 @@ local function GetDispelSensorRootConfig(cfg)
     if cached ~= nil then
         return cached ~= false and cached or nil
     end
-    -- Group owners compile neutral sensors; Unit Frames compile their harmful
-    -- dispel visuals as the assist-polarity owner at the historical root key.
+    -- Group owners compile neutral sensors; Unit Frames compile their friendly
+    -- cleanse visuals as the assist-polarity owner at the historical root key.
     local identityCandidateMode
     if cfg.group ~= true then identityCandidateMode = "assist" end
     cached = BuildDispelSensorRootConfig(cfg.sensors, identityCandidateMode, "DispelSensor")
@@ -4842,9 +4842,8 @@ local function GetDispelSensorRootConfig(cfg)
     return cached
 end
 
--- Unit Frame sensors without polarity (the helpful Purge sensor and any
--- "cast by me" HARMFUL|PLAYER sensor) keep their historical ungated behaviour
--- in a second owner, so the assist gate on DispelSensor can never hide them.
+-- Unit Frame sensors without polarity ("Any dispel type", helpful Purge and
+-- "cast by me") use a separate owner so the assist gate cannot hide them.
 local function GetNeutralDispelSensorRootConfig(cfg)
     if not cfg or cfg.group == true then return nil end
     local cached = cfg.neutralSensorRoot
@@ -5847,12 +5846,6 @@ local function LayoutDispelSensorOverlay(region, button, sensor, visualTarget)
     local style = sensor.style or "FULL"
     local thickness = ClampNumber(sensor.thickness, 3, 1, 32)
     region:ClearAllPoints()
-    if sensor.visual == "border" then
-        local pad = math_min(2, math_max(0, math_floor((thickness * 0.5) + 0.5)))
-        region:SetPoint("TOPLEFT", button, "TOPLEFT", -pad, pad)
-        region:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", pad, -pad)
-        return true
-    end
     local target = visualTarget
     if not target then return false end
     if style == "TOP" then
@@ -5929,6 +5922,44 @@ local function PrepareRoundedDispelOverlayRegion(parentFrame, region, owner)
     return callback(parentFrame, region, owner) == true
 end
 
+-- Native border regions are initialized once, then sealed by Blizzard. Keep
+-- the configured thickness in geometry rather than stretching thin edge art.
+-- Multiple textures share ONE AuraSlot: no extra aura selection or Lua scan.
+local function PrepareDispelSensorBorder(button, sensor, parentFrame)
+    local thickness = Round(ClampNumber(sensor.thickness, 3, 1, 30))
+    local prepare = _G.MSUF_RoundedUF_PrepareDispelBorder
+    local regions = type(prepare) == "function" and prepare(parentFrame, button, thickness) or nil
+    if not regions then
+        regions = {}
+        for i = 1, 4 do
+            local edge = button:CreateTexture(nil, "OVERLAY")
+            edge:SetTexture("Interface\\Buttons\\WHITE8X8")
+            regions[i] = edge
+        end
+        local top, bottom, left, right = regions[1], regions[2], regions[3], regions[4]
+        local anchor = IsGroupFrame(parentFrame) and (parentFrame.barGroup or parentFrame) or parentFrame
+        top:SetPoint("TOPLEFT", anchor, "TOPLEFT", -thickness, thickness)
+        top:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", thickness, thickness)
+        top:SetHeight(thickness)
+        bottom:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", -thickness, -thickness)
+        bottom:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", thickness, -thickness)
+        bottom:SetHeight(thickness)
+        left:SetPoint("TOPLEFT", anchor, "TOPLEFT", -thickness, 0)
+        left:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", -thickness, 0)
+        left:SetWidth(thickness)
+        right:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", thickness, 0)
+        right:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", thickness, 0)
+        right:SetWidth(thickness)
+    end
+    local options = sensor.visual == "purge" and A3.GetPurgeSensorTextureOptions(sensor) or GetSensorBorderOptions()
+    local alpha = sensor.visual == "purge" and 1 or 0.82
+    for i = 1, #regions do
+        regions[i]:SetAlpha(alpha)
+        button:AddDispelTypeTexture(regions[i], options)
+    end
+    return true
+end
+
 -- The flat-color menu preview is entirely MSUF-owned, so it may stay in the
 -- normal mutable RoundedFrames registry and follow live setting changes.
 local function RegisterRoundedDispelOverlayPreviewRegion(parentFrame, region)
@@ -5976,6 +6007,9 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     button:ClearDispelTypeText()
 
     button:ClearDispelTypeTextures()
+    if sensor.visual == "border" or sensor.visual == "purge" then
+        return PrepareDispelSensorBorder(button, sensor, parentFrame)
+    end
     if sensor.visual == "symbol" then
         -- One texture filling the button rect. Blizzard swaps its atlas/asset
         -- per dispel type and hides it when the slot holds no typed debuff, so
@@ -6038,14 +6072,6 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
         button:SetAlpha(Clamp01(sensor.alpha, 0.35))
         PrepareRoundedDispelOverlayRegion(parentFrame, region, button)
         button:AddDispelTypeTexture(region, GetSensorOverlayOptions())
-    elseif sensor.visual == "purge" then
-        region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        region:SetAlpha(1)
-        button:AddDispelTypeTexture(region, A3.GetPurgeSensorTextureOptions(sensor))
-    else
-        region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        region:SetAlpha(0.82)
-        button:AddDispelTypeTexture(region, GetSensorBorderOptions())
     end
     return true
 end
@@ -10735,7 +10761,7 @@ function A3.RefreshAll()
     return true
 end
 
--- Rounded masks attached to native Dispel display regions are immutable after
+-- Rounded masks and border rings on native Dispel regions are immutable after
 -- Blizzard accepts them. A rounded setting change therefore advances the
 -- existing visual generation and recreates the affected native containers on
 -- this cold configuration path; aura events never call this function.
