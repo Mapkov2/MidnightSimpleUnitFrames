@@ -1965,6 +1965,7 @@ local UNIT_LOAD_CONDITION_SPECS = {
     { key = "loadCondHideResting", label = "Hide Resting", terms = { "resting", "rested", "rest area", "while resting", "when resting", "ruhend", "erholt" } },
     { key = "loadCondHideSolo", label = "Hide Solo", terms = { "solo", "alone", "while solo", "when solo", "allein" } },
     { key = "loadCondHideStealthed", label = "Hide Stealthed", terms = { "stealthed", "stealth", "in stealth", "while stealthed", "when stealthed", "getarnt", "verstohlen" } },
+    { key = "loadCondShowWhenInjured", label = "Show Only When Injured", terms = { "only when injured", "only below full health", "below 100 health", "when damaged", "nur verletzt", "unter 100 leben" } },
 }
 
 local LOAD_CONDITION_TERMS = {

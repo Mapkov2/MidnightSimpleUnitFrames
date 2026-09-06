@@ -45,7 +45,7 @@ function A.UnitframesRegistry.BuildTextSpecialCoreContext(ctx)
         local keys = {
             "loadCondHideInHousing", "loadCondHideInCombat", "loadCondHideInGroup", "loadCondHideInInstance", "loadCondHideInVehicle",
             "loadCondHideMounted", "loadCondHideNoTarget", "loadCondHideOutOfCombat", "loadCondHideOutOfCombatNoTarget",
-            "loadCondHideResting", "loadCondHideSolo", "loadCondHideStealthed",
+            "loadCondHideResting", "loadCondHideSolo", "loadCondHideStealthed", "loadCondShowWhenInjured",
         }
         for i = 1, #keys do
             if conf[keys[i]] == true then active = true; break end

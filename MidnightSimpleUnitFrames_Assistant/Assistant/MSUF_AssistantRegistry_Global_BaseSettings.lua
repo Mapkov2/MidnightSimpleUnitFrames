@@ -224,6 +224,15 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
             if type(fn) == "function" then fn(GeneralDB().grid2EditModeIntegration ~= false) end
         end,
     })
+    RegisterGeneralBoolean("mapkoSkinMenus", "mapkoSkinMenus", "Use MapkoSkin for MSUF Menus", true, {
+        "mapkoskin menus", "use mapkoskin for msuf menus", "skin msuf menus", "disable mapkoskin menus",
+        "mapkoskin menues", "msuf menues mit mapkoskin",
+    }, {
+        category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_MAPKOSKIN_MENUS",
+        apply = function()
+            if MSUF.MenuSkin and type(MSUF.MenuSkin.Refresh) == "function" then MSUF.MenuSkin.Refresh() end
+        end,
+    })
     RegisterGeneralBoolean("detailsEditModeIntegration", "detailsEditModeIntegration", "Details! Edit Mode Integration", true, {
         "details edit mode", "details mover", "move details", "show details in edit mode", "details integration",
         "details im edit mode", "details verschieben", "details mover anzeigen",
