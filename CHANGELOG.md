@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha12 - 2026-09-06
+
+### Highlights
+
+- **Highlight borders work reliably again on rounded frames and respect the configured border thickness.**
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_rounded","controlId":"menu2.opt.bars.global.rounded.rounded.frames.enabled","settingKey":"bars.roundedFramesEnabled","prepareKind":"","prepareValue":"","query":"rounded frame texture","label":"Rounded frame texture"} -->
+- **MSUF menus and Edit Mode can follow your MapkoSkin appearance.** The **Use MapkoSkin for MSUF menus** option connects compatible MapkoSkin installations to MSUF menu styling.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_mapkoskin","controlId":"menu2.opt.misc.global.setting.mapko.skin.menus","settingKey":"general.mapkoSkinMenus","prepareKind":"","prepareValue":"","query":"use mapkoskin for msuf menus","label":"Use MapkoSkin for MSUF menus"} -->
+
+### Changes
+
+- Includes the complete Retail 6.15 and 6.151 feature and fix set, including the earlier prediction-opacity, raid-sorting, Assistant, and performance improvements.
+- MapkoSkin menu integration is available across the Mainline, Vanilla, TBC, and Mists flavors, with its own searchable toggle.
+- The Mainline flavor retains Retail 12.1.5 support and Arena Frames. Vanilla 1.15.9, TBC 2.5.6, and Mists 5.5.4 compatibility remains included.
+
+### Fixes
+
+- Restored rounded highlight startup and layering, including border thickness up to 30.
+- Native Dispel and Purge borders apply their configured thickness on all frame shapes and refresh immediately after Menu changes.
+- Group Frame highlight detection continues working when Aura icons are disabled.
+- Any dispel type highlights can detect typed harmful Auras on enemy units.
+
 ## 6.5-alpha11 - 2026-09-05
 
 ### Highlights
