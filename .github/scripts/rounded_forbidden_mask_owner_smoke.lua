@@ -1,3 +1,9 @@
+-- Preserve direct execution after the Auras3 factory split.
+if not _G.MSUF_Auras3TestLoader then
+    _G.MSUF_Auras3TestLoader = assert(loadfile(".github/scripts/auras3_test_loader.lua"))()
+    _G.MSUF_Auras3TestLoader.Install()
+end
+
 local function Read(path)
     local file = assert(io.open(path, "rb"))
     local source = file:read("*a")

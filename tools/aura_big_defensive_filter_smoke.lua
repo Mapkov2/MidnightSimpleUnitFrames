@@ -1,3 +1,9 @@
+-- Preserve direct execution after the Auras3 factory split.
+if not _G.MSUF_Auras3TestLoader then
+    _G.MSUF_Auras3TestLoader = assert(loadfile(".github/scripts/auras3_test_loader.lua"))()
+    _G.MSUF_Auras3TestLoader.Install()
+end
+
 local function readFile(path)
     local file = assert(io.open(path, "rb"))
     local text = file:read("*a")
@@ -115,8 +121,32 @@ assert(not has(flushBody, "directIdentityEventTopologyBatchDepth"),
     "refresh recovery reads the NativeRuntime-private topology depth")
 assert(has(runtime, "DrainDirectIdentityEventTopologyBatch = DrainDirectIdentityEventTopologyBatch"),
     "NativeRuntime does not export its topology recovery helper")
-assert(has(runtime, "local DrainDirectIdentityEventTopologyBatch = NativeRuntime.DrainDirectIdentityEventTopologyBatch"),
-    "public Aura orchestration does not retain the topology recovery helper")
+-- Exercise the actual Facade binding instead of depending on how the bootstrap
+-- spells its dependency map. Recovery must drain the interrupted batch before
+-- attempting the pending refresh, and clear the stale coalescing latches.
+do
+    local recovered, calls = {}, {}
+    local function Drain() calls[#calls + 1] = "drain" end
+    local empty = {}
+    local dependencies = setmetatable({
+        DrainDirectIdentityEventTopologyBatch = Drain, -- Frozen symbol-map baseline.
+        IdentityEvents = { DrainDirectIdentityEventTopologyBatch = Drain },
+    }, { __index = function() return empty end })
+    local ns = {}
+    assert(loadfile("MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua"))("MidnightSimpleUnitFrames", ns)
+    ns.Auras3RuntimeFactories.Facade("MidnightSimpleUnitFrames", ns, recovered,
+        { RegisterElement = function() end }, function() end, dependencies)
+    recovered.RefreshAll = function()
+        calls[#calls + 1] = "refresh"
+        assert(recovered._refreshAllCoalescing == nil and recovered._refreshAllIncomplete == nil,
+            "refresh recovery retried before clearing stale latches")
+        return true
+    end
+    recovered._refreshAllIncomplete, recovered._refreshAllCoalescing = true, true
+    assert(recovered._FlushCoalescedRefreshAll() == true, "refresh recovery did not retry")
+    assert(#calls == 2 and calls[1] == "drain" and calls[2] == "refresh",
+        "public Aura orchestration lost topology recovery ordering")
+end
 local topologyStart = assert(runtime:find("local directIdentityRefreshEventFrame", 1, true))
 local topologyStop = assert(runtime:find("local function DirectIdentityRefreshEventsAlreadyCover", topologyStart, true))
 local topologyBlock = runtime:sub(topologyStart, topologyStop - 1)

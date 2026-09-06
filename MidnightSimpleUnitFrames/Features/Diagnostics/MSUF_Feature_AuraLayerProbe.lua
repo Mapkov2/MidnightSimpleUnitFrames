@@ -29,6 +29,24 @@ local function ProbeLane(unitKey, rootKey)
     end
     local root = frame.Auras
     local container = root and root[rootKey]
+    local slotIndex
+    local plan = root and root._msufA3Config and root._msufA3Config.nativeOwnerPlan
+    if not container and plan then
+        for key, owner in pairs(plan.owners) do
+            if owner.ownedLaneKeys and owner.ownedLaneKeys[rootKey] then
+                container = root[key]
+                if container and owner.slotLanes then
+                    for i, lane in ipairs(owner.slotLanes) do
+                        if lane.rootKey == rootKey then
+                            slotIndex = container._msufA3FixedButtonCount - #owner.slotLanes + i
+                            break
+                        end
+                    end
+                end
+                break
+            end
+        end
+    end
     if not container then
         Say(("%s %s: no container (root=%s)"):format(unitKey, rootKey, root and "yes" or "no"))
         return
@@ -36,8 +54,8 @@ local function ProbeLane(unitKey, rootKey)
     local host = container._msufA3LayoutHost
     local hostParent = host and host.GetParent and host:GetParent()
     local containerParent = container.GetParent and container:GetParent()
-    local button
-    if container.GetAuraGroupFrame and container._msufA3ManagedGroupKey then
+    local button = slotIndex and container[slotIndex]
+    if not button and container.GetAuraGroupFrame and container._msufA3ManagedGroupKey then
         button = container:GetAuraGroupFrame(container._msufA3ManagedGroupKey, 1)
     end
     button = button or container[1]

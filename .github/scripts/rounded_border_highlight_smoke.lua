@@ -209,6 +209,14 @@ LoadEngine("Elements/MSUF_UF_Elements_LoadConditions.lua")
 LoadEngine("Group/MSUF_UF_Group_Indicators.lua")
 
 local UF = assert(MSUF.UF)
+-- Optional integration pass with the normal unitframe rendering parent.
+if arg and arg[3] == "visual-root" then
+ local applySpec = UF.ApplySpec
+ UF.ApplySpec = function(frame, spec, ...)
+  if spec.scope ~= "group" then UF.EnsureHealthVisualRoot(frame) end
+  return applySpec(frame, spec, ...)
+ end
+end
 
 local function NewUnitFrame(unit)
   local frame = NewObject(nil)

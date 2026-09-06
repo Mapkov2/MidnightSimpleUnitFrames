@@ -1,0 +1,158 @@
+{
+  "build": "12.1.0.69587",
+  "file_data_id": 1990283,
+  "encoding": "base36-token-groups-v1",
+  "common_groups": 25879,
+  "locales": {
+    "enUS": {
+      "csv_sha256": "87125c44078a41f147f5a06742f3f7a1900d391f256a27adf07bb00c4c1151ef",
+      "rows": 413885,
+      "groups": 55339,
+      "alias_ids": 275091,
+      "max_id": 1319904,
+      "hotfixed": true,
+      "db2_sha256": "2ce067f490551d308a52e18b9d0c48b860c6ad1e4a8aa09f73997886f6cd2449"
+    },
+    "deDE": {
+      "csv_sha256": "c313e9b872750eaaefa14386fa8feb2ee9dfd6a127155209f500d4349b883096",
+      "rows": 413875,
+      "groups": 53930,
+      "alias_ids": 277457,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "d9b68bac665843d2bfb5f6e05e70cd822ba5da113435be15eef29a3261fd9beb"
+    },
+    "frFR": {
+      "csv_sha256": "ff33e812597a76c0736b70337f17112c4148d4fe3b41aa19f1667e7683f0a14f",
+      "rows": 413875,
+      "groups": 54478,
+      "alias_ids": 275849,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "cc76ec7f600e6f11168f5d37c6375a22dfbab02e2cb44bf87919574739552945"
+    },
+    "esES": {
+      "csv_sha256": "0c1a8f805d9ab3fa81e39b2d278d6b1f9dc81c06255d2d17eb9f0f185aee9a04",
+      "rows": 413875,
+      "groups": 52930,
+      "alias_ids": 271326,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "669f188ca7229ed3bd2a67437083d9040b90e9c539828cce53648c7361864255"
+    },
+    "esMX": {
+      "csv_sha256": "18a4297713b4ae54b8e233cd70cb7ec81038dab35198c3283129f400effd1b98",
+      "rows": 413875,
+      "groups": 54750,
+      "alias_ids": 275654,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "e6c765b76b8434a1a06925a223128cdc81fce36be8f333aeee552d522e5d84bb"
+    },
+    "itIT": {
+      "csv_sha256": "3b30322d006d010a18356cab82bb63c746eb3460de404bd45b5ce3b8295b9922",
+      "rows": 413875,
+      "groups": 53227,
+      "alias_ids": 278979,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "7b45cbf151a436264601a9b186e5ff58bf60d34ca4889f6ab513bca4c4e44dd5"
+    },
+    "ptBR": {
+      "csv_sha256": "f008fb81291e87b9a130d0935f3bd97bf747f9e08ffedfb9efb992d90f67c808",
+      "rows": 413875,
+      "groups": 54192,
+      "alias_ids": 275646,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "7253062fe81f133a81b73fcfba43581df17a947cfc9349508479b947170ad15d"
+    },
+    "ruRU": {
+      "csv_sha256": "23400051614850e13cc16c2a6b875df83408e5eaf50f9c9b3306fb9b98038c93",
+      "rows": 413875,
+      "groups": 52571,
+      "alias_ids": 278771,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "1458194b444f4095bc9c6dc14f60cc98e4a1fc20fcb4a99614b2efff0be1d50e"
+    },
+    "koKR": {
+      "csv_sha256": "0694173f7a1c9a661a404f79801048efcca04d70b9ce302b7bfc078589504c5d",
+      "rows": 413875,
+      "groups": 53527,
+      "alias_ids": 280809,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "3241183c49eee6a3d222de225324518f1c5d5a6d39b35022de723a7db08b07d2"
+    },
+    "zhCN": {
+      "csv_sha256": "7f2e78e019a43c8271716b5f2cefa625b1f20373cf8fa8a7b2120a7de7feb28a",
+      "rows": 413875,
+      "groups": 53472,
+      "alias_ids": 279329,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "72d9ee68eb0dd29a03805e52f36e4f421aae1ceb1499259c6e9813a84a62d993"
+    },
+    "zhTW": {
+      "csv_sha256": "fd23e3a1444ff9f654be1e8a6a43eb1defbb8d86e132ea25f44839717a382f7f",
+      "rows": 413875,
+      "groups": 53770,
+      "alias_ids": 277611,
+      "max_id": 1318608,
+      "hotfixed": false,
+      "db2_sha256": "f47d7b058eb2c6d6fbb7dd6e7815d538692eb9b89f2fee598f1eb6bd4a474ac5"
+    }
+  },
+  "generated": {
+    "MSUF_Auras3_AliasData_Common.lua": {
+      "bytes": 459726,
+      "sha256": "b80d1af994b89ce5e70357c5798981b40bed47e3f2f8ef44b909193ea488d93b"
+    },
+    "MSUF_Auras3_AliasData_enUS.lua": {
+      "bytes": 971792,
+      "sha256": "b3f5269963fd2110485ee6de4b2c5a97aaa091bb4b58ac1a743db79c0d0f831e"
+    },
+    "MSUF_Auras3_AliasData_deDE.lua": {
+      "bytes": 982213,
+      "sha256": "6cf0a2bbc2cba8bdfcc6fb2996c67982bfc8c5930c42b62c9903a331820e2f53"
+    },
+    "MSUF_Auras3_AliasData_frFR.lua": {
+      "bytes": 974721,
+      "sha256": "940e8e141167d50b15862c779bae45590ae1526b2ccff8c0ad64f0dec21a9c2a"
+    },
+    "MSUF_Auras3_AliasData_esES.lua": {
+      "bytes": 950558,
+      "sha256": "5b5b40092bbae9dad70ec56e2f3b0cb9d1d75c9fff760f5eacf10d00143f8eb1"
+    },
+    "MSUF_Auras3_AliasData_esMX.lua": {
+      "bytes": 974018,
+      "sha256": "52f9b75101299df00d476762a74e1bdc8190ddd5a921a3c1590880c5382a6372"
+    },
+    "MSUF_Auras3_AliasData_itIT.lua": {
+      "bytes": 989120,
+      "sha256": "d1e3b821b0c9c970b28a575f160945fa9910d0cb0b05db1c48c4e7530f3d25bd"
+    },
+    "MSUF_Auras3_AliasData_ptBR.lua": {
+      "bytes": 973420,
+      "sha256": "266df655ccfae1acc55a590c64de899e5c8613f1ac32ca330b9da906ddbda293"
+    },
+    "MSUF_Auras3_AliasData_ruRU.lua": {
+      "bytes": 987424,
+      "sha256": "b7f127c0a8c7a715cb2021f33b06d8736a3104afb40885172d2b667a8b36c8d5"
+    },
+    "MSUF_Auras3_AliasData_koKR.lua": {
+      "bytes": 998570,
+      "sha256": "b2ec8d0804d30962b9f16900ec730ec8c0e596f98ab97f4c27305e03f8a649f0"
+    },
+    "MSUF_Auras3_AliasData_zhCN.lua": {
+      "bytes": 991115,
+      "sha256": "0a183a08bc18a11e4691767b9eac3859c0f228baf8c54edd53327e1ac5795b54"
+    },
+    "MSUF_Auras3_AliasData_zhTW.lua": {
+      "bytes": 982823,
+      "sha256": "87487e90685d1641bdfb3fb158dd1d8f19aa96a7128eede168a677b6bc018a09"
+    }
+  },
+  "hotfix_sha256": "7e861cead086462028665029ac45e6fa9b53de69a8586ff3571978a6bdfbfdd3"
+}

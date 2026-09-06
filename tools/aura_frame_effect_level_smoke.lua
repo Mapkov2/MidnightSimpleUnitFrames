@@ -1,3 +1,9 @@
+-- Preserve direct execution after the Auras3 factory split.
+if not _G.MSUF_Auras3TestLoader then
+    _G.MSUF_Auras3TestLoader = assert(loadfile(".github/scripts/auras3_test_loader.lua"))()
+    _G.MSUF_Auras3TestLoader.Install()
+end
+
 -- Regression for GitHub #123: a Full-Frame Aura effect rendered over the Name
 -- text on live Group Frames while the menu preview drew it correctly below.
 --

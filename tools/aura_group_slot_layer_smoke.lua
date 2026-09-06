@@ -1,3 +1,9 @@
+-- Preserve direct execution after the Auras3 factory split.
+if not _G.MSUF_Auras3TestLoader then
+    _G.MSUF_Auras3TestLoader = assert(loadfile(".github/scripts/auras3_test_loader.lua"))()
+    _G.MSUF_Auras3TestLoader.Install()
+end
+
 -- Regression for GitHub #85: fixed one-icon Group Aura lanes share one native
 -- owner, but each AuraSlot must retain its own configured 0..30 Layer.
 --
