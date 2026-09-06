@@ -8,12 +8,50 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "EE3102C27FCA47B1989F052C0D3220103EFFD5DDC2CF4D5428E8D86081B14D91",
-    currentVersion = "6.151",
+    sourceSha256 = "D805F1A3F4A297830365B73F0B57C112469613B643654E8F6E84A3A4A6F587D2",
+    currentVersion = "6.16-beta1",
     historyFromVersion = "6.02",
-    previousVersion = "6.02",
-    rangeLabel = "6.02 -> 6.151",
+    previousVersion = "6.151",
+    rangeLabel = "6.151 -> 6.16-beta1",
     entries = {
+        {
+            version = "6.16-beta1",
+            date = "2026-09-06",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Unit Frames can now appear only while their unit is injured. Enable Show only below 100% health under Unit > Load Conditions to keep a frame transparent at full health while preserving the other configured hide rules.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "show only below 100 health",
+                                label = "Show only below 100% health",
+                                sectionId = "load_conditions",
+                                controlId = "menu2.uf_player.unit.load_condition.loadcondshowwheninjured",
+                                settingKey = "player.loadCondShowWhenInjured",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Rebuilt the Auras3 backend into explicit native runtime, Menu, Edit Mode, and Spell Indicator modules while preserving its public behavior and Blizzard-owned Aura tracking.",
+                        "Custom Aura spell names now use prebuilt locale-specific alias catalogs instead of a live Aura-name resolver, including current localized and hotfixed spell groups.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Target Range Fade now forwards protected in-range results through Blizzard's native boolean-alpha path and retains its spell-range fallback when the native check is unavailable.",
+                        "Health gradients, dynamic backgrounds, and protected health and power text reuse already-read values and specialized writers to reduce duplicate work on frequent unit events.",
+                        "Injured-only visibility uses a secret-safe native health curve and stable visual parents so health bars, predictions, borders, textures, portraits, cast indicators, and Class Resources hide together without changing the clickable secure frame.",
+                        "Scheduler callback errors now retain the original callback stack while continuing to isolate failures and drain queued work.",
+                    },
+                },
+            },
+        },
         {
             version = "6.151",
             date = "2026-09-06",

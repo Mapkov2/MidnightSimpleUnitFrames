@@ -1,5 +1,24 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.16-beta1 - 2026-09-06
+
+### Highlights
+
+- **Unit Frames can now appear only while their unit is injured.** Enable **Show only below 100% health** under Unit > Load Conditions to keep a frame transparent at full health while preserving the other configured hide rules.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"load_conditions","controlId":"menu2.uf_player.unit.load_condition.loadcondshowwheninjured","settingKey":"player.loadCondShowWhenInjured","prepareKind":"","prepareValue":"","query":"show only below 100 health","label":"Show only below 100% health"} -->
+
+### Changes
+
+- Rebuilt the Auras3 backend into explicit native runtime, Menu, Edit Mode, and Spell Indicator modules while preserving its public behavior and Blizzard-owned Aura tracking.
+- Custom Aura spell names now use prebuilt locale-specific alias catalogs instead of a live Aura-name resolver, including current localized and hotfixed spell groups.
+
+### Fixes & Performance
+
+- Target Range Fade now forwards protected in-range results through Blizzard's native boolean-alpha path and retains its spell-range fallback when the native check is unavailable.
+- Health gradients, dynamic backgrounds, and protected health and power text reuse already-read values and specialized writers to reduce duplicate work on frequent unit events.
+- Injured-only visibility uses a secret-safe native health curve and stable visual parents so health bars, predictions, borders, textures, portraits, cast indicators, and Class Resources hide together without changing the clickable secure frame.
+- Scheduler callback errors now retain the original callback stack while continuing to isolate failures and drain queued work.
+
 ## 6.151 - 2026-09-06
 
 ### Highlights

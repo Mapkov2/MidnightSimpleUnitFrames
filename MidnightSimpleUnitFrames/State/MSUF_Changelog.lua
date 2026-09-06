@@ -8,12 +8,50 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "EE3102C27FCA47B1989F052C0D3220103EFFD5DDC2CF4D5428E8D86081B14D91",
-    currentVersion = "6.151",
-    historyFromVersion = "6.15-beta6",
-    previousVersion = "6.15-beta6",
-    rangeLabel = "6.15-beta6 -> 6.151",
+    sourceSha256 = "D805F1A3F4A297830365B73F0B57C112469613B643654E8F6E84A3A4A6F587D2",
+    currentVersion = "6.16-beta1",
+    historyFromVersion = "6.15-beta7",
+    previousVersion = "6.151",
+    rangeLabel = "6.151 -> 6.16-beta1",
     entries = {
+        {
+            version = "6.16-beta1",
+            date = "2026-09-06",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Unit Frames can now appear only while their unit is injured. Enable Show only below 100% health under Unit > Load Conditions to keep a frame transparent at full health while preserving the other configured hide rules.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "show only below 100 health",
+                                label = "Show only below 100% health",
+                                sectionId = "load_conditions",
+                                controlId = "menu2.uf_player.unit.load_condition.loadcondshowwheninjured",
+                                settingKey = "player.loadCondShowWhenInjured",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Rebuilt the Auras3 backend into explicit native runtime, Menu, Edit Mode, and Spell Indicator modules while preserving its public behavior and Blizzard-owned Aura tracking.",
+                        "Custom Aura spell names now use prebuilt locale-specific alias catalogs instead of a live Aura-name resolver, including current localized and hotfixed spell groups.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Target Range Fade now forwards protected in-range results through Blizzard's native boolean-alpha path and retains its spell-range fallback when the native check is unavailable.",
+                        "Health gradients, dynamic backgrounds, and protected health and power text reuse already-read values and specialized writers to reduce duplicate work on frequent unit events.",
+                        "Injured-only visibility uses a secret-safe native health curve and stable visual parents so health bars, predictions, borders, textures, portraits, cast indicators, and Class Resources hide together without changing the clickable secure frame.",
+                        "Scheduler callback errors now retain the original callback stack while continuing to isolate failures and drain queued work.",
+                    },
+                },
+            },
+        },
         {
             version = "6.151",
             date = "2026-09-06",
@@ -132,69 +170,6 @@ local data = {
                         "Unresolved Aura fallback scans no longer resynchronize an unchanged active-work state, while later Aura discovery, owner reactivation, and unregister cleanup remain intact.",
                         "Group death-background updates skip cache probes that cannot be reused outside an active frame dispatch while retaining fresh native death and resurrection checks.",
                         "Range Fade keeps an earlier timer when its logical deadline moves later, reducing timer replacement churn without moving range checks or alpha changes forward.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.15-beta6",
-            date = "2026-09-04",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Absorbs and heal prediction can now stay visible when the health bar is faded into the background. Enable Keep Absorbs + Prediction Visible per Unit Frame or for Party and Raid Frames to keep these overlays at full opacity independently from the health fill.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "keep absorbs prediction visible",
-                                label = "Keep Absorbs + Prediction Visible",
-                                sectionId = "transparency",
-                                controlId = "menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars",
-                                settingKey = "player.alphaExcludePredictionBars",
-                            },
-                        },
-                        {
-                            text = "Raid and Mythic Raid role sorting can now span the entire raid. Enable Sort roles across entire raid under Group Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "sort roles across entire raid",
-                                label = "Sort roles across entire raid",
-                                sectionId = "sorting",
-                                controlId = "menu2.gf_layout.group.field.sortrolesacrossraid",
-                                settingKey = "gf_raid.sortRolesAcrossRaid",
-                                prepareKind = "groupScope",
-                                prepareValue = "raid",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added Keep Absorbs + Prediction Visible to Unit Frames and Party/Raid Frames, including profile copy, defaults, previews, search, and Assistant support.",
-                        "Added Sort roles across entire raid for Raid and Mythic Raid Frames, including defaults, profile copy, locales, search, and Assistant support. Role sorting can now span the full raid with Preserve raid groups or Group + Role, while Party remains unchanged.",
-                        "The Boss Preview now displays incoming heals, absorbs, heal absorbs, and absorb text so prediction settings can be reviewed without a live boss.",
-                        "The Assistant now understands plain-language requests about a specific Unit Frame and resolves questions, hide commands, movement directions, and opacity controls against the named frame and control.",
-                        "Retired pre-6.0 profile conversion and import controls. Existing MSUF 6.x profiles and 6.x Wago imports remain supported; older or unversioned stored profiles are archived instead of entering the active profile list.",
-                        "See New Features can now open the exact Player Aura workspace used by the current Aura highlight.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview now preserve the configured health and prediction opacity instead of resetting prediction fills to full or faded health opacity.",
-                        "Assistant requests for Out of range opacity, Texture Layer opacity, and Portrait opacity now update their own controls instead of changing health-bar opacity.",
-                        "Detached Player Power bars attached or width-synced to Class Resources retain their controller-managed anchor while the Class Resource bar is hidden, preventing position and width jumps after shapeshifting.",
-                        "Text on detached bar now controls only Power-text placement. It no longer appears disabled merely because Power text is hidden and no longer enables Show power text by itself.",
-                        "Aura owners that cannot be visible for the current unit stop parsing UNIT_AURA; their native registration and unresolved-name work resume only when the owner becomes eligible again.",
-                        "Cleanse and Purge borders now use the same Frame Outline layer as their preview, Unit Frame dispel borders follow Blizzard's assist rules, and Purge, cast-by-me, and Retail exact-ID Group Aura ownership retain their intended behavior.",
-                        "Group Frame dead and offline backgrounds now follow secret health updates without lagging behind the unit's real state.",
-                        "Preserved raid groups build and sort one authoritative roster snapshot per secure-header setup. Their rendered block count now follows the same roster, preventing the filled and displayed grids from disagreeing when more subgroups are present than the configured column limit.",
-                        "The Group Layout Sorting card now aligns its Sort Mode dropdown and dependent toggles consistently.",
-                        "Interrupted full Aura refreshes arm their recovery before synchronous work and can no longer leave later refreshes stuck as pending after a Lua execution-budget abort.",
-                        "Aura recovery remains inside the native factory runtime and preserves the Retail 12.1 hook contracts across refreshes, preventing Aura displays from remaining empty after an interrupted update.",
-                        "Class Resource previews can schedule refreshes again after Menu lifecycle cancellation, so movement and position controls continue updating after settings changes.",
                     },
                 },
             },
