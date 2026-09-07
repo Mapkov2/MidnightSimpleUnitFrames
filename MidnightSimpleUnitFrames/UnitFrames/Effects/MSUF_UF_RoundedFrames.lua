@@ -581,7 +581,7 @@ local function EnsureRoundedHoverContainer(owner, parent, key)
   local container = owner[key]
   if not container then
     if not (CreateFrame and CanCreateRoundedRegion(container)) then return nil end
-    container = CreateFrame("Frame", nil, parent)
+    container = CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent)
     container:SetAllPoints(parent)
     if container.EnableMouse then container:EnableMouse(false) end
     container:Hide()
@@ -626,7 +626,7 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
     local edge = (i == 1) and baseEdge or stack[i]
     if not edge then
       if not CanCreateRoundedRegion(edge) then return false end
-      edge = parent:CreateTexture(nil, layer, nil, subLevel or 0)
+      edge = (parent._msufHealthVisualRoot or parent):CreateTexture(nil, layer, nil, subLevel or 0)
       SE_SnapOff(edge)
       stack[i] = edge
     end
@@ -916,7 +916,7 @@ local function ApplyUnitRoundedEdge(f, enabled, active, activeThickness)
   local thickness = ResolveUnitEdgeThickness(f, active, activeThickness)
   if not edge then
     if not CanCreateRoundedRegion(edge) then return end
-    edge = f:CreateTexture(nil, "BACKGROUND", nil, -7)
+    edge = (f._msufHealthVisualRoot or f):CreateTexture(nil, "BACKGROUND", nil, -7)
     SE_SnapOff(edge)
     f._msufRUF_Edge = edge
   end
@@ -1219,7 +1219,7 @@ ApplyGroupRoundedEdge = function(f, enabled)
   local active = f._msufGFHighlightBorder and f._msufGFHighlightBorder._msufHLActivePrio
   if not edge then
     if not CanCreateRoundedRegion(edge) then return end
-    edge = parent:CreateTexture(nil, "BACKGROUND", nil, -8)
+    edge = (parent._msufHealthVisualRoot or parent):CreateTexture(nil, "BACKGROUND", nil, -8)
     SE_SnapOff(edge)
     f._msufRGF_Edge = edge
   end
@@ -1295,7 +1295,7 @@ local function ApplyGroupRoundedIndicator(f, kind, enabled, shown, thickness, r,
   local parent = f.barGroup or f
   if not edge then
     if not CanCreateRoundedRegion(edge) then return false end
-    edge = parent:CreateTexture(nil, "OVERLAY", nil, kind == "target" and 7 or 6)
+    edge = (parent._msufHealthVisualRoot or parent):CreateTexture(nil, "OVERLAY", nil, kind == "target" and 7 or 6)
     SE_SnapOff(edge)
     f[edgeKey] = edge
   end
@@ -1453,7 +1453,7 @@ local function ApplySpellIndicatorRoundedEdge(button, frame, target, shown, thic
   local edge = button._msufRUFSpellIndicatorEdge
   if not edge then
     if not CanCreateRoundedRegion(edge) then return false end
-    edge = root:CreateTexture(nil, "OVERLAY")
+    edge = (root._msufHealthVisualRoot or root):CreateTexture(nil, "OVERLAY")
     SE_SnapOff(edge)
     button._msufRUFSpellIndicatorEdge = edge
   end
@@ -1567,7 +1567,7 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
       SetModernBorderEdgesSuppressed(f, false)
       return false
     end
-    edge = parent:CreateTexture(nil, layer, nil, subLevel)
+    edge = (parent._msufHealthVisualRoot or parent):CreateTexture(nil, layer, nil, subLevel)
     SE_SnapOff(edge)
     f[edgeKey] = edge
   end
@@ -1832,7 +1832,7 @@ local function PrepareFrozenDispelBorder(f, owner, thickness)
   local anchor = FrameIsGroup(f) and (f.barGroup or f) or f
   local regions = {}
   for i = 1, ClampEdgeSize(thickness, 1, MAX_HIGHLIGHT_BORDER_THICKNESS) do
-    local edge = owner:CreateTexture(nil, "OVERLAY")
+    local edge = (owner._msufHealthVisualRoot or owner):CreateTexture(nil, "OVERLAY")
     SE_SnapOff(edge)
     SetRoundedEdgeTexture(edge, roundedEdgePath)
     LayoutRoundedEdge(edge, anchor, i, i)

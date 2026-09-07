@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$auraTestDriver = Join-Path $PSScriptRoot "../.github/scripts/auras3_test_driver.lua"
 $root = (git rev-parse --show-toplevel).Trim()
 $rootFull = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
 
@@ -940,42 +941,44 @@ $lua = Get-Command lua -ErrorAction SilentlyContinue
 if ($lua) {
     $smoke = Join-Path $root "tools/tests/classic_client_bootstrap_smoke.lua"
     foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
-        & $lua.Source $smoke $flavor ($root -replace '\\', '/')
+        & $lua.Source $auraTestDriver $smoke $flavor ($root -replace '\\', '/')
         if ($LASTEXITCODE -ne 0) { throw "Client bootstrap smoke failed: $flavor" }
     }
     $classicProfilePolicySmoke = Join-Path $root "tools/tests/classic_profile_60_only_smoke.lua"
-    & $lua.Source $classicProfilePolicySmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicProfilePolicySmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic 6.0-only profile policy smoke failed" }
     $classResourceSmoke = Join-Path $root "tools/tests/classic_class_resources_smoke.lua"
-    & $lua.Source $classResourceSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classResourceSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic class-resource ownership smoke failed" }
     $classPowerProviderSmoke = Join-Path $root "tools/tests/classic_classpower_provider_smoke.lua"
-    & $lua.Source $classPowerProviderSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classPowerProviderSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Client ClassPower provider smoke failed" }
     $classicCastbarSmoke = Join-Path $root "tools/tests/classic_castbar_engine_smoke.lua"
-    & $lua.Source $classicCastbarSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicCastbarSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic castbar engine smoke failed" }
+    & $lua.Source $auraTestDriver (Join-Path $root "tools/tests/classic_transition_regression_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Classic transition regression failed" }
     $classicCastbarVisualSmoke = Join-Path $root "tools/tests/classic_castbar_visual_compat_smoke.lua"
-    & $lua.Source $classicCastbarVisualSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicCastbarVisualSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic castbar visual compatibility smoke failed" }
     $ptr1215RuntimeSmoke = Join-Path $root ".github/scripts/ptr_12_1_5_runtime_smoke.lua"
-    & $lua.Source $ptr1215RuntimeSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $ptr1215RuntimeSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "PTR 12.1.5 runtime smoke failed" }
     $retail1210FallbackSmoke = Join-Path $root ".github/scripts/retail_12_1_0_fallback_smoke.lua"
-    & $lua.Source $retail1210FallbackSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $retail1210FallbackSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Retail 12.1.0 fallback smoke failed" }
     $roundedHighlightSmoke = Join-Path $root ".github/scripts/rounded_border_highlight_smoke.lua"
-    & $lua.Source $roundedHighlightSmoke
+    & $lua.Source $auraTestDriver $roundedHighlightSmoke
     if ($LASTEXITCODE -ne 0) { throw "Rounded border highlight startup smoke failed" }
-    & $lua.Source $roundedHighlightSmoke --startup-disabled
+    & $lua.Source $auraTestDriver $roundedHighlightSmoke --startup-disabled
     if ($LASTEXITCODE -ne 0) { throw "Rounded border highlight enable smoke failed" }
-    & $lua.Source (Join-Path $root ".github/scripts/rounded_forbidden_mask_owner_smoke.lua")
+    & $lua.Source $auraTestDriver (Join-Path $root ".github/scripts/rounded_forbidden_mask_owner_smoke.lua")
     if ($LASTEXITCODE -ne 0) { throw "Rounded native aura ownership smoke failed" }
     $castbarOwnershipSmoke = Join-Path $root "tools/castbar_refresh_ownership_smoke.lua"
-    & $lua.Source $castbarOwnershipSmoke
+    & $lua.Source $auraTestDriver $castbarOwnershipSmoke
     if ($LASTEXITCODE -ne 0) { throw "Shared castbar refresh ownership smoke failed" }
     $auraFontFanoutSmoke = Join-Path $root "tools/aura_font_fanout_smoke.lua"
-    & $lua.Source $auraFontFanoutSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $auraFontFanoutSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Shared aura font fanout smoke failed" }
     foreach ($arenaSmoke in @(
         "tools/arena_unit_scope_smoke.lua",
@@ -987,14 +990,14 @@ if ($lua) {
         ".github/scripts/arena_postbase_integration_smoke.lua",
         ".github/scripts/arena_restoration_gaps_smoke.lua"
     )) {
-        & $lua.Source (Join-Path $root $arenaSmoke)
+        & $lua.Source $auraTestDriver (Join-Path $root $arenaSmoke)
         if ($LASTEXITCODE -ne 0) { throw "Arena frame regression smoke failed: $arenaSmoke" }
     }
     $nicknameProviderSmoke = Join-Path $root "tools/nickname_provider_api_smoke.lua"
-    & $lua.Source $nicknameProviderSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $nicknameProviderSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic nickname provider API smoke failed" }
     $eliteClassificationSmoke = Join-Path $root ".github/scripts/tests/elite_indicator_classification_smoke.lua"
-    & $lua.Source $eliteClassificationSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $eliteClassificationSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Elite indicator classification smoke failed" }
     foreach ($v604Smoke in @(
         "tools/aura_big_defensive_filter_smoke.lua",
@@ -1002,42 +1005,42 @@ if ($lua) {
         "tools/group_preview_roster_handoff_smoke.lua",
         "tools/unit_name_anchor_reflow_smoke.lua"
     )) {
-        & $lua.Source (Join-Path $root $v604Smoke)
+        & $lua.Source $auraTestDriver (Join-Path $root $v604Smoke)
         if ($LASTEXITCODE -ne 0) { throw "v6.04 parity smoke failed: $v604Smoke" }
     }
     $classicPredictionSmoke = Join-Path $root "tools/tests/classic_prediction_contract_smoke.lua"
-    & $lua.Source $classicPredictionSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicPredictionSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic prediction contract smoke failed" }
     $classicAuraSmoke = Join-Path $root "tools/tests/classic_aura_backend_smoke.lua"
-    & $lua.Source $classicAuraSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicAuraSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura backend smoke failed" }
     $classicAuraMenuFilterSmoke = Join-Path $root "tools/tests/classic_aura_menu_filters_smoke.lua"
-    & $lua.Source $classicAuraMenuFilterSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicAuraMenuFilterSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Aura menu filter smoke failed" }
     $classicAuraFeatureSmoke = Join-Path $root "tools/tests/classic_aura_features_smoke.lua"
-    & $lua.Source $classicAuraFeatureSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicAuraFeatureSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura feature compiler smoke failed" }
     $classicGroupDataSmoke = Join-Path $root "tools/tests/classic_group_indicator_data_smoke.lua"
-    & $lua.Source $classicGroupDataSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicGroupDataSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic group indicator data smoke failed" }
     $classicRaidManagerSmoke = Join-Path $root "tools/tests/classic_raid_manager_mode_smoke.lua"
-    & $lua.Source $classicRaidManagerSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicRaidManagerSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Raid Manager mode smoke failed" }
     $classicPetHappinessSmoke = Join-Path $root "tools/tests/classic_pet_happiness_smoke.lua"
-    & $lua.Source $classicPetHappinessSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicPetHappinessSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Pet Happiness smoke failed" }
     $classicEditModeSmoke = Join-Path $root "tools/tests/classic_editmode_smoke.lua"
-    & $lua.Source $classicEditModeSmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicEditModeSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Edit Mode smoke failed" }
     $classicMenuParitySmoke = Join-Path $root "tools/tests/classic_menu_retail_parity_smoke.lua"
-    & $lua.Source $classicMenuParitySmoke ($root -replace '\\', '/')
+    & $lua.Source $auraTestDriver $classicMenuParitySmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Menu2 Retail parity smoke failed" }
     $classicAuraRenderSmoke = Join-Path $root "tools/tests/classic_aura_render_smoke.lua"
     $classicAuraBackend = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"
     $classicAuraFeatures = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
     $classicAuraVisuals = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua"
     $classicAuraCore = Join-Path $root "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"
-    & $lua.Source $classicAuraRenderSmoke ($root -replace '\\', '/') `
+    & $lua.Source $auraTestDriver $classicAuraRenderSmoke ($root -replace '\\', '/') `
         ($classicAuraBackend -replace '\\', '/') ($classicAuraFeatures -replace '\\', '/') `
         ($classicAuraCore -replace '\\', '/') ($classicAuraVisuals -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura live-render smoke failed" }

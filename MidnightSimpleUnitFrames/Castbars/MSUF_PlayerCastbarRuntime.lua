@@ -504,6 +504,9 @@ local function InvalidatePlayerInterruptHide(frame)
     frame._msufHideToken = (frame._msufHideToken or 0) + 1
     frame._msufPlayerInterruptHideToken = nil
     frame._msufPlayerInterruptHideDeadline = nil
+    -- Cancellation removes the callback that would otherwise clear this flag.
+    -- A following cast/interrupt must be able to schedule its own hide.
+    frame._msufPlayerInterruptHidePending = nil
     if frame._msufPlayerInterruptHideCB and type(CancelScheduled) == "function" then
         CancelScheduled(frame._msufPlayerInterruptHideCB)
     end

@@ -1234,7 +1234,7 @@ local BARS_GENERAL_KEYS = KSW [[
     healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     enableAbsorbBar absorbTextMode absorbAnchorMode absorbBarHeight absorbBarOffsetY absorbBarOpacity
     healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY healAbsorbBarOpacity
-    overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger bossTargetOutlineMode
+    overAbsorbOverlay fullHealthAbsorbStripe absorbBarTexture healAbsorbBarTexture dispelBorderTrigger dispelBorderShowOn bossTargetOutlineMode
     bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover barOutlineColorR barOutlineColorG
     barOutlineColorB barOutlineColorA healthLossColorR healthLossColorG healthLossColorB powerLossColorR powerLossColorG powerLossColorB
@@ -1244,7 +1244,7 @@ local BARS_SCOPE_KEYS = KSW [[
     absorbBarHeight absorbBarOffsetY healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY
     healPredEnabled healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
-    aggroOutlineMode dispelOutlineMode dispelBorderTrigger
+    aggroOutlineMode dispelOutlineMode dispelBorderTrigger dispelBorderShowOn
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA

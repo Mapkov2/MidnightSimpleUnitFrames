@@ -8,12 +8,64 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9B877D9912A7502D3A5F50A31354FEA52FBFEA078D7043F1C7C5AAE1F4AA2F90",
-    currentVersion = "6.5-alpha12",
-    historyFromVersion = "6.5-alpha9",
-    previousVersion = "6.5-alpha11",
-    rangeLabel = "6.5-alpha11 -> 6.5-alpha12",
+    sourceSha256 = "9547E84A33DEFA2F14559D36141DBEAF0A9721015703E21C4E9B5600F480FBBF",
+    currentVersion = "6.5-alpha13",
+    historyFromVersion = "6.5-alpha10",
+    previousVersion = "6.5-alpha12",
+    rangeLabel = "6.5-alpha12 -> 6.5-alpha13",
     entries = {
+        {
+            version = "6.5-alpha13",
+            date = "2026-09-08",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Interrupted cast feedback clears again after rapidly starting and interrupting another cast. The configured feedback duration is preserved.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "interrupt display duration",
+                                label = "Interrupt display duration (sec)",
+                                sectionId = "castbar_behavior",
+                                controlId = "menu2.opt.castbar.global.behavior.castbar.interrupt.feedback.duration",
+                                settingKey = "general.castbarInterruptFeedbackDuration",
+                            },
+                        },
+                        {
+                            text = "Health rendering and text updates include the latest Retail refactors. Health gradients, backgrounds, and percentage text share sampled values and avoid redundant work.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "health gradient",
+                                label = "Health Gradient",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
+                                settingKey = "general.enableHealthGradient",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Includes the complete Retail 6.16-beta1 update and the subsequent performance passes through Retail commit 0e2bb191.",
+                        "Auras3 now uses separate runtime, configuration, Menu, Edit Mode, and Spell Indicator modules. Existing Arena behavior and Classic-specific Aura backends are preserved.",
+                        "Includes the localized Aura alias catalogs, injured-only Unit Frame visibility, Target Range Fade fixes, visual parenting, and updated Assistant controls.",
+                        "Includes subsequent health-background, group-health percentage, text-drain, Aura identity, castbar ownership, Texture Layer, Aura menu, and status-preview fixes.",
+                        "Retains Mainline 12.0.7/12.1.0/12.1.5, Vanilla 1.15.9, TBC 2.5.6, and Mists 5.5.4 support.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Raid and Party Frames refresh their current health and status when entering the world, including after accepting a summon with unchanged raid slots. This addresses frames remaining black until a reload or later unit event.",
+                        "Cancelling pending player interrupt feedback clears its pending state, allowing the next interruption to hide normally.",
+                        "The Classic delayed scheduler uses the refactored callback error handler while retaining keyed cancellation and replacement.",
+                        "Classic Aura Edit Mode and Menu load the new shared factories in their required order.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha12",
             date = "2026-09-06",
@@ -160,45 +212,6 @@ local data = {
                         "Group Frame dead and offline backgrounds follow secret health updates, and preserved raid groups build and sort from one authoritative roster snapshot per secure-header setup.",
                         "Interrupted full Aura refreshes arm recovery before synchronous work, retain the Retail 12.1.5 native contracts, and no longer leave later refreshes pending.",
                         "Class Resource previews can schedule refreshes again after Menu lifecycle cancellation.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-alpha9",
-            date = "2026-09-04",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "The unified Alpha now carries the current Retail 12.1.5 Aura path. Its Mainline flavor keeps the newer native Aura contracts while the Vanilla, TBC and Mists flavors retain their client-owned fallbacks.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "player buff aura layout visible",
-                                label = "Player Auras",
-                                sectionId = "auras",
-                                controlId = "menu2.uf_player.auras.unit-workspace.container-selector",
-                                settingKey = "auras3.player.buff.visible",
-                                prepareKind = "unitAuraWorkspace",
-                                prepareValue = "buff_layout",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "CurseForge now presents this Alpha for Retail 12.1.5 together with Vanilla 1.15.9, TBC 2.5.6 and Mists 5.5.4; Retail 12.1.0 remains on the separate Beta track.",
-                        "Synchronized the current Class Resource preview-recovery fix while retaining the client-owned resource implementations for Vanilla, TBC and Mists.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Native Aura hook recovery stays inside the factory-owned runtime, preserving the 12.1 contract floor without reintroducing the missing-global Aura failure.",
-                        "Class Resource previews reacquire their current controls after a Menu rebuild, so preview movement continues to work after settings change.",
-                        "Extended the Aura and Menu interaction smokes for the synchronized Retail paths.",
                     },
                 },
             },

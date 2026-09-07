@@ -6,7 +6,20 @@
   <Script file="..\Classic\Auras\MSUF_Auras3_Visuals.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_Features.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_UnitFrames.lua"/>
+  <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Config.lua"/>
+  <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Layout.lua"/>
+  <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Drag.lua"/>
+  <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Preview.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_EditMode.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_Schema.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_Common.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_Storage.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_Presets.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_GroupFilters.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_Appearance.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_Containers.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_CustomSpells.lua"/>
+  <Script file="..\..\Auras3\MenuModel\MSUF_Auras3_Menu_Filters.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_Menu_Model.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_Menu_Compat.lua"/>
 </Ui>

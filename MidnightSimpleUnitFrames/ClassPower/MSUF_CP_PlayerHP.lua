@@ -557,7 +557,7 @@ builders.PLAYER_HP = function(E)
         if PHP.frame then return true end
         if not playerFrame then return false end
 
-        local f = CreateFrame("Frame", "MSUF_ClassPowerPlayerHealthBar", playerFrame)
+        local f = CreateFrame("Frame", "MSUF_ClassPowerPlayerHealthBar", playerFrame._msufHealthVisualRoot or playerFrame)
         f:Hide()
         PHP.frame = f
 

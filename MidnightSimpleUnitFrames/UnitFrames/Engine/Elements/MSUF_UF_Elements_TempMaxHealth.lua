@@ -92,7 +92,7 @@ function TempMaxHealth.Create(frame, spec)
   local hpBar = frame.hpBar or frame.Health
   if not hpBar then return end
 
-  local bar = CreateFrame("StatusBar", nil, frame)
+  local bar = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
   bar:SetMinMaxValues(0, 1)
   bar:SetValue(0)
   bar:SetStatusBarTexture(WHITE)

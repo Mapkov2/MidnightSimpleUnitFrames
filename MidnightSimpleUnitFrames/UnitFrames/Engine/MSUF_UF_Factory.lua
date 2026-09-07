@@ -1048,6 +1048,7 @@ local function SpawnFrame(unit)
   EnsureRuntimeOnShow(frame)
   EnsureMouseoverHooks(frame)
   SetSecureUnitAttributes(frame, unit)
+  if UF.EnsureHealthVisualRoot then UF.EnsureHealthVisualRoot(frame) end
   frame.Enable = function(self)
     if RegisterUnitWatch then RegisterUnitWatch(self) end
     if self.Show then self:Show() end

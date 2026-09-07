@@ -715,7 +715,7 @@ function Power.Create(frame, spec)
   local snapshotCount = frame.MSUFUnitKey == "player" and 12 or 1
   local createTrail = CreateLossTrailPool or CreateLossTrail
   local trail = createTrail and createTrail(frame, (spec and spec.texture) or WHITE, 0, snapshotCount) or nil
-  local bar = CreateFrame("StatusBar", nil, frame)
+  local bar = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
   bar:SetMinMaxValues(0, 100)
   bar:SetValue(0)
   bar:SetStatusBarTexture((spec and spec.texture) or WHITE)
@@ -741,7 +741,7 @@ function Power.Create(frame, spec)
 
   -- Keep the background below the sibling loss trail. Anchoring still follows
   -- the StatusBar for embedded and detached geometry.
-  local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -1)
+  local bg = (frame._msufHealthVisualRoot or frame):CreateTexture(nil, "BACKGROUND", nil, -1)
   bg:SetAllPoints(bar)
   bg:SetColorTexture(0, 0, 0, spec and spec.backgroundAlpha or 0.72)
   frame.powerBarBG = bg

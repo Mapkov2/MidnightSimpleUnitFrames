@@ -79,6 +79,7 @@ function A.DiagnosticsRegistry.BuildFrameDiagnostics(ctx)
         { key = "loadCondHideResting", label = "Hide Resting" },
         { key = "loadCondHideSolo", label = "Hide Solo" },
         { key = "loadCondHideStealthed", label = "Hide Stealthed" },
+        { key = "loadCondShowWhenInjured", label = "Show Only When Injured" },
     }
 
     local function UnitFrameDiagnosticText(unit)

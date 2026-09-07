@@ -523,7 +523,8 @@ local function EnsurePortrait(frame)
     return holder, frame.portrait
   end
 
-  holder = CreateFrame("Frame", nil, frame)
+  holder = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
+  holder._msufUnitFrameOwner = frame
   holder:EnableMouse(false)
   frame.MSUFPortraitHolder = holder
   if frame.HookScript and not frame._msufPortraitOnShowHooked then

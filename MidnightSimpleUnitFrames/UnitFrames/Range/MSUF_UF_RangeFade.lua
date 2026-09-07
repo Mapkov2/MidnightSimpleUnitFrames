@@ -309,8 +309,17 @@ local function FrameRangeActive(frame)
     and _G.MSUF_UnitEditModeActive ~= true
 end
 
-local function ApplyMul(frame, inRange, force)
+local function ApplyMul(frame, inRange, force, checkedRange, fallbackInRange)
   if not frame then return false end
+  if issecretvalue(inRange) == true or issecretvalue(checkedRange) == true then
+    -- Keep protected range values out of the numeric multiplier/cache path.
+    frame._msufRangeInRange = nil
+    frame._msufRangeMulApplied = nil
+    if UF.ApplyRangeBoolean then
+      return UF.ApplyRangeBoolean(frame, inRange, checkedRange, force, fallbackInRange)
+    end
+    return false
+  end
   local mul = inRange == false and frame._msufRangeOutAlpha or 1
   if force ~= true and frame._msufRangeInRange == inRange and frame._msufRangeMulApplied == mul then
     return true
@@ -400,10 +409,23 @@ local function DirectRange(unit)
   return nil
 end
 
+local function TargetUnitRange()
+  if not UnitInRange then return nil, false end
+  local inRange, checked = UnitInRange("target")
+  -- Preserve both protected booleans. The native alpha writer also handles
+  -- checkedRange=false without Lua branching on its protected value.
+  if issecretvalue(checked) == true then return inRange, checked end
+  if checked == true or checked == 1 then return inRange, true end
+  return nil, false
+end
+
 local function TargetRange(existsKnown)
   if existsKnown ~= true and not UnitExistsPlain("target") then return nil end
-  local inRange, checked = UnitInRangeChecked("target")
-  if checked then return inRange end
+  local inRange, checked = TargetUnitRange()
+  if issecretvalue(checked) == true then
+    return inRange, checked, targetChecked <= 0 or targetInRange > 0
+  end
+  if checked then return inRange, checked end
   if targetChecked > 0 then return targetInRange > 0 end
   local frame = FrameForUnit("target")
   return frame and frame._msufRangeInRange
@@ -422,7 +444,8 @@ local function EvaluateUnit(unit, force, existsKnown)
     ClearUnit(unit, force)
     return false
   end
-  ApplyMul(frame, UnitRange(unit, existsKnown), force)
+  local inRange, checked, fallback = UnitRange(unit, existsKnown)
+  ApplyMul(frame, inRange, force, checked, fallback)
   return true
 end
 
@@ -570,9 +593,10 @@ TargetRefresh = function(force, preparedFrame)
     return false
   end
 
-  local inRange, checked = UnitInRangeChecked("target")
-  if checked then
-    ApplyMul(frame, inRange, force)
+  local inRange, checked = TargetUnitRange()
+  local checkedSecret = issecretvalue(checked) == true
+  if not checkedSecret and checked then
+    ApplyMul(frame, inRange, force, checked)
     return true
   end
 
@@ -583,6 +607,10 @@ TargetRefresh = function(force, preparedFrame)
         TargetSetState(spellID, result)
       end
     end
+  end
+  if checkedSecret then
+    ApplyMul(frame, inRange, force, checked, targetChecked <= 0 or targetInRange > 0)
+    return true
   end
   if targetChecked > 0 then
     ApplyMul(frame, targetInRange > 0, force)
@@ -602,6 +630,11 @@ local function ApplyTargetRegisteredRange(force)
     TargetClearStates()
     ApplyMul(frame, nil, force)
     return false
+  end
+  -- Native checkedRange selects the group range or the spell fallback. Update
+  -- only the fallback here; do not overwrite native data or re-query the unit.
+  if frame._msufRangeBooleanActive == true and UF.UpdateRangeBooleanFallback then
+    return UF.UpdateRangeBooleanFallback(frame, targetChecked <= 0 or targetInRange > 0, force)
   end
   if targetChecked > 0 then
     ApplyMul(frame, targetInRange > 0, force)
@@ -1072,6 +1105,35 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   if event == "SPELL_RANGE_CHECK_UPDATE" then
     OnTargetSpellRange(unit, a, b)
     return
+  elseif event == "UNIT_IN_RANGE_UPDATE" then
+    -- RegisterUnitEvent already matched this driver's small unit block. Its
+    -- payload may name the backing party/raid token, or be entirely secret.
+    -- The target-only route does not rebuild poll/spell registrations. Keep
+    -- the existing reconciliation for other units sharing a driver block.
+    if issecretvalue(unit) == true then
+      if activeUnits.target and source and source._msufRangeUnitFirst == 1
+        and source._msufRangeUnitLast == 1 then
+        EvaluateUnit("target", false)
+        return
+      end
+      MarkPollSetDirty()
+      EvaluateDriverUnitChunk(source, true)
+      RebuildPollSet()
+      return
+    end
+    -- Target is first in BuildDriverUnitLists when active. Re-query its plain
+    -- alias even when Blizzard reports a backing group token in the payload.
+    if activeUnits.target and source and source._msufRangeUnitFirst == 1 then
+      EvaluateUnit("target", false)
+    end
+    if unit and unit ~= "target" and activeUnits[unit] then
+      MarkPollSetDirty()
+      if not ApplyUnitInRangeEvent(unit, a) then
+        EvaluateUnit(unit, true)
+        RebuildPollSet()
+      end
+    end
+    return
   elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
     QueueBossLifecycleRange()
     return
@@ -1086,7 +1148,7 @@ local function DriverOnEvent(source, event, unit, a, b, c)
     return
   end
 
-  if unit and issecretvalue(unit) == true then
+  if issecretvalue(unit) == true then
     -- Restricted encounters can make UNIT_IN_RANGE_UPDATE's unit payload
     -- secret. RegisterUnitEvent already filtered the event to this driver's
     -- small unit block, so re-evaluate only that block with plain unit tokens.

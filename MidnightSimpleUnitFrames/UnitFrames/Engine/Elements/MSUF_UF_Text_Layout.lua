@@ -730,7 +730,7 @@ end
 local function EnsureTextOverlay(frame, field, layer, fallback)
   local overlay = frame[field]
   if not overlay then
-    overlay = CreateFrame("Frame", nil, frame)
+    overlay = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
     overlay:SetAllPoints(frame)
     overlay:EnableMouse(false)
     if overlay.SetClipsChildren then

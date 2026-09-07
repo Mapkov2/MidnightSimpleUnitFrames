@@ -138,7 +138,7 @@ assert(not has(flushBody, "directIdentityEventTopologyBatchDepth"),
     "refresh recovery reads the NativeRuntime-private topology depth")
 assert(has(runtime, "DrainDirectIdentityEventTopologyBatch = DrainDirectIdentityEventTopologyBatch"),
     "NativeRuntime does not export its topology recovery helper")
-assert(has(runtime, "local DrainDirectIdentityEventTopologyBatch = NativeRuntime.DrainDirectIdentityEventTopologyBatch"),
+assert(has(runtime, "local DrainDirectIdentityEventTopologyBatch = dependencies.IdentityEvents.DrainDirectIdentityEventTopologyBatch"),
     "public Aura orchestration does not retain the topology recovery helper")
 local topologyStart = assert(runtime:find("local directIdentityRefreshEventFrame", 1, true))
 local topologyStop = assert(runtime:find("local function DirectIdentityRefreshEventsAlreadyCover", topologyStart, true))

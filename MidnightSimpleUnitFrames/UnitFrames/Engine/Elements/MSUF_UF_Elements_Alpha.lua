@@ -21,6 +21,24 @@ local SetFrameAlpha = V.SetFrameAlpha
 local SetAlphaCached = V.SetAlphaCached
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
+local issecretvalue = _G.issecretvalue or function() return false end
+local EvaluateColorValueFromBoolean = _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorValueFromBoolean
+
+-- Retail live SimpleFrame/CurveUtil APIs accept protected booleans and alpha
+-- components. Select both conditions natively, retaining the ordinary spell
+-- fallback for unchecked units. Never compare/cache the selected alpha.
+local function SetRangeBooleanAlpha(obj, frame, inAlpha, outAlpha, field)
+  if not (obj and obj.SetAlphaFromBoolean) then return end
+  local inRange = frame._msufRangeBooleanValue
+  if frame._msufRangeBooleanCheckedSecret == true then
+    local rangeAlpha = EvaluateColorValueFromBoolean(inRange, inAlpha, outAlpha)
+    local fallbackAlpha = frame._msufRangeBooleanFallback == false and outAlpha or inAlpha
+    obj:SetAlphaFromBoolean(frame._msufRangeBooleanChecked, rangeAlpha, fallbackAlpha)
+  else
+    obj:SetAlphaFromBoolean(inRange, inAlpha, outAlpha)
+  end
+  obj[field] = nil -- the ordinary numeric writer must restore this lane later
+end
 
 
 local Alpha = {}
@@ -162,6 +180,12 @@ local function ApplyCastbarRangeAlpha(frame, mul, force)
     return false
   end
 
+  if frame._msufRangeBooleanActive == true
+    and CastbarRangeAlpha(frame, frame._msufRangeBooleanOutAlpha) ~= 1 then
+    SetRangeBooleanAlpha(castbar, frame, 1, frame._msufRangeBooleanOutAlpha, "_msufRangeCastbarAlpha")
+    return true
+  end
+
   local alpha = CastbarRangeAlpha(frame, mul)
   SetAlphaCached(castbar, alpha, "_msufRangeCastbarAlpha", force)
   return true
@@ -278,6 +302,17 @@ local function ApplyRangeOnly(frame, mul, force)
   return true
 end
 
+local function SetStatusBarFillRangeBoolean(bar, frame, alpha, field)
+  SetRangeBooleanAlpha(StatusBarTexture(bar), frame, alpha,
+    alpha * frame._msufRangeBooleanOutAlpha, field)
+end
+
+local function ApplyPredictionFillRangeBoolean(frame, alpha)
+  SetStatusBarFillRangeBoolean(frame.incomingHealBar, frame, alpha, "_msufAlphaPrediction")
+  SetStatusBarFillRangeBoolean(frame.absorbBar, frame, alpha, "_msufAlphaPrediction")
+  SetStatusBarFillRangeBoolean(frame.healAbsorbBar, frame, alpha, "_msufAlphaPrediction")
+end
+
 local function ConfiguredHPAlpha(cfg)
   local hp = Clamp01(cfg and cfg.hpAlpha, 1)
   if _G.MSUF_UnitEditModeActive == true and hp < 0.35 then
@@ -304,8 +339,48 @@ local function ResetFrameLayers(frame, force)
   frame._msufAlphaLastFG = nil
 end
 
+local function ApplyRangeBooleanAlpha(frame, cfg, force)
+  local outAlpha = frame._msufRangeBooleanOutAlpha
+  local oocMul = 1
+  if cfg and cfg.oocFade == true and cfg.externalOoc ~= true then oocMul = OocMul(cfg) end
+  local hp = ConfiguredHPAlpha(cfg)
+  local predictionAlpha = cfg and cfg.excludePredictionBars == true and 1 or hp
+  if RangeFadesWholeFrame(frame) then
+    local frameOut = outAlpha
+    if oocMul < frameOut then frameOut = oocMul end
+    SetRangeBooleanAlpha(frame, frame, oocMul, frameOut, "_msufLastAlpha")
+    ApplyCoreHealthFillAlpha(frame, hp, force)
+    ApplyPredictionFillAlpha(frame, predictionAlpha, force)
+  else
+    SetFrameAlpha(frame, oocMul)
+    SetStatusBarFillRangeBoolean(frame.hpBar or frame.Health, frame, hp, "_msufAlphaHealth")
+    SetStatusBarFillRangeBoolean(frame.healthLossTrail, frame, hp, "_msufAlphaHealthLoss")
+    local gradients = frame.hpGradients
+    if gradients then
+      for i = 1, #HEALTH_GRADIENT_FIELDS do
+        SetRangeBooleanAlpha(gradients[HEALTH_GRADIENT_FIELDS[i]], frame, hp,
+          hp * outAlpha, "_msufAlphaHealthGradient")
+      end
+    end
+    ApplyPredictionFillRangeBoolean(frame, predictionAlpha)
+  end
+  ApplyCastbarRangeAlpha(frame, 1, force)
+  SetTextLayerAlpha(frame, cfg and cfg.excludeTextPortrait == true and 1 or hp, force)
+  SetPortraitLayerAlpha(frame, cfg and cfg.excludeTextPortrait == true and 1 or hp, force)
+  frame._msufAlphaActive = true
+  frame._msufAlphaEffective = nil
+  frame._msufAlphaLastFrame = nil
+  frame._msufAlphaLastHP = nil
+  frame._msufAlphaLastPrediction = nil
+  frame._msufAlphaLastFG = nil
+end
+
 local function ApplyAlpha(frame, cfg, force)
   if not frame then
+    return
+  end
+  if frame._msufRangeBooleanActive == true then
+    ApplyRangeBooleanAlpha(frame, cfg, force)
     return
   end
 
@@ -377,6 +452,11 @@ function Alpha.ApplyPredictionFills(frame, spec, force)
   local cfg = frame._msufAlphaRuntimeCfg
   local hp = ConfiguredHPAlpha(cfg)
   local predictionAlpha = cfg and cfg.excludePredictionBars == true and 1 or hp
+  if frame._msufRangeBooleanActive == true and RangeFadesWholeFrame(frame) ~= true then
+    ApplyPredictionFillRangeBoolean(frame, predictionAlpha)
+    frame._msufAlphaLastPrediction = nil
+    return true
+  end
   ApplyPredictionFillAlpha(frame, predictionAlpha, force == true)
   frame._msufAlphaLastPrediction = predictionAlpha
   return true
@@ -427,7 +507,7 @@ function Alpha.Disable(frame)
   frame._msufAlphaRuntimeCfg = nil
   frame._msufAlphaRangeActive = nil
   frame._msufAlphaRangeHealthLayer = nil
-  if RangeMul(frame) ~= 1 then
+  if frame._msufRangeBooleanActive == true or RangeMul(frame) ~= 1 then
     ApplyAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, true)
     return
   end
@@ -437,6 +517,15 @@ end
 UF.ApplyRangeModifier = function(frame, mul, force)
   if not frame then
     return false
+  end
+  if frame._msufRangeBooleanActive == true then
+    frame._msufRangeBooleanActive = nil
+    frame._msufRangeBooleanValue = nil
+    frame._msufRangeBooleanChecked = nil
+    frame._msufRangeBooleanCheckedSecret = nil
+    frame._msufRangeBooleanOutAlpha = nil
+    frame._msufRangeBooleanFallback = nil
+    force = true
   end
   mul = Clamp01(mul, 1)
   if force ~= true and frame._msufRangeMul == mul then
@@ -454,6 +543,31 @@ UF.ApplyRangeModifier = function(frame, mul, force)
   return true
 end
 ExportPublic("MSUF_UF_ApplyRangeModifier", UF.ApplyRangeModifier)
+
+UF.ApplyRangeBoolean = function(frame, inRange, checkedRange, force, fallbackInRange)
+  if not (frame and frame.SetAlphaFromBoolean) then return false end
+  local checkedSecret = issecretvalue(checkedRange) == true
+  if checkedSecret and not EvaluateColorValueFromBoolean then return false end
+  frame._msufRangeBooleanActive = true
+  frame._msufRangeBooleanValue = inRange
+  frame._msufRangeBooleanChecked = checkedRange
+  frame._msufRangeBooleanCheckedSecret = checkedSecret
+  frame._msufRangeBooleanOutAlpha = Clamp01(frame._msufRangeOutAlpha, 1)
+  frame._msufRangeBooleanFallback = fallbackInRange
+  frame._msufRangeMul = 1
+  local cfg = frame._msufAlphaRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.alpha)
+  ApplyRangeBooleanAlpha(frame, cfg, force == true)
+  return true
+end
+
+UF.UpdateRangeBooleanFallback = function(frame, inRange, force)
+  if frame._msufRangeBooleanCheckedSecret ~= true then return true end
+  if not force and frame._msufRangeBooleanFallback == inRange then return true end
+  frame._msufRangeBooleanFallback = inRange
+  local cfg = frame._msufAlphaRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.alpha)
+  ApplyRangeBooleanAlpha(frame, cfg, force == true)
+  return true
+end
 
 local function ApplyCastbarRangeAlphaExport(castbarOrUnit, mul, force)
   local unit = type(castbarOrUnit) == "string" and castbarOrUnit

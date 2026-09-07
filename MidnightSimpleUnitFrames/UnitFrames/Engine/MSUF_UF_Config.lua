@@ -1275,7 +1275,8 @@ local function CompileLoadConditions(out, conf)
     load[def[1]] = enabled
     active = active or enabled
   end
-  load.active = active
+  load.showWhenInjured = Bool(conf.loadCondShowWhenInjured, false)
+  load.active = active or load.showWhenInjured
 
   load.unitlessEvents = ResetList(load.unitlessEvents)
   if load.active then
@@ -2286,6 +2287,8 @@ local function CompileUnitBorder(out, conf, general, bars)
   border.dispel = OutlineModeEnabled(ScopedValue(conf, general, "dispelOutlineMode", nil),
     legacyDispelBorder)
   border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE"))
+  local dispelShowOn = ScopedValue(conf, general, "dispelBorderShowOn", "BOTH")
+  border.dispelShowOn = (dispelShowOn == "FRIENDLY" or dispelShowOn == "ENEMY") and dispelShowOn or "BOTH"
   border.purge = OutlineModeEnabled(ScopedValue(conf, general, "purgeOutlineMode", nil),
     general.purgeBorderEnabled == true or general.hlPurgeBorderEnabled == true)
   border.bossTarget = OutlineModeEnabled(ScopedValue(conf, general, "bossTargetOutlineMode", nil),

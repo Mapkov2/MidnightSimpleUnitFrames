@@ -871,12 +871,21 @@ local function ApplySlot(frame, conf, unitKey, slot)
     return
   end
 
+  local visualParent = frame._msufHealthVisualRoot or frame
+  if frame._msufHealthVisualRoot and conf[keys.FollowFrameAlpha] == false then
+    visualParent = MSUF.UF.EnsureHealthVisualRoot(frame, true)
+    if not visualParent then return end
+  end
+  if frame._msufHealthVisualRoot and holder and holder:GetParent() ~= visualParent then
+    if InCombatLockdown and InCombatLockdown() then return end
+    holder:SetParent(visualParent)
+  end
   if not holder then
     if not holders then
       holders = {}
       frame._msufTexLayers = holders
     end
-    holder = CreateFrame("Frame", nil, frame)
+    holder = CreateFrame("Frame", nil, visualParent)
     holder:EnableMouse(false)
     holders[slot] = holder
   end
@@ -897,7 +906,7 @@ local function ApplySlot(frame, conf, unitKey, slot)
   -- unless the user detaches the layer from it; the layer's own alpha always
   -- applies on top.
   if holder.SetIgnoreParentAlpha then
-    holder:SetIgnoreParentAlpha(conf[keys.FollowFrameAlpha] == false)
+    holder:SetIgnoreParentAlpha(not frame._msufHealthVisualRoot and conf[keys.FollowFrameAlpha] == false)
   end
   -- Placement: anchor to the frame or one of its elements.
   local anchorMode = conf[keys.AnchorTarget]

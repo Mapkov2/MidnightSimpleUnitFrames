@@ -188,7 +188,7 @@ end
 local function EnsureHighlight(frame)
   local hb = frame._msufHL
   if not hb then
-    hb = CreateFrame("Frame", nil, frame, BACKDROP_TEMPLATE)
+    hb = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame, BACKDROP_TEMPLATE)
     hb:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     hb:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
     hb:EnableMouse(false)

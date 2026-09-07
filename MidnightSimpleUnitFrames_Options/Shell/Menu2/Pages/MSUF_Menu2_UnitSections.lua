@@ -1342,7 +1342,7 @@ local function BuildStatus(ctx, builder, unit)
     end
 end
 local function BuildLoadConditions(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("load_conditions", "Load Conditions", 178, false)
+    local sec = builder:CollapsibleSection("load_conditions", "Load Conditions", 210, false)
     local colW = math.floor(((ctx.width or 720) - 42) / 3)
     for i = 1, #LOAD_CONDITIONS do
         local spec = LOAD_CONDITIONS[i]
@@ -1363,6 +1363,25 @@ local function BuildLoadConditions(ctx, builder, unit)
                 M.RequestUnitApply(unit, "MSUF2_LOAD_CONDITION", { preview = true })
             end,
             SettingMeta(ctx, "load_condition." .. tostring(spec.key), unit, spec.key))
+    end
+    do
+        local key = "loadCondShowWhenInjured"
+        local label = "Show only below 100% health"
+        local toggle = W.ToggleAt and W.ToggleAt(sec, label, 14, -166, (ctx.width or 720) - 70)
+            or W.Toggle(sec, label)
+        M.BindBoolWidget(ctx, toggle,
+            function() return ReadBool(unit, key, false) end,
+            function(v)
+                GetConf(unit)[key] = v and true or false
+                UpdateLoadActive(unit)
+                M.RequestUnitApply(unit, "MSUF2_LOAD_CONDITION", { preview = true })
+            end,
+            SettingMeta(ctx, "load_condition." .. key, unit, key))
+        if M.AddTooltip then
+            M.AddTooltip(toggle, label,
+                "Show this frame only when its unit is below full health. At 100% health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
+                { hook = true, owner = "ANCHOR_RIGHT" })
+        end
     end
     local function RefreshLoadConditionState()
         SetSectionHeaderStatus(sec, nil)
@@ -1703,7 +1722,7 @@ local function BuildUnitPage(info)
         if info.unit == "arena" then
             BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildArenaLayout, { sectionId = "arena_layout", title = "Arena Layout", height = 160 })
         end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 178 })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 210 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchoring", height = 220 })
         M.TrackRefresh(ctx, function()

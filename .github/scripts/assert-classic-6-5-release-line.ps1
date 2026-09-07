@@ -58,8 +58,8 @@ foreach ($addon in $addons) {
 $requiredFragments = [ordered]@{
     "MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua" = "CreateTimedSignalCallbackMap"
     "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua" = "SetRoundLayoutToNearestPixel"
-    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua" = "SetEditModePreviewEnabled"
-    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua" = "AddPandemicActiveAnimation"
+    "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeContract.lua" = "SetEditModePreviewEnabled"
+    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators_Effects.lua" = "AddPandemicActiveAnimation"
     "MidnightSimpleUnitFrames/Runtime/MSUF_TooltipSpellIDs.lua" = "tooltipShowAuraCasterNames"
 }
 foreach ($relativePath in $requiredFragments.Keys) {

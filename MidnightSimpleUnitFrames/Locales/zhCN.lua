@@ -5816,6 +5816,12 @@ L["MSUF Arena Frames"] = "MSUF 竞技场框体"
 L["Sort roles across entire raid"] = "按整个团队排序角色"
 L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "在整个团队范围内排序坦克、治疗和输出，而不是在每个团队小组内部排序。仅限团队和史诗团队：适用于与“保留团队小组”一起使用的按角色排序，以及组+角色排序。"
 L["Raid-wide roles"] = "全团角色排序"
+
+-- Dispel border unit filter.
+L["Show on"] = "显示对象"
+L["Friendly"] = "友方"
+L["Enemy"] = "敌方"
+L["Both"] = "双方"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

@@ -462,7 +462,7 @@ local function EnsureBox(frame)
         return box
     end
 
-    box = CreateFrame("Frame", nil, frame)
+    box = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
     box.fill = box:CreateTexture(nil, "OVERLAY")
     box.fill:SetAllPoints()
     box.fill:SetTexture("Interface\\Buttons\\WHITE8x8")

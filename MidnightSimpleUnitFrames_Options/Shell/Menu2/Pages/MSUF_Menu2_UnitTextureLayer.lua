@@ -33,9 +33,11 @@ local TEXLAYER_TAB_ALIASES = {
     style = "advanced",
     visibility = "rules",
 }
-local TEXLAYER_SECTION_H = 574
+local TEXLAYER_SECTION_H = 596
 local TEXLAYER_CARD_Y = -108
-local TEXLAYER_CARD_H = 432
+-- Source color is the lowest dropdown on Setup; keep its 22px button and
+-- soft edge inside the card instead of letting them meet the next accordion.
+local TEXLAYER_CARD_H = 454
 local TEXT_BACKGROUND_PRESET = {
     Enabled = true,
     Texture = "",

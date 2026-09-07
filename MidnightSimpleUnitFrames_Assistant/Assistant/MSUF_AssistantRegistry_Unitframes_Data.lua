@@ -158,6 +158,7 @@ Data.LOAD_CONDITION_SPECS = {
     { key = "loadCondHideResting", label = "Hide Resting", aliases = { "hide resting", "resting load condition" } },
     { key = "loadCondHideSolo", label = "Hide Solo", aliases = { "hide solo", "solo load condition" } },
     { key = "loadCondHideStealthed", label = "Hide Stealthed", aliases = { "hide stealthed", "stealth load condition" } },
+    { key = "loadCondShowWhenInjured", label = "Show Only When Injured", aliases = { "show only when injured", "only below full health", "below 100 health", "when damaged" } },
 }
 Data.STATUS_TEXT_STATE_SPECS = {
     {

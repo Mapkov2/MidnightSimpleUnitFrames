@@ -975,9 +975,10 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   local colorByHealth = rt.healthColorByHealth == true
   local needHPValue = needsCurrent
   local needMaxValue = needsMax
-  local hpMissing = issecretvalue(hp) ~= true and hp == nil
-  local maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
-  local colorNeedsPercent = colorByHealth and (hpMissing or maxMissing)
+  local hpSecret = issecretvalue(hp) == true
+  local hpMaxSecret = issecretvalue(hpMax) == true
+  local colorNeedsPercent = colorByHealth
+    and ((not hpSecret and hp == nil) or (not hpMaxSecret and hpMax == nil))
   local pctOverride, pctOverrideSet
   if needsPercent or colorNeedsPercent then
     pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
@@ -1098,8 +1099,8 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     return
   end
 
-  local hpSecret = issecretvalue(hp) == true
-  local hpMaxSecret = issecretvalue(hpMax) == true
+  -- Reclassify only after replacing a value below; the incoming pair was
+  -- already checked for the color/value decision above.
   if (needHPValue and not hpSecret and hp == nil) or (needMaxValue and not hpMaxSecret and hpMax == nil) then
     local cachedHP, cachedMax = ReadHealthValuesCached(frame, unit)
     if needHPValue and not hpSecret and hp == nil then
@@ -1129,7 +1130,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   end
 
   if (needsPercent or colorNeedsPercent) and pctOverrideSet ~= true then
-    pctOverride = PercentFromValues(hp, hpMax)
+    if not hpSecret and not hpMaxSecret then pctOverride = PercentFromValues(hp, hpMax) end
     pctOverrideSet = pctOverride ~= nil
     if pctOverrideSet ~= true and HealthPercentAvailable then
       pctOverride = HealthPercent(unit)
@@ -1137,7 +1138,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
   end
   UpdateRuntimeHealthTextColor(frame, rt, unit, hp, hpMax, pctOverride, pctOverrideSet)
-  UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+  UpdateTextSlotsSecret(rt.healthSlots, rt.healthValueSlotCount or rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet, hpSecret, hpMaxSecret)
 end
 
 local function UpdateAbsorbRuntime(frame, event, unit, skipCombinedRefresh)
@@ -1298,9 +1299,8 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   local needsPercent = rt.powerNeedsPercent == true
   local needsCurrent = rt.powerNeedsCurrent == true
   local needsMax = rt.powerNeedsMax == true
-  local percentNeedsValues = false
-  local needPowerValue = needsCurrent or percentNeedsValues
-  local needMaxValue = needsMax or percentNeedsValues
+  local needPowerValue = needsCurrent
+  local needMaxValue = needsMax
 
   if rt.powerPlain == true then
     if (needPowerValue and power == nil) or (needMaxValue and powerMax == nil) then
@@ -1387,7 +1387,8 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   end
 
   local powerSecret = issecretvalue(power) == true
-  local powerMaxSecret = issecretvalue(powerMax) == true
+  -- powerMaxSecret was established before seeding the maximum cache. Neither
+  -- metadata nor text-color updates replace this value.
   if not powerSecret and not powerMaxSecret
     and ((needPowerValue and power == nil) or (needMaxValue and powerMax == nil)) then
     local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needMaxValue and powerMax == nil, animate)
@@ -1408,7 +1409,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   if needsPercent then
     pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
     if pctOverrideSet ~= true then
-      pctOverride = PercentFromValues(power, powerMax)
+      if not powerSecret and not powerMaxSecret then pctOverride = PercentFromValues(power, powerMax) end
       pctOverrideSet = pctOverride ~= nil
       if pctOverrideSet ~= true and PowerPercentAvailable then
         pctOverride = PowerPercent(unit)
@@ -1416,15 +1417,101 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       end
     end
   end
-  UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
+  UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet, powerSecret, powerMaxSecret)
+end
+
+-- The deferred queue has already checked attachment, visibility and active
+-- slots. CURRENT and CURRENT+PERCENT need neither a maximum, missing/absorb
+-- state nor a color resolver. Keep their drain on the compiled native writer;
+-- ordinary/cold updates still use the complete value pipeline above.
+local function DrainHealthCurrentText(frame, unit, pct, percentReady)
+  local rt = frame._msufTextRuntime
+  local bar = frame.hpBar or frame.Health
+  local hp = bar and bar._msufHealthValueUnit == unit and bar._msufHealthValue or nil
+  local hpSecret = issecretvalue(hp) == true
+  if not hpSecret and hp == nil then
+    hp = UnitHealth(unit)
+    hpSecret = issecretvalue(hp) == true
+  end
+  rt._lastHpRaw, rt._lastHpMaxRaw = hp, nil
+  rt.healthMissing = nil
+
+  local pctSecret = false
+  if rt.healthNeedsPercent == true then
+    if percentReady ~= true and rt._dispatchHealthPercentReady == true then
+      pct, percentReady = rt._dispatchHealthPercent, true
+    end
+    rt._dispatchHealthPercent, rt._dispatchHealthPercentReady = nil, nil
+    -- A deferred update needs the current unit state. Only the drain's latest
+    -- public bar cache can replace this read; no opaque event value is retained.
+    if percentReady ~= true then pct = HealthPercent(unit) end
+    pctSecret = issecretvalue(pct) == true
+    if percentReady ~= true and not pctSecret and pct == nil then
+      -- Preserve the general writer's retry when an invalid native sample was
+      -- sanitized to nil. A ready dispatch sample, even nil, is authoritative.
+      pct = HealthPercent(unit)
+      pctSecret = issecretvalue(pct) == true
+    end
+  else
+    pct = nil
+  end
+  local slot = rt.healthSlots[1]
+  slot.secretWriter(slot, hp, nil, pct, true, rt, hpSecret, false, pctSecret)
+end
+
+local function SelectHealthTextDrain(rt)
+  if nativeSecrets and rt.healthPlain ~= true and rt.healthValueSlotCount == 1
+    and rt.healthNeedsCurrent == true and rt.healthNeedsMax ~= true
+    and rt.healthNeedsMissing ~= true and rt.healthUsesAbsorb ~= true
+    and rt.healthColorByHealth ~= true
+    and (rt.healthNeedsPercent ~= true or HealthPercentAvailable)
+    and rt.healthSlots[1].secretWriter then
+    return DrainHealthCurrentText
+  end
+end
+
+local function DrainPowerCurrentText(frame, unit, power)
+  local rt = frame._msufTextRuntime
+  -- Static text still needs its initial color after a spec/region replacement.
+  -- Resource identity (including Player's displayed Mana) stays with the same
+  -- native reader as the general runtime whenever no public bar value exists.
+  if rt.powerColorByType == false and (frame._msufPowerTextColorInitialized ~= true
+    or frame._msufPowerTextColorType ~= false) then
+    SetPowerTextColor(frame, rt.textColorR or 1, rt.textColorG or 1, rt.textColorB or 1, rt.textColorA or 1)
+    frame._msufPowerTextColorInitialized = true
+    frame._msufPowerTextColorType = false
+    frame._msufPowerTextColorToken = nil
+  end
+  local secret = issecretvalue(power) == true
+  if not secret and power == nil then
+    power = ReadPowerValuesPlain(frame, unit, "UNIT_POWER_UPDATE", true, false, true)
+    secret = issecretvalue(power) == true
+  end
+  rt.healthMissing = nil
+  rt._lastPowerRaw, rt._lastPowerMaxRaw = power, nil
+  local slot = rt.powerSlots[1]
+  slot.secretWriter(slot, power, nil, nil, true, rt, secret, false, false)
+end
+
+local function SelectPowerTextDrain(rt, group)
+  -- Group value writers have their own public-value dedup contract. Keep that
+  -- route; specialize only single-frame CURRENT/FULLVALUE native drains.
+  if not group and nativeSecrets and rt.powerPlain ~= true and rt.powerSlotCount == 1
+    and rt.powerNeedsCurrent == true and rt.powerNeedsMax ~= true
+    and rt.powerNeedsPercent ~= true and rt.powerColorByType ~= true
+    and rt.powerSlots[1].secretWriter then
+    return DrainPowerCurrentText
+  end
 end
 
 Text.RuntimeHotFunctions = {
   healthHot = UpdateHealthRuntime,
+  healthDrain = SelectHealthTextDrain,
   healthDirty = MarkHealthTextDirty,
   groupHealthDirty = MarkGroupHealthTextDirty,
   absorbHot = UpdateAbsorbRuntime,
   powerHot = UpdatePowerRuntime,
+  powerDrain = SelectPowerTextDrain,
   powerDirty = MarkPowerTextDirty,
 }
 
@@ -1906,6 +1993,16 @@ function HealthText.SelectUpdate(frame)
   return UpdateHealthTextValues
 end
 
+local function UpdateGroupHealthPercentDecimal(frame, event, unit, hp, hpMax)
+  if frame and frame._msufTextDirtyMask ~= nil then
+    CancelDirtyTextFrame(frame, TEXT_DIRTY_HEALTH, true)
+  end
+  -- Consume Health's fresh dispatch percent in the original value pipeline.
+  -- Its native decimal formatter must keep ownership of rounding: the plain
+  -- percent writer's Lua quantization can differ at half-step boundaries.
+  return UpdateHealthRuntime(frame, event, unit or frame.MSUFUnitKey, hp, hpMax)
+end
+
 function HealthText.SelectEventUpdate(frame, spec, event, update)
   if event == "UNIT_ABSORB_AMOUNT_CHANGED" then return UpdateAbsorbRuntime end
   if event == "UNIT_HEALTH" then
@@ -1916,6 +2013,7 @@ function HealthText.SelectEventUpdate(frame, spec, event, update)
     -- text shape (absorb-combined, value/missing modes) keeps the coalescer.
     if spec and spec.scope == "group" and rt and rt.healthHotFromPercent
       and rt.healthUsesAbsorb ~= true then
+      if (rt.healthPercentDecimals or 0) >= 1 then return UpdateGroupHealthPercentDecimal end
       return UpdateHealthTextValues
     end
     return rt and rt.healthDirty or MarkHealthTextDirty
@@ -1927,6 +2025,8 @@ function HealthText.SelectEventUpdate(frame, spec, event, update)
 end
 
 HealthText.Update = UpdateHealthTextAll
+-- Core may share this static event route across identical group frames.
+HealthText.UpdateGroupPercentDecimal = UpdateGroupHealthPercentDecimal
 
 function HealthText.Disable(frame)
   CancelDirtyTextFrame(frame, TEXT_DIRTY_HEALTH)
@@ -2064,6 +2164,8 @@ FlushDirtyText = function()
             -- drain time and passed directly to the precompiled writer.
             if percentReady ~= true then pct = HealthPercent(unit) end
             percentFn(frame, "UNIT_HEALTH", unit, pct)
+          elseif rt.healthDrain then
+            rt.healthDrain(frame, unit, pct, percentReady)
           else
             if percentReady == true then
               -- The Health element already read this latest plain percentage
@@ -2098,7 +2200,11 @@ FlushDirtyText = function()
               powerMax = cachedMax
             end
           end
-          UpdatePowerTextValues(frame, "UNIT_POWER_UPDATE", unit, power, powerMax, nil, nil, false)
+          if rt.powerDrain then
+            rt.powerDrain(frame, unit, power)
+          else
+            UpdatePowerTextValues(frame, "UNIT_POWER_UPDATE", unit, power, powerMax, nil, nil, false)
+          end
         elseif mask == TEXT_DIRTY_POWER or mask == TEXT_DIRTY_BOTH then
           ClearDirtyTextDispatch(frame, TEXT_DIRTY_POWER)
         end

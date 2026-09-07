@@ -1099,6 +1099,9 @@ local function EnsureGroupLifecycleDriver()
   if groupLifecycleDriver then
     groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_ENABLE")
     groupLifecycleDriver:RegisterEvent("PARTY_MEMBER_DISABLE")
+    -- Zoning/summons can preserve both the secure unit token and shown state.
+    -- Reseed live health/status even when no OnShow or unit-value edge follows.
+    groupLifecycleDriver:RegisterEvent("PLAYER_ENTERING_WORLD")
   end
   return groupLifecycleDriver
 end
@@ -1742,7 +1745,37 @@ local function SharedSingleRoute(update, unitless, target)
   return route
 end
 
+local healthVisibilityRouteCache = {}
 local function CompileFrameEventPath(frame, event, list)
+  -- Strip the optional rendering gate before compiling the existing optimized
+  -- health route. No extra dispatch context or option check when disabled.
+  local loadConditions = UF.elements.LoadConditions
+  local gate = HEALTH_EVENTS[event] and loadConditions and loadConditions.UpdateHealthVisibility
+  if gate then
+    for i = 1, #list, 2 do
+      if list[i] == gate then
+        local remaining = {}
+        for j = 1, #list, 2 do
+          if j ~= i then
+            remaining[#remaining + 1] = list[j]
+            remaining[#remaining + 1] = list[j + 1]
+          end
+        end
+        if #remaining == 0 then return SharedSingleRoute(gate, false, nil) end
+        local base = CompileFrameEventPath(frame, event, remaining)
+        local route = healthVisibilityRouteCache[base]
+        if not route then
+          route = function(self, ev, unit, ...)
+            base(self, ev, unit, ...)
+            gate(self)
+          end
+          if sharedFrameEventRoutes[base] then healthVisibilityRouteCache[base] = route end
+        end
+        if sharedFrameEventRoutes[base] then sharedFrameEventRoutes[route] = true end
+        return route
+      end
+    end
+  end
   local target = frame._msufFrameUnitEventTargets and frame._msufFrameUnitEventTargets[event]
   local count = #list
   if frame._msufCoreScope == "group" and GROUP_THREAT_EVENTS[event] == true then

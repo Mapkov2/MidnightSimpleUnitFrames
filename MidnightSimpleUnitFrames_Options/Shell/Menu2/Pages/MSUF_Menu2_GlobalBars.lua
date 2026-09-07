@@ -47,6 +47,7 @@ local ROUNDED_PREVIEW_CARD_HEIGHT = 92
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
     "DISPEL_TYPE", "Any dispel type")
+local DISPEL_SHOW_ON = VT("FRIENDLY", "Friendly", "ENEMY", "Enemy", "BOTH", "Both")
 local DISPEL_COLOR_REFERENCES = {
     "aura.dispel.magic", "aura.dispel.curse", "aura.dispel.disease",
     "aura.dispel.poison", "aura.dispel.bleed",
@@ -124,6 +125,7 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["highlight.aggro.roles"] = { "general.aggroMode" },
     ["highlight.border_mode.dispelOutlineMode"] = { "general.dispelOutlineMode" },
     ["highlight.dispel.trigger"] = { "general.dispelBorderTrigger" },
+    ["highlight.dispel.show_on"] = { "general.dispelBorderShowOn" },
     ["highlight.border_mode.purgeOutlineMode"] = { "general.purgeOutlineMode" },
     ["highlight.priority.enabled"] = { "general.hlPrioEnabled" },
     ["power.smooth_fill"] = { "bars.smoothPowerBar" },
@@ -181,6 +183,7 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["highlight.aggro.roles"] = "aggroMode",
     ["highlight.border_mode.dispelOutlineMode"] = "dispelOutlineMode",
     ["highlight.dispel.trigger"] = "dispelBorderTrigger",
+    ["highlight.dispel.show_on"] = "dispelBorderShowOn",
     ["highlight.border_mode.purgeOutlineMode"] = "purgeOutlineMode",
     ["highlight.priority.enabled"] = "hlPrioEnabled",
 }
@@ -1895,7 +1898,7 @@ if type(M.RegisterUpgradeTourControls) == "function" then
 end
 
 local function BuildHighlightSection(ctx, b)
-    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 710, true)
+    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 764, true)
     local hlW = highlights._msuf2Width or ctx.width or 720
     local hlGap = 28
     local hlLeftX = 30
@@ -1912,7 +1915,7 @@ local function BuildHighlightSection(ctx, b)
         width = min(520, hlInnerW), frames = highlightTabFrames, defaultTab = "modes",
         x = hlLeftX, y = -44,
     }), "highlight.workspace_tab", VT("modes", "Modes", "preview", "Preview", "priority", "Priority"))
-    local modesCard = W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 542)
+    local modesCard = W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 596)
     local priorityCardW = min(360, max(260, hlLeftW + 28))
     local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
     W.ControlCard(previewFrame, "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248)
@@ -1981,9 +1984,20 @@ local function BuildHighlightSection(ctx, b)
             if value ~= previous then ShowDispelBorderReloadRequiredPopup() end
         end,
         "highlight.dispel.trigger")
-    local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -352,
+    local dispelShowOn = BindHighlightDropdown("Show on", DISPEL_SHOW_ON, -352,
+        function()
+            local value = BarScopeGet("dispelBorderShowOn", "BOTH")
+            return (value == "FRIENDLY" or value == "ENEMY") and value or "BOTH"
+        end,
+        function(v)
+            local value = (v == "FRIENDLY" or v == "ENEMY") and v or "BOTH"
+            BarScopeSet("dispelBorderShowOn", value, "MSUF2_DISPEL_BORDER", true)
+            RequestDispelPurgeBorderRuntime()
+        end,
+        "highlight.dispel.show_on")
+    local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -406,
         "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", RequestDispelPurgeBorderRuntime)
-    local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -406,
+    local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -460,
         function()
             local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
             return tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback
@@ -1997,11 +2011,11 @@ local function BuildHighlightSection(ctx, b)
             RequestBossTargetBorderRuntime()
         end,
         "highlight.boss_target.mode")
-    local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -456, hlLeftW, T.colors.dim)
+    local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -510, hlLeftW, T.colors.dim)
     if dispelPurgePtrHint.SetWordWrap then dispelPurgePtrHint:SetWordWrap(true) end
-    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -486, hlLeftW, T.colors.dim)
+    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -540, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
-    local unitAuraDispelHint = W.Text(modesFrame, UNITFRAME_DISPEL_AURA_WARNING, hlLeftX, -516, hlLeftW, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    local unitAuraDispelHint = W.Text(modesFrame, UNITFRAME_DISPEL_AURA_WARNING, hlLeftX, -570, hlLeftW, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
     if unitAuraDispelHint.SetWordWrap then unitAuraDispelHint:SetWordWrap(true) end
     local function ScopeBorderModeOn(key, defaultValue) return tonumber(BarScopeGet(key, defaultValue)) == 1 end
     local function BossTargetBorderOn()
@@ -2058,7 +2072,7 @@ local function BuildHighlightSection(ctx, b)
     local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end, nil, "highlight.preview.purge")
     local bossTargetTest = BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true, "highlight.preview.boss_target")
     local scopedBorderControls = { highlight, aggro, dispelBorder, purge }
-    local dispelBorderControls = { dispelTrigger, dispelTest }
+    local dispelBorderControls = { dispelTrigger, dispelShowOn, dispelTest }
     local function ClearBorderTestIfDisabled(flagName, setterName, enabled)
         local fn = _G[setterName]
         if _G[flagName] and not enabled and type(fn) == "function" then fn(false) end
@@ -2220,7 +2234,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
     { sectionId = "bars_absorb", title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
     { sectionId = "bars_outline", title = "Frame Outline", height = 252, build = BuildOutlineSection },
     { sectionId = "bars_rounded", title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
-    { sectionId = "bars_highlight", title = "Highlight Borders", height = 710, defaultOpen = true, build = BuildHighlightSection },
+    { sectionId = "bars_highlight", title = "Highlight Borders", height = 764, defaultOpen = true, build = BuildHighlightSection },
     { sectionId = "bars_power", title = "Bar Animation + Text Accuracy", height = 184, build = BuildPowerSection },
 }
 local function BuildGlobalBarsSectionLazy(ctx, b, spec)

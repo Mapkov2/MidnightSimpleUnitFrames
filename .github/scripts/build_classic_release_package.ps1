@@ -302,6 +302,8 @@ if ($sourceVersion -ne $release) {
 }
 & (Join-Path $PSScriptRoot "assert-classic-6-5-release-line.ps1") `
     -RepositoryRoot $repoRoot -ReleaseVersion $release
+& (Join-Path $PSScriptRoot "assert-classic-changelog-links.ps1") `
+    -RepositoryRoot $repoRoot -ReleaseVersion $release
 $outputRoot = Resolve-RepoOutputPath $OutputDirectory
 $expectedTocRelativePaths = @(
     foreach ($addon in $addonNames) {

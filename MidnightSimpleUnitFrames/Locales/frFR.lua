@@ -5595,6 +5595,12 @@ L["MSUF Arena Frames"] = "MSUF Cadres d'arène"
 L["Sort roles across entire raid"] = "Trier les rôles sur tout le raid"
 L["Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role."] = "Classe les tanks, les soigneurs et les DPS sur l'ensemble du raid au lieu de chaque groupe de raid. Raid et Raid mythique uniquement : s'applique à Par rôle avec Préserver les groupes de raid, et à Groupe + Rôle."
 L["Raid-wide roles"] = "Rôles sur tout le raid"
+
+-- Dispel border unit filter.
+L["Show on"] = "Afficher sur"
+L["Friendly"] = "Amical"
+L["Enemy"] = "Ennemi"
+L["Both"] = "Les deux"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

@@ -76,15 +76,15 @@ assert(not pcall(mask.ClearAllPoints),
     "test mask did not model the post-AddDispelTypeTexture forbidden state")
 
 local auras = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
-local initializerStart = assert(auras:find("local function PrepareDispelSensorButton", 1, true))
-local initializerEnd = assert(auras:find("--- Dispel-overlay preview", initializerStart, true))
+local initializerStart = assert(auras:find("local function PrepareDispelSensorVisual", 1, true))
+local initializerEnd = assert(auras:find("\nreturn {", initializerStart, true))
 local overlayStart = assert(auras:find('if sensor%.visual == "overlay" then%s+region:SetTexture%(', initializerStart))
 local overlayBranch = auras:sub(overlayStart, initializerEnd - 1)
 local prepareCall = assert(overlayBranch:find(
     "PrepareRoundedDispelOverlayRegion(parentFrame, region, button)", 1, true),
     "native dispel overlay is not prepared with its explicit owner")
 local blizzardHandoff = assert(overlayBranch:find(
-    "button:AddDispelTypeTexture(region, GetSensorOverlayOptions())", 1, true),
+    "owner:AddDispelTypeTexture(region, GetSensorOverlayOptions())", 1, true),
     "native dispel overlay Blizzard handoff missing")
 assert(prepareCall < blizzardHandoff,
     "native dispel overlay is masked after Blizzard makes it forbidden")

@@ -235,7 +235,7 @@ local function EnsureLayerFrame(frame, layer)
   end
   local holder = layers[layer]
   if not holder then
-    holder = CreateFrame("Frame", nil, frame)
+    holder = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
     holder:SetAllPoints(frame)
     holder:EnableMouse(false)
     if holder.SetClipsChildren then

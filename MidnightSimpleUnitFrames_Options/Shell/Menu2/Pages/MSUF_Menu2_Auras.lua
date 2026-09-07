@@ -2571,7 +2571,9 @@ local function BuildUnitStyle(ctx, b, scope, options)
     BindStyleSlider(stack, "X", 24, -212, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 374, true)
+    -- The final slider begins at -328 and its control sits another 24px lower.
+    -- Leave a 16px footer so its buttons cannot bleed into Duration Bar.
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 392, true)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(cooldown, {
             title = M.Format("%s Cooldown Text Settings", Tr(LaneTitle(lane))),
