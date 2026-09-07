@@ -181,24 +181,20 @@ local function SetHealthBackgroundValue(frame, unit, percent, percentSecret, ani
   if not backgroundBar then return false end
 
   local missing, secret
-  if percentSecret == nil then percentSecret = issecretvalue(percent) == true end
-  if percentSecret == true and UnitHealthPercent and REVERSE_TO_100 and unit then
-    -- The live percent is already opaque. Forward the inverse native result
-    -- without probing its type/value a second time; never compare or cache it.
+  if percentSecret == false then
+    -- Both percent lanes already sanitized this public sample. Cold/absolute
+    -- callers pass nil and use the native inverse below; no stale sample reuse.
+    missing = 100 - percent
+  elseif UnitHealthPercent and REVERSE_TO_100 and unit then
     missing = UnitHealthPercent(unit, true, REVERSE_TO_100)
-    secret = true
+    -- An opaque input keeps its inverse opaque: no Lua comparison or caching.
+    secret = percentSecret == true or issecretvalue(missing) == true
+    if not secret and not IsFiniteNumber(missing) then missing = 0 end
   else
-    if percentSecret ~= true and IsFiniteNumber(percent) then
-      missing = 100 - percent
-    end
-    if missing == nil and UnitHealthPercent and REVERSE_TO_100 and unit then
-      missing = UnitHealthPercent(unit, true, REVERSE_TO_100)
-    end
-    secret = issecretvalue(missing) == true
+    missing = 0
   end
 
   if not secret then
-    if not IsFiniteNumber(missing) then missing = 0 end
     if missing < 0 then missing = 0 elseif missing > 100 then missing = 100 end
   end
   if backgroundBar._msufHealthMissingMinMax ~= 100 then
@@ -226,6 +222,7 @@ local function ApplyHealthBackgroundFillMode(frame, health)
   if not (backgroundBar and frame.hpBar) then return false end
   local missing = health and health.backgroundFillMode == "missing"
   frame._msufHealthBackgroundFillMissing = missing == true
+  frame._msufHealthBackgroundNeedsValue = missing == true
 
   backgroundBar:ClearAllPoints()
   backgroundBar:SetAllPoints(missing and frame.hpBar or frame)
@@ -262,6 +259,74 @@ local function ApplyHealthBackgroundFillMode(frame, health)
   end
   if backgroundBar.Show then backgroundBar:Show() end
   return true
+end
+
+-- Keep the background's full native UV mapping. A white mask follows the live
+-- fill edge, including native interpolation, without a second health read.
+-- Absolute and chunked-loss bars retain their distinct value semantics.
+local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
+  local bar, background = frame.hpBar, frame.healthBackgroundBar
+  if not (bar and background) then return end
+  local h = frame.MSUFSpec and frame.MSUFSpec.health
+  local wanted = frame._msufHealthBackgroundFillMissing == true and percentPlan
+    and not (h and h.chunked == true)
+  local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+  local texture = background.GetStatusBarTexture and background:GetStatusBarTexture()
+  local supported = fill and texture and background.CreateMaskTexture
+    and texture.AddMaskTexture and texture.RemoveMaskTexture
+  local active = wanted and supported and true or false
+  local orientation, reverse = bar._msufOrientation or "HORIZONTAL", bar._msufReverseFill == true
+  if not resetValue and frame._msufHealthBackgroundMaskActive == active
+    and frame._msufHealthBackgroundMaskFill == fill
+    and frame._msufHealthBackgroundMaskTexture == texture
+    and (not active or frame._msufHealthBackgroundMaskOwner == background)
+    and frame._msufHealthBackgroundMaskAxis == orientation
+    and frame._msufHealthBackgroundMaskReverse == reverse then
+    frame._msufHealthBackgroundNeedsValue = frame._msufHealthBackgroundFillMissing == true and not active
+    return
+  end
+  local mask = frame._msufHealthBackgroundClipMask
+  local oldTexture = frame._msufHealthBackgroundMaskTexture
+  if frame._msufHealthBackgroundMaskActive == true and mask and oldTexture then oldTexture:RemoveMaskTexture(mask) end
+  if active then
+    if not mask or frame._msufHealthBackgroundMaskOwner ~= background then
+      mask = background:CreateMaskTexture(nil, "ARTWORK")
+      -- Mask region bounds do not clip white UVs by themselves. Black outside
+      -- keeps range-faded health from exposing the full background underneath.
+      mask:SetTexture(WHITE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+      frame._msufHealthBackgroundClipMask = mask
+      frame._msufHealthBackgroundMaskOwner = background
+    end
+    mask:ClearAllPoints()
+    if orientation == "VERTICAL" then
+      if reverse then
+        mask:SetPoint("TOPRIGHT", fill, "BOTTOMRIGHT", 0, 0)
+        mask:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+      else
+        mask:SetPoint("BOTTOMLEFT", fill, "TOPLEFT", 0, 0)
+        mask:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
+      end
+    elseif reverse then
+      mask:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+      mask:SetPoint("BOTTOMRIGHT", fill, "BOTTOMLEFT", 0, 0)
+    else
+      mask:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
+      mask:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+    end
+    texture:AddMaskTexture(mask)
+    background:SetMinMaxValues(0, 100)
+    background:SetValue(100)
+    background._msufHealthMissingMinMax = 100
+    background._msufHealthMissingValue, background._msufHealthMissingUnit = nil, nil
+  elseif frame._msufHealthBackgroundMaskActive == true and frame._msufHealthBackgroundFillMissing == true then
+    -- Restore the inverse before an absolute/chunked route starts. Capability
+    -- checks and mask binding stay in this cold layout/route selection path.
+    SetHealthBackgroundValue(frame, frame.MSUFUnitKey, nil, nil, false)
+  end
+  frame._msufHealthBackgroundMaskActive = active
+  frame._msufHealthBackgroundMaskFill, frame._msufHealthBackgroundMaskTexture = fill, texture
+  frame._msufHealthBackgroundMaskAxis, frame._msufHealthBackgroundMaskReverse = orientation, reverse
+  frame._msufHealthBackgroundNeedsValue = frame._msufHealthBackgroundFillMissing == true and not active
 end
 
 function Health.Layout(frame, spec, powerEnabled)
@@ -351,6 +416,9 @@ function Health.Apply(frame, spec)
     frame._msufHealthGradientCurve = nil
     frame._msufHealthGradientChannels = nil
   end
+  local channels = frame._msufHealthGradientChannels
+  frame._msufHealthGradientReadPercent = backgroundGradient and channels and channels.ReadHealthPercent or nil
+  frame._msufHealthGradientReadOpaque = backgroundGradient and channels and channels.ReadUnit or nil
   frame._msufHealthRuntimeColorEnabled = mode ~= "dark" and mode ~= "unified"
   frame._msufHealthRuntimeGradient = mode == "gradient"
   frame._msufHealthBackgroundColorMode = backgroundColorMode
@@ -418,6 +486,9 @@ function Health.Apply(frame, spec)
   if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
     _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
   end
+  -- The fill-mode apply seeded the value; reassert the full masked texture
+  -- even when this frame's mask and orientation did not change.
+  if Health.SyncBackgroundPlan then Health.SyncBackgroundPlan(frame, true) end
 end
 
 function Health.GetEvents(frame, spec)
@@ -519,7 +590,7 @@ local function UpdateAbsolute(frame, event, unit)
   end
   local value, maximum, percentReady, hpSecret, maxSecret =
     UpdateAbsoluteValues(frame, unit, hp, maxHP, refreshMax, event == "UNIT_HEALTH")
-  if frame._msufHealthBackgroundFillMissing == true then
+  if frame._msufHealthBackgroundNeedsValue == true then
     SetHealthBackgroundValue(frame, unit, nil, nil, event == "UNIT_HEALTH")
   end
   return value, maximum, percentReady, hpSecret, maxSecret
@@ -614,7 +685,7 @@ local function UpdateSingle(frame, event, unit, group)
         bar._msufHealthPercentValue, bar._msufHealthPercentUnit = pct, unit
       end
     end
-    if frame._msufHealthBackgroundFillMissing == true then
+    if frame._msufHealthBackgroundNeedsValue == true then
       SetHealthBackgroundValue(frame, unit, pct, pctSecret, healthTick)
     end
     if rt and (not healthTick or rt.healthDefersUnitHealthText ~= true)
@@ -629,7 +700,7 @@ local function UpdateSingle(frame, event, unit, group)
       and frame._msufHealthBackgroundColorDynamic == true
       and frame._msufHealthRuntimeColorUpdateEnabled ~= false then
       local refresh = frame._msufHealthBackgroundRefresh or RefreshHealthBarBackgroundColor
-      if not (type(refresh) == "function" and refresh(frame, event, unit, pct, 100, nil, nil, true) == true) then SetColor(frame) end
+      if not (type(refresh) == "function" and refresh(frame, event, unit, pct, 100, nil, nil, true, pctSecret) == true) then SetColor(frame) end
     elseif frame._msufHealthRuntimeColorUpdateEnabled ~= false
       and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100, nil, nil, true) then SetColor(frame) end
@@ -724,17 +795,14 @@ local function UpdateSingleCurrent(frame, event, unit)
 end
 
 local function UpdateGroup(frame, event, unit)
-  -- Cold/explicit group updates share the immediate text handoff. UNIT_HEALTH
-  -- uses the dedicated lane below and never pays for this wrapper or handoff.
+  -- Cold/explicit group updates share the generic immediate text handoff.
+  -- UNIT_HEALTH selects one of the folded lanes below at route compilation.
   return UpdateSingle(frame, event, unit, true)
 end
 
--- Group percent bar with zero health-text consumers: the single-pass lane.
--- The percent write, runtime-color gate, and the steady-state half of
--- NotifyHealthState are folded into one function so a group UNIT_HEALTH tick
--- runs without text-runtime handshakes or helper-call boundaries. Behaviour is
--- identical to UpdateGroup for a frame whose text runtime has no health slots;
--- SelectGroupHealthUpdater swaps back to UpdateGroup the moment slots appear.
+-- Fold the group percent write, runtime-color gate, and steady status update
+-- into one pass. Text-free/deferred routes use it directly; the immediate
+-- percent-text wrapper below publishes its result only to that consumer.
 local function UpdateGroupPercentLean(frame, event, unit)
   unit = unit or frame.MSUFUnitKey
   local bar = frame and frame.hpBar
@@ -769,7 +837,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
       bar._msufHealthPercentUnit = unit
     end
   end
-  if frame._msufHealthBackgroundFillMissing == true then
+  if frame._msufHealthBackgroundNeedsValue == true then
     SetHealthBackgroundValue(frame, unit, pct, secret, event == "UNIT_HEALTH")
   end
 
@@ -783,7 +851,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
     and frame._msufHealthRuntimeGradient ~= true then
     local refresh = frame._msufHealthBackgroundRefresh or RefreshHealthBarBackgroundColor
     if type(refresh) == "function" then
-      backgroundApplied = refresh(frame, event, unit, pct, 100, nil, nil, true) == true
+      backgroundApplied = refresh(frame, event, unit, pct, 100, nil, nil, true, secret) == true
     end
   end
 
@@ -831,6 +899,23 @@ local function UpdateGroupPercentLean(frame, event, unit)
   return pct, nil, true
 end
 
+-- Only the synchronous percent-text route consumes this sample. Its selector
+-- mirrors HealthText.SelectEventUpdate; deferred/value/absorb writers keep the
+-- lean updater and never retain a restricted value across events. Publishing
+-- through the existing dispatch slot also preserves Core's absolute-HP
+-- contract for prediction and visual followers.
+local function UpdateGroupPercentText(frame, event, unit)
+  local pct, maxHP, percentReady = UpdateGroupPercentLean(frame, event, unit)
+  if percentReady == true then
+    local rt = frame._msufTextRuntime
+    if rt then
+      rt._dispatchHealthPercent = pct
+      rt._dispatchHealthPercentReady = true
+    end
+  end
+  return pct, maxHP, percentReady
+end
+
 local HEALTH_PLAN_PERCENT = 1
 local HEALTH_PLAN_CURRENT = 2
 local HEALTH_PLAN_ABSOLUTE = 3
@@ -851,6 +936,13 @@ local function HealthValuePlan(frame)
     return HEALTH_PLAN_CURRENT
   end
   return HEALTH_PLAN_PERCENT
+end
+
+function Health.SyncBackgroundPlan(frame, resetValue)
+  if not frame then return end
+  local percentPlan = UnitHealthPercent and SCALE_100
+    and (frame._msufIsGroupFrame == true or HealthValuePlan(frame) == HEALTH_PLAN_PERCENT)
+  SyncHealthBackgroundMask(frame, percentPlan, resetValue)
 end
 
 local function UpdateColorOnly(frame, event, unit)
@@ -883,6 +975,8 @@ function Health.Update(frame, event, unit)
 end
 
 function Health.SelectUpdate(frame, spec)
+  -- Text changes can select a different value path without a full Health.Apply.
+  Health.SyncBackgroundPlan(frame)
   if (spec and spec.scope == "group") or (frame and frame._msufIsGroupFrame == true) then
     -- No health-text consumers -> the folded single-pass lane. Any text slot,
     -- percent need, or health-driven text color keeps the generic group path
@@ -902,12 +996,15 @@ function Health.SelectUpdate(frame, spec)
   return UpdateSingle
 end
 
-function Health.SelectEventUpdate(_frame, spec, event)
-  -- Group health text uses a shared deferred drain on UNIT_HEALTH, so the
-  -- generic UpdateGroup dispatch-percent handshake is dead work on that event.
-  -- Reuse the same folded bar path already used by text-free Raid/Mythic
-  -- frames; cold max/connection/identity events retain the full updater.
+function Health.SelectEventUpdate(frame, spec, event)
+  -- Compile the handoff only for the matching immediate percent-text consumer.
+  -- All deferred and text-free routes keep the folded bar-only path; cold
+  -- max/connection/identity events retain the full updater.
   if event == "UNIT_HEALTH" and spec and spec.scope == "group" then
+    local rt = frame and frame._msufTextRuntime
+    if rt and rt.healthHotFromPercent and rt.healthUsesAbsorb ~= true then
+      return UpdateGroupPercentText
+    end
     return UpdateGroupPercentLean
   end
   -- UNIT_FLAGS changes dead/ghost/AFK/DND status, not the health value. The
@@ -927,6 +1024,7 @@ Health.UpdateValueStaticPlain = Health.Update
 Health.UpdateValueGroupStatic = UpdateGroup
 Health.UpdateValueGroupPercent = UpdateGroup
 Health.UpdateValueGroupPercentLean = UpdateGroupPercentLean
+Health.UpdateValueGroupPercentText = UpdateGroupPercentText
 -- Static implementations are exposed on the element descriptor so Core can
 -- safely intern direct route prototypes without retaining frame-owned closures.
 Health.UpdateValueSinglePercent = UpdateSingle

@@ -540,17 +540,21 @@ local function UnitSupportsInterruptUnavailableTint(frame, general)
     if type(unit) ~= "string" then return false end
 
     local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
-    local function owns(which)
-        if type(shouldUse) == "function" then
-            return shouldUse(which, general) == true
-        end
-        return true
+    local key
+    if unit == "target" then
+        if general.kickReadyShowTarget ~= true then return false end
+        key = "target"
+    elseif unit == "focus" then
+        if general.kickReadyShowFocus ~= true then return false end
+        key = "focus"
+    elseif unit:sub(1, 4) == "boss" then
+        if general.kickReadyShowBoss ~= true then return false end
+        key = "boss"
+    else
+        return false
     end
-
-    if unit == "target" then return general.kickReadyShowTarget == true and owns("target") end
-    if unit == "focus" then return general.kickReadyShowFocus == true and owns("focus") end
-    if unit:sub(1, 4) == "boss" then return general.kickReadyShowBoss == true and owns("boss") end
-    return false
+    -- Resolve live ownership directly; no per-query closure is needed.
+    return type(shouldUse) ~= "function" or shouldUse(key, general) == true
 end
 
 local function ShouldUseInterruptUnavailableColor(frame)

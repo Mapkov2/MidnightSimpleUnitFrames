@@ -1379,12 +1379,14 @@ local function CompileTextRuntime(frame, spec, text)
         fromValues = hot.healthFromValues and hot.healthFromValues(frame, rt) or nil
       end
       rt.healthHot = fromValues or hot.healthHot
+      rt.healthDrain = hot.healthDrain and hot.healthDrain(rt) or nil
       rt.healthHotFromPercent = hot.healthFromPercent and hot.healthFromPercent(frame, rt) or nil
       rt.healthDirty = groupScope and hot.groupHealthDirty or hot.healthDirty
       rt.healthDefersUnitHealthText = not (groupScope and rt.healthHotFromPercent
         and rt.healthUsesAbsorb ~= true) and true or nil
     else
       rt.healthHot = nil
+      rt.healthDrain = nil
       rt.healthHotFromPercent = nil
       rt.healthDirty = nil
       rt.healthDefersUnitHealthText = nil
@@ -1395,19 +1397,23 @@ local function CompileTextRuntime(frame, spec, text)
         fromValues = hot.powerFromValues and hot.powerFromValues(frame, rt) or nil
       end
       rt.powerHot = fromValues or hot.powerHot
+      rt.powerDrain = hot.powerDrain and hot.powerDrain(rt, groupScope) or nil
       rt.powerHotFromPercent = hot.powerFromPercent and hot.powerFromPercent(frame, rt) or nil
       rt.powerDirty = hot.powerDirty
     else
       rt.powerHot = nil
+      rt.powerDrain = nil
       rt.powerHotFromPercent = nil
       rt.powerDirty = nil
     end
   else
     rt.healthHot = nil
+    rt.healthDrain = nil
     rt.healthHotFromPercent = nil
     rt.healthDirty = nil
     rt.healthDefersUnitHealthText = nil
     rt.powerHot = nil
+    rt.powerDrain = nil
     rt.powerHotFromPercent = nil
     rt.powerDirty = nil
   end

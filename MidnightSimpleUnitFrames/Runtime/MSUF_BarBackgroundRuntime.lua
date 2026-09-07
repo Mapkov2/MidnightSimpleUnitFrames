@@ -418,7 +418,43 @@ ExportPublic("MSUF_GetEffectiveHealthBarBackgroundTintRGBA", MSUF_GetEffectiveHe
 -- the Health element, while this runtime owns texture tint caches and the
 -- secret-safe VertexColor pass-through used by both dynamic color modes.
 local MSUF_RefreshHealthBarBackgroundColor
-local function MSUF_RefreshHealthGradientBackground(frame, event, unit, hp, maxHP, calc, force, percentReady)
+local RefreshHealthGradientBackgroundCompiled
+
+-- Configuration/texture owners call this after applying a spec. Reuse one
+-- frame-owned plan; no tables or closures are created by a health value tick.
+local function CompileHealthBackgroundPlan(frame)
+    if not frame then return end
+    local health = frame.MSUFSpec and frame.MSUFSpec.health
+    if not (health and health.backgroundColorMode == "health_gradient" and frame.hpBarBG) then
+        frame._msufHealthBackgroundRefresh = MSUF_RefreshHealthBarBackgroundColor
+        return
+    end
+    local common = MSUF.UFBarTextCommon
+    if common and common.PrepareHealthGradientCurve then
+        local curve, channels = common.PrepareHealthGradientCurve(health)
+        frame._msufHealthGradientCurve, frame._msufHealthGradientChannels = curve, channels
+        frame._msufHealthGradientReadPercent = channels and channels.ReadHealthPercent
+        frame._msufHealthGradientReadOpaque = channels and channels.ReadUnit
+    end
+    local readPercent, readOpaque = frame._msufHealthGradientReadPercent, frame._msufHealthGradientReadOpaque
+    if not (readPercent and readOpaque) then
+        frame._msufHealthBackgroundRefresh = MSUF_RefreshHealthBarBackgroundColor
+        return
+    end
+    local background = health.background
+    local alpha = background and background.a
+    if type(alpha) ~= "number" then alpha = frame.MSUFSpec.backgroundAlpha or 0.9 end
+    local plan = frame._msufHealthBackgroundPlan
+    if not plan then plan = {}; frame._msufHealthBackgroundPlan = plan end
+    plan.texture, plan.alpha = frame.hpBarBG, MSUF_Clamp01(alpha)
+    plan.readPercent, plan.readOpaque = readPercent, readOpaque
+    plan.readGradient = common and common.GradientColor
+    plan.foregroundGradient = health.mode == "gradient"
+    frame._msufHealthBackgroundRefresh = RefreshHealthGradientBackgroundCompiled
+end
+MSUF.Bars.CompileHealthBackgroundPlan = CompileHealthBackgroundPlan
+
+local function MSUF_RefreshHealthGradientBackground(frame, event, unit, hp, maxHP, calc, force, percentReady, percentSecret)
     if not frame then return false end
     local health = frame.MSUFSpec and frame.MSUFSpec.health
     -- Health.Apply selects this lane. Keep the live mode check: callers may
@@ -433,6 +469,13 @@ local function MSUF_RefreshHealthGradientBackground(frame, event, unit, hp, maxH
         -- Foreground and background share one native curve evaluation. Only
         -- the plain freshness sentinel may be inspected, never the RGB.
         r, gg, b = frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB
+    elseif percentSecret ~= nil and percentReady == true and not calc
+        and frame._msufHealthGradientReadPercent then
+        -- Only Health's direct background lane supplies percentSecret: it has
+        -- already validated this fresh native sample and its unit. Other
+        -- callers retain GradientColor's complete public contract below.
+        local reader = percentSecret and frame._msufHealthGradientReadOpaque or frame._msufHealthGradientReadPercent
+        r, gg, b = reader(unit, hp)
     else
         local common = MSUF.UFBarTextCommon
         local gradientColor = common and common.GradientColor
@@ -475,6 +518,37 @@ local function MSUF_RefreshHealthGradientBackground(frame, event, unit, hp, maxH
 end
 MSUF.Bars.RefreshHealthGradientBackground = MSUF_RefreshHealthGradientBackground
 
+RefreshHealthGradientBackgroundCompiled = function(frame, event, unit, hp, maxHP, calc, force, percentReady, percentSecret)
+    local plan = frame._msufHealthBackgroundPlan
+    local r, gg, b
+    if plan.foregroundGradient and frame._msufGradStashAt ~= nil then
+        r, gg, b = frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB
+    elseif percentReady == true and percentSecret ~= nil and not calc then
+        local read = percentSecret and plan.readOpaque or plan.readPercent
+        r, gg, b = read(unit, hp)
+    else
+        -- Identity/calculator updates still resolve current health through
+        -- the existing reader, while tint and texture use the prepared plan.
+        local read = plan.readGradient
+        if type(read) ~= "function" then return false end
+        r, gg, b = read(unit or frame.MSUFUnitKey or frame.unit, calc, frame, hp, maxHP, event, percentReady)
+    end
+    -- Keep the native sink inline in the selected value route. Sharing the
+    -- public painter here would reintroduce a Lua call for every health tick.
+    local secret = MSUF_HasAnySecretColor(r, gg, b)
+    if secret ~= true and (type(r) ~= "number" or type(gg) ~= "number" or type(b) ~= "number") then return false end
+    local a = plan.alpha
+    if secret == true then
+        plan.texture:SetVertexColor(r, gg, b, a)
+        frame._msufHPBgR, frame._msufHPBgG, frame._msufHPBgB, frame._msufHPBgA = nil, nil, nil, nil
+    elseif force == true or frame._msufHPBgR ~= r or frame._msufHPBgG ~= gg
+        or frame._msufHPBgB ~= b or frame._msufHPBgA ~= a then
+        plan.texture:SetVertexColor(r, gg, b, a)
+        frame._msufHPBgR, frame._msufHPBgG, frame._msufHPBgB, frame._msufHPBgA = r, gg, b, a
+    end
+    return true
+end
+
 MSUF_RefreshHealthBarBackgroundColor = function(frame, event, unit, hp, maxHP, calc, force, percentReady)
     if not frame then return false end
     local health = frame.MSUFSpec and frame.MSUFSpec.health
@@ -507,6 +581,7 @@ MSUF.Bars.RefreshHealthBarBackgroundColor = MSUF_RefreshHealthBarBackgroundColor
 
 local function MSUF_ApplyBarBackgroundVisual(frame)
     if not frame then return end
+    CompileHealthBackgroundPlan(frame)
     local spec = frame.MSUFSpec
     local hpTex = (spec and spec.health and spec.health.backgroundTexture) or (spec and spec.backgroundTexture)
     local powerTex = (spec and spec.power and spec.power.backgroundTexture) or (spec and spec.backgroundTexture) or hpTex

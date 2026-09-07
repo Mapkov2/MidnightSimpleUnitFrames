@@ -38,10 +38,11 @@ end
 local function ApplyGroupLaneAccessGate(root, lanes, laneKey, rootKey, canAssist, ready)
     local lane = lanes and lanes[laneKey]
     if not (lane and lane.groupAccessGate == true) then return false end
-    local known = issecretvalue(canAssist) ~= true and type(canAssist) == "boolean"
+    -- The sole caller already folded the secret/type check into this plain
+    -- ready flag. Keep the short circuit before inspecting canAssist.
     local parentFrame = root and root.GetParent and root:GetParent()
     local present = not parentFrame or parentFrame._msufA3GroupAuraPresenceVisible ~= false
-    local visible = present and ready ~= false and known and (lane.identityCandidateMode == "hostile"
+    local visible = present and ready and (lane.identityCandidateMode == "hostile"
         and canAssist == false or lane.identityCandidateMode ~= "hostile" and canAssist == true)
     return SetAssistAlpha(root[rootKey], visible, lane.alpha or 1)
 end
@@ -83,17 +84,19 @@ local function ApplyGroupAuraAssistGate(frame, canAssist, ready)
     local cfg = root._msufA3Config
     local groupSlots = GetGroupSlotsRootConfig(cfg)
     local any = false
-    local owners = groupSlots and {
-        groupSlots,
-        groupSlots.secondaryRoot,
-        groupSlots.tertiaryRoot,
-    } or {}
-    for index = 1, 3 do
-        local owner = owners[index]
-        if owner and owner.assistGated == true then
-            local visible = present and ready and (owner.identityCandidateMode == "hostile"
-                and canAssist == false or owner.identityCandidateMode ~= "hostile" and canAssist == true)
-            any = SetAssistAlpha(root[owner.rootKey or "GroupSlots"], visible, 1) or any
+    if groupSlots then
+        -- The compiled config already owns these three descriptors. Walking
+        -- them directly avoids a temporary table on every identity refresh;
+        -- a missing secondary must not hide an existing tertiary owner.
+        local owner = groupSlots
+        for index = 1, 3 do
+            if owner and owner.assistGated == true then
+                local visible = present and ready and (owner.identityCandidateMode == "hostile"
+                    and canAssist == false or owner.identityCandidateMode ~= "hostile" and canAssist == true)
+                any = SetAssistAlpha(root[owner.rootKey or "GroupSlots"], visible, 1) or any
+            end
+            if index == 1 then owner = groupSlots.secondaryRoot
+            else owner = groupSlots.tertiaryRoot end
         end
     end
 

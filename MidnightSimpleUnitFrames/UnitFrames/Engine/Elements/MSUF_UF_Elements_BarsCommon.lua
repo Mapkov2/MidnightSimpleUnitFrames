@@ -1352,6 +1352,29 @@ local function CompileGradientReaders(channels)
   end
 end
 
+local function CompileHealthPercentGradientReader(channels)
+  if not channels.linear then return channels.ReadUnit end
+  local r, g, b = channels.r, channels.g, channels.b
+  local mr, mg, mb = channels.mr, channels.mg, channels.mb
+  local dr1, dg1, db1 = channels.dr1, channels.dg1, channels.db1
+  local dr2, dg2, db2 = channels.dr2, channels.dg2, channels.db2
+  -- Private Health-owner contract: unit has just succeeded in the native
+  -- percent read, and Health has already classified/sanitized its 0..100
+  -- sample. Bind the immutable stops once; do not repeat generic API guards,
+  -- frame/spec resolution or secret probes for the same event payload.
+  -- The owner selects ReadUnit for opaque inputs before entering this reader.
+  return function(unit, percent)
+    local pct = percent / 100
+    if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
+    if pct <= 0.5 then
+      local t = pct * 2
+      return r + dr1 * t, g + dg1 * t, b + db1 * t, true
+    end
+    local t = (pct - 0.5) * 2
+    return mr + dr2 * t, mg + dg2 * t, mb + db2 * t, true
+  end
+end
+
 local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
   if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
     -- Unit/group specs normally share the same global gradient stops. Reuse
@@ -1397,6 +1420,7 @@ local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
         channels.dr2, channels.dg2, channels.db2 = hr - mr, hg - mg, hb - mb
       end
       CompileGradientReaders(channels)
+      channels.ReadHealthPercent = CompileHealthPercentGradientReader(channels)
     end
     local entry = { lr, lg, lb, mr, mg, mb, hr, hg, hb, curve, channels }
     if healthGradientCurveCacheCount < HEALTH_GRADIENT_CURVE_CACHE_LIMIT then
@@ -1652,6 +1676,11 @@ local function ApplyBackgrounds(frame, health, power, force)
   end
   if health == nil then health = true end
   if power == nil then power = true end
+  -- Full/color/texture applies publish immutable inputs to the Health value
+  -- route before it can consume another event, including shared group specs.
+  if health and MSUF.Bars and MSUF.Bars.CompileHealthBackgroundPlan then
+    MSUF.Bars.CompileHealthBackgroundPlan(frame)
+  end
   local hb = spec.health and spec.health.background
   if health and frame.bg and hb then
     local r, g, b = hb.r, hb.g, hb.b
