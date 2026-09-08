@@ -22,6 +22,10 @@ local string_byte = string.byte
 local string_sub = string.sub
 local math_floor = math.floor
 local math_abs = math.abs
+local IsSecretValue = type(_G.issecretvalue) == "function" and _G.issecretvalue
+local CurveUtil = _G.C_CurveUtil
+local EvaluateColorFromBoolean = CurveUtil and type(CurveUtil.EvaluateColorFromBoolean) == "function"
+    and CurveUtil.EvaluateColorFromBoolean
 
 local function PlainPositiveNumber(value)
     local isSecret = _G.issecretvalue
@@ -177,9 +181,8 @@ local function CachedColor(cache, red, green, blue, alpha)
 end
 
 local function CanUseBooleanTintValue(value)
-    local isSecret = _G.issecretvalue
-    if type(isSecret) == "function" and isSecret(value) == true then return true end
-    return value ~= nil
+    if IsSecretValue and IsSecretValue(value) == true then return true, true end
+    return value ~= nil, false
 end
 
 local function ApplyNonInterruptibleTint(
@@ -209,9 +212,13 @@ local function ApplyNonInterruptibleTint(
         and unavailableR ~= nil
         and unavailableG ~= nil
         and unavailableB ~= nil
-        and CanUseBooleanTintValue(interruptReadyBool)
-        and _G.C_CurveUtil
-        and type(_G.C_CurveUtil.EvaluateColorFromBoolean) == "function"
+        and EvaluateColorFromBoolean
+    local readySecret
+    if useUnavailable then
+        -- Keep the classification from the validity check; checking again in
+        -- the native-color branch adds work for every restricted combat value.
+        useUnavailable, readySecret = CanUseBooleanTintValue(interruptReadyBool)
+    end
 
     local red = useNonInterruptible and nonR or castR
     local green = useNonInterruptible and nonG or castG
@@ -232,7 +239,16 @@ local function ApplyNonInterruptibleTint(
                 unavailableB,
                 unavailableA or 1
             )
-            activeCastColor = _G.C_CurveUtil.EvaluateColorFromBoolean(interruptReadyBool, castColor, unavailableColor)
+            -- Native selection creates a result ColorObject. Public booleans
+            -- can reuse the immutable configured colors directly; restricted
+            -- inputs must still go through Blizzard's secret-safe selector.
+            if readySecret then
+                activeCastColor = EvaluateColorFromBoolean(interruptReadyBool, castColor, unavailableColor)
+            elseif type(interruptReadyBool) == "boolean" then
+                activeCastColor = interruptReadyBool and castColor or unavailableColor
+            else
+                activeCastColor = EvaluateColorFromBoolean(interruptReadyBool, castColor, unavailableColor)
+            end
         end
 
         local boolValue = apiNotInterruptibleRaw
