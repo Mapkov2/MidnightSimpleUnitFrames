@@ -1,5 +1,26 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha14 - 2026-09-08
+
+### Highlights
+
+- **Health gradients, backgrounds, and prediction updates include the latest Retail performance improvements.** Existing colors, text formats, prediction options, and Arena support are preserved.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_appearance","controlId":"menu2.opt.colors.advanced.appearance.gradient.enabled","settingKey":"general.enableHealthGradient","prepareKind":"","prepareValue":"","query":"health gradient","label":"Health Gradient"} -->
+
+### Changes
+
+- Includes Retail 6.16-beta2 with specialized health, absorb prediction, text, and castbar color updates.
+- Includes client-specific localized Aura spell-name catalogs for Vanilla, TBC, and Mists. Name matching covers spell ranks and spells whose cast and Aura use different IDs.
+- Retains the Mainline, Vanilla, TBC, and Mists client variants and their existing Arena and Classic-specific behavior.
+
+### Fixes & Performance
+
+- Health backgrounds reuse fresh samples, absorb-only prediction avoids unused update paths, and common text formats avoid repeated format selection.
+- Castbar interrupt-ready colors reuse configured colors for public values while preserving native protected-value handling and Arena settings.
+- Classic unit choices and interrupt-ready spell lists now follow the active client's capabilities. TBC specialization detection uses the dominant talent tree.
+- Classic menus and previews include injured-only visibility, friendly/enemy debuff-border scope, and chunked Power fill controls.
+- Classic dispel symbols, portrait masks, and Edit Mode arrows handle unavailable client atlases. Legacy Blizzard Arena frames are hidden when MSUF owns those frames.
+
 ## 6.5-alpha13 - 2026-09-08
 
 ### Highlights

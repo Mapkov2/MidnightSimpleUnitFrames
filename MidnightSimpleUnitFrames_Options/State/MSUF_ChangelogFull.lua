@@ -8,12 +8,52 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9547E84A33DEFA2F14559D36141DBEAF0A9721015703E21C4E9B5600F480FBBF",
-    currentVersion = "6.5-alpha13",
+    sourceSha256 = "33518938FA04080D54F21B1A0AC7C55A5B7C02C2C02C97F143DB0828CAAE2B42",
+    currentVersion = "6.5-alpha14",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-alpha12",
-    rangeLabel = "6.5-alpha12 -> 6.5-alpha13",
+    previousVersion = "6.5-alpha13",
+    rangeLabel = "6.5-alpha13 -> 6.5-alpha14",
     entries = {
+        {
+            version = "6.5-alpha14",
+            date = "2026-09-08",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Health gradients, backgrounds, and prediction updates include the latest Retail performance improvements. Existing colors, text formats, prediction options, and Arena support are preserved.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "health gradient",
+                                label = "Health Gradient",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
+                                settingKey = "general.enableHealthGradient",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Includes Retail 6.16-beta2 with specialized health, absorb prediction, text, and castbar color updates.",
+                        "Includes client-specific localized Aura spell-name catalogs for Vanilla, TBC, and Mists. Name matching covers spell ranks and spells whose cast and Aura use different IDs.",
+                        "Retains the Mainline, Vanilla, TBC, and Mists client variants and their existing Arena and Classic-specific behavior.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Health backgrounds reuse fresh samples, absorb-only prediction avoids unused update paths, and common text formats avoid repeated format selection.",
+                        "Castbar interrupt-ready colors reuse configured colors for public values while preserving native protected-value handling and Arena settings.",
+                        "Classic unit choices and interrupt-ready spell lists now follow the active client's capabilities. TBC specialization detection uses the dominant talent tree.",
+                        "Classic menus and previews include injured-only visibility, friendly/enemy debuff-border scope, and chunked Power fill controls.",
+                        "Classic dispel symbols, portrait masks, and Edit Mode arrows handle unavailable client atlases. Legacy Blizzard Arena frames are hidden when MSUF owns those frames.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha13",
             date = "2026-09-08",

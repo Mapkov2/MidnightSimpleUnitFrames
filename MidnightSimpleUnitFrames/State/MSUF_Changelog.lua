@@ -8,12 +8,52 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "9547E84A33DEFA2F14559D36141DBEAF0A9721015703E21C4E9B5600F480FBBF",
-    currentVersion = "6.5-alpha13",
-    historyFromVersion = "6.5-alpha10",
-    previousVersion = "6.5-alpha12",
-    rangeLabel = "6.5-alpha12 -> 6.5-alpha13",
+    sourceSha256 = "33518938FA04080D54F21B1A0AC7C55A5B7C02C2C02C97F143DB0828CAAE2B42",
+    currentVersion = "6.5-alpha14",
+    historyFromVersion = "6.5-alpha11",
+    previousVersion = "6.5-alpha13",
+    rangeLabel = "6.5-alpha13 -> 6.5-alpha14",
     entries = {
+        {
+            version = "6.5-alpha14",
+            date = "2026-09-08",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Health gradients, backgrounds, and prediction updates include the latest Retail performance improvements. Existing colors, text formats, prediction options, and Arena support are preserved.",
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "health gradient",
+                                label = "Health Gradient",
+                                sectionId = "colors_appearance",
+                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
+                                settingKey = "general.enableHealthGradient",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Includes Retail 6.16-beta2 with specialized health, absorb prediction, text, and castbar color updates.",
+                        "Includes client-specific localized Aura spell-name catalogs for Vanilla, TBC, and Mists. Name matching covers spell ranks and spells whose cast and Aura use different IDs.",
+                        "Retains the Mainline, Vanilla, TBC, and Mists client variants and their existing Arena and Classic-specific behavior.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Health backgrounds reuse fresh samples, absorb-only prediction avoids unused update paths, and common text formats avoid repeated format selection.",
+                        "Castbar interrupt-ready colors reuse configured colors for public values while preserving native protected-value handling and Arena settings.",
+                        "Classic unit choices and interrupt-ready spell lists now follow the active client's capabilities. TBC specialization detection uses the dominant talent tree.",
+                        "Classic menus and previews include injured-only visibility, friendly/enemy debuff-border scope, and chunked Power fill controls.",
+                        "Classic dispel symbols, portrait masks, and Edit Mode arrows handle unavailable client atlases. Legacy Blizzard Arena frames are hidden when MSUF owns those frames.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha13",
             date = "2026-09-08",
@@ -153,65 +193,6 @@ local data = {
                         "Unresolved Aura fallback scans avoid resynchronizing an unchanged active-work state while later discovery, owner reactivation, and unregister cleanup remain intact.",
                         "Group death-background updates skip cache probes that cannot be reused outside an active frame dispatch while retaining fresh native death and resurrection checks.",
                         "Range Fade keeps an earlier timer when its logical deadline moves later, reducing timer replacement churn without moving range checks or alpha changes forward.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-alpha10",
-            date = "2026-09-04",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Absorbs and heal prediction can now stay visible when the health bar is faded into the background. Enable Keep Absorbs + Prediction Visible per Unit Frame or for Party and Raid Frames to keep these overlays at full opacity independently from the health fill.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "keep absorbs prediction visible",
-                                label = "Keep Absorbs + Prediction Visible",
-                                sectionId = "transparency",
-                                controlId = "menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars",
-                                settingKey = "player.alphaExcludePredictionBars",
-                            },
-                        },
-                        {
-                            text = "Raid and Mythic Raid role sorting can now span the entire raid. Enable Sort roles across entire raid under Group Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "sort roles across entire raid",
-                                label = "Sort roles across entire raid",
-                                sectionId = "sorting",
-                                controlId = "menu2.gf_layout.group.field.sortrolesacrossraid",
-                                settingKey = "gf_raid.sortRolesAcrossRaid",
-                                prepareKind = "groupScope",
-                                prepareValue = "raid",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Synchronized the complete Retail 6.15-beta6 feature and fix set into the unified Alpha package.",
-                        "Added Keep Absorbs + Prediction Visible to Unit Frames and Party/Raid Frames, including profile copy, defaults, previews, search, and Assistant support.",
-                        "Added Sort roles across entire raid for Raid and Mythic Raid Frames, including defaults, profile copy, locales, search, and Assistant support. Party sorting remains unchanged.",
-                        "The Boss Preview now displays incoming heals, absorbs, heal absorbs, and absorb text so prediction settings can be reviewed without a live boss.",
-                        "The Assistant now resolves requests about a specific Unit Frame and its opacity, visibility, movement, portrait, texture, and text controls more precisely.",
-                        "Retired pre-6.0 profile conversion and import controls while preserving every supported MSUF 6.x profile and Wago import.",
-                        "The Mainline flavor retains its Retail 12.1.5 native Aura, scheduler, tooltip-caster, and pixel-rounding paths. Arena Frames and the Vanilla 1.15.9, TBC 2.5.6, and Mists 5.5.4 client flavors remain included.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview preserve the configured health and prediction opacity.",
-                        "Detached Player Power bars attached or width-synced to Class Resources keep their controller-managed anchor while the Class Resource bar is hidden.",
-                        "Aura owners that cannot be visible stop parsing UNIT_AURA; registration and unresolved-name work resume when the owner becomes eligible again.",
-                        "Cleanse and Purge borders share the Frame Outline layer, Unit Frame dispel borders follow Blizzard's assist rules, and exact-ID Group Aura ownership remains intact.",
-                        "Group Frame dead and offline backgrounds follow secret health updates, and preserved raid groups build and sort from one authoritative roster snapshot per secure-header setup.",
-                        "Interrupted full Aura refreshes arm recovery before synchronous work, retain the Retail 12.1.5 native contracts, and no longer leave later refreshes pending.",
-                        "Class Resource previews can schedule refreshes again after Menu lifecycle cancellation.",
                     },
                 },
             },
