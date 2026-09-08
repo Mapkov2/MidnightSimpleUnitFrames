@@ -39,9 +39,21 @@ local full = assert(Load("MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogF
     "full Options changelog payload missing")
 assert(type(compact.entries) == "table" and #compact.entries == 4,
     "compact core changelog must retain four releases")
-assert(type(full.entries) == "table" and #full.entries == 23
+local expectedVersions = {}
+for line in Read("CHANGELOG.md"):gmatch("[^\r\n]+") do
+    local version = line:match("^##%s+([^%s]+)%s+%-%s+%d%d%d%d%-%d%d%-%d%d")
+    if version then
+        expectedVersions[#expectedVersions + 1] = version
+        if version == "6.02" then break end
+    end
+end
+assert(expectedVersions[#expectedVersions] == "6.02", "authored history floor missing")
+assert(type(full.entries) == "table" and #full.entries == #expectedVersions
     and full.historyFromVersion == "6.02" and full.entries[#full.entries].version == "6.02",
     "full LoD changelog must contain only releases from 6.02 through current")
+for index, version in ipairs(expectedVersions) do
+    assert(full.entries[index].version == version, "full changelog release order differs from CHANGELOG.md")
+end
 assert(type(compact.sourceSha256) == "string" and compact.sourceSha256 == full.sourceSha256,
     "compact and full changelog payloads do not share one source hash")
 

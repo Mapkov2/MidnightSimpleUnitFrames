@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.16-beta2 - 2026-09-08
+
+### Highlights
+
+- **Health gradients, backgrounds, and prediction updates do less repeated work during combat.** Existing colors, text formats, prediction options, and update behavior are preserved.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_appearance","controlId":"menu2.opt.colors.advanced.appearance.gradient.enabled","settingKey":"general.enableHealthGradient","prepareKind":"","prepareValue":"","query":"health gradient","label":"Health Gradient"} -->
+
+### Fixes & Performance
+
+- Health and background rendering reuse fresh health samples and choose client-specific update paths once instead of on every health event.
+- Absorb-only prediction uses specialized update paths for static and follow-health anchors, including glow and full-health stripe options, while retaining identity, disable, and recovery handling.
+- Current, maximum, and percentage text use specialized writers and preserve live number-format changes. Group text updates reuse health values already sampled for the bars.
+- Castbar interrupt-ready colors reuse configured colors for public values and retain Blizzard's native handling for protected values.
+- Aura identity checks avoid temporary owner tables and repeated access checks. Castbar color ownership avoids redundant temporary allocations.
+- Corrected missing-health background masking during Range Fade so the configured background and out-of-range appearance remain visible.
+- Fixed clipping in Aura cooldown and Texture Layer options, and improved Unit Status previews in the Menu.
+
 ## 6.16-beta1 - 2026-09-06
 
 ### Highlights
