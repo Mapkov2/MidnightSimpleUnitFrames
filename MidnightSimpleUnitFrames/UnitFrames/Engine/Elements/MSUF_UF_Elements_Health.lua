@@ -51,16 +51,6 @@ local COLOR_ONLY_EVENTS = {
 }
 local PLAYER_STATUS_COLOR_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
-local IDENTITY_EVENTS = {
-  MSUF_UNIT_IDENTITY = true,
-  MSUF_UNIT_IDENTITY_FAST = true,
-  MSUF_UNIT_IDENTITY_SOFT = true,
-  MSUF_UNIT_IDENTITY_SOFT_FAST = true,
-  MSUF_GF_UNIT_IDENTITY = true,
-  MSUF_GF_UNIT_STRUCTURE = true,
-  MSUF_GF_NAME_UPDATE = true,
-}
-
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
 end
@@ -426,6 +416,7 @@ function Health.Apply(frame, spec)
   frame._msufHealthBackgroundGradient = backgroundGradient
   frame._msufHealthBackgroundRefresh = backgroundGradient and RefreshHealthGradientBackground
     or RefreshHealthBarBackgroundColor
+  frame._msufHealthBackgroundRefreshValue = frame._msufHealthBackgroundRefresh
   frame._msufHealthBgDynamic = backgroundDynamic
   frame._msufHealthRuntimeColorUpdateEnabled = frame._msufHealthRuntimeColorEnabled or backgroundDynamic
   SetTexture(frame.hpBar, h and h.texture or spec and spec.texture or WHITE)
@@ -648,16 +639,19 @@ local function UpdateTextureLayerHealthState(update, frame, unit, hp, maxHP)
   return update(frame, unit, hp, maxHP)
 end
 
-local function UpdateSingle(frame, event, unit, group)
-  unit = unit or frame.MSUFUnitKey
-  local rt = frame and frame._msufTextRuntime
-  if rt and rt._dispatchHealthPercentReady == true then
-    rt._dispatchHealthPercent = nil
-    rt._dispatchHealthPercentReady = nil
-  end
-  if not (frame and frame.hpBar and unit) then return end
-
-  if UnitHealthPercent and SCALE_100 then
+-- Client capabilities do not change after these local API references are
+-- loaded. Select once instead of carrying the absolute path through every
+-- native-percent update. Both variants keep the public handoff contract.
+local UpdateSingle
+if UnitHealthPercent and SCALE_100 then
+  UpdateSingle = function(frame, event, unit, group)
+    unit = unit or frame.MSUFUnitKey
+    local rt = frame and frame._msufTextRuntime
+    if rt and rt._dispatchHealthPercentReady == true then
+      rt._dispatchHealthPercent = nil
+      rt._dispatchHealthPercentReady = nil
+    end
+    if not (frame and frame.hpBar and unit) then return end
     -- Keep the native percent write and its consumers in one pass. The group
     -- lane below owns its deferred-text contract; this lane must still hand
     -- the very same payload to immediate single-frame text consumers.
@@ -695,14 +689,15 @@ local function UpdateSingle(frame, event, unit, group)
 
     -- Static foreground + independent gradient background needs one painter,
     -- without the generic foreground/status resolver's intermediate calls.
+    -- Apply already makes a gradient background dynamic and enables its color
+    -- updates. These two flags fully select this route; do not recheck their
+    -- derived flags on every value event.
     if healthTick and frame._msufHealthRuntimeColorEnabled == false
-      and frame._msufHealthBackgroundGradient == true
-      and frame._msufHealthBackgroundColorDynamic == true
-      and frame._msufHealthRuntimeColorUpdateEnabled ~= false then
-      local refresh = frame._msufHealthBackgroundRefresh or RefreshHealthBarBackgroundColor
+      and frame._msufHealthBackgroundGradient == true then
+      local refresh = frame._msufHealthBackgroundRefreshValue or RefreshHealthBarBackgroundColor
       if not (type(refresh) == "function" and refresh(frame, event, unit, pct, 100, nil, nil, true, pctSecret) == true) then SetColor(frame) end
     elseif frame._msufHealthRuntimeColorUpdateEnabled ~= false
-      and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
+      and (not healthTick or RuntimeColorOnHealthEvent(frame, pct, pctSecret)) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100, nil, nil, true) then SetColor(frame) end
     end
     if group then
@@ -723,24 +718,33 @@ local function UpdateSingle(frame, event, unit, group)
     end
     return pct, nil, true
   end
-
-  local hp, maxHP, absolutePercentReady, hpSecret = UpdateAbsolute(frame, event, unit)
-  if frame._msufHealthRuntimeColorUpdateEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
-    if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
-  end
-  if group then
-    NotifyHealthState(frame, event, unit, hp, hpSecret)
-  else
-    local updateTextureState = frame._msufTexLayerHealthUpdate
-    if updateTextureState then
-      UpdateTextureLayerHealthState(updateTextureState, frame, unit, hp, maxHP)
+else
+  UpdateSingle = function(frame, event, unit, group)
+    unit = unit or frame.MSUFUnitKey
+    local rt = frame and frame._msufTextRuntime
+    if rt and rt._dispatchHealthPercentReady == true then
+      rt._dispatchHealthPercent = nil
+      rt._dispatchHealthPercentReady = nil
     end
-    if frame._msufUpdateStatusTextIndicator then
+    if not (frame and frame.hpBar and unit) then return end
+    local hp, maxHP, absolutePercentReady, hpSecret = UpdateAbsolute(frame, event, unit)
+    if frame._msufHealthRuntimeColorUpdateEnabled ~= false
+      and (event ~= "UNIT_HEALTH" or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
+      if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
+    end
+    if group then
       NotifyHealthState(frame, event, unit, hp, hpSecret)
+    else
+      local updateTextureState = frame._msufTexLayerHealthUpdate
+      if updateTextureState then
+        UpdateTextureLayerHealthState(updateTextureState, frame, unit, hp, maxHP)
+      end
+      if frame._msufUpdateStatusTextIndicator then
+        NotifyHealthState(frame, event, unit, hp, hpSecret)
+      end
     end
+    return hp, maxHP, absolutePercentReady
   end
-  return hp, maxHP, absolutePercentReady
 end
 
 local function UpdateSingleAbsolute(frame, event, unit)
@@ -754,7 +758,7 @@ local function UpdateSingleAbsolute(frame, event, unit)
 
   local hp, maxHP, percentReady, hpSecret = UpdateAbsolute(frame, event, unit)
   if frame._msufHealthRuntimeColorUpdateEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
+    and (event ~= "UNIT_HEALTH" or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
   local updateTextureState = frame._msufTexLayerHealthUpdate
@@ -781,7 +785,7 @@ local function UpdateSingleCurrent(frame, event, unit)
   -- steady health ticks avoid the extra UnitHealthPercent call entirely.
   local hp, maxHP, _, hpSecret = UpdateAbsolute(frame, event, unit)
   if frame._msufHealthRuntimeColorUpdateEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
+    and (event ~= "UNIT_HEALTH" or RuntimeColorOnHealthEvent(frame, hp, hpSecret)) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then SetColor(frame) end
   end
   local updateTextureState = frame._msufTexLayerHealthUpdate
@@ -807,10 +811,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
   unit = unit or frame.MSUFUnitKey
   local bar = frame and frame.hpBar
   if not (bar and unit) then return end
-  if not (UnitHealthPercent and SCALE_100) then
-    return UpdateGroup(frame, event, unit)
-  end
-
+  local healthTick = event == "UNIT_HEALTH"
   local pct = UnitHealthPercent(unit, true, SCALE_100)
   local secret = issecretvalue(pct) == true
   if not secret and (type(pct) ~= "number" or pct ~= pct or (pct - pct) ~= 0) then pct = 0 end
@@ -821,7 +822,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
   if secret
     or bar._msufHealthPercentValue ~= pct
     or bar._msufHealthPercentUnit ~= unit then
-    local interp = event == "UNIT_HEALTH" and bar._msufSmoothInterp or nil
+    local interp = healthTick and bar._msufSmoothInterp or nil
     if interp then
       bar:SetValue(pct, interp)
       bar._msufInterpolating = true
@@ -838,7 +839,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
     end
   end
   if frame._msufHealthBackgroundNeedsValue == true then
-    SetHealthBackgroundValue(frame, unit, pct, secret, event == "UNIT_HEALTH")
+    SetHealthBackgroundValue(frame, unit, pct, secret, healthTick)
   end
 
   -- A background-only health gradient can stay on the folded group lane: its
@@ -846,10 +847,10 @@ local function UpdateGroupPercentLean(frame, event, unit)
   -- the alive/static foreground early return. Match-health waits until after a
   -- dynamic foreground repaint and is therefore handled by ApplyRuntimeColor.
   local backgroundApplied
-  if event == "UNIT_HEALTH"
+  if healthTick
     and frame._msufHealthBackgroundGradient == true
     and frame._msufHealthRuntimeGradient ~= true then
-    local refresh = frame._msufHealthBackgroundRefresh or RefreshHealthBarBackgroundColor
+    local refresh = frame._msufHealthBackgroundRefreshValue or RefreshHealthBarBackgroundColor
     if type(refresh) == "function" then
       backgroundApplied = refresh(frame, event, unit, pct, 100, nil, nil, true, secret) == true
     end
@@ -861,7 +862,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
   -- write instead of entering the generic color/status handoff. Identity,
   -- connection, gradient, gone-state, and smoothing semantics above remain
   -- unchanged.
-  if event == "UNIT_HEALTH"
+  if healthTick
     and frame._msufHealthRuntimeGradient ~= true
     and frame._msufHealthStatusGone ~= true
     and frame._msufStatusTextValue == nil
@@ -873,7 +874,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
 
   if (not backgroundApplied or frame._msufHealthRuntimeColorEnabled ~= false)
     and frame._msufHealthRuntimeColorUpdateEnabled ~= false
-    and (event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct, secret)) then
+    and (not healthTick or RuntimeColorOnHealthEvent(frame, pct, secret)) then
     -- A gone/status consumer can prevent the early return above. Its color
     -- handoff must retain the background-only result without evaluating it twice.
     if not ApplyRuntimeColor(frame, event, unit, pct, 100, nil, backgroundApplied, true) then SetColor(frame) end
@@ -883,7 +884,7 @@ local function UpdateGroupPercentLean(frame, event, unit)
   -- gone-state sink directly. Secret values keep the same nil seed that the
   -- full notifier would produce; every visible status transition retains that
   -- notifier contract.
-  if event == "UNIT_HEALTH"
+  if healthTick
     and frame._msufStatusTextValue == nil
     and frame._msufStatusTextHealthRefresh ~= true
     and (secret or pct > 0) then
@@ -897,6 +898,17 @@ local function UpdateGroupPercentLean(frame, event, unit)
     NotifyHealthState(frame, event, unit, pct, secret)
   end
   return pct, nil, true
+end
+
+-- Native API and curve availability are fixed when this module loads. Bind
+-- the supported updater once; a legacy client retains its guarded absolute
+-- route without a capability decision on every update.
+if not (UnitHealthPercent and SCALE_100) then
+  UpdateGroupPercentLean = function(frame, event, unit)
+    unit = unit or frame.MSUFUnitKey
+    if not (frame and frame.hpBar and unit) then return end
+    return UpdateGroup(frame, event, unit)
+  end
 end
 
 -- Only the synchronous percent-text route consumes this sample. Its selector

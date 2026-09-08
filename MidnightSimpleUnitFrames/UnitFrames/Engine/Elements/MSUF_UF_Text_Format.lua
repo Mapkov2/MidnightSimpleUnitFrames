@@ -853,10 +853,19 @@ local function CompileSecretWriter(slot)
     -- slot, SetText accepts that same opaque result without formatting it again.
     -- Select this at compile time; numeric fallbacks keep their original writer.
     if fn and pattern == "%s" then
+      if abbreviates then
+        -- This is the common CURRENT slot. Keep style options live while
+        -- selecting the short-number contract only when the slot is compiled.
+        return function(_, cur, _, _, _, _, curSecret)
+          if curSecret == nil then curSecret = issecretvalue(cur) == true end
+          cur = curSecret == true and fn(cur, NUM_OPTS) or fn(FiniteNumberOr(cur, 0), NUM_OPTS)
+          fs._aText, fs._aTextPlain = nil, nil
+          fs:SetText(cur)
+        end
+      end
       return function(_, cur, _, _, _, _, curSecret)
         if curSecret == nil then curSecret = issecretvalue(cur) == true end
-        local opts = abbreviates and NUM_OPTS or nil
-        cur = curSecret == true and fn(cur, opts) or fn(FiniteNumberOr(cur, 0), opts)
+        cur = curSecret == true and fn(cur, nil) or fn(FiniteNumberOr(cur, 0), nil)
         fs._aText, fs._aTextPlain = nil, nil
         fs:SetText(cur)
       end
@@ -874,10 +883,17 @@ local function CompileSecretWriter(slot)
     end
   elseif code == 2 then
     if fn and pattern == "%s" then
+      if abbreviates then
+        return function(_, _, maxValue, _, _, _, _, maxSecret)
+          if maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
+          maxValue = maxSecret == true and fn(maxValue, NUM_OPTS) or fn(FiniteNumberOr(maxValue, 0), NUM_OPTS)
+          fs._aText, fs._aTextPlain = nil, nil
+          fs:SetText(maxValue)
+        end
+      end
       return function(_, _, maxValue, _, _, _, _, maxSecret)
         if maxSecret == nil then maxSecret = issecretvalue(maxValue) == true end
-        local opts = abbreviates and NUM_OPTS or nil
-        maxValue = maxSecret == true and fn(maxValue, opts) or fn(FiniteNumberOr(maxValue, 0), opts)
+        maxValue = maxSecret == true and fn(maxValue, nil) or fn(FiniteNumberOr(maxValue, 0), nil)
         fs._aText, fs._aTextPlain = nil, nil
         fs:SetText(maxValue)
       end
@@ -901,6 +917,28 @@ local function CompileSecretWriter(slot)
       fs:SetFormattedText(pattern, pct)
     end
   elseif code == 6 or code == 7 then
+    if fn and abbreviates then
+      -- Bind the two frequent native formats without adding a dispatch/helper
+      -- call per write. Only values and the live number style vary at runtime.
+      if code == 6 then
+        return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
+          if curSecret == nil then curSecret = issecretvalue(cur) == true end
+          if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
+          cur = curSecret == true and fn(cur, NUM_OPTS) or fn(FiniteNumberOr(cur, 0), NUM_OPTS)
+          if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
+          fs._aText, fs._aTextPlain = nil, nil
+          fs:SetFormattedText(pattern, cur, delimiter, pct)
+        end
+      end
+      return function(_, cur, _, pct, _, _, curSecret, _, pctSecret)
+        if curSecret == nil then curSecret = issecretvalue(cur) == true end
+        if pctSecret == nil then pctSecret = issecretvalue(pct) == true end
+        cur = curSecret == true and fn(cur, NUM_OPTS) or fn(FiniteNumberOr(cur, 0), NUM_OPTS)
+        if pctSecret ~= true then pct = FiniteNumberOr(pct, 0) end
+        fs._aText, fs._aTextPlain = nil, nil
+        fs:SetFormattedText(pattern, pct, delimiter, cur)
+      end
+    end
     -- Current + percent is a common two-value slot. Its maximum is unused, so
     -- compile that fact instead of walking the general three-value dispatcher.
     -- Number-style options stay live, as in the single-value writers above.

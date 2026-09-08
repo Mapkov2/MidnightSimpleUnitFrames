@@ -1425,6 +1425,12 @@ local function CompilePredictionPlans(cfg, followAbsorb)
     end
   end
 
+  -- Queue drains already carry this numeric key. Alias the immutable plans
+  -- once, retaining event-name keys for full/lifecycle updates and recovery.
+  for mask = 1, 7 do
+    plans[mask] = plans[PREDICTION_DIRTY_PLAN_KEYS[mask]]
+  end
+
   local fullPlan = PredictionPlan(heal, absorb, healAbsorb, heal, absorb, healAbsorb, true)
   predictionPlanCache[key] = { plans, fullPlan }
   return plans, fullPlan
@@ -1436,6 +1442,7 @@ local DeactivatePredictionLifecycle
 local CancelQueuedPrediction
 local UpdateFull
 local UpdateBoundPredictionData
+local absorbDataWriters
 local UpdateGlowHealthFast
 local UpdateFullHealthStripeFast
 local UpdateMixedFollowHealthFast
@@ -1602,6 +1609,14 @@ local function CompilePredictionRuntime(frame, cfg, spec)
     if IsFlatPredictionArchetype(cfg, followAbsorb, mixedFollowClamp) then
       frame._msufPredictionFlushData = FlushFlatPrediction
       frame._msufPredictionSimpleAbsorb = true
+    elseif frame._msufPredictionMask == 2 then
+      -- Absorb-only configurations cannot use the mixed heal/follow clamp.
+      -- Bind shared writers; no per-frame closure or per-event plan expansion.
+      local glow = frame._msufPredictionOverAbsorbOverlay or frame._msufPredictionFullHealthStripe
+      local key = (followAbsorb and 1 or 0) + (glow and 2 or 0)
+        + (frame._msufPredictionFullHealthStripe and 4 or 0)
+      frame._msufPredictionFlushData = absorbDataWriters[key]
+      frame._msufPredictionSimpleAbsorb = nil
     else
       frame._msufPredictionFlushData = UpdateBoundPredictionData
       frame._msufPredictionSimpleAbsorb = nil
@@ -2526,7 +2541,7 @@ UpdateBoundPredictionData = function(frame, mask)
   local cfg = frame._msufPredictionRuntimeCfg
   local plans = frame._msufPredictionEventPlans
   local plan = type(mask) == "number"
-    and plans and plans[PREDICTION_DIRTY_PLAN_KEYS[mask]] or nil
+    and plans and plans[mask] or nil
   if type(mask) ~= "number"
     or not cfg
     or not plan
@@ -2542,6 +2557,71 @@ UpdateBoundPredictionData = function(frame, mask)
     plan[PLAN_REFRESH_HEAL], plan[PLAN_REFRESH_ABSORB], plan[PLAN_REFRESH_HEAL_ABSORB],
     plan[PLAN_SHOW_HEAL], plan[PLAN_SHOW_ABSORB], plan[PLAN_SHOW_HEAL_ABSORB], false)
 end
+
+-- Five shared absorb-only writers cover static/follow anchors and glow/stripe
+-- combinations beyond the existing flat writer. The cache guard is identical
+-- to the general drain: identity, disable and reseed still use UpdateFull.
+-- A valid plan for this archetype always reads and displays absorb, so there
+-- are no heal lanes or six plan flags to unpack on each event.
+local function CreateAbsorbDataWriter(followAbsorb, withGlow, fullStripe)
+  return function(frame, mask)
+    local unit = frame.MSUFUnitKey
+    local cfg = frame._msufPredictionRuntimeCfg
+    local plans = frame._msufPredictionEventPlans
+    local plan = type(mask) == "number" and plans and plans[mask] or nil
+    if type(mask) ~= "number"
+      or not cfg
+      or not plan
+      or frame._msufPredictionDisabled == true
+      or frame._msufPredictionCacheReady ~= true
+      or frame._msufPredictionCacheUnit ~= unit
+      or frame._msufPredictionCacheCfg ~= cfg then
+      local event = type(mask) == "number" and PREDICTION_DIRTY_PLAN_KEYS[mask] or mask
+      return UpdateFull(frame, event, unit, nil, nil, true)
+    end
+
+    local absorb = ReadDamageAbsorbs(frame, unit)
+    frame._msufPredictionAbsorb = absorb
+    local absorbSecret = issecretvalue(absorb) == true
+    frame._msufPredictionAbsorbSecret = absorbSecret and true or nil
+    local absorbPositive = not absorbSecret and type(absorb) == "number" and absorb > 0
+    frame._msufPredictionHealthVisualActive = (absorbPositive or (absorbSecret and fullStripe)) and true or nil
+    frame._msufPredictionPartialGlowHealthActive = not fullStripe and absorbPositive and true or nil
+    -- The guard already established CacheReady/Unit/Cfg. Only the glow's
+    -- health-tick dedupe becomes stale when its absorb payload changes.
+    frame._msufGlowTickBucket, frame._msufGlowTickUnit = nil, nil
+
+    local bar = frame.absorbBar
+    if not bar then return end
+    if followAbsorb then
+      LayoutBarIfNeeded(frame, bar, 2, frame._msufPredictionAbsorbMode,
+        frame._msufPredictionAbsorbReverse, nil,
+        frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
+    end
+    local maxHP
+    if bar._msufMaxReady ~= true then maxHP = ReadHealthMax(frame, unit, false) end
+    ShowValue(bar, maxHP, absorb, false)
+    if withGlow then
+      local holder = frame.overAbsorbGlowBar
+      local knownInactive = not fullStripe and not absorbSecret
+        and (type(absorb) ~= "number" or absorb <= 0)
+        and (holder == nil or (holder._msufOverAbsorbShown == false
+          and holder._msufOverAbsorbValuePlain == true
+          and (type(holder._msufOverAbsorbValue) ~= "number" or holder._msufOverAbsorbValue <= 0)))
+      if not knownInactive then
+        UpdateOverAbsorbGlow(frame, cfg, unit, nil, maxHP, absorb, false, true, absorbSecret)
+      end
+    end
+  end
+end
+
+absorbDataWriters = {
+  [1] = CreateAbsorbDataWriter(true, false, false),
+  [2] = CreateAbsorbDataWriter(false, true, false),
+  [3] = CreateAbsorbDataWriter(true, true, false),
+  [6] = CreateAbsorbDataWriter(false, true, true),
+  [7] = CreateAbsorbDataWriter(true, true, true),
+}
 
 function Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
   if event == "UNIT_HEALTH" then

@@ -419,6 +419,7 @@ ExportPublic("MSUF_GetEffectiveHealthBarBackgroundTintRGBA", MSUF_GetEffectiveHe
 -- secret-safe VertexColor pass-through used by both dynamic color modes.
 local MSUF_RefreshHealthBarBackgroundColor
 local RefreshHealthGradientBackgroundCompiled
+local RefreshHealthGradientBackgroundValue
 
 -- Configuration/texture owners call this after applying a spec. Reuse one
 -- frame-owned plan; no tables or closures are created by a health value tick.
@@ -427,6 +428,7 @@ local function CompileHealthBackgroundPlan(frame)
     local health = frame.MSUFSpec and frame.MSUFSpec.health
     if not (health and health.backgroundColorMode == "health_gradient" and frame.hpBarBG) then
         frame._msufHealthBackgroundRefresh = MSUF_RefreshHealthBarBackgroundColor
+        frame._msufHealthBackgroundRefreshValue = MSUF_RefreshHealthBarBackgroundColor
         return
     end
     local common = MSUF.UFBarTextCommon
@@ -439,6 +441,7 @@ local function CompileHealthBackgroundPlan(frame)
     local readPercent, readOpaque = frame._msufHealthGradientReadPercent, frame._msufHealthGradientReadOpaque
     if not (readPercent and readOpaque) then
         frame._msufHealthBackgroundRefresh = MSUF_RefreshHealthBarBackgroundColor
+        frame._msufHealthBackgroundRefreshValue = MSUF_RefreshHealthBarBackgroundColor
         return
     end
     local background = health.background
@@ -451,6 +454,10 @@ local function CompileHealthBackgroundPlan(frame)
     plan.readGradient = common and common.GradientColor
     plan.foregroundGradient = health.mode == "gradient"
     frame._msufHealthBackgroundRefresh = RefreshHealthGradientBackgroundCompiled
+    -- Only Health's percent-value lane has a fresh sample and no calculator.
+    -- Other callers keep the full provenance/stash contract above.
+    frame._msufHealthBackgroundRefreshValue = plan.foregroundGradient
+        and RefreshHealthGradientBackgroundCompiled or RefreshHealthGradientBackgroundValue
 end
 MSUF.Bars.CompileHealthBackgroundPlan = CompileHealthBackgroundPlan
 
@@ -535,6 +542,27 @@ RefreshHealthGradientBackgroundCompiled = function(frame, event, unit, hp, maxHP
     end
     -- Keep the native sink inline in the selected value route. Sharing the
     -- public painter here would reintroduce a Lua call for every health tick.
+    local secret = MSUF_HasAnySecretColor(r, gg, b)
+    if secret ~= true and (type(r) ~= "number" or type(gg) ~= "number" or type(b) ~= "number") then return false end
+    local a = plan.alpha
+    if secret == true then
+        plan.texture:SetVertexColor(r, gg, b, a)
+        frame._msufHPBgR, frame._msufHPBgG, frame._msufHPBgB, frame._msufHPBgA = nil, nil, nil, nil
+    elseif force == true or frame._msufHPBgR ~= r or frame._msufHPBgG ~= gg
+        or frame._msufHPBgB ~= b or frame._msufHPBgA ~= a then
+        plan.texture:SetVertexColor(r, gg, b, a)
+        frame._msufHPBgR, frame._msufHPBgG, frame._msufHPBgB, frame._msufHPBgA = r, gg, b, a
+    end
+    return true
+end
+
+-- Bound by the same cold owner as the general painter. Health calls this only
+-- with its fresh percent sample; source selection is already settled. Keep the
+-- small native sink inline so the hot lane does not add another painter call.
+RefreshHealthGradientBackgroundValue = function(frame, event, unit, hp, maxHP, calc, force, percentReady, percentSecret)
+    local plan = frame._msufHealthBackgroundPlan
+    local read = percentSecret and plan.readOpaque or plan.readPercent
+    local r, gg, b = read(unit, hp)
     local secret = MSUF_HasAnySecretColor(r, gg, b)
     if secret ~= true and (type(r) ~= "number" or type(gg) ~= "number" or type(b) ~= "number") then return false end
     local a = plan.alpha
