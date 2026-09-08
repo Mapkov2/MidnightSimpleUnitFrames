@@ -70,7 +70,8 @@ local function Run(sourceRoot, nativePercent)
           _msufHealthRuntimeGradient=gradient, _msufHealthBackgroundGradient=background,
           _msufHealthBackgroundColorDynamic=background,
           _msufHealthRuntimeColorUpdateEnabled=foreground or background,
-          _msufHealthBackgroundRefresh=Background, _msufHealthBackgroundFillMissing=missing,
+          _msufHealthBackgroundRefresh=Background, _msufHealthBackgroundRefreshValue=Background,
+          _msufHealthBackgroundFillMissing=missing,
           _msufHealthBackgroundNeedsValue=missing,
           _msufTextRuntime={healthSlotCount=1,healthNeedsPercent=true,
             healthDefersUnitHealthText=deferred},
@@ -108,6 +109,7 @@ local function Run(sourceRoot, nativePercent)
     MSUFSpec={health={mode="unified"}},_msufHealthRuntimeColorEnabled=false,
     _msufHealthBackgroundGradient=true,_msufHealthBackgroundColorDynamic=true,
     _msufHealthRuntimeColorUpdateEnabled=true,_msufHealthBackgroundRefresh=Background,
+    _msufHealthBackgroundRefreshValue=Background,
     _msufHealthBackgroundFillMissing=true,_msufHealthBackgroundNeedsValue=true,
     _msufUpdateStatusTextIndicator=function() error("alive opaque tick notified status") end,
     _msufTextRuntime={healthSlotCount=1,healthNeedsPercent=true,healthDefersUnitHealthText=true}}

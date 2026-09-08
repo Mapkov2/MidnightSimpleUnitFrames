@@ -255,7 +255,12 @@ if baseline then
   if compiled then kinds[#kinds+1]="absolutePublic";kinds[#kinds+1]="absoluteOpaque" end
   for _,kind in ipairs(kinds) do
     local before,after=oldWork[kind],work[kind]
-    assert(after.work<before.work and (compiled and after.probes<=before.probes or after.probes<before.probes),
+    -- Absolute-value updates retain the general color provenance contract.
+    -- The dedicated percent-value lane must improve all four native cases;
+    -- unchanged absolute cases are valid, but none may become more expensive.
+    local absolute=compiled and (kind=="absolutePublic" or kind=="absoluteOpaque")
+    assert((absolute and after.work<=before.work or after.work<before.work)
+      and (compiled and after.probes<=before.probes or after.probes<before.probes),
       "Lua work not reduced: "..kind)
     assert(after.reads==before.reads and after.writes==before.writes and after.allocated<=before.allocated,
       "native work or allocations increased: "..kind)
