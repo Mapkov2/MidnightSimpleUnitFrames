@@ -1252,7 +1252,8 @@ local function CompileLoadConditions(out, conf)
     load[def[1]] = enabled
     active = active or enabled
   end
-  load.active = active
+  load.showWhenInjured = Bool(conf.loadCondShowWhenInjured, false)
+  load.active = active or load.showWhenInjured
 
   load.unitlessEvents = ResetList(load.unitlessEvents)
   if load.active then
@@ -1790,6 +1791,13 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   out.unit = unit
   out.key = key
   out.enabled = conf.enabled ~= false
+  -- Units the running client cannot produce (Era focus/boss/arena, TBC boss)
+  -- compile disabled so no frame, castbar or preview is ever built for them.
+  local client = MSUF.Client
+  if out.enabled and client and type(client.SupportsUnit) == "function"
+    and not client.SupportsUnit(key) then
+    out.enabled = false
+  end
   out.width = Number(conf.width or conf.frameWidth, def.width)
   out.height = Number(conf.height or conf.frameHeight, def.height)
   local cooldownViewerAnchor
@@ -2262,6 +2270,8 @@ local function CompileUnitBorder(out, conf, general, bars)
   border.dispel = OutlineModeEnabled(ScopedValue(conf, general, "dispelOutlineMode", nil),
     legacyDispelBorder)
   border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE"))
+  local dispelShowOn = ScopedValue(conf, general, "dispelBorderShowOn", "BOTH")
+  border.dispelShowOn = (dispelShowOn == "FRIENDLY" or dispelShowOn == "ENEMY") and dispelShowOn or "BOTH"
   border.purge = OutlineModeEnabled(ScopedValue(conf, general, "purgeOutlineMode", nil),
     general.purgeBorderEnabled == true or general.hlPurgeBorderEnabled == true)
   border.bossTarget = OutlineModeEnabled(ScopedValue(conf, general, "bossTargetOutlineMode", nil),

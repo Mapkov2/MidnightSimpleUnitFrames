@@ -86,7 +86,12 @@ local function EnsureGuidedPlacementCue(mover)
     local function CreateArrow(point, relativePoint, x)
         local arrow = cue:CreateTexture(nil, "OVERLAY", nil, 7)
         local usedAtlas = false
-        if arrow.SetAtlas then arrow:SetAtlas("NPE_ArrowRight", false); usedAtlas = true end
+        -- Classic Era / TBC clients do not ship the NPE atlas; SetAtlas on an
+        -- unknown name raises, so probe the atlas before using it.
+        local atlasAPI = _G.C_Texture
+        local hasAtlas = arrow.SetAtlas and atlasAPI and type(atlasAPI.GetAtlasInfo) == "function"
+            and atlasAPI.GetAtlasInfo("NPE_ArrowRight") ~= nil
+        if hasAtlas then arrow:SetAtlas("NPE_ArrowRight", false); usedAtlas = true end
         if not usedAtlas then arrow:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow") end
         arrow:SetSize(28, 28)
         arrow:SetPoint(point, mover, relativePoint, x, 0)

@@ -1020,6 +1020,9 @@ if ($lua) {
     $classicAuraFeatureSmoke = Join-Path $root "tools/tests/classic_aura_features_smoke.lua"
     & $lua.Source $auraTestDriver $classicAuraFeatureSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura feature compiler smoke failed" }
+    $classicAuraAliasSmoke = Join-Path $root "tools/tests/classic_aura_alias_catalog_smoke.lua"
+    & $lua.Source $auraTestDriver $classicAuraAliasSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic aura alias catalog smoke failed" }
     $classicGroupDataSmoke = Join-Path $root "tools/tests/classic_group_indicator_data_smoke.lua"
     & $lua.Source $auraTestDriver $classicGroupDataSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic group indicator data smoke failed" }

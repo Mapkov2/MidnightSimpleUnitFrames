@@ -107,6 +107,28 @@ function Shape.ApplyMask(region, mask)
     end
 end
 
+--- Vanilla and TBC keep the pre-Dragonflight HUD art, so the Blizzard portrait
+--- mask atlas may not exist there. SetAtlas raises on an unknown atlas name;
+--- probe once per name and fall back to the shape's own circle media.
+local atlasKnown = {}
+local function AtlasKnown(name)
+    if type(name) ~= "string" or name == "" then return false end
+    local known = atlasKnown[name]
+    if known == nil then
+        local api = _G.C_Texture
+        if api and type(api.GetAtlasInfo) == "function" then
+            known = api.GetAtlasInfo(name) ~= nil
+        else
+            -- No probe API (test harness / very old client): keep the
+            -- pre-guard behavior and let SetAtlas decide.
+            known = true
+        end
+        atlasKnown[name] = known
+    end
+    return known
+end
+Shape.AtlasKnown = AtlasKnown
+
 function Shape.EnsureMask(owner, shape)
     local media = Shape.MEDIA[shape]
     if not (owner and media and owner.CreateMaskTexture) then return nil end
@@ -115,7 +137,11 @@ function Shape.EnsureMask(owner, shape)
         mask = owner:CreateMaskTexture(nil, "BACKGROUND")
         owner._msufA3AuraShapeMask = mask
     end
-    if media.maskAtlas and mask.SetAtlas then mask:SetAtlas(media.maskAtlas) else mask:SetTexture(media.mask) end
+    if media.maskAtlas and mask.SetAtlas and AtlasKnown(media.maskAtlas) then
+        mask:SetAtlas(media.maskAtlas)
+    else
+        mask:SetTexture(media.mask or media.swipe)
+    end
     mask:ClearAllPoints()
     mask:SetAllPoints(owner)
     mask:Show()
@@ -274,7 +300,7 @@ local function SetShapeTexture(texture, shape, border)
     local media = Shape.MEDIA[shape]
     if not (texture and media) then return false end
     if border then texture:SetTexture(media.border)
-    elseif media.maskAtlas and texture.SetAtlas then texture:SetAtlas(media.maskAtlas)
+    elseif media.maskAtlas and texture.SetAtlas and AtlasKnown(media.maskAtlas) then texture:SetAtlas(media.maskAtlas)
     else texture:SetTexture(media.swipe or media.mask) end
     if texture.SetDesaturated then texture:SetDesaturated(media.desaturate == true) end
     if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
@@ -804,7 +830,7 @@ function V.SetDispelSymbolArt(texture, style, dispelType)
     end
     local atlas = V.DispelAtlases[style] or V.DispelAtlases.BLIZZARD
     atlas = atlas and atlas[dispelType]
-    if atlas and texture.SetAtlas then
+    if atlas and texture.SetAtlas and AtlasKnown(atlas) then
         texture:SetAtlas(atlas, _G.TextureKitConstants and _G.TextureKitConstants.IgnoreAtlasSize)
         return true
     end

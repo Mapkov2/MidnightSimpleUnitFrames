@@ -237,7 +237,7 @@ local function DeepCopy(src)
     if type(CopyTable) == "function" then return CopyTable(src) end
     return M.DeepCopy(src)
 end
-local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture powerBarBgTexture]]
+local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerChunkedFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture powerBarBgTexture]]
 --- Must cover every per-unit portrait key the engine reads (CompileUnitPortrait in
 --- MSUF_UF_Config.lua) and the Visuals page binds. Border/background COLORS are
 --- intentionally absent: those live in MSUF_DB.general and are shared by all units.
@@ -330,6 +330,15 @@ local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicl
 local COPY_LAYOUT_FIELDS = WL [[width height]]
 local AURA_COPY_UNITS = KSW("player target focus boss arena")
 local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena" }
+do
+    -- Units the running client cannot produce are not aura copy partners.
+    local client = MSUF and MSUF.Client
+    if client and type(client.SupportsUnit) == "function" then
+        for unit in pairs(AURA_COPY_UNITS) do
+            if not client.SupportsUnit(unit) then AURA_COPY_UNITS[unit] = nil end
+        end
+    end
+end
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
 local UF_COPY_CATEGORIES = {
@@ -355,6 +364,20 @@ local function NewCopyScopeDefaults()
     return t
 end
 local UNIT_COPY_TARGETS = VTP "player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss Frames|arena=Arena Frames"
+--- Drop units the running client cannot produce (Era: focus/boss/arena, TBC:
+--- boss) from the unit pills and copy targets. MSUF.Client.SupportsUnit owns
+--- the per-client rule; the engine compiles those units disabled as well.
+do
+    local client = MSUF and MSUF.Client
+    if client and type(client.SupportsUnit) == "function" then
+        local kept = {}
+        for i = 1, #UNIT_COPY_TARGETS do
+            local entry = UNIT_COPY_TARGETS[i]
+            if client.SupportsUnit(entry.value) then kept[#kept + 1] = entry end
+        end
+        UNIT_COPY_TARGETS = kept
+    end
+end
 local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss Frames", arena = "Arena Frames" }
 local UNIT_PILL_WIDTHS = { targettarget = 116, focustarget = 104, boss = 92, arena = 92, target = 62, focus = 58, pet = 46 }
 local function DefaultCopyTarget(unit)
@@ -470,6 +493,11 @@ local POWER_COPY_OVERRIDES = {
         if unitKey ~= "player" then return false end
         local b = BarsDB()
         return b and b.smoothPowerBar == true or false
+    end },
+    { key = "powerChunkedFill", read = ConfTrue, fallback = function(unitKey)
+        if unitKey ~= "player" then return false end
+        local b = BarsDB()
+        return b and b.chunkedPowerBar == true or false
     end },
 }
 local function ReadPowerCopyValue(conf, unitKey, spec)

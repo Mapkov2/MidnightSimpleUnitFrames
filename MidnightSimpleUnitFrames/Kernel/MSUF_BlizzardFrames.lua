@@ -390,6 +390,36 @@ local function ApplyBlizzardAuraVisibility()
     return buffAuraSuppressedByMSUF, debuffAuraSuppressedByMSUF
 end
 
+--- Classic clients have no CompactArenaFrame: their arena UI is the legacy
+--- LoadOnDemand Blizzard_ArenaUI (ArenaEnemyFrames + ArenaPrepFrames with
+--- five secure ArenaEnemyFrameN children). Treat the containers like the boss
+--- container (reparent + hook) and the secure children like boss frames
+--- (unregister + hide, never reparent). The addon only loads when an arena
+--- match starts, so the pass also re-runs once on its ADDON_LOADED.
+local legacyArenaWatcher
+local function HideLegacyArenaFrames()
+    if not ShouldHideBlizzardUnitFrame("arena") then return end
+    if _G.CompactArenaFrame then return end
+    HandleFrame(_G.ArenaEnemyFrames, nil, "arena")
+    HandleFrame(_G.ArenaPrepFrames, nil, "arena")
+    for i = 1, 5 do
+        HandleFrame(_G["ArenaEnemyFrame" .. i], true, "arena")
+        HandleFrame(_G["ArenaPrepFrame" .. i], true, "arena")
+    end
+end
+
+local function EnsureLegacyArenaWatcher()
+    if legacyArenaWatcher or _G.CompactArenaFrame or _G.ArenaEnemyFrames then return end
+    if not (MSUF.Client and MSUF.Client.IsClassic == true) then return end
+    legacyArenaWatcher = CreateFrame("Frame")
+    legacyArenaWatcher:RegisterEvent("ADDON_LOADED")
+    legacyArenaWatcher:SetScript("OnEvent", function(self, _, addonName)
+        if addonName ~= "Blizzard_ArenaUI" then return end
+        self:UnregisterEvent("ADDON_LOADED")
+        HideLegacyArenaFrames()
+    end)
+end
+
 local function DisableBlizzardFrames()
     --- PlayerFrame owns no castbar on 12.x (Blizzard_UnitFrame/Mainline/
     --- PlayerFrame.lua), so suppressing it loses no castbar handling. Keep
@@ -451,6 +481,8 @@ local function DisableBlizzardFrames()
                 hookedFrames[arenaFrame] = true
             end
         end
+        HideLegacyArenaFrames()
+        EnsureLegacyArenaWatcher()
     end
 
     ApplyBlizzardAuraVisibility()

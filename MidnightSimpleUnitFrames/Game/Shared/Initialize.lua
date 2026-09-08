@@ -67,6 +67,28 @@ function Client.SupportsEvent(event)
     return type(event) == "string" and event ~= "" and unsupportedEvents[event] ~= true
 end
 
+-- Unit tokens that never exist on a client. Classic Era has no focus unit and
+-- no boss or arena encounters; TBC has focus and arenas but no boss units.
+-- Mirrors the gates ElvUI applies (Focus/Arena `not Classic`, Boss `not
+-- (Classic or TBC)`). Menu pages, copy targets and frame compilation consult
+-- this instead of repeating client checks.
+local unsupportedUnits = Client.UnsupportedUnits or {}
+Client.UnsupportedUnits = unsupportedUnits
+if isVanilla then
+    unsupportedUnits.focus = true
+    unsupportedUnits.focustarget = true
+    unsupportedUnits.boss = true
+    unsupportedUnits.arena = true
+elseif isTBC then
+    unsupportedUnits.boss = true
+end
+
+function Client.SupportsUnit(unit)
+    if type(unit) ~= "string" or unit == "" then return false end
+    local base = unit:match("^(%a+)%d+$") or unit
+    return unsupportedUnits[base] ~= true
+end
+
 -- Short aliases match the style used by ElvUI's shared client initializer and
 -- make future client splits cheap without introducing per-frame checks.
 MSUF.Retail = Client.IsRetail

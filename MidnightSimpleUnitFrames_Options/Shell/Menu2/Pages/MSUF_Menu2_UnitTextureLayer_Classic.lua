@@ -31,9 +31,11 @@ local TEXLAYER_EDGE_ATTACH = VTP "FREE=Free position|LEFT=Follow left frame edge
 local PAD_DIRECTION_SUFFIXES = { UP = "GradientDirUp", LEFT = "GradientDirLeft", RIGHT = "GradientDirRight", DOWN = "GradientDirDown" }
 local TEXLAYER_TABS = M.WordList "general placement style visibility"
 local TEXLAYER_TAB_TEXTS = { general = "General", placement = "Placement", style = "Style", visibility = "Visibility" }
-local TEXLAYER_SECTION_H = 572
+local TEXLAYER_SECTION_H = 594
 local TEXLAYER_CARD_Y = -108
-local TEXLAYER_CARD_H = 430
+-- Source color is the lowest dropdown on Setup; keep its 22px button and
+-- soft edge inside the card instead of letting them meet the next accordion.
+local TEXLAYER_CARD_H = 452
 local HIGHLIGHT_TEXTURE_PRESET = {
     Texture = "",
     CustomTexturePath = "Interface\\PETBATTLES\\PetBattle-SelectedPetGlow",

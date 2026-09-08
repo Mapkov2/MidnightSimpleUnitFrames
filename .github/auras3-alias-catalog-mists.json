@@ -1,0 +1,136 @@
+{
+  "flavor": "Mists",
+  "build": "5.5.4.68806",
+  "file_data_id": 1990283,
+  "encoding": "base36-token-groups-v1",
+  "common_groups": 5973,
+  "locales": {
+    "enUS": {
+      "csv_sha256": "9c5b248b98eb90661ba93a8081790eebc462e7f1ec75c4172f5903737eeebb7e",
+      "rows": 98129,
+      "groups": 12500,
+      "alias_ids": 52372,
+      "max_id": 1305890
+    },
+    "deDE": {
+      "csv_sha256": "f902b656d1a0f3f9348554430d03baecf30566225539df6314beb1050c7de44e",
+      "rows": 98129,
+      "groups": 12680,
+      "alias_ids": 54117,
+      "max_id": 1305890
+    },
+    "frFR": {
+      "csv_sha256": "b2d3e9237955c4ebd3d2aca54fbfc8200a1cb9368f5b4e1fe91d431aa7aa1486",
+      "rows": 98129,
+      "groups": 12572,
+      "alias_ids": 53162,
+      "max_id": 1305890
+    },
+    "esES": {
+      "csv_sha256": "ad25c0271986faeac22e59517b24bd3803253dea2a142009d6cc6c337a61ea19",
+      "rows": 98129,
+      "groups": 12558,
+      "alias_ids": 53320,
+      "max_id": 1305890
+    },
+    "esMX": {
+      "csv_sha256": "5109e1532deaaa8e13c4e5d76f88374adb4710307ca6a93b27cdbb38d38de4f8",
+      "rows": 98129,
+      "groups": 12572,
+      "alias_ids": 53360,
+      "max_id": 1305890
+    },
+    "itIT": {
+      "csv_sha256": "9c5b248b98eb90661ba93a8081790eebc462e7f1ec75c4172f5903737eeebb7e",
+      "rows": 98129,
+      "groups": 12500,
+      "alias_ids": 52372,
+      "max_id": 1305890
+    },
+    "ptBR": {
+      "csv_sha256": "7e02754e53256c99e58b64814610a16efea21a1483dc2f499b93ecaf4e2d6d06",
+      "rows": 98129,
+      "groups": 12471,
+      "alias_ids": 52995,
+      "max_id": 1305890
+    },
+    "ruRU": {
+      "csv_sha256": "9b8a65be69402ca2755b5c4966209c4587d8491c17a97c29b8a6674205b90321",
+      "rows": 98129,
+      "groups": 12374,
+      "alias_ids": 53856,
+      "max_id": 1305890
+    },
+    "koKR": {
+      "csv_sha256": "be3f281b435e13b8d931e82c237ff6212ea053016bc2fe827893ec1afe44dab8",
+      "rows": 98129,
+      "groups": 12687,
+      "alias_ids": 55897,
+      "max_id": 1305890
+    },
+    "zhCN": {
+      "csv_sha256": "5e00be0d47fe0f874bc51691f4873283ba4db51be82d875b2c118c7da0f1b3fb",
+      "rows": 98129,
+      "groups": 12458,
+      "alias_ids": 53382,
+      "max_id": 1305890
+    },
+    "zhTW": {
+      "csv_sha256": "dc86124ca69cb80afcbae53ffe8b769d95c9cda34c1f51fdf691bcf3131a1af4",
+      "rows": 98129,
+      "groups": 12455,
+      "alias_ids": 53241,
+      "max_id": 1305890
+    }
+  },
+  "generated": {
+    "MSUF_Auras3_AliasData_Common.lua": {
+      "bytes": 94474,
+      "sha256": "7caf9bf374a04c71d745198b1e1f2bb0496ae1966105a0adc03eda691ceb624c"
+    },
+    "MSUF_Auras3_AliasData_enUS.lua": {
+      "bytes": 180643,
+      "sha256": "925544b271aebca5cee851ff26ec19205d494ace3038f84f08d7acd87560504a"
+    },
+    "MSUF_Auras3_AliasData_deDE.lua": {
+      "bytes": 189548,
+      "sha256": "5056c12fda287fcaa15cfb189ce6df9a7353f24e24a3b205fd39f4459fdf585c"
+    },
+    "MSUF_Auras3_AliasData_frFR.lua": {
+      "bytes": 184665,
+      "sha256": "b9adb09a25aa2df205a592a4d610bba544ebaa6ed58b33dbd5bf872f1e7eeeeb"
+    },
+    "MSUF_Auras3_AliasData_esES.lua": {
+      "bytes": 185441,
+      "sha256": "b98cf9512806036548dab7c47de6ac49da6dd47762e609fc04e76abe09b95bbd"
+    },
+    "MSUF_Auras3_AliasData_esMX.lua": {
+      "bytes": 185655,
+      "sha256": "a46eeaaac504eda890fc1238604df2e7060e770108e5e18e6e927bc9d3d9410a"
+    },
+    "MSUF_Auras3_AliasData_itIT.lua": {
+      "bytes": 180643,
+      "sha256": "1ef0d1b329bde86b1ce93385a0edfef243902bf5657bc59fd9501c86a33dfd1d"
+    },
+    "MSUF_Auras3_AliasData_ptBR.lua": {
+      "bytes": 183729,
+      "sha256": "ba5be4748e18262848e3574c742be1cb7ffa597b0274e58d49425eb7186b89df"
+    },
+    "MSUF_Auras3_AliasData_ruRU.lua": {
+      "bytes": 187937,
+      "sha256": "ac55f8239af960f70ecd7db3ba8bc197977d2c73e9b1b2cdae14b60af56daaeb"
+    },
+    "MSUF_Auras3_AliasData_koKR.lua": {
+      "bytes": 198455,
+      "sha256": "baf08bd1e7c86ce34a3c4a2e8ccd839794b576086c19ac596a795d3ae7e184b4"
+    },
+    "MSUF_Auras3_AliasData_zhCN.lua": {
+      "bytes": 185651,
+      "sha256": "92d6453f82a29fb087d1c9147f77464aeaaf0a63ee754a4c434222e47cd2410b"
+    },
+    "MSUF_Auras3_AliasData_zhTW.lua": {
+      "bytes": 184943,
+      "sha256": "ae46a5f9633534ca19470e41304bd6532101ad312d17a83518c6e6791632e2e8"
+    }
+  }
+}

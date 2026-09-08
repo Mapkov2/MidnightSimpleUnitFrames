@@ -35,8 +35,43 @@ local INTERRUPT_SPELLS = {
     WARRIOR = { DEFAULT = 6552 },
 }
 
+--- Classic clients: the Retail table names spells that do not exist there
+--- (Rebuke, Wind Shear, Counter Shot, Skull Bash on Vanilla/TBC), so each
+--- era gets its own table. A class without an era interrupt has no entry and
+--- therefore no indicator instead of a permanently "ready" unknown spell.
+do
+    local client = MSUF and MSUF.Client
+    if client and (client.IsVanilla == true or client.IsTBC == true) then
+        INTERRUPT_SPELLS = {
+            DRUID = { DEFAULT = 16979 },   -- Feral Charge (interrupts and locks the school)
+            HUNTER = client.IsTBC == true and { DEFAULT = 34490 } or {}, -- Silencing Shot (TBC Marksmanship)
+            MAGE = { DEFAULT = 2139 },     -- Counterspell
+            PRIEST = { DEFAULT = 15487 },  -- Silence (Shadow talent)
+            ROGUE = { DEFAULT = 1766 },    -- Kick
+            SHAMAN = { DEFAULT = 8042 },   -- Earth Shock (rank 1; the alias catalog covers ranks)
+            WARLOCK = { DEFAULT = 19647 }, -- Spell Lock (Felhunter)
+            WARRIOR = { DEFAULT = 6552 },  -- Pummel
+        }
+    elseif client and client.IsMists == true then
+        INTERRUPT_SPELLS = {
+            DEATHKNIGHT = { DEFAULT = 47528 },                 -- Mind Freeze
+            DRUID = { DEFAULT = 106839, BALANCE = 78675 },     -- Skull Bash / Solar Beam
+            HUNTER = { MARKSMANSHIP = 34490 },                 -- Silencing Shot (Marksmanship only)
+            MAGE = { DEFAULT = 2139 },                         -- Counterspell
+            MONK = { DEFAULT = 116705 },                       -- Spear Hand Strike
+            PALADIN = { DEFAULT = 96231 },                     -- Rebuke
+            PRIEST = { DEFAULT = 15487 },                      -- Silence
+            ROGUE = { DEFAULT = 1766 },                        -- Kick
+            SHAMAN = { DEFAULT = 57994 },                      -- Wind Shear
+            WARLOCK = { DEFAULT = 19647 },                     -- Spell Lock (Felhunter)
+            WARRIOR = { DEFAULT = 6552 },                      -- Pummel
+        }
+    end
+end
+
 local SPECIALIZATION_KEYS = {
     [102] = "BALANCE",
+    [254] = "MARKSMANSHIP",
     [255] = "SURVIVAL",
     [266] = "DEMONOLOGY",
 }
@@ -154,8 +189,14 @@ local function ResolveInterruptSpellID()
     local classSpells = classToken and INTERRUPT_SPELLS[classToken]
     local spellID = classSpells and classSpells.DEFAULT
 
-    if classSpells and GetSpecialization and GetSpecializationInfo then
-        local specID = select(1, GetSpecializationInfo(GetSpecialization()))
+    -- Mists Classic documents the specialization API under
+    -- C_SpecializationInfo; the legacy globals stay the Retail fast path.
+    local specAPI = _G.C_SpecializationInfo
+    local getSpecialization = GetSpecialization or (specAPI and specAPI.GetSpecialization)
+    local getSpecializationInfo = GetSpecializationInfo or (specAPI and specAPI.GetSpecializationInfo)
+    if classSpells and getSpecialization and getSpecializationInfo then
+        local specIndex = getSpecialization()
+        local specID = specIndex and select(1, getSpecializationInfo(specIndex)) or nil
         local specKey = SPECIALIZATION_KEYS[specID]
 
         if specKey and classSpells[specKey] then

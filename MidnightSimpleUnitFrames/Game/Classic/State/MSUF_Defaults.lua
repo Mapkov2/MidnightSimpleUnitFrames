@@ -1066,13 +1066,17 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
         if type(db[key]) == "table" then
             db[key].smoothFill = false
+            db[key].chunkedFill = false
             db[key].powerSmoothFill = false
+            db[key].powerChunkedFill = false
         end
     end
     for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
         if type(db[key]) == "table" then
             db[key].smoothFill = false
+            db[key].chunkedFill = false
             db[key].powerSmoothFill = false
+            db[key].powerChunkedFill = false
         end
     end
     SetDefault(db.bars, "roundedFramesEnabled", false)
@@ -3018,6 +3022,7 @@ end
     --- UnitFrame dispel overlay (health-bar tint driven by native 12.1 aura visual state)
     if g.dispelOutlineMode == nil then g.dispelOutlineMode = 1 end
     if g.dispelBorderTrigger == nil then g.dispelBorderTrigger = "DISPEL_TYPE" end
+    if g.dispelBorderShowOn == nil then g.dispelBorderShowOn = "BOTH" end
     if g.unitDispelOverlayEnabled == nil then g.unitDispelOverlayEnabled = false end
     if g.unitDispelOverlayStyle == nil then g.unitDispelOverlayStyle = "FULL" end
     if g.unitDispelOverlayOnHealth == nil then g.unitDispelOverlayOnHealth = true end
@@ -4699,6 +4704,9 @@ local function fill(key, defaults)
             end
             if u.powerSmoothFill == nil then
                 u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar == true) or false
+            end
+            if u.powerChunkedFill == nil then
+                u.powerChunkedFill = (unitKey == "player") and (bars.chunkedPowerBar == true) or false
             end
             if unitKey == "player" then
                 local legacyShape = tostring(u.detachedPowerBarShape or "FOLLOW_CLASS"):upper()

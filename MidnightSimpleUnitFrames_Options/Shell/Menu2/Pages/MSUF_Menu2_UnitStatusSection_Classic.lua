@@ -27,12 +27,16 @@ StatusIconPackValues = StatusIconPackValues or function() return {} end
 local SYMBOL_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\"
 local RAID_GROUP_NAME_STYLES = VT("PAREN", "(2)", "BRACKET", "[2]", "NONE", "2")
 local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
+-- The Basic tab starts 64px below the body; these heights leave 12px below
+-- the Placement card and 16px below its final 24px slider row.
+local STATUS_SECTION_HEIGHT = 582
+local STATUS_PLACEMENT_CARD_HEIGHT = 242
 local IDENTITY_RESTRICTION_WARNING_COLOR = { 1.00, 0.64, 0.18, 1 }
 local IDENTITY_RESTRICTION_WARNING = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
 local function BuildStatus(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("status_icons", "Status icons", 528, false)
+    local sec = builder:CollapsibleSection("status_icons", "Status icons", STATUS_SECTION_HEIGHT, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local topGap = 28
@@ -75,7 +79,7 @@ local function BuildStatus(ctx, builder, unit)
     local placementCardX = leftX - 2
     local placementCardW = max(320, sectionW - placementCardX - 28)
     local placementCardY = topCardY - topCardH - cardRowGap
-    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, placementCardY, placementCardW, 226)
+    local placementCard = W.ControlCard(basicTab, "Placement", nil, placementCardX, placementCardY, placementCardW, STATUS_PLACEMENT_CARD_HEIGHT)
     local placeLeftX = 16
     local placeGap = 24
     local placeAvailableW = max(280, placementCardW - 32)
@@ -495,7 +499,7 @@ local function BuildStatus(ctx, builder, unit)
     local symbol = BindStatusSpecDropdown(selectedCard, "Symbol", CurrentStatusSymbolValues, 260, 16, -106, selectedControlW,
         "symbol", "DEFAULT", "MSUF2_STATUS_SYMBOL", "Status indicator symbol", {
         "symbol", "icon", "status symbol", "indicator symbol", "combat symbol", "rested symbol", "incoming rez symbol",
-    }, CurrentStatusSymbolValues)
+    }, CurrentStatusSymbolValues, function() if RefreshStatusSectionState then RefreshStatusSectionState() end end)
     local iconPack = BindStatusSpecDropdown(selectedCard, "Role icon style", IconPackValuesForCurrentStatus, 260, 16, -106, selectedControlW,
         "iconStyle", function(spec) return spec and spec.defaultIconStyle or "BLIZZARD" end, "MSUF2_STATUS_ICON_PACK", "Visual style for this indicator", {
         "indicator style", "icon style", "icon design", "icon pack", "leader indicator style", "leader icon design", "leader icon pack", "assist indicator style", "assist icon design", "assist icon pack", "role indicator style", "role icon design", "role icon pack", "status indicator style", "status icon design", "status icon pack",

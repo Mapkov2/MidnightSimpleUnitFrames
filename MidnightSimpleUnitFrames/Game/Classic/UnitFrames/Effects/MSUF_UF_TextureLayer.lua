@@ -604,7 +604,7 @@ local function ApplyLayerFrameState(frame, holder, conf, prefix, keys)
     end
   end
   if holder.SetIgnoreParentAlpha then
-    holder:SetIgnoreParentAlpha(conf[keys and keys.FollowFrameAlpha or (prefix .. "FollowFrameAlpha")] == false)
+    holder:SetIgnoreParentAlpha(not frame._msufHealthVisualRoot and conf[keys and keys.FollowFrameAlpha or (prefix .. "FollowFrameAlpha")] == false)
   end
   holder:SetAlpha(Clamp01(conf[keys and keys.Alpha or (prefix .. "Alpha")], 1))
 end
@@ -680,12 +680,21 @@ local function ApplySlot(frame, conf, unitKey, slot)
     return
   end
 
+  local visualParent = frame._msufHealthVisualRoot or frame
+  if frame._msufHealthVisualRoot and conf[keys.FollowFrameAlpha] == false then
+    visualParent = MSUF.UF.EnsureHealthVisualRoot(frame, true)
+    if not visualParent then return end
+  end
+  if frame._msufHealthVisualRoot and holder and holder:GetParent() ~= visualParent then
+    if InCombatLockdown and InCombatLockdown() then return end
+    holder:SetParent(visualParent)
+  end
   if not holder then
     if not holders then
       holders = {}
       frame._msufTexLayers = holders
     end
-    holder = CreateFrame("Frame", nil, frame)
+    holder = CreateFrame("Frame", nil, visualParent)
     holder:EnableMouse(false)
     holders[slot] = holder
   end

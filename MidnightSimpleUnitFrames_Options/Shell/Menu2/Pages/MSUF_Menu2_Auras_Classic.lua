@@ -48,7 +48,7 @@ local AURA_SCOPE_LABELS = { shared = "Shared", player = "Player", target = "Targ
 local AURA_SCOPE_VALID = M.KeySetFromWords "shared player target focus boss party raid"
 local AURA_GROUP_SCOPES = M.KeySetFromWords "party raid mythicraid"
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
--- Appearance > Aura Style owns only the genuinely global Aura theme selected
+-- Appearance > Auras owns only the genuinely global Aura theme selected
 -- by Aura product. Every layout/filter/deep-Style value remains frame-local.
 M.SHARED_AURA_STYLE_CONTAINER_VALUES = VTP
     "buff=Buffs|debuff=Debuffs|playerDefensives=Player Defensives|targetDots=Dots on Target"
@@ -156,6 +156,7 @@ M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client and MSUF.Client.IsClassic == true
     or (_G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE)
 local GROUP_NATIVE_FILTER_LABELS = {
     ALL = "All",
+    MSUF_GROUP_HIGHLIGHTS_V1 = "MSUF Highlights",
     Player = "Player",
     BigDefensivePlayer = "Big Defensive Player",
     ExternalDefensivePlayer = "External Defensive Player",
@@ -177,7 +178,8 @@ local GROUP_NATIVE_FILTER_LABELS = {
 }
 local GROUP_NATIVE_FILTER_ALLOWED = {
     buff = {
-        ALL = true, Player = true, BigDefensivePlayer = true, ExternalDefensivePlayer = true,
+        ALL = true, MSUF_GROUP_HIGHLIGHTS_V1 = true,
+        Player = true, BigDefensivePlayer = true, ExternalDefensivePlayer = true,
         RaidInCombatPlayer = true, CancelablePlayer = true, NotCancelablePlayer = true,
         RaidPlayer = true, BigDefensive = true, ExternalDefensive = true, RaidInCombat = true,
         Cancelable = true, NotCancelable = true, Raid = true, IMPORTANT = true,
@@ -190,6 +192,7 @@ local GROUP_NATIVE_FILTER_ALLOWED = {
 }
 local GROUP_NATIVE_FILTER_CANONICAL = {
     ALL = "ALL",
+    MSUFGROUPHIGHLIGHTSV1 = "MSUF_GROUP_HIGHLIGHTS_V1",
     PLAYER = "Player",
     BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
     EXTERNALDEFENSIVEPLAYER = "ExternalDefensivePlayer",
@@ -360,7 +363,7 @@ local function AddTooltip(widget, title, body)
 end
 local function AddAuraTooltipHelp(widget)
     return AddTooltip(widget, "Aura tooltip",
-        "Controls this aura lane independently. Always / Out of Combat / Modifier / Never under Global Style > Miscellaneous affect only unit and group frames. Auras only reuse the selected Blizzard/MSUF look and cursor placement.")
+        "Controls this aura lane independently. Always / Out of Combat / Modifier / Never under Appearance > Miscellaneous affect only unit and group frames. Auras only reuse the selected Blizzard/MSUF look and cursor placement.")
 end
 local function ActionButton(parent, label, width, role)
     if W.RoleButton then return W.RoleButton(parent, label, role or "normal", width or 90, 24) end
@@ -1012,6 +1015,9 @@ local function GroupFilterValues(groupKey)
                 out[#out + 1] = {
                     value = value,
                     text = GROUP_NATIVE_FILTER_LABELS[value] or item.text or item.label or value,
+                    tooltipTitle = item.tooltipTitle,
+                    tooltip = item.tooltip,
+                    description = item.description,
                 }
             end
         end
@@ -1020,6 +1026,7 @@ local function GroupFilterValues(groupKey)
     if groupKey == "buff" then
         return M.ValueTextList(
             "ALL", "All Buffs",
+            "MSUF_GROUP_HIGHLIGHTS_V1", "MSUF Highlights",
             "Player", "Cast by Me",
             "BigDefensivePlayer", "Big Defensive Player",
             "ExternalDefensivePlayer", "External Defensive Player",
@@ -2507,7 +2514,9 @@ local function BuildUnitStyle(ctx, b, scope, options)
     BindStyleSlider(stack, "X", 24, -212, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 374, true)
+    -- The final slider begins at -328 and its control sits another 24px lower.
+    -- Leave a 16px footer so its buttons cannot bleed into Duration Bar.
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 392, true)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(cooldown, {
             title = M.Format("%s Cooldown Text Settings", Tr(LaneTitle(lane))),
@@ -2706,6 +2715,13 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
     lane = lane == "debuff" and "debuff" or "buff"
     local section = b:Section("Ordering", 156)
     local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
+    local function OrderingAssistantContract(suffix)
+        return {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "This ordering control targets the selected UnitFrame Aura lane.",
+            assistantSettingKeys = { "auras3." .. tostring(unit) .. "." .. lane .. "." .. suffix },
+        }
+    end
     local function ReadSortMethod()
         local value = type(Model.ReadLaneStyleString) == "function"
             and Model.ReadLaneStyleString(unit, lane, "sortMethod", "DEFAULT") or "DEFAULT"
@@ -2742,7 +2758,8 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
         end,
         AuraControlMetaAtVisiblePath(ctx,
             "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_METHOD"),
-            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method"))
+            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method",
+            nil, OrderingAssistantContract("sortMethod")))
     AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
     local sortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, width - 48,
         ReadSortDirection,
@@ -2756,7 +2773,8 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
         end,
         AuraControlMetaAtVisiblePath(ctx,
             "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_DIRECTION"),
-            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction"))
+            "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction",
+            nil, OrderingAssistantContract("sortReverse")))
     AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
 end
 
@@ -2979,11 +2997,19 @@ local function BuildGroupOrdering(ctx, b, scope, lane)
     lane = lane == "externals" and "externals" or (lane == "debuff" and "debuff" or "buff")
     local section = b:Section("Ordering", 156)
     local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
+    local function OrderingAssistantContract(suffix)
+        return {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "This ordering control targets the selected Group Aura lane; Raid and Mythic Raid share this workspace.",
+            assistantSettingKeys = GroupAssistantSettingKeys(scope, ".auras." .. lane .. "." .. suffix),
+        }
+    end
     local groupSortMethod = BindGroupDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(lane), width - 48,
         scope, lane, "sortMethod", "DEFAULT", "visual", nil,
         AuraControlMetaAtVisiblePath(ctx,
             "group-style.lane." .. AuraCatalogToken(lane) .. ".sortmethod",
-            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method"))
+            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method",
+            nil, OrderingAssistantContract("sortMethod")))
     AddTooltip(groupSortMethod, "Aura sorting", "Only relevant sorting methods are shown for helpful and harmful auras.")
     local groupSortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, width - 48,
         function()
@@ -2995,7 +3021,8 @@ local function BuildGroupOrdering(ctx, b, scope, lane)
         end,
         AuraControlMetaAtVisiblePath(ctx,
             "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction",
-            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction"))
+            "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction",
+            nil, OrderingAssistantContract("sortReverse")))
     AddTooltip(groupSortDirection, "Aura sort order", "Reversed flips the complete priority order.")
 end
 local function CustomStyleSectionId(index, suffix)
@@ -4310,7 +4337,8 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
             assistantSettingKeys = GroupAssistantBlacklistSettingKeys(scope,
                 ".auras." .. lane .. ".blacklist.hidePermanent"),
         }))
-    AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
+    AddTooltip(hidePermanent, "Hide permanent auras",
+        "Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible.")
     local selectedFilterToken = CanonicalGroupFilterValue((GFReadGroup(scope, lane) or {}).filterToken or "ALL")
     for i = 1, #values do
         local item = values[i]
@@ -4335,7 +4363,8 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                     assistantSettingKeys = GroupAssistantSettingKeys(scope,
                         ".auras." .. lane .. ".filterToken"),
                 } or nil))
-        AddTooltip(control, item.text or item.value, "Only one filter can be active.")
+        AddTooltip(control, item.tooltipTitle or item.text or item.value,
+            item.tooltip or item.description or "Only one filter can be active.")
     end
     if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
         ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1, inner,
@@ -4689,6 +4718,8 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         -- highlights and search deep-links use these to open the exact
         -- workspace view instead of flashing an unrelated control.
         local exactViews = {
+            buff_layout = { tab = "buff", tool = "layout",
+                settingKey = "auras3." .. tostring(unit) .. ".buff.visible" },
             custom1_reminder = { tab = "custom1", tool = "setup",
                 settingKey = "auras3." .. tostring(unit) .. ".custom1.placed.reminderEnabled" },
         }
@@ -4742,12 +4773,12 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     AddTooltip(openStyle, "Shared Aura Style",
         "Opens the global Aura icon theme: border, shadow, colors, lane padding and native Player weapon enchants. This frame's container Style stays here.")
     local workspaceHint = W.Text(top,
-        "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.",
+        "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Auras.",
         16, footerY - 8, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
         workspaceHint:SetText(normalLane and UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit)
             and UNIT_AURA_DISPEL_WARNING
-            or "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Aura Style.")
+            or "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Auras.")
     end)
 
     if normalLane then
@@ -6405,7 +6436,7 @@ end
 
 local function BuildMovedAuraPage(ctx)
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Aura Controls moved to Frames", "Layout, filters, lists and every container-specific Style live in each frame. Appearance > Aura Style owns only the global icon theme.", 96)
+    b:GlobalStyleHeader("Aura Controls moved to Frames", "Layout, filters, lists and every container-specific Style live in each frame. Appearance > Auras owns only the global icon theme.", 96)
     local section = b:Section("Open a Frame", 190)
     local w = section._msuf2Width or b.width or 720
     local pages = {

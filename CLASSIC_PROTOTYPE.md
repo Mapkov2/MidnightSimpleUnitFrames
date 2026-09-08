@@ -32,6 +32,29 @@ reuses MSUF's pooled aura buttons. Its lifecycle binds the factory's
 `MSUFUnitKey`/`unitKey` to the legacy backend unit field and resolves tooltip
 aura indices when the AuraInstanceID tooltip APIs do not exist.
 
+Every Classic flavor ships a generated SpellName alias catalog under
+`Game/<Flavor>/Auras/AliasData` (Vanilla 1.15.9.68940, TBC 2.5.6.68941, Mists
+5.5.4.68806; regenerate with
+`.github/scripts/generate_classic_aura_alias_catalog.py` from wago.tools
+`SpellName` CSV exports of the flavor build, one `<locale>/SpellName.csv` per
+locale). The flavor manifests load the catalog right after
+`MSUF_Auras3_DataShared.lua` and then the shared Retail resolver
+`Auras3/MSUF_Auras3_AuraAliases.lua`. `A3.AddAuraSpellIDAndAliases` resolves
+every ID it expands against that catalog, so curated DoT/defensive lists, group
+spell indicators and user whitelists match all same-name IDs: spell ranks on
+Vanilla/TBC and cast-versus-aura ID drift on Mists, the way WeakAuras matches
+auras by name. Unlike Retail, Classic deliberately broadens curated data too.
+`tools/tests/classic_aura_alias_catalog_smoke.lua` pins the manifests, the
+build headers and representative expansions per flavor.
+
+`Game/Shared/Initialize.lua` also exposes `MSUF.Client.SupportsUnit(unit)`:
+Classic Era has no focus, boss or arena units and TBC has no boss units. The
+Classic unit config compiles those units disabled, the Classic Unit page drops
+them from its unit pills and copy targets, and the Classic-era interrupt-ready
+tables in `Castbars/MSUF_InterruptReady.lua` only name spells that exist on
+each client. Blizzard's LoadOnDemand `Blizzard_ArenaUI` frames are suppressed
+like the boss container when MSUF owns arena frames.
+
 The Classic backend implements the complete MSUF aura presentation contract:
 buff/debuff lanes, custom containers, target DoTs, player defensives, portrait
 auras, group spell/corner indicators, cooldowns, stacks, sorting, frame/icon

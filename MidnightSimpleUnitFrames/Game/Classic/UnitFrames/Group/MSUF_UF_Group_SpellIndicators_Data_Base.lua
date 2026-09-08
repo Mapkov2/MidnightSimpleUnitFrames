@@ -84,6 +84,26 @@ function SI.BuildReverseLookup(specKey)
   return lookup
 end
 
+--- TBC has no specialization API: the "spec" is the talent tree holding the
+--- most points (the same rule every Classic addon uses), and it only changes
+--- on PLAYER_TALENT_UPDATE / CHARACTER_POINTS_CHANGED, which the shared
+--- registry already treats as spec-change events.
+local function DominantTalentTab()
+  local numTabs = type(GetNumTalentTabs) == "function" and GetNumTalentTabs() or 0
+  if type(GetTalentTabInfo) ~= "function" or numTabs < 1 then return nil end
+  local bestIndex, bestPoints = nil, -1
+  for tab = 1, numTabs do
+    local info = { GetTalentTabInfo(tab) }
+    -- Classic returns (name, texture, pointsSpent, ...); newer Classic builds
+    -- may return a table with pointsSpent instead.
+    local points = type(info[1]) == "table" and tonumber(info[1].pointsSpent) or tonumber(info[3])
+    if points and points > bestPoints then
+      bestIndex, bestPoints = tab, points
+    end
+  end
+  return bestIndex
+end
+
 local cachedClass, cachedIndex, cachedKey
 function SI.GetPlayerSpec()
   local _, classToken = UnitClass("player")
@@ -95,6 +115,7 @@ function SI.GetPlayerSpec()
     specIndex = C_SpecializationInfo.GetSpecialization()
   end
   if not specIndex and ns.Client and ns.Client.IsVanilla == true then specIndex = 0 end
+  if not specIndex and ns.Client and ns.Client.IsTBC == true then specIndex = DominantTalentTab() end
   if not specIndex then return nil end
   if classToken == cachedClass and specIndex == cachedIndex then return cachedKey end
   cachedClass, cachedIndex = classToken, specIndex

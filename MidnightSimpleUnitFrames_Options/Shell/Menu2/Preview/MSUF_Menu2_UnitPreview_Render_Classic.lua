@@ -13,6 +13,32 @@ local PreviewHelpers = MenuState.PreviewHelpers or {}
 local CPPreview = MenuState.ClassPowerPreview or {}
 local CastbarPreview = MSUF.UFPreviewCastbar or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
+local function PreviewBackgroundColorMode(health, general)
+    local mode = health and health.backgroundColorMode or general and general.barBgColorMode
+    if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
+        return mode
+    end
+    if (health and health.backgroundClassColor == true) or (general and general.barBgClassColor == true) then return "class" end
+    if (health and health.backgroundMatchHealth == true) or (general and general.barBgMatchHPColor == true) then return "match_health" end
+    return "custom"
+end
+
+local function ApplyPreviewHealthBackgroundFill(mock, missing, vertical, reverse, healthFraction)
+    local backgroundBar = mock and mock.healthBackgroundBar
+    local bar = mock and mock.healthBar
+    if not (backgroundBar and bar) then return end
+    backgroundBar:ClearAllPoints()
+    backgroundBar:SetAllPoints(missing == true and bar or mock)
+    if backgroundBar.SetOrientation then backgroundBar:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL") end
+    local backgroundReverse = reverse
+    if missing == true then backgroundReverse = not reverse end
+    if backgroundBar.SetReverseFill then backgroundBar:SetReverseFill(backgroundReverse) end
+    if backgroundBar.SetMinMaxValues then backgroundBar:SetMinMaxValues(0, 1) end
+    local pct = tonumber(healthFraction) or 0
+    if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
+    local missingValue = missing == true and (1 - pct) or 1
+    backgroundBar:SetValue(missingValue)
+end
 -- Mirrors the live relief renderer. FULL overlays cache their resolved anchor
 -- extents before this runs, avoiding stale configured portraitWidth/Height.
 local PREVIEW_RING_OPENING_INFLATE = 0.0952380952
@@ -224,14 +250,14 @@ local function CopyPreviewAnimationData(box, data, hpFrac, powerFrac)
     copy.powerCur = nil
     return copy
 end
-local function ResolvePreviewPowerColor(renderState, data, power)
+local function ResolvePreviewPowerColor(renderState, data, power, powerToken)
     local mode = power and power.mode
     if mode == "dark" or mode == "unified" or mode == "static" then
         return power.r or 0.1, power.g or 0.35, power.b or 0.95
     elseif mode == "class" then
         return renderState.ClassColor(data.class)
     end
-    return renderState.PowerColor(data.powerToken)
+    return renderState.PowerColor(powerToken)
 end
 
 local function ResolvePreviewHealthTextColor(renderState, runtimeText, conf, general, data, fr, fg, fb)
@@ -776,6 +802,7 @@ function Render.Install(Preview, deps)
         end,
         AnimatedValue = SharedCPPreview.AnimatedValue,
         TextForValue = SharedCPPreview.TextForValue,
+        ConfiguredTextForValue = SharedCPPreview.ConfiguredTextForValue,
     }
     local fallbackFont = deps.FONT or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     if type(deps.ApplyPreviewFont) ~= "function" then
@@ -1454,7 +1481,11 @@ function Preview.Refresh(box, reason)
     end
     -- Live snapshot first so the preview mirrors the real frame's current
     -- state (exact name/class/HP/power); stylized mock only as fallback.
-    local data = (D.LiveUnitData and D.LiveUnitData(key)) or UNIT_DATA[key] or UNIT_DATA.player or {}
+    box._playerManaSourcePreviewActive = key == "player"
+        and PreviewHelpers.PlayerManaSourceActive
+        and PreviewHelpers.PlayerManaSourceActive(conf) or false
+    local data = (D.LiveUnitData and D.LiveUnitData(key, box._playerManaSourcePreviewActive))
+        or UNIT_DATA[key] or UNIT_DATA.player or {}
     local runtimeSpec = R.RuntimeSpecForPreviewKey(key)
     local runtimePower = runtimeSpec and runtimeSpec.power
     local runtimeStatus = runtimeSpec and runtimeSpec.status
@@ -1627,6 +1658,7 @@ function Preview.Refresh(box, reason)
         data = CopyPreviewAnimationData(box, data, animHp, powerFrac)
     end
     local cpH = classPowerOn and (tonumber(bars.classPowerHeight) or 4) or 0
+    local displayPowerToken = box._playerManaSourcePreviewActive and "MANA" or data.powerToken
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
     local classPowerSegCount = PreviewClassPowerSegmentCount(classPowerPreviewSpec, 10)
     box._runtimeClassPowerW = classPowerOn and PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount) or 0
@@ -1642,6 +1674,7 @@ function Preview.Refresh(box, reason)
     box._runtimePowerEbonMight = key == "player"
         and classPowerOn
         and type(box._runtimeClassPowerSecondarySpec) == "table"
+        and not box._playerManaSourcePreviewActive
         and bars.showEbonMight ~= false
         and classPowerPreviewSpec and classPowerPreviewSpec.key == "evoker_augmentation_ebon" or false
     box._runtimeDetachedPowerSyncClass = key == "player" and ((runtimePower and runtimePower.detachedSyncClass == true) or (runtimePower == nil and conf.detachedPowerBarSyncClassPower ~= false)) or false
@@ -2000,8 +2033,6 @@ function Preview.Refresh(box, reason)
     mock.healthBar:ClearAllPoints()
     mock.healthBar:SetPoint("TOPLEFT", mock, "TOPLEFT", 0, 0)
     mock.healthBar:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", 0, S(box._runtimeHealthPowerInset))
-    mock.hpBG:ClearAllPoints()
-    mock.hpBG:SetAllPoints(mock)
     local hpReverse = (runtimeSpec and runtimeSpec.health and runtimeSpec.health.reverse == true) or (not (runtimeSpec and runtimeSpec.health) and conf.reverseFillBars == true)
     local hpAreaW = max(1, sw)
     local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
@@ -2012,13 +2043,16 @@ function Preview.Refresh(box, reason)
     -- this Refresh function sits at Lua's 200 active-local limit.
     if (runtimeSpec and runtimeSpec.health and runtimeSpec.health.vertical == true) or (not (runtimeSpec and runtimeSpec.health) and conf.verticalFillBars == true) then
         if mock.healthBar.SetOrientation then mock.healthBar:SetOrientation("VERTICAL") end
+        mock.healthBar._msufOrientation = "VERTICAL"
         mock.tempMaxHealthBg:Hide()
         mock.tempMaxHealth:Hide()
     else
         if mock.healthBar.SetOrientation then mock.healthBar:SetOrientation("HORIZONTAL") end
+        mock.healthBar._msufOrientation = "HORIZONTAL"
         RenderTempMaxHealth(mock, runtimeSpec, conf, g, key, hpReverse, hpAreaW, SetTex)
     end
     if mock.healthBar.SetReverseFill then mock.healthBar:SetReverseFill(hpReverse) end
+    mock.healthBar._msufReverseFill = hpReverse
     if mock.healthBar.SetMinMaxValues then mock.healthBar:SetMinMaxValues(0, 1) end
     mock.healthBar:SetValue(hpFrac)
     -- Query after SetValue, exactly like Group Preview: the client owns this
@@ -2099,26 +2133,37 @@ function Preview.Refresh(box, reason)
     if not hr then hr, hg, hb = R.HealthColor(key, data) end
     local hbr, hbg, hbb, hba
     local healthBg = runtimeSpec and runtimeSpec.health and runtimeSpec.health.background
+    mock._msufPreviewBackgroundColorMode = PreviewBackgroundColorMode(runtimeSpec and runtimeSpec.health, g)
     if healthBg then
         hbr, hbg, hbb, hba = healthBg.r or hr, healthBg.g or hg, healthBg.b or hb, healthBg.a or 0.85
-        if runtimeSpec.health.backgroundClassColor == true then
+        if mock._msufPreviewBackgroundColorMode == "health_gradient" and MSUF.UFBarTextCommon
+            and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
+            hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(runtimeSpec.health, hpFrac)
+        elseif mock._msufPreviewBackgroundColorMode == "class" then
             hbr, hbg, hbb = R.ClassColor((data.isPlayer and data.class)
                 or ((D.LiveUnitData and D.LiveUnitData("player") or {}).class)
                 or (UNIT_DATA.player and UNIT_DATA.player.class))
-        elseif runtimeSpec.health.backgroundMatchHealth == true then
+        elseif mock._msufPreviewBackgroundColorMode == "match_health" then
             hbr, hbg, hbb = R.DarkMatchHPColor(hr, hg, hb)
         end
     else
         hbr, hbg, hbb, hba = R.HealthBackgroundColor(hr, hg, hb, data, conf)
+        if mock._msufPreviewBackgroundColorMode == "health_gradient" and MSUF.UFBarTextCommon
+            and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
+            hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(g, hpFrac)
+        end
     end
     -- Alpha follows the current menu value immediately. The compiled spec
     -- still owns the live texture/RGB mode, but may lag one debounced apply
     -- while a slider is being edited.
     hba = select(4, R.HealthBackgroundColor(hr, hg, hb, data, conf))
-    -- Match the live background owner: color and configured opacity are one
-    -- vertex-color operation, while the region alpha remains neutral.
+    -- Match the live background owner: color and configured opacity stay in
+    -- the vertex color while the native StatusBar owns fill geometry.
     mock.hpBG:SetVertexColor(hbr, hbg, hbb, hba)
-    mock.hpBG:SetAlpha(1)
+    ApplyPreviewHealthBackgroundFill(mock,
+        (runtimeSpec and runtimeSpec.health and runtimeSpec.health.backgroundFillMode == "missing")
+            or (not (runtimeSpec and runtimeSpec.health) and g and g.barBgFillMode == "missing"),
+        mock.healthBar._msufOrientation == "VERTICAL", hpReverse, hpFrac)
     mock.healthBar:SetStatusBarColor(hr, hg, hb, 1)
     local healthFillAlpha = max(0, min(1, tonumber(conf and conf.hpBarAlpha)
         or tonumber(runtimeSpec and runtimeSpec.alpha and runtimeSpec.alpha.hpAlpha) or 1))
@@ -2142,7 +2187,7 @@ function Preview.Refresh(box, reason)
             mock.powerBG:SetPoint("TOPRIGHT", mock, "BOTTOMRIGHT", 0, -max(1, S(1)))
         end
         mock.powerBG:SetHeight(powerH)
-        local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower)
+        local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower, displayPowerToken)
         local pbr, pbg, pbb, pba
         local powerBg = runtimePower and runtimePower.background
         if powerBg then
@@ -2160,7 +2205,7 @@ function Preview.Refresh(box, reason)
         mock.powerBG:Hide(); mock.power:Hide()
     end
     local fr, fg, fb = R.FontColor()
-    local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower)
+    local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower, displayPowerToken)
     if classPowerOn then
         mock.classPower:Show()
         local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
@@ -2374,8 +2419,10 @@ function Preview.Refresh(box, reason)
             local cpTextSize = S(tonumber(bars.classPowerFontSize) or 16)
             if cpTextSize < 7 then cpTextSize = 7 end
             ApplyPreviewFont(mock.classPower.text, cpTextSize)
-            if cp.animatedValue ~= nil and R.CPPreview.TextForValue then
-                mock.classPower.text:SetText(R.CPPreview.TextForValue(cp.preview, cp.animatedValue))
+            if cp.animatedValue ~= nil and (R.CPPreview.ConfiguredTextForValue or R.CPPreview.TextForValue) then
+                mock.classPower.text:SetText(R.CPPreview.ConfiguredTextForValue
+                    and R.CPPreview.ConfiguredTextForValue(bars, cp.preview, cp.animatedValue)
+                    or R.CPPreview.TextForValue(cp.preview, cp.animatedValue))
             else
                 mock.classPower.text:SetText((cp.preview and cp.preview.previewText) or "3")
             end
@@ -2594,7 +2641,7 @@ function Preview.Refresh(box, reason)
         SetPreviewTextColor(mock.hpText, RuntimeHealthPhysicalSlotValue(runtimeText, "Right", "directHealth", "Color"), box._fontPreviewTextAlpha)
     end
     if (runtimeText and runtimeText.powerColorByType == true) or (not runtimeText and g.colorPowerTextByType == true) then
-        local prt, pgt, pbt = R.PowerColor(data.powerToken)
+        local prt, pgt, pbt = R.PowerColor(displayPowerToken)
         SetTextColorSet(prt, pgt, pbt, box._fontPreviewTextAlpha, mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct)
     else
         SetTextColorSet(fr, fg, fb, box._fontPreviewTextAlpha, mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct)
