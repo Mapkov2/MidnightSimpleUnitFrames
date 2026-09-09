@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "26437D4ABA8A7B7DBC0BC2FDC147F9DD776760821AADC2950304E9A0EE9F7832",
-    currentVersion = "6.16-beta3",
+    sourceSha256 = "E0C7AF7D420015E44CE75216631175825A1692A1C4081CC1129B4DAFAB591526",
+    currentVersion = "6.16-beta4",
     historyFromVersion = "6.02",
-    previousVersion = "6.16-beta2",
-    rangeLabel = "6.16-beta2 -> 6.16-beta3",
+    previousVersion = "6.16-beta3",
+    rangeLabel = "6.16-beta3 -> 6.16-beta4",
     entries = {
+        {
+            version = "6.16-beta4",
+            date = "2026-09-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Demon Hunter Devourer Soul Fragment bars are divided into their fragments again. Separator and Pip gap act on the bar once more, while its fill keeps following the real fragment maximum.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "separator",
+                                label = "Separator",
+                                sectionId = "classpower_visuals",
+                                controlId = "menu2.classpower.advanced.style.pips.separator",
+                                settingKey = "bars.classPowerTickWidth",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "The Class Resources preview and the docked unit preview now render the Devourer resource the way it appears in game.",
+                        "Aura icon style controls re-apply their master-toggle gates on every Appearance page instead of only on Buffs, so Debuffs, Player Defensives and Dots no longer keep a stale enabled state.",
+                    },
+                },
+            },
+        },
         {
             version = "6.16-beta3",
             date = "2026-09-09",

@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "26437D4ABA8A7B7DBC0BC2FDC147F9DD776760821AADC2950304E9A0EE9F7832",
-    currentVersion = "6.16-beta3",
-    historyFromVersion = "6.151",
-    previousVersion = "6.16-beta2",
-    rangeLabel = "6.16-beta2 -> 6.16-beta3",
+    sourceSha256 = "E0C7AF7D420015E44CE75216631175825A1692A1C4081CC1129B4DAFAB591526",
+    currentVersion = "6.16-beta4",
+    historyFromVersion = "6.16-beta1",
+    previousVersion = "6.16-beta3",
+    rangeLabel = "6.16-beta3 -> 6.16-beta4",
     entries = {
+        {
+            version = "6.16-beta4",
+            date = "2026-09-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Demon Hunter Devourer Soul Fragment bars are divided into their fragments again. Separator and Pip gap act on the bar once more, while its fill keeps following the real fragment maximum.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "separator",
+                                label = "Separator",
+                                sectionId = "classpower_visuals",
+                                controlId = "menu2.classpower.advanced.style.pips.separator",
+                                settingKey = "bars.classPowerTickWidth",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "The Class Resources preview and the docked unit preview now render the Devourer resource the way it appears in game.",
+                        "Aura icon style controls re-apply their master-toggle gates on every Appearance page instead of only on Buffs, so Debuffs, Player Defensives and Dots no longer keep a stale enabled state.",
+                    },
+                },
+            },
+        },
         {
             version = "6.16-beta3",
             date = "2026-09-09",
@@ -148,36 +177,6 @@ local data = {
                         "Health gradients, dynamic backgrounds, and protected health and power text reuse already-read values and specialized writers to reduce duplicate work on frequent unit events.",
                         "Injured-only visibility uses a secret-safe native health curve and stable visual parents so health bars, predictions, borders, textures, portraits, cast indicators, and Class Resources hide together without changing the clickable secure frame.",
                         "Scheduler callback errors now retain the original callback stack while continuing to isolate failures and drain queued work.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.151",
-            date = "2026-09-06",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Highlight borders work reliably again on rounded frames and respect the configured border thickness.",
-                            link = {
-                                pageKey = "opt_bars",
-                                query = "rounded frame texture",
-                                label = "Rounded frame texture",
-                                sectionId = "bars_rounded",
-                                controlId = "menu2.opt.bars.global.rounded.rounded.frames.enabled",
-                                settingKey = "bars.roundedFramesEnabled",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Restored rounded highlight startup and layering, including support for border thickness up to 30.",
-                        "Dispel and Purge borders now apply their configured thickness on all frame shapes and refresh immediately after Menu changes.",
-                        "Group Frame highlight detection keeps working when Aura icons are disabled, and Any dispel type also works on enemy units.",
                     },
                 },
             },

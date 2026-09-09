@@ -1,5 +1,17 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.16-beta4 - 2026-09-09
+
+### Highlights
+
+- **Demon Hunter Devourer Soul Fragment bars are divided into their fragments again.** Separator and Pip gap act on the bar once more, while its fill keeps following the real fragment maximum.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visuals","controlId":"menu2.classpower.advanced.style.pips.separator","settingKey":"bars.classPowerTickWidth","prepareKind":"","prepareValue":"","query":"separator","label":"Separator"} -->
+
+### Fixes & Performance
+
+- The Class Resources preview and the docked unit preview now render the Devourer resource the way it appears in game.
+- Aura icon style controls re-apply their master-toggle gates on every Appearance page instead of only on Buffs, so Debuffs, Player Defensives and Dots no longer keep a stale enabled state.
+
 ## 6.16-beta3 - 2026-09-09
 
 ### Highlights
