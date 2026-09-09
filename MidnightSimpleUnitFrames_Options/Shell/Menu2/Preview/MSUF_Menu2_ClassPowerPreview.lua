@@ -1469,14 +1469,18 @@ local function RenderClassPower(preview, bars, player, spec)
     --- fragment boundaries into it. Mirror the same geometry here: Separator and
     --- Pip gap must preview what they actually do on that bar.
     local fragments = shapeInfo and 0 or floor(tonumber(spec.fragments) or 0)
-    local notchW = Clamp(bars.classPowerTickWidth, 1, 0, 4) + Clamp(bars.classPowerGap, 0, 0, 8)
-    --- Dividers may take every pixel the fragments do not need, exactly as on
-    --- the live bar.
-    if fragments >= 2 and fragments <= 64 and w > fragments then
+    --- Separator keeps its literal width inside the space the fragments do not
+    --- need and Pip gap spends the rest of it in proportion, exactly as on the
+    --- live bar.
+    local notchSep, notchGap = Clamp(bars.classPowerTickWidth, 1, 0, 4), Clamp(bars.classPowerGap, 0, 0, 8)
+    local notchW = 0
+    if fragments >= 2 and fragments <= 64 and w > fragments and (notchSep + notchGap) > 0 then
         local maxNotchW = floor((w - fragments) / (fragments - 1))
-        if notchW > maxNotchW then notchW = maxNotchW end
-    else
-        notchW = 0
+        if maxNotchW >= 1 then
+            local base = (notchSep > maxNotchW) and maxNotchW or notchSep
+            notchW = base + floor(((notchGap * (maxNotchW - base)) / 8) + 0.5)
+            if notchW > maxNotchW then notchW = maxNotchW end
+        end
     end
     local shownNotches = 0
     if fragments >= 2 and fragments <= 64 and notchW >= 1 then

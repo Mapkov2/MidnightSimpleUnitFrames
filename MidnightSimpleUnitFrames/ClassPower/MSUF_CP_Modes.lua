@@ -1221,6 +1221,8 @@ modeBuilders.AURA = function(E)
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local math_floor = math.floor
     local MAX_FRAGMENT_NOTCHES = (E.CPConst and tonumber(E.CPConst.MAX_FRAGMENT_NOTCHES)) or 64
+    --- Top of the Pip gap slider; the divider budget is shared across it.
+    local MAX_PIP_GAP = 8
 
     --- Devourer's fragment separators.
     --- Its Soul Fragment maximum is talent-dependent (30/35/50), far above
@@ -1250,16 +1252,6 @@ modeBuilders.AURA = function(E)
         if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
         local gap = tonumber(b.classPowerGap) or 0
         if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
-        --- One notch spans the same space a segmented resource puts between two
-        --- pips, so both sliders keep acting on the divider they name, and it
-        --- snaps to the pixel grid exactly like those separators do.
-        local notchW = tickW + gap
-        local snap = _G.MSUF_Snap
-        if notchW > 0 and type(snap) == "function" then
-            local snapped = tonumber(snap(CP.container or CP.bars[1], notchW))
-            if snapped and snapped > 0 then notchW = snapped end
-        end
-
         local width = (type(bar.GetWidth) == "function" and tonumber(bar:GetWidth())) or 0
         local height = (type(bar.GetHeight) == "function" and tonumber(bar:GetHeight())) or 0
         --- Past the pool ceiling the dividers would no longer sit on real
@@ -1267,16 +1259,28 @@ modeBuilders.AURA = function(E)
         --- the bug this bar already had. Draw none instead.
         if count > MAX_FRAGMENT_NOTCHES then count = 0 end
 
-        --- Same separator clamp the segmented layout uses: dividers may take
-        --- every pixel the fragments do not need, so each fragment keeps one.
-        --- Anything stricter saturates the sliders after two or three steps and
-        --- reads as a Pip gap that ignores its setting; anything looser lets a
-        --- divider overrun the fragment next to it.
-        if count >= 2 and width > count then
+        --- A divider may take every pixel the fragments do not need, and that
+        --- budget is what the two sliders share: Separator keeps its literal
+        --- width inside it, Pip gap spends the rest of it in proportion.
+        --- Spending it literally would saturate after two steps on a
+        --- forty-fragment bar - six pixels cannot hold nine distinct widths -
+        --- and read as a Pip gap that ignores its setting. Both sliders at zero
+        --- stays the opt-out.
+        local notchW = 0
+        if count >= 2 and width > count and (tickW + gap) > 0 then
             local maxNotchW = math_floor((width - count) / (count - 1))
-            if notchW > maxNotchW then notchW = maxNotchW end
-        else
-            notchW = 0
+            if maxNotchW >= 1 then
+                local base = (tickW > maxNotchW) and maxNotchW or tickW
+                notchW = base + math_floor(((gap * (maxNotchW - base)) / MAX_PIP_GAP) + 0.5)
+                --- Crisp like every other separator, but a scale that snaps a
+                --- hairline below one pixel must not erase the division.
+                local snap = _G.MSUF_Snap
+                if type(snap) == "function" then
+                    local snapped = tonumber(snap(CP.container or bar, notchW))
+                    if snapped and snapped >= 1 then notchW = snapped end
+                end
+                if notchW > maxNotchW then notchW = maxNotchW end
+            end
         end
 
         local shown = 0

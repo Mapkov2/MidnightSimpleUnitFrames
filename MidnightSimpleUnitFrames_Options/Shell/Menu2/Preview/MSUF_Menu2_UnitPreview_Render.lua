@@ -2627,17 +2627,24 @@ function Preview.Refresh(box, reason)
         local shownNotches = 0
         if notches then
             local fragments = cp.shapeInfo and 0 or floor(tonumber(cp.preview and cp.preview.fragments) or 0)
-            local rawNotchW = (tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)
-            local notchW = max(1, S(rawNotchW))
-            --- Dividers may take every pixel the fragments do not need,
+            --- Separator keeps its literal width inside the space the fragments
+            --- do not need and Pip gap spends the rest of it in proportion,
             --- exactly as on the live bar.
-            if fragments >= 2 and previewW > fragments then
+            local notchSep = tonumber(bars.classPowerTickWidth) or 1
+            if notchSep < 0 then notchSep = 0 elseif notchSep > 4 then notchSep = 4 end
+            local notchGap = tonumber(bars.classPowerGap) or 0
+            if notchGap < 0 then notchGap = 0 elseif notchGap > 8 then notchGap = 8 end
+            local notchW = 0
+            if fragments >= 2 and previewW > fragments and (notchSep + notchGap) > 0 then
                 local maxNotchW = floor((previewW - fragments) / (fragments - 1))
-                if notchW > maxNotchW then notchW = maxNotchW end
-            else
-                notchW = 0
+                if maxNotchW >= 1 then
+                    local base = max(1, S(notchSep))
+                    if base > maxNotchW then base = maxNotchW end
+                    notchW = base + floor(((notchGap * (maxNotchW - base)) / 8) + 0.5)
+                    if notchW > maxNotchW then notchW = maxNotchW end
+                end
             end
-            if fragments >= 2 and fragments <= 64 and rawNotchW >= 1 and notchW >= 1 then
+            if fragments >= 2 and fragments <= 64 and notchW >= 1 then
                 local reverse = bars.classPowerFillReverse == true
                 local limit = previewW - notchW
                 local notchH = max(1, S(cpH))
