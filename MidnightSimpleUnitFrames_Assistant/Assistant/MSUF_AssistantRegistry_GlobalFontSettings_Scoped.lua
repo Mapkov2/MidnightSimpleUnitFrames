@@ -351,5 +351,11 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             if RegisterScopedUnitFontTextSettings(ctx, scope) == false then return false end
         end
     end
+    -- The No Ellipsis owners above carry inverse-polarity companions (the raw
+    -- "shorten name show dots" wording); publish them beside their owners.
+    local Auto = A.AutoCoverage
+    if type(Auto) == "table" and type(Auto.RegisterInversePolarityCompanions) == "function" then
+        Auto.RegisterInversePolarityCompanions()
+    end
     return true
 end

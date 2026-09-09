@@ -98,12 +98,14 @@ function A.GroupFramesRegistry.BuildSpellIndicatorCore(ctx)
     local BuildSpellIndicatorStateHelpers = Assistant.GroupFramesRegistry and Assistant.GroupFramesRegistry.BuildSpellIndicatorStateHelpers
     local StateCore = type(BuildSpellIndicatorStateHelpers) == "function" and BuildSpellIndicatorStateHelpers({
         GroupDB = GroupDB,
+        GroupDBRead = ctx.GroupDBRead,
         ApplyGroup = ApplyGroup,
         SpellRuntime = SpellRuntime,
     }) or nil
     if type(StateCore) ~= "table" then return nil end
 
     local SpellDB = StateCore.SpellDB
+    local SpellDBRead = StateCore.SpellDBRead
     local EnsureSpec = StateCore.EnsureSpec
     local SpellEntry = StateCore.SpellEntry
     local Placed = StateCore.Placed
@@ -141,6 +143,7 @@ function A.GroupFramesRegistry.BuildSpellIndicatorCore(ctx)
         ColorSame = ColorSame,
         SpellRuntime = SpellRuntime,
         SpellDB = SpellDB,
+        SpellDBRead = SpellDBRead,
         SpecDisplay = SpecDisplay,
         ResolveSpec = ResolveSpec,
         ResolveAura = ResolveAura,

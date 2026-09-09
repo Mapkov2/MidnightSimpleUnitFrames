@@ -788,19 +788,42 @@ local function EnsurePicker()
         self._ownerDropdownOpen = opened and true or nil
     end
 
+    panel.classColorMode = T.Button(panel, Tr("Power bar color by class"), 306, 24)
+    panel.classColorMode:SetPoint("TOPLEFT", PICKER_PAD, -132)
+    panel.classColorMode._msuf2SkipHistoryCheckpoint = true
+    panel.classColorMode:SetScript("OnClick", function()
+        local owner = panel.owner
+        if not owner or type(owner._msuf2SetColorByClass) ~= "function" then return end
+        if M.BlockCombatAction and M.BlockCombatAction() then return end
+        if not panel.historyOwner then
+            panel.historyOwner = owner
+            if type(owner._msuf2BeginColorInteraction) == "function" then owner:_msuf2BeginColorInteraction() end
+        end
+        panel.touched[owner] = true
+        owner._msuf2SetColorByClass(not owner._msuf2GetColorByClass())
+        panel:NotifyLiveChange(owner)
+        panel:Refresh()
+    end)
+
     function panel:Layout()
         local advanced = self.advanced == true
-        if self._layoutAdvanced == advanced then self:ClampPosition(); return end
+        local hasClassMode = self.owner and type(self.owner._msuf2GetColorByClass) == "function" or false
+        self.classColorMode:SetShown(hasClassMode)
+        if self._layoutAdvanced == advanced and self._layoutClassMode == hasClassMode then self:ClampPosition(); return end
         self._layoutAdvanced = advanced
+        self._layoutClassMode = hasClassMode
+        local modeHeight = hasClassMode and 28 or 0
         local width = advanced and ADVANCED_WIDTH or SIMPLE_WIDTH
         local height = advanced and ADVANCED_HEIGHT or SIMPLE_HEIGHT
         local previewWidth = (width - PICKER_PAD * 2 - PICKER_GAP) * 0.5
         local selectorWidth = width - PICKER_PAD * 2
-        self:SetSize(width, height)
+        self:SetSize(width, height + modeHeight)
         self.selector:SetWidth(selectorWidth)
         self.original:SetWidth(previewWidth); self.current:SetWidth(previewWidth)
 
-        self.wheelCard:ClearAllPoints(); self.wheelCard:SetPoint("TOPLEFT", PICKER_PAD, -133)
+        self.wheelCard:ClearAllPoints(); self.wheelCard:SetPoint("TOPLEFT", PICKER_PAD, -133 - modeHeight)
+        self.advancedCard:ClearAllPoints()
+        self.advancedCard:SetPoint("TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133 - modeHeight)
         self.wheelCard:SetSize(advanced and LEFT_CARD_WIDTH or selectorWidth, advanced and 227 or 138)
         self.colorSelect:ClearAllPoints()
         local wheelSize = advanced and 126 or 102
@@ -959,6 +982,10 @@ local function EnsurePicker()
     end
     function panel:Refresh()
         if not self.owner then return end
+        self:Layout()
+        if type(self.owner._msuf2GetColorByClass) == "function" then
+            self.classColorMode:SetText(Tr("Power bar color by class") .. ": " .. Tr(self.owner._msuf2GetColorByClass() and "On" or "Off"))
+        end
         local r, g, b = self.owner:GetRGB(); local originalValue = self.originals and self.originals[self.owner]
         self.original:SetColorTexture(originalValue and originalValue[1] or r, originalValue and originalValue[2] or g, originalValue and originalValue[3] or b, 1)
         self.selector.label:SetText(Tr(self.owner._msuf2ColorLabel or self.owner._msuf2SearchText or "Color"))

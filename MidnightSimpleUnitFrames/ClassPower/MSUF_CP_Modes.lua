@@ -1215,7 +1215,6 @@ modeBuilders.AURA = function(E)
     local GetTrackedPlayerAura = E.GetTrackedPlayerAura
     local C_Spell = E.C_Spell
     local CPK = E.CPK
-    local WW = E.WW
     local NotSecret = E.NotSecret
     local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local ResolveMWAbove5Color = E.ResolveMWAbove5Color
@@ -1310,9 +1309,6 @@ modeBuilders.AURA = function(E)
                         restrictedApplications = true
                     end
                 end
-            elseif powerType == "WHIRLWIND" then
-                cur = WW.GetStacks()
-                textValue = cur
             elseif powerType == "TIP_OF_THE_SPEAR" then
                 cur = GetTrackedTipStacks()
                 textValue = cur
@@ -1381,12 +1377,6 @@ modeBuilders.AURA = function(E)
             local autoHideCur = cur
             if restrictedApplications then autoHideCur = nil end
             CP_CheckAutoHide(autoHideCur, maxPower)
-        end
-    end
-
-    local function BuildWWRender()
-        return function()
-            if CP.visible and CP.powerType == "WHIRLWIND" then UpdateSegmented(CP.powerType, CP.currentMax) end
         end
     end
 
@@ -1466,7 +1456,7 @@ modeBuilders.AURA = function(E)
         CP_CheckAutoHide(cur, 1)
     end
 
-    return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle, BuildWWRender = BuildWWRender }
+    return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle }
 end
 
 --- 12.1 Ebon presentation host. Aura discovery and the countdown are owned by

@@ -8846,6 +8846,14 @@ function AP.InheritBatchScope(before, after)
         scope = groups[1]
     end
     if not scope then return after end
+    -- "set Bars Show Player Power Bar to off then set Shadow Insanity Bar to
+    -- on": a control whose NAME merely contains a frame word configures no
+    -- frame, so it carries nothing onto the next clause.
+    if type(parser.CompoundClauseConfiguresAFrame) == "function"
+        and not parser.CompoundClauseConfiguresAFrame(before)
+    then
+        return after
+    end
 
     local trimmed = Trim(after)
     local starter = trimmed:match("^(%a+)")
@@ -8853,7 +8861,15 @@ function AP.InheritBatchScope(before, after)
     local starterNorm = starter:lower()
     for i = 1, #AP.BATCH_COMMAND_STARTERS do
         if starterNorm == AP.BATCH_COMMAND_STARTERS[i] then
-            return starter .. " " .. scope .. " " .. Trim(trimmed:sub(#starter + 1))
+            local scoped = starter .. " " .. scope .. " " .. Trim(trimmed:sub(#starter + 1))
+            -- The carried frame may only re-scope a twin of the same control
+            -- ("HP Bar Gradient" has no Focus twin: it stays shared).
+            if type(parser.CompoundScopedReadingKeepsAttribute) == "function"
+                and not parser.CompoundScopedReadingKeepsAttribute(after, scoped)
+            then
+                return after
+            end
+            return scoped
         end
     end
     return after

@@ -40,6 +40,7 @@ local GroupFramesCore = type(BuildGroupFramesCore) == "function" and BuildGroupF
     EnsureDB = EnsureDB,
     GeneralDB = GeneralDB,
     GroupDB = GroupDB,
+    GroupDBRead = C.GroupDBRead,
     ClampNumber = ClampNumber,
     ApplyGroup = ApplyGroup,
     GroupFramesData = GroupFramesData,
@@ -62,6 +63,7 @@ A.GroupFramesRegistry.SpellIndicators = {
     UNIT_LABELS = UNIT_LABELS,
     AddAliasesForUnit = AddAliasesForUnit,
     GroupDB = GroupDB,
+    GroupDBRead = C.GroupDBRead,
     ClampNumber = ClampNumber,
     ApplyGroup = ApplyGroup,
 }

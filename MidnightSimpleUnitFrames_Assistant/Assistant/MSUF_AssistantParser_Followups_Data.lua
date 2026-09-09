@@ -54,6 +54,9 @@ Data.FOLLOWUPS_PARSER = {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you just do", "what have you just done", "what have you done",
         "what did you just change", "what exactly did you change", "what did you set",
+        "what did i just change", "what did i change", "what did i just do", "what have i changed",
+        "what have i just changed", "what did i set", "what did we just change", "what did we change",
+        "what have you changed", "what have you just changed",
         "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
         "show me last change", "show me the last change", "what now", "what happened",
@@ -308,4 +311,34 @@ Data.FOLLOWUPS_PARSER = {
         "icon height", "icon width", "text height", "text width",
     },
     ALL_SCOPE_TERMS = { "all", "all of", "every", "each", "alle", "alles", "jede", "jeder", "jedes" },
+    -- "bring them back" after a hide: restore the previous value of the last
+    -- change rather than searching the registry for "back".
+    RESTORE_PREVIOUS_TERMS = {
+        "bring them back", "bring it back", "bring that back", "bring those back",
+        "put them back", "put it back", "put that back", "get them back", "get it back",
+        "show them again", "show it again", "show that again", "i want them back", "i want it back",
+        "want them back", "want it back", "restore them", "restore it", "restore that",
+        "turn them back on", "turn it back on", "back on again",
+    },
+    -- "the other one too": the counterpart of the frame that was just changed.
+    OTHER_ONE_TERMS = {
+        "the other one", "other one", "the other frame", "the other",
+    },
+    OTHER_ONE_COUNTERPARTS = {
+        player = "target", target = "player", focus = "target", pet = "player", boss = "target",
+        targettarget = "focustarget", focustarget = "targettarget",
+        party = "raid", raid = "party", mythicraid = "raid",
+    },
+    -- "back to the player one, a bit more": re-aim the last comparative at a
+    -- named frame.
+    UNIT_REFOCUS_TERMS = {
+        "back to", "back on",
+        "player one", "target one", "focus one", "pet one", "boss one", "party one", "raid one",
+        "the player", "the target", "the focus", "the pet", "the boss", "the party", "the raid",
+    },
+    -- A verb that states its own polarity is a fresh command, not a replay.
+    EXPLICIT_TOGGLE_VERB_TERMS = {
+        "enable", "disable", "turn on", "turn off", "switch on", "switch off", "show", "hide",
+        "activate", "deactivate",
+    },
 }

@@ -129,7 +129,10 @@ function A.GroupFramesRegistry.RegisterBasicSettings(ctx, scope)
     local GroupDB = ctx.GroupDB
     local RAID_MANAGER_KINDS = { "party", "raid", "mythicraid" }
     local RAID_MANAGER_ALLOWED = { AUTO = true, SHOW = true, MOUSEOVER = true, HIDDEN = true }
+    local GroupDBRead = ctx.GroupDBRead
     local function RaidManagerConf(kind)
+        -- Read path: never materialise a scope row for a question.
+        if type(GroupDBRead) == "function" then return GroupDBRead(kind) end
         return type(GroupDB) == "function" and GroupDB(kind) or nil
     end
     local function ReadRaidManagerMode()

@@ -17,7 +17,9 @@ local UNIT_ALIASES = ctx.UNIT_ALIASES or {}
 local AddAliasesForUnit = ctx.AddAliasesForUnit
 local AuraModel = ctx.AuraModel
 local GFAurasRoot = ctx.GFAurasRoot
+local GFAurasRootForWrite = ctx.GFAurasRootForWrite
 local GFAuraGroup = ctx.GFAuraGroup
+local GFAuraGroupForWrite = ctx.GFAuraGroupForWrite
 local GFAuraLaneShown = ctx.GFAuraLaneShown
 local SetGFAuraLaneShown = ctx.SetGFAuraLaneShown
 local GFReadAuraNumber = ctx.GFReadAuraNumber
@@ -34,6 +36,7 @@ local AurasData = A.AurasRegistryData or {}
 if not (Registry and type(Registry.RegisterSetting) == "function") then return end
 if type(AddAliasesForUnit) ~= "function" or type(AuraModel) ~= "function" then return end
 if type(GFAurasRoot) ~= "function" or type(GFAuraGroup) ~= "function" then return end
+if type(GFAurasRootForWrite) ~= "function" or type(GFAuraGroupForWrite) ~= "function" then return end
 if type(GFAuraLaneShown) ~= "function" or type(SetGFAuraLaneShown) ~= "function" then return end
 if type(GFReadAuraNumber) ~= "function" or type(GFWriteAuraNumber) ~= "function" then return end
 if type(GFReadAuraValue) ~= "function" or type(GFWriteAuraValue) ~= "function" then return end
@@ -77,6 +80,7 @@ local CategoryCore = type(BuildGroupAuraCategoryCore) == "function" and BuildGro
     A = A,
     AuraModel = AuraModel,
     GFAuraGroup = GFAuraGroup,
+    GFAuraGroupForWrite = GFAuraGroupForWrite,
     ApplyGroup = ApplyGroup,
     GF_AURA_CATEGORY_FALLBACK = GF_AURA_CATEGORY_FALLBACK,
 }) or nil
@@ -110,6 +114,7 @@ if type(RegisterGroupAuraLaneSettings) == "function" then
         RegisterGFAuraEnum = RegisterGFAuraEnum,
         RegisterGroupAuraRootSettings = A.AurasRegistry and A.AurasRegistry.RegisterGroupAuraRootSettings,
         GFAurasRoot = GFAurasRoot,
+        GFAurasRootForWrite = GFAurasRootForWrite,
         GFReadAuraValue = GFReadAuraValue,
         GFWriteAuraValue = GFWriteAuraValue,
         GFReadConfValue = GFReadConfValue,
@@ -143,6 +148,7 @@ if type(RegisterGroupAuraCategorySettings) == "function" then
     RegisterGroupAuraCategorySettings({
         Registry = Registry,
         AuraModel = AuraModel,
+        GFAuraGroup = GFAuraGroup,
         AddAliasesForUnit = AddAliasesForUnit,
         GFAuraCategoryValues = GFAuraCategoryValues,
         GFAuraCategoryLabel = GFAuraCategoryLabel,

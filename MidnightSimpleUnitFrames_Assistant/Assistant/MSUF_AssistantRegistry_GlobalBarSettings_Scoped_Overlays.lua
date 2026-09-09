@@ -184,6 +184,26 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
         apply = ApplyDispelPurgeBorder,
         reason = "MSUF_ASSISTANT_SCOPED_DISPEL_TRIGGER",
     })
+    -- Scoped twin of the "Show on" dropdown: the group bars page writes it
+    -- through BarScopeSet under the same hlOverride flag as the trigger.
+    RegisterScopedSetting("barScope", scope, "dispelBorderShowOn", "dispelBorderShowOn", "Dispel Border Show On", "enum", "BOTH", GlobalScopeAliases(scope, {
+        "dispel border show on", "dispel border shows on", "who the dispel border shows on",
+        "dispel border friendly or enemy", "dispel border units",
+    }), {
+        flag = "hlOverride",
+        values = { "FRIENDLY", "ENEMY", "BOTH" },
+        valueAliases = {
+            friendly = "FRIENDLY", friendlies = "FRIENDLY", friends = "FRIENDLY", allies = "FRIENDLY",
+            ["friendly only"] = "FRIENDLY", ["friendly units"] = "FRIENDLY",
+            enemy = "ENEMY", enemies = "ENEMY", hostile = "ENEMY", hostiles = "ENEMY",
+            ["enemy only"] = "ENEMY", ["enemy units"] = "ENEMY",
+            both = "BOTH", all = "BOTH", everyone = "BOTH", any = "BOTH",
+            ["friendly and enemy"] = "BOTH", ["enemy and friendly"] = "BOTH",
+        },
+        apply = ApplyDispelPurgeBorder,
+        reason = "MSUF_ASSISTANT_SCOPED_DISPEL_SHOW_ON",
+        description = "Which frames the dispel border may light up on for this scope: friendly, enemy, or both.",
+    })
     RegisterScopedMappedEnum("barScope", scope, "purgeOutlineMode", "purgeBorder", "Purge Border", "off", ON_OFF_VALUES, ON_OFF_STORAGE, GlobalScopeAliases(scope, {
         "purge border", "purge outline", "purgeable border",
     }), {

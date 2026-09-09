@@ -35,6 +35,7 @@ function A.GroupFramesRegistry.BuildCoreContext(ctx)
         GroupFramesData = GroupFramesData,
         AddAliasesForUnit = AddAliasesForUnit,
         GroupDB = GroupDB,
+        GroupDBRead = ctx.GroupDBRead,
         ApplyGroup = ApplyGroup,
     }) or nil
     if type(StatusIconCore) ~= "table" then return nil end
@@ -44,6 +45,7 @@ function A.GroupFramesRegistry.BuildCoreContext(ctx)
         Registry = Registry,
         UNIT_LABELS = UNIT_LABELS,
         GroupDB = GroupDB,
+        GroupDBRead = ctx.GroupDBRead,
         ClampNumber = ClampNumber,
         ApplyGroup = ApplyGroup,
     }) or nil
@@ -72,6 +74,7 @@ function A.GroupFramesRegistry.BuildCoreContext(ctx)
         EnsureDB = EnsureDB,
         GeneralDB = GeneralDB,
         GroupDB = GroupDB,
+        GroupDBRead = ctx.GroupDBRead,
         ApplyGroup = ApplyGroup,
         RegisterGroupString = RegisterGroupString,
         RegisterGroupEnum = RegisterGroupEnum,
@@ -85,6 +88,7 @@ function A.GroupFramesRegistry.BuildCoreContext(ctx)
         AddAliasesForUnit = AddAliasesForUnit,
         GeneralDB = GeneralDB,
         GroupDB = GroupDB,
+        GroupDBRead = ctx.GroupDBRead,
         ClampNumber = ClampNumber,
         ApplyGroup = ApplyGroup,
         RegisterGroupBoolean = RegisterGroupBoolean,

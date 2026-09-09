@@ -102,6 +102,8 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
             ["class portrait"] = "CLASS",
         },
     })
+    RegisterUnitBooleanSetting(unit, "portraitClickable", "portraitClickable", "Clickable Portrait", false,
+        MakeAliases(unit, "clickable portrait", "portrait clicking"), { category = "Portrait" })
     RegisterUnitBooleanSetting(unit, "portraitCastSpellIcon", "portraitCastSpellIcon",
         "Show Cast Spell Icon In Portrait", false,
         MakeAliases(unit, "cast spell icon in portrait", "portrait cast icon", "portrait spell icon"),

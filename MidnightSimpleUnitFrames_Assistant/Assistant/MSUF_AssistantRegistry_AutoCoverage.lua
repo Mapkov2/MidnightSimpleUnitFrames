@@ -49,6 +49,16 @@ local FLAT_SCOPES = { general = true, bars = true, gameplay = true }
 -- runtime; if an owner is removed or renamed, the raw path becomes a hard
 -- coverage gap instead of silently falling back to a generated setting.
 local CANONICAL_PATH_OWNERS = {
+    bars = {
+        -- Legacy per-unit power bar mirrors: MSUF_ReadUnitPowerBarEnabled
+        -- (Kernel/MSUF_Util.lua) reads <unit>.showPowerBar first and falls
+        -- back to these only while the unit key is nil, so the unit control
+        -- owns the visible identity and a write here would be invisible.
+        showPlayerPowerBar = "player.showPowerBar",
+        showTargetPowerBar = "target.showPowerBar",
+        showFocusPowerBar = "focus.showPowerBar",
+        showBossPowerBar = "boss.showPowerBar",
+    },
     player = {
         -- Fallback for the RIGHT text slot only: MSUF_UF_Config.lua:1687 reads
         -- conf.textRight first and only then this field, so a write here is

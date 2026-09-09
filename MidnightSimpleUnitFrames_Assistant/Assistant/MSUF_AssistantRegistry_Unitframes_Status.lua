@@ -329,7 +329,10 @@ function A.UnitframesRegistry.RegisterStatusTextColorSettings(ctx, unit)
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(UnitDB) ~= "function" or type(AddAliasesForUnit) ~= "function" then return end
 
-    local UNIT_LABELS = ctx.UNIT_LABELS or {}
+    -- The status loop's ctx carries no UNIT_LABELS, which left the raw unit
+    -- key in every label ("targettarget Level Text Color"); fall back to the
+    -- shared display names so the label reads "Target of Target ...".
+    local UNIT_LABELS = ctx.UNIT_LABELS or (A.RegistryCore and A.RegistryCore.UNIT_LABELS) or {}
     local unitLabel = UNIT_LABELS[unit] or unit
 
     local function Clamp01(value)

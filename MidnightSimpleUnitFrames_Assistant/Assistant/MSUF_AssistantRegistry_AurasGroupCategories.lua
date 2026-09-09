@@ -13,6 +13,7 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
 
     local Registry = ctx.Registry
     local AuraModel = ctx.AuraModel
+    local GFAuraGroup = ctx.GFAuraGroup
     local AddAliasesForUnit = ctx.AddAliasesForUnit
     local GFAuraCategoryValues = ctx.GFAuraCategoryValues
     local GFAuraCategoryLabel = ctx.GFAuraCategoryLabel
@@ -84,6 +85,14 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
                     type = "boolean",
                     aliases = aliases,
                     get = function()
+                        -- Direct saved-table read: the Auras3 model reader pins
+                        -- renderer = "CUSTOM" on every read, and a question must
+                        -- never write. Raid reads the raid table, as the model does.
+                        if type(GFAuraGroup) == "function" then
+                            local group = GFAuraGroup(settingScope, settingLane)
+                            local blacklist = type(group) == "table" and group.blacklist or nil
+                            return type(blacklist) == "table" and blacklist.hidePermanent == true or false
+                        end
                         local Model = AuraModel()
                         return Model and Model.ReadGroupBlacklistHidePermanent(settingScope, settingLane) == true or false
                     end,

@@ -1315,6 +1315,8 @@ function GroupPage.BuildPortrait(ctx, builder)
         PortraitMeta("position", "portraitMode"))
     AttachPortraitFocus(side)
     local render = BindDropdown(mainCard, "Render", renderValues, 16, -116, min(220, cardW - 32), "portraitRender", "2D", nil, RefreshPortraitControls)
+    local clickable = BindToggle(mainCard, "Clickable portrait", 16, -174, cardW - 32, "portraitClickable", false)
+    clickable._msuf2SearchText = "Clickable portrait group frame target right click menu click casting mouseover"
     local shape = BindDropdown(borderCard, "Shape", shapeValues, 16, -58, min(220, cardW - 32), "portraitShape", "SQUARE", nil, RefreshPortraitControls)
     local sizeMode = W.Segment(geometryCard, "Size mode", sizeModeValues, min(360, cardW - 32))
     W.MoveWidget(sizeMode, geometryCard, 16, -62, min(360, cardW - 32))
@@ -1360,7 +1362,7 @@ function GroupPage.BuildPortrait(ctx, builder)
     local castIcon = BindToggle(styleCard, "Show cast spell icon in portrait", 16, -274, cardW - 32, "portraitCastSpellIcon", false)
     castIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local activeControls = {
-        render, shape, sizeMode, size, width, height, placement, level, alpha,
+        render, clickable, shape, sizeMode, size, width, height, placement, level, alpha,
         border, edgeSoftness, background, castIcon,
     }
     local function Active(conf) return (conf.portraitMode or "OFF") ~= "OFF" end

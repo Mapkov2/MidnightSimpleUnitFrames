@@ -114,6 +114,9 @@ local PHRASE_FOLDS = {
     { "more visible", "opacity bigger" }, { "less visible", "opacity smaller" },
     { "half transparent", "opacity 50%" }, { "half opacity", "opacity 50%" }, { "half visible", "opacity 50%" },
     { "fully visible", "visible" }, { "fully opaque", "opacity 100%" },
+    -- "bring the target frame back" / "put it back": the frame mention is
+    -- removed before folding, so the verb and "back" meet here.
+    { "bring back", "show" }, { "put back", "show" }, { "get back", "show" }, { "bring it back", "show" },
     { "fill from the right", "reverse fill" }, { "fills from the right", "reverse fill" },
     { "fill right to left", "reverse fill" }, { "fill from right to left", "reverse fill" },
     { "from bottom to top", "vertical" }, { "bottom to top", "vertical" }, { "bottom up", "vertical" },
@@ -368,13 +371,19 @@ table.sort(PHRASE_FOLDS, function(a, b)
     return a[1] < b[1]
 end)
 
+-- The escaped fold patterns never change; building them per call made every
+-- alias of every setting in EnsureUnitIndex pay the escape again.
+local PHRASE_FOLD_PATTERNS, PHRASE_FOLD_REPLACEMENTS = {}, {}
+for i = 1, #PHRASE_FOLDS do
+    PHRASE_FOLD_PATTERNS[i] = " " .. EscapePattern(PHRASE_FOLDS[i][1]) .. " "
+    PHRASE_FOLD_REPLACEMENTS[i] = " " .. PHRASE_FOLDS[i][2] .. " "
+end
 local function ApplyPhraseFolds(text)
     text = " " .. text .. " "
-    for i = 1, #PHRASE_FOLDS do
-        local phrase, replacement = PHRASE_FOLDS[i][1], PHRASE_FOLDS[i][2]
-        local pattern = " " .. EscapePattern(phrase) .. " "
+    for i = 1, #PHRASE_FOLD_PATTERNS do
+        local pattern = PHRASE_FOLD_PATTERNS[i]
         if text:find(pattern) then
-            text = text:gsub(pattern, " " .. replacement .. " ")
+            text = text:gsub(pattern, PHRASE_FOLD_REPLACEMENTS[i])
         end
     end
     return Trim((text:gsub("%s+", " ")))
@@ -438,9 +447,15 @@ function P.UnitScopeFromNaturalText(text)
     -- is part of a unit-frame idiom such as "raid marker" or "party leader".
     do
         local masked = " " .. norm .. " "
+        -- Load conditions name the player's situation, not a group frame:
+        -- "only show my player frame when i am in a group" is Player Hide
+        -- Solo. Only the article forms are masked -- "in party frames" must
+        -- keep naming the party frames.
         for _, idiom in ipairs({ "raid marker", "raid markers", "raid icon", "raid icons", "raid group", "raid target",
             "party leader", "raid leader", "group leader", "dungeons and raids", "dungeons or raids", "group number",
-            "dungeons and raid", "dungeon and raid", "instances and raid" }) do
+            "dungeons and raid", "dungeon and raid", "instances and raid",
+            "in a group", "in a party", "in a raid", "when grouped", "while grouped", "when in group",
+            "when in party", "when in raid", "not in a group", "not in a party", "not in a raid" }) do
             masked = masked:gsub(" " .. EscapePattern(idiom) .. " ", " idiom ")
         end
         local groups = P.DetectGroups and P.DetectGroups(Trim(masked)) or {}
@@ -515,6 +530,13 @@ end
 local function AnalyseSubject(subjectTokens, rawText, opacityFold, frameIsObject)
     local text = table.concat(subjectTokens, " ")
     text = ApplyPhraseFolds(text)
+    -- "shorten the health values to 1.2m style" / "like 1.5k": a sample
+    -- abbreviated number names the Abbreviate HP Values control; read as a
+    -- number it would look for a numeric slider instead.
+    text = text:gsub("%f[%d]%d+%.?%d*%s*[km]%s+style%f[%A]", "abbreviate")
+        :gsub("%f[%a]like%s+%d+%.?%d*%s*[km]%f[%A]", "abbreviate")
+        :gsub("%f[%a]as%s+%d+%.?%d*%s*[km]%f[%A]", "abbreviate")
+    text = Trim((text:gsub("%s+", " ")))
     -- "only show ... when in a group" hides the frame everywhere else. Only
     -- when the frame itself is the object: "only show the texture layer in
     -- combat" is that layer's visibility choice.
@@ -853,7 +875,7 @@ local function EnsureUnitIndex(unit)
                     or (Normalize(setting.label or ""):find("%f[%a]hide%f[%A]") ~= nil),
             }
         end
-        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
     end
     unitIndexCache[unit] = entries
     return entries
@@ -1002,6 +1024,22 @@ local function CandidateScore(entry, analysis)
     -- the sentence meant: "turn off castbar" must not reach Show Castbar
     -- Interrupt just because the frame owns no castbar control of its own.
     if extras > analysis.hardCount then return nil end
+    -- A bare number never means a draw layer or strata: "focus name 16" is a
+    -- size the player left implicit, and Focus Name Text Layer only won
+    -- because its label carries fewer extra words than Focus Name Font Size.
+    -- Unless the sentence says layer/strata/level itself, such a control is
+    -- out; with no candidate left the Router asks instead of guessing.
+    if analysis.number ~= nil and extras > 0 then
+        local rawSet = analysis.rawSet or {}
+        local saysLayer = rawSet.layer or rawSet.layers or rawSet.strata or rawSet.level or rawSet.sublayer
+        if not saysLayer then
+            for token in pairs(entry.labelSet) do
+                if not matched[token] and (token == "layer" or token == "strata" or token == "sublayer") then
+                    return nil
+                end
+            end
+        end
+    end
     local score = 1000 - extras * 10
     -- "health bar" and "health text" are different things even though both
     -- words are generic on their own.
@@ -1506,6 +1544,27 @@ function P.UnitScopedNaturalPlan(text, raw, ctx)
         end
     end
     if ContainsAny(norm, AURA_TERMS) then return nil end
+    -- "make the boss frame bigger" resizes the frame; the Geometry resize
+    -- chooser (width / height / both) owns that. Matching one of the frame's
+    -- own size controls here picked Boss Number Indicator Size instead.
+    do
+        local sizeTail = norm:match("%f[%a]frames?%s+(%a+)$") or norm:match("%f[%a]frames?%s+(%a+)%s+a%s+bit$")
+            or norm:match("%f[%a]frames?%s+(%a+)%s+please$") or norm:match("%f[%a]frames?%s+(%a+)%s+slightly$")
+        -- Only the two-axis words stand down; "taller" / "wider" name one
+        -- axis and resolve to the frame's own Height / Width here.
+        -- Only when the frame itself is the subject: "make the raid marker
+        -- on the target frame bigger" also ends in "frame bigger", and its
+        -- subject is the marker, which this lane resolves.
+        local frameIsSubject = norm:find("%f[%a]on%s+the%s+%a+%s+frames?%f[%A]") == nil
+            and norm:find("%f[%a]on%s+my%s+frames?%f[%A]") == nil
+            and norm:find("%f[%a]of%s+the%s+%a+%s+frames?%f[%A]") == nil
+            and norm:find("%f[%a]in%s+the%s+%a+%s+frames?%f[%A]") == nil
+        if frameIsSubject and sizeTail and (sizeTail == "bigger" or sizeTail == "smaller" or sizeTail == "larger"
+            or sizeTail == "huge" or sizeTail == "tiny")
+        then
+            return nil
+        end
+    end
     -- A question is never a write. "is there Boss Texture Layer 3 Offset X
     -- in msuf?" carries a digit and a control name, which is exactly the
     -- shape a value-hungry lane mistakes for a command.

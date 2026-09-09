@@ -14,6 +14,7 @@ local UF = Text.UF
 local tonumber = Text.tonumber
 local floor = Text.floor
 local max = Text.max
+local abs = math.abs
 local concat = table.concat
 local tostring = tostring
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
@@ -1089,6 +1090,133 @@ local function InvalidateTextForFontEpoch(frame)
   frame._msufInlineRaw, frame._msufInlineText, frame._msufInlineStamp = nil, nil, nil
 end
 
+-- A separate alpha gate on the existing overlays preserves slot visibility,
+-- clipping, text opacity and secret-backed value/color writers. Blizzard live
+-- TextStatusBar.lua uses the same enter/leave lifecycle for status text.
+-- Hooks are installed once, only for frames that opt in. No polling or DB reads
+-- in the mouse path; disabled frames retain no active overlay references.
+local function FinishTextFade(group)
+  local overlay = group:GetParent()
+  overlay:SetAlpha(overlay._msufHoverTo)
+  overlay._msufHoverAlpha = overlay._msufHoverTo
+  overlay._msufHoverFading = nil
+end
+
+local function StopTextFade(group)
+  group:GetParent()._msufHoverFading = nil
+end
+
+local function ConfigureTextFade(overlay, fadeIn, fadeOut)
+  fadeIn, fadeOut = fadeIn or 0, fadeOut or 0
+  if overlay._msufHoverFadeIn == fadeIn and overlay._msufHoverFadeOut == fadeOut then return end
+  overlay._msufHoverFadeIn, overlay._msufHoverFadeOut = fadeIn, fadeOut
+  if (overlay._msufHoverFadeIn > 0 or overlay._msufHoverFadeOut > 0) and not overlay._msufHoverAnimation then
+    local group = overlay:CreateAnimationGroup()
+    group:SetToFinalAlpha(true)
+    local anim = group:CreateAnimation("Alpha")
+    anim:SetSmoothing("NONE")
+    group:SetScript("OnFinished", FinishTextFade)
+    group:SetScript("OnStop", StopTextFade)
+    overlay._msufHoverAnimation, overlay._msufHoverAnim = group, anim
+  end
+end
+
+local function SetTextHoverAlpha(overlay, target, instant)
+  local group = overlay._msufHoverAnimation
+  local current = overlay._msufHoverAlpha or 1
+  if overlay._msufHoverFading then
+    if not instant and overlay._msufHoverTo == target then return end
+    -- Only our own public animation timeline is inspected, never inherited
+    -- alpha (which can be secret-backed by range/load conditions).
+    if not instant then
+      current = overlay._msufHoverFrom + (overlay._msufHoverTo - overlay._msufHoverFrom) * overlay._msufHoverAnim:GetProgress()
+    end
+    group:Stop()
+  elseif current == target then
+    return
+  end
+  local duration = not instant and (target == 1 and overlay._msufHoverFadeIn or overlay._msufHoverFadeOut) or 0
+  if group and duration and duration > 0 and current ~= target then
+    overlay._msufHoverFrom, overlay._msufHoverTo = current, target
+    local anim = overlay._msufHoverAnim
+    if overlay._msufHoverAlpha ~= current then
+      overlay:SetAlpha(current)
+      overlay._msufHoverAlpha = current
+    end
+    anim:SetFromAlpha(current)
+    anim:SetToAlpha(target)
+    anim:SetDuration(duration * abs(target - current))
+    overlay._msufHoverFading = true
+    group:Play()
+  else
+    overlay:SetAlpha(target)
+    overlay._msufHoverAlpha = target
+  end
+end
+
+local function TextMouseEnter(frame)
+  if frame._msufHoverName then SetTextHoverAlpha(frame._msufHoverName, 1) end
+  if frame._msufHoverHealth then SetTextHoverAlpha(frame._msufHoverHealth, 1) end
+  if frame._msufHoverPower then SetTextHoverAlpha(frame._msufHoverPower, 1) end
+end
+
+local function TextMouseLeave(frame)
+  if frame._msufHoverName then SetTextHoverAlpha(frame._msufHoverName, 0) end
+  if frame._msufHoverHealth then SetTextHoverAlpha(frame._msufHoverHealth, 0) end
+  if frame._msufHoverPower then SetTextHoverAlpha(frame._msufHoverPower, 0) end
+end
+
+local function TextMouseHide(frame)
+  if frame._msufHoverName then SetTextHoverAlpha(frame._msufHoverName, 0, true) end
+  if frame._msufHoverHealth then SetTextHoverAlpha(frame._msufHoverHealth, 0, true) end
+  if frame._msufHoverPower then SetTextHoverAlpha(frame._msufHoverPower, 0, true) end
+end
+
+local function TextMouseShow(frame)
+  if not (frame._msufHoverName or frame._msufHoverHealth or frame._msufHoverPower) then return end
+  local alpha = frame:IsMouseOver() and 1 or 0
+  if frame._msufHoverName then SetTextHoverAlpha(frame._msufHoverName, alpha, true) end
+  if frame._msufHoverHealth then SetTextHoverAlpha(frame._msufHoverHealth, alpha, true) end
+  if frame._msufHoverPower then SetTextHoverAlpha(frame._msufHoverPower, alpha, true) end
+end
+
+local function ApplyTextMouseover(frame, text)
+  local name = text.nameMouseover == true and frame.MSUFNameTextLayer or nil
+  local health = text.healthMouseover == true and frame.MSUFHealthTextLayer or nil
+  local power = text.powerMouseover == true and frame.MSUFPowerTextLayer or nil
+  local oldName, oldHealth, oldPower = frame._msufHoverName, frame._msufHoverHealth, frame._msufHoverPower
+  if not (name or health or power or oldName or oldHealth or oldPower) then return end
+  -- Menu2 uses its own always-visible text preview. Detached group previews
+  -- must likewise never acquire live mouse behavior from a reused spec.
+  if frame._msufGFPreviewDetached == true then name, health, power = nil, nil, nil end
+  if name or health or power then
+    if not frame._msufTextMouseoverHooked then
+      frame:HookScript("OnEnter", TextMouseEnter)
+      frame:HookScript("OnLeave", TextMouseLeave)
+      frame:HookScript("OnHide", TextMouseHide)
+      frame:HookScript("OnShow", TextMouseShow)
+      frame._msufTextMouseoverHooked = true
+    end
+  end
+  if name then ConfigureTextFade(name, text.nameMouseoverFadeIn, text.nameMouseoverFadeOut) end
+  if health then ConfigureTextFade(health, text.healthMouseoverFadeIn, text.healthMouseoverFadeOut) end
+  if power then ConfigureTextFade(power, text.powerMouseoverFadeIn, text.powerMouseoverFadeOut) end
+  -- Existing overlays keep their current transition, including across layout,
+  -- color and duration changes. Only newly enabled/replaced overlays need a
+  -- mouse query; removing an overlay restores it without touching its peers.
+  if oldName == name and oldHealth == health and oldPower == power then return end
+  if oldName and oldName ~= name then SetTextHoverAlpha(oldName, 1, true) end
+  if oldHealth and oldHealth ~= health then SetTextHoverAlpha(oldHealth, 1, true) end
+  if oldPower and oldPower ~= power then SetTextHoverAlpha(oldPower, 1, true) end
+  frame._msufHoverName, frame._msufHoverHealth, frame._msufHoverPower = name, health, power
+  if (name and name ~= oldName) or (health and health ~= oldHealth) or (power and power ~= oldPower) then
+    local alpha = frame:IsMouseOver() and 1 or 0
+    if name and name ~= oldName then SetTextHoverAlpha(name, alpha, true) end
+    if health and health ~= oldHealth then SetTextHoverAlpha(health, alpha, true) end
+    if power and power ~= oldPower then SetTextHoverAlpha(power, alpha, true) end
+  end
+end
+
 function Text.Apply(frame, spec)
   local text = spec and spec.text or {}
   local powerEbonMight = frame._msufPowerEbonMight == true
@@ -1098,6 +1226,8 @@ function Text.Apply(frame, spec)
   end
   local sinksChanged, sinksReady = EnsureConfiguredTextSinks(frame, spec)
   sinksChanged = EnsureNameAnchorProxy(frame, spec) or sinksChanged
+  -- Run before layout cache returns: toggling hover does not require relayout.
+  ApplyTextMouseover(frame, text)
   local layoutRevision = spec and spec._msufTextLayoutRevision
   if frame._msufGFPreviewDetached ~= true
     and not sinksChanged

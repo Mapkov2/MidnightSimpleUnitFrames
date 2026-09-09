@@ -35,7 +35,7 @@ local function BuildText(ctx, builder, unit)
     -- The four text tabs share one section frame, so its height has to follow the
     -- tallest card stack of the selected tab. A single fixed height either clips
     -- the taller HP controls or leaves the shorter tabs with dead space.
-    local TAB_SECTION_HEIGHT = { name = 352, hp = 512, power = 500, advanced = 346 }
+    local TAB_SECTION_HEIGHT = { name = 560, hp = 624, power = 736, advanced = 346 }
     M.unitTextTabSelection = M.unitTextTabSelection or {}
     local function CurrentTextTab()
         local key = M.unitTextTabSelection[unit] or "name"
@@ -187,6 +187,36 @@ local function BuildText(ctx, builder, unit)
     local tabFrames = {}
     local tabs, RefreshTextTabs, ReadTextTab, SetGuidedTextTab
     local TextCard = UnitSectionShared.TextCard
+    local mouseoverFadeControls = {}
+    local function MouseoverControl(tab, kind, key, y)
+        local card = TextCard(tab, "Visibility", nil, rightX, y, rightW, 288)
+        local control = W.ToggleAt(card, "Only show on mouseover", 16, -48, rightW - 56)
+        W.Text(card, "Hover the unit frame to reveal this text. Preview stays visible. 0 seconds = instant.", 16, -82, rightW - 32, T.colors.dim)
+        M.BindBoolWidget(ctx, control,
+            function() return ReadBool(unit, key, false) end,
+            function(v)
+                SetBool(unit, key, v, "MSUF2_TEXT_MOUSEOVER", { text = true, preview = true })
+                RefreshTextControlState()
+            end,
+            FixedSettingMeta("text." .. kind .. ".mouseover", key))
+        local function FadeSlider(label, suffix, offset)
+            local settingKey = key .. suffix
+            local slider = W.Slider(card, label, 0, 2, 0.05, rightW - 58)
+            UnitSectionShared.PlaceSlider(card, slider, 16, offset, rightW - 58)
+            local meta = FixedSettingMeta("text." .. kind .. ".mouseover." .. suffix, settingKey)
+            meta.step = 0.05
+            M.BindNumberWidget(ctx, slider,
+                function() return ReadNumber(unit, settingKey, 0) end,
+                function(v) SetNumber(unit, settingKey, v, "MSUF2_TEXT_MOUSEOVER_FADE", { text = true, preview = true }) end,
+                0, meta)
+            return slider
+        end
+        mouseoverFadeControls[kind] = {
+            FadeSlider("Fade in (seconds)", "FadeIn", -154),
+            FadeSlider("Fade out (seconds)", "FadeOut", -216),
+        }
+        return control
+    end
     local PlaceDropdown, PlaceSlider = UnitSectionShared.PlaceDropdown, UnitSectionShared.PlaceSlider
     local function ReadSlot(unitKey, slotKey, legacyKey, fallback)
         local value = ReadText(unitKey, slotKey, nil)
@@ -417,6 +447,7 @@ local function BuildText(ctx, builder, unit)
         end,
         FixedSettingMeta("text.name.anchor", "nameTextAnchor"))
     local nameAppearance = TextCard(nameTab, "Appearance", nil, rightX, -4, rightW, 150)
+    local nameMouseover = MouseoverControl(nameTab, "name", "nameTextMouseover", -172)
     local nameSize = W.Slider(nameAppearance, "Size", 6, 48, 1, 260)
     PlaceSlider(nameAppearance, nameSize, 16, -58, rightW - 58)
     M.BindNumberWidget(ctx, nameSize,
@@ -432,6 +463,7 @@ local function BuildText(ctx, builder, unit)
     local HP_BASE_MODES = UnitSectionShared.HealthBaseModeValues(HP_MODES)
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
+        controls.mouseover = MouseoverControl(tab, kind, cfg.mouseoverKey, -240)
         local function FullValueShortEnabled()
             if not cfg.fullValueShortKey then return false end
             local value = ReadText(unit, cfg.fullValueShortKey, nil)
@@ -659,6 +691,7 @@ local function BuildText(ctx, builder, unit)
         return controls
     end
     local hpControls = BuildValueTextTab("hp", hpTab, {
+        mouseoverKey = "hpTextMouseover",
         preview = "630.0k - 63.4%",
         showLabel = "Show HP Text",
         showKey = "showHP",
@@ -696,6 +729,7 @@ local function BuildText(ctx, builder, unit)
         generalSizeKey = "hpFontSize",
     })
     local powerControls = BuildValueTextTab("power", powerTab, {
+        mouseoverKey = "powerTextMouseover",
         preview = "100 Energy",
         isPower = true,
         showLabel = "Show Power Text",
@@ -722,7 +756,7 @@ local function BuildText(ctx, builder, unit)
     })
     local powerManagedNotice, powerManagedNoticeButton
     if UnitSectionShared.CreateSectionNotice then
-        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -394, "Class Resources", 126)
+        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -548, "Class Resources", 126)
         powerManagedNotice, powerManagedNoticeButton = notice, button
     end
     if powerManagedNoticeButton then
@@ -755,9 +789,11 @@ local function BuildText(ctx, builder, unit)
         for i = 1, #controls do HookPreviewTextFocus(controls[i][1], kind, controls[i][2]) end
     end
     HookTextControls("name", { { showNameText }, { nameAnchor }, { nameSize }, { advNameLayer } })
-    local nameTextControls = { nameAnchor, nameSize, advNameLayer }
+    local nameTextControls = { nameAnchor, nameSize, advNameLayer, nameMouseover }
     local hpTextControls, hpSlotControls = UnitSectionShared.ValueTextControlSets("hp", hpControls, advHpLayer, HookTextControls, CurrentSlot)
     local powerTextControls, powerSlotControls = UnitSectionShared.ValueTextControlSets("power", powerControls, advPowerLayer, HookTextControls, CurrentSlot)
+    hpTextControls[#hpTextControls + 1] = hpControls.mouseover
+    powerTextControls[#powerTextControls + 1] = powerControls.mouseover
     if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end
     if hpControls.fullValueShort then hpTextControls[#hpTextControls + 1] = hpControls.fullValueShort end
     RefreshTextControlState = RefreshTextControlState(function()
@@ -781,6 +817,9 @@ local function BuildText(ctx, builder, unit)
         SetControlsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
         SetControlEnabled(powerControls.show, true)
         SetControlsEnabled(powerTextControls, powerOn)
+        SetControlsEnabled(mouseoverFadeControls.name, nameOn and ReadBool(unit, "nameTextMouseover", false))
+        SetControlsEnabled(mouseoverFadeControls.hp, hpOn and ReadBool(unit, "hpTextMouseover", false))
+        SetControlsEnabled(mouseoverFadeControls.power, powerOn and ReadBool(unit, "powerTextMouseover", false))
         if powerControls.RefreshPercentToggles then powerControls.RefreshPercentToggles(powerOn) end
         SetControlsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         if powerManaged then

@@ -74,20 +74,33 @@ function A.RegistryCoreBuilders.BuildDBHelpers(ctx)
         return db.gameplay
     end
 
+    local function GroupDBKey(scope)
+        if scope == "raid" or scope == "gf_raid" then
+            return "gf_raid"
+        elseif scope == "mythicraid" or scope == "gf_mythicraid" then
+            return "gf_mythicraid"
+        elseif scope == "priority" or scope == "gf_priority" then
+            return "gf_priority"
+        end
+        return "gf_party"
+    end
+
     local function GroupDB(scope)
         local db = EnsureDB()
-        local key
-        if scope == "raid" or scope == "gf_raid" then
-            key = "gf_raid"
-        elseif scope == "mythicraid" or scope == "gf_mythicraid" then
-            key = "gf_mythicraid"
-        elseif scope == "priority" or scope == "gf_priority" then
-            key = "gf_priority"
-        else
-            key = "gf_party"
-        end
+        local key = GroupDBKey(scope)
         db[key] = type(db[key]) == "table" and db[key] or {}
         return db[key]
+    end
+
+    -- Read-path sibling of GroupDB: returns the saved scope table when it
+    -- exists and nil otherwise, materialising nothing. Setting getters use it
+    -- so a question never writes to MSUF_DB.
+    local function GroupDBRead(scope)
+        local db = _G.MSUF_DB
+        if type(db) ~= "table" then return nil end
+        local conf = db[GroupDBKey(scope)]
+        if type(conf) == "table" then return conf end
+        return nil
     end
 
     local function ClampNumber(value, minValue, maxValue, step)
@@ -124,6 +137,7 @@ function A.RegistryCoreBuilders.BuildDBHelpers(ctx)
         BarsDB = BarsDB,
         GameplayDB = GameplayDB,
         GroupDB = GroupDB,
+        GroupDBRead = GroupDBRead,
         ClampNumber = ClampNumber,
         CallGlobal = CallGlobal,
     }

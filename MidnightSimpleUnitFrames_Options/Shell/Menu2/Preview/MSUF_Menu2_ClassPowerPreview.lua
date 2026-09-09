@@ -1232,8 +1232,8 @@ local function UpdateMeterFill(frame, fraction)
     if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
     return true
 end
-local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth)
-    local shape = CP_SHAPES[NormalizeClassShape(bars and bars.classPowerShape)]
+local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth, nativeBar)
+    local shape = not nativeBar and CP_SHAPES[NormalizeClassShape(bars and bars.classPowerShape)] or nil
     local widthMode = bars and bars.classPowerWidthMode or "player"
     local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES
     local width
@@ -1257,7 +1257,8 @@ local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth)
 end
 local function SegmentCount(spec)
     local count = floor(tonumber(spec and spec.segments) or 5)
-    if count < 1 then count = 1 elseif count > 10 then count = 10 end
+    local limit = spec and spec.token == "SWEEPING_STRIKES" and 18 or 10
+    if count < 1 then count = 1 elseif count > limit then count = limit end
     return count
 end
 
@@ -1307,14 +1308,16 @@ local function RenderClassPower(preview, bars, player, spec)
     -- Augmentation is no longer special here: Ebon Might lives on the Player
     -- Power bar, so Essence is an ordinary Class Resource with its own width,
     -- offsets and anchor.
-    local w = ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72)
+    local w = ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72,
+        spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
     local x = 2 + (tonumber(bars.classPowerOffsetX) or 0)
     local y = 4 + (tonumber(bars.classPowerOffsetY) or 0)
     frame:SetSize(w, h)
     frame:ClearAllPoints()
     frame:SetPoint("BOTTOMLEFT", preview.playerRef, "TOPLEFT", x, y)
     frame:Show()
-    local shape = NormalizeClassShape(bars.classPowerShape)
+    local shape = (spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
+        and "BAR" or NormalizeClassShape(bars.classPowerShape)
     local shapeInfo = CP_SHAPES[shape]
     local roundClassResources = shapeInfo == nil and RoundedClassResourcesPreviewEnabled(bars)
     local token = CPToken(spec)
@@ -1530,8 +1533,31 @@ end
 --- Ebon Might is rendered by the Player Power bar itself, so this dedicated row
 --- no longer exists. The stub stays because the surrounding preview plumbing
 --- (bounds, zoom fit, HP anchoring) still threads an optional second class row.
-local function RenderSecondaryClassTimer(preview)
-    return HideSecondaryClassTimer(preview)
+local function RenderSecondaryClassTimer(preview, bars, spec, classFrame)
+    if not (classFrame and bars.showArcaneSoul == true and spec and spec.key == "mage_arcane") then
+        return HideSecondaryClassTimer(preview)
+    end
+    local frame = EnsureMeter(preview, "ebonTimer")
+    local height = max(18, tonumber(bars.classPowerFontSize) or 14)
+    frame:ClearAllPoints()
+    frame:SetPoint("BOTTOMLEFT", classFrame, "TOPLEFT", 0, 5)
+    frame:SetSize(classFrame:GetWidth(), height)
+    RenderMeter(frame, nil, { width = classFrame:GetWidth(), height = height, fraction = 0.6,
+        texture = ResolveTexture(bars.classPowerTexture), bgTexture = ResolveTexture(bars.classPowerBgTexture),
+        r = 0.35, g = 0.65, b = 1, bgR = 0, bgG = 0, bgB = 0, bgA = 0,
+        outline = 0, reverse = bars.classPowerFillReverse == true })
+    frame.left:Hide()
+    frame.right:Hide()
+    ApplyFont(frame.center, tonumber(bars.classPowerFontSize) or 14)
+    frame.center:ClearAllPoints()
+    frame.center:SetPoint("CENTER", frame, "CENTER", bars.classPowerTextOffsetX or 0,
+        bars.classPowerTextOffsetY or 0)
+    frame.center:SetText("Surge 8.0")
+    frame.center:Show()
+    frame._msufCPPreviewActive = true
+    frame._msufCPPreviewTimerAnim = { showText = true }
+    frame:Show()
+    return frame
 end
 
 local function DetachedPowerShown(player)
@@ -1971,7 +1997,9 @@ local function RefreshClassPowerAnimation(preview)
     local state = preview and preview._msufCPPreviewAnim
     if not state then return false end
     if state.classFrame and not UpdateClassPowerAnimation(preview, state.classFrame) then return false end
-    if state.ebonFrame and not UpdateSecondaryClassTimerAnimation(preview, state.ebonFrame) then return false end
+    if state.ebonFrame and state.ebonFrame._msufCPPreviewTimerAnim
+        and state.ebonFrame._msufCPPreviewTimerAnim.spec
+        and not UpdateSecondaryClassTimerAnimation(preview, state.ebonFrame) then return false end
     if state.powerFrame and not UpdateDetachedPowerAnimation(preview, state.powerFrame, state.bars, state.player) then return false end
     if state.hpFrame and not UpdatePlayerHPAnimation(preview, state.hpFrame, state.bars, state.player) then return false end
     return true
@@ -2050,7 +2078,7 @@ end
 local function RefreshBounds(preview, classFrame, ebonFrame, powerFrame, hpFrame)
     PlaceBound(preview, "reference", preview.playerRef, "Reference", { 0.60, 0.66, 0.78 }, 1)
     PlaceBound(preview, "class", classFrame, "Class", { 0.30, 0.78, 0.55 }, 1)
-    PlaceBound(preview, "ebon", ebonFrame, "Ebon Might", { 0.40, 0.80, 0.60 }, 1, "class")
+    PlaceBound(preview, "ebon", ebonFrame, "Arcane Surge / Soul", { 0.40, 0.80, 0.60 }, 1, "class")
     PlaceBound(preview, "power", powerFrame, "Power", { 0.95, 0.72, 0.18 }, 1)
     PlaceBound(preview, "hp", hpFrame, "HP", { 0.25, 0.90, 0.42 }, 1)
 end
@@ -2643,7 +2671,7 @@ function Preview.Create(ctx, builder)
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
         PaintPlayerReference(box, spec, bars, player)
         local classFrame, classDisabledReason = RenderClassPower(box, bars, player, spec)
-        local ebonFrame = RenderSecondaryClassTimer(box)
+        local ebonFrame = RenderSecondaryClassTimer(box, bars, spec, classFrame)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then
             box.noResource:Hide()
         else

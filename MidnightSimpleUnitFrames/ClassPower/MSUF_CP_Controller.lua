@@ -190,7 +190,7 @@ local PLAYER_CLASS = select(2, UnitClass("player"))
 --- Phase 1 CP split: shared constants / profiles now live in ClassPower/*.lua
 --- Keeps the core chunk smaller and reduces WoW's top-level local pressure.
 local CPConst = _G.MSUF_CP_CONST or {}
-local CPK = CPConst.CPK or { MODE = { NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4, AURA_SINGLE = 5, CONTINUOUS = 6, TIMER_BAR = 8, STAGGER = 9, IRONFUR = 10 }, SPEC = {}, SPELL = {}, BAL = {}, THRESH = {} }
+local CPK = CPConst.CPK or { MODE = { NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4, AURA_SINGLE = 5, CONTINUOUS = 6, TIMER_BAR = 8, STAGGER = 9, IRONFUR = 10, NATIVE_AURA = 11 }, SPEC = {}, SPELL = {}, BAL = {}, THRESH = {} }
 local TIP = CPConst.TIP or {}
 local EBON = CPConst.EBON or {}
 local PT = CPConst.PT or {}
@@ -230,167 +230,6 @@ local function RefreshPlayerPowerBar()
     if refresh then refresh() end
 end
 --- DH Vengeance: Soul Fragments via C_Spell.GetSpellCastCount (MCR-sourced)
-
---- Whirlwind Tracker (Sensei pattern - own event frame, event-driven render)
-local _wwRender  --- forward-declared; set after CP_UpdateValues_AuraSegmented exists
-
-local WW = {}
-do
-    local MAX_STACKS = 4
-    local DURATION   = 20
-    local CRASHING_THUNDER  = 436707
-    local UNHINGED          = 386628
-    local GENERATORS = { [190411]=true, [6343]=true, [435222]=true }
-    local SPENDERS   = {
-        [23881]=true, [85288]=true, [280735]=true, [202168]=true,
-        [184367]=true, [335096]=true, [335097]=true, [5308]=true,
-    }
-    local BLADESTORMS = {
-        [50622]=true, [46924]=true, [227847]=true, [184362]=true, [446035]=true,
-    }
-
-    local stacks       = 0
-    local expiresAt    = nil
-    local noConsumeUntil = 0
-    local SEEN_CAST_GUID_MAX = 32
-    local seenCastGUID, seenCastRing = {}, {}
-    local seenCastWrite, seenCastCount = 1, 0
-    local _expiryTimer = nil  --- pending C_Timer handle for expiry
-    local _eventsBound = false
-    local ResetSeenCastGUID
-
-    WW.MAX_STACKS = MAX_STACKS
-
-    function WW.GetStacks()
-        if expiresAt and GetTime() >= expiresAt then
-            stacks = 0
-            expiresAt = nil
-        end
-        return stacks
-    end
-
-    local function ResetState()
-        stacks = 0
-        expiresAt = nil
-        noConsumeUntil = 0
-        _expiryTimer = (_expiryTimer or 0) + 1
-        ResetSeenCastGUID()
-    end
-
-    --- Schedule a one-shot expiry timer (replaces per-frame polling)
-    local function ScheduleExpiry()
-        if not expiresAt then return end
-        local remaining = expiresAt - GetTime()
-        if remaining <= 0 then
-            stacks = 0
-            expiresAt = nil
-            if _wwRender then _wwRender() end
-            return
-        end
-        --- Cancel previous timer token by bumping generation counter
-        _expiryTimer = (_expiryTimer or 0) + 1
-        local myTimer = _expiryTimer
-        C_Timer.After(remaining + 0.05, function()
-            if myTimer ~= _expiryTimer then return end  --- stale
-            if expiresAt and GetTime() >= expiresAt then
-                stacks = 0
-                expiresAt = nil
-                if _wwRender then _wwRender() end
-            end
-        end)
-    end
-
-    function ResetSeenCastGUID()
-        for i = 1, SEEN_CAST_GUID_MAX do
-            local guid = seenCastRing[i]
-            if guid then
-                seenCastGUID[guid] = nil
-                seenCastRing[i] = nil
-            end
-        end
-        seenCastWrite, seenCastCount = 1, 0
-    end
-
-    local function CastGUIDSeen(guid)
-        if not guid then return false end
-        if seenCastGUID[guid] then return true end
-
-        if seenCastCount >= SEEN_CAST_GUID_MAX then
-            local old = seenCastRing[seenCastWrite]
-            if old then seenCastGUID[old] = nil end
-        else
-            seenCastCount = seenCastCount + 1
-        end
-
-        seenCastRing[seenCastWrite] = guid
-        seenCastGUID[guid] = true
-        seenCastWrite = (seenCastWrite % SEEN_CAST_GUID_MAX) + 1
-
-        return false
-    end
-
-    --- Warrior-only: own event frame (Sensei pattern)
-    if PLAYER_CLASS == "WARRIOR" then
-        local f = CreateFrame("Frame")
-        f:SetScript("OnEvent", function(_, event, unit, castGUID, spellID)
-            if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
-                ResetState()
-                if _wwRender then _wwRender() end
-                return
-            end
-            if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" then return end
-
-            local known = C_SpellBook and C_SpellBook.IsSpellKnown
-
-            --- castGUID dedup
-            if CastGUIDSeen(castGUID) then return end
-
-            --- Unhinged no-consume window
-            if known and known(UNHINGED) and BLADESTORMS[spellID] then
-                noConsumeUntil = GetTime() + 2
-            end
-
-            --- Generator -> max stacks
-            if GENERATORS[spellID] then
-                if (spellID == 6343 or spellID == 435222) then
-                    if not (known and known(CRASHING_THUNDER)) then return end
-                end
-                stacks = MAX_STACKS
-                expiresAt = GetTime() + DURATION
-                ScheduleExpiry()
-                if _wwRender then _wwRender() end
-                return
-            end
-
-            --- Spender -> consume 1
-            if SPENDERS[spellID] then
-                if spellID == 23881 and GetTime() < noConsumeUntil then return end
-                if stacks > 0 then
-                    stacks = stacks - 1
-                    if stacks == 0 then expiresAt = nil end
-                    if _wwRender then _wwRender() end
-                end
-            end
-        end)
-
-        function WW.SetActive(active)
-            active = active and CP_ConfigClassPowerEnabled() or false
-            if _eventsBound == active then return end
-            _eventsBound = active
-            if active then
-                f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-                f:RegisterEvent("PLAYER_DEAD")
-                f:RegisterEvent("PLAYER_ALIVE")
-            else
-                f:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-                f:UnregisterEvent("PLAYER_DEAD")
-                f:UnregisterEvent("PLAYER_ALIVE")
-                ResetState()
-                if _wwRender then _wwRender() end
-            end
-        end
-    end
-end
 
 --- Phase 5 CP split: Balance Druid Astral Power prediction + eclipse colors now
 --- live in ClassPower/Features/MSUF_CP_Balance.lua. The core keeps only the
@@ -620,10 +459,11 @@ local function GetClassPowerType()
         end
 
     elseif PLAYER_CLASS == "WARRIOR" then
-        --- All Warrior specs use Whirlwind as class resource (Fury, Arms, Prot).
-        --- No talent gate: IsSpellKnown(12950) unreliable in 12.0 for passive talents.
-        --- If player doesn't have Improved Whirlwind, stacks stay 0 -> auto-hide handles it.
-        return "WHIRLWIND", CPK.MODE.AURA_SEGMENTED, false
+        local spec = GetSpec and GetSpec()
+        if spec == 2 then return "WHIRLWIND", CPK.MODE.NATIVE_AURA, false end
+        if spec == 1 and _cpDB.bars and _cpDB.bars.showSweepingStrikes == true then
+            return "SWEEPING_STRIKES", CPK.MODE.NATIVE_AURA, false
+        end
 
     elseif PLAYER_CLASS == "HUNTER" then
         local spec = GetSpec and GetSpec()
@@ -934,7 +774,7 @@ local CP = {
     augLifecycleRetryPending = false,
     augLifecycleDisablePending = false,
     augLifecycleTarget = nil,
-    --- Spell Tracker state (Tip of the Spear only - Whirlwind uses WW module)
+    --- Spell Tracker state (Tip of the Spear only - Whirlwind is native aura-owned)
     spStacks    = 0,       --- current stack count
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
 }
@@ -1485,7 +1325,6 @@ do
         ResolveFullResourceColor = ResolveFullResourceColor,
         ResolveMWAbove5Color = ResolveMWAbove5Color,
         CP_CheckAutoHide = CP_CheckAutoHide,
-        WW = WW,
         TIP = TIP,
         GetFilledAlpha = function() return _filledAlpha end,
         GetEmptyAlpha = function() return _emptyAlpha end,
@@ -1509,7 +1348,6 @@ do
     if aura then
         if type(aura.UpdateSegmented) == "function" then CP_UpdateValues_AuraSegmented = aura.UpdateSegmented end
         if type(aura.UpdateSingle) == "function" then CP_UpdateValues_AuraSingle = aura.UpdateSingle end
-        if type(aura.BuildWWRender) == "function" then _wwRender = aura.BuildWWRender() end
     end
 
     commonEnv.UnitPower = UnitPower
@@ -1874,8 +1712,26 @@ end
 --- The core keeps only orchestration and event wiring, while the heavy single-bar
 --- runners live outside the main chunk.
 
+local CP_RefreshEventBindings
+
+-- Lazily allocate only the active class's native slots. No aura/cast event feed.
+function CP.SyncNativeAuras()
+    if not CP.nativeAuras and (PLAYER_CLASS == "WARRIOR" or PLAYER_CLASS == "MAGE") then
+        local build = MSUF.CPBuilders and MSUF.CPBuilders.NativeAuras
+        if build then
+            CP.nativeAuras = build({ CP = CP, db = _cpDB, Class = PLAYER_CLASS,
+                Spec = GetSpec, Texture = CP_ResolveTexture, TextLevel = CP.GetEbonTextLevel })
+        end
+    end
+    if CP.nativeAuras then
+        CP.nativeAuras.Sync()
+        if CP_RefreshEventBindings then CP_RefreshEventBindings() end
+    end
+end
+
 --- Update function dispatch table (set in FullRefresh, called in hot path)
 local MODE_UPDATE_FN = {
+    [CPK.MODE.NATIVE_AURA]    = function() CP_CheckAutoHide(nil, nil) end,
     [CPK.MODE.SEGMENTED]      = CP_UpdateValues,
     [CPK.MODE.FRACTIONAL]     = CP_UpdateValues_Fractional,
     [CPK.MODE.RUNE_CD]        = CP_UpdateValues_RuneCD,
@@ -2092,7 +1948,6 @@ local function CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
 end
 
 --- Full refresh (called on spec change, form change, config change)
-local CP_RefreshEventBindings
 local CP_SetStructuralEventsBound = CP_Noop
 local function FullRefresh()
     if not MSUF_DB then return end
@@ -2248,16 +2103,15 @@ local function FullRefresh()
     --- Aug entry/exit already reapplied the same Player surface.
     if displayManaChanged and not augChanged then RefreshPlayerPowerBar() end
 
-    if WW.SetActive then
-        WW.SetActive(cpEnabled and powerType == "WHIRLWIND" and renderMode ~= CPK.MODE.NONE)
-    end
 
     if cpEnabled and powerType and renderMode ~= CPK.MODE.NONE then
         CP_Create(playerFrame)
 
         --- Resolve max power based on render mode
         local maxP
-        if renderMode == CPK.MODE.RUNE_CD then
+        if renderMode == CPK.MODE.NATIVE_AURA then
+            maxP = 1 -- one native fill; separators do not need aura slots
+        elseif renderMode == CPK.MODE.RUNE_CD then
             maxP = 6  --- DK always 6 runes
         elseif renderMode == CPK.MODE.AURA_SINGLE then
             --- DH Devourer mirrors Blizzard and Elemental: one continuous bar,
@@ -2282,8 +2136,6 @@ local function FullRefresh()
                 end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6  --- Vengeance: 6 soul fragment segments
-            elseif powerType == "WHIRLWIND" then
-                maxP = WW.MAX_STACKS  --- Warrior: 4 Whirlwind cleave stacks
             elseif powerType == "TIP_OF_THE_SPEAR" then
                 maxP = TIP.MAX_STACKS  --- Survival Hunter: 3 Tip of the Spear stacks
                 CP.spStacks = 0
@@ -2368,6 +2220,7 @@ local function FullRefresh()
 
         CP.container._msufAnchorOnly = nil
         CP.container:Show()
+        CP.SyncNativeAuras()
         if CP.augCompositeActive == true then
             --- Keep-alive only. The host is the Player Power bar, so its
             --- geometry and visibility belong to the Power element.
@@ -2379,7 +2232,8 @@ local function FullRefresh()
         --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
         if CP._outline then
             local outlineBars = _cpDB.bars or {}
-            local outlineShape = tostring(outlineBars.classPowerShape or "BAR"):upper()
+            local outlineShape = renderMode == CPK.MODE.NATIVE_AURA and "BAR"
+                or tostring(outlineBars.classPowerShape or "BAR"):upper()
             local outlineSize = tonumber(outlineBars.classPowerOutline) or 1
             if outlineShape == "BAR" and outlineSize > 0 and CP._msufRoundedOutlineSuppressed ~= true then
                 CP._outline:Show()
@@ -2408,6 +2262,7 @@ local function FullRefresh()
             CP.container:Hide()
         end
         CP.visible = false
+        if CP.nativeAuras then CP.nativeAuras.Disable() end
         --- Re-resolve against the maintained hidden anchor when present;
         --- otherwise return the detached Power bar to its configured width.
         CP.RefreshSyncedPowerWidth(playerFrame)
@@ -2517,8 +2372,7 @@ do
             CPK = CPK,
             PT = PT,
             TIP = TIP,
-            WW = WW,
-            CPConst = CPConst,
+                CPConst = CPConst,
             POWER_TYPE_TOKENS = POWER_TYPE_TOKENS,
             PLAYER_CLASS = PLAYER_CLASS,
             UnitPowerMax = UnitPowerMax,
@@ -2827,7 +2681,8 @@ CP_RefreshEventBindings = function()
     local wantWarlockPred = CP.visible and profile.warlockPred == true
     local wantSpellSucceeded = CP.visible and profile.spellSucceeded == true
     local wantDisplayPower = CP.visible or AM.visible
-    local wantRegen = (_autoHideActive and CP.visible)
+    local wantRegen = CP.nativeAuraPending == true
+        or (_autoHideActive and CP.visible)
         or CP.ebonSensorRetryPending == true
         or CP.ebonTextLayerRetryPending == true
         or CP.augLifecycleRetryPending == true
@@ -2938,7 +2793,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
             if CP.visible and CP.powerType == "TIP_OF_THE_SPEAR" then
                 OnTipOfTheSpearSpellCast(arg3)
             end
-            --- Whirlwind: handled by WW module's own event frame (no call needed here)
+            --- Whirlwind has no addon-owned cast tracker.
             --- DH Vengeance: soul fragment count changes on spellcast
             if CP.visible and CP.powerType == "SOUL_FRAGMENTS_VENG" then
                 CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
@@ -3017,6 +2872,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
     --- Combat state change: re-evaluate auto-hide (OOC toggle)
     if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
         if event == "PLAYER_REGEN_ENABLED" then
+            if CP.nativeAuraPending then CP.SyncNativeAuras() end
             if CP.augLifecycleDisablePending == true and CP.DisableNow then
                 CP.DisableNow()
                 return
@@ -3049,7 +2905,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
             CP_PlayerHPUpdate(event)
         end
         if CP.visible then
-            CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
+            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
         end
         return
     end
@@ -3214,6 +3070,7 @@ CP.RefreshLayoutCurrent = function()
     end
     CP._pf = playerFrame
     CP._layoutH = cpHeight
+    CP.SyncNativeAuras()
     return true
 end
 
@@ -3247,6 +3104,7 @@ CP.ApplyFontsPublic = function()
         CP.SetEbonSensorActive(CP.augCompositeActive == true)
         if CP.RefreshEbonStyle then CP.RefreshEbonStyle() end
         CP.ApplyEbonTextStyle()
+        CP.SyncNativeAuras()
     end
     if PHP.visible then
         PHP._fontStamp = nil
@@ -3265,6 +3123,7 @@ CP.RefreshVisualsPublic = function()
         if CP_ApplyColors then CP_ApplyColors(CP.powerType) end
         if CP.RefreshEbonStyle then CP.RefreshEbonStyle() end
         CP.ApplyEbonTextStyle()
+        CP.SyncNativeAuras()
         if CP.powerType == "IRONFUR" and CP.ironfur and CP.ironfur.RefreshVisual then
             CP.ironfur.RefreshVisual()
         end
@@ -3428,6 +3287,7 @@ function CP.DisableNow()
     CP.SyncControllerEvents(false)
     CP_ClearAugCompositeState()
     CP.SetEbonSensorActive(false)
+    if CP.nativeAuras then CP.nativeAuras.Disable() end
     if CP.container then CP.container:Hide() end
     if AM.container then AM.container:Hide() end
     if PHP.container then PHP.container:Hide() end

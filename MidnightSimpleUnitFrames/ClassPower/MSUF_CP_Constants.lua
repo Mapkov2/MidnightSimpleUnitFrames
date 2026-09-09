@@ -24,6 +24,7 @@ K.CPK = {
         TIMER_BAR      = 8,
         STAGGER        = 9,
         IRONFUR        = 10,
+        NATIVE_AURA    = 11,
     },
     SPEC = {
         DH_DEVOURER          = _G.SPEC_DEMONHUNTER_DEVOURER or 3,
