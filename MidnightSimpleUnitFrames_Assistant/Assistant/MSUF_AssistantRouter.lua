@@ -10345,6 +10345,11 @@ end
 
 function R.TryConversationalMutation(text, coreHandler)
     local norm = R.Normalize(text)
+    -- Setup guidance owns the complete onboarding request before this lane
+    -- removes the "help me" wrapper and retries it as a setting mutation.
+    if type(R.SETUP_GUIDANCE_TERMS) == "table" and R.ContainsAny(norm, R.SETUP_GUIDANCE_TERMS) then
+        return nil
+    end
     if norm:find("target s target", 1, true)
         or norm:find("target's target", 1, true)
         or norm:find("targets target", 1, true)
@@ -17239,6 +17244,10 @@ end
 
 function R.TryOpenEndedSettingIdea(text, coreHandler)
     local parser = A.Parser or {}
+    -- A warm fuzzy index must not turn onboarding into a colour-setting prompt.
+    if type(R.SETUP_GUIDANCE_TERMS) == "table" and R.ContainsAny(R.Normalize(text), R.SETUP_GUIDANCE_TERMS) then
+        return nil
+    end
     -- This lane ranks fuzzy candidates and asks when several look plausible.
     -- That is right for a vague idea, but wrong once the player has typed a
     -- control's exact visible name: "set my Boss Absorb Bar Opacity to 75"
