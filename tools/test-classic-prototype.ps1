@@ -1018,6 +1018,9 @@ if ($lua) {
     $classicAuraSmoke = Join-Path $root "tools/tests/classic_aura_backend_smoke.lua"
     & $lua.Source $auraTestDriver $classicAuraSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura backend smoke failed" }
+    $classicDispelSymbolSmoke = Join-Path $root "tools/tests/classic_dispel_symbol_chain_smoke.lua"
+    & $lua.Source $auraTestDriver $classicDispelSymbolSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic dispel symbol chain smoke failed" }
     $classicAuraMenuFilterSmoke = Join-Path $root "tools/tests/classic_aura_menu_filters_smoke.lua"
     & $lua.Source $auraTestDriver $classicAuraMenuFilterSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Aura menu filter smoke failed" }

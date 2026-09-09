@@ -818,24 +818,41 @@ V.DispelFolders = V.DispelFolders or {
     MSUF_GLYPHS = "Glyphs", MSUF_MINIMAL = "Minimal",
 }
 
-function V.SetDispelSymbolArt(texture, style, dispelType)
+--- Every MSUF set ships with the addon and covers all five dispel types, so
+--- it is always a valid destination when a Blizzard atlas is unavailable.
+local DISPEL_ART_FALLBACK_FOLDER = "Letters"
+
+local function SetDispelSymbolFile(texture, folder, dispelType, tinted)
+    local root = Shape.MEDIA_ROOT .. "\\Media\\Icons\\DispelTypes\\"
+    if tinted then root = root .. "Tintable\\" end
+    texture:SetTexture(root .. folder .. "\\" .. tostring(dispelType):lower() .. ".tga")
+    if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
+    return true
+end
+
+--- `tinted` mirrors Retail: a dispel type whose colour the user overrode is
+--- drawn from the Tintable variant so the caller can repaint it. A Blizzard
+--- atlas is pre-coloured and cannot honour an override, so an overridden type
+--- always resolves to MSUF art.
+function V.SetDispelSymbolArt(texture, style, dispelType, tinted)
     if not texture then return false end
     style = tostring(style or "BLIZZARD"):upper()
     local folder = V.DispelFolders[style]
     if folder then
-        texture:SetTexture(Shape.MEDIA_ROOT .. "\\Media\\Icons\\DispelTypes\\"
-            .. folder .. "\\" .. tostring(dispelType):lower() .. ".tga")
-        if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
-        return true
+        return SetDispelSymbolFile(texture, folder, dispelType, tinted)
     end
-    local atlas = V.DispelAtlases[style] or V.DispelAtlases.BLIZZARD
-    atlas = atlas and atlas[dispelType]
-    if atlas and texture.SetAtlas and AtlasKnown(atlas) then
-        texture:SetAtlas(atlas, _G.TextureKitConstants and _G.TextureKitConstants.IgnoreAtlasSize)
-        return true
+    if not tinted then
+        local atlas = V.DispelAtlases[style] or V.DispelAtlases.BLIZZARD
+        atlas = atlas and atlas[dispelType]
+        if atlas and texture.SetAtlas and AtlasKnown(atlas) then
+            texture:SetAtlas(atlas, _G.TextureKitConstants and _G.TextureKitConstants.IgnoreAtlasSize)
+            return true
+        end
     end
-    texture:SetTexture(nil)
-    return false
+    --- Clients older than 12.1 ship none of these debuff atlases. Blanking the
+    --- texture left a correctly sized but completely invisible symbol row, so
+    --- fall back to MSUF art instead of rendering nothing.
+    return SetDispelSymbolFile(texture, DISPEL_ART_FALLBACK_FOLDER, dispelType, tinted)
 end
 
 function V.HideDispelSymbols(frame, preview)
@@ -918,6 +935,9 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
         .. tostring(cfg.size) .. ":" .. tostring(cfg.spacing) .. ":" .. tostring(cfg.growth)
         .. ":" .. tostring(cfg.anchor) .. ":" .. tostring(cfg.x) .. ":" .. tostring(cfg.y)
         .. ":" .. tostring(cfg.alpha) .. ":" .. tostring(cfg.layer) .. ":" .. tostring(cfg.strata)
+        -- Stamped by the compile, never rebuilt here: a colour override has to
+        -- invalidate the cached signature or the tiles never repaint.
+        .. ":" .. tostring(cfg.tintKey or "")
     local host = frame[hostKey]
     if not host then
         host = CreateFrame("Frame", nil, frame)
@@ -963,8 +983,20 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
         else
             tile:SetPoint(ySign > 0 and "BOTTOM" or "TOP", host, ySign > 0 and "BOTTOM" or "TOP", 0, offset * ySign)
         end
-        V.SetDispelSymbolArt(tile, cfg.style, selected[i])
-        tile:Show()
+        local dispelType = selected[i]
+        local tint = cfg.tint and cfg.tint[dispelType] or nil
+        if V.SetDispelSymbolArt(tile, cfg.style, dispelType, tint ~= nil) then
+            if tile.SetVertexColor then
+                if tint then
+                    tile:SetVertexColor(tint[1], tint[2], tint[3])
+                else
+                    tile:SetVertexColor(1, 1, 1)
+                end
+            end
+            tile:Show()
+        else
+            tile:Hide()
+        end
     end
     for i = #selected + 1, #host.tiles do host.tiles[i]:Hide() end
     frame[activeKey] = true

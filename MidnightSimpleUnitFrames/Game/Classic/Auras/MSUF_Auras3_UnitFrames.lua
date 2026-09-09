@@ -890,6 +890,31 @@ local function CompileFrameAuraVisual(spec)
         and (borderEnabled ~= true or TriggerCanUseDirectVisual(borderTrigger))
         and (overlayEnabled ~= true or TriggerCanUseDirectVisual(overlayActualTrigger))
     local dispel = (borderEnabled == true or overlayEnabled == true) and CompileDispelVisual(spec.dispel) or nil
+    --- Retail switches a dispel type's symbol art to the Tintable variant when
+    --- the user overrode that type's colour, so the native colour map can
+    --- repaint it. Classic has no native colouring, so the renderer repaints it
+    --- directly. Collect the overridden types here, where the dispel block is
+    --- already read, and stamp a signature: the renderer must never rebuild one
+    --- per update. Inlined on purpose - this file sits at the 200-local ceiling
+    --- for its main chunk, so a helper here would not compile.
+    local symbolTints, symbolTintKey
+    local dispelSpec = symbolEnabled and type(spec.dispel) == "table" and spec.dispel or nil
+    if dispelSpec then
+        for i = 1, #DISPEL_POINTS do
+            local point = DISPEL_POINTS[i]
+            local base = "type" .. point[2]
+            if dispelSpec[base .. "R"] ~= nil or dispelSpec[base .. "G"] ~= nil
+                or dispelSpec[base .. "B"] ~= nil then
+                local tr = DispelColorValue(dispelSpec, base .. "R", point[3])
+                local tg = DispelColorValue(dispelSpec, base .. "G", point[4])
+                local tb = DispelColorValue(dispelSpec, base .. "B", point[5])
+                symbolTints = symbolTints or {}
+                symbolTints[point[2]] = { tr, tg, tb }
+                symbolTintKey = (symbolTintKey and (symbolTintKey .. "|") or "")
+                    .. point[2] .. tostring(tr) .. "," .. tostring(tg) .. "," .. tostring(tb)
+            end
+        end
+    end
 
     return {
         enabled = true,
@@ -929,6 +954,8 @@ local function CompileFrameAuraVisual(spec)
             alpha = Clamp01(symbol.alpha, 1),
             layer = Round(ClampNumber(symbol.layer, 8, 0, 30)),
             strata = tostring(symbol.strata or "AUTO"):upper(),
+            tint = symbolTints,
+            tintKey = symbolTintKey,
         } or nil,
     }
 end
@@ -3737,6 +3764,16 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
         return ClearFrameAuraVisualState(frame)
     end
     if cfg and cfg.visualDirect == true then
+        --- directVisualEligible is false whenever the symbol is enabled, so this
+        --- branch only ever runs with symbols off. It must still clear a host
+        --- left over from the previous config: turning the symbol off flips
+        --- eligibility on, and every later update takes this branch, so the last
+        --- rendered symbol would stay frozen on the frame. Every other exit from
+        --- this function touches the symbol host; this one did not.
+        local directRenderer = A3.ClassicVisuals
+        local directSymbolChanged = directRenderer
+            and type(directRenderer.HideDispelSymbols) == "function"
+            and directRenderer.HideDispelSymbols(frame) or false
         local borderActive, br, bg, bb, ba, borderSecret, borderToken = false
         local overlayActive, orr, og, ob, oa, overlaySecret, overlayToken = false
         if visual.borderEnabled == true then
@@ -3750,6 +3787,7 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
             end
         end
         return SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, false, visual)
+            or directSymbolChanged
     end
     local lane = state and state.lanes and state.lanes.debuff
     if not (lane and lane.config and lane.config.enabled == true) then

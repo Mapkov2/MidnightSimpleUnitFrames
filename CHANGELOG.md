@@ -1,5 +1,20 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha15 - 2026-09-09
+
+### Highlights
+
+- **Dispel symbols now render on every Classic client.** Clients without the 12.1 debuff atlases fall back to MSUF's own symbol art instead of drawing nothing, and a dispel type whose color you overrode is now repainted the way it already is on Retail.
+
+### Fixes & Performance
+
+- The Cooldown Manager anchor is resolved from what the client can actually provide. Clients without a Cooldown Manager no longer show the login warning that could never be satisfied, and the anchor switch is hidden instead of offered; your stored preference is kept, so the profile still works on a client that has one.
+- An imported profile that anchors Unit Frames to Essential Cooldowns no longer scatters them on a client without that frame; those frames fall back to the normal global anchor.
+- The Aggro border works on a fresh profile. Bars advertised it as On while the frames still treated it as Off, so it only lit up after toggling the dropdown off and on.
+- The Dispel Border hint no longer asks you to enable Aura sensors for Focus, Boss, or Arena frames on clients that do not have them.
+- Turning a Dispel Symbol off now clears it. It could stay frozen on the frame until the next reload.
+
+
 ## 6.5-alpha14 - 2026-09-08
 
 ### Highlights

@@ -2725,6 +2725,23 @@ end
     end
     --- Bars: Aggro highlight overlay (Target/Focus/Boss)
     --- Aggro indicator: re-uses the HP outline border as an orange warning when YOU have aggro (target/focus/boss).
+    --- Bars offers "Aggro border" with dropdown default 1 (On), the Assistant
+    --- manifest declares 1, and group frames default aggroEnabled = true. The
+    --- compiled unitframe fallback, however, only consulted the retired
+    --- indicator key below - which this very block coerces to "off" for every
+    --- profile that never carried it. A profile without an explicit choice
+    --- therefore read "On" in the menu while the border stayed dark, and only
+    --- an Off/On round trip through the dropdown repaired it. Seed the real key
+    --- once, before that coercion, so stored state and menu agree.
+    ---
+    --- aggroOutlineMode is shared with the group frames, whose own default is
+    --- on. Never seed 0 from the coerced "off" below: that would silently kill
+    --- a working group aggro border. Only enableAggroHighlight == false is a
+    --- real recorded off.
+    if g.aggroOutlineMode == nil then
+        g.aggroOutlineMode = (g.aggroIndicatorMode == "border"
+            or g.enableAggroHighlight ~= false) and 1 or 0
+    end
     if g.aggroIndicatorMode == nil then
         if g.enableAggroHighlight == true then
             g.aggroIndicatorMode = "border" --- legacy migrate
