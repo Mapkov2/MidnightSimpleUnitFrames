@@ -429,6 +429,8 @@ function R.LooksLikeKnowledgeQuestionPrefix(text)    local norm = R.Normalize(te
     if R.ContainsAny(norm, {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you just change", "what exactly did you change", "what did you set",
+        "what did i change", "what did i just change", "what did i just do", "what have i changed",
+        "what did i set", "what have you changed",
         "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
         "show me last change", "show me the last change",
@@ -677,6 +679,10 @@ R.FEATURE_NOT_IN_MSUF = {
       what = "a damage or healing meter", instead = "Details!, Recount, or Skada" },
     { terms = { "nameplate", "nameplates", "name plate", "name plates" },
       what = "nameplates", instead = "Plater or Blizzard's own nameplate options" },
+    { terms = { "item level", "item levels", "ilvl", "ilevel", "gear score", "gearscore", "my gear" },
+      what = "item level or gear score readouts", instead = "the character panel or an item-level addon" },
+    { terms = { "fps", "frame rate", "framerate", "frames per second", "my latency", "my ms", "world ms", "home ms" },
+      what = "performance or latency readouts", instead = "the system stats tooltip on the game menu button or a performance addon" },
     { terms = { "boss mod", "boss mods", "boss timer", "boss timers", "dbm", "bigwigs",
                 "big wigs", "boss warning", "boss warnings", "encounter timer" },
       what = "boss timers or encounter warnings", instead = "DBM or BigWigs" },
@@ -705,6 +711,12 @@ R.FEATURE_NOT_IN_MSUF = {
       what = "vendoring or auto-repair automation", instead = "an inventory addon" },
     { terms = { "dungeon finder", "group finder", "lfg addon", "premade group" },
       what = "group finding", instead = "the Blizzard group finder or Premade Groups Filter" },
+    { terms = { "threat meter", "threat meters", "threat plates", "aggro meter", "threat bar", "threat display", "omen" },
+      what = "a threat meter", instead = "Details! Threat, Omen, or Plater's threat colours" },
+    { terms = { "my gold", "how much gold", "gold i have", "gold do i have", "gold amount", "gold count", "gold total", "money i have", "my money" },
+      what = "gold or currency tracking", instead = "the Blizzard currency tab or a bag addon" },
+    { terms = { "my talents", "talents", "talent tree", "talent build", "talent loadout", "talent loadouts", "change spec", "switch spec" },
+      what = "talents or specialisation switching", instead = "the Blizzard talent window" },
 }
 
 function R.FeatureExistenceQuestionSubject(text)
@@ -802,6 +814,8 @@ function R.EnsureSettingLabelIndex()
     end
     local map, unique = {}, {}
     for i = 1, #settings do
+        -- Cooperative slice: this walk runs inside the job coroutine on a cold first answer.
+        if i % 32 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local label = setting and R.Normalize(setting.label or "") or ""
         if label ~= "" then
@@ -848,6 +862,8 @@ function R.EnsureSettingAliasIndex()
     end
     local owner, conflict = {}, {}
     for i = 1, #settings do
+        -- Cooperative slice: this walk runs inside the job coroutine on a cold first answer.
+        if type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local lists = { setting.exactAliases or EMPTY_ALIAS_LIST, setting.aliases or EMPTY_ALIAS_LIST }
         for l = 1, #lists do
@@ -1134,6 +1150,14 @@ function A.RouterNamedSettingLabel(text, labelsOnly)
     for i = 1, #R.SETTING_QUESTION_LEAD_INS do
         local lead = R.SETTING_QUESTION_LEAD_INS[i]
         if norm:sub(1, #lead) == lead then
+            -- "show me how much maximum health i lost" describes a result the
+            -- player wants shown; it is an enable request wearing a lookup's
+            -- opener, so it must not be answered as a lookup.
+            if lead == "show me " and A.Parser and type(A.Parser.ShowMeDescribesResult) == "function"
+                and A.Parser.ShowMeDescribesResult(norm)
+            then
+                break
+            end
             norm = R.Trim(norm:sub(#lead + 1))
             matched = true
             break
@@ -1366,6 +1390,620 @@ R.EXACT_RESET_PHRASES = {
     "reset frame positions", "reset my profile", "reset profile",
 }
 
+-- ---------------------------------------------------------------------------
+-- Submit safety preflight. Runs once per accepted turn, before the immediate
+-- lanes and the batch splitter, on a sentence with no pending state. Every
+-- branch is a plain string test: the preflight never touches the registry,
+-- the label index, or the alias index, so it costs nothing on the hot path.
+-- It does two things: it fails a handful of wrong-write sentence shapes
+-- closed with a read-only clarification, and it rewrites newcomer wording
+-- (chat fillers, "never mind, X", "X is too big shrink it") into the
+-- sentence the ordinary lanes already understand.
+-- ---------------------------------------------------------------------------
+
+R.PREFLIGHT_UNITS = {
+    { word = "targettarget", label = "Target of Target" },
+    { word = "focustarget", label = "Focus Target" },
+    { word = "player", label = "Player" },
+    { word = "target", label = "Target" },
+    { word = "focus", label = "Focus" },
+    { word = "pet", label = "Pet" },
+    { word = "boss", label = "Boss" },
+    { word = "party", label = "Party", needsFrame = true },
+    { word = "raid", label = "Raid", needsFrame = true },
+    { word = "arena", label = "Arena", needsFrame = true },
+}
+
+function R.PreflightUnitLabel(word)
+    for i = 1, #R.PREFLIGHT_UNITS do
+        if R.PREFLIGHT_UNITS[i].word == word then return R.PREFLIGHT_UNITS[i].label end
+    end
+    return nil
+end
+
+-- Units named in a fragment, in order. "raid target icon" and "raid filter"
+-- are not frames; party/raid/arena only count with the word "frame".
+function R.PreflightUnitsIn(fragment)
+    local words = {}
+    for word in tostring(fragment or ""):gmatch("%a+") do words[#words + 1] = word end
+    local found = {}
+    for i = 1, #words do
+        local word, prev, nextWord = words[i], words[i - 1], words[i + 1]
+        local label = R.PreflightUnitLabel(word)
+        if label then
+            local ok = true
+            if (word == "party" or word == "raid" or word == "arena")
+                and not (nextWord == "frame" or nextWord == "frames") then ok = false end
+            if word == "target" and (prev == "raid" or nextWord == "marker" or nextWord == "markers"
+                or nextWord == "icon" or nextWord == "icons" or nextWord == "mark" or nextWord == "of") then ok = false end
+            if word == "boss" and (nextWord == "mod" or nextWord == "mods" or nextWord == "timer" or nextWord == "timers") then ok = false end
+            if ok then found[#found + 1] = word end
+        end
+    end
+    return found
+end
+
+-- "on the player frame set the target health text size to 20": a sentence
+-- that opens with one frame and then names another. Both immediate lanes and
+-- the batch splitter read that as two requests and wrote BOTH frames; the
+-- leftover "on the player frame" clause even planned a verbless boolean.
+function R.PreflightLeadingCrossFrame(norm)
+    local unit, rest = norm:match("^on%s+the%s+(%a+)%s+frames?%s*,?%s*(.+)$")
+    if not unit then unit, rest = norm:match("^on%s+my%s+(%a+)%s+frames?%s*,?%s*(.+)$") end
+    if not unit then unit, rest = norm:match("^in%s+the%s+(%a+)%s+frames?%s*,?%s*(.+)$") end
+    if not unit then unit, rest = norm:match("^for%s+the%s+(%a+)%s+frames?%s*,?%s*(.+)$") end
+    if not unit then
+        rest = norm:match("^on%s+my%s+frames?%s*,?%s*(.+)$")
+        if rest then unit = "player" end
+    end
+    if not unit or not R.PreflightUnitLabel(unit) then return nil end
+    local others = R.PreflightUnitsIn(rest)
+    local other
+    for i = 1, #others do
+        if others[i] ~= unit then other = others[i]; break end
+    end
+    if not other then return nil end
+    local locLabel, otherLabel = R.PreflightUnitLabel(unit), R.PreflightUnitLabel(other)
+    local swapped = (" " .. rest .. " "):gsub(" " .. other .. " ", " " .. unit .. " ")
+    swapped = R.Trim(swapped)
+    return {
+        text = "You started with the " .. locLabel .. " frame, but the request itself names the "
+            .. otherLabel .. " frame. I kept MSUF unchanged rather than guess which one you meant.\n"
+            .. "Do you want '" .. rest .. "' (the " .. otherLabel .. " frame) or '" .. swapped
+            .. "' (the " .. locLabel .. " frame)?\nSay the one you want and I will apply only that.",
+        status = "info", result = "info",
+        summary = "Asks which frame a leading cross-frame request means instead of writing both.",
+        _readOnlyGuard = true,
+    }
+end
+
+R.PREFLIGHT_PRESERVE_MARKERS = {
+    " but keep ", " but leave ", " but not ", " except ", " while keeping ", " and keep ",
+    " but retain ", " but dont touch ", " but do not touch ", " without touching ",
+}
+R.PREFLIGHT_HIDE_VERBS = {
+    "hide", "disable", "turn off", "remove", "switch off", "deactivate", "get rid of", "kill",
+    "close",
+}
+
+-- "hide the player frame but keep the power bar visible": the kept subject is
+-- what the lanes matched, and the frame itself is what they hid. The kept
+-- clause is dropped before planning; when the head IS the whole frame the
+-- request cannot be honoured (hiding the frame hides its parts), so ask.
+function R.PreflightPreserveClause(norm)
+    local at, marker
+    for i = 1, #R.PREFLIGHT_PRESERVE_MARKERS do
+        local s = (" " .. norm .. " "):find(R.PREFLIGHT_PRESERVE_MARKERS[i], 1, true)
+        if s and (not at or s < at) then at, marker = s, R.PREFLIGHT_PRESERVE_MARKERS[i] end
+    end
+    if not at then return nil end
+    local padded = " " .. norm .. " "
+    local head = R.Trim(padded:sub(1, at - 1))
+    local tail = R.Trim(padded:sub(at + #marker))
+    if head == "" or tail == "" then return nil end
+    local kept = tail:gsub("^the%s+", ""):gsub("^my%s+", ""):gsub("^its%s+", "")
+    kept = kept:gsub("%s+as%s+it%s+is$", ""):gsub("%s+as%s+is$", ""):gsub("%s+alone$", "")
+        :gsub("%s+visible$", ""):gsub("%s+shown$", ""):gsub("%s+enabled$", ""):gsub("%s+on$", "")
+        :gsub("%s+there$", ""):gsub("%s+untouched$", "")
+    kept = R.Trim(kept)
+    if kept == "" then return nil end
+    local unit = head:match("^%a+%s+the%s+(%a+)%s+frames?$") or head:match("^%a+%s+%a+%s+the%s+(%a+)%s+frames?$")
+        or head:match("^%a+%s+my%s+(%a+)%s+frames?$") or head:match("^%a+%s+%a+%s+my%s+(%a+)%s+frames?$")
+        or head:match("^%a+%s+(%a+)%s+frames?$") or head:match("^%a+%s+%a+%s+(%a+)%s+frames?$")
+    if head:match("^%a+%s+my%s+frames?$") then unit = "player" end
+    local hidesFrame = false
+    if unit and R.PreflightUnitLabel(unit) then
+        for i = 1, #R.PREFLIGHT_HIDE_VERBS do
+            local verb = R.PREFLIGHT_HIDE_VERBS[i]
+            if head:sub(1, #verb + 1) == verb .. " " then hidesFrame = true; break end
+        end
+    end
+    -- "turn off all X except Y" is all-but-Y: dropping the kept clause would
+    -- broaden it into "turn off all X". A quantified head always asks.
+    if head:find("%f[%a]all%f[%A]") or head:find("%f[%a]every%f[%A]") or head:find("%f[%a]everything%f[%A]")
+        or head:find("%f[%a]each%f[%A]") or head:find("%f[%a]both%f[%A]") or head:find("%f[%a]entire%f[%A]")
+        or head:find("%f[%a]whole%f[%A]")
+    then
+        return {
+            text = "'" .. head .. "' covers several controls, and keeping the " .. kept
+                .. " out of it means picking the rest one by one, which I will not guess. I kept MSUF unchanged.\n"
+                .. "Name the ones you do want changed (for example '" .. head:gsub("%f[%a]all%s+", ""):gsub("%f[%a]every%s+", "")
+                .. "' with the exact part), and say the " .. kept .. " separately if needed. Which ones should I change?",
+            status = "info", result = "info",
+            summary = "Asks which controls an all-but-one request means instead of broadening it.",
+            _readOnlyGuard = true,
+        }, nil, nil
+    end
+    if hidesFrame then
+        local label = R.PreflightUnitLabel(unit)
+        return {
+            text = "Hiding the whole " .. label .. " frame hides its " .. kept
+                .. " with it, so that request cannot keep the " .. kept .. " visible. I kept MSUF unchanged.\n"
+                .. "Do you want to hide only individual parts instead (for example 'hide the " .. unit
+                .. " health bar', 'hide the " .. unit .. " name', 'hide the " .. unit
+                .. " portrait'), or hide the whole " .. label .. " frame including the " .. kept .. "?",
+            status = "info", result = "info",
+            summary = "Fails a hide-the-frame-but-keep-a-part request closed instead of hiding the kept part.",
+            _readOnlyGuard = true,
+        }, nil, nil
+    end
+    return nil, head, "I left the " .. kept .. " untouched, as you asked.", kept
+end
+
+-- "turn off the option that disables the target castbar": the sentence names
+-- a control by what it does, and the polarity words cancel out. Ask.
+R.PREFLIGHT_META_NOUNS = { "option", "setting", "toggle", "checkbox", "control", "switch" }
+R.PREFLIGHT_META_LINKS = { "that", "which", "to", "for" }
+R.PREFLIGHT_META_VERBS = {
+    disables = true, enables = true, hides = true, shows = true, turns = true, switches = true,
+    disable = true, enable = true, hide = true, show = true, turn = true, toggles = true, controls = true,
+    removes = true, remove = true, activates = true, deactivates = true, toggle = true,
+}
+function R.MetaReferenceSettingSubject(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    for i = 1, #R.PREFLIGHT_META_NOUNS do
+        for j = 1, #R.PREFLIGHT_META_LINKS do
+            local verb, subject = norm:match("%f[%a]" .. R.PREFLIGHT_META_NOUNS[i] .. "%s+" .. R.PREFLIGHT_META_LINKS[j] .. "%s+(%a+)%s+(.+)$")
+            if verb and R.PREFLIGHT_META_VERBS[verb] then
+                subject = subject:gsub("^on%s+", ""):gsub("^off%s+", ""):gsub("^the%s+", ""):gsub("^my%s+", "")
+                subject = R.Trim(subject)
+                if subject ~= "" then return subject end
+            end
+        end
+    end
+    return nil
+end
+
+function R.PreflightMetaReference(norm)
+    local subject = R.MetaReferenceSettingSubject(norm)
+    if not subject then return nil end
+    return {
+        text = "That names the control by what it does, so the on/off words cancel each other out and I did not guess. I kept MSUF unchanged.\n"
+            .. "Do you want the " .. subject .. " on or off? Say 'turn on " .. subject .. "' or 'turn off " .. subject .. "'.",
+        status = "info", result = "info",
+        summary = "Asks for the intended state of an indirectly named control.",
+        _readOnlyGuard = true,
+    }
+end
+
+R.PREFLIGHT_CONTRADICTIONS = {
+    { "on and off", "on or off" }, { "off and on", "on or off" },
+    { "enable and disable", "enabled or disabled" }, { "disable and enable", "enabled or disabled" },
+    { "show and hide", "shown or hidden" }, { "hide and show", "shown or hidden" },
+    { "bigger and smaller", "bigger or smaller" }, { "smaller and bigger", "bigger or smaller" },
+    { "larger and smaller", "bigger or smaller" }, { "smaller and larger", "bigger or smaller" },
+}
+
+-- "turn the player frame on and off": both polarities in one clause.
+function R.PreflightContradiction(norm)
+    for i = 1, #R.PREFLIGHT_CONTRADICTIONS do
+        local pair = R.PREFLIGHT_CONTRADICTIONS[i]
+        if R.HasNormalizedPhrase(norm, pair[1]) then
+            return {
+                text = "That asks for both states at once ('" .. pair[1] .. "'), so I kept MSUF unchanged.\n"
+                    .. "Which one do you want: " .. pair[2] .. "? Say it with just that one word and I will apply it.",
+                status = "info", result = "info",
+                summary = "Asks which of two contradictory states a request means.",
+                _readOnlyGuard = true,
+            }
+        end
+    end
+    return nil
+end
+
+-- "0 for everything on the target frame": one number for many controls.
+R.PREFLIGHT_QUANTIFIERS = { "everything", "all of it", "all settings", "every setting", "all sizes", "all values", "all options" }
+function R.PreflightQuantifier(norm)
+    if not norm:find("%d") then return nil end
+    local hit
+    for i = 1, #R.PREFLIGHT_QUANTIFIERS do
+        if R.HasNormalizedPhrase(norm, R.PREFLIGHT_QUANTIFIERS[i]) then hit = R.PREFLIGHT_QUANTIFIERS[i]; break end
+    end
+    if not hit then
+        if norm:match("^[%+%-]?%d+%%?%s+for%s+all%s") or norm:match("^[%+%-]?%d+%%?%s+for%s+every%s")
+            or norm:match("^set%s+all%s+.-%s+to%s+[%+%-]?%d+%%?$")
+            or norm:match("^make%s+all%s+.-%s+[%+%-]?%d+%%?$")
+        then hit = "all" end
+    end
+    if not hit then return nil end
+    local number = norm:match("[%+%-]?%d+%.?%d*%%?")
+    return {
+        text = "'" .. hit .. "' covers many controls of different kinds (sizes, offsets, opacities, font sizes), and one number cannot be right for all of them, so I kept MSUF unchanged.\n"
+            .. "Which control should be " .. tostring(number) .. "? For example 'set the target width to " .. tostring(number)
+            .. "' or 'set the target name font size to " .. tostring(number) .. "'.",
+        status = "info", result = "info",
+        summary = "Asks which control a number-for-everything request means.",
+        _readOnlyGuard = true,
+    }
+end
+
+-- "set the target name to 0": a number on a bare element noun that has
+-- several numeric properties is a guess whichever property wins.
+R.PREFLIGHT_BARE_ELEMENTS = {
+    ["name"] = "font size, x offset, y offset, text layer",
+    ["health text"] = "font size, x offset, y offset", ["hp text"] = "font size, x offset, y offset",
+    ["power text"] = "font size, x offset, y offset", ["mana text"] = "font size, x offset, y offset",
+    ["portrait"] = "size, x offset, y offset", ["castbar"] = "width, height, x offset, y offset",
+    ["health bar"] = "width, height", ["hp bar"] = "width, height",
+    ["power bar"] = "height, offset", ["mana bar"] = "height, offset",
+    ["frame"] = "width, height, x position, y position, scale", ["text"] = "font size, offsets",
+    ["buffs"] = "size, spacing, count", ["debuffs"] = "size, spacing, count", ["auras"] = "size, spacing, count",
+}
+function R.PreflightBareElementNumber(norm)
+    local clauses = {}
+    for clause in (norm .. " and "):gmatch("(.-)%s+and%s+") do clauses[#clauses + 1] = R.Trim(clause) end
+    for i = 1, #clauses do
+        local head, number = clauses[i]:match("^(.-)%s+to%s+([%+%-]?%d+%.?%d*%%?)$")
+        if not head then head, number = clauses[i]:match("^(.-)%s*=%s*([%+%-]?%d+%.?%d*%%?)$") end
+        if head then
+            head = head:gsub("^set%s+", ""):gsub("^make%s+", ""):gsub("^put%s+", ""):gsub("^change%s+", "")
+                :gsub("^the%s+", ""):gsub("^my%s+", "")
+            local unit
+            for j = 1, #R.PREFLIGHT_UNITS do
+                local w = R.PREFLIGHT_UNITS[j].word
+                if head:sub(1, #w + 1) == w .. " " then unit, head = w, head:sub(#w + 2); break end
+            end
+            head = R.Trim(head:gsub("^the%s+", ""))
+            local props = R.PREFLIGHT_BARE_ELEMENTS[head]
+            if props then
+                local scope = unit and (unit .. " ") or ""
+                local firstProp = props:match("^([^,]+)")
+                return {
+                    text = "'" .. scope .. head .. " to " .. number .. "' does not say which property should be " .. number
+                        .. " (the " .. head .. " has " .. props .. "), so I kept MSUF unchanged.\n"
+                        .. "Which one do you mean? For example 'set the " .. scope .. head .. " " .. firstProp .. " to " .. number .. "'.",
+                    status = "info", result = "info",
+                    summary = "Asks which numeric property of a bare element noun a number targets.",
+                    _readOnlyGuard = true,
+                }
+            end
+        end
+    end
+    return nil
+end
+
+-- "hide the mana thingy on the target": a vague noun after a resource word is
+-- the BAR (the visible object), never the text slot dropdown the fuzzy lane
+-- landed on ("Target Power Right Slot" went to none). Rewrites to the bar.
+R.PREFLIGHT_VAGUE_RESOURCES = { mana = true, power = true, energy = true, rage = true, health = true, hp = true, life = true, focus = true, runic = true }
+R.PREFLIGHT_VAGUE_NOUNS = { "thingy", "thing", "stuff", "doohickey", "whatsit", "thingie", "thingamajig" }
+function R.PreflightVagueNoun(norm)
+    local out = norm
+    for i = 1, #R.PREFLIGHT_VAGUE_NOUNS do
+        out = out:gsub("%f[%a](%a+)%s+" .. R.PREFLIGHT_VAGUE_NOUNS[i] .. "%f[%A]", function(resource)
+            if R.PREFLIGHT_VAGUE_RESOURCES[resource] then return resource .. " bar" end
+            return nil
+        end)
+    end
+    if out == norm then return nil end
+    return out
+end
+
+R.PREFLIGHT_SIZE_WORDS = { "bigger", "larger", "smaller", "taller", "shorter", "wider", "narrower", "thicker",
+    "thinner", "huge", "tiny", "height", "width", "size" }
+R.PREFLIGHT_SIZE_EXCLUDES = { "text", "font", "texture", "layer", "gradient", "color", "colour", "background", "bg",
+    "border", "outline", "alpha", "opacity", "transparent", "absorb", "heal", "prediction", "gcd", "class", "power",
+    "mana", "castbar", "cast", "portrait", "aura", "buff", "debuff", "icon", "spark", "fill", "number", "percent", "value" }
+
+-- Subject + attribute ownership. "make the target health bar taller" is the
+-- frame's Height (the health bar IS the frame); the texture-layer Height only
+-- answers to the words "texture layer". "hp text color" is the Health Text
+-- Color Mode, not the temp-max-health loss colour.
+function R.PreflightOwnershipRewrite(norm)
+    local out = norm
+    local hasSize, excluded = false, false
+    for i = 1, #R.PREFLIGHT_SIZE_WORDS do
+        if out:find("%f[%a]" .. R.PREFLIGHT_SIZE_WORDS[i] .. "%f[%A]") then hasSize = true; break end
+    end
+    if hasSize then
+        for i = 1, #R.PREFLIGHT_SIZE_EXCLUDES do
+            if out:find("%f[%a]" .. R.PREFLIGHT_SIZE_EXCLUDES[i] .. "%f[%A]") then excluded = true; break end
+        end
+        if not excluded then
+            out = out:gsub("%f[%a]health%s+bars?%f[%A]", "frame"):gsub("%f[%a]hp%s+bars?%f[%A]", "frame")
+                :gsub("%f[%a]healthbars?%f[%A]", "frame"):gsub("%f[%a]hpbars?%f[%A]", "frame")
+            out = out:gsub("%f[%a]frame%s+frame%f[%A]", "frame")
+            -- A "thicker" health bar is a taller frame; left as "frame
+            -- thicker" the lanes wrote the bar OUTLINE thickness instead.
+            if out ~= norm then
+                out = out:gsub("%f[%a]thicker%f[%A]", "taller"):gsub("%f[%a]thinner%f[%A]", "shorter")
+            end
+        end
+    end
+    -- Only a sentence that carries a value ("... color to red", "... color
+    -- red") is re-pointed at the mode enum. A value-less "change global hp
+    -- text color" already reaches the retained scoped-control choice.
+    local carriesColourValue = out:find("colou?r%s+to%s+%S") ~= nil or out:match("colou?r%s+(%a+)$") ~= nil
+    if carriesColourValue and not out:find("colou?r%s+mode") then
+        out = out:gsub("%f[%a]health%s+text%s+colou?r%f[%A]", "health text color mode")
+            :gsub("%f[%a]hp%s+text%s+colou?r%f[%A]", "health text color mode")
+            :gsub("%f[%a]health%s+value%s+colou?r%f[%A]", "health text color mode")
+    end
+    if out == norm then return nil end
+    return out
+end
+
+-- "make the target name bigger and move it to the left": the pronoun clause
+-- inherits clause one's element; without this the second clause matched the
+-- frame and moved the whole Target frame instead of its name.
+R.PREFLIGHT_PRONOUN_VERBS = { "move", "shift", "nudge", "shrink", "grow", "enlarge", "resize", "make", "put",
+    "set", "hide", "show", "turn", "color", "colour", "scale", "widen", "narrow", "raise", "lower", "increase", "decrease" }
+R.PREFLIGHT_SUBJECT_STOPS = { "bigger", "smaller", "larger", "taller", "shorter", "wider", "narrower", "to", "on",
+    "off", "up", "down", "left", "right", "by", "a bit", "slightly" }
+function R.PreflightPronounCarry(norm)
+    if not norm:find("%f[%a]it%f[%A]") and not norm:find("%f[%a]them%f[%A]") then return nil end
+    local clauses = {}
+    for clause in (norm .. " and "):gmatch("(.-)%s+and%s+") do clauses[#clauses + 1] = R.Trim(clause) end
+    if #clauses < 2 then return nil end
+    local first = clauses[1]
+    local verb, rest = first:match("^(%a+)%s+(.+)$")
+    if not verb then return nil end
+    rest = rest:gsub("^the%s+", ""):gsub("^my%s+", "player ")
+    local subject
+    for i = 1, #R.PREFLIGHT_SUBJECT_STOPS do
+        local candidate = rest:match("^(.-)%s+" .. R.PREFLIGHT_SUBJECT_STOPS[i]:gsub(" ", "%%s+") .. "%f[%A]")
+        if candidate and (not subject or #candidate < #subject) then subject = candidate end
+    end
+    if not subject or subject == "" or subject:find("%d") or subject:find("%f[%a]and%f[%A]") then return nil end
+    local words = 0
+    for _ in subject:gmatch("%a+") do words = words + 1 end
+    if words < 1 or words > 3 then return nil end
+    if subject:match("^%a+$") and R.PreflightUnitLabel(subject) then return nil end
+    local changed = false
+    for i = 2, #clauses do
+        local clause = clauses[i]
+        local cverb = clause:match("^(%a+)")
+        local isVerb = false
+        for j = 1, #R.PREFLIGHT_PRONOUN_VERBS do
+            if cverb == R.PREFLIGHT_PRONOUN_VERBS[j] then isVerb = true; break end
+        end
+        if isVerb and not clause:find(subject, 1, true) then
+            local padded = " " .. clause .. " "
+            local replaced = padded:gsub(" it ", " the " .. subject .. " "):gsub(" them ", " the " .. subject .. " ")
+            replaced = R.Trim(replaced)
+            if replaced ~= clause then clauses[i] = replaced; changed = true end
+        end
+    end
+    if not changed then return nil end
+    return table.concat(clauses, " and ")
+end
+
+-- Newcomer phrasings the lanes do not read. Each rewrite produces a sentence
+-- the ordinary lanes already prove; nothing here writes.
+R.PREFLIGHT_BIG_WORDS = { big = true, large = true, huge = true, wide = true, tall = true, fat = true, thick = true }
+R.PREFLIGHT_SMALL_WORDS = { small = true, tiny = true, little = true, narrow = true, short = true, thin = true }
+function R.PreflightNewcomerRewrite(norm)
+    local out = norm
+    -- "the target frame is way too big shrink it" -> "make the target frame smaller"
+    local subject, degree, tail = out:match("^(.-)%s+is%s+way%s+too%s+(%a+)%s*(.*)$")
+    if not subject then subject, degree, tail = out:match("^(.-)%s+is%s+too%s+(%a+)%s*(.*)$") end
+    if not subject then subject, degree, tail = out:match("^(.-)%s+is%s+so%s+(%a+)%s*(.*)$") end
+    if not subject then subject, degree, tail = out:match("^(.-)%s+is%s+really%s+(%a+)%s*(.*)$") end
+    if subject and tail then
+        local wantsSmaller = tail:find("shrink", 1, true) or tail:find("smaller", 1, true) or tail:find("reduce", 1, true)
+        local wantsBigger = tail:find("grow", 1, true) or tail:find("bigger", 1, true) or tail:find("enlarge", 1, true) or tail:find("increase", 1, true)
+        if wantsSmaller and R.PREFLIGHT_BIG_WORDS[degree] then
+            out = "make " .. subject .. " smaller"
+        elseif wantsBigger and R.PREFLIGHT_SMALL_WORDS[degree] then
+            out = "make " .. subject .. " bigger"
+        end
+    end
+    -- "shields on" -> the absorb bar, never the absorb text display mode
+    local state = out:match("^shields?%s+(on)$") or out:match("^shields?%s+(off)$")
+        or out:match("^absorbs?%s+(on)$") or out:match("^absorbs?%s+(off)$")
+        or out:match("^absorb%s+shields?%s+(on)$") or out:match("^absorb%s+shields?%s+(off)$")
+    if state then out = "turn " .. state .. " the absorb bar" end
+    local shieldVerb, shieldNoun = out:match("^(turn%s+on)%s+(.-)$")
+    if not shieldVerb then shieldVerb, shieldNoun = out:match("^(turn%s+off)%s+(.-)$") end
+    if not shieldVerb then shieldVerb, shieldNoun = out:match("^(show)%s+(.-)$") end
+    if not shieldVerb then shieldVerb, shieldNoun = out:match("^(hide)%s+(.-)$") end
+    if not shieldVerb then shieldVerb, shieldNoun = out:match("^(enable)%s+(.-)$") end
+    if not shieldVerb then shieldVerb, shieldNoun = out:match("^(disable)%s+(.-)$") end
+    if shieldVerb and (shieldNoun == "shields" or shieldNoun == "shield" or shieldNoun == "the shields"
+        or shieldNoun == "the shield" or shieldNoun == "my shields" or shieldNoun == "my shield")
+    then
+        out = shieldVerb .. " the absorb bar"
+    end
+    -- "use flat bars" -> the global bar texture
+    local texture = out:match("^use%s+(%a+)%s+bars$") or out:match("^switch%s+to%s+(%a+)%s+bars$")
+        or out:match("^give%s+me%s+(%a+)%s+bars$") or out:match("^i%s+want%s+(%a+)%s+bars$")
+        or out:match("^i%s+want%s+to%s+use%s+(%a+)%s+bars$") or out:match("^make%s+the%s+bars%s+(%a+)$")
+        or out:match("^make%s+my%s+bars%s+(%a+)$") or out:match("^set%s+bars%s+to%s+(%a+)$")
+        or out:match("^use%s+the%s+(%a+)%s+bar%s+texture$") or out:match("^use%s+(%a+)%s+texture%s+for%s+bars$")
+    if texture and not R.PreflightUnitLabel(texture) and texture ~= "the" and texture ~= "my" then
+        out = "set bar texture to " .. texture
+    end
+    if out == norm then return nil end
+    return out
+end
+
+R.PREFLIGHT_LEAD_FILLERS = { "yo", "hey", "hi", "hello", "ok", "okay", "um", "uh", "lol", "pls", "plz", "please",
+    "just", "can u", "could u", "cud u", "u can", "would u", "quick", "quickly", "real quick" }
+R.PREFLIGHT_TAIL_FILLERS = { "pls", "plz", "please", "lol", "lmao", "thx", "thanks", "ty", "kthx", "tyvm", "xd", "haha", "thank you", "thanks a lot" }
+R.PREFLIGHT_INNER_FILLERS = { { " lol ", " " }, { " kinda ", " " }, { " sorta ", " " }, { " way too ", " too " }, { " lmao ", " " }, { " xd ", " " } }
+
+local function PreflightCiPattern(phrase)
+    local out = phrase:gsub("%a", function(ch) return "[" .. ch:lower() .. ch:upper() .. "]" end)
+    out = out:gsub("%s+", "%%s+")
+    return out
+end
+
+-- Strips chat fillers from the RAW text, case-insensitively, so values that
+-- carry case (spell names, profile names) survive untouched. Returns nil when
+-- nothing was stripped or when nothing would be left.
+function R.StripChatFillers(raw)
+    raw = tostring(raw or "")
+    local out = raw
+    -- "never mind, show it again": the part after the retraction is the request.
+    local afterRetraction = out:match("^%s*[Nn]ever%s*[Mm]ind%s*[,%.%-;:]+%s*(%S.*)$")
+        or out:match("^%s*[Ff]orget%s+[Tt]hat%s*[,%.%-;:]+%s*(%S.*)$")
+        or out:match("^%s*[Aa]ctually%s*[,%.%-;:]+%s*(%S.*)$")
+    if afterRetraction then out = afterRetraction end
+    local changed = true
+    while changed do
+        changed = false
+        for i = 1, #R.PREFLIGHT_LEAD_FILLERS do
+            local stripped = out:match("^%s*" .. PreflightCiPattern(R.PREFLIGHT_LEAD_FILLERS[i]) .. "[%s,!%.]+(%S.*)$")
+            if stripped then out = stripped; changed = true end
+        end
+        for i = 1, #R.PREFLIGHT_TAIL_FILLERS do
+            local stripped = out:match("^(.-%S)[%s,!%.]+" .. PreflightCiPattern(R.PREFLIGHT_TAIL_FILLERS[i]) .. "[%s!%.]*$")
+            if stripped then out = stripped; changed = true end
+        end
+    end
+    for i = 1, #R.PREFLIGHT_INNER_FILLERS do
+        local padded = " " .. out .. " "
+        local replaced = padded:gsub(PreflightCiPattern(R.PREFLIGHT_INNER_FILLERS[i][1]), R.PREFLIGHT_INNER_FILLERS[i][2])
+        replaced = replaced:gsub("^%s+", ""):gsub("%s+$", "")
+        if replaced ~= out then out = replaced end
+    end
+    out = out:gsub("%s+", " ")
+    out = R.Trim(out)
+    if out == "" or out == R.Trim(raw) then return nil end
+    return out
+end
+
+-- Out-of-scope features asked for in ANY shape ("show my dps", "make my
+-- nameplates bigger"), not only the interrogative existence forms. Real
+-- controls that contain the word ("Include Nameplate Only", "Show DPS Power")
+-- keep their sentences.
+R.FEATURE_NOT_IN_MSUF_LABEL_COLLISIONS = { "include nameplate", "nameplate only", "dps power", "for dps", "role icon", "show dps power",
+    "nameplate counter", "nameplate count" }
+-- "what are nameplates" / "can msuf change nameplates" are existence
+-- questions: the interrogative lane answers them with the reviewed article,
+-- so the command match only claims imperative shapes.
+R.FEATURE_NOT_IN_MSUF_QUESTION_OPENERS = { "what", "whats", "is", "are", "does", "do", "can", "could", "which", "where", "how", "why", "will", "would" }
+-- Registered controls whose own label carries an out-of-scope term ("Gameplay
+-- Enable Nameplate Counter") keep their sentences. Built once, lazily, from
+-- labels only, and only after a term has matched.
+local function FeatureTermLabelPhrases()
+    if type(R._featureTermLabelPhrases) == "table" then return R._featureTermLabelPhrases end
+    local phrases = {}
+    local registry = A.Registry
+    local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or {}
+    for i = 1, #settings do
+        local label = R.Normalize(settings[i] and settings[i].label or "")
+        if label ~= "" then
+            local carries = false
+            for j = 1, #R.FEATURE_NOT_IN_MSUF do
+                local row = R.FEATURE_NOT_IN_MSUF[j]
+                for k = 1, #row.terms do
+                    if R.HasNormalizedPhrase(label, row.terms[k]) then carries = true break end
+                end
+                if carries then break end
+            end
+            if carries then phrases[#phrases + 1] = label end
+        end
+    end
+    R._featureTermLabelPhrases = phrases
+    return phrases
+end
+function R.FeatureNotInMsufCommandMatch(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    -- "what are nameplates" and "can msuf change nameplates" ask ABOUT the
+    -- feature and keep their reviewed articles; "can you add a threat meter"
+    -- and "how much gold do i have" ask FOR it and get the honest no.
+    if norm:match("^whats?%s") or norm:find("%f[%a]msuf%f[%A]") then return nil end
+    for i = 1, #R.FEATURE_NOT_IN_MSUF_LABEL_COLLISIONS do
+        if R.HasNormalizedPhrase(norm, R.FEATURE_NOT_IN_MSUF_LABEL_COLLISIONS[i]) then return nil end
+    end
+    local matched
+    for i = 1, #R.FEATURE_NOT_IN_MSUF do
+        local row = R.FEATURE_NOT_IN_MSUF[i]
+        if row.what ~= "voice chat" then
+            for j = 1, #row.terms do
+                if R.HasNormalizedPhrase(norm, row.terms[j]) then matched = row break end
+            end
+        end
+        if matched then break end
+    end
+    if not matched then return nil end
+    local labels = FeatureTermLabelPhrases()
+    for i = 1, #labels do
+        if norm:find(labels[i], 1, true) then return nil end
+    end
+    return matched
+end
+
+function R.FeatureNotInMsufReply(absent)
+    return {
+        text = table.concat({
+            "No - MSUF does not do " .. absent.what .. ", so there is no setting for it and I did not change anything.",
+            "MSUF covers unit frames, auras, cast bars, class resources, group frames, and profiles. For " .. absent.what .. " use " .. absent.instead .. ".",
+            "You can ask: what can you do | open Player | find auras",
+        }, "\n"),
+        status = "info", result = "info",
+        summary = "Answers an out-of-scope feature request with a verified no.",
+        _readOnlyGuard = true,
+    }
+end
+
+-- Entry point. Returns (result, rewrittenText, note): a read-only result ends
+-- the turn; a rewritten text replaces the sentence for the ordinary lanes; a
+-- note is appended to whatever the lanes reply.
+function R.SafetyPreflight(text)
+    local raw = tostring(text or "")
+    local stripped = R.StripChatFillers(raw)
+    local working = stripped or raw
+    local norm = R.Normalize(working)
+    if norm == "" then return nil, nil, nil end
+    local rewritten = stripped
+    local note
+
+    local absent = R.FeatureNotInMsufCommandMatch(norm)
+    if absent then return R.FeatureNotInMsufReply(absent), nil, nil end
+
+    local result = R.PreflightMetaReference(norm)
+    if result then return result, nil, nil end
+    result = R.PreflightContradiction(norm)
+    if result then return result, nil, nil end
+    result = R.PreflightQuantifier(norm)
+    if result then return result, nil, nil end
+    local vague = R.PreflightVagueNoun(norm)
+    if vague then norm, rewritten = vague, vague end
+    result = R.PreflightLeadingCrossFrame(norm)
+    if result then return result, nil, nil end
+
+    local preserveResult, head, keptNote, kept = R.PreflightPreserveClause(norm)
+    if preserveResult then return preserveResult, nil, nil end
+    if head then norm, rewritten, note = head, head, keptNote end
+
+    result = R.PreflightBareElementNumber(norm)
+    if result then return result, nil, nil end
+
+    local newcomer = R.PreflightNewcomerRewrite(norm)
+    if newcomer then norm, rewritten = newcomer, newcomer end
+    local owned = R.PreflightOwnershipRewrite(norm)
+    if owned then norm, rewritten = owned, owned end
+    local carried = R.PreflightPronounCarry(norm)
+    if carried then norm, rewritten = carried, carried end
+
+    return nil, rewritten, note, kept
+end
+A.RouterSafetyPreflight = R.SafetyPreflight
+
 function R.TryGlobalScopeGuidance(text)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
@@ -1385,6 +2023,11 @@ function R.TryGlobalScopeGuidance(text)
         or norm:match("^wipe%s+my%s+settings$") ~= nil
 
     if (resetVerb and globalScope) or impliedGlobalReset then
+        -- Offer the two resets as pending choices, each confirmation-gated, so
+        -- "1" then "yes" works instead of a numbered list nothing can select.
+        local resetChoices = A.Knowledge and type(A.Knowledge.DestructiveResetChoices) == "function"
+            and A.Knowledge.DestructiveResetChoices(text) or nil
+        if resetChoices then return resetChoices end
         return {
             text = table.concat({
                 "Factory reset and recovery help",
@@ -1393,9 +2036,11 @@ function R.TryGlobalScopeGuidance(text)
                 "2. Factory Reset All - clears every profile and every global option, back to a fresh install. Say: factory reset all",
                 "Both ask for confirmation before anything changes, and neither can be undone with 'undo'. If you might want the current setup back, save it first: say open profiles and use Export there.",
                 "If you only meant one area, name it instead - for example: reset all unit positions, reset all aura overrides, or reset cast bar colors.",
+                "Which one do you want?",
             }, "\n"),
             status = "info", result = "info",
             summary = "Explains the wholesale reset options instead of guessing one.",
+            _readOnlyGuard = true,
         }
     end
 
@@ -2332,7 +2977,11 @@ function R.EntriesNamedExactlyOnce(entries, text)
                 if names[j] ~= "" and R.Normalize(names[j]) == subject then
                     count = count + 1
                     found = item
-                    if tostring(setting.unit or "") == "global" then
+                    -- The bar-scope families keep their base control under
+                    -- the "shared" scope rather than "global"; it is the
+                    -- same bare-name owner.
+                    local unit = tostring(setting.unit or "")
+                    if unit == "global" or unit == "shared" then
                         globalCount = globalCount + 1
                         globalFound = item
                     end
@@ -2349,6 +2998,29 @@ function R.EntriesNamedExactlyOnce(entries, text)
         and not (type(R.UnitScopeFromText) == "function" and R.UnitScopeFromText(R.Normalize(text)))
     then
         return globalFound
+    end
+    -- The scoped twins of one bar-scope family ("Target Highlight Priority
+    -- Order", "Boss Highlight Priority Order", ...) answer to the bare name
+    -- only through their own scoped aliases, so none of them is "named
+    -- exactly once" and the shared base never made the ranked list. When
+    -- every candidate is the same attribute under a different scope and the
+    -- sentence names no frame, the shared control owns the bare name.
+    if count == 0 and not (type(R.UnitScopeFromText) == "function" and R.UnitScopeFromText(R.Normalize(text))) then
+        local suffix, uniform = nil, true
+        for i = 1, #entries do
+            local setting = entries[i] and entries[i].item and entries[i].item.setting
+            local tail = setting and tostring(setting.key or ""):match("^barScope%.[%w_]+%.(.+)$") or nil
+            if not tail or (suffix and tail ~= suffix) then uniform = false break end
+            suffix = tail
+        end
+        if uniform and suffix then
+            local registry = A.Registry
+            local shared = registry and type(registry.GetSetting) == "function"
+                and registry:GetSetting("barScope.shared." .. suffix) or nil
+            if type(shared) == "table" and type(shared.set) == "function" then
+                return { setting = shared, label = shared.label, settingKey = shared.key }
+            end
+        end
     end
     -- Value-kind preference. When the request states a value of a recognisable
     -- kind -- a colour name, an opacity word, a position, a texture key -- the
@@ -2960,6 +3632,18 @@ function R.ComputeFailClosedReadOnlyRequest(text)
             if type(R.StatedValueKindSiblingPlan) == "function" and R.StatedValueKindSiblingPlan(text) then
                 return false
             end
+            -- "set Target of Target Hide with No Target on Target of Target
+            -- Hide Out of Combat on" states no "to", so the search above saw
+            -- no explicit value and no single control -- yet the sentence is
+            -- two complete visible labels, each with its value. Asked last,
+            -- behind a set-verb, so questions never pay for the label walk.
+            local parser = A.Parser
+            if type(parser) == "table" and type(parser.BareLabelRunNamesSeveralControls) == "function"
+                and type(R.StartsWithMutationCommand) == "function" and R.StartsWithMutationCommand(text)
+                and parser.BareLabelRunNamesSeveralControls(norm)
+            then
+                return false
+            end
             return true
         end
     end
@@ -2982,7 +3666,19 @@ function R.ComputeFailClosedReadOnlyRequest(text)
 
     local parser = A.Parser
     if parser and type(parser.NonMutatingIntent) == "function" and parser.NonMutatingIntent(norm) then return true end
-    if norm:match("^show%s+me%s+") or norm:match("^zeige%s+mir%s+") then return true end
+    if (norm:match("^show%s+me%s+") or norm:match("^zeige%s+mir%s+"))
+        and not (parser and type(parser.ShowMeDescribesResult) == "function" and parser.ShowMeDescribesResult(norm))
+    then
+        return true
+    end
+    -- "i want to see how much healing is being blocked" is a wish that names
+    -- a control by its own result alias; the "how" inside it is not a
+    -- question. Only a desire opener pays for the named-control lookup.
+    if parser and type(parser.StartsWithDesireOpener) == "function" and parser.StartsWithDesireOpener(norm)
+        and type(R.NamedBooleanIntentPlan) == "function" and R.NamedBooleanIntentPlan(text)
+    then
+        return false
+    end
     if R.LooksLikeKnowledgeQuestionPrefix(norm)
         or R.LooksLikeKnowledgeRequest(norm)
         or R.LooksLikeDirectDefinitionQuestion(norm)
@@ -3039,6 +3735,8 @@ function R.LooksLikeKnowledgeFirstRequest(text)    local norm = R.Normalize(text
     if R.ContainsAny(norm, {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you just change", "what exactly did you change", "what did you set",
+        "what did i change", "what did i just change", "what did i just do", "what have i changed",
+        "what did i set", "what have you changed",
         "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
         "show me last change", "show me the last change",
@@ -3055,6 +3753,8 @@ function R.LooksLikeDirectDefinitionQuestion(text)    local norm = R.Normalize(t
     if R.ContainsAny(norm, {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you just change", "what exactly did you change", "what did you set",
+        "what did i change", "what did i just change", "what did i just do", "what have i changed",
+        "what did i set", "what have you changed",
         "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
         "show me last change", "show me the last change",
@@ -3121,6 +3821,10 @@ R.LOCAL_WOW_UI_INTENT_TERMS = {    "what", "what is", "what are", "what does", "
 
 function R.LooksLikeLocalWowUiKnowledgeRequest(text)    local norm = R.Normalize(text)
     if norm == "" then return false end
+    -- "show how much health is missing on the target frame" opens with a
+    -- command verb; the "how" inside it describes the wanted result, not a
+    -- question. A command-led sentence keeps its command lanes.
+    if R.StartsWithMutationCommand(norm) then return false end
     return R.ContainsAny(norm, R.LOCAL_WOW_UI_TERMS) and R.ContainsAny(norm, R.LOCAL_WOW_UI_INTENT_TERMS)
 end
 
@@ -3329,7 +4033,8 @@ end
 
 function R.LooksLikeScopedHelpKnowledgeRequest(text)    local norm = R.Normalize(text)
     if norm == "" then return false end
-    if R.ContainsAny(norm, { "what did you change", "what changed", "what was changed", "last change", "previous change" }) then return false end
+    if R.ContainsAny(norm, { "what did you change", "what changed", "what was changed", "last change", "previous change",
+        "what did i change", "what did i just change", "what have i changed", "what have you changed" }) then return false end
     if R.LooksLikeGuidedTourRequest(norm) then return false end
     if R.ContainsAny(norm, { "open", "go to", "show settings", "show me settings", "oeffne" })
         and not R.ContainsAny(norm, { "where should i go", "where should i go to", "where should i go for" })
@@ -5282,6 +5987,25 @@ A.RouterTryProfileProblemShortcut = function(text, coreHandler)
         return reply
     end
 
+    -- "delete my profile" / "delete this profile" names no profile: the one in
+    -- use cannot be deleted while it is active, so ask for the exact name
+    -- instead of guessing (or, worse, reading it as a recovery question).
+    if norm:match("^%a*%s*delete%s+my%s+profile") or norm:match("^%a*%s*delete%s+the%s+current%s+profile")
+        or norm:match("^%a*%s*delete%s+this%s+profile") or norm:match("^%a*%s*delete%s+the%s+active%s+profile")
+        or norm:match("^%a*%s*remove%s+my%s+profile") or norm:match("^%a*%s*delete%s+my%s+current%s+profile")
+    then
+        return {
+            text = table.concat({
+                "Which profile do you want to delete?",
+                "The profile you are using right now cannot be deleted while it is active - switch to another profile first. Deleting any other profile needs its exact name and asks for confirmation before anything is removed.",
+                "Say: delete profile <name> (for example: delete profile Raid Backup), or open profiles to see the names.",
+            }, "\n"),
+            status = "info", result = "info",
+            summary = "Asks which profile a name-less delete request means.",
+            _readOnlyGuard = true,
+        }
+    end
+
     if R.ContainsAny(norm, terms.restore) then
         return A.RouterProfileReply(
             "Profile recovery help",
@@ -5781,6 +6505,10 @@ function R.GroupScopeFromText(norm)
 end
 
 function R.UnitScopeFromText(norm)
+    -- "boss target" is the Boss Target highlight (what the boss is attacking),
+    -- a value word on every frame's priority order; it names neither the
+    -- Target frame nor the Boss frames.
+    norm = tostring(norm or ""):gsub("boss%s+targets?", " "):gsub("bosstarget", " ")
     if R.ContainsAny(norm, { "target of target", "targettarget" }) then return "targettarget", "Target of Target" end
     if R.ContainsAny(norm, { "focus target", "focustarget" }) then return "focustarget", "Focus Target" end
     -- Arena controls can contain another unit noun (for example "arena
@@ -6390,7 +7118,19 @@ function R.AuraGrowthMutationAmbiguity(text)
     local norm = R.Normalize(text)
     if not R.HasAuraGrowthIntent(norm) or not R.HasAuraGrowthMutationIntent(norm) then return nil end
     local scopes = R.AuraGrowthNamedScopes(norm)
-    if #scopes > 1 then return "scopes", scopes end
+    if #scopes > 1 then
+        -- "set Mythic Raid Debuff Filter Player Mythic Raid Debuff Growth
+        -- leftdown" names one frame twice; "Player" is the filter's VALUE. A
+        -- run of complete visible labels belongs to the compound parser,
+        -- which reads each control by name and never mixes their scopes.
+        local parser = A.Parser
+        if type(parser) == "table" and type(parser.BareLabelRunNamesSeveralControls) == "function"
+            and parser.BareLabelRunNamesSeveralControls(norm)
+        then
+            return nil
+        end
+        return "scopes", scopes
+    end
     if #scopes == 0 then return nil end
     local hasBuff = R.ContainsAny(norm, { "buff", "buffs" })
     local hasDebuff = R.ContainsAny(norm, { "debuff", "debuffs" })
@@ -7691,7 +8431,14 @@ function R.TryLiveUnitColorExplanation(text)
     -- "what does target portrait border do?" / "what is raid group border
     -- padding for?" ask for one control's purpose; the registry explanation
     -- lane answers it exactly.
-    if (norm:match("^what does .+ do$") or norm:match("^what is .+ for$")
+    -- "what is this purple full-frame debuff border on player" describes a
+    -- visual the player is looking at (a colour plus "this/that"); that is a
+    -- diagnosis of live state, not a request to define the control it names.
+    local observedVisual = R.ContainsAny(norm, R.COLOR_TERMS)
+        and (R.HasNormalizedPhrase(norm, "this") or R.HasNormalizedPhrase(norm, "that")
+            or R.HasNormalizedPhrase(norm, "these") or R.HasNormalizedPhrase(norm, "those"))
+    if not observedVisual
+        and (norm:match("^what does .+ do$") or norm:match("^what is .+ for$")
             or norm:match("^what is ") or norm:match("^explain "))
         and type(A.RouterTryRegistrySettingExplainShortcut) == "function"
         and A.RouterTryRegistrySettingExplainShortcut(norm) ~= nil
@@ -7813,6 +8560,16 @@ function R.LooksLikeLiveUnitColorQuestion(text)
     local norm = R.Normalize(text)
     if norm == "" or LiveColorHasExplicitMutation(norm) then return false end
     if not R.ContainsAny(norm, LIVE_COLOR_VISUAL_TERMS) or not LiveColorHasDiagnosticIntent(norm) then return false end
+    -- "how do i decide which border is shown first" asks about the highlight
+    -- PRIORITY control, not why a frame took a colour. Precedence wording
+    -- belongs to the named-control lanes, which answer with that control.
+    if R.ContainsAny(norm, {
+        "shown first", "shows first", "show first", "displayed first", "drawn first",
+        "priority", "priorities", "takes precedence", "take precedence", "precedence",
+        "which border wins", "border wins", "wins over", "on top of the other", "highlight order",
+    }) then
+        return false
+    end
     return LiveColorUnit(norm) ~= nil
         or LiveColorGroup(norm) ~= nil
         or R.ContainsAny(norm, {
@@ -9618,6 +10375,11 @@ end
 
 function R.TryConversationalMutation(text, coreHandler)
     local norm = R.Normalize(text)
+    -- Setup guidance owns the complete onboarding request before this lane
+    -- removes the "help me" wrapper and retries it as a setting mutation.
+    if type(R.SETUP_GUIDANCE_TERMS) == "table" and R.ContainsAny(norm, R.SETUP_GUIDANCE_TERMS) then
+        return nil
+    end
     if norm:find("target s target", 1, true)
         or norm:find("target's target", 1, true)
         or norm:find("targets target", 1, true)
@@ -10640,6 +11402,17 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
     then
         return nil
     end
+    -- "missing" is a problem word, but "how much health is missing" describes
+    -- the health DEFICIT text mode, not a hidden frame. The text-slot lane
+    -- had already resolved that sentence when this lane ran a frame
+    -- diagnostic over it.
+    if R.ContainsAny(norm, {
+        "how much health", "how much hp", "health is missing", "hp is missing",
+        "missing health", "missing hp", "health missing", "hp missing",
+        "health deficit", "hp deficit", "health lost", "hp lost",
+    }) then
+        return nil
+    end
 
     local group = R.VisibilityGroupForText(norm)
     local unit = R.VisibilityUnitForText(norm)
@@ -10983,8 +11756,8 @@ function R.TryUncertainContextChoices(text)
     if type(R.StatedValueKindSiblingPlan) == "function" and type(A.ExecutePlan) == "function" then
         local siblingPlan = R.StatedValueKindSiblingPlan(text)
         if siblingPlan then
-            local okSibling, siblingResult = pcall(A.ExecutePlan, siblingPlan, { sourceText = text })
-            if okSibling and type(siblingResult) == "table" and not A.RouterIsUnknownResult(siblingResult) then
+            local siblingResult = A.ExecutePlan(siblingPlan, { sourceText = text })
+            if type(siblingResult) == "table" and not A.RouterIsUnknownResult(siblingResult) then
                 return siblingResult
             end
         end
@@ -10992,8 +11765,8 @@ function R.TryUncertainContextChoices(text)
     if type(R.NamedBooleanIntentPlan) == "function" and type(A.ExecutePlan) == "function" then
         local intentPlan = R.NamedBooleanIntentPlan(text)
         if intentPlan then
-            local okIntent, intentResult = pcall(A.ExecutePlan, intentPlan, { sourceText = text })
-            if okIntent and type(intentResult) == "table" and not A.RouterIsUnknownResult(intentResult) then
+            local intentResult = A.ExecutePlan(intentPlan, { sourceText = text })
+            if type(intentResult) == "table" and not A.RouterIsUnknownResult(intentResult) then
                 return intentResult
             end
         end
@@ -11400,7 +12173,12 @@ R.RESULT_ORDINAL_ACTIONS = {    "open", "show", "show me", "explain", "describe"
     "bring", "send", "push", "pull",
 }
 
-function R.ResultOrdinalActionTargetMatches(norm, target)    target = R.Normalize(target)
+-- The (action, term) targets are a fixed vocabulary; normalising each one on
+-- every pending-result check was a 200 ms slice on a cold question.
+R._ordinalTargetNormCache = R._ordinalTargetNormCache or {}
+function R.ResultOrdinalActionTargetMatches(norm, target)    local cached = R._ordinalTargetNormCache[target]
+    if cached == nil then cached = R.Normalize(target); R._ordinalTargetNormCache[target] = cached end
+    target = cached
     if norm == target then return true end
     if norm:sub(1, #target + 1) ~= target .. " " then return false end
     local tail = R.Trim(norm:sub(#target + 2))
@@ -11508,6 +12286,7 @@ function R.LooksLikeResultListPositionReply(text)    if not A.RouterHasPendingSe
         for i = 1, #terms do
             if termMatches(terms[i]) then return true end
         end
+        if type(A.MaybeYield) == "function" then A.MaybeYield() end
     end
     return false
 end
@@ -11755,6 +12534,7 @@ end
 
 R.CORRECTION_HISTORY_TERMS = {    "what did you change", "what changed", "what was changed", "what did you do",
     "what did you just do", "what did you just change", "what exactly did you change",
+    "what did i change", "what did i just change", "what did i just do", "what have i changed", "what have you changed",
     "what exactly did you just do", "what did you set", "last change", "last assistant change",
     "previous change", "what is it now", "what is it set to", "current value", "value now",
     "show last change", "show me last change", "show me the last change",
@@ -15559,6 +16339,22 @@ function R.OpenEndedSpecialistOwnsChange(plan)
     return true
 end
 
+-- True when every change of a specialist plan carries a typed, non-boolean
+-- value (an enum choice, a number, a string, a relative step). A boolean plan
+-- is exactly what the mention-implies-on rescue also produces, so it settles
+-- nothing; a typed value proves the lane read more than the control's name.
+function R.OpenEndedSpecialistStatesTypedValue(plan)
+    if type(plan) ~= "table" or type(plan.changes) ~= "table" or #plan.changes == 0 then return false end
+    for i = 1, #plan.changes do
+        local change = plan.changes[i]
+        local setting = type(change) == "table" and change.setting or nil
+        if type(setting) ~= "table" or setting.type == "boolean" or type(change.value) == "boolean" then
+            return false
+        end
+    end
+    return true
+end
+
 function R.OpenEndedSettingCurrentValue(setting)
     if not (setting and type(setting.get) == "function") then return nil end
     local ok, value = pcall(setting.get)
@@ -15785,8 +16581,16 @@ end
 -- Count Anchor to topleft") the sentence asked for more than one change, and
 -- claiming it silently drops every item after the first while reporting
 -- success. Stand down instead so the compound planner in A.Parse owns it.
-local VALUE_TAIL_JOINERS = { " and ", " und ", ", " }
+local VALUE_TAIL_JOINERS = { " and ", " und ", ", ", " then " }
 local VALUE_TAIL_CONNECTORS = { " to ", " as ", " is ", " = ", " auf ", " zu ", " als " }
+-- "... to center and SET Raid Debuff Hide Permanent Auras to on": people
+-- repeat the verb after the joiner, and the subject must be read without it
+-- or the second control is never recognised -- the whole sentence then lost
+-- its multi-control exemption and was answered as a read-only question.
+local VALUE_TAIL_CLAUSE_VERBS = {
+    set = true, change = true, make = true, adjust = true, put = true,
+    setze = true, stelle = true, aendere = true,
+}
 local function ValueTailNamesAnotherControl(valueText)
     local norm = R.Normalize(valueText or "")
     if norm == "" then return false end
@@ -15803,12 +16607,25 @@ local function ValueTailNamesAnotherControl(valueText)
                     local connectorAt = restPadded:find(VALUE_TAIL_CONNECTORS[c], 1, true)
                     if connectorAt then
                         local subject = R.Trim(restPadded:sub(2, connectorAt - 1))
+                        local lead = subject:match("^(%S+)")
+                        if lead and VALUE_TAIL_CLAUSE_VERBS[lead] then
+                            subject = R.Trim(subject:sub(#lead + 1))
+                        end
                         if subject ~= "" and UniqueExactMutationEntry(subject) then return true end
                     end
                 end
             end
             startAt = at + 1
         end
+    end
+    -- No joiner at all: "class Shared Power Text Color Mode resource" is the
+    -- value tail of an unpunctuated run, where the second control's complete
+    -- label begins right after the first value word.
+    local parser = A.Parser
+    if type(parser) == "table" and type(parser.BareValueTailNamesAnotherControl) == "function"
+        and parser.BareValueTailNamesAnotherControl(norm)
+    then
+        return true
     end
     return false
 end
@@ -16319,6 +17136,52 @@ function R.ExactRegistrySettingForCommand(text, force)
     return item and item.setting or nil
 end
 
+-- A control's detail twins are the settings whose label extends its own
+-- ("Dispel Border" -> "Dispel Border Detects") in the same scope. When the
+-- named control cannot hold the stated value, the one enum twin that both
+-- accepts it AND has that choice spelled in the sentence is the control the
+-- player meant. Numbers and colours stay out: those have their own lanes.
+function R.ExactControlDetailTwinPlan(setting, text)
+    if type(setting) ~= "table" then return nil end
+    local base = R.Normalize(setting.label or "")
+    if base == "" then return nil end
+    local registry = A.Registry
+    local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+    if type(settings) ~= "table" then return nil end
+    local parser = A.Parser or {}
+    if type(parser.ValueForRegistrySetting) ~= "function" then return nil end
+    local norm = R.Normalize(text)
+    local unit = tostring(setting.unit or "")
+    local prefix = base .. " "
+    local found, count = nil, 0
+    for i = 1, #settings do
+        local twin = settings[i]
+        if type(twin) == "table" and twin ~= setting and type(twin.set) == "function"
+            and (twin.type == "enum" or (twin.type == "string" and twin.closedValues))
+            and tostring(twin.unit or "") == unit
+        then
+            local label = R.Normalize(twin.label or "")
+            if label:sub(1, #prefix) == prefix then
+                local value = parser.ValueForRegistrySetting(twin, norm, text)
+                if value ~= nil and R.EnumValueAppearsInText(twin, value, norm) then
+                    count = count + 1
+                    found = { setting = twin, value = value }
+                end
+            end
+        end
+    end
+    if count ~= 1 then return nil end
+    return {
+        kind = "changes",
+        changes = { found },
+        label = tostring(found.setting.label or found.setting.key),
+        summary = "Changes the detail control of the named family that holds the stated value.",
+        raw = text,
+        sourceText = text,
+        exactSettingMutation = true,
+    }
+end
+
 function R.TryExactRegistrySettingMutation(text)
     local item, hasExplicitValue = ExactMutationMatch(text)
     local setting = item and item.setting
@@ -16343,8 +17206,8 @@ function R.TryExactRegistrySettingMutation(text)
         end
         local siblingPlan = R.StatedValueKindSiblingPlan(text)
         if siblingPlan and type(A.ExecutePlan) == "function" then
-            local okSibling, siblingResult = pcall(A.ExecutePlan, siblingPlan, { sourceText = text })
-            if okSibling and type(siblingResult) == "table"
+            local siblingResult = A.ExecutePlan(siblingPlan, { sourceText = text })
+            if type(siblingResult) == "table"
                 and not A.RouterIsUnknownResult(siblingResult)
             then
                 return siblingResult
@@ -16362,11 +17225,28 @@ function R.TryExactRegistrySettingMutation(text)
 
     local plan = type(parser.PlanForExactRegistrySetting) == "function"
         and parser.PlanForExactRegistrySetting(setting, R.Normalize(text), text) or nil
-    if not plan then return ExactSettingValuePrompt(item, true) end
+    if not plan then
+        -- The named control rejects the value, but a detail control of the
+        -- same family may be exactly what the value belongs to: "set the
+        -- dispel border to dispellable by me" names Dispel Border (on/off)
+        -- with a value only Dispel Border Detects can hold. One accepting
+        -- twin is the answer; several, or none, keep the prompt.
+        local twinPlan = R.ExactControlDetailTwinPlan(setting, text)
+        if twinPlan and type(A.ExecutePlan) == "function" then
+            return A.ExecutePlan(twinPlan, { sourceText = text })
+        end
+        return ExactSettingValuePrompt(item, true)
+    end
     if plan.kind == "changes" and type(A.ExecutePlan) == "function" then
         return A.ExecutePlan(plan, { sourceText = text })
     end
     if plan.kind == "ambiguous" and type(plan.choices) == "table" then
+        -- Same detail-twin rule as above: the on/off control offered its two
+        -- states because the stated value belongs to its Detects twin.
+        local twinPlan = R.ExactControlDetailTwinPlan(setting, text)
+        if twinPlan and type(A.ExecutePlan) == "function" then
+            return A.ExecutePlan(twinPlan, { sourceText = text })
+        end
         return ExactSettingValuePrompt(item, true)
     end
     if plan.kind == "answer" and tostring(plan.status or "") == "ambiguous"
@@ -16414,6 +17294,10 @@ end
 
 function R.TryOpenEndedSettingIdea(text, coreHandler)
     local parser = A.Parser or {}
+    -- A warm fuzzy index must not turn onboarding into a colour-setting prompt.
+    if type(R.SETUP_GUIDANCE_TERMS) == "table" and R.ContainsAny(R.Normalize(text), R.SETUP_GUIDANCE_TERMS) then
+        return nil
+    end
     -- This lane ranks fuzzy candidates and asks when several look plausible.
     -- That is right for a vague idea, but wrong once the player has typed a
     -- control's exact visible name: "set my Boss Absorb Bar Opacity to 75"
@@ -16538,8 +17422,8 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
         if type(R.ExactLabelSingleChange) == "function" and type(A.ExecutePlan) == "function" then
             local plan = R.ExactLabelSingleChange(text)
             if plan then
-                local ok, result = pcall(A.ExecutePlan, plan, { sourceText = text })
-                if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
+                local result = A.ExecutePlan(plan, { sourceText = text })
+                if type(result) == "table" and not A.RouterIsUnknownResult(result) then
                     return result
                 end
             end
@@ -16558,7 +17442,7 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
             local value = setting and type(parser.ValueForRegistrySetting) == "function"
                 and parser.ValueForRegistrySetting(setting, R.Normalize(text), text) or nil
             if value ~= nil then
-                local ok, result = pcall(A.ExecutePlan, {
+                local result = A.ExecutePlan({
                     kind = "changes",
                     changes = { { setting = setting, value = value } },
                     label = tostring(setting.label or setting.key),
@@ -16566,7 +17450,7 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
                     raw = text,
                     sourceText = text,
                 }, { sourceText = text })
-                if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
+                if type(result) == "table" and not A.RouterIsUnknownResult(result) then
                     return result
                 end
             end
@@ -16698,11 +17582,32 @@ function R.TryOpenEndedSettingIdea(text, coreHandler)
                 if rewritten and not A.RouterIsUnknownResult(rewritten) then return rewritten end
             end
         end
+        -- A dedicated parser lane that read the WHOLE sentence and states a
+        -- real (non-boolean) value outranks the mention-implies-on rescue
+        -- below. "make the health bar gradient fade from the left" is the
+        -- gradient lane's Direction = LEFT; the rescue only saw the words
+        -- "health bar gradient" and switched the toggle on instead.
+        if type(coreHandler) == "function" and type(A.Parse) == "function" then
+            local specialized = A.Parse(text)
+            if R.OpenEndedSpecialistOwnsChange(specialized)
+                and R.OpenEndedSpecialistStatesTypedValue(specialized)
+            then
+                local savedCache = R._openEndedSettingCache
+                R._openEndedSettingCache = { text = R.Normalize(text), analysis = false }
+                local result = coreHandler(text)
+                R._openEndedSettingCache = savedCache
+                if result and not A.RouterIsUnknownResult(result)
+                    and not (type(A.RouterIsNoClueResult) == "function" and A.RouterIsNoClueResult(result))
+                then
+                    return result
+                end
+            end
+        end
         if type(A.ExecutePlan) == "function" then
             local plan = R.NamedBooleanIntentPlan(text)
             if plan then
-                local ok, result = pcall(A.ExecutePlan, plan, { sourceText = text })
-                if ok and type(result) == "table" and not A.RouterIsUnknownResult(result) then
+                local result = A.ExecutePlan(plan, { sourceText = text })
+                if type(result) == "table" and not A.RouterIsUnknownResult(result) then
                     return result
                 end
             end
@@ -17041,6 +17946,13 @@ function R.TryDirectSettingNavigation(text, coreHandler)
         or norm:match("^show%s+me%s+(.+)$")
         or norm:match("^open%s+(.+)$")
     if not direct then return nil end
+    -- "show me how much maximum health i lost" describes a result to enable,
+    -- not a control to open; opening Maximum Health Loss left it off.
+    if norm:match("^show%s+me%s") and A.Parser and type(A.Parser.ShowMeDescribesResult) == "function"
+        and A.Parser.ShowMeDescribesResult(norm)
+    then
+        return nil
+    end
     direct = R.Trim(direct:gsub("^the%s+", ""):gsub("^exact%s+", "")
         :gsub("%s+setting$", ""):gsub("%s+option$", ""):gsub("%s+control$", "")
         :gsub("%s+slider$", ""):gsub("%s+dropdown$", ""):gsub("%s+toggle$", "")
@@ -17615,7 +18527,14 @@ function R.RegistrySettingItemForKey(settingKey)
     end
 
     local page = R.FallbackPageForSetting(setting)
-    local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
+    -- Assistant output is English only: the menu's page title follows the
+    -- client locale ("DE Gruppenlayout"), so the Knowledge index's English
+    -- page names come first and the menu title only covers unknown pages.
+    local pageLabel = page and A.Knowledge and type(A.Knowledge.PageLabel) == "function"
+        and A.Knowledge.PageLabel(page) or nil
+    if page and (pageLabel == nil or pageLabel == "MSUF page") and A.DisplayPageLabel then
+        pageLabel = A.DisplayPageLabel(page, "MSUF page")
+    end
     local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or settingKey)
     return {
         kind = "setting",
@@ -18471,8 +19390,11 @@ A.RouterTryUnitScopedQuestionShortcut = function(text)
     -- "what is X" / "what does X do" ask what the control IS; "what setting
     -- detaches X" / "which option" ask WHERE it is and belong with the
     -- location questions.
+    -- "what if I show target name" proposes a change and belongs to the
+    -- decision-help lane, not to a definition of the control.
     local definitional = (norm:match("^what%s") or norm:match("^whats%s") or norm:match("^explain%s")
         or norm:match("^tell%s+me%s") or norm:match("^describe%s")) ~= nil
+        and not (norm:match("^what%s+if%s") or norm:match("^what%s+about%s"))
         and not (norm:match("^what%s+setting") or norm:match("^what%s+option") or norm:match("^what%s+control")
             or norm:match("^whats%s+the%s+setting") or norm:match("^what%s+is%s+the%s+setting")
             or norm:match("^what%s+is%s+the%s+option") or norm:match("^what%s+is%s+the%s+control"))
@@ -19125,6 +20047,8 @@ function R.ShouldSkipContext(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you just change", "what exactly did you change", "what did you set",
+        "what did i change", "what did i just change", "what did i just do", "what have i changed",
+        "what did i set", "what have you changed",
         "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
         "show me last change", "show me the last change",
@@ -19652,6 +20576,13 @@ function A.RouteInput(text, coreHandler)
         local existence = R.TryFeatureExistenceQuestion(text, coreHandler)
         if existence then return existence end
     end
+    -- "show my dps" / "make my nameplates bigger": the same out-of-scope list,
+    -- but in imperative shape. Left to the lanes, a resize chooser answered
+    -- "make my nameplates bigger" and a "1" would have resized the Player frame.
+    if not hasBlockingPending and type(R.FeatureNotInMsufCommandMatch) == "function" then
+        local absent = R.FeatureNotInMsufCommandMatch(text)
+        if absent then return R.FeatureNotInMsufReply(absent) end
+    end
 
     -- A definitional or how-to question ("what does embed power bar into
     -- health mean", "how do i hide the player frame when mounted") that names
@@ -19683,8 +20614,7 @@ function A.RouteInput(text, coreHandler)
             -- (the name-shortening "which dots?" list for "... style to dots")
             -- as pending state, which then outranked every lane below.
             scopedPlan.raw, scopedPlan.sourceText = text, text
-            local scopedOk, scopedResult = pcall(A.ExecutePlan, scopedPlan, { sourceText = text })
-            if not scopedOk then error(scopedResult, 0) end
+            local scopedResult = A.ExecutePlan(scopedPlan, { sourceText = text })
             if type(scopedResult) == "table" and not A.RouterIsUnknownResult(scopedResult) then
                 return scopedResult
             end
@@ -20307,8 +21237,8 @@ function A.RouteInput(text, coreHandler)
             then
                 local intentPlan = R.NamedBooleanIntentPlan(text)
                 if intentPlan then
-                    local okIntent, intentResult = pcall(A.ExecutePlan, intentPlan, { sourceText = text })
-                    if okIntent and type(intentResult) == "table"
+                    local intentResult = A.ExecutePlan(intentPlan, { sourceText = text })
+                    if type(intentResult) == "table"
                         and not A.RouterIsUnknownResult(intentResult)
                     then
                         return intentResult
@@ -20487,6 +21417,26 @@ function A.RouteInput(text, coreHandler)
     -- replace stale non-blocking search/guide state before that state can turn
     -- the request into a broad Aura choice.
     if not A.RouterHasPendingConfirmationOrFlow() then
+        -- "why is target name font size greyed out" names one control and asks
+        -- about its gate. The readability and colour topic lanes below used to
+        -- claim such sentences by their nouns; the dependency graph owns them.
+        if type(A.RouterLooksLikeExplicitSettingRelationshipRequest) == "function"
+            and A.RouterLooksLikeExplicitSettingRelationshipRequest(text)
+            and type(A.RouterTrySettingGraphShortcut) == "function"
+        then
+            local graphReply = A.RouterTrySettingGraphShortcut(text)
+            if graphReply then return graphReply end
+        end
+        -- "it looks too cluttered" / "make it cleaner" describe a result, not
+        -- a control. Knowledge turns that into numbered concrete choices; the
+        -- contextless-"it" and readability lanes must not claim it first.
+        if A.Knowledge and type(A.Knowledge.AestheticIntentFor) == "function"
+            and type(A.Knowledge.AestheticIntentReply) == "function"
+            and A.Knowledge.AestheticIntentFor(R.Normalize(text))
+        then
+            local aesthetic = A.Knowledge.AestheticIntentReply(text)
+            if aesthetic then return aesthetic end
+        end
         -- A named signal problem (for example dispellable debuffs) carries
         -- more information than the generic words "hard to see".
         local signalTopic = R.TrySignalProblemShortcut(text)
@@ -20944,7 +21894,11 @@ function A.RouteInput(text, coreHandler)
                 and parser.NonMutatingIntent(R.Normalize(text)) or nil
             local guidedAuraDuration = R.IsAuraDurationFilterQuestion
                 and R.IsAuraDurationFilterQuestion(text)
-            if (intent == "lookup" or intent == "capability") and not guidedAuraDuration then
+            -- "what did you change" is a history question owned by the
+            -- correction shortcut further down; with a page active, Knowledge
+            -- answered it with that page's control list instead.
+            local historyQuestion = R.ContainsAny(R.Normalize(text), R.CORRECTION_HISTORY_TERMS)
+            if (intent == "lookup" or intent == "capability") and not guidedAuraDuration and not historyQuestion then
                 -- The knowledge lane normally answers these, but it sits below
                 -- the mutation lanes, so consult it here rather than replacing
                 -- a real answer ("why would I use a focus frame") with a
@@ -21012,6 +21966,17 @@ function A.RouteInput(text, coreHandler)
                     and type(A.RouterLocationLaneReply) == "function"
                     and A.RouterLocationLaneReply(text) or nil
                 if locationLane then return locationLane end
+                -- "how can i configure this page" asks about the OPEN page.
+                -- The earlier page-help attempt stands down for anything that
+                -- also reads as a location question, so this lookup branch
+                -- answered it with a list of unrelated controls; the page's
+                -- own scope help is the answer.
+                if hasCore and type(R.IsCurrentPageHelpRequest) == "function"
+                    and R.IsCurrentPageHelpRequest(text)
+                then
+                    local currentPageHelp = R.TryPageHelpShortcut(text, Core)
+                    if currentPageHelp then return currentPageHelp end
+                end
                 if A.Knowledge and type(A.Knowledge.Answer) == "function" then
                     local knowledgeAnswer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
                     if knowledgeAnswer then return knowledgeAnswer end
@@ -21378,6 +22343,8 @@ function A.RouteInput(text, coreHandler)
         and R.ContainsAny(text, {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you just change", "what exactly did you change", "what did you set",
+        "what did i change", "what did i just change", "what did i just do", "what have i changed",
+        "what did i set", "what have you changed",
         "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
         "show me last change", "show me the last change",

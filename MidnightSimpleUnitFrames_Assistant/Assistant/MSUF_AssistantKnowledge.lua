@@ -244,13 +244,20 @@ local PAGE_LABEL_OVERRIDES = {
 }
 local function PageLabel(pageKey)
     if not pageKey or tostring(pageKey) == "" then return "Assistant" end
+    -- Assistant output is English only. The menu's own page title follows the
+    -- client locale, so a search result rendered "Raid Frame Scaling - DE
+    -- Gruppenlayout" under deDE; the Assistant's page names come first and
+    -- the menu title is only consulted for a page it does not know.
+    if pageKey and PAGE_LABEL_OVERRIDES[pageKey] then return PAGE_LABEL_OVERRIDES[pageKey] end
     if pageKey and A and type(A.DisplayPageLabel) == "function" then
         local label = A.DisplayPageLabel(pageKey, nil)
         if label and tostring(label) ~= "" then return label end
     end
-    if pageKey and PAGE_LABEL_OVERRIDES[pageKey] then return PAGE_LABEL_OVERRIDES[pageKey] end
     return "MSUF page"
 end
+-- The Router's compact search renders the same "<control> - <page>" lines
+-- and must use the same English page names.
+K.PageLabel = PageLabel
 
 local function ItemPageLabel(item)
     if type(item) ~= "table" then return nil end
@@ -1099,6 +1106,10 @@ function K.Search(query, limit, opts)
     -- names a channel, so the channels stay findable when the user truly asks
     -- for one but never shadow the real color control.
     local allowColorChannels = norm:find("channel", 1, true) ~= nil
+    -- A query that IS a channel's own key or label ("search
+    -- focustarget.texLayerGradient2R") asks for that component by name; with
+    -- nothing else able to match, the topic fallback answered instead.
+    local queryKey = Trim(tostring(cleanedQuery ~= "" and cleanedQuery or query)):lower()
     local results = {}
     for i = 1, #(index.items or {}) do
         if i % 32 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -1108,6 +1119,8 @@ function K.Search(query, limit, opts)
         if opts.kind and item.kind ~= opts.kind then score = 0 end
         if not allowColorChannels and item.kind == "setting" and item.setting
             and item.setting.assistantColorChannel == true
+            and tostring(item.key or ""):lower() ~= queryKey
+            and Normalize(item.label or "") ~= exactNorm
         then
             score = 0
         end
@@ -2575,11 +2588,29 @@ local function IsStaticAuraFilterDefinition(norm)
         or norm == "explain aura filtering" or norm == "explain aura filters"
 end
 
+-- A concept question the knowledge owner should answer before the late
+-- router lanes: a synonym subject ("fill axis") or a two-subject
+-- comparison. Both are fixed-pattern checks; everything else keeps the
+-- router's exact-label lanes.
+function K.IsEarlyConceptQuestion(norm)
+    if type(norm) ~= "string" or norm == "" then return false end
+    if norm:find("difference%s+between%s+.-%s+and%s+") then return true end
+    local subject = type(K.ConceptSubjectFromQuestion) == "function" and K.ConceptSubjectFromQuestion(norm) or nil
+    return subject ~= nil and K.CONCEPT_SUBJECT_SYNONYMS[subject] ~= nil
+end
+
 function K.IsStaticConceptDefinition(query)
     local router = A.RouterPrivate
     local semanticQuery = router and type(router.StripResponseLanguageDirective) == "function"
         and router.StripResponseLanguageDirective(query) or query
-    return IsStaticAuraFilterDefinition(Normalize(semanticQuery))
+    local norm = Normalize(semanticQuery)
+    if IsStaticAuraFilterDefinition(norm) then return true end
+    -- A vague aesthetic wish and a concept question with a known subject are
+    -- answered here as well; the router hands them over before its late
+    -- correction, search and clarification lanes can turn them into lists.
+    if type(K.AestheticIntentFor) == "function" and K.AestheticIntentFor(norm) then return true end
+    if type(K.IsEarlyConceptQuestion) == "function" and K.IsEarlyConceptQuestion(norm) then return true end
+    return false
 end
 
 local function DirectHelpAnswer(query, opts)
@@ -3475,9 +3506,34 @@ function K.DirectConceptHelp(query, opts)
     return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext(direct))
 end
 
+-- "search menu.auraBlacklistPreset" names one control by its registry key.
+-- That is a lookup of exactly that entry: the aura wording inside the key
+-- must not turn it into a frame clarification, and the concept lanes have
+-- nothing to add to it. Keys are case-sensitive, so the raw text is read.
+local function ExactRegistryKeyQuery(query)
+    local raw = Trim(tostring(query or ""))
+    local rest = raw:match("^[Ss][Ee][Aa][Rr][Cc][Hh]%s+(.+)$")
+        or raw:match("^[Ff][Ii][Nn][Dd]%s+(.+)$") or raw
+    rest = Trim(rest)
+    if rest == "" or rest:find("%s") or not rest:find(".", 1, true) then return nil end
+    if Registry and type(Registry.GetSetting) == "function" and Registry:GetSetting(rest) then
+        return rest
+    end
+    return nil
+end
+
 function K.Answer(query, opts)
     opts = opts or {}
-    if opts.forceSearch ~= true then
+    if opts.forceSearch ~= true and not ExactRegistryKeyQuery(query) then
+        -- A vague aesthetic wish becomes concrete pending choices; a concept
+        -- question with a known subject gets that control's explanation.
+        -- Both are read-only until the player picks a choice.
+        local aesthetic = type(K.AestheticIntentReply) == "function" and K.AestheticIntentReply(query) or nil
+        if aesthetic then return aesthetic end
+        if type(K.IsEarlyConceptQuestion) == "function" and K.IsEarlyConceptQuestion(Normalize(query)) then
+            local concept = K.ConceptQuestionReply(query)
+            if concept then return AsReadOnlyKnowledgeResult(concept) end
+        end
         local changelog = ChangelogAnswer(query)
         if changelog then return AsReadOnlyKnowledgeResult(changelog) end
 
@@ -3601,8 +3657,393 @@ local function ShouldSearchNoMatchCandidates(query)
     return false
 end
 
+-- Aesthetic intent -------------------------------------------------------
+-- "it looks too cluttered", "make it cleaner", "gimme a fatter castbar": no
+-- control is named, but the wish maps onto a handful of concrete controls.
+-- Offer those as numbered pending choices (applied only on selection) and
+-- never write on the sentence itself.
+K.AESTHETIC_INTENTS = {
+    {
+        id = "cluttered",
+        terms = { "cluttered", "clutter", "too busy", "looks busy", "look busy", "messy", "crowded", "overloaded", "too much going on",
+            "too much stuff", "too many icons", "too much text", "information overload" },
+        intro = "That sounds like too much on screen. These are the controls that usually cause it; pick one and I will apply it, nothing changes until you do.",
+        choices = {
+            { key = "auras3.player.buff.max", value = 8, label = "Cap Player Buffs at 8 icons" },
+            { key = "auras3.target.buff.max", value = 8, label = "Cap Target Buffs at 8 icons" },
+            { key = "auras3.target.debuff.max", value = 8, label = "Cap Target Debuffs at 8 icons" },
+            { key = "general.enableGradient", value = false, label = "Turn the bar gradient off" },
+            { key = "player.portraitMode", value = "OFF", label = "Hide the Player portrait" },
+        },
+    },
+    {
+        id = "cleaner",
+        terms = { "cleaner", "clean look", "look clean", "looks clean", "cleaner look", "minimalist", "minimal look", "more minimal",
+            "simpler look", "simple look", "look plain", "looks plain", "too plain", "tidier", "tidy up", "tidy it", "less noisy",
+            "flatter look", "sleek" },
+        intro = "For a cleaner look these are the usual levers; pick one and I will apply it, nothing changes until you do.",
+        choices = {
+            { key = "general.barTexture", value = "Flat", label = "Use the Flat bar texture" },
+            { key = "general.enableGradient", value = false, label = "Turn the bar gradient off" },
+            { key = "player.portraitMode", value = "OFF", label = "Hide the Player portrait" },
+            { key = "target.portraitMode", value = "OFF", label = "Hide the Target portrait" },
+        },
+    },
+    {
+        id = "nicer",
+        terms = { "nicer", "prettier", "look better", "looks better", "better looking", "look good", "look nice", "look great",
+            "look nicer", "looks nicer", "ugly", "hideous", "looks bland", "look bland", "looks boring", "look boring",
+            "more modern", "look modern", "looks modern", "fancier", "look fancy", "looks fancy", "more polished",
+            "look polished", "more stylish", "look stylish" },
+        intro = "Looks are taste, so I will not guess. These are the controls that change the overall style the most; pick one and I will apply it, nothing changes until you do.",
+        choices = {
+            { key = "general.barTexture", value = "Smooth", label = "Use the Smooth bar texture" },
+            { key = "general.enableGradient", value = true, label = "Turn the bar gradient on" },
+            { key = "general.gradientStrength", value = 0.6, label = "Stronger bar gradient (0.6)" },
+            { key = "player.portraitMode", value = "LEFT", label = "Show the Player portrait on the left" },
+            { key = "target.portraitMode", value = "RIGHT", label = "Show the Target portrait on the right" },
+        },
+    },
+    {
+        id = "fatter castbar",
+        terms = { "fatter castbar", "fatter cast bar", "thicker castbar", "thicker cast bar", "chunkier castbar",
+            "chunkier cast bar", "beefier castbar", "beefier cast bar", "bigger castbar", "bigger cast bar",
+            "taller castbar", "taller cast bar", "fat castbar", "fat cast bar", "thick castbar", "thick cast bar" },
+        intro = "A fatter cast bar is its Height. Pick the frame and I will raise it by 6; nothing changes until you do.",
+        find = { frameType = "castbar", attribute = "height", units = { "player", "target", "focus" }, relativeDelta = 6, label = "%s Castbar Height +6" },
+    },
+    {
+        id = "thinner castbar",
+        terms = { "thinner castbar", "thinner cast bar", "slimmer castbar", "slimmer cast bar", "smaller castbar",
+            "smaller cast bar", "shorter castbar", "shorter cast bar", "thin castbar", "thin cast bar", "slim castbar", "slim cast bar" },
+        intro = "A thinner cast bar is its Height. Pick the frame and I will lower it by 6; nothing changes until you do.",
+        find = { frameType = "castbar", attribute = "height", units = { "player", "target", "focus" }, relativeDelta = -6, label = "%s Castbar Height -6" },
+    },
+    {
+        id = "fatter frames",
+        terms = { "fatter frames", "fatter frame", "thicker frames", "thicker frame", "chunkier frames", "chunkier frame",
+            "taller frames", "taller frame", "fatter health bar", "thicker health bar",
+            "fatter bars", "thicker bars", "fat frames", "thick frames" },
+        intro = "Fatter frames means their Height. Pick the frame and I will raise it by 10; nothing changes until you do.",
+        find = { frameType = "unitframe", attribute = "height", units = { "player", "target", "focus" }, relativeDelta = 10, label = "%s Frame Height +10" },
+    },
+}
+
+local AESTHETIC_UNIT_LABELS = { player = "Player", target = "Target", focus = "Focus" }
+
+-- Destructive resets ------------------------------------------------------
+-- "reset everything" can mean the active profile or a factory reset. Offer
+-- both as numbered pending choices; each carries confirmRequired, so the
+-- selected reset still asks before it runs. Nothing runs on this sentence.
+-- A reset that names a frame or element is a scoped reset and stays with
+-- the parser.
+K.DESTRUCTIVE_RESET_TERMS = {
+    "reset everything", "reset all", "reset all settings", "reset all my settings", "reset all of my settings",
+    "reset the whole addon", "reset msuf", "reset the addon", "reset this addon", "wipe everything",
+    "wipe all settings", "wipe my settings", "start over", "start from scratch", "factory reset",
+    "reset to defaults", "reset to default", "reset all to default", "reset all to defaults",
+    "reset everything to default", "reset everything to defaults", "default everything",
+    "restore defaults", "restore all defaults", "restore the defaults", "back to defaults", "back to default settings",
+}
+K.DESTRUCTIVE_RESET_SCOPE_WORDS = {
+    "player", "target", "focus", "pet", "boss", "party", "raid", "castbar", "cast bar", "aura", "auras",
+    "buff", "buffs", "debuff", "debuffs", "text", "color", "colour", "colors", "colours", "font", "fonts",
+    "position", "positions", "size", "sizes", "layout", "frame", "frames", "bar", "bars", "portrait",
+    "indicator", "indicators", "profile", "profiles", "class power", "class resources", "custom", "container",
+}
+-- "i reset everything by accident" reports what happened; it wants the
+-- recovery article, not a fresh reset offer.
+K.DESTRUCTIVE_RESET_STANDDOWN_TERMS = {
+    "by accident", "accidentally", "by mistake", "i reset", "i have reset", "ive reset", "i did", "i just reset",
+    "was reset", "got reset", "happened", "after i", "undo", "revert", "recover", "restore my", "get back",
+}
+function K.DestructiveResetChoices(query)
+    local norm = Normalize(query)
+    if norm == "" or not (Registry and type(Registry.GetAction) == "function") then return nil end
+    for i = 1, #K.DESTRUCTIVE_RESET_STANDDOWN_TERMS do
+        if StringContainsPhrase(norm, K.DESTRUCTIVE_RESET_STANDDOWN_TERMS[i]) then return nil end
+    end
+    local matched = false
+    for i = 1, #K.DESTRUCTIVE_RESET_TERMS do
+        if StringContainsPhrase(norm, K.DESTRUCTIVE_RESET_TERMS[i]) then matched = true break end
+    end
+    if not matched then return nil end
+    for i = 1, #K.DESTRUCTIVE_RESET_SCOPE_WORDS do
+        if StringContainsPhrase(norm, K.DESTRUCTIVE_RESET_SCOPE_WORDS[i]) then return nil end
+    end
+    local choices = {}
+    local resetProfile = Registry:GetAction("reset_profile")
+    if resetProfile then
+        choices[#choices + 1] = {
+            action = resetProfile, args = {}, confirmRequired = true,
+            label = "Reset Active Profile (keeps your other profiles)",
+            summary = "Resets the active MSUF profile after confirmation.",
+        }
+    end
+    local factory = Registry:GetAction("factory_reset_all")
+    if factory then
+        choices[#choices + 1] = {
+            action = factory, args = {}, confirmRequired = true,
+            label = "Factory Reset All (every profile and every setting)",
+            summary = "Resets all MSUF data after confirmation.",
+        }
+    end
+    if #choices == 0 or type(A.SetPendingChoices) ~= "function" then return nil end
+    local choiceText = A.SetPendingChoices(choices)
+    if type(choiceText) ~= "string" then return nil end
+    return {
+        text = "'Everything' can mean two very different resets in MSUF, so I did not run either one. Pick one and I will ask you to confirm it before anything is reset:\n" .. choiceText,
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Assistant destructive reset choices",
+    }
+end
+
+-- The intent a sentence carries, or nil. Cheap: a handful of phrase
+-- scans, no registry access, so the router-side predicate can call it on
+-- every sentence that reaches the knowledge hand-off.
+-- A named frame, lane or page keeps its reviewed readability and clutter
+-- planning lanes ("raid frames are too busy", "my target debuffs are too
+-- busy", "make this less cluttered"); the aesthetic choices answer only the
+-- whole-UI wording ("it looks too cluttered", "the frames look ugly").
+K.AESTHETIC_INTENT_STANDDOWN_TERMS = {
+    "raid frame", "party frame", "group frame", "player frame", "target frame", "focus frame", "pet frame", "boss frame",
+    "debuff", "buff", "aura", "nameplate", "tooltip", "this page", "this section",
+    "make this", "this less", "this more", "these less", "these more", "here less", "here more",
+}
+function K.AestheticIntentFor(norm)
+    if type(norm) ~= "string" or norm == "" or norm:find("%d") then return nil end
+    for i = 1, #K.AESTHETIC_INTENT_STANDDOWN_TERMS do
+        if StringContainsPhrase(norm, K.AESTHETIC_INTENT_STANDDOWN_TERMS[i]) then return nil end
+    end
+    for i = 1, #K.AESTHETIC_INTENTS do
+        local candidate = K.AESTHETIC_INTENTS[i]
+        for j = 1, #candidate.terms do
+            if StringContainsPhrase(norm, candidate.terms[j]) then return candidate end
+        end
+    end
+    return nil
+end
+
+function K.AestheticIntentReply(query)
+    local norm = Normalize(query)
+    if not (Registry and type(Registry.GetSetting) == "function") then return nil end
+    local intent = K.AestheticIntentFor(norm)
+    if not intent then return nil end
+    local choices = {}
+    if intent.find then
+        local units = intent.find.units
+        local named = A.Parser and type(A.Parser.DetectUnits) == "function" and A.Parser.DetectUnits(norm) or {}
+        if #named > 0 then units = named end
+        for i = 1, #units do
+            local found = type(Registry.FindSettings) == "function"
+                and Registry:FindSettings({ unit = units[i], frameType = intent.find.frameType, attribute = intent.find.attribute }) or nil
+            local setting = found and found[1]
+            if setting and setting.type == "number" then
+                local unitLabel = AESTHETIC_UNIT_LABELS[units[i]] or tostring(setting.unit or units[i])
+                choices[#choices + 1] = {
+                    changes = { { setting = setting, relativeDelta = intent.find.relativeDelta } },
+                    label = string.format(intent.find.label, unitLabel),
+                    summary = "Applies the selected aesthetic adjustment.",
+                }
+            end
+        end
+    else
+        for i = 1, #intent.choices do
+            local spec = intent.choices[i]
+            local setting = Registry:GetSetting(spec.key)
+            local valid = setting ~= nil
+            if valid and type(setting.values) == "table" and #setting.values > 0 then
+                valid = false
+                for j = 1, #setting.values do
+                    if setting.values[j] == spec.value then valid = true break end
+                end
+            end
+            if valid and type(setting.get) == "function" and setting.get() == spec.value then valid = false end
+            if valid then
+                choices[#choices + 1] = { setting = setting, value = spec.value, label = spec.label }
+            end
+        end
+    end
+    if #choices == 0 then return nil end
+    local choiceText = type(A.SetPendingChoices) == "function" and A.SetPendingChoices(choices) or nil
+    if type(choiceText) ~= "string" then return nil end
+    return {
+        text = tostring(intent.intro) .. "\n" .. choiceText,
+        status = "ambiguous",
+        result = "ambiguous",
+        summary = "Assistant aesthetic intent choices",
+    }
+end
+
+-- Concept questions ------------------------------------------------------
+-- "what does the fill axis do" / "explain X": resolve X against registry
+-- labels and aliases (synonym map, then the typo corrector, then whole-token
+-- overlap) and answer with that control's explanation. "difference between
+-- A and B" explains both.
+K.CONCEPT_SUBJECT_SYNONYMS = {
+    ["fill axis"] = "vertical bar fill", ["fill direction axis"] = "vertical bar fill",
+    ["bar fill axis"] = "vertical bar fill", ["fill orientation"] = "vertical bar fill",
+    ["bar fill orientation"] = "vertical bar fill",
+}
+K.CONCEPT_QUESTION_LEADS = {
+    "what does the ", "what does ", "what do the ", "what do ", "what is the ", "what is ", "whats the ", "whats ",
+    "what's the ", "what's ", "what are the ", "what are ", "what would ", "what will ",
+    "can you explain the ", "can you explain ", "could you explain ", "explain the ", "explain ",
+    "tell me about the ", "tell me about ", "tell me what the ", "tell me what ", "describe the ", "describe ",
+    "how does the ", "how does ", "how do the ", "what happens with the ", "what happens with ",
+}
+K.CONCEPT_QUESTION_TAILS = {
+    " actually do", " really do", " do exactly", " exactly do", " do", " does", " mean", " for", " used for", " good for",
+    " control", " change", " affect", " setting", " option",
+}
+
+local function ConceptSubjectTokens(subject)
+    local tokens, seen = {}, {}
+    for token in subject:gmatch("%a[%a%d]*") do
+        if #token >= 2 and not seen[token] then seen[token] = true tokens[#tokens + 1] = token end
+    end
+    return tokens
+end
+
+function K.ConceptSubjectFromQuestion(norm)
+    local subject
+    for i = 1, #K.CONCEPT_QUESTION_LEADS do
+        local lead = K.CONCEPT_QUESTION_LEADS[i]
+        if norm:sub(1, #lead) == lead then subject = norm:sub(#lead + 1) break end
+    end
+    if not subject then return nil end
+    subject = subject:gsub("%s*%?+%s*$", "")
+    local trimmed = true
+    while trimmed do
+        trimmed = false
+        for i = 1, #K.CONCEPT_QUESTION_TAILS do
+            local tail = K.CONCEPT_QUESTION_TAILS[i]
+            if #subject > #tail and subject:sub(-#tail) == tail then
+                subject = subject:sub(1, #subject - #tail)
+                trimmed = true
+            end
+        end
+    end
+    subject = subject:gsub("^the%s+", ""):gsub("^a%s+", ""):gsub("^my%s+", ""):gsub("^this%s+", ""):gsub("^that%s+", "")
+    subject = subject:gsub("^%s+", ""):gsub("%s+$", "")
+    if subject == "" or subject == norm then return nil end
+    return subject
+end
+
+-- Whole-token overlap between the subject and every label/alias. A label or
+-- alias must contain every subject token; the shortest such name wins. Ties
+-- across frames ("Vertical Bar Fill" exists per unit) are returned together
+-- so the caller can ask which frame. Cold path: only reached after every
+-- exact lane has declined.
+function K.ConceptSubjectCandidates(subject)
+    local tokens = ConceptSubjectTokens(subject)
+    if #tokens == 0 or not (Registry and type(Registry.AllSettings) == "function") then return {} end
+    local best, bestLength = {}, nil
+    local EMPTY = {}
+    for _, setting in ipairs(Registry:AllSettings()) do
+        local names = { setting.label }
+        for _, list in ipairs({ setting.exactAliases or EMPTY, setting.aliases or EMPTY }) do
+            if type(list) == "table" then for j = 1, #list do names[#names + 1] = list[j] end end
+        end
+        local settingBest
+        for n = 1, #names do
+            local name = Normalize(names[n] or "")
+            if name ~= "" then
+                local padded = " " .. name .. " "
+                local all = true
+                for t = 1, #tokens do
+                    if not padded:find(" " .. tokens[t] .. " ", 1, true) then all = false break end
+                end
+                if all and (not settingBest or #name < settingBest) then settingBest = #name end
+            end
+        end
+        if settingBest then
+            if not bestLength or settingBest < bestLength then
+                best, bestLength = { setting }, settingBest
+            elseif settingBest == bestLength then
+                best[#best + 1] = setting
+            end
+        end
+    end
+    return best
+end
+
+function K.ExplainConceptSubject(subject)
+    if type(subject) ~= "string" or subject == "" then return nil end
+    if type(A.RouterTryRegistrySettingExplainShortcut) ~= "function" then return nil end
+    local resolved = K.CONCEPT_SUBJECT_SYNONYMS[subject] or subject
+    -- A label shared by every unit frame ("Vertical Bar Fill") gets the
+    -- cross-unit explanation rather than one arbitrary frame's copy.
+    if type(A.RouterLocationLaneReply) == "function" then
+        local shared = A.RouterLocationLaneReply("explain " .. resolved)
+        if type(shared) == "table" and tostring(shared.summary or ""):find("explanation", 1, true) then return shared end
+    end
+    local explained = A.RouterTryRegistrySettingExplainShortcut("explain " .. resolved)
+    if explained then return explained end
+    local router = A.RouterPrivate
+    if type(router) == "table" and type(router.CorrectControlTypos) == "function" then
+        local corrected = router.CorrectControlTypos(resolved)
+        if corrected and corrected ~= resolved then
+            corrected = K.CONCEPT_SUBJECT_SYNONYMS[corrected] or corrected
+            explained = A.RouterTryRegistrySettingExplainShortcut("explain " .. corrected)
+            if explained then return explained end
+            resolved = corrected
+        end
+    end
+    local candidates = K.ConceptSubjectCandidates(resolved)
+    if #candidates == 1 then
+        return A.RouterTryRegistrySettingExplainShortcut("explain " .. tostring(candidates[1].label or resolved))
+    end
+    if #candidates > 1 and #candidates <= 8 then
+        local labels = {}
+        for i = 1, #candidates do labels[#labels + 1] = tostring(candidates[i].label or "") end
+        return {
+            text = "Several MSUF controls match '" .. tostring(subject) .. "'. Which one do you mean?"
+                .. "\n" .. table.concat(labels, " | ")
+                .. "\nName the frame and I will explain that copy. I did not change anything.",
+            status = "info",
+            summary = "Asks which frame's control a concept question means.",
+        }
+    end
+    return nil
+end
+
+function K.ConceptQuestionReply(query)
+    local norm = Normalize(query)
+    if norm == "" then return nil end
+    local a, b = norm:match("^what%s+is%s+the%s+difference%s+between%s+(.-)%s+and%s+(.+)$")
+    if not a then a, b = norm:match("^whats%s+the%s+difference%s+between%s+(.-)%s+and%s+(.+)$") end
+    if not a then a, b = norm:match("^difference%s+between%s+(.-)%s+and%s+(.+)$") end
+    if a and b then
+        b = b:gsub("%s*%?+%s*$", "")
+        local first = K.ExplainConceptSubject(a:gsub("^the%s+", ""))
+        local second = K.ExplainConceptSubject(b:gsub("^the%s+", ""))
+        if first and second then
+            return {
+                text = tostring(first.text) .. "\n\n" .. tostring(second.text),
+                status = "info",
+                summary = "Assistant concept comparison",
+                searchResults = first.searchResults or second.searchResults,
+            }
+        end
+        return first or second
+    end
+    local subject = K.ConceptSubjectFromQuestion(norm)
+    if not subject then return nil end
+    return K.ExplainConceptSubject(subject)
+end
+
 function K.NoMatch(query)
     local results
+    -- A whole-addon reset is offered as confirmation-gated choices, never
+    -- run and never turned into a search list.
+    local destructiveReset = K.DestructiveResetChoices(query)
+    if destructiveReset then return destructiveReset end
+    -- A vague aesthetic wish is answered with concrete choices before any
+    -- search or topic article can turn it into a list of unrelated results.
+    local aesthetic = K.AestheticIntentReply(query)
+    if aesthetic then return aesthetic end
     if ShouldSearchNoMatchCandidates(query) then
         results = K.Search(query, 3, { ignoreCurrentPage = true })
     end
@@ -3624,6 +4065,14 @@ function K.NoMatch(query)
             summary = "Assistant help fallback with close matches",
             searchResults = ResultFollowups(results, 3),
         }
+    end
+    -- A concept question about a control that no exact lane recognised
+    -- ("what does the fill axis do"): a control explanation beats the topic
+    -- blurb whenever the subject resolves against labels and aliases with
+    -- the synonym map, the typo corrector and token overlap.
+    do
+        local concept = K.ConceptQuestionReply(query)
+        if concept then return concept end
     end
     -- Nothing scored well enough to list confidently. That is not a reason to
     -- dead-end: name the area the words point at, so the player always leaves
@@ -3792,8 +4241,8 @@ function K.NoMatch(query)
         local plan = type(router) == "table" and type(router.NamedBooleanIntentPlan) == "function"
             and router.NamedBooleanIntentPlan(query) or nil
         if plan and type(A.ExecutePlan) == "function" then
-            local ok, result = pcall(A.ExecutePlan, plan, { sourceText = query })
-            if ok and type(result) == "table" and result.text then return result end
+            local result = A.ExecutePlan(plan, { sourceText = query })
+            if type(result) == "table" and result.text then return result end
         end
     end
     return {

@@ -14,6 +14,8 @@
 --   /msufcoverage smoke          in-game acceptance checklist
 --   /msufcoverage smoke pass <id>|fail <id> <note>|block <id> <note>|reset
 --   /msufcoverage gate           summary gate for smoke + manifest + coverage
+--   /msufcoverage perf start     snapshot Assistant CPU/memory (needs scriptProfile 1)
+--   /msufcoverage perf stop      print the deltas since the start snapshot
 --
 -- The audit only reads; it never mutates the DB or the registry.
 local addonName, MSUF = ...
@@ -614,6 +616,12 @@ local ACCEPTANCE_SMOKE_CASES = {
     SmokeCase("control_action", "M1", "Open Dashboard > Display & Recovery.",
         "explain Copy Support Link; then: run it",
         "Explains the real button/action first, then runs that exact action after the explicit command."),
+    SmokeCase("perf_idle_60s", "M5", "Run /console scriptProfile 1 and /reload. Open the MSUF menu once so the Assistant runtime is loaded, run /msufcoverage perf start, then close the menu.",
+        "Stay out of combat with the menu closed for 60 seconds, then run /msufcoverage perf stop.",
+        "The printed Assistant CPU delta is ~0 ms (only the slash command itself may register) and memory does not grow over the 60 s window: the loaded runtime does no idle work while the menu is closed."),
+    SmokeCase("perf_combat_pull", "M5", "With scriptProfile 1 active and the Assistant runtime loaded, run /msufcoverage perf start right before a pull.",
+        "Fight one pull (dungeon trash or a target dummy, 30+ seconds), leave combat, then run /msufcoverage perf stop.",
+        "The printed Assistant CPU delta is ~0 ms across the combat window and no Assistant output, history entry, timer animation or queue work appears during combat."),
 }
 
 local function SmokeStore()
@@ -854,9 +862,113 @@ Audit.StoreAcceptanceGate = StoreAcceptanceGate
 Audit.BuildAcceptanceGateReport = BuildAcceptanceGateReport
 Audit.BuildGeneratedReport = BuildGeneratedReport
 
+-- ---------------------------------------------------------------------------
+-- In-game perf proof: /msufcoverage perf start | stop.
+-- Two manual snapshots and nothing else: no timer, no event, no hook. The
+-- owner takes the start snapshot, performs the scenario (menu closed for
+-- 60 s, or one combat pull), then takes the stop snapshot. The start
+-- snapshot lives in a runtime-only local; nothing reaches SavedVariables.
+-- ---------------------------------------------------------------------------
+local PERF_ADDONS = { "MidnightSimpleUnitFrames_Assistant", "MidnightSimpleUnitFrames" }
+local perfStartSnapshot = nil
+
+local function PerfCVar(name)
+    local cvar = _G.C_CVar
+    if type(cvar) == "table" and type(cvar.GetCVar) == "function" then return cvar.GetCVar(name) end
+    if type(_G.GetCVar) == "function" then return _G.GetCVar(name) end
+    return nil
+end
+
+local function PerfAddOnLoaded(name)
+    local addons = _G.C_AddOns
+    if type(addons) == "table" and type(addons.IsAddOnLoaded) == "function" then return addons.IsAddOnLoaded(name) == true end
+    if type(_G.IsAddOnLoaded) == "function" then return _G.IsAddOnLoaded(name) == true end
+    return nil
+end
+
+local function PerfSnapshot()
+    local snap = { cpu = {}, memory = {} }
+    if type(_G.GetTime) == "function" then snap.time = tonumber(_G.GetTime()) end
+    if type(_G.UpdateAddOnCPUUsage) == "function" and type(_G.GetAddOnCPUUsage) == "function" then
+        _G.UpdateAddOnCPUUsage()
+        for i = 1, #PERF_ADDONS do snap.cpu[PERF_ADDONS[i]] = tonumber(_G.GetAddOnCPUUsage(PERF_ADDONS[i])) end
+    end
+    if type(_G.UpdateAddOnMemoryUsage) == "function" and type(_G.GetAddOnMemoryUsage) == "function" then
+        _G.UpdateAddOnMemoryUsage()
+        for i = 1, #PERF_ADDONS do snap.memory[PERF_ADDONS[i]] = tonumber(_G.GetAddOnMemoryUsage(PERF_ADDONS[i])) end
+    end
+    snap.scriptProfile = tostring(PerfCVar("scriptProfile") or "")
+    snap.assistantLoaded = PerfAddOnLoaded(PERF_ADDONS[1])
+    snap.runtimeReady = type(A.Submit) == "function"
+    return snap
+end
+
+local function PerfProfileHint(snap)
+    if snap.scriptProfile == "1" then return nil end
+    return "scriptProfile is " .. (snap.scriptProfile ~= "" and snap.scriptProfile or "unset")
+        .. ": CPU numbers stay 0 until you run /console scriptProfile 1 and /reload."
+end
+
+local function PerfLoadedText(snap)
+    local loaded = snap.assistantLoaded
+    local loadedText = loaded == nil and "unknown" or (loaded and "yes" or "no")
+    return ("Assistant addon loaded: %s, runtime ready: %s"):format(loadedText, snap.runtimeReady and "yes" or "no")
+end
+
+local function PerfStart()
+    perfStartSnapshot = PerfSnapshot()
+    print("|cffffd700MSUF:|r perf start snapshot taken. " .. PerfLoadedText(perfStartSnapshot))
+    local hint = PerfProfileHint(perfStartSnapshot)
+    if hint then print("|cffffd700MSUF:|r " .. hint) end
+    print("|cffffd700MSUF:|r now close the menu for 60 s (idle proof) or do one combat pull, then run /msufcoverage perf stop.")
+end
+
+local function PerfDelta(startSet, stopSet, name)
+    local a, b = tonumber(startSet[name]), tonumber(stopSet[name])
+    if a == nil or b == nil then return nil end
+    return b - a
+end
+
+local function PerfNumberText(value, unit)
+    if value == nil then return "n/a" end
+    return ("%+.2f %s"):format(value, unit)
+end
+
+local function PerfStop()
+    if not perfStartSnapshot then
+        print("|cffffd700MSUF:|r no perf start snapshot; run /msufcoverage perf start first.")
+        return
+    end
+    local stop = PerfSnapshot()
+    local elapsed = (tonumber(stop.time) and tonumber(perfStartSnapshot.time)) and (stop.time - perfStartSnapshot.time) or nil
+    print(("|cffffd700MSUF:|r perf stop after %s. %s"):format(elapsed and ("%.1f s"):format(elapsed) or "n/a", PerfLoadedText(stop)))
+    for i = 1, #PERF_ADDONS do
+        local name = PERF_ADDONS[i]
+        print(("|cffffd700MSUF:|r   %s: CPU %s, memory %s"):format(name,
+            PerfNumberText(PerfDelta(perfStartSnapshot.cpu, stop.cpu, name), "ms"),
+            PerfNumberText(PerfDelta(perfStartSnapshot.memory, stop.memory, name), "KB")))
+    end
+    local hint = PerfProfileHint(stop)
+    if hint then print("|cffffd700MSUF:|r " .. hint) end
+    perfStartSnapshot = nil
+end
+
+Audit.PerfSnapshot = PerfSnapshot
+Audit.PerfStart = PerfStart
+Audit.PerfStop = PerfStop
+Audit.HasPerfStart = function() return perfStartSnapshot ~= nil end
+
 local function RunCommand(msg)
     local rawMsg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     msg = rawMsg:lower()
+    if msg == "perf start" then
+        PerfStart()
+        return
+    end
+    if msg == "perf stop" or msg == "perf" then
+        PerfStop()
+        return
+    end
     if msg == "gate" or msg == "acceptance gate" or msg == "status gate" then
         local text, gate = BuildAcceptanceGateReport()
         ShowReport("MSUF Assistant Acceptance Gate", text)

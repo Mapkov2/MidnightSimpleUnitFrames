@@ -265,6 +265,64 @@ Registry:RegisterSetting({
     combatSafe = false,
     description = "Controls the Boss Layout toggle that highlights the unit targeted by boss frames.",
 })
+local function ApplyBossMarker()
+    if type(M.RequestUnitApply) == "function" then
+        M.RequestUnitApply("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
+    else
+        CallGlobal("MSUF_UFPreview_RequestRefresh", "MSUF2_BOSS_TARGET_HIGHLIGHT")
+    end
+end
+Registry:RegisterSetting({
+    key = "general.bossTargetHighlightStyle", label = "Boss Target Highlight Style", page = "uf_boss",
+    category = "Boss Frames / Boss Target Highlight", unit = "boss", frameType = "unitframe",
+    attribute = "bossTargetHighlightStyle", type = "enum",
+    values = { "OFF", "BORDER", "ARROW", "DOUBLE_ARROW", "TRIPLE_ARROW", "DIAMOND", "CROSS", "BORDER_ARROW" },
+    aliases = { "boss target highlight style", "boss target marker style" },
+    valueAliases = { off = "OFF", border = "BORDER", arrow = "ARROW", ["double arrow"] = "DOUBLE_ARROW",
+        ["triple arrow"] = "TRIPLE_ARROW", diamond = "DIAMOND", cross = "CROSS", ["border and arrow"] = "BORDER_ARROW" },
+    get = function()
+        local g, conf = GeneralDB(), UnitDB("boss")
+        local mode = conf.hlOverride == true and conf.bossTargetOutlineMode or nil
+        if mode == nil then mode = g.bossTargetOutlineMode end
+        if mode == 0 or (mode == nil and g.bossTargetHighlightEnabled == false) then return "OFF" end
+        return g.bossTargetHighlightStyle or "BORDER"
+    end,
+    set = function(value)
+        local g = GeneralDB()
+        g.bossTargetHighlightEnabled = value ~= "OFF"
+        g.bossTargetOutlineMode = value ~= "OFF" and 1 or 0
+        UnitDB("boss").bossTargetOutlineMode = nil
+        if value ~= "OFF" then g.bossTargetHighlightStyle = value end
+    end,
+    apply = ApplyBossMarker, combatSafe = false,
+})
+for _, row in ipairs({
+    { "bossTargetIndicatorAnchor", "Marker Anchor", "LEFT", { "LEFT", "RIGHT", "TOP", "BOTTOM", "CENTER", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" } },
+    { "bossTargetIndicatorDirection", "Arrow Direction", "RIGHT", { "RIGHT", "LEFT", "UP", "DOWN" } },
+    { "bossTargetIndicatorLayout", "Marker Layout", "SINGLE", { "SINGLE", "BOTH_IN", "BOTH_OUT" } },
+}) do
+    RegisterUnitEnum("boss", row[1], row[1], row[2], row[3], row[4], MakeAliases("boss", row[2]), {
+        category = "Boss Target Highlight", applyOpts = { preview = true },
+    })
+end
+for _, row in ipairs({
+    { "bossTargetIndicatorSize", "Marker Size", 24, 8, 96 },
+    { "bossTargetIndicatorOffsetX", "Marker X Offset", -28, -500, 500 },
+    { "bossTargetIndicatorOffsetY", "Marker Y Offset", 0, -500, 500 },
+}) do
+    RegisterUnitNumberSetting("boss", row[1], row[1], row[2], row[3], row[4], row[5], MakeAliases("boss", row[2]), {
+        category = "Boss Target Highlight", applyOpts = { preview = true }, step = 1,
+    })
+end
+Registry:RegisterSetting({
+    key = "boss.bossTargetMultipleOnly", label = "Only Highlight With Multiple Boss Frames", page = "uf_boss",
+    category = "Boss Frames / Boss Target Highlight", unit = "boss", frameType = "unitframe",
+    attribute = "bossTargetMultipleOnly", type = "boolean",
+    aliases = { "boss target highlight multiple only", "only highlight with multiple boss frames" },
+    get = function() return UnitDB("boss").bossTargetMultipleOnly == true end,
+    set = function(value) UnitDB("boss").bossTargetMultipleOnly = value == true end,
+    apply = ApplyBossMarker, combatSafe = false,
+})
 RegisterUnitNumberSetting("boss", "spacing", "spacing", "Boss Spacing", -36, -400, 0, MakeAliases("boss", "spacing", "frame spacing", "closer together", "farther apart", "gap between frames", "distance between frames"), {
     category = "Boss Layout",
     applyOpts = { preview = true },

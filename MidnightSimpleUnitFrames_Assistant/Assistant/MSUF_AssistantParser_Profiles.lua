@@ -1266,6 +1266,42 @@ local function ParseProfile(text, raw)
                 summary = "Deletes the selected MSUF profile.",
             } or nil
         end
+        -- "delete my profile" names no profile. Offer the existing ones as
+        -- choices; the selected delete still asks for confirmation, and the
+        -- protected Default profile is not offered.
+        if ContainsAny(text, ProfileData.PROFILE_NOUN_TERMS or { "profile", "profiles" })
+            and not ContainsAny(text, { "spell", "aura", "blacklist", "whitelist", "entry", "entries", "list", "color", "colour", "preset" })
+        then
+            local action = Registry and Registry:GetAction("delete_profile")
+            local global = _G.MSUF_GlobalDB
+            local profiles = action and type(global) == "table" and type(global.profiles) == "table" and global.profiles or nil
+            if profiles then
+                local names = {}
+                for profileName, profile in pairs(profiles) do
+                    if type(profile) == "table" and tostring(profileName) ~= "Default" then names[#names + 1] = tostring(profileName) end
+                end
+                table.sort(names)
+                if #names > 0 then
+                    local choices = {}
+                    for i = 1, math.min(#names, 9) do
+                        choices[#choices + 1] = {
+                            action = action,
+                            args = { name = names[i] },
+                            confirmRequired = true,
+                            label = "Delete profile " .. names[i],
+                            summary = "Deletes the selected MSUF profile.",
+                        }
+                    end
+                    return {
+                        kind = "ambiguous",
+                        choices = choices,
+                        choiceIntro = "Which profile should I delete? Deleting cannot be undone, so I will ask you to confirm the one you pick. The Default profile is protected.",
+                        label = "Delete which profile",
+                        summary = "Asks which profile to delete before confirming.",
+                    }
+                end
+            end
+        end
     end
 
     if implicitSwitchName or ContainsAny(text, ProfileData.PROFILE_SWITCH_TERMS) then

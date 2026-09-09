@@ -1057,6 +1057,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     SetDefault(db.bars, "altManaWidth", 0)
     SetDefault(db.bars, "altManaOffsetX", 0)
     SetDefault(db.bars, "showGuardianIronfur", false)
+    SetDefault(db.bars, "showSweepingStrikes", false)
+    SetDefault(db.bars, "showArcaneSoul", false)
     SetDefault(db.bars, "guardianIronfurShowHashLines", true)
     -- Performance baseline: native interpolation is an
     -- explicit visual option, never an implicit cost on a fresh profile.
@@ -4403,6 +4405,15 @@ local function fill(key, defaults)
         end
     end
     local textDefaults = {
+        nameTextMouseover = false,
+        hpTextMouseover = false,
+        powerTextMouseover = false,
+        nameTextMouseoverFadeIn = 0,
+        nameTextMouseoverFadeOut = 0,
+        hpTextMouseoverFadeIn = 0,
+        hpTextMouseoverFadeOut = 0,
+        powerTextMouseoverFadeIn = 0,
+        powerTextMouseoverFadeOut = 0,
         nameTextAnchor = "TOPLEFT",
         nameOffsetX   = 7,
         nameOffsetY   = -4,
@@ -4873,6 +4884,7 @@ local function fill(key, defaults)
             u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
         end
         PortraitDefault("portraitClassStyle", "BLIZZARD")
+        if u.portraitClickable == nil then u.portraitClickable = false end
         u.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(u.portraitClassStyle)
         local inferredPortraitSizeMode
         if not useLegacyBaseline and u.portraitSizeMode == nil then

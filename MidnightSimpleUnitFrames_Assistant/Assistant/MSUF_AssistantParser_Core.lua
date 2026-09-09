@@ -58,6 +58,15 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     -- "the personal castbar" is the player's castbar; left untranslated it
     -- fuzzy-matched the "Personalize with guided setup" action instead.
     personal = "player",
+    -- Three-letter verb and noun typos the edit-distance corrector refuses
+    -- (it needs four letters): "mak my helth bar biger", "nmae text".
+    mak = "make",
+    nmae = "name",
+    naem = "name",
+
+    shw = "show",
+    trun = "turn",
+    tunr = "turn",
     -- German element nouns with no English cognate in the term lists. These
     -- are direct translations (safe under the list-normalization rule above:
     -- meaning is preserved, unlike the banned comparative mappings).
@@ -563,6 +572,14 @@ local ACTIONABLE_LEADING_PREFIXES = {
     "just",
     "quickly",
     "go ahead and",
+    -- "nah bring the target frame back": a change of mind in front of a
+    -- complete request. Only whole leading interjections; a bare "no" stays
+    -- the pending-confirmation reply it is.
+    "nah",
+    "nope",
+    "actually",
+    "wait",
+    "hmm",
     "i want to",
     "i wanna",
     "i need to",
@@ -1961,6 +1978,10 @@ local NON_MUTATING_PROBLEM_TERMS = {
     "misplaced", "empty", "not filling", "does not fill", "doesnt fill",
     "too faded", "too transparent", "too small",
     "too far apart", "too busy", "hard to see", "hard to read",
+    -- "my frames look off" is a complaint, not Player Frame Enabled = off.
+    "looks off", "look off", "looks weird", "look weird", "looks wrong", "look wrong",
+    "looks strange", "look strange", "looks odd", "look odd", "seems off", "seem off",
+    "looks broken", "look broken", "looks bad", "look bad",
     "weg", "fehlt", "fehlen", "fehlende", "fehlender", "fehlendes", "fehlenden", "fehlgeschlagen",
     "verschwunden", "nicht angezeigt", "wird nicht angezeigt",
     "werden nicht angezeigt", "nicht sichtbar", "unsichtbar", "versteckt", "ausgeblendet",
@@ -2091,9 +2112,98 @@ local function StartsWithAnyPhrase(text, phrases)
     return false
 end
 
+-- "is player name on" / "is the target castbar enabled":
+-- a yes/no question about a control's CURRENT state. The question mark is
+-- optional -- players drop it -- and without it the polarity word at the end
+-- was read as the value to write ("is player name on" switched the name on).
+-- No imperative can start with these openers, so the shape is safe to treat
+-- as read-only whatever follows.
+P.STATE_QUESTION_OPENERS = {
+    "is", "are", "does", "do", "has", "have", "isnt", "arent", "was", "were",
+}
+P.STATE_QUESTION_TAILS = {
+    "on", "off", "enabled", "disabled", "shown", "hidden", "active", "inactive",
+    "visible", "invisible", "checked", "unchecked", "turned on", "turned off",
+    "switched on", "switched off", "activated", "deactivated", "showing",
+}
+P.STATE_QUESTION_TRAILING_FILLER = {
+    "right now", "now", "currently", "at the moment", "atm", "already", "yet",
+    "still", "or not",
+}
+local function StateQuestionShape(normalized)
+    local norm = tostring(normalized or ""):gsub("%s*%?+%s*$", "")
+    if norm == "" then return false end
+    local opener = norm:match("^(%a+)%s")
+    if not opener then return false end
+    local openerOk = false
+    for i = 1, #P.STATE_QUESTION_OPENERS do
+        if opener == P.STATE_QUESTION_OPENERS[i] then openerOk = true; break end
+    end
+    if not openerOk then return false end
+    -- "does msuf have X" / "is there X" are existence questions, owned elsewhere.
+    if norm:match("^is%s+there%s") or norm:match("^are%s+there%s") then return false end
+    local stripped = true
+    while stripped do
+        stripped = false
+        for i = 1, #P.STATE_QUESTION_TRAILING_FILLER do
+            local filler = P.STATE_QUESTION_TRAILING_FILLER[i]
+            if norm:sub(-#filler - 1) == " " .. filler then
+                norm = norm:sub(1, -#filler - 2)
+                stripped = true
+            end
+        end
+    end
+    for i = 1, #P.STATE_QUESTION_TAILS do
+        local tail = P.STATE_QUESTION_TAILS[i]
+        if norm:sub(-#tail - 1) == " " .. tail then return true end
+    end
+    return false
+end
+P.IsStateQuestion = function(text) return StateQuestionShape(Normalize(text)) end
+
+-- "show me" opens a control when what follows is a control's name. When it
+-- describes a RESULT instead -- a quantity ("show me how much maximum health
+-- i lost") or a relative clause ("show me the healing that is on its way") --
+-- it is filler in front of an enable request. Shared by the intent reader,
+-- the Router's navigation opener and its named-label lookup so all three
+-- agree on which "show me" sentences are lookups.
+P.SHOW_ME_RESULT_MARKERS = {
+    " how much ", " how many ", " how far ", " how long ", " how often ",
+    " that is ", " that are ", " which is ", " which are ", " being ",
+    " i lost ", " i have lost ", " when i ", " when my ", " if i ", " whether ",
+}
+function P.ShowMeDescribesResult(text)
+    local hay = " " .. Normalize(text) .. " "
+    if not hay:find("^%s*show%s+me%s") then return false end
+    for i = 1, #P.SHOW_ME_RESULT_MARKERS do
+        if hay:find(P.SHOW_ME_RESULT_MARKERS[i], 1, true) then return true end
+    end
+    return false
+end
+
+-- "i want to see how much healing is being blocked" states a wish for a
+-- result, not a report that healing is broken. The problem-word scan below
+-- reads "blocked" as a symptom; a sentence that opens with a desire verb is
+-- describing what it wants shown.
+local DESIRE_OPENERS = {
+    "i want to see", "i want", "i would like to see", "i would like", "id like to see", "id like",
+    "i wish to see", "i need to see", "let me see", "i want it to show", "i want to be able to see",
+}
+P.DESIRE_OPENERS = DESIRE_OPENERS
+function P.StartsWithDesireOpener(text)
+    return StartsWithAnyPhrase(Normalize(text), DESIRE_OPENERS)
+end
+
 local function NonMutatingIntent(text)
     local normalized = Normalize(text)
     if normalized == "" then return nil end
+    -- "is there a Boss Buff Player Filter" asks whether a
+    -- control exists; the router's existence lane answers it read-only, and
+    -- no lane below it may treat the label's own words as an instruction.
+    if normalized:match("^is%s+there%s") or normalized:match("^are%s+there%s") then
+        return "capability"
+    end
+    if StateQuestionShape(normalized) then return "lookup" end
     local actionable = ActionableText(normalized)
     local explicitMutation = StartsWithAnyPhrase(actionable, EXPLICIT_MUTATION_PREFIXES)
     local questionPrefix = StartsWithAnyPhrase(actionable, READ_ONLY_QUESTION_PREFIXES)
@@ -2116,6 +2226,7 @@ local function NonMutatingIntent(text)
     -- top meant "show me Boss Absorb Bar Texture" was treated as an imperative
     -- and wrote to the texture.
     local presentationLookup = StartsWithAnyPhrase(actionable, { "show me", "zeige mir" })
+        and not P.ShowMeDescribesResult(actionable) and not P.ShowMeDescribesResult(normalized)
     local explicitImportantAuraFilter = explicitMutation
         and HasAnyExactPhrase(normalized, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
         and HasAnyExactPhrase(normalized, {
@@ -2206,6 +2317,7 @@ local function NonMutatingIntent(text)
 
     if HasAnyExactPhrase(normalized, NON_MUTATING_PROBLEM_TERMS)
         and not explicitMutation
+        and not StartsWithAnyPhrase(normalized, DESIRE_OPENERS)
     then
         return "problem"
     end

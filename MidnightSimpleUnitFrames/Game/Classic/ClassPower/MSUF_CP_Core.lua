@@ -334,7 +334,8 @@ builders.LAYOUT = function(E)
 
         local snap = _G.MSUF_Snap
 
-        local shape = CP_NormalizeShape(b.classPowerShape)
+        local shape = (powerType == "WHIRLWIND" or powerType == "SWEEPING_STRIKES")
+            and "BAR" or CP_NormalizeShape(b.classPowerShape)
         local shapeInfo = CP_ShapeTextures(shape)
         local shapeMode = shapeInfo ~= nil
         local widthMode = b.classPowerWidthMode or "player"
@@ -902,7 +903,8 @@ builders.PRESENTATION = function(E)
         else
             bgPath = fgPath
         end
-        local shapeInfo = CP_ShapeTextures(b.classPowerShape)
+        local shapeInfo = not (CP.powerType == "WHIRLWIND" or CP.powerType == "SWEEPING_STRIKES")
+            and CP_ShapeTextures(b.classPowerShape) or nil
         local activeFgPath = (shapeInfo and shapeInfo.fill) or fgPath
         local activeBgPath = (shapeInfo and shapeInfo.bg) or bgPath
 

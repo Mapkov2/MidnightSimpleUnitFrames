@@ -1399,7 +1399,7 @@ function ScheduleJobPump()
     end)
 end
 
-function A._RunJobPump()
+function AP.RunJobPumpOnce()
     local jobs = A._assistantJobs
     if type(jobs) ~= "table" or #jobs == 0 then return end
     if InCombat() or not MenuRuntimeActive() then
@@ -1476,6 +1476,28 @@ function A._RunJobPump()
             ScheduleJobPump()
         end
     end
+end
+
+-- One pump slice per call from the next-frame timer. When the next-frame
+-- callback runs inline instead (the no-NewTimer fallback in ScheduleNextFrame
+-- and the synchronous harness schedulers), the slice tail's ScheduleJobPump
+-- re-enters this function while a slice is still on the stack. Recursing
+-- there nests one C-level coroutine.resume per yield and a cold index build
+-- yields hundreds of times, which overflowed the C stack once the immediate
+-- lanes moved inside the job coroutine. The running pump loops instead.
+function A._RunJobPump()
+    if A._assistantJobPumpRunning then
+        A._assistantJobPumpRerun = true
+        return false
+    end
+    A._assistantJobPumpRunning = true
+    local result
+    repeat
+        A._assistantJobPumpRerun = nil
+        result = AP.RunJobPumpOnce()
+    until A._assistantJobPumpRerun ~= true
+    A._assistantJobPumpRunning = nil
+    return result
 end
 
 function A.MaybeYield(force)
@@ -1624,6 +1646,8 @@ function A.SetMenuRuntimeActive(active, reason)
         AP.nextFramePending = {}
         AP.nextFrameOrder = {}
         A._assistantJobPumpScheduled = nil
+        A._assistantJobPumpRunning = nil
+        A._assistantJobPumpRerun = nil
         A._refreshPending = nil
         return false
     end
@@ -1636,6 +1660,9 @@ function A.SetMenuRuntimeActive(active, reason)
     if type(A.ResumePendingBroadApply) == "function" then A.ResumePendingBroadApply() end
     ResumeAfterCombatCallbacks()
     A.ResumeCombatDeferredJobs(A._menuRuntimeReason)
+    -- Change plans queued in combat during an earlier session are mirrored in
+    -- SavedVariables; rebuild them before deciding whether a flush is due.
+    if type(A.RestoreQueuedPlans) == "function" then A.RestoreQueuedPlans() end
     if type(A.FlushQueue) == "function" and type(A.HasQueuedPlans) == "function" and A.HasQueuedPlans() then
         ScheduleNextFrame("MSUF_ASSISTANT_QUEUE_MENU_RESUME", function()
             if not InCombat() and MenuRuntimeActive() then A.FlushQueue() end
@@ -7618,6 +7645,62 @@ local function UnsafeGeneratedSettingResult(setting)
     return result
 end
 
+AP.COLOR_LITERAL_WORDS = {
+    "red", "green", "blue", "yellow", "orange", "purple", "pink", "white", "black", "gray", "grey",
+    "cyan", "magenta", "teal", "brown", "violet", "turquoise",
+}
+function AP.ColorLiteralInText(text)
+    local norm = " " .. NormalizeReply(tostring(text or "")) .. " "
+    for i = 1, #AP.COLOR_LITERAL_WORDS do
+        local word = AP.COLOR_LITERAL_WORDS[i]
+        if norm:find(" " .. word .. " ", 1, true) then return word end
+    end
+    if norm:match("%d+%s*,%s*%d+%s*,%s*%d+") or norm:match("#%x%x%x%x%x%x") then return "rgb" end
+    return nil
+end
+
+function AP.EnumValueToken(value)
+    if type(value) == "table" then value = value.value or value.key or value[1] end
+    return tostring(value or ""):lower()
+end
+
+-- A plan whose only targets are mode enums, none of which offers the colour
+-- the sentence names, is a wrong write whichever mode it picked.
+function AP.ColorLiteralEnumGuard(plan, sourceText)
+    local literal = AP.ColorLiteralInText(sourceText)
+    if not literal then return nil end
+    local offending
+    for i = 1, #plan.changes do
+        local change = plan.changes[i]
+        local setting = change and change.setting
+        if type(setting) ~= "table" then return nil end
+        local key = tostring(setting.key or "")
+        local kind = tostring(setting.type or "")
+        if kind == "color" or key:match("Colou?r[RGBA]$") or key:match("colou?r[RGBA]$") then return nil end
+        if kind == "enum" and type(setting.values) == "table" then
+            local found = false
+            for j = 1, #setting.values do
+                local token = AP.EnumValueToken(setting.values[j])
+                if token == literal or (literal ~= "rgb" and token:find(literal, 1, true)) then found = true; break end
+            end
+            if not found and AP.EnumValueToken(change.value) ~= literal then offending = offending or setting end
+        end
+    end
+    if not offending then return nil end
+    local choices = {}
+    for j = 1, #offending.values do choices[#choices + 1] = AP.EnumValueToken(offending.values[j]):upper() end
+    local label = tostring(offending.label or offending.key or "that control")
+    return {
+        text = label .. " is a mode choice (" .. table.concat(choices, ", ") .. "), not a custom colour, so '"
+            .. literal .. "' cannot be applied to it. I kept MSUF unchanged.\n"
+            .. "Which mode do you want? For example 'set " .. label .. " to " .. tostring(choices[#choices] or choices[1] or "")
+            .. "'. If you wanted a real colour, name the colour control (for example the bar or text colour under Colors).",
+        status = "info", result = "info",
+        summary = "Fails a colour literal on a mode enum closed instead of flipping the mode.",
+        _readOnlyGuard = true,
+    }
+end
+
 function A.ExecutePlan(plan, opts)
     opts = opts or {}
     if type(plan) ~= "table" then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
@@ -7637,6 +7720,27 @@ function A.ExecutePlan(plan, opts)
     if guarded and not guidedTourAction
         and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
         return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
+    end
+    -- "red should be the target name color" resolved to Name Text Color MODE
+    -- and wrote "class": a colour literal can never be the value of a mode
+    -- enum that has no such colour, so fail closed and list the real choices.
+    if plan.kind == "changes" and type(plan.changes) == "table" and sourceText then
+        local literalGuard = AP.ColorLiteralEnumGuard(plan, sourceText)
+        if literalGuard then return NormalizePlanResult(literalGuard) end
+        -- "... but keep the power bar": the head still resolved to the kept part.
+        local kept = A._preflightKeptSubject
+        if type(kept) == "string" and kept ~= "" then
+            local hit = AP.PreservedSubjectHit(plan, kept)
+            if hit then
+                return NormalizePlanResult({
+                    text = "That would change " .. tostring(hit.label or hit.key) .. ", which is the " .. kept
+                        .. " you asked me to keep, so I kept MSUF unchanged.\nWhich part do you want changed instead?",
+                    status = "info", result = "info",
+                    summary = "Refuses a plan that touches the part a preserve clause kept.",
+                    _readOnlyGuard = true,
+                })
+            end
+        end
     end
     -- A sentence carrying two RGB triplets is an ambiguous colour request; no
     -- lane may hand one of the components to a number control ("make bar
@@ -8538,6 +8642,16 @@ AP.BATCH_COMMAND_STARTERS[52] = "ausblenden"
 AP.BATCH_COMMAND_STARTERS[53] = "oeffne"
 AP.BATCH_COMMAND_STARTERS[54] = "waehle"
 AP.BATCH_COMMAND_STARTERS[55] = "nutze"
+-- Size verbs a pronoun clause carries ("... and shrink it a bit"). Without
+-- them the splitter kept the clause glued to the first one, the whole
+-- sentence planned only the first clause, and the second was dropped.
+AP.BATCH_COMMAND_STARTERS[56] = "shrink"
+AP.BATCH_COMMAND_STARTERS[57] = "grow"
+AP.BATCH_COMMAND_STARTERS[58] = "enlarge"
+AP.BATCH_COMMAND_STARTERS[59] = "widen"
+AP.BATCH_COMMAND_STARTERS[60] = "narrow"
+AP.BATCH_COMMAND_STARTERS[61] = "resize"
+AP.BATCH_COMMAND_STARTERS[62] = "scale"
 
 --- Batch parsing lets one input fan out into multiple normal assistant commands.
 --- It inherits obvious verbs across fragments but only executes after each part
@@ -8950,6 +9064,24 @@ function AP.BuildAtomicSettingBatch(parts)
         labels[#labels + 1] = AssistantPlanLabel(parsed, "request " .. tostring(i))
         for j = 1, #parsed.changes do combined[#combined + 1] = parsed.changes[j] end
     end
+    -- "make the target name bigger and shrink it a bit" plans the same control
+    -- twice with different values. Applying both in one transaction is a
+    -- coin toss on order; the sentence contradicts itself, so ask.
+    local seen, seenValue = {}, {}
+    for i = 1, #combined do
+        local change = combined[i]
+        local key = change and change.setting and tostring(change.setting.key or "") or ""
+        if key ~= "" then
+            -- The same dependency (an override flag) may ride along with two
+            -- parts; identical absolute values are fine. Two relative steps
+            -- (value nil) or two different values are the contradiction.
+            if seen[key] and (change.value == nil or seenValue[key] == nil or seenValue[key] ~= change.value) then
+                return nil, { conflictKey = key, label = tostring(change.setting.label or key) }
+            end
+            seen[key] = true
+            seenValue[key] = change.value
+        end
+    end
     return {
         kind = "changes",
         changes = combined,
@@ -9023,7 +9155,7 @@ end
 
 function AP.BatchPlanFailure(parts)
     return {
-        text = "I could not safely plan every part of that combined request, so I kept MSUF unchanged. Rephrase the unclear part or send the requests separately.",
+        text = "I could not safely plan every part of that combined request, so I kept MSUF unchanged. Could you rephrase the unclear part, or send the requests one at a time?",
         status = "ambiguous",
         summary = "Combined request needs clarification before anything changes.",
         batchParts = type(parts) == "table" and #parts or 0,
@@ -9034,7 +9166,17 @@ function AP.TrySubmitBatch(text, preSplitParts, opts)    local parts = preSplitP
     if not parts then return nil end
     local mixed = AP.TrySubmitMixedBatch(parts, opts)
     if mixed then return mixed end
-    local atomicPlan = AP.BuildAtomicSettingBatch(parts)
+    local atomicPlan, conflict = AP.BuildAtomicSettingBatch(parts)
+    if not atomicPlan and type(conflict) == "table" then
+        return {
+            text = "Those requests pull " .. tostring(conflict.label) .. " in two directions at once, so I kept MSUF unchanged.\n"
+                .. "Which one do you want? Send the two requests separately, or tell me the final value.",
+            status = "ambiguous",
+            summary = "Combined request contradicts itself on one control.",
+            batchParts = #parts,
+            _readOnlyGuard = true,
+        }
+    end
     if atomicPlan then
         local result = A.ExecutePlan(atomicPlan)
         if type(result) == "table" and AP.IsSuccessfulResultStatus(result.status or result.result) then
@@ -9744,11 +9886,15 @@ function AP.TryImmediateMutationResult(text, opts)
             firstWord == "move" or firstWord == "nudge" or firstWord == "shift"
             or firstWord == "increase" or firstWord == "decrease" or firstWord == "raise" or firstWord == "lower"
             or firstWord == "verschiebe" or firstWord == "verschieben"
-            or normalized:find(" offset", 1, true) or normalized:find("layer", 1, true)
-            or normalized:find("left", 1, true) or normalized:find("right", 1, true)
-            or normalized:find("up", 1, true) or normalized:find("down", 1, true)
-            or normalized:find("links", 1, true) or normalized:find("rechts", 1, true)
-            or normalized:find("hoch", 1, true) or normalized:find("runter", 1, true)
+            -- Whole words only: "pLAYER" contains "layer" and "grOUP"
+            -- contains "up", which sent "make the player frame bigger" through
+            -- the simple-change matcher and wrote Player Absorb Bar Height.
+            or normalized:find(" offset", 1, true) or normalized:find("%f[%a]layers?%f[%A]")
+            or normalized:find("%f[%a]left%f[%A]") or normalized:find("%f[%a]right%f[%A]")
+            or normalized:find("%f[%a]up%f[%A]") or normalized:find("%f[%a]down%f[%A]")
+            or normalized:find("%f[%a]upwards?%f[%A]") or normalized:find("%f[%a]downwards?%f[%A]")
+            or normalized:find("%f[%a]links%f[%A]") or normalized:find("%f[%a]rechts%f[%A]")
+            or normalized:find("%f[%a]hoch%f[%A]") or normalized:find("%f[%a]runter%f[%A]")
         if simpleMovementMutation then
             local simplePlan = A.ParseSimpleChange(text, ctx)
             if simplePlan and simplePlan.kind == "changes" and simplePlan.confirmRequired ~= true then
@@ -9799,6 +9945,60 @@ function AP.TryImmediateMutationResult(text, opts)
     return result
 end
 
+-- The preflight only runs on a fresh sentence. A pending choice,
+-- confirmation, or workflow owns the next input (a number, "yes", a profile
+-- name), and none of those shapes is a candidate for a rewrite.
+-- The subject a preserve clause kept ("... but keep the power bar"). The
+-- rewritten head is planned by the ordinary lanes, and ExecutePlan refuses
+-- any plan whose changes still name that subject.
+function AP.PreservedSubjectHit(plan, kept)
+    local words = {}
+    for word in tostring(kept or ""):lower():gmatch("%a+") do
+        if #word >= 3 then words[#words + 1] = word:gsub("s$", "") end
+    end
+    if #words == 0 then return nil end
+    for i = 1, #plan.changes do
+        local setting = plan.changes[i] and plan.changes[i].setting
+        local label = type(setting) == "table" and tostring(setting.label or setting.key or ""):lower() or ""
+        if label ~= "" then
+            local all = true
+            for j = 1, #words do
+                if not label:find(words[j], 1, true) then all = false; break end
+            end
+            if all then return setting end
+        end
+    end
+    return nil
+end
+
+function AP.SubmitSafetyPreflight(text)
+    A._preflightKeptSubject = nil
+    if A.pendingConfirmation or CurrentPendingChoices() then return nil, nil, nil end
+    if A.Workflow and type(A.Workflow.PendingFlow) == "function" and type(A.Workflow.PendingFlow()) == "table" then
+        return nil, nil, nil
+    end
+    if type(A.RouterHasPendingSearchResults) == "function" and A.RouterHasPendingSearchResults() then
+        return nil, nil, nil
+    end
+    if type(A.RouterSafetyPreflight) ~= "function" then return nil, nil, nil end
+    local result, rewritten, note, kept = A.RouterSafetyPreflight(text)
+    if type(kept) == "string" and kept ~= "" then A._preflightKeptSubject = kept end
+    if type(result) == "table" then return NormalizePlanResult(result), nil, nil end
+    if type(rewritten) == "string" and Trim(rewritten) ~= "" and rewritten ~= text then
+        return nil, rewritten, note
+    end
+    return nil, nil, note
+end
+
+function AP.AppendPreflightNote(result, note)
+    if type(result) ~= "table" or type(note) ~= "string" or note == "" then return result end
+    local status = tostring(result.status or result.result or "")
+    if status == "applied" or status == "changed" or status == "unchanged" then
+        result.text = tostring(result.text or "") .. "\n" .. note
+    end
+    return result
+end
+
 function AP.SubmitNow(text, opts)    opts = opts or {}
     A._activeSubmitSourceText = text
     text = Trim(text)
@@ -9811,8 +10011,22 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     -- reaching it -- which is why "set player health text size to 200" applied
     -- 48 with no explanation while "set player width to 4000" explained itself.
     A._assistantValueClamps = nil
+    -- Safety preflight: fails the known wrong-write sentence shapes closed and
+    -- rewrites newcomer wording before ANY lane sees the text. It has to sit
+    -- above the immediate lanes, which bypass the router entirely.
+    local sourceText, preflightNote = text, nil
+    do
+        local preflightResult, rewritten, note = AP.SubmitSafetyPreflight(text)
+        if preflightResult then
+            if opts.skipUserHistory ~= true then A.AddHistory("user", sourceText, "submitted") end
+            AP.RecordAssistantResult(preflightResult)
+            return preflightResult
+        end
+        if rewritten then text = rewritten end
+        preflightNote = note
+    end
     local immediate = AP.TryImmediateSubmitResult(text, opts)
-    if immediate then return immediate end
+    if immediate then return AP.AppendPreflightNote(immediate, preflightNote) end
     -- A complete multi-command sentence must be split before the low-latency
     -- single-plan path sees it. Otherwise that path can confidently apply the
     -- first clause and silently discard the remaining commands (for example,
@@ -9843,10 +10057,10 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
         and not batchParts and not existenceQuestion and not npcBarColor and not namedLookup
     then
         local immediateMutation = AP.TryImmediateMutationResult(text, opts)
-        if immediateMutation then return immediateMutation end
+        if immediateMutation then return AP.AppendPreflightNote(immediateMutation, preflightNote) end
     end
     if opts.skipUserHistory ~= true then
-        A.AddHistory("user", text, "submitted")
+        A.AddHistory("user", sourceText, "submitted")
     end
     local result = NormalizePlanResult(AP.LongInputResult(text)
         or AP.TrySubmitBatch(text, batchParts, { turnSerialAdvanced = true })
@@ -9854,6 +10068,7 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     if type(AP.ResolveUnresolvedMutationResult) == "function" then
         result = AP.ResolveUnresolvedMutationResult(text, result)
     end
+    result = AP.AppendPreflightNote(result, preflightNote)
     AP.RecordAssistantResult(result)
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.submit")
@@ -9898,6 +10113,37 @@ function AP.ResolveUnresolvedMutationResult(text, produced)
             and A.RouterPrivate.IsAdviceQuestion(text)
         then
             unresolved = false
+        end
+        -- "is there a Boss Buff Player Filter?" asks whether the control
+        -- exists. The existence lane answered read-only ("info"), which this
+        -- hook read as unresolved and then applied the label's own words --
+        -- storing "in msuf?" as a texture. An existence question is final.
+        if type(A.RouterIsFeatureExistenceQuestion) == "function"
+            and A.RouterIsFeatureExistenceQuestion(text) == true
+        then
+            unresolved = false
+        end
+        -- "is player name on" (no question mark) asks for the current state;
+        -- the polarity word at the end is not a value to write.
+        if type(A.Parser) == "table" and type(A.Parser.IsStateQuestion) == "function"
+            and A.Parser.IsStateQuestion(text)
+        then
+            unresolved = false
+        end
+        -- A sentence that names an out-of-scope feature ("show my dps") or a
+        -- control only indirectly ("the option that disables X") was answered
+        -- deliberately; a rescue rewrite may not turn either into a write.
+        if type(A.RouterPrivate) == "table" then
+            if type(A.RouterPrivate.FeatureNotInMsufCommandMatch) == "function"
+                and A.RouterPrivate.FeatureNotInMsufCommandMatch(text)
+            then
+                unresolved = false
+            end
+            if type(A.RouterPrivate.MetaReferenceSettingSubject) == "function"
+                and A.RouterPrivate.MetaReferenceSettingSubject(text)
+            then
+                unresolved = false
+            end
         end
         -- The router may correctly return an informational answer for an exact
         -- setting lookup. Do not let this last-resort recovery hook reinterpret
@@ -9981,8 +10227,8 @@ function AP.ResolveUnresolvedMutationResult(text, produced)
                 -- the control's own registered wording, so run it without
                 -- re-submitting the sentence to that gate.
                 plan.sourceText, plan.raw = nil, nil
-                local okPlan, planned = pcall(A.ExecutePlan, plan, {})
-                local plannedStatus = okPlan and type(planned) == "table"
+                local planned = A.ExecutePlan(plan, {})
+                local plannedStatus = type(planned) == "table"
                     and tostring(planned.status or planned.result or "") or ""
                 if plannedStatus == "applied" or plannedStatus == "changed" then
                     ClearPendingChoices()
@@ -10017,24 +10263,34 @@ function A.Submit(text)
     return A.RecoverAssistantFailure(result, { label = "assistant.submit", text = text })
 end
 
+-- The user turn is recorded before the job starts, so the immediate lanes
+-- inside the deferred pipeline must not add it again.
+AP.ImmediateLaneJobOpts = { skipUserHistory = true }
+
 function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     local steps = {}
     local parts
     if opts.batchChecked == true then
         parts = opts.preSplitParts
-    else
+    elseif opts.fullPipeline ~= true then
+        -- The full pipeline splits inside its coroutine; doing it here would
+        -- put the read-only classifier (and the alias index it can build)
+        -- back on the main thread.
         local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
         local exactMovement = AP.RequiresExactMovementRouting(text)
         parts = not failClosedReadOnly and not exactMovement and AP.SplitBatchCommands(text) or nil
     end
     local finalResult
     local finished = false
+    -- The immediate lanes record their own assistant turn; Complete must not
+    -- write it a second time when one of them answered inside the job.
+    local finalRecorded = false
 
     local function Complete(result)
         if finished then return end
         finalResult = NormalizePlanResult(result)
         A.SetBusy(false)
-        if finalResult.suppressAssistantRecord ~= true then AP.RecordAssistantResult(finalResult) end
+        if finalResult.suppressAssistantRecord ~= true and not finalRecorded then AP.RecordAssistantResult(finalResult) end
         finished = true
         if type(callback) == "function" then callback(finalResult) end
     end
@@ -10045,7 +10301,80 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
         end
     end
 
-    if parts then
+    if opts.fullPipeline == true then
+        -- The complete deferred pipeline inside ONE yielding coroutine:
+        -- safety preflight, compound split, the read-only stand-downs, both
+        -- immediate lanes and finally the routed answer. Every one of those
+        -- can build a cold registry, alias, label or unit index on the first
+        -- request after login (measured 0.9 s synchronous before the job even
+        -- started); inside the coroutine each index build yields at its
+        -- A.MaybeYield checkpoints instead of freezing the frame.
+        steps[#steps + 1] = A.CoroutineStep(function()
+            local preflightResult, rewritten, preflightNote = AP.SubmitSafetyPreflight(text)
+            if preflightResult then
+                finalResult = preflightResult
+                return
+            end
+            local routedText = rewritten or text
+            -- Stage boundaries are yield checkpoints (no-ops while the slice
+            -- budget has time left), so a stage that ran cold cannot carry its
+            -- cost into the next one's frame.
+            A.MaybeYield()
+            -- Detect compound commands before either immediate lane. Those
+            -- lanes are single-intent optimizations and would otherwise spend
+            -- cold-start time proving that a multi-clause request does not
+            -- belong there. The batch owner parses every clause and commits
+            -- exactly one atomic transaction (or no writes at all).
+            local batchParts = AP.SplitBatchCommands(routedText)
+            if batchParts and AP.RequiresExactMovementRouting(routedText) then batchParts = nil end
+            A.MaybeYield()
+            if not batchParts then
+                local immediate = AP.TryImmediateSubmitResult(routedText, AP.ImmediateLaneJobOpts)
+                if immediate then
+                    finalResult = AP.AppendPreflightNote(AP.ResolveUnresolvedMutationResult(routedText, immediate), preflightNote)
+                    finalRecorded = true
+                    return
+                end
+                A.MaybeYield()
+                -- Same stand-downs as AP.SubmitNow: an existence question, an
+                -- NPC-qualified bar colour request or a named-control lookup
+                -- must reach the router instead of being answered by a write.
+                local existenceQuestion = type(A.RouterIsFeatureExistenceQuestion) == "function"
+                    and A.RouterIsFeatureExistenceQuestion(routedText) == true
+                local npcBarColor = not existenceQuestion and type(A.RouterIsNpcQualifiedBarColorRequest) == "function"
+                    and A.RouterIsNpcQualifiedBarColorRequest(routedText) == true
+                local namedLookup = not existenceQuestion and not npcBarColor
+                    and type(A.RouterIsNamedSettingLookup) == "function"
+                    and A.RouterIsNamedSettingLookup(routedText) == true
+                A.MaybeYield()
+                if not existenceQuestion and not npcBarColor and not namedLookup then
+                    local immediateMutation = AP.TryImmediateMutationResult(routedText, AP.ImmediateLaneJobOpts)
+                    if immediateMutation then
+                        finalResult = AP.AppendPreflightNote(AP.ResolveUnresolvedMutationResult(routedText, immediateMutation), preflightNote)
+                        finalRecorded = true
+                        return
+                    end
+                    A.MaybeYield()
+                end
+            end
+            if batchParts then
+                finalResult = AP.TrySubmitBatch(routedText, batchParts, { turnSerialAdvanced = true })
+                    or AP.BatchPlanFailure(batchParts)
+            else
+                finalResult = AP.LongInputResult(routedText) or A.HandleInput(routedText, {
+                    skipTurnSerialAdvance = opts.turnSerialAdvanced == true,
+                })
+            end
+            finalResult = AP.ResolveUnresolvedMutationResult(routedText, finalResult)
+        end)
+        steps[#steps + 1] = function()
+            Complete(finalResult or {
+                text = "Something went wrong while MSUF processed that request.",
+                status = "failed",
+            })
+            return finalResult
+        end
+    elseif parts then
         -- Planning can build cold registry indices. Keep it inside the
         -- yielding job coroutine so accepting a compound prompt never blocks
         -- the Dashboard frame while each clause is resolved.
@@ -10121,47 +10450,28 @@ function AP.SubmitDeferredNow(text, callback)
     if AP.IsAssistantStopCommand and AP.IsAssistantStopCommand(text) then
         return NormalizePlanResult({ text = "Nothing is running right now.", result = "info" })
     end
-    -- Detect compound commands before either immediate lane. Those lanes are
-    -- single-intent optimizations and can otherwise spend cold-start time
-    -- proving that a multi-clause request does not belong there before the
-    -- scheduler receives it. The deferred batch owner parses every clause and
-    -- commits exactly one atomic transaction (or no writes at all).
-    local batchParts = AP.SplitBatchCommands(text)
-    if batchParts and AP.RequiresExactMovementRouting(text) then batchParts = nil end
-    -- Same standdown as AP.SubmitNow. This is the path the live menu uses, so
-    -- without it the immediate mutation lane still answered questions with a
-    -- write in game even though the synchronous path was fixed.
-    local deferredExistenceQuestion = type(A.RouterIsFeatureExistenceQuestion) == "function"
-        and A.RouterIsFeatureExistenceQuestion(text) == true
-    local deferredNpcBarColor = type(A.RouterIsNpcQualifiedBarColorRequest) == "function"
-        and A.RouterIsNpcQualifiedBarColorRequest(text) == true
-    local deferredNamedLookup = type(A.RouterIsNamedSettingLookup) == "function"
-        and A.RouterIsNamedSettingLookup(text) == true
-    if not batchParts then
-        local immediate = AP.TryImmediateSubmitResult(text)
-        if immediate then
-            immediate = AP.ResolveUnresolvedMutationResult(text, immediate)
-            AP.RunSubmitCallback(callback, immediate, "assistant.immediate.callback", text)
-            return immediate
-        end
-        if not deferredExistenceQuestion and not deferredNpcBarColor and not deferredNamedLookup then
-            local immediateMutation = AP.TryImmediateMutationResult(text)
-            if immediateMutation then
-                immediateMutation = AP.ResolveUnresolvedMutationResult(text, immediateMutation)
-                AP.RunSubmitCallback(callback, immediateMutation, "assistant.immediate-mutation.callback", text)
-                return immediateMutation
-            end
-        end
-    end
-
+    -- Everything that inspects the sentence -- the safety preflight, the
+    -- compound split, the read-only stand-downs, both immediate lanes and the
+    -- routed answer -- runs inside the job coroutine (AP.BuildDeferredSubmitSteps,
+    -- fullPipeline). Only the accepted-turn bookkeeping stays synchronous.
+    -- Before this the immediate lanes and their guards ran here on the main
+    -- thread, and the first request after login built the alias, label and
+    -- unit-scope indices synchronously (~0.9 s) before any job slice existed;
+    -- A.MaybeYield can only slice work that lives inside the coroutine.
+    --
+    -- Register the pump callback ahead of the busy refresh: both run in the
+    -- same next-frame batch, and a warm request then completes before the
+    -- Dashboard repaints, so the "Stop" state never flashes for one frame.
+    -- In harnesses whose timers run synchronously the pump simply finds no
+    -- job yet and returns.
+    ScheduleJobPump()
     A.SetBusy(true, "I am working on that. Press Stop or type stop to cancel.")
 
     A.AddHistory("user", text, "submitted")
     local steps, onDone = AP.BuildDeferredSubmitSteps(text, callback, {
         userHistoryRecorded = true,
         turnSerialAdvanced = true,
-        batchChecked = true,
-        preSplitParts = batchParts,
+        fullPipeline = true,
     })
     local job = A.StartJob("assistant.submit", steps, onDone, { requestText = text })
     if job and type(job.result) == "table" and not A.IsBusy() then
