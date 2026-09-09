@@ -22,8 +22,8 @@ A.AutoCoverageManifest = Manifest
 -- Defaults generated offline on 2026-09-09 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 5103 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 5103
+-- 5185 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 5185
 Manifest.requiredScopes = {
     "arena", "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -49,6 +49,9 @@ Manifest.defaults = {
         hpTextLeftOffsetX = 0,
         hpTextLeftOffsetY = 0,
         hpTextMode = "CURPERCENT",
+        hpTextMouseover = false,
+        hpTextMouseoverFadeIn = 0,
+        hpTextMouseoverFadeOut = 0,
         hpTextReverse = false,
         hpTextRightOffsetX = 0,
         hpTextRightOffsetY = 0,
@@ -57,6 +60,9 @@ Manifest.defaults = {
         nameOffsetY = -4,
         nameTextAnchor = "TOPLEFT",
         nameTextLayer = 5,
+        nameTextMouseover = false,
+        nameTextMouseoverFadeIn = 0,
+        nameTextMouseoverFadeOut = 0,
         offsetX = 360,
         offsetY = -40,
         oocFadeAlpha = 0.5,
@@ -76,6 +82,7 @@ Manifest.defaults = {
         portraitBorderStyle = "NONE",
         portraitBorderThickness = 6,
         portraitClassStyle = "BLIZZARD",
+        portraitClickable = false,
         portraitDetachedPoint = "RIGHT",
         portraitDetachedTo = "LEFT",
         portraitEdgeSoftness = 0,
@@ -115,6 +122,9 @@ Manifest.defaults = {
         powerTextLeftOffsetX = 0,
         powerTextLeftOffsetY = 0,
         powerTextMode = "CURRENT",
+        powerTextMouseover = false,
+        powerTextMouseoverFadeIn = 0,
+        powerTextMouseoverFadeOut = 0,
         powerTextRight = "CURRENT",
         powerTextRightOffsetX = 0,
         powerTextRightOffsetY = 0,
@@ -435,8 +445,8 @@ Manifest.defaults = {
         runeTextFontSizeOffset = -2,
         runeTextFormat = "tenths",
         showAltMana = true,
-        showArenaPowerBar = true,
         showArcaneSoul = false,
+        showArenaPowerBar = true,
         showBarBorder = true,
         showBossPowerBar = false,
         showChargedComboPoints = true,
@@ -2167,8 +2177,8 @@ Manifest.defaults = {
         tempMaxHealthTexture = "Solid",
         textBackdrop = true,
         tipCycleIndex = 9,
-        tooltipShowAuraSpellIDs = false,
         tooltipShowAuraCasterNames = false,
+        tooltipShowAuraSpellIDs = false,
         unifiedBarB = 0.29411765933036799,
         unifiedBarG = 0.090196080505847931,
         unifiedBarR = 0.90196084976196289,
@@ -5234,4 +5244,4 @@ Manifest.defaults = {
     },
 }
 
--- top-level scalar paths: 5103
+-- top-level scalar paths: 5185
