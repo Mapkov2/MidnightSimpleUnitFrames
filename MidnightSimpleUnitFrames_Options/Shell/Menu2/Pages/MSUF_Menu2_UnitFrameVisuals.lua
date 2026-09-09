@@ -639,7 +639,7 @@ local function BuildPower(ctx, builder, unit)
             return refs
         end, {
             title = "Power Bar Colors",
-            note = "The resource color follows the current unit. A matched background is derived from Health instead.",
+            note = "Color by class applies to all unit power bars. Resource colors apply when it is off. A matched background follows Health.",
             historySource = "menu:unit-power-colors",
             context = function() return { unit = unit } end,
         })

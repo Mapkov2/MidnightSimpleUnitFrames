@@ -18,6 +18,7 @@ local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled, ControlMeta, RegisterControl = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled ControlMeta RegisterControl]])
 local CurrentBarsScope, NormalizeScopeKey, ScopeHasOverride, GradientScopeGet, GradientScopeSet = M.Pick(GP, [[CurrentBarsScope NormalizeScopeKey ScopeHasOverride GradientScopeGet GradientScopeSet]])
 local COLOR_SETTING_KEY_BY_PATH = {
+    ["power.color_by_class"] = "general.powerColorMode",
     ["api.SetAbsorbOverlayColor"] = "general.absorbBarColor",
     ["api.SetAggroBorderColor"] = "general.aggroBorderColor",
     ["api.SetCastbarTargetNameColor"] = "general.castbarTargetNameColor",
@@ -1391,8 +1392,23 @@ function M._SetAllTextureLayerRGB(prefix, r, g, b)
     end
     M._ApplyTextureLayerColors()
 end
+M.PowerBarColorByClass = {
+    Get = function()
+        local g = G()
+        return tostring(g.powerColorMode or g.powerBarColorMode or "power"):lower() == "class"
+    end,
+    Set = function(enabled)
+        G().powerColorMode = enabled and "class" or "power"
+        ApplyColors()
+    end,
+}
+
 local function BuildPowerAndClassPowerColors(ctx, b, CH)
     local power = b:CollapsibleSection("colors_power", "Power Bar Colors", 150, false)
+    ValueToggleAt(ctx, power, "Power bar color by class", 12, -94,
+        function() return M.PowerBarColorByClass.Get() end,
+        function(v) M.PowerBarColorByClass.Set(v) end,
+        Meta("power.color_by_class"))
     M.colorsPowerToken = M.colorsPowerToken or "MANA"
     local powerColor
     ValueDropdownAt(ctx, power, "Power type", 12, -10, COLOR_DATA.POWER_TOKENS, 260,
@@ -2852,7 +2868,12 @@ local function PowerTokenTarget(id, token, label)
 end
 ContextFactory("power.current", function(context)
     local token = ContextPowerToken(context)
-    return PowerTokenTarget("power.current." .. token, token, (token:gsub("_", " ")) .. " power")
+    local target = PowerTokenTarget("power.current." .. token, token, (token:gsub("_", " ")) .. " power")
+    target.getColorByClass = M.PowerBarColorByClass.Get
+    target.setColorByClass = M.PowerBarColorByClass.Set
+    local state = ContextStoredState(G, { "powerColorOverrides", "powerColorMode", "powerBarColorMode" }, ApplyColors)
+    target.captureState, target.restoreState = state.captureState, state.restoreState
+    return target
 end)
 -- A single unit has one resource, so "power.current" resolves it from context.
 -- A party or raid roster mixes every resource type at once, so group cards name

@@ -1575,6 +1575,8 @@ local function ContextColorVirtualOwner(spec, opts)
     local owner = {
         _msuf2ColorLabel = spec.label or "Color",
         _msuf2ColorHasOpacity = spec.hasOpacity == true,
+        _msuf2GetColorByClass = spec.getColorByClass,
+        _msuf2SetColorByClass = spec.setColorByClass,
     }
     function owner:GetRGB()
         local r, g, b = getRGB()
