@@ -186,6 +186,14 @@ K.POWER_TYPE_TOKENS = {
 
 K.MAX_CLASS_POWER = 10
 
+--- Devourer's Soul Fragment maximum is talent-dependent (30/35/50) and far
+--- above MAX_CLASS_POWER, so the resource can never be one StatusBar per
+--- fragment - that clamp is what made the fill saturate at ten fragments.
+--- Its bar stays a single normalized fill and draws the fragment boundaries as
+--- separator notches over it. A fragment count past this ceiling draws no
+--- notches at all rather than dividers that no longer match the fragments.
+K.MAX_FRAGMENT_NOTCHES = 64
+
 K.CDM_FRAMES = {
     cooldown      = "EssentialCooldownViewer",
     utility       = "UtilityCooldownViewer",

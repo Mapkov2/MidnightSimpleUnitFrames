@@ -2150,6 +2150,9 @@ local function BuildPreview(parent, panel, width, height)
     mock.classPower:SetBackdropColor(0, 0, 0, 0.55)
     mock.classPower:SetBackdropBorderColor(0, 0, 0, 1)
     mock.classPower.segments = {}
+    --- Devourer divides one continuous fill with separator notches instead of
+    --- one pip per fragment, so its dividers need their own pool.
+    mock.classPower.notches = {}
     mock.classPower.segmentBgs = {}
     mock.classPower.segmentEdges = {}
     mock.classPower.runeTexts = {}

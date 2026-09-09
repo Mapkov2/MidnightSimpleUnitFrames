@@ -1118,6 +1118,7 @@ local function EnsureClassPower(preview)
     frame.textOwner:SetAllPoints(frame)
     if frame.textOwner.EnableMouse then frame.textOwner:EnableMouse(false) end
     frame.segments, frame.bgs, frame.edges, frame.runeTexts, frame.hashes = {}, {}, {}, {}, {}
+    frame.notches = {}
     for i = 1, 10 do
         frame.bgs[i] = MakeTexture(frame, "BACKGROUND", nil, nil, true)
         frame.segments[i] = MakeTexture(frame, "ARTWORK", nil, nil, true)
@@ -1297,6 +1298,7 @@ local function RenderClassPower(preview, bars, player, spec)
         HideTableRegions(frame.segments)
         HideTableRegions(frame.bgs)
         HideTableRegions(frame.edges)
+        HideTableRegions(frame.notches)
         HideTableRegions(frame.runeTexts)
         frame.text:Hide()
         preview.handleClass:Hide()
@@ -1462,6 +1464,34 @@ local function RenderClassPower(preview, bars, player, spec)
             frame.segments, frame.bgs, count, outline, CP_CLASS_ROUNDED_OPTS)
         if not shapeInfo and not roundedApplied then ApplyBarOutline(frame, outline) end
     end
+    --- Devourer's fragment separators. Its maximum cannot be one pip per
+    --- fragment, so the live bar keeps a single continuous fill and notches the
+    --- fragment boundaries into it. Mirror the same geometry here: Separator and
+    --- Pip gap must preview what they actually do on that bar.
+    local fragments = shapeInfo and 0 or floor(tonumber(spec.fragments) or 0)
+    local notchW = Clamp(bars.classPowerTickWidth, 1, 0, 4) + Clamp(bars.classPowerGap, 0, 0, 8)
+    local shownNotches = 0
+    if fragments >= 2 and fragments <= 64 and notchW >= 1 and ((w / fragments) - notchW) >= 1 then
+        local reverse = bars.classPowerFillReverse == true
+        local limit = w - notchW
+        for i = 1, fragments - 1 do
+            local notch = frame.notches[i]
+            if not notch then
+                notch = MakeTexture(frame, "OVERLAY", 6, nil, true)
+                frame.notches[i] = notch
+            end
+            local nx = floor(((w * i) / fragments) - (notchW * 0.5) + 0.5)
+            if nx < 0 then nx = 0 elseif nx > limit then nx = limit end
+            if reverse then nx = limit - nx end
+            notch:ClearAllPoints()
+            notch:SetColorTexture(0, 0, 0, 1)
+            notch:SetSize(notchW, h)
+            notch:SetPoint("TOPLEFT", frame, "TOPLEFT", nx, 0)
+            notch:Show()
+            shownNotches = i
+        end
+    end
+    for i = shownNotches + 1, #frame.notches do frame.notches[i]:Hide() end
     if spec.mode == "ironfur" and bars.guardianIronfurShowHashLines ~= false then
         local fractions = { 0.82, 0.51, 0.24 }
         for i = 1, #frame.hashes do

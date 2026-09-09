@@ -680,7 +680,7 @@ function CP.TextForValue(spec, value)
     if mode == "continuous" then return tostring(floor((value * 100) + 0.5)) .. " / 100" end
     if mode == "timer_bar" then return string.format("%.1f", floor((value * 20 * 10) + 0.5) / 10) end
     if mode == "stagger" then return tostring(floor((value * 34) + 0.5)) .. "K" end
-    if mode == "aura_single" then return tostring(floor((value * 5) + 0.5)) end
+    if mode == "aura_single" then return tostring(floor((value * (tonumber(spec.fragments) or 5)) + 0.5)) end
     if mode == "fractional" then return string.format("%.1f", value) end
     local rounded = CP.IsEssence(spec) and floor(value) or floor(value + 0.5)
     if spec.token == "SOUL_FRAGMENTS_VENG" then return tostring(rounded) .. " / " .. tostring(tonumber(spec.segments) or 6) end
@@ -703,7 +703,8 @@ function CP.ConfiguredTextForValue(bars, spec, value)
     elseif mode == "stagger" then
         current, maximum = tostring(floor((value * 34000) + 0.5)), "34000"
     elseif mode == "aura_single" then
-        current, maximum = tostring(floor((value * 5) + 0.5)), "5"
+        local fragments = tonumber(spec.fragments) or 5
+        current, maximum = tostring(floor((value * fragments) + 0.5)), tostring(fragments)
     elseif mode == "fractional" then
         current = string.format("%.1f", value)
         maximum = tostring(tonumber(spec.segments) or 1)

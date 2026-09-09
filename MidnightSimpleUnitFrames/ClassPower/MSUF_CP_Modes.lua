@@ -1219,6 +1219,92 @@ modeBuilders.AURA = function(E)
     local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local ResolveMWAbove5Color = E.ResolveMWAbove5Color
     local CP_CheckAutoHide = E.CP_CheckAutoHide
+    local math_floor = math.floor
+    local MAX_FRAGMENT_NOTCHES = (E.CPConst and tonumber(E.CPConst.MAX_FRAGMENT_NOTCHES)) or 64
+
+    --- Devourer's fragment separators.
+    --- Its Soul Fragment maximum is talent-dependent (30/35/50), far above
+    --- MAX_CLASS_POWER, so the resource can never own one StatusBar per
+    --- fragment - clamping it to ten is exactly what made the fill saturate at
+    --- ten fragments. The fill therefore stays Blizzard's single normalized bar
+    --- and the fragment boundaries are drawn as notches over it, which is what
+    --- the Separator and Pip gap sliders act on.
+    --- Placement is cold path. Aura traffic only compares the resolved fragment
+    --- count, so a stack change costs one comparison and touches no texture;
+    --- only a Meta transition, a changed Collapsing Star cost or a relayout
+    --- moves a notch.
+    local fragCount = -1
+    local function ApplyFragmentNotches(count)
+        local bar = CP.bars and CP.bars[1]
+        if not (bar and type(bar.CreateTexture) == "function") then return end
+        fragCount = count
+
+        local pool = CP.fragNotches
+        if not pool then
+            pool = {}
+            CP.fragNotches = pool
+        end
+
+        local b = _cpDB.bars or {}
+        local tickW = tonumber(b.classPowerTickWidth) or 1
+        if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
+        local gap = tonumber(b.classPowerGap) or 0
+        if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
+        --- One notch spans the same space a segmented resource puts between two
+        --- pips, so both sliders keep acting on the divider they name, and it
+        --- snaps to the pixel grid exactly like those separators do.
+        local notchW = tickW + gap
+        local snap = _G.MSUF_Snap
+        if notchW > 0 and type(snap) == "function" then
+            local snapped = tonumber(snap(CP.container or CP.bars[1], notchW))
+            if snapped and snapped > 0 then notchW = snapped end
+        end
+
+        local width = (type(bar.GetWidth) == "function" and tonumber(bar:GetWidth())) or 0
+        local height = (type(bar.GetHeight) == "function" and tonumber(bar:GetHeight())) or 0
+        --- Past the pool ceiling the dividers would no longer sit on real
+        --- fragment boundaries, and a separator that lies about the count is
+        --- the bug this bar already had. Draw none instead.
+        if count > MAX_FRAGMENT_NOTCHES then count = 0 end
+
+        local shown = 0
+        --- Every fragment keeps at least a pixel of its own: a bar too narrow
+        --- for its fragment count drops the notches instead of striping over
+        --- the whole fill.
+        if count >= 2 and notchW >= 1 and height >= 1 and ((width / count) - notchW) >= 1 then
+            local reverse = (b.classPowerFillReverse == true)
+            local limit = width - notchW
+            for i = 1, count - 1 do
+                local tex = pool[i]
+                if not tex then
+                    tex = bar:CreateTexture(nil, "OVERLAY", nil, 7)
+                    tex:SetTexture("Interface\\Buttons\\WHITE8x8")
+                    tex:SetVertexColor(0, 0, 0, 1)
+                    pool[i] = tex
+                end
+                local x = math_floor(((width * i) / count) - (notchW * 0.5) + 0.5)
+                if x < 0 then x = 0 elseif x > limit then x = limit end
+                tex:ClearAllPoints()
+                tex:SetSize(notchW, height)
+                if reverse then
+                    tex:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -x, 0)
+                else
+                    tex:SetPoint("TOPLEFT", bar, "TOPLEFT", x, 0)
+                end
+                tex:Show()
+                shown = i
+            end
+        end
+        for i = shown + 1, #pool do pool[i]:Hide() end
+    end
+
+    --- Layout owns the geometry, so it hands the new one straight back here
+    --- instead of leaving the notches stale until the next aura event. Passing
+    --- false is how every other resource and every shape mode drops them again
+    --- when it takes the single bar over.
+    CP.RefreshFragmentNotches = function(active)
+        ApplyFragmentNotches((active and fragCount > 1) and fragCount or 0)
+    end
 
     local function GetPlayerAura(spellID)
         if type(GetTrackedPlayerAura) == "function" then
@@ -1433,6 +1519,11 @@ modeBuilders.AURA = function(E)
             CP_StampStatusBarColor(bar, r, g, bl, 1)
             CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
         end
+        --- Separators follow the resolved maximum, never the stack value, so a
+        --- fragment gained or spent leaves every notch untouched.
+        local notchCount = math_floor(tonumber(progressMax) or 0)
+        if notchCount < 2 then notchCount = 0 end
+        if fragCount ~= notchCount then ApplyFragmentNotches(notchCount) end
         local visualVersion = visual and visual.version or 0
         if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
             for i = 2, CP.maxBars do if CP.bars[i] then CP_StampShown(CP.bars[i], false) end end

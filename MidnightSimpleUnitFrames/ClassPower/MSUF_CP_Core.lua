@@ -676,6 +676,17 @@ builders.LAYOUT = function(E)
         CP.currentMax = maxPower
         CP.height = h
 
+        --- Devourer draws its fragment separators as notches over one
+        --- continuous fill, so they sit on bars[1] instead of between pips and
+        --- cannot be placed by the segment loop above. Hand the geometry
+        --- resolved here straight to their owner: false drops them again for
+        --- every other resource and for every shape mode, both of which take
+        --- the same bar over.
+        local refreshFragmentNotches = CP.RefreshFragmentNotches
+        if refreshFragmentNotches then
+            refreshFragmentNotches((not shapeMode) and (powerType or CP.powerType) == "SOUL_FRAGMENTS")
+        end
+
         local applyRounded = _G.MSUF_ClassPower_ApplyRoundedSurface
         if type(applyRounded) == "function" then applyRounded() end
 

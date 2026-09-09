@@ -2620,6 +2620,40 @@ function Preview.Refresh(box, reason)
                 if runeText then runeText:Hide() end
             end
         end
+        --- Devourer's fragment separators. Its Soul Fragment maximum cannot be
+        --- one pip per fragment, so the live bar notches the boundaries into a
+        --- single continuous fill; mirror the same geometry here.
+        local notches = mock.classPower.notches
+        local shownNotches = 0
+        if notches then
+            local fragments = cp.shapeInfo and 0 or floor(tonumber(cp.preview and cp.preview.fragments) or 0)
+            local notchW = max(1, S((tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)))
+            if fragments >= 2 and fragments <= 64
+                and ((tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)) >= 1
+                and ((previewW / fragments) - notchW) >= 1 then
+                local reverse = bars.classPowerFillReverse == true
+                local limit = previewW - notchW
+                local notchH = max(1, S(cpH))
+                for i = 1, fragments - 1 do
+                    local notch = notches[i]
+                    if not notch then
+                        notch = mock.classPower:CreateTexture(nil, "OVERLAY", nil, 6)
+                        notch:SetTexture(TEX_W8)
+                        notches[i] = notch
+                    end
+                    local nx = floor(((previewW * i) / fragments) - (notchW * 0.5) + 0.5)
+                    if nx < 0 then nx = 0 elseif nx > limit then nx = limit end
+                    if reverse then nx = limit - nx end
+                    notch:ClearAllPoints()
+                    notch:SetVertexColor(0, 0, 0, 1)
+                    notch:SetSize(notchW, notchH)
+                    notch:SetPoint("TOPLEFT", mock.classPower, "TOPLEFT", nx, 0)
+                    notch:Show()
+                    shownNotches = i
+                end
+            end
+            for i = shownNotches + 1, #notches do notches[i]:Hide() end
+        end
         if PreviewHelpers.ApplyRoundedClassPowerSurface then
             local roundedApplied = PreviewHelpers.ApplyRoundedClassPowerSurface(mock.classPower, cp.rounded,
                 mock.classPower.segments, nil, cp.segCount,
@@ -2670,6 +2704,9 @@ function Preview.Refresh(box, reason)
         end
         mock.classPower:Hide()
         for i = 1, #mock.classPower.segments do mock.classPower.segments[i]:Hide() end
+        if mock.classPower.notches then
+            for i = 1, #mock.classPower.notches do mock.classPower.notches[i]:Hide() end
+        end
         if mock.classPower.text then mock.classPower.text:Hide() end
         HidePreviewSecondaryClassTimer(mock)
         box.handleClassPower:Hide()
