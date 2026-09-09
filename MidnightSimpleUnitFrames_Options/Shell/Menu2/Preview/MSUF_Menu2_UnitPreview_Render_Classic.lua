@@ -4,6 +4,8 @@
 --- refresh path that composes the live preview visuals.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
+local LEGACY_BLIZZARD_PORTRAIT = (MSUF.Client and MSUF.Client.IsVanilla == true)
+    or (_G.WOW_PROJECT_CLASSIC ~= nil and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_CLASSIC)
 local Render = MSUF.UFPreviewRender or {}
 MSUF.UFPreviewRender = Render
 local MenuState = MSUF.MSUF2 or _G.MSUF2 or {}
@@ -966,7 +968,7 @@ function Render.Install(Preview, deps)
         if portrait._msufPreviewShapeMaskKey ~= key then
             portrait._msufPreviewShapeMaskKey = key
             local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
-            if wantAtlas and GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.maskAtlas) then
+            if wantAtlas and not LEGACY_BLIZZARD_PORTRAIT and GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.maskAtlas) then
                 mask:SetAtlas(PREVIEW_BLIZZ.maskAtlas)
             else
                 mask:SetTexture(wantAtlas and PREVIEW_BLIZZ.circleMask or file, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
@@ -1023,7 +1025,7 @@ function Render.Install(Preview, deps)
             return
         end
         local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
-        local info = GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.frameAtlas)
+        local info = not LEGACY_BLIZZARD_PORTRAIT and GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.frameAtlas)
         local file = info and (info.file or info.filename)
         if not file then
             if not fallback and portrait.CreateTexture then

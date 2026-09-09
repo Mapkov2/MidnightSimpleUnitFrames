@@ -2,6 +2,11 @@ local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
 
+-- Era's legacy PlayerFrame does not use the modern HUD portrait atlases.
+-- Do not select them merely because GetAtlasInfo exposes an atlas entry.
+local LEGACY_BLIZZARD_PORTRAIT = (MSUF.Client and MSUF.Client.IsVanilla == true)
+  or (_G.WOW_PROJECT_CLASSIC ~= nil and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_CLASSIC)
+
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
 local Layers = UF and UF.Layers or {}
@@ -1241,6 +1246,7 @@ end
 --- art relocation inside the sheet is picked up without code changes.
 local blizzardRingInfo
 local function BlizzardRingInfo()
+  if LEGACY_BLIZZARD_PORTRAIT then return nil end
   if blizzardRingInfo ~= nil then
     return blizzardRingInfo or nil
   end
@@ -1268,6 +1274,7 @@ end
 
 local blizzardMaskAtlasKnown
 local function BlizzardMaskAtlasAvailable()
+  if LEGACY_BLIZZARD_PORTRAIT then return false end
   if blizzardMaskAtlasKnown == nil then
     local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
     blizzardMaskAtlasKnown = (GetAtlasInfo and GetAtlasInfo(BLIZZARD_PORTRAIT_MASK_ATLAS)) ~= nil

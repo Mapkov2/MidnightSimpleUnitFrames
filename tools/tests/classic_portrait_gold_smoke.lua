@@ -326,4 +326,24 @@ local previewArt = assert(portrait._msufPreviewBlizzFallback)
 assert(previewArt.shown and previewArt.vertexColor[2] == 0.82, "Era preview must show gold")
 render.LayoutPreviewBlizzardPortrait(portrait, false, 60, 60)
 assert(not previewArt.shown, "preview fallback must hide on shape switch")
+-- Era must use bundled art even when the modern atlas name resolves.
+_G.WOW_PROJECT_CLASSIC, _G.WOW_PROJECT_ID = 2, 2
+_G.C_Texture = { GetAtlasInfo = function() error("Era must not query modern HUD portrait atlases") end }
+local era = LoadElement()
+local eraFrame = NewFrame("BLIZZARD")
+era.Create(eraFrame)
+era.Apply(eraFrame, eraFrame.MSUFSpec)
+assert(eraFrame.MSUFPortraitHolder.artBorder.shown, "Era default Blizzard shape needs gold art")
+assert(eraFrame.MSUFPortraitHolder.mask.texture:find("circle_mask", 1, true))
+ns = { MSUF2 = ns.MSUF2, Client = { IsVanilla = true } }
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render_Classic.lua"))("Options", ns)
+preview = {}
+ns.UFPreviewRender.Install(preview, {})
+render = preview.RefreshDeps._RenderState
+portrait = NewRegion()
+portrait.tex, portrait.bg = NewRegion(portrait), NewRegion(portrait)
+render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
+render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60)
+assert(portrait._msufPreviewShapeMask.texture:find("circle_mask", 1, true), "Era preview must use the bundled circle mask")
+assert(portrait._msufPreviewBlizzFallback.shown, "Era preview must use gold art even with atlas APIs")
 print("classic_portrait_gold_smoke: OK")
