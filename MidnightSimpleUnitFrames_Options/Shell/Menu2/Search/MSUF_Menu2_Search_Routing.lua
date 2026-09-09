@@ -716,6 +716,7 @@ castbar=castbar|cast bar|spell name|cast icon|cast time
 status_icons=status icons|status icon|indicator|level|level text|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez|advanced status|advanced x offset|advanced y offset|extended x offset|extended y offset
 load_conditions=load conditions|visibility conditions|show conditions|hide conditions|when to show|when to hide
 boss_layout=boss layout|boss preview|boss frames
+boss_target_highlight=boss target highlight|boss target marker|highlight style|only highlight with multiple boss frames|marker anchor|arrow direction|marker layout|marker size|marker x offset|marker y offset
 ]],
     gf_layout = [[
 general=general|enable|disable|turn off|off|hide group frames|hide raid frames|hide party frames|group frames off|raid frames off|party frames off|use msuf group frames|show player|show solo|solo|visibility|party frames not showing|raid frames not showing|ausschalten|deaktivieren|ausblenden

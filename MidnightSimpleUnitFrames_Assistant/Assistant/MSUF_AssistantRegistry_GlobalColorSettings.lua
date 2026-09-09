@@ -51,6 +51,20 @@ if type(ColorData) ~= "table" then return end
 local AURA_COOLDOWN_TEXT_COLOR_ROWS = ColorData.AURA_COOLDOWN_TEXT_COLOR_ROWS or {}
 local AURA_COOLDOWN_TEXT_THRESHOLD_ROWS = ColorData.AURA_COOLDOWN_TEXT_THRESHOLD_ROWS or {}
 
+Registry:RegisterSetting({
+    key = "general.powerColorMode", label = "Power Bar Color Mode", page = "opt_colors",
+    category = "Global / Colors / Power", unit = "global", frameType = "globalColors",
+    attribute = "powerColorMode", type = "enum", values = { "power", "class" },
+    aliases = { "power bar color mode", "power color by class", "resource color mode" },
+    valueAliases = { resource = "power", ["resource colors"] = "power", ["class colors"] = "class" },
+    get = function()
+        local g = GeneralDB()
+        return tostring(g.powerColorMode or g.powerBarColorMode or "power"):lower() == "class" and "class" or "power"
+    end,
+    set = function(value) GeneralDB().powerColorMode = value end,
+    apply = ApplyColors, combatSafe = false,
+})
+
 do
 local BuildColorSettingsCoreContext = A.GlobalRegistry and A.GlobalRegistry.BuildColorSettingsCoreContext
 local ColorCore = type(BuildColorSettingsCoreContext) == "function" and BuildColorSettingsCoreContext({
