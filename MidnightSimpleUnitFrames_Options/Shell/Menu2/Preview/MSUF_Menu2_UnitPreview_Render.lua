@@ -2627,10 +2627,17 @@ function Preview.Refresh(box, reason)
         local shownNotches = 0
         if notches then
             local fragments = cp.shapeInfo and 0 or floor(tonumber(cp.preview and cp.preview.fragments) or 0)
-            local notchW = max(1, S((tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)))
-            if fragments >= 2 and fragments <= 64
-                and ((tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)) >= 1
-                and ((previewW / fragments) - notchW) >= 1 then
+            local rawNotchW = (tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)
+            local notchW = max(1, S(rawNotchW))
+            --- A divider never takes more room than the fragment it borders,
+            --- exactly as on the live bar.
+            if fragments >= 2 then
+                local maxNotchW = floor(previewW / (fragments * 2))
+                if notchW > maxNotchW then notchW = maxNotchW end
+            else
+                notchW = 0
+            end
+            if fragments >= 2 and fragments <= 64 and rawNotchW >= 1 and notchW >= 1 then
                 local reverse = bars.classPowerFillReverse == true
                 local limit = previewW - notchW
                 local notchH = max(1, S(cpH))
