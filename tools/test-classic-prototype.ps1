@@ -1008,7 +1008,7 @@ if ($lua) {
         & $lua.Source $auraTestDriver (Join-Path $root $v604Smoke)
         if ($LASTEXITCODE -ne 0) { throw "v6.04 parity smoke failed: $v604Smoke" }
     }
-    foreach ($clientVisualSmoke in @("classic_unit_availability_smoke.lua", "classic_portrait_gold_smoke.lua")) {
+    foreach ($clientVisualSmoke in @("classic_unit_availability_smoke.lua", "classic_portrait_gold_smoke.lua", "classic_minimap_click_smoke.lua")) {
         & $lua.Source $auraTestDriver (Join-Path $root ("tools/tests/" + $clientVisualSmoke))
         if ($LASTEXITCODE -ne 0) { throw "Classic unit/portrait regression failed: $clientVisualSmoke" }
     }

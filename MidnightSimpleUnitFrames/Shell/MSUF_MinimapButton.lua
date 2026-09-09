@@ -203,6 +203,7 @@ local function EnsureInitialized()
     --- Fallback: simple minimap-attached button
     if not fallbackBtn and _G.Minimap and type(_G.CreateFrame) == "function" then
         local b = CreateFrame("Button", "MSUF_MinimapButton", _G.Minimap)
+        b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b:SetSize(32, 32)
         b:SetFrameStrata("MEDIUM")
         b:SetFrameLevel(8)
