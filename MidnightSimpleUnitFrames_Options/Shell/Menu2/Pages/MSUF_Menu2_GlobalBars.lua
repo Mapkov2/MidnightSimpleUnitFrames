@@ -311,11 +311,32 @@ local function RegisterDragRows(container, path)
     end
     return container
 end
+--- A client without focus, boss or arena units has no page and no frame for
+--- those sensors, so they can never report enabled. Counting them left the
+--- shared scope permanently "missing a sensor" and made the auto-enable write
+--- aura config for units that do not exist on this client. Client support is
+--- fixed for the session, so resolve the list once.
+local supportedUnitFrameAuraUnits
+local function SupportedUnitFrameAuraUnits()
+    if supportedUnitFrameAuraUnits then return supportedUnitFrameAuraUnits end
+    if type(M.SupportsUnitPage) ~= "function" then
+        supportedUnitFrameAuraUnits = UNITFRAME_DISPEL_AURA_UNITS
+        return supportedUnitFrameAuraUnits
+    end
+    local supported = {}
+    for i = 1, #UNITFRAME_DISPEL_AURA_UNITS do
+        local unit = UNITFRAME_DISPEL_AURA_UNITS[i]
+        if M.SupportsUnitPage("uf_" .. unit) then supported[#supported + 1] = unit end
+    end
+    supportedUnitFrameAuraUnits = supported
+    return supported
+end
 local function UnitFrameAuraScopeUnits()
     local scope = CurrentBarsScope()
-    if scope == "shared" then return UNITFRAME_DISPEL_AURA_UNITS end
-    for i = 1, #UNITFRAME_DISPEL_AURA_UNITS do
-        if UNITFRAME_DISPEL_AURA_UNITS[i] == scope then return { scope } end
+    local units = SupportedUnitFrameAuraUnits()
+    if scope == "shared" then return #units > 0 and units or nil end
+    for i = 1, #units do
+        if units[i] == scope then return { scope } end
     end
     return nil
 end

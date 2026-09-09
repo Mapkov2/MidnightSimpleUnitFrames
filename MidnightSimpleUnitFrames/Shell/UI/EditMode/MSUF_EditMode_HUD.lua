@@ -160,10 +160,18 @@ function HUD.AutomaticCooldownProvider()
     return getter()
 end
 
+--- Clients without a Cooldown Manager never get the toolbar toggle: it would
+--- write a preference that no anchor can consume.
+function HUD.CooldownAnchorSupported()
+    local supported = _G.MSUF_IsCooldownAnchorSupported
+    if type(supported) == "function" then return supported() == true end
+    return type(_G.C_CooldownViewer) == "table"
+end
+
 function HUD.CooldownAnchorEnabled(general)
     local getter = _G.MSUF_IsCooldownAnchorEnabled
     if type(getter) == "function" then return getter(general) == true end
-    return general and general.anchorToCooldown == true or false
+    return type(_G.C_CooldownViewer) == "table" and general and general.anchorToCooldown == true or false
 end
 
 local function SetControlEnabled(btn, enabled)
@@ -2189,24 +2197,26 @@ local function EnsureHUD()
         HUD.OpenSelectedSettings()
     end, "Open Menu2 at the selected\nframe or component settings.")
 
-    cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 116, CLUSTER_BTN_H, "caption", function()
-        local db = _G.MSUF_DB; if not db then return end
-        db.general = db.general or {}
-        local enabled = not HUD.CooldownAnchorEnabled(db.general)
-        local setter = _G.MSUF_SetCooldownAnchorEnabled
-        if type(setter) == "function" then
-            setter(enabled, true)
-        else
-            db.general.anchorToCooldown = enabled
-        end
-        SetActive(cdmBtn, HUD.CooldownAnchorEnabled(db.general))
-        ApplyAllSettingsSafe()
-        HUD.SetStatus(HelpText(enabled and "EM_CDM_ON" or "EM_CDM_OFF"), "info")
-        C_Timer.After(0.1, function()
-            if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            if _G.MSUF_EM2_ReforcePreviewFrames then _G.MSUF_EM2_ReforcePreviewFrames() end
-        end)
-    end, "Anchor all unitframes to the\nEssential Cooldown Manager.")
+    if HUD.CooldownAnchorSupported() then
+        cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 116, CLUSTER_BTN_H, "caption", function()
+            local db = _G.MSUF_DB; if not db then return end
+            db.general = db.general or {}
+            local enabled = not HUD.CooldownAnchorEnabled(db.general)
+            local setter = _G.MSUF_SetCooldownAnchorEnabled
+            if type(setter) == "function" then
+                setter(enabled, true)
+            else
+                db.general.anchorToCooldown = enabled
+            end
+            SetActive(cdmBtn, HUD.CooldownAnchorEnabled(db.general))
+            ApplyAllSettingsSafe()
+            HUD.SetStatus(HelpText(enabled and "EM_CDM_ON" or "EM_CDM_OFF"), "info")
+            C_Timer.After(0.1, function()
+                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+                if _G.MSUF_EM2_ReforcePreviewFrames then _G.MSUF_EM2_ReforcePreviewFrames() end
+            end)
+        end, "Anchor all unitframes to the\nEssential Cooldown Manager.")
+    end
 
     anchorBtn = AddRowButton(linksItems, linksCluster, "Anchor", 60, CLUSTER_BTN_H, "caption", function()
         local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker()
@@ -2465,8 +2475,8 @@ function HUD.RefreshControls(force)
                 or L["Anchor all unitframes to the\nEssential Cooldown Manager."]
         end
         SetActive(cdmBtn, HUD.CooldownAnchorEnabled(general))
-        SetControlEnabled(anchorBtn, true)
     end
+    SetControlEnabled(anchorBtn, true)
     if auraBtn then
         local db = _G.MSUF_DB; local a2 = db and db.auras3; local sh = a2 and a2.shared
         SetActive(auraBtn, sh and sh.showInEditMode and _G.MSUF_UnitPreviewActive == true)

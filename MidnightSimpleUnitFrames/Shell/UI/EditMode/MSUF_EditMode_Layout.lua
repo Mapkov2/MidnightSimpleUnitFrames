@@ -1377,7 +1377,7 @@ local function UnitCooldownAnchorName(conf)
     local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
     local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
         and isCooldownAnchorEnabled(general) == true
-        or general and general.anchorToCooldown == true
+        or (type(_G.C_CooldownViewer) == "table" and general and general.anchorToCooldown == true)
     if cooldownAnchorEnabled then return "EssentialCooldownViewer" end
     local globalAnchor = general and general.anchorName
     if EDIT_COOLDOWN_ANCHORS[globalAnchor] then return globalAnchor end

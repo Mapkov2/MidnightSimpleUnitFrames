@@ -88,7 +88,13 @@ local function CooldownAnchorEnabled()
     local general = GetGeneral and GetGeneral() or nil
     local getter = _G.MSUF_IsCooldownAnchorEnabled
     if type(getter) == "function" then return getter(general) == true end
-    return type(general) == "table" and general.anchorToCooldown == true or false
+    return type(_G.C_CooldownViewer) == "table" and type(general) == "table" and general.anchorToCooldown == true or false
+end
+--- Hides the anchor switch on clients that can never host a Cooldown Manager.
+local function CooldownAnchorSupported()
+    local supported = _G.MSUF_IsCooldownAnchorSupported
+    if type(supported) == "function" then return supported() == true end
+    return type(_G.C_CooldownViewer) == "table"
 end
 local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
@@ -1186,6 +1192,17 @@ local function BuildLayout(ctx, builder, unit)
         customAnchor.Refresh()
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
         if anchorPoint.SetValue then anchorPoint:SetValue(AnchorPointValue()) end
+        if not CooldownAnchorSupported() then
+            -- The stored preference is kept so the profile stays portable, but
+            -- there is nothing to anchor to here: hide the switch instead of
+            -- offering a control that cannot take effect.
+            W.SetControlShown(cooldownAnchor, false)
+            automaticNotice:SetMessage(M.Tr("This client has no Cooldown Manager. Unit Frames use their own anchor."), "info")
+            automaticNotice:Show()
+            SetSectionHeaderStatus(sec, nil)
+            return
+        end
+        W.SetControlShown(cooldownAnchor, true)
         if automaticProviderLabel then
             if cooldownAnchorEnabled then
                 automaticNotice:SetMessage(M.Format(

@@ -134,10 +134,18 @@ local function IsCooldownViewerAnchorUsable(name)
   return IsCooldownViewerAnchorFrameUsable(ResolveCooldownViewerAnchor(name))
 end
 
+--- Fixed per client once the integration resolved it, so this stays a single
+--- boolean read on the cold anchor path.
+local function CooldownAnchorSupported()
+  local supported = _G.MSUF_IsCooldownAnchorSupported
+  if type(supported) == "function" then return supported() == true end
+  return type(_G.C_CooldownViewer) == "table"
+end
+
 local function IsGlobalCooldownAnchorEnabled(general)
   local isEnabled = _G.MSUF_IsCooldownAnchorEnabled
   if type(isEnabled) == "function" then return isEnabled(general) == true end
-  return general and general.anchorToCooldown == true or false
+  return CooldownAnchorSupported() and general and general.anchorToCooldown == true or false
 end
 
 local function CanonicalAnchorFrameName(name)
@@ -1561,7 +1569,11 @@ local function ConfiguredCooldownWidthMask()
   -- widths. This adds no polling: provider Show/Hide/Size events merely queue
   -- one OOC reapply, and combat events are replayed after regen.
   local anchorMask = 0
+  -- Only Cooldown Manager frames carry a source bit. A client that cannot host
+  -- one must not observe a viewer name left over in an imported profile.
+  local cooldownSupported = CooldownAnchorSupported()
   local function AddAnchorName(name)
+    if not cooldownSupported then return end
     local bit = COOLDOWN_WIDTH_SOURCE_BITS[CanonicalAnchorFrameName(name)]
     mask = MaskAdd(mask, bit)
     anchorMask = MaskAdd(anchorMask, bit)

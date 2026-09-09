@@ -182,6 +182,21 @@ local function Bool(value, fallback)
     return value == true
 end
 
+--- Fallback for a profile with no stored aggroOutlineMode. Bars, the Assistant
+--- manifest and the group frames all declare this border ON, so a profile that
+--- never recorded a decision follows that. Only the retired indicator key can
+--- turn it off without an explicit mode, and Defaults seeds the real key from
+--- the same predicate - keep the two in step.
+local function AggroBorderDefault(general)
+  if general == nil then return true end
+  if general.aggroIndicatorMode == "border" then return true end
+  --- enableAggroHighlight == false is the only explicit off the retired
+  --- indicator could record. Defaults coerces aggroIndicatorMode to "off" for
+  --- every profile that never carried it, so that value alone proves nothing
+  --- and must not disable the shared key - group frames read it too.
+  return general.enableAggroHighlight ~= false
+end
+
 local function OutlineModeEnabled(value, fallback)
   if value == nil then value = fallback end
   if value == true or value == false then return value end
@@ -1584,17 +1599,31 @@ local function CastbarEnabled(unit, key, general)
   return not (general and general[castbarKey] == false)
 end
 
+--- A client that cannot host a Cooldown Manager anchor must also ignore a
+--- stored one: imported profiles carry the viewer name, and resolving it would
+--- otherwise apply cooldown-space offsets against UIParent. Treating it as
+--- unconfigured routes the frame through the ordinary global anchor instead.
+local function CooldownAnchorSupported()
+  local supported = _G.MSUF_IsCooldownAnchorSupported
+  if type(supported) == "function" then return supported() == true end
+  return type(_G.C_CooldownViewer) == "table"
+end
+
 local function IsGlobalCooldownAnchorEnabled(general)
   local isEnabled = _G.MSUF_IsCooldownAnchorEnabled
   if type(isEnabled) == "function" then return isEnabled(general) == true end
-  return general and general.anchorToCooldown == true or false
+  return CooldownAnchorSupported() and general and general.anchorToCooldown == true or false
 end
 
 local function ResolveAnchorSettings(conf, general)
+  local cooldownSupported = CooldownAnchorSupported()
   local anchorFrameName = conf and conf.anchorFrameName
   if anchorFrameName == "UI_Parent" then anchorFrameName = "UIParent" end
   if type(anchorFrameName) == "string" and anchorFrameName ~= "" then
-    return anchorFrameName, conf.anchorToUnitframe, IsCooldownViewerFrameName(anchorFrameName)
+    local isCooldownAnchor = IsCooldownViewerFrameName(anchorFrameName)
+    if not isCooldownAnchor or cooldownSupported then
+      return anchorFrameName, conf.anchorToUnitframe, isCooldownAnchor
+    end
   end
 
   local anchorToUnitframe = conf and conf.anchorToUnitframe
@@ -1604,9 +1633,13 @@ local function ResolveAnchorSettings(conf, general)
     and anchorToUnitframe ~= "global"
     and anchorToUnitframe ~= "FREE" then
     if IsCooldownViewerFrameName(anchorToUnitframe) then
-      return anchorToUnitframe, "GLOBAL", true
+      if cooldownSupported then
+        return anchorToUnitframe, "GLOBAL", true
+      end
+      anchorToUnitframe = nil
+    else
+      return nil, anchorToUnitframe, false
     end
-    return nil, anchorToUnitframe, false
   end
 
   if IsGlobalCooldownAnchorEnabled(general) then
@@ -1616,7 +1649,10 @@ local function ResolveAnchorSettings(conf, general)
   local globalAnchor = general and general.anchorName
   if globalAnchor == "UI_Parent" then globalAnchor = "UIParent" end
   if IsCooldownViewerFrameName(globalAnchor) then
-    return globalAnchor, "GLOBAL", true
+    if cooldownSupported then
+      return globalAnchor, "GLOBAL", true
+    end
+    globalAnchor = nil
   end
   if type(globalAnchor) == "string"
     and globalAnchor ~= ""
@@ -2286,7 +2322,7 @@ local function CompileUnitBorder(out, conf, general, bars)
     legacyDispelBorder = true
   end
   border.aggro = OutlineModeEnabled(ScopedValue(conf, general, "aggroOutlineMode", nil),
-    general.aggroIndicatorMode == "border" or general.enableAggroHighlight == true)
+    AggroBorderDefault(general))
   border.dispel = OutlineModeEnabled(ScopedValue(conf, general, "dispelOutlineMode", nil),
     legacyDispelBorder)
   border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE"))
