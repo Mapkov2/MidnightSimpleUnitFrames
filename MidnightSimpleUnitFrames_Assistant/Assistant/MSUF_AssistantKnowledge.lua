@@ -37,6 +37,37 @@ local function Trim(text)
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+-- "search menu.auraBlacklistPreset" names one control by its registry key.
+-- That is a lookup of exactly that entry: the aura wording inside the key
+-- must not turn it into a frame clarification, and the concept lanes have
+-- nothing to add to it. Keys are case-sensitive, so the raw text is read.
+local function ExactRegistryKeyQuery(query)
+    local raw = Trim(tostring(query or ""))
+    local rest = raw:match("^[Ss][Ee][Aa][Rr][Cc][Hh]%s+(.+)$")
+        or raw:match("^[Ff][Ii][Nn][Dd]%s+(.+)$") or raw
+    rest = Trim(rest)
+    if rest == "" or rest:find("%s") or not rest:find(".", 1, true) then return nil end
+    if Registry and type(Registry.GetSetting) == "function" and Registry:GetSetting(rest) then
+        return rest
+    end
+    -- The Router hands Knowledge the normalized (lower-cased) text, so the
+    -- key is matched case-insensitively against a map built once.
+    local settings = Registry and type(Registry.AllSettings) == "function" and Registry:AllSettings() or nil
+    if type(settings) ~= "table" then return nil end
+    local map = K._lowerKeyMap
+    if type(map) ~= "table" or map.count ~= #settings then
+        map = { count = #settings }
+        for i = 1, #settings do
+            local settingKey = tostring(settings[i] and settings[i].key or "")
+            if settingKey ~= "" then map[settingKey:lower()] = settingKey end
+            if i % 128 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        end
+        K._lowerKeyMap = map
+    end
+    return map[rest:lower()]
+end
+K.ExactRegistryKeyQuery = ExactRegistryKeyQuery
+
 local function Normalize(text)
     if type(A.Normalize) == "function" then
         text = A.Normalize(text)
@@ -256,6 +287,9 @@ end
 -- The Router's compact search renders the same "<control> - <page>" lines
 -- and must use the same English page names.
 K.PageLabel = PageLabel
+-- The registry's page-name renderer reads the same English names without
+-- calling back into PageLabel (which itself falls back to the registry).
+K.PAGE_LABEL_OVERRIDES = PAGE_LABEL_OVERRIDES
 
 local function ItemPageLabel(item)
     if type(item) ~= "table" then return nil end
@@ -1584,6 +1618,10 @@ function K.ResolveAuraLandingPage(query, opts)
 end
 
 function K.ResolveFrameLocalAuraPage(query, opts)
+    -- A registry key typed verbatim is a lookup of that entry, whatever aura
+    -- words the key contains; both callers (page help and the Router's aura
+    -- clarification) must not ask which frame was meant.
+    if ExactRegistryKeyQuery(query) then return nil, false end
     local norm = Normalize(query)
     if ContainsAny(norm, GLOBAL_AURA_ICON_THEME_TERMS) then return nil, false end
     if ContainsAny(norm, GLOBAL_AURA_TIMER_COLOR_TERMS) then return nil, false end
@@ -2603,6 +2641,12 @@ function K.IsStaticConceptDefinition(query)
 end
 
 local function DirectHelpAnswer(query, opts)
+    -- A registry key typed verbatim is a lookup of that entry. The concept
+    -- and page-help readings below key on words inside the key ("aura",
+    -- "blacklist") and answered "search menu.auraBlacklistPreset" with the
+    -- Aura frame clarification, through K.DirectConceptHelp as well as
+    -- K.Answer; the search result list is the answer.
+    if ExactRegistryKeyQuery(query) then return nil end
     local router = A.RouterPrivate
     local semanticQuery = router and type(router.StripResponseLanguageDirective) == "function"
         and router.StripResponseLanguageDirective(query) or query
@@ -3493,22 +3537,6 @@ function K.DirectConceptHelp(query, opts)
     local direct = DirectHelpAnswer(query, opts or {})
     if not direct then return nil end
     return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext(direct))
-end
-
--- "search menu.auraBlacklistPreset" names one control by its registry key.
--- That is a lookup of exactly that entry: the aura wording inside the key
--- must not turn it into a frame clarification, and the concept lanes have
--- nothing to add to it. Keys are case-sensitive, so the raw text is read.
-local function ExactRegistryKeyQuery(query)
-    local raw = Trim(tostring(query or ""))
-    local rest = raw:match("^[Ss][Ee][Aa][Rr][Cc][Hh]%s+(.+)$")
-        or raw:match("^[Ff][Ii][Nn][Dd]%s+(.+)$") or raw
-    rest = Trim(rest)
-    if rest == "" or rest:find("%s") or not rest:find(".", 1, true) then return nil end
-    if Registry and type(Registry.GetSetting) == "function" and Registry:GetSetting(rest) then
-        return rest
-    end
-    return nil
 end
 
 function K.Answer(query, opts)

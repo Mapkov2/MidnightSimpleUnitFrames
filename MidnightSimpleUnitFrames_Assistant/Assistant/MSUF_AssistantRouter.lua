@@ -3865,7 +3865,7 @@ function R.KnowledgeNoMatch(text)    -- "I did not catch which option you meant"
                     local single = entries[1].item or {}
                     local page = single.page
                     local pageLabel = single.pageLabel
-                        or (page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page"))
+                        or (page and R.EnglishPageLabel(page, "MSUF page"))
                     if page and pageLabel then
                         entries[2] = { item = {
                             kind = "page",
@@ -10345,8 +10345,11 @@ end
 
 function R.TryConversationalMutation(text, coreHandler)
     local norm = R.Normalize(text)
-    -- Setup guidance owns the complete onboarding request before this lane
-    -- removes the "help me" wrapper and retries it as a setting mutation.
+    -- "help me configure my frames" is onboarding wording the setup-guidance
+    -- lane owns. This lane strips the "help me" wrapper and re-enters the
+    -- open-ended idea lane with "configure my frames", where the stand-down on
+    -- the whole phrase can no longer see it -- so it is applied here, on the
+    -- sentence as typed.
     if type(R.SETUP_GUIDANCE_TERMS) == "table" and R.ContainsAny(norm, R.SETUP_GUIDANCE_TERMS) then
         return nil
     end
@@ -14856,7 +14859,7 @@ function R.SettingFollowupResults(settingKey, query)
 
     if not setting then return nil end
     local page = R.FallbackPageForSetting(setting)
-    local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
+    local pageLabel = page and R.EnglishPageLabel(page, "MSUF page") or nil
     return {
         {
             kind = "setting",
@@ -14939,6 +14942,18 @@ function R.RegistrySettingTypeText(controlType, item)
         return A.DisplaySettingControl(setting, "article")
     end
     return "an MSUF option"
+end
+
+-- Assistant output is English only. The menu's page title follows the client
+-- locale, so a search result rendered "Raid Frame Scaling - DE Gruppenlayout"
+-- under deDE; the Knowledge index's English page names come first and the
+-- menu title only covers a page the Assistant does not know by name.
+function R.EnglishPageLabel(page, fallback)
+    if not page or tostring(page) == "" then return fallback end
+    local label = A.Knowledge and type(A.Knowledge.PageLabel) == "function" and A.Knowledge.PageLabel(page) or nil
+    if label and label ~= "MSUF page" then return label end
+    if type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(page, fallback) end
+    return fallback
 end
 
 function R.RegistryLocationLine(index, item)
@@ -15085,7 +15100,7 @@ function R.CompactRegistrySettingSearchEntries(text, limit, noRetry)
             local score = 1000 + (#queryWords * 100) - (extra * 20)
             if candidateText == queryJoined then score = score + 3000 end
             local page = R.FallbackPageForSetting(setting)
-            local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, setting.category or "MSUF page")
+            local pageLabel = page and R.EnglishPageLabel(page, setting.category or "MSUF page")
                 or tostring(setting.category or "MSUF page")
             matches[#matches + 1] = {
                 score = score,
@@ -15284,7 +15299,7 @@ function R.RegistryActionItemForKey(actionKey, page)
         page = tostring(A.ResolveRegisteredMenuPage(page) or "")
     end
     if page == "" then page = nil end
-    local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
+    local pageLabel = page and R.EnglishPageLabel(page, "MSUF page") or nil
     return {
         kind = action.type == "diagnostic" and "diagnostic" or "action",
         key = action.key,
@@ -15349,13 +15364,25 @@ function R.CanonicalExplicitSearchEntries(subject)
         return #entries > 0 and entries or nil
     end
 
-    if subject == "raid background color" or subject == "raid frame background color" then
-        local backdrop = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey("gf_raid.bgColor") or nil
-        local dead = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey("gf_raid.deadBgColor") or nil
+    -- "<group> background color" is a reviewed two-control family: the
+    -- group's own Backdrop Color and its Dead Background Color. Raid was the
+    -- only member for a long time; the party frames answered the same idea
+    -- with a fuzzy list that missed Party Backdrop Color entirely.
+    local groupScope = subject:match("^(party)%s+background%s+color$")
+        or subject:match("^(party)%s+frame%s+background%s+color$")
+        or subject:match("^(raid)%s+background%s+color$")
+        or subject:match("^(raid)%s+frame%s+background%s+color$")
+        or subject:match("^(mythicraid)%s+background%s+color$")
+        or subject:match("^(mythicraid)%s+frame%s+background%s+color$")
+        or ((subject == "mythic raid background color" or subject == "mythic raid frame background color")
+            and "mythicraid" or nil)
+    if groupScope then
+        local backdrop = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey("gf_" .. groupScope .. ".bgColor") or nil
+        local dead = R.RegistrySettingItemForKey and R.RegistrySettingItemForKey("gf_" .. groupScope .. ".deadBgColor") or nil
         local entries = {}
         if backdrop then entries[#entries + 1] = { score = 10000, rawScore = 10000, item = backdrop } end
         if dead then entries[#entries + 1] = { score = 9999, rawScore = 9999, item = dead } end
-        return #entries > 0 and entries or nil, "raid_background"
+        return #entries > 0 and entries or nil, "group_background"
     end
 
     return nil
@@ -15501,24 +15528,35 @@ function R.TryCompactExplicitSettingSearch(text)
     if not entries then return nil end
     local visible = math.min(3, #entries)
     local lines
-    if canonicalKind == "raid_background" and visible > 1 then
+    -- The group background family names the scope through its own Backdrop
+    -- Color label ("Raid Backdrop Color" -> "Raid"), so party and mythic raid
+    -- read the same way raid always did.
+    local groupBackground = canonicalKind == "group_background" and visible > 1
+    local backdropLabel, deadLabel, scopeLabel
+    if groupBackground then
+        local first, second = entries[1].item, entries[2].item
+        backdropLabel = tostring(first and (first.label or (first.setting and first.setting.label)) or "Backdrop Color")
+        deadLabel = tostring(second and (second.label or (second.setting and second.setting.label)) or "Dead Background Color")
+        scopeLabel = backdropLabel:match("^(.-)%s+Backdrop Color$") or "Group"
+    end
+    if groupBackground then
         lines = {
-            "Raid background color could mean two different MSUF controls. Pick the one you meant:",
+            scopeLabel .. " background color could mean two different MSUF controls. Pick the one you meant:",
         }
     else
         lines = { visible == 1 and "I found this in MSUF:" or "I found these MSUF matches:" }
     end
     for i = 1, visible do lines[#lines + 1] = R.RegistryLocationLine(i, entries[i].item) end
-    if canonicalKind == "raid_background" and visible > 1 then
-        lines[#lines + 1] = "Raid Backdrop Color is the normal frame background. Raid Dead Background Color is the special background used for dead members."
+    if groupBackground then
+        lines[#lines + 1] = backdropLabel .. " is the normal frame background. " .. deadLabel .. " is the special background used for dead members."
         lines[#lines + 1] = "Reply with 1 or 2, or ask me to open or explain that result."
     else
         lines[#lines + 1] = "You can ask me to open a page, explain a result, or change an option directly."
     end
     return {
         text = table.concat(lines, "\n"),
-        status = canonicalKind == "raid_background" and visible > 1 and "ambiguous" or "info",
-        result = canonicalKind == "raid_background" and visible > 1 and "ambiguous" or "info",
+        status = groupBackground and "ambiguous" or "info",
+        result = groupBackground and "ambiguous" or "info",
         summary = "Assistant compact registry search",
         searchResults = R.RegistryLocationResultFollowups(entries, visible),
     }
@@ -17244,7 +17282,12 @@ end
 
 function R.TryOpenEndedSettingIdea(text, coreHandler)
     local parser = A.Parser or {}
-    -- A warm fuzzy index must not turn onboarding into a colour-setting prompt.
+    -- "help me configure my frames" is onboarding wording the setup-guidance
+    -- lane owns (it starts the native guided setup). That lane runs after this
+    -- one, and with a warm knowledge index the fuzzy search read "my frames"
+    -- as Bar Outline Color and asked for a colour value; with a cold index it
+    -- happened to decline, which is why the gap only showed once the
+    -- background index build had landed.
     if type(R.SETUP_GUIDANCE_TERMS) == "table" and R.ContainsAny(R.Normalize(text), R.SETUP_GUIDANCE_TERMS) then
         return nil
     end
@@ -18273,7 +18316,7 @@ function R.LastChangedSettingItem()
     if not setting then return nil, ctx end
 
     local page = R.FallbackPageForSetting(setting)
-    local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
+    local pageLabel = page and R.EnglishPageLabel(page, "MSUF page") or nil
     local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or key)
     return {
         kind = "setting",
@@ -18477,11 +18520,7 @@ function R.RegistrySettingItemForKey(settingKey)
     -- Assistant output is English only: the menu's page title follows the
     -- client locale ("DE Gruppenlayout"), so the Knowledge index's English
     -- page names come first and the menu title only covers unknown pages.
-    local pageLabel = page and A.Knowledge and type(A.Knowledge.PageLabel) == "function"
-        and A.Knowledge.PageLabel(page) or nil
-    if page and (pageLabel == nil or pageLabel == "MSUF page") and A.DisplayPageLabel then
-        pageLabel = A.DisplayPageLabel(page, "MSUF page")
-    end
+    local pageLabel = page and R.EnglishPageLabel(page, "MSUF page") or nil
     local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or settingKey)
     return {
         kind = "setting",
@@ -21921,17 +21960,21 @@ function A.RouteInput(text, coreHandler)
                     local currentPageHelp = R.TryPageHelpShortcut(text, Core)
                     if currentPageHelp then return currentPageHelp end
                 end
-                if A.Knowledge and type(A.Knowledge.Answer) == "function" then
-                    local knowledgeAnswer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
-                    if knowledgeAnswer then return knowledgeAnswer end
-                end
                 -- "show me support links" runs the support-links summary
                 -- action; the eager navigation block deliberately skipped it,
                 -- so hand it to the core parser here rather than burying it
-                -- under generic lookup pointers.
+                -- under generic lookup pointers. It sits ABOVE the generic
+                -- Knowledge list: once the knowledge index is warm (moments
+                -- after login, when the background build lands) that list
+                -- would otherwise claim the sentence with "Show Support Links"
+                -- as its first hit and the navigation never ran.
                 if R.Normalize(text):find("support link", 1, true) and hasCore then
                     local supportResult = Core(text)
                     if supportResult and not A.RouterIsUnknownResult(supportResult) then return supportResult end
+                end
+                if A.Knowledge and type(A.Knowledge.Answer) == "function" then
+                    local knowledgeAnswer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+                    if knowledgeAnswer then return knowledgeAnswer end
                 end
                 -- "was kannst du alles" is an Assistant capability question;
                 -- the conversation reply answers it directly instead of a

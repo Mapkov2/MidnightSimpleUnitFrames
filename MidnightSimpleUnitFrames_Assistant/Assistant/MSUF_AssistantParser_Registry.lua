@@ -6068,7 +6068,19 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
                         }
                         if score > bestScore then bestScore = score end
                     elseif setting.type ~= "boolean" then
-                        missingValue[#missingValue + 1] = { setting = setting, score = score }
+                        -- "make raid background color different" names a group;
+                        -- a shared/global control may not answer with its own
+                        -- value list when a scope was named -- the named scope
+                        -- wins and the open-ended lane lists that scope's controls.
+                        local settingScope = tostring(setting.unit or "")
+                        local scopeless = settingScope == "" or settingScope == "global" or settingScope == "shared"
+                        -- Group scopes only: unit words keep the shared Bars
+                        -- route through the scoped twins.
+                        local namedScope = scopeless
+                            and type(P.DetectGroups) == "function" and #P.DetectGroups(text) > 0
+                        if not namedScope then
+                            missingValue[#missingValue + 1] = { setting = setting, score = score }
+                        end
                     end
                 end
             else

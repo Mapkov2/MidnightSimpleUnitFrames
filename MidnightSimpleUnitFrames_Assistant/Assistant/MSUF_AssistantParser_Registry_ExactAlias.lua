@@ -1033,7 +1033,19 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
                 if value ~= nil or relativeDelta ~= nil then
                     AddExactAliasChange(changes, seenChangeKeys, setting, value, relativeDelta, match.score, text)
                 elseif setting.type ~= "boolean" then
-                    missingValue[#missingValue + 1] = { setting = setting, score = match.score }
+                    -- "make raid background color different" names a group
+                    -- scope; a shared/global control with no scoped twin may
+                    -- not answer with its own value list -- the named scope
+                    -- wins, so the sentence flows on to the scoped lanes.
+                    local settingScope = tostring(setting.unit or "")
+                    local scopeless = settingScope == "" or settingScope == "global" or settingScope == "shared"
+                    -- Group scopes only: a unit word ("boss", "my frames") still
+                    -- reaches the shared Bars controls through the scoped twins.
+                    local namedScope = scopeless
+                        and type(P.DetectGroups) == "function" and #P.DetectGroups(text) > 0
+                    if not namedScope then
+                        missingValue[#missingValue + 1] = { setting = setting, score = match.score }
+                    end
                 end
             end
         end

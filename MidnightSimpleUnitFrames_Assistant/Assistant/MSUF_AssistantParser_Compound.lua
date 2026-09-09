@@ -2911,7 +2911,11 @@ local function BareLabelValueRun(text)
     for word in norm:gmatch("%S+") do tokens[#tokens + 1] = word end
     local n = #tokens
     local first = CLAUSE_LEAD_VERBS[tokens[1]] and 2 or 1
-    if (n - first + 1) < (hasTo and 7 or 4) or n > 24 then return nil end
+    -- Three generated group-aura labels ("Raid / Mythic Raid Buff Hidden
+    -- Category Sated / Exhaustion") with their values run past 30 words; the
+    -- walk is a handful of table lookups per word, so the cap only has to
+    -- keep a pasted paragraph out.
+    if (n - first + 1) < (hasTo and 7 or 4) or n > 48 then return nil end
     local lead = (first > 1) and tokens[1] or "set"
 
     local index = BareLabelIndex()
@@ -2996,6 +3000,36 @@ function P.BareLabelRunNamesSeveralControls(text)
     return type(commands) == "table" and #commands >= 2
 end
 
+-- A frame or group name is never a value. "raid background color different"
+-- names the Raid frames' own background through the SHARED control's label
+-- (the named scope wins and picks that scope's twin), so it is one control --
+-- yet the scan below read "raid" as the first value and "background color"
+-- as a second control. The open-ended lane stands down for multi-control
+-- sentences, so the request fell to the low-confidence guess list instead
+-- of listing Raid Backdrop Color and Raid Dead Background Color.
+-- Only a scope-less label behind a pure scope prefix is exempt: a label that
+-- names its own frame after another scope word ("target player width 300")
+-- still counts as a second control.
+local BARE_TAIL_SCOPE_WORDS = {
+    player = true, target = true, focus = true, pet = true, boss = true,
+    targettarget = true, tot = true, focustarget = true,
+    party = true, raid = true, mythic = true, mythicraid = true, group = true,
+}
+local BARE_TAIL_SCOPE_FILLER = { the = true, my = true, our = true, frame = true, frames = true }
+local function BareTailPrefixIsScope(tokens, last)
+    local named = false
+    for k = 1, last do
+        local word = tokens[k]
+        if BARE_TAIL_SCOPE_WORDS[word] then named = true
+        elseif not BARE_TAIL_SCOPE_FILLER[word] then return false end
+    end
+    return named
+end
+local function BareLabelSettingIsScopeless(setting)
+    local unit = tostring(type(setting) == "table" and setting.unit or "")
+    return unit == "" or unit == "global" or unit == "shared"
+end
+
 -- True when a value tail ("class shared power text color mode resource")
 -- continues into a second control: a multi-word visible label starts after
 -- the first value word and still leaves room for its own value. The exact
@@ -3012,9 +3046,13 @@ function P.BareValueTailNamesAnotherControl(valueText)
     if not index then return false end
     local map, maxWords = index.map, index.maxWords
     for from = 2, n - 2 do
+        local scopePrefix = BareTailPrefixIsScope(tokens, from - 1)
         local limit = math.min(n - 1, from + maxWords - 1)
         for to = limit, from + 1, -1 do
-            if map[table.concat(tokens, " ", from, to)] then return true end
+            local setting = map[table.concat(tokens, " ", from, to)]
+            if setting and not (scopePrefix and BareLabelSettingIsScopeless(setting)) then
+                return true
+            end
         end
     end
     return false

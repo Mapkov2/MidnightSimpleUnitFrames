@@ -188,6 +188,13 @@ end
 function A.DisplayPageLabel(page, fallback)
     local canonical, spec = RegisteredMenuPage(page)
     if not canonical then return tostring(fallback or "MSUF page") end
+    -- Assistant output is English by policy (2026-09-08): prefer the
+    -- Assistant's own English page names over the locale-following menu title.
+    local overrides = A.Knowledge and A.Knowledge.PAGE_LABEL_OVERRIDES
+    if type(overrides) == "table" then
+        local english = overrides[canonical]
+        if type(english) == "string" and english ~= "" then return english end
+    end
     if M and type(M.GetMenuPageLabel) == "function" then
         local label = M.GetMenuPageLabel(canonical)
         if type(label) == "string" and label ~= "" then return label end
