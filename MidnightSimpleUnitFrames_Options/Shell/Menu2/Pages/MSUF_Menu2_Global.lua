@@ -562,7 +562,7 @@ local function MenuFontKeySet(value)
     G().menuFontKey = FontSelectionValue(value) or ""
 end
 local TextureValues = M.StatusBarTextureItems
-local GLOBAL_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|targettarget=ToT|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss|arena=Arena|gf_party=Party|gf_raid=Raid"
+local GLOBAL_SCOPE_VALUES = (M.FilterSupportedUnitValues or function(values) return values end)(VTP "shared=Shared|player=Player|target=Target|targettarget=ToT|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss|arena=Arena|gf_party=Party|gf_raid=Raid")
 local function CurrentPowerBarScopeUnit()
     local key = CurrentBarsScope()
     return POWER_BAR_SCOPE_UNITS[key] and key or nil

@@ -1014,6 +1014,8 @@ function Render.Install(Preview, deps)
     end
     local function LayoutPreviewBlizzardPortrait(portrait, active, pw, ph)
         local ring = portrait._msufPreviewBlizzRing
+        local fallback = portrait._msufPreviewBlizzFallback
+        if fallback then fallback:Hide() end
         if not active then
             if ring then ring:Hide() end
             if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
@@ -1024,6 +1026,19 @@ function Render.Install(Preview, deps)
         local info = GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.frameAtlas)
         local file = info and (info.file or info.filename)
         if not file then
+            if not fallback and portrait.CreateTexture then
+                fallback = portrait:CreateTexture(nil, "OVERLAY", nil, 2)
+                fallback:SetTexture("Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_circle.tga")
+                fallback:SetVertexColor(1, 0.82, 0.3, 1)
+                portrait._msufPreviewBlizzFallback = fallback
+            end
+            if fallback then
+                local ix, iy = PreviewPortraitRingInflation(portrait, 2)
+                fallback:ClearAllPoints()
+                fallback:SetPoint("TOPLEFT", portrait, "TOPLEFT", -ix, iy)
+                fallback:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", ix, -iy)
+                fallback:Show()
+            end
             if ring then ring:Hide() end
             if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
             if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end

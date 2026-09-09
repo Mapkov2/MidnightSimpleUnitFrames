@@ -1044,6 +1044,7 @@ function M.RegisterSearchWidget(widget, meta)
 end
 
 local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, kind, extraParts)
+    if M.SupportsUnitPage and not M.SupportsUnitPage(pageInfo.key) then return end
     label = DisplaySearchText(label)
     if not IsSearchableDisplayText(label) then return end
 
@@ -1279,7 +1280,7 @@ local function AddStaticIndexSearchRecords(records, covered)
     for i = 1, #staticRecords do
         local rec = staticRecords[i]
         local identity = rec.searchIdentity
-        if not covered[identity] then
+        if not covered[identity] and (not M.SupportsUnitPage or M.SupportsUnitPage(rec.key, rec.exactTarget and rec.exactTarget.settingKey)) then
             rec.order = #records + 1
             records[#records + 1] = rec
         end

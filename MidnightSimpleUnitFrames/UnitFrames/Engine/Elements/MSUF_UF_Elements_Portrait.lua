@@ -1332,7 +1332,9 @@ end
 local function LayoutBlizzardPortraitRing(holder, p)
   local info = BlizzardRingInfo()
   if not info then
-    return false
+    -- Era has the legacy TargetingFrame texture, not the modern HUD atlas.
+    -- Keep the default gold dressing using the bundled beveled circle ring.
+    return LayoutPortraitArtBorder(holder, p, "CIRCLE", 2, "UP", 1, 0.82, 0.3, 1)
   end
   local ring = EnsureBlizzardPortraitRing(holder)
   if not ring then

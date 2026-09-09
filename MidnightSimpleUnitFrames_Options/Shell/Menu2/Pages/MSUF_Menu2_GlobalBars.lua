@@ -1997,7 +1997,8 @@ local function BuildHighlightSection(ctx, b)
         "highlight.dispel.show_on")
     local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -406,
         "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", RequestDispelPurgeBorderRuntime)
-    local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -460,
+    local bossSupported = not M.SupportsUnitPage or M.SupportsUnitPage("uf_boss")
+    local bossTarget = bossSupported and BindHighlightDropdown("Boss target border", borderModes, -460,
         function()
             local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
             return tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback
@@ -2013,8 +2014,8 @@ local function BuildHighlightSection(ctx, b)
         "highlight.boss_target.mode")
     local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -510, hlLeftW, T.colors.dim)
     if dispelPurgePtrHint.SetWordWrap then dispelPurgePtrHint:SetWordWrap(true) end
-    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -540, hlLeftW, T.colors.dim)
-    if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
+    local bossSharedHint = bossSupported and W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -540, hlLeftW, T.colors.dim)
+    if bossSharedHint and bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
     local unitAuraDispelHint = W.Text(modesFrame, UNITFRAME_DISPEL_AURA_WARNING, hlLeftX, -570, hlLeftW, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
     if unitAuraDispelHint.SetWordWrap then unitAuraDispelHint:SetWordWrap(true) end
     local function ScopeBorderModeOn(key, defaultValue) return tonumber(BarScopeGet(key, defaultValue)) == 1 end
@@ -2070,7 +2071,7 @@ local function BuildHighlightSection(ctx, b)
     local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end, nil, "highlight.preview.aggro")
     local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end, nil, "highlight.preview.dispel")
     local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end, nil, "highlight.preview.purge")
-    local bossTargetTest = BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true, "highlight.preview.boss_target")
+    local bossTargetTest = bossSupported and BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true, "highlight.preview.boss_target")
     local scopedBorderControls = { highlight, aggro, dispelBorder, purge }
     local dispelBorderControls = { dispelTrigger, dispelShowOn, dispelTest }
     local function ClearBorderTestIfDisabled(flagName, setterName, enabled)
@@ -2104,7 +2105,7 @@ local function BuildHighlightSection(ctx, b)
             unitAuraDispelHint:SetShown((not GroupScope()) and dispelOn and UnitFrameAuraSensorMissingForScope())
         end
         local hintColor = sharedActive and T.colors.dim or T.colors.muted
-        bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
+        if bossSharedHint then bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1) end
     end)
     local RefreshPriorityRows
     local prio = W.SwitchAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)

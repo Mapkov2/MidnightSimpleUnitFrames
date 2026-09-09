@@ -54,6 +54,7 @@ local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit == "boss1" or unit == "bosses" or unit == "boss frames" then unit = "boss" end
     if unit == "arena1" or unit == "arenas" or unit == "arena frames" then unit = "arena" end
+    if M.SupportsUnitPage and not M.SupportsUnitPage("uf_" .. unit) then return "player" end
     return CASTBAR_PREVIEW_UNITS[unit] and unit or "player"
 end
 local function NormalizeCastbarPreviewType(kind)
@@ -214,13 +215,13 @@ local function BuildCastbars(ctx)
             end
             return buttons, holder
         end
-        local unitButtons = PreviewButtonGroup(section, "TOPLEFT", "TOPLEFT", 82, -12, {
+        local unitButtons = PreviewButtonGroup(section, "TOPLEFT", "TOPLEFT", 82, -12, (M.FilterSupportedUnitValues or function(values) return values end)({
             { key = "player", text = "Player" },
             { key = "target", text = "Target" },
             { key = "focus", text = "Focus" },
             { key = "boss", text = "Boss" },
             { key = "arena", text = "Arena" },
-        }, 52, 4, M.SetCastbarPreviewUnit, "preview.unit")
+        }), 52, 4, M.SetCastbarPreviewUnit, "preview.unit")
         local buttonGap, interruptW = 6, 90
         local buttonW = compactControls
             and max(68, min(82, floor((sectionW - 132 - (buttonGap * 2)) / 3)))

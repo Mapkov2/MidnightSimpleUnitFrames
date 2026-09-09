@@ -51,6 +51,7 @@ local function InCombat()
 end
 
 local function ArenaCastbarsEnabled()
+    if MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("arena") then return false end
     EnsureDB()
 
     local general = _G.MSUF_DB and _G.MSUF_DB.general

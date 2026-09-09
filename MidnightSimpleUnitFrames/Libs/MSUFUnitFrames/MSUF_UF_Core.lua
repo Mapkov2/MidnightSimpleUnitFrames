@@ -50,7 +50,17 @@ UF.unitOrder = UF.unitOrder or {
   "arena1", "arena2", "arena3",
 }
 
-UF.unitLookup = UF.unitLookup or {}
+-- Prune unsupported client tokens before factories, events and edit-mode owners
+-- consume the managed-unit list. Imported profiles cannot re-enable these units.
+local client = (_G.MSUF_NS or MSUF).Client
+if client and client.SupportsUnit then
+  for i = #UF.unitOrder, 1, -1 do
+    if not client.SupportsUnit(UF.unitOrder[i]) then
+      table_remove(UF.unitOrder, i)
+    end
+  end
+end
+UF.unitLookup = {}
 for i = 1, #UF.unitOrder do
   UF.unitLookup[UF.unitOrder[i]] = true
 end

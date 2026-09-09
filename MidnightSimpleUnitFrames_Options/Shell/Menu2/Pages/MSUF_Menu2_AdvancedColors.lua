@@ -1713,7 +1713,7 @@ end
 -- PrefixedStatusDef naming in one piece. Parked on M rather than a file local:
 -- this chunk is at Lua 5.1's 200-local ceiling and one more breaks the page.
 M._statusTextColor = {
-    units = ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|boss=Boss Frames|arena=Arena Frames",
+    units = (M.FilterSupportedUnitValues or function(values) return values end)(ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|boss=Boss Frames|arena=Arena Frames"),
     indicators = ValueTextPairs "levelIndicator=Level Text|raceIndicator=Race Text|classTextIndicator=Class Text|raidGroupName=Raid Group|statusText=Dead / Offline Text|statusGhostText=Ghost Text|statusAFKText=AFK Text|statusDNDText=DND Text",
     unitKeys = {},
     prefixKeys = {},
@@ -3546,7 +3546,7 @@ local function BuildCastbarColors(ctx, b, CH)
     LabelAt(detail, "Each castbar text can override the shared castbar text color. Target text exists on Target, Focus, Boss, and Arena.",
         12, -8, detailW - 28, "GameFontHighlightSmall", T.colors.muted)
     local detailUnitDropdown = ValueDropdownAt(ctx, detail, "Editing:", 12, -44,
-        ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss|arena=Arena", min(260, detailW - 32),
+        (M.FilterSupportedUnitValues or function(values) return values end)(ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss|arena=Arena"), min(260, detailW - 32),
         DetailUnit,
         function(value)
             M._colorsCastbarDetailUnit = value
