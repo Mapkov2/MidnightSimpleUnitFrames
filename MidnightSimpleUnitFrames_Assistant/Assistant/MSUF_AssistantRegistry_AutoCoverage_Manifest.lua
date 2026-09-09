@@ -19,11 +19,11 @@ M.Assistant = A
 local Manifest = A.AutoCoverageManifest or {}
 A.AutoCoverageManifest = Manifest
 
--- Defaults generated offline on 2026-09-06 from the current factory profile
+-- Defaults generated offline on 2026-09-09 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 4893 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 4893
+-- 4902 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 4902
 Manifest.requiredScopes = {
     "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -201,6 +201,7 @@ Manifest.defaults = {
         runeTextFontSizeOffset = -2,
         runeTextFormat = "tenths",
         showAltMana = true,
+        showArcaneSoul = false,
         showBarBorder = true,
         showBossPowerBar = false,
         showChargedComboPoints = true,
@@ -212,6 +213,7 @@ Manifest.defaults = {
         showPlayerPowerBar = true,
         showShadowMana = true,
         showStagger = true,
+        showSweepingStrikes = false,
         showTargetPowerBar = true,
         smoothPowerBar = false,
         staggerHeight = 4,
@@ -366,6 +368,7 @@ Manifest.defaults = {
         portraitBorderUseClassColor = false,
         portraitCastSpellIcon = false,
         portraitClassStyle = "BLIZZARD",
+        portraitClickable = false,
         portraitDetachedPoint = "RIGHT",
         portraitDetachedTo = "LEFT",
         portraitEdgeSoftness = 0,
@@ -756,6 +759,7 @@ Manifest.defaults = {
         portraitBorderThickness = 2,
         portraitBorderUseClassColor = false,
         portraitClassStyle = "BLIZZARD",
+        portraitClickable = false,
         portraitDetachedPoint = "RIGHT",
         portraitDetachedTo = "LEFT",
         portraitEdgeSoftness = 0,
@@ -1053,6 +1057,7 @@ Manifest.defaults = {
         portraitBorderStyle = "NONE",
         portraitBorderThickness = 6,
         portraitClassStyle = "BLIZZARD",
+        portraitClickable = false,
         portraitDetachedPoint = "RIGHT",
         portraitDetachedTo = "LEFT",
         portraitEdgeSoftness = 0,
@@ -3372,6 +3377,7 @@ Manifest.defaults = {
         portraitBorderUseClassColor = false,
         portraitCastSpellIcon = true,
         portraitClassStyle = "BLIZZARD",
+        portraitClickable = false,
         portraitDetachedPoint = "LEFT",
         portraitDetachedTo = "RIGHT",
         portraitEdgeSoftness = 0,
@@ -3806,6 +3812,7 @@ Manifest.defaults = {
         portraitBorderUseClassColor = true,
         portraitCastSpellIcon = false,
         portraitClassStyle = "BLIZZARD",
+        portraitClickable = false,
         portraitDetachedPoint = "RIGHT",
         portraitDetachedTo = "LEFT",
         portraitEdgeSoftness = 0,
@@ -4262,6 +4269,7 @@ Manifest.defaults = {
         portraitBorderUseClassColor = true,
         portraitCastSpellIcon = false,
         portraitClassStyle = "BLIZZARD",
+        portraitClickable = false,
         portraitDetachedPoint = "RIGHT",
         portraitDetachedTo = "LEFT",
         portraitEdgeSoftness = 0,
@@ -4692,6 +4700,7 @@ Manifest.defaults = {
         portraitBorderUseClassColor = false,
         portraitCastSpellIcon = true,
         portraitClassStyle = "BLIZZARD",
+        portraitClickable = false,
         portraitDetachedPoint = "LEFT",
         portraitDetachedTo = "RIGHT",
         portraitEdgeSoftness = 0,
@@ -4950,4 +4959,4 @@ Manifest.defaults = {
     },
 }
 
--- top-level scalar paths: 4830
+-- top-level scalar paths: 4902
