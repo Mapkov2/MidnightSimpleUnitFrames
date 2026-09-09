@@ -27,6 +27,8 @@ try {
     Remove-Item Env:\MSUF_AURAS3_TEST_SOURCE_ROOT -ErrorAction SilentlyContinue
     & $lua.Source (Join-Path $PSScriptRoot "auras3_refactor_contract_smoke.lua") $repositoryRoot
     if ($LASTEXITCODE -ne 0) { throw "Auras3 XML/factory contracts failed." }
+    & $lua.Source (Join-Path $PSScriptRoot "aura_icon_style_gate_smoke.lua") $repositoryRoot
+    if ($LASTEXITCODE -ne 0) { throw "Auras3 icon-style gate lifecycle failed." }
 
     foreach ($test in @("auras3_filter_compile_smoke.lua", "auras3_scope_cache_smoke.lua", "auras3_preview_read_context_smoke.lua", "auras3_group_indicator_compile_smoke.lua")) {
         & $lua.Source (Join-Path $PSScriptRoot $test) $repositoryRoot

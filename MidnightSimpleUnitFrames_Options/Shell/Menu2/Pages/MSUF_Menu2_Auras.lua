@@ -2450,6 +2450,13 @@ local function BuildUnitStyle(ctx, b, scope, options)
     iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)", 1, -210, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
     end
 
+    if appearanceGlobalsOnly then
+        -- Re-apply the master-toggle gates whenever any Appearance page is
+        -- revisited. This must not live in the Buff-only Native Aura Flow
+        -- section: Debuffs, Player Defensives and Dots share these controls.
+        M.TrackRefresh(ctx, function() iconStyleGates.Apply(true) end)
+    end
+
     if appearanceGlobalsOnly and (previewContainer == "buff" or previewContainer == "debuff") then
         local blizzardFrames = b:CollapsibleSection(baseId .. "_blizzard_aura_frames", "Blizzard Buff & Debuff Frames", 152, false)
         local bfw = BodyWidth(blizzardFrames)
@@ -2515,7 +2522,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
         AddTooltip(weaponEnchants, "Native weapon enchant auras",
             "Adds Blizzard's temporary weapon-enchantment buttons to the Player Buff container. This is one shared setting and uses the native aura flow without an MSUF ticker or OnUpdate.")
         M.TrackRefresh(ctx, function()
-            iconStyleGates.Apply(true)
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(nativeFlow, { {
                     text = Model.ReadSharedBool("showWeaponEnchants", false) and "Weapon Enchants On" or "Weapon Enchants Off",
