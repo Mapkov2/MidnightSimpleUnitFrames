@@ -18465,7 +18465,14 @@ function R.RegistrySettingItemForKey(settingKey)
     end
 
     local page = R.FallbackPageForSetting(setting)
-    local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
+    -- Assistant output is English only: the menu's page title follows the
+    -- client locale ("DE Gruppenlayout"), so the Knowledge index's English
+    -- page names come first and the menu title only covers unknown pages.
+    local pageLabel = page and A.Knowledge and type(A.Knowledge.PageLabel) == "function"
+        and A.Knowledge.PageLabel(page) or nil
+    if page and (pageLabel == nil or pageLabel == "MSUF page") and A.DisplayPageLabel then
+        pageLabel = A.DisplayPageLabel(page, "MSUF page")
+    end
     local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or settingKey)
     return {
         kind = "setting",
@@ -21894,6 +21901,17 @@ function A.RouteInput(text, coreHandler)
                     and type(A.RouterLocationLaneReply) == "function"
                     and A.RouterLocationLaneReply(text) or nil
                 if locationLane then return locationLane end
+                -- "how can i configure this page" asks about the OPEN page.
+                -- The earlier page-help attempt stands down for anything that
+                -- also reads as a location question, so this lookup branch
+                -- answered it with a list of unrelated controls; the page's
+                -- own scope help is the answer.
+                if hasCore and type(R.IsCurrentPageHelpRequest) == "function"
+                    and R.IsCurrentPageHelpRequest(text)
+                then
+                    local currentPageHelp = R.TryPageHelpShortcut(text, Core)
+                    if currentPageHelp then return currentPageHelp end
+                end
                 if A.Knowledge and type(A.Knowledge.Answer) == "function" then
                     local knowledgeAnswer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
                     if knowledgeAnswer then return knowledgeAnswer end

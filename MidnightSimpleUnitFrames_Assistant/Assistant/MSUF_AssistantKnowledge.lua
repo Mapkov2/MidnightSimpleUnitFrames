@@ -253,6 +253,9 @@ local function PageLabel(pageKey)
     end
     return "MSUF page"
 end
+-- The Router's compact search renders the same "<control> - <page>" lines
+-- and must use the same English page names.
+K.PageLabel = PageLabel
 
 local function ItemPageLabel(item)
     if type(item) ~= "table" then return nil end
@@ -2682,18 +2685,6 @@ local function DirectHelpAnswer(query, opts)
     if norm == "was kann ich hier aendern" or norm == "hilfe hier" or norm == "hilfe fuer diese seite" or norm == "diese seite hilfe" then
         return PageHelp((opts and opts.currentPage) or CurrentPageKey(), "Current page help")
     end
-    -- "how can i configure this page" names the open page and asks what can
-    -- be done on it. Without a page-help reading the lookup advisory answered
-    -- it with a list of unrelated controls; the open page's own help is the
-    -- answer, under that page's title.
-    if ContainsAny(norm, { "this page", "current page", "page help" })
-        and ContainsAny(norm, {
-            "help", "commands", "what can", "what settings", "explain", "configure", "customize", "customise",
-            "how can", "how do", "how to", "where can", "where do",
-        })
-    then
-        return PageHelp((opts and opts.currentPage) or CurrentPageKey())
-    end
     local pageHelp = TryWhatCanPageHelp(norm, opts)
     if pageHelp then return pageHelp end
     if ContainsAny(norm, { "gcd", "global cooldown", "global cool down" })
@@ -3504,9 +3495,25 @@ function K.DirectConceptHelp(query, opts)
     return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext(direct))
 end
 
+-- "search menu.auraBlacklistPreset" names one control by its registry key.
+-- That is a lookup of exactly that entry: the aura wording inside the key
+-- must not turn it into a frame clarification, and the concept lanes have
+-- nothing to add to it. Keys are case-sensitive, so the raw text is read.
+local function ExactRegistryKeyQuery(query)
+    local raw = Trim(tostring(query or ""))
+    local rest = raw:match("^[Ss][Ee][Aa][Rr][Cc][Hh]%s+(.+)$")
+        or raw:match("^[Ff][Ii][Nn][Dd]%s+(.+)$") or raw
+    rest = Trim(rest)
+    if rest == "" or rest:find("%s") or not rest:find(".", 1, true) then return nil end
+    if Registry and type(Registry.GetSetting) == "function" and Registry:GetSetting(rest) then
+        return rest
+    end
+    return nil
+end
+
 function K.Answer(query, opts)
     opts = opts or {}
-    if opts.forceSearch ~= true then
+    if opts.forceSearch ~= true and not ExactRegistryKeyQuery(query) then
         -- A vague aesthetic wish becomes concrete pending choices; a concept
         -- question with a known subject gets that control's explanation.
         -- Both are read-only until the player picks a choice.
