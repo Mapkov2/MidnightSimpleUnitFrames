@@ -1470,10 +1470,10 @@ local function RenderClassPower(preview, bars, player, spec)
     --- Pip gap must preview what they actually do on that bar.
     local fragments = shapeInfo and 0 or floor(tonumber(spec.fragments) or 0)
     local notchW = Clamp(bars.classPowerTickWidth, 1, 0, 4) + Clamp(bars.classPowerGap, 0, 0, 8)
-    --- A divider never takes more room than the fragment it borders, exactly
-    --- as on the live bar.
-    if fragments >= 2 and fragments <= 64 then
-        local maxNotchW = floor(w / (fragments * 2))
+    --- Dividers may take every pixel the fragments do not need, exactly as on
+    --- the live bar.
+    if fragments >= 2 and fragments <= 64 and w > fragments then
+        local maxNotchW = floor((w - fragments) / (fragments - 1))
         if notchW > maxNotchW then notchW = maxNotchW end
     else
         notchW = 0

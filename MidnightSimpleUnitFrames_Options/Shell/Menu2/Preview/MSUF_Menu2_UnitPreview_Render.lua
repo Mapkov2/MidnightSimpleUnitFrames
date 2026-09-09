@@ -2629,10 +2629,10 @@ function Preview.Refresh(box, reason)
             local fragments = cp.shapeInfo and 0 or floor(tonumber(cp.preview and cp.preview.fragments) or 0)
             local rawNotchW = (tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)
             local notchW = max(1, S(rawNotchW))
-            --- A divider never takes more room than the fragment it borders,
+            --- Dividers may take every pixel the fragments do not need,
             --- exactly as on the live bar.
-            if fragments >= 2 then
-                local maxNotchW = floor(previewW / (fragments * 2))
+            if fragments >= 2 and previewW > fragments then
+                local maxNotchW = floor((previewW - fragments) / (fragments - 1))
                 if notchW > maxNotchW then notchW = maxNotchW end
             else
                 notchW = 0

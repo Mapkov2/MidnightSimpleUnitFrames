@@ -1267,13 +1267,13 @@ modeBuilders.AURA = function(E)
         --- the bug this bar already had. Draw none instead.
         if count > MAX_FRAGMENT_NOTCHES then count = 0 end
 
-        --- A divider never takes more room than the fragment it borders, so a
-        --- forty-fragment bar keeps at least half its width as resource. The
-        --- sliders stay live up to that cap: dropping every notch past a
-        --- threshold is what made Pip gap look dead, and letting it run free
-        --- turns the bar into stripes.
-        if count >= 2 then
-            local maxNotchW = math_floor(width / (count * 2))
+        --- Same separator clamp the segmented layout uses: dividers may take
+        --- every pixel the fragments do not need, so each fragment keeps one.
+        --- Anything stricter saturates the sliders after two or three steps and
+        --- reads as a Pip gap that ignores its setting; anything looser lets a
+        --- divider overrun the fragment next to it.
+        if count >= 2 and width > count then
+            local maxNotchW = math_floor((width - count) / (count - 1))
             if notchW > maxNotchW then notchW = maxNotchW end
         else
             notchW = 0
