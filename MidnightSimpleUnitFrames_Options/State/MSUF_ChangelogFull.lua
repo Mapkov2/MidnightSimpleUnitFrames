@@ -8,12 +8,29 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "33518938FA04080D54F21B1A0AC7C55A5B7C02C2C02C97F143DB0828CAAE2B42",
-    currentVersion = "6.5-alpha14",
+    sourceSha256 = "E71877574CEFC47C642E2890A8676244B56E7229FE0D2ADD922476F1E7B75877",
+    currentVersion = "6.5-alpha15",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-alpha13",
-    rangeLabel = "6.5-alpha13 -> 6.5-alpha14",
+    previousVersion = "6.5-alpha14",
+    rangeLabel = "6.5-alpha14 -> 6.5-alpha15",
     entries = {
+        {
+            version = "6.5-alpha15",
+            date = "2026-09-09",
+            sections = {
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Dispel symbols now render on every Classic client. Clients without the 12.1 debuff atlases fell through to a blank texture and drew nothing; they now fall back to MSUF's own symbol art. A dispel type whose color you overrode is repainted the way it already is on Retail.",
+                        "The Cooldown Manager anchor is resolved from what the client can actually provide. Clients without a Cooldown Manager no longer show the login warning that could never be satisfied, and the anchor switch is hidden instead of offered; your stored preference is kept, so the profile still works on a client that has one.",
+                        "An imported profile that anchors Unit Frames to Essential Cooldowns no longer scatters them on a client without that frame; those frames fall back to the normal global anchor.",
+                        "The Aggro border works on a fresh profile. Bars advertised it as On while the frames still treated it as Off, so it only lit up after toggling the dropdown off and on.",
+                        "The Dispel Border hint no longer asks you to enable Aura sensors for Focus, Boss, or Arena frames on clients that do not have them.",
+                        "Turning a Dispel Symbol off now clears it. It could stay frozen on the frame until the next reload.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha14",
             date = "2026-09-08",
