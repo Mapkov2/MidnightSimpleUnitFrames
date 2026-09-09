@@ -1,5 +1,25 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.16-beta3 - 2026-09-09
+
+### Highlights
+
+- **Name, health, and power text can each appear only on mouseover, with independent fade-in and fade-out durations.** Configure each text element under Unit > Text.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"text","controlId":"menu2.uf_player.unit.text.name.mouseover","settingKey":"player.nameTextMouseover","prepareKind":"","prepareValue":"","query":"only show on mouseover","label":"Only show on mouseover"} -->
+- **Boss target highlights now support arrows, paired markers, diamonds, crosses, and borders.** Position markers directly in the preview and optionally require multiple boss frames.
+<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"boss_target_highlight","controlId":"menu2.uf_boss.unit.boss_target_highlight.style","settingKey":"general.bossTargetHighlightStyle","prepareKind":"","prepareValue":"","query":"boss target highlight","label":"Highlight style"} -->
+- **Portraits can now be clickable.** Enable the option separately for each Unit Frame.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitclickable","settingKey":"player.portraitClickable","prepareKind":"unitPortraitTab","prepareValue":"general","query":"clickable portrait","label":"Clickable Portrait"} -->
+- **Class Resources now include native Sweeping Strikes tracking and an Arcane Surge / Arcane Soul timer.**
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_behavior","controlId":"menu2.classpower.advanced.behavior.arcane.soul","settingKey":"bars.showArcaneSoul","prepareKind":"","prepareValue":"","query":"arcane soul","label":"Arcane Surge / Soul Timer"} -->
+
+### Changes
+
+- Completed translations for the new Menu controls and descriptions across all supported languages.
+- Added class-colored power bars to the contextual color controls.
+- Expanded Assistant command coverage, scoped requests, follow-up handling, and exact setting navigation.
+- Updated the Menu search index and Assistant control catalog for the new settings.
+
 ## 6.16-beta2 - 2026-09-08
 
 ### Highlights

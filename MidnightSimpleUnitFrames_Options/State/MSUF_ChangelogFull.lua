@@ -8,12 +8,78 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "AE16E384F6C62CF6E88E825C3AE29822ECCA15F37173E0D2BF667A360AFAF6DD",
-    currentVersion = "6.16-beta2",
+    sourceSha256 = "26437D4ABA8A7B7DBC0BC2FDC147F9DD776760821AADC2950304E9A0EE9F7832",
+    currentVersion = "6.16-beta3",
     historyFromVersion = "6.02",
-    previousVersion = "6.16-beta1",
-    rangeLabel = "6.16-beta1 -> 6.16-beta2",
+    previousVersion = "6.16-beta2",
+    rangeLabel = "6.16-beta2 -> 6.16-beta3",
     entries = {
+        {
+            version = "6.16-beta3",
+            date = "2026-09-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Name, health, and power text can each appear only on mouseover, with independent fade-in and fade-out durations. Configure each text element under Unit > Text.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "only show on mouseover",
+                                label = "Only show on mouseover",
+                                sectionId = "text",
+                                controlId = "menu2.uf_player.unit.text.name.mouseover",
+                                settingKey = "player.nameTextMouseover",
+                            },
+                        },
+                        {
+                            text = "Boss target highlights now support arrows, paired markers, diamonds, crosses, and borders. Position markers directly in the preview and optionally require multiple boss frames.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "boss target highlight",
+                                label = "Highlight style",
+                                sectionId = "boss_target_highlight",
+                                controlId = "menu2.uf_boss.unit.boss_target_highlight.style",
+                                settingKey = "general.bossTargetHighlightStyle",
+                            },
+                        },
+                        {
+                            text = "Portraits can now be clickable. Enable the option separately for each Unit Frame.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "clickable portrait",
+                                label = "Clickable Portrait",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitclickable",
+                                settingKey = "player.portraitClickable",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "general",
+                            },
+                        },
+                        {
+                            text = "Class Resources now include native Sweeping Strikes tracking and an Arcane Surge / Arcane Soul timer.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "arcane soul",
+                                label = "Arcane Surge / Soul Timer",
+                                sectionId = "classpower_behavior",
+                                controlId = "menu2.classpower.advanced.behavior.arcane.soul",
+                                settingKey = "bars.showArcaneSoul",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Completed translations for the new Menu controls and descriptions across all supported languages.",
+                        "Added class-colored power bars to the contextual color controls.",
+                        "Expanded Assistant command coverage, scoped requests, follow-up handling, and exact setting navigation.",
+                        "Updated the Menu search index and Assistant control catalog for the new settings.",
+                    },
+                },
+            },
+        },
         {
             version = "6.16-beta2",
             date = "2026-09-08",

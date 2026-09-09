@@ -8,12 +8,78 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "AE16E384F6C62CF6E88E825C3AE29822ECCA15F37173E0D2BF667A360AFAF6DD",
-    currentVersion = "6.16-beta2",
-    historyFromVersion = "6.15",
-    previousVersion = "6.16-beta1",
-    rangeLabel = "6.16-beta1 -> 6.16-beta2",
+    sourceSha256 = "26437D4ABA8A7B7DBC0BC2FDC147F9DD776760821AADC2950304E9A0EE9F7832",
+    currentVersion = "6.16-beta3",
+    historyFromVersion = "6.151",
+    previousVersion = "6.16-beta2",
+    rangeLabel = "6.16-beta2 -> 6.16-beta3",
     entries = {
+        {
+            version = "6.16-beta3",
+            date = "2026-09-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Name, health, and power text can each appear only on mouseover, with independent fade-in and fade-out durations. Configure each text element under Unit > Text.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "only show on mouseover",
+                                label = "Only show on mouseover",
+                                sectionId = "text",
+                                controlId = "menu2.uf_player.unit.text.name.mouseover",
+                                settingKey = "player.nameTextMouseover",
+                            },
+                        },
+                        {
+                            text = "Boss target highlights now support arrows, paired markers, diamonds, crosses, and borders. Position markers directly in the preview and optionally require multiple boss frames.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "boss target highlight",
+                                label = "Highlight style",
+                                sectionId = "boss_target_highlight",
+                                controlId = "menu2.uf_boss.unit.boss_target_highlight.style",
+                                settingKey = "general.bossTargetHighlightStyle",
+                            },
+                        },
+                        {
+                            text = "Portraits can now be clickable. Enable the option separately for each Unit Frame.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "clickable portrait",
+                                label = "Clickable Portrait",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitclickable",
+                                settingKey = "player.portraitClickable",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "general",
+                            },
+                        },
+                        {
+                            text = "Class Resources now include native Sweeping Strikes tracking and an Arcane Surge / Arcane Soul timer.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "arcane soul",
+                                label = "Arcane Surge / Soul Timer",
+                                sectionId = "classpower_behavior",
+                                controlId = "menu2.classpower.advanced.behavior.arcane.soul",
+                                settingKey = "bars.showArcaneSoul",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Completed translations for the new Menu controls and descriptions across all supported languages.",
+                        "Added class-colored power bars to the contextual color controls.",
+                        "Expanded Assistant command coverage, scoped requests, follow-up handling, and exact setting navigation.",
+                        "Updated the Menu search index and Assistant control catalog for the new settings.",
+                    },
+                },
+            },
+        },
         {
             version = "6.16-beta2",
             date = "2026-09-08",
@@ -112,64 +178,6 @@ local data = {
                         "Restored rounded highlight startup and layering, including support for border thickness up to 30.",
                         "Dispel and Purge borders now apply their configured thickness on all frame shapes and refresh immediately after Menu changes.",
                         "Group Frame highlight detection keeps working when Aura icons are disabled, and Any dispel type also works on enemy units.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.15",
-            date = "2026-09-05",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Absorbs and heal prediction can stay visible when the health bar is faded into the background. Enable Keep Absorbs + Prediction Visible per Unit Frame or for Party and Raid Frames to keep these overlays at full opacity independently from the health fill.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "keep absorbs prediction visible",
-                                label = "Keep Absorbs + Prediction Visible",
-                                sectionId = "transparency",
-                                controlId = "menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars",
-                                settingKey = "player.alphaExcludePredictionBars",
-                            },
-                        },
-                        {
-                            text = "Raid and Mythic Raid role sorting can span the entire raid. Enable Sort roles across entire raid under Group Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group.",
-                            link = {
-                                pageKey = "gf_layout",
-                                query = "sort roles across entire raid",
-                                label = "Sort roles across entire raid",
-                                sectionId = "sorting",
-                                controlId = "menu2.gf_layout.group.field.sortrolesacrossraid",
-                                settingKey = "gf_raid.sortRolesAcrossRaid",
-                                prepareKind = "groupScope",
-                                prepareValue = "raid",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "The Boss Preview displays incoming heals, absorbs, heal absorbs, and absorb text so prediction settings can be reviewed without a live boss.",
-                        "The Assistant understands plain-language requests about a specific Unit Frame and resolves questions, hide commands, movement directions, and opacity controls against the named frame and control.",
-                        "Retired pre-6.0 profile conversion and import controls. Existing MSUF 6.x profiles and 6.x Wago imports remain supported; older or unversioned stored profiles are archived instead of entering the active profile list.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview preserve the configured health and prediction opacity.",
-                        "Detached Player Power bars attached or width-synced to Class Resources retain their position and width when shapeshifting hides the Class Resource bar.",
-                        "Text on detached bar controls Power-text placement independently from Show power text.",
-                        "Class Resource previews keep responding to movement and position controls after Menu lifecycle cancellation.",
-                        "Interrupted Aura refreshes recover instead of leaving Aura displays empty or later refreshes stuck as pending.",
-                        "Cleanse and Purge borders use the same Frame Outline layer as their preview, and Unit Frame dispel borders follow Blizzard's assist rules.",
-                        "Group Frame dead and offline backgrounds follow the unit's current state without delayed health-background updates.",
-                        "Preserved raid groups use one roster snapshot for sorting and layout, preventing the filled and displayed grids from disagreeing when more subgroups are present than the configured column limit.",
-                        "Assistant requests for Out of range opacity, Texture Layer opacity, and Portrait opacity update their own controls.",
-                        "Reduced repeated work and temporary allocations in health gradients, dynamic backgrounds, protected text, Aura fallback scans, and Range Fade timers while preserving their update behavior.",
                     },
                 },
             },
