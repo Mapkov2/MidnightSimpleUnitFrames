@@ -300,7 +300,11 @@ local PREVIEW_ROUNDED_OPTS = {
     edgeTexture = previewRoundedEdge,
     snapOff = PreviewSnapOff,
     clamp01 = Clamp01,
-    baseEdgeColor = function() return Core.BaseEdgeColor() end,
+    baseEdgeColor = function(mock)
+        local border = mock and mock._msufPreviewBossBorder
+        if border then return border.bossTargetR or 1, border.bossTargetG or .82, border.bossTargetB or 0, 1 end
+        return Core.BaseEdgeColor()
+    end,
 }
 local function PreviewPowerEdgeColor(mock)
     if mock and mock._msufPreviewPowerBorderR ~= nil then

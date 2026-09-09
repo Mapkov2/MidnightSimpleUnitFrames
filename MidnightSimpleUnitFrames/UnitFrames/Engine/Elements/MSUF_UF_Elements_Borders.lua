@@ -36,9 +36,65 @@ local ResolveGroupAggroThreat = V.ResolveGroupAggroThreat
 local BorderStyles = MSUF.BorderStyles or _G.MSUF_BorderStyles
 
 local Borders = {}
+local BossIndicator = MSUF.BossTargetIndicator
 local IsAggroBorderUnit
 local IsBossUnit
 local roundedVisualCallback
+local UnitExists = _G.UnitExists
+local bossPresenceFrames = {}
+local bossPresenceDriver
+local multipleBossesPresent = false
+local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+
+local function ReadMultipleBossesPresent()
+  if not UnitExists then return false end
+  local count = 0
+  for i = 1, #BOSS_UNITS do
+    local exists = UnitExists(BOSS_UNITS[i])
+    -- Do not use UnitExistsSafe here: its conservative unknown=true fallback
+    -- keeps frames alive, but cannot establish a confirmed count.
+    if not IsSecretValue(exists) and (exists == true or exists == 1) then
+      count = count + 1
+      if count == 2 then return true end
+    end
+  end
+  return false
+end
+
+local function RefreshBossPresence(_, event, unit)
+  if event == "UNIT_TARGETABLE_CHANGED" and (IsSecretValue(unit) or not IsBossUnit(unit)) then return end
+  local multiple = ReadMultipleBossesPresent()
+  if multiple == multipleBossesPresent then return end
+  multipleBossesPresent = multiple
+  for frame in pairs(bossPresenceFrames) do
+    Borders.Update(frame, "MSUF_BOSS_PRESENCE")
+  end
+end
+
+local function ConfigureBossPresence(frame, cfg)
+  local enabled = cfg and cfg.bossTarget == true and cfg.bossTargetMultipleOnly == true
+    and IsBossUnit(frame.MSUFUnitKey)
+  if enabled then
+    local wasEmpty = next(bossPresenceFrames) == nil
+    bossPresenceFrames[frame] = true
+    if not bossPresenceDriver then
+      bossPresenceDriver = CreateFrame("Frame")
+      bossPresenceDriver:SetScript("OnEvent", RefreshBossPresence)
+    end
+    if wasEmpty then
+      bossPresenceDriver:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+      bossPresenceDriver:RegisterEvent("PLAYER_ENTERING_WORLD")
+      bossPresenceDriver:RegisterEvent("UNIT_TARGETABLE_CHANGED")
+    end
+    RefreshBossPresence()
+  elseif bossPresenceFrames[frame] then
+    bossPresenceFrames[frame] = nil
+    if not next(bossPresenceFrames) then
+      bossPresenceDriver:UnregisterAllEvents()
+      multipleBossesPresent = false
+    end
+  end
+end
 
 function UF.SetRoundedBorderVisualCallback(callback)
   roundedVisualCallback = type(callback) == "function" and callback or nil
@@ -427,6 +483,8 @@ local function BossTargetState(frame, cfg)
   if not (cfg and cfg.bossTarget == true and UnitIsUnit and frame and bossUnit) then
     return false
   end
+  if frame._msufBossPreviewForced == true then return frame.MSUFUnitKey == "boss1" end
+  if cfg.bossTargetMultipleOnly == true and not multipleBossesPresent then return false end
   local isTarget = UnitIsUnit(frame.MSUFUnitKey, "target")
   if IsNil(isTarget) or not NotSecretValue(isTarget) then
     return false
@@ -811,6 +869,7 @@ local function ApplyHighlightBorder(frame, cfg, key, testActive, threatKnown, th
         frame._msufBorderRuntimeHighlightThickness, PurgeColor(cfg))
     end
   elseif key == "bossTarget" then
+    if BossIndicator and not BossIndicator.HasBorder(cfg) then return false end
     if (testActive and BossTargetTestApplies(frame)) or BossTargetState(frame, cfg) then
       return ApplyResolvedBorder(frame, cfg, key, RuntimeHighlightBorderLevel(frame, cfg, key),
         frame._msufBorderRuntimeHighlightThickness, BossTargetColor(cfg))
@@ -849,6 +908,10 @@ function Borders.Apply(frame, spec)
     frame._msufBorderRuntimeNormal = BorderNormalEnabled(cfg) or nil
     frame._msufBorderRuntimeHighlight = BorderHighlightEnabled(frame, cfg) or nil
     frame._msufBorderVisualCfg = nil
+    if BossIndicator then
+      BossIndicator.Apply(frame, frame._msufBorderRuntimeBossUnit and cfg or nil)
+    end
+    ConfigureBossPresence(frame, cfg)
   end
   if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
     LayoutBorder(frame, 1)
@@ -886,7 +949,8 @@ function Borders.GetActiveVisual(frame)
       elseif key == "purge" then
         active = testActive and PurgeTestApplies(frame)
       elseif key == "bossTarget" then
-        active = (testActive and BossTargetTestApplies(frame)) or BossTargetState(frame, cfg)
+        active = (not BossIndicator or BossIndicator.HasBorder(cfg))
+          and ((testActive and BossTargetTestApplies(frame)) or BossTargetState(frame, cfg))
       end
       if active then source = key break end
     end
@@ -908,6 +972,8 @@ if UF then
 end
 
 function Borders.Disable(frame)
+  if frame then ConfigureBossPresence(frame, nil) end
+  if frame and frame._msufBossTargetIndicator then frame._msufBossTargetIndicator:Hide() end
   if frame and frame.MSUFUnitDispelOverlay then
     frame.MSUFUnitDispelOverlay:Hide()
   end
@@ -970,8 +1036,22 @@ local function UpdateResolved(frame, threatKnown, threat)
   ApplyNormalBorder(frame, cfg)
 end
 
-function Borders.Update(frame)
+function Borders.Update(frame, event)
+  -- Threat/dispel refreshes do not affect the target marker. Reuse the existing
+  -- target subscription and full-apply lifecycle; no extra event frame/ticker.
+  local marker = frame and frame._msufBossTargetIndicator
+  if marker and event ~= "UNIT_THREAT_SITUATION_UPDATE" and event ~= "UNIT_THREAT_LIST_UPDATE"
+    and event ~= "MSUF_A3_DISPEL_SENSOR" then
+    local cfg = frame._msufBorderRuntimeCfg
+    marker:SetShown(BossIndicator.HasMarker(cfg) and
+      (BossTargetTestApplies(frame) or BossTargetState(frame, cfg)))
+  end
   return UpdateResolved(frame, false, false)
+end
+
+function UF.RefreshBossTargetPreview(frame)
+  if BossIndicator then BossIndicator.SetPreviewInteractive(frame, frame._msufBossPreviewForced == true) end
+  return Borders.Update(frame, "MSUF_BOSS_PREVIEW")
 end
 
 -- Selected only for group threat events. Core supplies the already-resolved

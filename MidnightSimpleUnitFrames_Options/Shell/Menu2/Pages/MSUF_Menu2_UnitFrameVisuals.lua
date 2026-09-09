@@ -310,6 +310,9 @@ local function BuildPortrait(ctx, builder, unit)
         end,
         PortraitControlMeta("portrait.position", tostring(unit) .. ".portraitMode"))
     local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitControls)
+    local clickable = BindPortraitToggle(mainCard, "Clickable portrait", 16, -174, leftW - 32, "portraitClickable", false, "MSUF2_PORTRAIT_CLICKABLE")
+    clickable._msuf2SearchText = "Clickable portrait unit frame target right click menu click casting mouseover"
+    BindExactPortraitTabTarget(clickable, "general", tostring(unit) .. ".portraitClickable")
     local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE", nil, RefreshPortraitControls)
     local sizeMode = W.Segment(geometryCard, "Size mode", PORTRAIT_SIZE_MODES, min(360, rightW - 32))
     W.MoveWidget(sizeMode, geometryCard, 16, -62, min(360, rightW - 32))
@@ -363,7 +366,7 @@ local function BuildPortrait(ctx, builder, unit)
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local portraitActiveControls = {
-        render, shape, sizeMode, size, widthOverride, heightOverride, edgeSoftness, portraitBg, castSpellIcon,
+        render, clickable, shape, sizeMode, size, widthOverride, heightOverride, edgeSoftness, portraitBg, castSpellIcon,
         placement, levelOffset, portraitAlpha,
     }
     local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end

@@ -1550,13 +1550,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap)
 end
 local function BuildBossLayout(ctx, builder, unit)
     if unit ~= "boss" then return end
-    local sec = builder:CollapsibleSection("boss_layout", "Boss Layout", 204, false)
-    if W.AttachContextColorReferences then
-        W.AttachContextColorReferences(sec, { "highlight.boss_target" }, {
-            title = "Boss Target Highlight Color",
-            historySource = "menu:unit-boss-target-highlight-color",
-        })
-    end
+    local sec = builder:CollapsibleSection("boss_layout", "Boss Layout", 150, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local rightX = math.max(350, floor(sectionW * 0.50) + 8)
@@ -1584,16 +1578,88 @@ local function BuildBossLayout(ctx, builder, unit)
             M.RequestUnitApply(unit, "MSUF2_BOSS_LAYOUT_MODE", { preview = true })
         end,
         SettingMeta(ctx, "boss_layout.mode", unit, "bossLayoutMode"))
-    local highlight = W.ToggleAt(sec, "Boss target highlight", leftX, -156, 260)
-    M.BindBoolWidget(ctx, highlight,
-        function() return ReadGeneralBool("bossTargetHighlightEnabled", true) end,
+end
+local function BuildBossTargetHighlight(ctx, builder, unit)
+    if unit ~= "boss" then return end
+    local sec = builder:CollapsibleSection("boss_target_highlight", "Boss target highlight", 450, false)
+    if W.AttachContextColorReferences then
+        W.AttachContextColorReferences(sec, { "highlight.boss_target" }, {
+            title = "Boss Target Highlight Color", historySource = "menu:unit-boss-target-highlight-color",
+        })
+    end
+    local function Apply()
+        M.RequestUnitApply("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
+    end
+    local styles = {
+        { value = "OFF", text = "Off" }, { value = "BORDER", text = "Border" },
+        { value = "ARROW", text = "Arrow" }, { value = "DOUBLE_ARROW", text = "Double arrow" },
+        { value = "TRIPLE_ARROW", text = "Triple arrow" },
+        { value = "DIAMOND", text = "Diamond" }, { value = "CROSS", text = "Cross" },
+        { value = "BORDER_ARROW", text = "Border and arrow" },
+    }
+    local style = W.Dropdown(sec, "Highlight style", styles, 270)
+    UnitSectionShared.PlaceDropdown(sec, style, 14, -42, 270)
+    M.BindDropdownWidget(ctx, style,
+        function()
+            local g = GetGeneral()
+            local conf = GetConf(unit)
+            local mode = conf.hlOverride == true and conf.bossTargetOutlineMode or nil
+            if mode == nil then mode = g.bossTargetOutlineMode end
+            if mode == 0 or (mode == nil and g.bossTargetHighlightEnabled == false) then return "OFF" end
+            return MSUF.BossTargetIndicator.Style(g)
+        end,
         function(v)
             local g = GetGeneral()
-            g.bossTargetHighlightEnabled = v and true or false
-            g.bossTargetOutlineMode = v and 1 or 0
-            M.RequestUnitApply("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
+            g.bossTargetHighlightEnabled = v ~= "OFF"
+            g.bossTargetOutlineMode = v ~= "OFF" and 1 or 0
+            GetConf(unit).bossTargetOutlineMode = nil
+            if v ~= "OFF" then g.bossTargetHighlightStyle = v end
+            Apply()
         end,
-        SettingMeta(ctx, "boss_layout.target_highlight", "general", "bossTargetHighlightEnabled"))
+        SettingMeta(ctx, "boss_target_highlight.style", "general", "bossTargetHighlightStyle"))
+    local function Dropdown(label, key, values, default, x, y)
+        local widget = W.Dropdown(sec, label, values, 270)
+        UnitSectionShared.PlaceDropdown(sec, widget, x, y, 270)
+        M.BindDropdownWidget(ctx, widget, function() return GetConf(unit)[key] or default end,
+            function(v) GetConf(unit)[key] = v; Apply() end,
+            SettingMeta(ctx, "boss_target_highlight." .. key, unit, key))
+    end
+    Dropdown("Marker anchor", "bossTargetIndicatorAnchor", {
+        { value = "LEFT", text = "Left" }, { value = "RIGHT", text = "Right" },
+        { value = "TOP", text = "Top" }, { value = "BOTTOM", text = "Bottom" },
+        { value = "CENTER", text = "Center" },
+        { value = "TOPLEFT", text = "Top left" }, { value = "TOPRIGHT", text = "Top right" },
+        { value = "BOTTOMLEFT", text = "Bottom left" }, { value = "BOTTOMRIGHT", text = "Bottom right" },
+    }, "LEFT", 350, -42)
+    Dropdown("Arrow direction", "bossTargetIndicatorDirection", {
+        { value = "RIGHT", text = "Right" }, { value = "LEFT", text = "Left" },
+        { value = "UP", text = "Up" }, { value = "DOWN", text = "Down" },
+    }, "RIGHT", 14, -112)
+    local function Slider(label, key, default, low, high, x, y)
+        local widget = W.Slider(sec, label, low, high, 1, 270)
+        W.MoveWidget(widget, sec, x, y, 270, "CENTER")
+        local meta = SettingMeta(ctx, "boss_target_highlight." .. key, unit, key)
+        meta.step, meta.roundStep = 1, true
+        M.BindNumberWidget(ctx, widget, function() return ReadNumber(unit, key, default) end,
+            function(v) GetConf(unit)[key] = v; Apply() end, default, meta)
+    end
+    Slider("Marker size", "bossTargetIndicatorSize", 24, 8, 96, 350, -112)
+    Slider("Marker X offset", "bossTargetIndicatorOffsetX", -28, -500, 500, 14, -188)
+    Slider("Marker Y offset", "bossTargetIndicatorOffsetY", 0, -500, 500, 350, -188)
+    Dropdown("Marker layout", "bossTargetIndicatorLayout", {
+        { value = "SINGLE", text = "Single marker" },
+        { value = "BOTH_IN", text = "Both sides: > frame <" },
+        { value = "BOTH_OUT", text = "Both sides: < frame >" },
+    }, "SINGLE", 14, -264)
+    W.Text(sec, "Both sides mirror the X offset. Y moves both markers together. Drag the left marker to adjust the pair.", 350, -264, 280, T.colors.muted)
+    W.Text(sec, "Drag the marker in either boss preview to position it. Boss 1 shows the selected target.", 14, -340, 630, T.colors.muted)
+    local multiple = W.ToggleAt(sec, "Only highlight with multiple boss frames", 14, -390, 500)
+    M.BindBoolWidget(ctx, multiple,
+        function() return GetConf(unit).bossTargetMultipleOnly == true end,
+        function(v) GetConf(unit).bossTargetMultipleOnly = v == true; Apply() end,
+        SettingMeta(ctx, "boss_target_highlight.multiple_only", unit, "bossTargetMultipleOnly"))
+    M.AddTooltip(multiple, "Only highlight with multiple boss frames",
+        "Requires at least two existing boss units, not two bosses taking damage. Updates during combat. Previews remain visible.")
 end
 local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn, opts)
     if UP.BuildSectionLazy and not (opts and opts.lazy == false) then
@@ -1665,7 +1731,8 @@ local function BuildUnitPage(info)
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_inline_text") end
         BuildStatus(ctx, builder, info.unit)
         if info.unit == "boss" then
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 204 })
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 150 })
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossTargetHighlight, { sectionId = "boss_target_highlight", title = "Boss target highlight", height = 450 })
         end
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 210 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end

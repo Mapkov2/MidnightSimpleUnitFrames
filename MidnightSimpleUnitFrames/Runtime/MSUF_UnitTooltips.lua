@@ -629,8 +629,10 @@ end
 local function MSUF_HandleTooltipModifier()
     local cache = MSUF_GetTooltipCache()
     local owner, unit = hoveredTooltipOwner, hoveredTooltipUnit
+    local portrait = owner and owner.MSUFPortraitClickTarget
     if cache.mode ~= TOOLTIP_MODE_MODIFIER
-        or not (owner and unit and owner.IsMouseOver and owner:IsMouseOver()) then
+        or not (owner and unit and ((portrait and portrait._msufPortraitHovered)
+            or (owner.IsMouseOver and owner:IsMouseOver()))) then
         MSUF_ClearUnitTooltipHover(owner)
         return
     end

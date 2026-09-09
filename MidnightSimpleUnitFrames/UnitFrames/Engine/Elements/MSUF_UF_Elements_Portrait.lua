@@ -574,6 +574,53 @@ local function EnsurePortrait(frame)
   return holder, tex
 end
 
+-- A separate secure child keeps the visual holder and its aura overlays under
+-- their existing owners. Blizzard's SecureButton_GetModifiedAttribute inherits
+-- unit/actions through useparent*, including secure group-header unit changes.
+-- Never copy a roster token or dispatch a protected click from insecure Lua.
+local function PortraitMouseEnter(button)
+  button._msufPortraitHovered = true
+  local callback = button._msufPortraitEnter
+  if callback then callback(button._msufUnitFrameOwner) end
+end
+
+local function PortraitMouseLeave(button)
+  if not button._msufPortraitHovered then return end
+  button._msufPortraitHovered = nil
+  local callback = button._msufPortraitLeave
+  if callback then callback(button._msufUnitFrameOwner) end
+end
+
+local function ApplyPortraitClickTarget(frame, p)
+  if InCombatLockdown and InCombatLockdown() then return end
+  local button = frame.MSUFPortraitClickTarget
+  local enabled = p and p.enabled == true and p.clickable == true
+    and frame._msufGFIsPreviewFrame ~= true
+  if not enabled then
+    if button then button:Hide() end
+    return
+  end
+  if not button then
+    button = CreateFrame("Button", nil, frame, "SecureUnitButtonTemplate")
+    button._msufUnitFrameOwner = frame
+    button:SetAttribute("useparent*", true)
+    button:SetAttribute("useparent-unit", true)
+    button:RegisterForClicks("AnyUp")
+    button:EnableMouse(true)
+    button:SetAllPoints(frame.MSUFPortraitHolder)
+    local hoverOwner = frame._msufIsGroupFrame and MSUF.GF or UF
+    button._msufPortraitEnter = hoverOwner and hoverOwner.PortraitMouseEnter
+    button._msufPortraitLeave = hoverOwner and hoverOwner.PortraitMouseLeave
+    button:HookScript("OnEnter", PortraitMouseEnter)
+    button:HookScript("OnLeave", PortraitMouseLeave)
+    button:HookScript("OnHide", PortraitMouseLeave)
+    frame.MSUFPortraitClickTarget = button
+    if UF.RegisterClickCastFrame then UF.RegisterClickCastFrame(button) end
+  end
+  button:SetFrameLevel(frame.MSUFPortraitHolder:GetFrameLevel() + 1)
+  button:Show()
+end
+
 -- The cast spell icon must not overwrite frame.portrait. SetPortraitTexture is
 -- a comparatively expensive native call, and sharing one Texture forced every
 -- cast/channel stop to rebuild an otherwise unchanged unit portrait. Create the
@@ -1526,6 +1573,7 @@ function Portrait.AcquirePositionAnchor(frame, p)
     return nil
   end
   local holder = EnsurePortrait(frame)
+  ApplyPortraitClickTarget(frame, nil)
   frame._msufPortraitFrameHeight = frame.MSUFSpec and frame.MSUFSpec.height or nil
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
@@ -1584,6 +1632,7 @@ function Portrait.Apply(frame, spec)
   ApplyPortraitBackground(holder, p)
   LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
   SetShown(holder, true)
+  ApplyPortraitClickTarget(frame, p)
   -- Base portrait and optional cast texture remain normal background regions.
   -- A visible native defensive AuraButton covers both from the next frame
   -- level; when Blizzard hides it, no MSUF visibility transition is required.
@@ -1611,6 +1660,7 @@ function Portrait.Apply(frame, spec)
 end
 
 function Portrait.Disable(frame)
+  ApplyPortraitClickTarget(frame, nil)
   SyncPlayerPortraitWorldEvent(frame, frame and frame.MSUFSpec, nil)
   local holder = frame.MSUFPortraitHolder
   frame._msufPortraitNeedsVisibleRefresh = nil

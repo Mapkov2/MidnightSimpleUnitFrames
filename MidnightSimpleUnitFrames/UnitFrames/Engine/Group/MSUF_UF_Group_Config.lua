@@ -1658,6 +1658,7 @@ local function CompilePortrait(kind, conf, frameHeight)
     render = conf.portraitRender == "CLASS" and "CLASS" or "2D",
     classStyle = PortraitClassStyle(conf.portraitClassStyle),
     castSpellIcon = conf.portraitCastSpellIcon == true,
+    clickable = conf.portraitClickable == true,
     shape = shape,
     size = size,
     sizeMode = sizeMode,

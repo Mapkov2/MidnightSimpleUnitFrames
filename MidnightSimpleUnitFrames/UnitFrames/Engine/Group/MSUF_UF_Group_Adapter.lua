@@ -244,7 +244,9 @@ do
     end
     pendingFrame, pendingToken, pendingAt = nil, nil, nil
     if frame._msufGFTooltipToken ~= token then return end
-    if frame.IsMouseOver and not frame:IsMouseOver() then return end
+    local portrait = frame.MSUFPortraitClickTarget
+    if not (portrait and portrait._msufPortraitHovered)
+      and frame.IsMouseOver and not frame:IsMouseOver() then return end
     local tooltips = MSUF.Tooltips
     if tooltips and not tooltips.hoverInert and tooltips.ShowUnit then
       tooltips.ShowUnit(frame, StoredAttrUnit(frame))
@@ -364,6 +366,16 @@ local function TrackFrame(frame, unit)
   if not wasTracked or oldUnit ~= newUnit then
     NotifyFrameRegistryObservers("track", frame, oldUnit, newUnit)
   end
+end
+
+function GF.PortraitMouseEnter(frame)
+  if Highlight then Highlight.GroupEnter(frame) end
+  GroupShowTooltip(frame)
+end
+
+function GF.PortraitMouseLeave(frame)
+  if Highlight then Highlight.GroupLeave(frame) end
+  GroupHideTooltip(frame)
 end
 GF.TrackFrame = TrackFrame
 

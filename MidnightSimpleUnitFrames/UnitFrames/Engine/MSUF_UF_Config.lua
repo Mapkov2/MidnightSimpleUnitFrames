@@ -1647,6 +1647,7 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.render = NormalizePortraitRender(conf.portraitRender)
   out.portrait.classStyle = NormalizePortraitClassStyle(conf.portraitClassStyle)
   out.portrait.castSpellIcon = conf.portraitCastSpellIcon == true
+  out.portrait.clickable = conf.portraitClickable == true
   out.portrait.shape = NormalizePortraitShape(conf.portraitShape)
   out.portrait.size = portraitSize
   out.portrait.sizeMode = portraitSizeMode
@@ -1876,6 +1877,15 @@ end
 local function CompileUnitText(out, db, unit, key, conf, general, bars)
   local text = out.text or {}
   out.text = text
+  text.nameMouseover = conf.nameTextMouseover == true
+  text.healthMouseover = conf.hpTextMouseover == true
+  text.powerMouseover = conf.powerTextMouseover == true
+  text.nameMouseoverFadeIn = math.min(2, math.max(0, Number(conf.nameTextMouseoverFadeIn, 0)))
+  text.nameMouseoverFadeOut = math.min(2, math.max(0, Number(conf.nameTextMouseoverFadeOut, 0)))
+  text.healthMouseoverFadeIn = math.min(2, math.max(0, Number(conf.hpTextMouseoverFadeIn, 0)))
+  text.healthMouseoverFadeOut = math.min(2, math.max(0, Number(conf.hpTextMouseoverFadeOut, 0)))
+  text.powerMouseoverFadeIn = math.min(2, math.max(0, Number(conf.powerTextMouseoverFadeIn, 0)))
+  text.powerMouseoverFadeOut = math.min(2, math.max(0, Number(conf.powerTextMouseoverFadeOut, 0)))
   text.healthLeft = NormalizeHealthTextMode(conf.textLeft, "NONE")
   text.healthCenter = NormalizeHealthTextMode(conf.textCenter, "NONE")
   text.healthRight = NormalizeHealthTextMode(conf.textRight or conf.hpTextMode or general.hpTextMode, "CURPERCENT")
@@ -2286,10 +2296,21 @@ local function CompileUnitBorder(out, conf, general, bars)
     general.purgeBorderEnabled == true or general.hlPurgeBorderEnabled == true)
   border.bossTarget = OutlineModeEnabled(ScopedValue(conf, general, "bossTargetOutlineMode", nil),
     general.bossTargetHighlightEnabled ~= false)
+  border.bossTargetStyle = MSUF.BossTargetIndicator and MSUF.BossTargetIndicator.Style(general) or "BORDER"
+  border.bossTargetSize = max(8, min(96, Number(conf.bossTargetIndicatorSize, 24)))
+  border.bossTargetAnchor = conf.bossTargetIndicatorAnchor or "LEFT"
+  border.bossTargetDirection = conf.bossTargetIndicatorDirection or "RIGHT"
+  border.bossTargetLayout = conf.bossTargetIndicatorLayout or "SINGLE"
+  border.bossTargetMultipleOnly = conf.bossTargetMultipleOnly == true
+  border.bossTargetX = Number(conf.bossTargetIndicatorOffsetX, -28)
+  border.bossTargetY = Number(conf.bossTargetIndicatorOffsetY, 0)
 end
 
 local function CompileUnitTail(out, unit, key, conf, general, bars)
   CompileUnitPortrait(out, conf, general)
+  if key == "boss" and out.border and MSUF.BossTargetIndicator then
+    out.border.bossTargetLeftExtent, out.border.bossTargetRightExtent = MSUF.BossTargetIndicator.PortraitExtents(out)
+  end
   CompileUnitStatus(out, conf, general, key)
 
   out.auras = out.auras or {}

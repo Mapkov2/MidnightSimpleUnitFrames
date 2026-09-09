@@ -578,6 +578,7 @@ local function ApplyBossPreviewFrameData(frame, index)
   local power = powerMax
 
   frame._msufBossPreviewForced = true
+  if UF.RefreshBossTargetPreview then UF.RefreshBossTargetPreview(frame) end
   local state = frame._msufUnitState
   if type(state) == "table" then
     state.exists = true
@@ -616,6 +617,7 @@ end
 local function ClearBossPreviewFrameForRuntime(frame, restoreVisuals)
   if not frame or frame._msufBossPreviewForced ~= true then return false end
   frame._msufBossPreviewForced = nil
+  if UF.RefreshBossTargetPreview then UF.RefreshBossTargetPreview(frame) end
   frame._msufUnitState = nil
   frame._msufAlphaLastFrame = nil
   frame._msufAlphaLastHP = nil

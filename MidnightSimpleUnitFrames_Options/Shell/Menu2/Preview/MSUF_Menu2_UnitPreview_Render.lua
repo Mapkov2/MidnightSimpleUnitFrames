@@ -1996,6 +1996,20 @@ function Preview.Refresh(box, reason)
             end
         end
     end
+    do
+        local border = key == "boss" and runtimeSpec and runtimeSpec.border
+        if MSUF.BossTargetIndicator and MSUF.BossTargetIndicator.HasMarker(border) then
+            local size = border.bossTargetSize or 24
+            minX, maxX, minY, maxY = ExpandRuntimeAnchorRect(minX, maxX, minY, maxY,
+                MSUF.BossTargetIndicator.IsPaired(border) and "LEFT" or (border.bossTargetAnchor or "LEFT"),
+                (border.bossTargetX or -28) - (MSUF.BossTargetIndicator.IsPaired(border) and (border.bossTargetLeftExtent or 0) or 0),
+                border.bossTargetY or 0, size, size, w, h)
+            if MSUF.BossTargetIndicator.IsPaired(border) then
+                minX, maxX, minY, maxY = ExpandRuntimeAnchorRect(minX, maxX, minY, maxY,
+                    "RIGHT", -(border.bossTargetX or -28) + (border.bossTargetRightExtent or 0), border.bossTargetY or 0, size, size, w, h)
+            end
+        end
+    end
     if (hasPortrait and PreviewLayerWanted(box, "portrait"))
         or (box._runtimeDefensivePortraitPositionOnly and PreviewLayerWanted(box, "auras")) then
         local poX = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0
@@ -2797,11 +2811,24 @@ function Preview.Refresh(box, reason)
         Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel,
             box._previewDispelOverlayAvailable, box._previewDispelSymbolAvailable, w, h)
     end
-    R.ApplyPreviewRounded(box, key, powerOn, R.PreviewRoundedOutlineThickness(key, conf, scale),
+    do
+    local previewBorder = runtimeSpec and runtimeSpec.border
+    local bossBorder = key == "boss" and MSUF.BossTargetIndicator
+        and MSUF.BossTargetIndicator.HasBorder(previewBorder)
+    mock._msufPreviewBossBorder = bossBorder and previewBorder or nil
+    if bossBorder then
+        local highlight = box._bossHighlightBorderSpec or {}
+        box._bossHighlightBorderSpec = highlight
+        highlight.enabled, highlight.thickness = true, previewBorder.highlightThickness or 3
+        highlight.r, highlight.g, highlight.b, highlight.a = previewBorder.bossTargetR, previewBorder.bossTargetG, previewBorder.bossTargetB, 1
+        previewBorder = highlight
+    end
+    R.ApplyPreviewRounded(box, key, powerOn, bossBorder and max(1, floor(previewBorder.thickness * scale + .5)) or R.PreviewRoundedOutlineThickness(key, conf, scale),
         box._runtimePowerEmbedded == true, box._previewPowerOutline,
         box._runtimeDetachedRoundedPower == true, box._previewPowerOutline)
     if R.ApplyPreviewFrameBorder then
-        R.ApplyPreviewFrameBorder(box, mock._msufPreviewRoundedActive == true and nil or (runtimeSpec and runtimeSpec.border), scale)
+        R.ApplyPreviewFrameBorder(box, mock._msufPreviewRoundedActive == true and nil or previewBorder, scale)
+    end
     end
     if R.ApplyPreviewBoundsGuide then
         local guideEdge = 1
@@ -3328,6 +3355,19 @@ function Preview.Refresh(box, reason)
         box.handleCastbarTime:Hide()
     end
     if Auras and Auras.Layout then Auras.Layout(box, mock, auraPreviewState, S, baseLevel) end
+    do
+    local bossIndicator = MSUF.BossTargetIndicator
+    if bossIndicator and box.handleBossTarget then
+        local marker = bossIndicator.Apply(mock, key == "boss" and runtimeSpec and runtimeSpec.border or nil, scale)
+        if marker then
+            marker:Show()
+            box.handleBossTarget:SetSize(max(18, marker:GetWidth() + 8), max(18, marker:GetHeight() + 8))
+            PlaceHandle(box.handleBossTarget, marker)
+        else
+            box.handleBossTarget:Hide()
+        end
+    end
+    end
     local statusLayerAvailable = false
     for i = 1, #D.STATUS_PREVIEW do
         local spec = D.STATUS_PREVIEW[i]

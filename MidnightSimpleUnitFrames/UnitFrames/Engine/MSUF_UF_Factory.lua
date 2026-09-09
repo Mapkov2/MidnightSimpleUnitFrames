@@ -1013,6 +1013,16 @@ local function EnsureMouseoverHooks(frame)
   frame._msufMouseoverHighlightHooked = true
 end
 
+function UF.PortraitMouseEnter(frame)
+  if Highlight then Highlight.UnitEnter(frame) end
+  ShowUnitTooltip(frame)
+end
+
+function UF.PortraitMouseLeave(frame)
+  if Highlight then Highlight.UnitLeave(frame) end
+  HideUnitTooltip(frame)
+end
+
 local function SpawnFrame(unit)
   if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return nil end
 
