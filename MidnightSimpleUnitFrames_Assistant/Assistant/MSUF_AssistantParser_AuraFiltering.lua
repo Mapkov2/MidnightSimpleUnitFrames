@@ -1080,6 +1080,21 @@ end
 function P.LooksLikeAuraFilteringConversation(text, ctx)
     text = type(Normalize) == "function" and Normalize(text) or tostring(text or ""):lower()
     if text == "" then return false end
+    -- A border or outline is a Bars highlight control: "show a border when
+    -- there is a debuff i can dispel" is Dispel Border, not a live filter on
+    -- the debuff lane. Only aura-icon or filter wording keeps it here.
+    if HasAny(text, { "border", "borders", "outline", "outlines" })
+        and not HasAny(text, { "icon", "icons", "filter", "filters", "filtering" })
+    then
+        return false
+    end
+    -- "only show my player frame when i am in a group" is that frame's load
+    -- condition; the frame is the object, no aura lane is named.
+    if not HasAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+        and text:find("%f[%a]frames?%s+when%f[%A]")
+    then
+        return false
+    end
     local durationIntent = DurationIntent(text)
     local explicitSpellList = HasAny(text, { "spell id", "spellid", "spell:", "hidden spell", "hidden aura" })
         or text:match("#?%d%d%d+") ~= nil

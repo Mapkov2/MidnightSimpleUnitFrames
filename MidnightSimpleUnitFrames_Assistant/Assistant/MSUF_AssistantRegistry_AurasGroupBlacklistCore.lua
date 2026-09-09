@@ -15,6 +15,7 @@ function A.AurasRegistry.BuildGroupAuraBlacklistCore(ctx)
     local AuraModel = ctx.AuraModel
     local GFAuraCategoryScope = ctx.GFAuraCategoryScope
     local GFAuraCategoryLane = ctx.GFAuraCategoryLane
+    local GFAuraGroup = ctx.GFAuraGroup
 
     if type(AuraModel) ~= "function" then return nil end
     if type(GFAuraCategoryScope) ~= "function" or type(GFAuraCategoryLane) ~= "function" then return nil end
@@ -38,6 +39,20 @@ function A.AurasRegistry.BuildGroupAuraBlacklistCore(ctx)
     end
 
     local function GFAuraBlacklistSummary(scope, lane)
+        -- The model summary materialises <scope>.auras (renderer = "CUSTOM")
+        -- even for an empty list; answer the empty case from the saved table.
+        if type(GFAuraGroup) == "function" then
+            local group = GFAuraGroup(GFAuraCategoryScope(scope), GFAuraCategoryLane(lane))
+            local blacklist = type(group) == "table" and group.blacklist or nil
+            local spells = type(blacklist) == "table" and blacklist.spells or nil
+            local hasEntry = false
+            if type(spells) == "table" then
+                for _, enabled in pairs(spells) do
+                    if enabled == true then hasEntry = true; break end
+                end
+            end
+            if not hasEntry then return "No blacklisted spells." end
+        end
         local Model = AuraModel()
         if Model and type(Model.GroupBlacklistSummary) == "function" then
             return Model.GroupBlacklistSummary(GFAuraCategoryScope(scope), GFAuraCategoryLane(lane))

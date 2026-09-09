@@ -395,6 +395,7 @@ if type(UnitAuraHelpers) ~= "table" then return end
 local BuildGroupAuraHelpers = A.RegistryCoreBuilders and A.RegistryCoreBuilders.BuildGroupAuraHelpers
 local GroupAuraHelpers = type(BuildGroupAuraHelpers) == "function" and BuildGroupAuraHelpers({
     GroupDB = GroupDB,
+    GroupDBRead = DBHelpers.GroupDBRead,
     ClampNumber = ClampNumber,
 }) or nil
 if type(GroupAuraHelpers) ~= "table" then return end

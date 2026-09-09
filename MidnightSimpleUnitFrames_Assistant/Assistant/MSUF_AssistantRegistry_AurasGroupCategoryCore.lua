@@ -14,11 +14,12 @@ function A.AurasRegistry.BuildGroupAuraCategoryCore(ctx)
     local ARef = ctx.A or A
     local AuraModel = ctx.AuraModel
     local GFAuraGroup = ctx.GFAuraGroup
+    local GFAuraGroupForWrite = ctx.GFAuraGroupForWrite
     local ApplyGroup = ctx.ApplyGroup
     local GF_AURA_CATEGORY_FALLBACK = ctx.GF_AURA_CATEGORY_FALLBACK or {}
 
     if type(AuraModel) ~= "function" or type(GFAuraGroup) ~= "function" then return nil end
-    if type(ApplyGroup) ~= "function" then return nil end
+    if type(GFAuraGroupForWrite) ~= "function" or type(ApplyGroup) ~= "function" then return nil end
 
     local BuildGroupAuraCategoryResolverCore = A.AurasRegistry and A.AurasRegistry.BuildGroupAuraCategoryResolverCore
     local ResolverCore = type(BuildGroupAuraCategoryResolverCore) == "function" and BuildGroupAuraCategoryResolverCore({
@@ -41,11 +42,11 @@ function A.AurasRegistry.BuildGroupAuraCategoryCore(ctx)
         scope = GFAuraCategoryScope(scope)
         lane = GFAuraCategoryLane(lane)
         catKey = ResolveGFAuraCategory(catKey) or catKey
-        local Model = AuraModel()
-        if Model and type(Model.ReadGroupBlacklistCategoryState) == "function" then
-            local state = Model.ReadGroupBlacklistCategoryState(scope, lane, catKey)
-            if type(state) == "table" then return state end
-        end
+        -- Read straight from the saved tables. The Auras3 group filter model's
+        -- reader (Model.ReadGroupBlacklistCategoryState) materialises
+        -- <scope>.auras and pins renderer = "CUSTOM" on every read, so a
+        -- question about a hidden category would write to MSUF_DB. The
+        -- model's own read is the same blacklistCats[catKey] == true test.
         local function read(kind)
             local group = GFAuraGroup(kind, lane)
             return type(group.blacklistCats) == "table" and group.blacklistCats[catKey] == true
@@ -55,7 +56,7 @@ function A.AurasRegistry.BuildGroupAuraCategoryCore(ctx)
     end
 
     local function WriteGFAuraCategoryKind(kind, lane, catKey, value)
-        local group = GFAuraGroup(kind, lane)
+        local group = GFAuraGroupForWrite(kind, lane)
         if type(group.blacklistCats) ~= "table" then group.blacklistCats = {} end
         group.blacklistCats[catKey] = value and true or nil
     end
@@ -116,6 +117,7 @@ function A.AurasRegistry.BuildGroupAuraCategoryCore(ctx)
     local GroupAuraBlacklistCore = type(BuildGroupAuraBlacklistCore) == "function" and BuildGroupAuraBlacklistCore({
         A = ARef,
         AuraModel = AuraModel,
+        GFAuraGroup = GFAuraGroup,
         GFAuraCategoryScope = GFAuraCategoryScope,
         GFAuraCategoryLane = GFAuraCategoryLane,
     }) or nil

@@ -16,6 +16,7 @@ function A.GroupFramesRegistry.BuildSpellIndicatorStateHelpers(ctx)
     if type(ctx) ~= "table" then return nil end
 
     local GroupDB = ctx.GroupDB
+    local GroupDBRead = ctx.GroupDBRead
     local ApplyGroup = ctx.ApplyGroup
     local SpellRuntime = ctx.SpellRuntime
     if type(GroupDB) ~= "function" or type(ApplyGroup) ~= "function" then return nil end
@@ -29,6 +30,23 @@ function A.GroupFramesRegistry.BuildSpellIndicatorStateHelpers(ctx)
         if type(si.specs) ~= "table" then si.specs = {} end
         if si.layer == nil then si.layer = 9 end
         return si
+    end
+
+    -- Read path for getters: the saved block as it is, or a frozen default
+    -- view when the scope has none. SpellDB above wrote enabled/spec/layer
+    -- defaults into MSUF_DB on the first read, which made a question about
+    -- spell indicators a write.
+    local SPELL_DEFAULT_VIEW = setmetatable({ enabled = false, spec = "auto", layer = 9 }, {
+        __newindex = function(_, key)
+            error("MSUF Assistant: spell indicator read view is read-only (" .. tostring(key) .. ")", 2)
+        end,
+    })
+    local function SpellDBRead(scope)
+        if type(GroupDBRead) ~= "function" then return SpellDB(scope) end
+        local conf = GroupDBRead(scope)
+        local si = conf and conf.spellIndicators
+        if type(si) == "table" then return si end
+        return SPELL_DEFAULT_VIEW
     end
 
     local function EnsureSpec(scope, specKey)
@@ -74,6 +92,7 @@ function A.GroupFramesRegistry.BuildSpellIndicatorStateHelpers(ctx)
 
     return {
         SpellDB = SpellDB,
+        SpellDBRead = SpellDBRead,
         EnsureSpec = EnsureSpec,
         SpellEntry = SpellEntry,
         Placed = Placed,

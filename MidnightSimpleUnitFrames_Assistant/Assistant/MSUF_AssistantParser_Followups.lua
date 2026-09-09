@@ -173,6 +173,19 @@ local function HasExplicitValueSubject(text)
     return false
 end
 
+-- Answering "what did you change" restates the subject: the player is still
+-- talking about that change, so the next bare follow-up ("a bit more",
+-- "put it back") must find it as fresh as it was right after the change.
+-- Without this a read-only question aged the subject past the one-turn
+-- window the immediate follow-up lanes honour.
+local function RefreshSubjectTurn(ctx)
+    local currentTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial)
+    if currentTurn and tonumber(ctx.lastSubjectTurn) then
+        ctx.lastSubjectTurn = currentTurn
+        if tonumber(ctx.lastMentionedTurn) then ctx.lastMentionedTurn = currentTurn end
+    end
+end
+
 function A._ParseFollowupAnswer(text, ctx)
     if IsTroubleshootingWhyQuestion(text) or IsPageExplanationQuestion(text) then return nil end
     if HasExplicitValueSubject(text) then return nil end
@@ -183,6 +196,7 @@ function A._ParseFollowupAnswer(text, ctx)
 
     if type(ctx.lastChangeBundle) == "table" and #ctx.lastChangeBundle > 0 then
         local bundle = ctx.lastChangeBundle
+        RefreshSubjectTurn(ctx)
         local lines = {}
         if #bundle == 1 then
             local previous = bundle[1]
@@ -618,6 +632,16 @@ local function BuildFollowup(text, ctx)
         or tostring(text or ""):match("^change%s+to%s+[-+]?%d+%.?%d*$") ~= nil
         or tostring(text or ""):match("^auf%s+[-+]?%d+%.?%d*$") ~= nil
         or tostring(text or ""):match("^zu%s+[-+]?%d+%.?%d*$") ~= nil
+        -- "now 300" / "try 320" / "300 instead" right after a numeric change
+        -- name no pronoun, but they can only mean the value just set.
+        or tostring(text or ""):match("^now%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^try%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^make%s+that%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^go%s+with%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^how%s+about%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^[-+]?%d+%.?%d*%s+instead$") ~= nil
+        or tostring(text or ""):match("^[-+]?%d+%.?%d*%s+then$") ~= nil
+        or tostring(text or ""):match("^[-+]?%d+%.?%d*%s+please$") ~= nil
     local exactValueReference = ContainsAny(text, FollowupData.EXACT_VALUE_REFERENCE_TERMS)
     local pluralExactValueReference = ContainsAny(text, FollowupData.PLURAL_EXACT_VALUE_REFERENCE_TERMS)
     local relativeNumberIntent = ContainsAny(text, P.RELATIVE_INCREASE_TERMS or {})
@@ -649,6 +673,19 @@ local function BuildFollowup(text, ctx)
     if not hasIntent then return nil end
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
+    -- "the other one too": the counterpart of the frame that was just changed
+    -- (player <-> target, party <-> raid). Only when no frame is named and the
+    -- subject is still fresh; the replay block below then re-applies the last
+    -- change to that frame.
+    if #units == 0 and #groups == 0 and ContainsAny(text, FollowupData.OTHER_ONE_TERMS)
+        and ContextSubjectRecent(ctx, 3)
+    then
+        local counterpart = (FollowupData.OTHER_ONE_COUNTERPARTS or {})[tostring(ctx.lastUnit or "")]
+        if counterpart then
+            if IsGroupContextUnit(counterpart) then groups = { counterpart } else units = { counterpart } end
+            targetReplayIntent = true
+        end
+    end
 
     -- A fully named setting starts a new subject even when its final noun is
     -- also useful as contextual shorthand. For example, after editing Player
@@ -967,6 +1004,10 @@ local function BuildFollowup(text, ctx)
             return "size"
         end
         if attr == "layer" or attr:find("layer$") then return "layer" end
+        -- "make it half transparent" after "player health bar opacity 50%":
+        -- the retained subject IS the opacity control, so it owns the
+        -- follow-up instead of a sibling search that finds several.
+        if attr == "alpha" or attr == "opacity" or attr:find("alpha$") or attr:find("opacity$") then return "opacity" end
         if attr == "anchor" or attr:find("anchor$") or attr:find("position$") then return "anchor" end
         if attr == "growth" or attr:find("growth$") or attr:find("direction$") then return "growth" end
         if attr == "enabled" or attr == "visible" or attr:find("enabled$") or attr:find("visible$") then return "enabled" end
@@ -1931,6 +1972,54 @@ local function BuildFollowup(text, ctx)
         local colorFollowup = A._BuildColorTokenFollowup(text, ctx)
         if colorFollowup then return colorFollowup end
     end
+    -- "back to the player one, a bit more": a named frame plus a comparative
+    -- and no fresh subject noun re-aims the last numeric adjustment at that
+    -- frame's own copy of the setting. The amount follows the previous step
+    -- ("a bit" halves it), the sign follows the comparative.
+    if (#units > 0 or #groups > 0) and not targetReplayIntent and not exactValueIntent
+        and ContextSubjectRecent(ctx, 3)
+        and (positiveIntent or negativeIntent or neutralIncreaseIntent or tooPositiveIntent or tooNegativeIntent or notEnoughIntent)
+        and ContainsAny(text, FollowupData.UNIT_REFOCUS_TERMS)
+    then
+        local refocusChanges = {}
+        local explicitAmount = A._RelativeNumberAmountForText(text)
+        for i = 1, #ctx.lastChangeBundle do
+            local prev = ctx.lastChangeBundle[i]
+            local previousSetting = prev and prev.key and Registry:GetSetting(prev.key) or nil
+            if previousSetting and previousSetting.type == "number" and prev.attribute then
+                local prevDelta = tonumber(prev.relativeDelta) or PreviousValueDelta(prev)
+                local sign
+                if negativeIntent or tooPositiveIntent then
+                    sign = -1
+                elseif positiveIntent or tooNegativeIntent or notEnoughIntent then
+                    sign = 1
+                elseif prevDelta ~= nil and prevDelta < 0 then
+                    sign = -1
+                else
+                    sign = 1
+                end
+                local scopes = {}
+                for j = 1, #units do scopes[#scopes + 1] = { unit = units[j], frameType = prev.frameType == "group" and "unitframe" or prev.frameType } end
+                for j = 1, #groups do scopes[#scopes + 1] = { unit = groups[j], frameType = prev.frameType == "unitframe" and "group" or prev.frameType } end
+                for j = 1, #scopes do
+                    local found = Registry:FindSettings({ unit = scopes[j].unit, frameType = scopes[j].frameType, attribute = prev.attribute })
+                    local setting = found and found[1]
+                    if setting and setting.type == "number" then
+                        local amount = FollowupAmount(setting, prevDelta, explicitAmount)
+                        refocusChanges[#refocusChanges + 1] = { setting = setting, relativeDelta = amount * sign }
+                    end
+                end
+            end
+        end
+        if #refocusChanges > 0 then
+            return {
+                kind = "changes",
+                changes = refocusChanges,
+                label = "Repeat previous adjustment on another frame",
+                summary = "Continues the previous numeric adjustment on the named frame.",
+            }
+        end
+    end
     if #units == 0 and #groups == 0 then return nil end
     if not targetReplayIntent then return nil end
     if not ContextSubjectRecent(ctx, 3) then return nil end
@@ -2068,14 +2157,104 @@ local function BuildFollowup(text, ctx)
     }
 end
 
+-- The numeric sibling of a boolean subject: after "fade my frame out of
+-- combat" (oocFadeEnabled), "make it 30% visible" means oocFadeAlpha. The
+-- family is the key with its enable/show marker stripped; the wording picks
+-- the suffix (opacity words -> Alpha/Opacity, size words -> Size, ...), and
+-- a lone numeric sibling wins without any wording. Cold path: only reached
+-- for a number follow-up on a boolean subject.
+local NUMERIC_SIBLING_SUFFIX_TERMS = {
+    { terms = { "visible", "opacity", "transparent", "transparency", "alpha", "opaque", "faded", "fade" }, suffixes = { "Alpha", "Opacity" } },
+    { terms = { "size", "big", "large", "small" }, suffixes = { "Size", "FontSize", "IconSize" } },
+    { terms = { "height", "tall" }, suffixes = { "Height" } },
+    { terms = { "width", "wide" }, suffixes = { "Width" } },
+    { terms = { "thick", "thickness" }, suffixes = { "Thickness" } },
+    { terms = { "spacing", "gap" }, suffixes = { "Spacing" } },
+    { terms = { "max", "count", "many" }, suffixes = { "Max" } },
+    { terms = { "scale" }, suffixes = { "Scale" } },
+}
+local function NumericSiblingForBooleanSubject(setting, text)
+    local key = tostring(setting and setting.key or "")
+    if key == "" or not (Registry and type(Registry.AllSettings) == "function") then return nil end
+    local scope, attribute = key:match("^(.*)%.([^%.]+)$")
+    if not scope then return nil end
+    local base = attribute:gsub("Enabled$", ""):gsub("Enable$", "")
+    base = base:gsub("^show(%u)", function(c) return c:lower() end)
+    base = base:gsub("^enable(%u)", function(c) return c:lower() end)
+    if attribute == "enabled" then base = "" end
+    local prefix = scope .. "." .. base
+    local candidates = {}
+    for _, candidate in ipairs(Registry:AllSettings()) do
+        local candidateKey = tostring(candidate.key or "")
+        if candidate.type == "number" and candidateKey ~= key and candidateKey:sub(1, #prefix) == prefix then
+            candidates[#candidates + 1] = candidate
+        end
+    end
+    if #candidates == 0 then return nil end
+    for i = 1, #NUMERIC_SIBLING_SUFFIX_TERMS do
+        local family = NUMERIC_SIBLING_SUFFIX_TERMS[i]
+        if ContainsAny(text, family.terms) then
+            for j = 1, #family.suffixes do
+                for k = 1, #candidates do
+                    if tostring(candidates[k].key):find(family.suffixes[j] .. "$") then return candidates[k] end
+                end
+            end
+        end
+    end
+    if #candidates == 1 then return candidates[1] end
+    return nil
+end
+
 local function BuildBooleanCorrection(text, ctx)
     if IsPageExplanationQuestion(text) then return nil end
     if not (ctx and type(ctx.lastSetting) == "string") then return nil end
     if not ContextSubjectRecent(ctx, 3) then return nil end
+    -- "bring them back" / "put it back": restore what the last change
+    -- overwrote, whatever its type, instead of reading "back" as a polarity.
+    if ContainsAny(text, FollowupData.RESTORE_PREVIOUS_TERMS) and type(ctx.lastChangeBundle) == "table" then
+        local restoreChanges = {}
+        for i = 1, #ctx.lastChangeBundle do
+            local prev = ctx.lastChangeBundle[i]
+            local previousSetting = prev and prev.key and Registry:GetSetting(prev.key) or nil
+            if previousSetting and prev.oldValue ~= nil and prev.oldValue ~= prev.value and prev.unchanged ~= true then
+                restoreChanges[#restoreChanges + 1] = { setting = previousSetting, value = prev.oldValue }
+            end
+        end
+        if #restoreChanges > 0 then
+            return {
+                kind = "changes",
+                changes = restoreChanges,
+                bulkSafe = #restoreChanges > 1,
+                label = "Restore previous value",
+                summary = "Restores the value the last Assistant change replaced.",
+            }
+        end
+    end
+    local setting = Registry:GetSetting(ctx.lastSetting)
+    -- A number after a boolean subject belongs to that subject's numeric
+    -- sibling ("and make it 30% visible then" -> Out of Combat Opacity).
+    if setting and setting.type == "boolean" then
+        local number = FirstNumber(text)
+        if number ~= nil and (ContainsAny(text, FollowupData.BOOLEAN_CORRECTION_TERMS)
+            or ContainsAny(text, FollowupData.EXPLICIT_FOLLOWUP_REFERENCE_TERMS) or text:find("%%"))
+        then
+            local sibling = NumericSiblingForBooleanSubject(setting, text)
+            if sibling then
+                local siblingValue = number
+                local fraction = sibling.percent == true or (tonumber(sibling.max) ~= nil and tonumber(sibling.max) <= 1)
+                if fraction and siblingValue > 1 then siblingValue = siblingValue / 100 end
+                return {
+                    kind = "changes",
+                    changes = { { setting = sibling, value = siblingValue } },
+                    label = "Set " .. tostring(sibling.label or "related option"),
+                    summary = "Continues from the last Assistant option's numeric sibling.",
+                }
+            end
+        end
+    end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     if not ContainsAny(text, FollowupData.BOOLEAN_CORRECTION_TERMS) then return nil end
-    local setting = Registry:GetSetting(ctx.lastSetting)
     if not setting or setting.type ~= "boolean" then return nil end
     return {
         kind = "changes",
@@ -2114,6 +2293,18 @@ local function ParseSetting(text, ctx)
         if qualifiers and P.SettingDropsStylingQualifiers({ key = attr, label = attr, attribute = attr }, qualifiers) then
             return nil
         end
+    end
+    -- "and on the player frame too" after "hide the target portrait" is a
+    -- replay of that portrait change on Player, not a request to enable the
+    -- Player frame: the sentence carries no polarity verb of its own, only a
+    -- replay marker and a frame name. Let the follow-up replay own it.
+    if attr == "enabled" and ctx and type(ctx.lastChangeBundle) == "table" and #ctx.lastChangeBundle > 0
+        and ContainsAny(text, FollowupData.REPLAY_TERMS)
+        and not ContainsAny(text, FollowupData.EXPLICIT_TOGGLE_VERB_TERMS)
+        and ContextSubjectRecent(ctx, 3)
+    then
+        local replay = BuildFollowup(text, ctx)
+        if replay then return replay end
     end
     if attr == "enabled" and (ContainsAny(text, FollowupData.ENABLED_GUARD_TERMS)
         or (type(P.TextNamesFrameDetail) == "function" and P.TextNamesFrameDetail(text)))

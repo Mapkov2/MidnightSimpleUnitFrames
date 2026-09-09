@@ -136,7 +136,7 @@ local function EnsureIndex(settings)
         -- alias-building loop below. It must obey the same deferred-job budget;
         -- otherwise the first cold callback can block for the entire registry
         -- even though the later alias work yields correctly.
-        if i % 32 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local label = type(settings[i]) == "table" and settings[i].label or nil
         if type(label) == "string" and label ~= "" then
             local normalized = Normalize(label)
@@ -150,10 +150,10 @@ local function EnsureIndex(settings)
         -- A single setting can retain dozens of normal/exact aliases. Yield
         -- checks only between settings let one alias-heavy bucket exceed the
         -- per-frame job budget during a cold index build.
-        if aliasWork % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        if aliasWork % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
     end
     for i = 1, #settings do
-        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        if i % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local exactAliases = type(setting) == "table" and setting.exactAliases or nil
         for j = 1, #(exactAliases or {}) do
@@ -261,7 +261,7 @@ local function FindRegistryExactAliasSettings(settings, subject, limit)
 
     local bucket, seen = {}, {}
     for i = 1, #settings do
-        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        if i % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local matched = false
         local exactAliases = type(setting) == "table" and setting.exactAliases or nil
@@ -481,7 +481,7 @@ local function ActionAliasSet()
                     local norm = Normalize(list[j])
                     if norm ~= "" then set[norm] = true end
                     aliasWork = aliasWork + 1
-                    if aliasWork % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                    if aliasWork % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
                 end
             end
         end
@@ -566,6 +566,51 @@ local function FullPhraseMatch(index, tokens, minTokens)
     -- callers that do not provide an explicit threshold.
     local handWrittenMinTokens = requestedMinTokens
     if not setting.generated and count < handWrittenMinTokens and not explicitTwoTokenNumber then return nil end
+    return setting, subject, boolFromVerb
+end
+
+-- Frame families whose controls legitimately carry the frame in their own
+-- name. A setting from one of these is never the stripped-form answer: the
+-- frame word the sentence carried may name a real twin there.
+local SCOPE_FAMILY_HEADS = {
+    player = true, target = true, focus = true, pet = true, boss = true,
+    targettarget = true, focustarget = true, auras3 = true, barScope = true,
+    fontScope = true,
+}
+local CARRIED_SCOPE_WORDS = {
+    player = true, target = true, focus = true, pet = true, boss = true,
+    party = true, raid = true, mythicraid = true, shared = true, global = true,
+}
+
+local function ScopeStrippedFullPhraseMatch(index, tokens, minTokens)
+    if type(tokens) ~= "table" or #tokens < 4 then return nil end
+    -- The carried frame sits right behind the verb: "set raid <name> to <value>".
+    local first = 1
+    while tokens[first] and COMMAND_FILLER_TOKENS[tokens[first]] do first = first + 1 end
+    while tokens[first] and COMMAND_VERB_TOKENS[tokens[first]] do
+        first = first + 1
+        while tokens[first] and COMMAND_DETERMINER_TOKENS[tokens[first]] do first = first + 1 end
+    end
+    if first == 1 then return nil end
+    local scopeEnd = first
+    if tokens[first] == "mythic" and tokens[first + 1] == "raid" then
+        scopeEnd = first + 1
+    elseif not CARRIED_SCOPE_WORDS[tokens[first] or ""] then
+        return nil
+    end
+    local stripped = {}
+    for i = 1, #tokens do
+        if i < first or i > scopeEnd then stripped[#stripped + 1] = tokens[i] end
+    end
+    local setting, subject, boolFromVerb = FullPhraseMatch(index, stripped, minTokens)
+    if not setting then return nil end
+    -- Only the control's own visible label qualifies: a batch clause spells
+    -- the label as the menu prints it. An alias hit is refused because the
+    -- "frame" word may be part of an idiom -- "raid icon x offset" is the raid
+    -- marker's offset, and stripping "raid" left the castbar icon's alias.
+    if Normalize(tostring(setting.label or "")) ~= tostring(subject or "") then return nil end
+    local head = tostring(setting.key or ""):match("^([^%.]+)")
+    if not head or SCOPE_FAMILY_HEADS[head] or head:find("^gf_") then return nil end
     return setting, subject, boolFromVerb
 end
 
@@ -750,6 +795,36 @@ function P.PlanForExactRegistrySetting(setting, text, raw)
     }
 end
 
+-- Strips the relative-pronoun glue between a noun and its description so an
+-- alias written as a plain phrase ("healing on its way") is found inside a
+-- sentence that says "the healing that is on its way".
+local function RelativeClauseFold(text)
+    local padded = " " .. tostring(text or "") .. " "
+    local folded = padded
+    for _, glue in ipairs({ " that is ", " that are ", " which is ", " which are ", " that ", " which " }) do
+        folded = folded:gsub(glue, " ")
+    end
+    folded = folded:gsub("%s+", " ")
+    return Normalize(folded)
+end
+
+-- A sentence that names exactly one group scope ("for party frames") means
+-- that scope's own copy of a bar-scope control, not the shared one the bare
+-- alias resolves to. Mythic raid shares the raid bar scope.
+local function GroupScopedTwin(setting, text)
+    if type(setting) ~= "table" or type(P.DetectGroups) ~= "function" or not Registry then return nil end
+    local key = tostring(setting.key or "")
+    local suffix = key:match("^general%.(.+)$") or key:match("^barScope%.shared%.(.+)$")
+    if not suffix then return nil end
+    local groups = P.DetectGroups(text)
+    if type(groups) ~= "table" or #groups ~= 1 then return nil end
+    local scope = tostring(groups[1])
+    if scope == "mythicraid" then scope = "raid" end
+    local twin = Registry:GetSetting("barScope.gf_" .. scope .. "." .. suffix)
+    if type(twin) == "table" and type(twin.set) == "function" then return twin end
+    return nil
+end
+
 function P.ParseRegistryExactAliasShortcut(text, raw, opts)
     -- The immediate Submit fast path calls this matcher before the Router.
     -- Never let a problem report, option-list request, or subjective policy
@@ -776,6 +851,15 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
     local forcedBooleanValue
     if fullPhrase then
         local setting, subject, boolFromVerb = FullPhraseMatch(index, tokens, minTokens)
+        if not setting then
+            -- A batch clause can arrive with a frame word carried in from the
+            -- clause before it ("set raid Bars Cp Cond Instance Only to on").
+            -- When the phrase WITH the frame names nothing but the phrase
+            -- without it is exactly one control that has no per-frame twin,
+            -- the frame was never part of this control's name; reading the
+            -- carried word fuzzily instead wrote Raid Bars Override.
+            setting, subject, boolFromVerb = ScopeStrippedFullPhraseMatch(index, tokens, minTokens)
+        end
         if not setting then return nil end
         -- Hand-written settings often have dedicated parsers with richer
         -- value handling; only claim them when value parsing is trivially
@@ -849,11 +933,53 @@ function P.ParseRegistryExactAliasShortcut(text, raw, opts)
             end
             matches = kept
         end
+        -- "show me the healing that is on its way" wraps the alias "healing
+        -- on its way" in a relative clause. Tried only when nothing matched
+        -- the sentence as written.
+        if #matches == 0 then
+            local folded = RelativeClauseFold(text)
+            if folded ~= text then AddMatches(matches, seen, index, Tokens(folded), minTokens) end
+        end
     end
     if #matches == 0 then return nil end
 
     local bestScore = 0
     for i = 1, #matches do if matches[i].score > bestScore then bestScore = matches[i].score end end
+    -- The named scope wins: "turn on the dispel border for party frames"
+    -- names the party frames, so the shared Dispel Border it matched by bare
+    -- name is replaced by that scope's own twin when the family has one.
+    for i = 1, #matches do
+        if matches[i].score == bestScore then
+            local twin = GroupScopedTwin(matches[i].setting, text)
+            if twin then matches[i].setting = twin end
+        end
+    end
+
+    -- Every per-unit copy answers to the same bare words ("bar texture" is an
+    -- alias of the shared control AND of seven generated per-unit ones). A
+    -- sentence that names no frame means the shared one -- "flat for the bar
+    -- texture" wrote Boss Bar Texture because the boss twin happened to
+    -- survive the eligibility pass first. Bulk wording keeps every copy.
+    if not fullPhrase then
+        local bestCount, sharedBest = 0, {}
+        for i = 1, #matches do
+            if matches[i].score == bestScore then
+                bestCount = bestCount + 1
+                local unit = tostring(matches[i].setting and matches[i].setting.unit or "")
+                if unit == "" or unit == "global" or unit == "shared" then sharedBest[#sharedBest + 1] = matches[i] end
+            end
+        end
+        local bulkHay = " " .. tostring(text or "") .. " "
+        local bulk = bulkHay:find(" all ", 1, true) or bulkHay:find(" every ", 1, true)
+            or bulkHay:find(" everywhere ", 1, true) or bulkHay:find(" each ", 1, true)
+        if bestCount > 1 and #sharedBest >= 1 and #sharedBest < bestCount
+            and not bulk
+            and #(type(P.DetectUnits) == "function" and P.DetectUnits(text) or {}) == 0
+            and #(type(P.DetectGroups) == "function" and P.DetectGroups(text) or {}) == 0
+        then
+            matches = sharedBest
+        end
+    end
 
     local changes, missingValue, seenChangeKeys = {}, {}, {}
     for i = 1, #matches do

@@ -22,7 +22,7 @@ local A3 = assert(MSUF.MSUF_Auras3)
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_GroupHighlightsData.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua"))("MidnightSimpleUnitFrames", MSUF)
 local spellRuntime = assert(A3.SpellIndicators)
-assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))("MidnightSimpleUnitFrames", MSUF)
+dofile("tools/assistant_auras3_model_loader.lua").Load(MSUF, "MidnightSimpleUnitFrames")
 local groupAuraFilter = assert(_G.MSUF_GF_AuraFilter)
 assert(groupAuraFilter.NormalizeFilterToken("buff", "BigDefensive") == "BigDefensive"
     and groupAuraFilter.NormalizeFilterToken("buff", "MSUF_GROUP_HIGHLIGHTS_V1") == "MSUF_GROUP_HIGHLIGHTS_V1"

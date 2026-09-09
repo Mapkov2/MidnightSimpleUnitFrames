@@ -23,6 +23,17 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return nil end
     if type(GroupDB) ~= "function" or type(ClampNumber) ~= "function" or type(ApplyGroup) ~= "function" then return nil end
+    -- Getters must not write: read the saved scope table when it exists and
+    -- treat a missing one as "all defaults" instead of creating it.
+    local GroupDBRead = type(ctx.GroupDBRead) == "function" and ctx.GroupDBRead or nil
+    local function ReadGroupValue(scope, dbKey)
+        if GroupDBRead then
+            local conf = GroupDBRead(scope)
+            if conf == nil then return nil end
+            return conf[dbKey]
+        end
+        return GroupDB(scope)[dbKey]
+    end
 
     local function RegisterGroupBoolean(scope, attr, dbKey, label, defaultValue, mode, aliases, opts)
         opts = opts or {}
@@ -43,7 +54,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             intentGuard = opts.intentGuard,
             get = function()
                 if opts.get then return opts.get(scope) end
-                local value = GroupDB(scope)[dbKey]
+                local value = ReadGroupValue(scope, dbKey)
                 if value == nil then return defaultValue and true or false end
                 return value and true or false
             end,
@@ -83,7 +94,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             percent = opts.percent == true,
             get = function()
                 if opts.get then return opts.get(scope) end
-                local value = tonumber(GroupDB(scope)[dbKey])
+                local value = tonumber(ReadGroupValue(scope, dbKey))
                 if value == nil then return defaultValue end
                 return value
             end,
@@ -130,7 +141,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             valueAliases = valueAliases,
             get = function()
                 if opts.get then return opts.get(scope) end
-                local value = GroupDB(scope)[dbKey]
+                local value = ReadGroupValue(scope, dbKey)
                 if allowed[value] then return value end
                 return defaultValue
             end,
@@ -167,7 +178,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             normalizesValue = opts.normalizeValue ~= nil,
             get = function()
                 if opts.get then return opts.get(scope) end
-                local value = GroupDB(scope)[dbKey]
+                local value = ReadGroupValue(scope, dbKey)
                 if type(value) ~= "string" or value == "" then return defaultValue or "" end
                 if opts.normalizeValue then value = opts.normalizeValue(value) end
                 return value

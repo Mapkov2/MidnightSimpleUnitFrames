@@ -24,10 +24,12 @@ function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
     local GF_AURA_GROUPS = ctx.GF_AURA_GROUPS or {}
     local AddAliasesForUnit = ctx.AddAliasesForUnit
     local GFAurasRoot = ctx.GFAurasRoot
+    local GFAurasRootForWrite = ctx.GFAurasRootForWrite
     local ApplyGroup = ctx.ApplyGroup
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AddAliasesForUnit) ~= "function" or type(GFAurasRoot) ~= "function" then return end
+    if type(GFAurasRootForWrite) ~= "function" then return end
     if type(ApplyGroup) ~= "function" then return end
 
     for _, scope in ipairs(GF_AURA_GROUPS) do
@@ -63,7 +65,7 @@ function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
                 return ClampLayer(externals and externals.layer, 7)
             end,
             set = function(value)
-                local root = GFAurasRoot(scopeKey)
+                local root = GFAurasRootForWrite(scopeKey)
                 if not root then return end
                 root.externals = type(root.externals) == "table" and root.externals or {}
                 root.externals.layer = ClampLayer(value, 7)
@@ -149,7 +151,7 @@ function A.AurasRegistry.RegisterGroupExternalLayerSettings(ctx)
                     return fieldSpec.default
                 end,
                 set = function(value)
-                    local root = GFAurasRoot(scopeKey)
+                    local root = GFAurasRootForWrite(scopeKey)
                     if not root then return end
                     root.externals = type(root.externals) == "table" and root.externals or {}
                     if fieldSpec.type == "boolean" then
@@ -241,6 +243,7 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
         UNIT_LABELS = UNIT_LABELS,
         AddAliasesForUnit = AddAliasesForUnit,
         GFAurasRoot = ctx.GFAurasRoot,
+        GFAurasRootForWrite = ctx.GFAurasRootForWrite,
         ApplyGroup = ctx.ApplyGroup,
     }
 

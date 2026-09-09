@@ -72,7 +72,18 @@ function R.IsExplicitNavigationCommand(text)
     then
         return true
     end
-    if norm:match("^show%s+me%s+") then return true end
+    if norm:match("^show%s+me%s+") then
+        -- "show me" opens a control when what follows is a control's name.
+        -- When it describes a RESULT -- a quantity ("show me how much maximum
+        -- health i lost") or a relative clause ("show me the healing that is
+        -- on its way") -- it is filler in front of an enable request, and
+        -- navigating there instead left the feature off.
+        local parser = A.Parser
+        if parser and type(parser.ShowMeDescribesResult) == "function" and parser.ShowMeDescribesResult(norm) then
+            return false
+        end
+        return true
+    end
     if norm:match("^close%s+") and R.ContainsAny and R.ContainsAny(norm, { "panel", "dashboard", "menu", "picker", "import", "export" }) then return true end
     if norm == "support links"
         or norm == "show support links"

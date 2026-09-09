@@ -422,7 +422,19 @@ local function SettingAllowedByExplicitScopes(setting, text)
     end
     local unit = tostring(setting.unit or "")
     local keyScope = SettingKeyScope(setting)
-    local units, groups = ExplicitScopes(text)
+    -- A frame word inside the VALUE names no frame: "set Priority Frames
+    -- Placement to raid left" states RAID_LEFT, it is not about the raid
+    -- frames, yet the "raid" vetoed the Priority Frames control. When the
+    -- tail behind the last connector is a value this enum accepts, the
+    -- scopes are read from the part in front of it.
+    local scopeText = text
+    if setting.type == "enum" and type(P.ValueForRegistrySetting) == "function" then
+        local head, tail = tostring(text or ""):match("^(.*)%s+to%s+(.-)$")
+        if head and tail and tail ~= "" and P.ValueForRegistrySetting(setting, tail, tail) ~= nil then
+            scopeText = head
+        end
+    end
+    local units, groups = ExplicitScopes(scopeText)
     if setting.frameType == "aura" and ContainsAny(text, RegistryPhrases[13])
         and not tostring(setting.attribute or ""):lower():find("filter", 1, true) then
         return false
@@ -4125,9 +4137,27 @@ function P.ParseCastbarPositionRegistryShortcut(text)
     }
 end
 
+-- Kept on P: this file is at the Lua 5.1 top-level local ceiling.
+P.POWER_GRADIENT_INTENSITY_TERMS = {
+    "stronger", "weaker", "strongest", "weakest", "more intense", "less intense",
+    "intense", "subtle", "subtler", "too subtle", "too strong", "turn up", "turn down",
+    "crank", "tone down", "tone it down", "increase", "decrease", "raise", "lower",
+    "boost", "reduce", "percent", "%",
+}
+
 function P.ParsePowerBarGradientRegistryShortcut(text)
     if ContainsAny(text, RegistryPhrases[205]) then return nil end
     if not ContainsAny(text, RegistryPhrases[206]) then return nil end
+    -- This lane owns the enable toggle only. A strength or intensity request
+    -- ("make the power gradient stronger", "turn up the power bar gradient
+    -- strength") names the Power Gradient Strength slider; defaulting the
+    -- missing polarity to ON wrote the toggle instead of the slider. The
+    -- health-bar twin already stands down on the same wording.
+    if ContainsAny(text, RegistryPhrases[216]) or ContainsAny(text, P.POWER_GRADIENT_INTENSITY_TERMS)
+        or tostring(text or ""):find("%d")
+    then
+        return nil
+    end
 
     local value = DetectBoolean(text)
     if value == nil then value = true end

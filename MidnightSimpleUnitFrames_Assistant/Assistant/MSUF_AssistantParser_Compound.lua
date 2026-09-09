@@ -80,7 +80,18 @@ local function SafeText(raw)
         end
         i = i + 1
     end
-    return Normalize(table.concat(out))
+    local joined = table.concat(out)
+    -- "set A to 1 then set B to 2" sequences clauses the way "and" joins
+    -- them. The Submit batch splitter reads this form first; when one of its
+    -- parts cannot stand alone it falls back to parsing the WHOLE sentence
+    -- here, and a "then" the compound parser did not recognise made that
+    -- fallback read only the last clause. No control's label contains the
+    -- word, so folding it to the joiner costs nothing.
+    local normalized = Normalize(joined)
+    if normalized:find("then", 1, true) then
+        normalized = normalized:gsub("%s+and%s+then%s+", " and "):gsub("%s+then%s+", " and ")
+    end
+    return normalized
 end
 
 local function SplitParts(text)
@@ -201,6 +212,7 @@ local function SimpleParse(text)
 end
 
 local ClauseHoldsSeveralControls
+local ExactLabelSettingForClause
 
 -- Resolve one clause of an explicit compound the way a single command is
 -- resolved: the parser first, then its visible LABEL. The parser matches
@@ -235,6 +247,35 @@ local function ResolveExplicitClause(command)
         end
     end
     MaybeYield()
+    -- The clause's subject IS one control's complete visible label: that is
+    -- the plainest reading there is, and it outranks whatever the topical
+    -- parser inferred -- including a same-control reading with the wrong
+    -- value ("Pet Show Only When Injured on" came back false because the
+    -- inference read "show ... on" its own way). The Router lookup below is
+    -- warm-gated, so on a cold session a compound of exact labels resolved
+    -- differently from the same clauses typed one at a time ("Astral Power
+    -- Color" fell to the power-bar colour twin). This lookup is the parser's
+    -- own label map, built once, so the answer no longer depends on what was
+    -- typed earlier in the session. A clause the compound parser already read
+    -- as SEVERAL controls ("party width to 120 height 36") keeps that reading:
+    -- the label names only its first control.
+    local clauseHoldsSeveral = plan and plan.kind == "changes" and type(plan.changes) == "table"
+        and #plan.changes > 1
+    if not clauseHoldsSeveral and ExactLabelSettingForClause
+        and type(P.PlanForExactRegistrySetting) == "function"
+    then
+        local labelSetting = ExactLabelSettingForClause(command)
+        if labelSetting then
+            P._compoundDepth = (tonumber(P._compoundDepth) or 0) + 1
+            local candidate = P.PlanForExactRegistrySetting(labelSetting, Normalize(command), command)
+            P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
+            if type(candidate) == "table" and candidate.kind == "changes"
+                and type(candidate.changes) == "table" and #candidate.changes > 0
+            then
+                return candidate
+            end
+        end
+    end
     local router = A.RouterPrivate
     if not (router and type(router.ExactRegistrySettingForCommand) == "function"
         and type(P.PlanForExactRegistrySetting) == "function")
@@ -2681,6 +2722,47 @@ local function ClauseResolves(command)
         and type(plan.changes) == "table" and #plan.changes > 0
 end
 
+-- The words of a control's visible label that name the control itself, with
+-- the frame or family words removed: "Party Power Bar Height" and "Bars Power
+-- Bar Height" both leave "power bar height", while "Raid Bars Override" leaves
+-- "override". Keys are no use here -- the per-frame twins of one control do
+-- not share an attribute name (gf_party.powerHeight vs bars.powerBarHeight).
+local LABEL_SCOPE_WORDS = {
+    player = true, target = true, focus = true, pet = true, boss = true, party = true, raid = true,
+    mythic = true, mythicraid = true, shared = true, global = true, general = true, bars = true,
+    of = true, frame = true, frames = true, group = true, unitframe = true,
+}
+local function LabelCore(setting)
+    local out = {}
+    for word in Normalize(tostring(setting and setting.label or "")):gmatch("%S+") do
+        if not LABEL_SCOPE_WORDS[word] then out[#out + 1] = word end
+    end
+    return table.concat(out, " ")
+end
+
+-- True when carrying a frame onto a bare clause keeps it about the same
+-- control. A bare clause that resolves on its own may only be re-scoped to a
+-- twin of that control; when the scoped reading lands on a differently named
+-- control, the frame was never part of this clause.
+local function ScopedReadingKeepsAttribute(bareCommand, scopedCommand)
+    local bare = SimpleParse(bareCommand)
+    if not (bare and bare.kind == "changes" and type(bare.changes) == "table" and #bare.changes > 0) then
+        return true
+    end
+    local scoped = SimpleParse(scopedCommand)
+    if not (scoped and scoped.kind == "changes" and type(scoped.changes) == "table" and #scoped.changes > 0) then
+        return false
+    end
+    local bareCores = {}
+    for i = 1, #bare.changes do
+        bareCores[LabelCore(bare.changes[i] and bare.changes[i].setting)] = true
+    end
+    for i = 1, #scoped.changes do
+        if not bareCores[LabelCore(scoped.changes[i] and scoped.changes[i].setting)] then return false end
+    end
+    return true
+end
+
 local function KeyNamesAFrame(key)
     for segment in tostring(key or ""):gmatch("[^%.]+") do
         if segment:find("^gf_") then return true end
@@ -2707,6 +2789,17 @@ local function ClauseConfiguresAFrame(command)
         if KeyNamesAFrame(setting and setting.key) then return true end
     end
     return false
+end
+
+-- Exported for the Submit batch splitter, which carries the first clause's
+-- frame onto a verb-repeating clause ("set Focus Interrupt Tracker to on then
+-- set HP Bar Gradient to on"). The same two tests the explicit compound form
+-- applies decide whether that carry is legitimate: the first clause must
+-- really configure a frame (general.enableFocusKickIcon does not), and the
+-- scoped reading of the next clause must stay on the same control.
+P.CompoundClauseConfiguresAFrame = function(command) return ClauseConfiguresAFrame(command) end
+P.CompoundScopedReadingKeepsAttribute = function(bareCommand, scopedCommand)
+    return ScopedReadingKeepsAttribute(bareCommand, scopedCommand)
 end
 
 local CommandsToClausePlan
@@ -2737,12 +2830,58 @@ local function BareLabelIndex()
             if map[label] == nil then map[label] = setting
             elseif map[label] ~= setting then map[label] = false end
         end
-        if i % 256 == 0 then MaybeYield() end
+        if i % 64 == 0 then MaybeYield() end
     end
     local index = { map = map, maxWords = maxWords, count = #settings }
     P._bareLabelIndex = index
     return index
 end
+
+local BARE_VALUE_WORDS = {
+    on = true, off = true, ["true"] = true, ["false"] = true,
+    enabled = true, disabled = true, show = true, hide = true, shown = true,
+    an = true, aus = true, aktiviert = true, deaktiviert = true,
+}
+
+local function IsBareValueToken(word)
+    return (BARE_VALUE_WORDS[word] or word:match("^[-+]?%d+%.?%d*$")) and true or false
+end
+
+-- The control whose complete visible label is the clause's subject -- the
+-- words between the lead verb and the value connector -- or nil when those
+-- words are not exactly one control's name. A shared label answers nil too.
+ExactLabelSettingForClause = function(command)
+    local norm = Normalize(command)
+    if norm == "" then return nil end
+    local lead = norm:match("^(%S+)")
+    if lead and CLAUSE_LEAD_VERBS[lead] then norm = Trim(norm:sub(#lead + 1)) end
+    norm = norm:gsub("^the%s+", ""):gsub("^my%s+", "")
+    if norm == "" then return nil end
+    local index = BareLabelIndex()
+    if not index then return nil end
+    -- A label can itself contain the connector ("Player Portrait Attach To
+    -- Frame Point"), so every " to " is tried as the subject boundary, the
+    -- longest subject first.
+    local padded = " " .. norm .. " "
+    local startAt = #padded
+    while true do
+        local at = nil
+        local from = 1
+        while true do
+            local s = padded:find(" to ", from, true)
+            if not s or s >= startAt then break end
+            at = s
+            from = s + 1
+        end
+        if not at then break end
+        local subject = Trim(padded:sub(2, at - 1))
+        local setting = subject ~= "" and index.map[subject] or nil
+        if setting then return setting end
+        startAt = at
+    end
+    return nil
+end
+P.ExactLabelSettingForClause = function(command) return ExactLabelSettingForClause(command) end
 
 -- "set Boss Buff Icons Per Row 21 Boss Buff Show Cooldown Swipe off": no
 -- joiner, no "to" -- just control names, each followed by its value. Nothing in
@@ -2752,19 +2891,27 @@ end
 -- value. Rewriting each pair as "set <label> to <value>" hands the result back
 -- to the ordinary clause path.
 --
--- Only entered for exactly this shape (a set-verb, no joiner, no "to"), so the
--- label lookups never touch an ordinary sentence.
+-- Only entered for exactly this shape (a set-verb, no joiner), so the label
+-- lookups never touch an ordinary sentence. A "to" no longer disqualifies the
+-- run outright: labels carry it ("Player Portrait Attach To Frame Point") and
+-- so do spoken enum values ("Mythic Raid Anchor to player"), and both were
+-- being refused as a whole. A sentence with "to" instead needs the length two
+-- named controls take, so "set target width to 300" still never scans.
+--
+-- Returns the rewritten commands and, for the caller's precedence decision,
+-- the shortest label found in words: a run whose every phrase is a multi-word
+-- visible label is as unambiguous as an explicit "A to 1 and B to 2".
 local function BareLabelValueRun(text)
     local norm = Normalize(text)
     if norm == "" then return nil end
     if norm:find(" and ", 1, true) or norm:find(" und ", 1, true) then return nil end
-    if norm:find("%f[%a]to%f[%A]") then return nil end
+    local hasTo = norm:find("%f[%a]to%f[%A]") ~= nil
 
     local tokens = {}
     for word in norm:gmatch("%S+") do tokens[#tokens + 1] = word end
     local n = #tokens
     local first = CLAUSE_LEAD_VERBS[tokens[1]] and 2 or 1
-    if (n - first + 1) < 4 or n > 24 then return nil end
+    if (n - first + 1) < (hasTo and 7 or 4) or n > 24 then return nil end
     local lead = (first > 1) and tokens[1] or "set"
 
     local index = BareLabelIndex()
@@ -2782,24 +2929,95 @@ local function BareLabelValueRun(text)
         return nil
     end
 
-    local commands = {}
+    local commands, minLabelWords = {}, math.huge
+    -- False once a value tail carries two numbers or switch words ("120
+    -- height 36"): the words between two labels then hide a control the index
+    -- does not know by name, and the shared-scope strategies read that shape.
+    local singleValues = true
+    local carriedScope
     local i = first
     while i <= n do
         MaybeYield()
-        local labelEnd = LabelAt(i)
+        local labelEnd, setting = LabelAt(i)
         if not labelEnd or labelEnd >= n then return nil end
+        local labelText = table.concat(tokens, " ", i, labelEnd)
+        -- The same frame carry the explicit form applies: "set Player Frame
+        -- Enabled off Gradient Override off" means the Player copy when the
+        -- previous control configured that frame and the scoped twin is a
+        -- real label. A control whose name merely contains a frame word
+        -- ("Focus Interrupt Tracker") carries nothing.
+        local ownScope = ClauseScopeWord(labelText)
+        if not ownScope and carriedScope then
+            local scoped = map[carriedScope .. " " .. labelText]
+            if scoped then
+                labelText = carriedScope .. " " .. labelText
+                setting = scoped
+            end
+        end
+        if ownScope and KeyNamesAFrame(setting and setting.key) then carriedScope = ownScope end
+        local labelWords = labelEnd - i + 1
+        if labelWords < minLabelWords then minLabelWords = labelWords end
+        -- A spoken value may open with the connector ("Anchor to player").
+        local valueStart = labelEnd + 1
+        if tokens[valueStart] == "to" then valueStart = valueStart + 1 end
+        if valueStart > n then return nil end
+        -- The first value word is never a label; a control name directly
+        -- after another has no value at all, and the run is refused.
+        if LabelAt(valueStart) then return nil end
         local nextLabel
-        for k = labelEnd + 1, n do
+        for k = valueStart + 1, n do
             if LabelAt(k) then nextLabel = k break end
         end
         local valueEnd = (nextLabel and (nextLabel - 1)) or n
-        if valueEnd <= labelEnd then return nil end
-        commands[#commands + 1] = lead .. " " .. table.concat(tokens, " ", i, labelEnd)
-            .. " to " .. table.concat(tokens, " ", labelEnd + 1, valueEnd)
+        local valueTokens = 0
+        for k = valueStart, valueEnd do
+            if IsBareValueToken(tokens[k]) then valueTokens = valueTokens + 1 end
+        end
+        if valueTokens > 1 then singleValues = false end
+        commands[#commands + 1] = lead .. " " .. labelText
+            .. " to " .. table.concat(tokens, " ", valueStart, valueEnd)
         i = valueEnd + 1
     end
     if #commands < 2 then return nil end
-    return commands
+    return commands, minLabelWords, singleValues
+end
+
+-- True when the sentence is an unpunctuated run of at least two complete
+-- visible labels, each followed by a value, behind a set-verb. The Router's
+-- fail-closed classifier asks this before it turns such a sentence into a
+-- read-only answer: with no "to" the value words are not "explicit" to the
+-- open-ended search, yet "set Target of Target Hide with No Target on Target
+-- of Target Hide Out of Combat on" names two controls and two values.
+function P.BareLabelRunNamesSeveralControls(text)
+    local norm = Normalize(text)
+    local lead = norm:match("^(%S+)")
+    if not (lead and CLAUSE_LEAD_VERBS[lead]) then return false end
+    local commands = BareLabelValueRun(norm)
+    return type(commands) == "table" and #commands >= 2
+end
+
+-- True when a value tail ("class shared power text color mode resource")
+-- continues into a second control: a multi-word visible label starts after
+-- the first value word and still leaves room for its own value. The exact
+-- single-setting lane uses it to stand down instead of swallowing the whole
+-- tail as one impossible value.
+function P.BareValueTailNamesAnotherControl(valueText)
+    local norm = Normalize(valueText)
+    if norm == "" then return false end
+    local tokens = {}
+    for word in norm:gmatch("%S+") do tokens[#tokens + 1] = word end
+    local n = #tokens
+    if n < 4 then return false end
+    local index = BareLabelIndex()
+    if not index then return false end
+    local map, maxWords = index.map, index.maxWords
+    for from = 2, n - 2 do
+        local limit = math.min(n - 1, from + maxWords - 1)
+        for to = limit, from + 1, -1 do
+            if map[table.concat(tokens, " ", from, to)] then return true end
+        end
+    end
+    return false
 end
 -- Second way to split an unpunctuated run, used when the label index cannot.
 -- It declines any subject that also names a semantic family ("boss buff hide
@@ -2808,11 +3026,6 @@ end
 -- ordinary resolver where a complete command ends instead of asking the label
 -- index where a name ends. Memoised and bounded; SimpleParse is already cached
 -- for the whole ParseCompound call, so each distinct fragment is parsed once.
-local BARE_VALUE_WORDS = {
-    on = true, off = true, ["true"] = true, ["false"] = true,
-    enabled = true, disabled = true, show = true, hide = true, shown = true,
-    an = true, aus = true, aktiviert = true, deaktiviert = true,
-}
 
 -- The consumed-extent test that the clause resolver cannot give us directly:
 -- ask the resolved CONTROL what words belong to it. Anything left in the
@@ -2824,10 +3037,6 @@ local BARE_VALUE_WORDS = {
 --   control's label, so the clause is one control with an optional word.
 --   "player name on portrait on"         -> leftover "portrait on"; "portrait"
 --   is NOT in Show Name's label, so it is a second control.
-local function IsBareValueToken(word)
-    return (BARE_VALUE_WORDS[word] or word:match("^[-+]?%d+%.?%d*$")) and true or false
-end
-
 local function LeftoverBelongsToSetting(setting, tokens, first, last, consumedEndsInValue)
     if last < first then return true end
     local hay = " " .. Normalize(tostring(setting and setting.label or "")) .. " "
@@ -2961,6 +3170,16 @@ local function BareParseSplit(text, scopeAnchoredOnly)
             local remainder = n - to
             local cutAllowed = (remainder == 0 or remainder >= MIN_CLAUSE_TOKENS)
                 and (not scopeAnchoredOnly or to == n or clauseStart[to + 1] == true)
+            -- A frame word sitting right after a value is the START of the
+            -- next control's name, not the tail of this one: cutting "... max
+            -- icons 10 mythic | raid buff icons per row 11" left "raid" to name
+            -- the plain Raid frame. The same holds for a one-word frame:
+            -- "... 10 raid | buff ..." would strand the scope.
+            if cutAllowed and to < n and to > from and IsBareValueToken(tokens[to - 1])
+                and (clauseStart[to] == true or (tokens[to] == "mythic" and tokens[to + 1] == "raid"))
+            then
+                cutAllowed = false
+            end
             if cutAllowed then
                 MaybeYield()
                 if Parses(from, to) then
@@ -3054,8 +3273,14 @@ local function ExplicitClauseCommands(text)
             -- "set player width to 300 and height to 45 and target width to
             -- 250 and height to 40": the last clause names no frame, and
             -- without the carried scope it silently lands back on Player.
+            -- The carried frame may only re-scope the SAME attribute: "set
+            -- bars cp cond in raid to off and bars cp cond instance only to
+            -- on" carried "raid" onto a global control and the scoped reading
+            -- resolved to Raid Bars Override, a different control entirely.
             local scoped = Trim((lead and (lead .. " ") or "") .. carriedScope .. " " .. body)
-            if ClauseResolves(scoped) then body = carriedScope .. " " .. body end
+            if ClauseResolves(scoped) and ScopedReadingKeepsAttribute(Trim((lead and (lead .. " ") or "") .. body), scoped) then
+                body = carriedScope .. " " .. body
+            end
         end
         commands[#commands + 1] = Trim((lead and (lead .. " ") or "") .. body)
     end
@@ -3133,7 +3358,10 @@ function P.ParseCompound(normalized, raw, normalParsed)
     if (tonumber(P._compoundDepth) or 0) > 0 then return nil end
     local text = SafeText(raw ~= "" and raw or normalized)
     if text == "" or ShouldSkip(text) then return nil end
-    if #text > 240 then return nil end
+    -- Four generated labels joined by "and" ("Raid / Mythic Raid Buff Hidden
+    -- Category Discipline Priest ...") run past 240 characters; the real
+    -- bounds are the token and clause caps the splitters apply themselves.
+    if #text > 400 then return nil end
     if normalParsed and normalParsed.kind ~= "changes" and normalParsed.kind ~= "ambiguous" and normalParsed.kind ~= "unknown" then return nil end
 
     local hasJoin = text:find(" and ", 1, true) or text:find(" und ", 1, true)
@@ -3298,6 +3526,31 @@ function P.ParseCompound(normalized, raw, normalParsed)
     -- checked for truncation by re-attaching the clause qualifier to whatever
     -- words are left over. The UNRESTRICTED search stays a last resort below.
     local explicitClauses = ExplicitClauseCommands(text)
+    if not explicitClauses then
+        -- The label run is the one bare reading that involves no inference:
+        -- every phrase it cut is a control's complete visible name. Offered
+        -- here only when each of those names has at least two words -- a
+        -- one-word label ("Height") next to a scoped one is the shared-scope
+        -- shape the keyword strategies read correctly ("set party width 120
+        -- height 36") -- and never when two clauses land on one control. A
+        -- keyword strategy that assembled MORE changes from the same words
+        -- must not outrank it: "Mythic Raid Detached Power Bar Height 41
+        -- Mythic Raid Detached Power Bar Offset X -500" lost to a three-change
+        -- reading that invented a detach toggle and wrote the shared height.
+        local labelRun, minLabelWords, singleValues = BareLabelValueRun(text)
+        if labelRun and singleValues and (tonumber(minLabelWords) or 0) >= 2 then
+            local labelPlan = CommandsToClausePlan(labelRun)
+            if labelPlan and labelPlan.changes and #labelPlan.changes >= #labelRun then
+                local seenKeys, distinct = {}, true
+                for i = 1, #labelPlan.changes do
+                    local key = tostring(labelPlan.changes[i].setting and labelPlan.changes[i].setting.key or "")
+                    if seenKeys[key] then distinct = false break end
+                    seenKeys[key] = true
+                end
+                if distinct then explicitClauses = labelPlan end
+            end
+        end
+    end
     if not explicitClauses then
         local anchored = BareParseSplit(text, true)
         local anchoredPlan = anchored and CommandsToClausePlan(anchored) or nil

@@ -278,26 +278,38 @@ local COMPATIBILITY_PROJECTIONS = {
     player = {
         hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
         powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        portraitBorderUseClassColor = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
+        portraitUseClassColorBorder = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
     },
     target = {
         hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
         powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        portraitBorderUseClassColor = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
+        portraitUseClassColorBorder = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
     },
     targettarget = {
         hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
         powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        portraitBorderUseClassColor = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
+        portraitUseClassColorBorder = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
     },
     focus = {
         hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
         powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        portraitBorderUseClassColor = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
+        portraitUseClassColorBorder = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
     },
     pet = {
         hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
         powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        portraitBorderUseClassColor = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
+        portraitUseClassColorBorder = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
     },
     boss = {
         hpTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
         powerTextAnchor = "Retired saved text-anchor field with no runtime or Menu2 consumer.",
+        portraitBorderUseClassColor = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
+        portraitUseClassColorBorder = "Retired portrait class-colour border flag: no runtime or Menu2 code reads it (dead twin of the other spelling); the live control is the CLASS_COLOR portrait border style.",
     },
 }
 local GROUP_COMPATIBILITY_PROJECTIONS = {
@@ -389,6 +401,117 @@ function Auto.ApplyCanonicalPathOwnership(covered, Registry)
     Auto.lastCanonicalOwnershipClaimed = claimed
     Auto.lastCanonicalOwnershipMissing = missing
     return claimed, missing
+end
+
+-- Raw paths whose reviewed owner stores the OPPOSITE polarity. MSUF_Defaults
+-- keeps shortenNameShowDots and nameNoEllipsis as inverse mirrors
+-- (CopyInverseBoolIfMissing), so a request phrased in the raw key's own words
+-- ("turn on target shorten name show dots") must not land on the owner as a
+-- plain boolean: that hid the dots instead of showing them. Each entry
+-- publishes a reviewed companion keyed beside its owner (never at the raw
+-- scope.dbKey path, which stays owned) whose get/set invert through the owner,
+-- so both spellings write the same field with the polarity the words carry.
+local INVERSE_POLARITY_COMPANIONS = {
+    shortenNameShowDots = {
+        label = "Shorten Name Show Dots",
+        ownerLabelSuffix = " Name No Ellipsis",
+        nouns = { "shorten name show dots", "shortened name show dots", "name show dots", "show dots on shortened names" },
+        description = "Shows the trailing dots on shortened names. This is the inverse of the No Ellipsis control: turning it on clears No Ellipsis for the same scope.",
+    },
+}
+Auto.InversePolarityCompanions = INVERSE_POLARITY_COMPANIONS
+
+function Auto.RegisterInversePolarityCompanions()
+    local Registry = A.Registry
+    if not (Registry and type(Registry.RegisterSetting) == "function"
+        and type(Registry.GetSetting) == "function") then return 0 end
+    -- Scope words are the raw scope key plus its display name (English only).
+    local unitLabels = A.RegistryCore and A.RegistryCore.UNIT_LABELS or {}
+    local globalScopeMeta = A.RegistryCore and A.RegistryCore.GLOBAL_SCOPE_META or {}
+    local made = 0
+    for scope, paths in pairs(CANONICAL_PATH_OWNERS) do
+        for dbKey, ownerKey in pairs(paths) do
+            local companion = INVERSE_POLARITY_COMPANIONS[dbKey]
+            local prefix = companion and tostring(ownerKey):match("^(.-)%.[^%.]+$") or nil
+            -- A prefix equal to the raw scope would put the companion on the
+            -- owned raw path itself; that identity must stay unpublished.
+            if prefix and prefix ~= scope then
+                local key = prefix .. "." .. dbKey
+                local owner = Registry:GetSetting(ownerKey)
+                if type(owner) == "table" and owner.generated ~= true and owner.type == "boolean"
+                    and type(owner.get) == "function" and type(owner.set) == "function"
+                    and Registry:GetSetting(key) == nil
+                then
+                    local ownerLabel = tostring(owner.label or "")
+                    local suffix = tostring(companion.ownerLabelSuffix or ""):gsub("(%W)", "%%%1")
+                    local scopeLabel = ownerLabel:gsub(suffix .. "$", "")
+                    if scopeLabel == "" then scopeLabel = ownerLabel end
+                    -- Scope words come from EVERY raw scope this owner serves
+                    -- plus the owner's own scope names: the player frame reads
+                    -- the shared fonts, so "player shorten name show dots" must
+                    -- reach the shared companion (without a "player" alias it
+                    -- fell through to the Player Name toggle: a wrong write).
+                    local scopeTokens, seenToken = {}, {}
+                    local function AddScopeToken(token)
+                        token = tostring(token or ""):lower()
+                        if token ~= "" and not seenToken[token] then
+                            seenToken[token] = true
+                            scopeTokens[#scopeTokens + 1] = token
+                        end
+                    end
+                    for rawScope, rawPaths in pairs(CANONICAL_PATH_OWNERS) do
+                        if rawPaths[dbKey] == ownerKey then
+                            AddScopeToken(rawScope)
+                            AddScopeToken(unitLabels[rawScope])
+                        end
+                    end
+                    local ownerScope = prefix:match("([^%.]+)$")
+                    local scopeMeta = globalScopeMeta[ownerScope]
+                    local metaAliases = scopeMeta and scopeMeta.aliases or { ownerScope }
+                    for t = 1, #metaAliases do AddScopeToken(metaAliases[t]) end
+                    if #scopeTokens == 0 then AddScopeToken(scopeLabel) end
+                    local aliases = {}
+                    for n = 1, #companion.nouns do
+                        local noun = companion.nouns[n]
+                        for t = 1, #scopeTokens do
+                            aliases[#aliases + 1] = scopeTokens[t] .. " " .. noun
+                            aliases[#aliases + 1] = noun .. " " .. scopeTokens[t]
+                        end
+                    end
+                    Registry:RegisterSetting({
+                        key = key,
+                        label = scopeLabel .. " " .. companion.label,
+                        category = owner.category,
+                        unit = owner.unit,
+                        frameType = owner.frameType,
+                        page = owner.page,
+                        attribute = dbKey,
+                        type = "boolean",
+                        text = true,
+                        fonts = owner.fonts,
+                        aliases = aliases,
+                        inversePolarityOf = ownerKey,
+                        get = function() return not owner.get() end,
+                        set = function(value) owner.set(not (value and true or false)) end,
+                        apply = function() if type(owner.apply) == "function" then return owner.apply() end end,
+                        combatSafe = owner.combatSafe == true,
+                        requiresReload = owner.requiresReload == true,
+                        description = companion.description,
+                        -- Menu2 exposes only the owner's control; the companion
+                        -- is the same field read with the words inverted, so it
+                        -- has no widget of its own to resolve to.
+                        menuControlDisposition = "standalone",
+                        menuControlDispositionReason = "Inverse-polarity companion of the "
+                            .. tostring(owner.label or ownerKey) .. " control: Menu2 shows only the owner's toggle.",
+                        menuControlDispositionEvidence = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua nameNoEllipsis / shortenNameShowDots and MSUF_AssistantRegistry_AutoCoverage.lua INVERSE_POLARITY_COMPANIONS",
+                    })
+                    made = made + 1
+                end
+            end
+        end
+    end
+    Auto.lastInverseCompanionCount = made
+    return made
 end
 
 -- "Channel" keeps these distinct from color VALUE words ("set X color to red")
@@ -1214,7 +1337,7 @@ function Auto.Fill()
     local generatedByNorm = {}
     local function RegisterGenerated(scope, key, value, coveredSet, fromManifest)
         fillWork = fillWork + 1
-        if fillWork % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        if fillWork % 16 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local valueType = type(value)
         if type(key) == "string"
             and not key:find(".", 1, true)
@@ -1383,6 +1506,27 @@ local REVIEWED_MENU_DOMAINS = {
     dispelSymbolLayer = { min = 0, max = 30, step = 1, source = "visual.dispel.symbol.layer",
         sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Effect Layer (0-30)" } },
 
+    -- Group power-bar border: ScopeSlider(ctx, powerBorderCard, "Border thickness",
+    -- 0, 6, 1, …, "powerBarBorderThickness", …) on the group bars page is the
+    -- only slider that writes the generated scopes (gf_* and the bars fallback
+    -- read by MSUF_ReadUnitPowerBarBorderThickness). The unit page binds its
+    -- own per-unit twin with a player-only 0..8 range, but every unit key is a
+    -- curated registration, so no generated row can inherit that range.
+    powerBarBorderThickness = { min = 0, max = 6, step = 1, source = "power.border_thickness",
+        sharedSlider = { file = "Pages/MSUF_Menu2_GroupBars.lua", label = "Border thickness" } },
+
+    -- Texture layer edge softness: one BindLayerSlider(advancedCard, "Edge
+    -- softness", …, 0, 0.30, 0.02, "EdgeSoftness", 0, true) drives whichever
+    -- of the three slots is selected, and the binder concatenates the slot
+    -- prefix onto the key, so each slot leaf carries that single range. The
+    -- binder's trailing `true` marks it a percent slider (shown as 0..30 %).
+    texLayerEdgeSoftness = { min = 0, max = 0.30, step = 0.02, percent = true, source = "texture_layer.edge_softness",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", keyedSlider = "EdgeSoftness" } },
+    texLayer2EdgeSoftness = { min = 0, max = 0.30, step = 0.02, percent = true, source = "texture_layer.edge_softness",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", keyedSlider = "EdgeSoftness" } },
+    texLayer3EdgeSoftness = { min = 0, max = 0.30, step = 0.02, percent = true, source = "texture_layer.edge_softness",
+        sharedSlider = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", keyedSlider = "EdgeSoftness" } },
+
     -- Status text placement offsets. The status section binds X/Y twice against
     -- the SAME descriptor field: the standard card at -500..500 and an extended
     -- card at -1000..1000. Both write spec.x / spec.y, so the extended pair is
@@ -1438,6 +1582,8 @@ function Auto.PromoteInheritedNumberDomains()
         }
     end
     for i = 1, #settings do
+        -- Cooperative slice: this walk runs inside the job coroutine on a cold first answer.
+        if i % 16 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local s = settings[i]
         if type(s) == "table" and s.generated ~= true and s.type == "number"
             and (s.min ~= nil or s.max ~= nil)
@@ -1590,6 +1736,50 @@ local REVIEWED_MENU_VALUES = {
                    "TOP", "BOTTOM", "LEFT", "RIGHT" },
         source = "status.placement.anchor",
         sharedValues = { file = "Pages/MSUF_Menu2_Unit.lua", table = "STATUS_ANCHORS", packed = true } },
+
+    -- Group dispel-symbol card (BuildGFDispelSymbolSection on the group bars
+    -- page): every dropdown is a ScopeDropdown / BindDropdownWidget over a
+    -- local VT table, so the lists transcribe verbatim.
+    dispelSymbolStyle = {
+        values = { "BLIZZARD", "BLIZZARD_RING", "BLIZZARD_BORDER", "MSUF_LETTERS", "MSUF_SHAPES", "MSUF_GLYPHS", "MSUF_MINIMAL" },
+        source = "visual.dispel.symbol.style",
+        sharedValues = { file = "Pages/MSUF_Menu2_GroupBars.lua", table = "GF_DISPEL_SYMBOL_STYLES", inlineVT = true, strings = true } },
+    dispelSymbolMode = { values = { "TOP", "ALL" }, source = "visual.dispel.symbol.mode",
+        sharedValues = { file = "Pages/MSUF_Menu2_GroupBars.lua", table = "GF_DISPEL_SYMBOL_MODES", inlineVT = true, strings = true } },
+    dispelSymbolTrigger = { values = { "BORDER", "BY_ME", "BY_RAID", "DISPEL_TYPE" }, source = "visual.dispel.symbol.trigger",
+        sharedValues = { file = "Pages/MSUF_Menu2_GroupBars.lua", table = "GF_DISPEL_OVERLAY_TRIGGERS", inlineVT = true, strings = true } },
+    dispelSymbolAnchor = {
+        values = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" },
+        source = "visual.dispel.symbol.anchor",
+        sharedValues = { file = "Pages/MSUF_Menu2_GroupBars.lua", table = "GF_DISPEL_SYMBOL_ANCHORS", inlineVT = true, strings = true } },
+    dispelSymbolGrowth = { values = { "RIGHT", "LEFT", "UP", "DOWN" }, source = "visual.dispel.symbol.growth",
+        sharedValues = { file = "Pages/MSUF_Menu2_GroupBars.lua", table = "GF_DISPEL_SYMBOL_GROWTH", inlineVT = true, strings = true } },
+
+    -- Group number style dropdown (group indicators page); the display texts
+    -- are "(2)", "[2]" and "2", so the smoke reads the VT by quoted strings.
+    groupNumberStyle = { values = { "PAREN", "BRACKET", "NONE" }, source = "visual.group_number.style",
+        sharedValues = { file = "Pages/MSUF_Menu2_GroupIndicators.lua", table = "GROUP_NUMBER_STYLES", inlineVT = true, strings = true } },
+
+    -- Dispel border "Show on" dropdown on the global bars page; the setter
+    -- normalizes anything else to BOTH, which is why the list is closed.
+    dispelBorderShowOn = { values = { "FRIENDLY", "ENEMY", "BOTH" }, source = "highlight.dispel.show_on",
+        sharedValues = { file = "Pages/MSUF_Menu2_GlobalBars.lua", table = "DISPEL_SHOW_ON", inlineVT = true, strings = true } },
+
+    -- Texture layer dropdowns: one BindLayerDropdown per property serves all
+    -- three slots and concatenates the slot prefix onto the key, so each slot
+    -- leaf carries the same packed VTP list.
+    texLayerCropMode = { values = { "FULL", "TOP_HALF", "BOTTOM_HALF" }, source = "texture_layer.crop_mode",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", table = "TEXLAYER_CROP_MODES", packed = true } },
+    texLayer2CropMode = { values = { "FULL", "TOP_HALF", "BOTTOM_HALF" }, source = "texture_layer.crop_mode",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", table = "TEXLAYER_CROP_MODES", packed = true } },
+    texLayer3CropMode = { values = { "FULL", "TOP_HALF", "BOTTOM_HALF" }, source = "texture_layer.crop_mode",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", table = "TEXLAYER_CROP_MODES", packed = true } },
+    texLayerColorTreatment = { values = { "ORIGINAL", "MONOCHROME" }, source = "texture_layer.color_treatment",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", table = "TEXLAYER_COLOR_TREATMENTS", packed = true } },
+    texLayer2ColorTreatment = { values = { "ORIGINAL", "MONOCHROME" }, source = "texture_layer.color_treatment",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", table = "TEXLAYER_COLOR_TREATMENTS", packed = true } },
+    texLayer3ColorTreatment = { values = { "ORIGINAL", "MONOCHROME" }, source = "texture_layer.color_treatment",
+        sharedValues = { file = "Pages/MSUF_Menu2_UnitTextureLayer.lua", table = "TEXLAYER_COLOR_TREATMENTS", packed = true } },
 }
 Auto.ReviewedMenuValues = REVIEWED_MENU_VALUES
 
@@ -1614,6 +1804,11 @@ local REVIEWED_MENU_MEDIA = {
     portraitClassStyle = { mediaType = "portraitpack",
         source = "portrait.class_style", menuKey = "portraitClassStyle",
         menuFile = "Pages/MSUF_Menu2_UnitFrameVisuals.lua", menuBuilder = "PortraitClassStyleValues" },
+    -- The bar-scope foreground texture picker ("textures.foreground" ->
+    -- "barTexture" on the global bars page) writes through BarScopeSet, so the
+    -- generated per-unit twins are the same statusbar control.
+    barTexture = { mediaType = "statusbar",
+        source = "textures.foreground", menuKey = "barTexture" },
 }
 Auto.ReviewedMenuMedia = REVIEWED_MENU_MEDIA
 
@@ -1671,6 +1866,8 @@ function Auto.PromoteInheritedValueLists()
 
     -- Build per-leaf curated value lists and detect disagreement.
     for i = 1, #settings do
+        -- Cooperative slice: this walk runs inside the job coroutine on a cold first answer.
+        if i % 16 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local s = settings[i]
         if type(s) == "table" and s.generated ~= true
             and type(s.values) == "table" and #s.values > 0
@@ -1742,3 +1939,9 @@ function Auto.EnsureFilled()
     if Auto._fillComplete == true then return 0 end
     return Auto.Fill()
 end
+
+-- Inverse-polarity companions are curated identities, not generated fill: they
+-- are published as soon as their curated owners exist (here for eager owners,
+-- and again from the scoped font registration for lazily built ones). The
+-- registration is idempotent, and it never counts toward the lazy fill.
+Auto.RegisterInversePolarityCompanions()

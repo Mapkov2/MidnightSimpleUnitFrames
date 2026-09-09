@@ -319,4 +319,44 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
         MakeAliases(unit, "hp text layer", "health text layer"), { min = 0, max = 30, fonts = true })
     RegisterUnitTextNumber(unit, "powerTextLayer", "powerTextLayer", "Power Text Layer", 2,
         MakeAliases(unit, "power text layer", "mana text layer"), { min = 0, max = 30, fonts = true })
+
+    -- Text "Visibility" cards (Menu2 UnitText): only-on-mouseover toggle plus
+    -- fade in/out seconds per text kind. Keys mirror MSUF_Defaults textDefaults.
+    local MOUSEOVER_DESCRIPTION = "Hover the unit frame to reveal this text; 0 seconds = instant."
+    -- The alias head is capped (MAX_SETTING_ALIASES), so each list keeps one
+    -- unit-prefixed noun and a short tail of bare English phrasings.
+    local MOUSEOVER_KINDS = {
+        { prefix = "nameText", label = "Name Text", noun = "name", alt = "name text" },
+        { prefix = "hpText", label = "HP Text", noun = "hp", alt = "health" },
+        { prefix = "powerText", label = "Power Text", noun = "power", alt = "mana" },
+    }
+    for k = 1, #MOUSEOVER_KINDS do
+        local kind = MOUSEOVER_KINDS[k]
+        local noun, alt = kind.noun, kind.alt
+        local toggleAliases = MakeAliases(unit, noun .. " mouseover")
+        AppendAliases(toggleAliases, "only show " .. noun .. " on mouseover", noun .. " text on hover", "hover " .. noun,
+            noun .. " only on mouseover", "show " .. noun .. " on hover", alt .. " on mouseover", alt .. " on hover")
+        local fadeInAliases = MakeAliases(unit, noun .. " fade in")
+        AppendAliases(fadeInAliases, noun .. " fade in seconds", noun .. " mouseover fade in", noun .. " text fade in",
+            alt .. " fade in", noun .. " fade in time")
+        local fadeOutAliases = MakeAliases(unit, noun .. " fade out")
+        AppendAliases(fadeOutAliases, noun .. " fade out seconds", noun .. " mouseover fade out", noun .. " text fade out",
+            alt .. " fade out", noun .. " fade out time")
+        local toggleKey = kind.prefix .. "Mouseover"
+        RegisterUnitBooleanSetting(unit, toggleKey, toggleKey, kind.label .. " Only on Mouseover", false, toggleAliases, {
+            category = "Text",
+            text = true,
+            description = MOUSEOVER_DESCRIPTION,
+        })
+        local fadeInKey = toggleKey .. "FadeIn"
+        RegisterUnitTextNumber(unit, fadeInKey, fadeInKey, kind.label .. " Mouseover Fade In", 0, fadeInAliases, {
+            min = 0, max = 2, step = 0.05,
+            description = MOUSEOVER_DESCRIPTION,
+        })
+        local fadeOutKey = toggleKey .. "FadeOut"
+        RegisterUnitTextNumber(unit, fadeOutKey, fadeOutKey, kind.label .. " Mouseover Fade Out", 0, fadeOutAliases, {
+            min = 0, max = 2, step = 0.05,
+            description = MOUSEOVER_DESCRIPTION,
+        })
+    end
 end

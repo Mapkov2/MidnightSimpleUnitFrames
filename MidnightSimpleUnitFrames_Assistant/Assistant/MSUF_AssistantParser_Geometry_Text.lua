@@ -852,6 +852,8 @@ function A._TextSlotDropdownValueForText(setting, text)
         { "current and maximum", "CURMAX" },
         { "current/max", "CURMAX" },
         { "current / max", "CURMAX" },
+        { "current/maximum", "CURMAX" },
+        { "current / maximum", "CURMAX" },
         { "current max", "CURMAX" },
         { "current maximum", "CURMAX" },
         { "current and percent", "CURPERCENT" },
@@ -937,6 +939,12 @@ function A._TextSlotDropdownValueForText(setting, text)
     if value ~= nil and A._EnumAllowsValue(setting, value) then return value end
     return nil
 end
+
+-- Desire wording that means "show it this way" without saying show; it picks
+-- the slot the show shorthand picks but never adds the visibility write.
+P.TEXT_SLOT_DESIRE_TERMS = {
+    "i want", "i would like", "id like", "i wish", "i need", "give me", "let me see", "i prefer",
+}
 
 P.TEXT_SLOT_SHOW_INTENT_TERMS = {
     "show", "display", "visible", "add", "create", "create new", "new", "put",
@@ -1025,10 +1033,20 @@ function A._ParseTextSlotDropdownValueShortcut(text)
         elseif bareSlot == "center" then slot = "Center"
         elseif bareSlot == "right" then slot = "Right" end
     end
-    if not slot and A._HasTextSlotShowIntent(text) and hasExplicitFrame then
+    -- A wish only counts when the sentence is about TEXT: "i want to see max
+    -- hp reduction on my health bar" names the bar, not a text slot.
+    local desiredText = ContainsAny(text, P.TEXT_SLOT_DESIRE_TERMS)
+        and ContainsAny(text, {
+            "text", "number", "numbers", "value", "values", "percent", "percentage", "%",
+            "current / max", "current/max", "current and max", "current / maximum", "current/maximum",
+            "current and maximum", "current maximum", "current max",
+        })
+        and not (ContainsAny(text, { "bar", "bars" }) and not ContainsAny(text, { "text", "number", "numbers" }))
+    if not slot and hasExplicitFrame and (A._HasTextSlotShowIntent(text) or desiredText) then
         -- Existing natural shorthand uses the right slot when the frame,
         -- health/power area, display mode, and explicit show intent are all
-        -- present ("show target health as current and percent").
+        -- present ("show target health as current and percent"). A wish
+        -- ("i want the target health as a percent") states the same thing.
         slot = "right"
     end
     if not slot then

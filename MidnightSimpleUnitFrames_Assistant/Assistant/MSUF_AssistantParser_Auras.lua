@@ -185,6 +185,32 @@ local function AuraGeometryLanes(text)
     return nil
 end
 
+-- "bigger debuffs on me": a player who says "on me" means their own frame.
+-- Kept to explicit self-locatives; "my buffs" is aura ownership (Highlight My
+-- Buffs), which unit detection already keeps away from the Player frame.
+local SELF_AURA_SCOPE_TERMS = { "on me", "for me", "on myself", "at me" }
+local function HasSelfAuraScope(text)
+    for i = 1, #SELF_AURA_SCOPE_TERMS do
+        if HasPhrase(text, SELF_AURA_SCOPE_TERMS[i]) then return true end
+    end
+    return false
+end
+
+-- "more debuffs", "fewer buffs": a count word directly in front
+-- of the lane noun asks for more or fewer icons, which is the lane's Max
+-- Icons cap, not its visibility toggle.
+local AURA_COUNT_COMPARATIVE_WORDS = { "more", "fewer", "less", "extra", "additional" }
+local function HasAuraCountComparative(text)
+    local padded = " " .. tostring(text or "") .. " "
+    for i = 1, #AURA_COUNT_COMPARATIVE_WORDS do
+        local word = AURA_COUNT_COMPARATIVE_WORDS[i]
+        for _, noun in ipairs({ "buffs?", "debuffs?", "auras?" }) do
+            if padded:find(" " .. word .. " %a*%s*" .. noun .. " ") then return true end
+        end
+    end
+    return false
+end
+
 local function AuraGeometryScopes(text)
     local groups = DetectGroups(text)
     if #groups > 0 then
@@ -223,6 +249,10 @@ local function AuraGeometryScopes(text)
         AddAuraGeometryGroups(out)
         return out
     end
+    if HasSelfAuraScope(text) then
+        out[#out + 1] = { kind = "unit", key = "player" }
+        return out
+    end
     return nil
 end
 
@@ -259,6 +289,9 @@ local function AuraGeometryAttribute(text, direction)
         return "anchor"
     end
     if not hasSizeIntent and ContainsAny(text, AurasPhrases[17]) then
+        return "max"
+    end
+    if not hasSizeIntent and HasAuraCountComparative(text) then
         return "max"
     end
     if ContainsAny(text, AurasPhrases[18]) then
@@ -314,7 +347,16 @@ local function AuraGeometryDelta(text, setting, attr, direction)
     end
     local relative = P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text)
     if relative ~= nil then return nil, relative end
-    if attr == "max" or attr == "perRow" or attr == "spacing" or attr == "layer" then
+    if attr == "max" then
+        local value = FirstNumber(text)
+        if value ~= nil then return value, nil end
+        if HasAuraCountComparative(text) then
+            if ContainsAny(text, AurasPhrases[23]) or HasPhrase(text, "fewer") then return nil, -1 end
+            return nil, 1
+        end
+        return nil, nil
+    end
+    if attr == "perRow" or attr == "spacing" or attr == "layer" then
         return FirstNumber(text), nil
     end
     if attr == "size" then

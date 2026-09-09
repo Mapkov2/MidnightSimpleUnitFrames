@@ -13,6 +13,7 @@ local function RegisterGFAuraRootBoolean(ctx, scope, attr, key, label, defaultVa
     local Registry = ctx.Registry
     local UNIT_LABELS = ctx.UNIT_LABELS or {}
     local GFAurasRoot = ctx.GFAurasRoot
+    local GFAurasRootForWrite = ctx.GFAurasRootForWrite
     local ApplyGroup = ctx.ApplyGroup
 
     Registry:RegisterSetting({
@@ -32,7 +33,7 @@ local function RegisterGFAuraRootBoolean(ctx, scope, attr, key, label, defaultVa
             if value == nil then return defaultValue and true or false end
             return value and true or false
         end,
-        set = function(value) GFAurasRoot(scope)[key] = value and true or false end,
+        set = function(value) GFAurasRootForWrite(scope)[key] = value and true or false end,
         apply = function() ApplyGroup(scope, "auras") end,
         combatSafe = false,
     })
@@ -42,6 +43,7 @@ local function RegisterGFAuraRootNestedBoolean(ctx, scope, attr, parentKey, chil
     local Registry = ctx.Registry
     local UNIT_LABELS = ctx.UNIT_LABELS or {}
     local GFAurasRoot = ctx.GFAurasRoot
+    local GFAurasRootForWrite = ctx.GFAurasRootForWrite
     local ApplyGroup = ctx.ApplyGroup
 
     Registry:RegisterSetting({
@@ -62,7 +64,7 @@ local function RegisterGFAuraRootNestedBoolean(ctx, scope, attr, parentKey, chil
             return value and true or false
         end,
         set = function(value)
-            local root = GFAurasRoot(scope)
+            local root = GFAurasRootForWrite(scope)
             root[parentKey] = type(root[parentKey]) == "table" and root[parentKey] or {}
             root[parentKey][childKey] = value and true or false
         end,
@@ -116,6 +118,7 @@ function A.AurasRegistry.RegisterGroupAuraRootSettings(ctx, scope)
     local ApplyGroup = ctx.ApplyGroup
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AddAliasesForUnit) ~= "function" or type(GFAurasRoot) ~= "function" then return end
+    if type(ctx.GFAurasRootForWrite) ~= "function" then return end
     if type(ApplyGroup) ~= "function" then return end
 
     local rootAliases = {}

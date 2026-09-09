@@ -240,6 +240,25 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "only react to debuffs i can dispel myself", "dispel border should only react to debuffs",
         "react to debuffs i can dispel myself",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_DISPEL_BORDER_TRIGGER", valueAliases = DISPEL_TRIGGER_ALIASES })
+    -- "Show on" dropdown beside the trigger (MSUF_Menu2_GlobalBars.lua
+    -- highlight.dispel.show_on): the setter normalizes anything but FRIENDLY /
+    -- ENEMY to BOTH, so the list is closed. Without this curated identity the
+    -- key stayed a page-less generated string with no Assistant destination.
+    RegisterGeneralEnum("dispelBorderShowOn", "dispelBorderShowOn", "Dispel Border Show On", "BOTH", { "FRIENDLY", "ENEMY", "BOTH" }, {
+        "dispel border show on", "dispel border shows on", "dispel border shown on",
+        "who the dispel border shows on", "dispel border units", "dispel border side",
+        "dispel border friendly or enemy", "dispel border for friendly or enemy",
+        "which units get the dispel border", "dispel border on friendly frames",
+        "dispel border on enemy frames", "dispel border only on friendly units",
+        "dispel border only on enemies",
+    }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_DISPEL_BORDER_SHOW_ON", valueAliases = {
+        friendly = "FRIENDLY", friendlies = "FRIENDLY", friends = "FRIENDLY", allies = "FRIENDLY",
+        ["friendly only"] = "FRIENDLY", ["friendly units"] = "FRIENDLY", ["friendly frames"] = "FRIENDLY",
+        enemy = "ENEMY", enemies = "ENEMY", hostile = "ENEMY", hostiles = "ENEMY",
+        ["enemy only"] = "ENEMY", ["enemy units"] = "ENEMY", ["enemy frames"] = "ENEMY",
+        both = "BOTH", all = "BOTH", everyone = "BOTH", any = "BOTH", ["all units"] = "BOTH",
+        ["friendly and enemy"] = "BOTH", ["enemy and friendly"] = "BOTH", ["friendly and hostile"] = "BOTH",
+    }, description = "Which frames the dispel border may light up on: friendly frames, enemy frames, or both." })
     RegisterGeneralMappedEnum("purgeOutlineMode", "purgeBorder", "Purge Border", "off", ON_OFF_VALUES, ON_OFF_STORAGE, {
         "purge border", "purge outline", "purgeable border", "purge highlight",
         "border when the target has a buff i can purge", "border for stealable buffs",

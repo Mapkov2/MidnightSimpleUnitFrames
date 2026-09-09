@@ -32,6 +32,7 @@ local Core = type(BuildSpellIndicatorCore) == "function" and BuildSpellIndicator
     UNIT_LABELS = UNIT_LABELS,
     AddAliasesForUnit = AddAliasesForUnit,
     GroupDB = GroupDB,
+    GroupDBRead = ctx.GroupDBRead,
     ClampNumber = ClampNumber,
     ApplyGroup = ApplyGroup,
 }) or nil
@@ -53,6 +54,7 @@ local Clamp01 = Core.Clamp01
 local ColorSame = Core.ColorSame
 local SpellRuntime = Core.SpellRuntime
 local SpellDB = Core.SpellDB
+local SpellDBRead = type(Core.SpellDBRead) == "function" and Core.SpellDBRead or SpellDB
 local SpecDisplay = Core.SpecDisplay
 local ResolveSpec = Core.ResolveSpec
 local ResolveAura = Core.ResolveAura
@@ -79,7 +81,7 @@ for _, scope in ipairs(SCOPES) do
     AddAliasesForUnit(aliases, scope, "spell indicator", "zauber indikator")
     AddAliasesForUnit(aliases, scope, "tracked spells", "verfolgte zauber")
     RegisterGroupNested(scope, "spellIndicators.enabled", "spellIndicators", "Spell Indicators", "boolean", aliases, {
-        get = function() return SpellDB(scope).enabled == true end,
+        get = function() return SpellDBRead(scope).enabled == true end,
         set = function(value)
             local si = SpellDB(scope)
             si.enabled = value and true or false
@@ -95,7 +97,7 @@ for _, scope in ipairs(SCOPES) do
     AddAliasesForUnit(aliases, scope, "tracked spell layer", "verfolgte zauber ebene")
     RegisterGroupNested(scope, "spellIndicators.layer", "spellIndicatorLayer", "Spell Indicator Layer", "number", aliases, {
         min = 0, max = 30, step = 1,
-        get = function() return tonumber(SpellDB(scope).layer) or 9 end,
+        get = function() return tonumber(SpellDBRead(scope).layer) or 9 end,
         set = function(value) SpellDB(scope).layer = ClampNumber(value, 0, 30, 1) end,
         apply = ApplySpell,
     })
@@ -106,7 +108,7 @@ for _, scope in ipairs(SCOPES) do
     AddAliasesForUnit(aliases, scope, "tracked spell spec", "verfolgte zauber spec")
     RegisterGroupNested(scope, "spellIndicators.spec", "spellIndicatorSpec", "Spell Indicator Spec", "enum", aliases, {
         values = SPEC_VALUES, displayValues = SPEC_DISPLAY_LABELS, valueAliases = SPEC_ALIASES,
-        get = function() return ResolveSpec(SpellDB(scope).spec) or "auto" end,
+        get = function() return ResolveSpec(SpellDBRead(scope).spec) or "auto" end,
         set = function(value)
             local specKey = ResolveSpec(value) or "auto"
             SpellDB(scope).spec = specKey

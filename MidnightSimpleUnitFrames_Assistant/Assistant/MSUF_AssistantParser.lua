@@ -773,7 +773,16 @@ local function ParseUnitReverseFillFastShortcut(normalized)
     }
 end
 
+-- "turn on player shorten name show dots" names the generated No Ellipsis
+-- companion, not the Name toggle; the bare "name" root phrase must not
+-- capture it before the exact-alias lane sees the whole label.
+P.UNIT_SIMPLE_BOOLEAN_VETO_TERMS = {
+    "shorten name show dots", "shorten names show dots", "name show dots", "no ellipsis",
+}
 local function ParseUnitSimpleBooleanFastShortcut(normalized)
+    if ContainsAny(normalized, P.UNIT_SIMPLE_BOOLEAN_VETO_TERMS) then
+        return nil
+    end
     if ContainsAny(normalized, P.RootPhrases[99]) then
         return nil
     end
@@ -2162,7 +2171,26 @@ local function ParseCastbarColorFastShortcut(normalized, raw)
     elseif ContainsAny(normalized, terms.playerOverride) then
         key = "general.playerCastbarOverrideColor"
     elseif targetNameIntent then
-        key = "general.castbarTargetNameColor"
+        -- The shared Cast Target Name Color has per-castbar twins; a sentence
+        -- naming the frame's castbar means that castbar's own control. "target
+        -- name" itself contains "target", so only "target castbar" / "target
+        -- cast bar" names the Target frame's castbar.
+        local registry = A.Registry
+        local scopedKey
+        if ContainsAny(normalized, { "boss castbar", "boss cast bar", "boss cast" }) then
+            scopedKey = "general.bossCastTargetNameColor"
+        elseif ContainsAny(normalized, { "focus castbar", "focus cast bar", "focus cast" }) then
+            scopedKey = "general.castbarFocusTargetNameColor"
+        elseif ContainsAny(normalized, { "player castbar", "player cast bar", "player cast", "my castbar", "my cast bar" }) then
+            scopedKey = "general.castbarPlayerTargetNameColor"
+        elseif ContainsAny(normalized, { "target castbar", "target cast bar", "targets castbar", "targets cast bar" }) then
+            scopedKey = "general.castbarTargetTargetNameColor"
+        end
+        if scopedKey and registry and registry:GetSetting(scopedKey) then
+            key = scopedKey
+        else
+            key = "general.castbarTargetNameColor"
+        end
     elseif ContainsAny(normalized, terms.text) then
         key = "general.castbarFontColor"
     elseif ContainsAny(normalized, terms.border) then
@@ -5696,7 +5724,11 @@ A._ParseHumanSafetyGuidanceShortcut = ParseHumanSafetyGuidanceShortcut
 function P.ShouldTryEarlyCompound(text, raw)
     text = tostring(text or "")
     local rawText = tostring(raw or "")
-    local punctuationJoin = rawText:find(",", 1, true) ~= nil
+    -- A comma written tight between words ("TANK,DAMAGER,HEALER") is one
+    -- list value, exactly as SafeText reads it; only ", " separates clauses.
+    -- Counting the tight comma as a joiner sent the role-order run down the
+    -- joined-clause tests, which found no "and" and skipped the label scan.
+    local punctuationJoin = rawText:find(",%s") ~= nil
         or rawText:find(";", 1, true) ~= nil
     local numberCount = 0
     for _ in text:gmatch("[-+]?%d+%.?%d*") do
@@ -5843,7 +5875,7 @@ function P.ShouldTryEarlyCompound(text, raw)
         local hasValueConnector = text:find("%f[%a]to%f[%A]") ~= nil
         local hasJoiner = text:find(" and ", 1, true) or text:find(" und ", 1, true)
             or text:find(",", 1, true) or punctuationJoin
-        if not hasValueConnector and not hasJoiner then
+        if not hasJoiner then
             local tokens = {}
             for word in text:gmatch("%S+") do tokens[#tokens + 1] = word end
             local SET_VERBS = {
@@ -5853,7 +5885,11 @@ function P.ShouldTryEarlyCompound(text, raw)
             -- Two controls each carrying a value need a long sentence; a bare
             -- single command ("set boss buff icon size 45") is shorter and the
             -- scan rejects it anyway when it finds only one control.
-            if #tokens >= 7 and SET_VERBS[tokens[1]] then return true end
+            -- A "to" inside the run belongs to a label ("Player Portrait
+            -- Attach To Frame Point") or a spoken value ("Anchor to player");
+            -- the run is then longer still, and an ordinary "set X to Y"
+            -- command stays below the floor.
+            if #tokens >= (hasValueConnector and 9 or 7) and SET_VERBS[tokens[1]] then return true end
         end
     end
 
@@ -6155,6 +6191,40 @@ function A.Parse(text, ctxOverride)
         exactFullAlias.raw = raw
         exactFullAlias.normalized = normalized
         return exactFullAlias
+    end
+    -- "set Astral Power Background Color to red" spells one control's complete
+    -- visible label. The exact-alias pre-pass above declines colours by
+    -- design, so the colour specialist answered with the shared Power Bar
+    -- Background Color instead. A single command survives because the Router's
+    -- label lane runs after the parser, but a batch part ("... then set ...")
+    -- is planned by A.Parse alone and only borrows that lane once its index
+    -- happens to be warm. The label is what the player read on screen, so it
+    -- outranks a topical pick here as well. Bounded to a set-verb with an
+    -- explicit "to" value, resolved on the parser's own label map, and only
+    -- for a single clause: "set player width to 300 and target to 250" would
+    -- otherwise read the last number into the first control.
+    if type(P.ExactLabelSettingForClause) == "function"
+        and type(P.PlanForExactRegistrySetting) == "function"
+        and normalized:find(" to ", 1, true)
+        and not normalized:find(" and ", 1, true) and not normalized:find(" und ", 1, true)
+        and not normalized:find(" then ", 1, true) and not raw:find("[,;]")
+    then
+        local lead = normalized:match("^(%S+)")
+        if lead and (lead == "set" or lead == "change" or lead == "make" or lead == "adjust" or lead == "put") then
+            local labelSetting = P.ExactLabelSettingForClause(normalized)
+            if labelSetting and (type(P.RegistrySettingMayMatchExactAlias) ~= "function"
+                or P.RegistrySettingMayMatchExactAlias(labelSetting, normalized) == true)
+            then
+                local labelPlan = P.PlanForExactRegistrySetting(labelSetting, normalized, raw)
+                if type(labelPlan) == "table" and labelPlan.kind == "changes"
+                    and type(labelPlan.changes) == "table" and #labelPlan.changes > 0
+                then
+                    labelPlan.raw = raw
+                    labelPlan.normalized = normalized
+                    return labelPlan
+                end
+            end
+        end
     end
     -- A sentence about ONE unit frame that describes the result in the
     -- player's own words ("put the portrait on the left of my player frame",
