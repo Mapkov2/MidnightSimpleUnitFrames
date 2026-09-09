@@ -8,12 +8,40 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E0C7AF7D420015E44CE75216631175825A1692A1C4081CC1129B4DAFAB591526",
-    currentVersion = "6.16-beta4",
-    historyFromVersion = "6.16-beta1",
-    previousVersion = "6.16-beta3",
-    rangeLabel = "6.16-beta3 -> 6.16-beta4",
+    sourceSha256 = "B70966E1D0354BC352B0D4C8919D865F575DCF9248CD77119DC1045181BAADA2",
+    currentVersion = "6.16-beta5",
+    historyFromVersion = "6.16-beta2",
+    previousVersion = "6.16-beta4",
+    rangeLabel = "6.16-beta4 -> 6.16-beta5",
     entries = {
+        {
+            version = "6.16-beta5",
+            date = "2026-09-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Separator and Pip gap shape the Demon Hunter Devourer bar across their whole range. The dividers share the space the fragments do not need, so every step of the sliders changes the bar instead of settling on one width.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "pip gap",
+                                label = "Pip gap",
+                                sectionId = "classpower_visuals",
+                                controlId = "menu2.classpower.advanced.style.pips.gap",
+                                settingKey = "bars.classPowerGap",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Pixel snapping no longer rounds a one-pixel divider below a pixel, which could remove the fragment division entirely at some interface scales.",
+                    },
+                },
+            },
+        },
         {
             version = "6.16-beta4",
             date = "2026-09-09",
@@ -139,44 +167,6 @@ local data = {
                         "Aura identity checks avoid temporary owner tables and repeated access checks. Castbar color ownership avoids redundant temporary allocations.",
                         "Corrected missing-health background masking during Range Fade so the configured background and out-of-range appearance remain visible.",
                         "Fixed clipping in Aura cooldown and Texture Layer options, and improved Unit Status previews in the Menu.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.16-beta1",
-            date = "2026-09-06",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Unit Frames can now appear only while their unit is injured. Enable Show only below 100% health under Unit > Load Conditions to keep a frame transparent at full health while preserving the other configured hide rules.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "show only below 100 health",
-                                label = "Show only below 100% health",
-                                sectionId = "load_conditions",
-                                controlId = "menu2.uf_player.unit.load_condition.loadcondshowwheninjured",
-                                settingKey = "player.loadCondShowWhenInjured",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Rebuilt the Auras3 backend into explicit native runtime, Menu, Edit Mode, and Spell Indicator modules while preserving its public behavior and Blizzard-owned Aura tracking.",
-                        "Custom Aura spell names now use prebuilt locale-specific alias catalogs instead of a live Aura-name resolver, including current localized and hotfixed spell groups.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Target Range Fade now forwards protected in-range results through Blizzard's native boolean-alpha path and retains its spell-range fallback when the native check is unavailable.",
-                        "Health gradients, dynamic backgrounds, and protected health and power text reuse already-read values and specialized writers to reduce duplicate work on frequent unit events.",
-                        "Injured-only visibility uses a secret-safe native health curve and stable visual parents so health bars, predictions, borders, textures, portraits, cast indicators, and Class Resources hide together without changing the clickable secure frame.",
-                        "Scheduler callback errors now retain the original callback stack while continuing to isolate failures and drain queued work.",
                     },
                 },
             },

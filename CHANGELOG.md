@@ -1,5 +1,16 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.16-beta5 - 2026-09-09
+
+### Highlights
+
+- **Separator and Pip gap shape the Demon Hunter Devourer bar across their whole range.** The dividers share the space the fragments do not need, so every step of the sliders changes the bar instead of settling on one width.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visuals","controlId":"menu2.classpower.advanced.style.pips.gap","settingKey":"bars.classPowerGap","prepareKind":"","prepareValue":"","query":"pip gap","label":"Pip gap"} -->
+
+### Fixes & Performance
+
+- Pixel snapping no longer rounds a one-pixel divider below a pixel, which could remove the fragment division entirely at some interface scales.
+
 ## 6.16-beta4 - 2026-09-09
 
 ### Highlights

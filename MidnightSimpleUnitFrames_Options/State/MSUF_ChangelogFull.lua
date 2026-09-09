@@ -8,12 +8,40 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E0C7AF7D420015E44CE75216631175825A1692A1C4081CC1129B4DAFAB591526",
-    currentVersion = "6.16-beta4",
+    sourceSha256 = "B70966E1D0354BC352B0D4C8919D865F575DCF9248CD77119DC1045181BAADA2",
+    currentVersion = "6.16-beta5",
     historyFromVersion = "6.02",
-    previousVersion = "6.16-beta3",
-    rangeLabel = "6.16-beta3 -> 6.16-beta4",
+    previousVersion = "6.16-beta4",
+    rangeLabel = "6.16-beta4 -> 6.16-beta5",
     entries = {
+        {
+            version = "6.16-beta5",
+            date = "2026-09-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Separator and Pip gap shape the Demon Hunter Devourer bar across their whole range. The dividers share the space the fragments do not need, so every step of the sliders changes the bar instead of settling on one width.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "pip gap",
+                                label = "Pip gap",
+                                sectionId = "classpower_visuals",
+                                controlId = "menu2.classpower.advanced.style.pips.gap",
+                                settingKey = "bars.classPowerGap",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Pixel snapping no longer rounds a one-pixel divider below a pixel, which could remove the fragment division entirely at some interface scales.",
+                    },
+                },
+            },
+        },
         {
             version = "6.16-beta4",
             date = "2026-09-09",
