@@ -1865,6 +1865,7 @@ end
 local _confParty, _confRaid, _confMythicRaid, _confPriority
 
 function GF.IsMythicRaidContext()
+    if MSUF.Client and MSUF.Client.SupportsGroupKind and not MSUF.Client.SupportsGroupKind("mythicraid") then return false end
     local inGroup = (IsInGroup and IsInGroup()) or false
     local inRaid = (IsInRaid and IsInRaid()) or false
     if not inGroup and not inRaid then return false end

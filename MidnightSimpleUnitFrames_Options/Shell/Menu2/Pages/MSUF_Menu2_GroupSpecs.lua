@@ -20,7 +20,7 @@ local function StatusIconSpecs(rows)
     return specs
 end
 local Specs = {
-    SCOPE_VALUES = VTP "party=Party|raid=Raid|mythicraid=Mythic Raid",
+    SCOPE_VALUES = (M.FilterSupportedUnitValues or function(values) return values end)(VTP "party=Party|raid=Raid|mythicraid=Mythic Raid"),
     GROWTH_VALUES = VTP "DOWN=Down|UP=Up|RIGHT=Right|LEFT=Left",
     BLIZZARD_FALLBACK_VALUES = VTP "AUTO=Blizzard default|SHOW=Force Blizzard frames|NONE=Hide all frames",
     GROUP_FRAME_PROVIDER_VALUES = {

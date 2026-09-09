@@ -513,10 +513,11 @@ local function BuildMisc(ctx)
             offsetX = -76,
         })
     end
-    local targetColumnW = math.floor((targetCardW - 36) / 3)
+    local mythicSupported = not M.SupportsFrameScope or M.SupportsFrameScope("mythicraid")
+    local targetColumnW = math.floor((targetCardW - 36) / (mythicSupported and 3 or 2))
     BindGroupTargetSwitch(targetCard, "Party frames", "party", 18, -78, targetColumnW - 42)
     BindGroupTargetSwitch(targetCard, "Raid frames", "raid", 18 + targetColumnW, -78, targetColumnW - 42)
-    BindGroupTargetSwitch(targetCard, "Mythic Raid frames", "mythicraid", 18 + (targetColumnW * 2), -78, targetColumnW - 42)
+    if mythicSupported then BindGroupTargetSwitch(targetCard, "Mythic Raid frames", "mythicraid", 18 + (targetColumnW * 2), -78, targetColumnW - 42) end
     local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 290, false)
     local tooltipW = tooltips._msuf2Width or ctx.width or 720
     local tooltipLeftX = 30

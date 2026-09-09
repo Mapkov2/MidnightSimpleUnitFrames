@@ -554,11 +554,13 @@ local function BuildTopActions(ctx, builder, unit, label)
     local scopeValues = {}
     for i = 1, #UNIT_TAB_ORDER do
         local tabUnit = UNIT_TAB_ORDER[i]
-        scopeValues[i] = {
+        if UNIT_PAGE_FOR_UNIT[tabUnit] and (not M.SupportsFrameScope or M.SupportsFrameScope(tabUnit)) then
+        scopeValues[#scopeValues + 1] = {
             value = tabUnit,
             text = UnitTopTabLabel(tabUnit, false),
             width = UnitTopTabWidth(tabUnit, false),
         }
+        end
     end
     local scopeOpts = {
         values = scopeValues,

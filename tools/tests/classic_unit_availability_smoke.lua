@@ -34,6 +34,29 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     local pages = assert(loadstring(source .. "\nreturn UNIT_PAGES"))("Options", ns)
     assert((pages.uf_boss ~= nil) == boss, flavor .. " boss page registered")
     assert((pages.uf_arena ~= nil) == arena, flavor .. " arena page registered")
+    local tabs = read(options .. "Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+    local start = assert(tabs:find("local function BuildTopActions", 1, true))
+    local finish = assert(tabs:find("    local scopeOpts =", start, true))
+    local order = {"player", "target", "boss", "arena", "focus", "pet", "targettarget", "focustarget"}
+    local mapping = {}
+    for key, page in pairs(pages) do mapping[page.unit] = key end
+    local build = assert(loadstring("local M, UNIT_TAB_ORDER, UNIT_PAGE_FOR_UNIT = ...; local function UnitTopTabLabel(u) return u end; local function UnitTopTabWidth() return 50 end; "
+        .. tabs:sub(start, finish - 1) .. " return scopeValues end; return BuildTopActions"))(menu, order, mapping)
+    local visible = build({}, {width=720}, "player", "Player")
+    assert(#visible == (flavor == "Vanilla" and 4 or flavor == "TBC" and 7 or 8), flavor .. " visible tab count")
+    for _, row in ipairs(visible) do assert(ns.Client.SupportsUnit(row.value), "unsupported visible tab "..row.value) end
+    local retail = flavor == "Mainline"
+    assert(ns.Client.SupportsGroupKind("mythicraid") == retail)
+    assert(menu.SupportsFrameScope("gf_mythicraid") == retail)
+    assert(menu.SupportsUnitPage("gf_layout", "gf_mythicraid.enabled") == retail)
+    local scopes = menu.FilterSupportedUnitValues({{value="party"},{value="raid"},{value="mythicraid"}})
+    assert(#scopes == (retail and 3 or 2), flavor .. " mythic selector visible")
+    assert(menu.NormalizeGroupScope("mythicraid") == (retail and "mythicraid" or "raid"))
+    local groupDB = read(core .. "GroupFrames/MSUF_GroupFrames_DB.lua")
+    local body = assert(groupDB:match("function GF.IsMythicRaidContext%(%)(.-)\nend"))
+    local mythic = assert(loadstring("local MSUF = ...; local function IsInGroup() return true end; local function IsInRaid() return true end; local function GetRaidDifficultyID() return 16 end; return function() "..body.." end"))(ns)
+    assert(mythic() == retail, flavor .. " must not route into a Mythic raid profile")
+
     for _, unit in ipairs({"Boss", "Arena"}) do
         local s = read(core .. "Castbars/MSUF_" .. unit .. "Castbars.lua")
         local fn = assert(s:match("local function " .. unit .. "CastbarsEnabled%(%)(.-)\nend"))

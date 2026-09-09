@@ -61,6 +61,13 @@ local BAR_SCOPES = {
     { key = "gf_mythicraid", label = "Mythic Raid" },
 }
 
+if M.FilterSupportedUnitValues then
+    M.FilterSupportedUnitValues(UNIT_SCOPES)
+    M.FilterSupportedUnitValues(UNIT_AURA_SCOPES)
+    M.FilterSupportedUnitValues(GROUP_SCOPES)
+    M.FilterSupportedUnitValues(BAR_SCOPES)
+end
+
 local STRATA_RANK = {
     AUTO = 0,
     BACKGROUND = 1,

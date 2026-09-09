@@ -74,7 +74,8 @@ end
 local function CurrentScope()
     local gp = GroupPage()
     if type(gp.CurrentScope) == "function" then return gp.CurrentScope() end
-    return M.gfScope or "party"
+    local scope = M.gfScope or "party"
+    return M.NormalizeGroupScope and M.NormalizeGroupScope(scope) or scope
 end
 local GF_PREVIEW_ROLE_LABELS = {
     TANK = "Tank",

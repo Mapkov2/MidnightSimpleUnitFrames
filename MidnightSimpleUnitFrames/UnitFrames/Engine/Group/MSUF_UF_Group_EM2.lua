@@ -61,6 +61,14 @@ local LABELS = {
 
 local GROUP_KINDS = { "party", "raid", "mythicraid" }
 local MOVER_KINDS = { "party", "raid", "mythicraid", "priority" }
+local function SupportedGroupKind(kind)
+  return not MSUF.Client or not MSUF.Client.SupportsGroupKind or MSUF.Client.SupportsGroupKind(kind)
+end
+for _, kinds in ipairs({ GROUP_KINDS, MOVER_KINDS }) do
+  for i = #kinds, 1, -1 do
+    if not SupportedGroupKind(kinds[i]) then table.remove(kinds, i) end
+  end
+end
 local _containers = {}
 local _previewAnchors = {}
 local _popups = {}
@@ -87,6 +95,7 @@ local function GF()
 end
 
 local function NormalizeKind(kind)
+  if not SupportedGroupKind(KEY_TO_KIND[kind] or kind) then return "raid" end
   if kind == "party" or kind == "raid" or kind == "mythicraid" or kind == "priority" then return kind end
   return KEY_TO_KIND[kind]
 end
@@ -1428,6 +1437,9 @@ local GROUP_COPY_TARGETS = {
   { "raid", "Raid" },
   { "mythicraid", "Mythic Raid" },
 }
+for i = #GROUP_COPY_TARGETS, 1, -1 do
+  if not SupportedGroupKind(GROUP_COPY_TARGETS[i][1]) then table.remove(GROUP_COPY_TARGETS, i) end
+end
 local GROUP_PAGE_COMPONENT = { gf_bars = "dispel", gf_auras = "auras", gf_indicators = "status" }
 local GROUP_PAGE_SECTION = { gf_auras = "buffs", gf_indicators = "sicons" }
 local GROUP_PAGE_BUTTONS = {

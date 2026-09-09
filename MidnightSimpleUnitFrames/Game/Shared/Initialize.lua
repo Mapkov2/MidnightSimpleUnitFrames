@@ -89,6 +89,10 @@ function Client.SupportsUnit(unit)
     return unsupportedUnits[base] ~= true
 end
 
+function Client.SupportsGroupKind(kind)
+    return kind ~= "mythicraid" or Client.IsRetail == true
+end
+
 -- Short aliases match the style used by ElvUI's shared client initializer and
 -- make future client splits cheap without introducing per-frame checks.
 MSUF.Retail = Client.IsRetail

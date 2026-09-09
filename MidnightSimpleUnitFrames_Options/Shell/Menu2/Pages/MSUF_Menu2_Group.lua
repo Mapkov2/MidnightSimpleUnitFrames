@@ -418,7 +418,8 @@ local function Num(kind, key, default)
     return tonumber(Val(kind, key, default)) or default or 0
 end
 local function CurrentScope()
-    return M.gfScope or "party"
+    local scope = M.gfScope or "party"
+    return M.NormalizeGroupScope and M.NormalizeGroupScope(scope) or scope
 end
 local function ScopeLabel(kind)
     return M.Tr(SCOPE_LABELS[kind] or "Party")
@@ -854,6 +855,7 @@ local function ScopeSection(ctx, builder, opts)
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
 
     local function SelectScope(kind)
+        if M.NormalizeGroupScope then kind = M.NormalizeGroupScope(kind) end
         local previousScope = M.gfScope
         M.SetMenuStateValue("gfScope", kind or "party")
         if previousScope ~= M.gfScope and W.CloseTextQuickSettings then W.CloseTextQuickSettings() end
@@ -974,8 +976,13 @@ local function ScopeSection(ctx, builder, opts)
             if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
         end
         if providerSummary then
-            providerSummary:SetText(M.Format("Frame providers | Party: %s | Raid: %s | Mythic Raid: %s",
-                FrameProviderShortLabel("party"), FrameProviderShortLabel("raid"), FrameProviderShortLabel("mythicraid")))
+            if M.SupportsFrameScope and not M.SupportsFrameScope("mythicraid") then
+                providerSummary:SetText(M.Format("Frame providers | Party: %s | Raid: %s",
+                    FrameProviderShortLabel("party"), FrameProviderShortLabel("raid")))
+            else
+                providerSummary:SetText(M.Format("Frame providers | Party: %s | Raid: %s | Mythic Raid: %s",
+                    FrameProviderShortLabel("party"), FrameProviderShortLabel("raid"), FrameProviderShortLabel("mythicraid")))
+            end
         end
     end
     M.TrackRefresh(ctx, RefreshTop)
