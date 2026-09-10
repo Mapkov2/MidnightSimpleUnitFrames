@@ -7,6 +7,155 @@ local T = M.Theme or {}
 local Shared = M.UnitSectionsShared or {}
 M.UnitSectionsShared = Shared
 
+-- Read-only summaries stay available while section bodies are still lazy.
+-- Each owner supplies exact field contracts; actions never infer settings from
+-- labels, runtime search records, or the position of a widget.
+function Shared.SectionFieldKeys(spec, conf, defaults)
+    local keys, seen = {}, {}
+    local function Add(key)
+        if not seen[key] then seen[key] = true; keys[#keys + 1] = key end
+    end
+    for key in tostring(spec.fields or ""):gmatch("%S+") do Add(key) end
+    for prefix in tostring(spec.prefixes or ""):gmatch("%S+") do
+        for _, source in ipairs({ conf or {}, defaults or {} }) do
+            for key in pairs(source) do
+                if type(key) == "string" and key:sub(1, #prefix) == prefix then Add(key) end
+            end
+        end
+    end
+    return keys
+end
+
+function Shared.AttachSectionUX(ctx, opts)
+    if not (ctx and ctx.entry) then return end
+    for id, spec in pairs(opts.sections) do
+        local section = ctx.entry.sections and ctx.entry.sections[id]
+        local entry = section and section._msuf2CollapsibleEntry
+        if entry and not entry._msuf2UXSummary then
+            local summary = T.Font(entry.header, "GameFontHighlightSmall", "", T.colors.muted, "supporting")
+            summary:SetJustifyH("LEFT")
+            summary:SetWordWrap(false)
+            summary:SetMaxLines(1)
+            entry._msuf2UXSummary = summary
+            local popup, popupSource
+            local function Close() if popup then popup:Hide() end end
+            local function Refresh()
+                local scope = opts.scope()
+                summary:SetText(spec.summary and spec.summary(opts.conf(scope), scope) or "")
+                if entry._msuf2SectionActions then
+                    W.SetControlEnabled(entry._msuf2SectionActions, not entry.featureSwitch or entry.featureSwitch:IsEnabled())
+                end
+                if popupSource and popupSource ~= scope then Close() end
+                if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
+            end
+            M.TrackRefresh(ctx, Refresh)
+            entry.header:HookScript("OnShow", Refresh)
+            entry.outer:HookScript("OnHide", Close)
+            if spec.fields or spec.prefixes or spec.copy then
+                local more = W.TopButton(entry.header, "...", 24, 22)
+                if W.StyleSectionActionButton then W.StyleSectionActionButton(more) end
+                more:SetPoint("RIGHT", entry.header, "RIGHT", -10, 0)
+                more:SetFrameLevel(entry.header:GetFrameLevel() + 4)
+                more._msuf2SkipHistoryCheckpoint = true
+                entry._msuf2ActionReserve = 34
+                entry._msuf2SectionActions = more
+                local function Change(target)
+                    if M.BlockCombatAction() or popupSource ~= opts.scope() then return false end
+                    local gate = ctx.entry._msuf2FrameGate
+                    if gate and gate.enabled == false then return false end
+                    if entry.featureSwitch and not entry.featureSwitch:IsEnabled() then return false end
+                    local source = popupSource
+                    if target then
+                        local allowed = false
+                        for _, item in ipairs(opts.targets or {}) do if item.value == target then allowed = true end end
+                        if not allowed or spec.noCopy or target == source or (spec.canCopy and not spec.canCopy(source, target)) then return false end
+                    end
+                    local success = M.RunWithHistory(target and "Copy section" or "Reset section",
+                        "section:" .. ctx.key .. ":" .. id, function()
+                            if target and spec.copy and opts.copy then return opts.copy(source, target, spec.copy) end
+                            local defaults = not target and opts.defaults(source) or nil
+                            if not target and not defaults then return false end
+                            local conf = opts.conf(source)
+                            local dst = target and opts.conf(target) or conf
+                            local keys = Shared.SectionFieldKeys(spec, conf, target and dst or defaults)
+                            local src = target and conf or defaults
+                            for _, key in ipairs(keys) do dst[key] = M.DeepCopy(src[key]) end
+                            opts.apply(target or source, id)
+                            return true
+                        end)
+                    if success == true then
+                        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(target and "Section copied" or "Section reset"), "ok", 1.5) end
+                        M.Refresh(ctx)
+                    elseif M.ShowStatusFeedback then
+                        M.ShowStatusFeedback(M.Tr("Action failed"), "danger", 1.8)
+                    end
+                    Close()
+                    return success
+                end
+                more:SetScript("OnClick", function()
+                    if popup and popup:IsShown() then Close(); return end
+                    popupSource = opts.scope()
+                    if not popup then
+                        popup = M.CreateMenuPopupPanel(_G.UIParent)
+                        popup:SetClampedToScreen(true)
+                        popup:SetSize(288, 174)
+                        local title = T.Font(popup, "GameFontHighlight", "", T.colors.text)
+                        title:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -12)
+                        title:SetWidth(242)
+                        title:SetWordWrap(false)
+                        popup.title = title
+                        local close = W.TopButton(popup, "x", 20, 20)
+                        close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -6, -6)
+                        close:SetScript("OnClick", Close)
+                        local reset = W.TopButton(popup, M.Tr("Reset section"), 250, 24)
+                        reset:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -42)
+                        reset:SetScript("OnClick", function() Change(nil) end)
+                        popup._msuf2ResetButton = reset
+                        reset:SetShown(spec.fields ~= nil or spec.prefixes ~= nil)
+                        local values = {}
+                        for _, item in ipairs(opts.targets or {}) do
+                            if item.value ~= popupSource and (not spec.canCopy or spec.canCopy(popupSource, item.value)) then values[#values + 1] = item end
+                        end
+                        local destination = values[1] and values[1].value
+                        local select = W.Dropdown(popup, "Copy to another frame", values, 250)
+                        W.MoveWidget(select, popup, 14, -76, 250)
+                        select:SetValue(destination)
+                        -- Use the widget's canonical callback, not a second settings binding.
+                        select:SetOnValueChanged(function(value) destination = value end)
+                        local copy = W.TopButton(popup, M.Tr("Copy section"), 250, 24)
+                        copy:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -132)
+                        copy:SetScript("OnClick", function() if destination then Change(destination) end end)
+                        local copyAllowed = spec.noCopy ~= true and #values > 0
+                        select:SetShown(copyAllowed)
+                        copy:SetShown(copyAllowed)
+                        if not copyAllowed then popup:SetHeight(82) end
+                        popup.RefreshTargets = function()
+                            local choices = {}
+                            for _, item in ipairs(opts.targets or {}) do
+                                if item.value ~= popupSource and (not spec.canCopy or spec.canCopy(popupSource, item.value)) then choices[#choices + 1] = item end
+                            end
+                            destination = choices[1] and choices[1].value
+                            select:SetValues(choices)
+                            select:SetValue(destination)
+                        end
+                        popup._msuf2ResetSection = function() return Change(nil) end
+                        popup._msuf2CopySection = function(target) return Change(target) end
+                    end
+                    popup.RefreshTargets()
+                    popup.title:SetText(opts.label(popupSource) .. " · " .. (entry.label:GetText() or id))
+                    popup:ClearAllPoints()
+                    popup:SetPoint("TOPRIGHT", more, "BOTTOMRIGHT", 0, -4)
+                    M.ApplyPopupFramePriority(popup)
+                    popup:Show()
+                end)
+                more._msuf2GetSectionPopup = function() return popup end
+                if M.AddTooltip then M.AddTooltip(more, "Section actions", nil, { hook = true }) end
+            end
+            Refresh()
+        end
+    end
+end
+
 -- Shared helpers for Unit page sections.
 -- Provides common warning notices, name-anchor filtering, badges, and small UI adapters used
 -- by text/status/visual subpages without coupling them to each other's internals.
@@ -123,6 +272,7 @@ function Shared.SetSectionHeaderStatus(sec, opts)
             M.CallIf(T.ApplyCollapseVisual, entry.arrow, entry.hint, entry.open)
         end
     end
+    if entry._msuf2UXSummary and entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
 end
 function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey)
     local notice = CreateFrame("Frame", nil, sec)

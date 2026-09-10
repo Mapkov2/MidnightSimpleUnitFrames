@@ -147,6 +147,28 @@ local function PortraitLayoutForWidth(sectionWidth, tab)
 end
 UP.PortraitLayoutForWidth = PortraitLayoutForWidth
 
+local function PreparePortraitSwitch(ctx, sec, unit)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
+    local portraitEnable = W.SectionSwitch(sec, "Portrait")
+    M.BindBoolWidget(ctx, portraitEnable,
+        function() return NormalizePortrait(unit) ~= "OFF" end,
+        function(v)
+            if v then
+                SetPortraitValue(unit, "portraitMode", M._msuf2LastPortraitSide[unit] or "LEFT", "MSUF2_PORTRAIT_MODE")
+            else
+                local mode = NormalizePortrait(unit)
+                if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastPortraitSide[unit] = mode end
+                SetPortraitValue(unit, "portraitMode", "OFF", "MSUF2_PORTRAIT_MODE")
+            end
+            if portraitEnable.refreshDetails then portraitEnable.refreshDetails() end
+        end,
+        ReviewedMeta(ctx, "portrait.enabled", "setting", "compound",
+            "Portrait is a boolean shortcut over the OFF/LEFT/RIGHT portraitMode enum and restores the remembered side when enabled."))
+    portraitEnable:SetChecked(NormalizePortrait(unit) ~= "OFF")
+    return portraitEnable
+end
 local function BuildPortrait(ctx, builder, unit)
     local layout = PortraitLayoutForWidth((ctx and ctx.width) or 720, CurrentPortraitTab(unit))
     local sec = builder:CollapsibleSection("portrait", "Portrait", layout.height, false)
@@ -281,21 +303,9 @@ local function BuildPortrait(ctx, builder, unit)
             return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
         end
     end
-    local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, portraitEnable,
-        function() return NormalizePortrait(unit) ~= "OFF" end,
-        function(v)
-            if v then
-                SetPortraitValue(unit, "portraitMode", M._msuf2LastPortraitSide[unit] or "LEFT", "MSUF2_PORTRAIT_MODE")
-            else
-                local mode = NormalizePortrait(unit)
-                if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastPortraitSide[unit] = mode end
-                SetPortraitValue(unit, "portraitMode", "OFF", "MSUF2_PORTRAIT_MODE")
-            end
-            RefreshPortraitControls()
-        end,
-        ReviewedMeta(ctx, "portrait.enabled", "setting", "compound",
-            "Portrait is a boolean shortcut over the OFF/LEFT/RIGHT portraitMode enum and restores the remembered side when enabled."))
+    local portraitEnable = PreparePortraitSwitch(ctx, sec, unit)
+    local portraitEnableContent = W.SectionSwitchContent(portraitEnable, mainCard, "Portrait", leftW - 62, -24)
+    portraitEnable.refreshDetails = function() RefreshPortraitControls() end
     local portrait = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, rightW))
     W.MoveWidget(portrait, mainCard, 16, -62, min(220, leftW - 32))
     M.BindSegment(ctx, portrait,
@@ -393,7 +403,7 @@ local function BuildPortrait(ctx, builder, unit)
         return (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0
     end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
-        { enable = portraitEnable },
+        { enable = { portraitEnable, portraitEnableContent } },
         { controls = portraitActiveControls, on = PortraitActive },
         -- The Left/Right segment only steers the attached layout; detached and
         -- overlay portraits take their position from the Placement card instead.
@@ -445,6 +455,25 @@ local function BuildPortrait(ctx, builder, unit)
         track = function(c, r) return M.TrackCollapsibleRefresh(c, sec, r) end,
     }))
 end
+local function PreparePowerSwitch(ctx, sec, unit)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local show = W.SectionSwitch(sec, "Show power bar")
+    W.AttachUnitEditFocus(show, unit, "powerbar")
+    M.BindBoolWidget(ctx, show,
+        function() return ReadBool(unit, "showPowerBar", true) end,
+        function(v)
+            SetBool(unit, "showPowerBar", v, "MSUF2_POWER_SHOW", { power = true, preview = true })
+            Call("MSUF_EnsureCooldownWidthObservers")
+            if show.refreshDetails then show.refreshDetails() end
+        end,
+        SettingMeta(ctx, "power.show", unit, "showPowerBar"))
+    M.TrackRefresh(ctx, function()
+        W.SetControlEnabled(show, not (unit == "player" and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)))
+    end)
+    return show
+end
+
 local function BuildPower(ctx, builder, unit)
     if not POWER_UNITS[unit] then return end
     local isPlayer = unit == "player"
@@ -647,16 +676,10 @@ local function BuildPower(ctx, builder, unit)
             context = function() return { unit = unit } end,
         })
     end
-    local show = W.SwitchAt(mainCard, "Show power bar", cardW - 62, -24, 0, "HIDDEN")
-    W.AttachUnitEditFocus(show, unit, "powerbar")
-    M.BindBoolWidget(ctx, show,
-        function() return ReadBool(unit, "showPowerBar", true) end,
-        function(v)
-            SetBool(unit, "showPowerBar", v, "MSUF2_POWER_SHOW", { power = true, preview = true })
-            Call("MSUF_EnsureCooldownWidthObservers")
-            RefreshPowerEnabled()
-        end,
-        SettingMeta(ctx, "power.show", unit, "showPowerBar"))
+    local show = PreparePowerSwitch(ctx, sec, unit)
+    local showContent = W.SectionSwitchContent(show, mainCard, "Show power bar", cardW - 62, -24)
+    W.AttachUnitEditFocus(showContent, unit, "powerbar")
+    show.refreshDetails = function() RefreshPowerEnabled() end
     if isPlayer then
         local playerPowerSource = W.Dropdown(mainCard, "Displayed resource", PLAYER_POWER_SOURCE_VALUES, cardW - 72)
         playerPowerSource._msuf2StableSearchLabel = M.PlayerPowerSourceSearchLabel
@@ -811,7 +834,7 @@ local function BuildPower(ctx, builder, unit)
     local function OrbSelected() return isPlayer and NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape) == "ORB" end
     local function ClassManaged() return isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) and true or false end
     RefreshPowerEnabled = RefreshPowerEnabled(M.BindGateGroup(ctx, nil, {
-        { enable = show, controls = powerControls, on = PowerOn },
+        { enable = { show, showContent }, controls = powerControls, on = PowerOn },
         { controls = detachedControls, on = DetachedOn },
         { controls = { attachedPowerHeight, embedPower }, on = function() return PowerOn() and not DetachedOn() end },
         { controls = borderSize, on = function() return PowerOn() and ReadPowerBorderEnabled() end },
@@ -830,7 +853,7 @@ local function BuildPower(ctx, builder, unit)
                 setEnabled(powerControls, false)
                 setEnabled(detachedControls, false)
                 if detachedTextToggle then setEnabled(detachedTextToggle, DetachedOn()) end
-                setEnabled(show, false)
+                setEnabled({ show, showContent }, false)
                 setEnabled(borderSize, false)
             end
         end,
@@ -852,6 +875,95 @@ local function BuildPower(ctx, builder, unit)
         track = function(c, r) return M.TrackCollapsibleRefresh(c, sec, r) end,
     }))
 end
+local function PrepareCastbarSwitch(ctx, sec, unit)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local fields = CASTBAR_FIELDS[unit]
+    local providerMemoryKey = fields.providerMemory or (fields.backend and (fields.backend .. "BeforeHide") or nil)
+    local canUseBlizzardProvider = unit == "player"
+    local state = {}
+    local function NormalizeBackend(value)
+        local fnUnit = _G.MSUF_NormalizeCastbarBackendForUnit
+        if type(fnUnit) == "function" then return fnUnit(unit, value) or "MSUF" end
+        local fn = _G.MSUF_NormalizeCastbarBackend
+        if type(fn) == "function" then
+            local backend = fn(value) or "MSUF"
+            if backend == "BLIZZARD" and not canUseBlizzardProvider then return "HIDE" end
+            return backend
+        end
+        if value == "BLIZZARD" and not canUseBlizzardProvider then return "HIDE" end
+        if value == "BLIZZARD" or value == "HIDE" or value == "MSUF" then return value end
+        return "MSUF"
+    end
+    local function ReadCastbarBackend()
+        local fn = _G.MSUF_GetCastbarBackend
+        if type(fn) == "function" then return NormalizeBackend(fn(unit, GetGeneral())) end
+        local g = GetGeneral()
+        local value = fields.backend and g[fields.backend]
+        if value == nil then return ReadGeneralBool(fields.enable, true) and "MSUF" or (canUseBlizzardProvider and "BLIZZARD" or "HIDE") end
+        return NormalizeBackend(value)
+    end
+    local function SetCastbarBackend(value)
+        local backend = NormalizeBackend(value)
+        local g = GetGeneral()
+        if providerMemoryKey and backend ~= "HIDE" then g[providerMemoryKey] = backend end
+        local fn = _G.MSUF_SetCastbarBackend
+        if type(fn) == "function" then
+            fn(unit, backend, g)
+        else
+            if fields.backend then g[fields.backend] = backend end
+            g[fields.enable] = (backend == "MSUF")
+        end
+        M.RequestUnitApply(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
+        Call("MSUF_Castbars_OnSettingsChanged", "menu2_backend")
+        if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
+        if state.refresh then state.refresh() end
+    end
+    local function ReadCastbarProvider()
+        if not canUseBlizzardProvider then return "MSUF" end
+        local backend = ReadCastbarBackend()
+        if backend == "BLIZZARD" then return "BLIZZARD" end
+        if backend == "MSUF" then return "MSUF" end
+        local remembered = providerMemoryKey and NormalizeBackend(GetGeneral()[providerMemoryKey]) or nil
+        if remembered == "BLIZZARD" then return "BLIZZARD" end
+        return "MSUF"
+    end
+    local function SetCastbarProvider(value)
+        if not canUseBlizzardProvider then return end
+        local backend = NormalizeBackend(value)
+        if backend == "HIDE" then backend = "MSUF" end
+        local previousBackend = ReadCastbarBackend()
+        SetCastbarBackend(backend)
+        if backend == "BLIZZARD" and previousBackend ~= "BLIZZARD" then
+            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
+            elseif _G.print then
+                _G.print("|cffffd700MSUF:|r Switching to the Blizzard player castbar requires a /reload.")
+            end
+        end
+    end
+    local function SetCastbarEnabled(enabled)
+        if enabled then
+            SetCastbarBackend(canUseBlizzardProvider and ReadCastbarProvider() or "MSUF")
+        else
+            local backend = ReadCastbarBackend()
+            if providerMemoryKey and backend ~= "HIDE" then GetGeneral()[providerMemoryKey] = backend end
+            SetCastbarBackend("HIDE")
+        end
+    end
+    state.read, state.set = ReadCastbarBackend, SetCastbarBackend
+    state.readProvider, state.setProvider = ReadCastbarProvider, SetCastbarProvider
+    state.setEnabled = SetCastbarEnabled
+    local enabled = W.SectionSwitch(sec, "Enable Castbar")
+    enabled._msuf2CastbarState = state
+    W.AttachUnitEditFocus(enabled, unit, "castbar")
+    M.BindBoolWidget(ctx, enabled,
+        function() return ReadCastbarBackend() ~= "HIDE" end,
+        SetCastbarEnabled,
+        ReviewedMeta(ctx, "castbar.enabled", "setting", "compound",
+            "Castbar visibility coordinates backend, enable state, and remembered provider."))
+    return enabled
+end
 local function BuildCastbar(ctx, builder, unit)
     local fields = CASTBAR_FIELDS[unit]
     if not fields then return end
@@ -865,7 +977,6 @@ local function BuildCastbar(ctx, builder, unit)
     local rightW = max(310, min(430, sectionW - rightX - 16))
     local prefix = CASTBAR_PREFIX[unit]
     local RefreshCastbarEnabled = M.RefreshProxy()
-    local providerMemoryKey = fields.providerMemory or (fields.backend and (fields.backend .. "BeforeHide") or nil)
     local canUseBlizzardProvider = (unit == "player")
     local allCastbarControls, iconControls, spellControls, targetNameControls, timeControls = {}, {}, {}, {}, {}
     local function AddControl(list, control)
@@ -968,75 +1079,11 @@ local function BuildCastbar(ctx, builder, unit)
             slider = function(s) return BindDetailSlider(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12]) end,
         })
     end
-    local function NormalizeBackend(value)
-        local fnUnit = _G.MSUF_NormalizeCastbarBackendForUnit
-        if type(fnUnit) == "function" then return fnUnit(unit, value) or "MSUF" end
-        local fn = _G.MSUF_NormalizeCastbarBackend
-        if type(fn) == "function" then
-            local backend = fn(value) or "MSUF"
-            if backend == "BLIZZARD" and not canUseBlizzardProvider then return "HIDE" end
-            return backend
-        end
-        if value == "BLIZZARD" and not canUseBlizzardProvider then return "HIDE" end
-        if value == "BLIZZARD" or value == "HIDE" or value == "MSUF" then return value end
-        return "MSUF"
-    end
-    local function ReadCastbarBackend()
-        local fn = _G.MSUF_GetCastbarBackend
-        if type(fn) == "function" then return NormalizeBackend(fn(unit, GetGeneral())) end
-        local g = GetGeneral()
-        local value = fields.backend and g[fields.backend]
-        if value == nil then return ReadGeneralBool(fields.enable, true) and "MSUF" or (canUseBlizzardProvider and "BLIZZARD" or "HIDE") end
-        return NormalizeBackend(value)
-    end
-    local function SetCastbarBackend(value)
-        local backend = NormalizeBackend(value)
-        local g = GetGeneral()
-        if providerMemoryKey and backend ~= "HIDE" then g[providerMemoryKey] = backend end
-        local fn = _G.MSUF_SetCastbarBackend
-        if type(fn) == "function" then
-            fn(unit, backend, g)
-        else
-            if fields.backend then g[fields.backend] = backend end
-            g[fields.enable] = (backend == "MSUF")
-        end
-        M.RequestUnitApply(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
-        Call("MSUF_Castbars_OnSettingsChanged", "menu2_backend")
-        if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
-        RefreshCastbarEnabled()
-    end
-    local function ReadCastbarProvider()
-        if not canUseBlizzardProvider then return "MSUF" end
-        local backend = ReadCastbarBackend()
-        if backend == "BLIZZARD" then return "BLIZZARD" end
-        if backend == "MSUF" then return "MSUF" end
-        local remembered = providerMemoryKey and NormalizeBackend(GetGeneral()[providerMemoryKey]) or nil
-        if remembered == "BLIZZARD" then return "BLIZZARD" end
-        return "MSUF"
-    end
-    local function SetCastbarProvider(value)
-        if not canUseBlizzardProvider then return end
-        local backend = NormalizeBackend(value)
-        if backend == "HIDE" then backend = "MSUF" end
-        local previousBackend = ReadCastbarBackend()
-        SetCastbarBackend(backend)
-        if backend == "BLIZZARD" and previousBackend ~= "BLIZZARD" then
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
-            elseif _G.print then
-                _G.print("|cffffd700MSUF:|r Switching to the Blizzard player castbar requires a /reload.")
-            end
-        end
-    end
-    local function SetCastbarEnabled(enabled)
-        if enabled then
-            SetCastbarBackend(canUseBlizzardProvider and ReadCastbarProvider() or "MSUF")
-        else
-            local backend = ReadCastbarBackend()
-            if providerMemoryKey and backend ~= "HIDE" then GetGeneral()[providerMemoryKey] = backend end
-            SetCastbarBackend("HIDE")
-        end
-    end
+    local castbarState = PrepareCastbarSwitch(ctx, sec, unit)._msuf2CastbarState
+    castbarState.refresh = function() RefreshCastbarEnabled() end
+    local ReadCastbarBackend, SetCastbarBackend = castbarState.read, castbarState.set
+    local ReadCastbarProvider, SetCastbarProvider = castbarState.readProvider, castbarState.setProvider
+    local SetCastbarEnabled = castbarState.setEnabled
     local controlWLeft = max(220, leftW - 58)
     local controlWRight = max(220, rightW - 58)
     local function SetCastbarSectionHeight(height)
@@ -1186,13 +1233,9 @@ local function BuildCastbar(ctx, builder, unit)
             SetCastbarBackend("MSUF")
         end)
     end
-    local enabled = W.SwitchAt(generalCard, "Enable Castbar", 16, -52, 220)
-    W.AttachUnitEditFocus(enabled, unit, "castbar")
-    M.BindBoolWidget(ctx, enabled,
-        function() return ReadCastbarBackend() ~= "HIDE" end,
-        SetCastbarEnabled,
-        ReviewedMeta(ctx, "castbar.enabled", "setting", "compound",
-            "Castbar visibility coordinates backend, enable state, and remembered provider."))
+    local enabled = PrepareCastbarSwitch(ctx, sec, unit)
+    local enabledContent = W.SectionSwitchContent(enabled, generalCard, "Enable Castbar", 16, -52, 220)
+    W.AttachUnitEditFocus(enabledContent, unit, "castbar")
     local provider
     if canUseBlizzardProvider then
         provider = W.Dropdown(providerCard, "Castbar provider", CASTBAR_BACKEND_VALUES, min(260, controlWRight))
@@ -1437,7 +1480,7 @@ local function BuildCastbar(ctx, builder, unit)
     local castbarFeatureToggles = { time, interrupt, icon, text, targetNameToggle }
     local function MsufOn() return ReadCastbarBackend() == "MSUF" end
     RefreshCastbarEnabled = RefreshCastbarEnabled(M.BindGateGroup(ctx, nil, {
-        { enable = enabled, controls = castbarFeatureToggles, on = MsufOn },
+        { enable = { enabled, enabledContent }, controls = castbarFeatureToggles, on = MsufOn },
         { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end },
         { controls = allCastbarControls, on = MsufOn },
         { controls = manualWidth, on = function() return MsufOn() and ReadWidthSource() == "manual" end },
@@ -1467,7 +1510,7 @@ local function BuildCastbar(ctx, builder, unit)
     }))
 end
 if type(UP.RegisterSection) == "function" then
-    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx, _, unit) return PortraitLayoutForWidth(ctx and ctx.width, CurrentPortraitTab(unit)).height end, placement = "after_inline_text", order = 10, build = BuildPortrait })
-    UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower })
-    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar })
+    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx, _, unit) return PortraitLayoutForWidth(ctx and ctx.width, CurrentPortraitTab(unit)).height end, placement = "after_inline_text", order = 10, build = BuildPortrait, prepareShell = function(ctx, sec, unit) PreparePortraitSwitch(ctx, sec, unit) end })
+    UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower, prepareShell = PreparePowerSwitch })
+    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar, prepareShell = PrepareCastbarSwitch })
 end

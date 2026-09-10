@@ -2473,7 +2473,6 @@ local function BuildWindowToolbar(state)
     local toolbarReset = T.Button(status, "Reset page", 88, 24)
     toolbarReset:SetPoint("RIGHT", toolbarFeatures, "LEFT", -12, 0)
     T.CenterButtonLabel(toolbarReset)
-    if T.SkinDangerButton then T.SkinDangerButton(toolbarReset) end
     if M.AddTooltip then
         M.AddTooltip(toolbarReset, "Reset page", function()
             local key = M.activeKey

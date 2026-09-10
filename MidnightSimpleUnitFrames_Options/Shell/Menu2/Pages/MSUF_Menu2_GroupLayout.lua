@@ -114,6 +114,22 @@ local function CurrentGroupHealthColorShortcutRelevant()
     local count = type(targets) == "table" and #targets or 0
     return count > 0 and count <= 7
 end
+local function PrepareFrameEnable(ctx, section)
+    local entry = section and section._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local enable = W.SectionSwitch(section, "Enable", "Enable")
+    enable._msuf2GroupFrameGateAlwaysEnabled = true
+    M.BindBoolWidget(ctx, enable,
+        function() return Bool(CurrentScope(), "enabled", false) end,
+        function(value)
+            -- Keep the configured Blizzard fallback when toggling MSUF off.
+            Set(CurrentScope(), "enabled", value == true, "rebuild")
+            M.Refresh(ctx)
+        end,
+        ControlMeta(ctx, "field.enabled"))
+    enable:SetChecked(Bool(CurrentScope(), "enabled", false))
+    return enable
+end
 local function RefreshFrameBasicsProviderHeader(section)
     local provider = FrameProvider(CurrentScope())
     local usesMSUF = provider == "MSUF"
@@ -152,6 +168,8 @@ local function RefreshFrameBasicsProviderHeader(section)
 end
 local function BuildGFGeneralSection(ctx, b)
     local general = b:CollapsibleSection("general", "Frame Basics", 520, false)
+    local enable = PrepareFrameEnable(ctx, general)
+    W.SectionSwitchContent(enable, general, "Enable", 32, -16, 180)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
     local generalRightX = min(max(430, floor(generalW * 0.52)), max(360, generalW - 360))
@@ -177,7 +195,6 @@ local function BuildGFGeneralSection(ctx, b)
             context = CurrentGroupHealthColorContext,
         })
     end
-    W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
     local frameProvider = AttachGroupFocus(W.Dropdown(general, "Frames used in this scope", GROUP_FRAME_PROVIDER_VALUES, min(300, generalLeftW)), "layout")
     W.MoveWidget(frameProvider, general, generalLeftX, -64, min(300, generalLeftW), "LEFT")
@@ -768,6 +785,7 @@ local GROUP_LAYOUT_SECTION_SPECS = {
     {
         sectionId = "general", title = "Frame Basics", height = 520, build = BuildGFGeneralSection,
         prepareShell = function(ctx, section)
+            PrepareFrameEnable(ctx, section)
             local function RefreshProviderHeader() RefreshFrameBasicsProviderHeader(section) end
             if M.AddRefresherOnce then
                 M.AddRefresherOnce(ctx, "group-frame-basics-provider-header", RefreshProviderHeader)
@@ -796,8 +814,8 @@ local GROUP_LAYOUT_SECTION_SPECS = {
         prepareShell = function(...) return GP.PreparePortraitShell(...) end,
     },
     { sectionId = "text", title = "Text", height = 690, build = BuildGFTextSection },
-    { sectionId = "power", title = "Resource Bar", autoHeight = true, build = BuildGFResourceBarSection },
-    { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection },
+    { sectionId = "power", title = "Resource Bar", autoHeight = true, build = BuildGFResourceBarSection, prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PreparePowerSwitch(ctx, sec) end },
+    { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection, prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PrepareRangeSwitch(ctx, sec) end },
     { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
     { sectionId = "layout_advanced", title = "Geometry", height = 448, build = BuildGFGeometrySection },
     { sectionId = "sorting", title = "Sorting", height = 236, build = BuildGFSortingSection },

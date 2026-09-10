@@ -123,6 +123,32 @@ local function CreateAccordionOpenHighlight(header, fromColor, toColor)
 end
 W.CreateAccordionRoundedRegions = CreateAccordionRoundedRegions
 W.CreateAccordionOpenHighlight = CreateAccordionOpenHighlight
+-- Every accordion uses the same border independently of page-specific content.
+-- The owner calls this only on open/hover/theme transitions, never on a ticker.
+function W.CreateAccordionBorder(header)
+    local edges = {}
+    for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+        local edge = header:CreateTexture(nil, "BORDER")
+        if side == "TOP" or side == "BOTTOM" then
+            edge:SetHeight(1)
+            edge:SetPoint(side .. "LEFT", header, side .. "LEFT", 4, 0)
+            edge:SetPoint(side .. "RIGHT", header, side .. "RIGHT", -4, 0)
+        else
+            edge:SetWidth(1)
+            edge:SetPoint("TOP" .. side, header, "TOP" .. side, 0, -4)
+            edge:SetPoint("BOTTOM" .. side, header, "BOTTOM" .. side, 0, 4)
+        end
+        edges[#edges + 1] = edge
+    end
+    header._msuf2AccordionBorder = edges
+    return function(open, hover)
+        local active = open or hover
+        local c = active and T.colors.accent or T.colors.borderSoft
+        for _, edge in ipairs(edges) do
+            edge:SetColorTexture(c[1], c[2], c[3], active and 0.75 or 0.55)
+        end
+    end
+end
 function W.SetCollapsibleHeaderBaseTone(target, color, alpha)
     local entry = target and (target._msuf2CollapsibleEntry or target)
     if not entry then return end
@@ -678,11 +704,11 @@ function W.PageBuilder(ctx, opts)
         M.accordionState = MenuStateTable("accordionState")
         local collapseHintClickState = GetCollapseHintClickState()
         local sectionId = tostring(id or title or "section")
-        local openHighlightEnabled = sectionId:lower():find("preview", 1, true) == nil
+        local openHighlightEnabled = true
         local stateKey = tostring(ctx.key or "page") .. ":" .. sectionId
         local saved = M.accordionState[stateKey]
         local open = (saved == nil) and (defaultOpen and true or false) or (saved and true or false)
-        local headerH = 28
+        local headerH = 32
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
         -- The wrapper must stay visually empty. A full card surface here sits
         -- underneath the header and fills its transparent rounded corners.
@@ -707,8 +733,8 @@ function W.PageBuilder(ctx, opts)
         header:SetPoint("TOPRIGHT", outer, "TOPRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
         header:SetHeight(headerH)
         local headerBg = CreateAccordionRoundedRegions(header, "BACKGROUND", 0)
-        local headerSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
-        headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.34)
+        local headerSurface = ThemeColor("coreSurface", T.colors.panel2)
+        headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.58)
         local headerOpenHighlight
         local headerActiveFrom, headerActiveTo
         if openHighlightEnabled then
@@ -764,7 +790,34 @@ function W.PageBuilder(ctx, opts)
         local function RefreshHeaderLayout()
             local headerW = (header.GetWidth and header:GetWidth()) or self.width or 240
             local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
-            local swatchReserve = tonumber(entry._msuf2ColorSwatchReserve) or 0
+            local swatchReserve = (tonumber(entry._msuf2ColorSwatchReserve) or 0)
+                + (tonumber(entry._msuf2FeatureSwitchReserve) or 0)
+            if entry._msuf2UXSummary then
+                local actions = tonumber(entry._msuf2ActionReserve) or 0
+                if entry.featureSwitch then
+                    entry.featureSwitch:ClearAllPoints()
+                    entry.featureSwitch:SetPoint("RIGHT", header, "RIGHT", -14 - actions - (tonumber(entry._msuf2ColorSwatchReserve) or 0), 0)
+                end
+                if entry._msuf2SectionActions then
+                    entry._msuf2SectionActions:ClearAllPoints()
+                    entry._msuf2SectionActions:SetPoint("RIGHT", header, "RIGHT", -10 - (tonumber(entry._msuf2ColorSwatchReserve) or 0), 0)
+                end
+                local right = 16 + swatchReserve + actions
+                local left = math.max(180, math.min(330, math.floor(headerW * 0.34)))
+                local room = headerW - left - right
+                local summary = entry._msuf2UXSummary
+                summary:ClearAllPoints()
+                summary:SetPoint("LEFT", header, "LEFT", left, 0)
+                summary:SetWidth(math.max(1, room))
+                local showSummary = not entry.open and room >= 110 and (summary:GetText() or "") ~= ""
+                summary:SetShown(showSummary)
+                hint:Hide()
+                for _, badge in ipairs(entry._msuf2Badges or {}) do badge:Hide() end
+                label:ClearAllPoints()
+                label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
+                label:SetPoint("RIGHT", header, "LEFT", showSummary and (left - 16) or math.max(80, headerW - right), 0)
+                return
+            end
             if not entry._msuf2ManualHintLayout then
                 local badges = entry._msuf2Badges
                 if badges and #badges > 0 then
@@ -837,12 +890,14 @@ function W.PageBuilder(ctx, opts)
             headerBg._msuf2TextureMode = "solid"
             headerBg:SetColorTexture(color[1], color[2], color[3], alpha)
         end
+        local PaintHeaderBorder = W.CreateAccordionBorder(header)
         local headerHoverColor = { 0, 0, 0, 1 }
         local function RefreshHeaderTone(hover)
+            PaintHeaderBorder(entry.open, hover)
             -- SavedVariables may apply the selected accent after Options code
             -- has loaded. Resolve live tokens on every interaction transition
             -- instead of repainting a header from a stale Midnight snapshot.
-            local liveSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
+            local liveSurface = ThemeColor("coreSurface", T.colors.panel2)
             local liveRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
             if headerOpenHighlight and headerOpenHighlight.SetColors then
                 local activeBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
@@ -863,16 +918,16 @@ function W.PageBuilder(ctx, opts)
                 T.ApplyCollapseVisual(arrow, nil, entry.open)
             end
             local base = entry._msuf2HeaderBaseColor or liveSurface
-            local baseAlpha = entry._msuf2HeaderBaseAlpha or (entry.open and 0.40 or 0.34)
+            local baseAlpha = entry._msuf2HeaderBaseAlpha or (entry.open and 0.64 or 0.58)
             if hover and entry._msuf2HeaderBaseColor then
                 headerHoverColor[1] = min((base[1] or 0) * 1.16, 1)
                 headerHoverColor[2] = min((base[2] or 0) * 1.16, 1)
                 headerHoverColor[3] = min((base[3] or 0) * 1.16, 1)
                 SetHeaderSolid(headerHoverColor, max(baseAlpha, 0.42))
             elseif entry.open then
-                SetHeaderSolid(base, hover and 0.48 or baseAlpha)
+                SetHeaderSolid(hover and liveRaised or base, baseAlpha)
             elseif hover then
-                SetHeaderSolid(liveRaised, 0.42)
+                SetHeaderSolid(liveRaised, 0.78)
             else
                 SetHeaderSolid(base, baseAlpha)
             end
@@ -1528,6 +1583,8 @@ local function AddThreeDotShortcutTextures(shortcut, colors)
     end
     shortcut._msuf2ThreeDotTextures = dots
 end
+
+W.StyleSectionActionButton = function(button) AddThreeDotShortcutTextures(button, LAYER_SHORTCUT_DOTS) end
 
 local function ResolveContextColorOption(value, fallback)
     if type(value) == "function" then value = value() end
@@ -2600,6 +2657,58 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     RegisterSearchObject(btn, label, "toggle", { anchor = side ~= "HIDDEN" and labelFS or btn })
     return btn
 end
+-- A section's master switch belongs to its always-visible header. Reuse the
+-- same widget when lazy content builds, preserving the exact binding identity.
+function W.SectionSwitch(section, label, displayLabel)
+    local entry = section and section._msuf2CollapsibleEntry
+    if not (entry and entry.header) then return W.SwitchAt(section, label, 16, -16) end
+    if entry.featureSwitch then return entry.featureSwitch end
+    local button = W.SwitchAt(entry.header, label, 0, 0, 0, "HIDDEN")
+    button:ClearAllPoints()
+    button:SetPoint("RIGHT", entry.header, "RIGHT", -14, 0)
+    button:SetFrameLevel(entry.header:GetFrameLevel() + 3)
+    local state = T.Font(entry.header, "GameFontHighlightSmall", "", T.colors.text, "caption")
+    state:SetPoint("RIGHT", button, "LEFT", -8, 0)
+    local setChecked = button.SetChecked
+    button.SetChecked = function(self, checked)
+        setChecked(self, checked)
+        state:SetText(Tr(displayLabel or "Enable"))
+    end
+    button:SetChecked(false)
+    entry.featureSwitch = button
+    entry._msuf2FeatureSwitchReserve = 112
+    if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
+    if M.AddTooltip then M.AddTooltip(button, label, nil, { hook = true }) end
+    return button
+end
+-- Second view of the same bound setting. Forward clicks through the original
+-- binding so combat checks, history and apply ownership remain centralized.
+function W.SectionSwitchContent(owner, parent, label, x, y, labelWidth)
+    local existing = rawget(owner, "_msuf2ContentSwitch")
+    if existing then return existing end
+    local control = W.SwitchAt(parent, label, x, y, labelWidth or 0, labelWidth and "RIGHT" or "HIDDEN")
+    control._msuf2UnitFrameGateAlwaysEnabled = owner._msuf2UnitFrameGateAlwaysEnabled == true
+    control._msuf2GroupFrameGateAlwaysEnabled = owner._msuf2GroupFrameGateAlwaysEnabled == true
+    owner._msuf2ContentSwitch = control
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(control, owner) end
+    local setChecked = owner.SetChecked
+    owner.SetChecked = function(self, checked)
+        setChecked(self, checked)
+        control:SetChecked(checked)
+    end
+    control:SetChecked(owner:GetChecked())
+    control:SetScript("OnClick", function(self)
+        if owner.IsEnabled and not owner:IsEnabled() then
+            self:SetChecked(owner:GetChecked())
+            return
+        end
+        local click = owner:GetScript("OnClick")
+        if click then click(owner) end
+        self:SetChecked(owner:GetChecked())
+    end)
+    if M.AddTooltip then M.AddTooltip(control, label, nil, { hook = true }) end
+    return control
+end
 local function ScopeButtonWidth(item)
     if item and item.width then return item.width end
     local value = item and item.value
@@ -2823,7 +2932,9 @@ local function ApplyEnabledVisuals(control, enabled)
     SetEnabledState(control, enabled)
     if control.SetAlpha and control._msuf2EnabledAlphaState ~= enabled then
         control._msuf2EnabledAlphaState = enabled
-        control:SetAlpha(enabled and 1 or 0.60)
+        -- Labels already receive the disabled text token. Fading their parent
+        -- again made gated settings unreadable, especially inside segments.
+        control:SetAlpha(1)
     end
     SetTextEnabledColor(control._msuf2Title, enabled)
     SetTextEnabledColor(control._msuf2Label, enabled)
@@ -2839,7 +2950,7 @@ local function ApplyEnabledVisuals(control, enabled)
         SetEnabledState(edit, enabled)
         if edit.SetAlpha and edit._msuf2EnabledAlphaState ~= enabled then
             edit._msuf2EnabledAlphaState = enabled
-            edit:SetAlpha(enabled and 1 or 0.60)
+            edit:SetAlpha(enabled and 1 or 0.85)
         end
     end
     if control._msuf2StepButtons then
@@ -2848,7 +2959,7 @@ local function ApplyEnabledVisuals(control, enabled)
             SetEnabledState(btn, enabled)
             if btn.SetAlpha and btn._msuf2EnabledAlphaState ~= enabled then
                 btn._msuf2EnabledAlphaState = enabled
-                btn:SetAlpha(enabled and 1 or 0.60)
+                btn:SetAlpha(enabled and 1 or 0.85)
             end
         end
     end
@@ -2858,7 +2969,7 @@ local function ApplyEnabledVisuals(control, enabled)
             SetEnabledState(btn, enabled)
             if btn.SetAlpha and btn._msuf2EnabledAlphaState ~= enabled then
                 btn._msuf2EnabledAlphaState = enabled
-                btn:SetAlpha(enabled and 1 or 0.60)
+                btn:SetAlpha(enabled and 1 or 0.85)
             end
         end
     end
