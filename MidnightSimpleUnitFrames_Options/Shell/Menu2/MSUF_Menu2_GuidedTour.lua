@@ -494,7 +494,7 @@ local function CooldownAnchorEnabled()
     end
     local getter = _G.MSUF_IsCooldownAnchorEnabled
     if type(getter) == "function" then return getter(general) == true end
-    return type(_G.C_CooldownViewer) == "table" and type(general) == "table" and general.anchorToCooldown == true or false
+    return type(general) == "table" and general.anchorToCooldown == true or false
 end
 local function CooldownConsentDecision()
     local providerId = AutomaticCooldownProvider()
@@ -502,15 +502,7 @@ local function CooldownConsentDecision()
     if not providerId or type(getter) ~= "function" then return nil end
     return getter(providerId)
 end
-local function CooldownAnchorSupported()
-    local supported = _G.MSUF_IsCooldownAnchorSupported
-    if type(supported) == "function" then return supported() == true end
-    return type(_G.C_CooldownViewer) == "table"
-end
 local function CooldownAnchorDecision()
-    -- Nothing to decide where no cooldown anchor can exist: the guide must not
-    -- gate placement behind a choice the client cannot honour.
-    if not CooldownAnchorSupported() then return "independent" end
     local value = Preference(COOLDOWN_ANCHOR_PREFERENCE)
     if VALID_COOLDOWN_ANCHOR_DECISION[value] then return value end
     if CooldownConsentDecision() ~= nil then
@@ -3137,21 +3129,17 @@ local function BuildEditModePage(ctx, T, W)
     local b = W.PageBuilder(ctx)
     Header(b, "Move vs size", "Drag Player to move it. Click Player to open the popup for Width and Height.")
 
-    local cooldownSupported = CooldownAnchorSupported()
-    local decisionCard = b:Section("", cooldownSupported and 146 or 62)
+    local decisionCard = b:Section("", 146)
     if decisionCard.title then decisionCard.title:SetText("") end
-    local decision
-    if cooldownSupported then
-        local decisionValues = {
-            { value = "cooldown", text = Tr("Follow Blizzard's Essential Cooldowns") },
-            { value = "independent", text = Tr("Independent placement") },
-        }
-        decision = W.Segment(decisionCard, Tr("Should all Unitframes follow the Cooldown Manager?"), decisionValues, max(240, b.width - 32))
-        RegisterSpecialClickTargets("edit_mode", "anchor", decision.buttons)
-        if type(W.MoveWidget) == "function" then W.MoveWidget(decision, decisionCard, 16, -18, max(240, b.width - 32), "LEFT") end
-    end
+    local decisionValues = {
+        { value = "cooldown", text = Tr("Follow Blizzard's Essential Cooldowns") },
+        { value = "independent", text = Tr("Independent placement") },
+    }
+    local decision = W.Segment(decisionCard, Tr("Should all Unitframes follow the Cooldown Manager?"), decisionValues, max(240, b.width - 32))
+    RegisterSpecialClickTargets("edit_mode", "anchor", decision.buttons)
+    if type(W.MoveWidget) == "function" then W.MoveWidget(decision, decisionCard, 16, -18, max(240, b.width - 32), "LEFT") end
     local decisionCopy = T.Font(decisionCard, "GameFontHighlightSmall", "", T.colors.muted)
-    decisionCopy:SetPoint("TOPLEFT", decisionCard, "TOPLEFT", 16, cooldownSupported and -88 or -20)
+    decisionCopy:SetPoint("TOPLEFT", decisionCard, "TOPLEFT", 16, -88)
     SetWrapped(decisionCopy, b.width - 32)
 
     InfoCard(b, T, "Two different actions", "DRAG = move the whole frame. CLICK = open its size and detail popup. Arrow keys nudge; Undo stays available.", "uf_player", 82)
@@ -3178,20 +3166,16 @@ local function BuildEditModePage(ctx, T, W)
         local anchorDecision = CooldownAnchorDecision()
         local placementComplete = EditModePlacementComplete()
         local movementComplete = EditModeMovementComplete()
-        if decision then
-            decision:SetValue(anchorDecision)
-            for i = 1, #(decision.buttons or {}) do
-                SetButtonEnabled(decision.buttons[i], true)
-            end
-            if decision._msuf2Title and decision._msuf2Title.SetText then
-                decision._msuf2Title:SetText(automaticProviderLabel
-                    and M.Format("Cooldown Manager anchoring (%s)", automaticProviderLabel)
-                    or Tr("Should all Unitframes follow the Cooldown Manager?"))
-            end
+        decision:SetValue(anchorDecision)
+        for i = 1, #(decision.buttons or {}) do
+            SetButtonEnabled(decision.buttons[i], true)
         end
-        if not decision then
-            decisionCopy:SetText(Tr("This client has no Cooldown Manager. Unit Frames use their own anchor."))
-        elseif anchorDecision == "cooldown" then
+        if decision._msuf2Title and decision._msuf2Title.SetText then
+            decision._msuf2Title:SetText(automaticProviderLabel
+                and M.Format("Cooldown Manager anchoring (%s)", automaticProviderLabel)
+                or Tr("Should all Unitframes follow the Cooldown Manager?"))
+        end
+        if anchorDecision == "cooldown" then
             decisionCopy:SetText(Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored Unitframe layout follows."))
         elseif anchorDecision == "independent" then
             decisionCopy:SetText(Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them."))
@@ -3218,7 +3202,7 @@ local function BuildEditModePage(ctx, T, W)
         SetButtonText(button, active and "Exit and keep changes" or "Open MSUF Edit Mode")
         SetButtonEnabled(button, not status.combatLocked and (active or anchorDecision ~= nil))
     end
-    for i = 1, #((decision and decision.buttons) or {}) do
+    for i = 1, #(decision.buttons or {}) do
         local choice = decision.buttons[i]
         choice:SetScript("OnClick", function(self)
             if SetGuidedCooldownAnchorDecision(self._msuf2Value) then
@@ -3227,7 +3211,7 @@ local function BuildEditModePage(ctx, T, W)
             end
         end)
     end
-    if decision and type(M.RegisterSearchWidget) == "function" then
+    if type(M.RegisterSearchWidget) == "function" then
         M.RegisterSearchWidget(decision, {
             controlId = "menu2.guided_setup.cooldown_anchor_decision",
             identityKey = "guided_setup.cooldown_anchor_decision",

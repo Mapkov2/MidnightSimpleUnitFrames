@@ -57,12 +57,6 @@ local ellesmereCooldownActiveSource
 local automaticCooldownProviderId
 local automaticCooldownProviderLabel
 local automaticCooldownProviderResolved = false
---- Whether this client can host an Essential Cooldown anchor at all.
---- Blizzard's namespace exists per client build and addons cannot be installed
---- mid-session, so the answer is fixed once resolved. Keeping it as a plain
---- upvalue leaves every anchor consumer at a single boolean read and adds no
---- probing to the cold anchor path.
-local cooldownAnchorSupported = type(_G.C_CooldownViewer) == "table"
 local InCombat
 local cooldownConsentPromptProviderId
 local cooldownConsentPromptAfterCombat = false
@@ -127,9 +121,6 @@ local function RefreshAutomaticCooldownProvider(notify)
     automaticCooldownProviderResolved = true
     automaticCooldownProviderId = providerId
     automaticCooldownProviderLabel = providerLabel
-    -- A supported layout provider can own the anchor without Blizzard's
-    -- Cooldown Manager, so a detected provider also establishes support.
-    if providerId ~= nil then cooldownAnchorSupported = true end
     if changed then
         cooldownConsentPromptProviderId = nil
         if type(_G.StaticPopup_Hide) == "function" then
@@ -149,15 +140,8 @@ function MSUF.GetAutomaticCooldownAnchorProvider()
     return automaticCooldownProviderId, automaticCooldownProviderLabel
 end
 
---- Clients without a Cooldown Manager keep the stored preference untouched so
---- a profile stays portable back to a client that has one, but every consumer
---- reads it as off. Nothing is written, nothing is migrated.
-function MSUF.IsCooldownAnchorSupported()
-    return cooldownAnchorSupported
-end
-
 function MSUF.IsCooldownAnchorEnabled(general)
-    return cooldownAnchorSupported and type(general) == "table" and general.anchorToCooldown == true or false
+    return type(general) == "table" and general.anchorToCooldown == true or false
 end
 
 local function CooldownConsentDecisions(create)
@@ -312,10 +296,6 @@ end
 
 _G.MSUF_IsCooldownAnchorEnabled = function(general)
     return MSUF.IsCooldownAnchorEnabled(general)
-end
-
-_G.MSUF_IsCooldownAnchorSupported = function()
-    return MSUF.IsCooldownAnchorSupported()
 end
 
 _G.MSUF_GetCooldownAnchorConsentDecision = function(providerId)
