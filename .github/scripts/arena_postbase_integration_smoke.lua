@@ -120,6 +120,11 @@ AssertList(previewVisited, arenaPreview, "Arena preview cast-target color refres
 local globalBars = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua")
 local dispelUnits = assert(globalBars:match("local UNITFRAME_DISPEL_AURA_UNITS = %{[^\n]+%}"),
     "missing UnitFrame Dispel sensor unit declaration")
+-- The scope resolver reads the client-supported subset through a cached
+-- helper, so the harness has to carry that helper too.
+local supportedUnits = Slice(globalBars,
+    "local supportedUnitFrameAuraUnits",
+    "local function UnitFrameAuraScopeUnits")
 local scopeUnits = Slice(globalBars,
     "local function UnitFrameAuraScopeUnits",
     "local function UnitFrameAuraSensorMissingForScope")
@@ -134,7 +139,7 @@ local MSUF = { MSUF_Auras3 = { MenuModel = {
     SetUnitEnabled = function(unit, value) enabled[unit] = value; writes[#writes + 1] = unit end,
 } } }
 local function CurrentBarsScope() return scope end
-]] .. dispelUnits .. "\n" .. scopeUnits .. ensureSensors .. [[
+]] .. dispelUnits .. "\n" .. supportedUnits .. scopeUnits .. ensureSensors .. [[
 return function(nextScope)
     scope, enabled, writes = nextScope, {}, {}
     EnsureUnitFrameAuraSensorsForScope()
