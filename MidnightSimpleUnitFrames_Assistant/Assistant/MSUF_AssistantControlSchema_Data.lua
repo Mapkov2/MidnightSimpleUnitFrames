@@ -5,7 +5,7 @@ MSUF.Assistant = MSUF.Assistant or {}
 local Data = { version = 3 }
 Data.columns = { 'semanticId', 'controlId', 'familyId', 'memberKey', 'pageKey', 'controlPath', 'classification', 'kind', 'settingKey', 'actionKey', 'navigationKey', 'safety', 'valueKind', 'min', 'max', 'step', 'percentIsValue', 'confirmRequired', 'identityStable', 'label', 'help', 'values', 'actionFixedArgs', 'actionInputArg', 'actionInputKind', 'actionInputDomain', 'storageUnit', 'displayUnit', 'displayScale', 'states', 'contexts' }
 Data.collectionStates = {
-    { 'base', 2571 },
+    { 'base', 2572 },
     { 'unit_player_buff_layout', 246 },
     { 'unit_player_buff_behavior', 240 },
     { 'unit_player_buff_filters', 252 },
@@ -204,7 +204,7 @@ Data.collectionStates = {
     { 'compat_buff_appearance', 16 },
     { 'compat_debuff_appearance', 14 },
 }
-Data.collectionUnionControls = 3726
+Data.collectionUnionControls = 3727
 Data.contexts = {
     { 'WARRIOR-71', 'WARRIOR', 1, 71, 'Arms', 'enUS' },
     { 'WARRIOR-72', 'WARRIOR', 2, 72, 'Fury', 'enUS' },
@@ -2281,6 +2281,7 @@ Data.records = {
     { 'setting:gf_layout/group/layout/field/detachedpowerbartextonbar@gf_layout/group/layout/field/detachedpowerbartextonbar', 'menu2.gf_layout.group.field.detachedpowerbartextonbar', '', '', 'gf_layout', 'group/layout/field/detachedpowerbartextonbar', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Text on detached bar', 'Turns Text on detached bar on or off. Available on the Frames > Party/Raid Frames page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/detachedpowerbarwidth@gf_layout/group/layout/field/detachedpowerbarwidth', 'menu2.gf_layout.group.field.detachedpowerbarwidth', '', '', 'gf_layout', 'group/layout/field/detachedpowerbarwidth', 'setting', 'slider', '', '', '', 'direct', 'number', '20', '800', '1', '0', '0', '1', 'Detached width', 'Adjusts Detached width. Available on the Frames > Party/Raid Frames page. Allowed range: 20 to 800 in increments of 1.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/embedpowerbarintohealth@gf_layout/group/layout/field/embedpowerbarintohealth', 'menu2.gf_layout.group.field.embedpowerbarintohealth', '', '', 'gf_layout', 'group/layout/field/embedpowerbarintohealth', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Embed into health', 'Turns Embed into health on or off. Available on the Frames > Party/Raid Frames page.', '', '', '', '', '', '', '', '', 'base', '*' },
+    { 'setting:gf_layout/group/layout/field/enabled@gf_layout/group/layout/field/enabled', 'menu2.gf_layout.group.field.enabled', '', '', 'gf_layout', 'group/layout/field/enabled', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Enable', 'Turns Enable on or off. Available on the Frames > Party/Raid Frames page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/framescaleenabled@gf_layout/group/layout/field/framescaleenabled', 'menu2.gf_layout.group.field.framescaleenabled', '', '', 'gf_layout', 'group/layout/field/framescaleenabled', 'setting', 'toggle', '', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Frame scaling', 'Turns Frame scaling on or off. Available on the Frames > Party/Raid Frames page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/framescalemanual@gf_layout/group/layout/field/framescalemanual', 'menu2.gf_layout.group.field.framescalemanual', '', '', 'gf_layout', 'group/layout/field/framescalemanual', 'setting', 'slider', '', '', '', 'direct', 'number', '50', '150', '5', '0', '0', '1', 'Manual Frame Scale', 'Adjusts Manual Frame Scale. Available on the Frames > Party/Raid Frames page. Allowed range: 50 to 150 in increments of 5.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:gf_layout/group/layout/field/framescalemode@gf_layout/group/layout/field/framescalemode', 'menu2.gf_layout.group.field.framescalemode', '', '', 'gf_layout', 'group/layout/field/framescalemode', 'setting', 'segment', '', '', '', 'direct', 'enum', '', '', '', '0', '0', '1', 'Scale Mode', 'Selects Scale Mode. Available on the Frames > Party/Raid Frames page. Available choices: Auto, Manual.', 's:auto\030Auto\031s:manual\030Manual', '', '', '', '', '', '', '', 'base', '*' },
