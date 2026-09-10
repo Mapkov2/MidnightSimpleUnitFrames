@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "A19B0FCF02761ADB4C337F8ECBCAF6F44FA9EC80B400271167721280C3CC448A"
+Search.StaticIndexSourceSha256 = "B54F11101F8F7F18AC032E475EB56FAFAD2016AB58EDBEB885FBDE49846FC807"
 Search.StaticIndexRecordCount = 2969
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
@@ -121,7 +121,6 @@ classpower	Rogue - Combo Points	dropdown	menu.classPowerPreviewResource		Advance
 classpower	Second Player HP bar	toggle	bars.playerHPBarEnabled		Player > Hp	second player hp bar	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Eenabled	classpower_player_hp			second player hp bar player hp classpower advanced player hp enabled classpower toggle bars playerhpbarenabled
 classpower	Separator	slider	bars.classPowerTickWidth		Style > Pips	separator	idclasspowermenu2%2Eclasspower%2Eadvanced%2Estyle%2Epips%2Eseparator	classpower_visuals			separator style pips classpower advanced style pips separator classpower slider bars classpowertickwidth
 classpower	Shape alignment	segment	bars.classPowerShapeAlign		Layout > Shape	shape alignment	idclasspowermenu2%2Eclasspower%2Eadvanced%2Elayout%2Eshape%2Ealignment	classpower_display			shape alignment layout shape classpower advanced layout shape alignment classpower segment bars classpowershapealign
-classpower	Show Arcane Surge / Soul (Arcane)	toggle	bars.showArcaneSoul		Behavior > Arcane	show arcane surge soul arcane	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ebehavior%2Earcane%2Esoul	classpower_behavior			show arcane surge soul arcane behavior arcane classpower advanced behavior arcane soul classpower toggle bars showarcanesoul
 classpower	Show Ebon Might duration (Aug)	toggle	bars.showEbonMight		Advanced > Behavior	show ebon might duration aug	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ebehavior%2Eebon	classpower_behavior			show ebon might duration aug advanced behavior classpower advanced behavior ebon classpower toggle bars showebonmight
 classpower	Show HP text	toggle	bars.playerHPBarTextEnabled		Hp > Text	show hp text	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Etext%2Eenabled	classpower_player_hp			show hp text hp text classpower advanced player hp text enabled classpower toggle bars playerhpbartextenabled
 classpower	Show Insanity bar (Shadow)	toggle	bars.showShadowMana		Advanced > Behavior	show insanity bar shadow	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ebehavior%2Eshadow	classpower_behavior			show insanity bar shadow advanced behavior classpower advanced behavior shadow classpower toggle bars showshadowmana
@@ -451,6 +450,7 @@ gf_layout	Detached height	slider			Layout > Field	detached height	idgf_layoutm
 gf_layout	Detached layer	slider			Layout > Field	detached layer	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbarframeleveloffset	power			detached layer layout field group layout field detachedpowerbarframeleveloffset gf layout slider
 gf_layout	Detached width	slider			Layout > Field	detached width	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbarwidth	power			detached width layout field group layout field detachedpowerbarwidth gf layout slider
 gf_layout	Embed into health	toggle			Layout > Field	embed into health	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eembedpowerbarintohealth	power			embed into health layout field group layout field embedpowerbarintohealth gf layout toggle
+gf_layout	Enable	toggle			Layout > Field	enable	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eenabled	general			enable layout field group layout field enabled gf layout toggle
 gf_layout	Fade frame out of combat	toggle			Layout > Field	fade frame out of combat	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eoocfadeenabled	transparency			fade frame out of combat layout field group layout field oocfadeenabled gf layout toggle
 gf_layout	Fade offline members	toggle			Layout > Field	fade offline members	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Eofflinefadeenabled	range			fade offline members layout field group layout field offlinefadeenabled gf layout toggle
 gf_layout	Fill border into frame gap	toggle			Layout > Portrait	fill border into frame gap	idgf_layoutmenu2%2Egf_layout%2Egroup%2Eportrait%2Eportraitfillborder	portrait			fill border into frame gap layout portrait group layout portrait portraitfillborder gf layout toggle
