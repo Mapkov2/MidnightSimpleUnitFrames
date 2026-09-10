@@ -1231,7 +1231,7 @@ end
 local function RefreshHandleSelection(box)
     if not box then return end
     local selected = box._selectedHandle
-    local guidesOn = not (M.gfPreviewLayerVisible and M.gfPreviewLayerVisible.guides == false)
+    local guidesOn = M.gfPreviewLayerVisible and M.gfPreviewLayerVisible.guides == true
     if selected and selected.IsShown and not selected:IsShown() then
         selected = nil
         box._selectedHandle = nil
@@ -1524,7 +1524,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     layersTitle:SetPoint("LEFT", layers, "LEFT", 10, 0)
     box._msuf2LayerRailHeader = layersTitle
     local layerDefaults = {
-        guides = true,
+        guides = false,
         -- The configured frame outline is rendered independently. Bounds is
         -- only the optional cyan measurement guide and therefore starts off.
         bounds = false,

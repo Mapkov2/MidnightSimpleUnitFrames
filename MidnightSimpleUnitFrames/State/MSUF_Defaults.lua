@@ -1060,7 +1060,6 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     SetDefault(db.bars, "altManaOffsetX", 0)
     SetDefault(db.bars, "showGuardianIronfur", false)
     SetDefault(db.bars, "showSweepingStrikes", false)
-    SetDefault(db.bars, "showArcaneSoul", false)
     SetDefault(db.bars, "guardianIronfurShowHashLines", true)
     -- Performance baseline: native interpolation is an
     -- explicit visual option, never an implicit cost on a fresh profile.
@@ -1129,11 +1128,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         SetDefault(g, "showGameMenuButton", true)
         SetDefault(g, "previewDragHintAnimationEnabled", true)
         g._msufPreviewDragHintExperienced = false
-        --- Factory profiles always teach preview interaction with the Guides
-        --- layer visible. Both toggles remain ordinary persisted user choices
-        --- after the factory profile has been created.
-        g.unitPreviewGuidesEnabled = true
-        g.classPowerPreviewGuidesEnabled = true
+        -- Start previews clean; the Guides layer is an explicit user choice.
+        g.unitPreviewGuidesEnabled = false
+        g.classPowerPreviewGuidesEnabled = false
         --- Factory Edit Mode baseline: grid on at 36px with snap, backdrop
         --- dimmed to 55%. The compact snapshot predates these tuned values,
         --- so they are set unconditionally over its stale ones.
@@ -2647,13 +2644,12 @@ if (tonumber(MSUF_DB._msufDefaultsRevision) or 0) < MSUF_DEFAULTS_NAVIGATION_ICO
 elseif g.showNavigationIcons == nil then
     g.showNavigationIcons = true
 end
---- Guides are the default teaching state for the Class Resources preview.
---- Revision 9 turns them on once for existing profiles; after that, an
---- explicit user toggle to false remains authoritative.
-if (tonumber(MSUF_DB._msufDefaultsRevision) or 0) < MSUF_DEFAULTS_CLASS_POWER_PREVIEW_GUIDES_REVISION then
-    g.classPowerPreviewGuidesEnabled = true
-elseif g.classPowerPreviewGuidesEnabled == nil then
-    g.classPowerPreviewGuidesEnabled = true
+-- Keep explicit guide choices, including profiles created before this default.
+if g.classPowerPreviewGuidesEnabled == nil then
+    g.classPowerPreviewGuidesEnabled = false
+end
+if g.unitPreviewGuidesEnabled == nil then
+    g.unitPreviewGuidesEnabled = false
 end
 if g.showGameMenuButton == nil then
     g.showGameMenuButton = true
@@ -2777,6 +2773,23 @@ end
     if g.powerLossColorB == nil then g.powerLossColorB = 1 end
     --- Bars: Aggro highlight overlay (Target/Focus/Boss)
     --- Aggro indicator: re-uses the HP outline border as an orange warning when YOU have aggro (target/focus/boss).
+    --- Bars offers "Aggro border" with dropdown default 1 (On), the Assistant
+    --- manifest declares 1, and group frames default aggroEnabled = true. The
+    --- compiled unitframe fallback, however, only consulted the retired
+    --- indicator key below - which this very block coerces to "off" for every
+    --- profile that never carried it. A profile without an explicit choice
+    --- therefore read "On" in the menu while the border stayed dark, and only
+    --- an Off/On round trip through the dropdown repaired it. Seed the real key
+    --- once, before that coercion, so stored state and menu agree. A profile
+    --- that carries the retired key keeps the decision it recorded.
+    --- aggroOutlineMode is shared with the group frames, whose own default is
+    --- on. Never seed 0 from the coerced "off" below: that would silently kill
+    --- a working group aggro border. Only enableAggroHighlight == false is a
+    --- real recorded off.
+    if g.aggroOutlineMode == nil then
+        g.aggroOutlineMode = (g.aggroIndicatorMode == "border"
+            or g.enableAggroHighlight ~= false) and 1 or 0
+    end
     if g.aggroIndicatorMode == nil then
         if g.enableAggroHighlight == true then
             g.aggroIndicatorMode = "border" --- legacy migrate

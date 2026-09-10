@@ -1243,6 +1243,14 @@ end
 local UnitPage = M.UnitPage or {}
 M.UnitPage = UnitPage
 M.Assign(UnitPage, {
+    SectionFields = {
+        portrait = table.concat(COPY_PORTRAIT_FIELDS, " "),
+        power_bar = table.concat(COPY_POWER_BAR_FIELDS, " "),
+        text = table.concat(COPY_TEXT_FIELDS, " "),
+        transparency = table.concat(COPY_TRANSPARENCY_FIELDS, " "),
+        load_conditions = table.concat(COPY_LOAD_CONDITION_FIELDS, " "),
+        texture_layer = table.concat(COPY_TEXLAYER_FIELDS, " "),
+    },
     UNIT_PAGES = UNIT_PAGES,
     POWER_UNITS = POWER_UNITS,
     CASTBAR_FIELDS = CASTBAR_FIELDS,

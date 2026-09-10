@@ -764,7 +764,54 @@ local function SetSectionBadgesAndStatus(sec, specs, status)
 end
 local TrackSectionRefresh = M.TrackCollapsibleRefresh
 local ApplyScopeEnabledGate
+local function AttachGroupSectionUX(ctx)
+    local function Number(n, fallback) return tostring(floor((tonumber(n) or fallback or 0) + 0.5)) end
+    local function Word(v, fallback)
+        local text = tostring(v or fallback or "")
+        return M.Tr(text:sub(1, 1):upper() .. text:sub(2):lower())
+    end
+    local sections = {
+        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill", summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
+        portrait = { prefixes = "portrait", noCopy = true },
+        text = { },
+        power = { fields = "powerBarEnabled powerHeight powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth", prefixes = "detachedPower" },
+        range = { fields = "rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha", summary = function(c) return c.rangeFadeEnabled and (Number((c.rangeFadeAlpha or 0.4) * 100) .. "%") or "" end },
+        transparency = { fields = "hpBarAlpha hpBgAlpha oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha alphaExcludeTextPortrait alphaExcludePredictionBars", summary = function(c) return Number((c.hpBarAlpha or 1) * 100) .. "%" end },
+        dispel = { prefixes = "dispelOverlay" },
+        dispelSymbol = { prefixes = "dispelSymbol" },
+        dstripe = { prefixes = "debuffStripe" },
+        layout_advanced = { fields = "width height spacing growth unitsPerColumn maxColumns", summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
+        sorting = { fields = "sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid autoTanks preserveRaidGroups", summary = function(c) return Word(c.sortMode, "GROUP") .. (c.playerFirstInRole and (" / " .. M.Tr("Player first")) or "") end },
+        scaling = { prefixes = "frameScale", fields = "scaleAt10 scaleAt20 scaleAt25 scaleOver25" },
+        anchor = { fields = "anchorToFrame anchorPoint x y", noCopy = true },
+        auras = { summary = function(c)
+            local a = c.auras or {}
+            if a.enabled == false then return M.Tr("Disabled") end
+            return M.Tr("Buffs") .. " " .. Number(a.buff and a.buff.max, 6) .. " / " .. M.Tr("Debuffs") .. " " .. Number(a.debuff and a.debuff.max, 6)
+        end },
+    }
+    local targets = {}
+    for _, scope in ipairs(SCOPE_VALUES) do targets[#targets + 1] = { value = scope.value, text = ScopeShortLabel(scope.value) } end
+    Shared.AttachSectionUX(ctx, {
+        sections = sections, scope = CurrentScope, conf = Conf, label = ScopeShortLabel, targets = targets,
+        defaults = function(scope)
+            local create = MSUF.MSUF_CreateFactoryDefaultProfile or _G.MSUF_CreateFactoryDefaultProfile
+            local profile = create and create()
+            local defaults = profile and profile["gf_" .. scope]
+            if defaults then return defaults end
+            local gf = GF()
+            if not (gf and gf.GetDefault) then return nil end
+            defaults = {}
+            for _, spec in pairs(sections) do
+                for _, key in ipairs(Shared.SectionFieldKeys(spec, Conf(scope), {})) do defaults[key] = gf.GetDefault(scope, key) end
+            end
+            return defaults
+        end,
+        apply = function(scope) QueueGF(scope, "rebuild"); RefreshGFPreview() end,
+    })
+end
 local function FinalizeScopePage(ctx, builder)
+    if ctx.key ~= "gf_priority" then AttachGroupSectionUX(ctx) end
     if type(ApplyScopeEnabledGate) == "function" then M.TrackRefresh(ctx, function() ApplyScopeEnabledGate(ctx) end) end
     if ctx and ctx.SetContentHeight and builder then ctx:SetContentHeight(math.abs(builder.y) + 42) end
 end
@@ -833,16 +880,16 @@ local function ScopeSection(ctx, builder, opts)
     end
     local scopeMetrics = not priorityMode and W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(scopeValues, {
         width = pageW,
-        label = "Editing:",
-        labelWidth = 64,
+        label = "",
+        labelWidth = 0,
+        startX = 16,
         centerY = scopeCenterY,
     })
     local noteY = min(-50, pageBottomY - 10)
     local scopeBottomY = (scopeMetrics and scopeMetrics.bottomY) or -72
-    local providerSummaryY = scopeBottomY - 8
     local h = priorityMode
         and max(70, math.abs(noteY) + 20)
-        or max(108, math.abs(providerSummaryY) + 24)
+        or max(92, math.abs(scopeBottomY) + 14)
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
@@ -902,16 +949,15 @@ local function ScopeSection(ctx, builder, opts)
     local scopeBar = W.ScopeOverrideBar(ctx, command, {
         values = scopeValues,
         width = pageW,
-        label = "Editing:",
-        labelWidth = 64,
+        label = "",
+        labelWidth = 0,
+        startX = 16,
         centerY = scopeCenterY,
         getValue = CurrentScope,
         setValue = SelectScope,
     })
     RegisterGroupControl(scopeBar, ctx, "scope.selector", "Editing", "segment", "ephemeral")
     for i = 1, #SCOPE_VALUES do scopeBtns[SCOPE_VALUES[i].value] = scopeBar and scopeBar.buttons and scopeBar.buttons[i] end
-    local providerSummary = W.Text(sec, "", 16, providerSummaryY, pageW - 32, T.colors.muted)
-    if providerSummary and providerSummary.SetJustifyH then providerSummary:SetJustifyH("LEFT") end
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
     local copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
         controlDomain = "group",
@@ -975,15 +1021,7 @@ local function ScopeSection(ctx, builder, opts)
             local info = SCOPE_VALUES[i]
             if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
         end
-        if providerSummary then
-            if M.SupportsFrameScope and not M.SupportsFrameScope("mythicraid") then
-                providerSummary:SetText(M.Format("Frame providers | Party: %s | Raid: %s",
-                    FrameProviderShortLabel("party"), FrameProviderShortLabel("raid")))
-            else
-                providerSummary:SetText(M.Format("Frame providers | Party: %s | Raid: %s | Mythic Raid: %s",
-                    FrameProviderShortLabel("party"), FrameProviderShortLabel("raid"), FrameProviderShortLabel("mythicraid")))
-            end
-        end
+
     end
     M.TrackRefresh(ctx, RefreshTop)
 end
@@ -1057,6 +1095,36 @@ end
 --- Party portrait workspace. Bindings are intentionally fixed to gf_party
 --- rather than CurrentScope: the shell is hidden outside Party and Raid/Mythic
 --- never receive portrait settings through the dynamic Group binding path.
+local function PreparePartyPortraitSwitch(ctx, sec)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local kind = "party"
+    local function SetValue(key, value)
+        Set(kind, key, value, "config")
+        RefreshContext(ctx)
+    end
+    M._msuf2LastGroupPortraitSide = M._msuf2LastGroupPortraitSide or "LEFT"
+    local portraitEnable = W.SectionSwitch(sec, "Portrait")
+    local portraitEnableMeta = GroupControlMeta(ctx, "portrait.enabled")
+    portraitEnableMeta.assistantDisposition = "compound"
+    portraitEnableMeta.assistantDispositionReason =
+        "This boolean projection toggles the Party portrait enum between OFF and the remembered LEFT or RIGHT side."
+    M.BindBoolWidget(ctx, portraitEnable,
+        function() return Val(kind, "portraitMode", "OFF") ~= "OFF" end,
+        function(value)
+            local mode = Val(kind, "portraitMode", "OFF")
+            if value then
+                SetValue("portraitMode", M._msuf2LastGroupPortraitSide)
+            else
+                if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastGroupPortraitSide = mode end
+                SetValue("portraitMode", "OFF")
+            end
+            if portraitEnable.refreshDetails then portraitEnable.refreshDetails() end
+        end,
+        portraitEnableMeta)
+    portraitEnable:SetChecked(Val(kind, "portraitMode", "OFF") ~= "OFF")
+    return portraitEnable
+end
 function GroupPage.BuildPortrait(ctx, builder)
     local kind = "party"
     local cardH = { main = 224, geometry = 440, placement = 382, border = 440, style = 330 }
@@ -1289,25 +1357,10 @@ function GroupPage.BuildPortrait(ctx, builder)
         end
         return type(ReadTab) ~= "function" or ReadTab() == tab
     end
-    M._msuf2LastGroupPortraitSide = M._msuf2LastGroupPortraitSide or "LEFT"
-    local portraitEnable = W.SwitchAt(mainCard, "Portrait", cardW - 62, -24, 0, "HIDDEN")
-    local portraitEnableMeta = PortraitMeta("enabled")
-    portraitEnableMeta.assistantDisposition = "compound"
-    portraitEnableMeta.assistantDispositionReason =
-        "This boolean projection toggles the Party portrait enum between OFF and the remembered LEFT or RIGHT side."
-    M.BindBoolWidget(ctx, portraitEnable,
-        function() return Val(kind, "portraitMode", "OFF") ~= "OFF" end,
-        function(value)
-            local mode = Val(kind, "portraitMode", "OFF")
-            if value then
-                SetValue("portraitMode", M._msuf2LastGroupPortraitSide)
-            else
-                if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastGroupPortraitSide = mode end
-                SetValue("portraitMode", "OFF")
-            end
-            RefreshPortraitControls()
-        end,
-        portraitEnableMeta)
+    local portraitEnable = PreparePartyPortraitSwitch(ctx, sec)
+    local portraitEnableContent = W.SectionSwitchContent(portraitEnable, mainCard, "Portrait", cardW - 62, -24)
+    AttachPortraitFocus(portraitEnableContent)
+    portraitEnable.refreshDetails = function() RefreshPortraitControls() end
     AttachPortraitFocus(portraitEnable)
     local side = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, cardW - 32))
     W.MoveWidget(side, mainCard, 16, -62, min(220, cardW - 32))
@@ -1387,7 +1440,7 @@ function GroupPage.BuildPortrait(ctx, builder)
         return (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0
     end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return Conf(kind) end, {
-        { enable = portraitEnable },
+        { enable = { portraitEnable, portraitEnableContent } },
         { controls = activeControls, on = Active },
         { controls = side, on = function(conf) return Placed(conf, "ATTACHED") end },
         { controls = { detachedPoint, detachedTo }, on = function(conf) return Placed(conf, "DETACHED") end },
@@ -1428,6 +1481,7 @@ end
 --- cached page. Restoring the original geometry makes scope switching cheap
 --- and keeps Raid/Mythic controls completely inaccessible.
 function GroupPage.PreparePortraitShell(ctx, section)
+    PreparePartyPortraitSwitch(ctx, section)
     local entry = section and section._msuf2CollapsibleEntry
     if not entry then return end
     entry._msufPartyPortraitHeaderHeight = entry._msufPartyPortraitHeaderHeight or entry.headerHeight
@@ -2138,11 +2192,11 @@ ApplyScopeEnabledGate = function(ctx)
     local wrapper = ctx and ctx.wrapper
     if not wrapper then return end
     local gateKey = "groupFrameEnabled"
-    if ControlGates.Apply then
-        ControlGates.Apply(wrapper, gateKey, true, { alwaysEnabledFlag = "_msuf2GroupFrameGateAlwaysEnabled" })
+    local enabled = Bool(CurrentScope(), "enabled", false)
+    if ControlGates.ApplySections then
+        ControlGates.ApplySections(ctx, gateKey, enabled, { alwaysEnabledFlag = "_msuf2GroupFrameGateAlwaysEnabled" })
         return
     end
-    local enabled = true
     if wrapper._msuf2GroupFrameGateKey == gateKey and wrapper._msuf2GroupFrameGateEnabled == enabled then return end
     wrapper._msuf2GroupFrameGateKey = gateKey
     wrapper._msuf2GroupFrameGateEnabled = enabled

@@ -5,7 +5,7 @@ MSUF.Assistant = MSUF.Assistant or {}
 local Data = { version = 3 }
 Data.columns = { 'semanticId', 'controlId', 'familyId', 'memberKey', 'pageKey', 'controlPath', 'classification', 'kind', 'settingKey', 'actionKey', 'navigationKey', 'safety', 'valueKind', 'min', 'max', 'step', 'percentIsValue', 'confirmRequired', 'identityStable', 'label', 'help', 'values', 'actionFixedArgs', 'actionInputArg', 'actionInputKind', 'actionInputDomain', 'storageUnit', 'displayUnit', 'displayScale', 'states', 'contexts' }
 Data.collectionStates = {
-    { 'base', 2823 },
+    { 'base', 2822 },
     { 'unit_player_buff_layout', 246 },
     { 'unit_player_buff_behavior', 240 },
     { 'unit_player_buff_filters', 252 },
@@ -204,7 +204,7 @@ Data.collectionStates = {
     { 'compat_buff_appearance', 16 },
     { 'compat_debuff_appearance', 14 },
 }
-Data.collectionUnionControls = 3978
+Data.collectionUnionControls = 3977
 Data.contexts = {
     { 'WARRIOR-71', 'WARRIOR', 1, 71, 'Arms', 'enUS' },
     { 'WARRIOR-72', 'WARRIOR', 2, 72, 'Fury', 'enUS' },
@@ -1597,7 +1597,6 @@ Data.records = {
     { 'setting:bars.roundedUnitFrames@opt_bars/opt/bars/global/rounded/rounded/unit/frames', 'menu2.opt.bars.global.rounded.rounded.unit.frames', '', '', 'opt_bars', 'opt/bars/global/rounded/rounded/unit/frames', 'setting', 'toggle', 'bars.roundedUnitFrames', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Unit frames', 'Enable or disable rounded textures on unit frames.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:bars.runeShowTime@classpower/classpower/advanced/behavior/rune', 'menu2.classpower.advanced.behavior.rune', '', '', 'classpower', 'classpower/advanced/behavior/rune', 'setting', 'toggle', 'bars.runeShowTime', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Show rune time (per rune)', 'Turns Show rune time (per rune) on or off. Available on the Features > Class Resources page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:bars.showAltMana@classpower/classpower/advanced/alternative/mana/enabled', 'menu2.classpower.advanced.alternative.mana.enabled', '', '', 'classpower', 'classpower/advanced/alternative/mana/enabled', 'setting', 'toggle', 'bars.showAltMana', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Show mana bar (dual resource)', 'Turns Show mana bar (dual resource) on or off. Available on the Features > Class Resources page.', '', '', '', '', '', '', '', '', 'base', '*' },
-    { 'setting:bars.showArcaneSoul@classpower/classpower/advanced/behavior/arcane/soul', 'menu2.classpower.advanced.behavior.arcane.soul', '', '', 'classpower', 'classpower/advanced/behavior/arcane/soul', 'setting', 'toggle', 'bars.showArcaneSoul', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Show Arcane Surge / Soul (Arcane)', 'Turns Show Arcane Surge / Soul (Arcane) on or off. Available on the Features > Class Resources page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:bars.showChargedComboPoints@classpower/classpower/advanced/behavior/charged', 'menu2.classpower.advanced.behavior.charged', '', '', 'classpower', 'classpower/advanced/behavior/charged', 'setting', 'toggle', 'bars.showChargedComboPoints', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Show empowered combo points', 'Turns Show empowered combo points on or off. Available on the Features > Class Resources page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:bars.showClassPower@classpower/classpower/advanced/layout/enabled', 'menu2.classpower.advanced.layout.enabled', '', '', 'classpower', 'classpower/advanced/layout/enabled', 'setting', 'toggle', 'bars.showClassPower', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Class Resource', 'Enables or disables MSUF Class Resources live outside combat. Available on the Features > Class Resources page.', '', '', '', '', '', '', '', '', 'base', '*' },
     { 'setting:bars.showEbonMight@classpower/classpower/advanced/behavior/ebon', 'menu2.classpower.advanced.behavior.ebon', '', '', 'classpower', 'classpower/advanced/behavior/ebon', 'setting', 'toggle', 'bars.showEbonMight', '', '', 'direct', 'boolean', '', '', '', '0', '0', '1', 'Show Ebon Might duration (Aug)', 'Turns Show Ebon Might duration (Aug) on or off. Available on the Features > Class Resources page.', '', '', '', '', '', '', '', '', 'base', '*' },

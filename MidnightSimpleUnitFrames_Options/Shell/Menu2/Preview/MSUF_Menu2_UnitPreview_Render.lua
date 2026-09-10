@@ -1610,7 +1610,7 @@ function Preview.Refresh(box, reason)
     --- Re-read them on every visible preview refresh so a factory reset or
     --- profile switch cannot leave the already-built layer rail stale.
     if type(box.layerVisibility) == "table" then
-        box.layerVisibility.guides = g.unitPreviewGuidesEnabled ~= false
+        box.layerVisibility.guides = g.unitPreviewGuidesEnabled == true
     end
     -- Live snapshot first so the preview mirrors the real frame's current
     -- state (exact name/class/HP/power); stylized mock only as fallback.
@@ -2626,6 +2626,54 @@ function Preview.Refresh(box, reason)
                 if runeText then runeText:Hide() end
             end
         end
+        --- Devourer's fragment separators. Its Soul Fragment maximum cannot be
+        --- one pip per fragment, so the live bar notches the boundaries into a
+        --- single continuous fill; mirror the same geometry here.
+        local notches = mock.classPower.notches
+        local shownNotches = 0
+        if notches then
+            local fragments = cp.shapeInfo and 0 or floor(tonumber(cp.preview and cp.preview.fragments) or 0)
+            --- Separator keeps its literal width inside the space the fragments
+            --- do not need and Pip gap spends the rest of it in proportion,
+            --- exactly as on the live bar.
+            local notchSep = tonumber(bars.classPowerTickWidth) or 1
+            if notchSep < 0 then notchSep = 0 elseif notchSep > 4 then notchSep = 4 end
+            local notchGap = tonumber(bars.classPowerGap) or 0
+            if notchGap < 0 then notchGap = 0 elseif notchGap > 8 then notchGap = 8 end
+            local notchW = 0
+            if fragments >= 2 and previewW > fragments and (notchSep + notchGap) > 0 then
+                local maxNotchW = floor((previewW - fragments) / (fragments - 1))
+                if maxNotchW >= 1 then
+                    local base = max(1, S(notchSep))
+                    if base > maxNotchW then base = maxNotchW end
+                    notchW = base + floor(((notchGap * (maxNotchW - base)) / 8) + 0.5)
+                    if notchW > maxNotchW then notchW = maxNotchW end
+                end
+            end
+            if fragments >= 2 and fragments <= 64 and notchW >= 1 then
+                local reverse = bars.classPowerFillReverse == true
+                local limit = previewW - notchW
+                local notchH = max(1, S(cpH))
+                for i = 1, fragments - 1 do
+                    local notch = notches[i]
+                    if not notch then
+                        notch = mock.classPower:CreateTexture(nil, "OVERLAY", nil, 6)
+                        notch:SetTexture(TEX_W8)
+                        notches[i] = notch
+                    end
+                    local nx = floor(((previewW * i) / fragments) - (notchW * 0.5) + 0.5)
+                    if nx < 0 then nx = 0 elseif nx > limit then nx = limit end
+                    if reverse then nx = limit - nx end
+                    notch:ClearAllPoints()
+                    notch:SetVertexColor(0, 0, 0, 1)
+                    notch:SetSize(notchW, notchH)
+                    notch:SetPoint("TOPLEFT", mock.classPower, "TOPLEFT", nx, 0)
+                    notch:Show()
+                    shownNotches = i
+                end
+            end
+            for i = shownNotches + 1, #notches do notches[i]:Hide() end
+        end
         if PreviewHelpers.ApplyRoundedClassPowerSurface then
             local roundedApplied = PreviewHelpers.ApplyRoundedClassPowerSurface(mock.classPower, cp.rounded,
                 mock.classPower.segments, nil, cp.segCount,
@@ -2676,6 +2724,9 @@ function Preview.Refresh(box, reason)
         end
         mock.classPower:Hide()
         for i = 1, #mock.classPower.segments do mock.classPower.segments[i]:Hide() end
+        if mock.classPower.notches then
+            for i = 1, #mock.classPower.notches do mock.classPower.notches[i]:Hide() end
+        end
         if mock.classPower.text then mock.classPower.text:Hide() end
         HidePreviewSecondaryClassTimer(mock)
         box.handleClassPower:Hide()

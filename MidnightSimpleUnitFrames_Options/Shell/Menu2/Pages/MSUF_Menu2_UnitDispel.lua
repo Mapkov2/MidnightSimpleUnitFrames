@@ -196,6 +196,34 @@ local function OverlaySectionHeight()
     return 390
 end
 
+local function PrepareOverlaySwitch(ctx, sec, unit)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local master = W.SectionSwitch(sec, "Dispel Overlay")
+    M.BindBoolWidget(ctx, master,
+        function() return ReadValue(unit, "unitDispelOverlayEnabled", false) == true end,
+        function(value)
+            SetDispelMasterValue(unit, "unitDispelOverlayEnabled", value, "MSUF2_UF_DISPEL_OVERLAY")
+            if master.refreshDetails then master.refreshDetails() end
+        end,
+        Meta(ctx, unit, "overlay.enabled", "unitDispelOverlayEnabled"))
+    return master
+end
+
+local function PrepareSymbolSwitch(ctx, sec, unit)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local master = W.SectionSwitch(sec, "Dispel Symbol")
+    M.BindBoolWidget(ctx, master,
+        function() return ReadValue(unit, "unitDispelSymbolEnabled", false) == true end,
+        function(value)
+            SetDispelMasterValue(unit, "unitDispelSymbolEnabled", value, "MSUF2_UF_DISPEL_SYMBOL")
+            if master.refreshDetails then master.refreshDetails() end
+        end,
+        Meta(ctx, unit, "symbol.enabled", "unitDispelSymbolEnabled"))
+    return master
+end
+
 local function BuildUnitDispelOverlaySection(ctx, builder, unit)
     local sectionHeight = OverlaySectionHeight(ctx)
     local section = builder:CollapsibleSection("unit_dispel_overlay", "Dispel Overlay", sectionHeight, false)
@@ -250,14 +278,9 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
         return slider
     end
 
-    local master = W.SwitchAt(card, "Dispel Overlay", 16, -16, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, master,
-        function() return ReadValue(unit, "unitDispelOverlayEnabled", false) == true end,
-        function(value)
-            SetDispelMasterValue(unit, "unitDispelOverlayEnabled", value, "MSUF2_UF_DISPEL_OVERLAY")
-            Sync()
-        end,
-        Meta(ctx, unit, "overlay.enabled", "unitDispelOverlayEnabled"))
+    local master = PrepareOverlaySwitch(ctx, section, unit)
+    local masterContent = W.SectionSwitchContent(master, card, "Dispel Overlay", 16, -16)
+    master.refreshDetails = function() Sync() end
     local controls = {
         BindDropdown("Overlay detects", UNIT_DISPEL_TRIGGERS, "unitDispelOverlayTrigger", "BORDER",
             NormalizeUnitDispelOverlayTrigger, "MSUF2_UF_DISPEL_OVERLAY_TRIGGER", -54),
@@ -303,6 +326,7 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
             if type(clear) == "function" then clear(false) end
         end
         SetControlEnabled(master, true)
+        SetControlEnabled(masterContent, true)
         SetControlsEnabled(controls, enabled)
         RefreshAuraWarning(warning, unit)
     end))
@@ -403,14 +427,9 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
         return slider
     end
 
-    local master = W.SwitchAt(card, "Dispel Symbol", 16, -16, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, master,
-        function() return ReadValue(unit, "unitDispelSymbolEnabled", false) == true end,
-        function(value)
-            SetDispelMasterValue(unit, "unitDispelSymbolEnabled", value, "MSUF2_UF_DISPEL_SYMBOL")
-            Sync()
-        end,
-        Meta(ctx, unit, "symbol.enabled", "unitDispelSymbolEnabled"))
+    local master = PrepareSymbolSwitch(ctx, section, unit)
+    local masterContent = W.SectionSwitchContent(master, card, "Dispel Symbol", 16, -16)
+    master.refreshDetails = function() Sync() end
     --- Distinct from the Overlay card's preview on the same page: this one is
     --- draggable, and two identically labelled toggles gave no way to tell
     --- them apart. The "(drag)" wording already ships in every locale.
@@ -473,6 +492,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
             if type(clear) == "function" then clear(false) end
         end
         SetControlEnabled(master, true)
+        SetControlEnabled(masterContent, true)
         SetControlsEnabled(controls, enabled)
         SetControlsEnabled(allModeControls, enabled and ReadValue(unit, "unitDispelSymbolMode", "ALL") == "ALL")
         RefreshAuraWarning(warning, unit)
@@ -488,6 +508,7 @@ if type(UP.RegisterSection) == "function" then
         order = 10,
         units = SUPPORTED_UNITS,
         build = BuildUnitDispelOverlaySection,
+        prepareShell = PrepareOverlaySwitch,
     })
     UP.RegisterSection({
         id = "unit_dispel_symbol",
@@ -497,5 +518,6 @@ if type(UP.RegisterSection) == "function" then
         order = 20,
         units = SUPPORTED_UNITS,
         build = BuildUnitDispelSymbolSection,
+        prepareShell = PrepareSymbolSwitch,
     })
 end

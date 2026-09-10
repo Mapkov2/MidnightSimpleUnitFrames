@@ -27,7 +27,6 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["behavior.charged"] = "bars.showChargedComboPoints",
     ["behavior.ebon"] = "bars.showEbonMight",
     ["behavior.sweeping"] = "bars.showSweepingStrikes",
-    ["behavior.arcaneSoul"] = "bars.showArcaneSoul",
     ["behavior.ele"] = "bars.showEleMaelstrom",
     ["behavior.ironfur"] = "bars.showGuardianIronfur",
     ["behavior.ironfurHashes"] = "bars.guardianIronfurShowHashLines",
@@ -251,7 +250,11 @@ local TEXT_SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right"
 local DETACHED_POWER_TEXT_PRESETS = M.KeySetFromWords "CURRENT CURMAX PERCENT CURPERCENT CURMAXPERCENT"
 local CLASS_POWER_PREVIEW_SPECS = {
     { key = "deathknight_runes", label = "Death Knight - Runes", token = "RUNES", mode = "rune", segments = 6, value = 3, previewText = "3", runeDuration = 10 },
-    { key = "demonhunter_devourer", label = "Demon Hunter - Soul Fragments", token = "SOUL_FRAGMENTS", mode = "aura_segmented", segments = 5, value = 3, previewText = "3" },
+    --- Devourer's Soul Fragment maximum is talent-dependent and far above the
+    --- ten-pip ceiling, so the live bar is one continuous fill whose fragment
+    --- boundaries are drawn as separator notches. `fragments` previews that
+    --- division at a representative maximum.
+    { key = "demonhunter_devourer", label = "Demon Hunter - Soul Fragments", token = "SOUL_FRAGMENTS", mode = "aura_single", segments = 1, value = 0.5, previewText = "20", fragments = 40 },
     { key = "demonhunter_vengeance", label = "Demon Hunter - Vengeance Fragments", token = "SOUL_FRAGMENTS_VENG", mode = "aura_segmented", segments = 6, value = 4, previewText = "4 / 6" },
     { key = "druid_feral", label = "Druid - Feral Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 5, value = 3, previewText = "3" },
     { key = "druid_guardian", label = "Druid - Guardian Ironfur", token = "IRONFUR", mode = "ironfur", segments = 1, value = 0.72, previewText = "3" },
@@ -978,8 +981,6 @@ function Page:BuildClassBehavior()
         { "reverse", "toggle", "Fill right-to-left", "classPowerFillReverse", false, group = "cp" },
         { "sweeping", "toggle", "Show Sweeping Strikes (Arms)", "showSweepingStrikes", false, applyRefresh, group = "cp",
             helpTitle = "Sweeping Strikes", help = "Arms only. Shows actual aura charges in a segmented bar, using the same native display as Fury Whirlwind. These two trackers use a bar with static dividers; aura values are never read by the addon. Appearance changes during combat apply after combat." },
-        { "arcaneSoul", "toggle", "Show Arcane Surge / Soul (Arcane)", "showArcaneSoul", false, applyRefresh, group = "cp",
-            helpTitle = "Arcane Surge / Arcane Soul", help = "Adds a countdown row above Arcane Charges. Shows the actual remaining Arcane Surge or Arcane Soul aura duration in seconds. Width follows Class Resources; font size and text offsets use the resource text settings. Blizzard updates the countdown without an addon timer. Appearance changes during combat apply after combat." },
         { "ele", "toggle", "Show Maelstrom bar (Ele)", "showEleMaelstrom", false, group = "cp" },
         { "ebon", "toggle", "Show Ebon Might duration (Aug)", "showEbonMight", true, group = "cp",
             helpTitle = "Ebon Might On Player Power",
@@ -997,7 +998,7 @@ function Page:BuildClassBehavior()
     W.ControlCardBackdrop(section, 14, -38, max(280, rightX - 42), 230)
     W.ControlCardBackdrop(section, rightX - 14, -38, max(280, (section._msuf2Width or self.width) - rightX - 28) + 14, 230)
     PlaceColumn(section, 14, -38, 32, nil, nil, fields.anchor, fields.charged, fields.text, fields.rune, fields.reverse,
-        fields.sweeping, fields.arcaneSoul)
+        fields.sweeping)
     PlaceColumn(section, rightX, -38, 32, nil, nil, fields.ele, fields.ebon, fields.shadow,
         fields.ironfur, fields.ironfurHashes, fields.prediction, fields.smooth)
     self.ironfurHashes = fields.ironfurHashes

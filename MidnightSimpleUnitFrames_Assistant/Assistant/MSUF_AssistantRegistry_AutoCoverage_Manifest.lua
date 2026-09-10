@@ -22,8 +22,8 @@ A.AutoCoverageManifest = Manifest
 -- Defaults generated offline on 2026-09-09 from the current factory profile
 -- through the same decode and normalization path used by MSUF in game.
 -- Regenerate and verify with tools/assistant_autocoverage_manifest_regression.py.
--- 5185 top-level scalar fallbacks across every required AutoCoverage scope.
-Manifest.scalarCount = 5185
+-- 5184 top-level scalar fallbacks across every required AutoCoverage scope.
+Manifest.scalarCount = 5184
 Manifest.requiredScopes = {
     "arena", "bars", "boss", "focus", "focustarget", "gameplay", "general",
     "gf_mythicraid", "gf_party", "gf_raid", "pet", "player", "target", "targettarget",
@@ -445,7 +445,6 @@ Manifest.defaults = {
         runeTextFontSizeOffset = -2,
         runeTextFormat = "tenths",
         showAltMana = true,
-        showArcaneSoul = false,
         showArenaPowerBar = true,
         showBarBorder = true,
         showBossPowerBar = false,
@@ -1855,7 +1854,7 @@ Manifest.defaults = {
         classBarBgG = 0.025000000000000001,
         classBarBgR = 0.025000000000000001,
         classPowerPreviewAnimate = false,
-        classPowerPreviewGuidesEnabled = true,
+        classPowerPreviewGuidesEnabled = false,
         colorHealthTextByHealth = false,
         colorPowerTextByType = true,
         combatStateIndicatorAnchor = "TOPLEFT",
@@ -2202,7 +2201,7 @@ Manifest.defaults = {
         unitDispelSymbolX = -18,
         unitDispelSymbolY = -1,
         unitInfoTooltipStyle = "classic",
-        unitPreviewGuidesEnabled = true,
+        unitPreviewGuidesEnabled = false,
         unitTooltipAnchor = "EXTERNAL",
         unitTooltipMode = "OOC",
         unitTooltipModifier = "ALT",

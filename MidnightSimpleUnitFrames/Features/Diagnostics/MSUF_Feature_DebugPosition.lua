@@ -83,7 +83,7 @@ local function UpdateOverlay()
     local enabledGetter = _G.MSUF_IsCooldownAnchorEnabled
     local cooldownEnabled = type(enabledGetter) == "function"
         and enabledGetter(g) == true
-        or g and g.anchorToCooldown == true
+        or (type(_G.C_CooldownViewer) == "table" and g and g.anchorToCooldown == true)
     local ancLabel = cooldownEnabled
         and ("|cFFFFAA00CooldownManager%s|r"):format(automaticProvider and (" (" .. automaticProvider .. ")") or "")
         or  "|cFFAAAAFF" .. tostring(g and g.anchorName or "UIParent") .. "|r"

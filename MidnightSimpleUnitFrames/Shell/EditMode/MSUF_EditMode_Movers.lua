@@ -912,7 +912,7 @@ local function MSUF_GetAnchorFrame()
     local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
     local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
         and isCooldownAnchorEnabled(g) == true
-        or g.anchorToCooldown == true
+        or (type(_G.C_CooldownViewer) == "table" and g.anchorToCooldown == true)
     if cooldownAnchorEnabled then
         local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
         local getSize = _G.MSUF_GetUsableCooldownAnchorSize

@@ -104,7 +104,7 @@ local function GetAnchorFrame()
     local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
     local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
         and isCooldownAnchorEnabled(general) == true
-        or general.anchorToCooldown == true
+        or (type(_G.C_CooldownViewer) == "table" and general.anchorToCooldown == true)
 
     if cooldownAnchorEnabled then
         local getCooldown = _G.MSUF_GetEffectiveCooldownFrame
@@ -243,7 +243,8 @@ local function ApplyNonInterruptibleTint(
             -- can reuse the immutable configured colors directly; restricted
             -- inputs must still go through Blizzard's secret-safe selector.
             if readySecret then
-                activeCastColor = EvaluateColorFromBoolean(interruptReadyBool, castColor, unavailableColor)
+                local selectReadyColor = _G.MSUF_KickReady_SelectColor or EvaluateColorFromBoolean
+                activeCastColor = selectReadyColor(interruptReadyBool, castColor, unavailableColor)
             elseif type(interruptReadyBool) == "boolean" then
                 activeCastColor = interruptReadyBool and castColor or unavailableColor
             else

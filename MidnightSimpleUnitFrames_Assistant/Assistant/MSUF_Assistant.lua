@@ -8837,6 +8837,12 @@ function AP.InheritBatchScope(before, after)
     local detectGroups = parser.DetectGroups
     if type(detectUnits) ~= "function" or type(detectGroups) ~= "function" then return after end
     if #detectUnits(after) > 0 or #detectGroups(after) > 0 then return after end
+    -- "... then set Shared Health Text Color Mode to class" states its own
+    -- scope: "shared"/"global" is not a unit, so the checks above miss it and
+    -- the previous clause's frame would silently re-scope it.
+    if type(parser.DetectGlobalScope) == "function" and parser.DetectGlobalScope(after) == "shared" then
+        return after
+    end
 
     local units, groups = detectUnits(before), detectGroups(before)
     local scope

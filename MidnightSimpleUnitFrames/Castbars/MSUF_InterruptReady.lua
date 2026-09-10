@@ -1,7 +1,7 @@
 --- Castbars/MSUF_InterruptReady.lua
 --- Optional interrupt-readiness indicator for target, focus, and boss castbars.
 ---
---- This module answers two questions: "is my interrupt cooldown ready?" and
+--- This module answers two questions: "is any of my interrupts ready?" and
 --- "how should the indicator look for the current cast's interruptibility?" It
 --- must not decide castbar ownership or spellcast state; it decorates frames
 --- that the castbar drivers already own.
@@ -34,6 +34,9 @@ local INTERRUPT_SPELLS = {
     WARLOCK = { DEFAULT = 19647, DEMONOLOGY = 119914 },
     WARRIOR = { DEFAULT = 6552 },
 }
+
+-- Spell-book membership handles spec and talent changes without spec shims.
+local SECONDARY_INTERRUPT_SPELLS = { PALADIN = 31935, WARRIOR = 386071 }
 
 --- Classic clients: the Retail table names spells that do not exist there
 --- (Rebuke, Wind Shear, Counter Shot, Skull Bash on Vanilla/TBC), so each
@@ -77,10 +80,13 @@ local SPECIALIZATION_KEYS = {
 }
 
 local state = {}
+local slots = { {}, {} }
+local slotCount = 0
+local spellSetGeneration = 0
+local spellBookEventRegistered = false
+local cooldownWakeUnsupported = false
 local cooldownTimerGeneration = 0
 local cooldownTimerEndTime
-local cooldownWakeFrame
-local cooldownWakeArmed = false
 local eventFrame
 local cooldownEventRegistered = false
 local activeIndicatorFrames = {}
@@ -92,24 +98,22 @@ local UpdateCooldownEventRegistration
 local UpdateLifecycleEventRegistration
 local ClearCooldownWake
 local HandleCooldownWakeDone
-local cooldownSnapshot
-local cooldownSnapshotSpellID
-local cooldownSnapshotFrameStamp
-local cooldownSnapshotKnown = false
 local statusSnapshotFrameStamp
-local statusSnapshotSpellID
+local statusSnapshotGeneration
 local statusSnapshotReady
 local statusSnapshotRemaining
 local statusSnapshotCooldown
 local statusSnapshotKnown = false
 
 local function InvalidateCooldownSnapshot()
-    cooldownSnapshot = nil
-    cooldownSnapshotSpellID = nil
-    cooldownSnapshotFrameStamp = nil
-    cooldownSnapshotKnown = false
+    for index = 1, #slots do
+        local slot = slots[index]
+        slot.snapshot = nil
+        slot.snapshotFrameStamp = nil
+        slot.snapshotKnown = false
+    end
     statusSnapshotFrameStamp = nil
-    statusSnapshotSpellID = nil
+    statusSnapshotGeneration = nil
     statusSnapshotReady = nil
     statusSnapshotRemaining = nil
     statusSnapshotCooldown = nil
@@ -174,11 +178,45 @@ local function Now()
     return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
 end
 
---- Resolve the player's current interrupt spell once per class/spec change.
---- Some classes swap interrupt IDs by specialization, so cache both class/spec
---- metadata with the selected spell.
+-- Modern specialization APIs work even with deprecation shims disabled.
+local function ActiveSpecID()
+    local specInfo = _G.C_SpecializationInfo
+    local getSpecialization = (specInfo and specInfo.GetSpecialization) or _G.GetSpecialization
+    local getSpecializationInfo = (specInfo and specInfo.GetSpecializationInfo) or _G.GetSpecializationInfo
+    if type(getSpecialization) ~= "function" or type(getSpecializationInfo) ~= "function" then
+        return nil
+    end
+
+    local specIndex = getSpecialization()
+    if specIndex == nil then return nil end
+
+    return (select(1, getSpecializationInfo(specIndex)))
+end
+
+local function SecondaryInterruptSpellID(classToken)
+    local spellID = classToken and SECONDARY_INTERRUPT_SPELLS[classToken]
+    local spellBook = _G.C_SpellBook
+    local isKnown = spellBook and spellBook.IsSpellKnownOrInSpellBook
+    if spellID and type(isKnown) == "function" and isKnown(spellID) == true then
+        return spellID
+    end
+end
+
+local function ClassHasSecondaryCandidate()
+    local classToken = state.classToken
+    if classToken == nil and UnitClass then
+        local _, token = UnitClass("player")
+        classToken = token
+    end
+
+    return (classToken and SECONDARY_INTERRUPT_SPELLS[classToken]) ~= nil
+end
+
+-- Resolve spells only on lifecycle/settings changes. Spell-book membership
+-- admits Avenger's Shield and the talented Disrupting Shout independently.
 local function ResolveInterruptSpellID()
     local previousSpellID = state.spellID
+    local previousSecondarySpellID = state.secondarySpellID
     local classToken
     if UnitClass then
         local _, token = UnitClass("player")
@@ -189,76 +227,95 @@ local function ResolveInterruptSpellID()
     local classSpells = classToken and INTERRUPT_SPELLS[classToken]
     local spellID = classSpells and classSpells.DEFAULT
 
-    -- Mists Classic documents the specialization API under
-    -- C_SpecializationInfo; the legacy globals stay the Retail fast path.
-    local specAPI = _G.C_SpecializationInfo
-    local getSpecialization = GetSpecialization or (specAPI and specAPI.GetSpecialization)
-    local getSpecializationInfo = GetSpecializationInfo or (specAPI and specAPI.GetSpecializationInfo)
-    if classSpells and getSpecialization and getSpecializationInfo then
-        local specIndex = getSpecialization()
-        local specID = specIndex and select(1, getSpecializationInfo(specIndex)) or nil
+    local specID = ActiveSpecID()
+    if specID ~= nil then
         local specKey = SPECIALIZATION_KEYS[specID]
-
-        if specKey and classSpells[specKey] then
+        if classSpells and specKey and classSpells[specKey] then
             spellID = classSpells[specKey]
         end
-
         state.specID = specID
     end
+
+    local secondarySpellID = spellID and SecondaryInterruptSpellID(classToken)
 
     if previousSpellID and previousSpellID ~= spellID then
         state.previousSpellID = previousSpellID
     end
-    if previousSpellID ~= spellID then
-        InvalidateCooldownSnapshot()
+    if previousSecondarySpellID and previousSecondarySpellID ~= secondarySpellID then
+        state.previousSecondarySpellID = previousSecondarySpellID
     end
+
+    if previousSpellID ~= spellID or previousSecondarySpellID ~= secondarySpellID then
+        spellSetGeneration = spellSetGeneration + 1
+        InvalidateCooldownSnapshot()
+        if ClearCooldownWake then ClearCooldownWake() end
+    end
+
     state.spellID = spellID
+    state.secondarySpellID = secondarySpellID
+    slots[1].spellID, slots[2].spellID = spellID, secondarySpellID
+    slotCount = secondarySpellID and 2 or (spellID and 1 or 0)
+    if eventFrame and not spellBookEventRegistered and ClassHasSecondaryCandidate() then
+        eventFrame:RegisterEvent("SPELLS_CHANGED")
+        spellBookEventRegistered = true
+    end
+
     return spellID
 end
 
---- Unrelated spell and GCD events cannot change the dedicated interrupt
---- cooldown because InterruptCooldown explicitly ignores the GCD. Nil-ID
---- broadcasts remain relevant, as do current and previous override IDs.
+-- Either slot (including base/previous IDs) can change the union.
 local function NeedsInterruptCooldownUpdate(spellID, baseSpellID)
     if spellID == nil then return true end
 
-    local interruptSpellID = state.spellID or ResolveInterruptSpellID()
-    if spellID == interruptSpellID or baseSpellID == interruptSpellID then
-        return true
+    if state.spellID == nil then ResolveInterruptSpellID() end
+
+    for index = 1, slotCount do
+        local slotSpellID = slots[index].spellID
+        if spellID == slotSpellID or baseSpellID == slotSpellID then
+            return true
+        end
     end
 
     local previousSpellID = state.previousSpellID
-    return previousSpellID ~= nil
+    if previousSpellID ~= nil
         and (spellID == previousSpellID or baseSpellID == previousSpellID)
+    then
+        return true
+    end
+
+    local previousSecondarySpellID = state.previousSecondarySpellID
+    return previousSecondarySpellID ~= nil
+        and (spellID == previousSecondarySpellID or baseSpellID == previousSecondarySpellID)
 end
 
-local function InterruptCooldown()
-    local spellID = state.spellID or ResolveInterruptSpellID()
+-- Share each Duration only within this rendered frame. Relevant events must
+-- invalidate before reading, including multiple resets within the same frame.
+local function SlotCooldown(slot)
+    local spellID = slot.spellID
     if not (spellID and SpellAPI and SpellAPI.GetSpellCooldownDuration) then
         return nil
     end
-
-    -- GetSpellCooldownDuration creates a LuaDurationObject. Share it only
-    -- inside the current rendered frame; relevant cooldown/spec/world events
-    -- invalidate before their refresh. This removes cast/color refresh-burst
-    -- allocation without depending on undocumented cross-event object lifetime.
     local frameStamp = _G.GetTime and _G.GetTime()
     if frameStamp ~= nil
-        and cooldownSnapshotKnown == true
-        and cooldownSnapshotFrameStamp == frameStamp
-        and cooldownSnapshotSpellID == spellID
+        and slot.snapshotKnown == true
+        and slot.snapshotFrameStamp == frameStamp
     then
-        return cooldownSnapshot
+        return slot.snapshot
     end
-
     local cooldown = SpellAPI.GetSpellCooldownDuration(spellID, true)
     if frameStamp ~= nil then
-        cooldownSnapshot = cooldown
-        cooldownSnapshotSpellID = spellID
-        cooldownSnapshotFrameStamp = frameStamp
-        cooldownSnapshotKnown = true
+        slot.snapshot = cooldown
+        slot.snapshotFrameStamp = frameStamp
+        slot.snapshotKnown = true
     end
     return cooldown
+end
+
+local function InterruptCooldown()
+    if state.spellID == nil then ResolveInterruptSpellID() end
+    if slotCount < 1 then return nil end
+
+    return SlotCooldown(slots[1])
 end
 
 local function CooldownRemaining(cooldown)
@@ -291,42 +348,83 @@ local function CooldownReadyValue(cooldown, remaining)
     return nil
 end
 
+-- A plain ready slot settles the union. If both booleans are restricted,
+-- return one here and compose both at the native color sink below.
+local function CombinedStatus(seedCooldown, seedResolved)
+    if state.spellID == nil then ResolveInterruptSpellID() end
+
+    local plainReady = false
+    local secretReady
+    local hasSecret = false
+    local soonestRemaining
+    local primaryCooldown
+
+    for index = 1, slotCount do
+        local cooldown
+        if index == 1 and seedResolved == true then
+            cooldown = seedCooldown
+        else
+            cooldown = SlotCooldown(slots[index])
+        end
+
+        if index == 1 then
+            primaryCooldown = cooldown
+        end
+
+        local remaining = CooldownRemaining(cooldown)
+        local ready = CooldownReadyValue(cooldown, remaining)
+
+        if plainIsSecret(ready) == true then
+            if not hasSecret then
+                hasSecret = true
+                secretReady = ready
+            end
+        elseif ready == true then
+            plainReady = true
+        end
+
+        if remaining ~= nil and (soonestRemaining == nil or remaining < soonestRemaining) then
+            soonestRemaining = remaining
+        end
+    end
+
+    if plainReady == true then
+        return true, soonestRemaining, primaryCooldown
+    end
+
+    if hasSecret then
+        return secretReady, soonestRemaining, primaryCooldown
+    end
+
+    return false, soonestRemaining, primaryCooldown
+end
+
 local function InterruptStatus(cooldown, cooldownResolved)
     local useSnapshot = cooldownResolved ~= true
     local frameStamp = useSnapshot and _G.GetTime and _G.GetTime() or nil
-    local spellID = useSnapshot and (state.spellID or ResolveInterruptSpellID()) or nil
     if frameStamp ~= nil
         and statusSnapshotKnown == true
         and statusSnapshotFrameStamp == frameStamp
-        and statusSnapshotSpellID == spellID
+        and statusSnapshotGeneration == spellSetGeneration
     then
         return statusSnapshotReady, statusSnapshotRemaining, statusSnapshotCooldown
     end
 
-    if cooldownResolved ~= true then
-        cooldown = InterruptCooldown()
-    end
-    local remaining = CooldownRemaining(cooldown)
-    local ready = CooldownReadyValue(cooldown, remaining)
+    local ready, remaining, primaryCooldown = CombinedStatus(cooldown, cooldownResolved)
 
     if not HasKnownValue(ready) then
         ready = false
     end
-
-    -- The player's own interrupt cooldown is normally plain. Share that
-    -- resolved status across the target/focus/boss start burst, but never
-    -- retain a secret boolean in Lua; secret readiness still flows directly
-    -- from the native Duration object to its supported sinks on every caller.
     if frameStamp ~= nil and plainIsSecret(ready) ~= true then
         statusSnapshotFrameStamp = frameStamp
-        statusSnapshotSpellID = spellID
+        statusSnapshotGeneration = spellSetGeneration
         statusSnapshotReady = ready
         statusSnapshotRemaining = remaining
-        statusSnapshotCooldown = cooldown
+        statusSnapshotCooldown = primaryCooldown
         statusSnapshotKnown = true
     end
 
-    return ready, remaining, cooldown
+    return ready, remaining, primaryCooldown
 end
 
 local function ResolveStatus(status)
@@ -413,16 +511,30 @@ local function ReadyColors(general)
     return state.readyColor, state.notReadyColor
 end
 
+local function SecondaryReadyForColor()
+    if slotCount < 2 then return false end
+    local cooldown = SlotCooldown(slots[2])
+    return CooldownReadyValue(cooldown, CooldownRemaining(cooldown))
+end
+
+local function SelectReadyColor(isReady, readyColor, notReadyColor)
+    if plainIsSecret(isReady) ~= true then
+        return isReady == true and readyColor or notReadyColor
+    end
+    if not EvaluateColorFromBoolean then return notReadyColor end
+    local secondary = SecondaryReadyForColor()
+    if plainIsSecret(secondary) == true then
+        -- Nested native selection implements OR without branching on either
+        -- restricted boolean (live CurveUtilDocumentation.lua).
+        notReadyColor = EvaluateColorFromBoolean(secondary, readyColor, notReadyColor)
+    end
+    return EvaluateColorFromBoolean(isReady, readyColor, notReadyColor)
+end
+ExportPublic("MSUF_KickReady_SelectColor", SelectReadyColor)
+
 local function ColorForReady(isReady, general)
     local readyColor, notReadyColor = ReadyColors(general)
-    if plainIsSecret(isReady) == true then
-        if EvaluateColorFromBoolean then
-            return EvaluateColorFromBoolean(isReady, readyColor, notReadyColor)
-        end
-        return notReadyColor
-    end
-
-    return isReady == true and readyColor or notReadyColor
+    return SelectReadyColor(isReady, readyColor, notReadyColor)
 end
 
 local function RGBAForReady(isReady, general)
@@ -658,6 +770,12 @@ local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
         local notReadyR, notReadyG, notReadyB = ColorFromDB(general, "kickNotReadyColor", 1, 0, 0)
 
         if EvaluateColorValueFromBoolean then
+            local secondary = SecondaryReadyForColor()
+            if plainIsSecret(secondary) == true then
+                notReadyR = EvaluateColorValueFromBoolean(secondary, readyR, notReadyR)
+                notReadyG = EvaluateColorValueFromBoolean(secondary, readyG, notReadyG)
+                notReadyB = EvaluateColorValueFromBoolean(secondary, readyB, notReadyB)
+            end
             red = EvaluateColorValueFromBoolean(isReady, readyR, notReadyR)
             green = EvaluateColorValueFromBoolean(isReady, readyG, notReadyG)
             blue = EvaluateColorValueFromBoolean(isReady, readyB, notReadyB)
@@ -828,7 +946,7 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
         end
 
         TintOutline(frame, red, green, blue, alpha)
-        frame._msufKickReadyVisualKey = visualKey
+        frame._msufKickReadyVisualKey = frame._kickReadyBorderTinted and visualKey or nil
         return
     end
 
@@ -876,8 +994,7 @@ local function ResolveFillStatus(status)
     end
 
     local cooldown = StatusCooldown(status)
-    status.remaining = CooldownRemaining(cooldown)
-    status.ready = CooldownReadyValue(cooldown, status.remaining)
+    status.ready, status.remaining = InterruptStatus(cooldown, true)
     status.resolved = HasKnownValue(status.ready)
 end
 
@@ -888,8 +1005,10 @@ local function RecordDisplayedReady(status)
 
     if HasKnownValue(status.ready) and plainIsSecret(status.ready) ~= true then
         state.cooldownDisplayReady = status.ready == true
-    elseif status.remaining ~= nil then
-        state.cooldownDisplayReady = status.remaining <= 0.05
+    else
+        -- A readable cooldown from one slot says nothing about the other
+        -- slot's secret readiness or the color selected by the native sink.
+        state.cooldownDisplayReady = nil
     end
 end
 
@@ -978,17 +1097,18 @@ local function RefreshExternalReadyConsumers()
     end
 end
 
-local function EnsureCooldownWakeFrame()
-    if cooldownWakeFrame == false then
+-- One native completion callback per slot; no polling or Lua OnUpdate.
+local function EnsureCooldownWakeFrame(slot)
+    if cooldownWakeUnsupported then
         return nil
     end
-    if cooldownWakeFrame then
-        return cooldownWakeFrame
+    if slot.wakeFrame then
+        return slot.wakeFrame
     end
 
     local frame = _G.CreateFrame("Cooldown", nil, eventFrame or _G.UIParent)
     if not (frame and frame.SetCooldownFromDurationObject and frame.SetScript) then
-        cooldownWakeFrame = false
+        cooldownWakeUnsupported = true
         return nil
     end
 
@@ -1000,28 +1120,29 @@ local function EnsureCooldownWakeFrame()
     if frame.SetHideCountdownNumbers then frame:SetHideCountdownNumbers(true) end
     frame:SetScript("OnCooldownDone", function()
         if HandleCooldownWakeDone then
-            HandleCooldownWakeDone()
+            HandleCooldownWakeDone(slot)
         end
     end)
     if frame.Show then frame:Show() end
 
-    cooldownWakeFrame = frame
+    slot.wakeFrame = frame
     return frame
 end
 
 ClearCooldownWake = function()
-    cooldownWakeArmed = false
     cooldownTimerGeneration = cooldownTimerGeneration + 1
     cooldownTimerEndTime = nil
-    if cooldownWakeFrame and cooldownWakeFrame ~= false and cooldownWakeFrame.Clear then
-        cooldownWakeFrame:Clear()
+    for index = 1, #slots do
+        local slot = slots[index]
+        slot.wakeArmed = false
+        slot.wakeEndTime = nil
+        local wakeFrame = slot.wakeFrame
+        if wakeFrame and wakeFrame.Clear then
+            wakeFrame:Clear()
+        end
     end
 end
 
---- Arm one native C-side cooldown completion callback from the secret-safe
---- Duration object. Numeric one-shot timing is retained only as a degraded
---- fallback for clients without SetCooldownFromDurationObject; neither path
---- polls or installs a Lua OnUpdate.
 local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, cooldownResolved)
     if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 then
         ClearCooldownWake()
@@ -1032,16 +1153,46 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, c
         cooldown = InterruptCooldown()
         cooldownResolved = true
     end
-
-    if cooldown then
-        local wakeFrame = EnsureCooldownWakeFrame()
-        if wakeFrame then
-            cooldownTimerGeneration = cooldownTimerGeneration + 1
-            cooldownTimerEndTime = nil
-            cooldownWakeArmed = true
-            wakeFrame:SetCooldownFromDurationObject(cooldown, true)
-            return true
+    local armed = false
+    for index = 1, slotCount do
+        local slot = slots[index]
+        local slotCooldown = (index == 1) and cooldown or SlotCooldown(slot)
+        if slotCooldown then
+            local slotRemaining = CooldownRemaining(slotCooldown)
+            -- Keep wakes through the final 50 ms: visual readiness has a
+            -- tolerance, but native completion fires only at actual zero.
+            local slotRunning = slotRemaining == nil or slotRemaining > 0
+            local wakeFrame = slotRunning and EnsureCooldownWakeFrame(slot) or nil
+            if wakeFrame then
+                if not armed then
+                    cooldownTimerGeneration = cooldownTimerGeneration + 1
+                    cooldownTimerEndTime = nil
+                    armed = true
+                end
+                -- GetEndTime's default is real time, including mod-rate.
+                -- Compare exact public deadlines, never object/event identity
+                -- or a tolerance that could swallow a reset. Secrets rebind.
+                local endTime
+                if slotRemaining ~= nil and slotCooldown.GetEndTime then
+                    endTime = PlainNumber(slotCooldown:GetEndTime())
+                end
+                if not slot.wakeArmed or endTime == nil or slot.wakeEndTime ~= endTime then
+                    slot.wakeEndTime = endTime
+                    slot.wakeArmed = true
+                    wakeFrame:SetCooldownFromDurationObject(slotCooldown, true)
+                end
+            elseif not slotRunning then
+                slot.wakeArmed = false
+                local existingFrame = slot.wakeFrame
+                if existingFrame and existingFrame.Clear then
+                    existingFrame:Clear()
+                end
+            end
         end
+    end
+
+    if armed then
+        return true
     end
 
     if cooldownTimerEndTime then
@@ -1088,20 +1239,18 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, c
     return true
 end
 
-HandleCooldownWakeDone = function()
-    if not cooldownWakeArmed then
+HandleCooldownWakeDone = function(slot)
+    if not (slot and slot.wakeArmed) then
         return
     end
-    cooldownWakeArmed = false
+    slot.wakeArmed = false
 
     if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 then
         return
     end
 
     InvalidateCooldownSnapshot()
-    local cooldown = InterruptCooldown()
-    local remaining = CooldownRemaining(cooldown)
-    local ready = CooldownReadyValue(cooldown, remaining)
+    local ready, remaining, cooldown = CombinedStatus()
     RefreshActive(true, ready, remaining, cooldown, true)
     RefreshExternalReadyConsumers()
 end
@@ -1152,9 +1301,20 @@ local function KickReady_RefreshFrame(frame, castState)
     local status = AcquireScratchStatus()
     RefreshFrame(frame, castState, status)
     ResolveFillStatus(status)
+    -- One frame's paint cannot certify the readiness displayed by all frames.
+    state.cooldownDisplayReady = nil
     if status.cooldownResolved == true then
         ScheduleCooldownRefresh(status.remaining, true, status.cooldown, true)
     end
+end
+
+-- The outline owner only needs a new paint after replacing its edges. Keep
+-- this independent of shared scratch status and cooldown wake scheduling.
+local function KickReady_RefreshOutline(frame)
+    if not (frame and frame._kickReadyBorderTinted) then return end
+    frame._msufKickReadyVisualKey = nil
+    RefreshFrame(frame)
+    state.cooldownDisplayReady = nil
 end
 
 local function KickReady_RefreshAll()
@@ -1181,9 +1341,7 @@ end
 local function CooldownEventAlreadyDisplayed()
     -- GetSpellCooldownDuration returns a fresh Duration object. Reuse this
     -- event's object for both readable-remaining and secret IsZero paths.
-    local cooldown = InterruptCooldown()
-    local remaining = CooldownRemaining(cooldown)
-    local ready = CooldownReadyValue(cooldown, remaining)
+    local ready, remaining, cooldown = InterruptStatus()
     if not HasKnownValue(ready) then
         return false, nil, nil, cooldown, true
     end
@@ -1214,6 +1372,7 @@ ExportPublic("MSUF_KickReady_EvaluateColor", KickReady_EvaluateColor)
 ExportPublic("MSUF_KickReady_EvaluateRGBA", KickReady_EvaluateRGBA)
 ExportPublic("MSUF_KickReady_ApplyLayout", KickReady_ApplyLayout)
 ExportPublic("MSUF_KickReady_RefreshFrame", KickReady_RefreshFrame)
+ExportPublic("MSUF_KickReady_RefreshOutline", KickReady_RefreshOutline)
 ExportPublic("MSUF_KickReady_RefreshAll", KickReady_RefreshAll)
 
 UpdateCooldownEventRegistration = function()
@@ -1237,20 +1396,19 @@ end
 eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
 eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
+        local previousGeneration = spellSetGeneration
         InvalidateCooldownSnapshot()
         ResolveInterruptSpellID()
+        if previousGeneration == spellSetGeneration and event == "SPELLS_CHANGED" then
+            return
+        end
     else
         if not NeedsInterruptCooldownUpdate(spellID, baseSpellID) then
             return
         end
 
-        -- SPELL_UPDATE_COOLDOWN can repeat in one rendered frame. Filter and
-        -- dedupe before requesting a fresh Duration object.
-        local now = _G.GetTime and _G.GetTime()
-        if now ~= nil and state.cooldownRefreshFrameStamp == now then
-            return
-        end
-        state.cooldownRefreshFrameStamp = now
+        -- Starts and resets (including the SAME spell) can share a frame.
+        -- Invalidate first; only the resulting display state may be deduped.
         InvalidateCooldownSnapshot()
 
         local alreadyDisplayed, ready, remaining, cooldown, cooldownResolved = CooldownEventAlreadyDisplayed()
@@ -1291,15 +1449,21 @@ UpdateLifecycleEventRegistration = function(enabled)
         eventFrame:UnregisterEvent("PLAYER_LOGIN")
         eventFrame:UnregisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:UnregisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        eventFrame:UnregisterEvent("SPELLS_CHANGED")
         eventFrame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
     end
     cooldownEventRegistered = false
+    spellBookEventRegistered = false
     if enabled ~= true then
         if ClearCooldownWake then ClearCooldownWake() end
         return false
     end
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    if ClassHasSecondaryCandidate() then
+        eventFrame:RegisterEvent("SPELLS_CHANGED")
+        spellBookEventRegistered = true
+    end
     UpdateCooldownEventRegistration()
     return true
 end

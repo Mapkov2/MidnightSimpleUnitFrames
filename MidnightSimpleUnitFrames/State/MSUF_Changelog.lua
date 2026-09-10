@@ -41,12 +41,12 @@ local data = {
                         {
                             text = "Health gradients, backgrounds, and prediction updates include the latest Retail performance improvements. Existing colors, text formats, prediction options, and Arena support are preserved.",
                             link = {
-                                pageKey = "opt_colors",
-                                query = "health gradient",
-                                label = "Health Gradient",
-                                sectionId = "colors_appearance",
-                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
-                                settingKey = "general.enableHealthGradient",
+                                pageKey = "classpower",
+                                query = "pip gap",
+                                label = "Pip gap",
+                                sectionId = "classpower_visuals",
+                                controlId = "menu2.classpower.advanced.style.pips.gap",
+                                settingKey = "bars.classPowerGap",
                             },
                         },
                     },
@@ -131,14 +131,49 @@ local data = {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "Highlight borders work reliably again on rounded frames and respect the configured border thickness.",
+                            text = "Name, health, and power text can each appear only on mouseover, with independent fade-in and fade-out durations. Configure each text element under Unit > Text.",
                             link = {
-                                pageKey = "opt_bars",
-                                query = "rounded frame texture",
-                                label = "Rounded frame texture",
-                                sectionId = "bars_rounded",
-                                controlId = "menu2.opt.bars.global.rounded.rounded.frames.enabled",
-                                settingKey = "bars.roundedFramesEnabled",
+                                pageKey = "uf_player",
+                                query = "only show on mouseover",
+                                label = "Only show on mouseover",
+                                sectionId = "text",
+                                controlId = "menu2.uf_player.unit.text.name.mouseover",
+                                settingKey = "player.nameTextMouseover",
+                            },
+                        },
+                        {
+                            text = "Boss target highlights now support arrows, paired markers, diamonds, crosses, and borders. Position markers directly in the preview and optionally require multiple boss frames.",
+                            link = {
+                                pageKey = "uf_boss",
+                                query = "boss target highlight",
+                                label = "Highlight style",
+                                sectionId = "boss_target_highlight",
+                                controlId = "menu2.uf_boss.unit.boss_target_highlight.style",
+                                settingKey = "general.bossTargetHighlightStyle",
+                            },
+                        },
+                        {
+                            text = "Portraits can now be clickable. Enable the option separately for each Unit Frame.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "clickable portrait",
+                                label = "Clickable Portrait",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitclickable",
+                                settingKey = "player.portraitClickable",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "general",
+                            },
+                        },
+                        {
+                            text = "Class Resources now include native Sweeping Strikes tracking.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "sweeping strikes",
+                                label = "Sweeping Strikes Tracker",
+                                sectionId = "classpower_behavior",
+                                controlId = "menu2.classpower.advanced.behavior.sweeping",
+                                settingKey = "bars.showSweepingStrikes",
                             },
                         },
                         {
@@ -163,7 +198,7 @@ local data = {
                     },
                 },
                 {
-                    title = "Fixes",
+                    title = "Changes",
                     bullets = {
                         "Restored rounded highlight startup and layering, including border thickness up to 30.",
                         "Native Dispel and Purge borders apply their configured thickness on all frame shapes and refresh immediately after Menu changes.",

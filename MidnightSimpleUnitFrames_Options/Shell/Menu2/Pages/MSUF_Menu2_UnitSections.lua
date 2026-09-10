@@ -263,9 +263,10 @@ local function ApplyUnitFrameEnabledGate(ctx, unit)
     local wrapper = ctx and ctx.wrapper
     if not wrapper then return end
     local enabled = ReadBool(unit, "enabled", true)
+        and (unit ~= "focustarget" or ReadBool("focus", "enabled", true))
     local gateKey = "unitFrameEnabled:" .. tostring(unit)
-    if ControlGates.Apply then
-        ControlGates.Apply(wrapper, gateKey, enabled, {
+    if ControlGates.ApplySections then
+        ControlGates.ApplySections(ctx, gateKey, enabled, {
             alwaysEnabledFlag = "_msuf2UnitFrameGateAlwaysEnabled",
             exclusivePrefix = "unitFrameEnabled:",
         })
@@ -555,6 +556,57 @@ local function BuildPreview(ctx, builder, unit)
     M.TrackRefresh(ctx, RefreshPreviewState)
     if fixedRecord then fixedRecord.onActivate = RefreshPreviewState end
 end
+local function SectionNumber(value, fallback)
+    return tostring(math.floor((tonumber(value) or fallback or 0) + 0.5))
+end
+local function AttachUnitSectionUX(ctx, unit)
+    local fields = UP.SectionFields or {}
+    local sections = {
+        frame_basics = { fields = "smoothFill chunkedFill reverseFillBars verticalFillBars healthColorMode", summary = function(c)
+            return SectionNumber(c.width, 220) .. " x " .. SectionNumber(c.height, 40) .. " px"
+        end },
+        portrait = { fields = fields.portrait, copy = "portrait" },
+        power_bar = { fields = fields.power_bar, copy = "power" },
+        text = { fields = fields.text, copy = "text" },
+        auras = { summary = function()
+            local model = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
+            if not (model and model.ReadNumber) then return "" end
+            return M.Tr("Buffs") .. " " .. SectionNumber(model.ReadNumber(unit, "maxBuffs", 8, 0, 80))
+                .. " / " .. M.Tr("Debuffs") .. " " .. SectionNumber(model.ReadNumber(unit, "maxDebuffs", 12, 0, 80))
+        end },
+        castbar = { copy = "castbar", canCopy = function(a, b) return UP.CASTBAR_FIELDS[a] and UP.CASTBAR_FIELDS[b] end },
+        unit_dispel_overlay = { prefixes = "unitDispelOverlay" },
+        unit_dispel_symbol = { prefixes = "unitDispelSymbol" },
+        transparency = { fields = fields.transparency, copy = "transparency", summary = function(c) return SectionNumber((c.hpBarAlpha or 1) * 100) .. "%" end },
+        load_conditions = { fields = fields.load_conditions, copy = "load", summary = function(c)
+            local count = 0
+            for key, value in pairs(c) do if key:find("loadCond", 1, true) == 1 and key ~= "loadCondActive" and value == true then count = count + 1 end end
+            return count > 0 and M.Format("%d active conditions", count) or ""
+        end },
+        texture_layer = { fields = fields.texture_layer, copy = "texlayer", summary = function(c)
+            local n = (c.texLayerEnabled and 1 or 0) + (c.texLayer2Enabled and 1 or 0) + (c.texLayer3Enabled and 1 or 0)
+            return n > 0 and M.Format("%d / 3 textures enabled", n) or ""
+        end },
+        anchoring = { fields = "point relativePoint offsetX offsetY anchorFrameName anchorToUnitframe", noCopy = true },
+    }
+    local targets = {}
+    for _, key in ipairs(UNIT_TAB_ORDER) do targets[#targets + 1] = { value = key, text = UnitTopLabel(key) } end
+    UnitSectionShared.AttachSectionUX(ctx, {
+        sections = sections, targets = targets, scope = function() return unit end, conf = GetConf, label = UnitTopLabel,
+        defaults = function(scope)
+            local create = MSUF.MSUF_CreateFactoryDefaultProfile or _G.MSUF_CreateFactoryDefaultProfile
+            local defaults = create and create()
+            -- Optional units can be absent from the factory snapshot. Clearing
+            -- their overrides restores the same inherited defaults as page reset.
+            return type(defaults) == "table" and (defaults[scope] or {}) or nil
+        end,
+        copy = function(source, target, category) return CopyUnitSettings(source, target, { [category] = true }) end,
+        apply = function(scope, id)
+            if id == "load_conditions" then UpdateLoadActive(scope) end
+            M.RequestUnitApply(scope, "MSUF2_SECTION_RESET", { preview = true, text = true, fonts = true, power = true, alpha = true })
+        end,
+    })
+end
 local function BuildTopActions(ctx, builder, unit, label)
     local pageW = tonumber(builder.width) or 720
     local scopeValues = {}
@@ -572,8 +624,9 @@ local function BuildTopActions(ctx, builder, unit, label)
         values = scopeValues,
         width = pageW,
         maxRight = pageW - 112,
-        label = "Editing:",
-        labelWidth = 64,
+        label = "",
+        labelWidth = 0,
+        startX = 16,
         getValue = function() return unit end,
         setValue = function(tabUnit)
             local pageKey = UNIT_PAGE_FOR_UNIT[tabUnit]
@@ -581,7 +634,8 @@ local function BuildTopActions(ctx, builder, unit, label)
         end,
     }
     local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(scopeValues, scopeOpts)
-    local sectionH = math.max(54, math.abs((scopeMetrics and scopeMetrics.bottomY) or -40) + 14)
+    local scopeH = math.max(54, math.abs((scopeMetrics and scopeMetrics.bottomY) or -40) + 14)
+    local sectionH = scopeH
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
@@ -721,77 +775,33 @@ local function BuildTopActions(ctx, builder, unit, label)
         })
     end
 end
+local function PrepareBasicsSwitch(ctx, sec, unit)
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local enable = W.SectionSwitch(sec, "Enable", "Enable")
+    enable._msuf2UnitFrameGateAlwaysEnabled = true
+    M.BindBoolWidget(ctx, enable,
+        function() return ReadBool(unit, "enabled", true) end,
+        function(v)
+            SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true })
+            M.Refresh(ctx)
+        end,
+        SettingMeta(ctx, "basics.enabled", unit, "enabled"))
+    enable:SetChecked(ReadBool(unit, "enabled", true))
+    return enable
+end
 local function AttachBasicsHeaderStatus(sec, unit)
-    local sectionEntry = sec and sec._msuf2CollapsibleEntry
-    if not sectionEntry then return nil end
-    if type(sectionEntry._msuf2BasicsHeaderRefresh) == "function" then return sectionEntry._msuf2BasicsHeaderRefresh end
-    local badge
-    local badgeFill
-    local badgeEdge
-    if sectionEntry.header then
-        sectionEntry._msuf2ManualHintLayout = true
-        badge = CreateFrame("Frame", nil, sectionEntry.header)
-        badge:SetSize(116, 18)
-        badgeFill, badgeEdge = T.CreateSuperellipseLayers(badge, "_msuf2DisabledBadge", 1, "ARTWORK", "ARTWORK")
-        local badgeLabel = T.Font(badge, "GameFontDisableSmall", M.Tr("Frame disabled"), { 1.00, 0.86, 0.74, 1 })
-        badgeLabel:SetPoint("CENTER", badge, "CENTER", 0, 0)
-        badgeLabel:SetWidth(104)
-        badgeLabel:SetJustifyH("CENTER")
-        badge:Hide()
-        if sectionEntry.hint then
-            sectionEntry.hint:ClearAllPoints()
-            sectionEntry.hint:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -12, 0)
-            sectionEntry.hint:SetWidth(110)
-            sectionEntry.hint:SetJustifyH("RIGHT")
-            badge:SetPoint("RIGHT", sectionEntry.hint, "LEFT", -8, 0)
-        else
-            badge:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -122, 0)
-        end
-        if sectionEntry.label then
-            sectionEntry.label:ClearAllPoints()
-            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 8, 0)
-            sectionEntry.label:SetPoint("RIGHT", badge, "LEFT", -12, 0)
-            sectionEntry.label:SetJustifyH("LEFT")
-        end
+    local entry = sec and sec._msuf2CollapsibleEntry
+    if not entry then return end
+    local function Refresh()
+        local enabled = ReadBool(unit, "enabled", true)
+            and (unit ~= "focustarget" or ReadBool("focus", "enabled", true))
+        local color = enabled and EnabledHeaderColor() or WARNING_HEADER_BG
+        W.SetCollapsibleHeaderBaseTone(entry, color, color[4])
+        entry.label:SetText(M.Tr("Frame Basics") .. (enabled and "" or (" - " .. M.Tr("Frame disabled"))))
     end
-    local function RefreshBasicsState()
-        T.ApplyCollapseVisual(sectionEntry.arrow, sectionEntry.hint, sectionEntry.open)
-        local ownOn = ReadBool(unit, "enabled", true)
-        local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
-        local on = ownOn and not parentOff
-        local headerColor = on and EnabledHeaderColor() or WARNING_HEADER_BG
-        if W.SetCollapsibleHeaderBaseTone then
-            W.SetCollapsibleHeaderBaseTone(sectionEntry, headerColor, headerColor[4])
-        elseif sectionEntry.headerBg then
-            sectionEntry.headerBg:SetColorTexture(headerColor[1], headerColor[2], headerColor[3], headerColor[4])
-        end
-        if sectionEntry.label and sectionEntry.label.SetTextColor then
-            if on then
-                sectionEntry.label:SetTextColor(T.colors.text[1], T.colors.text[2], T.colors.text[3], T.colors.text[4] or 1)
-            else
-                sectionEntry.label:SetTextColor(0.92, 0.88, 0.82, 1)
-            end
-        end
-        if badge then
-            badge:SetShown(not on)
-            if not on and badgeFill and badgeEdge then
-                badgeFill:SetVertexColor(WARNING_BADGE_FILL[1], WARNING_BADGE_FILL[2], WARNING_BADGE_FILL[3], WARNING_BADGE_FILL[4])
-                badgeEdge:SetVertexColor(WARNING_BADGE_EDGE[1], WARNING_BADGE_EDGE[2], WARNING_BADGE_EDGE[3], WARNING_BADGE_EDGE[4])
-            end
-        end
-        if sectionEntry.hint then
-            if on then
-                sectionEntry.hint:SetText(M.Tr("ON"))
-                sectionEntry.hint:SetTextColor(0.52, 0.76, 0.58, 1)
-            else
-                sectionEntry.hint:SetText(M.Tr("OFF"))
-                sectionEntry.hint:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4])
-            end
-        end
-    end
-    sectionEntry._msuf2BasicsHeaderRefresh = RefreshBasicsState
-    RefreshBasicsState()
-    return RefreshBasicsState
+    Refresh()
+    return Refresh
 end
 local function BuildBasics(ctx, builder, unit, label)
     -- Default-open so the page greets users with real settings instead of a
@@ -866,15 +876,8 @@ local function BuildBasics(ctx, builder, unit, label)
         end
         return Write()
     end
-    local enable = W.SwitchAt(sec, "Enable", x1, row1, labelW)
-    enable._msuf2UnitFrameGateAlwaysEnabled = true
-    M.BindBoolWidget(ctx, enable,
-        function() return ReadBool(unit, "enabled", true) end,
-        function(v)
-            SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true })
-            M.RequestOrRefresh(ctx, "frame-basics-enabled")
-        end,
-        SettingMeta(ctx, "basics.enabled", unit, "enabled"))
+    local enableHeader = PrepareBasicsSwitch(ctx, sec, unit)
+    local enable = W.SectionSwitchContent(enableHeader, sec, "Enable", x1, row1, labelW)
     -- Fill Direction (axis + in-axis direction) is a 4-way dropdown placed on
     -- its own row below Health Color Scheme; Smooth takes the freed x2 slot.
     local smooth = W.ToggleAt(sec, "Smooth fill", x2, row1, labelW)
@@ -1779,6 +1782,7 @@ local function BuildUnitPage(info)
             title = "Frame Basics",
             height = 216,
             prepareShell = function(lazyCtx, sec, lazyUnit)
+                PrepareBasicsSwitch(lazyCtx, sec, lazyUnit)
                 local refresh = AttachBasicsHeaderStatus(sec, lazyUnit)
                 if refresh then
                     if M.AddRefresherOnce then
@@ -1811,6 +1815,7 @@ local function BuildUnitPage(info)
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 210 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchoring", height = 220 })
+        AttachUnitSectionUX(ctx, info.unit)
         M.TrackRefresh(ctx, function()
             ApplyUnitFrameEnabledGate(ctx, info.unit)
         end)
