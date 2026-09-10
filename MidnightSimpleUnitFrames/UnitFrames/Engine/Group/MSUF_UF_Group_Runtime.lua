@@ -937,8 +937,17 @@ local function RuntimeOnEvent(self, event, unit)
       if priorityUnit == true then SchedulePriorityNameSettle() end
     end
     return
-  elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
+  elseif event == "PLAYER_DIFFICULTY_CHANGED" then
+    -- Normal and mythic raid share one secure header, so the difficulty edge
+    -- has to swap its config kind immediately; the queued settle only corrects
+    -- the footprint afterwards.
     GF.RefreshHeaderLayout(event)
+    ScheduleHeaderLayoutSettle()
+  elseif event == "ZONE_CHANGED_NEW_AREA" then
+    -- HeaderScope() is nil for this event, so an inline pass would be an exact
+    -- duplicate of the settle's own RefreshHeaderLayout(). Rebuilding every raid
+    -- button twice inside the post-loading-screen frame is what tripped the
+    -- script watchdog; the queued pass alone repaints one frame later.
     ScheduleHeaderLayoutSettle()
   end
 end
