@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha16 - 2026-09-10
+
+### Changes
+
+- Every settings section now carries its on/off switch, a one-line summary and a "..." menu on its header, so a feature can be turned on or off without expanding it and a single section can be reset or copied on its own.
+- Options menus read brighter: taller section headers with an accent border when open or hovered, a higher floor for the smallest fonts, and a clearly visible active page in the navigation.
+- Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.
+- Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.
+- Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.
+
+### Fixes & Performance
+
+- The interrupt-ready indicator counts every interrupt you actually have instead of a single spell, while each client keeps its own era-correct interrupt list.
+- With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.
+- A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.
+- Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.
+
 ## 6.5-alpha15 - 2026-09-09
 
 ### Fixes & Performance

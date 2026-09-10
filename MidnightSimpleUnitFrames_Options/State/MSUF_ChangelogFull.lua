@@ -8,12 +8,37 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E71877574CEFC47C642E2890A8676244B56E7229FE0D2ADD922476F1E7B75877",
-    currentVersion = "6.5-alpha15",
+    sourceSha256 = "4E88B9846E7D06B3E123C8E3C204E70F39FBBAD878CA889A48D7D1C78CD3A4B3",
+    currentVersion = "6.5-alpha16",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-alpha14",
-    rangeLabel = "6.5-alpha14 -> 6.5-alpha15",
+    previousVersion = "6.5-alpha15",
+    rangeLabel = "6.5-alpha15 -> 6.5-alpha16",
     entries = {
+        {
+            version = "6.5-alpha16",
+            date = "2026-09-10",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Every settings section now carries its on/off switch, a one-line summary and a \"...\" menu on its header, so a feature can be turned on or off without expanding it and a single section can be reset or copied on its own.",
+                        "Options menus read brighter: taller section headers with an accent border when open or hovered, a higher floor for the smallest fonts, and a clearly visible active page in the navigation.",
+                        "Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.",
+                        "Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.",
+                        "Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "The interrupt-ready indicator counts every interrupt you actually have instead of a single spell, while each client keeps its own era-correct interrupt list.",
+                        "With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.",
+                        "A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.",
+                        "Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha15",
             date = "2026-09-09",

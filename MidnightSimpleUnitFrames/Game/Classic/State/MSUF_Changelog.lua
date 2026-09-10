@@ -8,12 +8,37 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E71877574CEFC47C642E2890A8676244B56E7229FE0D2ADD922476F1E7B75877",
-    currentVersion = "6.5-alpha15",
-    historyFromVersion = "6.5-alpha12",
-    previousVersion = "6.5-alpha14",
-    rangeLabel = "6.5-alpha14 -> 6.5-alpha15",
+    sourceSha256 = "4E88B9846E7D06B3E123C8E3C204E70F39FBBAD878CA889A48D7D1C78CD3A4B3",
+    currentVersion = "6.5-alpha16",
+    historyFromVersion = "6.5-alpha13",
+    previousVersion = "6.5-alpha15",
+    rangeLabel = "6.5-alpha15 -> 6.5-alpha16",
     entries = {
+        {
+            version = "6.5-alpha16",
+            date = "2026-09-10",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Every settings section now carries its on/off switch, a one-line summary and a \"...\" menu on its header, so a feature can be turned on or off without expanding it and a single section can be reset or copied on its own.",
+                        "Options menus read brighter: taller section headers with an accent border when open or hovered, a higher floor for the smallest fonts, and a clearly visible active page in the navigation.",
+                        "Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.",
+                        "Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.",
+                        "Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "The interrupt-ready indicator counts every interrupt you actually have instead of a single spell, while each client keeps its own era-correct interrupt list.",
+                        "With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.",
+                        "A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.",
+                        "Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha15",
             date = "2026-09-09",
@@ -119,56 +144,6 @@ local data = {
                         "Cancelling pending player interrupt feedback clears its pending state, allowing the next interruption to hide normally.",
                         "The Classic delayed scheduler uses the refactored callback error handler while retaining keyed cancellation and replacement.",
                         "Classic Aura Edit Mode and Menu load the new shared factories in their required order.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-alpha12",
-            date = "2026-09-06",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Highlight borders work reliably again on rounded frames and respect the configured border thickness.",
-                            link = {
-                                pageKey = "opt_bars",
-                                query = "rounded frame texture",
-                                label = "Rounded frame texture",
-                                sectionId = "bars_rounded",
-                                controlId = "menu2.opt.bars.global.rounded.rounded.frames.enabled",
-                                settingKey = "bars.roundedFramesEnabled",
-                            },
-                        },
-                        {
-                            text = "MSUF menus and Edit Mode can follow your MapkoSkin appearance. The Use MapkoSkin for MSUF menus option connects compatible MapkoSkin installations to MSUF menu styling.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "use mapkoskin for msuf menus",
-                                label = "Use MapkoSkin for MSUF menus",
-                                sectionId = "misc_mapkoskin",
-                                controlId = "menu2.opt.misc.global.setting.mapko.skin.menus",
-                                settingKey = "general.mapkoSkinMenus",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Includes the complete Retail 6.15 and 6.151 feature and fix set, including the earlier prediction-opacity, raid-sorting, Assistant, and performance improvements.",
-                        "MapkoSkin menu integration is available across the Mainline, Vanilla, TBC, and Mists flavors, with its own searchable toggle.",
-                        "The Mainline flavor retains Retail 12.1.5 support and Arena Frames. Vanilla 1.15.9, TBC 2.5.6, and Mists 5.5.4 compatibility remains included.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Restored rounded highlight startup and layering, including border thickness up to 30.",
-                        "Native Dispel and Purge borders apply their configured thickness on all frame shapes and refresh immediately after Menu changes.",
-                        "Group Frame highlight detection continues working when Aura icons are disabled.",
-                        "Any dispel type highlights can detect typed harmful Auras on enemy units.",
                     },
                 },
             },
