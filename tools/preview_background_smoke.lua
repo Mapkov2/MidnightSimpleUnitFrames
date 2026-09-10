@@ -1,5 +1,5 @@
 -- Executable smoke for the shared Menu2 preview background selector.
--- Verifies the Silvermoon default, texture/custom switching, studio fallback,
+-- Verifies the neutral Studio default, texture/custom switching, studio fallback,
 -- and one shared picker used by Unit, Group, and Class Resources preview canvases.
 
 _G = _G or _ENV
@@ -194,7 +194,7 @@ assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Preview
 
 local H = assert(M.PreviewHelpers)
 local key = H.GetPreviewBackground()
-assert(key == "silvermoon", "silvermoon must be the default")
+assert(key == "studio", "studio must be the default")
 for _, name in ipairs({ "bright_stone.png", "city_scene.png", "dark_stone.png", "silvermoon.png" }) do
     local asset = assert(io.open("MidnightSimpleUnitFrames_Options/Media/PreviewBackgrounds/" .. name, "rb"),
         "missing preview background asset: " .. name)
@@ -220,7 +220,10 @@ canvas.left, canvas.bottom = 250, 250
 canvas:SetSize(600, 180)
 H.ApplyPreviewChrome(outer, "outer", theme)
 H.ApplyPreviewChrome(canvas, "canvas", theme)
-assert(canvas._msuf2PreviewCanvasImage and canvas._msuf2PreviewCanvasImage.shown, "default image missing")
+assert(not canvas._msuf2PreviewCanvasImage or not canvas._msuf2PreviewCanvasImage.shown,
+    "studio default must not show a world texture")
+assert(H.SetPreviewBackground("silvermoon"), "explicit Silvermoon selection failed")
+assert(canvas._msuf2PreviewCanvasImage and canvas._msuf2PreviewCanvasImage.shown, "chosen image missing")
 assert(canvas._msuf2PreviewCanvasImage.texture:match("silvermoon%.png$"), "wrong default texture")
 assert(canvas._msuf2PreviewCanvasImage.texCoord[3] > 0, "wide canvas texture must crop instead of stretch")
 assert(canvas.backdropColor[4] == 0, "silvermoon image backdrop must be transparent")
@@ -283,6 +286,6 @@ assert(menuHost._msuf2AtmosphereTextures[1]:GetAlpha() == 1
     "background switching must leave the host atmosphere untouched")
 
 local stateSource = assert(io.open("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_State.lua", "rb")):read("*a")
-assert(stateSource:find('previewBackground%s*=%s*"silvermoon"'), "persistent silvermoon default missing")
+assert(stateSource:find('previewBackground%s*=%s*"studio"'), "persistent studio default missing")
 assert(stateSource:find("previewBackgroundCustomR%s*=%s*0%.08"), "persistent custom color missing")
 print("PREVIEW BACKGROUND SMOKE PASS - silvermoon/custom/studio/hot-swap/persistence")

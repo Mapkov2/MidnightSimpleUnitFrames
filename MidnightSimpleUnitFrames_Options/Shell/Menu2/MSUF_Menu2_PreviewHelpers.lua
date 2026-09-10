@@ -76,7 +76,7 @@ function H.ApplyRoundedMediaSlice(region, strength)
         region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
     end
 end
-local PREVIEW_BACKGROUND_DEFAULT = "silvermoon"
+local PREVIEW_BACKGROUND_DEFAULT = "studio"
 local PREVIEW_BACKGROUND_ASPECT = 2
 local PREVIEW_BACKGROUND_CLEAR = { 0, 0, 0, 0 }
 local PREVIEW_BACKGROUND_CUSTOM_DEFAULT = { 0.08, 0.12, 0.18, 1 }

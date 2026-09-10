@@ -1605,7 +1605,7 @@ function Preview.Refresh(box, reason)
     --- Re-read them on every visible preview refresh so a factory reset or
     --- profile switch cannot leave the already-built layer rail stale.
     if type(box.layerVisibility) == "table" then
-        box.layerVisibility.guides = g.unitPreviewGuidesEnabled ~= false
+        box.layerVisibility.guides = g.unitPreviewGuidesEnabled == true
     end
     -- Live snapshot first so the preview mirrors the real frame's current
     -- state (exact name/class/HP/power); stylized mock only as fallback.

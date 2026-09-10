@@ -326,7 +326,7 @@ local function PreviewGuidesEnabled()
     local db = _G.MSUF_DB
     local general = db and db.general
     if type(general) == "table" and general.unitPreviewGuidesEnabled ~= nil then return general.unitPreviewGuidesEnabled ~= false end
-    return true
+    return false
 end
 local function SetPreviewGuidesEnabled(enabled)
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})

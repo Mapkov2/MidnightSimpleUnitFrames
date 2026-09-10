@@ -229,7 +229,7 @@ end
 local function PreviewGuidesEnabled()
     local general = General()
     if general.classPowerPreviewGuidesEnabled ~= nil then return general.classPowerPreviewGuidesEnabled ~= false end
-    return true
+    return false
 end
 local function SetPreviewGuidesEnabled(enabled)
     General().classPowerPreviewGuidesEnabled = enabled ~= false
@@ -2270,7 +2270,7 @@ local function CreateLayerSidebar(box, sideW)
     box.layerButtons = {}
     for i = 1, #CP_PREVIEW_LAYERS do
         local def = CP_PREVIEW_LAYERS[i]
-        box.layerVisibility[def.key] = (def.key == "guides") and PreviewGuidesEnabled() or true
+        box.layerVisibility[def.key] = def.key ~= "guides" or PreviewGuidesEnabled()
         local btn = Helpers.CreateLayerButton(sidebar, box, def, i, sideW, CP_LAYER_BUTTON_OPTS)
         if def.key == "guides" then
             RegisterPreviewControl(box._catalogCtx, btn, "layer.guides",
