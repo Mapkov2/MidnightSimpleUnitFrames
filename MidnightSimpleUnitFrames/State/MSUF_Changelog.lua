@@ -8,12 +8,59 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "B70966E1D0354BC352B0D4C8919D865F575DCF9248CD77119DC1045181BAADA2",
-    currentVersion = "6.16-beta5",
-    historyFromVersion = "6.16-beta2",
-    previousVersion = "6.16-beta4",
-    rangeLabel = "6.16-beta4 -> 6.16-beta5",
+    sourceSha256 = "8AF6299FF2FE00EDFC06500DFFACBA3E0533D3D5E0B7BDBF0296DEA91AA7C4A4",
+    currentVersion = "6.16-beta6",
+    historyFromVersion = "6.16-beta3",
+    previousVersion = "6.16-beta5",
+    rangeLabel = "6.16-beta5 -> 6.16-beta6",
     entries = {
+        {
+            version = "6.16-beta6",
+            date = "2026-09-10",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Every settings section now carries its on/off switch, a one-line summary and a \"...\" menu on its header. Turn a feature on or off without expanding it, read its current values at a glance, and reset or copy just that section.",
+                            linkless = true,
+                        },
+                        {
+                            text = "The interrupt-ready indicator counts every interrupt you have, not just your main kick. Paladins with Avenger's Shield and Warriors with Disrupting Shout read as ready as soon as either one is off cooldown.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "castbar border",
+                                label = "Castbar border",
+                                sectionId = "castbar_interrupt_ready",
+                                controlId = "menu2.opt.castbar.global.interrupt.ready.kick.ready.style",
+                                settingKey = "general.kickReadyStyle",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Options menus read brighter: taller section headers with an accent border when open or hovered, a higher floor for the smallest fonts, and a clearly visible active page in the navigation.",
+                        "Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.",
+                        "Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.",
+                        "Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.",
+                        "The Arcane Surge / Arcane Soul countdown row and its Class Resources toggle were removed. Whirlwind and Sweeping Strikes tracking are unchanged.",
+                        "German clients now see translated text for the new frame workspace header and the section actions popup.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.",
+                        "Balance Druid, Survival Hunter and Demonology Warlock track their own interrupt again instead of a spell they cannot cast.",
+                        "A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.",
+                        "Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.",
+                        "The 6.16 beta 3 entry in See New Features no longer links to the removed Arcane Surge / Soul toggle.",
+                    },
+                },
+            },
+        },
         {
             version = "6.16-beta5",
             date = "2026-09-09",
@@ -133,40 +180,6 @@ local data = {
                         "Added class-colored power bars to the contextual color controls.",
                         "Expanded Assistant command coverage, scoped requests, follow-up handling, and exact setting navigation.",
                         "Updated the Menu search index and Assistant control catalog for the new settings.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.16-beta2",
-            date = "2026-09-08",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Health gradients, backgrounds, and prediction updates do less repeated work during combat. Existing colors, text formats, prediction options, and update behavior are preserved.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "health gradient",
-                                label = "Health Gradient",
-                                sectionId = "colors_appearance",
-                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
-                                settingKey = "general.enableHealthGradient",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Health and background rendering reuse fresh health samples and choose client-specific update paths once instead of on every health event.",
-                        "Absorb-only prediction uses specialized update paths for static and follow-health anchors, including glow and full-health stripe options, while retaining identity, disable, and recovery handling.",
-                        "Current, maximum, and percentage text use specialized writers and preserve live number-format changes. Group text updates reuse health values already sampled for the bars.",
-                        "Castbar interrupt-ready colors reuse configured colors for public values and retain Blizzard's native handling for protected values.",
-                        "Aura identity checks avoid temporary owner tables and repeated access checks. Castbar color ownership avoids redundant temporary allocations.",
-                        "Corrected missing-health background masking during Range Fade so the configured background and out-of-range appearance remain visible.",
-                        "Fixed clipping in Aura cooldown and Texture Layer options, and improved Unit Status previews in the Menu.",
                     },
                 },
             },

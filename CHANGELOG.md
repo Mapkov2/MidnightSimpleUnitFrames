@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.16-beta6 - 2026-09-10
+
+### Highlights
+
+- **Every settings section now carries its on/off switch, a one-line summary and a "..." menu on its header.** Turn a feature on or off without expanding it, read its current values at a glance, and reset or copy just that section.
+<!-- msuf-menu-link: none -->
+- **The interrupt-ready indicator counts every interrupt you have, not just your main kick.** Paladins with Avenger's Shield and Warriors with Disrupting Shout read as ready as soon as either one is off cooldown.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_interrupt_ready","controlId":"menu2.opt.castbar.global.interrupt.ready.kick.ready.style","settingKey":"general.kickReadyStyle","prepareKind":"","prepareValue":"","query":"castbar border","label":"Castbar border"} -->
+
+### Changes
+
+- Options menus read brighter: taller section headers with an accent border when open or hovered, a higher floor for the smallest fonts, and a clearly visible active page in the navigation.
+- Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.
+- Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.
+- Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.
+- The Arcane Surge / Arcane Soul countdown row and its Class Resources toggle were removed. Whirlwind and Sweeping Strikes tracking are unchanged.
+- German clients now see translated text for the new frame workspace header and the section actions popup.
+
+### Fixes & Performance
+
+- With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.
+- Balance Druid, Survival Hunter and Demonology Warlock track their own interrupt again instead of a spell they cannot cast.
+- A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.
+- Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.
+- The 6.16 beta 3 entry in See New Features no longer links to the removed Arcane Surge / Soul toggle.
+
 ## 6.16-beta5 - 2026-09-09
 
 ### Highlights
