@@ -333,7 +333,9 @@ local function CreateDashboardAccordionTone(header, arrow)
     local headerActiveFrom = { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 }
     local headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
     local headerOpenHighlight = W.CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo)
+    local PaintHeaderBorder = W.CreateAccordionBorder(header)
     local function Refresh(open, hover)
+        PaintHeaderBorder(open, hover)
         local headerSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
         local headerRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
         headerActiveBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
@@ -346,7 +348,7 @@ local function CreateDashboardAccordionTone(header, arrow)
         M.CallIf(T.ApplyCollapseVisual, arrow, nil, open)
         if open then arrow:SetVertexColor(1, 1, 1, 0.98) end
         local color = hover and headerRaised or headerSurface
-        headerBg:SetColorTexture(color[1], color[2], color[3], hover and 0.42 or 0.34)
+        headerBg:SetColorTexture(color[1], color[2], color[3], hover and 0.78 or 0.58)
     end
     return Refresh
 end
@@ -376,11 +378,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     header:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, top)
     header:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, top)
     header:SetHeight(headerH)
-    local headerEdge = header:CreateTexture(nil, "BORDER")
-    headerEdge:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
-    headerEdge:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
-    headerEdge:SetHeight(1)
-    headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.44)
     local arrow = header:CreateTexture(nil, "OVERLAY")
     arrow:SetSize(10, 10)
     arrow:SetPoint("LEFT", header, "LEFT", 16, 0)
@@ -527,7 +524,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     }), opts.title or "Changelog", "button")
     local function PaintHeader(isOpen)
         PaintHeaderTone(isOpen, false)
-        if headerEdge.SetColorTexture then headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], isOpen and 0.58 or 0.34) end
         hint:SetText(isOpen and M.Tr("Hide") or M.Tr("View"))
     end
     local function RefreshOpenState()

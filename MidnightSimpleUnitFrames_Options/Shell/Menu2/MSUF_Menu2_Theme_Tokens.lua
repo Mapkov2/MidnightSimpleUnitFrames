@@ -61,12 +61,8 @@ local function ColorRows(rows)
     end
     return out
 end
--- Accessible midnight palette. Structural surfaces stay neutral, blue owns interaction,
--- and green/red/amber are reserved for success, danger, and warning semantics.
--- Text legibility ramp against `panel`, in WCAG contrast: text 17.1:1, muted 8.4:1,
--- dim 4.9:1, disabled 3.7:1. Disabled is deliberately the floor but must stay
--- readable: gated controls (see ControlGates) are common, and a user who cannot
--- read a gated label cannot tell what enabling its parent would unlock.
+-- Preserve the authored midnight glass surfaces. Improve reading contrast in
+-- foreground tokens without replacing the menu's translucent materials.
 T.colors = ColorRows [[
 coreShadow=0.020,0.039,0.071,1.00
 coreInk=0.027,0.063,0.106,1.00
@@ -86,27 +82,27 @@ borderSoft=0.086,0.149,0.227,0.720
 cardBorder=0.102,0.173,0.259,0.820
 text=0.933,0.957,1.000,1.00
 title=0.957,0.973,1.000,1.00
-muted=0.659,0.706,0.780,0.96
-searchPlaceholder=0.659,0.706,0.780,0.94
-dim=0.500,0.550,0.650,0.92
-disabled=0.460,0.510,0.590,0.82
+muted=0.741,0.792,0.863,1.00
+searchPlaceholder=0.741,0.792,0.863,1.00
+dim=0.659,0.718,0.804,1.00
+disabled=0.580,0.635,0.725,1.00
 accent=0.231,0.510,0.965,1.00
 checkActive=0.141,0.365,0.741,1.00
 checkActiveEdge=0.357,0.608,1.000,0.94
 checkInactive=0.043,0.090,0.149,1.00
-checkInactiveEdge=0.102,0.173,0.259,0.88
+checkInactiveEdge=0.290,0.420,0.580,0.96
 accent2=0.851,0.643,0.255,1.00
 danger=0.878,0.322,0.369,1.00
 ok=0.259,0.827,0.573,1.00
-pillBase=0.035,0.067,0.114,0.92
-pillBaseSolid=0.055,0.098,0.161,0.94
+pillBase=0.055,0.098,0.161,0.94
+pillBaseSolid=0.065,0.114,0.180,0.96
 pillHover=0.063,0.145,0.255,0.96
 pillActive=0.141,0.365,0.741,0.96
-pillEdge=0.102,0.173,0.259,0.68
-pillEdgeButton=0.102,0.173,0.259,0.76
+pillEdge=0.220,0.340,0.490,0.88
+pillEdgeButton=0.220,0.340,0.490,0.90
 pillEdgeHover=0.231,0.510,0.965,0.58
 pillEdgeActive=0.357,0.608,1.000,0.78
-pillText=0.839,0.890,0.961,0.98
+pillText=0.902,0.937,0.984,1.00
 pillTextActive=0.957,0.973,1.000,1.00
 navPillBase=0.020,0.039,0.071,0.86
 navPillBaseSolid=0.035,0.067,0.114,0.92
@@ -115,12 +111,12 @@ navPillActive=0.141,0.365,0.741,0.96
 navPillEdge=0.102,0.173,0.259,0.62
 navPillEdgeHover=0.231,0.510,0.965,0.60
 navPillEdgeActive=0.357,0.608,1.000,0.80
-navText=0.839,0.890,0.961,0.98
+navText=0.902,0.937,0.984,1.00
 navTextActive=0.957,0.973,1.000,1.00
-navHeaderText=0.659,0.706,0.780,0.94
+navHeaderText=0.741,0.792,0.863,1.00
 navHeaderHover=0.357,0.608,1.000,1.00
 navArrowOpen=0.357,0.608,1.000,1.00
-navArrowClosed=0.659,0.706,0.780,0.78
+navArrowClosed=0.741,0.792,0.863,0.94
 glassShell=0.020,0.039,0.071,0.900
 glassRail=0.027,0.063,0.106,0.880
 glassHost=0.035,0.067,0.114,0.860

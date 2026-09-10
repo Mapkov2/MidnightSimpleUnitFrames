@@ -65,7 +65,8 @@ local function BuildDispelOverlaySection(ctx, b)
             maxTargets = 5,
         })
     end
-    local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", 16, -16, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
+    local dispelToggle = BindScopeToggle(ctx, W.SectionSwitch(dispel, "Dispel Overlay"), "dispelOverlayEnabled", false, "visual")
+    local dispelToggleContent = W.SectionSwitchContent(dispelToggle, dispelCard, "Dispel Overlay", 16, -16)
     local dispelTrigger = W.Dropdown(dispelCard, "Overlay detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
     M.BindDropdownWidget(ctx, dispelTrigger,
         function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")) end,
@@ -117,6 +118,7 @@ local function BuildDispelOverlaySection(ctx, b)
         end
         SetOptionsEnabled(dispelControls, overlayOn)
         SetOptionEnabled(dispelToggle, not DISPEL_OVERLAY_121_PTR_DISABLED)
+        SetOptionEnabled(dispelToggleContent, not DISPEL_OVERLAY_121_PTR_DISABLED)
         local badges = {
             OnOffBadge(overlayOn, "Active", "Off"),
         }
@@ -183,8 +185,8 @@ local function BuildGFDispelSymbolSection(ctx, b)
     local cardW = min(900, max(320, sectionW - 40))
     local wide = cardW >= 760
     local card = W.ControlCard(section, nil, nil, 20, -38, cardW, wide and 304 or 500)
-    local toggle = BindScopeToggle(ctx, W.SwitchAt(card, "Dispel Symbol", 16, -16, 0, "HIDDEN"),
-        "dispelSymbolEnabled", false, "visual")
+    local toggle = BindScopeToggle(ctx, W.SectionSwitch(section, "Dispel Symbol"), "dispelSymbolEnabled", false, "visual")
+    local toggleContent = W.SectionSwitchContent(toggle, card, "Dispel Symbol", 16, -16)
     local leftX, columnGap = 16, 24
     local controlW = wide and floor((cardW - 32 - columnGap) * 0.5) or min(360, cardW - 32)
     local rightX = wide and (leftX + controlW + columnGap) or leftX
@@ -223,6 +225,7 @@ local function BuildGFDispelSymbolSection(ctx, b)
         SetOptionsEnabled(controls, on)
         SetOptionsEnabled(allModeControls, on and Val(CurrentScope(), "dispelSymbolMode", "ALL") == "ALL")
         SetOptionEnabled(toggle, true)
+        SetOptionEnabled(toggleContent, true)
         local badges = {
             OnOffBadge(on, "Active", "Off"),
             { text = OptionText(GF_DISPEL_SYMBOL_STYLES, Val(CurrentScope(), "dispelSymbolStyle", "BLIZZARD"), "Blizzard symbol"), kind = on and "accent" or "muted" },
@@ -233,6 +236,47 @@ local function BuildGFDispelSymbolSection(ctx, b)
     TrackSectionRefresh(ctx, section, RefreshDispelSymbolState)
 end
 
+local function DefaultPowerHeight(kind)
+    kind = kind or CurrentScope()
+    return (kind == "raid" or kind == "mythicraid") and 4 or 6
+end
+local function IsPowerBarEnabled(kind)
+    local conf = Conf(kind or CurrentScope())
+    if not conf then return false end
+    if conf.powerBarEnabled == false then return false end
+    local raw = tonumber(conf.powerHeight)
+    if raw ~= nil and raw <= 0 then return false end
+    return true
+end
+local function CurrentPowerHeight(kind)
+    kind = kind or CurrentScope()
+    local raw = tonumber(Conf(kind).powerHeight)
+    if raw and raw > 0 then return raw end
+    return DefaultPowerHeight(kind)
+end
+local function PreparePowerSwitch(ctx, power)
+    local entry = power and power._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local powerEnabled = W.SectionSwitch(power, "Show Power Bar")
+    M.BindBoolWidget(ctx, powerEnabled,
+        function() return IsPowerBarEnabled(CurrentScope()) end,
+        function(v)
+            local scope = CurrentScope()
+            Set(scope, "powerBarEnabled", v and true or false, "geometry")
+            if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
+            RequestGroupBarsRefresh(ctx, "gf-bars-power-enabled")
+        end,
+        ControlMeta(ctx, "field.powerBarEnabled"))
+    powerEnabled:SetChecked(IsPowerBarEnabled(CurrentScope()))
+    return powerEnabled
+end
+local function PrepareRangeSwitch(ctx, range)
+    local entry = range and range._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local toggle = BindScopeToggle(ctx, W.SectionSwitch(range, "Range Fade"), "rangeFadeEnabled", false, "visual")
+    toggle:SetChecked(Bool(CurrentScope(), "rangeFadeEnabled", false))
+    return toggle
+end
 local function BuildGFResourceBarSection(ctx, b)
     -- Self-sizing section: the cards reserve their own rows through W.NextRow and
     -- b:FinishSection derives the height from the cursor. A hand-declared height
@@ -247,24 +291,6 @@ local function BuildGFResourceBarSection(ctx, b)
     local powerRightX = powerLeftX + powerLeftW + powerGap
     local powerRightW = powerInnerW - powerLeftW - powerGap
     local powerSliderW = max(180, min(360, powerLeftW - 64))
-    local function DefaultPowerHeight(kind)
-        kind = kind or CurrentScope()
-        return (kind == "raid" or kind == "mythicraid") and 4 or 6
-    end
-    local function IsPowerBarEnabled(kind)
-        local conf = Conf(kind or CurrentScope())
-        if not conf then return false end
-        if conf.powerBarEnabled == false then return false end
-        local raw = tonumber(conf.powerHeight)
-        if raw ~= nil and raw <= 0 then return false end
-        return true
-    end
-    local function CurrentPowerHeight(kind)
-        kind = kind or CurrentScope()
-        local raw = tonumber(Conf(kind).powerHeight)
-        if raw and raw > 0 then return raw end
-        return DefaultPowerHeight(kind)
-    end
     -- Card set mirrors the unit-frame Resource Bar section (Visibility & Size,
     -- Border & fill, Detached placement); Roles is the group-only addition.
     -- Bar art and colour stay off this page for the same reason they are off the
@@ -307,16 +333,8 @@ local function BuildGFResourceBarSection(ctx, b)
             historySource = "menu:group-power-loss-color",
         })
     end
-    local powerEnabled = W.SwitchAt(powerMainCard, "Show Power Bar", powerLeftW - 62, -24, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, powerEnabled,
-        function() return IsPowerBarEnabled(CurrentScope()) end,
-        function(v)
-            local scope = CurrentScope()
-            Set(scope, "powerBarEnabled", v and true or false, "geometry")
-            if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
-            RequestGroupBarsRefresh(ctx, "gf-bars-power-enabled")
-        end,
-        ControlMeta(ctx, "field.powerBarEnabled"))
+    local powerEnabled = PreparePowerSwitch(ctx, power)
+    local powerEnabledContent = W.SectionSwitchContent(powerEnabled, powerMainCard, "Show Power Bar", powerLeftW - 62, -24)
     local powerHeight = W.Slider(powerMainCard, "Power height", 1, 30, 1, powerSliderW)
     M.BindNumberWidget(ctx, powerHeight,
         function() return CurrentPowerHeight(CurrentScope()) end,
@@ -400,6 +418,7 @@ local function BuildGFResourceBarSection(ctx, b)
         local enabled = IsPowerBarEnabled(CurrentScope())
         local detached = enabled and Bool(CurrentScope(), "powerBarDetached", false)
         SetOptionEnabled(powerEnabled, true)
+        SetOptionEnabled(powerEnabledContent, true)
         SetOptionsEnabled(powerControls, enabled)
         SetOptionEnabled(powerHeight, enabled and not detached)
         SetOptionEnabled(embedPower, enabled and not detached)
@@ -992,7 +1011,8 @@ local function BuildGFDebuffStripeSection(ctx, b)
             offsetX = -76,
         })
     end
-    local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripeCard, "Debuff Stripe", stripeCardW - 62, -24, 0, "HIDDEN"), "debuffStripeEnabled", false, "visual")
+    local stripeToggle = BindScopeToggle(ctx, W.SectionSwitch(stripe, "Debuff Stripe"), "debuffStripeEnabled", false, "visual")
+    local stripeToggleContent = W.SectionSwitchContent(stripeToggle, stripeCard, "Debuff Stripe", stripeCardW - 62, -24)
     local stripeEdge = ScopeDropdown(ctx, stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260, "debuffStripeEdge", "BOTTOM", "visual", 16, -74, min(260, stripeCardW - 32))
     local stripeHeight = ScopeSlider(ctx, stripeCard, "Stripe height", 1, 8, 1, 300, "debuffStripeHeight", 3, "visual", 16, -126, min(360, stripeCardW - 72))
     local stripeHint = W.Text(stripeCard, "Color and opacity are in Appearance > Colors > Group Frame Colors.", 16, -176, stripeCardW - 32, T.colors.muted)
@@ -1002,6 +1022,7 @@ local function BuildGFDebuffStripeSection(ctx, b)
         local enabled = Bool(CurrentScope(), "debuffStripeEnabled", false)
         SetOptionsEnabled(stripeControls, enabled)
         SetOptionEnabled(stripeToggle, true)
+        SetOptionEnabled(stripeToggleContent, true)
         SetSectionBadgesAndStatus(stripe, {
             OnOffBadge(enabled, "Active", "Off"),
             { text = OptionText(DEBUFF_STRIPE_EDGES, Val(CurrentScope(), "debuffStripeEdge", "BOTTOM"), "Bottom Edge"), kind = enabled and "info" or "muted" },
@@ -1030,7 +1051,8 @@ local function BuildGFRangeFadeSection(ctx, b)
     local rangeCardY = -18
     local rangeEffectCard = W.ControlCard(range, "Behavior", nil, rangeLeftX, rangeCardY, rangeLeftWidth, 190)
     local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, rangeCardY, rangeRightWidth, 190)
-    local rangeToggle = BindScopeToggle(ctx, W.SwitchAt(rangeEffectCard, "Range Fade", rangeLeftWidth - 62, -24, 0, "HIDDEN"), "rangeFadeEnabled", false, "visual")
+    local rangeToggle = PrepareRangeSwitch(ctx, range)
+    local rangeToggleContent = W.SectionSwitchContent(rangeToggle, rangeEffectCard, "Range Fade", rangeLeftWidth - 62, -24)
     local function BindRangeAlphaSlider(key, label, default, y)
         local control = W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth)
         M.BindNumberWidget(ctx, control,
@@ -1080,6 +1102,7 @@ local function BuildGFRangeFadeSection(ctx, b)
         local offlineHidden = Bool(CurrentScope(), "hideOfflineEnabled", false)
         SetOptionsEnabled(rangeControls, enabled)
         SetOptionEnabled(rangeToggle, true)
+        SetOptionEnabled(rangeToggleContent, true)
         SetOptionEnabled(offlineFadeToggle, not offlineHidden)
         SetOptionEnabled(offlineAlphaSlider, offlineFade or offlineHidden)
         local offlineText, offlineKind = "Offline visible", "muted"
@@ -1100,6 +1123,8 @@ local function BuildGFRangeFadeSection(ctx, b)
 end
 
 M.GroupFrameLayoutSections = M.GroupFrameLayoutSections or {}
+M.GroupFrameLayoutSections.PreparePowerSwitch = PreparePowerSwitch
+M.GroupFrameLayoutSections.PrepareRangeSwitch = PrepareRangeSwitch
 M.GroupFrameLayoutSections.BuildResourceBar = BuildGFResourceBarSection
 M.GroupFrameLayoutSections.BuildText = BuildGFTextSection
 M.GroupFrameLayoutSections.BuildRangeFade = BuildGFRangeFadeSection

@@ -53,3 +53,25 @@ function Gates.Apply(root, gateKey, enabled, opts)
     return changed
 end
 Gates.ForEachControl = ForEachControl
+-- Scope only setting sections: page/unit selectors and preview chrome remain
+-- available so a disabled frame never traps the user on its page.
+function Gates.ApplySections(ctx, gateKey, enabled, opts)
+    local page = ctx and ctx.entry
+    if not page then return end
+    page._msuf2FrameGate = { key = gateKey, enabled = enabled, opts = opts }
+    for id, section in pairs(page.sections or {}) do
+        local entry = section._msuf2CollapsibleEntry
+        if entry and not tostring(id):lower():find("preview", 1, true) then
+            Gates.Apply(entry.outer, gateKey, enabled, opts)
+            local primary = id == "frame_basics" or id == "general"
+            entry.header:SetAlpha((enabled or primary) and 1 or 0.48)
+            if primary and entry.label then
+                local title = M.Tr("Frame Basics")
+                if not enabled then title = title .. " - " .. M.Tr("Frame disabled") end
+                entry.label:SetText(title)
+                local color = enabled and M.Theme.colors.text or M.Theme.colors.disabled
+                entry.label:SetTextColor(color[1], color[2], color[3], 1)
+            end
+        end
+    end
+end

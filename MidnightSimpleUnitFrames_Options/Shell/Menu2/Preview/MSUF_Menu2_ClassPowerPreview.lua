@@ -229,7 +229,7 @@ end
 local function PreviewGuidesEnabled()
     local general = General()
     if general.classPowerPreviewGuidesEnabled ~= nil then return general.classPowerPreviewGuidesEnabled ~= false end
-    return true
+    return false
 end
 local function SetPreviewGuidesEnabled(enabled)
     General().classPowerPreviewGuidesEnabled = enabled ~= false
@@ -1118,6 +1118,7 @@ local function EnsureClassPower(preview)
     frame.textOwner:SetAllPoints(frame)
     if frame.textOwner.EnableMouse then frame.textOwner:EnableMouse(false) end
     frame.segments, frame.bgs, frame.edges, frame.runeTexts, frame.hashes = {}, {}, {}, {}, {}
+    frame.notches = {}
     for i = 1, 10 do
         frame.bgs[i] = MakeTexture(frame, "BACKGROUND", nil, nil, true)
         frame.segments[i] = MakeTexture(frame, "ARTWORK", nil, nil, true)
@@ -1297,6 +1298,7 @@ local function RenderClassPower(preview, bars, player, spec)
         HideTableRegions(frame.segments)
         HideTableRegions(frame.bgs)
         HideTableRegions(frame.edges)
+        HideTableRegions(frame.notches)
         HideTableRegions(frame.runeTexts)
         frame.text:Hide()
         preview.handleClass:Hide()
@@ -1462,6 +1464,46 @@ local function RenderClassPower(preview, bars, player, spec)
             frame.segments, frame.bgs, count, outline, CP_CLASS_ROUNDED_OPTS)
         if not shapeInfo and not roundedApplied then ApplyBarOutline(frame, outline) end
     end
+    --- Devourer's fragment separators. Its maximum cannot be one pip per
+    --- fragment, so the live bar keeps a single continuous fill and notches the
+    --- fragment boundaries into it. Mirror the same geometry here: Separator and
+    --- Pip gap must preview what they actually do on that bar.
+    local fragments = shapeInfo and 0 or floor(tonumber(spec.fragments) or 0)
+    --- Separator keeps its literal width inside the space the fragments do not
+    --- need and Pip gap spends the rest of it in proportion, exactly as on the
+    --- live bar.
+    local notchSep, notchGap = Clamp(bars.classPowerTickWidth, 1, 0, 4), Clamp(bars.classPowerGap, 0, 0, 8)
+    local notchW = 0
+    if fragments >= 2 and fragments <= 64 and w > fragments and (notchSep + notchGap) > 0 then
+        local maxNotchW = floor((w - fragments) / (fragments - 1))
+        if maxNotchW >= 1 then
+            local base = (notchSep > maxNotchW) and maxNotchW or notchSep
+            notchW = base + floor(((notchGap * (maxNotchW - base)) / 8) + 0.5)
+            if notchW > maxNotchW then notchW = maxNotchW end
+        end
+    end
+    local shownNotches = 0
+    if fragments >= 2 and fragments <= 64 and notchW >= 1 then
+        local reverse = bars.classPowerFillReverse == true
+        local limit = w - notchW
+        for i = 1, fragments - 1 do
+            local notch = frame.notches[i]
+            if not notch then
+                notch = MakeTexture(frame, "OVERLAY", 6, nil, true)
+                frame.notches[i] = notch
+            end
+            local nx = floor(((w * i) / fragments) - (notchW * 0.5) + 0.5)
+            if nx < 0 then nx = 0 elseif nx > limit then nx = limit end
+            if reverse then nx = limit - nx end
+            notch:ClearAllPoints()
+            notch:SetColorTexture(0, 0, 0, 1)
+            notch:SetSize(notchW, h)
+            notch:SetPoint("TOPLEFT", frame, "TOPLEFT", nx, 0)
+            notch:Show()
+            shownNotches = i
+        end
+    end
+    for i = shownNotches + 1, #frame.notches do frame.notches[i]:Hide() end
     if spec.mode == "ironfur" and bars.guardianIronfurShowHashLines ~= false then
         local fractions = { 0.82, 0.51, 0.24 }
         for i = 1, #frame.hashes do
@@ -1533,31 +1575,8 @@ end
 --- Ebon Might is rendered by the Player Power bar itself, so this dedicated row
 --- no longer exists. The stub stays because the surrounding preview plumbing
 --- (bounds, zoom fit, HP anchoring) still threads an optional second class row.
-local function RenderSecondaryClassTimer(preview, bars, spec, classFrame)
-    if not (classFrame and bars.showArcaneSoul == true and spec and spec.key == "mage_arcane") then
-        return HideSecondaryClassTimer(preview)
-    end
-    local frame = EnsureMeter(preview, "ebonTimer")
-    local height = max(18, tonumber(bars.classPowerFontSize) or 14)
-    frame:ClearAllPoints()
-    frame:SetPoint("BOTTOMLEFT", classFrame, "TOPLEFT", 0, 5)
-    frame:SetSize(classFrame:GetWidth(), height)
-    RenderMeter(frame, nil, { width = classFrame:GetWidth(), height = height, fraction = 0.6,
-        texture = ResolveTexture(bars.classPowerTexture), bgTexture = ResolveTexture(bars.classPowerBgTexture),
-        r = 0.35, g = 0.65, b = 1, bgR = 0, bgG = 0, bgB = 0, bgA = 0,
-        outline = 0, reverse = bars.classPowerFillReverse == true })
-    frame.left:Hide()
-    frame.right:Hide()
-    ApplyFont(frame.center, tonumber(bars.classPowerFontSize) or 14)
-    frame.center:ClearAllPoints()
-    frame.center:SetPoint("CENTER", frame, "CENTER", bars.classPowerTextOffsetX or 0,
-        bars.classPowerTextOffsetY or 0)
-    frame.center:SetText("Surge 8.0")
-    frame.center:Show()
-    frame._msufCPPreviewActive = true
-    frame._msufCPPreviewTimerAnim = { showText = true }
-    frame:Show()
-    return frame
+local function RenderSecondaryClassTimer(preview)
+    return HideSecondaryClassTimer(preview)
 end
 
 local function DetachedPowerShown(player)
@@ -2078,7 +2097,7 @@ end
 local function RefreshBounds(preview, classFrame, ebonFrame, powerFrame, hpFrame)
     PlaceBound(preview, "reference", preview.playerRef, "Reference", { 0.60, 0.66, 0.78 }, 1)
     PlaceBound(preview, "class", classFrame, "Class", { 0.30, 0.78, 0.55 }, 1)
-    PlaceBound(preview, "ebon", ebonFrame, "Arcane Surge / Soul", { 0.40, 0.80, 0.60 }, 1, "class")
+    PlaceBound(preview, "ebon", ebonFrame, "Ebon Might", { 0.40, 0.80, 0.60 }, 1, "class")
     PlaceBound(preview, "power", powerFrame, "Power", { 0.95, 0.72, 0.18 }, 1)
     PlaceBound(preview, "hp", hpFrame, "HP", { 0.25, 0.90, 0.42 }, 1)
 end
@@ -2251,7 +2270,7 @@ local function CreateLayerSidebar(box, sideW)
     box.layerButtons = {}
     for i = 1, #CP_PREVIEW_LAYERS do
         local def = CP_PREVIEW_LAYERS[i]
-        box.layerVisibility[def.key] = (def.key == "guides") and PreviewGuidesEnabled() or true
+        box.layerVisibility[def.key] = def.key ~= "guides" or PreviewGuidesEnabled()
         local btn = Helpers.CreateLayerButton(sidebar, box, def, i, sideW, CP_LAYER_BUTTON_OPTS)
         if def.key == "guides" then
             RegisterPreviewControl(box._catalogCtx, btn, "layer.guides",
@@ -2671,7 +2690,7 @@ function Preview.Create(ctx, builder)
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
         PaintPlayerReference(box, spec, bars, player)
         local classFrame, classDisabledReason = RenderClassPower(box, bars, player, spec)
-        local ebonFrame = RenderSecondaryClassTimer(box, bars, spec, classFrame)
+        local ebonFrame = RenderSecondaryClassTimer(box)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then
             box.noResource:Hide()
         else

@@ -15,6 +15,9 @@ T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
     card = 13, accordion = 15, section = 15, heading = 17, hero = 21,
 }
 function T.FontSize(role, fallback)
+    -- Menu-only readability floor; gameplay fonts keep their own sizing.
+    if role == "micro" then return 11 end
+    if role == "caption" or role == "supporting" then return 12 end
     if SharedUI and type(SharedUI.FontSize) == "function" then return SharedUI.FontSize(role, fallback) end
     return T.fontSizes[role] or tonumber(fallback) or T.fontSizes.body
 end
@@ -1563,7 +1566,7 @@ function T.ApplyCollapseVisual(chevron, hint, open)
     open = open and true or false
     if chevron then
         local c = open and T.colors.accent or T.colors.accent2
-        local a = open and 0.86 or 0.74
+        local a = open and 0.96 or 0.90
         local chevronKey = tostring(open) .. "\030" .. tostring(c[1]) .. "\030" .. tostring(c[2]) .. "\030" .. tostring(c[3]) .. "\030" .. tostring(a)
         if chevron._msuf2CollapseVisualKey ~= chevronKey then
             chevron._msuf2CollapseVisualKey = chevronKey
@@ -2311,7 +2314,7 @@ local function PaintNavPillGlowArt(art, path, state)
     end
     local c = T.colors or {}
     local blue = hover and (c.navPillEdgeHover or c.coreGlow)
-        or c.coreBlue or c.accent or { 0.060, 0.250, 0.390, 1 }
+        or c.navPillEdgeActive or c.coreHot or c.accent or { 0.060, 0.250, 0.390, 1 }
     if art.hoverWash then
         if hover then
             if art.hoverWashPath ~= path then
@@ -2333,12 +2336,15 @@ local function PaintNavPillGlowArt(art, path, state)
         if art.glowPath ~= path then
             art.glowPath = path
             art.glow:SetTexture(path)
+            -- The bitmap's bright rim supplies the outline. Remove its baked
+            -- blue before tinting so the accent is not multiplied twice.
+            if art.glow.SetDesaturated then art.glow:SetDesaturated(true) end
             art.glow._msuf2TextureMode = nil
             if art.glow.SetTexCoord then art.glow:SetTexCoord(0, 1, 0, 1) end
         end
         ApplyTextureGradient(art.glow, "VERTICAL",
-            { blue[1], blue[2], blue[3], active and 0.120 or 0.055 },
-            { blue[1], blue[2], blue[3], active and 0.024 or 0.010 },
+            { blue[1], blue[2], blue[3], active and 0.72 or 0.38 },
+            { blue[1], blue[2], blue[3], active and 0.56 or 0.28 },
             true)
         art.glow:Show()
     end
@@ -2384,10 +2390,10 @@ local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alp
         local bottom = art._bottomColor or {}
         art._topColor = top
         art._bottomColor = bottom
-        if state == "hover" then
+        if state == "hover" or state == "active" then
             -- Preserve the bitmap's authored dark-blue paint. Multiplying it by
-            -- the already-dark hover token made the fill disappear; a near-
-            -- neutral tint keeps it visible without the bright stadium result.
+            -- dark interaction tokens also crushed the authored outline. Keep
+            -- both selected and hovered rims readable with a neutral tint.
             top[1], top[2], top[3], top[4] = 1.00, 1.00, 1.00, 0.98
             bottom[1], bottom[2], bottom[3], bottom[4] = 0.76, 0.84, 1.00, 0.92
         else
@@ -2556,7 +2562,7 @@ local function ButtonVisual(btn, active, hover)
             local bg = hover and c.navPillHover or c.navPillActive
             local br = hover and c.navPillEdgeHover or c.navPillEdgeActive
             local tx = hover and (c.navHeaderHover or c.navTextActive) or c.navTextActive
-            if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
+            if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
             if SetNavPillArt(btn, "active", bg, hover and 0.20 or 0.17, -0.20) then
                 SetNavActiveFX(btn, false)
                 SetLabelColor(btn._msuf2Label, tx)

@@ -181,6 +181,10 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
             RefreshNewControls(refreshStart)
             local refresh = shellEntry._msuf2RefreshState
             if type(refresh) == "function" and refresh ~= LazyRefresh then refresh(shellEntry) end
+            local gate = ctx and ctx.entry and ctx.entry._msuf2FrameGate
+            if gate and M.ControlGates and M.ControlGates.ApplySections then
+                M.ControlGates.ApplySections(ctx, gate.key, gate.enabled, gate.opts)
+            end
             local relayout = shellEntry.builder
             if shellEntry.open and relayout and relayout.RelayoutCollapsibles then
                 if C_Timer and C_Timer.After then

@@ -8,8 +8,7 @@ MSUF.CPBuilders = MSUF.CPBuilders or {}
 function MSUF.CPBuilders.NativeAuras(E)
     local CP, db = E.CP, E.db
     local states, pending = {}, false
-    local spells = { WHIRLWIND = 85739, SWEEPING_STRIKES = 260708,
-        ARCANE_SURGE = 365362, ARCANE_SOUL = 451038 }
+    local spells = { WHIRLWIND = 85739, SWEEPING_STRIKES = 260708 }
     local formatters = {}
 
     local function Mutable(state)
@@ -38,24 +37,18 @@ function MSUF.CPBuilders.NativeAuras(E)
         state.active = false
     end
 
-    local function Style(state, key, maximum)
+    local function Style(state, maximum)
         if not state.bar then pending = true; return false end
         local b, v = db.bars or {}, CP.visual or {}
-        local timer = key == "ARCANE_SURGE" or key == "ARCANE_SOUL"
         local texture = E.Texture(b.classPowerTexture)
         local font = (_G.MSUF_GetFontPath and _G.MSUF_GetFontPath()) or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
         local flags = _G.MSUF_GetFontFlags and _G.MSUF_GetFontFlags() or "OUTLINE"
         local size = tonumber(b.classPowerFontSize) or 14
         local r, g, blue = v.baseR or 1, v.baseG or 1, v.baseB or 1
-        if timer then
-            r, g, blue = 0.35, 0.65, 1
-            if key == "ARCANE_SOUL" then r, g, blue = 1, 0.65, 0.2 end
-        end
         local textMode = db.textMode
-        local format = timer and (key == "ARCANE_SURGE" and "Surge %.1f" or "Soul %.1f")
-            or (textMode == "MAX" and tostring(maximum)
-                or textMode == "CURMAX" and ("%d / " .. maximum) or "%d")
-        local showText = timer or b.classPowerShowText == true
+        local format = textMode == "MAX" and tostring(maximum)
+            or textMode == "CURMAX" and ("%d / " .. maximum) or "%d"
+        local showText = b.classPowerShowText == true
         local textLevel = E.TextLevel()
         -- A settings-only signature. No aura data enters this cache.
         local signature = table.concat({ texture, font, flags, size, r, g, blue,
@@ -74,23 +67,13 @@ function MSUF.CPBuilders.NativeAuras(E)
         text:SetPoint("CENTER", state.button, "CENTER", b.classPowerTextOffsetX or 0,
             b.classPowerTextOffsetY or 0)
         state.textOwner:SetFrameLevel(textLevel)
-        if timer then
-            state.button:SetDurationBar(bar, { interpolation = Enum.StatusBarInterpolation.Immediate,
-                direction = Enum.StatusBarTimerDirection.RemainingTime })
-            state.button:SetDurationText(text, { textFormatter = Formatter(format, 0.1) })
-            local binding = state.button:GetDurationTextBinding()
-            binding:SetUpdateInterval(0.1)
-            binding:SetExpiredText("")
-            binding:SetZeroDurationText("")
+        state.button:SetApplicationBar(bar, { maxApplications = maximum,
+            interpolation = Enum.StatusBarInterpolation.Immediate })
+        if showText then
+            state.button:SetApplicationCount(text, { formatter = Formatter(format, 1) })
         else
-            state.button:SetApplicationBar(bar, { maxApplications = maximum,
-                interpolation = Enum.StatusBarInterpolation.Immediate })
-            if showText then
-                state.button:SetApplicationCount(text, { formatter = Formatter(format, 1) })
-            else
-                state.button:ClearApplicationCount()
-                text:SetText("")
-            end
+            state.button:ClearApplicationCount()
+            text:SetText("")
         end
         state.signature = signature
         return true
@@ -98,7 +81,7 @@ function MSUF.CPBuilders.NativeAuras(E)
 
     local function Ensure(key, maximum)
         local state = states[key]
-        if state and state.sensor then Style(state, key, maximum); return state end
+        if state and state.sensor then Style(state, maximum); return state end
         if not Mutable() then pending = true; return nil end
         local A3 = _G.MSUF_Auras3
         if not (A3 and A3.CreateClassPowerAuraSensor) then pending = true; return nil end
@@ -122,7 +105,7 @@ function MSUF.CPBuilders.NativeAuras(E)
                 state.textOwner = CreateFrame("Frame", nil, button)
                 state.textOwner:SetAllPoints(button)
                 state.text = state.textOwner:CreateFontString(nil, "OVERLAY")
-                Style(state, key, maximum)
+                Style(state, maximum)
             end)
         if not state.sensor then state.proxy:Hide(); pending = true; return nil end
         return state
@@ -139,10 +122,8 @@ function MSUF.CPBuilders.NativeAuras(E)
         pending = false
         local b = db.bars or {}
         local key = CP.visible and spells[CP.powerType] and CP.powerType or nil
-        local arcane = CP.visible and E.Class == "MAGE" and E.Spec() == 1
-            and b.showArcaneSoul == true and not CP.isVehicle
         for name, state in pairs(states) do
-            if name ~= key and not (arcane and (name == "ARCANE_SURGE" or name == "ARCANE_SOUL")) then Park(state) end
+            if name ~= key then Park(state) end
         end
         if key then
             local maximum = key == "WHIRLWIND" and 4 or 18
@@ -184,18 +165,6 @@ function MSUF.CPBuilders.NativeAuras(E)
                 end
             end
             if CP.text then CP.text:Hide() end
-        end
-        if arcane then
-            for _, name in ipairs({ "ARCANE_SURGE", "ARCANE_SOUL" }) do
-                local state = Ensure(name, 1)
-                if state then
-                    state.proxy:ClearAllPoints()
-                    state.proxy:SetPoint("BOTTOMLEFT", CP.container, "TOPLEFT", 0, 5)
-                    state.proxy:SetPoint("BOTTOMRIGHT", CP.container, "TOPRIGHT", 0, 5)
-                    state.proxy:SetHeight(math.max(18, tonumber(b.classPowerFontSize) or 14))
-                    Activate(state)
-                end
-            end
         end
         CP.nativeAuraPending = pending
     end

@@ -120,10 +120,6 @@ function A.ClassPowerRegistry.RegisterDisplaySettings(ctx)
         ClassPowerAliases("sweeping strikes", "sweeping strikes tracker"), {
         reason = "MSUF_ASSISTANT_CLASSPOWER_SWEEPING_STRIKES",
     })
-    RegisterBarsBoolean("showArcaneSoul", "arcaneSoul", "Arcane Surge / Soul Timer", false,
-        ClassPowerAliases("arcane soul", "arcane surge timer", "arcane soul timer"), {
-        reason = "MSUF_ASSISTANT_CLASSPOWER_ARCANE_SOUL",
-    })
     -- The markers only exist while the tracker itself is on, so the Assistant
     -- turns the tracker on with them instead of writing a dead setting.
     RegisterBarsBoolean("guardianIronfurShowHashLines", "ironfurMarkers", "Ironfur Cast Markers", true, ClassPowerAliases("ironfur markers", "ironfur cast markers", "ironfur hash lines"), {
