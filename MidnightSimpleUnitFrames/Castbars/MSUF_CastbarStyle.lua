@@ -205,6 +205,14 @@ local function EnsureOutline(frame)
     frame._msufOutline = { _host = host }
 end
 
+local function RefreshInterruptOutline(frame)
+    if not frame._kickReadyBorderTinted then return end
+    -- The style owner just rebuilt/recolored the actual edges. A cached
+    -- readiness key no longer proves that its tint is on those edges.
+    local refresh = _G.MSUF_KickReady_RefreshOutline
+    if type(refresh) == "function" then refresh(frame) end
+end
+
 function Style:ApplyCastbarOutline(frame, force)
     if not frame then
         return
@@ -219,6 +227,7 @@ function Style:ApplyCastbarOutline(frame, force)
     local applyRounded = _G.MSUF_RoundedCastbar_ApplyOutline
     if type(applyRounded) == "function"
         and applyRounded(frame, edge, thickness, red, green, blue, alpha) then
+        RefreshInterruptOutline(frame)
         return
     end
 
@@ -234,6 +243,8 @@ function Style:ApplyCastbarOutline(frame, force)
         frame._msufOutlineG = nil
         frame._msufOutlineB = nil
         frame._msufOutlineA = nil
+        frame._msufKickReadyVisualKey = nil
+        frame._kickReadyBorderTinted = nil
         return
     end
 
@@ -252,12 +263,12 @@ function Style:ApplyCastbarOutline(frame, force)
     -- BackdropTemplateMixin:ApplyBackdrop resets every edge piece to white.
     -- Reapply the configured color whenever SetBackdrop rebuilt the outline,
     -- even when our RGB cache itself did not change.
-    if backdropChanged
+    local colorChanged = backdropChanged
         or frame._msufOutlineR ~= red
         or frame._msufOutlineG ~= green
         or frame._msufOutlineB ~= blue
         or frame._msufOutlineA ~= alpha
-    then
+    if colorChanged then
         host:SetBackdropBorderColor(red, green, blue, alpha)
 
         frame._msufOutlineR = red
@@ -267,6 +278,7 @@ function Style:ApplyCastbarOutline(frame, force)
     end
 
     host:Show()
+    if colorChanged then RefreshInterruptOutline(frame) end
 end
 
 function Style:ApplyCastbarOutlineToAll(force)

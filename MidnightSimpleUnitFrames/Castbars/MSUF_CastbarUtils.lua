@@ -243,7 +243,8 @@ local function ApplyNonInterruptibleTint(
             -- can reuse the immutable configured colors directly; restricted
             -- inputs must still go through Blizzard's secret-safe selector.
             if readySecret then
-                activeCastColor = EvaluateColorFromBoolean(interruptReadyBool, castColor, unavailableColor)
+                local selectReadyColor = _G.MSUF_KickReady_SelectColor or EvaluateColorFromBoolean
+                activeCastColor = selectReadyColor(interruptReadyBool, castColor, unavailableColor)
             elseif type(interruptReadyBool) == "boolean" then
                 activeCastColor = interruptReadyBool and castColor or unavailableColor
             else
