@@ -1575,31 +1575,8 @@ end
 --- Ebon Might is rendered by the Player Power bar itself, so this dedicated row
 --- no longer exists. The stub stays because the surrounding preview plumbing
 --- (bounds, zoom fit, HP anchoring) still threads an optional second class row.
-local function RenderSecondaryClassTimer(preview, bars, spec, classFrame)
-    if not (classFrame and bars.showArcaneSoul == true and spec and spec.key == "mage_arcane") then
-        return HideSecondaryClassTimer(preview)
-    end
-    local frame = EnsureMeter(preview, "ebonTimer")
-    local height = max(18, tonumber(bars.classPowerFontSize) or 14)
-    frame:ClearAllPoints()
-    frame:SetPoint("BOTTOMLEFT", classFrame, "TOPLEFT", 0, 5)
-    frame:SetSize(classFrame:GetWidth(), height)
-    RenderMeter(frame, nil, { width = classFrame:GetWidth(), height = height, fraction = 0.6,
-        texture = ResolveTexture(bars.classPowerTexture), bgTexture = ResolveTexture(bars.classPowerBgTexture),
-        r = 0.35, g = 0.65, b = 1, bgR = 0, bgG = 0, bgB = 0, bgA = 0,
-        outline = 0, reverse = bars.classPowerFillReverse == true })
-    frame.left:Hide()
-    frame.right:Hide()
-    ApplyFont(frame.center, tonumber(bars.classPowerFontSize) or 14)
-    frame.center:ClearAllPoints()
-    frame.center:SetPoint("CENTER", frame, "CENTER", bars.classPowerTextOffsetX or 0,
-        bars.classPowerTextOffsetY or 0)
-    frame.center:SetText("Surge 8.0")
-    frame.center:Show()
-    frame._msufCPPreviewActive = true
-    frame._msufCPPreviewTimerAnim = { showText = true }
-    frame:Show()
-    return frame
+local function RenderSecondaryClassTimer(preview)
+    return HideSecondaryClassTimer(preview)
 end
 
 local function DetachedPowerShown(player)
@@ -2120,7 +2097,7 @@ end
 local function RefreshBounds(preview, classFrame, ebonFrame, powerFrame, hpFrame)
     PlaceBound(preview, "reference", preview.playerRef, "Reference", { 0.60, 0.66, 0.78 }, 1)
     PlaceBound(preview, "class", classFrame, "Class", { 0.30, 0.78, 0.55 }, 1)
-    PlaceBound(preview, "ebon", ebonFrame, "Arcane Surge / Soul", { 0.40, 0.80, 0.60 }, 1, "class")
+    PlaceBound(preview, "ebon", ebonFrame, "Ebon Might", { 0.40, 0.80, 0.60 }, 1, "class")
     PlaceBound(preview, "power", powerFrame, "Power", { 0.95, 0.72, 0.18 }, 1)
     PlaceBound(preview, "hp", hpFrame, "HP", { 0.25, 0.90, 0.42 }, 1)
 end
@@ -2713,7 +2690,7 @@ function Preview.Create(ctx, builder)
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
         PaintPlayerReference(box, spec, bars, player)
         local classFrame, classDisabledReason = RenderClassPower(box, bars, player, spec)
-        local ebonFrame = RenderSecondaryClassTimer(box, bars, spec, classFrame)
+        local ebonFrame = RenderSecondaryClassTimer(box)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then
             box.noResource:Hide()
         else

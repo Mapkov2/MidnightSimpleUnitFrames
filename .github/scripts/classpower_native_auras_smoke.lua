@@ -7,8 +7,8 @@ local function Widget(parent)
     frames = frames + 1
     local w = { parent = parent, level = 1, shown = true, width = 240 }
     function w:SetAllPoints() end
-    function w:ClearAllPoints() end
-    function w:SetPoint() end
+    function w:ClearAllPoints() self.points = {} end
+    function w:SetPoint(...) self.points = self.points or {}; self.points[#self.points + 1] = { ... } end
     function w:SetHeight(v) self.height = v end
     function w:SetWidth(v) self.width = v end
     function w:GetWidth() return self.width end
@@ -22,7 +22,7 @@ local function Widget(parent)
     function w:SetTextColor() assert(not restricted, "restricted text mutation") end
     function w:SetFont() assert(not restricted, "restricted font mutation") end
     function w:SetStatusBarTexture() assert(not restricted, "restricted texture mutation") end
-    function w:SetStatusBarColor() assert(not restricted, "restricted color mutation") end
+    function w:SetStatusBarColor(...) assert(not restricted, "restricted color mutation"); self.barColor = { ... } end
     function w:SetReverseFill() assert(not restricted, "restricted fill mutation") end
     function w:SetValue(v) self.value = v end
     function w:SetText(v) self.text = v end
@@ -42,6 +42,14 @@ C_StringUtil = { CreateNumericRuleFormatter = function()
     return { SetBreakpoints = function(self, rules) self.rules = rules end }
 end }
 C_Spell = { GetSpellMaxCumulativeAuraApplications = function() return 18 end }
+C_DurationUtil = { CreateDurationTextBinding = function()
+    local binding = {}
+    function binding:SetUpdateInterval(v) self.interval = v end
+    function binding:SetExpiredText(v) self.expired = v end
+    function binding:SetZeroDurationText(v) self.zero = v end
+    function binding:SetEnabled(v) self.enabled = v end
+    return binding
+end }
 MSUF_Auras3 = { CreateClassPowerAuraSensor = function(parent, key, ids, initialize)
     local sensor, button = Widget(parent), Widget(parent)
     sensor.button, sensor.ids, sensor.key = button, ids, key
@@ -53,11 +61,6 @@ MSUF_Auras3 = { CreateClassPowerAuraSensor = function(parent, key, ids, initiali
     function button:ClearApplicationCount() self.text = nil end
     function button:SetDurationBar(bar, opts) self.bar, self.durationOptions = bar, opts end
     function button:SetDurationText(text, opts) self.text, self.durationTextOptions = text, opts end
-    local binding = {}
-    function binding:SetUpdateInterval(v) self.interval = v end
-    function binding:SetExpiredText(v) self.expired = v end
-    function binding:SetZeroDurationText(v) self.zero = v end
-    function button:GetDurationTextBinding() return binding end
     initialize(button)
     sensors[#sensors + 1] = sensor
     return sensor
@@ -96,36 +99,16 @@ assert(sensors[2].ids[260708] and sensors[2].button.appOptions.maxApplications =
 owner.Disable()
 assert(not sensors[2].enabled)
 
+-- Only Warrior routes into this module. A Mage-shaped power type must not
+-- allocate anything, and the Controller must not even build the module.
 local mageCP = { visible = true, powerType = 16, container = Widget(), visual = {} }
-local mageDB = { bars = {} }
-local spec = 1
-local mage = ns.CPBuilders.NativeAuras({ CP = mageCP, db = mageDB, Class = "MAGE",
-    Spec = function() return spec end, Texture = function() return "texture" end,
-    TextLevel = function() return 10 end })
+local mage = ns.CPBuilders.NativeAuras({ CP = mageCP, db = { bars = {} },
+    Texture = function() return "texture" end, TextLevel = function() return 10 end })
 count = frames
 mage.Sync()
-assert(frames == count, "disabled optional tracker allocates no frames")
-mageDB.bars.showArcaneSoul = true
-combat, restricted = true, true
-mage.Sync()
-assert(frames == count and mageCP.nativeAuraPending, "combat enable waits")
-combat, restricted = false, false
-mage.Sync()
-assert(#sensors == 4 and sensors[3].ids[365362] and sensors[4].ids[451038])
-assert(sensors[3].button.durationOptions.direction == 1)
-assert(sensors[4].button:GetDurationTextBinding().interval == .1)
-mageCP.isVehicle = true
-mage.Sync()
-assert(not sensors[3].enabled and not sensors[4].enabled, "vehicle suspension")
-mageCP.isVehicle, spec = false, 3
-mage.Sync()
-assert(not sensors[3].enabled, "Frost has no Arcane timer")
-spec = 1
-mage.Sync()
-assert(sensors[3].enabled and sensors[4].enabled, "reactivate cached Arcane slots")
-mageDB.bars.showArcaneSoul = false
-mage.Sync()
-assert(not sensors[3].enabled and not sensors[4].enabled, "option disable")
+assert(frames == count and #sensors == 2, "a non-Warrior power type allocates no native slots")
+assert(not mageCP.nativeAuraPending, "an inapplicable power type must not leave work pending")
+
 local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua", "rb"))
 local source = file:read("*a")
 file:close()
@@ -146,4 +129,9 @@ key, mode, aura = route("WARRIOR", Spec, warriorDB, modes)
 assert(key == "SWEEPING_STRIKES" and mode == 11 and aura == false)
 warriorSpec = 3
 assert(route("WARRIOR", Spec, warriorDB, modes) == nil)
+-- Warrior is the only class with native class-resource aura trackers. Building
+-- the module for anyone else allocates an AuraContainer that can never fill.
+assert(source:find('if not CP.nativeAuras and PLAYER_CLASS == "WARRIOR" then', 1, true),
+    "the native aura builder must stay Warrior-only")
+
 print("native class aura lifecycle and spec routing smoke: ok")

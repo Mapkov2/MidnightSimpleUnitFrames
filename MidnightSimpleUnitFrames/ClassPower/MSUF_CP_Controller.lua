@@ -1716,11 +1716,11 @@ local CP_RefreshEventBindings
 
 -- Lazily allocate only the active class's native slots. No aura/cast event feed.
 function CP.SyncNativeAuras()
-    if not CP.nativeAuras and (PLAYER_CLASS == "WARRIOR" or PLAYER_CLASS == "MAGE") then
+    if not CP.nativeAuras and PLAYER_CLASS == "WARRIOR" then
         local build = MSUF.CPBuilders and MSUF.CPBuilders.NativeAuras
         if build then
-            CP.nativeAuras = build({ CP = CP, db = _cpDB, Class = PLAYER_CLASS,
-                Spec = GetSpec, Texture = CP_ResolveTexture, TextLevel = CP.GetEbonTextLevel })
+            CP.nativeAuras = build({ CP = CP, db = _cpDB,
+                Texture = CP_ResolveTexture, TextLevel = CP.GetEbonTextLevel })
         end
     end
     if CP.nativeAuras then

@@ -27,7 +27,6 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["behavior.charged"] = "bars.showChargedComboPoints",
     ["behavior.ebon"] = "bars.showEbonMight",
     ["behavior.sweeping"] = "bars.showSweepingStrikes",
-    ["behavior.arcaneSoul"] = "bars.showArcaneSoul",
     ["behavior.ele"] = "bars.showEleMaelstrom",
     ["behavior.ironfur"] = "bars.showGuardianIronfur",
     ["behavior.ironfurHashes"] = "bars.guardianIronfurShowHashLines",
@@ -982,8 +981,6 @@ function Page:BuildClassBehavior()
         { "reverse", "toggle", "Fill right-to-left", "classPowerFillReverse", false, group = "cp" },
         { "sweeping", "toggle", "Show Sweeping Strikes (Arms)", "showSweepingStrikes", false, applyRefresh, group = "cp",
             helpTitle = "Sweeping Strikes", help = "Arms only. Shows actual aura charges in a segmented bar, using the same native display as Fury Whirlwind. These two trackers use a bar with static dividers; aura values are never read by the addon. Appearance changes during combat apply after combat." },
-        { "arcaneSoul", "toggle", "Show Arcane Surge / Soul (Arcane)", "showArcaneSoul", false, applyRefresh, group = "cp",
-            helpTitle = "Arcane Surge / Arcane Soul", help = "Adds a countdown row above Arcane Charges. Shows the actual remaining Arcane Surge or Arcane Soul aura duration in seconds. Width follows Class Resources; font size and text offsets use the resource text settings. Blizzard updates the countdown without an addon timer. Appearance changes during combat apply after combat." },
         { "ele", "toggle", "Show Maelstrom bar (Ele)", "showEleMaelstrom", false, group = "cp" },
         { "ebon", "toggle", "Show Ebon Might duration (Aug)", "showEbonMight", true, group = "cp",
             helpTitle = "Ebon Might On Player Power",
@@ -1001,7 +998,7 @@ function Page:BuildClassBehavior()
     W.ControlCardBackdrop(section, 14, -38, max(280, rightX - 42), 230)
     W.ControlCardBackdrop(section, rightX - 14, -38, max(280, (section._msuf2Width or self.width) - rightX - 28) + 14, 230)
     PlaceColumn(section, 14, -38, 32, nil, nil, fields.anchor, fields.charged, fields.text, fields.rune, fields.reverse,
-        fields.sweeping, fields.arcaneSoul)
+        fields.sweeping)
     PlaceColumn(section, rightX, -38, 32, nil, nil, fields.ele, fields.ebon, fields.shadow,
         fields.ironfur, fields.ironfurHashes, fields.prediction, fields.smooth)
     self.ironfurHashes = fields.ironfurHashes

@@ -1056,7 +1056,6 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     SetDefault(db.bars, "altManaOffsetX", 0)
     SetDefault(db.bars, "showGuardianIronfur", false)
     SetDefault(db.bars, "showSweepingStrikes", false)
-    SetDefault(db.bars, "showArcaneSoul", false)
     SetDefault(db.bars, "guardianIronfurShowHashLines", true)
     -- Performance baseline: native interpolation is an
     -- explicit visual option, never an implicit cost on a fresh profile.

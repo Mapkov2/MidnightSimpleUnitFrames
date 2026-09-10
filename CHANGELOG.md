@@ -33,8 +33,8 @@
 <!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"boss_target_highlight","controlId":"menu2.uf_boss.unit.boss_target_highlight.style","settingKey":"general.bossTargetHighlightStyle","prepareKind":"","prepareValue":"","query":"boss target highlight","label":"Highlight style"} -->
 - **Portraits can now be clickable.** Enable the option separately for each Unit Frame.
 <!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitclickable","settingKey":"player.portraitClickable","prepareKind":"unitPortraitTab","prepareValue":"general","query":"clickable portrait","label":"Clickable Portrait"} -->
-- **Class Resources now include native Sweeping Strikes tracking and an Arcane Surge / Arcane Soul timer.**
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_behavior","controlId":"menu2.classpower.advanced.behavior.arcane.soul","settingKey":"bars.showArcaneSoul","prepareKind":"","prepareValue":"","query":"arcane soul","label":"Arcane Surge / Soul Timer"} -->
+- **Class Resources now include native Sweeping Strikes tracking.**
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_behavior","controlId":"menu2.classpower.advanced.behavior.sweeping","settingKey":"bars.showSweepingStrikes","prepareKind":"","prepareValue":"","query":"sweeping strikes","label":"Sweeping Strikes Tracker"} -->
 
 ### Changes
 
