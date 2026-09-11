@@ -83,6 +83,10 @@ local data = {
                             },
                         },
                         {
+                            text = "Roughly 3-5% more FPS from lower addon CPU time. The combat update paths for health, prediction, text and auras were reworked to stop repeating work every tick.",
+                            linkless = true,
+                        },
+                        {
                             text = "Every menu string is now translated in all twelve locales. German, both Spanish variants, French, Italian, Korean, Brazilian Portuguese, Russian and both Chinese variants no longer fall back to English.",
                             linkless = true,
                         },
@@ -117,7 +121,6 @@ local data = {
                         "Pixel snapping no longer rounds a one-pixel divider below a pixel, which could remove the fragment division entirely at some interface scales.",
                         "Injured-only visibility uses a secret-safe native health curve and stable visual parents, so bars, predictions, borders, textures, portraits, cast indicators and Class Resources hide together without changing the clickable secure frame.",
                         "Aura identity checks and castbar colour ownership avoid redundant temporary allocations, and scheduler callback errors keep the original callback stack while still isolating failures.",
-                        "Party frame backgrounds no longer get stuck faded in instanced combat. Restricted combat applies Range Fade through a native path that skipped the bookkeeping the normal path checks, so a health bar, its background or a prediction bar could keep its out-of-range opacity after coming back into range.",
                         "Fixed clipping in Aura cooldown and Texture Layer options, and improved Unit Status previews in the menu.",
                     },
                 },
