@@ -304,7 +304,6 @@ local function BuildPortrait(ctx, builder, unit)
         end
     end
     local portraitEnable = PreparePortraitSwitch(ctx, sec, unit)
-    local portraitEnableContent = W.SectionSwitchContent(portraitEnable, mainCard, "Portrait", leftW - 62, -24)
     portraitEnable.refreshDetails = function() RefreshPortraitControls() end
     local portrait = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, rightW))
     W.MoveWidget(portrait, mainCard, 16, -62, min(220, leftW - 32))
@@ -403,7 +402,7 @@ local function BuildPortrait(ctx, builder, unit)
         return (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0
     end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
-        { enable = { portraitEnable, portraitEnableContent } },
+        { enable = { portraitEnable } },
         { controls = portraitActiveControls, on = PortraitActive },
         -- The Left/Right segment only steers the attached layout; detached and
         -- overlay portraits take their position from the Placement card instead.
@@ -677,8 +676,6 @@ local function BuildPower(ctx, builder, unit)
         })
     end
     local show = PreparePowerSwitch(ctx, sec, unit)
-    local showContent = W.SectionSwitchContent(show, mainCard, "Show power bar", cardW - 62, -24)
-    W.AttachUnitEditFocus(showContent, unit, "powerbar")
     show.refreshDetails = function() RefreshPowerEnabled() end
     if isPlayer then
         local playerPowerSource = W.Dropdown(mainCard, "Displayed resource", PLAYER_POWER_SOURCE_VALUES, cardW - 72)
@@ -834,7 +831,7 @@ local function BuildPower(ctx, builder, unit)
     local function OrbSelected() return isPlayer and NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape) == "ORB" end
     local function ClassManaged() return isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) and true or false end
     RefreshPowerEnabled = RefreshPowerEnabled(M.BindGateGroup(ctx, nil, {
-        { enable = { show, showContent }, controls = powerControls, on = PowerOn },
+        { enable = { show }, controls = powerControls, on = PowerOn },
         { controls = detachedControls, on = DetachedOn },
         { controls = { attachedPowerHeight, embedPower }, on = function() return PowerOn() and not DetachedOn() end },
         { controls = borderSize, on = function() return PowerOn() and ReadPowerBorderEnabled() end },
@@ -853,7 +850,7 @@ local function BuildPower(ctx, builder, unit)
                 setEnabled(powerControls, false)
                 setEnabled(detachedControls, false)
                 if detachedTextToggle then setEnabled(detachedTextToggle, DetachedOn()) end
-                setEnabled({ show, showContent }, false)
+                setEnabled({ show }, false)
                 setEnabled(borderSize, false)
             end
         end,
@@ -1237,8 +1234,6 @@ local function BuildCastbar(ctx, builder, unit)
         end)
     end
     local enabled = PrepareCastbarSwitch(ctx, sec, unit)
-    local enabledContent = W.SectionSwitchContent(enabled, generalCard, "Enable Castbar", 16, -52, 220)
-    W.AttachUnitEditFocus(enabledContent, unit, "castbar")
     local provider
     if canUseBlizzardProvider then
         provider = W.Dropdown(providerCard, "Castbar provider", CASTBAR_BACKEND_VALUES, min(260, controlWRight))
@@ -1483,7 +1478,7 @@ local function BuildCastbar(ctx, builder, unit)
     local castbarFeatureToggles = { time, interrupt, icon, text, targetNameToggle }
     local function MsufOn() return ReadCastbarBackend() == "MSUF" end
     RefreshCastbarEnabled = RefreshCastbarEnabled(M.BindGateGroup(ctx, nil, {
-        { enable = { enabled, enabledContent }, controls = castbarFeatureToggles, on = MsufOn },
+        { enable = { enabled }, controls = castbarFeatureToggles, on = MsufOn },
         { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end },
         { controls = allCastbarControls, on = MsufOn },
         { controls = manualWidth, on = function() return MsufOn() and ReadWidthSource() == "manual" end },

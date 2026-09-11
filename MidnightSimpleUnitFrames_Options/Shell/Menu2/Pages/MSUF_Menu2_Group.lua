@@ -1358,8 +1358,6 @@ function GroupPage.BuildPortrait(ctx, builder)
         return type(ReadTab) ~= "function" or ReadTab() == tab
     end
     local portraitEnable = PreparePartyPortraitSwitch(ctx, sec)
-    local portraitEnableContent = W.SectionSwitchContent(portraitEnable, mainCard, "Portrait", cardW - 62, -24)
-    AttachPortraitFocus(portraitEnableContent)
     portraitEnable.refreshDetails = function() RefreshPortraitControls() end
     AttachPortraitFocus(portraitEnable)
     local side = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, cardW - 32))
@@ -1440,7 +1438,7 @@ function GroupPage.BuildPortrait(ctx, builder)
         return (tonumber(conf.portraitWidth) or 0) > 0 or (tonumber(conf.portraitHeight) or 0) > 0
     end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return Conf(kind) end, {
-        { enable = { portraitEnable, portraitEnableContent } },
+        { enable = { portraitEnable } },
         { controls = activeControls, on = Active },
         { controls = side, on = function(conf) return Placed(conf, "ATTACHED") end },
         { controls = { detachedPoint, detachedTo }, on = function(conf) return Placed(conf, "DETACHED") end },

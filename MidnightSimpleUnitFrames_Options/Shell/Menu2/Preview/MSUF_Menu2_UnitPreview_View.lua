@@ -1761,9 +1761,10 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
             -- readable column rather than the full box width, and the rail
             -- caption is redundant behind a button already labelled "Layers".
             local popoverWidth = 268
+            box._msuf2LayerPopoverWidth = popoverWidth
             sidebar:SetWidth(popoverWidth)
             if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Hide() end
-            if box.LayoutLayerRail then box:LayoutLayerRail(popoverWidth + 24) end
+            if box.LayoutLayerRail then box:LayoutLayerRail(popoverWidth) end
             if sidebar.SetFrameLevel and canvas.GetFrameLevel then
                 sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 90)
             end
@@ -1777,6 +1778,7 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
         EnsureUnitLayersButton(box):Show()
         LayoutUnitHeaderControls(box, true)
     else
+        box._msuf2LayerPopoverWidth = nil
         if box.title then box.title:Show() end
         if box.hint then box.hint:Show() end
         SetUnitCanvasToolsShown(box, true)
@@ -2006,6 +2008,22 @@ local function BuildPreview(parent, panel, width, height)
     end
     box.LayoutLayerRail = function(self, railWidth)
         if not PreviewHelpers.FlowLayerChips then return 30 end
+        -- While the rail hangs under the "Layers" button it is a dropdown, not
+        -- the docked strip, so it owns its own width. Callers that re-flow it
+        -- from the preview box -- the render pass does, on every layer-
+        -- availability change such as entering combat view -- would otherwise
+        -- push the chips out past the panel painted behind them.
+        local popover = self._msuf2LayerPopoverWidth
+        if popover and PreviewHelpers.FlowLayerPopover then
+            local boxW = (self.GetWidth and self:GetWidth()) or 0
+            local boxH = (self.GetHeight and self:GetHeight()) or 0
+            return PreviewHelpers.FlowLayerPopover(self.sidebar, self.layerButtons, {
+                width = popover,
+                maxWidth = boxW > 0 and (boxW - 24) or nil,
+                maxHeight = boxH > 0 and (boxH - 44) or nil,
+                rowHeight = 20,
+            })
+        end
         railWidth = tonumber(railWidth) or (self.sidebar and self.sidebar.GetWidth and self.sidebar:GetWidth()) or 0
         local headerWidth = 0
         local header = self._msuf2LayerRailHeader

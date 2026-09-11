@@ -534,9 +534,10 @@ local function ApplyGroupCompactPresentation(box, compact, sideW)
             -- The chips keep their flow inside the popover, sized to a readable
             -- column; the caption is redundant behind a "Layers" button.
             local popoverWidth = 268
+            box._msuf2LayerPopoverWidth = popoverWidth
             layers:SetWidth(popoverWidth)
             if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Hide() end
-            if box.LayoutLayerRail then box:LayoutLayerRail(popoverWidth + 24) end
+            if box.LayoutLayerRail then box:LayoutLayerRail(popoverWidth) end
             if layers.SetFrameLevel and stage.GetFrameLevel then layers:SetFrameLevel((stage:GetFrameLevel() or 1) + 90) end
             layers:Hide()
         end
@@ -544,6 +545,7 @@ local function ApplyGroupCompactPresentation(box, compact, sideW)
         LayoutGroupPreviewHeaderControls(box, true)
         return
     end
+    box._msuf2LayerPopoverWidth = nil
     if box._title then box._title:Show() end
     if box._hint then box._hint:Show() end
     SetGroupPreviewToolsShown(box, true)
@@ -1659,6 +1661,18 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end
     box.LayoutLayerRail = function(self, railWidth)
         if not PreviewHelpers.FlowLayerChips then return 30 end
+        -- The compact popover owns its own width; see the unit preview rail.
+        local popover = self._msuf2LayerPopoverWidth
+        if popover and PreviewHelpers.FlowLayerPopover then
+            local boxW = (self.GetWidth and self:GetWidth()) or 0
+            local boxH = (self.GetHeight and self:GetHeight()) or 0
+            return PreviewHelpers.FlowLayerPopover(self._layers, self._layerButtons, {
+                width = popover,
+                maxWidth = boxW > 0 and (boxW - 24) or nil,
+                maxHeight = boxH > 0 and (boxH - 44) or nil,
+                rowHeight = 20,
+            })
+        end
         railWidth = tonumber(railWidth) or (self._layers and self._layers.GetWidth and self._layers:GetWidth()) or 0
         local headerWidth = 0
         local header = self._msuf2LayerRailHeader
