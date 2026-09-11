@@ -874,16 +874,15 @@ local function BuildBasics(ctx, builder, unit, label)
         end
         return Write()
     end
-    local enableHeader = PrepareBasicsSwitch(ctx, sec, unit)
-    local enable = W.SectionSwitchContent(enableHeader, sec, "Enable", x1, row1, labelW)
+    local enable = PrepareBasicsSwitch(ctx, sec, unit)
     -- Fill Direction (axis + in-axis direction) is a 4-way dropdown placed on
     -- its own row below Health Color Scheme; Smooth takes the freed x2 slot.
-    local smooth = W.ToggleAt(sec, "Smooth fill", x2, row1, labelW)
+    local smooth = W.ToggleAt(sec, "Smooth fill", x1, row1, labelW)
     M.BindBoolWidget(ctx, smooth,
         function() return ReadBool(unit, "smoothFill", false) end,
         function(v) SetHealthFillMode("smoothFill", "chunkedFill", v, "MSUF2_SMOOTH_FILL", "Smooth health fill") end,
         SettingMeta(ctx, "basics.smooth_fill", unit, "smoothFill"))
-    local chunked = W.ToggleAt(sec, "Chunked health loss", x3, row1, labelW)
+    local chunked = W.ToggleAt(sec, "Chunked health loss", x2, row1, labelW)
     M.BindBoolWidget(ctx, chunked,
         function() return ReadBool(unit, "chunkedFill", false) end,
         function(v) SetHealthFillMode("chunkedFill", "smoothFill", v, "MSUF2_CHUNKED_FILL", "Chunked health loss") end,

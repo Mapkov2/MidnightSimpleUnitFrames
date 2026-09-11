@@ -2681,34 +2681,6 @@ function W.SectionSwitch(section, label, displayLabel)
     if M.AddTooltip then M.AddTooltip(button, label, nil, { hook = true }) end
     return button
 end
--- Second view of the same bound setting. Forward clicks through the original
--- binding so combat checks, history and apply ownership remain centralized.
-function W.SectionSwitchContent(owner, parent, label, x, y, labelWidth)
-    local existing = rawget(owner, "_msuf2ContentSwitch")
-    if existing then return existing end
-    local control = W.SwitchAt(parent, label, x, y, labelWidth or 0, labelWidth and "RIGHT" or "HIDDEN")
-    control._msuf2UnitFrameGateAlwaysEnabled = owner._msuf2UnitFrameGateAlwaysEnabled == true
-    control._msuf2GroupFrameGateAlwaysEnabled = owner._msuf2GroupFrameGateAlwaysEnabled == true
-    owner._msuf2ContentSwitch = control
-    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(control, owner) end
-    local setChecked = owner.SetChecked
-    owner.SetChecked = function(self, checked)
-        setChecked(self, checked)
-        control:SetChecked(checked)
-    end
-    control:SetChecked(owner:GetChecked())
-    control:SetScript("OnClick", function(self)
-        if owner.IsEnabled and not owner:IsEnabled() then
-            self:SetChecked(owner:GetChecked())
-            return
-        end
-        local click = owner:GetScript("OnClick")
-        if click then click(owner) end
-        self:SetChecked(owner:GetChecked())
-    end)
-    if M.AddTooltip then M.AddTooltip(control, label, nil, { hook = true }) end
-    return control
-end
 local function ScopeButtonWidth(item)
     if item and item.width then return item.width end
     local value = item and item.value

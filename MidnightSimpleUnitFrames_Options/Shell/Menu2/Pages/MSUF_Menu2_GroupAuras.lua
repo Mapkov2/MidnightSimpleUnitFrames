@@ -468,11 +468,7 @@ local function BuildGFAuras(ctx)
         M.AttachAuraFontsAndColors(top, M.Format("Auras"), scope)
     end
 
-    local rootSection = auraBuilder:Section("Group Aura Visibility", 88)
-    local rootWidth = rootSection._msuf2Width or auraBuilder.width or 720
-    local rootEnabled = BindAuraRootEnabled(ctx,
-        W.SectionSwitch(outer, "Enable group auras"))
-    W.SectionSwitchContent(rootEnabled, rootSection, "Enable group auras", 24, -50, rootWidth - 48)
+    BindAuraRootEnabled(ctx, W.SectionSwitch(outer, "Enable group auras"))
 
     if tool == "layout" and lane == "externals" then
         local filterSection = auraBuilder:Section("External Defensive Filtering", 88)

@@ -279,7 +279,6 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
     end
 
     local master = PrepareOverlaySwitch(ctx, section, unit)
-    local masterContent = W.SectionSwitchContent(master, card, "Dispel Overlay", 16, -16)
     master.refreshDetails = function() Sync() end
     local controls = {
         BindDropdown("Overlay detects", UNIT_DISPEL_TRIGGERS, "unitDispelOverlayTrigger", "BORDER",
@@ -326,7 +325,6 @@ local function BuildUnitDispelOverlaySection(ctx, builder, unit)
             if type(clear) == "function" then clear(false) end
         end
         SetControlEnabled(master, true)
-        SetControlEnabled(masterContent, true)
         SetControlsEnabled(controls, enabled)
         RefreshAuraWarning(warning, unit)
     end))
@@ -428,7 +426,6 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
     end
 
     local master = PrepareSymbolSwitch(ctx, section, unit)
-    local masterContent = W.SectionSwitchContent(master, card, "Dispel Symbol", 16, -16)
     master.refreshDetails = function() Sync() end
     --- Distinct from the Overlay card's preview on the same page: this one is
     --- draggable, and two identically labelled toggles gave no way to tell
@@ -492,7 +489,6 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
             if type(clear) == "function" then clear(false) end
         end
         SetControlEnabled(master, true)
-        SetControlEnabled(masterContent, true)
         SetControlsEnabled(controls, enabled)
         SetControlsEnabled(allModeControls, enabled and ReadValue(unit, "unitDispelSymbolMode", "ALL") == "ALL")
         RefreshAuraWarning(warning, unit)

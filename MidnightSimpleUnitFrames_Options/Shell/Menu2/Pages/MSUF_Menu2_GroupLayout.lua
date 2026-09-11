@@ -168,8 +168,7 @@ local function RefreshFrameBasicsProviderHeader(section)
 end
 local function BuildGFGeneralSection(ctx, b)
     local general = b:CollapsibleSection("general", "Frame Basics", 520, false)
-    local enable = PrepareFrameEnable(ctx, general)
-    W.SectionSwitchContent(enable, general, "Enable", 32, -16, 180)
+    PrepareFrameEnable(ctx, general)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
     local generalRightX = min(max(430, floor(generalW * 0.52)), max(360, generalW - 360))
