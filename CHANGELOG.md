@@ -1,109 +1,52 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.16-beta6 - 2026-09-10
+## 6.16 - 2026-09-10
 
 ### Highlights
 
-- **Every settings section now carries its on/off switch, a one-line summary and a "..." menu on its header.** Turn a feature on or off without expanding it, read its current values at a glance, and reset or copy just that section.
+- **Every settings section now carries its on/off switch, a one-line summary and a "..." menu on its header.** Turn a feature on or off without expanding it, read its current values at a glance, and reset or copy a single section to another frame.
 <!-- msuf-menu-link: none -->
-- **The interrupt-ready indicator counts every interrupt you have, not just your main kick.** Paladins with Avenger's Shield and Warriors with Disrupting Shout read as ready as soon as either one is off cooldown.
-<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_interrupt_ready","controlId":"menu2.opt.castbar.global.interrupt.ready.kick.ready.style","settingKey":"general.kickReadyStyle","prepareKind":"","prepareValue":"","query":"castbar border","label":"Castbar border"} -->
+- **Name, health and power text can each appear only on mouseover**, with independent fade-in and fade-out durations.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"text","controlId":"menu2.uf_player.unit.text.name.mouseover","settingKey":"player.nameTextMouseover","prepareKind":"","prepareValue":"","query":"only show on mouseover","label":"Only show on mouseover"} -->
+- **Unit Frames can appear only while their unit is injured.** Show only below 100% health keeps a frame transparent at full health while your other hide rules still apply.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"load_conditions","controlId":"menu2.uf_player.unit.load_condition.loadcondshowwheninjured","settingKey":"player.loadCondShowWhenInjured","prepareKind":"","prepareValue":"","query":"show only below 100 health","label":"Show only below 100% health"} -->
+- **Boss target highlights support arrows, paired markers, diamonds, crosses and borders.** Position markers directly in the preview and optionally require several boss frames.
+<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"boss_target_highlight","controlId":"menu2.uf_boss.unit.boss_target_highlight.style","settingKey":"general.bossTargetHighlightStyle","prepareKind":"","prepareValue":"","query":"boss target highlight","label":"Highlight style"} -->
+- **Portraits can be clickable**, enabled separately for each Unit Frame.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitclickable","settingKey":"player.portraitClickable","prepareKind":"unitPortraitTab","prepareValue":"general","query":"clickable portrait","label":"Clickable Portrait"} -->
+- **Class Resources track Sweeping Strikes natively.**
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_behavior","controlId":"menu2.classpower.advanced.behavior.sweeping","settingKey":"bars.showSweepingStrikes","prepareKind":"","prepareValue":"","query":"sweeping strikes","label":"Sweeping Strikes Tracker"} -->
+- **Every menu string is now translated in all twelve locales.** German, both Spanish variants, French, Italian, Korean, Brazilian Portuguese, Russian and both Chinese variants no longer fall back to English.
+<!-- msuf-menu-link: none -->
 
 ### Changes
 
-- Options menus read brighter: taller section headers with an accent border when open or hovered, a higher floor for the smallest fonts, and a clearly visible active page in the navigation.
+- Options menus read brighter: taller section headers with an accent border when open or hovered, the same accent outline on every clickable surface you hover — unit tabs, pills, buttons, dropdowns and the section "..." menus — a higher floor for the smallest fonts, and a clearly visible active page in the navigation.
 - Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.
 - Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.
 - Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.
+- Class-colored power bars were added to the contextual color controls.
+- The Auras3 backend was rebuilt into explicit native runtime, Menu, Edit Mode and Spell Indicator modules, with no change to how your auras behave or to Blizzard-owned aura tracking.
+- Custom Aura spell names now use prebuilt locale-specific alias catalogs instead of a live aura-name resolver, including current localized and hotfixed spell groups.
+- Assistant command coverage, scoped requests, follow-up handling and exact setting navigation were expanded, and the Assistant control catalog and menu search index were rebuilt for the new settings.
+- The interrupt-ready indicator counts every interrupt you have, not just your main kick. Paladins with Avenger's Shield and Warriors with Disrupting Shout read as ready as soon as either one is off cooldown.
+- Demon Hunter Devourer Soul Fragment bars are divided into their fragments again, and Separator and Pip gap shape that division across their whole range.
 - The Arcane Surge / Arcane Soul countdown row and its Class Resources toggle were removed. Whirlwind and Sweeping Strikes tracking are unchanged.
-- German clients now see translated text for the new frame workspace header and the section actions popup.
 
 ### Fixes & Performance
 
-- With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.
-- Balance Druid, Survival Hunter and Demonology Warlock track their own interrupt again instead of a spell they cannot cast.
-- A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.
-- Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.
-- The 6.16 beta 3 entry in See New Features no longer links to the removed Arcane Surge / Soul toggle.
-
-## 6.16-beta5 - 2026-09-09
-
-### Highlights
-
-- **Separator and Pip gap shape the Demon Hunter Devourer bar across their whole range.** The dividers share the space the fragments do not need, so every step of the sliders changes the bar instead of settling on one width.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visuals","controlId":"menu2.classpower.advanced.style.pips.gap","settingKey":"bars.classPowerGap","prepareKind":"","prepareValue":"","query":"pip gap","label":"Pip gap"} -->
-
-### Fixes & Performance
-
+- Health gradients, backgrounds and prediction do less repeated work during combat: fresh health samples are reused, client-specific update paths are chosen once instead of on every health event, and current, maximum and percentage text use specialized writers that still honour live number-format changes.
+- Absorb-only prediction uses specialized update paths for static and follow-health anchors, including glow and full-health stripe options, while keeping identity, disable and recovery handling.
+- Group text updates reuse health values already sampled for the bars, and zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.
+- With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured, and Balance Druid, Survival Hunter and Demonology Warlock track their own interrupt again instead of a spell they cannot cast.
+- Target Range Fade forwards protected in-range results through Blizzard's native boolean-alpha path and keeps its spell-range fallback, and missing-health background masking during Range Fade was corrected so the configured background stays visible.
+- A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt, and the Class Resources and docked unit previews render the Devourer resource the way it appears in game.
+- Aura icon style controls re-apply their master-toggle gates on every Appearance page, so Debuffs, Player Defensives and Dots no longer keep a stale enabled state.
 - Pixel snapping no longer rounds a one-pixel divider below a pixel, which could remove the fragment division entirely at some interface scales.
-
-## 6.16-beta4 - 2026-09-09
-
-### Highlights
-
-- **Demon Hunter Devourer Soul Fragment bars are divided into their fragments again.** Separator and Pip gap act on the bar once more, while its fill keeps following the real fragment maximum.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visuals","controlId":"menu2.classpower.advanced.style.pips.separator","settingKey":"bars.classPowerTickWidth","prepareKind":"","prepareValue":"","query":"separator","label":"Separator"} -->
-
-### Fixes & Performance
-
-- The Class Resources preview and the docked unit preview now render the Devourer resource the way it appears in game.
-- Aura icon style controls re-apply their master-toggle gates on every Appearance page instead of only on Buffs, so Debuffs, Player Defensives and Dots no longer keep a stale enabled state.
-
-## 6.16-beta3 - 2026-09-09
-
-### Highlights
-
-- **Name, health, and power text can each appear only on mouseover, with independent fade-in and fade-out durations.** Configure each text element under Unit > Text.
-<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"text","controlId":"menu2.uf_player.unit.text.name.mouseover","settingKey":"player.nameTextMouseover","prepareKind":"","prepareValue":"","query":"only show on mouseover","label":"Only show on mouseover"} -->
-- **Boss target highlights now support arrows, paired markers, diamonds, crosses, and borders.** Position markers directly in the preview and optionally require multiple boss frames.
-<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"boss_target_highlight","controlId":"menu2.uf_boss.unit.boss_target_highlight.style","settingKey":"general.bossTargetHighlightStyle","prepareKind":"","prepareValue":"","query":"boss target highlight","label":"Highlight style"} -->
-- **Portraits can now be clickable.** Enable the option separately for each Unit Frame.
-<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitclickable","settingKey":"player.portraitClickable","prepareKind":"unitPortraitTab","prepareValue":"general","query":"clickable portrait","label":"Clickable Portrait"} -->
-- **Class Resources now include native Sweeping Strikes tracking.**
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_behavior","controlId":"menu2.classpower.advanced.behavior.sweeping","settingKey":"bars.showSweepingStrikes","prepareKind":"","prepareValue":"","query":"sweeping strikes","label":"Sweeping Strikes Tracker"} -->
-
-### Changes
-
-- Completed translations for the new Menu controls and descriptions across all supported languages.
-- Added class-colored power bars to the contextual color controls.
-- Expanded Assistant command coverage, scoped requests, follow-up handling, and exact setting navigation.
-- Updated the Menu search index and Assistant control catalog for the new settings.
-
-## 6.16-beta2 - 2026-09-08
-
-### Highlights
-
-- **Health gradients, backgrounds, and prediction updates do less repeated work during combat.** Existing colors, text formats, prediction options, and update behavior are preserved.
-<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_appearance","controlId":"menu2.opt.colors.advanced.appearance.gradient.enabled","settingKey":"general.enableHealthGradient","prepareKind":"","prepareValue":"","query":"health gradient","label":"Health Gradient"} -->
-
-### Fixes & Performance
-
-- Health and background rendering reuse fresh health samples and choose client-specific update paths once instead of on every health event.
-- Absorb-only prediction uses specialized update paths for static and follow-health anchors, including glow and full-health stripe options, while retaining identity, disable, and recovery handling.
-- Current, maximum, and percentage text use specialized writers and preserve live number-format changes. Group text updates reuse health values already sampled for the bars.
-- Castbar interrupt-ready colors reuse configured colors for public values and retain Blizzard's native handling for protected values.
-- Aura identity checks avoid temporary owner tables and repeated access checks. Castbar color ownership avoids redundant temporary allocations.
-- Corrected missing-health background masking during Range Fade so the configured background and out-of-range appearance remain visible.
-- Fixed clipping in Aura cooldown and Texture Layer options, and improved Unit Status previews in the Menu.
-
-## 6.16-beta1 - 2026-09-06
-
-### Highlights
-
-- **Unit Frames can now appear only while their unit is injured.** Enable **Show only below 100% health** under Unit > Load Conditions to keep a frame transparent at full health while preserving the other configured hide rules.
-<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"load_conditions","controlId":"menu2.uf_player.unit.load_condition.loadcondshowwheninjured","settingKey":"player.loadCondShowWhenInjured","prepareKind":"","prepareValue":"","query":"show only below 100 health","label":"Show only below 100% health"} -->
-
-### Changes
-
-- Rebuilt the Auras3 backend into explicit native runtime, Menu, Edit Mode, and Spell Indicator modules while preserving its public behavior and Blizzard-owned Aura tracking.
-- Custom Aura spell names now use prebuilt locale-specific alias catalogs instead of a live Aura-name resolver, including current localized and hotfixed spell groups.
-
-### Fixes & Performance
-
-- Target Range Fade now forwards protected in-range results through Blizzard's native boolean-alpha path and retains its spell-range fallback when the native check is unavailable.
-- Health gradients, dynamic backgrounds, and protected health and power text reuse already-read values and specialized writers to reduce duplicate work on frequent unit events.
-- Injured-only visibility uses a secret-safe native health curve and stable visual parents so health bars, predictions, borders, textures, portraits, cast indicators, and Class Resources hide together without changing the clickable secure frame.
-- Scheduler callback errors now retain the original callback stack while continuing to isolate failures and drain queued work.
+- Injured-only visibility uses a secret-safe native health curve and stable visual parents, so bars, predictions, borders, textures, portraits, cast indicators and Class Resources hide together without changing the clickable secure frame.
+- Aura identity checks and castbar colour ownership avoid redundant temporary allocations, and scheduler callback errors keep the original callback stack while still isolating failures.
+- Party frame backgrounds no longer get stuck faded in instanced combat. Restricted combat applies Range Fade through a native path that skipped the bookkeeping the normal path checks, so a health bar, its background or a prediction bar could keep its out-of-range opacity after coming back into range.
+- Fixed clipping in Aura cooldown and Texture Layer options, and improved Unit Status previews in the menu.
 
 ## 6.151 - 2026-09-06
 
@@ -145,141 +88,6 @@
 - Preserved raid groups use one roster snapshot for sorting and layout, preventing the filled and displayed grids from disagreeing when more subgroups are present than the configured column limit.
 - Assistant requests for Out of range opacity, Texture Layer opacity, and Portrait opacity update their own controls.
 - Reduced repeated work and temporary allocations in health gradients, dynamic backgrounds, protected text, Aura fallback scans, and Range Fade timers while preserving their update behavior.
-
-## 6.15-beta7 - 2026-09-05
-
-### Highlights
-
-- **Busy group combat now spends less time updating health gradients, dynamic backgrounds, protected text, Aura fallback state, and Range Fade timers.** Existing colors, status transitions, unresolved-Aura discovery, and range sampling behavior are preserved.
-<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_appearance","controlId":"menu2.opt.colors.advanced.appearance.gradient.enabled","settingKey":"general.enableHealthGradient","prepareKind":"","prepareValue":"","query":"health gradient","label":"Health Gradient"} -->
-
-### Fixes & Performance
-
-- Health gradients now reuse bounded native scalar curves for their RGB channels, avoid per-update ColorMixin allocation, and keep constant channels out of the native evaluation path.
-- Group health updates no longer repeat an already completed dynamic-background refresh or enter an empty color handoff after the background has been painted.
-- Dynamic health backgrounds cache stable alpha inputs and known cache keys, use the native secret-value predicate when available, and forward protected colors directly to their supported rendering sink.
-- Protected current, maximum, and percentage text modes now use compiled single-value writers instead of the general multi-value formatter.
-- Unresolved Aura fallback scans no longer resynchronize an unchanged active-work state, while later Aura discovery, owner reactivation, and unregister cleanup remain intact.
-- Group death-background updates skip cache probes that cannot be reused outside an active frame dispatch while retaining fresh native death and resurrection checks.
-- Range Fade keeps an earlier timer when its logical deadline moves later, reducing timer replacement churn without moving range checks or alpha changes forward.
-
-## 6.15-beta6 - 2026-09-04
-
-### Highlights
-
-- **Absorbs and heal prediction can now stay visible when the health bar is faded into the background.** Enable **Keep Absorbs + Prediction Visible** per Unit Frame or for Party and Raid Frames to keep these overlays at full opacity independently from the health fill.
-<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"transparency","controlId":"menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars","settingKey":"player.alphaExcludePredictionBars","prepareKind":"","prepareValue":"","query":"keep absorbs prediction visible","label":"Keep Absorbs + Prediction Visible"} -->
-- **Raid and Mythic Raid role sorting can now span the entire raid.** Enable **Sort roles across entire raid** under Group Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group.
-<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"sorting","controlId":"menu2.gf_layout.group.field.sortrolesacrossraid","settingKey":"gf_raid.sortRolesAcrossRaid","prepareKind":"groupScope","prepareValue":"raid","query":"sort roles across entire raid","label":"Sort roles across entire raid"} -->
-
-### Changes
-
-- Added **Keep Absorbs + Prediction Visible** to Unit Frames and Party/Raid Frames, including profile copy, defaults, previews, search, and Assistant support.
-- Added **Sort roles across entire raid** for Raid and Mythic Raid Frames, including defaults, profile copy, locales, search, and Assistant support. Role sorting can now span the full raid with Preserve raid groups or Group + Role, while Party remains unchanged.
-- The Boss Preview now displays incoming heals, absorbs, heal absorbs, and absorb text so prediction settings can be reviewed without a live boss.
-- The Assistant now understands plain-language requests about a specific Unit Frame and resolves questions, hide commands, movement directions, and opacity controls against the named frame and control.
-- Retired pre-6.0 profile conversion and import controls. Existing MSUF 6.x profiles and 6.x Wago imports remain supported; older or unversioned stored profiles are archived instead of entering the active profile list.
-- See New Features can now open the exact Player Aura workspace used by the current Aura highlight.
-
-### Fixes & Performance
-
-- Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview now preserve the configured health and prediction opacity instead of resetting prediction fills to full or faded health opacity.
-- Assistant requests for Out of range opacity, Texture Layer opacity, and Portrait opacity now update their own controls instead of changing health-bar opacity.
-- Detached Player Power bars attached or width-synced to Class Resources retain their controller-managed anchor while the Class Resource bar is hidden, preventing position and width jumps after shapeshifting.
-- **Text on detached bar** now controls only Power-text placement. It no longer appears disabled merely because Power text is hidden and no longer enables **Show power text** by itself.
-- Aura owners that cannot be visible for the current unit stop parsing `UNIT_AURA`; their native registration and unresolved-name work resume only when the owner becomes eligible again.
-- Cleanse and Purge borders now use the same Frame Outline layer as their preview, Unit Frame dispel borders follow Blizzard's assist rules, and Purge, cast-by-me, and Retail exact-ID Group Aura ownership retain their intended behavior.
-- Group Frame dead and offline backgrounds now follow secret health updates without lagging behind the unit's real state.
-- Preserved raid groups build and sort one authoritative roster snapshot per secure-header setup. Their rendered block count now follows the same roster, preventing the filled and displayed grids from disagreeing when more subgroups are present than the configured column limit.
-- The Group Layout Sorting card now aligns its Sort Mode dropdown and dependent toggles consistently.
-- Interrupted full Aura refreshes arm their recovery before synchronous work and can no longer leave later refreshes stuck as pending after a Lua execution-budget abort.
-- Aura recovery remains inside the native factory runtime and preserves the Retail 12.1 hook contracts across refreshes, preventing Aura displays from remaining empty after an interrupted update.
-- Class Resource previews can schedule refreshes again after Menu lifecycle cancellation, so movement and position controls continue updating after settings changes.
-
-## 6.15-beta5 - 2026-09-04
-
-### Highlights
-
-- **Auras are visible and recover reliably again in the Retail 12.1 Beta.** Open Player Auras at Buffs > Layout to review the visible Aura lane.
-<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"auras","controlId":"menu2.uf_player.auras.unit-workspace.container-selector","settingKey":"auras3.player.buff.visible","prepareKind":"unitAuraWorkspace","prepareValue":"buff_layout","query":"player buff aura layout visible","label":"Player Auras"} -->
-
-### Changes
-
-- The CurseForge Beta is explicitly published for Retail 12.1.0.
-
-### Fixes & Performance
-
-- Aura recovery remains inside its factory-owned runtime and retains the native 12.1 hook contracts across refreshes, preventing Aura displays from staying empty after an interrupted update.
-- Class Resource previews can schedule refreshes again after Menu lifecycle cancellation, so their movement and position controls continue to update after settings changes.
-- Extended the Aura and Menu interaction smokes for both fixes.
-
-## 6.15-beta4 - 2026-09-04
-
-### Highlights
-
-- **Retail Aura displays recover instead of remaining disabled when a full refresh exceeds the Lua execution budget.**
-<!-- msuf-menu-link: none -->
-
-### Changes
-
-- Retired the complete pre-6.0 profile conversion path and its legacy import controls. Every MSUF 6.x schema-600 profile and the 6.x Wago envelope remain supported; older or unversioned stored profiles are archived instead of being normalized into the active profile list.
-
-### Fixes & Performance
-
-- Full Aura refreshes batch identity-event topology once and arm their next-frame recovery before synchronous work, so a `script ran too long` abort cannot leave every later Aura refresh permanently latched as pending.
-
-## 6.15-beta3 - 2026-09-03
-
-### Highlights
-
-- **The Assistant now understands requests that name one unit frame and then describe the result.** "Show the PvP flag on my target frame", "put the portrait on the left of my player frame" or "the name on my player frame is too small" resolve against that frame's own controls instead of the frame's master toggle or a single matching word.
-<!-- msuf-menu-link: none -->
-
-### Changes
-
-- Questions about one control of one unit frame are answered with that control - its page, what it does and its current value - instead of a page-level overview. "Don't show raid markers on my player frame" is read as a hide command, and "upwards"/"downwards" now reach the movement lanes.
-- Out of range opacity, Texture Layer opacity and Portrait opacity are no longer written to the health bar's opacity.
-
-### Fixes & Performance
-
-- Aura owners that cannot be visible for the current unit stop parsing every UNIT_AURA update: the native registration is dropped while the owner is ineligible and Blizzard's own reparse restores it, and the spell-name resolver only listens per unit while an active owner still has names to resolve.
-- Cleanse and Purge borders draw in the Frame Outline layer band at the Borders highlight detail, so the live border lands exactly where the Cleanse test border draws.
-- Unit Frame dispel borders follow Blizzard's own assist check and only appear on units you can dispel; the Purge marker and "cast by me" sensors keep their previous behaviour, and exact-ID group aura lanes drop a native owner per unit on 12.1.
-- The dead and offline health background now follows secret health values on Group Frames instead of lagging behind the real state.
-- Preserved raid groups take one authoritative roster snapshot per header setup instead of one per block, and the number of laid-out blocks follows the roster so a raid using more subgroups than the configured column limit no longer fills a different grid than it draws.
-
-## 6.15-beta2 - 2026-09-02
-
-### Highlights
-
-- **Raid and Mythic Raid role sorting can now span the entire raid.** Enable **Sort roles across entire raid** under Frames > Party/Raid Frames > Layout > Sorting to order tanks, healers, and damage dealers across the whole raid instead of within each raid group, including with Preserve raid groups.
-<!-- msuf-menu-link: none -->
-
-### Changes
-
-- Added **Sort roles across entire raid** to Raid and Mythic Raid sorting with defaults, profile copy, locales, search, and Assistant support. By Role with Preserve raid groups and Group + Role follow the raid-wide order; Party is unaffected.
-- The Boss Preview now renders incoming heal, absorb, and heal-absorb bars plus the absorb text so prediction settings can be judged without a live boss.
-
-### Fixes & Performance
-
-- Raid role sorting stays fully out of combat: the raid-wide order is rebuilt only when roles or the roster change outside combat, and Blizzard's secure header applies it natively.
-- Tidied the Group Layout Sorting card so the Sort Mode dropdown and its toggles sit evenly inside the card.
-
-## 6.15-beta1 - 2026-09-01
-
-### Highlights
-
-- **Absorbs and heal prediction can now stay visible when Unit Frame health opacity is reduced.** Enable **Keep Absorbs + Prediction Visible** per frame to preserve these overlays independently from the health fill.
-<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"transparency","controlId":"menu2.uf_player.unit.transparency.alpha_exclude_prediction_bars","settingKey":"player.alphaExcludePredictionBars","prepareKind":"","prepareValue":"","query":"keep absorbs prediction visible","label":"Keep Absorbs + Prediction Visible"} -->
-
-### Changes
-
-- Added the matching **Keep Absorbs + Prediction Visible** option for Party and Raid Frames, including profile copy, defaults, previews, search, and Assistant support.
-
-### Fixes & Performance
-
-- Health gradients, texture changes, prediction refreshes, Group Range Fade, and the Boss Preview now preserve the configured health and prediction opacity instead of resetting fills to full opacity.
-- Detached Player Power bars attached or width-synced to Class Resources keep using the controller-maintained hidden anchor, preventing width or position jumps when shapeshifting hides the visible Class Resource bar.
 
 ## 6.14 - 2026-08-30
 
