@@ -100,7 +100,7 @@ pillHover=0.063,0.145,0.255,0.96
 pillActive=0.141,0.365,0.741,0.96
 pillEdge=0.220,0.340,0.490,0.88
 pillEdgeButton=0.220,0.340,0.490,0.90
-pillEdgeHover=0.231,0.510,0.965,0.58
+pillEdgeHover=0.231,0.510,0.965,0.75
 pillEdgeActive=0.357,0.608,1.000,0.78
 pillText=0.902,0.937,0.984,1.00
 pillTextActive=0.957,0.973,1.000,1.00
@@ -109,7 +109,7 @@ navPillBaseSolid=0.035,0.067,0.114,0.92
 navPillHover=0.063,0.145,0.255,0.96
 navPillActive=0.141,0.365,0.741,0.96
 navPillEdge=0.102,0.173,0.259,0.62
-navPillEdgeHover=0.231,0.510,0.965,0.60
+navPillEdgeHover=0.231,0.510,0.965,0.75
 navPillEdgeActive=0.357,0.608,1.000,0.80
 navText=0.902,0.937,0.984,1.00
 navTextActive=0.957,0.973,1.000,1.00
@@ -347,12 +347,14 @@ local function SwapAccentDeep(tbl, tones, depth)
     end
 end
 -- Midnight keeps its authored blue hover. Non-midnight themes derive hover
--- from the same accent ramp as selection, at a lower alpha so pointer feedback
--- remains subordinate to the persistent active state.
+-- from the same accent ramp as selection, at the same 0.75 alpha the accordion
+-- header border uses, so pointer feedback reads identically on every clickable
+-- surface. The active state stays unmistakable through its filled pill rather
+-- than through a stronger edge.
 local function ApplyAccentNavHoverColors(tones)
     local mappings = {
         { "navPillHover", tones[1], 0.92 },
-        { "navPillEdgeHover", tones[2], 0.60 },
+        { "navPillEdgeHover", tones[2], 0.75 },
         { "navHeaderHover", tones[3], 1.00 },
     }
     for i = 1, #mappings do

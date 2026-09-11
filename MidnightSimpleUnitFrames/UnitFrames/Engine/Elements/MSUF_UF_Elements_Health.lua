@@ -264,7 +264,14 @@ local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
   local texture = background.GetStatusBarTexture and background:GetStatusBarTexture()
   local supported = fill and texture and background.CreateMaskTexture
     and texture.AddMaskTexture and texture.RemoveMaskTexture
-  local active = wanted and supported and true or false
+  -- The rounded surface already owns a mask on this very texture. Stacking a
+  -- second native clip mask on it renders the missing-health background wrong
+  -- (issue #146), so rounded frames keep the value-driven fill that 6.16 beta1
+  -- used. Frames without the rounded surface still take the cheap clip mask.
+  local roundedMasked = _G.MSUF_RoundedUF_Active == true
+    or (frame._msufRGF_MaskedTextures and frame._msufRGF_MaskedTextures[texture] ~= nil)
+    or (frame._msufRUF_MaskedTextures and frame._msufRUF_MaskedTextures[texture] ~= nil)
+  local active = wanted and supported and not roundedMasked and true or false
   local orientation, reverse = bar._msufOrientation or "HORIZONTAL", bar._msufReverseFill == true
   if not resetValue and frame._msufHealthBackgroundMaskActive == active
     and frame._msufHealthBackgroundMaskFill == fill

@@ -2576,7 +2576,7 @@ function H.FlowLayerChips(rail, buttons, opts)
     local rowH = opts.rowHeight or 20
     local available = (tonumber(opts.width) or (rail.GetWidth and rail:GetWidth()) or 0) - padX * 2
     if available <= 0 then available = 480 end
-    local x, rows = 0, 1
+    local x, rows, widest = 0, 1, 0
     for i = 1, #buttons do
         local btn = buttons[i]
         -- Hidden layer buttons (a feature the surface does not expose) must not
@@ -2590,12 +2590,42 @@ function H.FlowLayerChips(rail, buttons, opts)
             btn:ClearAllPoints()
             btn:SetPoint("TOPLEFT", rail, "TOPLEFT", padX + x, -(padY + (rows - 1) * (rowH + gapY)))
             x = x + w + gapX
+            if x - gapX > widest then widest = x - gapX end
         end
     end
     local height = padY * 2 + rows * rowH + (rows - 1) * gapY
     if rail.SetHeight then rail:SetHeight(height) end
     rail._msuf2ChipRows = rows
-    return height
+    -- Second return: the width the widest row actually needs, so a popover can
+    -- hug its chips instead of leaving dead panel beside a short last row.
+    return height, padX + widest + (tonumber(opts.padXRight) or padX)
+end
+-- A layer rail hanging under a "Layers" button is a dropdown, so it has to stay
+-- inside the preview it belongs to in both directions. Flow at the narrow
+-- authored column first, widen only as far as needed to keep it off the bottom
+-- edge, then hug the chips so a short last row leaves no dead panel.
+function H.FlowLayerPopover(rail, buttons, opts)
+    opts = opts or {}
+    local width = tonumber(opts.width) or 268
+    local cap = math.max(width, tonumber(opts.maxWidth) or width)
+    local budget = tonumber(opts.maxHeight)
+    local function Flow(w)
+        return H.FlowLayerChips(rail, buttons, {
+            width = w,
+            padX = opts.padX or 10,
+            padXRight = opts.padXRight or 10,
+            rowHeight = opts.rowHeight,
+        })
+    end
+    local height, used = Flow(width)
+    while budget and height > budget and width < cap do
+        width = min(cap, width + 48)
+        height, used = Flow(width)
+    end
+    if rail and rail.SetWidth then
+        rail:SetWidth(min(width, math.max(120, used or width)))
+    end
+    return height, width
 end
 local TEXT_FOCUS_SIDES = { "top", "bottom", "left", "right" }
 local EDGE_ANCHORS = {
