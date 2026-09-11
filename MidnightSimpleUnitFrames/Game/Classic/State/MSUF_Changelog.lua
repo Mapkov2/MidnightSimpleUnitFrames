@@ -8,12 +8,35 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "4E88B9846E7D06B3E123C8E3C204E70F39FBBAD878CA889A48D7D1C78CD3A4B3",
-    currentVersion = "6.5-alpha16",
-    historyFromVersion = "6.5-alpha13",
-    previousVersion = "6.5-alpha15",
-    rangeLabel = "6.5-alpha15 -> 6.5-alpha16",
+    sourceSha256 = "B4B4ADA8E51E0FFD1DD4B4BDC9FE3219CB4B083EA7F194F845EE5283F131D8D0",
+    currentVersion = "6.5-alpha17",
+    historyFromVersion = "6.5-alpha14",
+    previousVersion = "6.5-alpha16",
+    rangeLabel = "6.5-alpha16 -> 6.5-alpha17",
     entries = {
+        {
+            version = "6.5-alpha17",
+            date = "2026-09-11",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Includes Retail 6.20. The Mainline manifests report 6.20; the Vanilla, TBC and Mists clients carry this alpha.",
+                        "Every clickable surface in the options menu answers hover with the same accent outline the section headers use: unit tabs, pills, buttons, dropdowns and the section \"...\" menus.",
+                        "Each settings section keeps exactly one on/off switch, on its header. The duplicate copy inside the section body is gone.",
+                        "Every menu string is translated in all twelve locales. German, both Spanish variants, French, Italian, Korean, Brazilian Portuguese, Russian and both Chinese variants no longer fall back to English.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "With Rounded Frames on, health backgrounds no longer change opacity at random during instanced combat. The missing-health optimisation stacked a second native mask on the texture the rounded surface already masks; rounded frames keep the value-driven fill and every other frame keeps the cheaper mask.",
+                        "The preview's Layers dropdown stays inside its panel and inside the preview. Entering combat view re-flowed its chips across the full preview width behind a narrow panel; the dropdown now owns its width and widens only as far as it needs to stay off the bottom edge.",
+                        "The Assistant switches a fade feature on when you set its fade value. \"Set name fade in to 0.25\" used to write the number while Name Text Mouseover stayed off, so nothing visibly changed; the owner now switches on in the same transaction, on every unit frame, and undo reverts both.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha16",
             date = "2026-09-10",
@@ -92,58 +115,6 @@ local data = {
                         "Classic unit choices and interrupt-ready spell lists now follow the active client's capabilities. TBC specialization detection uses the dominant talent tree.",
                         "Classic menus and previews include injured-only visibility, friendly/enemy debuff-border scope, and chunked Power fill controls.",
                         "Classic dispel symbols, portrait masks, and Edit Mode arrows handle unavailable client atlases. Legacy Blizzard Arena frames are hidden when MSUF owns those frames.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-alpha13",
-            date = "2026-09-08",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Interrupted cast feedback clears again after rapidly starting and interrupting another cast. The configured feedback duration is preserved.",
-                            link = {
-                                pageKey = "opt_castbar",
-                                query = "interrupt display duration",
-                                label = "Interrupt display duration (sec)",
-                                sectionId = "castbar_behavior",
-                                controlId = "menu2.opt.castbar.global.behavior.castbar.interrupt.feedback.duration",
-                                settingKey = "general.castbarInterruptFeedbackDuration",
-                            },
-                        },
-                        {
-                            text = "Health rendering and text updates include the latest Retail refactors. Health gradients, backgrounds, and percentage text share sampled values and avoid redundant work.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "health gradient",
-                                label = "Health Gradient",
-                                sectionId = "colors_appearance",
-                                controlId = "menu2.opt.colors.advanced.appearance.gradient.enabled",
-                                settingKey = "general.enableHealthGradient",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Includes the complete Retail 6.16-beta1 update and the subsequent performance passes through Retail commit 0e2bb191.",
-                        "Auras3 now uses separate runtime, configuration, Menu, Edit Mode, and Spell Indicator modules. Existing Arena behavior and Classic-specific Aura backends are preserved.",
-                        "Includes the localized Aura alias catalogs, injured-only Unit Frame visibility, Target Range Fade fixes, visual parenting, and updated Assistant controls.",
-                        "Includes subsequent health-background, group-health percentage, text-drain, Aura identity, castbar ownership, Texture Layer, Aura menu, and status-preview fixes.",
-                        "Retains Mainline 12.0.7/12.1.0/12.1.5, Vanilla 1.15.9, TBC 2.5.6, and Mists 5.5.4 support.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Raid and Party Frames refresh their current health and status when entering the world, including after accepting a summon with unchanged raid slots. This addresses frames remaining black until a reload or later unit event.",
-                        "Cancelling pending player interrupt feedback clears its pending state, allowing the next interruption to hide normally.",
-                        "The Classic delayed scheduler uses the refactored callback error handler while retaining keyed cancellation and replacement.",
-                        "Classic Aura Edit Mode and Menu load the new shared factories in their required order.",
                     },
                 },
             },
