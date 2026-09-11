@@ -6858,8 +6858,69 @@ function AP.TryOpenSingleColorSettingPicker(changes)
     return A.OpenColorSettingPickerForSetting(selected)
 end
 
+-- A fade duration or fade alpha does nothing at all while the feature that owns
+-- it is switched off, so writing one on its own leaves the player with a
+-- reported change they cannot see ("set name fade in to 0.25" while Name Text
+-- Mouseover is off). The menu says as much by greying those sliders out behind
+-- their toggle. Switch the owner on in the same transaction, the way a scoped
+-- font control writes its scope override: it lands in the same undo bundle and
+-- the reply names both changes, so nothing happens behind the player's back.
+AP.FadeFeatureGates = {
+    nameTextMouseoverFadeIn = "nameTextMouseover",
+    nameTextMouseoverFadeOut = "nameTextMouseover",
+    hpTextMouseoverFadeIn = "hpTextMouseover",
+    hpTextMouseoverFadeOut = "hpTextMouseover",
+    powerTextMouseoverFadeIn = "powerTextMouseover",
+    powerTextMouseoverFadeOut = "powerTextMouseover",
+    oocFadeAlpha = "oocFadeEnabled",
+    rangeFadeAlpha = "rangeFadeEnabled",
+    rangeFadeLayerMode = "rangeFadeEnabled",
+    rangeFadeUpdateRate = "rangeFadeEnabled",
+}
+
+function AP.AddFadeFeatureGates(changes)
+    if type(changes) ~= "table" or #changes == 0 then return changes end
+    if not (Registry and type(Registry.GetSetting) == "function") then return changes end
+    local gates = AP.FadeFeatureGates
+    local seen = {}
+    for i = 1, #changes do
+        local setting = changes[i] and changes[i].setting
+        local key = type(setting) == "table" and setting.key or nil
+        if type(key) == "string" then seen[key] = true end
+    end
+    -- Collect first and splice afterwards: inserting while walking `changes`
+    -- shifts the entries still to be looked at, and the plan's last scope would
+    -- never be reached.
+    local pending = {}
+    for i = 1, #changes do
+        local setting = changes[i] and changes[i].setting
+        local key = type(setting) == "table" and setting.key or nil
+        if type(key) == "string" then
+            local scope, leaf = key:match("^([%w_]+)%.([%w_]+)$")
+            local gateLeaf = leaf and gates[leaf]
+            local gateKey = gateLeaf and (scope .. "." .. gateLeaf) or nil
+            if gateKey and not seen[gateKey] then
+                local gate = Registry:GetSetting(gateKey)
+                if gate and type(gate.get) == "function" and type(gate.set) == "function" then
+                    local ok, current = pcall(gate.get)
+                    -- Only when it is genuinely off. An "off" the player put in
+                    -- this same plan already sits in `seen` and is left alone.
+                    if ok and current ~= true then
+                        seen[gateKey] = true
+                        pending[#pending + 1] = { setting = gate, value = true, companion = true }
+                    end
+                end
+            end
+        end
+    end
+    for i = #pending, 1, -1 do
+        table.insert(changes, 1, pending[i])
+    end
+    return changes
+end
+
 local function ExecuteChanges(plan)
-    local changes = plan.changes or {}
+    local changes = AP.AddFadeFeatureGates(plan.changes or {})
     local nameStateScopes = NameShorteningStateScopes(changes)
     local beforeNameShorteningStates = A.CaptureNameShorteningStates(nameStateScopes)
     local undoChanges = {}
