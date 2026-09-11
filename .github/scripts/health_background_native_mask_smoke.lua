@@ -136,6 +136,22 @@ local function Run(sourceRoot)
     b.texture=tex
     return b
   end
+  -- A mask MSUF does not own (the rounded surface puts one here). Health must
+  -- never detach it, and must not stack its own clip mask on top of it.
+  local function BuildFrame(group,axis,reverse,smooth)
+    local frame=Region()
+    frame.MSUFUnitKey=group and "raid1" or "target"
+    local spec={scope=group and "group" or "single",health={mode="unified",
+      backgroundColorMode="custom",backgroundFillMode="missing",vertical=axis=="VERTICAL",
+      reverse=reverse,smooth=smooth,texture="foreground",backgroundTexture="pattern"}}
+    frame.MSUFSpec=spec
+    frame.hpBar=Bar(frame,"hp");frame.healthBackgroundBar=Bar(frame,"bg")
+    frame.hpBarBG=frame.healthBackgroundBar.texture
+    local foreign=Region();foreign.relative=frame
+    foreign.hWrap,foreign.vWrap=BLACK_OUTSIDE,BLACK_OUTSIDE
+    frame.hpBarBG.masks[foreign]=true
+    return frame,spec,foreign
+  end
   local samples,cases,compositionChecks={},0,0
   local steadyReads,steadyWrites,steadyInstructions=0,0,0
   for _,group in ipairs({false,true}) do
@@ -144,20 +160,10 @@ local function Run(sourceRoot)
         for _,smooth in ipairs({false,true}) do
           for _,restricted in ipairs({false,true}) do
             hp,opaque=37,restricted
-            local frame=Region()
-            frame.MSUFUnitKey=group and "raid1" or "target"
-            local spec={scope=group and "group" or "single",health={mode="unified",
-              backgroundColorMode="custom",backgroundFillMode="missing",vertical=axis=="VERTICAL",
-              reverse=reverse,smooth=smooth,texture="foreground",backgroundTexture="pattern"}}
-            frame.MSUFSpec=spec
-            frame.hpBar=Bar(frame,"hp");frame.healthBackgroundBar=Bar(frame,"bg")
-            frame.hpBarBG=frame.healthBackgroundBar.texture
-            local rounded=Region();rounded.relative=frame
-            rounded.hWrap,rounded.vWrap=BLACK_OUTSIDE,BLACK_OUTSIDE
-            frame.hpBarBG.masks[rounded]=true
+            local frame,spec,foreign=BuildFrame(group,axis,reverse,smooth)
             health.Apply(frame,spec)
             local update=health.SelectUpdate(frame,spec)
-            assert(frame.hpBarBG.masks[rounded],"rounded mask lost during apply")
+            assert(frame.hpBarBG.masks[foreign],"foreign mask lost during apply")
             if health.SyncBackgroundPlan then assert(frame._msufHealthBackgroundMaskActive,"native mask not selected") end
             for _,value in ipairs({0,1,37,100,99,21,21,73,0,100}) do
               hp=value
@@ -183,7 +189,7 @@ local function Run(sourceRoot)
             -- texture replacement must not leave stale native mask bindings.
             spec.health.backgroundFillMode="full";health.Apply(frame,spec)
             health.Apply(frame,spec)
-            assert(frame.hpBarBG.masks[rounded],"full mode lost rounded mask")
+            assert(frame.hpBarBG.masks[foreign],"full mode lost the foreign mask")
             if health.SyncBackgroundPlan then
               assert(not frame._msufHealthBackgroundMaskActive and not frame._msufHealthBackgroundNeedsValue)
               spec.health.backgroundFillMode="missing";health.Apply(frame,spec)
@@ -210,9 +216,76 @@ local function Run(sourceRoot)
       end
     end
   end
-  return samples,cases,steadyReads,steadyWrites,steadyInstructions,compositionChecks
+  -- Issue #146. The rounded surface masks this exact texture, and two masks on
+  -- one texture render the missing-health background wrong in the live renderer
+  -- (the model above composes rects and cannot see it). Rounded frames must
+  -- therefore keep the value-driven fill; everyone else keeps the clip mask.
+  local gateChecks=0
+  if health.SyncBackgroundPlan then
+    hp,opaque=37,false
+    local frame,spec,foreign=BuildFrame(false,"HORIZONTAL",false,false)
+    _G.MSUF_RoundedUF_Active=true
+    health.Apply(frame,spec)
+    _G.MSUF_RoundedUF_Active=nil
+    assert(not frame._msufHealthBackgroundMaskActive,"clip mask stacked on a rounded texture")
+    assert(frame._msufHealthBackgroundNeedsValue,"rounded frames lost the value-driven fill")
+    assert(frame.hpBarBG.masks[foreign],"rounded mask detached")
+    local clip=frame._msufHealthBackgroundClipMask
+    assert(not clip or not frame.hpBarBG.masks[clip],"clip mask bound while rounded")
+    gateChecks=gateChecks+4
+
+    -- Per-frame bookkeeping is the order-independent half of the same gate: it
+    -- still holds while the master flag is briefly down (rounded just toggled).
+    for _,key in ipairs({"_msufRGF_MaskedTextures","_msufRUF_MaskedTextures"}) do
+      local f,s,fo=BuildFrame(false,"HORIZONTAL",false,false)
+      f[key]={[f.hpBarBG]=fo}
+      health.Apply(f,s)
+      assert(not f._msufHealthBackgroundMaskActive,key.." did not gate the clip mask")
+      assert(f._msufHealthBackgroundNeedsValue,key.." lost the value-driven fill")
+      gateChecks=gateChecks+2
+    end
+
+    -- Without rounded the clip mask is still the selected route.
+    local plain,plainSpec=BuildFrame(false,"HORIZONTAL",false,false)
+    health.Apply(plain,plainSpec)
+    assert(plain._msufHealthBackgroundMaskActive,"unrounded frames lost the native mask")
+    assert(not plain._msufHealthBackgroundNeedsValue,"unrounded frames kept the value path")
+    gateChecks=gateChecks+2
+
+    -- The engine applies the rounded surface after Health (BarsCommon hands off
+    -- at the end of its apply), so the clip mask can already be bound when the
+    -- rounded mask arrives. MSUF_UF_RoundedFrames re-syncs at that moment; the
+    -- re-sync has to retire the clip mask and leave the rounded one alone.
+    local late,lateSpec,lateForeign=BuildFrame(false,"HORIZONTAL",false,false)
+    health.Apply(late,lateSpec)
+    local lateClip=late._msufHealthBackgroundClipMask
+    assert(late.hpBarBG.masks[lateClip],"native mask not bound before the rounded pass")
+    _G.MSUF_RoundedUF_Active=true
+    late._msufRUF_MaskedTextures={[late.hpBarBG]=lateForeign}
+    health.SyncBackgroundPlan(late,true)
+    _G.MSUF_RoundedUF_Active=nil
+    assert(not late.hpBarBG.masks[lateClip],"late rounded re-sync kept the clip mask")
+    assert(late.hpBarBG.masks[lateForeign],"late rounded re-sync dropped the rounded mask")
+    assert(late._msufHealthBackgroundNeedsValue,"late rounded re-sync lost the value fill")
+    gateChecks=gateChecks+4
+  end
+  return samples,cases,steadyReads,steadyWrites,steadyInstructions,compositionChecks,gateChecks
 end
-local current,n,reads,writes,work,compositionChecks=Run(root)
+local current,n,reads,writes,work,compositionChecks,gateChecks=Run(root)
+
+-- The Health side can only gate on what it can see. Pin the rounded module's
+-- half of the ordering contract: attaching a rounded mask to a texture that
+-- already carries the clip mask must re-sync Health instead of stacking.
+do
+  local f=assert(io.open(root.."/MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua","rb"))
+  local src=f:read("*a"):gsub("\r\n","\n");f:close()
+  local attach=src:match("tex:AddMaskTexture%(m%)\n(.-)\n  return true")
+  assert(attach,"rounded mask attachment point not found")
+  assert(attach:find("_msufHealthBackgroundMaskActive",1,true)
+    and attach:find("_msufHealthBackgroundMaskTexture",1,true)
+    and attach:find("SyncBackgroundPlan",1,true),
+    "rounded mask attachment no longer re-syncs the health background plan")
+end
 if baseline then
   local old,on,oldReads,oldWrites,oldWork=Run(baseline)
   assert(on==n)
@@ -226,4 +299,5 @@ else
   print("Native-mask lifecycle/secret/geometry checks passed: "..n.." samples")
 end
 print("Range-fade composition checks passed: "..compositionChecks)
+print("Rounded-surface gate checks passed: "..gateChecks.." (clip mask yields to the rounded mask)")
 print("Live texture UV, pixel rounding, combat/taint and renderer cost remain client checks.")

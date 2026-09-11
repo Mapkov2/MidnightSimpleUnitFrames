@@ -463,6 +463,17 @@ local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
 
   tex:AddMaskTexture(m)
   f[maskedKey][tex] = m
+  -- The engine masks the rounded surface after Health has applied, so a health
+  -- background clip mask can already sit on this exact texture. Two masks on
+  -- one texture render the missing-health background wrong (issue #146): retire
+  -- the clip mask and let Health fall back to its value-driven fill.
+  if f._msufHealthBackgroundMaskActive == true and f._msufHealthBackgroundMaskTexture == tex then
+    local Elements = MSUF and MSUF.UF and MSUF.UF.Elements
+    local Health = Elements and Elements.Health
+    if Health and type(Health.SyncBackgroundPlan) == "function" then
+      Health.SyncBackgroundPlan(f, true)
+    end
+  end
   return true
 end
 
