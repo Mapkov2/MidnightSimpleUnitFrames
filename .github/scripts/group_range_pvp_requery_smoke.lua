@@ -40,14 +40,15 @@ _G.C_Timer = {
     end,
 }
 
+-- Shared widget stubs: the settle driver needs exactly these three, and the
+-- shared implementations record into the same scripts/events tables.
+local Stubs = assert(loadfile(".github/scripts/msuf_test_stubs.lua")
+    or loadfile("../.github/scripts/msuf_test_stubs.lua"))()
+local driverEnv = Stubs.New({ preset = "eventDriver" })
 local settleDriver
 _G.CreateFrame = function()
-    local driver = { events = {}, scripts = {} }
-    function driver:SetScript(kind, callback) self.scripts[kind] = callback end
-    function driver:RegisterEvent(event) self.events[event] = true end
-    function driver:UnregisterEvent(event) self.events[event] = nil end
-    settleDriver = driver
-    return driver
+    settleDriver = driverEnv:CreateFrame("Frame")
+    return settleDriver
 end
 
 local coreChunk, coreErr = loadfile(corePath)

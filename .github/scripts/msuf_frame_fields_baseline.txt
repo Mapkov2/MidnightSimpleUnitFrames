@@ -1,0 +1,114 @@
+# Pre-existing `_msuf*` frame fields that are read but never written anywhere in
+# the shipped tree. Read by .github/scripts/msuf_static_checks.py
+# (check_frame_fields). Ratchet: this list may only shrink. A new writer-less
+# read fails the static checks instead of being added here.
+#
+# Unlike msuf_frame_fields_allowlist.txt, nothing on this list is correct. Each
+# entry is a read that can only ever see nil: dead compatibility code, a hook
+# nothing stamps any more, or a wrong name. Fixing one means deleting its line
+# (stale entries are reported on every run). Prune by hand - the grouping
+# comments below are the only documentation these fields have.
+#
+# One exact field name per line; `#` starts a comment.
+
+# --- Retired square-border / highlight implementation -----------------------
+# UnitFrames/Effects/MSUF_UF_RoundedFrames.lua defensively hides the artifacts
+# of the pre-6.0 border and mouseover-highlight modules (see
+# UnitFrames/Engine/Elements/MSUF_UF_Highlight.lua, which the TOC no longer
+# loads). Every read is `if f.X and f.X.Hide then`, so nil is harmless; nothing
+# has written these since the Borders/RoundedFrames rewrite.
+# _msufBarOutline is additionally read by Castbars/MSUF_CastbarAnchors.lua as a
+# "legacy rectangular frame exposes its own outline host" width source.
+_msufBarOutline
+_msufBehindBarBg
+_msufDetachedPBOutline
+_msufGFBorderFrame
+_msufGFDebuffStripe
+_msufGFHighlightBorder
+_msufGFOutlineLines
+_msufHLA
+_msufHLActivePrio
+_msufHLB
+_msufHLEdgeSz
+_msufHLG
+_msufHLOfs
+_msufHLR
+_msufHighlightActiveKey
+_msufHighlightColorKey
+_msufHighlightOutline
+_msufHighlightOutlineB
+_msufHighlightOutlineG
+_msufHighlightOutlineR
+_msufPowerBorder
+_msufRoundedGFShell
+_msufRoundedShell
+
+# --- Auras3 -> engine override hooks that Auras3 never stamps ---------------
+# The debuff-stripe and dispel-border readers take `frame._msufA3X or cfg.X`,
+# so the configured value always wins and the aura-driven override is dead
+# (matches the 2026-09 finding that the Borders dispel path is unreachable).
+# _msufA3SkipDirectIdentityRefresh is a per-container opt-out of the direct
+# identity refresh route that nothing sets.
+# Read: UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua,
+# UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua,
+# Auras3/Runtime/MSUF_Auras3_Runtime_IdentityEvents.lua.
+_msufA3DebuffStripeA
+_msufA3DebuffStripeActive
+_msufA3DebuffStripeB
+_msufA3DebuffStripeEdge
+_msufA3DebuffStripeG
+_msufA3DebuffStripeHeight
+_msufA3DebuffStripeR
+_msufA3DispelA
+_msufA3DispelActive
+_msufA3DispelB
+_msufA3DispelG
+_msufA3DispelR
+_msufA3SkipDirectIdentityRefresh
+
+# --- Edit Mode popup: overlay pieces of a skin that no longer attaches -------
+# Shell/UI/MSUF_EditPopupUI.lua kills these overlay regions so a skinned button
+# keeps its own look. Nothing in the shipped tree (Shell/UI/MSUF_Style.lua,
+# Shell/UI/MSUF_MapkoSkin.lua) creates them, so every Kill call is a no-op.
+_msufBtnBG
+_msufBtnDisabled
+_msufBtnDown
+_msufBtnHover
+_msufMidnightBackdrop
+_msufPeelBorder
+_msufPeelFill
+
+# --- Engine flags and hooks with no writer ----------------------------------
+# _msufGFBuilt: group-frame marker; live code uses _msufGFKind.
+#   Read: Runtime/MSUF_UIScaleRuntime.lua.
+# _msufGFNameHiddenForStatus: GF.ShouldShowNameText's status override; the
+#   status element never sets it. Read: GroupFrames/MSUF_GroupFrames_DB.lua.
+# _msufHealthColorByHealth: health-text colour mode gate.
+#   Read: UnitFrames/Engine/Elements/MSUF_UF_Text_Common.lua.
+# _msufPowerBarReserved: portrait anchor override.
+#   Read: UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua.
+# _msufPowerBgDynamic: the power-bar twin of _msufHealthBgDynamic, which
+#   MSUF_UF_Elements_Health.lua does write; the Power element writes no
+#   counterpart, so the dynamic power background never engages. Read:
+#   MSUF_UF_Elements_BarsCommon.lua, Group/MSUF_UF_Group_Visuals.lua.
+# _msufUnit: last link of the castbar unit-key fallback chain
+#   (frame.unit or frame.MSUF_unit or frame._msufUnit or frame.unitKey).
+#   Read: Castbars/MSUF_CastbarUtils.lua, Castbars/MSUF_CastbarVisuals.lua.
+# _msufModernFactoryProfile_v1: provenance marker gating three factory-profile
+#   repairs. Only tools/profile_apply_smoke.lua sets it, so in a real install
+#   all three repairs are unreachable. Read: State/MSUF_Defaults.lua.
+_msufGFBuilt
+_msufGFNameHiddenForStatus
+_msufHealthColorByHealth
+_msufModernFactoryProfile_v1
+_msufPowerBarReserved
+_msufPowerBgDynamic
+_msufUnit
+
+# --- Wrong name (defect) ----------------------------------------------------
+# Runtime/MSUF_FontRuntime.lua fans the name font out to `f._msufToTInlineSep`
+# and `f._msufToTInlineText`. The target-of-target inline regions are actually
+# `frame.totInlineSep` / `frame.totInlineText` (created and listed as such in
+# UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua), so the inline ToT
+# separator and text never receive the font update. Renaming the two reads is a
+# behaviour change and is left to the owner.

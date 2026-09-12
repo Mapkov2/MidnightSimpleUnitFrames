@@ -13,6 +13,17 @@ stubs = stubs:gsub("frame%._parent = parent or G%.UIParent", [[frame._parent = p
     if frame._parent and frame._parent._children then
         table.insert(frame._parent._children, frame)
     end]])
+local nativeTimerStub = [[
+function C_Timer.NewTimer(delay, callback)
+    local timer = { active = true }
+    function timer:Cancel() self.active = false end
+    C_Timer.After(delay, function()
+        if timer.active then timer.active = false; callback(timer) end
+    end)
+    return timer
+end
+]]
+stubs = stubs:gsub("\nreturn {", nativeTimerStub .. "\nreturn {", 1)
 package.preload["wow_stubs"] = assert(loadstring(stubs))
 local harness = Read("tools/assistant_v1_catalog_crosswalk.lua")
 local cut = assert(harness:find("\nlocal pageBuildFailures = {}", 1, true))
@@ -166,6 +177,21 @@ for key in pairs(M.pages) do
         end
     end
 end
+local buildFailure = {}
+local builds = 0
+M.pages.test_error_recovery = { build = function()
+    builds = builds + 1
+    if builds == 1 then error(buildFailure) end
+    return 100
+end }
+local builtOK, buildError = pcall(M.BuildPageEntry, "test_error_recovery", false)
+assert(not builtOK and buildError == buildFailure, "page builder hid its original error")
+local incomplete = M.cache.test_error_recovery
+assert(incomplete and incomplete._msuf2BuildIncomplete, "failed page was cached as complete")
+local recovered = M.BuildPageEntry("test_error_recovery", false)
+assert(recovered ~= incomplete and not recovered._msuf2BuildIncomplete and builds == 2, "failed page could not reopen")
+M.InvalidatePage("test_error_recovery")
+M.pages.test_error_recovery = nil
 assert(accordionCount > 30, "insufficient cross-menu accordion coverage")
 print("accordion parity: " .. accordionCount .. " accordions across " .. pageCount .. " menus")
 print("menu2_single_switch_smoke: one header switch, open/closed actions and master gating passed")

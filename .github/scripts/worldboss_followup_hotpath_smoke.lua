@@ -74,14 +74,22 @@ for _, providers in ipairs({ {true, false}, {false, true}, {false, false} }) do
 end
 
 -- Count only the cache probes which cannot serve the non-dispatch route.
+-- A renamed/removed seam must fail loudly: without the counter installed the
+-- probe assertion below would be vacuously true.
 local probes = 0
-for i = 1, 100 do
-    local name, fn = debug.getupvalue(UF.ReadDeadCached, i)
-    if not name then break end
-    if name == "FreshUnitState" or name == "IdentityDispatchState" then
-        debug.setupvalue(UF.ReadDeadCached, i, function(...) probes = probes + 1; return fn(...) end)
+local function CountUpvalue(fn, wanted)
+    for i = 1, 200 do
+        local name, value = debug.getupvalue(fn, i)
+        if not name then break end
+        if name == wanted then
+            debug.setupvalue(fn, i, function(...) probes = probes + 1; return value(...) end)
+            return i
+        end
     end
+    error("missing upvalue '" .. tostring(wanted) .. "' in ReadDeadCached: the empty-cache probe count cannot be measured", 2)
 end
+assert(CountUpvalue(UF.ReadDeadCached, "FreshUnitState"))
+assert(CountUpvalue(UF.ReadDeadCached, "IdentityDispatchState"))
 for i = 1, 1000 do UF.ReadDeadCached(frame, "party1") end
 assert(probes == 0, "non-dispatch hot path retained empty cache probes")
 

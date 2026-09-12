@@ -31,6 +31,8 @@ do
         RegisterElement = function(name, element) elements[name] = element end,
     }
     local MSUF = { UF = UF, Secrets = {} }
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))(
+        "MidnightSimpleUnitFrames", MSUF)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua"))(
         "MidnightSimpleUnitFrames", MSUF)
 

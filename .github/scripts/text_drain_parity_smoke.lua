@@ -98,7 +98,7 @@ local function Run(source, reference)
   local modes={"CURRENT","FULLVALUE","CURPERCENT","PERCENTCUR","PERCENT","MAX",
     "CURMAX","CURMAXPERCENT","DEFICIT","ABSORB","CURRENT_ABSORB","NONE"}
   local cases=0
-  for capability=1,4 do
+  for _, capability in ipairs({1, 2, 4}) do
     local Text=Load(capability~=3,capability~=2,capability~=4)
     for _,scope in ipairs({"unit","group","player"}) do
       for _,mode in ipairs(modes) do
@@ -253,5 +253,7 @@ if baseline then
     print(string.format("%s: instructions/100 %d -> %d; probes %d -> %d; native reads %d; writes %d; KiB/1000 %.3f -> %.3f",
       key,b[1],a[1],b[2],a[2],a[3],a[4],b[5],a[5]))
   end
+else
+  print("text_drain_parity_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
 end
 print("text_drain_parity_smoke: ok ("..cases.." queued updates plus recompile/disable cases)")

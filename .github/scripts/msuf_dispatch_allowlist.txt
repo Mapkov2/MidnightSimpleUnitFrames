@@ -1,0 +1,16 @@
+# Names that MSUF dispatches by string and that are published outside the
+# shipped tree. Read by .github/scripts/msuf_static_checks.py
+# (check_dispatch_names). One exact global name per line; `#` starts a comment.
+#
+# Only one thing belongs here: a name whose publisher is Blizzard or another
+# addon, so the call is a deliberate, optional integration point rather than a
+# broken internal wire. An MSUF-owned name that nothing publishes is a defect -
+# fix the name or delete the dead call. If the dead call has to survive for now
+# (an unowned hook the fix belongs elsewhere for), it goes in
+# msuf_dispatch_baseline.txt, which is a shrink-only ratchet, not here.
+#
+# Seeded empty on 2026-09-12: every one of the 91 names the tree dispatches by
+# string is MSUF-prefixed and MSUF-owned. No Blizzard or third-party name is
+# reached through a CallGlobal-style dispatcher today; the external Edit Mode
+# bridges (Details, Dominos, Grid2, Ellesmere, DandersFrames, Blizzard) all
+# dispatch MSUF-owned `MSUF_*EditMode_*` entry points, not foreign globals.

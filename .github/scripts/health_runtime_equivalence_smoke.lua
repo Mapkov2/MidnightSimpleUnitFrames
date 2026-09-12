@@ -145,11 +145,14 @@ if baselineRoot then
   print(string.format("Health equivalence: %d updates, native writes/handoffs identical; Health-only opaque instructions %d -> %d (%+.1f%%)",
     cases,oldInstructions,instructions,100*(instructions/oldInstructions-1)))
 else
+  print("health_runtime_equivalence_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
   print(string.format("Health lifecycle/opaque forwarding: %d updates, %d native percent queries",cases,calls))
 end
 local legacy,legacyCalls,_,legacyCases=Run(root,false)
 if baselineRoot then
   local oldLegacy,oldLegacyCalls=Run(baselineRoot,false)
   assert(legacy==oldLegacy and legacyCalls==oldLegacyCalls,"legacy absolute-health behavior changed")
+else
+  print("health_runtime_equivalence_smoke: SKIPPED legacy baseline comparison (no baseline source root in arg[2])")
 end
 print(string.format("Legacy native-percent absence: %d additional updates, equivalent absolute-health behavior",legacyCases))

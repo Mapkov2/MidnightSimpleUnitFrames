@@ -228,13 +228,15 @@ _G.InCombatLockdown = function() return false end
 _G.IsInGroup = function() return runtimeInGroup end
 _G.IsInRaid = function() return runtimeInRaid end
 _G.GetNumGroupMembers = function() return 2 end
+-- Shared widget stubs: the event methods record into the same events table;
+-- SetScript keeps this harness's single script field.
+local Stubs = assert(loadfile(".github/scripts/msuf_test_stubs.lua")
+  or loadfile("../.github/scripts/msuf_test_stubs.lua"))()
+local runtimeEnv = Stubs.New({ preset = "eventDriverAll" })
+runtimeEnv.Methods.SetScript = function(self, _, callback) self.script = callback end
 _G.CreateFrame = function()
-  local frame = { events = {} }
-  function frame:SetScript(_, callback) self.script = callback end
-  function frame:RegisterEvent(event) self.events[event] = true end
-  function frame:UnregisterAllEvents() self.events = {} end
-  runtimeEventFrame = frame
-  return frame
+  runtimeEventFrame = runtimeEnv:CreateFrame("Frame")
+  return runtimeEventFrame
 end
 
 local runtimeMSUF = { GF = runtimeGF, UF = {} }

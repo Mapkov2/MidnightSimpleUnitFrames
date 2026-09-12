@@ -1,0 +1,21 @@
+# `_msuf*` frame fields that are read without any writer in the shipped tree
+# and are *correct that way*. Read by .github/scripts/msuf_static_checks.py
+# (check_frame_fields). One exact field name per line; `#` starts a comment.
+#
+# Only two things belong here:
+#   * a field whose writer is outside the shipped Lua (an older addon version
+#     that persisted it into SavedVariables, Blizzard, or another addon), and
+#   * a dynamic write the gate cannot see. The gate already resolves
+#     `frame[key] = v` in a file that spells the field as a string literal and
+#     any `"_msufPrefix" .. name` key family, so a dynamic write normally needs
+#     no entry here; add one only with a comment naming the write site.
+#
+# A read with no writer that is *not* one of those two is a defect (a typo, or
+# a writer that was removed). It does not belong here - fix it, or carry it in
+# msuf_frame_fields_baseline.txt until it is fixed.
+
+# Migration marker for Aura 2 v11f lane offsets. MSUF 2.x wrote it into
+# SavedVariables (old MSUF_Defaults.lua / MSUF_Presets.lua); 6.x only reads it
+# to decide whether the retired buff/debuffOffset aliases are still live.
+# Read: State/MSUF_Defaults.lua.
+_msufA2_migrated_v11f

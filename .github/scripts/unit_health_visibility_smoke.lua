@@ -93,7 +93,11 @@ UnregisterUnitWatch = function(frame) frame.watched = nil end
 UnitWatchRegistered = function(frame) return frame.watched == true end
 
 local function Load(path) assert(loadfile(base .. path))("MidnightSimpleUnitFrames", MSUF) end
+-- Metadata precedes Core in the embed load order and owns the cold config
+-- helpers (Clamp01 and friends) that Shared/Config/Alpha capture at load.
+Load("Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")
 Load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
+Load("UnitFrames/Engine/MSUF_UF_Shared.lua")
 Load("UnitFrames/Engine/MSUF_UF_Config.lua")
 local UF = MSUF.UF
 -- Reach the real cold compiler without mocking unrelated bar/layout settings.

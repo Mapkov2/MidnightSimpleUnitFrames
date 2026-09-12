@@ -65,6 +65,8 @@ local MSUF = {
     Secrets = {},
 }
 
+-- The shared engine helpers register on the same UF table the text runtime reads through UFBarTextCommon.
+assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", { UF = UF })
 local chunk = assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Common.lua"))
 chunk("MidnightSimpleUnitFrames", MSUF)
 local Text = assert(MSUF.UFText)

@@ -31,7 +31,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Auras3 icon-style gate lifecycle failed." }
 
     foreach ($test in @("auras3_filter_compile_smoke.lua", "auras3_scope_cache_smoke.lua", "auras3_preview_read_context_smoke.lua", "auras3_group_indicator_compile_smoke.lua")) {
-        & $lua.Source (Join-Path $PSScriptRoot $test) $repositoryRoot
+        & $lua.Source $driver (Join-Path $PSScriptRoot $test) $repositoryRoot
         if ($LASTEXITCODE -ne 0) { throw "Auras3 optimization contract failed: $test" }
     }
 
@@ -85,7 +85,7 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($OptimizationBaselineSourceRoot)) {
         Remove-Item Env:\MSUF_AURAS3_TEST_SOURCE_ROOT -ErrorAction SilentlyContinue
         foreach ($test in @("auras3_filter_compile_smoke.lua", "auras3_scope_cache_smoke.lua", "auras3_group_indicator_compile_smoke.lua")) {
-            & $lua.Source (Join-Path $PSScriptRoot $test) $repositoryRoot $OptimizationBaselineSourceRoot
+            & $lua.Source $driver (Join-Path $PSScriptRoot $test) $repositoryRoot $OptimizationBaselineSourceRoot
             if ($LASTEXITCODE -ne 0) { throw "Auras3 earlier optimization comparison failed: $test" }
         }
     }

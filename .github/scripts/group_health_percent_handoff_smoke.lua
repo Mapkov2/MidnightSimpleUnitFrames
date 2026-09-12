@@ -185,6 +185,7 @@ if baselineRoot then
     print(string.format("Group percent Lua work (%s): %d -> %d",kind,oldWorkByKind[kind],workByKind[kind]))
   end
 else
+  print("group_health_percent_handoff_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
   print(string.format("Group percent handoff: %d updates, %d native reads, %d text writes; payload/dirty/prediction/visual/legacy contracts passed",cases,reads,writes))
 end
 print(string.format("Group percent slot/decimal/symbol/quantization parity: %d additional updates",formatCases))

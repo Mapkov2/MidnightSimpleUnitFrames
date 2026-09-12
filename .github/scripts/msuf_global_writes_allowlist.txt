@@ -1,0 +1,20 @@
+# Global names that addon code may write without an MSUF prefix.
+# Read by .github/scripts/msuf_static_checks.py (check_global_names).
+# One exact name per line; `#` starts a comment. Every other non-MSUF,
+# non-_G SETGLOBAL in the main/Options addons fails the static checks, so
+# a new slash command or key binding needs its name added here on purpose.
+
+# Key binding headers/names (Bindings.xml contract; read by Blizzard's
+# KeyBindingFrame as globals).
+BINDING_HEADER_MSUF_HEADER
+BINDING_NAME_MSUF_PRIORITY_TOGGLE
+BINDING_NAME_MSUF_TOGGLE_EDITMODE
+BINDING_NAME_MSUF_TOGGLE_OPTIONS
+
+# Slash command registrations (SLASH_<KEY><N> globals paired with
+# SlashCmdList[<KEY>]).
+SLASH_MIDNIGHTSUF1
+SLASH_MSUF2OPTIONS1
+SLASH_MSUFDBGPOS1
+SLASH_MSUFOPTIONS1
+SLASH_MSUFRELOADUI1

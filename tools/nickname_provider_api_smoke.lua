@@ -54,13 +54,15 @@ end
 _G.GetNormalizedRealmName = function() return "Realm" end
 _G.issecretvalue = function() return false end
 _G.geterrorhandler = function() return function(message) error(message, 0) end end
+-- Shared widget stubs: the event methods record into the same events table;
+-- SetScript keeps this harness's single callback field.
+local Stubs = assert(loadfile(".github/scripts/msuf_test_stubs.lua")
+    or loadfile("../.github/scripts/msuf_test_stubs.lua"))()
+local eventEnv = Stubs.New({ preset = "eventDriver" })
+eventEnv.Methods.SetScript = function(self, _, callback) self.callback = callback end
 _G.CreateFrame = function()
-    local frame = { events = {} }
-    function frame:SetScript(_, callback) self.callback = callback end
-    function frame:RegisterEvent(event) self.events[event] = true end
-    function frame:UnregisterEvent(event) self.events[event] = nil end
-    eventFrame = frame
-    return frame
+    eventFrame = eventEnv:CreateFrame("Frame")
+    return eventFrame
 end
 
 local unitFrame = {
@@ -117,6 +119,10 @@ local MSUF = {
 }
 
 _G.MSUF_DB = { general = {} }
+
+-- Provider resolvers are called through the Kernel-owned protected-call boundary.
+assert(loadfile(ResolvePath("Kernel/MSUF_Boundary.lua")))("MidnightSimpleUnitFrames",
+    { ExportPublic = function(name, value) _G[name] = value; return value end })
 
 local chunk = assert(loadfile(ResolvePath("Integrations/MSUF_Integration_NicknameProviders.lua")))
 chunk("MidnightSimpleUnitFrames", MSUF)

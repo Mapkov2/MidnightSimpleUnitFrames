@@ -150,5 +150,6 @@ if baselineRoot then
   end
 else
   assert(public==0,"public health reread for gradient")
+  print("health_gradient_evaluation_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
   print("Health gradient evaluation: native/public/opaque parity, equal-channel reuse, zero hot ColorMixins")
 end

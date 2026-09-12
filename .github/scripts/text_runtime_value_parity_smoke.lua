@@ -197,6 +197,8 @@ if baseline then
   -- Specializing fixed formats can remove Lua work while retaining all native
   -- secrecy checks. Additional probes remain a regression.
   assert(probesAfter <= probesBefore, "pipeline secret queries increased")
+else
+  print("text_runtime_value_parity_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
 end
 if output then output:close() end
 print(string.format("text_runtime_value_parity_smoke: ok (%d paired health/power updates; Lua instructions %d -> %d; secret queries %d -> %d)",

@@ -112,10 +112,14 @@ assert(not mageCP.nativeAuraPending, "an inapplicable power type must not leave 
 local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua", "rb"))
 local source = file:read("*a")
 file:close()
-local first = assert(source:find("local function GetClassPowerType()", 1, true))
-local last = assert(source:find("--- Stagger detection", first, true))
+-- Power-type routing lives in the controller's Config sibling.
+local configFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller_Config.lua", "rb"))
+local configSource = configFile:read("*a")
+configFile:close()
+local first = assert(configSource:find("local function GetClassPowerType()", 1, true))
+local last = assert(configSource:find("local function CP_GetModeEventProfile", first, true))
 local route = assert(loadstring("return function(PLAYER_CLASS, GetSpec, _cpDB, CPK)\n"
-    .. source:sub(first, last - 1) .. "\nreturn GetClassPowerType() end"))()
+    .. configSource:sub(first, last - 1) .. "\nreturn GetClassPowerType() end"))()
 local modes = { MODE = { NATIVE_AURA = 11, NONE = 0, SEGMENTED = 1 } }
 local warriorDB = { bars = {} }
 local warriorSpec = 2

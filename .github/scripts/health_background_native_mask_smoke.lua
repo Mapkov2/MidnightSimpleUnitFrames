@@ -296,6 +296,7 @@ if baseline then
   print(string.format("Native-mask model: %d matched geometry samples; native reads %d -> %d, writes %d -> %d, Health Lua instructions %d -> %d",
     n,oldReads,reads,oldWrites,writes,oldWork,work))
 else
+  print("health_background_native_mask_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
   print("Native-mask lifecycle/secret/geometry checks passed: "..n.." samples")
 end
 print("Range-fade composition checks passed: "..compositionChecks)

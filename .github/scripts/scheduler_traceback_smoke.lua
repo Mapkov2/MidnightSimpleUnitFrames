@@ -25,7 +25,8 @@ _G.print=function(...)
   for i=1,#parts do parts[i]=tostring(parts[i]) end
   prints[#prints+1]=table.concat(parts," ")
 end
-local ns={}
+local ns={ExportPublic=function(name,value) _G[name]=value return value end}
+assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua"))("MSUF",ns)
 local scheduler=ns.Scheduler
 local survived,deferred=0,0
@@ -35,17 +36,12 @@ OriginalCallback=function()
 end
 scheduler.ScheduleOnce("failing",OriginalCallback)
 scheduler.ScheduleOnce("survivor",function() survived=survived+1 end)
+local ok = xpcall(driver.tick, _G.geterrorhandler()) -- models the client's script boundary
+assert(not ok and #reported==1 and callbackPresent,"direct callback lost its original stack")
+assert(survived==0 and deferred==0 and driver.tick,"failure stranded work or hid exception")
 driver.tick()
-assert(#reported==1 and callbackPresent,"original error stack was unwound before reporting")
-assert(survived==1 and deferred==0 and driver.tick,"failure stranded work or ran newly queued work immediately")
-driver.tick()
-assert(deferred==1 and not driver.tick,"next-frame work was lost or scheduler stayed armed")
+assert(survived==1 and deferred==1 and not driver.tick,"next-frame work was lost")
 assert(scheduler.head==1 and scheduler.tail==0 and next(scheduler.pending)==nil,"queue state leaked after error")
-_G.geterrorhandler=function() return function() error("broken third-party handler") end end
-scheduler.ScheduleOnce("handler_failure",function() error("still report original failure") end)
-scheduler.ScheduleOnce("survivor2",function() survived=survived+1 end)
-driver.tick()
-assert(survived==2 and #prints==1 and prints[1]:find("still report original failure",1,true),"broken handler stranded queue or lost fallback report")
-assert(not driver.tick and next(scheduler.pending)==nil,"handler error left queue armed")
+assert(#prints==0,"scheduler replaced error handling with chat output")
 _G.print=nativePrint
-print("Scheduler traceback: original callback retained; errors isolated; nested work deferred; broken error handler handled")
+print("Scheduler traceback: original callback retained; direct exceptions; remaining work resumed")

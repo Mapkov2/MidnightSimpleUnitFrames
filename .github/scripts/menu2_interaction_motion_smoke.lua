@@ -42,7 +42,7 @@ assert(navPaint:find("StopNavPillGlowPulse(art)", 1, true)
 
 local window = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window.lua")
 local selectPage = assert(window:match(
-    "function M.SelectPage%b()%s*(.-)%s*local function RestorePageScroll"
+    "function M.SelectPage%b()%s*(.-)%s*local function CreateMinimizedBar"
 ), "page selection function missing")
 assert(not selectPage:find("PlayMotion", 1, true),
     "page selection gained a content transition instead of committing directly")

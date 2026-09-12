@@ -34,6 +34,7 @@ local function ResolveOptionsPath(relative)
     error("cannot locate Options " .. relative)
 end
 
+local REQUIRE_PATH = ResolvePath("Kernel/MSUF_Require.lua")
 local CHAT_PATH = ResolvePath("Runtime/MSUF_SlashCommands.lua")
 local TOOLTIP_PATH = ResolvePath("Runtime/MSUF_UnitTooltips.lua")
 local EDITMODE_BRIDGE_PATH = ResolvePath("Runtime/MSUF_BlizzEditModeBridge.lua")
@@ -141,6 +142,14 @@ MSUF.ExportPublic = function(name, value)
     _G[name] = value
     return value
 end
+
+--- Kernel/MSUF_Require.lua loads immediately after Kernel/MSUF_Boundary.lua in
+--- the TOC and installs MSUF.Require / MSUF.Optional. All three files below
+--- declare MSUF_EnsureDB (State/MSUF_Defaults.lua, stubbed above) as a hard
+--- dependency, so the declaration helper has to be in place first.
+local requireChunk, requireError = loadfile(REQUIRE_PATH)
+assert(requireChunk, requireError)
+requireChunk("MidnightSimpleUnitFrames", MSUF)
 
 local chunk, err = loadfile(CHAT_PATH)
 assert(chunk, err)

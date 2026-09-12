@@ -75,6 +75,7 @@ local function Run(sourceRoot)
     RegisterElement=function(_,element) health=element end}}
   local function Load(path) assert(loadfile(base..path))("MSUF",ns) end
   Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
+  Load("Kernel/MSUF_Util.lua") -- BarBackgroundRuntime aliases MSUF.Util.EnsureDBSafe
   Load("Runtime/MSUF_BarBackgroundRuntime.lua")
   local common=ns.UFBarTextCommon
   common.SCALE_100=SCALE
@@ -269,5 +270,6 @@ if baseline then
   end
 else
   for kind,result in pairs(work) do assert(result.allocated<1,"hot allocation: "..kind) end
+  print("health_background_sample_parity_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
 end
 print(string.format("Health/background sample parity: %d updates, native call/sink order, colors, alpha, missing fill and smoothing passed",cases))

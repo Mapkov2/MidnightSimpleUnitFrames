@@ -16,6 +16,8 @@ end
 
 local HELPERS = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PreviewHelpers.lua"
 local UNIT = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua"
+-- The unit compact/docked presentation switch lives in the View_Chrome sibling.
+local UNIT_CHROME = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View_Chrome.lua"
 local GROUP = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_GroupPreview_Native.lua"
 
 -- Run the real helpers, not a copy of their arithmetic.
@@ -109,8 +111,9 @@ print("negative control: box-width flow pushes " .. escaped .. " chips outside a
 
 -- Both preview surfaces must route the popover through the fitting flow, and
 -- must hand the width back when the rail returns to the docked bottom strip.
-local function CheckSurface(path, name, ownerField)
+local function CheckSurface(path, name, ownerField, presentationPath)
     local source = Read(path)
+    local presentation = presentationPath and Read(presentationPath) or source
     local a = assert(source:find("LayoutLayerRail = function", 1, true), name .. ": no LayoutLayerRail")
     local b = assert(source:find("\n    end\n", a, true), name .. ": unterminated LayoutLayerRail")
     local body = source:sub(a, b)
@@ -120,13 +123,14 @@ local function CheckSurface(path, name, ownerField)
         name .. ": popover does not use the fitting flow")
     assert(body:find("maxHeight =", 1, true), name .. ": popover has no height budget")
     assert(body:find("maxWidth =", 1, true), name .. ": popover has no width cap")
-    assert(source:find("_msuf2LayerPopoverWidth = popoverWidth", 1, true),
+    assert(presentation:find("_msuf2LayerPopoverWidth = popoverWidth", 1, true),
         name .. ": compact presentation never claims the popover width")
-    assert(source:find("_msuf2LayerPopoverWidth = nil", 1, true),
+    assert(presentation:find("_msuf2LayerPopoverWidth = nil", 1, true),
         name .. ": docked presentation never releases the popover width")
-    assert(not source:find("LayoutLayerRail(popoverWidth + 24)", 1, true),
+    assert(not source:find("LayoutLayerRail(popoverWidth + 24)", 1, true)
+        and not presentation:find("LayoutLayerRail(popoverWidth + 24)", 1, true),
         name .. ": still flows 24px wider than the panel it paints")
 end
-CheckSurface(UNIT, "unit preview", "self.sidebar")
+CheckSurface(UNIT, "unit preview", "self.sidebar", UNIT_CHROME)
 CheckSurface(GROUP, "group preview", "self._layers")
 print("preview_layer_popover_smoke: the layer dropdown stays inside its preview on both surfaces")

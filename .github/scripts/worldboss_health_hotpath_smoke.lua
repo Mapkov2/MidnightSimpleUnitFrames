@@ -145,6 +145,7 @@ _G.C_CurveUtil.CreateCurve = function() return NewCurve(false) end
 -- Public background runtime: input changes, force, plain cache and secrets.
 local function Noop() end
 _G["EssentialCooldownViewer_MSA_Container"] = { ClearAllPoints = Noop, SetSize = Noop, SetPoint = Noop }
+Load("Kernel/MSUF_Util.lua", ns) -- BarBackgroundRuntime aliases MSUF.Util.EnsureDBSafe
 Load("Runtime/MSUF_BarBackgroundRuntime.lua", ns)
 local writes = 0
 local background = { SetVertexColor = function(self, rr, gg, bb, aa)
@@ -155,18 +156,27 @@ frame.hpBarBG, frame.MSUFUnitKey = background, "target"
 custom.backgroundColorMode, custom.background = "health_gradient", { a = 0.42 }
 local Refresh = ns.Bars.RefreshHealthBarBackgroundColor
 local GradientRefresh = ns.Bars.RefreshHealthGradientBackground or Refresh
-local alphaClamps = 0
-for i = 1, 50 do
-    local name, fn = debug.getupvalue(GradientRefresh, i)
-    if not name then break end
-    if name == "MSUF_Clamp01" then
-        debug.setupvalue(GradientRefresh, i, function(value)
-            alphaClamps = alphaClamps + 1
-            return fn(value)
-        end)
-        break
+-- Counter installation must be a hard failure: a renamed seam would otherwise
+-- leave the counters at zero and turn the assertions below into no-ops.
+local function WrapUpvalue(fn, wanted, owner, wrap)
+    for i = 1, 200 do
+        local name, value = debug.getupvalue(fn, i)
+        if not name then break end
+        if name == wanted then
+            debug.setupvalue(fn, i, wrap(value))
+            return i
+        end
     end
+    error("missing upvalue '" .. tostring(wanted) .. "' in " .. owner
+        .. ": the counter it feeds cannot be installed", 2)
 end
+local alphaClamps = 0
+assert(WrapUpvalue(GradientRefresh, "MSUF_Clamp01", "the health background painter", function(clamp)
+    return function(value)
+        alphaClamps = alphaClamps + 1
+        return clamp(value)
+    end
+end))
 assert(Refresh(frame, "UNIT_HEALTH"))
 Near(background.a, 0.42)
 Refresh(frame, "UNIT_HEALTH")
@@ -196,6 +206,7 @@ _G.hasanysecretvalues = nil
 local legacyBackground = { UF = {}, UFBarTextCommon = { GradientColor = function()
     return SECRET, SECRET, SECRET, true
 end } }
+Load("Kernel/MSUF_Util.lua", legacyBackground)
 Load("Runtime/MSUF_BarBackgroundRuntime.lua", legacyBackground)
 local alternate = { healthBg = background, MSUFSpec = { health = {
     backgroundColorMode = "health_gradient", background = { a = 0.31 },
@@ -226,17 +237,13 @@ end }, UFBarTextCommon = {
 } }
 Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua", healthNS)
 local colorHandoffs = 0
-for i = 1, 50 do
-    local name, fn = debug.getupvalue(Health.UpdateValueGroupPercentLean, i)
-    if not name then break end
-    if name == "ApplyRuntimeColor" then
-        debug.setupvalue(Health.UpdateValueGroupPercentLean, i, function(...)
+assert(WrapUpvalue(Health.UpdateValueGroupPercentLean, "ApplyRuntimeColor",
+    "the lean group health update", function(apply)
+        return function(...)
             colorHandoffs = colorHandoffs + 1
-            return fn(...)
-        end)
-        break
-    end
-end
+            return apply(...)
+        end
+    end))
 local bar = { SetValue = function(self, value, interpolation)
     self.value, self.interpolation = value, interpolation
 end, SetMinMaxValues = function() end }

@@ -113,5 +113,6 @@ if baselineRoot then
   end
 else
   assert(allocated<1,"identity gate still allocates per update")
+  print("aura_identity_gate_parity_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
   print(string.format("Aura identity gates: %d cases; secret/public/presence/owner/lane parity and no per-update table",cases))
 end

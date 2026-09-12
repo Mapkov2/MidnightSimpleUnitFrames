@@ -158,6 +158,13 @@ _G.SLASH_RIVALRELOADUI2 = "/reloadui"
 local chatMSUF = { UF = {} }
 chatMSUF.ExportPublic = function(name, value) _G[name] = value; return value end
 
+--- Kernel/MSUF_Require.lua loads right after Kernel/MSUF_Boundary.lua in the
+--- TOC and installs MSUF.Require, which the slash runtime uses to declare
+--- MSUF_EnsureDB (stubbed above) a hard dependency.
+chunk, err = loadfile(ResolvePath("Kernel/MSUF_Require.lua"))
+assert(chunk, err)
+chunk("MidnightSimpleUnitFrames", chatMSUF)
+
 chunk, err = loadfile(ResolvePath("Runtime/MSUF_SlashCommands.lua"))
 assert(chunk, err)
 chunk("MidnightSimpleUnitFrames", chatMSUF)
@@ -215,12 +222,11 @@ for path in pipe:lines() do
                     and source:find("scope.masqueEnabled ~= nil", 1, true)
                     and source:find("scope.masqueEnabled = nil", 1, true),
                 "State defaults may only inspect and purge the retired Masque setting")
-        elseif path == "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua" then
-            assert(retiredSettingCount == 3
-                    and source:find("db.gf_party.masqueEnabled = nil", 1, true)
-                    and source:find("db.gf_raid.masqueEnabled = nil", 1, true)
-                    and source:find("db.gf_mythicraid.masqueEnabled = nil", 1, true),
-                "Group defaults may only purge the retired Masque setting")
+        elseif path == "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Migrations.lua" then
+            -- One pipeline step, applied to gf_party, gf_raid and gf_mythicraid.
+            assert(retiredSettingCount == 1
+                    and source:find('{ name = "masque", run = function(conf) conf.masqueEnabled = nil end },', 1, true),
+                "Group DB repair may only purge the retired Masque setting")
         else
             assert(retiredSettingCount == 0,
                 "retired Masque setting found outside the profile cleanup path in " .. path)

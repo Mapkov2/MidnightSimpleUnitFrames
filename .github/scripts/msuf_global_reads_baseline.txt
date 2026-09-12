@@ -1,0 +1,14 @@
+# Unknown global reads carried by the MSUF static checks (ratchet: this list may
+# only shrink). Each name is read by main/Options addon code but never written in
+# the shipped tree, is not a Lua 5.1 standard global, and is not a WoW API/FrameXML
+# name in msuf_wow_api_names.txt. Fix the read (or the missing definition) and
+# delete its line; new unknown reads fail the check instead of being added here.
+# Rewrite with --write-globals-baseline (it only prunes stale entries).
+EnumerateFrames
+GetCameraZoom
+GetShapeshiftForm
+GetUnitClassification
+MSUF_BeginEditModeTransaction
+MSUF_EditModeSizing
+MSUF_FONT_COLORS
+PetBattleFrameHider

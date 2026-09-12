@@ -153,13 +153,16 @@ local topologyBlock = runtime:sub(topologyStart, topologyStop - 1)
 local topologyLoader = loadstring or load
 local topologyChunk, topologyLoadError = topologyLoader([[
 local A3 = {}
+local MSUF = ...
 ]] .. topologyBlock .. [[
 return A3._BeginDirectIdentityEventTopologyBatch,
     A3._EndDirectIdentityEventTopologyBatch,
     DrainDirectIdentityEventTopologyBatch
 ]], "@aura_topology_recovery")
 assert(topologyChunk, topologyLoadError)
-local beginBatch, endBatch, drainBatch = topologyChunk()
+local topologyNamespace = {}
+_G.MSUF_Auras3TestLoader.PrepareDependencies("MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityEvents.lua", topologyNamespace)
+local beginBatch, endBatch, drainBatch = topologyChunk(topologyNamespace)
 assert(beginBatch() == 1 and beginBatch() == 2, "topology batch depth did not increment")
 assert(drainBatch() == true, "topology recovery did not drain an interrupted batch")
 assert(endBatch() == false and drainBatch() == false,
@@ -293,11 +296,11 @@ assert(has(profiles, "MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21")
     and has(profiles, "MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false)")
     and has(profiles, "MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true)"),
     "stored/imported profiles do not repair retired Group filter tokens")
-local groupDB = readFile("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua")
+local groupDB = readFile("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Migrations.lua")
 assert(has(groupDB, "g.filterToken = normalize(gk, g.filterToken)"),
     "active Group DB cold repair does not normalize retired filter tokens")
 assert(has(groupDB, "local state = createCanonical(true)")
-    and has(profiles, '"canonical Group Aura reset", createCanonical, true'),
+    and has(profiles, 'createCanonical(true)'),
     "existing-profile repair can inherit new factory-only Group Aura defaults")
 
 local assistantData = readFile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Auras_Data.lua")

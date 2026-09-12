@@ -1,0 +1,7 @@
+# Dispatched-by-string names with no publisher in the shipped tree, carried by
+# the MSUF static checks (ratchet: this list may only shrink). Each name is
+# handed to a CallGlobal-style dispatcher or sits in a dispatch name list, and
+# nothing in the main/Options tree ever assigns it, so the call is a no-op. Fix
+# the name (or delete the dead call) and remove its line; a new unpublished
+# dispatch fails the check instead of being added here.
+# Rewrite with --write-dispatch-baseline (it only prunes stale entries).

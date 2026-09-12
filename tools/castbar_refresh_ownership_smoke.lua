@@ -163,8 +163,12 @@ assert(not contains(boss, 'frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
 assert(contains(boss,
         '_G.MSUF_EventBus_Register("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_BOSS_CASTBARS_ENGAGE", HandleBossPoolLifecycle)')
     and contains(boss,
-        '_G.MSUF_EventBus_Register("UNIT_TARGETABLE_CHANGED", "MSUF_BOSS_CASTBARS_TARGETABLE", HandleBossPoolLifecycle)'),
+        '_G.MSUF_EventBus_Register("UNIT_TARGETABLE_CHANGED", "MSUF_BOSS_CASTBARS_TARGETABLE", HandleBossPoolLifecycle, BOSS_LIFECYCLE_UNITS)'),
     "shared boss lifecycle driver is incomplete")
+-- The bus drops any UNIT_* subscription that carries no unit filter, so the
+-- boss unit list is what makes the targetable subscription exist at all.
+assert(contains(boss, 'BOSS_LIFECYCLE_UNITS[bossLifecycleIndex] = "boss" .. bossLifecycleIndex'),
+    "boss targetable subscription lost its boss unit filter")
 assert(contains(boss, 'scheduleOnce("MSUF_BOSS_POOL_LIFECYCLE", FlushBossPoolLifecycle)')
     and contains(boss, "bossPoolRefreshPendingGeneration ~= bossPoolRefreshGeneration"),
     "overlapping boss lifecycle events must coalesce and reject stale queued work")

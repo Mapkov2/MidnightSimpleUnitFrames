@@ -15,8 +15,9 @@ AGENTS.md
 # Local MSUF developer toolbelt. These scripts/docs are intentionally local-only
 # and should not ship with the addon or be pushed to GitHub.
 tools/
-# Verification suite (smokes, static checks, Assistant release gate). Runs on
-# this machine only; CI is packaging-only and never invokes these.
+# Full local verification suite (smokes, static checks, Assistant release gate).
+# Portable regression contracts live separately in .github/quality/.
+# CI remains packaging-only; these machine-local suites are not invoked there.
 .github/scripts/tests/
 .github/scripts/msuf_static_checks.py
 .github/scripts/run_assistant_release_gate.ps1
