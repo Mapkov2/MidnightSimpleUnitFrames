@@ -9,19 +9,20 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
-local function CoreUnitFrame(unit)
-    local UF = MSUF and MSUF.UF
-    if UF and type(UF.GetFrame) == "function" then
-        local frame = UF.GetFrame(unit)
-        if frame then return frame end
-    end
-    local frames = UF and UF.frames
-    return unit and frames and frames[unit] or nil
-end
+local ExportPublic = MSUF.ExportPublic
+
+--- Perf locals: the RUNTIME handlers and the warm font/text refresh below
+--- run per event, so the Lua standard functions they touch are bound once.
+--- InCombatLockdown stays a global read on purpose: the layout gate is cold
+--- and the combat harnesses swap that function at runtime.
+local type, tostring, tonumber = type, tostring, tonumber
+local math_floor, math_max, math_abs = math.floor, math.max, math.abs
+
+--- Single owner of the player-frame resolver for the whole ClassPower module.
+--- This file loads before the controller and its Surface sibling (TOC order),
+--- which bind the exported function instead of carrying their own copy.
+local CoreUnitFrame = MSUF.UF.GetFrame
+ExportPublic("MSUF_CP_CoreUnitFrame", CoreUnitFrame)
 
 local function CP_IsUsableCooldownAnchorFrame(frame)
     local getSize = _G.MSUF_GetUsableCooldownAnchorSize
@@ -63,17 +64,9 @@ local CP_SHAPE_TEXTURES = {
     },
 }
 
-local function CP_NormalizeShape(value)
-    value = tostring(value or "BAR"):upper()
-    if value == "CIRCLE" or value == "DIAMOND" or value == "HEX" then return value end
-    return "BAR"
-end
+local CP_NormalizeShape = _G.MSUF_UF_NormalizeClassPowerShape
 
-local function CP_NormalizeShapeAlign(value)
-    value = tostring(value or "CENTER"):upper()
-    if value == "LEFT" or value == "RIGHT" then return value end
-    return "CENTER"
-end
+local CP_NormalizeShapeAlign = _G.MSUF_UF_NormalizeShapeAlign
 
 local function CP_ShapeTextures(shape)
     return CP_SHAPE_TEXTURES[CP_NormalizeShape(shape)]
@@ -94,7 +87,7 @@ end
 local function CP_ResolveTextLayerLevel(frame, bars)
     local textLayer = tonumber(bars and bars.classPowerTextLayer) or 5
     if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
-    textLayer = math.floor(textLayer + 0.5)
+    textLayer = math_floor(textLayer + 0.5)
     local layers = MSUF.UF and MSUF.UF.Layers
     if layers and type(layers.TextLevel) == "function" then
         return layers.TextLevel(frame, textLayer, 5)
@@ -113,7 +106,7 @@ builders.BUILD = function(E)
     local _cpDB = E._cpDB
     local CreateFrame = E.CreateFrame
     local CP_ResolveTexture = E.CP_ResolveTexture
-    local math_floor = E.math_floor or math.floor
+    local math_floor = E.math_floor or math_floor
 
     local function CP_EnsureTextFrame()
         if CP.textFrame then return CP.textFrame end
@@ -206,7 +199,7 @@ builders.BUILD = function(E)
         end
 
         --- Tick separators (between bars)
-        for i = math.max(1, CP.maxBars), count - 1 do
+        for i = math_max(1, CP.maxBars), count - 1 do
             if not CP.ticks[i] then
                 local tick = CP.container:CreateTexture(nil, "OVERLAY")
                 tick:SetTexture("Interface\\Buttons\\WHITE8x8")
@@ -264,7 +257,7 @@ builders.LAYOUT = function(E)
     local CP = E.CP
     local _cpDB = E._cpDB
     local CPConst = E.CPConst
-    local math_floor = E.math_floor or math.floor
+    local math_floor = E.math_floor or math_floor
     local tonumber = E.tonumber or tonumber
     local CreateFrame = E.CreateFrame or CreateFrame
     local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
@@ -273,17 +266,27 @@ builders.LAYOUT = function(E)
     local SetEmptyAlpha = E.SetEmptyAlpha
     local SetAutoHideActive = E.SetAutoHideActive
 
-    --- Applies size, anchor, segment placement, tick separators, and outline.
-    --- This is warm-path code: it can run often during option changes, but it
-    --- must not be called for every power value update.
-    local function CP_Layout(playerFrame, maxPower, height, powerType)
-        if not CP.container or maxPower <= 0 then return end
+    --- CP_Layout runs as a fixed sequence of named stages. They share one
+    --- pass-state table that is allocated once here, so a layout pass adds no
+    --- allocation of its own. The stages run in the order the former inline
+    --- body had, and each one reads exactly the values its section read.
+    local Layout = {}
+    local pass = {}
+
+    --- Stage 1: combat / hard-lock gate. Returns false when the geometry has
+    --- to be replayed after combat; CP_Layout then stops before any write.
+    function Layout.Gate(playerFrame, maxPower, height, powerType)
+        pass.playerFrame = playerFrame
+        pass.maxPower = maxPower
+        pass.h = height
+        pass.powerType = powerType
 
         local hardLocked = (type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked())
             or false
         local inLockdown = hardLocked
             or (InCombatLockdown and InCombatLockdown())
             or false
+        pass.inLockdown = inLockdown
         if CP.container._msufLayoutInitialized == true
             and (hardLocked or (inLockdown and CP.container.IsProtected and CP.container:IsProtected()))
         then
@@ -296,12 +299,18 @@ builders.LAYOUT = function(E)
             CP._layoutDirty = true
             ExportPublic("MSUF_ClassPowerLayoutDirty", true)
             RequestUFReanchorAfterCombat()
-            return
+            return false
         end
+        return true
+    end
 
-        local h = height
+    --- Stage 2: profile snapshot, container/text frame levels, and the
+    --- separator width, pixel snapper and pip shape every later stage shares.
+    function Layout.Prepare()
+        local playerFrame, powerType = pass.playerFrame, pass.powerType
         local b = _cpDB.bars or {}
-        local layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
+        pass.b = b
+        pass.layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
         levelOffset = math_floor(levelOffset + 0.5)
@@ -331,13 +340,22 @@ builders.LAYOUT = function(E)
 
         local tickW = tonumber(b.classPowerTickWidth) or 1
         if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
+        pass.tickW = tickW
 
-        local snap = _G.MSUF_Snap
+        pass.snap = _G.MSUF_Snap
 
         local shape = (powerType == "WHIRLWIND" or powerType == "SWEEPING_STRIKES")
             and "BAR" or CP_NormalizeShape(b.classPowerShape)
         local shapeInfo = CP_ShapeTextures(shape)
-        local shapeMode = shapeInfo ~= nil
+        pass.shapeInfo = shapeInfo
+        pass.shapeMode = shapeInfo ~= nil
+    end
+
+    --- Stage 3: resolve the container width from the player frame, the
+    --- explicit setting, the pip auto-fit or a cooldown frame.
+    function Layout.ResolveWidth()
+        local playerFrame, maxPower, h, b = pass.playerFrame, pass.maxPower, pass.h, pass.b
+        local inLockdown, layoutCache, snap, shapeMode = pass.inLockdown, pass.layoutCache, pass.snap, pass.shapeMode
         local widthMode = b.classPowerWidthMode or "player"
         local userW
         local playerSpecW = (playerFrame and playerFrame.MSUFSpec and tonumber(playerFrame.MSUFSpec.width)) or 275
@@ -393,7 +411,15 @@ builders.LAYOUT = function(E)
             userW = snap(CP.container, userW)
         end
         if not userW or userW < 1 then userW = 1 end
+        pass.userW = userW
+        pass.cdmName = cdmName
+    end
 
+    --- Stage 4: size and anchor the container, publish the layout-dirty
+    --- state and cache the cooldown-frame width for the next combat pass.
+    function Layout.Position()
+        local playerFrame, h, b = pass.playerFrame, pass.h, pass.b
+        local inLockdown, layoutCache, userW, cdmName = pass.inLockdown, pass.layoutCache, pass.userW, pass.cdmName
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
 
@@ -484,7 +510,11 @@ builders.LAYOUT = function(E)
         if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
+    end
 
+    --- Stage 5: the rectangular-mode outline frame around the container.
+    function Layout.Outline()
+        local b, snap, shapeMode = pass.b, pass.snap, pass.shapeMode
         local outlineThick = tonumber(b.classPowerOutline) or 1
         if outlineThick < 0 then outlineThick = 0 elseif outlineThick > 4 then outlineThick = 4 end
 
@@ -520,13 +550,18 @@ builders.LAYOUT = function(E)
         else
             if CP._outline then CP._outline:Hide() end
         end
+    end
 
-        local frameW = userW
+    --- Stage 6: segment metrics - pip gap, separator width and the bar space
+    --- left once the separators are budgeted.
+    function Layout.Metrics()
+        local maxPower, b, snap, tickW = pass.maxPower, pass.b, pass.snap, pass.tickW
+        local frameW = pass.userW
         local gap = tonumber(b.classPowerGap) or 0
         if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
         local snapGap = (gap > 0 and type(snap) == "function") and snap(CP.container, gap) or gap
 
-        local fillReverse = (b.classPowerFillReverse == true)
+        pass.fillReverse = (b.classPowerFillReverse == true)
         local numTicks = maxPower - 1
         local snapTickW = (tickW > 0 and type(snap) == "function") and snap(CP.container, tickW) or tickW
         local sepW = snapTickW + snapGap
@@ -546,10 +581,17 @@ builders.LAYOUT = function(E)
         local totalSepW = numTicks * sepW
         local totalBarSpace = frameW - totalSepW
         if totalBarSpace < maxPower then totalBarSpace = maxPower end
+        pass.snapGap, pass.snapTickW, pass.sepW, pass.totalBarSpace = snapGap, snapTickW, sepW, totalBarSpace
+    end
 
+    --- Stage 7: background colour, pip alpha and the auto-hide gate the
+    --- value updates read.
+    function Layout.Surface()
+        local b, powerType, shapeMode = pass.b, pass.powerType, pass.shapeMode
         local bgA = tonumber(b.classPowerBgAlpha) or 0.3
         local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType or CP.powerType)
         CP.bgTex:SetVertexColor(bgR, bgG, bgB, shapeMode and 0 or bgA)
+        pass.bgA, pass.bgR, pass.bgG, pass.bgB = bgA, bgR, bgG, bgB
 
         local filledAlpha = tonumber(b.classPowerFilledAlpha) or 1.0
         local emptyAlpha  = tonumber(b.classPowerEmptyAlpha)  or 0.3
@@ -561,7 +603,16 @@ builders.LAYOUT = function(E)
         SetAutoHideActive((b.classPowerHideOOC == true)
                        or (b.classPowerHideWhenFull == true)
                        or (b.classPowerHideWhenEmpty == true))
+    end
 
+    --- Stage 8: place the pips (shape mode) or the row segments and their
+    --- tick separators, then hide every bar and tick past maxPower.
+    function Layout.PlaceBars()
+        local maxPower, h, b = pass.maxPower, pass.h, pass.b
+        local snap, shapeInfo, shapeMode, fillReverse = pass.snap, pass.shapeInfo, pass.shapeMode, pass.fillReverse
+        local frameW = pass.userW
+        local snapGap, snapTickW, sepW, totalBarSpace = pass.snapGap, pass.snapTickW, pass.sepW, pass.totalBarSpace
+        local bgA, bgR, bgG, bgB = pass.bgA, pass.bgR, pass.bgG, pass.bgB
         if shapeMode then
             local shapeFill = shapeInfo.fill
             local shapeBg = shapeInfo.bg
@@ -671,7 +722,12 @@ builders.LAYOUT = function(E)
                 if CP.ticks[i] then CP.ticks[i]:Hide() end
             end
         end
+    end
 
+    --- Stage 9: publish the resolved geometry to the runtime, the Devourer
+    --- notches, the rounded surface and an attached detached Power bar.
+    function Layout.Finish()
+        local maxPower, h, powerType, shapeMode, userW = pass.maxPower, pass.h, pass.powerType, pass.shapeMode, pass.userW
         CP.currentMax = maxPower
         CP.height = h
 
@@ -705,6 +761,22 @@ builders.LAYOUT = function(E)
         end
     end
 
+    --- Applies size, anchor, segment placement, tick separators, and outline.
+    --- This is warm-path code: it can run often during option changes, but it
+    --- must not be called for every power value update.
+    local function CP_Layout(playerFrame, maxPower, height, powerType)
+        if not CP.container or maxPower <= 0 then return end
+        if not Layout.Gate(playerFrame, maxPower, height, powerType) then return end
+        Layout.Prepare()
+        Layout.ResolveWidth()
+        Layout.Position()
+        Layout.Outline()
+        Layout.Metrics()
+        Layout.Surface()
+        Layout.PlaceBars()
+        Layout.Finish()
+    end
+
     return {
         CP_Layout = CP_Layout,
     }
@@ -717,9 +789,9 @@ builders.PRESENTATION = function(E)
     local CP = E.CP
     local _cpDB = E._cpDB
     local PT = E.PT
-    local math_floor = E.math_floor or math.floor
+    local math_floor = E.math_floor or math_floor
     local tonumber = E.tonumber or tonumber
-    local ResolveClassPowerColor = E.ResolveClassPowerColor
+
     local CP_ResolveTexture = E.CP_ResolveTexture
     local GetUpdateFn = E.GetUpdateFn
 
@@ -775,32 +847,7 @@ builders.PRESENTATION = function(E)
         region._msufCPShadowX, region._msufCPShadowY = targetShadowX, targetShadowY
     end
 
-    local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
-        if type(region.GetFont) ~= "function" then return true end
-        local actual, actualSize, actualFlags = region:GetFont()
-        if not actual then return false end
-        if actualSize and math.abs((tonumber(actualSize) or 0) - size) > 0.01 then return false end
-        if (actualFlags or "") ~= (fontFlags or "") then return false end
-        if actual == fontPath then return true end
-        if type(_G.MSUF_FontPathMatches) == "function" and _G.MSUF_FontPathMatches(fontPath, actual) == true then return true end
-        if type(_G.MSUF_FontPathEquals) == "function" and _G.MSUF_FontPathEquals(fontPath, actual) == true then return true end
-        return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(fontPath or ""):gsub("/", "\\"):lower()
-    end
-
-    local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
-        if not (region and region.SetFont) then return false end
-        local applyResolved = _G.MSUF_ApplyResolvedFont
-        if type(applyResolved) == "function" then
-            local ok, _, source = applyResolved(region, fontPath, size, fontFlags)
-            return ok == true and source ~= "fallback"
-        end
-        local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
-        if ok and applied ~= false and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
-        local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
-        pcall(region.SetFont, region, fallback, size, fontFlags)
-        if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
-        return false
-    end
+    local ApplyClassPowerFont = _G.MSUF_ApplyResolvedFont
 
     --- Font refresh is driven by global font serials and ClassPower options.
     --- Keep it stamped so profile/font changes repaint once instead of during
@@ -961,7 +1008,6 @@ builders.RUNTIME = function(env)
     local CPK = env.CPK
     local PT = env.PT
     local TIP = env.TIP
-    local WW = env.WW
     local CPConst = env.CPConst
     local POWER_TYPE_TOKENS = env.POWER_TYPE_TOKENS
     local PLAYER_CLASS = env.PLAYER_CLASS
@@ -985,7 +1031,7 @@ builders.RUNTIME = function(env)
     local FullRefresh = env.FullRefresh
     local CP_SyncRuntimeOnUpdates = env.CP_SyncRuntimeOnUpdates
     local CP_ShouldUseLiteBindings = env.CP_ShouldUseLiteBindings
-    local CP_UpdateValues_Stagger = env.CP_UpdateValues_Stagger
+
     local OnWarlockCastStart = env.OnWarlockCastStart
     local OnWarlockCastEnd = env.OnWarlockCastEnd
     local OnTipOfTheSpearSpellCast = env.OnTipOfTheSpearSpellCast
@@ -1015,8 +1061,8 @@ builders.RUNTIME = function(env)
                 if NotSecret(spellMax) and type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6
-            elseif powerType == "WHIRLWIND" then
-                maxP = WW.MAX_STACKS
+            --- WHIRLWIND never reaches this branch: the config routes it to
+            --- NATIVE_AURA only, whose fill count Blizzard's slot owns.
             elseif powerType == "TIP_OF_THE_SPEAR" then
                 maxP = TIP.MAX_STACKS
             elseif powerType == "ICICLES" then

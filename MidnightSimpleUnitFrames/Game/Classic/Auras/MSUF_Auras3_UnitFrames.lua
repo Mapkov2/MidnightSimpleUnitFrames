@@ -17,10 +17,7 @@ if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsCla
 --- scan split.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then

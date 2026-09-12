@@ -7,11 +7,7 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -587,3 +583,5 @@ SetBlizzardEventsEnabled()
 ExportPublic("MSUF_GF_DisableBlizzard", function()
   return GF.ApplyBlizzardGroupFrameOwnership("legacy-global")
 end)
+
+ExportPublic("MSUF_NormalizeRaidManagerMode", NormalizeRaidManagerMode)

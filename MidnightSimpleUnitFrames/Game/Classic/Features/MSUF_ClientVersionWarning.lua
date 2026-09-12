@@ -18,10 +18,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local KEY = "MSUF_ClientVersionWarning"
 local POPUP_KEY = "MSUF_CLIENT_VERSION_WARNING"

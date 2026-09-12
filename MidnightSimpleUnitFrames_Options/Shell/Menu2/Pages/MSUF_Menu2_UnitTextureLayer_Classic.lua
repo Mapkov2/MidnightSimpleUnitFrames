@@ -7,6 +7,7 @@ local T = M.Theme or {}
 local UP = M.UnitPage or {}
 local VTP = M.ValueTextPairs
 local abs = math.abs
+local Tr = M.TranslateText or M.Tr
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -363,9 +364,8 @@ local function BuildTextureLayer(ctx, builder, unit)
     local SetString = UP.SetString
     local SetControlEnabled = UP.SetControlEnabled
     local GetConf = UP.GetConf
-    local Call = UP.Call
     local ReviewedMeta = UP.ReviewedMeta
-    if not (ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf and Call and ReviewedMeta) then return end
+    if not (ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf and ReviewedMeta) then return end
 
     M.unitTexLayerSlot = M.unitTexLayerSlot or {}
     M.unitTexLayerTab = M.unitTexLayerTab or {}
@@ -378,7 +378,7 @@ local function BuildTextureLayer(ctx, builder, unit)
         return SLOT_PREFIXES[CurrentSlot()] .. base
     end
     local function RefreshLayer()
-        Call("MSUF_RefreshUnitTextureLayers", unit)
+        _G.MSUF_RefreshUnitTextureLayers(unit)
     end
     local function SetHighlightTextureEnabled(enabled)
         if M.BlockCombatAction and M.BlockCombatAction() then return false end
@@ -743,6 +743,8 @@ local function BuildTextureLayer(ctx, builder, unit)
         elseif control.SetValueFormatter then
             control:SetValueFormatter(function(v) return tostring(floor((tonumber(v) or 0) + 0.5)) end)
         end
+        local selectedValue1
+        if not (percent) then selectedValue1 = step end
         M.BindNumberWidget(ctx, control,
             function() return ReadNumber(unit, Key(base), default) end,
             function(v)
@@ -752,7 +754,7 @@ local function BuildTextureLayer(ctx, builder, unit)
                 RefreshLayer()
             end,
             default,
-            LayerMeta(base, nil, percent and nil or step))
+            LayerMeta(base, nil, selectedValue1))
         W.MoveWidget(control, parent, x, y, width - 58, "LEFT")
         return control
     end

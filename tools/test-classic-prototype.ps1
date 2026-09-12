@@ -10,6 +10,8 @@ $rootFull = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
 
 & python (Join-Path $root ".github/scripts/classic_refactor_load_order_smoke.py")
 if ($LASTEXITCODE -ne 0) { throw "Classic refactor load-order contract failed" }
+& python (Join-Path $root ".github/quality/error_paths.py")
+if ($LASTEXITCODE -ne 0) { throw "Classic error visibility contract failed" }
 
 $retailReferenceRootFull = $null
 if ([string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
@@ -953,9 +955,15 @@ if ($lua) {
     $classResourceSmoke = Join-Path $root "tools/tests/classic_class_resources_smoke.lua"
     & $lua.Source $auraTestDriver $classResourceSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic class-resource ownership smoke failed" }
+    & $lua.Source (Join-Path $root "tools/tests/classic_defaults_refactor_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Classic split defaults contract failed" }
     $classPowerProviderSmoke = Join-Path $root "tools/tests/classic_classpower_provider_smoke.lua"
     & $lua.Source $auraTestDriver $classPowerProviderSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Client ClassPower provider smoke failed" }
+    foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
+        & $lua.Source (Join-Path $root "tools/tests/classic_classpower_runtime_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Classic ClassPower runtime contract failed: $flavor" }
+    }
     $classicCastbarSmoke = Join-Path $root "tools/tests/classic_castbar_engine_smoke.lua"
     & $lua.Source $auraTestDriver $classicCastbarSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic castbar engine smoke failed" }

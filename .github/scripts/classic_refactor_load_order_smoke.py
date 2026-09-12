@@ -46,6 +46,26 @@ for client in ("Mainline", "Vanilla", "Mists", "TBC"):
         ("GroupFrames/MSUF_GroupFrames_DB_Migrations.lua", "UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua"),
     ):
         assert order.index(prefix + provider) < order.index(prefix + consumer), (client, provider, consumer)
+    controller = "ClassPower/MSUF_CP_Controller.lua" if client == "Mainline" else "Game/Classic/ClassPower/MSUF_CP_Controller.lua"
+    for part in ("Config", "Colors", "Surface"):
+        assert order.index(prefix + f"ClassPower/MSUF_CP_Controller_{part}.lua") < order.index(prefix + controller)
+    options = load_order(ROOT / f"MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options_{client}.toc")
+    menu = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
+    suffix = "" if client == "Mainline" else "_Classic"
+    for helper in ("AuraSettings", "AuraControls"):
+        assert options.index(menu + f"Pages/MSUF_Menu2_{helper}.lua") < options.index(menu + f"Pages/MSUF_Menu2_Auras{suffix}.lua")
+    for provider, consumer in (
+        ("Pages/MSUF_Menu2_Group_SpellModel.lua", "Pages/MSUF_Menu2_GroupAuras.lua"),
+        ("Pages/MSUF_Menu2_GlobalCastbars_Preview.lua", "Pages/MSUF_Menu2_GlobalCastbars.lua"),
+        ("Pages/MSUF_Menu2_AdvancedColors_Meta.lua", "Pages/MSUF_Menu2_AdvancedColors.lua"),
+        ("Preview/MSUF_Menu2_ClassPowerPreview_Lifecycle.lua", "Preview/MSUF_Menu2_ClassPowerPreview.lua"),
+        ("Preview/MSUF_Menu2_ClassPowerPreview_Interaction.lua", "Preview/MSUF_Menu2_ClassPowerPreview.lua"),
+    ):
+        assert options.index(menu + provider) < options.index(menu + consumer), (client, provider, consumer)
+    for part in ("Group", "Resources", "Context"):
+        assert menu + f"Pages/MSUF_Menu2_AdvancedColors_{part}.lua" in options, client
+    for helper in ("Handles", "Chrome"):
+        assert options.index(menu + f"Preview/MSUF_Menu2_UnitPreview_View_{helper}.lua") < options.index(menu + f"Preview/MSUF_Menu2_UnitPreview_View{suffix}.lua")
     assert order[-1] == prefix + "Kernel/MSUF_RuntimeContracts.lua", client
     print(f"PASS {client}: split state, unit catalogue, group migrations and final runtime contracts")
 

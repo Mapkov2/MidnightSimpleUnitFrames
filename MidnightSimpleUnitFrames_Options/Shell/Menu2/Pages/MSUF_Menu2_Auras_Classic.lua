@@ -36,14 +36,7 @@ local function AuraDurationBarColor()
     if type(resolver) == "function" then return resolver() end
     return 1, 1, 1
 end
-local AccessibleNumber = M.AccessibleNumber or function(value, fallback)
-    fallback = tonumber(fallback) or 0
-    local canaccessvalue = _G.canaccessvalue
-    if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then return fallback end
-    local issecretvalue = _G.issecretvalue
-    if type(issecretvalue) == "function" and issecretvalue(value) == true then return fallback end
-    return tonumber(value) or fallback
-end
+local AccessibleNumber = M.AccessibleNumber
 local AURA_SCOPE_LABELS = { shared = "Shared", player = "Player", target = "Target", focus = "Focus", boss = "Boss", party = "Party", raid = "Raid / Mythic" }
 local AURA_SCOPE_VALID = M.KeySetFromWords "shared player target focus boss party raid"
 local AURA_GROUP_SCOPES = M.KeySetFromWords "party raid mythicraid"
@@ -115,17 +108,8 @@ function M.AttachAuraFontsAndColors(section, title, unit)
 end
 local BUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, BIG_DEFENSIVE=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
 local DEBUFF_AURA_SORT_METHOD_OK = { DEFAULT=true, UNIT_FRAME_DEBUFF=true, IMPORTANT_FIRST=true, EXPIRATION=true, EXPIRATION_ONLY=true, NAME=true, NAME_ONLY=true, INSTANCE_ID=true }
-local function AuraSortMethodValues(lane, allowCustomPriority)
-    if allowCustomPriority == true then return CUSTOM_PRIORITY_AURA_SORT_METHOD_VALUES end
-    return lane == "debuff" and DEBUFF_AURA_SORT_METHOD_VALUES or BUFF_AURA_SORT_METHOD_VALUES
-end
-local function ChoiceLabel(values, value, fallback)
-    for i = 1, #(values or {}) do
-        local item = values[i]
-        if item and item.value == value then return item.text or fallback or tostring(value or "") end
-    end
-    return fallback or tostring(value or "")
-end
+local AuraSortMethodValues = M.AuraSettings.AuraSortMethodValues
+local ChoiceLabel = M.AuraSettings.ChoiceLabel
 local AURA_ANCHOR_LABELS = {
     TOPLEFT = "Top Left", TOP = "Top", TOPRIGHT = "Top Right",
     LEFT = "Left", CENTER = "Center", RIGHT = "Right",
@@ -136,16 +120,8 @@ local AURA_SORT_SUMMARY_LABELS = {
     IMPORTANT_FIRST = "Important first", EXPIRATION = "Player + expiring", EXPIRATION_ONLY = "Expiring soon",
     NAME = "Player + name", NAME_ONLY = "Name", INSTANCE_ID = "Arrival order", CUSTOM_PRIORITY = "Custom priority",
 }
-local function AnchorLabel(value)
-    value = tostring(value or "CENTER"):upper()
-    return AURA_ANCHOR_LABELS[value] or value
-end
-local function NormalizeAuraSortMethodForLane(lane, value, allowCustomPriority)
-    value = tostring(value or "DEFAULT"):upper()
-    if allowCustomPriority == true and value == "CUSTOM_PRIORITY" then return value end
-    local allowed = lane == "debuff" and DEBUFF_AURA_SORT_METHOD_OK or BUFF_AURA_SORT_METHOD_OK
-    return allowed[value] and value or "DEFAULT"
-end
+local AnchorLabel = M.AuraSettings.AnchorLabel
+local NormalizeAuraSortMethodForLane = M.AuraSettings.NormalizeAuraSortMethodForLane
 local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
@@ -221,15 +197,9 @@ local function CanonicalGroupFilterValue(value)
     end
     return canonical
 end
-local function Tr(text)
-    if type(M.Tr) == "function" then return M.Tr(text) end
-    return text
-end
+local Tr = M.AuraSettings.Tr
 -- Search-result suffix shared by every aura list status line.
-local function MatchSuffix(query, count)
-    if query == nil or query == "" then return "" end
-    return M.Format(" - %d matches", count)
-end
+local MatchSuffix = M.AuraSettings.MatchSuffix
 local function AuraCatalogToken(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     return token ~= "" and token or (fallback or "control")
@@ -256,91 +226,17 @@ M._customContainerAssistantSuffixes = {
     "placed.reminderClickCast", "placed.reminderOnlyCastable",
     "reminderEnchantMainHand", "reminderEnchantOffHand",
 }
-local function AuraControlMeta(ctx, path, classification, assistantContract)
-    path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
-    path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
-    local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, "auras")
-    local identity = "auras." .. path
-    local meta = {
-        controlId = "menu2." .. pageKey .. "." .. identity,
-        pageKey = pageKey,
-        identityKey = identity,
-        controlPath = "auras/" .. path:gsub("%.", "/"),
-        classification = classification or "setting",
-        ephemeral = classification == "ephemeral" or nil,
-    }
-    if type(assistantContract) == "string" and assistantContract ~= "" then
-        meta.settingKey = assistantContract
-    elseif type(assistantContract) == "table" then
-        meta.settingKey = assistantContract.settingKey
-        meta.actionKey = assistantContract.actionKey
-        meta.actionFixedArgs = assistantContract.actionFixedArgs
-        meta.actionInputArg = assistantContract.actionInputArg
-        meta.assistantDisposition = assistantContract.assistantDisposition
-        meta.assistantDispositionReason = assistantContract.assistantDispositionReason
-        meta.assistantSettingKeys = assistantContract.assistantSettingKeys
-        meta.assistantSettingKeyPatterns = assistantContract.assistantSettingKeyPatterns
-    end
-    if (meta.classification == "setting" or meta.classification == "action")
-        and not meta.settingKey and not meta.actionKey and not meta.assistantDisposition
-    then
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "This Aura control targets the selected scope, lane, tool, or container on the current Aura workspace."
-    end
-    return meta
-end
-local function AuraControlMetaAtVisiblePath(ctx, identityPath, visiblePath, classification, assistantContract)
-    local meta = AuraControlMeta(ctx, identityPath, classification, assistantContract)
-    visiblePath = tostring(visiblePath or identityPath or "control"):lower():gsub("[^%w%._/-]+", "-")
-    visiblePath = visiblePath:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
-    meta.controlPath = "auras/" .. visiblePath:gsub("%.", "/")
-    return meta
-end
-local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
-    if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
-    local meta = AuraControlMeta(ctx, path, classification,
-        type(navigationKey) == "table" and navigationKey or nil)
-    meta.label = label
-    meta.kind = kind
-    if classification == "navigation" then
-        meta.navigationKey = navigationKey
-    elseif classification == "action" then
-        if type(navigationKey) == "string" then meta.actionKey = navigationKey end
-        if meta.actionKey then
-            meta.assistantDisposition = nil
-            meta.assistantDispositionReason = nil
-        end
-    end
-    M.RegisterSearchWidget(widget, meta)
-    return widget
-end
-local function RegisterAuraTextAction(ctx, widget, input, label, path, assistantContract)
-    if widget then
-        widget._msuf2CommandAction = {
-            kind = "button",
-            valueKind = "text",
-            set = function(value)
-                value = tostring(value or "")
-                if input and input.SetText then input:SetText(value) end
-                local handler = type(widget.GetScript) == "function" and widget:GetScript("OnClick") or nil
-                if type(handler) ~= "function" then return false end
-                return handler(widget, "LeftButton", false)
-            end,
-        }
-    end
-    return RegisterAuraControl(ctx, widget, label, "button", path, "action", assistantContract)
-end
+local AuraControlMeta = M.AuraControls.AuraControlMeta
+local AuraControlMetaAtVisiblePath = M.AuraControls.AuraControlMetaAtVisiblePath
+local RegisterAuraControl = M.AuraControls.RegisterAuraControl
+local RegisterAuraTextAction = M.AuraControls.RegisterAuraTextAction
 local function RegisterAuraChoiceBar(ctx, bar, values, path, assistantContract)
     if not bar then return bar end
     RegisterAuraControl(ctx, bar, bar._msuf2SearchTitle or "Editing", "segment", path,
         assistantContract and "setting" or "ephemeral", assistantContract)
     return bar
 end
-local function Round(value)
-    value = tonumber(value) or 0
-    if value < 0 then return -floor((-value) + 0.5) end
-    return floor(value + 0.5)
-end
+local Round = M.AuraSettings.Round
 local function NormalizeDebuffTypeBorderMode(value, fallback)
     if value == true then return "SYMBOL" end
     if value == false then return "OFF" end
@@ -353,25 +249,9 @@ local function NormalizeDebuffTypeBorderMode(value, fallback)
     if value == "OFF" or value == "NONE" or value == "DISABLED" then return "OFF" end
     return fallback or "OFF"
 end
-local function AddTooltip(widget, title, body)
-    return M.AddTooltip(widget, title, body, {
-        hook = true,
-        titleAsLine = true,
-        labelHit = true,
-        labelHitWhenDisabled = true,
-    })
-end
-local function AddAuraTooltipHelp(widget)
-    return AddTooltip(widget, "Aura tooltip",
-        "Controls this aura lane independently. Always / Out of Combat / Modifier / Never under Appearance > Miscellaneous affect only unit and group frames. Auras only reuse the selected Blizzard/MSUF look and cursor placement.")
-end
-local function ActionButton(parent, label, width, role)
-    if W.RoleButton then return W.RoleButton(parent, label, role or "normal", width or 90, 24) end
-    if W.TopButton then return W.TopButton(parent, label, width or 90, 24) end
-    local btn = T.Button(parent, label, width or 90, 24)
-    if W.StyleTopActionButton then W.StyleTopActionButton(btn) end
-    return btn
-end
+local AddTooltip = M.AuraControls.AddTooltip
+local AddAuraTooltipHelp = M.AuraControls.AddAuraTooltipHelp
+local ActionButton = M.AuraControls.ActionButton
 
 local CUSTOM_DEBUFF_BLACKLIST_INFO_SEEN_KEY = "auraEnemyDebuffBlacklistInfoSeen"
 local CUSTOM_DEBUFF_BLACKLIST_INFO_TITLE = "UnitFrame Debuff blacklist"
@@ -450,17 +330,7 @@ local function Card(parent, title, subtitle, x, y, width, height)
     if card and T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
     return card
 end
-local function Rebuild(ctx)
-    -- Nested aura workspaces and pinned previews settle their final height after
-    -- the page is selected; the shared helper reapplies the viewport for us.
-    local key = (ctx and ctx.key) or M.activeKey or "auras3"
-    if M.RebuildPageKeepingScroll and M.RebuildPageKeepingScroll(key) then return end
-    if M.RequestRefresh then
-        M.RequestRefresh(ctx, "auras-rebuild-fallback")
-    elseif M.Refresh then
-        M.Refresh(ctx)
-    end
-end
+local Rebuild = M.AuraControls.Rebuild
 local function SelectPage(pageKey, scope)
     if scope then
         M.SetMenuStateValue("auraScope", scope)
@@ -468,19 +338,8 @@ local function SelectPage(pageKey, scope)
     end
     if M.SelectPage then M.SelectPage(pageKey or "auras3") end
 end
-local function RequestAuraRuntime(scope, reason)
-    local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
-    if apply and type(apply.RequestAuras) == "function" then
-        return apply.RequestAuras(scope or "shared", reason or "AURAS3_MENU2_BATCH")
-    end
-    Model.Apply(scope or "shared", reason or "AURAS3_MENU2_BATCH")
-    return true
-end
-local function AurasMenuCombatLocked()
-    if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() and true or false end
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then return _G.MSUF_IsConfigCombatLocked() and true or false end
-    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
-end
+local RequestAuraRuntime = M.AuraControls.RequestAuraRuntime
+local AurasMenuCombatLocked = M.AuraSettings.AurasMenuCombatLocked
 local function HandleNestedScrollWheel(scrollFrame, delta, step)
     delta = tonumber(delta) or 0
     if delta == 0 or not scrollFrame then return end
@@ -526,74 +385,8 @@ function M._StyleNestedAuraScrollFrame(scrollFrame, anchor, step)
     end
 end
 
-local function ConfigureAuraSpellPriorityDrag(row, handle, listChild, rowHeight, onDrop)
-    if not (row and handle and listChild) then return end
-    rowHeight = max(1, tonumber(rowHeight) or 1)
-    row:SetMovable(true)
-    handle:RegisterForDrag("LeftButton")
-    handle:EnableMouse(true)
-    local function SnapRow()
-        local slot = max(1, tonumber(row._displayIndex) or 1)
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((slot - 1) * rowHeight))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((slot - 1) * rowHeight))
-    end
-    local function ClearDragState(shouldSnap)
-        if row.StopMovingOrSizing then row:StopMovingOrSizing() end
-        if row.SetFrameStrata and row._msufA3OldStrata then row:SetFrameStrata(row._msufA3OldStrata) end
-        row._msufA3OldStrata = nil
-        row._msufA3Dragging = nil
-        if shouldSnap == true then SnapRow() end
-    end
-    handle:HookScript("OnEnter", function()
-        if row._dragEnabled ~= true or not row.SetBackdropBorderColor then return end
-        local c = (T.colors and T.colors.coreBlue) or { 0.095, 0.360, 0.560, 0.95 }
-        row:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
-    end)
-    handle:HookScript("OnLeave", function()
-        if not row.SetBackdropBorderColor then return end
-        local c = (T.colors and (T.colors.cardBorder or T.colors.borderSoft)) or { 0.210, 0.230, 0.300, 0.78 }
-        row:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
-    end)
-    handle:SetScript("OnDragStart", function()
-        if row._dragEnabled ~= true or not row._spellID then return end
-        if GameTooltip then GameTooltip:Hide() end
-        row._msufA3Dragging = true
-        row._msufA3OldStrata = row.GetFrameStrata and row:GetFrameStrata() or nil
-        if row.SetFrameStrata then row:SetFrameStrata("TOOLTIP") end
-        row:StartMoving()
-    end)
-    handle:SetScript("OnDragStop", function()
-        if row._msufA3Dragging ~= true then return end
-        if row.StopMovingOrSizing then row:StopMovingOrSizing() end
-        local _, centerY = row:GetCenter()
-        local top = listChild.GetTop and listChild:GetTop()
-        local count = max(1, tonumber(row._entryCount) or 1)
-        local source = max(1, min(count, tonumber(row._displayIndex) or 1))
-        local target, bestDistance = source, math.huge
-        if centerY and top then
-            local rowHalf = (row.GetHeight and row:GetHeight() or rowHeight) * 0.5
-            for slot = 1, count do
-                local distance = math.abs(centerY - (top - ((slot - 1) * rowHeight) - rowHalf))
-                if distance < bestDistance then
-                    target, bestDistance = slot, distance
-                end
-            end
-        end
-        local spellID = row._spellID
-        ClearDragState(true)
-        if spellID and target ~= source and type(onDrop) == "function" then onDrop(spellID, target) end
-    end)
-    row:HookScript("OnHide", function() ClearDragState(false) end)
-end
-local function QueueAurasPageRefresh(ctx, reason)
-    if AurasMenuCombatLocked() then return false end
-    if M.RequestRefresh then
-        M.RequestRefresh(ctx, reason or "auras-refresh")
-    elseif M.Refresh then
-        M.Refresh(ctx)
-    end
-end
+local ConfigureAuraSpellPriorityDrag = M.AuraControls.ConfigureAuraSpellPriorityDrag
+local QueueAurasPageRefresh = M.AuraControls.QueueAurasPageRefresh
 local auraPageRefreshQueued = false
 local pendingAuraPageRefreshCtx
 local pendingAuraPageRefreshReason
@@ -610,32 +403,10 @@ local function QueueAuraPageControlRefresh(ctx, reason)
     end
     if C_Timer and C_Timer.After then C_Timer.After(0, Flush) else Flush() end
 end
-local function ApplyUnit(ctx, unit, reason, refresh)
-    reason = reason or "AURAS3_MENU2"
-    RequestAuraRuntime(unit or "shared", reason)
-    if refresh == true then QueueAuraPageControlRefresh(ctx, reason) end
-end
+local ApplyUnit = M.AuraControls.ApplyUnit
 local BindSwitch, BindToggle, BindSlider = M.BindSwitchAt, M.BindToggleAt, M.BindSliderAt
 local BindDropdown, BindTextInput = M.BindDropdownAt, M.BindTextInputAt
-local function ConfigureMaxDurationSlider(slider)
-    if not slider then return slider end
-    if slider.SetValueFormatter then
-        slider:SetValueFormatter(function(value)
-            value = Round(value)
-            return value <= 0 and "Off" or (tostring(value) .. "s")
-        end)
-    end
-    if slider.SetValueParser then
-        slider:SetValueParser(function(value)
-            value = tostring(value or ""):lower()
-            if value == "off" then return 0 end
-            return tonumber(value:match("%d+"))
-        end)
-    end
-    AddTooltip(slider, "Maximum duration",
-        "Off shows auras of any duration. Otherwise, auras whose total duration exceeds this number of seconds are hidden.")
-    return slider
-end
+local ConfigureMaxDurationSlider = M.AuraControls.ConfigureMaxDurationSlider
 local UNIT_AURA_WORKSPACE_TAB_STYLE = {
     bg = { 0.012, 0.025, 0.052, 0.90 },
     border = { 0.070, 0.130, 0.235, 0.52 },
@@ -702,55 +473,28 @@ local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setVa
     M.TrackRefresh(ctx, RefreshButtons)
     return getValue(), buttons, RefreshButtons
 end
-local function CurrentScope()
-    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
-    local scope = M.auraScope or "shared"
-    if scope == "mythicraid" then scope = "raid" end
-    return AURA_SCOPE_VALID[scope] and scope or "shared"
-end
+local CurrentScope = M.AuraSettings.CurrentScope
 local function SetCurrentScope(scope)
     scope = scope or "shared"
     if scope == "mythicraid" then scope = "raid" end
     M.SetMenuStateValue("auraScope", scope)
     if scope == "party" or scope == "raid" then M.SetMenuStateValue("auraStyleGFScope", scope) end
 end
-local function IsGroupScope(scope)
-    scope = scope or CurrentScope()
-    return AURA_GROUP_SCOPES[scope] == true
-end
-local function ScopeLabel(scope)
-    return AURA_SCOPE_LABELS[scope] or "Raid / Mythic"
-end
+local IsGroupScope = M.AuraSettings.IsGroupScope
+local ScopeLabel = M.AuraSettings.ScopeLabel
 local function FinishPage(ctx, b)
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 42) end
 end
 local SetCurrentLane
-local function CurrentLane(stateKey, defaultValue)
-    local lane = M[stateKey] or defaultValue or "debuff"
-    if lane ~= "buff" and lane ~= "debuff" then lane = defaultValue or "debuff" end
-    return lane
-end
+local CurrentLane = M.AuraSettings.CurrentLane
 function SetCurrentLane(stateKey, lane)
     lane = lane == "buff" and "buff" or "debuff"
     M.SetMenuStateValue(stateKey, lane)
     if stateKey ~= "auraStyleGFLane" then M.SetMenuStateValue("auraStyleGFLane", lane) end
 end
-local function BuildLaneTabs(ctx, parent, stateKey, x, y, width)
-    BuildActionTabs(ctx, parent, LANE_VALUES, x, y, width, function() return CurrentLane(stateKey, "debuff") end, function(value)
-        SetCurrentLane(stateKey, value)
-        Rebuild(ctx)
-    end, nil, nil, "workspace.lane-selector." .. AuraCatalogToken(stateKey, "lane"))
-end
-local function LaneTitle(kind)
-    if kind == "buff" then return "Buff" end
-    if kind == "external" or kind == "externals" then return "External Defensive" end
-    return "Debuff"
-end
-local function LanePlural(kind)
-    if kind == "buff" then return "Buffs" end
-    if kind == "external" or kind == "externals" then return "External Defensives" end
-    return "Debuffs"
-end
+local BuildLaneTabs = M.AuraControls.BuildLaneTabs
+local LaneTitle = M.AuraSettings.LaneTitle
+local LanePlural = M.AuraSettings.LanePlural
 local function CurrentAuraStyleContainer(scope)
     local container = scope == "shared"
         and (M.auraSharedStyleContainer or CurrentLane("auraStyleGFLane", "debuff"))
@@ -829,21 +573,15 @@ end
 local function OtherLane(kind)
     return kind == "buff" and "debuff" or "buff"
 end
-local function LaneMaxKey(kind)
-    return kind == "buff" and "maxBuffs" or "maxDebuffs"
-end
-local function LaneSizeKey(kind)
-    return kind == "buff" and "buffGroupIconSize" or "debuffGroupIconSize"
-end
+local LaneMaxKey = M.AuraSettings.LaneMaxKey
+local LaneSizeKey = M.AuraSettings.LaneSizeKey
 local function LaneXKey(kind)
     return kind == "buff" and "buffGroupOffsetX" or "debuffGroupOffsetX"
 end
 local function LaneYKey(kind)
     return kind == "buff" and "buffGroupOffsetY" or "debuffGroupOffsetY"
 end
-local function LaneDefaultMax(kind)
-    return kind == "buff" and 8 or 12
-end
+local LaneDefaultMax = M.AuraSettings.LaneDefaultMax
 local function LaneDefaultY(kind)
     return kind == "buff" and 36 or 6
 end
@@ -1197,10 +935,7 @@ local function ApplyAuraPreviewFont(fs, size)
             local gdb = _G.MSUF_DB and _G.MSUF_DB.general
             path = resolveSafe(path, px, flags, gdb and gdb.fontKey)
         end
-        local ok = pcall(fs.SetFont, fs, path, px, flags)
-        if not ok then
-            pcall(fs.SetFont, fs, FONT, px, flags)
-        end
+        _G.MSUF_ApplyResolvedFont(fs, path, px, flags)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0) end

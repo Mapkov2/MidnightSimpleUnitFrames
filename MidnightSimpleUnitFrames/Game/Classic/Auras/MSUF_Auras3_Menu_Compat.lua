@@ -18,17 +18,7 @@ if type(A3._ClassicReadBlacklistHidePermanent) ~= "function"
     return
 end
 
-local function DeepCopy(value, seen)
-    if type(value) ~= "table" then return value end
-    seen = seen or {}
-    if seen[value] then return seen[value] end
-    local out = {}
-    seen[value] = out
-    for key, item in pairs(value) do
-        out[DeepCopy(key, seen)] = DeepCopy(item, seen)
-    end
-    return out
-end
+local DeepCopy = MSUF.MSUF_DeepCopy
 
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local BOSS_LOOKUP = {

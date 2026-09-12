@@ -3,6 +3,7 @@
     <Script file="Pages\MSUF_Menu2_GroupPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_GroupSpecs.lua"/>
     <Script file="Pages\MSUF_Menu2_Group.lua"/>
+    <Script file="Pages\MSUF_Menu2_Group_SpellModel.lua"/>
     <Script file="Pages\MSUF_Menu2_GroupLayout.lua"/>
     <Script file="Pages\MSUF_Menu2_GroupBars.lua"/>
     <Script file="Pages\MSUF_Menu2_GroupAuras.lua"/>
@@ -12,11 +13,19 @@
     <Script file="MSUF_Menu2_ContextColorPicker.lua"/>
     <Script file="MSUF_Menu2_TextQuickSettings.lua"/>
     <Script file="Pages\MSUF_Menu2_ColorPainter.lua"/>
+    <Script file="Pages\MSUF_Menu2_AdvancedColors_Meta.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors.lua"/>
+    <Script file="Pages\MSUF_Menu2_AdvancedColors_Group.lua"/>
+    <Script file="Pages\MSUF_Menu2_AdvancedColors_Resources.lua"/>
+    <Script file="Pages\MSUF_Menu2_AdvancedColors_Context.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedGameplay.lua"/>
+    <Script file="Preview\MSUF_Menu2_ClassPowerPreview_Lifecycle.lua"/>
+    <Script file="Preview\MSUF_Menu2_ClassPowerPreview_Interaction.lua"/>
     <Script file="Preview\MSUF_Menu2_ClassPowerPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedClassPower.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedProfiles.lua"/>
+    <Script file="Pages\MSUF_Menu2_AuraSettings.lua"/>
+    <Script file="Pages\MSUF_Menu2_AuraControls.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras_Classic.lua"/>
     <Script file="MSUF_Menu2_GuidedTour.lua"/>
 </Ui>

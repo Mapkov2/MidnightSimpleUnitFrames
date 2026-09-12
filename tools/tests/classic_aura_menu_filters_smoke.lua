@@ -132,6 +132,10 @@ auraMenuFile:close()
 assert(not auraMenuSource:match("%f[%w]VT%s*%("),
     "Aura menu retains an unresolved global VT call")
 
+for _, helper in ipairs({ "AuraSettings", "AuraControls" }) do
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_" .. helper .. ".lua"))(
+        "MidnightSimpleUnitFrames", namespace)
+end
 assert(loadfile(auraMenuPath))("MidnightSimpleUnitFrames", namespace)
 assert(type(menu.BuildAuras3GroupLaneWorkspace) == "function",
     "Classic group Aura workspace builder was not exported")

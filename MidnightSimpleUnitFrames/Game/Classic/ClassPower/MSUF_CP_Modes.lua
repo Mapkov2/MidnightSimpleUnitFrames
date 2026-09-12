@@ -6,13 +6,16 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
+
 local modeBuilders = _G.MSUF_CP_MODE_BUILDERS or {}
 ExportPublic("MSUF_CP_MODE_BUILDERS", modeBuilders)
 
+--- Perf locals: the stamp helpers and the native-timer plumbing below run per
+--- pip on every power/aura event, and the Essence path runs per
+--- UNIT_POWER_FREQUENT.
+local type = type
+local math_abs = math.abs
 local _issecretvalue = _G.issecretvalue
 
 local function CP_GetVisual(E)
@@ -349,7 +352,7 @@ modeBuilders.SEGMENTED = function(E)
         local needsResync = bar._essNativeActive ~= true or bar._essNativeRate ~= rate
         if not needsResync and partialProgress ~= nil then
             local predicted = (now - (bar._essNativeStart or startTime)) * rate
-            needsResync = math.abs(predicted - partialProgress) > 0.10
+            needsResync = math_abs(predicted - partialProgress) > 0.10
         end
         if needsResync then
             if not nativeTimer.SetTimeFromStart(duration, startTime, 1 / rate) then return false end
@@ -544,7 +547,7 @@ modeBuilders.SEGMENTED = function(E)
             and nativeBar._essNativeRate == _essRate
             and nativeBar._msufCPVisualVersion == visualVersion then
             local predicted = (now - (nativeBar._essNativeStart or _essRechargeAt)) * _essRate
-            if math.abs(predicted - partialProgress) <= 0.10 then
+            if math_abs(predicted - partialProgress) <= 0.10 then
                 CP_CheckAutoHide(cur, maxPower)
                 return
             end
@@ -1214,7 +1217,6 @@ modeBuilders.AURA = function(E)
     local GetTrackedPlayerAura = E.GetTrackedPlayerAura
     local C_Spell = E.C_Spell
     local CPK = E.CPK
-    local WW = E.WW
     local NotSecret = E.NotSecret
     local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local ResolveMWAbove5Color = E.ResolveMWAbove5Color
@@ -1309,9 +1311,6 @@ modeBuilders.AURA = function(E)
                         restrictedApplications = true
                     end
                 end
-            elseif powerType == "WHIRLWIND" then
-                cur = WW.GetStacks()
-                textValue = cur
             elseif powerType == "TIP_OF_THE_SPEAR" then
                 cur = GetTrackedTipStacks()
                 textValue = cur
@@ -1392,12 +1391,6 @@ modeBuilders.AURA = function(E)
         end
     end
 
-    local function BuildWWRender()
-        return function()
-            if CP.visible and CP.powerType == "WHIRLWIND" then UpdateSegmented(CP.powerType, CP.currentMax) end
-        end
-    end
-
     local function UpdateSingle()
         --- Devourer mirrors Blizzard's 12.1 Soul Fragments bar and Elemental's
         --- MSUF presentation: one continuous bar normalized to the real maximum.
@@ -1474,7 +1467,7 @@ modeBuilders.AURA = function(E)
         CP_CheckAutoHide(cur, 1)
     end
 
-    return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle, BuildWWRender = BuildWWRender }
+    return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle }
 end
 
 --- 12.1 Ebon presentation host. Aura discovery and the countdown are owned by

@@ -19,11 +19,16 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-local STATUS_ANCHORS, DEFAULT_SYMBOLS, StatusIconPackValues, GetConf, GetGeneral, Call, UnitTopLabel, ReadBool, SetBool, SetNumber, SetString, ReadGeneralBool, SetGeneralBool, ClampStatusLayer, StatusValues, FindStatusSpec, CurrentStatusSpec, ReadStatusBool, ReadStatusNumber, ReadStatusString, RefreshStatusRuntime, SetControlEnabled, ControlMeta, RegisterControl = M.Pick(UP, [[STATUS_ANCHORS DEFAULT_SYMBOLS StatusIconPackValues GetConf GetGeneral Call UnitTopLabel ReadBool SetBool SetNumber SetString ReadGeneralBool SetGeneralBool ClampStatusLayer StatusValues FindStatusSpec CurrentStatusSpec ReadStatusBool ReadStatusNumber ReadStatusString RefreshStatusRuntime SetControlEnabled ControlMeta RegisterControl]])
+local STATUS_ANCHORS, DEFAULT_SYMBOLS, StatusIconPackValues, GetConf = UP.STATUS_ANCHORS, UP.DEFAULT_SYMBOLS, UP.StatusIconPackValues, UP.GetConf
+local GetGeneral, UnitTopLabel, ReadBool, SetBool, SetNumber = UP.GetGeneral, UP.UnitTopLabel, UP.ReadBool, UP.SetBool, UP.SetNumber
+local SetString, ReadGeneralBool, SetGeneralBool, ClampStatusLayer = UP.SetString, UP.ReadGeneralBool, UP.SetGeneralBool, UP.ClampStatusLayer
+local StatusValues, FindStatusSpec, CurrentStatusSpec, ReadStatusBool = UP.StatusValues, UP.FindStatusSpec, UP.CurrentStatusSpec, UP.ReadStatusBool
+local ReadStatusNumber, ReadStatusString, RefreshStatusRuntime = UP.ReadStatusNumber, UP.ReadStatusString, UP.RefreshStatusRuntime
+local SetControlEnabled, ControlMeta, RegisterControl = UP.SetControlEnabled, UP.ControlMeta, UP.RegisterControl
 local SetControlsEnabled = W.SetControlsEnabled
 STATUS_ANCHORS = STATUS_ANCHORS or {}
 DEFAULT_SYMBOLS = DEFAULT_SYMBOLS or {}
-StatusIconPackValues = StatusIconPackValues or function() return {} end
+StatusIconPackValues = function() return {} end
 local SYMBOL_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Symbols\\"
 local RAID_GROUP_NAME_STYLES = VT("PAREN", "(2)", "BRACKET", "[2]", "NONE", "2")
 local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
@@ -33,9 +38,14 @@ local STATUS_SECTION_HEIGHT = 582
 local STATUS_PLACEMENT_CARD_HEIGHT = 242
 local IDENTITY_RESTRICTION_WARNING_COLOR = { 1.00, 0.64, 0.18, 1 }
 local IDENTITY_RESTRICTION_WARNING = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
-local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
-local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
-local function BuildStatus(ctx, builder, unit)
+local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues
+local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus
+-- The section is assembled by StatusSection.Build from one stage per card or
+-- helper group. Stages share one per-build `state` table and run in the order
+-- the controls used to be created inline; RefreshStatusSectionState is a
+-- RefreshProxy so callbacks bound in earlier stages reach the body wired last.
+local StatusSection = {}
+function StatusSection.OpenSection(state, ctx, builder, unit)
     local sec = builder:CollapsibleSection("status_icons", "Status icons", STATUS_SECTION_HEIGHT, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
@@ -96,6 +106,14 @@ local function BuildStatus(ctx, builder, unit)
         if width then control:SetSize(width, 22) end
         T.CenterButtonLabel(control)
     end
+    state.sec, state.leftW, state.advancedTab, state.selectedCard, state.previewCard, state.placementCard =
+        sec, leftW, advancedTab, selectedCard, previewCard, placementCard
+    state.placementCardX, state.placementCardW, state.placeLeftX, state.placeLeftW, state.placeRightX, state.placeRightW =
+        placementCardX, placementCardW, placeLeftX, placeLeftW, placeRightX, placeRightW
+    state.selectedControlW, state.previewControlW, state.PlaceButton = selectedControlW, previewControlW, PlaceButton
+end
+function StatusSection.PrepareBinders(state, ctx, unit)
+    local PlaceButton = state.PlaceButton
     local function RefreshStatusMenu()
         if M.RequestRefresh then
             M.RequestRefresh(ctx, "unit-status-menu")
@@ -212,7 +230,7 @@ local function BuildStatus(ctx, builder, unit)
             function() return ReadBool(unit, "stateIconsTestMode", ReadGeneralBool("stateIconsTestMode", false)) end,
             function(value)
                 SetBool(unit, "stateIconsTestMode", value, reason, { preview = true })
-                Call("MSUF_RequestStatusIconsRefreshForCurrent", unit, reason or "MSUF2_STATUS_TEST")
+                _G.MSUF_RequestStatusIconsRefreshForCurrent(unit, reason or "MSUF2_STATUS_TEST")
             end)
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, "status.preview." .. tostring(reason), "ephemeral")
         return control
@@ -221,10 +239,10 @@ local function BuildStatus(ctx, builder, unit)
         local control = W.Button(parent, label, width)
         PlaceButton(control, parent, xPos, yPos, width)
         control:SetScript("OnClick", function()
-            Call("MSUF_UFPreview_SetStatusPreviewMode", mode)
+            _G.MSUF_UFPreview_SetStatusPreviewMode(mode)
             if mode == "current" then
                 local spec = CurrentStatusSpec(unit)
-                if spec then Call("MSUF_UFPreview_SelectStatusIcon", spec.value) end
+                if spec then _G.MSUF_UFPreview_SelectStatusIcon(spec.value) end
             end
         end)
         RegisterStatusSearch(control, searchLabel, keywords, nil, nil, semanticPath, "ephemeral")
@@ -237,7 +255,7 @@ local function BuildStatus(ctx, builder, unit)
     local function ResolveStatusDefault(defaultValue, spec)
         return type(defaultValue) == "function" and defaultValue(spec) or defaultValue
     end
-    local RefreshStatusSectionState
+    local RefreshStatusSectionState = M.RefreshProxy()
     local function BindStatusSpecDropdown(parent, label, values, width, xPos, yPos, moveWidth, specField, defaultValue, reason, searchLabel, keywords, searchValues, afterSet)
         local control = W.Dropdown(parent, label, values, width)
         Shared.PlaceDropdown(parent, control, xPos, yPos, moveWidth)
@@ -261,6 +279,19 @@ local function BuildStatus(ctx, builder, unit)
             "status.selected." .. tostring(specField), nil, selectedStatusContract)
         return control
     end
+    state.selectedStatusColorContract = selectedStatusColorContract
+    state.RefreshStatusMenu, state.ReadStatusEnabled, state.StatusSearchKeywords, state.selectedStatusContract =
+        RefreshStatusMenu, ReadStatusEnabled, StatusSearchKeywords, selectedStatusContract
+    state.RegisterStatusSearch, state.BindStatusPlacementSlider, state.ClampSelectedStatusLayer, state.BindStatusTestToggle =
+        RegisterStatusSearch, BindStatusPlacementSlider, ClampSelectedStatusLayer, BindStatusTestToggle
+    state.StatusPreviewButton, state.SetPreviewCurrentVisual, state.RefreshStatusSectionState, state.BindStatusSpecDropdown =
+        StatusPreviewButton, SetPreviewCurrentVisual, RefreshStatusSectionState, BindStatusSpecDropdown
+end
+function StatusSection.BuildIndicatorSelector(state, ctx, unit)
+    local sec, selectedCard, previewCard, selectedControlW = state.sec, state.selectedCard, state.previewCard, state.selectedControlW
+    local previewControlW, leftW = state.previewControlW, state.leftW
+    local RegisterStatusSearch, RefreshStatusMenu, ReadStatusEnabled = state.RegisterStatusSearch, state.RefreshStatusMenu, state.ReadStatusEnabled
+    local selectedStatusContract, RefreshStatusSectionState = state.selectedStatusContract, state.RefreshStatusSectionState
     local selector = W.Dropdown(selectedCard, "Indicator", function() return StatusValues(unit) end, 260)
     if selector._msuf2Title and selector._msuf2Title.SetTextColor then selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1) end
     Shared.PlaceDropdown(selectedCard, selector, 16, -54, selectedControlW)
@@ -274,7 +305,7 @@ local function BuildStatus(ctx, builder, unit)
             if not spec then return end
             M.unitStatusSelection = M.unitStatusSelection or {}
             M.unitStatusSelection[unit] = spec.value
-            Call("MSUF_UFPreview_SelectStatusIcon", spec.value)
+            _G.MSUF_UFPreview_SelectStatusIcon(spec.value)
             RefreshStatusMenu()
         end)
     RegisterStatusSearch(selector, "Status indicator selector", {
@@ -288,7 +319,7 @@ local function BuildStatus(ctx, builder, unit)
         function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
         function(value)
             SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = false, notify = false })
-            Call("MSUF_RequestStatusIconsRefreshForCurrent")
+            _G.MSUF_RequestStatusIconsRefreshForCurrent()
         end)
     RegisterStatusSearch(midnight, "Status indicator style", {
         "midnight style", "status style", "indicator style", "icon style",
@@ -336,7 +367,7 @@ local function BuildStatus(ctx, builder, unit)
             M.unitStatusSelection[unit] = spec.value
             if sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab("basic") == false then return false end
             if selector and selector.SetValue then selector:SetValue(spec.value) end
-            Call("MSUF_UFPreview_SelectStatusIcon", spec.value)
+            _G.MSUF_UFPreview_SelectStatusIcon(spec.value)
             if RefreshStatusSectionState then RefreshStatusSectionState() end
             return CurrentStatusSpec(unit) == spec
         end
@@ -345,6 +376,10 @@ local function BuildStatus(ctx, builder, unit)
     local identityRestrictionWarning = W.Text(selectedCard, IDENTITY_RESTRICTION_WARNING,
         16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR)
     if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end
+    state.selector, state.previewLabel, state.midnight, state.enabled, state.AttachStatusExactTarget, state.identityRestrictionWarning =
+        selector, previewLabel, midnight, enabled, AttachStatusExactTarget, identityRestrictionWarning
+end
+function StatusSection.PrepareIconResolvers(state, unit)
     local function CurrentStatusSymbolValues()
         local spec = CurrentStatusSpec(unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
@@ -495,6 +530,16 @@ local function BuildStatus(ctx, builder, unit)
         end
         return nil
     end
+    state.CurrentStatusSymbolValues, state.StatusPreviewEntries, state.IsRoleStatusSpec, state.StatusIconStyleLabel, state.SpecificIconLabel =
+        CurrentStatusSymbolValues, StatusPreviewEntries, IsRoleStatusSpec, StatusIconStyleLabel, SpecificIconLabel
+    state.SetDropdownTitle, state.IconPackValuesForCurrentStatus, state.IconAssetValuesForCurrentStatus, state.ResolvePreviewStatusIcon =
+        SetDropdownTitle, IconPackValuesForCurrentStatus, IconAssetValuesForCurrentStatus, ResolvePreviewStatusIcon
+end
+function StatusSection.BuildIconStyleControls(state, ctx, unit)
+    local selectedCard, selectedControlW, BindStatusSpecDropdown = state.selectedCard, state.selectedControlW, state.BindStatusSpecDropdown
+    local RefreshStatusSectionState, StatusSearchKeywords = state.RefreshStatusSectionState, state.StatusSearchKeywords
+    local CurrentStatusSymbolValues, IconPackValuesForCurrentStatus = state.CurrentStatusSymbolValues, state.IconPackValuesForCurrentStatus
+    local IconAssetValuesForCurrentStatus = state.IconAssetValuesForCurrentStatus
     local symbol = BindStatusSpecDropdown(selectedCard, "Symbol", CurrentStatusSymbolValues, 260, 16, -106, selectedControlW,
         "symbol", "DEFAULT", "MSUF2_STATUS_SYMBOL", "Status indicator symbol", {
         "symbol", "icon", "status symbol", "indicator symbol", "combat symbol", "rested symbol", "incoming rez symbol",
@@ -538,6 +583,15 @@ local function BuildStatus(ctx, builder, unit)
         selectedTextShortcut:SetShown(current and (current.textIndicator == true
             or current.inlineName == true or current.statusTextState ~= nil))
     end
+    state.symbol, state.iconPack, state.customIcon, state.selectedTextShortcut = symbol, iconPack, customIcon, selectedTextShortcut
+end
+function StatusSection.BuildPlacementCard(state, ctx, unit)
+    local placementCard, placeLeftX, placeLeftW, placeRightX = state.placementCard, state.placeLeftX, state.placeLeftW, state.placeRightX
+    local placeRightW, PlaceButton = state.placeRightW, state.PlaceButton
+    local RegisterStatusSearch, AttachStatusExactTarget = state.RegisterStatusSearch, state.AttachStatusExactTarget
+    local BindStatusSpecDropdown, BindStatusPlacementSlider = state.BindStatusSpecDropdown, state.BindStatusPlacementSlider
+    local ClampSelectedStatusLayer, selectedStatusContract = state.ClampSelectedStatusLayer, state.selectedStatusContract
+    local RefreshStatusMenu = state.RefreshStatusMenu
     local raidGroupStyle = W.Dropdown(placementCard, "Style", RAID_GROUP_NAME_STYLES, 180)
     Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
     M.BindDropdownWidget(ctx, raidGroupStyle,
@@ -624,7 +678,7 @@ local function BuildStatus(ctx, builder, unit)
     end
     local textColor = W.Color(placementCard, "Text color")
     local metadata = ControlMeta(ctx, "status.selected.text_color")
-    for key, value in pairs(selectedStatusColorContract) do metadata[key] = value end
+    for key, value in pairs(state.selectedStatusColorContract) do metadata[key] = value end
     M.BindColor(ctx, textColor, SelectedStatusColorRGB, WriteSelectedStatusColor, metadata)
     if textColor.RegisterForClicks then textColor:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     local textColorBaseClick = textColor.GetScript and textColor:GetScript("OnClick")
@@ -653,7 +707,7 @@ local function BuildStatus(ctx, builder, unit)
         "level color", "level text color", "race text color", "class text color",
         "raid group color", "dead text color", "ghost text color", "afk text color", "dnd text color",
         "status text color", "indicator color",
-    }, nil, nil, "status.selected.text_color", nil, selectedStatusColorContract)
+    }, nil, nil, "status.selected.text_color", nil, state.selectedStatusColorContract)
     local reset = W.Button(placementCard, "Reset selected", 150)
     PlaceButton(reset, placementCard, placeRightX, -54, 150)
     reset._msuf2SkipHistoryCheckpoint = true
@@ -684,6 +738,12 @@ local function BuildStatus(ctx, builder, unit)
     RegisterStatusSearch(reset, "Reset selected status indicator", {
         "reset level", "reset level position", "reset level anchor", "reset indicator position",
     }, nil, nil, "status.selected.reset", "action", selectedStatusContract)
+    state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset = raidGroupStyle, size, anchor, layer, reset
+end
+function StatusSection.BuildPreviewCard(state, unit)
+    local previewCard, previewControlW, BindStatusTestToggle = state.previewCard, state.previewControlW, state.BindStatusTestToggle
+    local StatusPreviewButton, StatusPreviewEntries = state.StatusPreviewButton, state.StatusPreviewEntries
+    local ResolvePreviewStatusIcon = state.ResolvePreviewStatusIcon
     local test = BindStatusTestToggle(previewCard, "Test mode", 16, -120, previewControlW, "MSUF2_STATUS_TEST", "Status indicator test mode", {
         "test mode", "preview level", "test level", "status preview",
     })
@@ -755,6 +815,16 @@ local function BuildStatus(ctx, builder, unit)
             end
         end
     end
+    state.test, state.current, state.all, state.iconPreviewLabel, state.RefreshIconPreviewStrip =
+        test, current, all, iconPreviewLabel, RefreshIconPreviewStrip
+end
+function StatusSection.BuildAdvancedTab(state)
+    local advancedTab, placementCardX, placementCardW, placeLeftX = state.advancedTab, state.placementCardX, state.placementCardW, state.placeLeftX
+    local placeLeftW, placeRightX, placeRightW = state.placeLeftW, state.placeRightX, state.placeRightW
+    local BindStatusPlacementSlider, ClampSelectedStatusLayer = state.BindStatusPlacementSlider, state.ClampSelectedStatusLayer
+    local PlaceButton, reset, RegisterStatusSearch = state.PlaceButton, state.reset, state.RegisterStatusSearch
+    local selectedStatusContract, BindStatusTestToggle = state.selectedStatusContract, state.BindStatusTestToggle
+    local StatusPreviewButton = state.StatusPreviewButton
     local advanced = {}
     advanced.card = W.ControlCard(advancedTab, "Advanced Placement", nil, placementCardX, -38, placementCardW, 232)
     advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 0, 30, placeLeftX, -58, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER", "Advanced status indicator layer", {
@@ -778,6 +848,22 @@ local function BuildStatus(ctx, builder, unit)
     advanced.all = StatusPreviewButton(advanced.card, "Show all", placeRightX, -178, min(112, placeRightW), "all", "Advanced show all status indicators", {
         "advanced show all", "status icon advanced preview all",
     }, "status.preview.advanced.all")
+    state.advanced = advanced
+end
+function StatusSection.BindRefreshState(state, ctx, unit)
+    local sec, selectedCard, previewCard, placementCard = state.sec, state.selectedCard, state.previewCard, state.placementCard
+    local selectedControlW = state.selectedControlW
+    local placeLeftX, placeLeftW, placeRightX, placeRightW = state.placeLeftX, state.placeLeftW, state.placeRightX, state.placeRightW
+    local PlaceButton = state.PlaceButton
+    local selector, previewLabel, midnight = state.selector, state.previewLabel, state.midnight
+    local identityRestrictionWarning, symbol, iconPack, customIcon = state.identityRestrictionWarning, state.symbol, state.iconPack, state.customIcon
+    local selectedTextShortcut = state.selectedTextShortcut
+    local raidGroupStyle, size, anchor, layer, reset, test = state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset, state.test
+    local current, all, iconPreviewLabel, advanced = state.current, state.all, state.iconPreviewLabel, state.advanced
+    local ReadStatusEnabled, SetDropdownTitle, StatusIconStyleLabel = state.ReadStatusEnabled, state.SetDropdownTitle, state.StatusIconStyleLabel
+    local SpecificIconLabel, IsRoleStatusSpec = state.SpecificIconLabel, state.IsRoleStatusSpec
+    local SetPreviewCurrentVisual, RefreshIconPreviewStrip = state.SetPreviewCurrentVisual, state.RefreshIconPreviewStrip
+    local RefreshStatusSectionState = state.RefreshStatusSectionState
     local statusEnabledControls = { size, anchor, layer, advanced.layer }
     local function LayoutSelectedControls(hasSymbol, hasIconPack, hasCustomIcon)
         local y = -106
@@ -824,7 +910,7 @@ local function BuildStatus(ctx, builder, unit)
         end
     end
     local function ShowControls(shown, ...) for i = 1, select("#", ...) do ShowControl(select(i, ...), shown) end end
-    RefreshStatusSectionState = function()
+    RefreshStatusSectionState = RefreshStatusSectionState(function()
         local spec = CurrentStatusSpec(unit)
         local inlineName = spec and spec.inlineName == true
         SetDropdownTitle(iconPack, StatusIconStyleLabel(spec))
@@ -873,7 +959,19 @@ local function BuildStatus(ctx, builder, unit)
         SetControlEnabled(advanced.all, not inlineName)
         RefreshIconPreviewStrip(spec, isEnabled)
         SetSectionHeaderStatus(sec, nil)
-    end
+    end)
     M.TrackCollapsibleRefresh(ctx, sec, RefreshStatusSectionState)
 end
-M.BuildUnitStatusSection = BuildStatus
+function StatusSection.Build(ctx, builder, unit)
+    local state = {}
+    StatusSection.OpenSection(state, ctx, builder, unit)
+    StatusSection.PrepareBinders(state, ctx, unit)
+    StatusSection.BuildIndicatorSelector(state, ctx, unit)
+    StatusSection.PrepareIconResolvers(state, unit)
+    StatusSection.BuildIconStyleControls(state, ctx, unit)
+    StatusSection.BuildPlacementCard(state, ctx, unit)
+    StatusSection.BuildPreviewCard(state, unit)
+    StatusSection.BuildAdvancedTab(state)
+    StatusSection.BindRefreshState(state, ctx, unit)
+end
+M.BuildUnitStatusSection = StatusSection.Build

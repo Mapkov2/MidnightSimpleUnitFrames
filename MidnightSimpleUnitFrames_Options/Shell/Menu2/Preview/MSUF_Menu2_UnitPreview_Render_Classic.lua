@@ -791,8 +791,8 @@ function Render.Install(Preview, deps)
         IsCharged = SharedCPPreview.IsCharged or F.False,
         IsFull = SharedCPPreview.IsFull or F.False,
         ResolveComboColor = SharedCPPreview.ResolveComboColor or FallbackCombo,
-        ResolveSlotColor = SharedCPPreview.ResolveSlotColor or function(_, _, _, r, g, b) return r, g, b end,
-        ResolveFullColor = SharedCPPreview.ResolveFullColor or function(_, _, r, g, b) return false, r, g, b end,
+        ResolveSlotColor = SharedCPPreview.ResolveSlotColor,
+        ResolveFullColor = SharedCPPreview.ResolveFullColor,
         ResolveBaseColor = function(spec, bars, fallbackR, fallbackG, fallbackB)
             return (SharedCPPreview.ResolveBaseColor or FallbackBase)(spec, bars, fallbackR, fallbackG, fallbackB, PowerColor)
         end,
@@ -836,10 +836,7 @@ function Render.Install(Preview, deps)
             if type(fontPath) ~= "string" or fontPath == "" then fontPath = fallbackFont end
             local resolveSafe = _G.MSUF_ResolveSafeFontPath
             if type(resolveSafe) == "function" then fontPath = resolveSafe(fontPath, size, fontFlags, fontKey) end
-            local ok = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-            if not ok then
-                pcall(fs.SetFont, fs, fallbackFont, size, fontFlags)
-            end
+            _G.MSUF_ApplyResolvedFont(fs, fontPath, size, fontFlags)
             if fs.SetShadowOffset then
                 if useShadow == nil then useShadow = not (general and general.textBackdrop == false) end
                 if useShadow then
@@ -2008,7 +2005,7 @@ function Preview.Refresh(box, reason)
     -- level above it; text/status and portrait levels are based on that bar.
     baseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or (baseLevel + 4)
     if mock.healthBar and mock.healthBar.SetFrameLevel then mock.healthBar:SetFrameLevel(baseLevel + 1) end
-    local ElementLevel = Layers.ElementLevel or function(layer, fallback, detail) return baseLevel + ClampPreviewLayer(layer, fallback) + (detail or 0) end
+    local ElementLevel = Layers.ElementLevel
     if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(ElementLevel(bars.classPowerFrameLevelOffset, 5, 0)) end
     if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(ElementLevel(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6, 0)) end
     local textBase = 0

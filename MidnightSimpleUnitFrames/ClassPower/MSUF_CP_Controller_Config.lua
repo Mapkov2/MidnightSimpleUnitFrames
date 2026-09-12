@@ -250,7 +250,7 @@ builders.CONTROLLER_CONFIG = function(E)
     --- isAuraPower: true if driven by UNIT_AURA instead of UNIT_POWER_UPDATE
 
     --- ClassPower: returns powerType, renderMode, isAuraPower
-    local function GetClassPowerType()
+    local GetClassPowerType = E.GetClassPowerType or function()
         --- Vehicle override: always combo points.
         if UnitHasVehicleUI and UnitHasVehicleUI("player") then
             local hasCP = PlayerVehicleHasComboPoints and PlayerVehicleHasComboPoints()
@@ -393,6 +393,7 @@ builders.CONTROLLER_CONFIG = function(E)
         --- its protected aura payload for a resource whose state is deterministic.
         if powerType == "TIP_OF_THE_SPEAR" then profile.aura = false end
         profile.deadAlive = (powerType == "TIP_OF_THE_SPEAR")
+        profile.targetChanged = E.Client and E.Client.NeedsTargetChanged(powerType) == true or false
         return profile
     end
 

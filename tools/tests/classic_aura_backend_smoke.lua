@@ -314,6 +314,7 @@ _G.MSUF_DB.gf_party = {
 }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))(
     "MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MSUF", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Menu_Compat.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 namespace.GF = namespace.GF or {}

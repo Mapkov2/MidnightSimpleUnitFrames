@@ -8,7 +8,7 @@ end
 function GetComboPoints() return 3 end
 
 local addonName = "MidnightSimpleUnitFrames"
-local namespace = {}
+local namespace = { ExportPublic = function(name, value) _G[name] = value end }
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Constants.lua"))(addonName, namespace)
 local K = assert(MSUF_CP_CONST)
 local MODE, PT = K.CPK.MODE, K.PT
@@ -79,18 +79,5 @@ powerType, mode = resolve(vanilla, "ROGUE", nil, PT.Energy)
 assert(powerType == PT.ComboPoints and mode == MODE.SEGMENTED)
 powerType, mode = resolve(vanilla, "PALADIN", nil, PT.Mana)
 assert(powerType == nil and mode == MODE.NONE)
-
-local controllerPath = repo .. "/MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Controller.lua"
-local controllerFile = assert(io.open(controllerPath, "rb"))
-local controllerSource = controllerFile:read("*a")
-controllerFile:close()
-assert(controllerSource:find('if type%(CP%.SetEbonSensorActive%) ~= "function" then'),
-    "Classic controller lacks its Ebon sensor fallback contract")
-assert(controllerSource:find('CP%.SetEbonSensorActive = function%(%) return false end'),
-    "Classic controller does not install the no-op Ebon sensor")
-assert(controllerSource:find('if type%(CP%.ApplyEbonTextStyle%) ~= "function" then'),
-    "Classic controller lacks its Ebon text fallback contract")
-assert(controllerSource:find('CP%.ApplyEbonTextStyle = function%(%) end'),
-    "Classic controller does not install the no-op Ebon text styler")
 
 print("client ClassPower providers smoke passed")

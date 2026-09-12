@@ -8,6 +8,8 @@ local function Read(relativePath)
 end
 
 local auras = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Classic.lua")
+    .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AuraSettings.lua")
+    .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AuraControls.lua")
 for _, contract in ipairs({
     "labelHitWhenDisabled",
     "CUSTOM_DISPLAY_MODES",
