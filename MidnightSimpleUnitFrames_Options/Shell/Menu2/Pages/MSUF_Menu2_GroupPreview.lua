@@ -14,7 +14,7 @@ local GF_PREVIEW_FIXED_HEIGHT = 180
 local GF_PREVIEW_BOX_HEIGHT = 132
 local GF_PREVIEW_EXPANDED_HEIGHT = 358
 local GF_PREVIEW_BOX_Y = -40
-local Tr = M.TranslateText or M.Tr or function(text) return text end
+local Tr = M.TranslateText or M.Tr
 local function GroupPreviewScopeLabel()
     local scope = tostring(M.gfScope or "party")
     if scope == "raid" then return Tr("Raid") end
@@ -272,7 +272,7 @@ local function AddGFPreview(ctx, builder)
         RefreshThisPreview()
         return box ~= nil and PreviewHostShown()
     end
-    M.EnsureGroupPagePreviewForAssistant = M.EnsureGroupPagePreviewForAssistant or function(pageKey)
+    M.EnsureGroupPagePreviewForAssistant = function(pageKey)
         local ensure = M._assistantGroupPreviewEnsurers and M._assistantGroupPreviewEnsurers[pageKey]
         return type(ensure) == "function" and ensure() == true or false
     end

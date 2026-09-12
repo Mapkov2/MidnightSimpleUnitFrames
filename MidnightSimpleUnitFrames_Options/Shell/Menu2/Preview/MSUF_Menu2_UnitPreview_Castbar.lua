@@ -11,15 +11,7 @@ local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
 local Castbar = MSUF.UFPreviewCastbar or {}
 MSUF.UFPreviewCastbar = Castbar
-local function CoreFrame(unit)
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame(unit)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
-    return unit and frames and frames[unit] or nil
-end
+local CoreFrame = MSUF.UF.GetFrame
 function Castbar.OffsetFields(unitKey)
     -- Runtime and preview need the same DB keys for offsets, but only runtime owns live frame
     -- anchoring. Keep the key translation here and the actual SetPoint calls in render code.
@@ -186,20 +178,12 @@ function Castbar.ReadString(g, key, suffix, bossKey, fallback)
     if value == nil or value == "" then value = fallback end
     return tostring(value or fallback or "")
 end
-function Castbar.NormalizeTextPosition(value, fallback)
-    value = tostring(value or fallback or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
-    if value == "CENTER" or value == "RIGHT" or value == "ABOVE" or value == "BELOW" then return value end
-    return "LEFT"
-end
+Castbar.NormalizeTextPosition = _G.MSUF_NormalizeCastbarTextPosition
 function Castbar.JustifyForTextPosition(position)
     if position == "LEFT" or position == "RIGHT" then return position end
     return "CENTER"
 end
-function Castbar.NormalizeTextJustify(value, fallback)
-    value = tostring(value or fallback or "LEFT"):upper()
-    if value == "CENTER" or value == "RIGHT" then return value end
-    return "LEFT"
-end
+Castbar.NormalizeTextJustify = _G.MSUF_NormalizeCastbarTextJustify
 function Castbar.AnchorText(fontString, relativeTo, position, x, y, justify, scaleFn)
     if not (fontString and relativeTo) then return end
     position = Castbar.NormalizeTextPosition(position, "LEFT")

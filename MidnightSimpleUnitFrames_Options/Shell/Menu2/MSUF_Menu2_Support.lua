@@ -15,13 +15,10 @@ end
 MSUF.GetMenu2Namespace = MSUF.GetMenu2Namespace or EnsureMenu2Namespace
 local M = MSUF.GetMenu2Namespace()
 MSUF.MSUF2 = M
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local unpack = table.unpack or unpack
 local floor = math.floor
-local abs = math.abs
+
 local function Clamp(value, minValue, maxValue)
     value = tonumber(value) or minValue
     if value < minValue then return minValue end
@@ -31,34 +28,8 @@ end
 local function Print(msg)
     if type(print) == "function" then print("|cff00ff00MSUF:|r " .. tostring(msg or "")) end
 end
-local function ForEachCoreFrame(fn)
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.ForEachFrame) == "function" then
-        uf.ForEachFrame(function(frame)
-            if frame then fn(frame, frame.MSUFUnitKey or frame.unit) end
-        end)
-        return true
-    end
-    local frames = uf and uf.frames
-    if type(frames) ~= "table" then return false end
-    for unitKey, frame in pairs(frames) do fn(frame, unitKey) end
-    return true
-end
-local function Tr(text)
-    if type(M.Tr) == "function" then
-        local translated = M.Tr(text)
-        if translated ~= nil then return translated end
-    end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    if type(MSUF.TR) == "function" then
-        local translated = MSUF.TR(text)
-        if translated ~= nil then return translated end
-    end
-    local locale = MSUF.L or _G.MSUF_L
-    if type(locale) == "table" and locale[text] ~= nil then return locale[text] end
-    return text
-end
-M.TranslateText = M.TranslateText or Tr
+local Tr = MSUF.Translate
+M.TranslateText = Tr
 local function IsConfigCombatLocked()
     if type(_G.MSUF_IsConfigCombatLocked) == "function" then return _G.MSUF_IsConfigCombatLocked() and true or false end
     if _G.InCombatLockdown and _G.InCombatLockdown() then return true end
@@ -125,7 +96,6 @@ function Runtime:Schedule(delay, callback, label)
             self.timer:Cancel()
         end
     end
-    menuRuntimeTasks[task] = true
     local function Run(...)
         if not task.active then return end
         task.active = false
@@ -133,20 +103,10 @@ function Runtime:Schedule(delay, callback, label)
         if generation ~= menuRuntimeGeneration or IsConfigCombatLocked() then return end
         return callback(...)
     end
-    if rawTimerAPI and type(rawTimerAPI.NewTimer) == "function" then
-        local timer = rawTimerAPI.NewTimer(delay, Run)
-        if timer or not task.active then
-            task.timer = timer
-            return task
-        end
-    end
-    if rawTimerAPI and type(rawTimerAPI.After) == "function" then
-        -- Compatibility-only path for harnesses/old clients. The generation
-        -- gate keeps it inert; supported Retail clients use cancellable timers.
-        rawTimerAPI.After(delay, Run)
-        return task
-    end
-    Run()
+    -- The supported client returns a cancellable timer. Register the task only
+    -- after native scheduling succeeds, so an error cannot strand pending work.
+    task.timer = rawTimerAPI.NewTimer(delay, Run)
+    menuRuntimeTasks[task] = true
     return task
 end
 
@@ -265,6 +225,13 @@ local function ReleasePreviewKeyboardCapture(box)
     end
 end
 
+-- The nudge owner, its arrow buttons and the "active box" slot are dynamic
+-- globals on purpose, not a template-name convenience: SetOverrideBindingClick
+-- addresses the SecureActionButtonTemplate buttons by global name, each
+-- button's OnClick resolves its target through _G[spec.activeName], and the
+-- preview views read the same literal global (MSUF_UFPreview_ActiveNudgeBox)
+-- in their getActive fallback. Routing the slot through a table on M would
+-- leave those readers stale, so the names stay spec-driven and global.
 local function PreviewBindingOwner_OnEvent(self, event)
     if event == "PLAYER_REGEN_DISABLED" then
         self.__msufPendingClear = true
@@ -574,6 +541,26 @@ end
 function M.DeepCopy(value, seen)
     return DeepCopyValue(value, seen)
 end
+--- Names that a Pick call asked for but the source module never published.
+--- Binding by name string means a renamed or removed helper silently becomes a
+--- nil local, and the failure only surfaces much later as "attempt to call a nil
+--- value" far from its cause. Every miss is recorded here and reported once, so
+--- the offending name is named at bind time. The return value is unchanged (the
+--- caller still receives nil), which keeps this purely diagnostic.
+M.PickMissing = M.PickMissing or {}
+local pickMissing = M.PickMissing
+local pickMissingSeen = {}
+
+local function NotePickMiss(name)
+    if pickMissingSeen[name] then return end
+    pickMissingSeen[name] = true
+    pickMissing[#pickMissing + 1] = name
+    local report = (MSUF and MSUF.ReportError) or _G.MSUF_ReportError
+    if type(report) == "function" then
+        report("Menu2", "Pick could not resolve '" .. name .. "': the source module does not publish it")
+    end
+end
+
 local function PickValues(source, names, fallbacks, defaultEmpty)
     local values, count = {}, 0
     source = source or {}
@@ -581,7 +568,8 @@ local function PickValues(source, names, fallbacks, defaultEmpty)
         count = count + 1
         local value = source[name]
         if fallbacks then value = value or fallbacks[name]
-        elseif defaultEmpty then value = value or {} end
+        elseif defaultEmpty then value = value or {}
+        elseif value == nil then NotePickMiss(name) end
         values[count] = value
     end
     return unpack(values, 1, count)
@@ -641,6 +629,7 @@ end
 -- metadata table accepts controlId/identityKey/settingKey (and the corresponding
 -- action/navigation fields) for incremental runtime-catalog migration.
 function M.BindBoolWidget(ctx, widget, getValue, setValue, metadata)
+    assert(type(getValue) == "function" and type(setValue) == "function", "boolean control requires get/set owners")
     M.BindToggle(ctx, widget,
         function() return getValue() and true or false end,
         function(v) setValue(v and true or false) end,
@@ -689,9 +678,7 @@ function M.BindTextInputAt(ctx, parent, label, x, y, width, getValue, setValue, 
         metadata)
     return widget
 end
-function M.CallIf(fn, ...)
-    if type(fn) == "function" then return fn(...) end
-end
+
 
 -- Lets callbacks call a refresh function before its body is assigned later in the page build.
 function M.RefreshProxy()
@@ -703,7 +690,7 @@ function M.RefreshProxy()
             refresh = candidate
             return candidate
         end
-        return M.CallIf(refresh)
+        if refresh then return refresh() end
     end
 end
 
@@ -742,22 +729,25 @@ function M.BindGateGroup(ctx, source, entries, opts)
         end
     end
     local function refresh()
-        local cfg = M.CallIf(source)
+        local cfg
+        if source then cfg = source() end
         for i = 1, #entries do
             local e = entries[i]
             if (not e.when) or e.when(cfg) then
-                if e.enable then setEnabled(e.enable, e.enableOn and (e.enableOn(cfg) and true or false) or true) end
+                if e.enable then setEnabled(e.enable, not e.enableOn or not not e.enableOn(cfg)) end
                 if e.controls then setEnabled(e.controls, e.on and (e.on(cfg) and true or false) or false) end
             end
         end
         if opts.override then opts.override(cfg, setEnabled) end
-        M.CallIf(opts.also)
+        if opts.also then opts.also() end
     end
     if opts.noTrack then return refresh end
     if opts.track then return opts.track(ctx, refresh) or refresh end
     return M.TrackRefresh(ctx, refresh)
 end
-function M.RequestOrRefresh(ctx, reason) if M.RequestRefresh then return M.RequestRefresh(ctx, reason) end; return M.CallIf(M.Refresh, ctx) end
+function M.RequestOrRefresh(ctx, reason)
+    return M.RequestRefresh(ctx, reason)
+end
 function M.NormalizeHpMode(mode)
     if type(_G.MSUF_NormalizeHpTextMode) == "function" then return _G.MSUF_NormalizeHpTextMode(mode) end
     if mode == nil then return "CURPERCENT" end
@@ -1415,5 +1405,46 @@ do
                 if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
             end,
         })
+    end
+end
+
+local function PlayerDisplayName()
+    local name
+    if type(_G.UnitName) == "function" then
+        name = _G.UnitName("player")
+    end
+    if type(_G.issecretvalue) == "function" and _G.issecretvalue(name) then name = nil end
+    if type(name) == "string" then name = name:match("^[^-]+") else name = nil end
+    if not name or name == "" or name == "Unknown" then name = M.Tr("Player") end
+    return name
+end
+M.PlayerDisplayName = PlayerDisplayName
+
+local function TrimText(text)
+    text = tostring(text or "")
+    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+M.TrimText = TrimText
+
+-- Registration-time lookup only; delayed builders keep their own page owner.
+function M.FindPageEntry(widget)
+    while widget do
+        local entry = widget._msuf2PageEntry
+        if entry then return entry end
+        widget = widget.GetParent and widget:GetParent()
+    end
+end
+function M.PageKeyForWidget(widget)
+    local entry = M.FindPageEntry(widget)
+    return entry and entry.key
+end
+
+function M.CreateGuidedCopyOpener(copyPopup, copy)
+    return function()
+        local popup = copyPopup and copyPopup.GetPopup and copyPopup.GetPopup()
+        if popup and popup.IsShown and popup:IsShown() then return true end
+        if copyPopup then copyPopup.Show(copy) end
+        popup = copyPopup and copyPopup.GetPopup and copyPopup.GetPopup()
+        return popup and popup.IsShown and popup:IsShown() or false
     end
 end

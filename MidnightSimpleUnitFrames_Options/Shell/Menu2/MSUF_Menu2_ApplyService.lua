@@ -4,10 +4,7 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
 local type = type
@@ -125,24 +122,6 @@ local function IsGlobalApplyScope(scope)
     return scope == nil or scope == "*" or scope == "shared" or scope == "global" or scope == "all"
 end
 
-Apply.Invoke = assert(M.InvokeBoundary, "Menu2 callback boundary missing")
-
-function Apply.CallGlobal(name, ...)
-    local fn = _G[name]
-    if type(fn) == "function" then
-        return Apply.Invoke(fn, ...)
-    end
-    return false
-end
-
-function Apply.CallGlobalResult(name, ...)
-    local fn = _G[name]
-    if type(fn) == "function" then
-        return Apply.Invoke(fn, ...)
-    end
-    return false, nil
-end
-
 function Apply.NormalizeUnit(unit)
     unit = (unit == "tot") and "targettarget" or unit
     unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
@@ -159,37 +138,14 @@ end
 local function ApplyUnitFrame(unit, applyMask)
     local UF = MSUF and MSUF.UF
     if UF and type(UF.Apply) == "function" then
-        local ok, result = Apply.Invoke(UF.Apply, unit, applyMask)
-        return ok and result == true
+        local result = UF.Apply(unit, applyMask)
+        return result == true
     end
     return false
 end
 
 local function ApplyAuraScope(scope, reason)
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if not a3 then return false end
-    local model = a3.MenuModel
-    if model and type(model.Apply) == "function" then
-        local ok, result = Apply.Invoke(model.Apply, scope, reason or "MSUF2_AURAS")
-        return ok == true and result ~= false
-    end
-    if type(a3.RequestScope) == "function" then
-        local ok, result = Apply.Invoke(a3.RequestScope, scope, reason or "MSUF2_AURAS")
-        return ok == true and result ~= false
-    end
-    if IsGlobalApplyScope(scope) and type(a3.RequestApply) == "function" then
-        local ok, result = Apply.Invoke(a3.RequestApply, scope or "shared", reason or "MSUF2_AURAS")
-        return ok == true and result ~= false
-    end
-    if type(a3.RefreshUnit) == "function" then
-        local ok, result = Apply.Invoke(a3.RefreshUnit, scope)
-        return ok == true and result ~= false
-    end
-    if type(a3.RequestUnit) == "function" then
-        local ok, result = Apply.Invoke(a3.RequestUnit, scope)
-        return ok == true and result ~= false
-    end
-    return false
+    return MSUF.MSUF_Auras3.MenuModel.Apply(scope, reason or "MSUF2_AURAS") ~= false
 end
 
 local UNIT_AURA_ELEMENTS = { "Auras" }
@@ -202,8 +158,8 @@ local function RefreshEditAuraPreview(a3, unit)
     -- the completed runtime apply. RefreshEditPreview is itself preview-active
     -- and combat gated, so this adds no idle or combat work.
     if a3 and type(a3.RefreshEditPreview) == "function" then
-        local ok = Apply.Invoke(a3.RefreshEditPreview, unit)
-        return ok == true
+        a3.RefreshEditPreview(unit)
+        return true
     end
     return false
 end
@@ -216,7 +172,7 @@ local function ApplyUnitAuras(unit, reason, configAlreadyApplied)
     -- the menu preview reads post-write metrics instead of the stale cache.
     local a3 = MSUF and MSUF.MSUF_Auras3
     if a3 and type(a3.InvalidateUnitRuntimeConfig) == "function" then
-        Apply.Invoke(a3.InvalidateUnitRuntimeConfig, unit)
+        a3.InvalidateUnitRuntimeConfig(unit)
     end
     if configAlreadyApplied == true then
         return ApplyAuraScope(unit, reason)
@@ -227,15 +183,9 @@ local function ApplyUnitAuras(unit, reason, configAlreadyApplied)
     -- compiled frame spec. Afterwards refresh the separate Edit Mode preview
     -- owner from the same post-write state; the generic Menu preview is queued
     -- later by FlushApply.
-    local UF = MSUF and MSUF.UF
-    if UF and type(UF.RefreshElements) == "function" then
-        local called = Apply.Invoke(UF.RefreshElements, unit, UNIT_AURA_ELEMENTS, reason)
-        if called then
-            RefreshEditAuraPreview(a3, unit)
-            return true
-        end
-    end
-    return ApplyAuraScope(unit, reason)
+    MSUF.UF.RefreshElements(unit, UNIT_AURA_ELEMENTS, reason)
+    RefreshEditAuraPreview(a3, unit)
+    return true
 end
 
 local function BumpAuraNativeVisuals()
@@ -302,8 +252,8 @@ end
 local function ApplyUnitCastbar(unit)
     unit = NormalizeCastbarUnit(unit)
     if not unit then return false end
-    if Apply.CallGlobal("MSUF_ApplyCastbarUnitAndSync", unit) then return true end
-    return Apply.CallGlobal("MSUF_ApplyCastbarVisualsForUnit", unit)
+    _G.MSUF_ApplyCastbarUnitAndSync(unit)
+    return true
 end
 
 local function WantsClassPower(opts)
@@ -381,37 +331,33 @@ local function FlushPendingClassPower()
     if type(opts) ~= "table" then return false end
     pendingClassPowerOpts = nil
     Apply.pendingClassPowerOpts = nil
-    return Apply.CallGlobal("MSUF_ClassPower_Apply", opts)
+    _G.MSUF_ClassPower_Apply(opts)
+    return true
 end
 
 local function ApplyPowerLayoutForUnit(unit)
-    unit = Apply.NormalizeUnit(unit)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
-    if unit and Apply.CallGlobal("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", unit, true) then
-        return true
+    if unit then
+        _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(unit, true)
+    else
+        _G.MSUF_ApplyPowerBarEmbedLayout_All()
     end
-    return Apply.CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
+    return true
 end
 
 local function ApplyDetachedPowerBarRuntime(unit, refreshTextures)
     unit = Apply.NormalizeUnit(unit) or "player"
     local did = false
     if refreshTextures ~= false and unit == "player" then
-        did = Apply.CallGlobal("MSUF_DetachedPowerBar_RefreshTextures") or did
+        _G.MSUF_DetachedPowerBar_RefreshTextures()
+did = true
     end
     did = ApplyPowerLayoutForUnit(unit) or did
     return did
 end
 
 local function ApplyAllCastbars()
-    if Apply.CallGlobal("MSUF_ApplyAllCastbarsAndSync") then return true end
-    local did = false
-    did = ApplyUnitCastbar("player") or did
-    did = ApplyUnitCastbar("target") or did
-    did = ApplyUnitCastbar("focus") or did
-    did = ApplyUnitCastbar("boss") or did
-    if did then return true end
-    return Apply.CallGlobal("MSUF_UpdateCastbarVisuals")
+    _G.MSUF_ApplyAllCastbarsAndSync()
+    return true
 end
 
 local function RefreshTargetedGeneral(reason, opt, alphaDeferred)
@@ -450,9 +396,11 @@ local function RefreshTargetedGeneral(reason, opt, alphaDeferred)
 
     if textish then
         if textScope then
-            did = Apply.CallGlobal("MSUF_ForceTextLayoutForUnitKey", textScope) or did
+            _G.MSUF_ForceTextLayoutForUnitKey(textScope)
+did = true
         else
-            did = Apply.CallGlobal("MSUF_ForceTextLayoutForUnitKey") or did
+            _G.MSUF_ForceTextLayoutForUnitKey()
+did = true
         end
     end
     if powerish then
@@ -466,16 +414,20 @@ local function RefreshTargetedGeneral(reason, opt, alphaDeferred)
     end
     if alphaish and alphaDeferred ~= true then
         if alphaScope then
-            did = Apply.CallGlobal("MSUF_RefreshAllUnitAlphas", alphaScope) or did
+            _G.MSUF_RefreshAllUnitAlphas(alphaScope)
+did = true
         else
-            did = Apply.CallGlobal("MSUF_RefreshAllUnitAlphas") or did
+            _G.MSUF_RefreshAllUnitAlphas()
+did = true
         end
     end
     if classpowerish and not ClassPowerAlreadyApplied(opt) then
-        did = Apply.CallGlobal("MSUF_ClassPower_Apply", ClassPowerRuntimeOptions(opt)) or did
+        _G.MSUF_ClassPower_Apply(ClassPowerRuntimeOptions(opt))
+did = true
     end
     if opt.visual == true or opt.frames == true then
-        return Apply.CallGlobal("MSUF_RefreshAllFrames"), true
+        _G.MSUF_RefreshAllFrames()
+        return true, true
     end
     return did or textish or powerish or alphaish or classpowerish or detachedPowerish or false, false
 end
@@ -498,18 +450,14 @@ local function RefreshActiveBossPreview(reason)
     local editPreviewActive = _G.MSUF_UnitEditModeActive == true
         and (_G.MSUF_BossTestMode == true or _G.MSUF_PreviewTestMode == true)
     if not bossPageActive and not editPreviewActive then return end
-    if bossPageActive and Apply.CallGlobal("MSUF_ApplyBossUnitframePreviewState", true, reason or "MSUF2_BOSS_PREVIEW") then return end
-    Apply.CallGlobal("MSUF_SyncBossUnitframePreviewWithUnitEdit")
+    if bossPageActive then
+        _G.MSUF_ApplyBossUnitframePreviewState(true, reason or "MSUF2_BOSS_PREVIEW")
+        return
+    end
+    _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
 end
 
-local GroupInvoke = Apply.Invoke
-
-local function MaskHas(mask, flag)
-    mask = tonumber(mask) or 0
-    flag = tonumber(flag) or 0
-    if flag <= 0 then return false end
-    return mask % (flag * 2) >= flag
-end
+local MaskHas = _G.MSUF_UF_MaskHas
 
 local function AddDirty(mask, flag)
     if not flag then return mask or 0 end
@@ -591,12 +539,12 @@ local function RefreshGroupPreview(kind, reason, dirtyMask)
     local gf = MSUF and MSUF.GF
     local opts = { reason = reason or "MSUF2_GROUP", dirtyMask = dirtyMask }
     if gf and type(gf.RefreshPreviewLayout) == "function" then
-        GroupInvoke(gf.RefreshPreviewLayout, kind, opts)
+        gf.RefreshPreviewLayout(kind, opts)
     elseif type(_G.MSUF_GF_RefreshPreviewLayout) == "function" then
-        Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", kind, opts)
+        _G.MSUF_GF_RefreshPreviewLayout(kind, opts)
     end
     if type(M.RefreshGFNativePreviews) == "function" then
-        Apply.Invoke(M.RefreshGFNativePreviews, reason or "MSUF2_GROUP")
+        M.RefreshGFNativePreviews(reason or "MSUF2_GROUP")
     end
 end
 
@@ -605,28 +553,28 @@ local function ApplyPriorityRecord(gf, reason)
     if type(gf.RequestPriorityApply) == "function" then
         -- RequestPriorityApply is a method-shaped public contract so Menu2,
         -- EditMode, and the SettingGraph all share one combat-safe cold path.
-        local ok = Apply.Invoke(gf.RequestPriorityApply, gf, reason or "MSUF2_PRIORITY")
-        return ok == true
+        gf.RequestPriorityApply(gf, reason or "MSUF2_PRIORITY")
+        return true
     end
     if InCombatLockdown and InCombatLockdown() and type(gf.DeferGroupRuntime) == "function" then
-        Apply.Invoke(gf.DeferGroupRuntime, "layout", "priority")
+        gf.DeferGroupRuntime("layout", "priority")
         return true
     end
     if type(gf.RefreshPriorityFrames) == "function" then
-        local ok = Apply.Invoke(gf.RefreshPriorityFrames, reason or "MSUF2_PRIORITY")
-        return ok == true
+        gf.RefreshPriorityFrames(reason or "MSUF2_PRIORITY")
+        return true
     end
     if type(gf.RefreshGeometry) == "function" then
-        local ok = Apply.Invoke(gf.RefreshGeometry, "priority")
-        return ok == true
+        gf.RefreshGeometry("priority")
+        return true
     end
     return false
 end
 
 local function FinishGroupRecord(gf, rec, kind, reason, did)
     if rec and rec.requestAuraRefresh and gf and type(gf.RequestAuraRefresh) == "function" then
-        local ok = GroupInvoke(gf.RequestAuraRefresh, kind)
-        did = ok == true or did
+        gf.RequestAuraRefresh(kind)
+        did = true
     end
     RefreshGroupPreview(kind, reason, rec and rec.dirtyMask or nil)
     return did
@@ -644,33 +592,36 @@ local function ApplyGroupRecord(kindKey, rec, reason)
 
     if rec.invalidateConfCache then
         if gf and type(gf.InvalidateConfCache) == "function" then
-            local ok = GroupInvoke(gf.InvalidateConfCache)
-            did = ok == true or did
+            gf.InvalidateConfCache()
+            did = true
         else
-            did = Apply.CallGlobal("MSUF_GF_InvalidateConfCache") or did
+            _G.MSUF_GF_InvalidateConfCache()
+did = true
         end
     end
     if not gf then
         if rec.rebuild and type(_G.MSUF_GF_RefreshAll) == "function" then
-            did = Apply.CallGlobal("MSUF_GF_RefreshAll") or did
+            _G.MSUF_GF_RefreshAll()
+did = true
         elseif dirty and type(_G.MSUF_GF_RefreshVisuals) == "function" then
-            did = Apply.CallGlobal("MSUF_GF_RefreshVisuals", kind, dirty) or did
+            _G.MSUF_GF_RefreshVisuals(kind, dirty)
+did = true
         end
         return FinishGroupRecord(nil, rec, kind, reason, did)
     end
 
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         if rec.rebuild and type(gf.DeferGroupRuntime) == "function" then
-            GroupInvoke(gf.DeferGroupRuntime, "rebuild", kind, dirty)
+            gf.DeferGroupRuntime("rebuild", kind, dirty)
             did = true
         elseif rec.rebuild and type(gf.Rebuild) == "function" then
-            GroupInvoke(gf.Rebuild, kind)
+            gf.Rebuild(kind)
             did = true
         elseif rec.geometry and type(gf.DeferGroupRuntime) == "function" then
-            GroupInvoke(gf.DeferGroupRuntime, "layout", kind, dirty)
+            gf.DeferGroupRuntime("layout", kind, dirty)
             did = true
         elseif dirty and type(gf.DeferGroupRuntime) == "function" then
-            GroupInvoke(gf.DeferGroupRuntime, "refresh", kind, dirty)
+            gf.DeferGroupRuntime("refresh", kind, dirty)
             did = true
         end
         return FinishGroupRecord(gf, rec, kind, reason, did)
@@ -678,25 +629,25 @@ local function ApplyGroupRecord(kindKey, rec, reason)
 
     if rec.rebuild then
         if type(gf.Rebuild) == "function" then
-            GroupInvoke(gf.Rebuild, kind)
+            gf.Rebuild(kind)
             did = true
         elseif kind == nil and type(gf.RebuildAll) == "function" then
-            GroupInvoke(gf.RebuildAll)
+            gf.RebuildAll()
             did = true
         else
-            if type(gf.RefreshGeometry) == "function" then GroupInvoke(gf.RefreshGeometry, kind); did = true end
-            if type(gf.RefreshUnitBindings) == "function" then GroupInvoke(gf.RefreshUnitBindings, kind); did = true end
-            if type(gf.RefreshVisuals) == "function" then GroupInvoke(gf.RefreshVisuals, kind, gf.DIRTY_ALL or dirty); did = true end
+            if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry(kind); did = true end
+            if type(gf.RefreshUnitBindings) == "function" then gf.RefreshUnitBindings(kind); did = true end
+            if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind, gf.DIRTY_ALL or dirty); did = true end
         end
         return FinishGroupRecord(gf, rec, kind, reason, did)
     end
 
     if rec.geometry and type(gf.RefreshGeometry) == "function" then
-        GroupInvoke(gf.RefreshGeometry, kind)
+        gf.RefreshGeometry(kind)
         did = true
     end
     if dirty and type(gf.RefreshVisuals) == "function" then
-        GroupInvoke(gf.RefreshVisuals, kind, dirty)
+        gf.RefreshVisuals(kind, dirty)
         did = true
     end
     return FinishGroupRecord(gf, rec, kind, reason, did)
@@ -766,85 +717,38 @@ local function FlushPendingGroups()
     return did
 end
 
-local function RefreshGroupFonts(scope)
-    local gf = MSUF and MSUF.GF
-    if not gf then return end
+-- All group refreshes share the same scope routing. The GF runtime owns the
+-- dirty masks and refresh implementation; absence is a dependency error.
+local function RefreshGroupScope(scope, refresh, mask)
     local kindA, kindB = GroupKindsForScope(scope)
     if not kindA and not IsGlobalApplyScope(scope) then return false end
-    local dirty = gf.DIRTY_FONT or 4
-    if type(gf.RefreshFonts) == "function" then
-        if kindA then
-            local did = GroupInvoke(gf.RefreshFonts, kindA)
-            if kindB then did = GroupInvoke(gf.RefreshFonts, kindB) or did end
-            return did
-        end
-        return GroupInvoke(gf.RefreshFonts)
-    end
-    if type(gf.MarkAllDirty) == "function" then
-        return GroupInvoke(gf.MarkAllDirty, dirty)
-    end
-    if type(gf.RefreshVisuals) == "function" then
-        if kindA then
-            local did = GroupInvoke(gf.RefreshVisuals, kindA, dirty)
-            if kindB then did = GroupInvoke(gf.RefreshVisuals, kindB, dirty) or did end
-            return did
-        end
-        return GroupInvoke(gf.RefreshVisuals, nil, dirty)
-    end
+    refresh(kindA, mask)
+    if kindB then refresh(kindB, mask) end
+    return true
+end
+
+local function RefreshGroupFonts(scope)
+    return RefreshGroupScope(scope, MSUF.GF.RefreshFonts)
 end
 
 local function RefreshGroupVisuals(mask)
-    local gf = MSUF and MSUF.GF
-    if not gf then return end
-    local dirty = mask or gf.DIRTY_VISUAL or 2
-    if type(gf.RefreshVisuals) == "function" then return GroupInvoke(gf.RefreshVisuals, nil, dirty) end
-    if type(gf.MarkAllDirty) == "function" then
-        return GroupInvoke(gf.MarkAllDirty, dirty)
-    end
+    MSUF.GF.RefreshVisuals(nil, mask or MSUF.GF.DIRTY_VISUAL)
+    return true
 end
 
 local function RefreshGroupBarVisuals(mask, scope)
-    local gf = MSUF and MSUF.GF
-    if not gf then return end
-    local dirty = mask or gf.DIRTY_VISUAL or 2
-    local kindA, kindB = GroupKindsForScope(scope)
-    if not kindA and not IsGlobalApplyScope(scope) then return false end
-    if type(gf.RefreshVisuals) == "function" then
-        if kindA then
-            local did = GroupInvoke(gf.RefreshVisuals, kindA, dirty)
-            if kindB then did = GroupInvoke(gf.RefreshVisuals, kindB, dirty) or did end
-            return did
-        end
-        return GroupInvoke(gf.RefreshVisuals, nil, dirty)
-    end
-    if type(gf.MarkAllDirty) == "function" then
-        return GroupInvoke(gf.MarkAllDirty, dirty)
-    end
+    return RefreshGroupScope(scope, MSUF.GF.RefreshVisuals, mask or MSUF.GF.DIRTY_VISUAL)
 end
 
 local function RefreshGroupColors(scope)
-    local gf = MSUF and MSUF.GF
-    if not gf then return end
-    local kindA, kindB = GroupKindsForScope(scope)
-    if not kindA and not IsGlobalApplyScope(scope) then return false end
-    local dirty = gf.DIRTY_COLOR or 8
-    if type(gf.RefreshColors) == "function" then
-        if kindA then
-            local did = GroupInvoke(gf.RefreshColors, kindA)
-            if kindB then did = GroupInvoke(gf.RefreshColors, kindB) or did end
-            return did
-        end
-        return GroupInvoke(gf.RefreshColors)
-    end
-    if kindA then return RefreshGroupBarVisuals(dirty, scope) end
-    return RefreshGroupVisuals(dirty)
+    return RefreshGroupScope(scope, MSUF.GF.RefreshColors)
 end
 
 local function PushVisualUpdates()
     local api = MSUF and MSUF._colorsAPI
     if api and type(api.PushVisualUpdates) == "function" then
-        local ok = Apply.Invoke(api.PushVisualUpdates)
-        return ok == true
+        api.PushVisualUpdates()
+        return true
     end
     return false
 end
@@ -855,17 +759,17 @@ local function ApplyFontRuntime(opt, unitFramesApplied, castbarRefreshPending, c
     local kindA = GroupKindsForScope(scope)
     local unitScope = (not globalScope and not kindA) and NormalizeApplyScope(scope) or nil
     if globalScope then
-        Apply.CallGlobal("MSUF_UpdateAllFonts_Immediate", nil, unitFramesApplied == true, castbarRefreshPending == true, classPowerRefreshPending == true)
+        _G.MSUF_UpdateAllFonts_Immediate(nil, unitFramesApplied == true, castbarRefreshPending == true, classPowerRefreshPending == true)
     elseif unitScope then
-        Apply.CallGlobal("MSUF_UpdateAllFonts_Immediate", unitScope, unitFramesApplied == true, castbarRefreshPending == true, classPowerRefreshPending == true)
+        _G.MSUF_UpdateAllFonts_Immediate(unitScope, unitFramesApplied == true, castbarRefreshPending == true, classPowerRefreshPending == true)
     end
     if unitFramesApplied ~= true and not (opt and opt.colors) then
         if globalScope then
-            Apply.CallGlobal("MSUF_RefreshAllIdentityColors")
-            Apply.CallGlobal("MSUF_RefreshAllPowerTextColors")
+            _G.MSUF_RefreshAllIdentityColors()
+            _G.MSUF_RefreshAllPowerTextColors()
         elseif unitScope then
-            Apply.CallGlobal("MSUF_RefreshAllIdentityColors", unitScope)
-            Apply.CallGlobal("MSUF_RefreshAllPowerTextColors", unitScope)
+            _G.MSUF_RefreshAllIdentityColors(unitScope)
+            _G.MSUF_RefreshAllPowerTextColors(unitScope)
         end
     end
     RefreshGroupFonts(scope)
@@ -885,22 +789,25 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
     local needsGroupAggroRefresh = false
     local castbarTexturesApplied = false
     if wantsTextureRuntime then
-        local textureScope = globalScope and nil or (unitScope or scope)
-        Apply.CallGlobal("MSUF_InvalidateAbsorbCache", textureScope)
+        local selectedValue1
+        if not (globalScope) then selectedValue1 = (unitScope or scope) end
+        local textureScope = selectedValue1
+        -- No separate absorb-cache invalidation step: the legacy standalone
+        -- absorb display/anchor memo went away with Core/MSUF_Bars. Those two
+        -- values are compiled into the unit spec now, and the texture pass
+        -- below recompiles them via UF.RefreshPredictionBars -> RefreshElements.
         local skipCastbars = castbarRefreshPending == true
-        if not Apply.CallGlobal("MSUF_UpdateAllBarTextures_Immediate", textureScope, unitFramesApplied == true, skipCastbars) then
-            Apply.CallGlobal("MSUF_UpdateAllBarTextures", textureScope)
-        end
+        _G.MSUF_UpdateAllBarTextures_Immediate(textureScope, unitFramesApplied == true, skipCastbars)
         castbarTexturesApplied = globalScope and not skipCastbars
     end
     if opt and opt.barGradients == true then
-        Apply.CallGlobal("MSUF_UpdateAllBarGradients", scope, unitFramesApplied == true)
+        _G.MSUF_UpdateAllBarGradients(scope, unitFramesApplied == true)
     end
     if opt and opt.barOutline == true then
         if not groupOnly and unitFramesApplied ~= true then
-            Apply.CallGlobal("MSUF_ApplyBarOutlineThickness_All", unitScope)
+            _G.MSUF_ApplyBarOutlineThickness_All(unitScope)
         end
-        if not groupOnly then Apply.CallGlobal("MSUF_ApplyRoundedUnitframes") end
+        if not groupOnly then _G.MSUF_ApplyRoundedUnitframes() end
         needsGroupBorderRefresh = true
         didOutlineRefresh = true
     end
@@ -908,27 +815,30 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
         if not groupOnly and unitFramesApplied ~= true then
             local UF = MSUF and MSUF.UF
             if UF and type(UF.RefreshBorders) == "function" then
-                Apply.Invoke(UF.RefreshBorders, unitScope)
+                UF.RefreshBorders(unitScope)
             else
-                Apply.CallGlobal("MSUF_ApplyBarOutlineThickness_All", unitScope)
+                _G.MSUF_ApplyBarOutlineThickness_All(unitScope)
             end
         end
         needsGroupBorderRefresh = true
         didOutlineRefresh = true
     end
     if opt and opt.roundedBars == true then
-        Apply.CallGlobal("MSUF_ApplyRoundedUnitframes")
+        _G.MSUF_ApplyRoundedUnitframes()
         RefreshGroupBarVisuals(nil, scope)
-        Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", "party")
-        Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", "raid")
-        Apply.CallGlobal("MSUF_GF_RefreshPreviewLayout", "mythicraid")
-        Apply.CallGlobal("MSUF_GF_RefreshPreviewBox")
+        _G.MSUF_GF_RefreshPreviewLayout("party")
+        _G.MSUF_GF_RefreshPreviewLayout("raid")
+        _G.MSUF_GF_RefreshPreviewLayout("mythicraid")
+        _G.MSUF_GF_RefreshPreviewBox()
     end
     if opt and opt.aggroBorder == true then
         if not groupOnly and unitFramesApplied ~= true and not didOutlineRefresh then
-            Apply.CallGlobal("MSUF_ApplyBarOutlineThickness_All", unitScope)
+            _G.MSUF_ApplyBarOutlineThickness_All(unitScope)
         end
-        Apply.CallGlobal("MSUF_AggroOutline_ApplyEventRegistration")
+        -- No explicit threat-event registration step: Borders.GetEvents /
+        -- Borders.GetUnitlessEvents derive UNIT_THREAT_* (and the player's
+        -- target-change seed) from spec.border.aggro, and every border element
+        -- apply on this path re-derives the frame's event routes from them.
         needsGroupBorderRefresh = true
         didOutlineRefresh = true
     end
@@ -937,12 +847,14 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
     end
     if opt and opt.dispelPurgeBorder == true then
         if not groupOnly and unitFramesApplied ~= true and not didOutlineRefresh then
-            Apply.CallGlobal("MSUF_ApplyBarOutlineThickness_All", unitScope)
+            _G.MSUF_ApplyBarOutlineThickness_All(unitScope)
         end
-        Apply.CallGlobal("MSUF_DispelOutline_ApplyEventRegistration")
         if not groupOnly then
-            Apply.CallGlobal("MSUF_RefreshDispelOutlineStates", true)
-            Apply.CallGlobal("MSUF_RefreshUnitDispelOverlays")
+            -- MSUF_RefreshDispelOutlineStates used to be a plain alias of the
+            -- call below, so the pair was one refresh written twice. Do not
+            -- revive it as an alias call either: the surviving name takes a
+            -- frame, not the old ignored "true".
+            _G.MSUF_RefreshUnitDispelOverlays()
         end
         needsGroupBorderRefresh = true
         didOutlineRefresh = true
@@ -951,9 +863,9 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
         if unitFramesApplied ~= true then
             local UF = MSUF and MSUF.UF
             if UF and type(UF.RefreshBorders) == "function" then
-                Apply.Invoke(UF.RefreshBorders, "boss")
+                UF.RefreshBorders("boss")
             else
-                Apply.CallGlobal("MSUF_ApplyBarOutlineThickness_All", "boss")
+                _G.MSUF_ApplyBarOutlineThickness_All("boss")
             end
         end
     end
@@ -973,9 +885,7 @@ end
 
 local function ApplyCastbarRuntime(opt)
     if opt and opt.castbarTextures then
-        if not Apply.CallGlobal("MSUF_UpdateCastbarTextures_Immediate") then
-            Apply.CallGlobal("MSUF_UpdateCastbarTextures")
-        end
+        _G.MSUF_UpdateCastbarTextures_Immediate()
     end
 end
 
@@ -998,7 +908,8 @@ local function FlushCastbarSettingsChanged()
     pendingCastbarSettingsSource = nil
     Apply.pendingCastbarSettingsChanged = false
     Apply.pendingCastbarSettingsSource = nil
-    return Apply.CallGlobal("MSUF_Castbars_OnSettingsChanged", source)
+    _G.MSUF_Castbars_OnSettingsChanged(source)
+    return true
 end
 
 local function ApplyColorRuntime(opt, unitFramesApplied)
@@ -1007,19 +918,18 @@ local function ApplyColorRuntime(opt, unitFramesApplied)
     local kindA = GroupKindsForScope(scope)
     local unitScope = (not globalScope and not kindA) and NormalizeApplyScope(scope) or nil
     if unitFramesApplied ~= true and globalScope then
-        if not Apply.CallGlobal("MSUF_RefreshAllFrameColors") then
-            Apply.CallGlobal("MSUF_RefreshAllIdentityColors")
-            Apply.CallGlobal("MSUF_RefreshAllPowerTextColors")
-        end
+        _G.MSUF_RefreshAllFrameColors()
     elseif unitFramesApplied ~= true and unitScope then
-        if not Apply.CallGlobal("MSUF_RefreshAllFrameColors", unitScope) then
-            Apply.CallGlobal("MSUF_RefreshAllIdentityColors", unitScope)
-            Apply.CallGlobal("MSUF_RefreshAllPowerTextColors", unitScope)
-        end
+        _G.MSUF_RefreshAllFrameColors(unitScope)
     end
     if globalScope then
-        Apply.CallGlobal("MSUF_PrioRows_Reinit")
-        if type(M.ApplyGameplay) == "function" then Apply.Invoke(M.ApplyGameplay) end
+        if type(M.ApplyGameplay) == "function" then M.ApplyGameplay() end
+    end
+    -- Only the visible, current Bars entry owns live priority-row widgets.
+    local entry = M.activeKey == "opt_bars" and M.cache and M.cache.opt_bars
+    if entry and not entry._msuf2Invalidated and M.frame and M.frame:IsShown()
+        and type(entry.refreshHighlightPriorityColors) == "function" then
+        entry.refreshHighlightPriorityColors()
     end
     RefreshGroupColors(scope)
     return true
@@ -1029,14 +939,14 @@ local function ApplyMouseoverHighlightRuntime()
     -- Cold path only: menu changes are coalesced before this runs. Rounded
     -- frames rebuild their cached edge stack first; the standalone renderer
     -- then refreshes its cached style/size/color generation.
-    Apply.CallGlobal("MSUF_ApplyRoundedUnitframes")
-    Apply.CallGlobal("MSUF_RefreshMouseoverHighlight")
+    _G.MSUF_ApplyRoundedUnitframes()
+    _G.MSUF_RefreshMouseoverHighlight()
     return true
 end
 
 FlushApply = function()
     if flushTimer and type(flushTimer.Cancel) == "function" then
-        Apply.Invoke(flushTimer.Cancel, flushTimer)
+        flushTimer.Cancel(flushTimer)
     end
     flushTimer = nil
     if InCombat() then
@@ -1058,21 +968,20 @@ FlushApply = function()
 
     for unit in pairs(pendingUnits) do
         local opt = pendingOpts[unit] or {}
+        pendingUnits[unit], pendingOpts[unit] = nil, nil
         local notifyUnit = unit
         local wantsUnitFrameApply = opt.notify ~= false or opt.applyUnit == true
         local unitFramesApplied = false
 
         if opt.notify ~= false then
-            local called, result = Apply.CallGlobalResult(
-                "MSUF_UFCore_NotifyConfigChanged", notifyUnit, true, true,
-                opt.reason or "MSUF2", coordinatedApplyMask)
-            unitFramesApplied = called and result ~= false or false
+            local result = _G.MSUF_UFCore_NotifyConfigChanged(notifyUnit, true, true, opt.reason or "MSUF2", coordinatedApplyMask)
+            unitFramesApplied = result ~= false or false
         end
-        if wantsUnitFrameApply and not unitFramesApplied then
+        if opt.notify == false and opt.applyUnit == true then
             unitFramesApplied = ApplyUnitFrame(unit, coordinatedApplyMask)
         end
         if not unitFramesApplied and opt.text then
-            Apply.CallGlobal("MSUF_ForceTextLayoutForUnitKey", unit)
+            _G.MSUF_ForceTextLayoutForUnitKey(unit)
         end
         if not unitFramesApplied and (opt.power or opt.detachedPowerBar) then
             if opt.detachedPowerBar then
@@ -1081,12 +990,9 @@ FlushApply = function()
                 ApplyPowerLayoutForUnit(unit)
             end
         end
-        if wantsUnitFrameApply and not unitFramesApplied then
-            unitFramesApplied = Apply.CallGlobal("MSUF_RefreshAllFrames", unit)
-        end
         if unitFramesApplied then pendingAlphaUnits[unit] = nil end
         if (opt.power or opt.detachedPowerBar) and unit == "player" and not opt.classpowerApplied then
-            Apply.CallGlobal("MSUF_ClassPower_Apply", { anchor = true, cdm = true, playerHP = true, syncNow = false })
+            _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, playerHP = true, syncNow = false })
         end
         if opt.fonts then
             ApplyFontRuntime({ fontScope = unit }, unitFramesApplied, opt.castbar == true, opt.classpowerApplied == true)
@@ -1094,8 +1000,6 @@ FlushApply = function()
         if opt.auras then ApplyUnitAuras(unit, opt.reason, unitFramesApplied) end
         if opt.castbar then ApplyUnitCastbar(unit) end
     end
-    WipeTable(pendingUnits)
-    WipeTable(pendingOpts)
 
     local fullUnitFramesApplied = false
     local generalAlphaCovered = false
@@ -1109,12 +1013,10 @@ FlushApply = function()
         local fullNotify = opt.fullNotify
         if fullNotify == nil then fullNotify = opt.notify ~= false end
         if applyAll and fullNotify then
-            local called, result = Apply.CallGlobalResult(
-                "MSUF_UFCore_NotifyConfigChanged", nil, true, true,
-                opt.reason or "MSUF2_GENERAL", coordinatedApplyMask)
-            applied = called and result ~= false or false
+            local result = _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, opt.reason or "MSUF2_GENERAL", coordinatedApplyMask)
+            applied = result ~= false or false
         end
-        if applyAll and not applied then applied = ApplyUnitFrame(nil, coordinatedApplyMask) end
+        if applyAll and not fullNotify then applied = ApplyUnitFrame(nil, coordinatedApplyMask) end
         fullUnitFramesApplied = applyAll and applied == true
         if opt.fonts then
             ApplyFontRuntime(opt, fullUnitFramesApplied, pendingCastbar == true,
@@ -1130,7 +1032,7 @@ FlushApply = function()
         if opt.colors then ApplyColorRuntime(opt, fullUnitFramesApplied) end
         if opt.mouseoverHighlight then ApplyMouseoverHighlightRuntime() end
         if applyAll and WantsClassPower(opt) and not ClassPowerAlreadyApplied(opt) then
-            Apply.CallGlobal("MSUF_ClassPower_Apply", ClassPowerRuntimeOptions(opt))
+            _G.MSUF_ClassPower_Apply(ClassPowerRuntimeOptions(opt))
         end
         if not applyAll then
             local _, coversAlpha = RefreshTargetedGeneral(opt.reason or "MSUF2_GENERAL", opt, true)
@@ -1161,16 +1063,16 @@ FlushApply = function()
         WipeTable(pendingAlphaUnits)
     end
     if wantAlphaAll then
-        Apply.CallGlobal("MSUF_RefreshAllUnitAlphas")
+        _G.MSUF_RefreshAllUnitAlphas()
     else
         for unit in pairs(pendingAlphaUnits) do
-            Apply.CallGlobal("MSUF_RefreshAllUnitAlphas", unit)
+            _G.MSUF_RefreshAllUnitAlphas(unit)
         end
     end
     WipeTable(pendingAlphaUnits)
     Apply.pendingAlpha = false
     if wantPreview then
-        Apply.CallGlobal("MSUF_UFPreview_RequestRefresh", wantPreview)
+        _G.MSUF_UFPreview_RequestRefresh(wantPreview)
         RefreshActiveBossPreview(wantPreview)
     end
 end
@@ -1187,8 +1089,8 @@ function Apply.QueueFlush()
             flushTimer = nil
             FlushApply()
         end
-        local scheduled, timer = Apply.Invoke(C_Timer.NewTimer, APPLY_FLUSH_DELAY, Run)
-        if scheduled and (timer or fired) then
+        local timer = C_Timer.NewTimer(APPLY_FLUSH_DELAY, Run)
+        if (timer or fired) then
             if not fired then flushTimer = timer end
             return true
         end
@@ -1203,7 +1105,7 @@ end
 
 function Apply.Quiesce(combat)
     if flushTimer and type(flushTimer.Cancel) == "function" then
-        Apply.Invoke(flushTimer.Cancel, flushTimer)
+        flushTimer.Cancel(flushTimer)
     end
     flushTimer = nil
     if not flushQueued then return true end

@@ -2,10 +2,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
     or "MidnightSimpleUnitFrames"
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
@@ -17,7 +14,7 @@ local T = M.Theme
 local PreviewHelpers = M.PreviewHelpers or {}
 local Specs = M.GroupPreviewSpecs or {}
 local GFZoomPan = M.GroupPreviewZoomPan or {}
-local PickDefaults = M.PickDefaults
+
 local F = M.Fallbacks or {}
 local floor = math.floor
 local max = math.max
@@ -37,9 +34,9 @@ local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
 local HANDLE_FALLBACK_COLOR = { 0.70, 0.80, 1.00 }
 local GF_PREVIEW_ROLE_DEFAULT = Specs.ROLE or "HEALER"
-local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_CLASSES, GF_PREVIEW_NAMES, GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS, GF_AURA_GROWTH_TABLE, GF_STATUS_RUNTIME_KEYS = PickDefaults(Specs, [[
-    SECTION_PAGE PAGE_FOCUS CLASSES NAMES ANCHOR_FRAC AURA_MOCK_ICON_IDS AURA_GROWTH_TABLE STATUS_RUNTIME_KEYS
-]])
+local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_CLASSES = Specs.SECTION_PAGE or {}, Specs.PAGE_FOCUS or {}, Specs.CLASSES or {}
+local GF_PREVIEW_NAMES, GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS = Specs.NAMES or {}, Specs.ANCHOR_FRAC or {}, Specs.AURA_MOCK_ICON_IDS or {}
+local GF_AURA_GROWTH_TABLE, GF_STATUS_RUNTIME_KEYS = Specs.AURA_GROWTH_TABLE or {}, Specs.STATUS_RUNTIME_KEYS or {}
 if not GF_AURA_GROWTH_TABLE.RIGHTDOWN then GF_AURA_GROWTH_TABLE.RIGHTDOWN = { px = 1, py = 0, sx = 0, sy = -1 } end
 local function ShallowCopy(src)
     if type(src) ~= "table" then return nil end
@@ -284,15 +281,7 @@ local function PreviewAnimationOnUpdate(box, elapsed)
     box._animationAccum = 0
     RefreshPreviewAnimationFrame(box)
 end
-local function StartPreviewAnimationDriver(box)
-    if not (box and box._animationEnabled == true) then return end
-    if PreviewAnimationInCombat() then
-        StopPreviewAnimationDriver(box)
-        return
-    end
-    if box.RegisterEvent then box:RegisterEvent("PLAYER_REGEN_DISABLED") end
-    box:SetScript("OnUpdate", PreviewAnimationOnUpdate)
-end
+local StartPreviewAnimationDriver = M.PreviewHelpers.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
 local function SetPreviewAnimationEnabled(box, enabled, reason)
     if not box then return end
     enabled = enabled == true
@@ -668,9 +657,7 @@ local GF_PREVIEW_MIN_W = Specs.MIN_W or 380
 local GF_PREVIEW_MIN_H = Specs.MIN_H or 130
 local GF_PREVIEW_ZOOM_MIN = Specs.ZOOM_MIN or 0.35
 local GF_PREVIEW_ZOOM_MAX = Specs.ZOOM_MAX or 4.0
-local function Tr(text)
-    return (M.Tr and M.Tr(text)) or text
-end
+local Tr = M.Tr
 local function ClassColor(classToken, dr, dg, db)
     if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
         local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(classToken)
@@ -865,24 +852,14 @@ if GFZoomPan.Configure then
         end,
     })
 end
-local ClampZoom = GFZoomPan.Clamp or function(value)
-    value = tonumber(value) or 1
-    if value < GF_PREVIEW_ZOOM_MIN then return GF_PREVIEW_ZOOM_MIN end
-    if value > GF_PREVIEW_ZOOM_MAX then return GF_PREVIEW_ZOOM_MAX end
-    return floor(value * 100 + 0.5) / 100
-end
+local ClampZoom = GFZoomPan.Clamp
 local UpdateZoomControls = GFZoomPan.UpdateControls or F.Noop
 local ResolveDefaultZoomLock = GFZoomPan.ResolveDefaultLock or F.Noop
 local SetZoom = GFZoomPan.SetZoom or F.Noop
 local StepZoom = GFZoomPan.Step or F.Noop
 local StartPan = GFZoomPan.Start or F.False
 local StopPan = GFZoomPan.Stop or F.Noop
-local function ReadBarsBool(key, default)
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-    local value = bars and bars[key]
-    if value == nil then return default and true or false end
-    return value and true or false
-end
+local ReadBarsBool = MSUF.MSUF2.PreviewHelpers.ReadPreviewBarsBool
 local function NormalizeAnchorMode(value, fallback)
     local mode = tonumber(value) or fallback or 3
     if mode < 1 or mode > 5 then mode = fallback or 3 end
@@ -1108,9 +1085,9 @@ local GFTextFocus = (M.GroupPreviewTextFocus and M.GroupPreviewTextFocus.Install
     min = min,
     max = max,
 })) or {}
-local CurrentTextKind = GFTextFocus.CurrentTextKind or function() return "name" end
-local TextOffsetKeys = GFTextFocus.TextOffsetKeys or function() return "nameOffsetX", "nameOffsetY" end
-local TextLabel = GFTextFocus.TextLabel or function() return "Name Text" end
+local CurrentTextKind = GFTextFocus.CurrentTextKind
+local TextOffsetKeys = GFTextFocus.TextOffsetKeys
+local TextLabel = GFTextFocus.TextLabel
 local TextMovesTogether = GFTextFocus.TextMovesTogether or F.True
 local SetTextMoveTogether = GFTextFocus.SetTextMoveTogether or F.Noop
 local PlaceHandleAroundRegions = GFTextFocus.PlaceHandleAroundRegions or F.False
@@ -1366,7 +1343,11 @@ local NativeDeps = {
     HealthColor = HealthColor,
     ResolveStatusbarTexture = ResolvePreviewStatusbarTexture,
 }
-local function CreateNativeGFPreview(parent, ctx, onOpen)
+-- The native preview installs in stages that share one per-call state table;
+-- NativeBuild.Create runs them once, in order. Per-refresh work stays inside
+-- the box methods and the render module exactly as before.
+local NativeBuild = {}
+function NativeBuild.Frame(parent, ctx)
     local R = ShallowCopy(NativeDeps) or {}
     local H, T, M = R.Helpers, R.T, R.M
     local width = (ctx.width or 720) - 28
@@ -1437,6 +1418,14 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local hint = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
+    return {
+        ctx = ctx, R = R, width = width, layerW = layerW, box = box, chrome = chrome,
+        RegisterPreviewControl = RegisterPreviewControl,
+    }
+end
+function NativeBuild.Stage(state)
+    local R, box, RegisterPreviewControl = state.R, state.box, state.RegisterPreviewControl
+    local T, M = R.T, R.M
     -- The stage is re-anchored against the selection bar by
     -- ApplyDockedPreviewLayout once the layer rail exists.
     local stage = CreateFrame("Frame", nil, box, T.Template())
@@ -1506,6 +1495,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     -- Bounds mark a measurement, not a problem; cyan matches the Unit preview.
     bounds:SetBackdropBorderColor(0.25, 0.75, 0.88, 0.92)
     box._bounds = bounds
+    state.stage, state.bounds = stage, bounds
+end
+function NativeBuild.LayerRail(state)
+    local R, box, chrome, layerW, RegisterPreviewControl = state.R, state.box, state.chrome, state.layerW, state.RegisterPreviewControl
+    local T, M = R.T, R.M
     local layers = CreateFrame("Frame", nil, box, T.Template())
     local layerColors = T.colors or {}
     if PreviewHelpers.ApplyPreviewChrome then
@@ -1603,7 +1597,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                 return
             end
             if IsShiftKeyDown and IsShiftKeyDown() then
-                M.gfPreviewSoloLayer = (M.gfPreviewSoloLayer == self.key) and nil or self.key
+                local selectedValue1
+                if not ((M.gfPreviewSoloLayer == self.key)) then selectedValue1 = self.key end
+                M.gfPreviewSoloLayer = selectedValue1
             else
                 M.gfPreviewSoloLayer = nil
                 layerVisibility[self.key] = layerVisibility[self.key] == false
@@ -1714,6 +1710,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
         if self._msuf2ElementPicker then self._msuf2ElementPicker:Show() end
     end
+end
+function NativeBuild.Mock(state)
+    local R, box, stage, bounds, RegisterPreviewControl = state.R, state.box, state.stage, state.bounds, state.RegisterPreviewControl
+    local T, M = R.T, R.M
     local mock = CreateFrame("Frame", nil, stage, T.Template())
     mock:SetBackdrop({ bgFile = R.WHITE8X8 })
     mock:SetBackdropColor(0.08, 0.08, 0.09, 0.92)
@@ -1812,6 +1812,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock._powerLeftFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
     mock._powerCenterFS = mock._powerFS
     mock._powerRightFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
+    state.mock = mock
+end
+function NativeBuild.Handles(state)
+    local R, box, stage, RegisterPreviewControl = state.R, state.box, state.stage, state.RegisterPreviewControl
+    local T, M = R.T, R.M
     box._selectedHandle = nil
     R.RegisterPreviewControl = RegisterPreviewControl
     local handleBundle = (M.GroupPreviewHandles and M.GroupPreviewHandles.Install and M.GroupPreviewHandles.Install(box, R)) or {}
@@ -1824,16 +1829,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local dispelSymbolHandle = handleBundle.dispelSymbolHandle
     local statusHandles = handleBundle.statusHandles or {}
     local spellHandle = handleBundle.spellHandle
-    local SelectHandle = handleBundle.SelectHandle or function() end
-    local NudgeHandlePosition = handleBundle.NudgeHandlePosition or function() end
-    local AddIconPool = handleBundle.AddIconPool or function() end
-    local StopHandleDrag = handleBundle.StopHandleDrag or function()
-        if box._dragFrame then
-            box._dragFrame:SetScript("OnUpdate", nil)
-            box._dragFrame._handle = nil
-            box._dragFrame:Hide()
-        end
-    end
+    local SelectHandle = handleBundle.SelectHandle
+    local NudgeHandlePosition = handleBundle.NudgeHandlePosition
+    local AddIconPool = handleBundle.AddIconPool
+    local StopHandleDrag = handleBundle.StopHandleDrag
     local function ReadGroupSelectionCoordinates(owner, handle)
         -- Name X/Y are anchor-local offsets. Reading the rendered handle
         -- center here makes X=0 mean "center the glyphs in the frame", which
@@ -1952,6 +1951,19 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             registerControl(selectionBar.openButton, "selection.open_settings", "Open selected preview element settings", "button", "ephemeral")
         end
     end
+    state.buffHandle, state.trackedBuffHandle, state.debuffHandle = buffHandle, trackedBuffHandle, debuffHandle
+    state.externalHandle, state.powerBarHandle, state.portraitHandle = externalHandle, powerBarHandle, portraitHandle
+    state.dispelSymbolHandle, state.statusHandles, state.spellHandle = dispelSymbolHandle, statusHandles, spellHandle
+    state.SelectHandle, state.NudgeHandlePosition, state.AddIconPool = SelectHandle, NudgeHandlePosition, AddIconPool
+    state.StopHandleDrag = StopHandleDrag
+end
+function NativeBuild.Render(state)
+    local ctx, R, box, width, mock = state.ctx, state.R, state.box, state.width, state.mock
+    local H, M = R.Helpers, R.M
+    local buffHandle, trackedBuffHandle, debuffHandle = state.buffHandle, state.trackedBuffHandle, state.debuffHandle
+    local externalHandle, powerBarHandle, portraitHandle = state.externalHandle, state.powerBarHandle, state.portraitHandle
+    local dispelSymbolHandle, statusHandles, spellHandle = state.dispelSymbolHandle, state.statusHandles, state.spellHandle
+    local SelectHandle, NudgeHandlePosition, AddIconPool = state.SelectHandle, state.NudgeHandlePosition, state.AddIconPool
     box.OnPreviewCanvasMoved = function(_, button)
         if PreviewHelpers.NotePreviewCanvasMoved then PreviewHelpers.NotePreviewCanvasMoved(button) end
     end
@@ -1972,6 +1984,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         renderDeps.AddIconPool = AddIconPool
         M.GroupPreviewRender.Install(box, ctx, renderDeps)
     end
+end
+function NativeBuild.Lifecycle(state)
+    local box, StopHandleDrag = state.box, state.StopHandleDrag
     function box:CancelPendingRefresh()
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
         self._msufGFRefreshQueued = nil
@@ -2138,10 +2153,19 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         self._msufGFRefreshHeight = height
         self:RequestRefresh("GROUP_PREVIEW_SIZE")
     end)
-    return box
+end
+function NativeBuild.Create(parent, ctx, onOpen)
+    local state = NativeBuild.Frame(parent, ctx)
+    NativeBuild.Stage(state)
+    NativeBuild.LayerRail(state)
+    NativeBuild.Mock(state)
+    NativeBuild.Handles(state)
+    NativeBuild.Render(state)
+    NativeBuild.Lifecycle(state)
+    return state.box
 end
 M.GroupPreview = M.GroupPreview or {}
-M.GroupPreview.CreateNative = CreateNativeGFPreview
+M.GroupPreview.CreateNative = NativeBuild.Create
 M.GroupPreview.OpenSection = OpenGFSection
 function M.FocusGFPreviewTextSlot(kind, slot, active)
     local previews = M._gfNativePreviews

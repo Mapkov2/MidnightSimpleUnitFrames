@@ -15,11 +15,7 @@ local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
 local CurrentPanelKey = PreviewModel.CurrentPanelKey
 local MakeFS = PreviewModel.MakeFS
-local RoundOffset = (MSUF.UFPreviewCore and MSUF.UFPreviewCore.RoundOffset) or function(v)
-    v = tonumber(v) or 0
-    if v >= 0 then return floor(v + 0.5) end
-    return -floor((-v) + 0.5)
-end
+local RoundOffset = _G.MSUF_RoundOffset
 local function ClampNumber(value, defaultValue, minValue, maxValue)
     value = tonumber(value)
     if value == nil then value = defaultValue end
@@ -51,12 +47,7 @@ local function PlaceHandleAroundShownRegions(handle, parent, regions, pad)
     if type(place) ~= "function" then return false end
     return place(handle, parent, regions, pad) == true
 end
-local function AuraDurationBarColor()
-    local auras3 = MSUF.MSUF_Auras3
-    local resolver = auras3 and auras3.GetDurationBarColor
-    if type(resolver) == "function" then return resolver() end
-    return 1, 1, 1
-end
+local AuraDurationBarColor = MSUF.MSUF_Auras3.GetDurationBarColor
 local function RuntimeRound(value)
     return floor((tonumber(value) or 0) + 0.5)
 end
@@ -489,10 +480,7 @@ function Auras.CreateHandles(box, makeHandle)
         }, "Dispel Symbol", { 0.30, 0.80, 1.00 })
     end
 end
-local function ButtonAnchor(xSign, ySign)
-    if ySign > 0 then return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT" end
-    return xSign < 0 and "TOPRIGHT" or "TOPLEFT"
-end
+local ButtonAnchor = _G.MSUF_AuraButtonAnchor
 local function Growth(cfg, kind)
     local isBuff = kind == "buff"
     local growth = isBuff and (cfg.buffGrowthX or cfg.growth) or (cfg.debuffGrowthX or cfg.growth)
@@ -507,35 +495,14 @@ local function Growth(cfg, kind)
     end
     return gx, gy, vertical, ButtonAnchor(gx, gy)
 end
-local function AnchorOffset(anchor, w, h)
-    w = tonumber(w) or 0
-    h = tonumber(h) or 0
-    anchor = tostring(anchor or "TOPLEFT")
-    if anchor == "TOPLEFT" then return 0, h end
-    if anchor == "TOP" then return w * 0.5, h end
-    if anchor == "TOPRIGHT" then return w, h end
-    if anchor == "LEFT" then return 0, h * 0.5 end
-    if anchor == "CENTER" then return w * 0.5, h * 0.5 end
-    if anchor == "RIGHT" then return w, h * 0.5 end
-    if anchor == "BOTTOMLEFT" then return 0, 0 end
-    if anchor == "BOTTOM" then return w * 0.5, 0 end
-    if anchor == "BOTTOMRIGHT" then return w, 0 end
-    return 0, h
-end
+local AnchorOffset = _G.MSUF_AuraAnchorOffset
 local function NormalizeAnchor(anchor, fallback)
     anchor = tostring(anchor or "")
     return AURA_ANCHOR_OK[anchor] and anchor or fallback or "TOPLEFT"
 end
 --- Inward offset from a lane's initial corner for the shared style padding,
 --- mirroring the runtime container's SetFlowLayoutPadding inset.
-local function PaddingInset(anchor, pad)
-    pad = tonumber(pad) or 0
-    if pad == 0 then return 0, 0 end
-    anchor = tostring(anchor or "TOPLEFT")
-    local dx = anchor:find("LEFT", 1, true) and pad or (anchor:find("RIGHT", 1, true) and -pad or 0)
-    local dy = anchor:find("BOTTOM", 1, true) and pad or (anchor:find("TOP", 1, true) and -pad or 0)
-    return dx, dy
-end
+local PaddingInset = _G.MSUF_AuraPaddingInset
 --- Shared icon style for a previewed lane: the compiled runtime style when the
 --- lane metrics carry one, otherwise the scope-resolved preview style.
 local function LaneIconStyle(metrics, _, kind)
@@ -1251,8 +1218,8 @@ local function ApplyAuraFont(fs, font)
     if not (fs and font) then return end
     if fs.SetFont and (fs._msufAuraFontPath ~= font.path or fs._msufAuraFontSize ~= font.size
         or fs._msufAuraFontFlags ~= font.flags or fs._msufAuraFontEpoch ~= font.epoch) then
-        if not pcall(fs.SetFont, fs, font.path, font.size, font.flags) then
-            pcall(fs.SetFont, fs, FONT, font.size, font.flags)
+        if not _G.MSUF_SetFontChecked(fs, font.path, font.size, font.flags) then
+            _G.MSUF_SetFontChecked(fs, FONT, font.size, font.flags)
         end
         fs._msufAuraFontPath, fs._msufAuraFontSize = font.path, font.size
         fs._msufAuraFontFlags, fs._msufAuraFontEpoch = font.flags, font.epoch

@@ -2,12 +2,9 @@
 --- Cold-path shared helpers for the MSUF2 unit frame preview.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local floor = math.floor
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local MASK_MEDIA = MEDIA .. "Masks\\"
@@ -85,12 +82,7 @@ end
 function Core.SetShownSafe(region, shown)
     if region and region.SetShown then region:SetShown(shown and true or false) end
 end
-local function ReadPreviewBarsBool(key, default)
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-    local value = bars and bars[key]
-    if value == nil then return default and true or false end
-    return value and true or false
-end
+local ReadPreviewBarsBool = MSUF.MSUF2.PreviewHelpers.ReadPreviewBarsBool
 local function ClampPreviewEdgeSize(value, fallback, maxValue)
     local n = tonumber(value)
     if n == nil then n = tonumber(fallback) or 0 end
@@ -476,8 +468,12 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         "healthGradient", healthAnchor, true)
     PreviewSetMask(mock, mock.tempMaxHealthBg, tempMaxBgMask)
     PreviewSetMask(mock, mock.tempMaxHealth, tempMaxMask)
-    PreviewSetMask(mock, mock.healPred, healPredMode == 4 and nil or healPredMask)
-    PreviewSetMask(mock, mock.absorb, absorbMode == 4 and nil or absorbMask)
+    local selectedValue2
+    if not (healPredMode == 4) then selectedValue2 = healPredMask end
+    PreviewSetMask(mock, mock.healPred, selectedValue2)
+    local selectedValue1
+    if not (absorbMode == 4) then selectedValue1 = absorbMask end
+    PreviewSetMask(mock, mock.absorb, selectedValue1)
     PreviewSetMask(mock, mock.healAbsorb, healAbsorbMask)
     local dispelOverlay = mock._msufPreviewDispelOverlayRegion
     local dispelOverlayMask = dispelOverlay and dispelOverlay:IsShown()

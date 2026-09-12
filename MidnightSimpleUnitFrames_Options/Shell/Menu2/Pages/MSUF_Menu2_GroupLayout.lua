@@ -11,10 +11,18 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-local SCOPE_VALUES, GROWTH_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
+local SCOPE_VALUES, GROWTH_VALUES, SORT_MODES, GF_ANCHOR_TO = GP.SCOPE_VALUES or {}, GP.GROWTH_VALUES or {}, GP.SORT_MODES or {}, GP.GF_ANCHOR_TO or {}
+local GF_ANCHOR_POINTS = GP.GF_ANCHOR_POINTS or {}
 local GROUP_FRAME_PROVIDER_VALUES = GP.GROUP_FRAME_PROVIDER_VALUES or {}
 local GROUP_RAID_MANAGER_VALUES = GP.GROUP_RAID_MANAGER_VALUES or {}
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice, ControlMeta, RegisterControl, RefreshContext, FrameProvider, FrameProviderLabel, FrameProviderTooltip, SetFrameProvider, RaidManagerMode, SetRaidManagerMode = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice ControlMeta RegisterControl RefreshContext FrameProvider FrameProviderLabel FrameProviderTooltip SetFrameProvider RaidManagerMode SetRaidManagerMode]])
+local Conf, Val, QueueGF, Set, Bool, Num, ScopeSection = GP.Conf, GP.Val, GP.QueueGF, GP.Set, GP.Bool, GP.Num, GP.ScopeSection
+local CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider = GP.CurrentScope, GP.BindScopeToggle, GP.ScopeDropdown, GP.ScopeSlider
+local BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled = GP.BuildGrowthDirectionTiles, GP.BuildRoleOrderRows, GP.SetOptionEnabled
+local SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus = GP.SetOptionsEnabled, GP.FinalizeScopePage, GP.SetSectionBadgesAndStatus
+local TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText = GP.TrackSectionRefresh, GP.OnOffBadge, GP.BadgeNumber, GP.OptionText
+local CreateSectionNotice, ControlMeta, RegisterControl, RefreshContext = GP.CreateSectionNotice, GP.ControlMeta, GP.RegisterControl, GP.RefreshContext
+local FrameProvider, FrameProviderLabel, FrameProviderTooltip = GP.FrameProvider, GP.FrameProviderLabel, GP.FrameProviderTooltip
+local SetFrameProvider, RaidManagerMode, SetRaidManagerMode = GP.SetFrameProvider, GP.RaidManagerMode, GP.SetRaidManagerMode
 SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -662,7 +670,7 @@ local function BuildGFScalingSection(ctx, b)
     local function AddScaleSlider(parent, spec, width)
         local label = spec.label
         local slider = BindScaleSlider(W.Slider(parent, "", 50, spec.max or 100, 5, width), spec.key, spec.default,
-            spec.labelFn or function(v) return string.format("%s: %d%%", label, v) end)
+            function(v) return string.format("%s: %d%%", label, v) end)
         W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
         BindAutoScalePreview(slider, spec.previewCount)
         return slider
@@ -721,7 +729,9 @@ local function BuildGFAnchorSection(ctx, b)
         function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
         function(v)
             local conf = Conf(CurrentScope())
-            conf.anchorToFrame = (v == "FREE") and nil or v
+            local selectedValue1
+            if not ((v == "FREE")) then selectedValue1 = v end
+            conf.anchorToFrame = selectedValue1
             QueueGF(CurrentScope(), "rebuild")
         end,
         ControlMeta(ctx, "field.anchorToFrame"))

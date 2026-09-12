@@ -6,10 +6,7 @@
 --- centralized and migration-safe.
 local _, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local MENU_STATE_VERSION = 6
@@ -46,16 +43,7 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     dashboardScalingOpen = false,
     lastPandemicMode = "PULSE",
 }
-local function MenuCharKey()
-    local fn = rawget(_G, "MSUF_GetCharKey")
-    if type(fn) == "function" then
-        local key = fn()
-        if type(key) == "string" and key ~= "" then return key end
-    end
-    local name = (_G.UnitName and _G.UnitName("player")) or "Unknown"
-    local realm = (_G.GetRealmName and _G.GetRealmName()) or "Realm"
-    return tostring(name) .. "-" .. tostring(realm)
-end
+local MenuCharKey = _G.MSUF_GetCharKey
 local function CopyMissingStateValues(dst, src)
     if type(dst) ~= "table" or type(src) ~= "table" then return end
     for k, v in pairs(src) do

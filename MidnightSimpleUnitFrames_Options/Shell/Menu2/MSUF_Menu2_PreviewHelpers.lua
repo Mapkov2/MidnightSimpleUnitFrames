@@ -16,7 +16,7 @@ M.ClassPowerPreview = CP
 -- preview modules. Keep preview-only fallbacks here instead of coupling pages to live runtime.
 local floor = math.floor
 local min = math.min
-local IsSecretValue = _G.issecretvalue or function() return false end
+local IsSecretValue = _G.issecretvalue
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
 local ROUNDED_MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
@@ -138,13 +138,7 @@ local function PreviewBackgroundSpec()
     local key = tostring(M.previewBackground or PREVIEW_BACKGROUND_DEFAULT)
     return PREVIEW_BACKGROUND_BY_KEY[key] or PREVIEW_BACKGROUND_BY_KEY[PREVIEW_BACKGROUND_DEFAULT]
 end
-local function ClampPreviewColor(value, fallback)
-    value = tonumber(value)
-    if value == nil then value = fallback end
-    if value < 0 then return 0 end
-    if value > 1 then return 1 end
-    return value
-end
+local ClampPreviewColor = MSUF.UF.Clamp01
 local function PreviewBackgroundCustomRGB()
     return ClampPreviewColor(M.previewBackgroundCustomR, PREVIEW_BACKGROUND_CUSTOM_DEFAULT[1]),
         ClampPreviewColor(M.previewBackgroundCustomG, PREVIEW_BACKGROUND_CUSTOM_DEFAULT[2]),
@@ -1690,11 +1684,13 @@ function H.InstallZoomPan(ZoomPan, opts)
         -- Previews that opted into the zoom lock mirror the same state on it.
         if type(box.RefreshZoomLock) == "function" then box.RefreshZoomLock() end
     end
-    function ZoomPan.ApplyPan(box)
+    function ZoomPan.ApplyPan(box, panX, panY)
+        panX = panX or tonumber(box and box._zoomPanX) or 0
+        panY = panY or tonumber(box and box._zoomPanY) or 0
         if opts.panMode == "topLeft" then
             if not (box and box._stage and box._mock and box._mock.GetPoint) then return false end
-            local x = (tonumber(box._mockBaseOffsetX) or 0) + (tonumber(box._zoomPanX) or 0)
-            local y = (tonumber(box._mockBaseOffsetY) or 0) + (tonumber(box._zoomPanY) or 0)
+            local x = (tonumber(box._mockBaseOffsetX) or 0) + panX
+            local y = (tonumber(box._mockBaseOffsetY) or 0) + panY
             local oldPoint, oldRelative, oldRelativePoint, oldX, oldY = box._mock:GetPoint(1)
             box._mock:ClearAllPoints()
             box._mock:SetPoint("TOPLEFT", box._stage, "TOPLEFT", x, y)
@@ -1706,7 +1702,6 @@ function H.InstallZoomPan(ZoomPan, opts)
                 and SameOffset(actualX, x) and SameOffset(actualY, y)
         end
         if not (box and box.canvas and box.mock and box.mock.GetPoint) then return false end
-        local panX, panY = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
         local expectedX = (tonumber(box._mockBaseOffsetX) or 0) + panX
         local expectedY = (tonumber(box._mockBaseOffsetY) or 0) + panY
         local oldPoint, oldRelative, oldRelativePoint, oldX, oldY = box.mock:GetPoint(1)
@@ -1732,20 +1727,13 @@ function H.InstallZoomPan(ZoomPan, opts)
         x, y = ExactPanNumber(x), ExactPanNumber(y)
         if x == nil or y == nil then return false, "invalid-pan" end
         local beforeX, beforeY = ZoomPan.GetPan(box)
-        if beforeX == x and beforeY == y then return true, beforeX, beforeY, beforeX, beforeY end
+        if beforeX == x and beforeY == y then return true, beforeX, beforeY, x, y end
+        if ZoomPan.ApplyPan(box, x, y) ~= true then
+            assert(ZoomPan.ApplyPan(box, beforeX, beforeY) == true, "preview pan rollback failed")
+            return false, "pan-readback-mismatch"
+        end
         box._zoomPanX, box._zoomPanY = x, y
-        local appliedOk, applied = pcall(ZoomPan.ApplyPan, box)
-        local afterX, afterY = ZoomPan.GetPan(box)
-        if appliedOk and applied == true and afterX == x and afterY == y then
-            return true, beforeX, beforeY, afterX, afterY
-        end
-        box._zoomPanX, box._zoomPanY = beforeX, beforeY
-        local rollbackOk, rolledBack = pcall(ZoomPan.ApplyPan, box)
-        local restoredX, restoredY = ZoomPan.GetPan(box)
-        if not rollbackOk or rolledBack ~= true or restoredX ~= beforeX or restoredY ~= beforeY then
-            return false, "rollback-failed"
-        end
-        return false, appliedOk and "pan-readback-mismatch" or "pan-write-failed"
+        return true, beforeX, beforeY, x, y
     end
     function ZoomPan.NudgePan(box, dx, dy)
         dx, dy = ExactPanNumber(dx), ExactPanNumber(dy)
@@ -1969,14 +1957,7 @@ function H.BuildZoomBar(box, surface, opts)
     local startPan = opts.StartPan or F.False
     local stopPan = opts.StopPan or F.Noop
     local buttonH = tonumber(opts.buttonHeight) or 20
-    local createButton = opts.CreateZoomButton or function(parent, text, width, tooltip, onClick)
-        local btn = CreateFrame("Button", nil, parent, template)
-        btn:SetSize(width or 24, buttonH)
-        btn:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
-        btn:SetText(text)
-        btn:SetScript("OnClick", onClick)
-        return btn
-    end
+    local createButton = opts.CreateZoomButton
     local prefix = opts.fieldPrefix or ""
     local zoomBar = CreateFrame("Frame", nil, surface, template)
     zoomBar:SetSize(opts.width or (opts.lockButton and 226 or 200), opts.height or 24)
@@ -2912,15 +2893,7 @@ function H.LayoutEdgeLines(frame, edge, opts)
     H.SetEdgeLinesShown(frame, true, opts)
     return true
 end
-function H.ClampEdgeSize(value, fallback, maxValue)
-    local n = tonumber(value)
-    if n == nil then n = tonumber(fallback) or 0 end
-    n = math.floor(n + 0.5)
-    if n < 0 then n = 0 end
-    maxValue = tonumber(maxValue) or 8
-    if n > maxValue then n = maxValue end
-    return n
-end
+H.ClampEdgeSize = _G.MSUF_ClampRoundedEdgeSize
 function H.EnsureRoundedVisuals(mock, opts)
     if not (mock and mock.CreateTexture) then return false end
     opts = opts or {}
@@ -3165,4 +3138,62 @@ function H.ApplyRoundedClassPowerSurface(frame, enabled, fills, backgrounds, cou
     state.bgR, state.bgG, state.bgB, state.bgA = bgR, bgG, bgB, bgA
     state.edgeR, state.edgeG, state.edgeB, state.edgeA = edgeR, edgeG, edgeB, edgeA
     return true
+end
+
+local function PreviewBackgroundColorMode(health, general)
+    local mode = health and health.backgroundColorMode or general and general.barBgColorMode
+    if mode == "custom" or mode == "match_health" or mode == "class" or mode == "health_gradient" then
+        return mode
+    end
+    if (health and health.backgroundClassColor == true) or (general and general.barBgClassColor == true) then return "class" end
+    if (health and health.backgroundMatchHealth == true) or (general and general.barBgMatchHPColor == true) then return "match_health" end
+    return "custom"
+end
+H.HealthBackgroundColorMode = PreviewBackgroundColorMode
+
+local function SetCanvasToolsShown(box, shown, animateButton)
+    if not box then return end
+    local controlsHint = box._msuf2PreviewControlsHint
+    if not shown then
+        if box._msuf2CompactToolsHidden ~= true then
+            box._msuf2CompactControlsHintWasShown = controlsHint and controlsHint.IsShown and controlsHint:IsShown() or false
+        end
+        box._msuf2CompactToolsHidden = true
+        if box.zoomBar then box.zoomBar:Hide() end
+        if animateButton then animateButton:Hide() end
+        if controlsHint then controlsHint:Hide() end
+        return
+    end
+    box._msuf2CompactToolsHidden = nil
+    if box.zoomBar then box.zoomBar:Show() end
+    if animateButton then animateButton:Show() end
+    if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
+end
+H.SetCanvasToolsShown = SetCanvasToolsShown
+
+local function ExactPreviewDelta(value)
+    value = tonumber(value)
+    if value == nil or value ~= value or value == math.huge or value == -math.huge then return nil end
+    return value
+end
+H.ExactPreviewDelta = ExactPreviewDelta
+
+local function ReadPreviewBarsBool(key, default)
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local value = bars and bars[key]
+    if value == nil then return default and true or false end
+    return value and true or false
+end
+H.ReadPreviewBarsBool = ReadPreviewBarsBool
+
+function H.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
+    return function(box)
+        if not (box and box._animationEnabled == true) then return end
+        if PreviewAnimationInCombat() then
+            StopPreviewAnimationDriver(box)
+            return
+        end
+        if box.RegisterEvent then box:RegisterEvent("PLAYER_REGEN_DISABLED") end
+        box:SetScript("OnUpdate", PreviewAnimationOnUpdate)
+    end
 end

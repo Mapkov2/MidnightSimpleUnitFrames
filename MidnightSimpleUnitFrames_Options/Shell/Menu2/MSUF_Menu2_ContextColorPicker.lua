@@ -5,9 +5,7 @@ MSUF.MSUF2 = M
 local W = M.Widgets or {}
 local T = M.Theme
 local abs, floor, max, min = math.abs, math.floor, math.max, math.min
-local Tr = M.TranslateText or M.Tr or function(text) return text end
-
-local InvokePickerCallback = M.InvokeBoundary or pcall
+local Tr = M.TranslateText or M.Tr
 
 -- Menu-only, progressive color editor. The compact view exposes the common
 -- path; contextual targets and the large palettes stay one deliberate click
@@ -31,13 +29,7 @@ end
 local function Byte(value) return floor(Clamp01(value) * 255 + 0.5) end
 local function ToHex(r, g, b) return string.format("#%02X%02X%02X", Byte(r), Byte(g), Byte(b)) end
 local function Byte01(value) return floor(value * 255 + 0.5) end
-local function FromHex(value)
-    local hex = tostring(value or ""):match("^%s*#?(%x%x%x%x%x%x)%s*$")
-    if not hex then return nil end
-    return (tonumber(hex:sub(1, 2), 16) or 255) / 255,
-        (tonumber(hex:sub(3, 4), 16) or 255) / 255,
-        (tonumber(hex:sub(5, 6), 16) or 255) / 255
-end
+local FromHex = M.Widgets.ParseHexColor
 local function HSV(h, s, v)
     h, s, v = (tonumber(h) or 0) % 1, Clamp01(s), Clamp01(v)
     local sector = floor(h * 6)
@@ -427,27 +419,12 @@ local function PickerMenuScale()
     return PICKER_REFERENCE_SCALE
 end
 
-local function EnsurePicker()
-    if picker then return picker end
-    local parent = _G.UIParent or M.frame
-    if not parent then return nil end
-
-    local blocker = CreateFrame("Button", nil, parent)
-    blocker:SetAllPoints(parent); blocker:EnableMouse(true)
-    blocker:SetScript("OnClick", function() if picker then picker:Finish(true) end end); blocker:Hide()
-
-    local panel = T.Panel(parent, nil, T.colors.glassShell or T.colors.bg, T.colors.cardBorder or T.colors.borderSoft)
-    picker = panel
-    panel:SetSize(SIMPLE_WIDTH, SIMPLE_HEIGHT); panel:SetScale(PickerMenuScale()); panel:SetClampedToScreen(true)
-    panel:SetMovable(true); panel:EnableMouse(true); panel:EnableKeyboard(true)
-    if panel.SetPropagateKeyboardInput then panel:SetPropagateKeyboardInput(true) end
-    if T.ApplySurface then T.ApplySurface(panel, "popup") end
-    if T.ApplyBackdrop then T.ApplyBackdrop(panel, T.colors.glassShell or T.colors.bg, T.colors.border) end
-    panel._msuf2PickerBrightSurface = BrightSurface(panel,
-        T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], 0.93)
-    panel.blocker = blocker
-    ApplyPickerPriority(panel, blocker)
-
+-- The picker singleton is assembled by Picker.Ensure from one stage builder per
+-- region (title bar, target selector, preview fields, wheel card, advanced card,
+-- action bar) followed by the panel method groups they wire. Every stage runs
+-- once, in the order the regions used to be created inline.
+local Picker = {}
+function Picker.BuildTitleBar(panel)
     local close
     if M.CreateWindowControlButton then
         close = M.CreateWindowControlButton(panel, "close")
@@ -506,7 +483,9 @@ local function EnsurePicker()
     moveHint:SetPoint("TOPRIGHT", close or panel,
         close and "TOPLEFT" or "TOPRIGHT", close and -10 or -16, close and -1 or -16)
     moveHint:Hide()
+end
 
+function Picker.BuildTargetSelector(panel)
     local selector = T.Button(panel, "", SIMPLE_WIDTH - PICKER_PAD * 2, 32)
     selector._msuf2SkipHistoryCheckpoint = true
     selector._msuf2ControlKind = "dropdown"
@@ -526,14 +505,18 @@ local function EnsurePicker()
     selector.editingLabel, selector.separator = editingLabel, separator
     selector:SetScript("OnClick", function() panel:SetContextListShown(true) end)
     panel.selector = selector
+end
 
+function Picker.BuildPreviewFields(panel)
     local original = ColorField(panel, 144, 22); original:SetPoint("TOPLEFT", PICKER_PAD, -101)
     local current = ColorField(panel, 144, 22); current:SetPoint("TOPRIGHT", -PICKER_PAD, -101)
     original:SetActive(false); current:SetActive(true)
     panel.original, panel.current = original, current
     local originalLabel = Font(panel, "GameFontDisableSmall", "Original", T.colors.dim); originalLabel:SetPoint("BOTTOMLEFT", original, "TOPLEFT", 0, 2)
     local currentLabel = Font(panel, "GameFontDisableSmall", "Current", T.colors.dim); currentLabel:SetPoint("BOTTOMLEFT", current, "TOPLEFT", 0, 2)
+end
 
+function Picker.BuildWheelCard(panel)
     local wheelCard = T.Panel(panel, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
     wheelCard:SetPoint("TOPLEFT", PICKER_PAD, -133); wheelCard:SetSize(SIMPLE_WIDTH - PICKER_PAD * 2, 138)
     if T.ApplySurface then T.ApplySurface(wheelCard, "card") end
@@ -589,17 +572,21 @@ local function EnsurePicker()
     end)
     if M.AddTooltip then M.AddTooltip(opacity, "Opacity", "Adjusts the alpha channel of this color.") end
 
+    local CommitHex = function(self)
+local r, g, b = FromHex(self:GetText())
+        if r then panel:Apply(r, g, b) else panel:Refresh() end
+end
+
     local compactHexTitle = Font(wheelCard, "GameFontNormalSmall", "HEX", T.colors.muted)
     local compactHex = Input(wheelCard, 64, false); panel.compactHexTitle, panel.compactHex = compactHexTitle, compactHex
     compactHex:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
     compactHex:SetScript("OnMouseUp", function(self) self:HighlightText() end)
     compactHex:SetScript("OnEditFocusLost", function(self) self:SetText(panel._readoutHex or "") end)
-    compactHex._commit = function(self)
-        local r, g, b = FromHex(self:GetText())
-        if r then panel:Apply(r, g, b) else panel:Refresh() end
-    end
+    compactHex._commit = CommitHex
     if M.AddTooltip then M.AddTooltip(compactHex, "HEX color", "Type a new value, then press Enter.") end
+end
 
+function Picker.BuildAdvancedCard(panel)
     local advancedCard = T.Panel(panel, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
     advancedCard:SetPoint("TOPLEFT", PICKER_PAD + LEFT_CARD_WIDTH + PICKER_GAP, -133)
     advancedCard:SetSize(ADVANCED_WIDTH - PICKER_PAD * 2 - LEFT_CARD_WIDTH - PICKER_GAP, 227)
@@ -651,10 +638,7 @@ local function EnsurePicker()
     end
     local hexTitle = Font(advancedCard, "GameFontNormalSmall", "HEX", T.colors.muted); panel.hexTitle = hexTitle
     local hex = Input(advancedCard, 64, false); panel.hex = hex
-    hex._commit = function(self)
-        local r, g, b = FromHex(self:GetText())
-        if r then panel:Apply(r, g, b) else panel:Refresh() end
-    end
+    hex._commit = CommitHex
     local copy = T.Button(advancedCard, Tr("Copy"), 54, 22); panel.copy = copy
     if copy._msuf2Label then
         copy._msuf2Label:ClearAllPoints(); copy._msuf2Label:SetPoint("LEFT", 4, 0); copy._msuf2Label:SetPoint("RIGHT", -4, 0)
@@ -709,7 +693,9 @@ local function EnsurePicker()
 
     local emptyHint = Font(advancedCard, "GameFontDisableSmall", "No colors here yet.", T.colors.dim)
     emptyHint:SetJustifyH("CENTER"); panel.emptyHint = emptyHint
+end
 
+function Picker.BuildActionBar(panel)
     local actionBar = T.Panel(panel, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     actionBar:SetPoint("BOTTOMLEFT", PICKER_PAD, 8); actionBar:SetPoint("BOTTOMRIGHT", -PICKER_PAD, 8); actionBar:SetHeight(42)
     if T.ApplySurface then T.ApplySurface(actionBar, "status") end
@@ -728,7 +714,9 @@ local function EnsurePicker()
     if done._msuf2Label then done._msuf2Label:SetJustifyH("CENTER") end
     if T.ApplyButtonRole then T.ApplyButtonRole(done, "primary") end
     done:SetScript("OnClick", function() panel:Finish(false) end)
+end
 
+function Picker.DefinePositioning(panel, parent)
     function panel:SavePosition()
         local store = Store(); if not store then return end
         local cx, cy = self:GetCenter(); local px, py = parent:GetCenter()
@@ -758,7 +746,9 @@ local function EnsurePicker()
         local store = Store()
         if store then store.x, store.y = floor(x + 0.5), floor(y + 0.5) end
     end
+end
 
+function Picker.DefineContextList(panel)
     function panel:SetContextListShown(shown)
         if shown ~= true then
             self._ownerDropdownOpen = nil
@@ -804,7 +794,9 @@ local function EnsurePicker()
         panel:NotifyLiveChange(owner)
         panel:Refresh()
     end)
+end
 
+function Picker.DefineLayout(panel)
     function panel:Layout()
         local advanced = self.advanced == true
         local hasClassMode = self.owner and type(self.owner._msuf2GetColorByClass) == "function" or false
@@ -898,6 +890,8 @@ local function EnsurePicker()
         self.paletteTab = key
         self:RefreshPalettes()
     end
+end
+function Picker.DefinePaletteRefresh(panel)
     function panel:RefreshSelectedSwatch(r, g, b, hexValue)
         if not r and self.owner then r, g, b = self.owner:GetRGB() end
         local lookup = self.paletteLookups and self.paletteLookups[self.paletteTab or "quick"]
@@ -943,6 +937,8 @@ local function EnsurePicker()
         self._palettesDirty = nil
         self:RefreshSelectedSwatch()
     end
+end
+function Picker.DefineReadout(panel)
     function panel:RefreshColorReadout(syncColorSelect, r, g, b)
         if not self.owner then return end
         if not r then r, g, b = self.owner:GetRGB() end
@@ -997,8 +993,10 @@ local function EnsurePicker()
     function panel:SetOwner(owner) if owner then self.owner = owner; self:Refresh() end end
     function panel:NotifyLiveChange(owner)
         local callback = self._msuf2OnLiveChange
-        if type(callback) == "function" then InvokePickerCallback(callback, owner or self.owner) end
+        if type(callback) == "function" then callback(owner or self.owner) end
     end
+end
+function Picker.DefineSession(panel)
     function panel:Apply(r, g, b, fromColorSelect)
         if not self.owner then return end
         r, g, b = Clamp01(r), Clamp01(g), Clamp01(b)
@@ -1056,7 +1054,7 @@ local function EnsurePicker()
         self._msuf2OnLiveChange = nil
         self.owner, self.owners, self.originals, self.touched, self.historyOwner = nil, nil, nil, nil, nil
         self:Hide(); self.finishing = nil
-        if type(onFinish) == "function" then InvokePickerCallback(onFinish, cancelled == true) end
+        if type(onFinish) == "function" then onFinish(cancelled == true) end
     end
     function panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag, onLiveChange)
         if self:IsShown() then
@@ -1097,6 +1095,41 @@ local function EnsurePicker()
         RaisePickerInfo(self)
         self.blocker:Show(); self:Show(); self:ClampPosition()
     end
+end
+
+function Picker.Ensure()
+    if picker then return picker end
+    local parent = _G.UIParent or M.frame
+    if not parent then return nil end
+
+    local blocker = CreateFrame("Button", nil, parent)
+    blocker:SetAllPoints(parent); blocker:EnableMouse(true)
+    blocker:SetScript("OnClick", function() if picker then picker:Finish(true) end end); blocker:Hide()
+
+    local panel = T.Panel(parent, nil, T.colors.glassShell or T.colors.bg, T.colors.cardBorder or T.colors.borderSoft)
+    picker = panel
+    panel:SetSize(SIMPLE_WIDTH, SIMPLE_HEIGHT); panel:SetScale(PickerMenuScale()); panel:SetClampedToScreen(true)
+    panel:SetMovable(true); panel:EnableMouse(true); panel:EnableKeyboard(true)
+    if panel.SetPropagateKeyboardInput then panel:SetPropagateKeyboardInput(true) end
+    if T.ApplySurface then T.ApplySurface(panel, "popup") end
+    if T.ApplyBackdrop then T.ApplyBackdrop(panel, T.colors.glassShell or T.colors.bg, T.colors.border) end
+    panel._msuf2PickerBrightSurface = BrightSurface(panel,
+        T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], 0.93)
+    panel.blocker = blocker
+    ApplyPickerPriority(panel, blocker)
+
+    Picker.BuildTitleBar(panel)
+    Picker.BuildTargetSelector(panel)
+    Picker.BuildPreviewFields(panel)
+    Picker.BuildWheelCard(panel)
+    Picker.BuildAdvancedCard(panel)
+    Picker.BuildActionBar(panel)
+    Picker.DefinePositioning(panel, parent)
+    Picker.DefineContextList(panel)
+    Picker.DefineLayout(panel)
+    Picker.DefinePaletteRefresh(panel)
+    Picker.DefineReadout(panel)
+    Picker.DefineSession(panel)
 
     panel:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then
@@ -1117,7 +1150,7 @@ local function EnsurePicker()
 end
 
 function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag, onLiveChange)
-    local panel = EnsurePicker()
+    local panel = Picker.Ensure()
     if panel then panel:Open(contextTitle, owners, contextNote, initialOwner, onFinish, scopeTag, onLiveChange) end
     return panel
 end

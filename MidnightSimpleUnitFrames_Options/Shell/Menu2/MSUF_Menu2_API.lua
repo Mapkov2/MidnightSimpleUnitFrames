@@ -11,23 +11,15 @@ local MenuRuntime = M.MenuRuntime or {}
 -- M.Format is installed by MSUF_Menu2_Theme.lua. This file is also loaded by
 -- audits and by Assistant entry points that run before the theme exists, so
 -- route through a fallback instead of indexing a nil.
-local function Fmt(text, ...)
-    if type(M.Format) == "function" then return M.Format(text, ...) end
-    local translated = type(M.Tr) == "function" and M.Tr(text) or text
-    if select("#", ...) == 0 then return translated end
-    return string.format(translated, ...)
-end
+local Fmt = M.Format
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 ExportPublic("MSUF2_Open", function(pageKey) M.Open(pageKey) end)
 ExportPublic("MSUF2_Toggle", function(pageKey) M.Toggle(pageKey) end)
 ExportPublic("MSUF_OpenStandaloneOptionsWindow", function(pageKey) M.Open(pageKey) end)
 ExportPublic("MSUF_ShowStandaloneOptionsWindow", function(pageKey) M.Open(pageKey) end)
-ExportPublic("MSUF_HideStandaloneOptionsWindow", function() M.CallIf(M.HideSlashMenuAndMinibar, M.frame) end)
+ExportPublic("MSUF_HideStandaloneOptionsWindow", function() M.HideSlashMenuAndMinibar(M.frame) end)
 ExportPublic("MSUF_OpenOptionsMenu", function() M.Open() end)
 ExportPublic("MSUF_OpenPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
 ExportPublic("MSUF_SwitchMirrorPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
@@ -222,8 +214,8 @@ do
             -- The fallback owns teardown only when the minimized bar is the
             -- remaining visible Menu2 surface.
             if not winShown and type(MenuRuntime.Quiesce) == "function" then MenuRuntime:Quiesce("combat") end
-            M.CallIf(M.BlockCombatAction)
-            M.CallIf(M.HideSlashMenuAndMinibar, win)
+            M.BlockCombatAction()
+            M.HideSlashMenuAndMinibar(win)
             M.UpdateMenuCombatListener()
         end)
     end

@@ -2,7 +2,7 @@
 -- this file owns only saved-value bindings, page layout, and control-state dependencies.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value) _G[name] = value; return value end
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
@@ -14,7 +14,9 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local RefreshClassPowerInlinePreview = M.RefreshProxy()
-local CallGlobal, Bars, BoolValue, NumValue, SetValue, DeepCopyTable, BuildTableControlSpecs, SwitchAt, SetControlEnabled, ControlMeta, RegisterControl = M.Pick(AP, [[CallGlobal Bars BoolValue NumValue SetValue DeepCopyTable BuildTableControlSpecs SwitchAt SetControlEnabled ControlMeta RegisterControl]])
+local Bars, BoolValue, NumValue, SetValue = AP.Bars, AP.BoolValue, AP.NumValue, AP.SetValue
+local DeepCopyTable, BuildTableControlSpecs, SwitchAt = AP.DeepCopyTable, AP.BuildTableControlSpecs, AP.SwitchAt
+local SetControlEnabled, ControlMeta, RegisterControl = AP.SetControlEnabled, AP.ControlMeta, AP.RegisterControl
 local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["alternative_mana.enabled"] = "bars.showAltMana",
     ["alternative_mana.layout.height"] = "bars.altManaHeight",
@@ -195,13 +197,13 @@ local function ApplyClassPowerRuntime(reason, runtime, flags)
         RefreshClassPowerInlinePreview()
         return ApplyService.RequestClassPower(reason or "MSUF2_CLASSPOWER", runtime, flags or APPLY_CLASSPOWER_GENERAL)
     end
-    CallGlobal("MSUF_ClassPower_Apply", runtime)
+    _G.MSUF_ClassPower_Apply(runtime)
     RefreshClassPowerInlinePreview()
     M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER", flags or APPLY_CLASSPOWER_GENERAL)
 end
 local function ApplyClassPower() ApplyClassPowerRuntime("MSUF2_CLASSPOWER", CLASSPOWER_FULL, APPLY_CLASSPOWER_GENERAL) end
 local function ApplyClassPowerSource()
-    CallGlobal("MSUF_EnsureCooldownWidthObservers")
+    _G.MSUF_EnsureCooldownWidthObservers()
     ApplyClassPower()
 end
 local function ApplyClassPowerVisuals() ApplyClassPowerRuntime("MSUF2_CLASSPOWER_VISUALS", CLASSPOWER_VISUALS, APPLY_CLASSPOWER_GENERAL) end
@@ -212,21 +214,9 @@ local VT, VTP = M.ValueTextList, M.ValueTextPairs
 local PLAYER_POWER_SOURCE_VALUES = M.PlayerPowerSourceValues
 local NormalizePlayerPowerSource = M.NormalizePlayerPowerSource
 local NormalizeClassPowerShape = CPPreview.NormalizeClassShape
-local function NormalizeClassPowerShapeAlign(value)
-    value = tostring(value or "CENTER"):upper()
-    if value == "LEFT" or value == "RIGHT" then return value end
-    return "CENTER"
-end
-local function NormalizeDetachedPowerShape(value)
-    value = tostring(value or "BAR"):upper()
-    if value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-    return "BAR"
-end
-local function NormalizePlayerHPShape(value)
-    value = tostring(value or "BAR"):upper()
-    if value == "FOLLOW_POWER" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-    return "BAR"
-end
+local NormalizeClassPowerShapeAlign = _G.MSUF_UF_NormalizeShapeAlign
+local NormalizeDetachedPowerShape = _G.MSUF_UF_NormalizeDetachedPowerShape
+local NormalizePlayerHPShape = _G.MSUF_UF_NormalizePlayerHPShape
 local function ResolvePlayerHPShape(bars, db)
     local value = NormalizePlayerHPShape(bars and bars.playerHPBarShape)
     if value ~= "FOLLOW_POWER" then return CPPreview.ResolvePowerShape(value) end
@@ -354,7 +344,7 @@ local function ApplyClassPowerPage(reason, flags, runtime)
         RefreshClassPowerInlinePreview()
         return ApplyService.RequestClassPower(reason or "MSUF2_CLASSPOWER_PAGE", runtime, flags)
     end
-    CallGlobal("MSUF_ClassPower_Apply", runtime)
+    _G.MSUF_ClassPower_Apply(runtime)
     RefreshClassPowerInlinePreview()
     if type(flags) == "table" and flags.unit and type(M.RequestUnitApply) == "function" then
         M.RequestUnitApply(flags.unit, reason, flags)
@@ -364,13 +354,16 @@ local function ApplyClassPowerPage(reason, flags, runtime)
 end
 local function ApplyDetachedPowerBar() ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER, CP_APPLY_DETACHED_POWER) end
 local function ApplyDetachedPowerSource()
-    CallGlobal("MSUF_EnsureCooldownWidthObservers")
+    _G.MSUF_EnsureCooldownWidthObservers()
     ApplyDetachedPowerBar()
 end
 local function ApplyDetachedPowerWidthMode()
-    CallGlobal("MSUF_EnsureCooldownWidthObservers")
+    _G.MSUF_EnsureCooldownWidthObservers()
     ApplyClassPowerPage("MSUF2_DETACHED_POWER_WIDTH_MODE", APPLY_DETACHED_POWER_WIDTH_MODE, CP_APPLY_DETACHED_POWER)
 end
+--- Forward declaration: the smoothing handler below runs before the accessor
+--- is defined further down, so the name has to exist as a local first.
+local Player
 local function ApplyDetachedPlayerPowerSmoothing()
     local player = Player()
     if player.powerSmoothFill == true then player.powerChunkedFill = false end
@@ -392,14 +385,14 @@ local function ApplyDetachedPowerBarOutline()
     if ApplyService and type(ApplyService.RequestBarOutline) == "function" then
         ApplyService.RequestBarOutline("MSUF2_DETACHED_POWER_OUTLINE", "player")
     else
-        CallGlobal("MSUF_ApplyBarOutlineThickness_All", "player")
+        _G.MSUF_ApplyBarOutlineThickness_All("player")
     end
     ApplyDetachedPowerBar()
 end
 local function ApplyPlayerHPBar() ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP", APPLY_PLAYER_HP, CP_APPLY_PLAYER_HP) end
 local function ApplyPlayerHPTextures() ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXTURES", APPLY_PLAYER_HP, CP_APPLY_PLAYER_HP_TEXTURES) end
 local function ApplyPlayerHPText() ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXT", APPLY_PLAYER_HP, CP_APPLY_PLAYER_HP) end
-local function Player()
+function Player()
     local db = M.EnsureDB()
     db.player = db.player or {}
     return db.player
@@ -636,18 +629,16 @@ local function QuickApplyPhase2NoCP(offsets)
 end
 local function QuickRefreshAll(reason)
     reason = reason or "ClassPowerQuickSetup"
-    CallGlobal("MSUF_EnsureCooldownWidthObservers")
+    _G.MSUF_EnsureCooldownWidthObservers()
     local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if ApplyService and type(ApplyService.RequestClassPower) == "function" then
         RefreshClassPowerInlinePreview()
         return ApplyService.RequestClassPower(reason, CLASSPOWER_QUICK_RUNTIME, CLASSPOWER_QUICK_FLAGS)
     end
     ApplyClassPower()
-    if not CallGlobal("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", "player", true) then
-        CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
-    end
-    CallGlobal("MSUF_ClassPower_Apply", { playerHP = true })
-    CallGlobal("MSUF_UFCore_NotifyConfigChanged", "player", false, true, reason)
+    _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true)
+    _G.MSUF_ClassPower_Apply({ playerHP = true })
+    _G.MSUF_UFCore_NotifyConfigChanged("player", false, true, reason)
 end
 local function QuickOffered(mark)
     local db = M.EnsureDB()
@@ -1534,9 +1525,9 @@ function Page:LazySection(id, title, height, method)
             build = function(_, proxyBuilder)
                 local outerBuilder = page.b
                 page.b = proxyBuilder
-                local buildOK, buildError = pcall(method, page)
+                local buildError = method(page)
                 page.b = outerBuilder
-                if not buildOK then error(buildError, 0) end
+
                 -- Newly built controls need their enabled/disabled state; the
                 -- proxy is a safe no-op while the page itself is still building.
                 page.refresh()

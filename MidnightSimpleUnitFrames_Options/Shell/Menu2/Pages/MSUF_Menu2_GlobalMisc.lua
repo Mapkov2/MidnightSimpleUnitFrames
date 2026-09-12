@@ -12,7 +12,8 @@ local GP = M.GlobalPage or {}
 local max = math.max
 local min = math.min
 local C_Timer = M.MenuTimer or _G.C_Timer
-local Call, G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues, MenuFontKeyGet, MenuFontKeySet, ControlMeta = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool MenuFontValues MenuFontKeyGet MenuFontKeySet ControlMeta]])
+local G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues = GP.G, GP.ReadG, GP.SetG, GP.ReadGBool, GP.SetGBool, GP.MenuFontValues
+local MenuFontKeyGet, MenuFontKeySet, ControlMeta = GP.MenuFontKeyGet, GP.MenuFontKeySet, GP.ControlMeta
 local SETTING_KEY_BY_PATH = {
     ["language.selection"] = "general.menuLocale",
     ["menu.font"] = "general.menuFontKey",
@@ -115,7 +116,7 @@ local function BuildMisc(ctx)
             function() return ReadGBool(key, default) end,
             function(v)
                 SetGBool(key, v, reason, opts or PREVIEW_FALSE)
-                M.CallIf(afterSet, v)
+                if afterSet then afterSet(v) end
             end,
             Meta("setting." .. key))
         if x then W.MoveWidget(control, parent, x, y, width, "LEFT") end
@@ -222,9 +223,9 @@ local function BuildMisc(ctx)
     local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, menuBehaviorW - 70, T.colors.muted)
     if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
     BindMiscToggle(menuBehavior, "Hide Advanced menu section", "hideAdvancedMenu", true, "MSUF2_ADVANCED_MENU_VISIBILITY", 14, -118, 280, MENU_WRITE_OPTS,
-        function() M.CallIf(M.RefreshAdvancedNavVisibility) end)
+        function() M.RefreshAdvancedNavVisibility() end)
     BindMiscToggle(menuBehavior, "Show navigation icons", "showNavigationIcons", false, "MSUF2_NAV_ICONS", 14, -148, 280, MENU_WRITE_OPTS,
-        function() M.CallIf(M.RefreshNavIconVisibility) end)
+        function() M.RefreshNavIconVisibility() end)
     BindMiscToggle(menuBehavior, "Show MSUF button in game menu", "showGameMenuButton", true, "MSUF2_GAME_MENU_BUTTON", 14, -178, 320, MENU_WRITE_OPTS,
         function(v)
             if type(_G.MSUF_SetGameMenuButtonEnabled) == "function" then
@@ -257,8 +258,8 @@ local function BuildMisc(ctx)
             else
                 SetG("menuFontKey", value or "", "MSUF2_MENU_FONT", MENU_WRITE_OPTS)
             end
-            M.CallIf(T.ClearMenuFontCache)
-            M.CallIf(T.RefreshMenuFonts)
+            T.ClearMenuFontCache()
+            T.RefreshMenuFonts()
             if menuFontPreview and menuFontPreview.SetText then
                 menuFontPreview:SetText(M.Tr("AaBbCc 12345 - MSUF Menu"))
             end
@@ -271,7 +272,7 @@ local function BuildMisc(ctx)
         text = M.Tr("The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"),
         button1 = RELOADUI or M.Tr("Reload"),
         button2 = CANCEL or M.Tr("Not now"),
-        OnAccept = function() M.CallIf(ReloadUI) end,
+        OnAccept = function() ReloadUI() end,
     })
     local accentSwatch
     local function IsAccentMode(mode)
@@ -365,13 +366,13 @@ local function BuildMisc(ctx)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
     BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360, nil,
         function()
-            Call("MSUF_ApplyModules")
+            _G.MSUF_ApplyModules()
         end)
     local nicknameIntegration = b:CollapsibleSection("misc_nickname_integration", "Nickname Integration", 124, true)
     local nsrtNicknames = BindMiscToggle(nicknameIntegration, "Use NSRT nicknames on MSUF frames",
         "nsrtNicknameIntegration", true, "MSUF2_NSRT_NICKNAMES", 14, -42, 430, PREVIEW_FALSE,
         function()
-            Call("MSUF_NSRTNicknames_ApplySetting")
+            _G.MSUF_NSRTNicknames_ApplySetting()
         end)
     M.AddTooltip(nsrtNicknames, "NSRT nickname integration",
         "On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified.",
@@ -494,8 +495,8 @@ local function BuildMisc(ctx)
     if mouseoverHelp.SetWordWrap then mouseoverHelp:SetWordWrap(true) end
     local function RefreshMouseoverControls()
         local on = ReadGBool("highlightEnabled", true)
-        M.CallIf(W.SetControlEnabled, style, on)
-        M.CallIf(W.SetControlEnabled, size, on)
+        W.SetControlEnabled(style, on)
+        W.SetControlEnabled(size, on)
     end
     if enabled and enabled.HookScript then enabled:HookScript("OnClick", RefreshMouseoverControls) end
     M.TrackRefresh(ctx, RefreshMouseoverControls)
@@ -531,7 +532,7 @@ local function BuildMisc(ctx)
         "tooltips.anchor")
     local tooltipModifier
     local function RefreshTooltipControls()
-        M.CallIf(W.SetControlEnabled, tooltipModifier, ReadTooltipMode() == "MODIFIER")
+        W.SetControlEnabled(tooltipModifier, ReadTooltipMode() == "MODIFIER")
     end
     BindMiscDropdown(tooltips, "Show unitframe tooltips", TOOLTIP_MODES, tooltipLeftW, tooltipLeftX, -112,
         function() return ReadTooltipMode() end,
@@ -573,13 +574,13 @@ local function BuildMisc(ctx)
         end)
     BindMiscToggle(blizzard, "Play sound on Target/Target Lost", "playTargetSelectLostSounds", false, "MSUF2_TARGET_SOUNDS", nil, nil, nil, nil,
         function(v)
-            Call("MSUF_TargetSoundDriver_ResetState")
-            if v then Call("MSUF_TargetSoundDriver_Ensure") end
+            _G.MSUF_TargetSoundDriver_ResetState()
+            if v then _G.MSUF_TargetSoundDriver_Ensure() end
         end)
     local resourcePing = BindMiscToggle(blizzard, "Enable native Player resource pings (12.1)",
         "playerResourcePingEnabled", true, "MSUF2_PLAYER_RESOURCE_PING", nil, nil, nil, PREVIEW_FALSE,
         function()
-            Call("MSUF_RefreshPlayerResourcePing")
+            _G.MSUF_RefreshPlayerResourcePing()
         end)
     M.AddTooltip(resourcePing, "Native Player resource pings",
         "Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel.",

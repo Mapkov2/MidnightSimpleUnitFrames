@@ -12,10 +12,9 @@ local W = M.Widgets
 local T = M.Theme
 local P = M.ColorPainter or {}
 M.ColorPainter = P
-local AP = M.AdvancedPage or {}
-local ControlMeta, RegisterControl = M.Pick(AP, [[ControlMeta RegisterControl]])
+local ControlMeta, RegisterControl = (M.AdvancedPage or {}).ControlMeta, (M.AdvancedPage or {}).RegisterControl
 local floor, max, min = math.floor, math.max, math.min
-local Tr = M.TranslateText or M.Tr or function(text) return text end
+local Tr = M.TranslateText or M.Tr
 
 -- The Resources tab renders a menu-only strip that reads colors straight out of
 -- the DB, so nothing repaints it when a color setter writes. Those setters live
@@ -450,8 +449,13 @@ local function AddClickTarget(host, anchor, onClick, onRightClick, label, priori
     return button
 end
 
-function P.Build(ctx, builder, categories)
-    if not (ctx and builder and type(categories) == "table" and #categories > 0) then return nil end
+-- P.Build runs these stages once, in order, over one per-call state table. Values
+-- a later stage assigns (ShowCategory, the lazily built preview boxes, the
+-- resources strip, the click-target list) are read through the table so the
+-- closures of earlier stages see them at call time.
+local PainterBuild = {}
+function PainterBuild.Selector(state)
+    local ctx, builder, categories = state.ctx, state.builder, state.categories
     local valid = {}
     local selectorValues = {}
     for i = 1, #categories do
@@ -460,7 +464,6 @@ function P.Build(ctx, builder, categories)
         selectorValues[i] = { value = category.key, text = category.shortTitle or category.title }
     end
     local function Current() return valid[M.colorsPainterCategory] and M.colorsPainterCategory or categories[1].key end
-    local ShowCategory
 
     -- Category choice is page navigation, not preview chrome.  Keep it outside
     -- the collapsible preview so the active settings remain reachable even
@@ -474,6 +477,7 @@ function P.Build(ctx, builder, categories)
         centerY = -27,
         getValue = Current,
         setValue = function(value)
+            local ShowCategory = state.ShowCategory
             if ShowCategory then ShowCategory(value) end
         end,
     }
@@ -509,6 +513,10 @@ function P.Build(ctx, builder, categories)
             flowGap = 8,
         })
     end
+    state.valid, state.Current, state.categoryBar = valid, Current, categoryBar
+end
+function PainterBuild.PreviewShell(state)
+    local ctx, builder = state.ctx, state.builder
 
     local section, _, fixedPreview = W.FixedPreviewSection(ctx, builder, {
         title = "Color Preview",
@@ -590,16 +598,23 @@ function P.Build(ctx, builder, categories)
     -- EnsureUnitBoxes below) never moves layout. Only when no deferred refresh
     -- can follow do they build synchronously.
     local unitBoxes = {}
-    local unitBoxesBuilt = false
-    local EnsureUnitBoxes
     -- The group tab shows one full-width native preview. Like the castbar
     -- panel it is built lazily on first activation of its tab; the default
-    -- unit tab must not pay for the native group frame preview.
-    local groupBox
+    -- unit tab must not pay for the native group frame preview. The box lands
+    -- in state.groupBox once EnsureGroupBox runs.
     local groupPreviewAvailable = type((M.GroupPreview or {}).CreateNative) == "function"
     local unitPreviewAvailable = type(MSUF.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox) == "function"
     if not unitPreviewAvailable and not groupPreviewAvailable then Label(host, "Preview renderer is unavailable.", 12, -12, previewW - 24, T.colors.muted) end
     SetZoomChromeShown(false)
+    state.section, state.fixedPreview, state.paletteSection, state.innerW = section, fixedPreview, paletteSection, innerW
+    state.previewW, state.host, state.shield = previewW, host, shield
+    state.RaiseZoomBars, state.CollectZoomBar = RaiseZoomBars, CollectZoomBar
+    state.unitGap, state.unitPreviewW, state.unitBoxes = unitGap, unitPreviewW, unitBoxes
+end
+function PainterBuild.PreviewBoxes(state)
+    local ctx, host, previewW, CollectZoomBar = state.ctx, state.host, state.previewW, state.CollectZoomBar
+    local unitGap, unitPreviewW, unitBoxes = state.unitGap, state.unitPreviewW, state.unitBoxes
+    local Current = state.Current
 
     -- The color preview keeps zoom/pan but intentionally no layout editing,
     -- so the "?" help must describe this surface instead of the full editor.
@@ -621,10 +636,10 @@ function P.Build(ctx, builder, categories)
     end
     -- The castbar tab shows one full-width panel instead of two half panels;
     -- built lazily on first activation of the tab.
-    local castBox
     local function EnsureCastBox()
-        if castBox == nil then
-            castBox = MakeUnitPreview(host, ctx, previewW, "target", "Target") or false
+        if state.castBox == nil then
+            local castBox = MakeUnitPreview(host, ctx, previewW, "target", "Target") or false
+            state.castBox = castBox
             if castBox then
                 castBox:ClearAllPoints()
                 castBox:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
@@ -634,12 +649,13 @@ function P.Build(ctx, builder, categories)
                 castBox:Hide()
             end
         end
-        return castBox or nil
+        return state.castBox or nil
     end
 
     local function EnsureGroupBox()
-        if groupBox == nil then
-            groupBox = MakeGroupPreview(host, ctx, previewW) or false
+        if state.groupBox == nil then
+            local groupBox = MakeGroupPreview(host, ctx, previewW) or false
+            state.groupBox = groupBox
             if groupBox then
                 CollectZoomBar(groupBox._zoomBar)
                 if groupBox._zoomBar and groupBox._zoomBar.SetAlpha then groupBox._zoomBar:SetAlpha(0) end
@@ -647,7 +663,7 @@ function P.Build(ctx, builder, categories)
                 groupBox:Hide()
             end
         end
-        return groupBox or nil
+        return state.groupBox or nil
     end
 
     local function WireUnitBox(box)
@@ -663,6 +679,7 @@ function P.Build(ctx, builder, categories)
     -- resume marker: if combat quiescence cancels the tracked timer, the next
     -- EnsureUnitBoxes call finishes the pair synchronously.
     local targetBoxPending = false
+    local unitBoxesBuilt = false
     local function AddTargetBox()
         targetBoxPending = false
         local targetBox = MakeUnitPreview(host, ctx, unitPreviewW, "target", "Target")
@@ -672,11 +689,11 @@ function P.Build(ctx, builder, categories)
         unitBoxes[#unitBoxes + 1] = targetBox
         WireUnitBox(targetBox)
         if not (ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown()) then
-            ShowCategory(Current())
+            state.ShowCategory(Current())
             RequestPreview(targetBox, "MSUF2_COLOR_PAINTER_TARGET_BOX")
         end
     end
-    EnsureUnitBoxes = function()
+    state.EnsureUnitBoxes = function()
         if unitBoxesBuilt then
             if targetBoxPending then AddTargetBox() end
             return
@@ -704,6 +721,10 @@ function P.Build(ctx, builder, categories)
             AddTargetBox()
         end
     end
+    state.EnsureCastBox, state.EnsureGroupBox = EnsureCastBox, EnsureGroupBox
+end
+function PainterBuild.Delegation(state)
+    local shield, unitBoxes = state.shield, state.unitBoxes
 
     -- Zoom and pan gestures pass through the shield to the hovered preview's
     -- own canvas handlers. Direct canvas mouse input stays disabled on this
@@ -719,7 +740,7 @@ function P.Build(ctx, builder, categories)
             local surface = SurfaceOf(unitBoxes[i])
             if surface then return surface end
         end
-        return SurfaceOf(castBox or nil) or SurfaceOf(groupBox)
+        return SurfaceOf(state.castBox or nil) or SurfaceOf(state.groupBox)
     end
     local function DelegateSurfaceScript(scriptName, ...)
         local surface = HoveredPreviewSurface()
@@ -749,11 +770,16 @@ function P.Build(ctx, builder, categories)
     end
 
     local function RefreshPreviews(reason)
+        local groupBox, castBox = state.groupBox, state.castBox
         for i = 1, #unitBoxes do RequestPreview(unitBoxes[i], reason) end
         if groupBox then RequestPreview(groupBox, reason) end
         if castBox then RequestPreview(castBox, reason) end
         P.RefreshResourcesStrip()
     end
+    state.DelegateSurfaceScript, state.RefreshPreviews = DelegateSurfaceScript, RefreshPreviews
+end
+function PainterBuild.Palette(state)
+    local ctx, paletteSection, innerW = state.ctx, state.paletteSection, state.innerW
 
     -- Hint line: makes the clickable preview discoverable and doubles as the
     -- status line for the palette brush.
@@ -872,6 +898,12 @@ function P.Build(ctx, builder, categories)
     end
     RefreshPaletteSlots()
     M.TrackRefresh(ctx, RefreshPaletteSlots)
+    state.SetHintStatus, state.PaletteHexToRGB = SetHintStatus, PaletteHexToRGB
+end
+function PainterBuild.PaintTargets(state)
+    local ctx, section, innerW, host, shield, unitBoxes = state.ctx, state.section, state.innerW, state.host, state.shield, state.unitBoxes
+    local Current, RefreshPreviews, DelegateSurfaceScript = state.Current, state.RefreshPreviews, state.DelegateSurfaceScript
+    local SetHintStatus, PaletteHexToRGB = state.SetHintStatus, state.PaletteHexToRGB
 
     -- Click-to-paint: resolve the section that owns the clicked element and
     -- open the shared context picker on its real bound color controls.
@@ -937,7 +969,7 @@ function P.Build(ctx, builder, categories)
     -- clear without duplicating the selector.
     local tabDescription = Label(section, "", 144, -14, innerW - 144, T.colors.muted)
 
-    local clickTargets = {}
+    state.clickTargets = {}
     local function FocusColorSection(sectionId)
         sectionId = sectionId or CATEGORY_SECTION[Current()]
         local target = EnsureSectionForPaint(sectionId)
@@ -947,9 +979,10 @@ function P.Build(ctx, builder, categories)
         return false
     end
     local function RebuildClickTargets(category, castPanel)
-        ReleaseClickTargets(clickTargets)
-        clickTargets = {}
-        local anchors = ResolveCategoryAnchors(castPanel and { castPanel } or unitBoxes, groupBox, category.key)
+        ReleaseClickTargets(state.clickTargets)
+        local clickTargets = {}
+        state.clickTargets = clickTargets
+        local anchors = ResolveCategoryAnchors(castPanel and { castPanel } or unitBoxes, state.groupBox, category.key)
         for i = 1, #anchors do
             local spec = anchors[i]
             local navigateTooltip = NAVIGATE_ONLY_SECTIONS[spec.sectionId or ""]
@@ -969,15 +1002,21 @@ function P.Build(ctx, builder, categories)
             if target then clickTargets[#clickTargets + 1] = target end
         end
     end
+    state.tabDescription, state.FocusColorSection = tabDescription, FocusColorSection
+    state.OpenPaintTarget, state.RebuildClickTargets = OpenPaintTarget, RebuildClickTargets
+end
+function PainterBuild.ResourcesStrip(state)
+    local ctx, host, shield = state.ctx, state.host, state.shield
+    local FocusColorSection, OpenPaintTarget = state.FocusColorSection, state.OpenPaintTarget
     -- Resources tab: menu-only preview strip that follows the Power type /
     -- Resource type dropdowns. The live unit frames can only render the
     -- player's own class resources, so they cannot preview foreign selections.
-    local resourcesStrip
+    -- The strip lands in state.resourcesStrip (false once known unavailable).
     local function EnsureResourcesStrip(category)
-        if resourcesStrip ~= nil then return resourcesStrip or nil end
+        if state.resourcesStrip ~= nil then return state.resourcesStrip or nil end
         local preview = category and category.preview
         if type(preview) ~= "table" then
-            resourcesStrip = false
+            state.resourcesStrip = false
             return nil
         end
         local strip = CreateFrame("Frame", nil, host)
@@ -1079,16 +1118,23 @@ function P.Build(ctx, builder, categories)
             end
         end
         strip:Hide()
-        resourcesStrip = strip
+        state.resourcesStrip = strip
         resourceStrips[#resourceStrips + 1] = strip
         return strip
     end
     M.TrackRefresh(ctx, function()
+        local resourcesStrip = state.resourcesStrip
         if resourcesStrip and resourcesStrip ~= false and resourcesStrip:IsShown() and resourcesStrip.Update then
             resourcesStrip.Update()
         end
     end)
-    ShowCategory = function(key)
+    state.EnsureResourcesStrip = EnsureResourcesStrip
+end
+function PainterBuild.Category(state)
+    local valid, categories, unitBoxes, categoryBar = state.valid, state.categories, state.unitBoxes, state.categoryBar
+    local EnsureCastBox, EnsureGroupBox, EnsureResourcesStrip = state.EnsureCastBox, state.EnsureGroupBox, state.EnsureResourcesStrip
+    local tabDescription, RebuildClickTargets, RaiseZoomBars = state.tabDescription, state.RebuildClickTargets, state.RaiseZoomBars
+    local function ShowCategory(key)
         if not valid[key] then key = categories[1].key end
         if M.SetMenuStateValue then M.SetMenuStateValue("colorsPainterCategory", key) else M.colorsPainterCategory = key end
         local category
@@ -1098,10 +1144,11 @@ function P.Build(ctx, builder, categories)
                 break
             end
         end
-        EnsureUnitBoxes()
+        state.EnsureUnitBoxes()
         local castPanel = key == "cast" and EnsureCastBox() or nil
         local strip = key == "resources" and EnsureResourcesStrip(category) or nil
         if key == "group" then EnsureGroupBox() end
+        local castBox, resourcesStrip, groupBox = state.castBox, state.resourcesStrip, state.groupBox
         for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group" and not castPanel and not strip) end
         if castBox then castBox:SetShown(castPanel and true or false) end
         if resourcesStrip and resourcesStrip ~= false then resourcesStrip:SetShown(strip and true or false) end
@@ -1124,8 +1171,8 @@ function P.Build(ctx, builder, categories)
         if category then
             tabDescription:SetText(Tr(category.subtitle or ""))
             if strip then
-                ReleaseClickTargets(clickTargets)
-                clickTargets = {}
+                ReleaseClickTargets(state.clickTargets)
+                state.clickTargets = {}
                 strip.Update()
             else
                 RebuildClickTargets(category, castPanel)
@@ -1136,7 +1183,12 @@ function P.Build(ctx, builder, categories)
         -- shows below the preview.
         if type(M.ColorsOnPainterCategory) == "function" then M.ColorsOnPainterCategory(key) end
     end
+    state.ShowCategory = ShowCategory
     M.ColorsSetPainterCategory = ShowCategory
+end
+function PainterBuild.Lifecycle(state)
+    local ctx, section, host, fixedPreview, unitBoxes = state.ctx, state.section, state.host, state.fixedPreview, state.unitBoxes
+    local Current, ShowCategory, RefreshPreviews = state.Current, state.ShowCategory, state.RefreshPreviews
     local function EnsurePreviewAttachment()
         if not W.AttachPinnedPreview then return end
         local pageKey = ctx and ctx.key
@@ -1161,7 +1213,7 @@ function P.Build(ctx, builder, categories)
         -- Showing only Player/Target here cannot make them visible below a
         -- released (hidden) host.
         if host.Show then host:Show() end
-        EnsureUnitBoxes()
+        state.EnsureUnitBoxes()
         EnsurePreviewAttachment()
         ShowCategory(Current())
         if not skipRender then RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE") end
@@ -1190,6 +1242,7 @@ function P.Build(ctx, builder, categories)
         section:HookScript("OnShow", function() QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_SHOW") end)
         section:HookScript("OnHide", function()
             initialRefreshSerial = initialRefreshSerial + 1
+            local groupBox, castBox = state.groupBox, state.castBox
             for i = 1, #unitBoxes do unitBoxes[i]:Hide() end
             if groupBox then groupBox:Hide() end
             if castBox then castBox:Hide() end
@@ -1202,6 +1255,7 @@ function P.Build(ctx, builder, categories)
     end
     ShowCategory(Current())
     if not section:IsShown() then
+        local groupBox, castBox = state.groupBox, state.castBox
         for i = 1, #unitBoxes do unitBoxes[i]:Hide() end
         if groupBox then groupBox:Hide() end
         if castBox then castBox:Hide() end
@@ -1218,4 +1272,17 @@ function P.Build(ctx, builder, categories)
         fixedPreview.onActivate = function() QueueVisiblePreviewRefresh("MSUF2_COLOR_PAINTER_FIXED_SHOW") end
     end
     return section
+end
+function P.Build(ctx, builder, categories)
+    if not (ctx and builder and type(categories) == "table" and #categories > 0) then return nil end
+    local state = { ctx = ctx, builder = builder, categories = categories }
+    PainterBuild.Selector(state)
+    PainterBuild.PreviewShell(state)
+    PainterBuild.PreviewBoxes(state)
+    PainterBuild.Delegation(state)
+    PainterBuild.Palette(state)
+    PainterBuild.PaintTargets(state)
+    PainterBuild.ResourcesStrip(state)
+    PainterBuild.Category(state)
+    return PainterBuild.Lifecycle(state)
 end

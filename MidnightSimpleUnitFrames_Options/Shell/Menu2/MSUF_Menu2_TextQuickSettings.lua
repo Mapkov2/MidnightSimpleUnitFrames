@@ -2,6 +2,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local EnsureDB = M.EnsureDB
 
 -- TEXT_QUICK_SETTINGS
 -- One cold, reusable Text Colors popup for RGB dots inside Text cards. It only
@@ -9,7 +10,7 @@ MSUF.MSUF2 = M
 -- opens the existing color picker directly; no typography control belongs here.
 local W = M.Widgets
 local T = M.Theme
-local Tr = M.Tr or function(value) return value end
+local Tr = M.Tr
 
 local textQuickPopup
 local activeAnchor
@@ -23,11 +24,7 @@ local SCOPE_LABELS = {
     gf_party = "Party", gf_raid = "Raid",
 }
 
-local function Resolve(value, fallback)
-    if type(value) == "function" then value = value() end
-    if value == nil or value == "" then return fallback end
-    return value
-end
+local Resolve = M.Widgets.ResolveContextColorOption
 
 local function GlobalPage()
     return M.GlobalPage or {}
@@ -203,7 +200,7 @@ local function CopyColor(value)
 end
 
 local function CaptureDBColorEntry(tableKey, key)
-    local db = _G.MSUF_DB
+    local db = EnsureDB()
     local colors = db and db[tableKey]
     return {
         hadTable = type(colors) == "table",
@@ -213,7 +210,7 @@ local function CaptureDBColorEntry(tableKey, key)
 end
 
 local function RestoreDBColorEntry(tableKey, key, state)
-    local db = _G.MSUF_DB
+    local db = EnsureDB()
     if not (db and state) then return end
     if state.hadTable then
         db[tableKey] = type(db[tableKey]) == "table" and db[tableKey] or {}
@@ -385,7 +382,7 @@ end
 
 local function CaptureScopeFields(scope, fields)
     local GP, state = GlobalPage(), {}
-    local db = GP.DB and GP.DB() or _G.MSUF_DB or {}
+    local db = GP.DB and GP.DB() or EnsureDB()
     local keys = type(GP.ScopeDBKeys) == "function" and GP.ScopeDBKeys(scope) or nil
     for i = 1, #(keys or {}) do
         local entryKey, entry = keys[i], db[keys[i]]
@@ -401,7 +398,7 @@ end
 
 local function RestoreScopeFields(scope, state)
     local GP = GlobalPage()
-    local db = GP.DB and GP.DB() or _G.MSUF_DB
+    local db = GP.DB and GP.DB() or EnsureDB()
     if not (db and type(state) == "table") then return end
     for i = 1, #state do
         local saved = state[i]

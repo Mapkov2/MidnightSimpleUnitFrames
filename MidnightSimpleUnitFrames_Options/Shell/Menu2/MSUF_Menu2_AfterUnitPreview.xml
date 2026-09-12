@@ -12,6 +12,7 @@
     <Script file="Pages\MSUF_Menu2_Global.lua"/>
     <Script file="Pages\MSUF_Menu2_GlobalFonts.lua"/>
     <Script file="Pages\MSUF_Menu2_GlobalBars.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalCastbars_Preview.lua"/>
     <Script file="Pages\MSUF_Menu2_GlobalCastbars.lua"/>
     <Script file="Pages\MSUF_Menu2_GlobalMisc.lua"/>
 </Ui>

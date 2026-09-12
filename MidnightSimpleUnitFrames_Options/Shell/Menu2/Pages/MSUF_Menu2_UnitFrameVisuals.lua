@@ -12,8 +12,13 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BORDERS = M.PickDefaults(UP, [[POWER_UNITS CASTBAR_FIELDS PORTRAIT_RENDER PORTRAIT_SHAPES PORTRAIT_BORDERS]])
-local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources ControlMeta SettingMeta ReviewedMeta RegisterControl]])
+local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER = UP.POWER_UNITS or {}, UP.CASTBAR_FIELDS or {}, UP.PORTRAIT_RENDER or {}
+local PORTRAIT_SHAPES, PORTRAIT_BORDERS = UP.PORTRAIT_SHAPES or {}, UP.PORTRAIT_BORDERS or {}
+local GetConf, GetGeneral, GetBars, UnitTopLabel, ReadBool = UP.GetConf, UP.GetGeneral, UP.GetBars, UP.UnitTopLabel, UP.ReadBool
+local SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool = UP.SetBool, UP.ReadNumber, UP.SetNumber, UP.ReadGeneralBool, UP.SetGeneralBool
+local NormalizePortrait, SetPortraitValue = UP.NormalizePortrait, UP.SetPortraitValue
+local IsPlayerPowerManagedByClassResources, ControlMeta, SettingMeta = UP.IsPlayerPowerManagedByClassResources, UP.ControlMeta, UP.SettingMeta
+local ReviewedMeta, RegisterControl = UP.ReviewedMeta, UP.RegisterControl
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
 local CASTBAR_UNITS = M.KeySetFromWords "player target focus boss"
@@ -47,8 +52,8 @@ local PORTRAIT_PLACEMENT = {
 }
 local PORTRAIT_SIZE_MODES = VT("UNIFORM", "Uniform", "SEPARATE", "Width & height")
 local UnitSectionShared = M.UnitSectionsShared or {}
-local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
-local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
+local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus
+local CreateSectionNotice = UnitSectionShared.CreateSectionNotice
 -- Power Bar section card geometry. Player gets one extra resource-source row;
 -- BuildPower and PowerSectionHeight share these helpers so the detached card
 -- always follows the first row without overlap.
@@ -78,11 +83,7 @@ local function RefreshClassPowerDetachedState()
     -- ask the ClassPower page/runtime to recompute enabled state after relevant edits.
     if type(M.RefreshClassPowerDetachedState) == "function" then M.RefreshClassPowerDetachedState() end
 end
-local function NormalizeDetachedPowerShape(value)
-    value = tostring(value or "BAR"):upper()
-    if value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-    return "BAR"
-end
+local NormalizeDetachedPowerShape = _G.MSUF_UF_NormalizeDetachedPowerShape
 local function PortraitClassStyleValues()
     local PM = MSUF and MSUF.PortraitMedia
     local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {
@@ -463,7 +464,7 @@ local function PreparePowerSwitch(ctx, sec, unit)
         function() return ReadBool(unit, "showPowerBar", true) end,
         function(v)
             SetBool(unit, "showPowerBar", v, "MSUF2_POWER_SHOW", { power = true, preview = true })
-            Call("MSUF_EnsureCooldownWidthObservers")
+            _G.MSUF_EnsureCooldownWidthObservers()
             if show.refreshDetails then show.refreshDetails() end
         end,
         SettingMeta(ctx, "power.show", unit, "showPowerBar"))
@@ -560,7 +561,7 @@ local function BuildPower(ctx, builder, unit)
         if isPlayer then conf.detachedPowerBarSyncClassPower = false end
         SetNumber(unit, "detachedPowerBarWidth", value, reason, DETACHED_POWER_OPTS)
         if detachedSync and detachedSync.SetChecked then detachedSync:SetChecked(false) end
-        Call("MSUF_EnsureCooldownWidthObservers")
+        _G.MSUF_EnsureCooldownWidthObservers()
         if sharedSourceChanged then
             M.RequestGeneralApply(reason, DETACHED_POWER_OPTS)
         end
@@ -590,7 +591,10 @@ local function BuildPower(ctx, builder, unit)
     local function BindPowerToggle(parent, addFn, label, x, y, width, key, defaultValue, reason, readFn, afterSet, opts)
         local control = addFn(W.ToggleAt(parent, label, x, y, width))
         M.BindBoolWidget(ctx, control,
-            readFn or function() return ReadBool(unit, key, defaultValue) end,
+            function()
+                if readFn then return readFn() end
+                return ReadBool(unit, key, defaultValue)
+            end,
             function(v)
                 SetBool(unit, key, v, reason, opts or POWER_OPTS)
                 if afterSet then afterSet(v) end
@@ -649,7 +653,7 @@ local function BuildPower(ctx, builder, unit)
                 return
             end
             SetBool(unit, "showPowerBar", true, "MSUF2_POWER_SHOW", { power = true, preview = true })
-            Call("MSUF_EnsureCooldownWidthObservers")
+            _G.MSUF_EnsureCooldownWidthObservers()
             RefreshPowerEnabled()
         end)
     end
@@ -771,7 +775,7 @@ local function BuildPower(ctx, builder, unit)
                 if isPlayer and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "BAR" end
                 if isPlayer and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
             end
-            Call("MSUF_EnsureCooldownWidthObservers")
+            _G.MSUF_EnsureCooldownWidthObservers()
             M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", DETACHED_POWER_OPTS)
             RefreshPowerEnabled()
             RefreshClassPowerDetachedState()
@@ -789,7 +793,7 @@ local function BuildPower(ctx, builder, unit)
         local playerDetached = BuildPowerControls(detachedCard, AddDetachedControl, {
             { "toggle", "Sync width to Class Resource", 16, -94, detachedLeftW, "detachedPowerBarSyncClassPower", true, "MSUF2_POWER_DETACHED_SYNC",
             function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end,
-            function() Call("MSUF_EnsureCooldownWidthObservers") end, DETACHED_POWER_OPTS, "sync" },
+            function() _G.MSUF_EnsureCooldownWidthObservers() end, DETACHED_POWER_OPTS, "sync" },
             { "toggle", "Anchor to Class Resource", detachedRightX, -94, detachedRightW, "detachedPowerBarAnchorToClassPower", false, "MSUF2_POWER_DETACHED_ANCHOR", nil, nil, DETACHED_POWER_OPTS },
         })
         detachedSync = playerDetached.sync
@@ -817,7 +821,7 @@ local function BuildPower(ctx, builder, unit)
                 local conf = GetConf(unit)
                 conf.detachedPowerBarShape = v
                 if v == "ORB" and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
-                Call("MSUF_EnsureCooldownWidthObservers")
+                _G.MSUF_EnsureCooldownWidthObservers()
                 M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED_SHAPE", DETACHED_POWER_OPTS)
                 RefreshPowerEnabled()
                 RefreshClassPowerDetachedState()
@@ -912,7 +916,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
             g[fields.enable] = (backend == "MSUF")
         end
         M.RequestUnitApply(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
-        Call("MSUF_Castbars_OnSettingsChanged", "menu2_backend")
+        _G.MSUF_Castbars_OnSettingsChanged("menu2_backend")
         if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
         if state.refresh then state.refresh() end
     end

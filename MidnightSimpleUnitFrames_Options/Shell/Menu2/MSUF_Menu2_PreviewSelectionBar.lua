@@ -16,7 +16,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local SB = M.PreviewSelectionBar or {}
 M.PreviewSelectionBar = SB
-local F = M.Fallbacks or {}
+
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local floor = math.floor
 

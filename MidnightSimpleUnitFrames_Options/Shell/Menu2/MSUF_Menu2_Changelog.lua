@@ -13,9 +13,7 @@ local max = math.max
 local tostring = tostring
 local type = type
 
-local function Tr(text)
-    return type(M.Tr) == "function" and M.Tr(text) or tostring(text or "")
-end
+local Tr = M.Tr
 
 local function ChangelogData()
     local full = (type(MSUF) == "table" and MSUF.MSUF_FullChangelog) or _G.MSUF_FullChangelog

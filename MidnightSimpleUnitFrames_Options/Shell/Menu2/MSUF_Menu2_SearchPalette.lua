@@ -28,14 +28,9 @@ local KIND_LABELS = {
     toggle = "Toggle",
 }
 
-local function TrimText(text)
-    text = tostring(text or "")
-    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
-end
+local TrimText = M.TrimText
 
-local function Tr(text)
-    return type(M.Tr) == "function" and M.Tr(text) or text
-end
+local Tr = M.Tr
 
 local function ShortText(text, limit)
     text = TrimText(text)

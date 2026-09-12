@@ -167,15 +167,13 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
             return shellBody
         end
         local refreshStart = ctx and ctx.refreshers and #ctx.refreshers or 0
-        -- Deferred builds run outside BuildPageEntry, where the search build
-        -- key is no longer set; registrations must never fall back to
-        -- whichever page happens to be active by the time the timer fires.
-        local previousBuildKey = M._msuf2SearchBuildKey
-        if ctx and ctx.key then M._msuf2SearchBuildKey = ctx.key end
-        local buildOK, buildError = pcall(spec.build, ctx, proxy, unit, spec)
-        M._msuf2SearchBuildKey = previousBuildKey
+        local entry = ctx.entry
+        local wasIncomplete = entry._msuf2BuildIncomplete
+        entry._msuf2BuildIncomplete = true
+        spec.build(ctx, proxy, unit, spec)
+        entry._msuf2BuildIncomplete = wasIncomplete
         building = false
-        if not buildOK then error(buildError, 0) end
+
         built = true
         if shellEntry then
             RefreshNewControls(refreshStart)

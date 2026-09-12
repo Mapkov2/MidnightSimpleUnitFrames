@@ -36,12 +36,10 @@ local function Normalize(text)
     return normalize(text)
 end
 
-local InvokeStaticProvider = M.InvokeBoundary or pcall
-
 local function Translate(text)
     if type(M.Tr) ~= "function" then return text end
-    local ok, translated = InvokeStaticProvider(M.Tr, text)
-    if ok and type(translated) == "string" and translated ~= "" then return translated end
+    local translated = M.Tr(text)
+    if type(translated) == "string" and translated ~= "" then return translated end
     return text
 end
 
@@ -160,8 +158,8 @@ end
 local function LocaleKey()
     local effective = Search.Text and Search.Text.SearchEffectiveLocale
     if type(effective) == "function" then
-        local ok, key = InvokeStaticProvider(effective)
-        if ok and key then return key end
+        local key = effective()
+        if key then return key end
     end
     return "?"
 end

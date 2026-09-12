@@ -9,7 +9,7 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
-local Tr = M.TranslateText or M.Tr or function(text) return text end
+local Tr = M.TranslateText or M.Tr
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -19,10 +19,24 @@ local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
 local SPELL_INDICATORS_121_PTR_DISABLED = false
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
-local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES ICON_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
-local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, IsAllSpecsSpellSpec, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues IsAllSpecsSpellSpec CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText ControlMeta RegisterControl]])
+local STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS = GP.STATUS_ICON_ANCHORS or {}, GP.GF_STATUS_ICON_SPECS or {}
+local GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES = GP.GF_STATUS_ICON_VALUES or {}, GP.PLACED_INDICATOR_TYPES or {}
+local FRAME_EFFECT_TYPES, ICON_EFFECT_TYPES, SPELL_GROWTH_VALUES = GP.FRAME_EFFECT_TYPES or {}, GP.ICON_EFFECT_TYPES or {}, GP.SPELL_GROWTH_VALUES or {}
+local CI_SLOT_VALUES, CI_SLOT_DEFAULTS = GP.CI_SLOT_VALUES or {}, GP.CI_SLOT_DEFAULTS or {}
+local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num = GP.GF, GP.RefreshGFPreview, GP.Conf, GP.Val, GP.QueueGF, GP.Set, GP.Bool, GP.Num
+local ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown = GP.ScopeSection, GP.CurrentScope, GP.BindScopeToggle, GP.ScopeDropdown
+local ScopeSlider, SpellIndicators, IconStyleValues = GP.ScopeSlider, GP.SpellIndicators, GP.IconStyleValues
+local CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues = GP.CurrentGFStatusSpec, GP.QueueSpellIndicators, GP.SpellSpecValues
+local SpellTrackedSpecValues, IsAllSpecsSpellSpec, CurrentSpellMultiSpec = GP.SpellTrackedSpecValues, GP.IsAllSpecsSpellSpec, GP.CurrentSpellMultiSpec
+local EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura = GP.EffectiveSpellSpec, GP.SpellAuraValues, GP.SetCurrentSpellAura
+local ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig = GP.ClearCurrentSpellAura, GP.CurrentSpellAura, GP.CurrentSpellConfig
+local PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues = GP.PlacedConfig, GP.FrameEffectConfig, GP.CICategoryValues, GP.CIFilterValues
+local CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider = GP.CIModeValues, GP.CurrentCISlot, GP.CICustomConfig, GP.BindNestedSlider
+local SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage = GP.SetOptionEnabled, GP.SetOptionsEnabled, GP.FinalizeScopePage
+local SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge = GP.SetSectionBadgesAndStatus, GP.TrackSectionRefresh, GP.OnOffBadge
+local OptionText, ControlMeta, RegisterControl = GP.OptionText, GP.ControlMeta, GP.RegisterControl
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
 local function ResolvePlacedSpellIndicatorControlVisibility(placed)
@@ -31,11 +45,11 @@ local function ResolvePlacedSpellIndicatorControlVisibility(placed)
     local barSelected = placedType == "bar"
     return iconSelected, barSelected, barSelected and placed.barShowTimer == true
 end
-SetCurrentSpellAura = SetCurrentSpellAura or function(kind, auraName)
+SetCurrentSpellAura = function(kind, auraName)
     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
     M.gfSpellIndicatorSelection[kind] = auraName or ""
 end
-ClearCurrentSpellAura = ClearCurrentSpellAura or function(kind)
+ClearCurrentSpellAura = function(kind)
     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
     M.gfSpellIndicatorSelection[kind] = nil
 end
@@ -132,8 +146,8 @@ local function ResolveCustomBuffSpellIDs(value)
     local cs = _G.C_Spell
     local resolver = cs and cs.GetSpellIDForSpellIdentifier
     if type(resolver) ~= "function" then return nil end
-    local ok, spellID = pcall(resolver, identifier)
-    if not ok then return nil end
+    local spellID = resolver(identifier)
+
     if issecretvalue(spellID) == true then return nil end
     local out, seen = {}, {}
     AddCustomBuffSpellID(out, seen, spellID)
@@ -192,8 +206,8 @@ local function SuggestedActivePlayerAuraID(spellIDs)
     if issecretvalue(spellName) == true or type(spellName) ~= "string" or spellName == "" or spellName == ("Buff " .. tostring(enteredID)) then return nil end
     local getByName = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataBySpellName
     if type(getByName) ~= "function" then return nil end
-    local ok, aura = pcall(getByName, "player", spellName, "HELPFUL")
-    if not ok then return nil end
+    local aura = getByName("player", spellName, "HELPFUL")
+
     if issecretvalue(aura) == true then return nil end
     if aura == nil or type(aura) ~= "table" then return nil end
     local auraSpellID = aura.spellId
@@ -642,14 +656,14 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
             local key = spec and spec.iconStyle
             if not key then return end
             Set(CurrentScope(), key, value or "DEFAULT", "visual")
-            M.CallIf(RefreshGFPreview)
+            RefreshGFPreview()
             if RefreshStatusIconState then RefreshStatusIconState() end
         end,
         ControlMeta(ctx, "status.selected.iconStyle"))
     W.MoveWidget(iconPack, selectedCard, 16, -106, siconLeftW - 32, "LEFT")
     local customIcon = BindStatusDropdown(selectedCard, "Custom icon", IconAssetValuesForCurrentStatus, siconLeftW, "customIcon", "", "visual", 16, -158, siconLeftW - 32,
         function()
-            M.CallIf(RefreshGFPreview)
+            RefreshGFPreview()
             if RefreshStatusIconState then RefreshStatusIconState() end
         end)
 
@@ -681,7 +695,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
         if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode(mode) end
         if mode == "current" and gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(CurrentGFStatusSpec().value) end
-        M.CallIf(RefreshGFPreview)
+        RefreshGFPreview()
         if RefreshStatusPreviewButtons then RefreshStatusPreviewButtons() end
     end
     local function PreviewActionButton(parent, label, width, semanticPath, onClick)
@@ -955,7 +969,7 @@ local function SpellFeedback(text, kind)
     if M.ShowStatusFeedback then M.ShowStatusFeedback(Tr(text), kind, 3) end
 end
 local function RefreshSpellPage(refreshPage)
-    M.CallIf(RefreshGFPreview)
+    RefreshGFPreview()
     if refreshPage then refreshPage() end
 end
 local function AddCustomBuffResolved(refreshPage, kind, specKey, spellIDs)
@@ -1237,7 +1251,7 @@ function SpellTileGrid:OnMouseUp(tile, button)
         end
     else
         SetCurrentSpellAura(kind, tile._auraName)
-        M.CallIf(RefreshGFPreview)
+        RefreshGFPreview()
     end
     if M.Refresh then M.Refresh(self.ctx) else self.refreshPage() end
 end
@@ -1705,7 +1719,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             EnsureSpellDefaults(kind, EffectiveSpellSpec(kind))
             CurrentSpellAura(kind)
             QueueSpellIndicators(kind)
-            M.CallIf(RefreshGFPreview)
+            RefreshGFPreview()
             RefreshSpellIndicatorState()
             RequestSpellControlRefresh("gf-spell-spec")
         end,
@@ -1730,7 +1744,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         M.gfPreviewAllSpecSpellIcons = M.gfPreviewAllSpecSpellIcons or {}
         M.gfPreviewAllSpecSpellIcons[kind] = enabled == true or nil
         RefreshPreviewAllButton()
-        M.CallIf(RefreshGFPreview)
+        RefreshGFPreview()
         RefreshSpellIndicatorState()
         return PreviewAllSpecIconsEnabled() == (enabled == true)
     end
@@ -1758,7 +1772,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             EnsureSpellDefaults(kind, EffectiveSpellSpec(kind))
             CurrentSpellAura(kind)
             QueueSpellIndicators(kind)
-            M.CallIf(RefreshGFPreview)
+            RefreshGFPreview()
             RefreshSpellIndicatorState()
             RequestSpellControlRefresh("gf-spell-multi-spec")
         end,
@@ -1783,7 +1797,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             cfg.multiSpecs = cfg.multiSpecs or {}
             cfg.multiSpecs[specKey] = value and true or nil
             QueueSpellIndicators(kind)
-            M.CallIf(RefreshGFPreview)
+            RefreshGFPreview()
             RefreshSpellIndicatorState()
             RequestSpellControlRefresh("gf-spell-multi-track")
         end,
@@ -1794,7 +1808,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         function() return CurrentSpellAura(CurrentScope()) end,
         function(value)
             SetCurrentSpellAura(CurrentScope(), value)
-            M.CallIf(RefreshGFPreview)
+            RefreshGFPreview()
             RefreshSpellIndicatorState()
             RequestSpellControlRefresh("gf-spell-selection")
         end,
@@ -2350,7 +2364,7 @@ local function BuildGFIndicators(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
-    local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
+    local function RefreshPage() M.SelectPage(ctx.key) end
     BuildIndicatorsSection(ctx, b)
     BuildStatusIconsSection(ctx, b, RefreshPage)
     BuildCornerIndicatorsSection(ctx, b, RefreshPage)

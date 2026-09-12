@@ -9,19 +9,24 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme or {}
 local GP = M.GroupPage or {}
-local floor, ceil, abs = math.floor, math.ceil, math.abs
+local floor = math.floor
 local max = math.max
-local min = math.min
+
 local VT = M.ValueTextList
 local C_Timer = M.MenuTimer or _G.C_Timer
-local GF, RefreshGFPreview, AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[GF RefreshGFPreview AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber OptionText]])
+local RefreshGFPreview, AURA_ANCHORS, STATUS_ICON_ANCHORS = GP.RefreshGFPreview, GP.AURA_ANCHORS, GP.STATUS_ICON_ANCHORS
+local SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup = GP.SPELL_GROWTH_VALUES, GP.ScopeSection, GP.CurrentScope, GP.AuraGroup
+local AurasRoot, QueueGF, RefreshContext = GP.AurasRoot, GP.QueueGF, GP.RefreshContext
+local SetOptionEnabled, SetOptionsEnabled = GP.SetOptionEnabled, GP.SetOptionsEnabled
+local FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge = GP.FinalizeScopePage, GP.SetSectionBadgesAndStatus, GP.OnOffBadge
+local BadgeNumber, OptionText = GP.BadgeNumber, GP.OptionText
 AURA_ANCHORS = AURA_ANCHORS or {}
 STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS or {}
 SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES or {}
 SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
-OptionText = OptionText or function(values, value, fallback)
+OptionText = function(values, value, fallback)
     values = type(values) == "function" and values() or values
     if type(values) == "table" then
         for i = 1, #values do
@@ -35,10 +40,7 @@ local function ThemeColor(key, fallback)
     local colors = T and T.colors
     return colors and colors[key] or fallback
 end
-local function AuraCatalogToken(value, fallback)
-    local token = tostring(value or ""):lower():gsub("[^%w]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
-    return token ~= "" and token or (fallback or "control")
-end
+local AuraCatalogToken = M.AuraCatalogToken
 local function AuraCatalogPageKey(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     return token ~= "" and token or (fallback or "gf_auras")
@@ -141,7 +143,7 @@ local function SetAuraWorkspaceLane(scope, lane)
     M.gfAuraLaneSelection[scope] = (lane == "debuff" and "debuff") or (lane == "externals" and "externals") or "buff"
 end
 local function RebuildGroupAuraPage(ctx)
-    M.CallIf(M.RebuildPageKeepingScroll, (ctx and ctx.key) or M.activeKey or "gf_auras")
+    M.RebuildPageKeepingScroll((ctx and ctx.key) or M.activeKey or "gf_auras")
 end
 local function AuraWorkspaceLayout(lane, width)
     local sectionW = tonumber(width) or 720
@@ -254,11 +256,7 @@ local function NativeAuraKey(groupKey)
     if groupKey == "externals" then return "externals" end
     return "debuffs"
 end
-local function GroupAuraSettingKeys(scope, suffix)
-    suffix = tostring(suffix or "")
-    if scope == "party" then return { "gf_party" .. suffix } end
-    return { "gf_raid" .. suffix, "gf_mythicraid" .. suffix }
-end
+local GroupAuraSettingKeys = M.GroupAuraSettingKeys
 local function AllGroupAuraSettingKeys(suffix)
     suffix = tostring(suffix or "")
     return { "gf_party" .. suffix, "gf_raid" .. suffix, "gf_mythicraid" .. suffix }
@@ -282,7 +280,7 @@ local function BindAuraRootEnabled(ctx, widget)
             if not root then return end
             root.enabled = value and true or false
             if QueueGF then QueueGF(activeScope, "auras") end
-            M.CallIf(RefreshContext, ctx)
+            RefreshContext(ctx)
         end,
         AuraControlMeta(ctx, "group-workspace.root.enabled", nil, {
             assistantDisposition = "dynamic",
@@ -309,7 +307,7 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
             end
             group.enabled = enabled
             if QueueGF then QueueGF(scope, "auras") end
-            M.CallIf(RefreshContext, ctx)
+            RefreshContext(ctx)
         end,
         AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey, "lane") .. ".enabled", nil, {
             assistantDisposition = "dynamic",
@@ -319,45 +317,20 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
         }))
     return widget
 end
-local function CreateNestedGroupAuraBuilder(ctx, parentBuilder, body)
-    local entry = body and body._msuf2CollapsibleEntry
-    if not (entry and W.PageBuilder) then return parentBuilder end
-    local bodyWidth = body._msuf2Width or parentBuilder.width or 720
-    local nestedCtx = setmetatable({
-        wrapper = body,
-        width = max(320, bodyWidth - 24),
-        key = ctx and ctx.key,
-        entry = ctx and ctx.entry,
-        _msuf2ContentX = 12,
-        _msuf2TopInset = 0,
-    }, { __index = ctx })
-    function nestedCtx:SetContentHeight(height)
-        height = max(80, ceil(tonumber(height) or 80))
-        if entry.contentHeight == height then return end
-        entry.contentHeight = height
-        body:SetHeight(height)
-        if parentBuilder.RequestRelayoutCollapsibles then parentBuilder:RequestRelayoutCollapsibles() end
-    end
-    local nestedBuilder = W.PageBuilder(nestedCtx)
-    entry._msuf2SettleContentLayout = function()
-        if nestedBuilder.RelayoutCollapsibles then nestedBuilder:RelayoutCollapsibles() end
-        nestedCtx:SetContentHeight(abs(nestedBuilder.y) + 42)
-    end
-    return nestedBuilder
-end
+local CreateNestedGroupAuraBuilder = W.CreateNestedAuraBuilder
 
 local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
-    local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
+    local function RefreshPage() M.SelectPage(ctx.key) end
     local function CombatLocked()
         if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() == true end
         return _G.InCombatLockdown and _G.InCombatLockdown() or false
     end
     local function RefreshAuraPreviews(scope)
         if CombatLocked() then return false end
-        M.CallIf(RefreshGFPreview, scope, { auraOnly = true })
+        RefreshGFPreview(scope, { auraOnly = true })
         return true
     end
     local function BindLiveAuraSlider(widget, scope, lane, key, fallback, meta)
@@ -436,7 +409,7 @@ local function BuildGFAuras(ctx)
                 group[key] = value
                 RefreshAuraPreviews(activeScope)
                 QueueGF(activeScope, "auras")
-                if key == "growth" then M.CallIf(RefreshContext, ctx) end
+                if key == "growth" then RefreshContext(ctx) end
             end,
             meta or AuraControlMeta(ctx,
                 "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
@@ -482,7 +455,7 @@ local function BuildGFAuras(ctx)
                 local activeScope = CurrentScope()
                 AuraGroup(activeScope, "externals").autoBlacklistBuffs = value == true
                 if QueueGF then QueueGF(activeScope, "auras") end
-                M.CallIf(RefreshContext, ctx)
+                RefreshContext(ctx)
             end,
             AuraControlMeta(ctx, "group-workspace.lane.externals.auto-blacklist-buffs", nil, {
                 assistantDisposition = "dynamic",

@@ -18,9 +18,7 @@ local PREVIEW_MAX_WIDTH = 320
 local TOUR_BAND_GAP = 16
 local TOUR_CONTROLS_LABEL_HEIGHT = 20
 
-local function Tr(text)
-    return type(M.Tr) == "function" and M.Tr(text) or text
-end
+local Tr = M.Tr
 
 -- Highlights can host a small group of live settings so the tour is something
 -- you touch, not only read. The rows are registered by the page that owns the
@@ -160,14 +158,7 @@ local function OpenPage(item)
     end
 end
 
-local function SetTextLayout(fontString, width, justify)
-    if not fontString then return fontString end
-    fontString:SetWidth(max(1, width or 1))
-    fontString:SetJustifyH(justify or "LEFT")
-    if fontString.SetWordWrap then fontString:SetWordWrap(true) end
-    if fontString.SetNonSpaceWrap then fontString:SetNonSpaceWrap(true) end
-    return fontString
-end
+local SetTextLayout = M.Widgets.SetTextLayout
 
 local function RegisterControl(widget, releaseKey, suffix, label, help)
     if not (widget and type(M.RegisterSearchWidget) == "function") then return widget end
@@ -546,7 +537,9 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     -- Linkless cards (inline dummy preview instead of a route) offer only the
     -- review flow, so "Next" takes over the primary role there.
     local nextLabel = index == count and "Finish tour" or "Next highlight"
-    local nextRole = item.action and nil or "primary"
+    local selectedValue1
+    if not (item.action) then selectedValue1 = "primary" end
+    local nextRole = selectedValue1
     local function AdvanceReviewed()
         Controller():Advance("reviewed")
         RefreshHome()

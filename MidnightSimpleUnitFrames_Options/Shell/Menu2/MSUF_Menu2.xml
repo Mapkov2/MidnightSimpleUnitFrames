@@ -14,11 +14,16 @@
     <Script file="MSUF_Menu2_Dropdowns.lua"/>
     <Script file="MSUF_Menu2_ApplyService.lua"/>
     <Script file="MSUF_Menu2_Bindings.lua"/>
+    <Script file="MSUF_Menu2_Bindings_History.lua"/>
+    <Script file="MSUF_Menu2_Bindings_Reset.lua"/>
     <Script file="MSUF_Menu2_SearchBridge.lua"/>
     <Script file="MSUF_Menu2_SearchPalette.lua"/>
     <Script file="MSUF_Menu2_PagePreviews.lua"/>
     <Script file="MSUF_Menu2_NavRail.lua"/>
     <Script file="MSUF_Menu2_WindowControls.lua"/>
+    <Script file="MSUF_Menu2_Window_PageNavigation.lua"/>
+    <Script file="MSUF_Menu2_Window_PageEntry.lua"/>
+    <Script file="MSUF_Menu2_PageLifecycle.lua"/>
     <Script file="MSUF_Menu2_Window.lua"/>
     <Script file="MSUF_Menu2_API.lua"/>
     <Script file="MSUF_AssistantBridge.lua"/>

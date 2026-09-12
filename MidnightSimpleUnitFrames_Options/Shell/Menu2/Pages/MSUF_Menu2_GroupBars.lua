@@ -15,9 +15,15 @@ local max = math.max
 local min = math.min
 local VT = M.ValueTextList
 local DISPEL_OVERLAY_121_PTR_DISABLED = false
-local SCOPE_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, GF_BAR_MODES, SIMPLE_TEXTURES, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(GP, [[SCOPE_VALUES HEALTH_MODES TEXT_MODES DELIMITER_VALUES ANCHORS GF_BAR_MODES SIMPLE_TEXTURES DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES]])
+local TEXT_MODES = GP.TEXT_MODES or {}
+local DELIMITER_VALUES, ANCHORS = GP.DELIMITER_VALUES or {}, GP.ANCHORS or {}
+local DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = GP.DISPEL_OVERLAY_STYLES or {}, GP.DEBUFF_STRIPE_EDGES or {}
 local HEALTH_TEXT_MODES = GP.HEALTH_TEXT_MODES or TEXT_MODES
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText ControlMeta RegisterControl]])
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection = GP.GF, GP.Conf, GP.Val, GP.QueueGF, GP.Set, GP.Bool, GP.Num, GP.ScopeSection
+local CurrentScope, BindScopeToggle, ScopeDropdown = GP.CurrentScope, GP.BindScopeToggle, GP.ScopeDropdown
+local ScopeSlider, SetOptionEnabled, SetOptionsEnabled = GP.ScopeSlider, GP.SetOptionEnabled, GP.SetOptionsEnabled
+local FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh = GP.FinalizeScopePage, GP.SetSectionBadgesAndStatus, GP.TrackSectionRefresh
+local OnOffBadge, BadgeNumber, OptionText, ControlMeta, RegisterControl = GP.OnOffBadge, GP.BadgeNumber, GP.OptionText, GP.ControlMeta, GP.RegisterControl
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
@@ -571,9 +577,13 @@ local function BuildGFTextSection(ctx, b)
         if tab == "name" then
             FocusGFPreviewText("name", nil, true)
         elseif tab == "hp" then
-            FocusGFPreviewText("hp", MoveTogether("hp") and nil or CurrentSlot("hp"), true)
+            local selectedValue3
+            if not (MoveTogether("hp")) then selectedValue3 = CurrentSlot("hp") end
+            FocusGFPreviewText("hp", selectedValue3, true)
         elseif tab == "power" then
-            FocusGFPreviewText("power", MoveTogether("power") and nil or CurrentSlot("power"), true)
+            local selectedValue2
+            if not (MoveTogether("power")) then selectedValue2 = CurrentSlot("power") end
+            FocusGFPreviewText("power", selectedValue2, true)
         else
             FocusGFPreviewText(nil, nil, false)
         end
@@ -659,9 +669,7 @@ local function BuildGFTextSection(ctx, b)
     end
     local tabFrames = {}
     local TextCard = UnitSectionShared.TextCard
-    local PlaceSlider = UnitSectionShared.PlaceSlider or function(parent, control, x, y, width)
-        return W.MoveWidget(control, parent, x, y, width, "CENTER")
-    end
+    local PlaceSlider = UnitSectionShared.PlaceSlider
     local function IsPowerTextEnabled()
         local gf = GF()
         if gf and type(gf.IsPowerTextEnabled) == "function" then return gf.IsPowerTextEnabled(CurrentScope(), Conf(CurrentScope())) and true or false end
@@ -871,7 +879,9 @@ local function BuildGFTextSection(ctx, b)
             function() return MoveTogether(kind) end,
             function(v)
                 SetMoveTogether(kind, v)
-                FocusGFPreviewText(kind, v and nil or CurrentSlot(kind), true)
+                local selectedValue1
+                if not (v) then selectedValue1 = CurrentSlot(kind) end
+                FocusGFPreviewText(kind, selectedValue1, true)
                 if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
                 RequestGroupBarsRefresh(ctx, "gf-bars-text-move-together")
             end,
@@ -951,7 +961,7 @@ local function BuildGFTextSection(ctx, b)
         local nameOn = Bool(CurrentScope(), "showName", true)
         local hpOn = Bool(CurrentScope(), "showHPText", true)
         local powerOn = IsPowerTextEnabled()
-        M.CallIf(RefreshTextTabs)
+        RefreshTextTabs()
         SetOptionsEnabled(nameTextControls, nameOn)
         SetOptionsEnabled(hpTextControls, hpOn)
         if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end

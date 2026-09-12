@@ -4,10 +4,7 @@
 --- save/write behavior behind drag and keyboard nudges.
 local _, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Handles = M.GroupPreviewHandles or {}
@@ -56,6 +53,10 @@ local GROUP_SECTION_LAYER = {
     dispel = "dispelSymbol",
     dispelSymbol = "dispelSymbol",
 }
+--- Install stages. Each binds one slice of the handle behaviour onto the shared
+--- per-install state table; Handles.Install runs them in the original order.
+local Stage = {}
+
 function Handles.Install(box, deps)
     if not box then return nil end
     deps = deps or {}
@@ -63,26 +64,22 @@ function Handles.Install(box, deps)
     local H = deps.H or {}
     local M = deps.M or _G.MSUF2 or {}
     local MSUF = deps.MSUF or MSUF or {}
-    local function AuraDurationBarColor()
-        local auras3 = MSUF.MSUF_Auras3
-        local resolver = auras3 and auras3.GetDurationBarColor
-        if type(resolver) == "function" then return resolver() end
-        return 1, 1, 1
-    end
+    local AuraDurationBarColor = MSUF.MSUF_Auras3.GetDurationBarColor
     local T = deps.T or M.Theme or {}
     local PreviewHelpers = M.PreviewHelpers or {}
-    local RegisterPreviewControl = deps.RegisterPreviewControl or function(widget, semanticPath, label, kind, classification, extra)
-        local page = M.GroupPage
-        if page and type(page.RegisterControl) == "function" then
-            page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification, extra)
-        end
-        return widget
-    end
+    local RegisterPreviewControl = deps.RegisterPreviewControl
     local OpenSection = deps.OpenSection or (M.GroupPreview and M.GroupPreview.OpenSection)
     local WHITE8X8 = deps.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
-    local Tr, Round, ResolveAnchor, PointOffset, HandleOffset, OffsetToConfig, CurrentStatusSpec, CurrentSpellConfig, CurrentSpellPlaced, HandleText, HandleOffsets, UpdateHint, RefreshHandleSelection, StatusLabel, StartPan, StopPan, ZoomWheel = M.PickFallbacks(deps, HANDLE_FALLBACKS, [[
-        TR Round ResolveAnchor PointOffset HandleOffset OffsetToConfig CurrentStatusSpec CurrentSpellConfig CurrentSpellPlaced HandleText HandleOffsets UpdateHint RefreshHandleSelection StatusLabel StartPan StopPan ZoomWheel
-    ]])
+    local Tr, Round = deps.TR or HANDLE_FALLBACKS.TR, deps.Round or HANDLE_FALLBACKS.Round
+    local ResolveAnchor, PointOffset = deps.ResolveAnchor or HANDLE_FALLBACKS.ResolveAnchor, deps.PointOffset or HANDLE_FALLBACKS.PointOffset
+    local HandleOffset, OffsetToConfig = deps.HandleOffset or HANDLE_FALLBACKS.HandleOffset, deps.OffsetToConfig or HANDLE_FALLBACKS.OffsetToConfig
+    local CurrentStatusSpec = deps.CurrentStatusSpec or HANDLE_FALLBACKS.CurrentStatusSpec
+    local CurrentSpellConfig = deps.CurrentSpellConfig or HANDLE_FALLBACKS.CurrentSpellConfig
+    local HandleText = deps.HandleText or HANDLE_FALLBACKS.HandleText
+    local HandleOffsets, UpdateHint = deps.HandleOffsets or HANDLE_FALLBACKS.HandleOffsets, deps.UpdateHint or HANDLE_FALLBACKS.UpdateHint
+    local RefreshHandleSelection = deps.RefreshHandleSelection or HANDLE_FALLBACKS.RefreshHandleSelection
+    local StatusLabel, StartPan = deps.StatusLabel or HANDLE_FALLBACKS.StatusLabel, deps.StartPan or HANDLE_FALLBACKS.StartPan
+    local StopPan, ZoomWheel = deps.StopPan or HANDLE_FALLBACKS.StopPan, deps.ZoomWheel or HANDLE_FALLBACKS.ZoomWheel
     if not deps.OffsetToConfig then OffsetToConfig = Round end
     box._handles = {}
     box._handleList = {}
@@ -107,6 +104,27 @@ function Handles.Install(box, deps)
         box._dragFrame:SetFrameLevel(InteractionLevel(2))
     end
     box._dragFrame:Hide()
+    local st = { box = box, deps = deps }
+    st.AuraDurationBarColor, st.CurrentSpellConfig, st.CurrentStatusSpec, st.H, st.HandleOffset, st.HandleOffsets, st.HandleText, st.InteractionLevel = AuraDurationBarColor, CurrentSpellConfig, CurrentStatusSpec, H, HandleOffset, HandleOffsets, HandleText, InteractionLevel
+    st.M, st.MSUF, st.OffsetToConfig, st.OpenSection, st.PointOffset, st.PreviewHelpers, st.RefreshHandleSelection, st.RegisterPreviewControl = M, MSUF, OffsetToConfig, OpenSection, PointOffset, PreviewHelpers, RefreshHandleSelection, RegisterPreviewControl
+    st.ResolveAnchor, st.Round, st.StartPan, st.StatusLabel, st.StopPan, st.T, st.Tr, st.UpdateHint = ResolveAnchor, Round, StartPan, StatusLabel, StopPan, T, Tr, UpdateHint
+    st.WHITE8X8, st.ZoomWheel, st.dragParent, st.max, st.mock = WHITE8X8, ZoomWheel, dragParent, max, mock
+    Stage.BindSelection(st)
+    Stage.BindTextDrag(st)
+    Stage.BindPositionWriters(st)
+    Stage.BindExactNudge(st)
+    Stage.BindDrag(st)
+    Stage.BindHandleFactory(st)
+    Stage.CreateLayerHandles(st)
+    Stage.BindSpellDrop(st)
+    Stage.CreateTextHandles(st)
+    return Stage.BuildBundle(st)
+end
+
+--- Handle selection, spell config lookup, history checkpoints and the
+--- post-move refresh of the live group frames.
+function Stage.BindSelection(st)
+    local CurrentSpellConfig, H, HandleText, M, MSUF, OpenSection, RefreshHandleSelection, box = st.CurrentSpellConfig, st.H, st.HandleText, st.M, st.MSUF, st.OpenSection, st.RefreshHandleSelection, st.box
     local function SelectHandle(handle)
         box._selectedHandle = handle
         if box.SetFocus then box:SetFocus() end
@@ -280,6 +298,14 @@ function Handles.Install(box, deps)
         RefreshHandleSelection(box)
         return true
     end
+    st.CheckpointHandleHistory, st.ConfigCombatLocked, st.HandleHistoryLabel, st.OpenHandleSettings, st.RefreshGroupIndicatorDragPreview, st.RefreshGroupPreviewAfterMove, st.SelectHandle, st.SpellConfigForHandle = CheckpointHandleHistory, ConfigCombatLocked, HandleHistoryLabel, OpenHandleSettings, RefreshGroupIndicatorDragPreview, RefreshGroupPreviewAfterMove, SelectHandle, SpellConfigForHandle
+    st.SpellPlacedForHandle = SpellPlacedForHandle
+end
+
+--- Text handle drag: captured region geometry, live drag painting and the
+--- offset writer behind name/HP/power text moves.
+function Stage.BindTextDrag(st)
+    local CheckpointHandleHistory, H, RefreshGroupPreviewAfterMove, RefreshHandleSelection, ResolveAnchor, Round, UpdateHint, box = st.CheckpointHandleHistory, st.H, st.RefreshGroupPreviewAfterMove, st.RefreshHandleSelection, st.ResolveAnchor, st.Round, st.UpdateHint, st.box
     local function RefreshTextDragPreview(handle)
         UpdateHint(box, handle)
         RefreshHandleSelection(box)
@@ -409,6 +435,15 @@ function Handles.Install(box, deps)
     local function ResolveGroupAuraAnchor(rx, ry)
         return ResolveAnchor(rx, ry)
     end
+    st.ApplyTextRegionDrag, st.CaptureTextDragRegions, st.ReleaseTextDragRegions, st.ResolveGroupAuraAnchor, st.WriteTextHandleOffsets = ApplyTextRegionDrag, CaptureTextDragRegions, ReleaseTextDragRegions, ResolveGroupAuraAnchor, WriteTextHandleOffsets
+end
+
+--- Position writers: saving a dragged handle into the config and the
+--- arrow-key nudge path.
+function Stage.BindPositionWriters(st)
+    local CheckpointHandleHistory, ConfigCombatLocked, CurrentStatusSpec, H, HandleOffset, HandleOffsets, OffsetToConfig, PointOffset = st.CheckpointHandleHistory, st.ConfigCombatLocked, st.CurrentStatusSpec, st.H, st.HandleOffset, st.HandleOffsets, st.OffsetToConfig, st.PointOffset
+    local RefreshGroupIndicatorDragPreview, RefreshGroupPreviewAfterMove, ResolveAnchor, ResolveGroupAuraAnchor, Round, SpellPlacedForHandle, WriteTextHandleOffsets, box = st.RefreshGroupIndicatorDragPreview, st.RefreshGroupPreviewAfterMove, st.ResolveAnchor, st.ResolveGroupAuraAnchor, st.Round, st.SpellPlacedForHandle, st.WriteTextHandleOffsets, st.box
+    local max = st.max
     local function SaveHandlePosition(handle, action, previewOnly)
         if not (handle and box._mock) or handle._locked or ConfigCombatLocked() then return false end
         if handle._cfgText then return end
@@ -568,11 +603,15 @@ function Handles.Install(box, deps)
         CheckpointHandleHistory(handle, "Nudge")
         return true
     end
-    local function ExactPreviewDelta(value)
-        value = tonumber(value)
-        if value == nil or value ~= value or value == math.huge or value == -math.huge then return nil end
-        return value
-    end
+    st.NudgeHandlePosition, st.SaveHandlePosition = NudgeHandlePosition, SaveHandlePosition
+end
+
+--- Exact (scripted) nudges: read/write one handle's configured position and
+--- the transactional box:NudgeHandleExact API.
+function Stage.BindExactNudge(st)
+    local CheckpointHandleHistory, CurrentStatusSpec, H, HandleHistoryLabel, M, RefreshGroupPreviewAfterMove, Round, SelectHandle = st.CheckpointHandleHistory, st.CurrentStatusSpec, st.H, st.HandleHistoryLabel, st.M, st.RefreshGroupPreviewAfterMove, st.Round, st.SelectHandle
+    local SpellPlacedForHandle, WriteTextHandleOffsets, box = st.SpellPlacedForHandle, st.WriteTextHandleOffsets, st.box
+    local ExactPreviewDelta = MSUF.MSUF2.PreviewHelpers.ExactPreviewDelta
     local function ReadHandlePositionExact(handle)
         if not handle then return nil end
         local conf = H.Conf(H.CurrentScope())
@@ -692,6 +731,14 @@ function Handles.Install(box, deps)
         if outcome and outcome[1] then return true, outcome[2], outcome[3], outcome[4], outcome[5] end
         return false, (outcome and outcome[2]) or "write-failed"
     end
+end
+
+--- Pointer drag lifecycle: start, per-frame update and release for every
+--- handle kind.
+function Stage.BindDrag(st)
+    local ApplyTextRegionDrag, CaptureTextDragRegions, CheckpointHandleHistory, ConfigCombatLocked, HandleOffsets, M, OpenHandleSettings, PreviewHelpers = st.ApplyTextRegionDrag, st.CaptureTextDragRegions, st.CheckpointHandleHistory, st.ConfigCombatLocked, st.HandleOffsets, st.M, st.OpenHandleSettings, st.PreviewHelpers
+    local RefreshGroupPreviewAfterMove, RefreshHandleSelection, ReleaseTextDragRegions, Round, SaveHandlePosition, SelectHandle, StartPan, StopPan = st.RefreshGroupPreviewAfterMove, st.RefreshHandleSelection, st.ReleaseTextDragRegions, st.Round, st.SaveHandlePosition, st.SelectHandle, st.StartPan, st.StopPan
+    local UpdateHint, WriteTextHandleOffsets, box = st.UpdateHint, st.WriteTextHandleOffsets, st.box
     local function StopHandleDrag(handle, button, allowOpenSettings)
         if box._stage and box._stage._msufGFPreviewPanning then StopPan(box._stage) end
         if button and button ~= "LeftButton" then return end
@@ -865,6 +912,15 @@ function Handles.Install(box, deps)
         box._dragFrame:Show()
         RefreshHandleSelection(box)
     end
+    st.StartHandleDrag, st.StopHandleDrag = StartHandleDrag, StopHandleDrag
+end
+
+--- Handle factory: the preview handle button (scripts, tooltip, quick actions,
+--- control registration) and its pooled aura icon regions.
+function Stage.BindHandleFactory(st)
+    local AuraDurationBarColor, H, HandleText, M, OpenHandleSettings, PreviewHelpers, RefreshHandleSelection, RegisterPreviewControl = st.AuraDurationBarColor, st.H, st.HandleText, st.M, st.OpenHandleSettings, st.PreviewHelpers, st.RefreshHandleSelection, st.RegisterPreviewControl
+    local SelectHandle, StartHandleDrag, StopHandleDrag, T, Tr, WHITE8X8, ZoomWheel, box = st.SelectHandle, st.StartHandleDrag, st.StopHandleDrag, st.T, st.Tr, st.WHITE8X8, st.ZoomWheel, st.box
+    local mock = st.mock
     local function CreatePreviewHandle(key, sectionKey, color, label, width, height, locked, parent)
         local handle = CreateFrame("Button", nil, parent or mock, T.Template())
         handle:SetSize(width or 32, height or 32)
@@ -1059,6 +1115,13 @@ function Handles.Install(box, deps)
             handle._iconDurationBars[i] = durationBar
         end
     end
+    st.AddIconPool, st.CreatePreviewHandle = AddIconPool, CreatePreviewHandle
+end
+
+--- Creates the aura, power, portrait, dispel, status and spell indicator
+--- handles plus the dynamic per-spell handle pool.
+function Stage.CreateLayerHandles(st)
+    local AddIconPool, CreatePreviewHandle, H, StatusLabel, T, box, dragParent = st.AddIconPool, st.CreatePreviewHandle, st.H, st.StatusLabel, st.T, st.box, st.dragParent
     local buffHandle = CreatePreviewHandle("buff", "buffs", { 0.36, 0.79, 0.36 }, "BUFFS", 86, 34, false)
     buffHandle._cfgGroup = "buff"
     AddIconPool(buffHandle, 6)
@@ -1151,6 +1214,15 @@ function Handles.Install(box, deps)
             if not active[key] then handle:Hide() end
         end
     end
+    st.buffHandle, st.debuffHandle, st.dispelSymbolHandle, st.externalHandle, st.portraitHandle, st.powerBarHandle, st.spellHandle, st.spellIndicatorHandles = buffHandle, debuffHandle, dispelSymbolHandle, externalHandle, portraitHandle, powerBarHandle, spellHandle, spellIndicatorHandles
+    st.statusHandles, st.trackedBuffHandle = statusHandles, trackedBuffHandle
+end
+
+--- Spell drop target: cursor hit-testing, the drop guide and the
+--- box:SetSpellDropTarget / box:DropSpellIndicatorAtCursor API.
+function Stage.BindSpellDrop(st)
+    local CheckpointHandleHistory, H, InteractionLevel, M, OffsetToConfig, PointOffset, RefreshGroupPreviewAfterMove, ResolveAnchor = st.CheckpointHandleHistory, st.H, st.InteractionLevel, st.M, st.OffsetToConfig, st.PointOffset, st.RefreshGroupPreviewAfterMove, st.ResolveAnchor
+    local SpellConfigForHandle, SpellPlacedForHandle, T, Tr, UpdateHint, WHITE8X8, box, mock = st.SpellConfigForHandle, st.SpellPlacedForHandle, st.T, st.Tr, st.UpdateHint, st.WHITE8X8, st.box, st.mock
     local function CursorPositionInUI()
         local x, y = GetCursorPosition()
         if not (x and y) then return nil end
@@ -1281,6 +1353,12 @@ function Handles.Install(box, deps)
         if M.RequestRefresh then M.RequestRefresh(nil, "gf-spell-drop-controls") end
         return true, anchor, nextX, nextY
     end
+end
+
+--- Text handles (name, HP and power groups/slots) and the
+--- box:FocusTextSlot API.
+function Stage.CreateTextHandles(st)
+    local CreatePreviewHandle, H, box, spellIndicatorHandles = st.CreatePreviewHandle, st.H, st.box, st.spellIndicatorHandles
     box._spellIndicatorHandles = spellIndicatorHandles
     local function ConfigureTextHandle(handle, kind, slot)
         if not handle then return end
@@ -1343,6 +1421,12 @@ function Handles.Install(box, deps)
         end
         return true
     end
+end
+
+--- Public handle bundle consumed by the group preview render layer.
+function Stage.BuildBundle(st)
+    local AddIconPool, NudgeHandlePosition, SelectHandle, StopHandleDrag, buffHandle, debuffHandle, dispelSymbolHandle, externalHandle = st.AddIconPool, st.NudgeHandlePosition, st.SelectHandle, st.StopHandleDrag, st.buffHandle, st.debuffHandle, st.dispelSymbolHandle, st.externalHandle
+    local portraitHandle, powerBarHandle, spellHandle, statusHandles, trackedBuffHandle = st.portraitHandle, st.powerBarHandle, st.spellHandle, st.statusHandles, st.trackedBuffHandle
     return {
         buffHandle = buffHandle,
         trackedBuffHandle = trackedBuffHandle,

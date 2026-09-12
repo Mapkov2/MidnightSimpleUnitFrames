@@ -12,8 +12,9 @@ local AP = M.AdvancedPage or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
-local C_Timer = M.MenuTimer or _G.C_Timer
-local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs, ControlMeta, RegisterControl = M.Pick(AP, [[Gameplay MoveWidget LabelAt SwitchAt AddTableControlSpecs ControlMeta RegisterControl]])
+
+local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs = AP.Gameplay, AP.MoveWidget, AP.LabelAt, AP.SwitchAt, AP.AddTableControlSpecs
+local ControlMeta, RegisterControl = AP.ControlMeta, AP.RegisterControl
 local GAMEPLAY_SETTING_BY_PATH = {
     ["timer.enabled"] = "gameplay.enableCombatTimer",
     ["combat_state.enabled"] = "gameplay.enableCombatStateText",
@@ -467,7 +468,7 @@ local function BuildGameplay(ctx)
             return g.enableCombatCrosshair == true and g.enableCombatCrosshairMeleeRangeColor == true
         end },
     }, { also = function()
-        M.CallIf(previewRefresh)
+        if previewRefresh then previewRefresh() end
         SyncTotemPreviewButton()
     end })
     ctx:SetContentHeight(math.abs(b.y) + 42)

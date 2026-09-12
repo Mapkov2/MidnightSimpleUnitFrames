@@ -5,15 +5,12 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local T = M.Theme or {}
 local W = M.Widgets or {}
-local Tr = M.TranslateText or M.Tr or function(text) return text end
+local Tr = M.TranslateText or M.Tr
 local floor = math.floor
 local sort = table.sort
 
@@ -21,8 +18,6 @@ local Overview = M.LayerOverview or {}
 M.LayerOverview = Overview
 Overview.providers = Overview.providers or {}
 local providers = Overview.providers
-
-local InvokeProvider = M.InvokeBoundary or pcall
 
 local UNIT_SCOPES = {
     { key = "player", label = "Player" },
@@ -181,8 +176,8 @@ end
 local function UnitStatusAllowed(spec, unit)
     if type(spec) ~= "table" then return false end
     if type(spec.allowed) == "function" then
-        local ok, allowed = InvokeProvider(spec.allowed, unit)
-        return ok and allowed == true
+        local allowed = spec.allowed(unit)
+        return allowed == true
     end
     if spec.units then return WordContains(spec.units, unit) end
     return true
@@ -248,14 +243,14 @@ local function CollectRows(includeLegacyStrata)
     local strataByID = includeLegacyStrata and {} or nil
     local sink = {
         Layer = function(_, descriptor) AddLayerRow(layerByID, descriptor) end,
-        Strata = includeLegacyStrata
-            and function(_, descriptor) AddStrataRow(strataByID, descriptor) end
-            or function() end,
+        Strata = function(_, descriptor)
+            if includeLegacyStrata then AddStrataRow(strataByID, descriptor) end
+        end,
     }
     local ids = SortedKeys(providers)
     for i = 1, #ids do
         local provider = providers[ids[i]]
-        if type(provider) == "function" then InvokeProvider(provider, sink) end
+        if type(provider) == "function" then provider(sink) end
     end
     local layers, strataRows = {}, {}
     for _, row in pairs(layerByID) do layers[#layers + 1] = row end
