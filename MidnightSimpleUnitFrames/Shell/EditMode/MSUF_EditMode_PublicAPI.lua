@@ -5,17 +5,14 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local EM2 = _G.MSUF_EM2
 if not (EM2 and EM2.Registry) then return end
 local Util = EM2.Util or {}
+local ReportError = MSUF.ReportError or _G.MSUF_ReportError
 
 local API, External = { VERSION = 1 }, {}
 local records, owners, listeners = {}, {}, {}
 local sessionActive, sessionSnapshot = false, nil
 EM2.ExternalElements = External
 
-local function Export(name, value)
-    if type(MSUF.ExportPublic) == "function" then return MSUF.ExportPublic(name, value) end
-    _G[name] = value
-    return value
-end
+local Export = MSUF.ExportPublic
 
 local function ValidName(value)
     return type(value) == "string" and value ~= "" and #value <= 80
@@ -71,16 +68,18 @@ end
 local function Report(record, name, err)
     local message = ("MSUF Edit Mode API (%s/%s): %s failed: %s"):format(
         record and record.owner or "?", record and record.id or "?", name, tostring(err))
-    local handler = type(_G.geterrorhandler) == "function" and _G.geterrorhandler()
-    if type(handler) == "function" then handler(message)
-    elseif type(_G.print) == "function" then _G.print(message) end
+    ReportError("EditMode.ExternalAPI", message)
 end
+
+-- These handlers belong to the registration, so unregistering releases them.
+-- The operation and owner are immutable; nested callbacks cannot change context.
+
 
 local function Invoke(record, name, ...)
     local callback = record and record[name]
     if type(callback) ~= "function" then return false, "callback_missing" end
-    local ok, result, detail = pcall(callback, ...)
-    if not ok then Report(record, name, result); return false, "callback_error" end
+    local result, detail = callback(...)
+
     if result == false then return false, detail or "callback_rejected" end
     return true, result, detail
 end
@@ -317,7 +316,7 @@ end
 
 function API.RegisterSessionListener(owner, callback)
     if not ValidName(owner) or type(callback) ~= "function" then return false end
-    listeners[owner] = callback
+    listeners[owner] = { callback = callback }
     return true
 end
 
@@ -438,17 +437,7 @@ local function ControlSpec(record, id)
     end
 end
 
-local function InvokeControl(record, spec, name, ...)
-    local callback = spec and spec[name]
-    if type(callback) ~= "function" then return false, "callback_missing" end
-    local ok, result = pcall(callback, ...)
-    if not ok then
-        Report(record, ("control %s %s"):format(tostring(spec.id), name), result)
-        return false, "callback_error"
-    end
-    if result == false then return false, "callback_rejected" end
-    return true, result
-end
+
 
 function External.GetControls(key)
     local record = records[key]
@@ -459,9 +448,7 @@ function External.GetControlValue(key, id)
     local record = records[key]
     local spec = ControlSpec(record, id)
     if not spec then return nil end
-    local ok, value = InvokeControl(record, spec, "get")
-    if not ok then return nil end
-    return value
+    return spec.get()
 end
 
 --- One undo transaction per committed control change; the element's own
@@ -484,13 +471,13 @@ function External.ApplyControl(key, id, value)
     --- no undo entry, no capture/rollback — the owner's set either applies or
     --- reports failure and the popup re-syncs to the real state.
     if spec.transient then
-        if not InvokeControl(record, spec, "set", value) then return false end
+        if spec.set(value) == false then return false end
         Refresh()
         return true
     end
     local before = Capture(record)
     if not before or undo.BeginChange("external", key, spec.label) ~= true then return false end
-    if not InvokeControl(record, spec, "set", value) then
+    if spec.set(value) == false then
         undo.CancelChange()
         Restore(record, before, "rollback")
         return false
@@ -598,9 +585,8 @@ local function NotifySession(enabled, reason)
     for _, record in pairs(records) do
         if record.onSessionChanged then Invoke(record, "onSessionChanged", enabled, reason) end
     end
-    for owner, callback in pairs(listeners) do
-        local ok, err = pcall(callback, enabled, reason)
-        if not ok then Report({ owner = owner, id = "session" }, "listener", err) end
+    for _, listener in pairs(listeners) do
+        listener.callback(enabled, reason)
     end
 end
 

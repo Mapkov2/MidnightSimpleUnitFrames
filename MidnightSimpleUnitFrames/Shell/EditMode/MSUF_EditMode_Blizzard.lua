@@ -25,16 +25,9 @@ local LAYOUT_NAME = "MSUF"
 local registered = {}
 local active, tooltipContainerShown, sessionActive = false, false, false
 
-local function Export(name, value)
-    if type(MSUF.ExportPublic) == "function" then return MSUF.ExportPublic(name, value) end
-    _G[name] = value
-    return value
-end
+local Export = MSUF.ExportPublic
 
-local function General()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local General = _G.MSUF_GetGeneralDB
 
 local function Enabled()
     local general = General()
@@ -877,12 +870,7 @@ local function SessionChanged(enabled)
     end
 end
 
-local function Add(element)
-    if registered[element.id] then return true end
-    local ok = API.RegisterElement(OWNER, element)
-    if ok then registered[element.id] = true end
-    return ok == true
-end
+local Add = _G.MSUF_EM2.ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
 
 local function Activate()
     if active or not Enabled() then return false end
@@ -1017,12 +1005,7 @@ local function Deactivate()
     return true
 end
 
-local function SetEnabled(enabled)
-    enabled = enabled ~= false
-    local general = General()
-    if general then general[SETTING] = enabled end
-    return enabled and Activate() or Deactivate()
-end
+local SetEnabled = _G.MSUF_EM2.ExternalProviders.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_BlizzardEditMode_IsAvailable", function() return Blizzard() ~= nil end)
 Export("MSUF_BlizzardEditMode_SetEnabled", SetEnabled)

@@ -13,8 +13,8 @@ local NAME_FOCUS_PLACEMENT = { useScaledRect = true }
 local VALUE_FOCUS_PLACEMENT = { fitText = true, useScaledRect = true }
 function TextFocus.Install(deps)
     deps = deps or {}
-    local CurrentScope = deps.CurrentScope or function() return M.gfScope or "party" end
-    local Conf = deps.Conf or function(_) return {} end
+    local CurrentScope = deps.CurrentScope
+    local Conf = deps.Conf
     -- Under reverse order the configured left HP slot renders on the physical
     -- right FontString (and vice versa); map slot-addressed visuals to the
     -- FontString that actually shows the slot's content.
@@ -67,14 +67,8 @@ local function GFPreviewPlaceHandleAroundRegions(handle, parent, regions, pad, k
     return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad,
         kind == "name" and NAME_FOCUS_PLACEMENT or VALUE_FOCUS_PLACEMENT)
 end
-local GFPreviewNormalizeTextFocusKind = PreviewHelpers.NormalizeTextFocusKind or function(kind)
-    if kind == "name" or kind == "hp" or kind == "power" then return kind end
-    return nil
-end
-local GFPreviewNormalizeTextFocusSlot = PreviewHelpers.NormalizeTextFocusSlot or function(slot)
-    if slot == "left" or slot == "center" or slot == "right" then return slot end
-    return nil
-end
+local GFPreviewNormalizeTextFocusKind = PreviewHelpers.NormalizeTextFocusKind
+local GFPreviewNormalizeTextFocusSlot = PreviewHelpers.NormalizeTextFocusSlot
 local function GFPreviewTextFocusRegions(mock, kind, slot)
     if not mock then return nil end
     if kind == "name" then

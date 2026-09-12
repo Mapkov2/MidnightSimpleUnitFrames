@@ -1,13 +1,22 @@
 --- Integrations/MSUF_Integration_NSRTNicknames.lua
 --- Optional Northern Sky Raid Tools nickname resolver for unit-frame display names.
+---
+--- Foreign symbols this file depends on (NorthernSkyRaidTools; undocumented):
+---   NSRT.Settings: settings table. GlobalNickNames plus the per-addon opt-in
+---     key ("MSUF", or MSUF's folder name) gate the resolver. Absent: no
+---     provider is registered and discovery keeps retrying on ADDON_LOADED /
+---     PLAYER_LOGIN until PLAYER_ENTERING_WORLD, after which discovery stops.
+---   NSRT.NickNames: fullName -> nickname map copied into the local cache on
+---     every refresh. Absent or empty: zero nicknames, provider unregistered.
+---   NSAPI.RegisterCallback(owner, event, fn): subscribes to
+---     "NSRT_NICKNAME_UPDATED" and "MSUF_NICKNAME_TOGGLE". Absent: no live
+---     updates; nicknames refresh only on the discovery events and through
+---     the MSUF_NSRTNicknames_ApplySetting export.
 
 local addonName, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 local NicknameAPI = MSUF.API and MSUF.API.Nicknames
 if not (NicknameAPI and NicknameAPI.GetVersion and NicknameAPI.GetVersion() >= 1) then return end
 
@@ -17,7 +26,7 @@ local CreateFrame = Text.CreateFrame
 local InCombatLockdown = Text.InCombatLockdown
 local UnitFullName = UnitFullName
 local GetNormalizedRealmName = GetNormalizedRealmName
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local type = type
 local pairs = pairs
 

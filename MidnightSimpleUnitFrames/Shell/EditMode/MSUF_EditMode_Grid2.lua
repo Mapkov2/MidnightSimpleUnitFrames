@@ -11,16 +11,9 @@ local active, hookedLayout, previewOwned = false, nil, false
 local scaleHooked, scaleQueued, scalePending = false, false, false
 local eventFrame
 
-local function Export(name, value)
-    if type(MSUF.ExportPublic) == "function" then return MSUF.ExportPublic(name, value) end
-    _G[name] = value
-    return value
-end
+local Export = MSUF.ExportPublic
 
-local function General()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local General = _G.MSUF_GetGeneralDB
 
 local function Enabled()
     local general = General()
@@ -174,12 +167,7 @@ local function StableId(key)
     return ("detached_%s_%d"):format(stem ~= "" and stem or "detached", hash)
 end
 
-local function Add(element)
-    if registered[element.id] then return true end
-    local ok = API.RegisterElement(OWNER, element)
-    if ok then registered[element.id] = true end
-    return ok == true
-end
+local Add = _G.MSUF_EM2.ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
 
 local function SyncHeaders()
     local layout = active and Enabled() and Layout()
@@ -277,12 +265,7 @@ local function Deactivate()
     return true
 end
 
-local function SetEnabled(enabled)
-    enabled = enabled ~= false
-    local general = General()
-    if general then general[SETTING] = enabled end
-    return enabled and Activate() or Deactivate()
-end
+local SetEnabled = _G.MSUF_EM2.ExternalProviders.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_Grid2EditMode_IsAvailable", function() return Layout() ~= nil end)
 Export("MSUF_Grid2EditMode_SetEnabled", SetEnabled)

@@ -21,6 +21,7 @@ local hiddenParent
 local hookedFrames = {}
 local looseFrames = {}
 local visibleFrames = {}
+local pendingHide = {}
 local watcher
 local blizzardAuraHiddenParent
 local buffAuraOriginalParent
@@ -46,10 +47,7 @@ local UNIT_KEYS = {
     arena = "arena",
 }
 
-local function General()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local General = _G.MSUF_GetGeneralDB
 
 local function UnitGroup(unit)
     if type(unit) == "string" and unit:match("^boss%d*$") then
@@ -142,8 +140,14 @@ local function HiddenParent()
 end
 
 local function FlushLooseFrames()
-    -- Protected Blizzard frames cannot always be reparented while combat is
-    -- active. Queue the intended parent changes and replay them on regen.
+    -- Protected Blizzard frames cannot always be hidden or reparented while
+    -- combat is active. Queue the intended changes and replay them on regen.
+    for frame in next, pendingHide do
+        pendingHide[frame] = nil
+        if frame and frame.Hide then
+            frame:Hide()
+        end
+    end
     local parent = HiddenParent()
     for frame in next, looseFrames do
         if frame and frame.SetParent then
@@ -208,16 +212,37 @@ local function Unregister(frame)
     end
 end
 
+--- Hiding a protected Blizzard frame while combat is active throws and taints
+--- the caller, and MSUF reaches this file from combat-deferred profile applies
+--- (State/MSUF_Profiles.lua). Queue the hide and replay it on regen instead of
+--- swallowing it. Mirrors DeferHide in MSUF_UF_Group_Blizzard.lua.
+local function DeferHide(frame)
+    pendingHide[frame] = true
+    -- A queued hide and a queued hand-back to Blizzard contradict each other;
+    -- the newer request wins.
+    visibleFrames[frame] = nil
+    EnsureWatcher():RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+
 local function Hide(frame)
-    if frame and frame.Hide then
-        frame:Hide()
+    if not (frame and frame.Hide) then
+        return
     end
+    if InCombatLockdown and InCombatLockdown() and frame.IsProtected and frame:IsProtected() then
+        DeferHide(frame)
+        return
+    end
+    pendingHide[frame] = nil
+    frame:Hide()
 end
 
 local function KeepBlizzardCastbar(frame)
     if not (frame and frame.SetParent) then
         return
     end
+    -- An earlier pass may have queued a hide for this castbar. Handing it back
+    -- to Blizzard revokes that request.
+    pendingHide[frame] = nil
     if InCombatLockdown and InCombatLockdown() and frame.IsProtected and frame:IsProtected() then
         -- Player castbar can be intentionally handed back to Blizzard. Delay
         -- the parent restore if the castbar is protected during combat.

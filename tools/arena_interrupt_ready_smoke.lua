@@ -18,7 +18,7 @@ assert(Contains(menu, '"Show on Arena castbars"') and Contains(menu, '"kickReady
 assert(Contains(menu, 'ReadGBool("kickReadyShowArena", false)'),
     "Interrupt Ready Menu2 enablement gate omits Arena")
 
-local bindings = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua")
+local bindings = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua")
 assert(Contains(bindings, "kickReadyShowBoss kickReadyShowArena"),
     "Castbar reset ownership omits the Arena Interrupt Ready setting")
 

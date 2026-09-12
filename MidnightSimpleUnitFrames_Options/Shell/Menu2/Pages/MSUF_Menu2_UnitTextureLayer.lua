@@ -6,7 +6,7 @@ local W = M.Widgets or {}
 local T = M.Theme or {}
 local UP = M.UnitPage or {}
 local VTP = M.ValueTextPairs
-local Tr = M.TranslateText or M.Tr or function(text) return text end
+local Tr = M.TranslateText or M.Tr
 local floor = math.floor
 local max = math.max
 
@@ -185,7 +185,7 @@ local function BuildTextureLayer(ctx, builder, unit)
         return boundPrefix .. base
     end
     local function RefreshLayer()
-        Call("MSUF_RefreshUnitTextureLayers", unit)
+        _G.MSUF_RefreshUnitTextureLayers(unit)
     end
     local function FinishPreset(changed, reason)
         if not changed then return false end
@@ -288,6 +288,8 @@ local function BuildTextureLayer(ctx, builder, unit)
         elseif control.SetValueFormatter then
             control:SetValueFormatter(function(v) return tostring(floor((tonumber(v) or 0) + 0.5)) end)
         end
+        local selectedValue1
+        if not (percent) then selectedValue1 = step end
         M.BindNumberWidget(ctx, control,
             function() return ReadNumber(unit, Key(base), default) end,
             function(v)
@@ -296,7 +298,7 @@ local function BuildTextureLayer(ctx, builder, unit)
                 if after then after() end
             end,
             default,
-            LayerMeta(base, nil, percent and nil or step))
+            LayerMeta(base, nil, selectedValue1))
         W.MoveWidget(control, parent, x, y, width - 58, "LEFT")
         return control
     end

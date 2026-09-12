@@ -4,12 +4,8 @@
 --- - Do NOT embed large third-party libraries here.
 --- - Delegate profile import/export to MSUF_Profiles.lua (which owns profile semantics).
 local addonName, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
---- Simple deterministic Lua-table serializer used when compact codecs are unavailable.
+local ExportPublic = MSUF.ExportPublic
+--- Explicit legacy DB serialization API; profile exports use the native codec.
 local function SerializeLuaTable(tbl)
     local function ser(v, indent)
         local t = type(v)
@@ -41,56 +37,8 @@ end
 --- Public: serialize the active DB.
 local function MSUF_SerializeDB()
     local db = _G.MSUF_DB
-    if type(db) ~= "table" then
-         return "return {}"
-    end
+    assert(type(db) == "table", "MSUF: active profile is not initialized")
     return SerializeLuaTable(db)
 end
---- Proxies
-local function Proxy_ExportSelectionToString(kind)
-    local real = _G.MSUF_Profiles_ExportSelectionToString
-    if type(real) == "function" then
-        return real(kind)
-    end
-    --- Fallback: schema-600 table dump.
-    return MSUF_SerializeDB()
-end
-local function Proxy_ImportFromString(str)
-    local real = _G.MSUF_Profiles_ImportFromString
-    if type(real) == "function" then
-        return real(str)
-    end
-    print("|cffff0000MSUF:|r Import failed: profiles system not loaded.")
- end
---- External API (Wago UI Packs / other tools):
---- We expose stable globals that can export/import a SPECIFIC profile by key without switching the active profile.
---- These are thin proxies so load-order never breaks: real implementations live in MSUF_Profiles.lua.
-local function Proxy_ExportExternal(profileKey)
-    local real = _G.MSUF_Profiles_ExportExternal
-    if type(real) == "function" then
-        return real(profileKey)
-    end
-     return false, "profiles system not loaded"
-end
-local function Proxy_ImportExternal(profileString, profileKey)
-    local real = _G.MSUF_Profiles_ImportExternal
-    if type(real) == "function" then
-        return real(profileString, profileKey)
-    end
-     return false, "profiles system not loaded"
-end
---- Export globals (minimal surface).
-ExportPublic("MSUF_SerializeDB", _G.MSUF_SerializeDB or MSUF_SerializeDB)
---- IMPORTANT: If load order makes this file load before MSUF_Profiles.lua,
---- we still want the buttons to work. So we install thin proxies.
-ExportPublic("MSUF_ExportSelectionToString", _G.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString)
-ExportPublic("MSUF_ImportFromString", _G.MSUF_ImportFromString or Proxy_ImportFromString)
-ExportPublic("MSUF_ExportExternal", _G.MSUF_ExportExternal or Proxy_ExportExternal)
-ExportPublic("MSUF_ImportExternal", _G.MSUF_ImportExternal or Proxy_ImportExternal)
-if type(MSUF) == "table" then
-    MSUF.MSUF_SerializeDB = MSUF.MSUF_SerializeDB or MSUF_SerializeDB
-    MSUF.MSUF_ExportSelectionToString = MSUF.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString
-    MSUF.MSUF_ImportFromString = MSUF.MSUF_ImportFromString or Proxy_ImportFromString
-    MSUF.MSUF_ExportExternal = MSUF.MSUF_ExportExternal or Proxy_ExportExternal
-    MSUF.MSUF_ImportExternal = MSUF.MSUF_ImportExternal or Proxy_ImportExternal
-end
+ExportPublic("MSUF_SerializeDB", MSUF_SerializeDB)
+MSUF.MSUF_SerializeDB = MSUF_SerializeDB

@@ -102,9 +102,19 @@ function namespace.ExportPublic(name, value)
     return value
 end
 
+-- Load the actual split state providers; this test covers decoding policy,
+-- while runtime application is asserted in the separate profile apply suite.
+for _, relative in ipairs({ "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua" }) do
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. relative))("MidnightSimpleUnitFrames", namespace)
+end
+function MSUF_TryDecodeCompactString(value) return decoded[value] end
+function MSUF_EnsureDB() end
+namespace.ProfileRuntime = { Apply = function() end }
+
 MSUF_DB = currentProfile
 MSUF_ActiveProfile = "Current"
-local profilesChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))
+local profilesPath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
+local profilesChunk = assert(loadstring(MSUF_Auras3TestLoader.ReadSource(profilesPath), "@" .. profilesPath))
 profilesChunk("MidnightSimpleUnitFrames", namespace)
 
 assert(type(MSUF_ImportLegacyFromString) ~= "function",

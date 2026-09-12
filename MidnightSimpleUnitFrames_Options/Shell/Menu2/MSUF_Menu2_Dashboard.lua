@@ -16,13 +16,8 @@ local max = math.max
 local min = math.min
 local CreateFrame = _G.CreateFrame
 local CreateColor = _G.CreateColor
-local InvokeDashboardBoundary = M.InvokeBoundary or pcall
-local function NormalizeControlPath(value)
-    local path = tostring(value or "")
-    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
-    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
-    return path
-end
+
+local NormalizeControlPath = M.NormalizeControlPath
 local function DashboardMeta(semanticPath, classification, exact)
     local identity = table.concat({ "home", "dashboard", NormalizeControlPath(semanticPath) }, ".")
     local meta = {
@@ -294,12 +289,12 @@ function M.RunDashboardDirectAction(actionKey)
         return false, "That Dashboard action is not available in this menu build."
     end
     if type(command.blockCombat) == "function" then
-        local ok, blocked = InvokeDashboardBoundary(command.blockCombat)
-        if not ok then return false, "The Dashboard action failed safely: " .. tostring(blocked) end
+        local blocked = command.blockCombat()
+
         if blocked == true then return false, "That Dashboard action is unavailable during combat." end
     end
-    local ok, result, detail = InvokeDashboardBoundary(command.set)
-    if not ok then return false, "The Dashboard action failed safely: " .. tostring(result) end
+    local result, detail = command.set()
+
     if result == false then return false, detail or "The Dashboard action could not be completed." end
     return true, detail or (spec and spec.label) or "Dashboard action complete."
 end
@@ -345,7 +340,7 @@ local function CreateDashboardAccordionTone(header, arrow)
         if headerOpenHighlight.SetColors then headerOpenHighlight:SetColors(headerActiveFrom, headerActiveTo) end
         headerOpenHighlight:SetShown(open)
         headerBg:SetAlpha(open and 0 or 1)
-        M.CallIf(T.ApplyCollapseVisual, arrow, nil, open)
+        T.ApplyCollapseVisual(arrow, nil, open)
         if open then arrow:SetVertexColor(1, 1, 1, 0.98) end
         local color = hover and headerRaised or headerSurface
         headerBg:SetColorTexture(color[1], color[2], color[3], hover and 0.78 or 0.58)
@@ -355,7 +350,7 @@ end
 --- Dashboard disclosures change card heights, so they toggle by rebuilding the
 --- whole page. Keep the viewport so the clicked header stays under the cursor.
 local function RebuildDashboardPage()
-    M.CallIf(M.RebuildPageKeepingScroll, "home")
+    M.RebuildPageKeepingScroll("home")
 end
 local function BuildDashboardChangelog(parent, cardWidth, opts)
     opts = opts or {}
@@ -517,7 +512,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         end
     end
     child:SetHeight(max(1, math.abs(y) + 8))
-    M.CallIf(T.StyleScrollFrame, scroll, parent)
+    T.StyleScrollFrame(scroll, parent)
     local open = M.dashboardChangelogOpen == true
     RegisterDashboardControl(header, DashboardMeta("changelog.disclosure", "ephemeral", {
         help = "Shows or hides the bundled MSUF release notes.",
@@ -570,22 +565,11 @@ local function ConfirmGuidedSetupRestart()
         M.Tr("Run the guided setup again? The walkthrough starts over at the first step."))
     return true
 end
-local function BuildDashboardUX(ctx)
-    if type(M.BuildUpgradeHighlightDashboardScene) == "function" and M.BuildUpgradeHighlightDashboardScene(ctx) == true then
-        return
-    end
-    if type(M.BuildFirstLoadDashboardScene) == "function" and M.BuildFirstLoadDashboardScene(ctx) == true then
-        return
-    end
-    -- BuildPageEntry clears the page catalog immediately before invoking us.
-    -- Restore the frame-free contracts first; conditional real widgets below
-    -- then promote only the controls whose disclosures are currently open.
-    RegisterDashboardDirectControls()
-    local root = ctx.wrapper
-    local width = ctx.width or 760
-    local x0, y0 = 12, -12
-    local layoutW = max(1, width - x0)
-    local mainW = layoutW
+-- The home page is assembled by Dashboard.Build from one stage per card. Stages
+-- share one per-build `state` table (helpers, geometry, disclosure flags) and run
+-- in the order the cards used to be built inline.
+local Dashboard = {}
+function Dashboard.PrepareSurfaceHelpers(state, root)
     local function Card(parent, title, x, y, w, h, bg, border)
         bg = bg or T.colors.panel2
         border = border or T.colors.cardBorder or T.colors.borderSoft
@@ -692,19 +676,23 @@ local function BuildDashboardUX(ctx)
             bodyColor = { 0.85, 0.85, 0.85 },
         }) or frame
     end
+    state.Card, state.ApplyDashboardHeroGradient, state.Button, state.Kicker, state.Pill, state.AddTooltip =
+        Card, ApplyDashboardHeroGradient, Button, Kicker, Pill, AddTooltip
+end
+function Dashboard.PrepareActionHelpers(state)
     local function IsDashboardEditModeActive()
         return M.IsMSUFEditModeActive(true)
     end
     local function IsDashboardEditModeCombatLocked()
         return M.IsEditModeCombatLocked(true)
     end
-    local function RefreshDashboardEditModeButtonSafe() M.CallIf(M.RefreshDashboardEditModeButton) end
-    local function RefreshMenuFramePrioritySafe() M.CallIf(M.RefreshMenuFramePriority) end
+    local function RefreshDashboardEditModeButtonSafe() M.RefreshDashboardEditModeButton() end
+    local function RefreshMenuFramePrioritySafe() M.RefreshMenuFramePriority() end
     local function RefreshDashboardFrameStatus() local f = M.frame; if f and f.RefreshStatus then f:RefreshStatus() end end
     local function ToggleEditMode()
         local active = IsDashboardEditModeActive()
         if (not active) and IsDashboardEditModeCombatLocked() then
-            M.CallIf(M.BlockCombatAction)
+            M.BlockCombatAction()
             RefreshDashboardEditModeButtonSafe()
             RefreshDashboardFrameStatus()
             return
@@ -814,16 +802,15 @@ local function BuildDashboardUX(ctx)
         ui.Scale = Clamp(ui.Scale, 0.3, 1.5)
         return g, ui
     end
-    local function RunMSUFSlashCommand(message)
-        local slash = _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
-        if type(slash) ~= "function" then return false end
-        slash(message or "")
-        return true
-    end
-    M.dashboardEditModeButton = nil
-    M.TrackRefresh(ctx, RefreshDashboardEditModeButtonSafe)
-    local mainTop = y0
-
+    local RunMSUFSlashCommand = DirectRunSlash
+    state.RefreshDashboardEditModeButtonSafe, state.iconDir, state.CopyWagoLink, state.Percent, state.Clamp, state.SnapPct =
+        RefreshDashboardEditModeButtonSafe, iconDir, CopyWagoLink, Percent, Clamp, SnapPct
+    state.SetSliderValueSafe, state.HideSliderValueBox, state.EnablePercentWheel, state.PixelScale, state.GlobalState, state.RunMSUFSlashCommand =
+        SetSliderValueSafe, HideSliderValueBox, EnablePercentWheel, PixelScale, GlobalState, RunMSUFSlashCommand
+end
+function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
+    local root, x0, mainW, Card, Kicker, Button, AddTooltip = state.root, state.x0, state.mainW, state.Card, state.Kicker, state.Button, state.AddTooltip
+    local iconDir, CopyWagoLink = state.iconDir, state.CopyWagoLink
     -- Setup remains available after onboarding. Quick Setup is the default;
     -- the first route screen still offers the complete learning tour.
     -- launcher deliberately compact; the persistent progress bar itself lives
@@ -870,7 +857,7 @@ local function BuildDashboardUX(ctx)
             StartGuidedSetupFromDashboard(false)
         end
     end, highlightGuidedSetup and "success" or "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
-    M.CallIf(T.AttachNavIcon, action, "home", false, true)
+    T.AttachNavIcon(action, "home", false, true)
     local wagoW = launcherNarrow and actionW or 150
     local wago = Button(launcher, "Wago Profiles",
         launcherNarrow and actionX or (mainW - 354),
@@ -890,13 +877,16 @@ local function BuildDashboardUX(ctx)
         wago._msuf2Label:SetJustifyH("CENTER")
     end
     AddTooltip(wago, "Wago Profiles", "Browse Wago profiles")
-
-    mainTop = mainTop - launcherH - 10
+    return launcherH
+end
+function Dashboard.BuildAssistantHero(state, mainTop)
+    local root, x0, mainW, Card, ApplyDashboardHeroGradient = state.root, state.x0, state.mainW, state.Card, state.ApplyDashboardHeroGradient
+    local Kicker = state.Kicker
     local tinyHero = mainW < 390
     local heroH = tinyHero and 398 or (mainW < 560 and 382 or 360)
     local hero = Card(root, "", x0, mainTop, mainW, heroH, T.colors.glassHost, T.colors.cardBorder)
     ApplyDashboardHeroGradient(hero, mainW, heroH)
-    M.CallIf(T.ApplyNeonEdge, hero, "ambient", { variant = "host" })
+    T.ApplyNeonEdge(hero, "ambient", { variant = "host" })
     if MSUF and MSUF.Assistant and type(MSUF.Assistant.BuildDashboardCard) == "function" then
         MSUF.Assistant.BuildDashboardCard(hero, mainW, heroH)
     else
@@ -906,7 +896,9 @@ local function BuildDashboardUX(ctx)
         title:SetWidth(mainW - 44)
         W.Text(hero, "The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF.", 22, -82, mainW - 44, T.colors.muted)
     end
-    local featureBlockBottom = mainTop - heroH
+    return heroH
+end
+function Dashboard.PrepareDisclosure(state)
     local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills, semanticPath)
         local head = CreateFrame("Button", nil, parent)
         head:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
@@ -936,6 +928,10 @@ local function BuildDashboardUX(ctx)
         }), title, "button")
         return head
     end
+    state.DashboardDisclosure = DashboardDisclosure
+end
+function Dashboard.ResolveCardStack(state, featureBlockBottom)
+    local layoutW = state.layoutW
     local recoveryW = layoutW
     local recoveryOpen = M.dashboardRecoveryOpen == true
     --- Three buttons fit one row down to ~392px (Reset + Print Help end at 232, the
@@ -955,6 +951,16 @@ local function BuildDashboardUX(ctx)
     local scalingTop = changelogTop - changelogH - 10
     local recoveryTop = scalingTop - scalingH - 10
     local supportTop = recoveryTop - recoveryH - 10
+    state.recoveryW, state.recoveryOpen, state.recoveryWrap, state.recoveryH = recoveryW, recoveryOpen, recoveryWrap, recoveryH
+    state.changelogOpen, state.changelogH, state.scalingOpen, state.scalingColumns, state.scalingH =
+        changelogOpen, changelogH, scalingOpen, scalingColumns, scalingH
+    state.changelogTop, state.scalingTop, state.recoveryTop, state.supportTop = changelogTop, scalingTop, recoveryTop, supportTop
+end
+function Dashboard.BuildRecoveryCard(state)
+    local root, x0, Card, Pill, Button, AddTooltip = state.root, state.x0, state.Card, state.Pill, state.Button, state.AddTooltip
+    local DashboardDisclosure, RunMSUFSlashCommand = state.DashboardDisclosure, state.RunMSUFSlashCommand
+    local recoveryTop, recoveryW, recoveryH, recoveryOpen = state.recoveryTop, state.recoveryW, state.recoveryH, state.recoveryOpen
+    local recoveryWrap = state.recoveryWrap
     local recovery = Card(root, "", x0, recoveryTop, recoveryW, recoveryH, T.colors.panel2, T.colors.borderSoft)
     local g = M.GetGeneralDB and M.GetGeneralDB() or {}
     DashboardDisclosure(recovery, "Display & recovery", recoveryOpen, "dashboardRecoveryOpen", recoveryW, function(head)
@@ -976,12 +982,18 @@ local function BuildDashboardUX(ctx)
         end, nil, "display_recovery.print_help")
         AddTooltip(printHelp, "Print Help", "Lists every MSUF slash command in chat, diagnostics included.")
         Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
-            M.CallIf(M.StageFactoryReset)
+            M.StageFactoryReset()
         end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true })
         if recoveryWrap then
             W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
         end
     end
+    state.g = g
+end
+function Dashboard.BuildScalingCard(state, ctx)
+    local root, x0, Card, Pill, DashboardDisclosure = state.root, state.x0, state.Card, state.Pill, state.DashboardDisclosure
+    local GlobalState, Percent, g = state.GlobalState, state.Percent, state.g
+    local scalingTop, recoveryW, scalingH, scalingOpen = state.scalingTop, state.recoveryW, state.scalingH, state.scalingOpen
     local scaling = Card(root, "", x0, scalingTop, recoveryW, scalingH, T.colors.panel2, T.colors.borderSoft)
     DashboardDisclosure(scaling, "Scaling", scalingOpen, "dashboardScalingOpen", recoveryW, function(scaleHead)
         if recoveryW < 520 then return end
@@ -991,231 +1003,238 @@ local function BuildDashboardUX(ctx)
         Pill(scaleHead, M.Format("Menu %d%%", MenuScalePercentFromStored(g.slashMenuScale)), recoveryW - 180, -11, 76)
         Pill(scaleHead, M.Format("Frames %d%%", Percent(g.msufUiScale, 1)), recoveryW - 98, -11, 84)
     end, "scaling.disclosure")
-    if scalingOpen then
-        W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value.", 16, -60, recoveryW - 32, T.colors.muted)
-        local pendingGlobalEnabled, pendingGlobalScale, pendingMsufScale, pendingMenuScale
-        local colGap = 24
-        local colW = (scalingColumns == 3) and math.floor((recoveryW - 32 - (colGap * 2)) / 3)
-            or ((scalingColumns == 2) and math.floor((recoveryW - 32 - colGap) / 2) or (recoveryW - 32))
-        local globalX, globalTop = 16, -94
-        local msufX = (scalingColumns == 3) and (16 + colW + colGap) or ((scalingColumns == 2) and (16 + colW + colGap) or 16)
-        local msufTop = (scalingColumns == 3 or scalingColumns == 2) and -94 or -242
-        local menuX = (scalingColumns == 3) and (16 + ((colW + colGap) * 2)) or 16
-        local menuTop = (scalingColumns == 3) and -94 or ((scalingColumns == 2) and -242 or -390)
-        local function AppliedGlobalScale()
-            local _, ui = GlobalState()
-            return ui.Enabled, Clamp(ui.Scale, 0.3, 1.5)
+    if scalingOpen then Dashboard.BuildScalingColumns(state, ctx, scaling) end
+end
+function Dashboard.BuildScalingColumns(state, ctx, scaling)
+    local recoveryW, scalingColumns, Button, Percent, Clamp = state.recoveryW, state.scalingColumns, state.Button, state.Percent, state.Clamp
+    local SnapPct, SetSliderValueSafe, HideSliderValueBox = state.SnapPct, state.SetSliderValueSafe, state.HideSliderValueBox
+    local EnablePercentWheel, PixelScale, GlobalState = state.EnablePercentWheel, state.PixelScale, state.GlobalState
+    W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value.", 16, -60, recoveryW - 32, T.colors.muted)
+    local pendingGlobalEnabled, pendingGlobalScale, pendingMsufScale, pendingMenuScale
+    local colGap = 24
+    local colW = (scalingColumns == 3) and math.floor((recoveryW - 32 - (colGap * 2)) / 3)
+        or ((scalingColumns == 2) and math.floor((recoveryW - 32 - colGap) / 2) or (recoveryW - 32))
+    local globalX, globalTop = 16, -94
+    local msufX = (scalingColumns == 3) and (16 + colW + colGap) or ((scalingColumns == 2) and (16 + colW + colGap) or 16)
+    local msufTop = (scalingColumns == 3 or scalingColumns == 2) and -94 or -242
+    local menuX = (scalingColumns == 3) and (16 + ((colW + colGap) * 2)) or 16
+    local menuTop = (scalingColumns == 3) and -94 or ((scalingColumns == 2) and -242 or -390)
+    local function AppliedGlobalScale()
+        local _, ui = GlobalState()
+        return ui.Enabled, Clamp(ui.Scale, 0.3, 1.5)
+    end
+    local function SelectedGlobalScale()
+        local enabled, appliedScale = AppliedGlobalScale()
+        local selectedEnabled = pendingGlobalEnabled
+        if selectedEnabled == nil then selectedEnabled = enabled end
+        local selectedScale = Clamp(pendingGlobalScale or appliedScale, 0.3, 1.5)
+        return selectedEnabled, selectedScale, enabled, appliedScale
+    end
+    local function AppliedMsufScale()
+        local dbScale = M.GetGeneralDB()
+        return Clamp(tonumber(dbScale.msufUiScale) or 1, 0.25, 2.0)
+    end
+    local function PendingMsufScale()
+        return Clamp(pendingMsufScale or AppliedMsufScale(), 0.25, 2.0)
+    end
+    local function AppliedMenuScale()
+        local dbScale = M.GetGeneralDB()
+        return MenuScalePercentFromStored(dbScale.slashMenuScale) / 100
+    end
+    local function PendingMenuScale()
+        return Clamp(pendingMenuScale or AppliedMenuScale(), MENU_SCALE_MIN_PERCENT / 100, MENU_SCALE_MAX_PERCENT / 100)
+    end
+    local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct, semanticPath, command)
+        local slider = W.Slider(parent, label, minPct, maxPct, stepPct, width)
+        HideSliderValueBox(slider)
+        slider:ClearAllPoints()
+        slider:SetPoint("TOPLEFT", parent, "TOPLEFT", x, top - 64)
+        if slider._msuf2SetLayoutWidth then slider:_msuf2SetLayoutWidth(width) end
+        if slider._msuf2Title then
+            slider._msuf2Title:ClearAllPoints()
+            slider._msuf2Title:SetPoint("TOPLEFT", parent, "TOPLEFT", x, top)
+            slider._msuf2Title:SetWidth(width)
         end
-        local function SelectedGlobalScale()
-            local enabled, appliedScale = AppliedGlobalScale()
-            local selectedEnabled = pendingGlobalEnabled
-            if selectedEnabled == nil then selectedEnabled = enabled end
-            local selectedScale = Clamp(pendingGlobalScale or appliedScale, 0.3, 1.5)
-            return selectedEnabled, selectedScale, enabled, appliedScale
-        end
-        local function AppliedMsufScale()
-            local dbScale = M.GetGeneralDB()
-            return Clamp(tonumber(dbScale.msufUiScale) or 1, 0.25, 2.0)
-        end
-        local function PendingMsufScale()
-            return Clamp(pendingMsufScale or AppliedMsufScale(), 0.25, 2.0)
-        end
-        local function AppliedMenuScale()
-            local dbScale = M.GetGeneralDB()
-            return MenuScalePercentFromStored(dbScale.slashMenuScale) / 100
-        end
-        local function PendingMenuScale()
-            return Clamp(pendingMenuScale or AppliedMenuScale(), MENU_SCALE_MIN_PERCENT / 100, MENU_SCALE_MAX_PERCENT / 100)
-        end
-        local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct, semanticPath, command)
-            local slider = W.Slider(parent, label, minPct, maxPct, stepPct, width)
-            HideSliderValueBox(slider)
-            slider:ClearAllPoints()
-            slider:SetPoint("TOPLEFT", parent, "TOPLEFT", x, top - 64)
-            if slider._msuf2SetLayoutWidth then slider:_msuf2SetLayoutWidth(width) end
-            if slider._msuf2Title then
-                slider._msuf2Title:ClearAllPoints()
-                slider._msuf2Title:SetPoint("TOPLEFT", parent, "TOPLEFT", x, top)
-                slider._msuf2Title:SetWidth(width)
-            end
-            EnablePercentWheel(slider, minPct, maxPct, stepPct)
-            RegisterDashboardControl(slider, DashboardMeta(semanticPath, command and "setting" or "ephemeral", {
-                help = command and "Reads and applies this scale percentage directly."
-                    or "Selects a pending scale percentage; use Apply to commit it.",
-                command = command,
-            }), label, "slider")
-            return slider
-        end
-        local function BuildSimpleScaleColumn(opts)
-            W.Text(scaling, opts.help, opts.x, opts.top - 20, colW, T.colors.muted)
-            local status = W.Text(scaling, "", opts.x, opts.top - 40, colW, T.colors.muted)
-            local Refresh
-            local command = {
-                kind = "slider", min = opts.minPct, max = opts.maxPct, step = opts.stepPct, percentIsValue = true,
-                blockCombat = DirectCombatLocked,
-                get = function() return Percent(opts.applied(), 1) end,
-                set = function(value)
-                    local pct = SnapPct(value, opts.minPct, opts.maxPct, opts.stepPct)
-                    opts.apply(pct / 100)
-                    if Refresh then Refresh() end
-                    return true
-                end,
-                refresh = function() if Refresh then Refresh() end end,
-            }
-            local slider = BuildScaleSlider(scaling, opts.label, opts.x, opts.top, colW, opts.minPct, opts.maxPct, opts.stepPct,
-                opts.semanticPath .. ".percent", command)
-            local apply, revert
-            Refresh = function()
-                local applied = opts.applied()
-                local pending = opts.pending()
-                local changed = math.abs(applied - pending) > 0.001
-                status:SetText(M.Format(M.Tr("Applied: %d%%  Selected: %d%%"), Percent(applied, 1), Percent(pending, 1)))
-                SetSliderValueSafe(slider, SnapPct(pending * 100, opts.minPct, opts.maxPct, opts.stepPct))
-                if apply then
-                    if changed then apply:Enable() else apply:Disable() end
-                    if apply.SetActive then apply:SetActive(changed) end
-                end
-                if revert then
-                    if changed then revert:Enable() else revert:Disable() end
-                end
-            end
-            slider:HookScript("OnValueChanged", function(self, value)
-                if self._msuf2Refreshing then return end
-                local pct = SnapPct(value, opts.minPct, opts.maxPct, opts.stepPct)
-                if pct ~= value then SetSliderValueSafe(self, pct) end
-                opts.set(Clamp(pct / 100, opts.minPct / 100, opts.maxPct / 100))
-                Refresh()
-            end)
-            apply = Button(scaling, "Apply", opts.x, opts.top - 100, 72, 20, function()
-                opts.apply(opts.pending())
-                Refresh()
-            end, "primary", opts.semanticPath .. ".apply")
-            revert = Button(scaling, "Revert", opts.x + 82, opts.top - 100, 72, 20, function()
-                opts.clear()
-                Refresh()
-            end, nil, opts.semanticPath .. ".revert_pending", "ephemeral")
-            return Refresh
-        end
-        W.Text(scaling, "Changes the global WoW UI scale through MSUF presets.", globalX, globalTop - 20, colW, T.colors.muted)
-        local globalStatus = W.Text(scaling, "", globalX, globalTop - 40, colW, T.colors.muted)
-        local RefreshGlobalScale, ApplyGlobalScale
-        local globalScaleCommand = {
-            kind = "slider", min = 30, max = 150, step = 1, percentIsValue = true,
+        EnablePercentWheel(slider, minPct, maxPct, stepPct)
+        RegisterDashboardControl(slider, DashboardMeta(semanticPath, command and "setting" or "ephemeral", {
+            help = command and "Reads and applies this scale percentage directly."
+                or "Selects a pending scale percentage; use Apply to commit it.",
+            command = command,
+        }), label, "slider")
+        return slider
+    end
+    local function BuildSimpleScaleColumn(opts)
+        W.Text(scaling, opts.help, opts.x, opts.top - 20, colW, T.colors.muted)
+        local status = W.Text(scaling, "", opts.x, opts.top - 40, colW, T.colors.muted)
+        local Refresh
+        local command = {
+            kind = "slider", min = opts.minPct, max = opts.maxPct, step = opts.stepPct, percentIsValue = true,
             blockCombat = DirectCombatLocked,
-            get = function()
-                local _, _, appliedEnabled, appliedScale = SelectedGlobalScale()
-                return appliedEnabled and Percent(appliedScale, 1) or false
-            end,
+            get = function() return Percent(opts.applied(), 1) end,
             set = function(value)
-                local _, _, _, appliedScale = SelectedGlobalScale()
-                if value == false then ApplyGlobalScale(false, appliedScale, "auto")
-                else ApplyGlobalScale(true, SnapPct(value, 30, 150, 1) / 100, "custom") end
+                local pct = SnapPct(value, opts.minPct, opts.maxPct, opts.stepPct)
+                opts.apply(pct / 100)
+                if Refresh then Refresh() end
                 return true
             end,
-            refresh = function() if RefreshGlobalScale then RefreshGlobalScale() end end,
+            refresh = function() if Refresh then Refresh() end end,
         }
-        local globalScale = BuildScaleSlider(scaling, "Global UI Scale", globalX, globalTop, colW, 30, 150, 1,
-            "scaling.global_ui.percent", globalScaleCommand)
-        local globalApply, globalRevert
-        RefreshGlobalScale = function()
-            local selectedEnabled, selectedScale, appliedEnabled, appliedScale = SelectedGlobalScale()
-            local applied = appliedEnabled and (Percent(appliedScale, 1) .. "%") or M.Tr("Off")
-            local selected = selectedEnabled and (Percent(selectedScale, 1) .. "%") or M.Tr("Off")
-            local changed = (selectedEnabled ~= appliedEnabled) or math.abs(selectedScale - appliedScale) > 0.001
-            globalStatus:SetText(M.Format(M.Tr("Applied: %s   Selected: %s"), applied, selected))
-            SetSliderValueSafe(globalScale, SnapPct(selectedScale * 100, 30, 150, 1))
-            if globalApply then
-                if changed then globalApply:Enable() else globalApply:Disable() end
-                if globalApply.SetActive then globalApply:SetActive(changed) end
+        local slider = BuildScaleSlider(scaling, opts.label, opts.x, opts.top, colW, opts.minPct, opts.maxPct, opts.stepPct,
+            opts.semanticPath .. ".percent", command)
+        local apply, revert
+        Refresh = function()
+            local applied = opts.applied()
+            local pending = opts.pending()
+            local changed = math.abs(applied - pending) > 0.001
+            status:SetText(M.Format(M.Tr("Applied: %d%%  Selected: %d%%"), Percent(applied, 1), Percent(pending, 1)))
+            SetSliderValueSafe(slider, SnapPct(pending * 100, opts.minPct, opts.maxPct, opts.stepPct))
+            if apply then
+                if changed then apply:Enable() else apply:Disable() end
+                if apply.SetActive then apply:SetActive(changed) end
             end
-            if globalRevert then
-                if changed then globalRevert:Enable() else globalRevert:Disable() end
+            if revert then
+                if changed then revert:Enable() else revert:Disable() end
             end
         end
-        globalScale:HookScript("OnValueChanged", function(self, value)
+        slider:HookScript("OnValueChanged", function(self, value)
             if self._msuf2Refreshing then return end
-            local pct = SnapPct(value, 30, 150, 1)
+            local pct = SnapPct(value, opts.minPct, opts.maxPct, opts.stepPct)
             if pct ~= value then SetSliderValueSafe(self, pct) end
-            pendingGlobalEnabled = true
-            pendingGlobalScale = Clamp(pct / 100, 0.3, 1.5)
-            RefreshGlobalScale()
+            opts.set(Clamp(pct / 100, opts.minPct / 100, opts.maxPct / 100))
+            Refresh()
         end)
-        ApplyGlobalScale = function(enabled, value, preset)
-            local dbScale, ui = GlobalState()
-            ui.Enabled = enabled == true
-            ui.Scale = Clamp(value or ui.Scale, 0.3, 1.5)
-            dbScale.globalUiScalePreset = preset or (ui.Enabled and "custom" or "auto")
-            dbScale.globalUiScaleValue = ui.Enabled and ui.Scale or nil
-            pendingGlobalEnabled, pendingGlobalScale = nil, nil
-            if ui.Enabled and type(_G.MSUF_SetGlobalUiScale) == "function" then
-                _G.MSUF_SetGlobalUiScale(ui.Scale, true)
-            elseif (not ui.Enabled) and type(_G.MSUF_ResetGlobalUiScale) == "function" then
-                _G.MSUF_ResetGlobalUiScale(true)
-            end
-            if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_GLOBAL_SCALE", { preview = true, applyAll = false }) end
-            RefreshGlobalScale()
-        end
-        Button(scaling, "1080p", globalX, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1080, "1080p") end,
-            nil, "scaling.global_ui.preset.1080p")
-        Button(scaling, "1440p", globalX + 60, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1440, "1440p") end,
-            nil, "scaling.global_ui.preset.1440p")
-        Button(scaling, "4K", globalX + 120, globalTop - 100, 42, 20, function() ApplyGlobalScale(true, 768 / 2160, "4k") end,
-            nil, "scaling.global_ui.preset.4k")
-        Button(scaling, "Pixel", globalX + 170, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, PixelScale(), "pixel") end,
-            nil, "scaling.global_ui.preset.pixel")
-        globalApply = Button(scaling, "Apply", globalX, globalTop - 126, 72, 20, function()
-            local selectedEnabled, selectedScale = SelectedGlobalScale()
-            ApplyGlobalScale(selectedEnabled, selectedScale, selectedEnabled and "custom" or "auto")
-        end, "primary", "scaling.global_ui.apply")
-        globalRevert = Button(scaling, "Revert", globalX + 82, globalTop - 126, 72, 20, function()
-            pendingGlobalEnabled, pendingGlobalScale = nil, nil
-            RefreshGlobalScale()
-        end, nil, "scaling.global_ui.revert_pending", "ephemeral")
-        Button(scaling, "Off", globalX + 164, globalTop - 126, 52, 20, function()
-            pendingGlobalEnabled = false
-            RefreshGlobalScale()
-        end, nil, "scaling.global_ui.select_off", "ephemeral")
-        local RefreshMsufScale = BuildSimpleScaleColumn({
-            x = msufX, top = msufTop, label = "MSUF Frame Scale", help = "Changes the actual MSUF unit frames in-game.",
-            semanticPath = "scaling.msuf_frames",
-            minPct = MSUF_SCALE_MIN_PERCENT, maxPct = MSUF_SCALE_MAX_PERCENT, stepPct = MSUF_SCALE_STEP_PERCENT,
-            applied = AppliedMsufScale,
-            pending = PendingMsufScale,
-            set = function(value) pendingMsufScale = value end,
-            clear = function() pendingMsufScale = nil end,
-            apply = function(scaleValue)
-                local dbScale = M.GetGeneralDB()
-                dbScale.msufUiScale = scaleValue
-                pendingMsufScale = nil
-                if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scaleValue) end
-                if M.RequestGeneralApply then
-                    M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
-                end
-            end,
-        })
-        local RefreshMenuScale = BuildSimpleScaleColumn({
-            x = menuX, top = menuTop, label = "MSUF Menu Scale", help = "Changes only this configuration menu window.",
-            semanticPath = "scaling.menu",
-            minPct = MENU_SCALE_MIN_PERCENT, maxPct = MENU_SCALE_MAX_PERCENT, stepPct = MENU_SCALE_STEP_PERCENT,
-            applied = AppliedMenuScale,
-            pending = PendingMenuScale,
-            set = function(value) pendingMenuScale = value end,
-            clear = function() pendingMenuScale = nil end,
-            apply = function(scaleValue)
-                local dbScale = M.GetGeneralDB()
-                dbScale.slashMenuScale = MenuScaleStoredFromPercent(scaleValue * 100)
-                pendingMenuScale = nil
-                if M.frame and M.ApplyMenuFrameScale then M.ApplyMenuFrameScale(M.frame)
-                elseif M.frame and M.frame.SetScale then
-                    local storedScale = dbScale.slashMenuScale
-                    M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(storedScale)) or storedScale)
-                end
-            end,
-        })
-        M.TrackRefresh(ctx, RefreshGlobalScale)
-        M.TrackRefresh(ctx, RefreshMsufScale)
-        M.TrackRefresh(ctx, RefreshMenuScale)
+        apply = Button(scaling, "Apply", opts.x, opts.top - 100, 72, 20, function()
+            opts.apply(opts.pending())
+            Refresh()
+        end, "primary", opts.semanticPath .. ".apply")
+        revert = Button(scaling, "Revert", opts.x + 82, opts.top - 100, 72, 20, function()
+            opts.clear()
+            Refresh()
+        end, nil, opts.semanticPath .. ".revert_pending", "ephemeral")
+        return Refresh
     end
+    W.Text(scaling, "Changes the global WoW UI scale through MSUF presets.", globalX, globalTop - 20, colW, T.colors.muted)
+    local globalStatus = W.Text(scaling, "", globalX, globalTop - 40, colW, T.colors.muted)
+    local RefreshGlobalScale, ApplyGlobalScale
+    local globalScaleCommand = {
+        kind = "slider", min = 30, max = 150, step = 1, percentIsValue = true,
+        blockCombat = DirectCombatLocked,
+        get = function()
+            local _, _, appliedEnabled, appliedScale = SelectedGlobalScale()
+            return appliedEnabled and Percent(appliedScale, 1) or false
+        end,
+        set = function(value)
+            local _, _, _, appliedScale = SelectedGlobalScale()
+            if value == false then ApplyGlobalScale(false, appliedScale, "auto")
+            else ApplyGlobalScale(true, SnapPct(value, 30, 150, 1) / 100, "custom") end
+            return true
+        end,
+        refresh = function() if RefreshGlobalScale then RefreshGlobalScale() end end,
+    }
+    local globalScale = BuildScaleSlider(scaling, "Global UI Scale", globalX, globalTop, colW, 30, 150, 1,
+        "scaling.global_ui.percent", globalScaleCommand)
+    local globalApply, globalRevert
+    RefreshGlobalScale = function()
+        local selectedEnabled, selectedScale, appliedEnabled, appliedScale = SelectedGlobalScale()
+        local applied = appliedEnabled and (Percent(appliedScale, 1) .. "%") or M.Tr("Off")
+        local selected = selectedEnabled and (Percent(selectedScale, 1) .. "%") or M.Tr("Off")
+        local changed = (selectedEnabled ~= appliedEnabled) or math.abs(selectedScale - appliedScale) > 0.001
+        globalStatus:SetText(M.Format(M.Tr("Applied: %s   Selected: %s"), applied, selected))
+        SetSliderValueSafe(globalScale, SnapPct(selectedScale * 100, 30, 150, 1))
+        if globalApply then
+            if changed then globalApply:Enable() else globalApply:Disable() end
+            if globalApply.SetActive then globalApply:SetActive(changed) end
+        end
+        if globalRevert then
+            if changed then globalRevert:Enable() else globalRevert:Disable() end
+        end
+    end
+    globalScale:HookScript("OnValueChanged", function(self, value)
+        if self._msuf2Refreshing then return end
+        local pct = SnapPct(value, 30, 150, 1)
+        if pct ~= value then SetSliderValueSafe(self, pct) end
+        pendingGlobalEnabled = true
+        pendingGlobalScale = Clamp(pct / 100, 0.3, 1.5)
+        RefreshGlobalScale()
+    end)
+    ApplyGlobalScale = function(enabled, value, preset)
+        local dbScale, ui = GlobalState()
+        ui.Enabled = enabled == true
+        ui.Scale = Clamp(value or ui.Scale, 0.3, 1.5)
+        dbScale.globalUiScalePreset = preset or (ui.Enabled and "custom" or "auto")
+        dbScale.globalUiScaleValue = ui.Enabled and ui.Scale or nil
+        pendingGlobalEnabled, pendingGlobalScale = nil, nil
+        if ui.Enabled and type(_G.MSUF_SetGlobalUiScale) == "function" then
+            _G.MSUF_SetGlobalUiScale(ui.Scale, true)
+        elseif (not ui.Enabled) and type(_G.MSUF_ResetGlobalUiScale) == "function" then
+            _G.MSUF_ResetGlobalUiScale(true)
+        end
+        if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_GLOBAL_SCALE", { preview = true, applyAll = false }) end
+        RefreshGlobalScale()
+    end
+    Button(scaling, "1080p", globalX, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1080, "1080p") end,
+        nil, "scaling.global_ui.preset.1080p")
+    Button(scaling, "1440p", globalX + 60, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1440, "1440p") end,
+        nil, "scaling.global_ui.preset.1440p")
+    Button(scaling, "4K", globalX + 120, globalTop - 100, 42, 20, function() ApplyGlobalScale(true, 768 / 2160, "4k") end,
+        nil, "scaling.global_ui.preset.4k")
+    Button(scaling, "Pixel", globalX + 170, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, PixelScale(), "pixel") end,
+        nil, "scaling.global_ui.preset.pixel")
+    globalApply = Button(scaling, "Apply", globalX, globalTop - 126, 72, 20, function()
+        local selectedEnabled, selectedScale = SelectedGlobalScale()
+        ApplyGlobalScale(selectedEnabled, selectedScale, selectedEnabled and "custom" or "auto")
+    end, "primary", "scaling.global_ui.apply")
+    globalRevert = Button(scaling, "Revert", globalX + 82, globalTop - 126, 72, 20, function()
+        pendingGlobalEnabled, pendingGlobalScale = nil, nil
+        RefreshGlobalScale()
+    end, nil, "scaling.global_ui.revert_pending", "ephemeral")
+    Button(scaling, "Off", globalX + 164, globalTop - 126, 52, 20, function()
+        pendingGlobalEnabled = false
+        RefreshGlobalScale()
+    end, nil, "scaling.global_ui.select_off", "ephemeral")
+    local RefreshMsufScale = BuildSimpleScaleColumn({
+        x = msufX, top = msufTop, label = "MSUF Frame Scale", help = "Changes the actual MSUF unit frames in-game.",
+        semanticPath = "scaling.msuf_frames",
+        minPct = MSUF_SCALE_MIN_PERCENT, maxPct = MSUF_SCALE_MAX_PERCENT, stepPct = MSUF_SCALE_STEP_PERCENT,
+        applied = AppliedMsufScale,
+        pending = PendingMsufScale,
+        set = function(value) pendingMsufScale = value end,
+        clear = function() pendingMsufScale = nil end,
+        apply = function(scaleValue)
+            local dbScale = M.GetGeneralDB()
+            dbScale.msufUiScale = scaleValue
+            pendingMsufScale = nil
+            if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scaleValue) end
+            if M.RequestGeneralApply then
+                M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
+            end
+        end,
+    })
+    local RefreshMenuScale = BuildSimpleScaleColumn({
+        x = menuX, top = menuTop, label = "MSUF Menu Scale", help = "Changes only this configuration menu window.",
+        semanticPath = "scaling.menu",
+        minPct = MENU_SCALE_MIN_PERCENT, maxPct = MENU_SCALE_MAX_PERCENT, stepPct = MENU_SCALE_STEP_PERCENT,
+        applied = AppliedMenuScale,
+        pending = PendingMenuScale,
+        set = function(value) pendingMenuScale = value end,
+        clear = function() pendingMenuScale = nil end,
+        apply = function(scaleValue)
+            local dbScale = M.GetGeneralDB()
+            dbScale.slashMenuScale = MenuScaleStoredFromPercent(scaleValue * 100)
+            pendingMenuScale = nil
+            if M.frame and M.ApplyMenuFrameScale then M.ApplyMenuFrameScale(M.frame)
+            elseif M.frame and M.frame.SetScale then
+                local storedScale = dbScale.slashMenuScale
+                M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(storedScale)) or storedScale)
+            end
+        end,
+    })
+    M.TrackRefresh(ctx, RefreshGlobalScale)
+    M.TrackRefresh(ctx, RefreshMsufScale)
+    M.TrackRefresh(ctx, RefreshMenuScale)
+end
+function Dashboard.BuildChangelogCard(state)
+    local root, x0, Card, changelogTop, recoveryW, changelogH = state.root, state.x0, state.Card, state.changelogTop, state.recoveryW, state.changelogH
     local changelog = Card(root, "", x0, changelogTop, recoveryW, changelogH, T.colors.panel2, T.colors.borderSoft)
     BuildDashboardChangelog(changelog, recoveryW, {
         title = "Changelog",
@@ -1227,6 +1246,10 @@ local function BuildDashboardUX(ctx)
             RebuildDashboardPage()
         end,
     })
+end
+function Dashboard.BuildSupportCard(state)
+    local root, x0, Card, AddTooltip, iconDir, supportTop = state.root, state.x0, state.Card, state.AddTooltip, state.iconDir, state.supportTop
+    local recoveryW = state.recoveryW
     local supportCompact = recoveryW < 560
     local supportH = supportCompact and 116 or 78
     local support = Card(root, "", x0, supportTop, recoveryW, supportH, T.colors.panel2, T.colors.borderSoft)
@@ -1301,7 +1324,43 @@ local function BuildDashboardUX(ctx)
         end
         previous = btn
     end
-    local bottom = supportTop - supportH
+    return supportH
+end
+function Dashboard.Build(ctx)
+    if type(M.BuildUpgradeHighlightDashboardScene) == "function" and M.BuildUpgradeHighlightDashboardScene(ctx) == true then
+        return
+    end
+    if type(M.BuildFirstLoadDashboardScene) == "function" and M.BuildFirstLoadDashboardScene(ctx) == true then
+        return
+    end
+    -- BuildPageEntry clears the page catalog immediately before invoking us.
+    -- Restore the frame-free contracts first; conditional real widgets below
+    -- then promote only the controls whose disclosures are currently open.
+    RegisterDashboardDirectControls()
+    local root = ctx.wrapper
+    local width = ctx.width or 760
+    local x0, y0 = 12, -12
+    local layoutW = max(1, width - x0)
+    local mainW = layoutW
+    local state = { root = root, x0 = x0, layoutW = layoutW, mainW = mainW }
+    Dashboard.PrepareSurfaceHelpers(state, root)
+    Dashboard.PrepareActionHelpers(state)
+    M.dashboardEditModeButton = nil
+    M.TrackRefresh(ctx, state.RefreshDashboardEditModeButtonSafe)
+    local mainTop = y0
+
+    local launcherH = Dashboard.BuildGuidedSetupLauncher(state, mainTop)
+
+    mainTop = mainTop - launcherH - 10
+    local heroH = Dashboard.BuildAssistantHero(state, mainTop)
+    local featureBlockBottom = mainTop - heroH
+    Dashboard.PrepareDisclosure(state)
+    Dashboard.ResolveCardStack(state, featureBlockBottom)
+    Dashboard.BuildRecoveryCard(state)
+    Dashboard.BuildScalingCard(state, ctx)
+    Dashboard.BuildChangelogCard(state)
+    local supportH = Dashboard.BuildSupportCard(state)
+    local bottom = state.supportTop - supportH
     ctx:SetContentHeight(math.abs(bottom) + 42)
 end
-M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboardUX, version = 9 })
+M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 9 })

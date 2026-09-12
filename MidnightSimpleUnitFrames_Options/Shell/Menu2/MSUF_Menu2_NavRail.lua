@@ -43,10 +43,7 @@ local function NavIconsEnabled()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     return type(g) == "table" and g.showNavigationIcons == true
 end
-local function TrimText(text)
-    text = tostring(text or "")
-    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
-end
+local TrimText = M.TrimText
 local function ShortLabel(text, limit)
     text = TrimText(text)
     limit = tonumber(limit) or 22
@@ -178,9 +175,9 @@ local function CreateNavButton(parent, key, label, indent)
     btn._msuf2NavIndent = indent or 0
     btn._msuf2NavPillVisualWidth = NavPillVisualWidth(parent)
     btn._msuf2RawLabel = label
-    M.CallIf(T.AttachNavIcon, btn, key, (indent or 0) > 0, NavIconsEnabled())
+    T.AttachNavIcon(btn, key, (indent or 0) > 0, NavIconsEnabled())
     M.navButtons[key] = btn
-    M.CallIf(btn.RefreshVisual, btn)
+    if btn.RefreshVisual then btn.RefreshVisual(btn) end
     return btn
 end
 function M.RefreshNavIconVisibility()
@@ -189,7 +186,7 @@ function M.RefreshNavIconVisibility()
     local visible = NavIconsEnabled()
     for key, btn in pairs(buttons) do
         if btn and btn._msuf2NavItem then
-            M.CallIf(T.AttachNavIcon, btn, key, (btn._msuf2NavIndent or 0) > 0, visible)
+            T.AttachNavIcon(btn, key, (btn._msuf2NavIndent or 0) > 0, visible)
         end
     end
 end
@@ -279,7 +276,7 @@ local function CreateHistoryControls(parent)
     redo:SetPoint("TOPLEFT", undo, "TOPRIGHT", buttonGap, 0)
     StyleHistoryButton(redo, "Redo", T.media.historyRedo)
     redo:SetScript("OnClick", function()
-        M.CallIf(M.Redo)
+        M.Redo()
     end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(redo, "history.redo", "Redo", "action", {
@@ -414,7 +411,7 @@ local function CreateHistoryControls(parent)
     return row
 end
 local function BuildNavRail(parent)
-    M.CallIf(M.EnsurePersistentMenuState)
+    M.EnsurePersistentMenuState()
     M.nav = parent
     M.navButtons = {}
     M.navHeaders = {}
@@ -707,7 +704,7 @@ local function BuildNavRail(parent)
     listScroll:SetScrollChild(list)
     parent._msuf2NavListScroll = listScroll
     parent._msuf2NavList = list
-    M.CallIf(T.StyleScrollFrame, listScroll, parent)
+    T.StyleScrollFrame(listScroll, parent)
     local created = {}
     local navItems = CurrentNavItems()
     for i = 1, #navItems do
@@ -774,7 +771,7 @@ local function BuildNavRail(parent)
         end
     end
     function parent:_msuf2NavReflow()
-        M.CallIf(M.RefreshNavIconVisibility)
+        M.RefreshNavIconVisibility()
         local y = -4
         local advancedHidden = IsAdvancedNavHidden()
         for i = 1, #created do
@@ -815,12 +812,12 @@ local function BuildNavRail(parent)
         local contentH = max(abs(y) + 8, (listScroll.GetHeight and listScroll:GetHeight()) or 1)
         list:SetSize(NAV_W - NAV_SCROLL_GUTTER, contentH)
         if listScroll._msuf2RefreshScrollBar then listScroll:_msuf2RefreshScrollBar() end
-        M.CallIf(M.RefreshHistoryControls)
+        M.RefreshHistoryControls()
     end
     parent:_msuf2NavReflow()
 end
 M.BuildNavRail = BuildNavRail
 function M.RefreshAdvancedNavVisibility()
     if M.nav and M.nav._msuf2NavReflow then M.nav:_msuf2NavReflow() end
-    if M.activeKey then M.CallIf(M.UpdateNav, M.activeKey) end
+    if M.activeKey then M.UpdateNav(M.activeKey) end
 end

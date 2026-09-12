@@ -8,24 +8,14 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 MSUF.Castbars = MSUF.Castbars or {}
 local Visuals = MSUF.Castbars.Visuals or {}
 MSUF.Castbars.Visuals = Visuals
 
 local issecretvalue = _G.issecretvalue
 
-local function IsSecretValue(value)
-    local fn = issecretvalue
-    if type(fn) ~= "function" then
-        fn = _G.issecretvalue
-        if type(fn) == "function" then issecretvalue = fn end
-    end
-    return type(fn) == "function" and fn(value) == true
-end
+local IsSecretValue = _G.issecretvalue
 
 local function GeneralDB()
     if type(_G.MSUF_EnsureDB) == "function" and not _G.MSUF_DB then
@@ -78,15 +68,7 @@ local function PrefixForUnit(unit)
     return nil
 end
 
-local function CastbarFrameInset(frame, g)
-    if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
-        local inset = _G.MSUF_GetCastbarOutlineInset(frame, g)
-        return tonumber(inset) or 0
-    end
-    local thickness = tonumber(g and g.castbarOutlineThickness)
-    if thickness == nil then thickness = 1 end
-    return thickness > 0 and 1 or 0
-end
+local CastbarFrameInset = _G.MSUF_CastbarFrameInset
 
 local function Num(value, fallback)
     value = tonumber(value)
@@ -160,6 +142,7 @@ local function NormalizeIconPosition(value)
     if value == "RIGHT" or value == "INSIDE_LEFT" or value == "INSIDE_RIGHT" then return value end
     return "LEFT"
 end
+ExportPublic("MSUF_NormalizeCastbarIconPosition", NormalizeIconPosition)
 
 local function NormalizeTextPosition(value, fallback)
     value = tostring(value or fallback or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
@@ -321,8 +304,7 @@ local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
             local ok, _, source = applyResolved(fontString, fontPath, size, flags, fontKey)
             requestedReady = ok == true and source ~= "fallback"
         else
-            local ok, applied = pcall(fontString.SetFont, fontString, fontPath, size, flags)
-            requestedReady = ok and applied ~= false
+            requestedReady = _G.MSUF_SetFontChecked(fontString, fontPath, size, flags)
             local matches = _G.MSUF_FontApplicationMatches
             if requestedReady and type(matches) == "function" then
                 requestedReady = matches(fontString, fontPath, size) == true
@@ -848,3 +830,9 @@ local function RefreshCastbarFrame(frame, forcedUnit, general)
 end
 ExportPublic("MSUF_RefreshCastbarFrame", RefreshCastbarFrame)
 Visuals.RefreshFrame = RefreshCastbarFrame
+
+ExportPublic("MSUF_NormalizeCastbarTextPosition", NormalizeTextPosition)
+
+ExportPublic("MSUF_NormalizeCastbarTextJustify", NormalizeJustify)
+
+ExportPublic("MSUF_NormalizeCastbarTruncate", NormalizeSpellNameTruncate)

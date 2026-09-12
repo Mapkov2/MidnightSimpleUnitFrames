@@ -82,13 +82,7 @@ local LSM_SKIP = {
 
 local DEFAULT_EDGE_SCALE, DEFAULT_MIN_EDGE = 4, 8
 
-local function GetLSM()
-    local lsm = (MSUF and MSUF.LSM) or _G.MSUF_LSM
-    if not lsm and type(_G.LibStub) == "function" then
-        lsm = _G.LibStub("LibSharedMedia-3.0", true)
-    end
-    return lsm
-end
+local GetLSM = _G.MSUF_GetSharedMedia
 
 local function AssetAllowed(path)
     if type(path) ~= "string" or path == "" then return nil end

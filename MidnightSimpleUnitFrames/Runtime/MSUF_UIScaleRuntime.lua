@@ -10,10 +10,7 @@ _G.MSUF2 = M
 local Runtime = M.MenuRuntime or {}
 M.MenuRuntime = Runtime
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local abs = math.abs
 local function Clamp(value, minValue, maxValue)
     value = tonumber(value) or minValue
@@ -37,12 +34,7 @@ local function ForEachCoreFrame(fn)
     for unitKey, frame in pairs(frames) do fn(frame, unitKey) end
     return true
 end
-local function IsConfigCombatLocked()
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
-        return _G.MSUF_IsConfigCombatLocked() and true or false
-    end
-    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
-end
+local IsConfigCombatLocked = _G.InCombatLockdown
 local function ShowConfigCombatLockMessage()
     if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
         _G.MSUF_ShowConfigCombatLockMessage()
@@ -55,9 +47,12 @@ local function BlockConfigCombatLocked(silent)
     if not silent then ShowConfigCombatLockMessage() end
     return true
 end
+--- REQUIRED: State/MSUF_Defaults.lua is listed unconditionally in the TOC and
+--- exports MSUF_EnsureDB at its top level, long before this file. Scale state
+--- is read straight out of MSUF_DB.general, so the guard is not optional.
+local EnsureDB = MSUF.Require("MSUF_EnsureDB", "Runtime/MSUF_UIScaleRuntime.lua")
 local function EnsureGeneral()
-    local ensureDB = _G.MSUF_EnsureDB
-    if type(ensureDB) == "function" then ensureDB() end
+    EnsureDB()
     ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
     _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
     return _G.MSUF_DB.general
@@ -160,11 +155,7 @@ local EnsureScaleApplyAfterCombat
 local ResetGlobalUiScale
 local function CancelScaleTimer(timer)
     if not (timer and type(timer.Cancel) == "function") then return end
-    local ok, err = pcall(timer.Cancel, timer)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, err) end
-    end
+    timer.Cancel(timer)
 end
 local function CancelPendingScaleTimers()
     local reanchorPending = _G.MSUF_ScaleReanchorPending == true
@@ -260,16 +251,20 @@ end
 local function GetBlizzardCVarScale()
     local useUiScale
     if type(_G.GetCVarBool) == "function" then
-        local ok, value = pcall(_G.GetCVarBool, "useUiScale")
-        if ok then useUiScale = value end
+        local value = _G.GetCVarBool("useUiScale")
+        do
+useUiScale = value
+end
     end
     if useUiScale == nil and type(_G.GetCVar) == "function" then
-        local ok, value = pcall(_G.GetCVar, "useUiScale")
-        if ok then useUiScale = tostring(value) == "1" end
+        local value = _G.GetCVar("useUiScale")
+        do
+useUiScale = tostring(value) == "1"
+end
     end
     if useUiScale and type(_G.GetCVar) == "function" then
-        local ok, value = pcall(_G.GetCVar, "uiScale")
-        value = ok and tonumber(value) or nil
+        local value = _G.GetCVar("uiScale")
+        value = tonumber(value) or nil
         if value and value > 0 then return Clamp(value, 0.3, 2.0) end
     end
     if type(_G.GetPhysicalScreenSize) == "function" then
@@ -282,13 +277,17 @@ local function GetBlizzardCVarScale()
 end
 local function RestoreBlizzardUiScaleOnce()
     if type(_G.UIParent_UpdateScale) == "function" then
-        local ok = pcall(_G.UIParent_UpdateScale)
-        if ok then return true end
+        _G.UIParent_UpdateScale()
+        do
+return true
+end
     end
     local scale = GetBlizzardCVarScale()
     if scale and _G.UIParent and _G.UIParent.SetScale then
-        local ok = pcall(_G.UIParent.SetScale, _G.UIParent, scale)
-        if ok then return true end
+        _G.UIParent.SetScale(_G.UIParent, scale)
+        do
+return true
+end
     end
     return false
 end

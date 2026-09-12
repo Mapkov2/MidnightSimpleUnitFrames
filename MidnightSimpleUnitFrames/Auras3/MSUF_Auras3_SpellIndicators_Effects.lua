@@ -14,8 +14,8 @@ local math_min, math_max = math.min, math.max
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
 local SPELL_FRAME_EFFECT_BASE_OFFSET = tonumber(FrameLayers.SPELL_FRAME_EFFECT_BASE_OFFSET) or 1
 local CreateFrame = _G.CreateFrame
-local InCombat = _G.InCombatLockdown or function() return false end
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local InCombat = _G.InCombatLockdown
+local issecretvalue = _G.issecretvalue
 local ICON_ALERT_TEXTURE = [[Interface\SpellActivationOverlay\IconAlert]]
 local ICON_ALERT_ANTS_TEXTURE = [[Interface\SpellActivationOverlay\IconAlertAnts]]
 local FRAME_GLOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
@@ -269,8 +269,7 @@ local function SyncNameOverlayFont(overlay, source)
         if type(applyResolved) == "function" then
             applyResolved(overlay, path, size, flags, general and general.fontKey)
         else
-            local ok, applied = pcall(overlay.SetFont, overlay, path, size, flags)
-            if (not ok or applied == false) and type(_G.MSUF_MarkFontApplyFailed) == "function" then
+            if not _G.MSUF_SetFontChecked(overlay, path, size, flags) and type(_G.MSUF_MarkFontApplyFailed) == "function" then
                 _G.MSUF_MarkFontApplyFailed()
             end
         end

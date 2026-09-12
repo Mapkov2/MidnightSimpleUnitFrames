@@ -6,6 +6,7 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local EnsureDB = M.EnsureDB
 local Rounded = M.GroupPreviewRounded or {}
 M.GroupPreviewRounded = Rounded
 function Rounded.Install(deps)
@@ -16,9 +17,9 @@ function Rounded.Install(deps)
     local GF_PREVIEW_ROUNDED_MASK = deps.ROUNDED_MASK
     local GF_PREVIEW_ROUNDED_EDGE = deps.ROUNDED_EDGE
     local GF_PREVIEW_ROUNDED_STRENGTH = 3
-    local ReadBarsBool = deps.ReadBarsBool or function(_, default) return default == true end
-    local Round = deps.Round or function(value) return math.floor((tonumber(value) or 0) + 0.5) end
-    local HealPredAnchorMode = deps.HealPredAnchorMode or function() return 3 end
+    local ReadBarsBool = deps.ReadBarsBool
+    local Round = deps.Round
+    local HealPredAnchorMode = deps.HealPredAnchorMode
 local function RoundedEnabled()
     return ReadBarsBool("roundedFramesEnabled", false)
         and ReadBarsBool("roundedGroupFrames", true)
@@ -259,7 +260,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     local absorbMask = EnsureRoundedMask(mock, "absorb", sharedBody and mock or mock._absorb, absorbTex)
     local healAbsorbMask = EnsureRoundedMask(mock, "healAbsorb", sharedBody and mock or mock._healAbsorb, healAbsorbTex)
     local healPredMode = HealPredAnchorMode(conf)
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    local gen = EnsureDB().general
     local absorbMode = tonumber((conf and conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
     if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
     local powerBgMask = roundPower and EnsureRoundedMask(mock, "power", powerAnchor, mock._powerBg) or nil
@@ -280,8 +281,12 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     SetMask(mock, dispelOverlay, dispelOverlayMask)
     SetMask(mock, mock._tempMaxHealthBg, tempMaxHealthBgMask)
     SetMask(mock, tempMaxHealthTex, tempMaxHealthMask)
-    SetMask(mock, healPredTex, healPredMode == 4 and nil or healPredMask)
-    SetMask(mock, absorbTex, absorbMode == 4 and nil or absorbMask)
+    local selectedValue2
+    if not (healPredMode == 4) then selectedValue2 = healPredMask end
+    SetMask(mock, healPredTex, selectedValue2)
+    local selectedValue1
+    if not (absorbMode == 4) then selectedValue1 = absorbMask end
+    SetMask(mock, absorbTex, selectedValue1)
     SetMask(mock, healAbsorbTex, healAbsorbMask)
     SetMask(mock, mock._powerBg, powerBgMask)
     SetMask(mock, powerTex, powerTexMask)

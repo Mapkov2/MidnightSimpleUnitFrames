@@ -8,13 +8,11 @@ MSUF.UF.Elements = MSUF.UF.Elements or {}
 local UF = MSUF.UF
 local Elements = UF.Elements
 local Metadata = UF.Metadata or {}
-local Framework = MSUF.MSUFUnitFrames or MSUF.UFCore
 
 local type = type
 local pairs = pairs
 local next = next
 local tostring = tostring
-local tonumber = tonumber
 local table_remove = table.remove
 local table_concat = table.concat
 local CreateFrame = CreateFrame
@@ -26,8 +24,8 @@ local UnitIsConnected = UnitIsConnected
 local UnitIsDead = UnitIsDead
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitGUID = UnitGUID
-local GetTime = GetTime or function() return 0 end
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local GetTime = _G.GetTime
+local issecretvalue = _G.issecretvalue
 
 UF.version = "8.4-demand-runtime-plans"
 UF.frames = UF.frames or {}
@@ -43,41 +41,6 @@ UF.elementTraits = UF.elementTraits or {}
 UF.initialized = UF.initialized or false
 
 local HOST_VALUES = UF._hostValues or _G
-
-UF.unitOrder = UF.unitOrder or {
-  "player", "target", "focus", "targettarget", "focustarget", "pet",
-  "boss1", "boss2", "boss3", "boss4", "boss5",
-  "arena1", "arena2", "arena3",
-}
-
--- Prune unsupported client tokens before factories, events and edit-mode owners
--- consume the managed-unit list. Imported profiles cannot re-enable these units.
-local client = (_G.MSUF_NS or MSUF).Client
-if client and client.SupportsUnit then
-  for i = #UF.unitOrder, 1, -1 do
-    if not client.SupportsUnit(UF.unitOrder[i]) then
-      table_remove(UF.unitOrder, i)
-    end
-  end
-end
-UF.unitLookup = {}
-for i = 1, #UF.unitOrder do
-  UF.unitLookup[UF.unitOrder[i]] = true
-end
-
-UF.configKeyUnits = UF.configKeyUnits or {
-  player = { "player" },
-  target = { "target" },
-  focus = { "focus" },
-  targettarget = { "targettarget" },
-  tot = { "targettarget" },
-  targetoftarget = { "targettarget" },
-  focustarget = { "focustarget" },
-  pet = { "pet" },
-  boss = { "boss1", "boss2", "boss3", "boss4", "boss5" },
-  arena = { "arena1", "arena2", "arena3" },
-}
-UF.singleUnitLists = UF.singleUnitLists or {}
 
 local BASIC_ELEMENTS = {
   LoadConditions = true,
@@ -109,9 +72,11 @@ local EVENT_ELEMENTS = {
   GroupCornerIndicators = true,
   GroupStatusRuntime = true,
   GroupVisuals = true,
-  -- Group range events must stay unit-filtered per frame. A shared
-  -- RegisterUnitEvent subscription is capped at four unit tokens and cannot
-  -- safely dispatch a secret UNIT_IN_RANGE_UPDATE unit payload.
+  -- Group range events must stay unit-filtered per frame, because a shared
+  -- subscription cannot safely dispatch a secret UNIT_IN_RANGE_UPDATE unit
+  -- payload. Note this is the only reason: RegisterUnitEvent itself takes a
+  -- variadic unit-token list and reports refusal by returning false (12.1
+  -- SimpleFrameAPIDocumentation), so there is no four-token ceiling to respect.
   GroupRangeFade = true,
 }
 
@@ -193,38 +158,6 @@ local NONPREFIX_UNIT_EVENTS = {
   -- RegisterEvent and fire for every unit's toggle.
   PLAYER_FLAGS_CHANGED = true,
 }
-
-local BOSS_UNITS = {
-  boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-}
-
-local ARENA_UNITS = {
-  arena1 = true, arena2 = true, arena3 = true,
-}
-
-UF.dependentUnitParents = UF.dependentUnitParents or {
-  targettarget = "target",
-  focustarget = "focus",
-}
-
-function UF.ParentUnitForDependentUnit(unit)
-  return UF.dependentUnitParents and UF.dependentUnitParents[unit]
-end
-
-function UF.IsDependentUnit(unit)
-  return UF.ParentUnitForDependentUnit(unit) ~= nil
-end
-
-function UF.ConfigKeyForUnit(unit)
-  if BOSS_UNITS[unit] then return "boss" end
-  if ARENA_UNITS[unit] then return "arena" end
-  if unit == "targetoftarget" or unit == "tot" then return "targettarget" end
-  return unit
-end
-
-function UF.IsManagedUnit(unit)
-  return UF.unitLookup[unit] == true
-end
 
 local function IsUnitToken(unit)
   return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
@@ -435,256 +368,6 @@ local function ReadDeadCached(frame, unit, state)
   return dead, known
 end
 UF.ReadDeadCached = ReadDeadCached
-
-local function Clamp01(value, fallback)
-  value = tonumber(value)
-  if value == nil then value = fallback end
-  if value < 0 then return 0 end
-  if value > 1 then return 1 end
-  return value
-end
-UF.Clamp01 = Clamp01
-
-local function NumberWithFallback(value, fallback)
-  value = tonumber(value)
-  return value == nil and fallback or value
-end
-UF.NumberWithFallback = NumberWithFallback
-
-local function NormalizeDispelDetectTrigger(value)
-  value = tostring(value or ""):upper()
-  if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then
-    return "BY_RAID"
-  end
-  if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then
-    return "DISPEL_TYPE"
-  elseif value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then
-    return "DISPEL_TYPE"
-  elseif value == "PLAYER_CAST" or value == "CAST_BY_ME" or value == "MY_DEBUFF" then
-    return "PLAYER_CAST"
-  end
-  return "BY_ME"
-end
-UF.NormalizeDispelDetectTrigger = NormalizeDispelDetectTrigger
-
-local function NormalizeDispelOverlayTrigger(value)
-  value = tostring(value or ""):upper()
-  if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
-  return NormalizeDispelDetectTrigger(value)
-end
-UF.NormalizeDispelOverlayTrigger = NormalizeDispelOverlayTrigger
-
-local function NormalizeDispelOverlayStyle(value)
-  if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then return value end
-  return "FULL"
-end
-UF.NormalizeDispelOverlayStyle = NormalizeDispelOverlayStyle
-
-local function NormalizeRangeFadeLayerMode(value)
-  if value == "health" or value == "hp" or value == "hpbar" or value == "HP" or value == 2 then
-    return "health"
-  end
-  return "frame"
-end
-UF.NormalizeRangeFadeLayerMode = NormalizeRangeFadeLayerMode
-
-local function NormalizeAbsorbTestScope(scope)
-  scope = tostring(scope or "shared"):lower():gsub("%s+", ""):gsub("%-", "_")
-  if scope == "" or scope == "all" or scope == "global" then return "shared" end
-  if scope == "gf_party" or scope == "group_party" or scope == "gfparty" then return "party" end
-  if scope == "gf_raid" or scope == "gf_mythicraid" or scope == "group_raid"
-    or scope == "gfraid" or scope == "mythic" or scope == "mythicraid" then return "raid" end
-  if scope == "focus_target" then return "focustarget" end
-  if scope == "targetoftarget" or scope == "tot" then return "targettarget" end
-  return scope
-end
-UF.NormalizeAbsorbTestScope = NormalizeAbsorbTestScope
-
-local PREDICTION_TEST_CATEGORIES = {
-  heal = true,
-  absorb = true,
-  healAbsorb = true,
-  tempMaxHealth = true,
-}
-
-local function NormalizePredictionTestCategory(category)
-  if category == "heal" or category == "prediction" or category == "healPrediction" then return "heal" end
-  if category == "healAbsorb" or category == "negative" or category == "negativeAbsorb" then return "healAbsorb" end
-  if category == "absorb" or category == "positive" or category == "positiveAbsorb" then return "absorb" end
-  if category == "tempMaxHealth" or category == "maxHealthLoss" or category == "reducedMaxHealth" then return "tempMaxHealth" end
-  return nil
-end
-UF.NormalizePredictionTestCategory = NormalizePredictionTestCategory
-
-local function PredictionTestBucketEnabled(bucket, category)
-  if type(bucket) ~= "table" then return false end
-  category = NormalizePredictionTestCategory(category)
-  if category then return bucket[category] == true end
-  return bucket.heal == true or bucket.absorb == true or bucket.healAbsorb == true
-end
-
-local function AbsorbTextureTestEnabledForScope(scope, category)
-  local modes = HOST_VALUES.MSUF_PredictionTestModes
-  if type(modes) == "table" then
-    local normalized = NormalizeAbsorbTestScope(scope)
-    if PredictionTestBucketEnabled(modes.shared, category) then return true end
-    if normalized ~= "shared" and PredictionTestBucketEnabled(modes[normalized], category) then return true end
-    return normalized == "shared" and PredictionTestBucketEnabled(modes.shared, category) or false
-  end
-  if HOST_VALUES.MSUF_AbsorbTextureTestMode ~= true then return false end
-  local wanted = NormalizeAbsorbTestScope(HOST_VALUES.MSUF_AbsorbTextureTestScope)
-  return wanted == "shared" or wanted == NormalizeAbsorbTestScope(scope)
-end
-UF.AbsorbTextureTestEnabledForScope = AbsorbTextureTestEnabledForScope
-UF.PREDICTION_TEST_CATEGORIES = PREDICTION_TEST_CATEGORIES
-
-local function ConfigScopedValue(conf, general, key, fallback)
-  if conf and conf.hlOverride == true and conf[key] ~= nil then return conf[key] end
-  if general and general[key] ~= nil then return general[key] end
-  return fallback
-end
-UF.ConfigScopedValue = ConfigScopedValue
-
-local BORDER_PRIORITY_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget" }
-local BORDER_PRIORITY_ALLOWED = { dispel = true, aggro = true, purge = true, bossTarget = true }
-local BORDER_PRIORITY_ALIAS = {
-  Dispel = "dispel", DISPEL = "dispel", Magic = "dispel", MAGIC = "dispel",
-  Curse = "dispel", CURSE = "dispel", Disease = "dispel", DISEASE = "dispel",
-  Poison = "dispel", POISON = "dispel", Bleed = "dispel", BLEED = "dispel",
-  Aggro = "aggro", AGGRO = "aggro", Purge = "purge", PURGE = "purge",
-  BossTarget = "bossTarget", Boss_Target = "bossTarget",
-  ["Boss Target"] = "bossTarget", ["boss target"] = "bossTarget",
-  boss_target = "bossTarget", bosstarget = "bossTarget", BOSS_TARGET = "bossTarget",
-}
-
-local function ScopedAliasValue(conf, general, key, legacyKey, fallback)
-  if conf and conf.hlOverride == true then
-    if conf[key] ~= nil then return conf[key] end
-    if legacyKey and conf[legacyKey] ~= nil then return conf[legacyKey] end
-  end
-  if general then
-    if general[key] ~= nil then return general[key] end
-    if legacyKey and general[legacyKey] ~= nil then return general[legacyKey] end
-  end
-  return fallback
-end
-
-local function CompileBorderPriority(conf, general)
-  local enabled = ScopedAliasValue(conf, general, "hlPrioEnabled", "highlightPrioEnabled", false)
-  enabled = enabled == true or enabled == 1 or enabled == "1"
-  local raw = ScopedAliasValue(conf, general, "hlPrioOrder", "highlightPrioOrder", nil)
-  local order, used = {}, {}
-  if type(raw) == "table" then
-    for i = 1, #raw do
-      local key = raw[i]
-      if type(key) == "string" then key = BORDER_PRIORITY_ALIAS[key] or key end
-      if BORDER_PRIORITY_ALLOWED[key] and not used[key] then
-        used[key] = true
-        order[#order + 1] = key
-      end
-    end
-  end
-  for i = 1, #BORDER_PRIORITY_DEFAULTS do
-    local key = BORDER_PRIORITY_DEFAULTS[i]
-    if not used[key] then
-      used[key] = true
-      order[#order + 1] = key
-    end
-  end
-  return enabled, order
-end
-UF.CompileBorderPriority = CompileBorderPriority
-
-local function GradientKeyActive(conf, key)
-  if not (conf and conf.hlOverride == true and conf.gradientOverride == true) then return false end
-  if conf.gradientOverrideVersion ~= 2 then return conf[key] ~= nil end
-  return type(conf.gradientOverrideKeys) == "table" and conf.gradientOverrideKeys[key] == true
-end
-
-local function GradientScopedValue(conf, general, key, fallback, legacyKey)
-  if GradientKeyActive(conf, key) and conf[key] ~= nil then return conf[key] end
-  if legacyKey and GradientKeyActive(conf, legacyKey) and conf[legacyKey] ~= nil then return conf[legacyKey] end
-  if general and general[key] ~= nil then return general[key] end
-  if legacyKey and general and general[legacyKey] ~= nil then return general[legacyKey] end
-  return fallback
-end
-
-local function ResolveBarGradient(conf, general, enabledKey)
-  local power = enabledKey == "enablePowerGradient"
-  local useLegacyDirections = false
-  if power then
-    local scopedPower = GradientKeyActive(conf, "powerGradientDirLeft") or GradientKeyActive(conf, "powerGradientDirRight")
-      or GradientKeyActive(conf, "powerGradientDirUp") or GradientKeyActive(conf, "powerGradientDirDown")
-    local scopedLegacy = GradientKeyActive(conf, "gradientDirLeft") or GradientKeyActive(conf, "gradientDirRight")
-      or GradientKeyActive(conf, "gradientDirUp") or GradientKeyActive(conf, "gradientDirDown")
-    local generalPower = general and (general.powerGradientDirLeft ~= nil or general.powerGradientDirRight ~= nil
-      or general.powerGradientDirUp ~= nil or general.powerGradientDirDown ~= nil)
-    useLegacyDirections = not scopedPower and (scopedLegacy or not generalPower)
-  end
-  local prefix = power and not useLegacyDirections and "powerGradientDir" or "gradientDir"
-  local left = GradientScopedValue(conf, general, prefix .. "Left", false) == true
-  local right = GradientScopedValue(conf, general, prefix .. "Right", false) == true
-  local up = GradientScopedValue(conf, general, prefix .. "Up", false) == true
-  local down = GradientScopedValue(conf, general, prefix .. "Down", false) == true
-  if not (left or right or up or down) then
-    local directionKey = power and not useLegacyDirections and "powerGradientDirection" or "gradientDirection"
-    local legacy = GradientScopedValue(conf, general, directionKey, "RIGHT")
-    left = legacy == "LEFT"
-    up = legacy == "UP"
-    down = legacy == "DOWN"
-    right = not (left or up or down)
-  end
-  local strengthKey = power and "powerGradientStrength" or "gradientStrength"
-  local colorPrefix = power and "powerBarGradientColor" or "healthBarGradientColor"
-  return {
-    enabled = GradientScopedValue(conf, general, enabledKey, false) == true,
-    strength = Clamp01(GradientScopedValue(conf, general, strengthKey, 0.45,
-      power and "gradientStrength" or nil), 0.45),
-    r = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "R", 0), 0),
-    g = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "G", 0), 0),
-    b = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "B", 0), 0),
-    left = left, right = right, up = up, down = down,
-  }
-end
-UF.ResolveBarGradient = ResolveBarGradient
-
-function UF.FillPredictionColors(dst, general, conf, scopedValue, numberFn)
-  scopedValue = scopedValue or ConfigScopedValue
-  numberFn = numberFn or NumberWithFallback
-  dst.healR = numberFn(general and general.healPredictionColorR, 0)
-  dst.healG = numberFn(general and general.healPredictionColorG, 1)
-  dst.healB = numberFn(general and general.healPredictionColorB, 0)
-  dst.healA = Clamp01(scopedValue(conf, general, "healPredictionBarOpacity", general and general.healPredictionColorA), 0.45)
-  dst.absorbR = numberFn(general and general.absorbBarColorR, 1)
-  dst.absorbG = numberFn(general and general.absorbBarColorG, 1)
-  dst.absorbB = numberFn(general and general.absorbBarColorB, 1)
-  dst.absorbA = Clamp01(scopedValue(conf, general, "absorbBarOpacity", general and general.absorbBarColorA), 0.75)
-  dst.healAbsorbR = numberFn(general and general.healAbsorbBarColorR, 0.7)
-  dst.healAbsorbG = numberFn(general and general.healAbsorbBarColorG, 0)
-  dst.healAbsorbB = numberFn(general and general.healAbsorbBarColorB, 0)
-  dst.healAbsorbA = Clamp01(scopedValue(conf, general, "healAbsorbBarOpacity", general and general.healAbsorbBarColorA), 1)
-end
-
-function UF.UnitsForConfigKey(key)
-  local units = UF.configKeyUnits[key]
-  if units then return units end
-  if UF.unitLookup[key] then
-    units = UF.singleUnitLists[key]
-    if not units then
-      units = { key }
-      UF.singleUnitLists[key] = units
-    end
-    return units
-  end
-  return nil
-end
-
-function UF.FrameName(unit)
-  local prefix = UF.frameNamePrefix
-    or (Framework and Framework.framePrefix)
-    or "MSUF"
-  return tostring(prefix) .. "_" .. tostring(unit or "unknown")
-end
 
 local UPDATE_KEYS = UF._updateKeys or setmetatable({}, {
   __index = function(t, name)
@@ -1248,6 +931,20 @@ local function RouteCacheLeaf(root, fn1, fn2, fn3, fn4, mode, target)
   return nextNode, target or NIL_ROUTE_KEY
 end
 
+-- Route-closure contract for BuildHealthRoute and BuildGroupHealthRoute.
+-- `self._msufTextDirtyMask` is the deferred text drain's pending mask owned by
+-- MSUF_UF_Text_Runtime: bit 1 (value 1) = a HealthText repaint is already
+-- queued, bit 2 (value 2) = a PowerText repaint is queued, 3 = both. The test
+-- `dirty ~= 1 and dirty ~= 3` means "health bit clear" (mask nil or 2) spelled
+-- without a bit library, so the queued drain, not this tick, repaints text.
+-- `self._msufPredictionHealthVisualActive` is the flag Prediction publishes
+-- while a health-dependent absorb visual exists; false skips that follower.
+-- The ten near-identical closures below are intentional unrolling: every
+-- archetype (target-bound vs unit-bound, gated vs plain prediction, gated vs
+-- plain text, with or without visuals, dispatch-free vs Begin/EndFrameEvent)
+-- is one straight-line function whose captured nils were decided once at
+-- compile time, so the dominant UNIT_HEALTH tick pays no per-event branching.
+-- Do not fold them into a generic closure or a shared helper.
 local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUnitless, target,
     predictionGated, textDirtyGated)
   -- UNIT_HEALTH can compile two followers whose common state is already known
@@ -2288,6 +1985,7 @@ local function IsBossUnit(unit)
   return unit == "boss1" or unit == "boss2" or unit == "boss3"
     or unit == "boss4" or unit == "boss5"
 end
+UF.IsBossUnit = IsBossUnit
 
 local function IsArenaUnit(unit)
   return unit == "arena1" or unit == "arena2" or unit == "arena3"

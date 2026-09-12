@@ -1,5 +1,0 @@
-<Ui xmlns="http://www.blizzard.com/wow/ui/">
-  <Include file="..\Libs\MSUFUnitFrames\MSUFUnitFrames.xml"/>
-  <Script file="Engine\MSUF_UF_Config.lua"/>
-  <Script file="Engine\MSUF_UF_PreviewAnimation.lua"/>
-</Ui>

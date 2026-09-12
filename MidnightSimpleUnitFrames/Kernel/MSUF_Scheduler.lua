@@ -5,21 +5,7 @@
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS or {})
 
-local C_Timer = _G.C_Timer
 local type = type
-local pcall = pcall
-local xpcall = xpcall
-
-local function ReportCallbackError(err)
-    local handler = _G.geterrorhandler and _G.geterrorhandler()
-    if type(handler) == "function" then
-        local reported = pcall(handler, err)
-        if reported then return end
-    end
-    if type(_G.print) == "function" then
-        _G.print("|cffffd700MSUF Scheduler:|r", tostring(err))
-    end
-end
 
 local Scheduler = MSUF.Scheduler or {}
 MSUF.Scheduler = Scheduler
@@ -31,94 +17,49 @@ Scheduler.queue = queue
 Scheduler.head = Scheduler.head or 1
 Scheduler.tail = Scheduler.tail or 0
 
-local frame = Scheduler.frame
-if not frame and _G.CreateFrame then
-    frame = _G.CreateFrame("Frame", "MSUF_SchedulerFrame")
-    Scheduler.frame = frame
-end
+local frame = Scheduler.frame or _G.CreateFrame("Frame", "MSUF_SchedulerFrame")
+Scheduler.frame = frame
 
 local FlushNextFrame
 local function ArmNextFrame()
-    if frame then
-        frame:SetScript("OnUpdate", FlushNextFrame)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, FlushNextFrame)
-    else
-        FlushNextFrame()
-    end
+    frame:SetScript("OnUpdate", FlushNextFrame)
 end
 
---- PERF (4.22 Beta hotfix): Re-entry safety + leftover preservation.
----
---- Problem: callbacks executed inside this loop can re-schedule via
---- ScheduleOnce/RunNextFrame. Without a snapshot of `tail` taken BEFORE the
---- loop, the loop would extend itself within the same frame --- this is the
---- runaway pattern that produced 1739x amplification on GROUP_ROSTER_UPDATE
---- bursts and 67ms frame stalls in the prior trace.
----
---- We snapshot `snapshotTail` once. Items appended during this flush land at
---- queue[snapshotTail+1..Scheduler.tail] and are NOT processed this frame.
---- Without explicit handling those leftovers would be silently dropped when
---- we reset Scheduler.head/tail. So we compact them to the front and
---- re-arm the OnUpdate driver for the next frame.
----
---- Net result: one schedule = one execution per frame, no re-entry storm,
---- no lost work. Pure Lua state --- secret-safe by construction.
+-- Keep the driver armed until the queue is drained. Advance/remove the current
+-- item before calling it: an error is visible and the next frame can continue
+-- at the next item without replaying the failure or stranding pending work.
 function FlushNextFrame()
-    if frame then
-        frame:SetScript("OnUpdate", nil)
-    end
-    Scheduler.nextFrameActive = false
-
     local head = Scheduler.head or 1
     local snapshotTail = Scheduler.tail or 0
-
-    --- Each queued callback is a fault boundary. Report failures through the
-    --- normal error handler, but always finish the drain/compaction bookkeeping
-    --- so one feature cannot strand unrelated next-frame work.
     while head <= snapshotTail do
         local key = queue[head]
         queue[head] = nil
         head = head + 1
         Scheduler.head = head
-
         if key ~= nil then
-            local cb = pending[key]
+            local callback = pending[key]
             pending[key] = nil
-            -- Report while the callback stack still exists. Reporting after a
-            -- pcall returned erased the useful frames from BugSack timeouts.
-            -- The nested pcall above runs only on failure and protects the
-            -- queue even when a third-party error handler itself throws.
-            if type(cb) == "function" then xpcall(cb, ReportCallbackError) end
+            if callback then callback() end
         end
     end
-
-    --- Items appended during the flush (snapshotTail+1 .. Scheduler.tail).
-    --- Compact them to the head of the queue and arm next-frame flush.
     local liveTail = Scheduler.tail or 0
     if liveTail >= head then
-        local writeIdx = 0
+        local count = 0
         for i = head, liveTail do
             local key = queue[i]
             queue[i] = nil
             if key ~= nil then
-                writeIdx = writeIdx + 1
-                queue[writeIdx] = key
+                count = count + 1
+                queue[count] = key
             end
         end
-        if writeIdx <= 0 then
-            Scheduler.head, Scheduler.tail = 1, 0
-            return
-        end
-        Scheduler.head = 1
-        Scheduler.tail = writeIdx
-        if not Scheduler.nextFrameActive then
-            Scheduler.nextFrameActive = true
-            ArmNextFrame()
-        end
+        Scheduler.head, Scheduler.tail = 1, count
+        if count > 0 then return end
     else
         Scheduler.head, Scheduler.tail = 1, 0
     end
+    Scheduler.nextFrameActive = false
+    frame:SetScript("OnUpdate", nil)
 end
 
 local function QueueNextFrame(key, fn)
@@ -182,7 +123,7 @@ local function RunDelayed(key)
     local fn = delayedPending[key]
     if fn == nil then return end
     delayedPending[key] = nil
-    xpcall(fn, ReportCallbackError)
+    fn()
 end
 
 --- Schedule fn under key after delay seconds. A second call for the same key
@@ -237,14 +178,13 @@ function Scheduler.IsScheduled(key)
     return key ~= nil and delayedPending[key] ~= nil
 end
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+
+local ExportPublic = MSUF.ExportPublic
 
 ExportPublic("MSUF_Scheduler", Scheduler)
 ExportPublic("MSUF_RunNextFrame", Scheduler.RunNextFrame)
 ExportPublic("MSUF_ScheduleOnce", Scheduler.ScheduleOnce)
+ExportPublic("MSUF_Core_RunNextFrame", Scheduler.RunNextFrame)
+
 ExportPublic("MSUF_ScheduleAfter", Scheduler.ScheduleAfter)
 ExportPublic("MSUF_CancelScheduled", Scheduler.CancelScheduled)
-ExportPublic("MSUF_Core_RunNextFrame", _G.MSUF_Core_RunNextFrame or Scheduler.RunNextFrame)

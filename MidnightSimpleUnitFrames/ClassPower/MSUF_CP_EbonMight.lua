@@ -9,10 +9,7 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
@@ -23,7 +20,7 @@ end
 builders.EBON_MIGHT = function(E)
     local CP = E.CP
     local EBON = E.EBON or {}
-    local _cpDB = E._cpDB
+
     local CreateFrame = E.CreateFrame or CreateFrame
     local GetHost = E.GetHost
     local GetStyle = E.GetStyle

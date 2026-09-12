@@ -1,7 +1,6 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
@@ -14,7 +13,7 @@ local type = type
 local table_remove = table.remove
 local next = next
 local InCombatLockdown = InCombatLockdown
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 GF.frames = GF.frames or setmetatable({}, { __mode = "k" })
 GF.frameList = GF.frameList or {}

@@ -26,7 +26,7 @@ local tostring = tostring
 local tonumber = tonumber
 local math_floor = math.floor
 local InCombatLockdown = InCombatLockdown
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 local DEFERRED_REFRESH_ALL = "*"
 local EMPTY_LIST = {}
@@ -474,7 +474,9 @@ function UF.RefreshPredictionBars(scope, reason, skipUnitFrames)
   reason = reason or "MSUF2_ABSORB"
   local did = false
   if skipUnitFrames ~= true then
-    did = UF.RefreshElements(scope == "shared" and nil or scope, PREDICTION_ELEMENTS, reason) or false
+    local selectedValue2
+    if not (scope == "shared") then selectedValue2 = scope end
+    did = UF.RefreshElements(selectedValue2, PREDICTION_ELEMENTS, reason) or false
   end
   local GF = MSUF and MSUF.GF
   if GF and type(GF.ForEachFrame) == "function" and type(GF.CompileSpec) == "function"
@@ -510,7 +512,9 @@ end
 
 function UF.RefreshTempMaxHealth(scope, reason)
   reason = reason or "MSUF2_TEMP_MAX_HEALTH"
-  local did = UF.RefreshElements(scope == "shared" and nil or scope, TEMP_MAX_HEALTH_ELEMENTS, reason) or false
+  local selectedValue1
+  if not (scope == "shared") then selectedValue1 = scope end
+  local did = UF.RefreshElements(selectedValue1, TEMP_MAX_HEALTH_ELEMENTS, reason) or false
   local GF = MSUF and MSUF.GF
   if GF and type(GF.ForEachFrame) == "function" and type(GF.CompileSpec) == "function"
     and type(UF.ApplyElementToFrame) == "function" then

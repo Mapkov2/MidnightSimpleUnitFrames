@@ -1,9 +1,6 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
@@ -147,10 +144,7 @@ local HP_MODES = VTP "ABSORB=Absorb|CURRENTABSORB=Current + Absorb|FULLVALUEABSO
 local POWER_MODES = VTP "CURRENT=Current|MAX=Max|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|NONE=None"
 local BOSS_LAYOUT_OPTIONS = VTP "VERTICAL_DOWN=Vertical (top -> bottom)|VERTICAL_UP=Vertical (bottom -> top)|HORIZONTAL_RIGHT=Horizontal (left -> right)|HORIZONTAL_LEFT=Horizontal (right -> left)"
 local BOSS_LAYOUT_VALID = KSW("VERTICAL_DOWN VERTICAL_UP HORIZONTAL_RIGHT HORIZONTAL_LEFT")
-local function PortableControlToken(value, fallback)
-    local token = tostring(value or ""):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
-    return token ~= "" and token or (fallback or "control")
-end
+local PortableControlToken = M.PortableControlToken
 local function UnitControlMeta(ctx, semanticPath, classification)
     local pageKey = PortableControlToken(ctx and ctx.key or M.activeKey, "uf_unknown")
     local path = PortableControlToken(semanticPath, "control")
@@ -213,18 +207,8 @@ local function GetBars()
     db.bars = db.bars or {}
     return db.bars
 end
-local function Call(name, ...)
-    local apply = M.ApplyService
-    if apply and type(apply.CallGlobal) == "function" then return apply.CallGlobal(name, ...) end
-    local fn = _G[name]
-    if type(fn) == "function" then fn(...); return true end
-    return false
-end
-local function DeepCopy(src)
-    if type(src) ~= "table" then return src end
-    if type(CopyTable) == "function" then return CopyTable(src) end
-    return M.DeepCopy(src)
-end
+
+local DeepCopy = M.DeepCopy
 local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerChunkedFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerBarTexture powerBarBgTexture]]
 --- Must cover every per-unit portrait key the engine reads (CompileUnitPortrait in
 --- MSUF_UF_Config.lua) and the Visuals page binds. Border/background COLORS are
@@ -434,7 +418,7 @@ local function ConfBool(value) if value ~= nil then return true, value ~= false 
 local function ConfTrue(value) if value ~= nil then return true, value == true end end
 local function ConfNumber(value) if type(value) == "number" then return true, value end end
 local function BarsDB()
-    return _G.MSUF_DB and _G.MSUF_DB.bars
+    return M.EnsureDB().bars
 end
 local POWER_COPY_OVERRIDES = {
     { key = "showPowerBar", fn = "MSUF_ReadUnitPowerBarEnabled", read = ConfBool, fallback = function(unitKey)
@@ -726,10 +710,9 @@ local function CompleteUnitCopy(callback, applied, result)
     return applied == true, result
 end
 local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
-    M.EnsureDB()
-    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
-    _G.MSUF_DB.general = _G.MSUF_DB.general or {}
-    local g = _G.MSUF_DB.general
+    local profileDB = M.EnsureDB()
+    profileDB.general = profileDB.general or {}
+    local g = profileDB.general
     local src, srcKey = EnsureUnitDB(unit)
     if not src or not srcKey then
         return CompleteUnitCopy(onComplete, false, { reason = "invalid_source", source = unit, destination = target })
@@ -793,7 +776,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
             dst.showInterruptSource = src.showInterruptSource
             if CopyCastbar(g, srcKey, dstKey) then
                 result.castbarApplied = true
-                Call("MSUF_UpdateCastbarWidthSourceSync", g, dstKey)
+                _G.MSUF_UpdateCastbarWidthSourceSync(g, dstKey)
             end
         end
         if scopes.load then CopyFields(dst, src, COPY_LOAD_CONDITION_FIELDS) end
@@ -816,8 +799,7 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     end
     local function FinishCopy(statusUnit)
         if scopes.status then
-            Call("MSUF_RefreshAllIndicators", statusUnit, "MSUF2_COPY_UNIT_STATUS")
-            Call("MSUF_RefreshStatusIndicators", statusUnit, "MSUF2_COPY_UNIT_STATUS")
+            _G.MSUF_RefreshStatusIndicators(statusUnit, "MSUF2_COPY_UNIT_STATUS")
         end
     end
     if target == "all" then
@@ -888,27 +870,8 @@ local function ClearBossPagePreviewForCombat()
     local clear = _G.MSUF_ClearBossUnitframePreviewForCombat
     return type(clear) == "function" and clear() == true
 end
-local function CoreFrame(unit)
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame(unit)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
-    return unit and frames and frames[unit] or nil
-end
-local function BossPreviewFramesVisible()
-    local sawFrame = false
-    for i = 1, 5 do
-        local unit = "boss" .. i
-        local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
-        if frame then
-            sawFrame = true
-            if frame.IsShown and not frame:IsShown() then return false end
-        end
-    end
-    return sawFrame
-end
+
+local BossPreviewFramesVisible = M.BossPreviewFramesVisible
 local function SyncBossPagePreview()
     local active = (_G.MSUF2_BossUnitframePreviewActive == true)
     if BossPagePreviewInCombat() then
@@ -1177,10 +1140,10 @@ end
 local function RefreshStatusRuntime(unit, spec)
     local runtimeRefreshed = false
     if spec and spec.refresh then
-        runtimeRefreshed = Call(spec.refresh, unit, "MSUF2_STATUS_INDICATOR")
+        runtimeRefreshed = true, _G[spec.refresh](unit, "MSUF2_STATUS_INDICATOR")
     end
     if spec and spec.statusRuntime and not runtimeRefreshed then
-        Call("MSUF_RefreshStatusIndicators", unit, "MSUF2_STATUS_INDICATOR")
+        _G.MSUF_RefreshStatusIndicators(unit, "MSUF2_STATUS_INDICATOR")
     end
     if spec and spec.value == "level" then
         if unit == "boss" and _G.MSUF_BossTestMode and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end
@@ -1272,7 +1235,6 @@ M.Assign(UnitPage, {
     GetConf = GetConf,
     GetGeneral = GetGeneral,
     GetBars = GetBars,
-    Call = Call,
     DeepCopy = DeepCopy,
     DefaultCopyTarget = DefaultCopyTarget,
     UnitTopLabel = UnitTopLabel,

@@ -27,7 +27,7 @@ local type = type
 local pairs = pairs
 local floor = math.floor
 
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 local afkSince = {}        -- guid -> GetTime() stamp of the observed AFK-on edge
 local attached = {}        -- frame -> true while its AFK timer text is visible

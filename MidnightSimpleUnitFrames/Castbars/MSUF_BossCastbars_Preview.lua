@@ -7,41 +7,18 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
-local function CoreFrame(unit)
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame(unit)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
-    return unit and frames and frames[unit] or nil
-end
+local CoreFrame = MSUF.UF.GetFrame
 
 local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
     MAX_BOSS_FRAMES = 5
 end
 
-local function GeneralDB()
-    if type(EnsureDB) == "function" then
-        EnsureDB()
-    end
+local GeneralDB = _G.MSUF_EnsureCastbarGeneralDB
 
-    MSUF_DB = MSUF_DB or {}
-    MSUF_DB.general = MSUF_DB.general or {}
-    return MSUF_DB.general
-end
-
-local function InCombat()
-    return _G.MSUF_InCombat == true
-        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
-        or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
-end
+local InCombat = _G.MSUF_IsPlayerInCombat
 
 local function PreviewEnabled()
     local general = GeneralDB()

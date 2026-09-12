@@ -7,15 +7,9 @@ MSUF = MSUF or {}
 local type, rawget, tonumber = type, rawget, tonumber
 local LibStub = LibStub
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
-local ResolveFontPath = _G.MSUF_ResolveFontPath or function(path) return path end
+local ResolveFontPath = _G.MSUF_ResolveFontPath
 
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    local locale = MSUF.L or _G.MSUF_L
-    local translated = type(locale) == "table" and rawget(locale, text)
-    return translated or text
-end
+local Tr = MSUF.Translate
 
 local L_GAMEPLAY_COLORS_TIP
 local function RefreshLocaleText()
@@ -56,8 +50,12 @@ local function EnsureGameplayDefaults()
             _G.MSUF_EnsureDB()
         end
     end
-    if type(MSUF_DB) ~= "table" then
-        MSUF_DB = {}
+    if type(MSUF_DB) ~= "table" and type(_G.MSUF_EnsureDB) == "function" then
+        -- State/MSUF_Defaults.lua owns the SavedVariable. Run its bootstrap
+        -- instead of assigning a bare table here: a hand-rolled MSUF_DB would
+        -- carry neither the defaults nor the profile binding. The lookup stays
+        -- late-bound because Features load after State but may be hosted alone.
+        _G.MSUF_EnsureDB()
     end
     if type(MSUF_DB.gameplay) ~= "table" then
         MSUF_DB.gameplay = {}

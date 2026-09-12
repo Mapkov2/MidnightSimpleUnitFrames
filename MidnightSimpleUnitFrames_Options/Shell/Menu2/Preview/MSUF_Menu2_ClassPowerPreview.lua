@@ -4,25 +4,15 @@
 --- drag loop; drag writes saved offsets and repaints only this preview.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
 local Preview = M.ClassPowerStackPreview or {}
 M.ClassPowerStackPreview = Preview
-local function ClassPowerSurfaceShown(box)
-    if not (box and box.IsShown and box:IsShown()) then return false end
-    local hostShown = box._msufCPPreviewHostShown
-    return type(hostShown) ~= "function" or hostShown(box) == true
-end
-local function ActivateClassPowerSurface(box)
-    if box and not ClassPowerSurfaceShown(box) then box = nil end
-    Preview.active = box
-    return Preview.active
-end
+local ClassPowerSurfaceShown = Preview.SurfaceShown
+local ActivateClassPowerSurface = Preview.ActivateSurface
+local RequestClassPowerPreviewRefresh = Preview.RequestRefresh
 local W = M.Widgets
 local T = M.Theme
 local CPPreview = M.ClassPowerPreview or {}
@@ -36,14 +26,9 @@ Preview.ZoomPan = ZoomPan
 -- animation driver's OnUpdate disabled.
 local ONUPDATE_MODE_DISABLED = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.Disabled) or 0
 local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.RunWhenVisible) or 1
-local function NormalizeControlPath(value)
-    local path = tostring(value or "")
-    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
-    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
-    return path
-end
+local NormalizeControlPath = M.NormalizeControlPath
 local function PreviewControlMeta(ctx, semanticPath, classification, exact)
-    local pageKey = NormalizeControlPath((ctx and ctx.key) or M._msuf2SearchBuildKey or M.activeKey or "classpower")
+    local pageKey = NormalizeControlPath((ctx and ctx.key) or M.activeKey or "classpower")
     if pageKey == "" then pageKey = "classpower" end
     local path = NormalizeControlPath(semanticPath)
     local identity = pageKey .. ".class-power-preview." .. path
@@ -73,7 +58,6 @@ local max = math.max
 local min = math.min
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local PREVIEW_BORDER_COLOR = { 1.00, 0.02, 0.02, 1.00 }
-local CP_PREVIEW_REFRESH_DELAY = 0.05
 local CP_PREVIEW_ANIMATION_INTERVAL = 0.05
 local CP_SHAPES, POWER_SHAPES = CPPreview.CLASS_SHAPES, CPPreview.POWER_SHAPES
 local NormalizeClassShape, ResolvePowerShape = CPPreview.NormalizeClassShape, CPPreview.ResolvePowerShape
@@ -87,41 +71,6 @@ local HP_TEXT_REVERSE = { CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURPERCENT = "PE
 local DELIMITERS = { [""] = " ", ["-"] = " - ", ["/"] = " / ", ["\\"] = " \\ ", ["|"] = " | ", ["<"] = " < ", [">"] = " > ", ["~"] = " ~ ", [":"] = " : " }
 local function TR(text)
     return (M.Tr and M.Tr(text)) or text
-end
-local function RequestClassPowerPreviewRefresh(box, reason)
-    if not (box and box.Refresh) then return end
-    box._msufCPRefreshReason = reason or box._msufCPRefreshReason
-    local queued = box._msufCPRefreshQueued
-    if queued then
-        -- MenuRuntime can cancel a pending MenuTimer task when the menu is
-        -- quiesced. Do not let that cancelled task permanently suppress every
-        -- later Class Resources refresh after the menu resumes.
-        if type(queued) ~= "table" or queued.active ~= false then return end
-        box._msufCPRefreshQueued = nil
-    end
-    box._msufCPRefreshQueued = true
-    box._msufCPRefreshSerial = (tonumber(box._msufCPRefreshSerial) or 0) + 1
-    local serial = box._msufCPRefreshSerial
-    local function Run()
-        if not box or serial ~= box._msufCPRefreshSerial then return end
-        local refreshReason = box._msufCPRefreshReason
-        box._msufCPRefreshReason = nil
-        box._msufCPRefreshQueued = nil
-        if box.IsShown and not box:IsShown() then return end
-        if box._msufCPPreviewHostShown and not box:_msufCPPreviewHostShown() then return end
-        box:Refresh(refreshReason or "CLASSPOWER_PREVIEW_REFRESH")
-    end
-    if C_Timer and C_Timer.After then
-        local task = C_Timer.After(CP_PREVIEW_REFRESH_DELAY, Run)
-        if box._msufCPRefreshQueued then
-            -- The MenuTimer facade returns its cancellable task. A nil result
-            -- means the lifecycle rejected the schedule (for example during a
-            -- combat transition), so leave the queue open for the next request.
-            box._msufCPRefreshQueued = (C_Timer == M.MenuTimer and task == nil) and nil or (task or true)
-        end
-    else
-        Run()
-    end
 end
 local function SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
     if not (box and box.summary and box.summary.SetText) then return end
@@ -166,9 +115,7 @@ local CP_PREVIEW_LAYERS = {
     { key = "hpText", label = "HP Text", color = { 0.25, 0.90, 0.42 }, tooltip = "Extra player HP text." },
     { key = "bounds", label = "Bounds", color = { 1.00, 0.22, 0.12 }, tooltip = "Preview-only bounds around visible elements." },
 }
-local function Round(value)
-    return floor((tonumber(value) or 0) + 0.5)
-end
+local Round = M.ClassPowerPreviewInteraction.Round
 local function Clamp(value, fallback, minValue, maxValue)
     value = tonumber(value) or fallback
     if value < minValue then return minValue end
@@ -252,23 +199,14 @@ local function RefreshLayerButtons(preview)
         if buttons[i].Refresh then buttons[i]:Refresh() end
     end
 end
-local function NormalizeAlign(value)
-    value = tostring(value or "CENTER"):upper()
-    if value == "LEFT" or value == "RIGHT" then return value end
-    return "CENTER"
-end
+local NormalizeAlign = _G.MSUF_UF_NormalizeShapeAlign
 local function ResolveHPShape(bars, player)
     local value = tostring(bars and bars.playerHPBarShape or "BAR"):upper()
     if value ~= "FOLLOW_POWER" then return ResolvePowerShape(value, bars and bars.classPowerShape) end
     if not (player and player.powerBarDetached == true) then return "BAR" end
     return ResolvePowerShape(player.detachedPowerBarShape or "BAR", bars and bars.classPowerShape)
 end
-local function ShapeOutlineAlpha(value)
-    value = tonumber(value) or 0
-    if value <= 0 then return 0 end
-    if value >= 8 then return 1 end
-    return 0.49 + (value * 0.065)
-end
+local ShapeOutlineAlpha = _G.MSUF_UF_ShapeOutlineAlpha
 local function AutoFitPips(segCount, height, gap)
     segCount = floor(tonumber(segCount) or 1)
     if segCount < 1 then segCount = 1 elseif segCount > 10 then segCount = 10 end
@@ -363,7 +301,7 @@ local function CPTextColor(fallbackR, fallbackG, fallbackB)
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
 end
 local function CPTextAlpha()
-    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local g = EnsureDB().general
     local alpha = tonumber(g and g.fontTextAlpha) or 1
     if alpha < 0.7 then alpha = 0.7 elseif alpha > 1 then alpha = 1 end
     return alpha
@@ -452,14 +390,13 @@ local function ApplyFont(region, size)
     if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then
-        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        local g = EnsureDB().general
         fontPath = resolveSafe(fontPath, size, fontFlags, g and g.fontKey)
     end
-    local ok = pcall(region.SetFont, region, fontPath, size, fontFlags)
-    if not ok then
-        pcall(region.SetFont, region, "Fonts\\FRIZQT__.TTF", size, fontFlags)
+    if not _G.MSUF_SetFontChecked(region, fontPath, size, fontFlags) then
+        _G.MSUF_SetFontChecked(region, "Fonts\\FRIZQT__.TTF", size, fontFlags)
     end
-    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local g = EnsureDB().general
     local useShadow
     if type(_G.MSUF_GetGlobalFontSettings) == "function" then
         local _, _, _, _, _, _, enabled = _G.MSUF_GetGlobalFontSettings()
@@ -529,7 +466,7 @@ local CP_POWER_ROUNDED_OPTS = {
     edgeSubLevel = 6,
     snapOff = Helpers.SnapOff,
     baseEdgeColor = function()
-        local db = _G.MSUF_DB or {}
+        local db = EnsureDB()
         local player = db.units and db.units.player or {}
         local general = db.general or {}
         return tonumber(player.barOutlineColorR) or tonumber(general.barBorderR) or 0,
@@ -557,7 +494,7 @@ local function RoundedClassResourcesPreviewEnabled(bars)
         and bars.roundedClassResources == true
 end
 local function RoundedPowerPreviewEnabled()
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local bars = EnsureDB().bars
     return bars and bars.roundedFramesEnabled == true
         and bars.roundedUnitFrames ~= false
         and bars.roundedPowerBars ~= false
@@ -592,100 +529,11 @@ local function SetRoundedPowerPreview(frame, enabled, outline)
     if frame._msufCPRoundedBg then frame._msufCPRoundedBg:Hide() end
     return true
 end
-local function CallApply(handle, reason)
-    local kind = handle and handle._applyKind
-    local moveOnly = reason == "CLASSPOWER_PREVIEW_MOVE" and kind ~= "powerText"
-    if not moveOnly then
-        if kind == "class" or kind == "classText" then
-            if type(_G.MSUF_ClassPower_Apply) == "function" then
-                _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, playerHP = true, syncNow = false })
-            elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
-                _G.MSUF_ClassPower_Refresh()
-                if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
-            end
-            if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
-        elseif kind == "power" or kind == "powerText" then
-            if kind == "powerText" and type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey("player") end
-            if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
-            if type(_G.MSUF_ClassPower_Apply) == "function" then
-                _G.MSUF_ClassPower_Apply({ playerHP = true })
-            elseif type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then
-                _G.MSUF_ClassPower_PlayerHP_Refresh()
-            end
-        elseif kind == "hp" or kind == "hpText" then
-            if type(_G.MSUF_ClassPower_Apply) == "function" then
-                _G.MSUF_ClassPower_Apply({ playerHP = true })
-            elseif type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then
-                _G.MSUF_ClassPower_PlayerHP_Refresh()
-            end
-        end
-    end
-    local applyReason = reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE"
-    local previewQueued = false
-    if type(M.RequestGeneralApply) == "function" then
-        previewQueued = M.RequestGeneralApply(applyReason, {
-            preview = true,
-            applyAll = false,
-            notify = false,
-            history = false,
-        }) ~= false
-    end
-    if not previewQueued and type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-        _G.MSUF_UFPreview_RequestRefresh(reason or "CLASSPOWER_PREVIEW_MOVE")
-    end
-end
-local function StoreForHandle(handle)
-    if not handle then return nil end
-    if handle._store == "player" then return Player() end
-    return Bars()
-end
-local function ReadHandle(handle)
-    local store = StoreForHandle(handle)
-    local x = store and tonumber(store[handle._xKey]) or nil
-    local y = store and tonumber(store[handle._yKey]) or nil
-    if x == nil then x = tonumber(handle._defaultX) or 0 end
-    if y == nil then y = tonumber(handle._defaultY) or 0 end
-    return x, y
-end
-
---- Handle writes update the same SavedVariables offsets used by runtime
---- ClassPower, but only repaint this preview unless the caller asks to apply.
-local function WriteHandle(handle, x, y, skipApply)
-    local store = StoreForHandle(handle)
-    if not (store and handle and handle._xKey and handle._yKey) then return end
-    store[handle._xKey] = Round(x)
-    store[handle._yKey] = Round(y)
-    if handle._applyKind == "powerText" and type(M.SyncDirectTextOffsets) == "function" then
-        M.SyncDirectTextOffsets(store, handle._xKey)
-        M.SyncDirectTextOffsets(store, handle._yKey)
-    end
-    if type(M.RefreshVisibleSliders) == "function" then M.RefreshVisibleSliders("CLASSPOWER_PREVIEW_MOVE") end
-    RequestClassPowerPreviewRefresh(handle._preview, "CLASSPOWER_PREVIEW_DRAG")
-    if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_MOVE") end
-end
-local function ClassPowerRouteForHandle(handle)
-    local kind = handle and (handle._applyKind or handle._layerKey or handle._key) or "class"
-    local section, state, tab = "classpower_display"
-    if kind == "classText" then section, state, tab = "classpower_visuals", "classPowerStyleTab", "text"
-    elseif kind == "power" or kind == "powerText" then section, state, tab = "classpower_detached_power", "classPowerDetachedPowerTab", kind == "power" and "layout" or "text"
-    elseif kind == "hp" or kind == "hpText" then section, state, tab = "classpower_player_hp", "classPowerPlayerHPTab", kind == "hp" and "layout" or "text" end
-    if state then
-        if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue(state, tab) else M[state] = tab end
-    end
-    return section
-end
-local function OpenClassPowerHandleSettings(handle)
-    if not (M and type(M.SelectPage) == "function") then return false end
-    _G.MSUF_EM2_MenuFocusRequest = {
-        pageKey = "classpower",
-        sectionId = ClassPowerRouteForHandle(handle),
-        component = handle and handle._key,
-        source = "classpower-preview",
-        explicit = true,
-        changedAt = GetTime and GetTime() or 0,
-    }
-    return M.SelectPage("classpower") ~= false
-end
+local Interaction = M.ClassPowerPreviewInteraction
+local CallApply = Interaction.Apply
+local ReadHandle = Interaction.Read
+local WriteHandle = Interaction.Write
+local OpenClassPowerHandleSettings = Interaction.OpenSettings
 local function RefreshHandleVisuals(preview)
     if not (preview and preview.handles) then return end
     local guidesOn = GuidesOn(preview)
@@ -723,8 +571,8 @@ local function RefreshHandleVisuals(preview)
 end
 -- Shared preview-keyboard helpers keep ClassPower and Unit preview nudging in
 -- lockstep while the DB write/apply behavior remains local to this module.
-local IsTextInputFocused = Helpers.IsTextInputFocused or function() return false end
-local NudgeStep = Helpers.NudgeStep or function() return 1 end
+local IsTextInputFocused = Helpers.IsTextInputFocused
+local NudgeStep = Helpers.NudgeStep
 local function CanNudgeHandle(handle)
     local preview = handle and handle._preview
     return handle ~= nil
@@ -785,11 +633,7 @@ local function SelectHandle(handle)
     RegisterPreviewNudgeTarget(preview)
     RefreshHandleVisuals(preview)
 end
-local function ExactPreviewDelta(value)
-    value = tonumber(value)
-    if value == nil or value ~= value or value == math.huge or value == -math.huge then return nil end
-    return value
-end
+local ExactPreviewDelta = MSUF.MSUF2.PreviewHelpers.ExactPreviewDelta
 local function FindClassPowerPreviewHandle(preview, handleKey)
     if not (preview and type(handleKey) == "string" and handleKey ~= "") then return nil end
     for i = 1, #(preview.handles or {}) do
@@ -2435,24 +2279,7 @@ local function EnsureClassPowerLayersButton(box)
     box._msuf2LayersButton = btn
     return btn
 end
-local function SetClassPowerPreviewToolsShown(box, shown)
-    if not box then return end
-    local controlsHint = box._msuf2PreviewControlsHint
-    if not shown then
-        if box._msuf2CompactToolsHidden ~= true then
-            box._msuf2CompactControlsHintWasShown = controlsHint and controlsHint.IsShown and controlsHint:IsShown() or false
-        end
-        box._msuf2CompactToolsHidden = true
-        if box.zoomBar then box.zoomBar:Hide() end
-        if box.animateButton then box.animateButton:Hide() end
-        if controlsHint then controlsHint:Hide() end
-        return
-    end
-    box._msuf2CompactToolsHidden = nil
-    if box.zoomBar then box.zoomBar:Show() end
-    if box.animateButton then box.animateButton:Show() end
-    if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
-end
+local SetClassPowerPreviewToolsShown = M.PreviewHelpers.SetCanvasToolsShown
 local function LayoutClassPowerHeaderControls(box, compact)
     if not box then return end
     local header = box._msuf2CompactHeader
@@ -2488,7 +2315,7 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     if compact then
         if box.title then box.title:Hide() end
         if box.hint then box.hint:Hide() end
-        SetClassPowerPreviewToolsShown(box, false)
+        SetClassPowerPreviewToolsShown(box, false, box and box.animateButton)
         if canvas then
             box.canvasW = max(1, (box.GetWidth and box:GetWidth() or 1) - 16)
             box.canvasH = max(1, (box.GetHeight and box:GetHeight() or 1) - 16)
@@ -2513,7 +2340,7 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     end
     if box.title then box.title:Show() end
     if box.hint then box.hint:Show() end
-    SetClassPowerPreviewToolsShown(box, true)
+    SetClassPowerPreviewToolsShown(box, true, box and box.animateButton)
     LayoutClassPowerHeaderControls(box, false)
     if canvas then
         box.canvasW = max(1, boxWidth - resolvedSideW - 32)
@@ -2862,14 +2689,7 @@ function Preview.Create(ctx, builder)
     function section:Refresh(reason)
         RefreshVisibleSurfaces(reason or "CLASSPOWER_PREVIEW_SECTION_REFRESH")
     end
-    function M.ResumeClassPowerPreview(reason, pageKey)
-        pageKey = tostring(pageKey or M.activeKey or "classpower")
-        if tostring(box._msufCPPreviewPageKey or "") ~= pageKey or not box:_msufCPPreviewHostShown() then return false end
-        if box.IsShown and not box:IsShown() then box:Show() end
-        RequestClassPowerPreviewRefresh(box, reason or "CLASSPOWER_PREVIEW_RESUME")
-        ActivateClassPowerSurface(box)
-        return true
-    end
+    ctx.entry.classPowerPreview = box
     M.TrackRefresh(ctx, function() RefreshVisibleSurfaces("CLASSPOWER_PREVIEW_PAGE_REFRESH") end)
     if fixedRecord then
         fixedRecord.onActivate = function()

@@ -18,22 +18,18 @@ local UnitPower = Text.UnitPower
 local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
 local ResolveDisplayedPowerIdentity = Text.ResolveDisplayedPowerIdentity
-local InCombatLockdown = Text.InCombatLockdown
+
 local UnitName = Text.UnitName
 local ReadDisplayName = UnitName
 local displayNameResolverUsesFrame = false
-local GetTime = Text.GetTime
+
 local C_Timer = _G.C_Timer
 local PowerColor = Text.PowerColor
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
-local ApplyNameTextColor = Text.ApplyNameTextColor or function(frame, unit)
-  Text.SetNameTextColor(frame, Text.NameTextColor(frame, unit))
-end
+local ApplyNameTextColor = Text.ApplyNameTextColor
 local NPCTypeTextColorEnabled = Text.NPCTypeTextColorEnabled
-local ApplyInlineTextColor = Text.ApplyInlineTextColor or function(frame, unit, inline)
-  Text.SetInlineTextColor(frame, Text.InlineTextColor(frame, unit, inline))
-end
+local ApplyInlineTextColor = Text.ApplyInlineTextColor
 local SetPowerTextColor = Text.SetPowerTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local HealthPercent = Text.HealthPercent
@@ -41,11 +37,17 @@ local HealthPercentAvailable = Text.UnitHealthPercent ~= nil and Text.SCALE_100 
 local PowerPercent = Text.PowerPercent
 local PowerPercentAvailable = Text.UnitPowerPercent ~= nil
 local floor = Text.floor or math.floor
+-- Read per dispatch (DirtyTextFrameState, the percent cache key, the legacy
+-- name truncator's per-byte walk); keep them off the global table.
+local type = type
+local tonumber = tonumber
+local string_byte = string.byte
+local string_sub = string.sub
 local Secrets = MSUF.Secrets or {}
 local nativeSecrets = _G.issecretvalue ~= nil
-local issecretvalue = _G.issecretvalue or function(_) return false end
-local UnitMissing = Secrets.UnitMissing or function(_) return false end
-local FreshUnitState = UF.FreshUnitState
+local issecretvalue = _G.issecretvalue
+local UnitMissing = Secrets.UnitMissing
+
 local ReadConnectedCached = UF.ReadConnectedCached
 local ReadDeadCached = UF.ReadDeadCached
 local UpdateTextSlots = Text.UpdateTextSlots
@@ -175,19 +177,7 @@ local function MarkHealthTextDirty(frame)
   end
 end
 
-local function MarkGroupHealthTextDirty(frame)
-  -- Group UNIT_HEALTH is compiled with Health's percent-only updater. That
-  -- route never publishes a dispatch payload, so the generic four-field clear
-  -- is dead work on every member tick.
-  MarkDirtyText(frame, TEXT_DIRTY_HEALTH)
-  local rt = frame and frame._msufTextRuntime
-  if rt and (rt._dispatchHealthPercentReady == true
-    or rt._dispatchHealthMissingReady == true) then
-    -- Defensive recovery for a stale payload left by an interrupted cold-path
-    -- recompile; the steady compiled Group route never enters this branch.
-    ClearDirtyTextDispatch(frame, TEXT_DIRTY_HEALTH)
-  end
-end
+local MarkGroupHealthTextDirty = MarkHealthTextDirty
 
 local function MarkPowerTextDirty(frame)
   MarkDirtyText(frame, TEXT_DIRTY_POWER)
@@ -829,7 +819,7 @@ local function TruncateLegacyGroupName(name, rt)
   if name == nil or maxChars <= 0 or issecretvalue(name) == true then return name end
 
   local function NextByte(pos)
-    local byte = string.byte(name, pos)
+    local byte = string_byte(name, pos)
     if not byte then return pos + 1 end
     if byte < 128 then return pos + 1 end
     if byte < 224 then return pos + 2 end
@@ -848,7 +838,7 @@ local function TruncateLegacyGroupName(name, rt)
   if rt.nameShortenSide == "LEFT" then
     pos = 1
     for _ = 1, count - maxChars do pos = NextByte(pos) end
-    return dots .. string.sub(name, pos)
+    return dots .. string_sub(name, pos)
   end
 
   count, pos = 0, 1
@@ -856,7 +846,7 @@ local function TruncateLegacyGroupName(name, rt)
     count = count + 1
     pos = NextByte(pos)
   end
-  return string.sub(name, 1, pos - 1) .. dots
+  return string_sub(name, 1, pos - 1) .. dots
 end
 
 function Text.UpdateName(frame, event, unit)
@@ -1152,7 +1142,9 @@ local function UpdateAbsorbRuntime(frame, event, unit, skipCombinedRefresh)
   if UnitGetTotalAbsorbs then absorb = UnitGetTotalAbsorbs(unit) end
   local secret = nativeSecrets and issecretvalue(absorb) == true
   if not secret and rt._lastAbsorbTextValue == absorb then return end
-  rt._lastAbsorbTextValue = secret and nil or absorb
+  local selectedValue1
+  if not (secret) then selectedValue1 = absorb end
+  rt._lastAbsorbTextValue = selectedValue1
   rt.healthAbsorb = absorb
   if count > 0 then
     if secret then

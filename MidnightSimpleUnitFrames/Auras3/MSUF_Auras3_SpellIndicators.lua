@@ -14,7 +14,7 @@ A3.SpellIndicators = Runtime
 
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 -- Config, effects and reminders are initialized once. The native owner below
 -- keeps direct local calls; module boundaries add no per-aura dispatch layer.
@@ -319,7 +319,7 @@ local function CreateSlots(root, slotRoot, parentFrame)
     local deps = D()
     if not deps.EnsureLoaded() then
         A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = (deps.addonName or "Blizzard_AuraContainer") .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
+        A3._RecordNativeAuraRuntimeError((deps.addonName or "Blizzard_AuraContainer") .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
         return nil
     end
     local container = deps.CreateContainer(root)

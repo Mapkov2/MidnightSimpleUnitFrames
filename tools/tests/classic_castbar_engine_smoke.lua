@@ -31,6 +31,7 @@ local namespace = {
 }
 
 local path = root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEngine.lua"
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
 local engine = assert(namespace.MSUF_CastbarEngine, "castbar engine did not load")
 
@@ -78,7 +79,7 @@ assert(not runtimeSource:sub(interrupted, unitGuard):find("HasActivePlayerCast",
     "late player interrupt feedback still requires an API-active cast after STOP")
 assert(runtimeSource:find("frame._msufPlayerInterruptCastGUID = interruptCastGUID", 1, true)
     and runtimeSource:find("select(2, ...) == frame._msufPlayerInterruptCastGUID", 1, true)
-    and runtimeSource:find("_G.GetTime() <= frame._msufPlayerInterruptCastDeadline", 1, true),
+    and runtimeSource:find("GetTime() <= frame._msufPlayerInterruptCastDeadline", 1, true),
     "player castbar does not retain and verify the stopped cast identity")
 
 local previewFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua", "rb"))

@@ -32,7 +32,7 @@ local function Exists(path)
 end
 
 -- 1) Engine roster ----------------------------------------------------------
-local core = Read("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
+local core = Read("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua") .. Read("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
 Check(core:find('"arena1", "arena2", "arena3",', 1, true),
     "UF.unitOrder does not spawn arena1..arena3")
 Check(core:find('arena = { "arena1", "arena2", "arena3" },', 1, true),
@@ -71,7 +71,7 @@ Check(type(arenaFill) == "string", "arena fill block is unreadable")
 for _, key in ipairs({ "spacing", "bossLayoutMode", "showInterrupt", "portraitMode" }) do
     Check(arenaFill:find(key, 1, true), "arena fill block lost key: " .. key)
 end
-Check(defaults:find("MSUF_DB.arena.showTrinket", 1, true),
+Check(defaults:find("profileDB.arena.showTrinket", 1, true),
     "arena trinket toggle default is gone")
 Check(defaults:find('_InitCastbarBackend("arena", "arenaCastbarBackend", "enableArenaCastbar")', 1, true),
     "arena castbar backend is no longer initialized")

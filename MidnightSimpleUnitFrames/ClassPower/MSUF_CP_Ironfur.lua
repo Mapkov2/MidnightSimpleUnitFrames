@@ -4,10 +4,7 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local modeBuilders = _G.MSUF_CP_MODE_BUILDERS
 if type(modeBuilders) ~= "table" then
@@ -28,6 +25,7 @@ modeBuilders.IRONFUR = function(E)
     local CreateFrame = CreateFrame
     local C_SpellBook = C_SpellBook
     local tostring = tostring
+    local type = type
 
     local IRONFUR_SPELL = 192081
     local URSOCS_ENDURANCE = 393611

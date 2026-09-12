@@ -19,8 +19,6 @@ local format = string.format
 local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring
 local sort = table.sort
 
-local InvokeGuidedBoundary = M.InvokeBoundary or pcall
-
 local function Tr(text)
     return type(M.Tr) == "function" and M.Tr(tostring(text or "")) or tostring(text or "")
 end
@@ -381,10 +379,6 @@ function M.GetGuidedTourStageProgress()
     local current, total = ActiveStagePosition(stage)
     return current, total, stage and stage.id
 end
-function M.GetGuidedTourMode()
-    return SelectedSetupMode()
-end
-
 local function StageIncludesSection(stage, sectionId)
     if type(stage) ~= "table" then return true end
     local included = stage.includeSections
@@ -417,8 +411,8 @@ end
 Invoke = function(object, method, ...)
     local fn = object and object[method]
     if type(fn) ~= "function" then return false end
-    local called, a, b, c = InvokeGuidedBoundary(fn, object, ...)
-    return called and a ~= false, a, b, c
+    local a, b, c = fn(object, ...)
+    return a ~= false, a, b, c
 end
 
 local function TourIsActive()
@@ -456,16 +450,7 @@ local function ProfileMismatch()
     return tourProfile ~= "" and tourProfile ~= activeProfile, tourProfile, activeProfile
 end
 
-local function PlayerDisplayName()
-    local name
-    if type(_G.UnitName) == "function" then
-        name = _G.UnitName("player")
-    end
-    if type(_G.issecretvalue) == "function" and _G.issecretvalue(name) then name = nil end
-    if type(name) == "string" then name = name:match("^[^-]+") else name = nil end
-    if not name or name == "" or name == "Unknown" then name = Tr("Player") end
-    return name
-end
+local PlayerDisplayName = M.PlayerDisplayName
 
 local function Preference(key, fallback)
     local ok, value = Invoke(Tour(), "GetPreference", key)
@@ -502,11 +487,7 @@ local function CooldownConsentDecision()
     if not providerId or type(getter) ~= "function" then return nil end
     return getter(providerId)
 end
-local function CooldownAnchorSupported()
-    local supported = _G.MSUF_IsCooldownAnchorSupported
-    if type(supported) == "function" then return supported() == true end
-    return type(_G.C_CooldownViewer) == "table"
-end
+local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
 local function CooldownAnchorDecision()
     -- Nothing to decide where no cooldown anchor can exist: the guide must not
     -- gate placement behind a choice the client cannot honour.
@@ -1027,8 +1008,8 @@ local function EnsureStageSurface(stage)
         local selectScope = scopeRegion and scopeRegion.body and scopeRegion.body._msuf2GuidedSelectScope
         local prepared
         if type(selectScope) == "function" then
-            local ok, value = InvokeGuidedBoundary(selectScope, "party")
-            prepared = ok and value ~= false
+            local value = selectScope("party")
+            prepared = value ~= false
         end
         if not prepared then
             if type(M.SetMenuStateValue) == "function" then M.SetMenuStateValue("gfScope", "party") else M.gfScope = "party" end
@@ -1040,8 +1021,8 @@ local function EnsureStageSurface(stage)
         local selectTab = section and section._msuf2GuidedSelectTab
         local prepared
         if type(selectTab) == "function" then
-            local ok, value = InvokeGuidedBoundary(selectTab, stage.prepareTab)
-            prepared = ok and value ~= false
+            local value = selectTab(stage.prepareTab)
+            prepared = value ~= false
         end
         if not prepared then
             local state = M[stage.prepareState]
@@ -1058,8 +1039,8 @@ local function EnsureStageSurface(stage)
         local selectSlot = section and section._msuf2GuidedSelectSlot
         local prepared
         if type(selectSlot) == "function" then
-            local ok, value = InvokeGuidedBoundary(selectSlot, stage.prepareTab, stage.prepareSlot)
-            prepared = ok and value ~= false
+            local value = selectSlot(stage.prepareTab, stage.prepareSlot)
+            prepared = value ~= false
         end
         if not prepared then
             local state = M[stage.prepareSlotState]
@@ -1075,8 +1056,8 @@ local function EnsureStageSurface(stage)
     local byKind = Runtime.copyPopupOpeners and Runtime.copyPopupOpeners[kind]
     local ensureVisible = byKind and byKind[stage.pageKey]
     if type(ensureVisible) ~= "function" then return false end
-    local ok, visible = InvokeGuidedBoundary(ensureVisible)
-    return ok and visible ~= false
+    local visible = ensureVisible()
+    return visible ~= false
 end
 
 local function StageSections(stage)
@@ -1224,8 +1205,8 @@ end
 local function RuntimeControlRecords()
     local catalog = M.RuntimeControlCatalog
     if not (catalog and type(catalog.GetRecords) == "function") then return {} end
-    local ok, records = InvokeGuidedBoundary(catalog.GetRecords)
-    return ok and type(records) == "table" and records or {}
+    local records = catalog.GetRecords()
+    return type(records) == "table" and records or {}
 end
 
 local function GuidedWidgetIsActionable(widget)
@@ -1386,35 +1367,6 @@ local function SectionControls(pageKey, section, sections, records, includeEphem
         for i = #controls, controlLimit + 1, -1 do controls[i] = nil end
     end
     return controls
-end
-
-local function PageGuideModel(pageKey)
-    local entry = M.cache and M.cache[pageKey]
-    local cached = Runtime.controlModel
-    if entry and cached and cached.pageKey == pageKey and cached.entry == entry then return cached end
-    local sections = SortedSections(pageKey)
-    local records = RuntimeControlRecords()
-    local controlsBySection, allControls, seen = {}, {}, {}
-    for i = 1, #sections do
-        local list = SectionControls(pageKey, sections[i], sections, records)
-        controlsBySection[sections[i].id] = list
-        for j = 1, #list do
-            local control = list[j]
-            if not seen[control.id] then
-                seen[control.id] = true
-                allControls[#allControls + 1] = control
-            end
-        end
-    end
-    local model = {
-        pageKey = pageKey,
-        entry = entry,
-        sections = sections,
-        controlsBySection = controlsBySection,
-        allControls = allControls,
-    }
-    if entry then Runtime.controlModel = model end
-    return model
 end
 
 local function AllStageControls(stage)
@@ -2040,21 +1992,6 @@ local function BackCurrent()
         then return true end
     end
     return ReturnToPreviousStage(stage)
-end
-
-local function LabelList(controls, limit)
-    local labels, seen = {}, {}
-    for i = 1, #controls do
-        local label = tostring(controls[i].label or "")
-        if label ~= "" and not seen[label] then
-            seen[label] = true
-            labels[#labels + 1] = label
-            if #labels >= (limit or 4) then break end
-        end
-    end
-    local value = table.concat(labels, ", ")
-    if #controls > #labels then value = value .. format(Tr(" and %d more"), #controls - #labels) end
-    return value
 end
 
 local function SkipSignature(stage, position)
@@ -2819,8 +2756,8 @@ function M.StartGuidedTour(opts)
     local stage = STAGE_BY_ID[tostring(opts.stageId or "")] or STAGES[1]
     local restorePoint
     if type(M.CaptureGuidedTourRestorePoint) == "function" then
-        local captured, value = InvokeGuidedBoundary(M.CaptureGuidedTourRestorePoint)
-        if captured and type(value) == "table" then restorePoint = value end
+        local value = M.CaptureGuidedTourRestorePoint()
+        if type(value) == "table" then restorePoint = value end
     end
     local ok = Invoke(Tour(), "Start", ActiveProfileName(), stage.id, restorePoint)
     if not ok then return false end
@@ -3132,6 +3069,17 @@ local function RegisterGuidedPageButton(button, suffix, label, help)
     end
 end
 
+local function CreateEditModeClick(Refresh)
+    return function()
+        if BlockedByCombat() then return end
+        local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
+        if type(M.SetMSUFEditModeActive) == "function" then
+            M.SetMSUFEditModeActive(not status.active, nil, { source = "guided_tour" })
+        end
+        Refresh()
+    end
+end
+
 local function BuildEditModePage(ctx, T, W)
     Runtime.specialClickTargets = { stageId = "edit_mode", groups = {} }
     local b = W.PageBuilder(ctx)
@@ -3239,14 +3187,7 @@ local function BuildEditModePage(ctx, T, W)
             help = Tr("Choose this before moving frames because it changes the anchor used by every Unitframe position."),
         })
     end
-    button:SetScript("OnClick", function()
-        if BlockedByCombat() then return end
-        local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
-        if type(M.SetMSUFEditModeActive) == "function" then
-            M.SetMSUFEditModeActive(not status.active, nil, { source = "guided_tour" })
-        end
-        Refresh()
-    end)
+    button:SetScript("OnClick", CreateEditModeClick(Refresh))
     RegisterSpecialClickTargets("edit_mode", "edit_mode_toggle", { button })
     RegisterGuidedPageButton(button, "edit_mode_toggle", "Open or exit MSUF Edit Mode", "Moves whole MSUF frames and group containers; exiting keeps changes.")
     if type(ctx.AddRefresher) == "function" then ctx:AddRefresher(Refresh) end
@@ -3296,14 +3237,7 @@ local function BuildGroupEditModePage(ctx, T, W)
         SetButtonText(button, status.active and "Exit and keep changes" or "Open MSUF Edit Mode")
         SetButtonEnabled(button, not status.combatLocked)
     end
-    button:SetScript("OnClick", function()
-        if BlockedByCombat() then return end
-        local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
-        if type(M.SetMSUFEditModeActive) == "function" then
-            M.SetMSUFEditModeActive(not status.active, nil, { source = "guided_tour" })
-        end
-        Refresh()
-    end)
+    button:SetScript("OnClick", CreateEditModeClick(Refresh))
     RegisterSpecialClickTargets("group_edit_mode", "group_edit_mode_toggle", { button })
     RegisterGuidedPageButton(button, "group_edit_mode_toggle", "Open or exit MSUF Edit Mode for Party Frames", "Drag moves the group container; clicking its mover opens Width, Height, and Spacing.")
     if type(ctx.AddRefresher) == "function" then ctx:AddRefresher(Refresh) end
@@ -3373,8 +3307,8 @@ local function BuildFinalReviewPage(ctx, T, W)
             local point = select(2, Invoke(Tour(), "GetRestorePoint"))
             if type(point) ~= "table" then return end
             Invoke(Tour(), "MarkRestorePointUsed", true)
-            local ok, restored = InvokeGuidedBoundary(M.RestoreGuidedTourRestorePoint, point)
-            if not ok or restored ~= true then
+            local restored = M.RestoreGuidedTourRestorePoint(point)
+            if restored ~= true then
                 Invoke(Tour(), "MarkRestorePointUsed", false)
                 armed = false
                 SetButtonText(button, "Restore starting setup")

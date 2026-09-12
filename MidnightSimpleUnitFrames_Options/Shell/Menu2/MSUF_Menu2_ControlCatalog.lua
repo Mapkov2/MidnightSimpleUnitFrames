@@ -35,24 +35,6 @@ M.RuntimeControlCatalog = Catalog
 
 Catalog.SCHEMA_VERSION = 2
 
--- Page-provided commands and metadata providers are plugin-style boundaries:
--- they must report authoring bugs without taking down the complete catalog or
--- leaving an Assistant transaction half-finished.
-local function InvokeBoundary(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local ok, r1, r2, r3, r4 = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" and pcall(handler, r1) then return false, r1 end
-        if type(print) == "function" then
-            print("|cffffd700MSUF callback:|r", tostring(r1))
-        end
-        return false, r1
-    end
-    return true, r1, r2, r3, r4
-end
-M.InvokeBoundary = InvokeBoundary
-
 -- Shell controls are not built by the page/widget factories, so an omitted raw
 -- Button would otherwise be invisible to a percentage calculated only from
 -- already-registered records.  Keep the executable shell surface and the
@@ -248,7 +230,7 @@ local function ActionValueFingerprint(value)
 end
 
 local function IsValidLuaPattern(text)
-    return pcall(string.match, "", text)
+    return true, string.match("", text)
 end
 
 local function NormalizeAssistantRouteList(value, fieldName, requireAnchors)
@@ -351,9 +333,7 @@ local function IsValidRuntimeId(value)
 end
 
 --- Optional widget accessor: templates vary in which of GetName/GetObjectType/
---- GetParent they expose, so the nil-guard is the useful part. Formerly named
---- SafeCall and wrapped in pcall, which hid a protected call from a `grep pcall`
---- audit and swallowed real widget bugs. None of these accessors throw.
+--- GetParent they expose. Available accessors run directly; exceptions propagate.
 local function ReadWidget(method, object, ...)
     if type(method) ~= "function" then return nil end
     return method(object, ...)
@@ -420,8 +400,10 @@ local function CommandSource(command, label)
     local direct = CleanText(command.source or command.sourceKey or command.settingKey or command.actionKey or command.navigationKey)
     if direct ~= "" then return direct end
     if type(command.sourceFn) == "function" then
-        local ok, value = InvokeBoundary(command.sourceFn, label)
-        if ok then return CleanText(value) end
+        local value = command.sourceFn(label)
+        do
+return CleanText(value)
+end
     end
     return ""
 end
@@ -468,8 +450,8 @@ local function CommandMetadata(command, label)
     if type(command) ~= "table" then return nil end
     local values = command.values
     if type(values) ~= "table" and type(command.getValues) == "function" then
-        local ok, resolved = InvokeBoundary(command.getValues)
-        if ok and type(resolved) == "table" then values = resolved end
+        local resolved = command.getValues()
+        if type(resolved) == "table" then values = resolved end
     end
     local count = 0
     if type(values) == "table" then
@@ -567,15 +549,15 @@ local function RuntimeCapabilityIssue(record)
     local command, meta = record and record.command, EnsureCommandMeta(record)
     if type(command) ~= "table" or type(meta) ~= "table" then return nil end
     if meta.hasGet then
-        local ok = InvokeBoundary(command.get)
-        if not ok then return "read command raised an error" end
+        command.get()
+
     end
     local kind = CleanText(meta.kind ~= "" and meta.kind or record.kind):lower()
     if kind == "dropdown" or kind == "segment" or kind == "dragrow" then
         local values = command.values
         if type(values) ~= "table" and type(command.getValues) == "function" then
-            local ok, resolved = InvokeBoundary(command.getValues)
-            if not ok then return "values provider raised an error" end
+            local resolved = command.getValues()
+
             values = resolved
         end
         if type(values) ~= "table" then return kind .. " values provider did not return a table" end
@@ -594,8 +576,8 @@ end
 local function RuntimeWidgetValues(widget)
     local values = widget and widget.values
     if type(values) == "function" then
-        local ok, resolved = InvokeBoundary(values)
-        values = ok and resolved or nil
+        local resolved = values()
+        values = resolved or nil
     end
     return type(values) == "table" and values or nil
 end
@@ -830,7 +812,7 @@ function Catalog.Register(widget, meta, registrationSource)
     if widget._msuf2ControlPartOf ~= nil then return nil, "component controls are owned by their logical parent" end
 
     local command = type(meta.command) == "table" and meta.command or nil
-    local pageKey = CleanText(meta.pageKey or (command and command.ctxKey) or M._msuf2SearchBuildKey or M.activeKey)
+    local pageKey = CleanText(meta.pageKey or (command and command.ctxKey) or M.PageKeyForWidget(widget) or M.activeKey)
     if pageKey == "" then pageKey = "unknown" end
     local kind = NormalizeToken(meta.kind or WidgetKind(widget))
     if kind == "" then kind = "control" end
@@ -1433,8 +1415,8 @@ local function SelectableValues(record)
     if type(command) ~= "table" then return nil end
     local values = command.values
     if type(values) ~= "table" and type(command.getValues) == "function" then
-        local ok, resolved = InvokeBoundary(command.getValues)
-        if ok and type(resolved) == "table" then values = resolved end
+        local resolved = command.getValues()
+        if type(resolved) == "table" then values = resolved end
     end
     if type(values) ~= "table" then return nil end
     local out = {}
@@ -1536,8 +1518,8 @@ function Catalog.Read(controlId)
     local record = STATE.byId[CleanText(controlId)]
     local command = record and record.command
     if not (command and type(command.get) == "function") then return nil, "read_unavailable" end
-    local ok, r1, r2, r3, r4 = InvokeBoundary(command.get)
-    if not ok then return nil, "read_failed", r1 end
+    local r1, r2, r3, r4 = command.get()
+
     return true, r1, r2, r3, r4
 end
 
@@ -1591,26 +1573,26 @@ function Catalog.Execute(controlId, value, options)
     local command = record.command
     if not (command and type(command.set) == "function") then return false, "write_unavailable" end
     if type(command.blockCombat) == "function" then
-        local ok, blocked = InvokeBoundary(command.blockCombat)
-        if not ok or blocked == true then return false, "blocked" end
+        local blocked = command.blockCombat()
+        if blocked == true then return false, "blocked" end
     end
     if type(command.canExecute) == "function" then
-        local ok, executable = InvokeBoundary(command.canExecute)
-        if not ok or executable ~= true then return false, "stale_control" end
+        local executable = command.canExecute()
+        if executable ~= true then return false, "stale_control" end
     end
     local valid, normalized = ValueAllowed(record, value)
     if not valid then return false, "invalid_value" end
     local ok, result
     if record.kind == "color" then
-        ok, result = InvokeBoundary(command.set, normalized[1], normalized[2], normalized[3], normalized[4])
+        ok, result = true, command.set(normalized[1], normalized[2], normalized[3], normalized[4])
     else
-        ok, result = InvokeBoundary(command.set, normalized)
+        ok, result = true, command.set(normalized)
     end
     if not ok then return false, "write_failed", result end
     if result == false then return false, "write_rejected" end
     if type(command.refresh) == "function" then
-        local refreshed, refreshError = InvokeBoundary(command.refresh)
-        if not refreshed then return false, "refresh_failed", refreshError end
+        local refreshError = command.refresh()
+
     end
     return true, result
 end
@@ -1979,8 +1961,8 @@ function Catalog.ResolveExactTarget(pageKey, descriptor)
         if contractSettingKey ~= true and CleanText(contractSettingKey) ~= settingKey then
             return nil, nil, "prepare_setting_mismatch"
         end
-        local ok, prepared = pcall(prepare, widget, descriptor)
-        if not ok or prepared ~= true then return nil, nil, "prepare_failed" end
+        local prepared = prepare(widget, descriptor)
+        if prepared ~= true then return nil, nil, "prepare_failed" end
     end
 
     return PublicRecord(record), widget, "control_id"
@@ -2515,7 +2497,7 @@ function M.MarkRuntimeControlComponent(widget, owner)
     if record then RemoveRecord(record); STATE.revision = STATE.revision + 1 end
     STATE.components[widget] = {
         owner = owner,
-        pageKey = CleanText(M._msuf2SearchBuildKey or M.activeKey or "unknown"),
+        pageKey = CleanText(M.PageKeyForWidget(widget) or M.activeKey or "unknown"),
     }
     widget._msuf2RuntimeControlComponent = true
     if type(M.UnregisterSearchWidget) == "function" then M.UnregisterSearchWidget(widget) end
@@ -2594,3 +2576,64 @@ end
 function M.GetRuntimeControlCoverageReport()
     return Catalog.GetCoverageReport()
 end
+
+-- Stable identity and registration contract shared by all page families.
+local function NormalizeControlPath(value)
+    local path = tostring(value or "")
+    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
+    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return path
+end
+local function ControlMeta(pageKey, domain, semanticPath, classification, exact)
+    local identity = table.concat({
+        NormalizeControlPath(pageKey),
+        NormalizeControlPath(domain),
+        NormalizeControlPath(semanticPath),
+    }, ".")
+    local meta = {
+        controlId = "menu2." .. identity,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        classification = classification or "setting",
+    }
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do meta[key] = value end
+    end
+    return meta
+end
+local function RegisterControl(widget, meta, label, kind, values)
+    if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
+    local payload = {}
+    for key, value in pairs(meta) do payload[key] = value end
+    payload.label = label or payload.label
+    payload.kind = kind or payload.kind
+    payload.values = values or payload.values
+    M.RegisterSearchWidget(widget, payload)
+    return widget
+end
+M.ControlMeta = ControlMeta
+M.RegisterControlMetadata = RegisterControl
+
+M.NormalizeControlPath = NormalizeControlPath
+
+local function PortableControlToken(value, fallback)
+    local token = tostring(value or ""):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return token ~= "" and token or (fallback or "control")
+end
+M.PortableControlToken = PortableControlToken
+
+local function AuraCatalogToken(value, fallback)
+    local token = tostring(value or ""):lower():gsub("[^%w]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
+    return token ~= "" and token or (fallback or "control")
+end
+M.AuraCatalogToken = AuraCatalogToken
+
+local function GroupAuraSettingKeys(scope, suffix)
+    suffix = tostring(suffix or "")
+    if scope == "party" then return { "gf_party" .. suffix } end
+    -- Raid and Mythic Raid share this Menu2 Aura editor and each write fans out
+    -- to both backing scopes.  Retain both finite identities so exact guidance
+    -- reaches the same reviewed dynamic control from either Registry setting.
+    return { "gf_raid" .. suffix, "gf_mythicraid" .. suffix }
+end
+M.GroupAuraSettingKeys = GroupAuraSettingKeys

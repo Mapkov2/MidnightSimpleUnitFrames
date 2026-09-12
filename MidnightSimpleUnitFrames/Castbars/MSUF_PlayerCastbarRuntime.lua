@@ -9,10 +9,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
 local RunNextFrame = _G.MSUF_RunNextFrame
@@ -23,7 +20,18 @@ local tonumber = tonumber
 local tostring = tostring
 local select = select
 local math_max = math.max
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
+-- Per-event/per-cast API aliases; MSUF_* and RAID_CLASS_COLORS stay late-bound.
+local GetTime = _G.GetTime
+local GetTimePreciseSec = _G.GetTimePreciseSec
+local GetCVar = _G.GetCVar
+local GetNetStats = _G.GetNetStats
+local UnitClass = _G.UnitClass
+local UnitExists = _G.UnitExists
+local UnitHasVehicleUI = _G.UnitHasVehicleUI
+local C_NamePlate = _G.C_NamePlate
+local issecure = _G.issecure
+local INTERRUPTED = _G.INTERRUPTED
 local castbarEngine
 
 local function ScheduleDelayed(callback, delay)
@@ -52,10 +60,10 @@ local ACTIVE_DURATION_OPTIONS = {
 }
 local INTERRUPT_IDENTITY_GRACE = 0.25
 
-local function DisableFrameOnUpdate(frame)
-    if not frame or not frame.SetScript then return end
-    frame:SetScript("OnUpdate", nil)
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared OnUpdate teardown and
+-- lazy DB bootstrap; harnesses that load this file standalone load Utils first.
+local DisableFrameOnUpdate = _G.MSUF_Castbar_DisableFrameOnUpdate
+local EnsureDBLazy = _G.MSUF_EnsureDBLazy
 
 local function ClearFrameOnUpdateScript(frame)
     if frame and frame.SetScript then
@@ -63,16 +71,6 @@ local function ClearFrameOnUpdateScript(frame)
     end
 end
 
-local function EnsureDBLazy()
-    local fn = _G.MSUF_EnsureDBLazy
-    if type(fn) == "function" then
-        fn()
-    elseif not _G.MSUF_DB and type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
-    end
-end
-
-local RuntimePlainNumber = _G.MSUF_CastbarRuntime_PlainNumber
 local CastbarRuntime = _G.MSUF_CastbarRuntime
 local ApplyInterruptValues = CastbarRuntime and CastbarRuntime.ApplyInterruptValues
 
@@ -82,27 +80,9 @@ local function ReleaseRuntimeActive(frame)
     end
 end
 
-local function PlainNumber(value)
-    if RuntimePlainNumber then
-        return RuntimePlainNumber(value)
-    end
-
-    if value == nil then return nil end
-    local toPlain = _G.ToPlain
-    if type(toPlain) == "function" then
-        local plain = toPlain(value)
-        local number = tonumber(tostring(plain))
-        if number ~= nil then
-            return number
-        end
-    end
-
-    local valueType = type(value)
-    if valueType == "number" or valueType == "string" then
-        return tonumber(tostring(value))
-    end
-    return nil
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper;
+-- harnesses that load this file standalone load Utils first.
+local PlainNumber = _G.MSUF_Castbar_PlainNumber
 
 local function CallEmpowerStart(frame, stage)
     local fn = _G.MSUF_PlayerCastbar_EmpowerStart
@@ -206,9 +186,9 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
         return
     end
 
-    local _, _, homeMS, worldMS = _G.GetNetStats()
+    local _, _, homeMS, worldMS = GetNetStats()
     local networkMS = math_max(homeMS or 0, worldMS or 0)
-    local queueWindowMS = tonumber(_G.GetCVar("SpellQueueWindow") or "0") or 0
+    local queueWindowMS = tonumber(GetCVar("SpellQueueWindow") or "0") or 0
     local latencyMS = math_max(networkMS, queueWindowMS)
     local durationMS = durationSeconds * 1000
     local pct = durationMS > 0 and (latencyMS / durationMS) or 0
@@ -244,6 +224,9 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
     FlushLatencyPending(frame, generation)
 end
 
+-- Player-only tint: honours the player color override and nameplate-derived
+-- interruptibility. The target/focus/boss frame method of the same name in
+-- MSUF_CastbarDriver.lua does neither; the two are intentionally separate.
 local function UpdateColorForInterruptible(frame)
     if not frame or not frame.statusBar then return end
 
@@ -251,7 +234,7 @@ local function UpdateColorForInterruptible(frame)
     local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
 
     if general.playerCastbarOverrideEnabled then
-        if not (frame.interruptFeedbackEndTime and _G.GetTime() < frame.interruptFeedbackEndTime) then
+        if not (frame.interruptFeedbackEndTime and GetTime() < frame.interruptFeedbackEndTime) then
             local mode = general.playerCastbarOverrideMode
             local red, green, blue
 
@@ -260,7 +243,7 @@ local function UpdateColorForInterruptible(frame)
                 green = tonumber(general.playerCastbarOverrideG)
                 blue = tonumber(general.playerCastbarOverrideB)
             else
-                local _, classToken = _G.UnitClass("player")
+                local _, classToken = UnitClass("player")
                 if classToken then
                     if type(_G.MSUF_GetClassBarColor) == "function" then
                         red, green, blue = _G.MSUF_GetClassBarColor(classToken)
@@ -285,10 +268,10 @@ local function UpdateColorForInterruptible(frame)
 
     local forceNotInterruptible = false
     local unit = frame.unit or "player"
-    local nameplateAPI = _G.C_NamePlate
+    local nameplateAPI = C_NamePlate
     local nameplate = nameplateAPI
         and nameplateAPI.GetNamePlateForUnit
-        and nameplateAPI.GetNamePlateForUnit(unit, _G.issecure())
+        and nameplateAPI.GetNamePlateForUnit(unit, issecure())
     if nameplate then
         local nativeCastbar = (nameplate.UnitFrame and nameplate.UnitFrame.castBar) or nameplate.castBar or nameplate.CastBar
         local barType = nativeCastbar and nativeCastbar.barType
@@ -365,10 +348,10 @@ end
 local function GetEffectiveUnit(frame)
     local unit = (frame and frame.unit) or "player"
     if unit == "player"
-        and type(_G.UnitHasVehicleUI) == "function"
-        and _G.UnitHasVehicleUI("player")
-        and type(_G.UnitExists) == "function"
-        and _G.UnitExists("vehicle") then
+        and type(UnitHasVehicleUI) == "function"
+        and UnitHasVehicleUI("player")
+        and type(UnitExists) == "function"
+        and UnitExists("vehicle") then
         local vehicleState = BuildCastState("vehicle", frame)
         if vehicleState and vehicleState.active == true then
             return "vehicle", vehicleState
@@ -455,7 +438,7 @@ local function CaptureCastTimes(frame, startMS, endMS)
     startMS = PlainNumber(startMS)
     endMS = PlainNumber(endMS)
 
-    local now = _G.GetTime()
+    local now = GetTime()
     if type(endMS) == "number" then
         local endSeconds = endMS / 1000
         local remaining = endSeconds - now
@@ -539,8 +522,12 @@ local function ApplyActiveCast(
     frame._msufCastNilSince = nil
     frame._msufHardStopNilSince = nil
     ClearPendingPlayerInterrupt(frame)
-    StoreActiveCastIdentity(frame, isChannel and nil or castGUID, spellID, castBarID)
-    frame.MSUF_castDuration = isChannel and nil or durationObj
+    local selectedValue2
+    if not (isChannel) then selectedValue2 = castGUID end
+    StoreActiveCastIdentity(frame, selectedValue2, spellID, castBarID)
+    local selectedValue1
+    if not (isChannel) then selectedValue1 = durationObj end
+    frame.MSUF_castDuration = selectedValue1
     frame.MSUF_channelDuration = isChannel and durationObj or nil
     frame.MSUF_channelTotal = nil
 
@@ -628,7 +615,7 @@ local function ApplyActiveCast(
     frame:Show()
     if _G.MSUF_RegisterCastbar then _G.MSUF_RegisterCastbar(frame) end
     if _G.MSUF_UpdateCastbarFrame then
-        local now = (_G.GetTimePreciseSec and _G.GetTimePreciseSec()) or _G.GetTime()
+        local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
         _G.MSUF_UpdateCastbarFrame(frame, 0, now)
     end
 
@@ -691,7 +678,7 @@ local function StopPlayerCastbar(frame)
     if interruptUnit ~= nil and interruptCastGUID ~= nil then
         frame._msufPlayerInterruptCastUnit = interruptUnit
         frame._msufPlayerInterruptCastGUID = interruptCastGUID
-        frame._msufPlayerInterruptCastDeadline = _G.GetTime() + INTERRUPT_IDENTITY_GRACE
+        frame._msufPlayerInterruptCastDeadline = GetTime() + INTERRUPT_IDENTITY_GRACE
     end
     MarkPlayerStateInactive(frame)
 
@@ -849,7 +836,7 @@ local function EnsureInterruptHideCallback(frame)
             return
         end
 
-        local now = _G.GetTime()
+        local now = GetTime()
         if deadline and deadline > now then
             ScheduleDelayed(frame._msufPlayerInterruptHideCB, deadline - now)
             return
@@ -903,10 +890,10 @@ local function ShowInterruptFeedback(frame, label)
     frame._msufChanNilSince = nil
     local getFeedbackDuration = _G.MSUF_GetInterruptFeedbackDuration
     local duration = type(getFeedbackDuration) == "function" and getFeedbackDuration() or 0.5
-    frame.interruptFeedbackEndTime = _G.GetTime() + duration
+    frame.interruptFeedbackEndTime = GetTime() + duration
 
     local reverseFill = _G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(frame, false) or false
-    local interruptLabel = label or _G.INTERRUPTED
+    local interruptLabel = label or INTERRUPTED
     if ApplyInterruptValues then
         ApplyInterruptValues(CastbarRuntime, frame, 1, reverseFill, interruptLabel)
     else
@@ -919,7 +906,7 @@ local function ShowInterruptFeedback(frame, label)
 
     frame._msufHideToken = (frame._msufHideToken or 0) + 1
     frame._msufPlayerInterruptHideToken = frame._msufHideToken
-    frame._msufPlayerInterruptHideDeadline = _G.GetTime() + duration
+    frame._msufPlayerInterruptHideDeadline = GetTime() + duration
     EnsureInterruptHideCallback(frame)
     if not frame._msufPlayerInterruptHidePending then
         frame._msufPlayerInterruptHidePending = true
@@ -1004,7 +991,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             and frame._msufPlayerInterruptCastGUID ~= nil
             and select(2, ...) == frame._msufPlayerInterruptCastGUID
             and frame._msufPlayerInterruptCastDeadline ~= nil
-            and _G.GetTime() <= frame._msufPlayerInterruptCastDeadline) then
+            and GetTime() <= frame._msufPlayerInterruptCastDeadline) then
         return
     end
     if event == "UNIT_SPELLCAST_START"
@@ -1034,7 +1021,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
         if IsDifferentActiveCast(frame, castGUID, spellID, castBarID) then return end
 
         ClearActiveCastIdentity(frame)
-        local interruptLabel = _G.INTERRUPTED
+        local interruptLabel = INTERRUPTED
         if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
             interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", interruptLabel)
         end
@@ -1058,7 +1045,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             return
         elseif event == "UNIT_SPELLCAST_STOP" then
             if frame.interruptFeedbackEndTime
-                and _G.GetTime() < frame.interruptFeedbackEndTime then
+                and GetTime() < frame.interruptFeedbackEndTime then
                 return
             end
             if not ActiveUnitMatches(frame, eventUnit) then return end

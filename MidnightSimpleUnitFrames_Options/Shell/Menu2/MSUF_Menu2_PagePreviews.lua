@@ -29,15 +29,7 @@ local function ApplyBossPagePreviewFallback(active, reason)
     end
     if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncBossUnitframePreviewWithUnitEdit() end
 end
-local function CoreFrame(unit)
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame(unit)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
-    return unit and frames and frames[unit] or nil
-end
+local CoreFrame = MSUF.UF.GetFrame
 local function BossPreviewFramesVisible()
     local sawFrame = false
     for i = 1, 5 do
@@ -572,3 +564,5 @@ M.ResetBossPagePreviewCache = ResetBossPagePreviewCache
 M.ResetStatusIndicatorTestModeOnMenuExit = ResetStatusIndicatorTestModeOnMenuExit
 M.SyncGFPagePreviewForKey = SyncGroupPagePreviewForKey
 M.RequestGFPagePreviewForKey = RequestGroupPagePreviewForKey
+
+M.BossPreviewFramesVisible = BossPreviewFramesVisible

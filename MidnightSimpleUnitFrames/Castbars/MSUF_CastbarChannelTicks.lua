@@ -3,10 +3,7 @@
 -- This augments castbar visuals only; cast/channel state remains in the shared runtime.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local DEFAULT_MARKER_COUNT = 5
 local MAX_CUSTOM_MARKER_COUNT = 10
@@ -50,7 +47,7 @@ local CHANNEL_TICK_DATA = {
     [291944] = { ticks = 6 }, -- Regeneratin'
 }
 
-local issecretvalue = _G.issecretvalue or function() return false end
+local issecretvalue = _G.issecretvalue
 local IsPlayerSpell = _G.IsPlayerSpell
 
 local function PlainNumber(value)

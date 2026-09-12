@@ -9,10 +9,7 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local UF = MSUF.UF
 if not (UF and UF.RegisterElement) then return end
@@ -46,7 +43,7 @@ local IsPlayerSpell = _G.IsPlayerSpell
 local Enum = _G.Enum
 local SPELL_BANK_PLAYER = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
 
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local UnitExistsPlain = UF.UnitExistsSafe
 
 local SUPPORTED_UNITS = {
@@ -196,12 +193,7 @@ local function WipeTable(t)
   end
 end
 
-local function PlainBool(value)
-  if issecretvalue(value) == true then return nil end
-  if value == true or value == 1 then return true end
-  if value == false or value == 0 then return false end
-  return nil
-end
+local PlainBool = MSUF.Secrets.PlainBool
 
 local spellOverrideCache = {}
 local function SpellOverrideID(spellID)

@@ -4,12 +4,23 @@
 local _, private = ...
 local main = _G.MSUF_NS
 if type(main) ~= "table" then return end
+main.OptionsLODReady = nil
+if type(private) == "table" and private ~= main then private.OptionsLODReady = nil end
 
 local menu = main.MSUF2 or _G.MSUF2
 local requiredFunctions = {
     "Open",
     "Toggle",
     "SelectPage",
+    "BuildPageEntry",
+    "InvalidatePage",
+    "QueueVisiblePageLayoutSettle",
+    "ResumeClassPowerPreview",
+    "ResumeGFNativePreviews",
+    "ResumePinnedPreviews",
+    "ReleaseGFNativePreviews",
+    "ReleasePinnedPreviews",
+    "GuidedTourOnPageSelected",
     "OpenExactSettingControl",
     "OpenExactColorSettingPicker",
     "OpenExactCatalogControl",

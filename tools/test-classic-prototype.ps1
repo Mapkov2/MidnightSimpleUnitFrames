@@ -8,6 +8,9 @@ $auraTestDriver = Join-Path $PSScriptRoot "../.github/scripts/auras3_test_driver
 $root = (git rev-parse --show-toplevel).Trim()
 $rootFull = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
 
+& python (Join-Path $root ".github/scripts/classic_refactor_load_order_smoke.py")
+if ($LASTEXITCODE -ne 0) { throw "Classic refactor load-order contract failed" }
+
 $retailReferenceRootFull = $null
 if ([string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
     $candidate = Join-Path (Split-Path -Parent $rootFull) "MidnightSimpleUnitFrames"

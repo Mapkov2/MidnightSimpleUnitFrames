@@ -44,14 +44,7 @@ local UNIT_DISPEL_SYMBOL_ANCHORS = VT("TOPLEFT", "Top Left", "TOP", "Top", "TOPR
     "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right",
     "BOTTOMLEFT", "Bottom Left", "BOTTOM", "Bottom", "BOTTOMRIGHT", "Bottom Right")
 
-local function NormalizeDispelTrigger(value)
-    local normalize = _G.MSUF_NormalizeDispelBorderTrigger
-    if type(normalize) == "function" then return normalize(value) end
-    if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then return "BY_RAID" end
-    if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
-    if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
-    return "BY_ME"
-end
+local NormalizeDispelTrigger = _G.MSUF_NormalizeDispelBorderTrigger
 
 local function NormalizeUnitDispelOverlayTrigger(value)
     local normalize = _G.MSUF_NormalizeUnitDispelOverlayTrigger
@@ -136,13 +129,7 @@ local function UnitAuraEnabled(unit)
     return model.UnitEnabled(unit) == true
 end
 
-local function ModeEnabled(value, fallback)
-    if value == nil then value = fallback end
-    if value == true or value == false then return value end
-    value = tonumber(value)
-    if value == nil then return fallback == true end
-    return value == 1
-end
+local ModeEnabled = _G.MSUF_UF_OutlineModeEnabled
 
 local function UnitDispelRequested(unit)
     if ReadValue(unit, "unitDispelOverlayEnabled", false) == true

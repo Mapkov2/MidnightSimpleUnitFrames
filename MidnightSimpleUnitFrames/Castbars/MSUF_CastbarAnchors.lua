@@ -19,10 +19,7 @@
 local _G = _G
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local floor = math.floor
 local ceil = math.ceil
 local type = type
@@ -115,11 +112,7 @@ local function GetUnitFrames()
     return unitFramesCache
 end
 
-local function InCombat()
-    return _G.MSUF_InCombat == true
-        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
-        or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
-end
+local InCombat = _G.MSUF_IsPlayerInCombat
 
 -- "boss", "boss1".."boss5" -> "boss"; "arena", "arena1".."arena3" -> "arena";
 -- everything else unchanged.
@@ -195,7 +188,7 @@ local function GetUnitframe(unit)
     unit = tostring(unit or "")
     local normalized = NormalizeUnit(unit)
     if normalized == "boss" then
-        local index = tonumber(unit:match("^boss(%d+)$")) or 1
+    local index = tonumber(unit:match("^boss(%d+)$")) or 1
         return GetCoreUnitframe("boss" .. index) or GetCoreUnitframe("boss1")
     end
     if normalized == "arena" then
@@ -1334,8 +1327,6 @@ function MSUF_ReanchorPlayerCastBar()
     RefreshCastbarVisualFollowers(preview, "player", general)
 end
 
-MSUF_PlayerCastbarManageHooked = true -- Blizzard fallback removed; nothing to manage here.
-
 function MSUF_ReanchorBossCastBar()
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
         _G.MSUF_ApplyBossCastbarPositionSetting(false, true)
@@ -1392,3 +1383,5 @@ ExportPublic("MSUF_ReanchorPlayerCastBar", MSUF_ReanchorPlayerCastBar)
 ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)
 ExportPublic("MSUF_ReanchorBossCastBar", MSUF_ReanchorBossCastBar)
 ExportPublic("MSUF_ReanchorArenaCastBar", MSUF_ReanchorArenaCastBar)
+
+ExportPublic("MSUF_CastbarFrameInset", CastbarFrameInset)

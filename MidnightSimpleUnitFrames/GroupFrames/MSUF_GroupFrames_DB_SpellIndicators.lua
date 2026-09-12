@@ -4,10 +4,7 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local GF = MSUF.GF or {}
 MSUF.GF = GF
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local function IsDefaultsConf(kind, conf)
     if kind == "party" then return conf == GF.PARTY_DEFAULTS end

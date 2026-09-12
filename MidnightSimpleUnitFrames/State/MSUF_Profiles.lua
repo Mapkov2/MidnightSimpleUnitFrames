@@ -18,249 +18,31 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF = _G.MSUF or MSUF
 MSUF.Public = MSUF.Public or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
+local ExportPublic = MSUF.ExportPublic
+
+--- Shared coldpath field helpers (State/MSUF_StateHelpers.lua) and the import
+--- parser plus compact transport codecs (State/MSUF_ProfileCodec.lua) load
+--- before this file. Both are hard dependencies of the normalization and
+--- import/export paths below.
+local StateHelpers = MSUF.StateHelpers
+if type(StateHelpers) ~= "table" then
+    error("State/MSUF_StateHelpers.lua must load before State/MSUF_Profiles.lua")
+end
+local MSUF_PROFILE_IMPORT_LIMITS = MSUF.ProfileIOImportLimits
+if type(MSUF_PROFILE_IMPORT_LIMITS) ~= "table" then
+    error("State/MSUF_ProfileCodec.lua must load before State/MSUF_Profiles.lua")
 end
 
-local MSUF_PROFILE_IMPORT_LIMITS = {
-    encodedBytes = 8 * 1024 * 1024,
-    decodedBytes = 32 * 1024 * 1024,
-    depth = 64,
-    nodes = 250000,
-}
-
---- Parse the narrow Lua-table syntax emitted by the text serializer without
---- compiling or executing user input. Supported values are tables, finite
---- numbers, quoted strings, booleans, and nil. Functions, expressions,
---- metatables, long strings, and arbitrary identifiers are rejected.
-local function MSUF_ProfileIO_ParseTableLiteral(str)
-    if type(str) ~= "string" then return nil, "profile import must be text" end
-    if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil, "profile import is too large" end
-
-    local state = { text = str, pos = 1, len = #str, nodes = 0, stringBytes = 0 }
-    local parseValue
-    local function Fail(message)
-        return nil, tostring(message or "invalid profile table") .. " at byte " .. tostring(state.pos)
-    end
-    local function SkipSpace()
-        while state.pos <= state.len do
-            local ch = state.text:sub(state.pos, state.pos)
-            if ch:match("%s") then
-                state.pos = state.pos + 1
-            elseif state.text:sub(state.pos, state.pos + 1) == "--" then
-                if state.text:sub(state.pos + 2, state.pos + 3) == "[[" then
-                    local close = state.text:find("]]", state.pos + 4, true)
-                    if not close then return false, "unterminated comment" end
-                    state.pos = close + 2
-                else
-                    local newline = state.text:find("\n", state.pos + 2, true)
-                    state.pos = newline and (newline + 1) or (state.len + 1)
-                end
-            else
-                break
-            end
-        end
-        return true
-    end
-    local function CountNode()
-        state.nodes = state.nodes + 1
-        if state.nodes > MSUF_PROFILE_IMPORT_LIMITS.nodes then return false, "profile table has too many values" end
-        return true
-    end
-    local function ParseIdentifier()
-        local start = state.pos
-        local first = state.text:sub(state.pos, state.pos)
-        if not first:match("[_%a]") then return nil end
-        state.pos = state.pos + 1
-        while state.pos <= state.len and state.text:sub(state.pos, state.pos):match("[_%w]") do
-            state.pos = state.pos + 1
-        end
-        return state.text:sub(start, state.pos - 1)
-    end
-    local function ParseString()
-        local quote = state.text:sub(state.pos, state.pos)
-        state.pos = state.pos + 1
-        local out, count = {}, 0
-        while state.pos <= state.len do
-            local ch = state.text:sub(state.pos, state.pos)
-            state.pos = state.pos + 1
-            if ch == quote then
-                local value = table.concat(out)
-                state.stringBytes = state.stringBytes + #value
-                if state.stringBytes > MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
-                    return nil, "profile table strings are too large"
-                end
-                return value
-            end
-            if ch == "\n" or ch == "\r" then return nil, "unterminated string" end
-            if ch == "\\" then
-                if state.pos > state.len then return nil, "unterminated escape" end
-                local esc = state.text:sub(state.pos, state.pos)
-                state.pos = state.pos + 1
-                local mapped = ({ a = "\a", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t", v = "\v", ["\\"] = "\\", ['"'] = '"', ["'"] = "'" })[esc]
-                if mapped then
-                    ch = mapped
-                elseif esc:match("%d") then
-                    local digits = esc
-                    for _ = 1, 2 do
-                        local digit = state.text:sub(state.pos, state.pos)
-                        if not digit:match("%d") then break end
-                        digits = digits .. digit
-                        state.pos = state.pos + 1
-                    end
-                    local byte = tonumber(digits)
-                    if not byte or byte > 255 then return nil, "invalid decimal escape" end
-                    ch = string.char(byte)
-                elseif esc == "\n" then
-                    ch = "\n"
-                else
-                    return nil, "unsupported string escape"
-                end
-            end
-            count = count + 1
-            out[count] = ch
-        end
-        return nil, "unterminated string"
-    end
-    local function ParseNumber()
-        local rest = state.text:sub(state.pos)
-        local token = rest:match("^[+-]?0[xX][%da-fA-F]+")
-            or rest:match("^[+-]?%d+%.?%d*[eE][+-]?%d+")
-            or rest:match("^[+-]?%d*%.%d+[eE][+-]?%d+")
-            or rest:match("^[+-]?%d+%.?%d*")
-            or rest:match("^[+-]?%d*%.%d+")
-        if not token or token == "" or token == "+" or token == "-" then return nil, "invalid number" end
-        local value = tonumber(token)
-        if not value or value ~= value or value == math.huge or value == -math.huge then return nil, "invalid number" end
-        state.pos = state.pos + #token
-        return value
-    end
-    local function ParseTable(depth)
-        if depth > MSUF_PROFILE_IMPORT_LIMITS.depth then return nil, "profile table is too deep" end
-        state.pos = state.pos + 1
-        local tbl, arrayIndex = {}, 1
-        while true do
-            local ok, why = SkipSpace()
-            if not ok then return nil, why end
-            local ch = state.text:sub(state.pos, state.pos)
-            if ch == "}" then state.pos = state.pos + 1; return tbl end
-            if ch == "" then return nil, "unterminated table" end
-
-            local key, value
-            if ch == "[" then
-                state.pos = state.pos + 1
-                key, why = parseValue(depth + 1)
-                if why then return nil, why end
-                ok, why = SkipSpace()
-                if not ok then return nil, why end
-                if state.text:sub(state.pos, state.pos) ~= "]" then return Fail("expected ]") end
-                state.pos = state.pos + 1
-                ok, why = SkipSpace()
-                if not ok then return nil, why end
-                if state.text:sub(state.pos, state.pos) ~= "=" then return Fail("expected =") end
-                state.pos = state.pos + 1
-                value, why = parseValue(depth + 1)
-            else
-                local saved = state.pos
-                local identifier = ParseIdentifier()
-                if identifier then
-                    ok, why = SkipSpace()
-                    if not ok then return nil, why end
-                end
-                if identifier and state.text:sub(state.pos, state.pos) == "=" then
-                    key = identifier
-                    state.pos = state.pos + 1
-                    value, why = parseValue(depth + 1)
-                else
-                    state.pos = saved
-                    key = arrayIndex
-                    arrayIndex = arrayIndex + 1
-                    value, why = parseValue(depth + 1)
-                end
-            end
-            if why then return nil, why end
-            if type(key) ~= "string" and type(key) ~= "number" then return nil, "unsupported table key" end
-            if value ~= nil then tbl[key] = value end
-            ok, why = SkipSpace()
-            if not ok then return nil, why end
-            ch = state.text:sub(state.pos, state.pos)
-            if ch == "," or ch == ";" then
-                state.pos = state.pos + 1
-            elseif ch ~= "}" then
-                return Fail("expected table separator")
-            end
-        end
-    end
-    parseValue = function(depth)
-        local ok, why = SkipSpace()
-        if not ok then return nil, why end
-        ok, why = CountNode()
-        if not ok then return nil, why end
-        local ch = state.text:sub(state.pos, state.pos)
-        if ch == "{" then return ParseTable(depth) end
-        if ch == '"' or ch == "'" then return ParseString() end
-        if ch:match("[+%-%d%.]") then return ParseNumber() end
-        local identifier = ParseIdentifier()
-        if identifier == "true" then return true end
-        if identifier == "false" then return false end
-        if identifier == "nil" then return nil end
-        return nil, "unsupported value"
-    end
-
-    local ok, why = SkipSpace()
-    if not ok then return nil, why end
-    if state.text:sub(state.pos, state.pos + 5) == "return"
-        and not state.text:sub(state.pos + 6, state.pos + 6):match("[_%w]") then
-        state.pos = state.pos + 6
-    end
-    local value
-    value, why = parseValue(1)
-    if why then return nil, why end
-    if type(value) ~= "table" then return nil, "profile import must contain a table" end
-    ok, why = SkipSpace()
-    if not ok then return nil, why end
-    if state.pos <= state.len then return Fail("unexpected trailing input") end
-    return value
-end
-local function MSUF_ProfileIO_LoadTableLiteral(str)
-    local tbl, err = MSUF_ProfileIO_ParseTableLiteral(str)
-    if not tbl then return nil, err end
-    -- Preserve the old internal callable contract without compiling input.
-    return function() return tbl end
-end
-
---- Small runtime bridge helpers. Profile code owns the DB mutation, then asks
---- each subsystem to rebuild whatever cached view it keeps. These wrappers keep
---- the rest of the file readable and make missing optional modules harmless.
+--- Profile storage owns DB mutation; ProfileRuntime owns the ordered fanout.
+--- REQUIRED, in the same spirit as the two errors above: State/MSUF_Defaults.lua
+--- is listed unconditionally in the TOC three entries ahead of this file and is
+--- the single top-level writer of MSUF_EnsureDB. Every profile create, switch,
+--- reset and import below routes its schema repair through it, so a missing
+--- export must not degrade into profiles that silently skip normalization.
+local MSUF_ENSURE_DB = MSUF.Require("MSUF_EnsureDB", "State/MSUF_Profiles.lua")
 local function MSUF_ProfileIO_RunEnsureDB(force, allowPersistedFastPath, temporaryProfile)
-    local ensureDB = _G.MSUF_EnsureDB
-    if type(ensureDB) == "function" then
-        ensureDB(force == true, allowPersistedFastPath == true, temporaryProfile == true)
-        return true
-    end
-    return false
-end
-local function MSUF_ProfileIO_ReportBoundaryError(label, err)
-    local message = "MSUF ProfileIO " .. tostring(label or "callback") .. ": " .. tostring(err)
-    ExportPublic("MSUF_ProfileIO_LastRuntimeApplyError", message)
-    local handler = _G.geterrorhandler and _G.geterrorhandler()
-    if type(handler) == "function" then
-        local reported = pcall(handler, message)
-        if reported then return end
-    end
-    if type(_G.print) == "function" then
-        _G.print("|cffffd700MSUF ProfileIO:|r", message)
-    end
-end
-local function MSUF_ProfileIO_RunProtected(label, fn, ...)
-    if type(fn) ~= "function" then return false end
-    local ok, r1, r2, r3, r4 = pcall(fn, ...)
-    if not ok then
-        MSUF_ProfileIO_ReportBoundaryError(label, r1)
-        return false, r1
-    end
-    return true, r1, r2, r3, r4
+    MSUF_ENSURE_DB(force == true, allowPersistedFastPath == true, temporaryProfile == true)
+    return true
 end
 
 -- Profile imports can enter through Menu2, legacy globals, or the external
@@ -271,13 +53,8 @@ function MSUF.ProfileIOCompleteFirstLoadImport()
     if type(firstLoad) ~= "table" or type(firstLoad.CompleteProfileImport) ~= "function" then
         return false
     end
-    local called, completed = MSUF_ProfileIO_RunProtected(
-        "FirstLoad.CompleteProfileImport",
-        firstLoad.CompleteProfileImport,
-        firstLoad,
-        "import"
-    )
-    if not called then return false end
+    local completed = firstLoad.CompleteProfileImport(firstLoad, "import")
+
     if completed == true then
         local menu = MSUF and MSUF.MSUF2
         if type(menu) == "table" and type(menu.InvalidatePage) == "function" then
@@ -286,593 +63,7 @@ function MSUF.ProfileIOCompleteFirstLoadImport()
     end
     return completed == true
 end
-local function MSUF_ProfileIO_RunApplyAllSettings(applyMask)
-    local UF = MSUF and MSUF.UF
-    if UF and UF.Apply then
-        return MSUF_ProfileIO_RunProtected("UF.Apply", UF.Apply, nil, applyMask)
-    end
-    return false
-end
-local function MSUF_ProfileIO_RunDisableBlizzardFrames()
-    local UF = MSUF and MSUF.UF
-    if UF and type(UF.DisableBlizzardFrames) == "function" then
-        return MSUF_ProfileIO_RunProtected("UF.DisableBlizzardFrames", UF.DisableBlizzardFrames)
-    end
-    return false
-end
-local function MSUF_ProfileIO_SafeMSUFScale()
-    local g = type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table" and MSUF_DB.general or nil
-    local scale = tonumber(g and g.msufUiScale) or 1
-    if scale < 0.25 then
-        scale = 1
-    elseif scale > 2.0 then
-        scale = 2.0
-    end
-    return scale
-end
-local function MSUF_ProfileIO_RunFrameScaleApply()
-    local scale = MSUF_ProfileIO_SafeMSUFScale()
-    if type(_G.MSUF_ApplyMsufScale) == "function" then
-        _G.MSUF_ApplyMsufScale(scale)
-        return true
-    end
-    local UF = MSUF and MSUF.UF
-    local frames = UF and UF.frames
-    if type(frames) == "table" then
-        for _, frame in pairs(frames) do
-            if frame and type(frame.SetScale) == "function" then
-                frame:SetScale(scale)
-            end
-        end
-        return true
-    end
-    return false
-end
-local MSUF_ProfileIO_CallGlobal
-
-MSUF_ProfileIO_CallGlobal = function(name, ...)
-    local fn = _G[name]
-    if type(fn) ~= "function" then
-        return false
-    end
-    return MSUF_ProfileIO_RunProtected(name, fn, ...)
-end
-
-local function MSUF_ProfileIO_ApplyCastbarRuntime(reason)
-    MSUF_ProfileIO_CallGlobal("MSUF_Castbars_OnSettingsChanged", reason)
-    local applyAll = _G.MSUF_ApplyAllCastbarsAndSync
-    if type(applyAll) == "function" then
-        return MSUF_ProfileIO_RunProtected("MSUF_ApplyAllCastbarsAndSync", applyAll)
-    end
-
-    local units = { "player", "target", "focus", "boss", "arena" }
-    local applied = false
-    for i = 1, #units do
-        local unit = units[i]
-        if MSUF_ProfileIO_CallGlobal("MSUF_ApplyCastbarUnitAndSync", unit) then
-            applied = true
-        elseif MSUF_ProfileIO_CallGlobal("MSUF_ApplyCastbarVisualsForUnit", unit) then
-            applied = true
-        end
-    end
-    if applied then
-        return true
-    end
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorPlayerCastBar")
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorTargetCastBar")
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorFocusCastBar")
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorBossCastBar")
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorArenaCastBar")
-    return MSUF_ProfileIO_CallGlobal("MSUF_UpdateCastbarVisuals")
-end
-
---- The coordinated UF apply already owns unit-frame text, while the explicit
---- class-power/castbar passes below own their fonts. Keep one font-runtime pass
---- for external consumers and Auras3. Imports refresh their aura payload before
---- this hook, so they skip the otherwise required profile-switch aura refresh.
-local function MSUF_ProfileIO_ApplyExternalFontFollowers(skipAuras)
-    local applyFonts = _G.MSUF_UpdateAllFonts_Immediate
-    if type(applyFonts) == "function" then
-        return MSUF_ProfileIO_RunProtected(
-            "MSUF_UpdateAllFonts_Immediate",
-            applyFonts,
-            nil,
-            true,
-            true,
-            true,
-            skipAuras == true
-        )
-    end
-
-    if skipAuras == true then return false end
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.ApplyFontsFromGlobal) == "function" then
-        return MSUF_ProfileIO_RunProtected(
-            "Auras3.ApplyFontsFromGlobal",
-            a3.ApplyFontsFromGlobal,
-            nil,
-            "MSUF_PROFILE_FONT_FOLLOWERS"
-        )
-    end
-    if a3 and type(a3.RefreshAll) == "function" then
-        return MSUF_ProfileIO_RunProtected("Auras3.RefreshAll", a3.RefreshAll)
-    end
-    return false
-end
-
-local MSUF_ProfileIO_PostProfileRuntimeApply
-local function MSUF_ProfileIO_CheckLocaleReload()
-    local namespace = _G.MSUF_NS or _G.MSUF
-    if not (namespace and type(namespace.SetLocale) == "function") then return false end
-    local configured = type(namespace.ResolveConfiguredLocale) == "function"
-        and namespace.ResolveConfiguredLocale(_G.MSUF_DB)
-        or (_G.GetLocale and _G.GetLocale())
-    local _, reloadRequired = namespace.SetLocale(configured)
-    if reloadRequired ~= true then return false end
-
-    local menu = namespace.MSUF2 or _G.MSUF2
-    if menu and type(menu.ShowLocaleReloadRequired) == "function" then
-        menu.ShowLocaleReloadRequired()
-    elseif _G.print then
-        _G.print("|cffffd700MSUF:|r Menu language changed with the profile. Reload the UI to apply it.")
-    end
-    return true
-end
-local function MSUF_ProfileIO_InCombatLockdown()
-    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
-end
-
---- One fanout point after profile mutations. If protected frame work is unsafe
---- in combat, the expensive/restricted part is deferred but cheap visual state
---- such as scale and Blizzard-frame ownership is still nudged immediately.
-local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
-    if not MSUF_ProfileIO_InCombatLockdown() then
-        return false
-    end
-    ExportPublic("MSUF_ProfileIO_PendingPostProfileRuntimeApply", {
-        reason = reason or "PROFILE_APPLY",
-        applyAll = applyAll == true,
-    })
-    local f = _G.MSUF_ProfileIO_PostProfileDeferFrame
-    if not f and type(_G.CreateFrame) == "function" then
-        f = _G.CreateFrame("Frame")
-        ExportPublic("MSUF_ProfileIO_PostProfileDeferFrame", f)
-        f:SetScript("OnEvent", function(self, event)
-            if event ~= "PLAYER_REGEN_ENABLED" then return end
-            if MSUF_ProfileIO_InCombatLockdown() then return end
-            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-            local pending = _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply
-            ExportPublic("MSUF_ProfileIO_PendingPostProfileRuntimeApply", nil)
-            if pending and MSUF_ProfileIO_PostProfileRuntimeApply then
-                MSUF_ProfileIO_PostProfileRuntimeApply(pending.reason or "PROFILE_APPLY_AFTER_COMBAT", pending.applyAll == true)
-            end
-        end)
-    end
-    if f and f.RegisterEvent then
-        f:RegisterEvent("PLAYER_REGEN_ENABLED")
-    end
-    MSUF_ProfileIO_RunDisableBlizzardFrames()
-    MSUF_ProfileIO_RunFrameScaleApply()
-    return true
-end
-MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
-    reason = reason or "PROFILE_APPLY"
-    if MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll) then
-        return
-    end
-    MSUF_ProfileIO_RunDisableBlizzardFrames()
-    MSUF_ProfileIO_RunFrameScaleApply()
-    MSUF_ProfileIO_CallGlobal("MSUF_TargetSoundDriver_ApplySetting")
-    MSUF_ProfileIO_CallGlobal("MSUF_NSRTNicknames_ApplySetting")
-    local activeGeneral = _G.MSUF_DB and _G.MSUF_DB.general
-    MSUF_ProfileIO_CallGlobal("MSUF_EllesmereEditMode_SetEnabled",
-        not (type(activeGeneral) == "table" and activeGeneral.ellesmereEditModeIntegration == false))
-    MSUF_ProfileIO_CallGlobal("MSUF_Grid2EditMode_SetEnabled",
-        not (type(activeGeneral) == "table" and activeGeneral.grid2EditModeIntegration == false))
-    MSUF_ProfileIO_CallGlobal("MSUF_DetailsEditMode_SetEnabled",
-        not (type(activeGeneral) == "table" and activeGeneral.detailsEditModeIntegration == false))
-    MSUF_ProfileIO_CallGlobal("MSUF_DominosEditMode_SetEnabled",
-        not (type(activeGeneral) == "table" and activeGeneral.dominosEditModeIntegration == false))
-    MSUF_ProfileIO_CallGlobal("MSUF_DandersEditMode_SetEnabled",
-        not (type(activeGeneral) == "table" and activeGeneral.dandersEditModeIntegration == false))
-    MSUF_ProfileIO_CallGlobal("MSUF_BlizzardEditMode_SetEnabled",
-        not (type(activeGeneral) == "table" and activeGeneral.blizzardEditModeIntegration == false))
-    --- The profile carries the last committed Blizzard Edit Mode arrangement
-    --- (general.blizzardEditModeSnapshot); re-apply it for the new profile.
-    MSUF_ProfileIO_CallGlobal("MSUF_BlizzardEditMode_ApplyProfileSnapshot")
-    --- Group-frame config tables are cached by identity. Drop those references
-    --- before the runtime rebuild reads the newly active profile root.
-    MSUF_ProfileIO_CallGlobal("MSUF_GF_InvalidateConfCache")
-
-    --- The number-abbreviation style is held as an upvalue in every text
-    --- consumer, so it must be re-resolved from the new profile before the
-    --- rebuild below formats anything.
-    local numberFormat = MSUF and MSUF.NumberFormat
-    if numberFormat and type(numberFormat.Refresh) == "function" then
-        MSUF_ProfileIO_RunProtected("MSUF.NumberFormat.Refresh", numberFormat.Refresh)
-    end
-
-    local nsGlobal = _G.MSUF_NS
-    local core = nsGlobal and nsGlobal.MSUF_UnitframeCore
-    if core and type(core.InvalidateAllFrameConfigs) == "function" then
-        core.InvalidateAllFrameConfigs()
-    end
-    local UF = MSUF and MSUF.UF
-    local metadata = UF and UF.Metadata
-    local coordinatedApplyMask = metadata and metadata.coordinatedApplyMask
-    local notifyCalled, notifyApplied = MSUF_ProfileIO_CallGlobal(
-        "MSUF_UFCore_NotifyConfigChanged",
-        nil,
-        true,
-        true,
-        reason,
-        coordinatedApplyMask
-    )
-    -- A load-order proxy or a deferred/failed core apply can be callable while
-    -- still returning nil/false. Treat only an explicit true result as a
-    -- completed apply; the direct UF.Apply fallback is idempotent and ensures
-    -- newly re-enabled frames are actually spawned and registered.
-    if notifyCalled ~= true or notifyApplied ~= true then
-        MSUF_ProfileIO_RunApplyAllSettings(coordinatedApplyMask)
-    end
-    MSUF_ProfileIO_CallGlobal("MSUF_ApplyModules")
-    MSUF_ProfileIO_CallGlobal("MSUF_GF_RebuildAll")
-    if not MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Apply", { full = true, cdm = true }) then
-        MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Refresh")
-        MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshTextures")
-        MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
-    end
-    MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
-    MSUF_ProfileIO_ApplyCastbarRuntime(reason)
-    MSUF_ProfileIO_ApplyExternalFontFollowers(applyAll == true)
-    MSUF_ProfileIO_CheckLocaleReload()
-end
---- Compact codec (backward compatible)
---- New export format (preferred):
---- MSUF4: base64(CBOR(table)) using Blizzard C_EncodingUtil
---- Compatible import transports:
---- MSUF3: base64(CBOR(table)) using Blizzard C_EncodingUtil
---- MSUF2: LibDeflate 'print-safe' encoding of deflate-compressed payload (common Wago/WA style)
---- MSUF2: base64(deflate(CBOR(table))) from earlier internal experiments
---- Design goals:
---- * Export always uses Blizzard (MSUF4) when available.
---- * Import accepts MSUF4 + MSUF3 + MSUF2 variants automatically.
---- * For MSUF2 print-safe, we decode the print alphabet ourselves and then use Blizzard
---- DecompressString when available (no bundled LibDeflate needed).
---- * Never fall back to table-literal parsing for MSUF2/MSUF3/MSUF4 prefixes.
-do
-    local function GetEncodingUtil()
-        local E = _G.C_EncodingUtil
-        if not E then  return nil end
-        if type(E.SerializeCBOR) ~= "function" then  return nil end
-        if type(E.DeserializeCBOR) ~= "function" then  return nil end
-        if type(E.EncodeBase64) ~= "function" then  return nil end
-        if type(E.DecodeBase64) ~= "function" then  return nil end
-        --- Compress/Decompress are optional depending on branch/client.
-         return E
-    end
-    local function GetDeflateEnum()
-        local Enum = _G.Enum
-        if Enum and Enum.CompressionMethod and Enum.CompressionMethod.Deflate then
-            return Enum.CompressionMethod.Deflate
-        end
-         return nil
-    end
-    local function StripWS(s)
-        return (s:gsub("%s+", ""))
-    end
-    local function CleanBase64(s)
-        s = StripWS(s or "")
-        local rem = #s % 4
-        if rem == 1 then
-            return nil
-        elseif rem == 2 then
-            s = s .. "=="
-        elseif rem == 3 then
-            s = s .. "="
-        end
-        return s
-    end
-    --- LibDeflate's print-safe alphabet is 64 chars:
-    --- 0-9, A-Z, a-z, (, )
-    local _PRINT_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()"
-    local _PRINT_MAP
-    local function EnsurePrintMap()
-        if _PRINT_MAP then  return _PRINT_MAP end
-        local t = {}
-        for i = 1, #_PRINT_ALPHABET do
-            t[_PRINT_ALPHABET:sub(i, i)] = i - 1
-        end
-        _PRINT_MAP = t
-         return t
-    end
-    --- Decode LibDeflate:EncodeForPrint output into raw bytes.
-    --- LibDeflate's print codec has existed in multiple implementations; to be robust,
-    --- we try BOTH bit-order variants (LSB-first and MSB-first) and accept whichever
-    --- yields a payload that successfully decompresses/deserializes.
-    local function DecodeForPrint_Variants(data)
-        if type(data) ~= "string" or data == "" then  return nil, nil end
-        data = StripWS(data)
-        local map = EnsurePrintMap()
-        --- Variant A: LSB-first packing
-        local function decode_lsb()
-            local out, outLen = {}, 0
-            local acc, bits = 0, 0
-            for i = 1, #data do
-                local v = map[data:sub(i,i)]
-                if v == nil then  return nil end
-                acc = acc + v * (2 ^ bits)
-                bits = bits + 6
-                while bits >= 8 do
-                    local b = acc % 256
-                    acc = (acc - b) / 256
-                    bits = bits - 8
-                    outLen = outLen + 1
-                    out[outLen] = string.char(b)
-                end
-            end
-            return table.concat(out)
-        end
-        --- Variant B: MSB-first packing
-        local function decode_msb()
-            local out, outLen = {}, 0
-            local acc, bits = 0, 0
-            for i = 1, #data do
-                local v = map[data:sub(i,i)]
-                if v == nil then  return nil end
-                acc = acc * 64 + v
-                bits = bits + 6
-                while bits >= 8 do
-                    local shift = bits - 8
-                    local b = math.floor(acc / (2 ^ shift)) % 256
-                    --- keep only the remaining low bits
-                    acc = acc % (2 ^ shift)
-                    bits = shift
-                    outLen = outLen + 1
-                    out[outLen] = string.char(b)
-                end
-            end
-            return table.concat(out)
-        end
-        return decode_lsb(), decode_msb()
-    end
-    local TryDeserialize
-    -- Import codecs and optional serializer libraries consume user-provided
-    -- bytes. Rejection may raise, so these boundaries intentionally convert an
-    -- exception into a normal decode miss; callers show the user-facing error.
-    local function TryCodecCall(fn, ...)
-        if type(fn) ~= "function" then return false end
-        return pcall(fn, ...)
-    end
-    local function TryBlizzardDecompress(E, compressed)
-        if not E or type(compressed) ~= "string" then  return nil end
-        if #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
-        if type(E.DecompressString) ~= "function" then  return nil end
-        local method = GetDeflateEnum()
-        local ok, res
-        if method ~= nil then
-            ok, res = TryCodecCall(E.DecompressString, compressed, method)
-            if ok and type(res) == "string" and #res <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return res end
-        end
-        ok, res = TryCodecCall(E.DecompressString, compressed)
-        if ok and type(res) == "string" and #res <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return res end
-         return nil
-    end
-    local function GetLibDeflate()
-        if _G.LibDeflate and type(_G.LibDeflate.DecompressDeflate) == "function" then
-            return _G.LibDeflate
-        end
-        local libStub = _G.LibStub
-        if libStub and type(libStub.GetLibrary) == "function" then
-            -- silent=true: GetLibrary returns nil for missing libs, no throw.
-            local lib = libStub:GetLibrary("LibDeflate", true)
-            if lib and type(lib.DecompressDeflate) == "function" then
-                return lib
-            end
-        end
-        return nil
-    end
-    local function TryLibDeflateDecompress(compressed)
-        local lib = GetLibDeflate()
-        if not lib or type(compressed) ~= "string" then return nil end
-        if #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
-        local ok, plain = TryCodecCall(lib.DecompressDeflate, lib, compressed)
-        if ok and type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return plain end
-        return nil
-    end
-    --- Prefer the matching decompressor, while retaining the raw legacy path.
-    --- Every codec attempt is protected because malformed user input is an
-    --- expected decode miss, not an addon runtime error.
-    local function TryDeserializeMaybeCompressed(E, payload)
-        if type(payload) ~= "string" then return nil end
-        if #payload > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
-        local plain = TryBlizzardDecompress(E, payload)
-        local result = TryDeserialize(E, plain or payload)
-        if result then return result end
-        local libPlain = TryLibDeflateDecompress(payload)
-        if libPlain and libPlain ~= plain then
-            result = TryDeserialize(E, libPlain)
-            if result then return result end
-        end
-        if plain then return TryDeserialize(E, payload) end
-        return nil
-    end
-    local function TryBlizzardCompress(E, plain)
-        if not E or type(plain) ~= "string" then  return nil end
-        if type(E.CompressString) ~= "function" then
-             return nil
-        end
-        -- Deterministic form selection: the Deflate enum's presence is the
-        -- capability signal for the method-taking arity.
-        local method = GetDeflateEnum()
-        local ok, res
-        if method ~= nil then
-            ok, res = TryCodecCall(E.CompressString, plain, method, 9)
-            if ok and type(res) == "string" then return res end
-            ok, res = TryCodecCall(E.CompressString, plain, method)
-            if ok and type(res) == "string" then return res end
-        end
-        ok, res = TryCodecCall(E.CompressString, plain)
-        if ok and type(res) == "string" then return res end
-         return nil
-    end
-    --- Container routing avoids a blind try/catch chain: the three
-    --- supported wire formats are self-identifying. AceSerializer strings start
-    --- with "^1", text fallback exports are a Lua table literal "{...}", and
-    --- everything else is MSUF's own CBOR envelope. Each chosen decoder still
-    --- fails closed on malformed bytes.
-    TryDeserialize = function(E, payload)
-        if not E or type(payload) ~= "string" then  return nil end
-        if #payload > MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return nil end
-        if payload:sub(1, 2) == "^1" then
-            local libStub = _G.LibStub
-            local Ace = libStub and type(libStub.GetLibrary) == "function"
-                and libStub:GetLibrary("AceSerializer-3.0", true) or nil
-            if not (Ace and type(Ace.Deserialize) == "function") then return nil end
-            local ok, success, t = TryCodecCall(Ace.Deserialize, Ace, payload)
-            if ok and success and type(t) == "table" then return t end
-            return nil
-        end
-        local trimmed = payload:match("^%s*(.-)%s*$")
-        if trimmed and trimmed:sub(1, 1) == "{" and trimmed:sub(-1) == "}" then
-            local fn = MSUF_ProfileIO_LoadTableLiteral(trimmed)
-            if not fn then return nil end
-            local t = fn()
-            if type(t) == "table" then return t end
-            return nil
-        end
-        if type(E.DeserializeCBOR) ~= "function" then return nil end
-        local ok, tbl = TryCodecCall(E.DeserializeCBOR, payload)
-        if ok and type(tbl) == "table" then return tbl end
-        return nil
-    end
-    local function IsSecretRuntimeValue(value)
-        local isSecret = _G.issecretvalue
-        if type(isSecret) ~= "function" then
-            return false
-        end
-        return isSecret(value) == true
-    end
-    local function CompactSerializableCopy(value, seen)
-        if IsSecretRuntimeValue(value) then
-            return nil
-        end
-        local tv = type(value)
-        if tv == "nil" or tv == "number" or tv == "string" or tv == "boolean" then
-            return value
-        end
-        if tv ~= "table" then
-            return nil
-        end
-        seen = seen or {}
-        if seen[value] then
-            return nil
-        end
-        seen[value] = true
-        local out = {}
-        for k, v in pairs(value) do
-            local kt = type(k)
-            if kt == "number" or kt == "string" or kt == "boolean" then
-                local safeValue = CompactSerializableCopy(v, seen)
-                if safeValue ~= nil then
-                    out[k] = safeValue
-                end
-            end
-        end
-        seen[value] = nil
-        return out
-    end
-    local function TryEncodeCompactPayload(E, tbl, prefix)
-        local encoded, bin = TryCodecCall(E.SerializeCBOR, tbl)
-        if not encoded or type(bin) ~= "string" then return nil end
-        --- Prefer smaller strings when compression exists.
-        local payload = TryBlizzardCompress(E, bin) or bin
-        local base64OK, b64 = TryCodecCall(E.EncodeBase64, payload)
-        if not base64OK or type(b64) ~= "string" then return nil end
-        return tostring(prefix or "MSUF4") .. ":" .. b64
-    end
-    local function EncodeCompactTable(tbl, prefix)
-        local E = GetEncodingUtil()
-        if not E then  return nil end
-        local compact = TryEncodeCompactPayload(E, tbl, prefix)
-        if compact then  return compact end
-        --- Some dirty runtime profiles can contain transient values that cannot
-        --- be CBOR-encoded. Drop those the same way the Lua fallback would.
-        local safe = CompactSerializableCopy(tbl)
-        if safe then
-            return TryEncodeCompactPayload(E, safe, prefix)
-        end
-        return nil
-    end
-    local function EncodeCompactTableMSUF3(tbl)
-        return EncodeCompactTable(tbl, "MSUF3")
-    end
-    local function TryDecodeCompactString(str)
-        if type(str) ~= "string" then  return nil end
-        if #str > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
-        local E = GetEncodingUtil()
-        if not E then  return nil end
-        local s = str:match("^%s*(.-)%s*$")
-        if not s then  return nil end
-        --- MSUF4/MSUF3: base64(CBOR) [optionally compressed]
-        do
-            local b64 = s:match("^MSUF[34]:%s*(.+)$")
-            if b64 then
-                b64 = CleanBase64(b64)
-                if not b64 then  return nil end
-                local decoded, blob = TryCodecCall(E.DecodeBase64, b64)
-                if decoded and type(blob) == "string" then
-                    local t = TryDeserializeMaybeCompressed(E, blob)
-                    if t then  return t end
-                end
-                  return nil
-            end
-        end
-        --- MSUF2: legacy variants
-        do
-            local payload = s:match("^MSUF2:%s*(.+)$")
-            if not payload then  return nil end
-            payload = payload:gsub("^%s+", ""):gsub("%s+$", "")
-            --- 1) Try Blizzard base64 first (older internal MSUF2 variant)
-            local b64 = CleanBase64(payload)
-            if b64 then
-                local decoded, blob = TryCodecCall(E.DecodeBase64, b64)
-                if decoded and type(blob) == "string" then
-                    local t = TryDeserializeMaybeCompressed(E, blob)
-                    if t then  return t end
-                end
-            end
-            --- 2) Try LibDeflate print-safe (Wago/WA style)
-            local raw_lsb, raw_msb = DecodeForPrint_Variants(payload)
-            if raw_lsb then
-                local t = TryDeserializeMaybeCompressed(E, raw_lsb)
-                if t then  return t end
-            end
-            if raw_msb then
-                local t = TryDeserializeMaybeCompressed(E, raw_msb)
-                if t then  return t end
-            end
-            --- 3) LibDeflate (from another addon): print-decode then deflate;
-            --- Wago-style payloads are always compressed on this route.
-            local ld = _G.LibDeflate
-            if ld and type(ld.DecodeForPrint) == "function" and type(ld.DecompressDeflate) == "function" then
-                local decodeOK, raw = TryCodecCall(ld.DecodeForPrint, ld, payload)
-                if decodeOK and type(raw) == "string" and #raw <= MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then
-                    local decompressOK, plain = TryCodecCall(ld.DecompressDeflate, ld, raw)
-                    if decompressOK and type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
-                        local t = TryDeserialize(E, plain)
-                        if t then  return t end
-                    end
-                end
-            end
-             return nil
-        end
-     end
-    ExportPublic("MSUF_EncodeCompactTable", _G.MSUF_EncodeCompactTable or EncodeCompactTable)
-    ExportPublic("MSUF_EncodeCompactTableMSUF3", EncodeCompactTableMSUF3)
-    ExportPublic("MSUF_TryDecodeCompactString", _G.MSUF_TryDecodeCompactString or TryDecodeCompactString)
-end
-
+local ApplyProfileRuntime = MSUF.ProfileRuntime.Apply
 --- Profile lifecycle API. These globals are used by Menu2, assistant actions,
 --- slash handlers, and legacy callers, so the public surface stays global even
 --- though the implementation is isolated in this State module.
@@ -1022,7 +213,7 @@ function MSUF_InitProfiles()
     char.activeProfile = active
     MSUF_ActiveProfile = active
     MSUF_DB = profiles[active]
-    MSUF_ProfileIO_CallGlobal("MSUF_GF_InvalidateConfCache")
+    _G.MSUF_GF_InvalidateConfCache()
     --- After DB swap: seed missing defaults so per-unit conf tables exist.
     --- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
     --- when the profile was saved from an older version missing those keys,
@@ -1033,7 +224,7 @@ function MSUF_InitProfiles()
     --- repaired earlier in the startup chain.
     MSUF_ProfileIO_RunEnsureDB(false, true)
     if hadEstablishedOwner and (previousActive ~= active or previousDB ~= MSUF_DB) then
-        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_INIT_REBIND", false)
+        ApplyProfileRuntime("PROFILE_INIT_REBIND", false)
         MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_INIT_REBIND", active, MSUF_DB)
     end
  end
@@ -1046,8 +237,8 @@ function MSUF_CreateProfile(name)
     end
     local createFactoryProfile = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile)
         or _G.MSUF_CreateFactoryDefaultProfile
-    local called, profile = MSUF_ProfileIO_RunProtected("create factory profile", createFactoryProfile)
-    if not called or type(profile) ~= "table" then
+    local profile = createFactoryProfile()
+    if type(profile) ~= "table" then
         print("|cffff0000MSUF:|r Factory defaults are not available; profile was not created.")
         return false, "factory defaults unavailable"
     end
@@ -1084,7 +275,7 @@ MSUF_ProfileIO_NotifyAssistantProfileEpochChanged = function(reason, name, db)
         callback = rawget(assistant, "OnProfileOwnerSwitched")
     end
     if type(callback) ~= "function" then return false end
-    return MSUF_ProfileIO_RunProtected("Assistant.OnProfileEpochChanged", callback, name, db, epoch, reason)
+    return true, callback(name, db, epoch, reason)
 end
 function MSUF_SwitchProfile(name)
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
@@ -1104,7 +295,7 @@ function MSUF_SwitchProfile(name)
     char.activeProfile = name
     MSUF_ActiveProfile = name
     MSUF_DB = profiles[name]
-    MSUF_ProfileIO_CallGlobal("MSUF_GF_InvalidateConfCache")
+    _G.MSUF_GF_InvalidateConfCache()
     --- Invalidate cached config references (UFCore caches per-frame config table refs).
     do
         local MSUF = _G.MSUF_NS
@@ -1117,7 +308,7 @@ function MSUF_SwitchProfile(name)
     --- resets clear/bypass it, so a valid profile can switch without paying a
     --- second broad default-fill pass while stale/malformed tables still repair.
     MSUF_ProfileIO_RunEnsureDB(false, true)
-    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_SWITCH", false)
+    ApplyProfileRuntime("PROFILE_SWITCH", false)
     MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_SWITCH", name, MSUF_DB)
     print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
     return true
@@ -1129,13 +320,13 @@ function MSUF_ResetProfile(name)
     profiles[name] = {}
     if name == MSUF_ActiveProfile then
         MSUF_DB = profiles[name]
-        MSUF_ProfileIO_CallGlobal("MSUF_GF_InvalidateConfCache")
+        _G.MSUF_GF_InvalidateConfCache()
         --- Phase 3: invalidate settings cache immediately after DB swap
         if _G.MSUF_UFCore_InvalidateSettingsCache then
             _G.MSUF_UFCore_InvalidateSettingsCache()
         end
         MSUF_ProfileIO_RunEnsureDB(true)
-        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_RESET", false)
+        ApplyProfileRuntime("PROFILE_RESET", false)
         MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_RESET", name, MSUF_DB)
     end
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
@@ -1597,7 +788,7 @@ end
 
 local function MSUF_ProfileIO_FontKeyAvailable(key)
     if type(key) ~= "string" or key == "" then return true end
-    local normalize = _G.MSUF_NormalizeFontKey or function(value) return value end
+    local normalize = _G.MSUF_NormalizeFontKey
     local normalized = normalize(key)
     local internal = _G.MSUF_GetInternalFontPathByKey
     if type(internal) == "function" then
@@ -2021,6 +1212,12 @@ local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA = 600
 --- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
 --- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
 --- translation pipeline gains a new mandatory repair.
+--- Cross-reference: State/MSUF_Defaults.lua runs a second, independent alias
+--- normalization pipeline (MSUF_EnsureDB_Heavy, gated by
+--- MSUF_DEFAULTS_CURRENT_REVISION) over the same text/status/aura alias keys,
+--- using the narrower StateHelpers.DefaultsSpec. The two revisions are bumped
+--- independently and are deliberately not merged; keep both in mind when a
+--- key alias changes.
 local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21
 local MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY = "profileModelRevision"
 --- RC17's destructive hard cut established revision 1 as the canonical Unit
@@ -2114,11 +1311,6 @@ local MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS = {
     "boss1", "boss2", "boss3", "boss4", "boss5",
     "arena1", "arena2", "arena3",
 }
-local MSUF_PROFILEIO_LEGACY_UNIT_NAME_ANCHORS = {
-    LEFT = "TOPLEFT",
-    CENTER = "TOP",
-    RIGHT = "TOPRIGHT",
-}
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget",
@@ -2127,529 +1319,18 @@ local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "arena", "arena1", "arena2", "arena3",
     "gf_party", "gf_raid", "gf_mythicraid",
 }
-local MSUF_PROFILEIO_TEXT_NUMERIC_KEYS = {
-    nameOffsetX = { -500, 500 },
-    nameOffsetY = { -500, 500 },
-    nameTextOffsetX = { -500, 500 },
-    nameTextOffsetY = { -500, 500 },
-    hpOffsetX = { -500, 500 },
-    hpOffsetY = { -500, 500 },
-    hpTextOffsetX = { -500, 500 },
-    hpTextOffsetY = { -500, 500 },
-    powerOffsetX = { -500, 500 },
-    powerOffsetY = { -500, 500 },
-    powerTextOffsetX = { -500, 500 },
-    powerTextOffsetY = { -500, 500 },
-    nameFontSize = { 6, 128 },
-    hpFontSize = { 6, 128 },
-    powerFontSize = { 6, 128 },
-    fontBaselineOffset = { -4, 4 },
-    nameMaxChars = { 0, 256 },
-    shortenNameMaxChars = { 0, 256 },
-    shortenNameFrontMaskPx = { 0, 128 },
-    nameTextLayer = { 0, 30 },
-    hpTextLayer = { 0, 30 },
-    textLayer = { 0, 30 },
-    powerTextLayer = { 0, 30 },
-}
-local MSUF_PROFILEIO_TEXT_SIDE_PREFIXES = {
-    "hpTextLeft", "hpTextCenter", "hpTextRight",
-    "hpLeft", "hpCenter", "hpRight",
-    "powerTextLeft", "powerTextCenter", "powerTextRight",
-    "powerLeft", "powerCenter", "powerRight",
-}
-local MSUF_PROFILEIO_DIRECT_TEXT_SUFFIXES = {
-    "Name",
-    "HealthLeft", "HealthCenter", "HealthRight",
-    "PowerLeft", "PowerCenter", "PowerRight",
-}
-local MSUF_PROFILEIO_TEXT_MODE_KEYS = {
-    "textLeft", "textCenter", "textRight",
-    "hpTextLeft", "hpTextCenter", "hpTextRight",
-    "hpTextMode",
-    "powerTextLeft", "powerTextCenter", "powerTextRight",
-    "powerTextMode",
-}
-local MSUF_PROFILEIO_STATUS_PREFIXES = {
-    "leaderIcon",
-    "raidMarker",
-    "levelIndicator",
-    "bossNumberIndicator",
-    "eliteIcon",
-    "statusText",
-    "statusGhostText",
-    "statusAFKText",
-    "statusAFKTimer",
-    "statusDNDText",
-    "combatStateIndicator",
-    "restedStateIndicator",
-    "restingStateIndicator",
-    "incomingResIndicator",
-    "pvpIndicator",
-    "stanceIndicator",
-    "raidGroupName",
-}
-local MSUF_PROFILEIO_GROUP_STATUS_NUMERIC_KEYS = {
-    roleIconSize = { 1, 256 },
-    roleIconX = { -500, 500 },
-    roleIconY = { -500, 500 },
-    roleIconLayer = { 0, 30 },
-    raidMarkerSize = { 1, 256 },
-    raidMarkerX = { -500, 500 },
-    raidMarkerY = { -500, 500 },
-    raidMarkerLayer = { 0, 30 },
-    leaderIconSize = { 1, 256 },
-    leaderIconX = { -500, 500 },
-    leaderIconY = { -500, 500 },
-    leaderIconLayer = { 0, 30 },
-    assistIconSize = { 1, 256 },
-    assistIconX = { -500, 500 },
-    assistIconY = { -500, 500 },
-    assistIconLayer = { 0, 30 },
-    statusTextSize = { 1, 256 },
-    statusOffsetX = { -500, 500 },
-    statusOffsetY = { -500, 500 },
-    statusTextLayer = { 0, 30 },
-    statusGhostTextSize = { 1, 256 },
-    statusGhostOffsetX = { -500, 500 },
-    statusGhostOffsetY = { -500, 500 },
-    statusGhostTextLayer = { 0, 30 },
-    statusAFKTextSize = { 1, 256 },
-    statusAFKOffsetX = { -500, 500 },
-    statusAFKOffsetY = { -500, 500 },
-    statusAFKTextLayer = { 0, 30 },
-    statusAFKTimerTextSize = { 1, 256 },
-    statusAFKTimerOffsetX = { -500, 500 },
-    statusAFKTimerOffsetY = { -500, 500 },
-    statusAFKTimerTextLayer = { 0, 30 },
-    statusDNDTextSize = { 1, 256 },
-    statusDNDOffsetX = { -500, 500 },
-    statusDNDOffsetY = { -500, 500 },
-    statusDNDTextLayer = { 0, 30 },
-    groupNumberSize = { 1, 256 },
-    groupNumberX = { -500, 500 },
-    groupNumberY = { -500, 500 },
-    groupNumberLayer = { 0, 30 },
-}
-local MSUF_PROFILEIO_GROUP_STATUS_ANCHOR_KEYS = {
-    "roleIconAnchor",
-    "raidMarkerAnchor",
-    "leaderIconAnchor",
-    "assistIconAnchor",
-    "statusTextAnchor",
-    "statusGhostTextAnchor",
-    "statusAFKTextAnchor",
-    "statusAFKTimerTextAnchor",
-    "statusDNDTextAnchor",
-    "groupNumberAnchor",
-}
-local MSUF_PROFILEIO_UNIT_STATUS_BOOL_ALIASES = {
-    { "showLeaderIcon", "leaderIcon" },
-    { "showRaidMarker", "raidMarker" },
-    { "showLevelIndicator", "levelIndicator" },
-    { "showEliteIcon", "eliteIcon" },
-    { "statusTextEnabled", "statusText" },
-    { "showCombatStateIndicator", "combatStateIndicator" },
-    { "showRestingIndicator", "restedStateIndicator" },
-    { "showRestingIndicator", "restingStateIndicator" },
-    { "showIncomingResIndicator", "incomingResIndicator" },
-    { "showPvpIndicator", "pvpIndicator" },
-    { "showRaidGroupInName", "raidGroupName" },
-}
-local MSUF_PROFILEIO_UNIT_STATUS_OFFSET_ALIASES = {
-    { "leaderIconOffsetX", "leaderIconX" },
-    { "leaderIconOffsetY", "leaderIconY" },
-    { "raidMarkerOffsetX", "raidMarkerX" },
-    { "raidMarkerOffsetY", "raidMarkerY" },
-    { "statusTextOffsetX", "statusOffsetX" },
-    { "statusTextOffsetY", "statusOffsetY" },
-    { "raidGroupNameOffsetX", "groupNumberX" },
-    { "raidGroupNameOffsetY", "groupNumberY" },
-    { "raidGroupNameLayer", "groupNumberLayer" },
-}
-local MSUF_PROFILEIO_GROUP_STATUS_BOOL_ALIASES = {
-    { "roleIcon", "showRoleIcon" },
-    { "leaderIcon", "showLeaderIcon" },
-    { "assistIcon", "showAssistIcon" },
-    { "raidMarker", "showRaidMarker" },
-    { "statusText", "statusTextEnabled" },
-    { "statusGhostText", "statusGhostTextEnabled" },
-    { "statusAFKText", "statusAFKTextEnabled" },
-    { "statusDNDText", "statusDNDTextEnabled" },
-    { "showGroupNumber", "showRaidGroupInName" },
-}
-local MSUF_PROFILEIO_GROUP_STATUS_OFFSET_ALIASES = {
-    { "roleIconX", "roleIconOffsetX" },
-    { "roleIconY", "roleIconOffsetY" },
-    { "leaderIconX", "leaderIconOffsetX" },
-    { "leaderIconY", "leaderIconOffsetY" },
-    { "assistIconX", "assistIconOffsetX" },
-    { "assistIconY", "assistIconOffsetY" },
-    { "raidMarkerX", "raidMarkerOffsetX" },
-    { "raidMarkerY", "raidMarkerOffsetY" },
-    { "statusOffsetX", "statusTextOffsetX" },
-    { "statusOffsetY", "statusTextOffsetY" },
-    { "statusGhostOffsetX", "statusGhostTextOffsetX" },
-    { "statusGhostOffsetY", "statusGhostTextOffsetY" },
-    { "statusAFKOffsetX", "statusAFKTextOffsetX" },
-    { "statusAFKOffsetY", "statusAFKTextOffsetY" },
-    { "statusDNDOffsetX", "statusDNDTextOffsetX" },
-    { "statusDNDOffsetY", "statusDNDTextOffsetY" },
-    { "groupNumberX", "raidGroupNameOffsetX" },
-    { "groupNumberY", "raidGroupNameOffsetY" },
-    { "groupNumberLayer", "raidGroupNameLayer" },
-}
 local MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS = {
     "player", "target", "targettarget", "tot", "targetoftarget",
     "focus", "focustarget", "focus_target", "focustargettarget",
     "pet", "boss", "boss1", "boss2", "boss3", "boss4", "boss5",
 }
-local MSUF_PROFILEIO_AURA_NUMERIC_KEYS = {
-    offsetX = { -4096, 4096 },
-    offsetY = { -4096, 4096 },
-    buffOffsetX = { -4096, 4096 },
-    buffOffsetY = { -4096, 4096 },
-    debuffOffsetX = { -4096, 4096 },
-    debuffOffsetY = { -4096, 4096 },
-    buffGroupOffsetX = { -4096, 4096 },
-    buffGroupOffsetY = { -4096, 4096 },
-    debuffGroupOffsetX = { -4096, 4096 },
-    debuffGroupOffsetY = { -4096, 4096 },
-    iconSize = { 1, 256 },
-    buffIconSize = { 1, 256 },
-    debuffIconSize = { 1, 256 },
-    iconZoom = { 100, 200 },
-    buffIconZoom = { 100, 200 },
-    debuffIconZoom = { 100, 200 },
-    buffGroupIconSize = { 1, 256 },
-    debuffGroupIconSize = { 1, 256 },
-    privateSize = { 1, 256 },
-    spacing = { 0, 128 },
-    splitSpacing = { 0, 256 },
-    buffSpacing = { 0, 128 },
-    debuffSpacing = { 0, 128 },
-    perRow = { 1, 80 },
-    buffPerRow = { 1, 80 },
-    debuffPerRow = { 1, 80 },
-    maxIcons = { 0, 80 },
-    maxBuffs = { 0, 80 },
-    maxDebuffs = { 0, 80 },
-    stackTextSize = { 1, 128 },
-    cooldownTextSize = { 1, 128 },
-    stackTextOffsetX = { -2000, 2000 },
-    stackTextOffsetY = { -2000, 2000 },
-    cooldownTextOffsetX = { -2000, 2000 },
-    cooldownTextOffsetY = { -2000, 2000 },
-    cooldownDecimalSeconds = { 0, 30 },
-    buffLayer = { 0, 30 },
-    debuffLayer = { 0, 30 },
-    buffStackTextSize = { 1, 128 },
-    debuffStackTextSize = { 1, 128 },
-    buffCooldownTextSize = { 1, 128 },
-    debuffCooldownTextSize = { 1, 128 },
-    buffStackTextOffsetX = { -2000, 2000 },
-    buffStackTextOffsetY = { -2000, 2000 },
-    debuffStackTextOffsetX = { -2000, 2000 },
-    debuffStackTextOffsetY = { -2000, 2000 },
-    buffCooldownTextOffsetX = { -2000, 2000 },
-    buffCooldownTextOffsetY = { -2000, 2000 },
-    debuffCooldownTextOffsetX = { -2000, 2000 },
-    debuffCooldownTextOffsetY = { -2000, 2000 },
-    buffCooldownDecimalSeconds = { 0, 30 },
-    debuffCooldownDecimalSeconds = { 0, 30 },
-}
-local MSUF_PROFILEIO_AURA_STRING_KEYS = {
-    "growth", "rowWrap", "buffGrowth", "debuffGrowth", "privateGrowth",
-    "buffGrowthX", "buffGrowthY", "debuffGrowthX", "debuffGrowthY",
-    "buffRowWrap", "debuffRowWrap", "layoutMode", "buffDebuffAnchor",
-    "stackCountAnchor", "cooldownTextAnchor", "buffAnchor", "debuffAnchor",
-    "buffStackCountAnchor", "debuffStackCountAnchor",
-    "buffCooldownTextAnchor", "debuffCooldownTextAnchor",
-    "buffStrata", "debuffStrata",
-    "debuffTypeBorderMode", "dispelBorderMode", "pandemicMode",
-}
-
-local function MSUF_ProfileIO_ToNumber(value)
-    local n = tonumber(value)
-    if n == nil then return nil end
-    return n
-end
-
-local function MSUF_ProfileIO_NormalizeNumberField(tbl, key, minValue, maxValue)
-    if type(tbl) ~= "table" or tbl[key] == nil then return false end
-    local n = MSUF_ProfileIO_ToNumber(tbl[key])
-    if n == nil then return false end
-    if minValue ~= nil and n < minValue then
-        n = minValue
-    elseif maxValue ~= nil and n > maxValue then
-        n = maxValue
-    end
-    if tbl[key] ~= n then
-        tbl[key] = n
-        return true
-    end
-    return false
-end
-
-local function MSUF_ProfileIO_CopyIfMissing(tbl, toKey, fromKey)
-    if type(tbl) ~= "table" or tbl[toKey] ~= nil or tbl[fromKey] == nil then
-        return false
-    end
-    tbl[toKey] = tbl[fromKey]
-    return true
-end
-
-local function MSUF_ProfileIO_CopyInverseBoolIfMissing(tbl, toKey, fromKey)
-    if type(tbl) ~= "table" or tbl[toKey] ~= nil or tbl[fromKey] == nil then
-        return false
-    end
-    tbl[toKey] = not (tbl[fromKey] == true)
-    return true
-end
-
-local function MSUF_ProfileIO_UpperStringField(tbl, key)
-    if type(tbl) ~= "table" or type(tbl[key]) ~= "string" then return false end
-    local value = tbl[key]
-    if value == "" then
-        tbl[key] = nil
-        return true
-    end
-    local upper = string.upper(value)
-    if value ~= upper then
-        tbl[key] = upper
-        return true
-    end
-    return false
-end
-
-local function MSUF_ProfileIO_TableHasAnyValue(tbl)
-    return type(tbl) == "table" and next(tbl) ~= nil
-end
-
-local MSUF_PROFILEIO_AURA_GROWTH_PARTS = {
-    RIGHTDOWN = { "RIGHT", "DOWN" },
-    LEFTDOWN = { "LEFT", "DOWN" },
-    RIGHTUP = { "RIGHT", "UP" },
-    LEFTUP = { "LEFT", "UP" },
-    RIGHT = { "RIGHT", nil },
-    LEFT = { "LEFT", nil },
-    UP = { "UP", "UP" },
-    DOWN = { "DOWN", "DOWN" },
-}
-
-local function MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, toKey, fromKey)
-    if type(tbl) ~= "table" or tbl[toKey] ~= nil or tbl[fromKey] == nil then return false end
-    local n = MSUF_ProfileIO_ToNumber(tbl[fromKey])
-    if n == nil then return false end
-    tbl[toKey] = n
-    return true
-end
-
-local function MSUF_ProfileIO_CopyAuraGrowthAlias(tbl, fromKey, toGrowthKey, toWrapKey)
-    if type(tbl) ~= "table" or tbl[fromKey] == nil then return false end
-    local value = tostring(tbl[fromKey] or ""):upper()
-    local parts = MSUF_PROFILEIO_AURA_GROWTH_PARTS[value]
-    if not parts then return false end
-    local changed = false
-    if tbl[toGrowthKey] == nil then
-        tbl[toGrowthKey] = parts[1]
-        changed = true
-    end
-    if parts[2] ~= nil and tbl[toWrapKey] == nil then
-        tbl[toWrapKey] = parts[2]
-        changed = true
-    end
-    return changed
-end
-
-local function MSUF_ProfileIO_HasScopedFontOverrideValue(scope)
-    if type(scope) ~= "table" then return false end
-    if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
-    if scope.fontMonochrome ~= nil or scope.fontSlug ~= nil or scope.fontTextAlpha ~= nil or scope.fontBaselineOffset ~= nil then return true end
-    if scope.textBackdrop ~= nil or scope.fontShadowStrength ~= nil or scope.fontShadowOpacity ~= nil or scope.fontShadowDistance ~= nil then return true end
-    if scope.colorPowerTextByHealth ~= nil then return true end
-    if scope.colorPowerTextByType ~= nil or scope.colorHealthTextByHealth ~= nil then return true end
-    if scope.nameClassColor ~= nil or scope.npcNameRed ~= nil or scope.nameNpcClassColor ~= nil then return true end
-    if scope.useGlobalFontColor == false then return true end
-    if scope.fontR ~= nil or scope.fontG ~= nil or scope.fontB ~= nil then return true end
-    local mode = scope.nameColorMode
-    if mode ~= nil and mode ~= "" and mode ~= "DEFAULT" then return true end
-    if scope.nameShortenEnabled ~= nil or scope.shortenNames ~= nil then return true end
-    if (tonumber(scope.nameMaxChars) or 0) > 0 then return true end
-    if scope.shortenNameMaxChars ~= nil or scope.nameClipSide ~= nil or scope.shortenNameClipSide ~= nil then return true end
-    if scope.nameNoEllipsis ~= nil or scope.shortenNameShowDots ~= nil or scope.shortenNameFrontMaskPx ~= nil then return true end
-    return false
-end
-
-local function MSUF_ProfileIO_NormalizeNameShorteningScope(scope, allowFontOverride, isGroupScope)
-    if type(scope) ~= "table" then return false end
-    local changed = false
-    if isGroupScope then
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "nameShortenEnabled", "shortenNames") or changed
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "nameMaxChars", "shortenNameMaxChars") or changed
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "nameClipSide", "shortenNameClipSide") or changed
-        changed = MSUF_ProfileIO_CopyInverseBoolIfMissing(scope, "nameNoEllipsis", "shortenNameShowDots") or changed
-    else
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "shortenNames", "nameShortenEnabled") or changed
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "shortenNameMaxChars", "nameMaxChars") or changed
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "shortenNameClipSide", "nameClipSide") or changed
-        changed = MSUF_ProfileIO_CopyInverseBoolIfMissing(scope, "shortenNameShowDots", "nameNoEllipsis") or changed
-    end
-    changed = MSUF_ProfileIO_NormalizeNumberField(scope, "shortenNameMaxChars", 0, 256) or changed
-    changed = MSUF_ProfileIO_NormalizeNumberField(scope, "nameMaxChars", 0, 256) or changed
-    changed = MSUF_ProfileIO_NormalizeNumberField(scope, "shortenNameFrontMaskPx", 0, 128) or changed
-    changed = MSUF_ProfileIO_UpperStringField(scope, "shortenNameClipSide") or changed
-    changed = MSUF_ProfileIO_UpperStringField(scope, "nameClipSide") or changed
-    if allowFontOverride and scope.fontOverride == nil and MSUF_ProfileIO_HasScopedFontOverrideValue(scope) then
-        scope.fontOverride = true
-        changed = true
-    end
-    return changed
-end
-
-local function MSUF_ProfileIO_NormalizeTextScope(scope, isGroupScope, allowFontOverride)
-    if type(scope) ~= "table" then return false end
-    local changed = false
-    if isGroupScope then
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "nameAnchor", "nameTextAnchor") or changed
-    else
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "nameTextAnchor", "nameAnchor") or changed
-    end
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "nameOffsetX", "nameTextOffsetX") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "nameOffsetY", "nameTextOffsetY") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "hpOffsetX", "hpTextOffsetX") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "hpOffsetY", "hpTextOffsetY") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "powerOffsetX", "powerTextOffsetX") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "powerOffsetY", "powerTextOffsetY") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "textLeft", "hpTextLeft") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "textCenter", "hpTextCenter") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(scope, "textRight", "hpTextRight") or changed
-    if isGroupScope then
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "textDelimiter", "hpTextSeparator") or changed
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "powerTextDelimiter", "powerTextSeparator") or changed
-    else
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "hpTextSeparator", "textDelimiter") or changed
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, "powerTextSeparator", "powerTextDelimiter") or changed
-    end
-
-    for key, limits in pairs(MSUF_PROFILEIO_TEXT_NUMERIC_KEYS) do
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, key, limits[1], limits[2]) or changed
-    end
-    for i = 1, #MSUF_PROFILEIO_TEXT_SIDE_PREFIXES do
-        local prefix = MSUF_PROFILEIO_TEXT_SIDE_PREFIXES[i]
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, prefix .. "OffsetX", -500, 500) or changed
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, prefix .. "OffsetY", -500, 500) or changed
-    end
-    for i = 1, #MSUF_PROFILEIO_DIRECT_TEXT_SUFFIXES do
-        local key = "direct" .. MSUF_PROFILEIO_DIRECT_TEXT_SUFFIXES[i]
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, key .. "OffsetX", key .. "X") or changed
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, key .. "OffsetY", key .. "Y") or changed
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, key .. "OffsetX", -500, 500) or changed
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, key .. "OffsetY", -500, 500) or changed
-        changed = MSUF_ProfileIO_UpperStringField(scope, key .. "Point") or changed
-        changed = MSUF_ProfileIO_UpperStringField(scope, key .. "RelativePoint") or changed
-    end
-    for i = 1, #MSUF_PROFILEIO_TEXT_MODE_KEYS do
-        changed = MSUF_ProfileIO_UpperStringField(scope, MSUF_PROFILEIO_TEXT_MODE_KEYS[i]) or changed
-    end
-    changed = MSUF_ProfileIO_UpperStringField(scope, "nameTextAnchor") or changed
-    changed = MSUF_ProfileIO_UpperStringField(scope, "nameAnchor") or changed
-    if not isGroupScope then
-        local legacyAnchor = MSUF_PROFILEIO_LEGACY_UNIT_NAME_ANCHORS[scope.nameTextAnchor]
-        if legacyAnchor then
-            scope.nameTextAnchor = legacyAnchor
-            changed = true
-        end
-    end
-    changed = MSUF_ProfileIO_NormalizeNameShorteningScope(scope, allowFontOverride == true, isGroupScope == true) or changed
-    return changed
-end
-
-local function MSUF_ProfileIO_NormalizeStatusScope(scope, isGroupScope)
-    if type(scope) ~= "table" then return false end
-    local changed = false
-    local boolAliases = isGroupScope and MSUF_PROFILEIO_GROUP_STATUS_BOOL_ALIASES or MSUF_PROFILEIO_UNIT_STATUS_BOOL_ALIASES
-    for i = 1, #boolAliases do
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, boolAliases[i][1], boolAliases[i][2]) or changed
-    end
-    local offsetAliases = isGroupScope and MSUF_PROFILEIO_GROUP_STATUS_OFFSET_ALIASES or MSUF_PROFILEIO_UNIT_STATUS_OFFSET_ALIASES
-    for i = 1, #offsetAliases do
-        changed = MSUF_ProfileIO_CopyIfMissing(scope, offsetAliases[i][1], offsetAliases[i][2]) or changed
-    end
-    for i = 1, #MSUF_PROFILEIO_STATUS_PREFIXES do
-        local prefix = MSUF_PROFILEIO_STATUS_PREFIXES[i]
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, prefix .. "Size", 1, 256) or changed
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, prefix .. "OffsetX", -500, 500) or changed
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, prefix .. "OffsetY", -500, 500) or changed
-        changed = MSUF_ProfileIO_NormalizeNumberField(scope, prefix .. "Layer", 0, 30) or changed
-        changed = MSUF_ProfileIO_UpperStringField(scope, prefix .. "Anchor") or changed
-    end
-    if isGroupScope then
-        for key, limits in pairs(MSUF_PROFILEIO_GROUP_STATUS_NUMERIC_KEYS) do
-            changed = MSUF_ProfileIO_NormalizeNumberField(scope, key, limits[1], limits[2]) or changed
-        end
-        for i = 1, #MSUF_PROFILEIO_GROUP_STATUS_ANCHOR_KEYS do
-            changed = MSUF_ProfileIO_UpperStringField(scope, MSUF_PROFILEIO_GROUP_STATUS_ANCHOR_KEYS[i]) or changed
-        end
-    end
-    return changed
-end
-
-local MSUF_PROFILEIO_GROUP_STATUS_SCOPES = { gf_party = true, gf_raid = true, gf_mythicraid = true }
-local MSUF_PROFILEIO_UNIT_STATUS_SPLIT = {
-    { "statusDeadTextEnabled", "showDead", true, nil },
-    { "statusGhostTextEnabled", "showGhost", true, "statusGhostText" },
-    { "statusAFKTextEnabled", "showAFK", false, "statusAFKText" },
-    { "statusDNDTextEnabled", "showDND", false, "statusDNDText" },
-}
-local MSUF_PROFILEIO_STATUS_LAYOUT_SUFFIXES = { "Size", "Anchor", "OffsetX", "OffsetY", "Layer" }
-local function MSUF_ProfileIO_MigrateSplitStatusText(profile)
-    if type(profile) ~= "table" then return false end
-    local changed = false
-    local general = type(profile.general) == "table" and profile.general or {}
-    local states = type(general.statusIndicators) == "table" and general.statusIndicators or {}
-    for i = 1, #MSUF_PROFILEIO_TEXT_SCOPE_KEYS do
-        local scopeKey = MSUF_PROFILEIO_TEXT_SCOPE_KEYS[i]
-        local scope = profile[scopeKey]
-        if type(scope) == "table" and MSUF_PROFILEIO_GROUP_STATUS_SCOPES[scopeKey] then
-            if scope.statusDNDText == nil and scope.statusAFKText ~= nil then
-                scope.statusDNDText = scope.statusAFKText
-                scope.statusDNDTextSize = scope.statusAFKTextSize
-                scope.statusDNDTextAnchor = scope.statusAFKTextAnchor
-                scope.statusDNDTextLayer = scope.statusAFKTextLayer
-                scope.statusDNDOffsetX = scope.statusAFKOffsetX
-                scope.statusDNDOffsetY = scope.statusAFKOffsetY
-                changed = true
-            end
-        elseif type(scope) == "table" and scopeKey ~= "general" then
-            local master = scope.statusTextEnabled
-            if master == nil then master = general.statusTextEnabled end
-            if master == nil then master = true end
-            for j = 1, #MSUF_PROFILEIO_UNIT_STATUS_SPLIT do
-                local def = MSUF_PROFILEIO_UNIT_STATUS_SPLIT[j]
-                if scope[def[1]] == nil then
-                    local state = states[def[2]]
-                    if state == nil then state = def[3] end
-                    scope[def[1]] = master == true and state == true
-                    changed = true
-                end
-                local prefix = def[4]
-                if prefix then
-                    for k = 1, #MSUF_PROFILEIO_STATUS_LAYOUT_SUFFIXES do
-                        local suffix = MSUF_PROFILEIO_STATUS_LAYOUT_SUFFIXES[k]
-                        local key, legacyKey = prefix .. suffix, "statusText" .. suffix
-                        if scope[key] == nil then
-                            local value = scope[legacyKey]
-                            if value == nil then value = general[legacyKey] end
-                            if value ~= nil then scope[key], changed = value, true end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return changed
-end
+--- The field helpers, the text/status scope normalizers, the aura layout
+--- normalizer and the split-status migration are shared with
+--- State/MSUF_Defaults.lua through MSUF.StateHelpers. This pipeline always
+--- passes StateHelpers.ProfileIOSpec, which keeps the import-side semantics:
+--- empty strings are dropped, non-boolean inverse sources are coerced, and
+--- the wider import key sets are normalized. See the cross-reference note
+--- above MSUF_ProfileIO_TranslateProfileToCurrent for the Defaults twin.
 
 local function MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
     local auras = type(profile) == "table" and profile.auras3 or nil
@@ -2657,8 +1338,8 @@ local function MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
     if type(perUnit) ~= "table" then return false end
     for _, unitCfg in pairs(perUnit) do
         if type(unitCfg) == "table" then
-            if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout == nil then return true end
-            if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout == nil then return true end
+            if StateHelpers.TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout == nil then return true end
+            if StateHelpers.TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout == nil then return true end
         end
     end
     return false
@@ -2713,7 +1394,7 @@ end
 local function MSUF_ProfileIO_NormalizeLegacyRootNameShortening(profile, createGeneral)
     if type(profile) ~= "table" then return false end
     local changed = false
-    changed = MSUF_ProfileIO_CopyIfMissing(profile, "shortenNames", "nameShortenEnabled") or changed
+    changed = StateHelpers.CopyIfMissing(profile, "shortenNames", "nameShortenEnabled") or changed
     local general = profile.general
     if type(general) ~= "table" then
         if createGeneral == false then
@@ -2746,41 +1427,9 @@ local function MSUF_ProfileIO_NormalizeLegacyRootNameShortening(profile, createG
         general.shortenNameFrontMaskPx = profile.shortenNameFrontMaskPx
         changed = true
     end
-    changed = MSUF_ProfileIO_NormalizeNumberField(general, "shortenNameMaxChars", 0, 256) or changed
-    changed = MSUF_ProfileIO_NormalizeNumberField(general, "shortenNameFrontMaskPx", 0, 128) or changed
-    changed = MSUF_ProfileIO_UpperStringField(general, "shortenNameClipSide") or changed
-    return changed
-end
-
-local function MSUF_ProfileIO_NormalizeAuraLayoutTable(tbl)
-    if type(tbl) ~= "table" then return false end
-    local changed = false
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "maxBuffs", "maxIcons") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "maxDebuffs", "maxIcons") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "buffGroupIconSize", "buffIconSize") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "debuffGroupIconSize", "debuffIconSize") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "buffGroupIconSize", "iconSize") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "debuffGroupIconSize", "iconSize") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "buffGroupOffsetX", "buffOffsetX") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "buffGroupOffsetY", "buffOffsetY") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "debuffGroupOffsetX", "debuffOffsetX") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "debuffGroupOffsetY", "debuffOffsetY") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "buffGroupOffsetX", "offsetX") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "buffGroupOffsetY", "offsetY") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "debuffGroupOffsetX", "offsetX") or changed
-    changed = MSUF_ProfileIO_CopyNumberAliasIfMissing(tbl, "debuffGroupOffsetY", "offsetY") or changed
-    changed = MSUF_ProfileIO_CopyAuraGrowthAlias(tbl, "buffGrowth", "buffGrowthX", "buffGrowthY") or changed
-    changed = MSUF_ProfileIO_CopyAuraGrowthAlias(tbl, "debuffGrowth", "debuffGrowthX", "debuffGrowthY") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(tbl, "buffGrowthY", "buffRowWrap") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(tbl, "debuffGrowthY", "debuffRowWrap") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(tbl, "buffGrowthY", "rowWrap") or changed
-    changed = MSUF_ProfileIO_CopyIfMissing(tbl, "debuffGrowthY", "rowWrap") or changed
-    for key, limits in pairs(MSUF_PROFILEIO_AURA_NUMERIC_KEYS) do
-        changed = MSUF_ProfileIO_NormalizeNumberField(tbl, key, limits[1], limits[2]) or changed
-    end
-    for i = 1, #MSUF_PROFILEIO_AURA_STRING_KEYS do
-        changed = MSUF_ProfileIO_UpperStringField(tbl, MSUF_PROFILEIO_AURA_STRING_KEYS[i]) or changed
-    end
+    changed = StateHelpers.NormalizeNumberField(general, "shortenNameMaxChars", 0, 256) or changed
+    changed = StateHelpers.NormalizeNumberField(general, "shortenNameFrontMaskPx", 0, 128) or changed
+    changed = StateHelpers.UpperStringField(general, "shortenNameClipSide", true) or changed
     return changed
 end
 
@@ -3092,9 +1741,8 @@ local function MSUF_ProfileIO_ResetUnitAuras(profile)
         or sourceA2 and MSUF_ProfileIO_AuraResetSnapshotA2(sourceA2) or nil
     local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalUnitAuras)
         or _G.MSUF_CreateCanonicalUnitAuras
-    local ok, cleanAuras = MSUF_ProfileIO_RunProtected(
-        "canonical Unit Aura reset", createCanonical)
-    if not ok or type(cleanAuras) ~= "table" then
+    local cleanAuras = createCanonical()
+    if type(cleanAuras) ~= "table" then
         -- Never destroy the old data if the Defaults-owned factory is missing.
         -- The absent revision keeps this profile eligible for a retry.
         return false
@@ -3193,8 +1841,8 @@ end
 local function MSUF_ProfileIO_AuraResetCurrentGroupCount()
     local getter = _G.GetNumGroupMembers
     if type(getter) ~= "function" then return 0 end
-    local ok, value = pcall(getter)
-    if not ok then return 0 end
+    local value = getter()
+
     value = tonumber(value)
     if value == nil or value ~= value then return 0 end
     value = math.floor(value + 0.5)
@@ -3314,9 +1962,8 @@ local function MSUF_ProfileIO_ResetGroupAuras(profile, groupCount)
                 end
                 local snapshot = MSUF_ProfileIO_AuraResetSnapshotGroup(conf, scope, groupCount)
                 if canonical == nil then
-                    local ok, value = MSUF_ProfileIO_RunProtected(
-                        "canonical Group Aura reset", createCanonical, true)
-                    if ok and type(value) == "table" then canonical = value else canonical = false end
+                    local value = createCanonical(true)
+                    if type(value) == "table" then canonical = value else canonical = false end
                 end
                 local state = canonical and canonical[scope]
                 if type(state) == "table" and type(state.auras) == "table" then
@@ -3368,18 +2015,18 @@ local function MSUF_ProfileIO_NormalizeProfileAuras(profile)
     local auras = profile.auras3
     if type(auras) ~= "table" then return changed end
     local repairAuraOverrides = MSUF_ProfileIO_AuraOverridesNeedRepair(profile)
-    changed = MSUF_ProfileIO_NormalizeAuraLayoutTable(auras.shared) or changed
+    changed = StateHelpers.NormalizeAuraLayoutTable(auras.shared, StateHelpers.ProfileIOSpec) or changed
     if type(auras.perUnit) == "table" then
         for _, unitCfg in pairs(auras.perUnit) do
             if type(unitCfg) == "table" then
-                changed = MSUF_ProfileIO_NormalizeAuraLayoutTable(unitCfg.layout) or changed
-                changed = MSUF_ProfileIO_NormalizeAuraLayoutTable(unitCfg.layoutShared) or changed
+                changed = StateHelpers.NormalizeAuraLayoutTable(unitCfg.layout, StateHelpers.ProfileIOSpec) or changed
+                changed = StateHelpers.NormalizeAuraLayoutTable(unitCfg.layoutShared, StateHelpers.ProfileIOSpec) or changed
                 if repairAuraOverrides then
-                    if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout == nil then
+                    if StateHelpers.TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout == nil then
                         unitCfg.overrideLayout = true
                         changed = true
                     end
-                    if MSUF_ProfileIO_TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout == nil then
+                    if StateHelpers.TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout == nil then
                         unitCfg.overrideSharedLayout = true
                         changed = true
                     end
@@ -3390,6 +2037,8 @@ local function MSUF_ProfileIO_NormalizeProfileAuras(profile)
     return changed
 end
 
+--- Profile-side alias normalization pipeline (see the cross-reference note
+--- above MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION for its Defaults twin).
 MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     if type(profile) ~= "table" then return profile, false end
     context = type(context) == "table" and context or {}
@@ -3441,11 +2090,11 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
         if type(scope) == "table" then
             local isGroupScope = key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid"
             local inferFontOverride = key ~= "general"
-            changed = MSUF_ProfileIO_NormalizeTextScope(scope, isGroupScope, inferFontOverride) or changed
-            changed = MSUF_ProfileIO_NormalizeStatusScope(scope, isGroupScope) or changed
+            changed = StateHelpers.NormalizeTextScope(scope, isGroupScope, StateHelpers.ProfileIOSpec, inferFontOverride) or changed
+            changed = StateHelpers.NormalizeStatusScope(scope, isGroupScope, StateHelpers.ProfileIOSpec) or changed
         end
     end
-    changed = MSUF_ProfileIO_MigrateSplitStatusText(profile) or changed
+    changed = StateHelpers.MigrateSplitStatusText(profile, MSUF_PROFILEIO_TEXT_SCOPE_KEYS) or changed
     changed = MSUF_ProfileIO_NormalizeProfileAuras(profile) or changed
     changed = MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true) or changed
     local normalizeLayers = _G.MSUF_NormalizeNumericLayers
@@ -3486,70 +2135,7 @@ MSUF_ProfileIO_TranslateProfilesToCurrent = function(profiles, source)
 end
 
 --- Deterministic-ish Lua serializer (good enough for UI copy/paste strings).
-local function MSUF_SerializeLuaTable(root)
-    local function valToStr(v)
-        local tv = type(v)
-        if tv == "number" then
-            return tostring(v)
-        elseif tv == "boolean" then
-            return v and "true" or "false"
-        elseif tv == "string" then
-            return string.format("%q", v)
-        elseif tv == "table" then
-             return nil --- handled by serTable
-        else
-             return "nil"
-        end
-     end
-    local function keyToStr(k)
-        if type(k) == "string" and k:match("^[%a_][%w_]*$") then
-             return k
-        elseif type(k) == "number" or type(k) == "boolean" then
-            -- Preserve typed map keys in the no-codec Lua fallback. Quoting a
-            -- numeric Spec/Spell ID here silently turned [71] into ["71"] on
-            -- import and detached all geometry stored below that key.
-            return "[" .. tostring(k) .. "]"
-        else
-            return "[" .. string.format("%q", k) .. "]"
-        end
-     end
-    local function sortKeys(t)
-        local keys = {}
-        for k in pairs(t) do
-            keys[#keys + 1] = k
-        end
-        table.sort(keys, function(a, b)
-            local ta, tb = type(a), type(b)
-            if ta ~= tb then
-                return tostring(ta) < tostring(tb)
-            end
-            if ta == "number" then
-                return a < b
-            end
-            return tostring(a) < tostring(b)
-        end)
-         return keys
-    end
-    local function serTable(t, indent)
-        indent = indent or ""
-        local indent2 = indent .. "  "
-        local lines = {}
-        table.insert(lines, "{\n")
-        local keys = sortKeys(t)
-        for _, k in ipairs(keys) do
-            local v = t[k]
-            local kStr = keyToStr(k)
-            if type(v) == "table" then
-                table.insert(lines, indent2 .. kStr .. " = " .. serTable(v, indent2) .. ",\n")
-            else
-                table.insert(lines, indent2 .. kStr .. " = " .. valToStr(v) .. ",\n")
-            end
-        end
-        table.insert(lines, indent .. "}")
-        return table.concat(lines)
-    end
-    return "return " .. serTable(root, "")
-end
+
 --- Key classification for general settings.
 local function MSUF_IsColorKey(k)
     if type(k) ~= "string" then  return false end
@@ -3672,8 +2258,9 @@ local MSUF_UNITFRAME_LEGACY_ALPHA_KEYS = {
     "alphaFGInCombat", "alphaFGOutOfCombat", "alphaBGInCombat", "alphaBGOutOfCombat",
     "alphaHPInCombat", "alphaHPOutOfCombat", "alphaPreserveHPColor", "bgA", "hpTextIgnoreAlpha",
 }
-local function MSUF_ProfileIO_EnsureUnitframeAlphaDB()
-    if type(MSUF_DB) ~= "table" then  return end
+local function MSUF_ProfileIO_EnsureUnitframeAlphaDB(profile)
+    profile = profile or _G.MSUF_DB
+    if type(profile) ~= "table" then  return end
     local function ensureAlpha(conf)
         if type(conf) ~= "table" then  return end
         for i = 1, #MSUF_UNITFRAME_LEGACY_ALPHA_KEYS do
@@ -3686,10 +2273,10 @@ local function MSUF_ProfileIO_EnsureUnitframeAlphaDB()
         end
     end
     for _, unitKey in ipairs(MSUF_UNITFRAME_UNIT_KEYS) do
-        if type(MSUF_DB[unitKey]) ~= "table" then
-            MSUF_DB[unitKey] = {}
+        if type(profile[unitKey]) ~= "table" then
+            profile[unitKey] = {}
         end
-        ensureAlpha(MSUF_DB[unitKey])
+        ensureAlpha(profile[unitKey])
     end
  end
 local function MSUF_ProfileIO_EnsureGroupFramesDB()
@@ -4122,7 +2709,7 @@ end
 --- Blizzard Edit Mode data in profile strings is strictly opt-in, per
 --- direction: exports never carry general.blizzardEditModeSnapshot and
 --- imports never apply it unless the profiles-page switch is on. Both flags
---- are session-transient by design — the user decides per session.
+--- are session-transient by design â€” the user decides per session.
 local MSUF_ProfileIO_ExportBlizzardEM = false
 local MSUF_ProfileIO_ImportBlizzardEM = false
 ExportPublic("MSUF_Profiles_SetExportBlizzardEditMode", function(value)
@@ -4305,21 +2892,21 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
         local rebuilt = false
         for i = 1, #touchedKinds do
             local groupKind = touchedKinds[i]
-            local ok = MSUF_ProfileIO_RunProtected("GF.Rebuild(" .. tostring(groupKind) .. ")", gf.Rebuild, groupKind)
-            rebuilt = ok or rebuilt
+            gf.Rebuild(groupKind)
+            rebuilt = true
         end
         if rebuilt then return end
     elseif gf and type(gf.RefreshGeometry) == "function" then
         local refreshed = false
         for i = 1, #touchedKinds do
             local groupKind = touchedKinds[i]
-            local ok = MSUF_ProfileIO_RunProtected("GF.RefreshGeometry(" .. tostring(groupKind) .. ")", gf.RefreshGeometry, groupKind)
-            refreshed = ok or refreshed
+            gf.RefreshGeometry(groupKind)
+            refreshed = true
             if type(gf.RefreshUnitBindings) == "function" then
-                MSUF_ProfileIO_RunProtected("GF.RefreshUnitBindings(" .. tostring(groupKind) .. ")", gf.RefreshUnitBindings, groupKind)
+                gf.RefreshUnitBindings(groupKind)
             end
             if type(gf.RefreshVisuals) == "function" then
-                MSUF_ProfileIO_RunProtected("GF.RefreshVisuals(" .. tostring(groupKind) .. ")", gf.RefreshVisuals, groupKind, gf.DIRTY_ALL or gf.DIRTY_CONFIG or gf.DIRTY_VISUAL)
+                gf.RefreshVisuals(groupKind, gf.DIRTY_ALL or gf.DIRTY_CONFIG or gf.DIRTY_VISUAL)
             end
         end
         if refreshed then return end
@@ -4395,8 +2982,8 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if not snapshot then  return false, "not a table" end
     local valid, validationError = MSUF.ProfileIOValidateImportValue(snapshot)
     if not valid then return false, validationError end
-    local copied, stagedSnapshot = MSUF_ProfileIO_RunProtected("snapshot staging", MSUF_DeepCopy, snapshot)
-    if not copied or type(stagedSnapshot) ~= "table" then
+    local stagedSnapshot = MSUF_DeepCopy(snapshot)
+    if type(stagedSnapshot) ~= "table" then
         return false, "profile staging failed: " .. tostring(stagedSnapshot)
     end
     snapshot = MSUF_ProfileIO_SelectSupportedProfile(stagedSnapshot)
@@ -4566,38 +3153,21 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
     if type(payload.general) == "table"
         and type(payload.general.blizzardEditModeSnapshot) == "table" then
-        MSUF_ProfileIO_CallGlobal("MSUF_BlizzardEditMode_ApplyProfileSnapshot")
+        _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
     end
-    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
+    ApplyProfileRuntime("PROFILE_IMPORT", true)
     MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
     MSUF.ProfileIOCompleteFirstLoadImport()
      return true
 end
 function MSUF_ExportSelectionToString(kind)
     local snap = MSUF_SnapshotForKind(kind)
-    if not snap then
-         return nil
-    end
+    if not snap then return nil end
     local exportSnap, wagoExport = MSUF_ProfileIO_MakeWagoSnapshot(snap)
-    if wagoExport == true then
-        local enc3 = _G.MSUF_EncodeCompactTableMSUF3
-        if type(enc3) == "function" then
-            local compact = enc3(exportSnap)
-            if compact then
-                 return compact
-            end
-        end
-        return MSUF_SerializeLuaTable(exportSnap)
+    if wagoExport then
+        return _G.MSUF_EncodeCompactTableMSUF3(exportSnap)
     end
-    local enc = _G.MSUF_EncodeCompactTable
-    if type(enc) == "function" then
-        local compact = enc(snap)
-        if compact then
-             return compact
-        end
-    end
-    --- 0-regression fallback
-    return MSUF_SerializeLuaTable(snap)
+    return _G.MSUF_EncodeCompactTable(snap)
 end
 
 local function MSUF_ApplyFullProfileToActiveProfile(tbl)
@@ -4614,15 +3184,15 @@ local function MSUF_ApplyFullProfileToActiveProfile(tbl)
         print("|cffff0000MSUF:|r Profile import failed: " .. tostring(validationError))
         return false
     end
-    local prepared, staged = MSUF_ProfileIO_RunProtected("profile import staging", function()
+    local staged = (function()
         local copy = MSUF_DeepCopy(tbl)
         MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
             source = "profile_import",
             markProfile = true,
         })
         return copy
-    end)
-    if not prepared or type(staged) ~= "table" then
+    end)()
+    if type(staged) ~= "table" then
         print("|cffff0000MSUF:|r Profile import failed during staging: " .. tostring(staged))
         return false
     end
@@ -4649,7 +3219,7 @@ local function MSUF_ApplyFullProfileToActiveProfile(tbl)
     MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
-    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
+    ApplyProfileRuntime("PROFILE_IMPORT", true)
     MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
     print("|cff00ff00MSUF:|r Profile imported into the active profile.")
     MSUF_ProfileIO_ReportImportWarnings()
@@ -4692,7 +3262,7 @@ function MSUF_ImportFromString(str)
         print("|cffff0000MSUF:|r Import failed: could not decode compact profile string (" .. prefix .. ").")
          return false
     end
-    local func, err = MSUF_ProfileIO_LoadTableLiteral(str)
+    local func, err = MSUF.ProfileIOLoadTableLiteral(str)
     if not func then
         print("|cffff0000MSUF:|r Import failed: " .. tostring(err))
          return false
@@ -4731,14 +3301,7 @@ function MSUF_ImportFromString(str)
 --- ok, strOrErr = MSUF_ExportExternal(profileKey)
 --- ok, errOrNil = MSUF_ImportExternal(profileString, profileKey)
 ---
-local function MSUF_ProfileIO_EnsureProfilesTable()
-    if not MSUF_GlobalDB or type(MSUF_GlobalDB) ~= "table" then
-        MSUF_GlobalDB = {}
-    end
-    if type(MSUF_GlobalDB.profiles) ~= "table" then
-        MSUF_GlobalDB.profiles = {}
-    end
- end
+
 local function MSUF_ProfileIO_EnsureProfileSystemInitialized()
     MSUF_ProfileIO_RunEnsureDB()
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
@@ -4749,8 +3312,6 @@ local function MSUF_ProfileIO_EnsureProfileSystemInitialized()
         or type(profiles[active]) ~= "table"
     if needsInit and type(MSUF_InitProfiles) == "function" then
         MSUF_InitProfiles()
-    elseif MSUF_ProfileIO_TranslateProfilesToCurrent then
-        MSUF_ProfileIO_TranslateProfilesToCurrent(profiles, "external_api")
     end
 end
 local function MSUF_ProfileIO_GetProfileTable(profileKey)
@@ -4758,81 +3319,19 @@ local function MSUF_ProfileIO_GetProfileTable(profileKey)
          return nil
     end
     MSUF_ProfileIO_EnsureProfileSystemInitialized()
-    MSUF_ProfileIO_EnsureProfilesTable()
     return MSUF_GlobalDB.profiles[profileKey]
 end
-local function MSUF_ProfileIO_WithTemporaryProfileDB(profile, fn)
-    if type(profile) ~= "table" or type(fn) ~= "function" then
-        return false, "invalid temporary profile"
-    end
-    local oldDB = MSUF_DB
-    local auras3 = MSUF and MSUF.MSUF_Auras3
-    local oldAuras3DBRef = type(auras3) == "table" and auras3.DBRef or nil
-    local oldSuppressRuntimeSideEffects = _G.MSUF_ProfileIO_SuppressRuntimeSideEffects
-    ExportPublic("MSUF_ProfileIO_SuppressRuntimeSideEffects", true)
-    MSUF_DB = profile
 
-    -- This is a real transaction boundary: every exit path must restore the
-    -- active DB pointer and subsystem references before an error is reported.
-    local runOK, result = pcall(fn)
-
-    MSUF_DB = oldDB
-    ExportPublic("MSUF_ProfileIO_SuppressRuntimeSideEffects", oldSuppressRuntimeSideEffects)
-    if type(auras3) == "table" then
-        auras3.DBRef = oldAuras3DBRef
-    end
-
-    local cacheOK, cacheError = true, nil
-    local invalidateGF = _G.MSUF_GF_InvalidateConfCache
-    if type(invalidateGF) == "function" then
-        cacheOK, cacheError = MSUF_ProfileIO_RunProtected("GF.InvalidateConfCache", invalidateGF)
-    else
-        local gf = MSUF and MSUF.GF
-        if gf and type(gf.InvalidateConfCache) == "function" then
-            cacheOK, cacheError = MSUF_ProfileIO_RunProtected("GF.InvalidateConfCache", gf.InvalidateConfCache)
-        end
-    end
-
-    if not runOK then
-        MSUF_ProfileIO_ReportBoundaryError("temporary profile materialization", result)
-        return false, result
-    end
-    if not cacheOK then return false, cacheError end
-    return true, result
-end
 local function MSUF_ProfileIO_MaterializeProfileCopyForExport(profile, profileKey)
-    if type(profile) ~= "table" then
-        return nil, "not a table"
-    end
+    if type(profile) ~= "table" then return nil, "not a table" end
     MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
-        source = "external_export",
-        markProfile = true,
-        trustNormalizationMarker = true,
+        source = "external_export", markProfile = true, trustNormalizationMarker = true,
     })
-    if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
-        _G.MSUF_NormalizePortraitRenderDB(profile)
-    end
-    local materialized, why = MSUF_ProfileIO_WithTemporaryProfileDB(profile, function()
-        --- The exported table is a private copy. Let Defaults use its persisted
-        --- revision fast path; missing/stale revisions still run the full pass.
-        MSUF_ProfileIO_RunEnsureDB(false, true, true)
-        MSUF_ProfileIO_EnsureUnitframeAlphaDB()
-        MSUF_ProfileIO_EnsureGroupFramesDB()
-        local auras = MSUF and MSUF.MSUF_Auras3
-        if auras then
-            if type(auras.EnsureDB) == "function" then
-                auras.EnsureDB()
-            end
-            local aurasDB = auras.DB
-            if aurasDB and type(aurasDB.Ensure) == "function" then
-                aurasDB.Ensure()
-            end
-        end
-    end)
-    if not materialized then
-        ExportPublic("MSUF_ProfileIO_LastExportMaterializeError", tostring(profileKey or "profile") .. ": " .. tostring(why))
-        return nil, "profile materialization failed: " .. tostring(why)
-    end
+    _G.MSUF_NormalizePortraitRenderDB(profile)
+    _G.MSUF_NormalizeProfileDefaults(profile, false, true)
+    MSUF_ProfileIO_EnsureUnitframeAlphaDB(profile)
+    MSUF.GF.RepairGroupDB(profile)
+    MSUF.MSUF_Auras3.NormalizeProfileDB(profile)
     return profile
 end
 local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
@@ -4844,7 +3343,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
     end
     local valid, validationError = MSUF.ProfileIOValidateImportValue(newTable)
     if not valid then return false, validationError end
-    local prepared, staged = MSUF_ProfileIO_RunProtected("external import staging", function()
+    local staged = (function()
         local copy = MSUF_DeepCopy(newTable)
         MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
             source = "external_import",
@@ -4857,14 +3356,13 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
             _G.MSUF_MigrateDispelPriorityProfile(copy, true)
         end
         return copy
-    end)
-    if not prepared or type(staged) ~= "table" then
+    end)()
+    if type(staged) ~= "table" then
         return false, "profile staging failed: " .. tostring(staged)
     end
     newTable = staged
     MSUF_ProfileIO_CollectProfileMediaWarnings(newTable)
     MSUF_ProfileIO_EnsureProfileSystemInitialized()
-    MSUF_ProfileIO_EnsureProfilesTable()
     local existing = MSUF_GlobalDB.profiles[profileKey]
     local isActive = (profileKey == MSUF_ActiveProfile)
     if isActive and type(MSUF_DB) ~= "table" and type(existing) == "table" then
@@ -4885,7 +3383,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
-        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_EXTERNAL_IMPORT", true)
+        ApplyProfileRuntime("PROFILE_EXTERNAL_IMPORT", true)
         MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_EXTERNAL_IMPORT", profileKey, target)
         MSUF_ProfileIO_ReportImportWarnings()
         return true
@@ -4937,15 +3435,7 @@ function MSUF_ExportExternal(profileKey)
         payload = MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload),
     }
     local exportSnap = MSUF_ProfileIO_MakeWagoSnapshot(snap)
-    local enc = _G.MSUF_EncodeCompactTableMSUF3
-    if type(enc) == "function" then
-        local compact = enc(exportSnap)
-        if type(compact) == "string" and compact:match("%S") then
-             return true, compact
-        end
-    end
-    --- 0-regression fallback (rare): return Lua snapshot.
-    return true, MSUF_SerializeLuaTable(exportSnap)
+    return true, _G.MSUF_EncodeCompactTableMSUF3(exportSnap)
 end
 function MSUF_ImportExternal(profileString, profileKey)
     MSUF_ProfileIO_ResetImportWarnings()
@@ -4979,7 +3469,7 @@ function MSUF_ImportExternal(profileString, profileKey)
         return false, "could not decode compact profile string (" .. tostring(prefix) .. ")"
     end
     --- Safe table-literal support for schema-600 text snapshots.
-    local func = MSUF_ProfileIO_LoadTableLiteral(profileString)
+    local func = MSUF.ProfileIOLoadTableLiteral(profileString)
     if not func then
          return false, "invalid lua table string"
     end

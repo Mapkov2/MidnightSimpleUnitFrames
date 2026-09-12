@@ -173,9 +173,7 @@ A3._HasDirectIdentityRefreshContainers = function()
     return false
 end
 
-A3._IsGroupUnitToken = function(unit)
-    return type(unit) == "string" and (unit:match("^party%d+$") ~= nil or unit:match("^raid%d+$") ~= nil)
-end
+A3._IsGroupUnitToken = _G.MSUF_IsGroupUnitToken
 
 A3._DirectIdentityRefreshUnitEligible = function(unit)
     if A3._directIdentityRefreshUnits[unit] == true then return true end

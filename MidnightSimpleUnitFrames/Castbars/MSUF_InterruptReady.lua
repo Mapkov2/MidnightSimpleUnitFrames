@@ -8,10 +8,7 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local SpellAPI = _G.C_Spell
 local TimerAPI = _G.C_Timer
@@ -130,7 +127,7 @@ local function GeneralDB()
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 end
 
-local plainIsSecret = _G.issecretvalue or function(_) return false end
+local plainIsSecret = _G.issecretvalue
 local plainHuge = math.huge
 
 local function HasKnownValue(value)
@@ -142,12 +139,10 @@ local function HasKnownValue(value)
 end
 
 local function PlainNumber(value)
-    if plainIsSecret(value) == true then
-        local toPlain = _G.ToPlain
-        if type(toPlain) ~= "function" then return nil end
-        value = toPlain(value)
-        if plainIsSecret(value) == true then return nil end
-    end
+    -- A secret has no plain reading here: the client exposes no unwrap helper
+    -- (there is no ToPlain in the 12.1 API), so secrets report "unknown" and
+    -- the callers fall back to their own defaults.
+    if plainIsSecret(value) == true then return nil end
 
     if value == nil then
         return nil
@@ -441,11 +436,6 @@ local function ResolveStatus(status)
         return status.ready
     end
 
-    local ready = InterruptStatus()
-    return ready
-end
-
-local function InterruptReady()
     local ready = InterruptStatus()
     return ready
 end

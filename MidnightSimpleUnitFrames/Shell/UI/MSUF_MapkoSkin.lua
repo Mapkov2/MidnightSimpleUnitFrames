@@ -2,7 +2,7 @@
 local _, MSUF = ...
 local Skin = {}
 MSUF.MenuSkin = Skin
-local api, client, active, refreshing
+local api, client, active
 local events
 local appearance = {}
 local records = setmetatable({}, { __mode = "k" })
@@ -10,7 +10,6 @@ local texts = setmetatable({}, { __mode = "k" })
 local palettes = setmetatable({}, { __mode = "k" })
 local groups = setmetatable({}, { __mode = "k" })
 local unpack = unpack
-
 local tokens = {
     bg = "background", popup = "popup", panel = "surface", panelNav = "ink", panel2 = "raised",
     card = "card", header = "surface", border = "border", borderSoft = "borderSoft", cardBorder = "borderSoft",
@@ -194,15 +193,11 @@ function Skin.IsActive() return active == true end
 function Skin.Owns(target) return active == true and records[target] and records[target].skinned == true end
 
 local function Repaint(target, record)
-    local ok, message = pcall(record.paint, target, record.a, record.b)
-    if not ok then
-        local handler = geterrorhandler and geterrorhandler()
-        if handler then pcall(handler, "MSUF MapkoSkin repaint: " .. tostring(message)) end
-    end
+    record.paint(target, record.a, record.b)
 end
 
 function Skin.Refresh(_, domain, key)
-    if not api or refreshing then return end
+    if not api then return end
     if domain and domain ~= "ready" and domain ~= "profile" and domain ~= "color" and domain ~= "theme"
         and domain ~= "appearance" and domain ~= "geometry" and domain ~= "windowAction"
         and not (domain == "adapter" and key == "master") then return end
@@ -211,7 +206,6 @@ function Skin.Refresh(_, domain, key)
         if events then events:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return
     end
-    refreshing = true
     active = api:IsEnabled() and not (MSUF_DB and MSUF_DB.general and MSUF_DB.general.mapkoSkinMenus == false)
     appearance = api:GetAppearanceSnapshot()
     for color, entry in pairs(palettes) do PaintPalette(color, entry) end
@@ -231,7 +225,7 @@ function Skin.Refresh(_, domain, key)
         target._msuf2SliderVisualReady = nil
         if record.paint then Repaint(target, record) end
     end
-    refreshing, Skin.pending = false, nil
+    Skin.pending = nil
     if events then events:UnregisterEvent("PLAYER_REGEN_ENABLED") end
 end
 

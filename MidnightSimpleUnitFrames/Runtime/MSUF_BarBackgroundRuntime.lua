@@ -10,10 +10,7 @@
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Bars = MSUF.Bars or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local type, tonumber = type, tonumber
 local UnitClass = _G.UnitClass
@@ -110,11 +107,7 @@ do
     EnsureLegacyCooldownViewerAnchor()
 end
 
-local function EnsureDBSafe()
-    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
-        (_G.MSUF_EnsureDB)()
-    end
-end
+local EnsureDBSafe = MSUF.Util.EnsureDBSafe
 
 local function MSUF_Clamp01(v)
     v = tonumber(v)
@@ -124,14 +117,7 @@ local function MSUF_Clamp01(v)
     return v
 end
 
-local function MSUF_IsSecretValue(value)
-    local fn = issecretvalue
-    if type(fn) ~= "function" then
-        fn = _G.issecretvalue
-        if type(fn) == "function" then issecretvalue = fn end
-    end
-    return type(fn) == "function" and fn(value) == true
-end
+local MSUF_IsSecretValue = _G.issecretvalue
 
 local function MSUF_HasAnySecretColor(r, g, b)
     if type(hasanysecretvalues) == "function" then

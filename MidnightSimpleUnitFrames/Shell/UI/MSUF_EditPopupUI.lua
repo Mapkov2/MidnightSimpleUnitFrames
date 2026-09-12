@@ -44,7 +44,7 @@ local C = {
     checkEdge = { 0.255, 0.455, 0.835, 0.90 },
 }
 
-local BOX_W    = 52
+
 local BOX_H    = 24
 local STEP_W   = 20
 
@@ -227,6 +227,10 @@ local Quick = Menu2Style.QuickPopup
 if type(Quick) ~= "table" then Quick = {} end
 Menu2Style.QuickPopup = Quick
 EM2.QuickPopup = Quick
+function Quick.CaptureSizeRatio(pf)
+    local width, height = tonumber(pf.wBox:GetText()), tonumber(pf.hBox:GetText())
+    if width and height and height > 0 then pf._sizeRatio = width / height end
+end
 
 local QC = {
     panelBg = { 0.03, 0.05, 0.12, 0.95 },

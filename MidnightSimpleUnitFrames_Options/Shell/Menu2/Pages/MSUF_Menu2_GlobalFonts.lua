@@ -16,7 +16,13 @@ local max = math.max
 local min = math.min
 local SHADOW_OPACITY_APPLY_DELAY = 0.18
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
-local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, ScopeWrite, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, FontOutlineGetFor, FontOutlineSetFor, FontShadowMetricsFor, FontTextColorModeGetFor, FontTextColorModeSetFor, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta, RegisterControl = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride ScopeWrite CurrentFontScope IsGFScope FontScopeGet FontScopeSet FontOutlineGetFor FontOutlineSetFor FontShadowMetricsFor FontTextColorModeGetFor FontTextColorModeSetFor NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta RegisterControl]])
+local DB, G, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride = GP.DB, GP.G, GP.NormalizeScopeKey, GP.ScopeDBKeys, GP.ScopeHasOverride
+local ScopeSetOverride, ScopeWrite, CurrentFontScope, IsGFScope = GP.ScopeSetOverride, GP.ScopeWrite, GP.CurrentFontScope, GP.IsGFScope
+local FontScopeGet, FontScopeSet, FontOutlineGetFor, FontOutlineSetFor = GP.FontScopeGet, GP.FontScopeSet, GP.FontOutlineGetFor, GP.FontOutlineSetFor
+local FontShadowMetricsFor, FontTextColorModeGetFor = GP.FontShadowMetricsFor, GP.FontTextColorModeGetFor
+local FontTextColorModeSetFor, NormalizeFontKey, FontValues, FontKeyGet = GP.FontTextColorModeSetFor, GP.NormalizeFontKey, GP.FontValues, GP.FontKeyGet
+local FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts = GP.FontKeySet, GP.SetControlEnabled, GP.SetControlsEnabled, GP.ApplyFonts
+local ControlMeta = GP.ControlMeta
 local FONT_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["name_shortening.enabled"] = { "gf_party.nameShortenEnabled", "gf_raid.nameShortenEnabled" },
     ["name_shortening.style"] = { "gf_party.nameClipSide", "gf_raid.nameClipSide" },
@@ -112,20 +118,7 @@ local function NormalizeBaselineOffset(value)
     if value > 4 then return 4 end
     return value
 end
-local function ComposeFontFlags(outline, monochrome, slug)
-    local flags = ""
-    outline = tostring(outline or "OUTLINE"):upper()
-    if slug == true then
-        return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
-    end
-    if outline == "THICKOUTLINE" then
-        flags = "THICKOUTLINE"
-    elseif outline ~= "NONE" and outline ~= "" then
-        flags = "OUTLINE"
-    end
-    if monochrome == true then flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME" end
-    return flags
-end
+local ComposeFontFlags = _G.MSUF_ComposeFontFlags
 local function ConfiguredFontColorPreview(scope)
     scope = NormalizeScopeKey(scope or CurrentFontScope())
     local getFor = GP.FontScopeGetFor
@@ -292,9 +285,8 @@ local function ApplyPreviewFont(fs)
     if type(resolveSafe) == "function" then path = resolveSafe(path, size, flags, key) end
     local applyScaleMode = _G.MSUF_ApplyFontScaleAnimationMode
     if type(applyScaleMode) == "function" then applyScaleMode(fs, flags) end
-    local ok = pcall(fs.SetFont, fs, path, size, flags)
-    if not ok then
-        pcall(fs.SetFont, fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, flags)
+    if not _G.MSUF_SetFontChecked(fs, path, size, flags) then
+        _G.MSUF_SetFontChecked(fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, flags)
     end
     local c = ConfiguredFontColorPreview()
     c[4] = NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1))
@@ -416,13 +408,7 @@ local function BuildFonts(ctx)
         return active
     end
     local function RefreshFontsPage(reason)
-        if M.RequestRefresh then
-            M.RequestRefresh(ctx, reason)
-        elseif M.Refresh then
-            M.Refresh(ctx)
-        elseif M.SelectPage then
-            M.SelectPage(ctx.key)
-        end
+        M.RequestRefresh(ctx, reason)
     end
     GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
@@ -520,7 +506,7 @@ local function BuildFonts(ctx)
         M.BindSegment(ctx, control, getValue, function(v)
             setValue(v)
             RefreshFontPreview()
-            M.CallIf(afterSet)
+            if afterSet then afterSet() end
         end, Meta(path))
         return control
     end

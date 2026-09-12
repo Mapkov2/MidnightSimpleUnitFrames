@@ -14,6 +14,7 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     _G.WOW_PROJECT_ID = ({ Vanilla = 2, TBC = 5, Mists = 19, Mainline = 1 })[flavor]
     local ns = {}
     assert(loadfile(core .. "Game/Shared/Initialize.lua"))("MSUF", ns)
+    assert(loadfile(core .. "Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("MSUF", ns)
     assert(loadfile(core .. "Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))("MSUF", ns)
     assert(loadfile(options .. "MSUF_OptionsLOD_Bootstrap.lua"))("Options", {})
     local menu = ns.MSUF2

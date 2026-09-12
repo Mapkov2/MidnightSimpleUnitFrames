@@ -3,12 +3,8 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local PA = MSUF.PreviewAnimation or {}
 MSUF.PreviewAnimation = PA
@@ -34,15 +30,7 @@ local PREVIEW_NAME_LABELS = {
   pet = "Pet Name Position",
 }
 
-local function CoreFrame(unit)
-  local uf = MSUF and MSUF.UF
-  if uf and type(uf.GetFrame) == "function" then
-    local frame = uf.GetFrame(unit)
-    if frame then return frame end
-  end
-  local frames = uf and uf.frames
-  return unit and frames and frames[unit] or nil
-end
+local CoreFrame = MSUF.UF.GetFrame
 local CASTBAR_PREVIEWS = {
   { name = "MSUF_PlayerCastbarPreview", unit = "player", label = "Test Cast" },
   { name = "MSUF_TargetCastbarPreview", unit = "target", label = "Test Cast" },

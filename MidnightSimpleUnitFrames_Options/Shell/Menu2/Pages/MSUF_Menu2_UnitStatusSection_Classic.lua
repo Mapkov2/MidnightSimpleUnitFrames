@@ -288,7 +288,6 @@ local function BuildStatus(ctx, builder, unit)
         function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
         function(value)
             SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = false, notify = false })
-            Call("MSUF_SetStatusIconStyleUseMidnight", value and true or false)
             Call("MSUF_RequestStatusIconsRefreshForCurrent")
         end)
     RegisterStatusSearch(midnight, "Status indicator style", {

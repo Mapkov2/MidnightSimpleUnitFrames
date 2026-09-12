@@ -6,9 +6,12 @@
 --- from menu/edit code.
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
+local ExportPublic = MSUF.ExportPublic
 
 local type = type
 local tostring = tostring
+-- Canonical factories can be absent during bootstrap; a present factory is
+-- our own provider and a programming error must propagate.
 
 local function DeepCopy(value, seen)
     if type(value) ~= "table" then return value end
@@ -43,8 +46,8 @@ local function NewPlayerDefensiveContainer()
             and MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer)
         or _G.MSUF_CreateCanonicalPlayerDefensiveAuraContainer
     if type(createCanonical) == "function" then
-        local ok, item = pcall(createCanonical)
-        if ok and type(item) == "table" then return item end
+        local item = createCanonical()
+        if type(item) == "table" then return item end
     end
     return {
         enabled = true,
@@ -192,12 +195,40 @@ if type(A3) ~= "table" then
     MSUF.MSUF_Auras3 = A3
 end
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 ExportPublic("MSUF_Auras3", A3)
+
+-- Native aura runtime failures are recorded on A3.nativeAuraRuntimeError so
+-- diagnostics and smokes can read them, but nothing ever showed them: a
+-- Blizzard_AuraContainer that refuses to load, a missing container template,
+-- a container short of its method contract or a filter string Blizzard
+-- rejects leaves the affected lanes dark with no message. Each distinct
+-- failure is handed to the shared error boundary once per session. Clients
+-- expected to lack the 12.1 aura runtime stay silent: a pre-12.1 build is
+-- already told by the client version warning, and a non-Mainline project
+-- never had it.
+local reportedNativeAuraRuntimeErrors = {}
+local function NativeAuraRuntimeExpected()
+    local warning = MSUF.ClientVersionWarning
+    if type(warning) == "table" and type(warning.IsLegacyClient) == "function"
+        and warning.IsLegacyClient() == true then
+        return false
+    end
+    local projectID, mainlineID = _G.WOW_PROJECT_ID, _G.WOW_PROJECT_MAINLINE
+    if projectID ~= nil and mainlineID ~= nil and projectID ~= mainlineID then return false end
+    return true
+end
+function A3._RecordNativeAuraRuntimeError(message)
+    A3.nativeAuraRuntimeError = message
+    if reportedNativeAuraRuntimeErrors[message] then return message end
+    reportedNativeAuraRuntimeErrors[message] = true
+    local report = MSUF.ReportError or _G.MSUF_ReportError
+    if type(report) == "function" and NativeAuraRuntimeExpected() then
+        report("Auras3", message)
+    end
+    return message
+end
 
 A3.addonName = addonName
 A3.embedTarget = (type(MSUF.UFCore) == "table" and MSUF.UFCore.embedTarget) or addonName
@@ -231,67 +262,31 @@ local function EnsureRootDB()
     return db
 end
 
-function A3.EnsureDB()
-    local db = EnsureRootDB()
+function A3.NormalizeProfileDB(db)
+    if type(db.auras2) == "table" then
+        _G.MSUF_ProfileIO_TranslateProfileToCurrent(db, { source = "auras3_core", markProfile = true })
+    end
     local current = db.auras3
-    if type(db.auras2) == "table" then
-        local translate = _G.MSUF_ProfileIO_TranslateProfileToCurrent
-        if type(translate) == "function" then
-            translate(db, { source = "auras3_core", markProfile = true })
-            current = db.auras3
-        end
+    if type(current) ~= "table" then
+        current = MSUF.MSUF_CreateCanonicalUnitAuras()
+        db.auras3 = current
     end
-
-    if type(current) == "table" then
-        if next(current) == nil and type(db.auras2) == "table" then
-            current = db.auras2
-            db.auras3 = current
-            current._msufAuras3TranslatedFromLegacyAuras2 = true
-        end
-        db.auras2 = nil
-        current._msufAurasRuntime = nil
-        local materialize = (type(MSUF) == "table" and MSUF.MSUF_MaterializeUnitAuraLaneOwners)
-            or _G.MSUF_MaterializeUnitAuraLaneOwners
-        if type(materialize) == "function" then materialize(current) end
-        if tonumber(current.profileModelRevision) and tonumber(current.profileModelRevision) >= 1 then
-            -- Canonical profiles already use frame-owned Aura lists. Running
-            -- the retired fan-out would only repopulate compatibility records
-            -- and migration markers in a freshly reset tree.
-            current._msufA3FrameOwnedLists_v1 = nil
-        else
-            MigrateFrameOwnedAuraLists(current)
-        end
-        EnsurePlayerDefensiveProfileDefault(db, current)
-        A3.DBRef = current
-        return current, current.shared
-    end
-
-    if type(db.auras2) == "table" then
-        current = db.auras2
-    else
-        local createCanonical = (type(MSUF) == "table" and MSUF.MSUF_CreateCanonicalUnitAuras)
-            or _G.MSUF_CreateCanonicalUnitAuras
-        if type(createCanonical) == "function" then
-            local ok, value = pcall(createCanonical)
-            current = ok and type(value) == "table" and value or {}
-        else
-            current = {}
-        end
-    end
-    db.auras3 = current
     db.auras2 = nil
     current._msufAurasRuntime = nil
-    local materialize = (type(MSUF) == "table" and MSUF.MSUF_MaterializeUnitAuraLaneOwners)
-        or _G.MSUF_MaterializeUnitAuraLaneOwners
-    if type(materialize) == "function" then materialize(current) end
+    MSUF.MSUF_MaterializeUnitAuraLaneOwners(current)
     if tonumber(current.profileModelRevision) and tonumber(current.profileModelRevision) >= 1 then
         current._msufA3FrameOwnedLists_v1 = nil
     else
         MigrateFrameOwnedAuraLists(current)
     end
     EnsurePlayerDefensiveProfileDefault(db, current)
-    A3.DBRef = current
     return current, current.shared
+end
+
+function A3.EnsureDB()
+    local current, shared = A3.NormalizeProfileDB(EnsureRootDB())
+    A3.DBRef = current
+    return current, shared
 end
 
 function A3.BackendEnabled()
@@ -404,3 +399,128 @@ end
 function A3.BuildAuraLaneMetrics()
     return nil
 end
+
+-- Shared configuration rule. Runtime and both menu layers bind this once.
+local function NormalizeDebuffTypeBorderMode(value, fallback)
+    if value == true then return "SYMBOL" end
+    if value == false then return "OFF" end
+    value = tostring(value or ""):upper()
+    if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+    if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+        or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+        return "SYMBOL"
+    end
+    if value == "OFF" or value == "NONE" or value == "DISABLED" then return "OFF" end
+    return fallback or "OFF"
+end
+A3.NormalizeDebuffTypeBorderMode = NormalizeDebuffTypeBorderMode
+ExportPublic("MSUF_NormalizeAuraDebuffTypeBorderMode", NormalizeDebuffTypeBorderMode)
+
+-- Legacy group flags intentionally retain their own fallback semantics.
+local function NormalizeDispelBorderMode(value, legacyEnabled)
+  if value == true then return "SYMBOL" end
+  if value == false then return "OFF" end
+  value = tostring(value or ""):upper()
+  if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+  if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+    or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+    return "SYMBOL"
+  end
+  if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
+  return legacyEnabled == true and "SYMBOL" or "OFF"
+end
+A3.NormalizeLegacyDispelBorderMode = NormalizeDispelBorderMode
+ExportPublic("MSUF_NormalizeLegacyDispelBorderMode", NormalizeDispelBorderMode)
+
+local AuraStrataIsSecret = _G.issecretvalue
+local function SyncFrameStrata(frame, strata)
+    if not (frame and frame.SetFrameStrata) then return false end
+    if AuraStrataIsSecret(strata) == true then return false end
+    if strata == nil or strata == "" then return false end
+    local cachedStrata = frame._msufA3FrameStrata
+    if AuraStrataIsSecret(cachedStrata) ~= true and cachedStrata == strata then return false end
+    frame._msufA3FrameStrata = strata
+    local currentStrata
+    if frame.GetFrameStrata then currentStrata = frame:GetFrameStrata() end
+    if AuraStrataIsSecret(currentStrata) == true or currentStrata ~= strata then
+        frame:SetFrameStrata(strata)
+        return true
+    end
+    return false
+end
+A3.SyncFrameStrata = SyncFrameStrata
+ExportPublic("MSUF_AuraSyncFrameStrata", SyncFrameStrata)
+
+local function AnchorOffset(anchor, w, h)
+    w = tonumber(w) or 0
+    h = tonumber(h) or 0
+    anchor = tostring(anchor or "TOPLEFT")
+    if anchor == "TOPLEFT" then return 0, h end
+    if anchor == "TOP" then return w * 0.5, h end
+    if anchor == "TOPRIGHT" then return w, h end
+    if anchor == "LEFT" then return 0, h * 0.5 end
+    if anchor == "CENTER" then return w * 0.5, h * 0.5 end
+    if anchor == "RIGHT" then return w, h * 0.5 end
+    if anchor == "BOTTOMLEFT" then return 0, 0 end
+    if anchor == "BOTTOM" then return w * 0.5, 0 end
+    if anchor == "BOTTOMRIGHT" then return w, 0 end
+    return 0, h
+end
+A3.AnchorOffset = AnchorOffset
+ExportPublic("MSUF_AuraAnchorOffset", AnchorOffset)
+
+local function PaddingInset(anchor, pad)
+    pad = tonumber(pad) or 0
+    if pad == 0 then return 0, 0 end
+    anchor = tostring(anchor or "TOPLEFT")
+    local dx = anchor:find("LEFT", 1, true) and pad or (anchor:find("RIGHT", 1, true) and -pad or 0)
+    local dy = anchor:find("BOTTOM", 1, true) and pad or (anchor:find("TOP", 1, true) and -pad or 0)
+    return dx, dy
+end
+A3.PaddingInset = PaddingInset
+ExportPublic("MSUF_AuraPaddingInset", PaddingInset)
+
+local function NormalizeDispelTrigger(value)
+    if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then return "BY_RAID" end
+    if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
+    if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
+    return "BY_ME"
+end
+A3.NormalizeDispelTrigger = NormalizeDispelTrigger
+ExportPublic("MSUF_NormalizeDispelBorderTrigger", NormalizeDispelTrigger)
+
+local function SpellIDFromKey(value)
+    value = tostring(value or "")
+    local id = tonumber(value:match("spell:(%d+)") or value:match("#(%d+)") or value:match("^(%d+)$"))
+    return id and math.floor(id + 0.5) or nil
+end
+A3.SpellIDFromKey = SpellIDFromKey
+ExportPublic("MSUF_AuraSpellIDFromKey", SpellIDFromKey)
+
+local function ButtonAnchor(xSign, ySign)
+    if ySign > 0 then
+        return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT"
+    end
+    return xSign < 0 and "TOPRIGHT" or "TOPLEFT"
+end
+A3.ButtonAnchor = ButtonAnchor
+ExportPublic("MSUF_AuraButtonAnchor", ButtonAnchor)
+
+local function ReadParentFrameStrata(parentFrame)
+    local strata
+    if parentFrame and parentFrame.GetFrameStrata then strata = parentFrame:GetFrameStrata() end
+    if AuraStrataIsSecret(strata) == true then return nil end
+    return strata
+end
+A3.ReadParentFrameStrata = ReadParentFrameStrata
+ExportPublic("MSUF_AuraReadParentFrameStrata", ReadParentFrameStrata)
+
+local function TableHasAnyKey(tbl, keys)
+    if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
+    for key in pairs(keys) do
+        if tbl[key] ~= nil then return true end
+    end
+    return false
+end
+A3.TableHasAnyKey = TableHasAnyKey
+ExportPublic("MSUF_AuraTableHasAnyKey", TableHasAnyKey)

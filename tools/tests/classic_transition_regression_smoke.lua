@@ -12,6 +12,7 @@ end
 local source = Read("MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua")
 local now, scheduled, hidden, cancelled = 0, {}, 0, 0
 local env = setmetatable({
+    GetTime = function() return now end,
     CancelScheduled = function(cb) scheduled[cb] = nil; cancelled = cancelled + 1 end,
     ScheduleDelayed = function(cb, delay) scheduled[cb] = now + delay end,
     HidePlayerFrameIfNoLongerCasting = function() hidden = hidden + 1 end,

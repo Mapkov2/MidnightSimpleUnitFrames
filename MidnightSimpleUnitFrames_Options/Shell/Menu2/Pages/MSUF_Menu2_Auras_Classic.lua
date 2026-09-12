@@ -3942,7 +3942,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
                         secretCount = s._unreadable or 0,
                     }
                     if reopen and not (M.BlockCombatAction and M.BlockCombatAction()) then
-                        M.CallIf(M.Open, s._returnPage)
+                        M.Open(s._returnPage)
                     end
                 end
                 s.stopBtn:SetScript("OnClick", function()
@@ -4023,7 +4023,7 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
             if s.hint then s.hint:Hide() end
             for i = 1, #s.icons do s.icons[i]:Hide() end
             s:Show()
-            M.CallIf(M.HideSlashMenuAndMinibar, M.frame)
+            M.HideSlashMenuAndMinibar(M.frame)
             return true
         end)
         add:SetScript("OnClick", function()

@@ -344,8 +344,8 @@ local fontRuntimeFile = assert(io.open(
   "MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua", "rb"))
 local fontRuntimeSource = fontRuntimeFile:read("*a")
 fontRuntimeFile:close()
-Check(fontRuntimeSource:find("_MSUF_ApplyFontCached(f._msufNameAnchorText, nameSize", 1, true),
-  "font fallback does not keep the name anchor proxy metric-identical")
+Check(fontRuntimeSource:find('MSUF.UF.RefreshElements(onlyKey, UNITFRAME_FONT_ELEMENTS, "FONT_RUNTIME")', 1, true),
+  "font refresh does not reach the authoritative unitframe text owner")
 
 if #failures > 0 then
   error("unit name anchor reflow smoke failed:\n - " .. table.concat(failures, "\n - "), 0)

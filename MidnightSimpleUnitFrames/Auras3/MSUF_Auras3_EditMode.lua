@@ -9,10 +9,7 @@
 --- frames to refresh. Keep live aura payload handling inside the native runtime.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local InCombatLockdown = _G.InCombatLockdown
@@ -20,9 +17,6 @@ local C_Timer = _G.C_Timer
 
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- driver disabled and silently kills the drag OnUpdate.
-local Enum = _G.Enum
-local ONUPDATE_MODE_DISABLED = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.Disabled) or 0
-local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.RunWhenVisible) or 1
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then

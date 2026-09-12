@@ -3,10 +3,7 @@
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 MSUF.L = MSUF.L or (_G.MSUF_L) or {}
 local L = MSUF.L
 if not getmetatable(L) then setmetatable(L, { __index = function(_, k) return k end }) end
@@ -158,7 +155,7 @@ local function CanonKey(key)
     if UNIT_SET[key] then return key end
     return "player"
 end
-local IsSecretValue = _G.issecretvalue or function(_) return false end
+local IsSecretValue = _G.issecretvalue
 local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", arena = "arena1", pet = "pet" }
 local liveUnitDataCache = {}
 local function LiveNumber(value)
@@ -302,17 +299,7 @@ local function LiveRaidSubgroup()
 end
 Preview.LiveUnitData = LiveUnitData
 Preview.LiveRaidSubgroup = LiveRaidSubgroup
-local function ProfileSystemNeedsInit()
-    local active = _G.MSUF_ActiveProfile
-    local gdb = _G.MSUF_GlobalDB
-    local profiles = type(gdb) == "table" and gdb.profiles or nil
-    local activeTable = type(active) == "string" and type(profiles) == "table" and profiles[active] or nil
-    return type(active) ~= "string"
-        or active == ""
-        or type(_G.MSUF_DB) ~= "table"
-        or type(activeTable) ~= "table"
-        or _G.MSUF_DB ~= activeTable
-end
+local ProfileSystemNeedsInit = M.ProfileSystemNeedsInit
 local function EnsureDB()
     if ProfileSystemNeedsInit() and type(_G.MSUF_InitProfiles) == "function" then
         _G.MSUF_InitProfiles()
@@ -325,9 +312,11 @@ local function EnsureDB()
     end
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
+    local db = _G.MSUF_DB
     for i = 1, #UNIT_KEYS do
-        _G.MSUF_DB[UNIT_KEYS[i]] = _G.MSUF_DB[UNIT_KEYS[i]] or {}
+        db[UNIT_KEYS[i]] = db[UNIT_KEYS[i]] or {}
     end
+    return db
 end
 local function CurrentPanelKey(panel)
     local key = panel and panel._msufGetCurrentKey and panel._msufGetCurrentKey()
@@ -335,17 +324,17 @@ local function CurrentPanelKey(panel)
     return CanonKey(key)
 end
 local function UnitDB(key)
-    EnsureDB()
+    local db = EnsureDB()
     key = CanonKey(key)
-    _G.MSUF_DB[key] = _G.MSUF_DB[key] or {}
-    return _G.MSUF_DB[key], _G.MSUF_DB.general, key
+    db[key] = db[key] or {}
+    return db[key], db.general, key
 end
 local function SeedTextFromGeneral(db)
     if not db then return end
     if type(_G.MSUF_Bars_SeedTextFromGeneral) == "function" then
         _G.MSUF_Bars_SeedTextFromGeneral(db)
     else
-        local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+        local g = M.EnsureDB().general or {}
         if db.hpTextMode == nil then db.hpTextMode = g.hpTextMode end
         if db.hpTextReverse == nil then db.hpTextReverse = g.hpTextReverse end
         if db.powerTextMode == nil then db.powerTextMode = g.powerTextMode end
@@ -417,8 +406,7 @@ local function ShortenPreviewName(name, key, layoutConf)
     name = tostring(name or "")
     key = CanonKey(key)
     if name == "" then return name end
-    EnsureDB()
-    local db = _G.MSUF_DB or {}
+    local db = EnsureDB()
     local g = db.general or {}
     local u = db[key] or {}
     local shorten = db.shortenNames and true or false
@@ -481,7 +469,7 @@ local function ApplyPanelUnit(panel, key, reason)
         -- frame must still re-apply the written settings (preview<->live parity).
         _G.MSUF_UFCore_NotifyConfigChanged(key, true, true, reason or "UNIT_OPTIONS")
     end
-    if type(_G.MSUF_SyncUnitPositionPopup) == "function" then _G.MSUF_SyncUnitPositionPopup(key, _G.MSUF_DB and _G.MSUF_DB[key]) end
+    if type(_G.MSUF_SyncUnitPositionPopup) == "function" then _G.MSUF_SyncUnitPositionPopup(key, M.EnsureDB()[key]) end
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "UNIT_OPTIONS") end
 end
 local function RefreshAllControls(list)
@@ -735,12 +723,12 @@ local function PreviewGlobalHealthMode(g, cache)
     return mode
 end
 local function PreviewHealthMode(key, g, cache)
-    local db = _G.MSUF_DB
+    local db = M.EnsureDB()
     local conf = db and db[CanonKey(key)]
     return NormalizePreviewHealthMode(conf and conf.healthColorMode) or PreviewGlobalHealthMode(g, cache)
 end
 local function HealthColor(key, data)
-    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    local g = M.EnsureDB().general or {}
     local cache = SettingsCache()
     local mode = PreviewHealthMode(key, g, cache)
     data = data or UNIT_DATA.player
@@ -766,7 +754,7 @@ local function HealthColor(key, data)
            (cache and cache.darkBarB) or g.darkBarB or g.darkBarGray or 0.07
 end
 local function DarkMatchHPColor(r, g, b, cache)
-    local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
+    local gen = (cache and cache.generalRef) or M.EnsureDB().general
     if gen and gen.darkMode and not gen.darkBgCustomColor then
         local br = Clamp01((cache and cache.darkBgBrightness) or gen.darkBgBrightness, 1)
         return Clamp01(r * br, 0), Clamp01(g * br, 0), Clamp01(b * br, 0)
@@ -786,7 +774,7 @@ local function PerUnitBackgroundAlpha(conf, key, fallbackKey, resolvedAlpha, res
 end
 local function HealthBackgroundColor(hr, hg, hb, data, conf)
     local cache = SettingsCache()
-    local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
+    local gen = (cache and cache.generalRef) or M.EnsureDB().general
     local r, g, b, a
     if cache then
         r, g, b, a = cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA
@@ -851,7 +839,7 @@ local function FontColor()
         local r, g, b = fn()
         if r then return r, g, b end
     end
-    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    local g = M.EnsureDB().general or {}
     return g.fontColorR or 1, g.fontColorG or 1, g.fontColorB or 1
 end
 local function NormalizeToTInlineColorMode(value)
@@ -859,7 +847,7 @@ local function NormalizeToTInlineColorMode(value)
     return "AUTO"
 end
 local function PreviewNameColorFlags(key)
-    local db = _G.MSUF_DB or {}
+    local db = M.EnsureDB()
     local gen = db.general or {}
     local wantClass = gen.nameClassColor
     local wantNpc = gen.npcNameRed
@@ -981,7 +969,7 @@ local function MakeFS(parent, layer, size)
 end
 local function ReadPowerBarEnabled(conf, key)
     conf = conf or {}
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local bars = M.EnsureDB().bars
     if conf.showPowerBar ~= nil then return conf.showPowerBar ~= false end
     local masterKey = POWER_BAR_MASTER_KEYS[key]
     if masterKey and bars and bars[masterKey] ~= nil then return bars[masterKey] ~= false end

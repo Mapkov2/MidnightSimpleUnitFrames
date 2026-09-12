@@ -8,32 +8,14 @@
 
 local _, ns = ...
 ns = ns or {}
-local ExportPublic = ns.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = ns.ExportPublic
 
-local PlainNumber = _G.MSUF_CastbarRuntime_PlainNumber or function(value)
-    if value == nil then
-        return nil
-    end
-
-    local toPlain = _G.ToPlain
-    if type(toPlain) == "function" then
-        local plain = toPlain(value)
-        plain = tonumber(tostring(plain))
-        if plain ~= nil then
-            return plain
-        end
-    end
-
-    local valueType = type(value)
-    if valueType == "number" or valueType == "string" then
-        return tonumber(tostring(value))
-    end
-
-    return nil
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper;
+-- harnesses that load the engine standalone load Utils first.
+local PlainNumber = _G.MSUF_Castbar_PlainNumber
+local type = type
+local pairs = pairs
+local table_remove = table.remove
 
 ns.MSUF_CastbarEngine = ns.MSUF_CastbarEngine or {}
 
@@ -51,8 +33,6 @@ local GetUnitEmpowerStageCount = _G.GetUnitEmpowerStageCount
 local UnitShouldDisplaySpellTargetName = _G.UnitShouldDisplaySpellTargetName
 local UnitSpellTargetName = _G.UnitSpellTargetName
 local UnitSpellTargetClass = _G.UnitSpellTargetClass
-local ToPlain = _G.ToPlain
-local issecretvalue = _G.issecretvalue or function(_) return false end
 
 Engine.VERSION = 4
 Engine._subs = Engine._subs or {}
@@ -93,7 +73,7 @@ function Engine:Unsubscribe(key, callback)
     if not subscriptions then return false end
     for index = #subscriptions, 1, -1 do
         if subscriptions[index] == callback then
-            table.remove(subscriptions, index)
+            table_remove(subscriptions, index)
             if #subscriptions == 0 then self._subs[key] = nil end
             return true
         end
@@ -121,9 +101,6 @@ function Engine:AdvanceGeneration(unit)
     self._generation[unit] = generation
     self:Invalidate(unit)
     return generation
-end
-
-function Engine:ForceRefresh()
 end
 
 function Engine:Invalidate(unit)
@@ -175,11 +152,9 @@ function Engine:SameIdentity(left, right)
     return left.generation ~= nil and left.generation == right.generation
 end
 
-local EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
-    if not MSUF_DB and type(EnsureDB) == "function" then
-        EnsureDB()
-    end
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared lazy DB bootstrap;
+-- harnesses that load this file standalone load Utils first.
+local EnsureDBLazy = _G.MSUF_EnsureDBLazy
 
 --- Profession casts are filtered out before any frame work happens. The flag is
 --- NeverSecret in 12.x, so the filter also holds for PvP-restricted units.
@@ -213,18 +188,6 @@ local function PreserveInterruptState(_, previousState)
     end
 
     return false
-end
-
-local function PlainBool(value)
-    if value == nil then
-        return false
-    end
-
-    if issecretvalue(value) == true and type(ToPlain) == "function" then
-        value = ToPlain(value)
-    end
-
-    return value == true or value == 1 or value == "true"
 end
 
 local function UnitIsEmpowering(unit)
@@ -290,6 +253,9 @@ function Engine:BuildState(unit, previousState)
         Engine._state[unit] = state
     end
 
+    -- isEmpowered/numEmpowerStages are only produced by the channel query
+    -- below; declare them here so that poll never writes globals.
+    local isEmpowered, numEmpowerStages
     local name, text, icon, startTimeMS, endTimeMS, isTradeskill, castID, apiNotInterruptible, spellId, castBarID, delayTimeMS = UnitCastingInfo(unit)
     if name and HideTradeSkillCasts() and isTradeskill == true then
         -- isTradeskill is NeverSecret, so this comparison also holds for
@@ -369,6 +335,9 @@ function Engine:BuildState(unit, previousState)
     return state
 end
 
+-- Canonical resolver: gates on state.active and caches on the state.
+-- MSUF_CastbarDriver.lua keeps a stateless copy purely as its no-Engine
+-- fallback; the two differ on purpose and are not interchangeable.
 function Engine:ResolveTargetInfo(state)
     if not (state and state.active == true and state.unit) then
         return nil

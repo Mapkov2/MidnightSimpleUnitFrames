@@ -7,48 +7,12 @@ MSUF.MSUF2 = M
 -- Provides shared DB helpers, binding adapters, and layout primitives for advanced option
 -- pages. Keep page-specific controls in their domain files and common glue here.
 local W = M.Widgets
-local WL = M.WordList
+
 local C_Timer = M.MenuTimer or _G.C_Timer
-local function NormalizeControlPath(value)
-    local path = tostring(value or "")
-    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
-    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
-    return path
-end
-local function ControlMeta(pageKey, domain, semanticPath, classification, exact)
-    local identity = table.concat({
-        NormalizeControlPath(pageKey),
-        NormalizeControlPath(domain),
-        NormalizeControlPath(semanticPath),
-    }, ".")
-    local meta = {
-        controlId = "menu2." .. identity,
-        identityKey = identity,
-        controlPath = identity:gsub("%.", "/"),
-        classification = classification or "setting",
-    }
-    if type(exact) == "table" then
-        for key, value in pairs(exact) do meta[key] = value end
-    end
-    return meta
-end
-local function RegisterControl(widget, meta, label, kind, values)
-    if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
-    local payload = {}
-    for key, value in pairs(meta) do payload[key] = value end
-    payload.label = label or payload.label
-    payload.kind = kind or payload.kind
-    payload.values = values or payload.values
-    M.RegisterSearchWidget(widget, payload)
-    return widget
-end
-local function CallGlobal(name, ...)
-    local apply = M.ApplyService
-    if apply and type(apply.CallGlobal) == "function" then return apply.CallGlobal(name, ...) end
-    local fn = _G[name]
-    if type(fn) == "function" then fn(...); return true end
-    return false
-end
+
+local ControlMeta = M.ControlMeta
+local RegisterControl = M.RegisterControlMetadata
+
 local function DB()
     return M.EnsureDB()
 end
@@ -85,11 +49,7 @@ local function SetValue(tbl, key, value, apply)
     end
     return M.RunWithHistory(tostring(key), "advanced:" .. tostring(key), Write)
 end
-local function DeepCopyTable(src)
-    if type(src) ~= "table" then return src end
-    if type(CopyTable) == "function" then return CopyTable(src) end
-    return M.DeepCopy(src)
-end
+local DeepCopyTable = M.DeepCopy
 local BindToggleControl, BindDropdownControl = M.BindBoolWidget, M.BindDropdownWidget
 local function BindSliderControl(ctx, slider, getValue, setValue, fallback, step, metadata)
     local opts = {}
@@ -226,7 +186,7 @@ end
 local AdvancedPage = M.AdvancedPage or {}
 M.AdvancedPage = AdvancedPage
 M.Assign(AdvancedPage, {
-    CallGlobal = CallGlobal, DB = DB, G = G, Bars = Bars, Gameplay = Gameplay,
+DB = DB, G = G, Bars = Bars, Gameplay = Gameplay,
     ControlMeta = ControlMeta, RegisterControl = RegisterControl,
     BoolValue = BoolValue, NumValue = NumValue, SetValue = SetValue, DeepCopyTable = DeepCopyTable,
     BindTableToggle = BindTableToggle, BindTableSwitchAt = BindTableSwitchAt, BindTableSlider = BindTableSlider, BindTableDropdown = BindTableDropdown,

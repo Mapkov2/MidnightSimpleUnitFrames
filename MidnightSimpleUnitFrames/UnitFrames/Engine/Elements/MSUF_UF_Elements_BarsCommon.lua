@@ -3,10 +3,7 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local UF = MSUF.UF
 local CreateFrame = CreateFrame
@@ -65,9 +62,9 @@ local C_CurveUtil = _G.C_CurveUtil
 local CreateColor = _G.CreateColor
 local C_ClassColor_GetClassColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
 local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
-local IsNil = Secrets.IsNil or function(value) return value == nil end
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local IsSecret = Secrets.IsSecret
+local IsNil = Secrets.IsNil
+local issecretvalue = _G.issecretvalue
 local SafeNumber = Secrets.SafeNumber or tonumber
 local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
 local SECRET_NATIVE_CLASS_COLOR = 2
@@ -91,9 +88,7 @@ local npcTypeReferenceLevel
 local npcTypeReferenceInstanceType
 local npcTypeLieutenantLevel
 
-local IsUnitToken = UF.IsUnitToken or function(unit)
-  return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
-end
+local IsUnitToken = UF.IsUnitToken
 
 local ARENA_OPPONENT_UNITS = {
   arena1 = true,
@@ -186,10 +181,7 @@ local function DrawSubLayer(layer, fallback)
   return layer
 end
 
-local function GetLayerBaseLevel(frame)
-  local base = frame and (frame.Health or frame.hpBar or frame)
-  return base and base.GetFrameLevel and (base:GetFrameLevel() or 0) or 0
-end
+local GetLayerBaseLevel = UF.Layers.BaseFrameLevel
 
 local function SetStatusTexture(bar, texture)
   if bar and texture and bar.MSUFTexture ~= texture then
@@ -887,7 +879,7 @@ local function ClassColor(unit)
       return r, g, b
     end
   end
-  return 0.12, 0.62, 0.95
+  return 0.12, 0.62, 0.95 -- per-event path: literal stays inline (LOADK); mirrors UF.Shared.FallbackClassColor()
 end
 
 local function DispatchClassColor(frame, unit, allowSecretPassThrough)
@@ -901,7 +893,7 @@ local function DispatchClassColor(frame, unit, allowSecretPassThrough)
   end
   local r, g, b = ClassColorForToken(class, classIsKnownPlain)
   if r ~= nil then return r, g, b end
-  return 0.12, 0.62, 0.95
+  return 0.12, 0.62, 0.95 -- per-event path: literal stays inline (LOADK); mirrors UF.Shared.FallbackClassColor()
 end
 
 local function FriendlyNPCClassToken(state, frame, unit)
@@ -1137,16 +1129,6 @@ local function ReadUnitBool(api, unit, defaultValue)
     return defaultValue, false
   end
   return ReadKnownUnitBool(api, unit, defaultValue)
-end
-
--- Core normally supplies both dispatch-cache readers. Standalone consumers
--- that intentionally load this shared primitive without Core still retain the
--- same secret-safe result contract instead of calling a nil optional helper.
-ReadConnectedCached = ReadConnectedCached or function(_, unit)
-  return ReadUnitBool(UnitIsConnected, unit, true)
-end
-ReadDeadCached = ReadDeadCached or function(_, unit)
-  return ReadUnitBool(UnitIsDeadOrGhost, unit, false)
 end
 
 local function HealthModeNeedsIdentity(spec)
@@ -1666,7 +1648,7 @@ local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event, 
       bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
       return true
     end
-    r, g, b, raw = 0.12, 0.62, 0.95, nil
+    r, g, b, raw = 0.12, 0.62, 0.95, nil -- per-event path: literal stays inline (LOADK); mirrors UF.Shared.FallbackClassColor()
   end
   if health.mode == "gradient" and raw == true then
     if issecretvalue(r) == true or issecretvalue(g) == true or issecretvalue(b) == true then
@@ -1855,7 +1837,9 @@ MSUF.UFBarTextCommon = {
   UpdateAllBarGradients = UpdateAllBarGradients,
   SetFrameLevelCached = SetFrameLevelCached,
   ExternalFrameWidth = ExternalFrameWidth,
+  HealthModeNeedsIdentity = HealthModeNeedsIdentity,
   ClassColorForToken = ClassColorForToken,
+  DispatchClassColor = DispatchClassColor,
   ClassColor = ClassColor,
   UnitNPCKind = UnitNPCKind,
   NPCColor = NPCColor,

@@ -9,6 +9,7 @@ end
 
 local registeredLoadConditions
 local liveUnits = {}
+_G.UnitExists = function(unit) return liveUnits[unit] == true end
 local UF = {
     RegisterElement = function(name, element)
         if name == "LoadConditions" then registeredLoadConditions = element end

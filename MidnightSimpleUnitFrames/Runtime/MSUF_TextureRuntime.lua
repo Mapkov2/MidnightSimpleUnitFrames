@@ -13,29 +13,11 @@ MSUF.Textures = MSUF.Textures or {}
 local type, tonumber = type, tonumber
 local pairs = pairs
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
-local function Export(key, fn, aliasKey, forceAlias)
-    if MSUF then MSUF[key] = fn end
-    ExportPublic(key, fn)
-    if aliasKey then
-        if forceAlias then
-            ExportPublic(aliasKey, fn)
-        else
-            ExportPublic(aliasKey, _G[aliasKey] or fn)
-        end
-    end
-    return fn
-end
 
-local function EnsureDBSafe()
-    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
-        (_G.MSUF_EnsureDB)()
-    end
-end
+
+local EnsureDBSafe = MSUF.Util.EnsureDBSafe
 
 local function NormalizeScope(scope)
     scope = tostring(scope or ""):lower()
@@ -79,22 +61,9 @@ end
 
 --- Profile/menu texture changes can arrive in bursts. Defer the final UF dirty
 --- apply so multiple setters collapse into one engine commit.
-local function ApplyDirtyCommit()
-    local UF = MSUF and MSUF.UF
-    local commit = UF and UF.ApplyDirty
-    if type(commit) == "function" then commit(UF) end
-end
 
-local function ScheduleApplyCommit()
-    local UF = MSUF and MSUF.UF
-    local commit = UF and UF.ApplyDirty
-    if type(commit) ~= "function" then return end
-    if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", ApplyDirtyCommit)
-    else
-        _G.C_Timer.After(0, ApplyDirtyCommit)
-    end
-end
+
+local ScheduleApplyCommit = _G.MSUF_UF_ScheduleApplyCommit
 
 local _iterState = {}
 local PREDICTION_REFRESH_ELEMENTS = { "Prediction", "Alpha" }
@@ -229,8 +198,11 @@ local function UpdateAbsorbBarTextures(scope)
     return refreshed
 end
 
-Export("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)
-Export("MSUF_UpdateAllBarTextures", UpdateAllBarTextures, "UpdateAllBarTextures", true)
+MSUF.MSUF_UpdateAbsorbBarTextures = UpdateAbsorbBarTextures
+ExportPublic("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)
+MSUF.MSUF_UpdateAllBarTextures = UpdateAllBarTextures
+ExportPublic("MSUF_UpdateAllBarTextures", UpdateAllBarTextures)
+ExportPublic("UpdateAllBarTextures", UpdateAllBarTextures)
 
 local function DetachedPowerBarRefreshTextures()
     -- The detached Player bar has no dedicated texture keys anymore; the
@@ -238,7 +210,8 @@ local function DetachedPowerBarRefreshTextures()
     -- player-scoped refresh repaints everything.
     UpdateAllBarTextures("player")
 end
-Export("MSUF_DetachedPowerBar_RefreshTextures", DetachedPowerBarRefreshTextures)
+MSUF.MSUF_DetachedPowerBar_RefreshTextures = DetachedPowerBarRefreshTextures
+ExportPublic("MSUF_DetachedPowerBar_RefreshTextures", DetachedPowerBarRefreshTextures)
 
 if not _G.MSUF_UpdateAllBarTextures_Immediate then
     ExportPublic("MSUF_UpdateAllBarTextures_Immediate", _G.MSUF_UpdateAllBarTextures)
@@ -274,7 +247,8 @@ local function MSUF_UpdateAbsorbDisplayMode(mode)
     g.showTotalAbsorbAmount = false
 end
 
-Export("MSUF_UpdateAbsorbDisplayMode", MSUF_UpdateAbsorbDisplayMode, "MSUF_UpdateAbsorbDisplayMode")
+MSUF.MSUF_UpdateAbsorbDisplayMode = MSUF_UpdateAbsorbDisplayMode
+ExportPublic("MSUF_UpdateAbsorbDisplayMode", MSUF_UpdateAbsorbDisplayMode)
 
 MSUF.Textures.UpdateAllBarTextures = UpdateAllBarTextures
 MSUF.Textures.UpdateAbsorbBarTextures = UpdateAbsorbBarTextures

@@ -36,6 +36,8 @@ Game\Shared\Initialize.lua
 Game\Classic\Initialize.lua
 Game\Classic\BlizzardFrames.lua
 Kernel\MSUF_Bootstrap.lua
+Kernel\MSUF_Boundary.lua
+Kernel\MSUF_Require.lua
 State\MSUF_FirstLoad.lua
 State\MSUF_UpgradeHighlights.lua
 State\MSUF_GuidedTour.lua
@@ -63,9 +65,13 @@ Locales\MSUF_PriorityFrames_FAQ.lua
 # KERNEL / STATE / UI PRIMITIVES
 # ---------------------------------------------------------------
 Kernel\MSUF_Util.lua
+Kernel\MSUF_Keybinds.lua
+State\MSUF_StateHelpers.lua
 Game\Classic\State\MSUF_Changelog.lua
 Game\Classic\State\MSUF_Defaults.lua
 Runtime\MSUF_NumberFormat.lua
+State\MSUF_ProfileCodec.lua
+State\MSUF_ProfileRuntime.lua
 State\MSUF_Profiles.lua
 Shell\UI\MSUF_Style.lua
 Kernel\MSUF_Modules.lua
@@ -99,6 +105,7 @@ Runtime\MSUF_SlashCommands.lua
 Runtime\MSUF_UnitTooltips.lua
 Runtime\MSUF_BlizzEditModeBridge.lua
 Libs\MSUFUnitFrames\MSUFUnitFrames.xml
+UnitFrames\Engine\MSUF_UF_Shared.lua
 Game\Classic\UnitFrames\MSUF_UF_Config.lua
 UnitFrames\Engine\MSUF_UF_PreviewAnimation.lua
 Runtime\MSUF_Colors.lua
@@ -194,3 +201,5 @@ UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
 Castbars\MSUF_CastbarRounded.lua
 Game\Classic\Castbars\MSUF_CastbarVisualCompat.lua
 Game\Classic\UnitFrames\Effects\MSUF_UF_TextureLayer.lua
+
+Kernel\MSUF_RuntimeContracts.lua

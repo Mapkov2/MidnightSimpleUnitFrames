@@ -17,9 +17,6 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local unpack = unpack or table.unpack
-local DISPEL_BORDER_121_PTR_DISABLED = false
-local PURGE_BORDER_121_PTR_DISABLED = false
-local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel and Purge use native 12.1 AuraContainer detection."
 local UNITFRAME_DISPEL_AURA_WARNING = "Dispel Border, Overlay, and Symbol need each UnitFrame's Aura sensor. Enable Buffs or Debuffs on the affected UnitFrame, or turn on its Dispel feature to enable the sensor automatically. Both icon caps may stay at 0."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss", "arena" }
@@ -44,7 +41,7 @@ local ROUNDED_PREVIEW_STRETCHED = _G.Enum and _G.Enum.UITextureSliceMode
 local ROUNDED_STRENGTH_APPLY_DELAY = 0.12
 local ROUNDED_SECTION_HEIGHT = 310
 local ROUNDED_PREVIEW_CARD_HEIGHT = 92
-local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
+local GRADIENT_DIR_KEYS, PRIORITY_LABELS = GP.GRADIENT_DIR_KEYS or {}, GP.PRIORITY_LABELS or {}
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
     "DISPEL_TYPE", "Any dispel type")
 local DISPEL_SHOW_ON = VT("FRIENDLY", "Friendly", "ENEMY", "Enemy", "BOTH", "Both")
@@ -52,8 +49,16 @@ local DISPEL_COLOR_REFERENCES = {
     "aura.dispel.magic", "aura.dispel.curse", "aura.dispel.disease",
     "aura.dispel.poison", "aura.dispel.bleed",
 }
-local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, GradientScopeGet, GradientScopeSet, GradientScopeHasExplicit, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, ChunkedPowerGet, ChunkedPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars GradientScopeGet GradientScopeSet GradientScopeHasExplicit TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet ChunkedPowerGet ChunkedPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
-local IsAbsorbTextureTestEnabled = GP.IsAbsorbTextureTestEnabled or function() return _G.MSUF_AbsorbTextureTestMode == true end
+local DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey = GP.DB, GP.G, GP.Bars, GP.ReadG, GP.ReadGBool, GP.ReadB, GP.NormalizeScopeKey
+local ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope = GP.ScopeDBKeys, GP.ScopeHasOverride, GP.ScopeSetOverride, GP.CurrentBarsScope
+local IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars = GP.IsGFScope, GP.BarScopeGet, GP.BarScopeSet, GP.BarScopeGetBars
+local BarScopeSetBars, GradientScopeGet, GradientScopeSet = GP.BarScopeSetBars, GP.GradientScopeGet, GP.GradientScopeSet
+local GradientScopeHasExplicit, TextureValues, CurrentPowerBarScopeUnit = GP.GradientScopeHasExplicit, GP.TextureValues, GP.CurrentPowerBarScopeUnit
+local SmoothPowerGet, SmoothPowerSet, ChunkedPowerGet, ChunkedPowerSet = GP.SmoothPowerGet, GP.SmoothPowerSet, GP.ChunkedPowerGet, GP.ChunkedPowerSet
+local PriorityOrder, PriorityColor, RefreshBorderTestModes = GP.PriorityOrder, GP.PriorityColor, GP.RefreshBorderTestModes
+local SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled = GP.SetAbsorbTextureTest, GP.SetControlEnabled, GP.SetControlsEnabled
+local ApplyBars, ControlMeta, RegisterControl = GP.ApplyBars, GP.ControlMeta, GP.RegisterControl
+local IsAbsorbTextureTestEnabled = GP.IsAbsorbTextureTestEnabled
 local BAR_SETTING_BY_PATH = {
     ["highlight.boss_target.mode"] = "general.bossTargetOutlineMode",
     ["rounded.roundedFramesEnabled"] = "bars.roundedFramesEnabled",
@@ -371,6 +376,14 @@ end
 -- Scope rules are shared by all page sections. Keeping them outside the page builder
 -- prevents every widget callback from being routed through one giant closure.
 local function SharedScope() return CurrentBarsScope() == "shared" end
+local ReloadAfterCombatCheck = function()
+if _G.InCombatLockdown and _G.InCombatLockdown() then
+                if _G.print then _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
+            elseif type(_G.ReloadUI) == "function" then
+                _G.ReloadUI()
+            end
+end
+
 local function GroupScope()
     local scope = CurrentBarsScope()
     return type(IsGFScope) == "function" and IsGFScope(scope)
@@ -431,13 +444,7 @@ local function ShowDispelBorderReloadRequiredPopup()
         text = M.Tr("Dispel border") .. "\n\n" .. M.Tr("Requires a UI reload."),
         button1 = _G.RELOAD or M.Tr("Reload"),
         hideOnEscape = false,
-        OnAccept = function()
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                if _G.print then _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
-            elseif type(_G.ReloadUI) == "function" then
-                _G.ReloadUI()
-            end
-        end,
+        OnAccept = ReloadAfterCombatCheck,
     })
     _G.StaticPopup_Show("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED")
 end
@@ -450,13 +457,7 @@ local function ShowRoundedReloadRequiredPopup()
     M.InstallStaticPopup("MSUF2_ROUNDED_RELOAD_REQUIRED", {
         text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
         button1 = _G.RELOAD or M.Tr("Reload"), hideOnEscape = false,
-        OnAccept = function()
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                if _G.print then _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
-            elseif type(_G.ReloadUI) == "function" then
-                _G.ReloadUI()
-            end
-        end,
+        OnAccept = ReloadAfterCombatCheck,
     })
     local dialog = _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
     if dialog and type(M.ApplyPopupFramePriority) == "function" then
@@ -590,14 +591,7 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
     return card
 end
 
-local function NormalizeDispelTrigger(value)
-    local normalize = _G.MSUF_NormalizeDispelBorderTrigger
-    if type(normalize) == "function" then return normalize(value) end
-    if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then return "BY_RAID" end
-    if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
-    if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
-    return "BY_ME"
-end
+local NormalizeDispelTrigger = _G.MSUF_NormalizeDispelBorderTrigger
 local function NormalizeAggroMode(value)
     value = tostring(value or "ALL"):upper()
     if value == "TANK_ONLY" then return "TANK" end
@@ -854,13 +848,7 @@ end
 local function BuildScopeSection(ctx, b)
     local scopeValues = GP.SCOPE_VALUES
     local function RefreshBarsPage(reason)
-        if M.RequestRefresh then
-            M.RequestRefresh(ctx, reason)
-        elseif M.Refresh then
-            M.Refresh(ctx)
-        elseif M.SelectPage then
-            M.SelectPage(ctx.key)
-        end
+        M.RequestRefresh(ctx, reason)
     end
     GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
@@ -1071,193 +1059,6 @@ local function BuildTextureSection(ctx, b)
             btn:SetActive(powerDirections[value] == true)
             SetControlEnabled(btn, powerActive)
         end
-    end))
-end
-
-local function BuildAbsorbSectionLegacy(ctx, b)
-    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 460, true)
-    local absorbW = absorb._msuf2Width or ctx.width or 720
-    local absorbLeftX = 30
-    local absorbRightX = max(430, min(560, floor(absorbW * 0.52)))
-    local absorbLeftW = max(300, min(380, absorbRightX - absorbLeftX - 58))
-    local absorbRightW = max(300, min(420, absorbW - absorbRightX - 42))
-    W.LabelAt(absorb, "Display", absorbLeftX, -42, absorbLeftW, "GameFontNormalSmall", T.colors.accent)
-    local absorbMode = W.Dropdown(absorb, "Display mode", VT(1, "Absorb off", 2, "Absorb bar"), absorbLeftW)
-    local function ReadAbsorbDisplayMode()
-        local mode = tonumber(BarScopeGet("absorbTextMode", 2)) or 2
-        return (mode == 1 or mode == 4) and 1 or 2
-    end
-    local function ApplyAbsorbRuntime(reason) ApplyBars(reason) end
-    local SyncAbsorbControls = M.RefreshProxy()
-    local function AbsorbDefault(value) return type(value) == "function" and value() or value end
-    local function ResolveBarPreviewTexture(key, fallback)
-        key = type(key) == "string" and key ~= "" and key or fallback
-        local resolve = _G.MSUF_ResolveStatusbarTextureKey
-        if type(resolve) == "function" then
-            local texture = resolve(key)
-            if type(texture) == "string" and texture ~= "" then return texture end
-        end
-        return "Interface\\Buttons\\WHITE8X8"
-    end
-    local function AbsorbAnchorPreview(item)
-        local foregroundKey = BarTextureForScope()
-        local backgroundKey = BarBackgroundTextureForScope()
-        local absorbKey = BarScopeGet("absorbBarTexture", ReadG("absorbBarTexture", ""))
-        local opacity = tonumber(BarScopeGet("absorbBarOpacity", ReadG("absorbBarOpacity", 0.75))) or 0.75
-        return {
-            mode = tonumber(item and item.value) or 3,
-            dualDirection = true,
-            showAbsorbEdgeGlow = ReadGBool("fullHealthAbsorbStripe", false),
-            healthFraction = tonumber(item and item.value) == 4 and 0.84 or 0.68,
-            overlayFraction = 0.22,
-            healthTexture = ResolveBarPreviewTexture(foregroundKey, "Blizzard"),
-            backgroundTexture = ResolveBarPreviewTexture(backgroundKey, foregroundKey),
-            overlayTexture = ResolveBarPreviewTexture(absorbKey, foregroundKey),
-            healthColor = { 0.12, 0.62, 0.25, 1 },
-            backgroundColor = { 0.025, 0.075, 0.045, 0.92 },
-            overlayColor = {
-                tonumber(BarScopeGet("absorbBarColorR", ReadG("absorbBarColorR", 1))) or 1,
-                tonumber(BarScopeGet("absorbBarColorG", ReadG("absorbBarColorG", 1))) or 1,
-                tonumber(BarScopeGet("absorbBarColorB", ReadG("absorbBarColorB", 1))) or 1,
-                max(0, min(1, opacity)),
-            },
-        }
-    end
-    local function AbsorbAnchorValues()
-        return {
-            { value = 1, text = "Anchor to left side", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
-            { value = 2, text = "Anchor to right side", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
-            { value = 3, text = "Follow HP bar", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
-            { value = 4, text = "Follow HP bar (overflow)", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
-            { value = 5, text = "Reverse from max", previewKind = "barOverlay", barPreview = AbsorbAnchorPreview },
-        }
-    end
-    local function BindAbsorbDropdown(label, values, key, defaultValue, reason, x, y, width, numeric)
-        local control = W.Dropdown(absorb, label, values, width)
-        M.BindDropdownWidget(ctx, control,
-            function()
-                local fallback = AbsorbDefault(defaultValue)
-                local value = BarScopeGet(key, fallback)
-                return numeric and (tonumber(value) or fallback) or value
-            end,
-            function(v)
-                local fallback = AbsorbDefault(defaultValue)
-                BarScopeSet(key, numeric and (tonumber(v) or fallback) or (v or fallback), reason, true)
-                ApplyAbsorbRuntime(reason)
-                SyncAbsorbControls()
-            end,
-            Meta("absorb." .. key))
-        W.MoveWidget(control, absorb, x, y, width, "LEFT")
-        return control
-    end
-    local function BindAbsorbSlider(label, minValue, maxValue, step, key, defaultValue, reason, x, y, width)
-        local control = W.Slider(absorb, label, minValue, maxValue, step, width)
-        M.BindNumberWidget(ctx, control,
-            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
-            function(v)
-                BarScopeSet(key, tonumber(v) or defaultValue, reason, true)
-                ApplyAbsorbRuntime(reason)
-                SyncAbsorbControls()
-            end,
-            defaultValue,
-            Meta("absorb." .. key))
-        W.MoveWidget(control, absorb, x, y, width, "LEFT")
-        return control
-    end
-    local function BuildAbsorbControlSpecs(specs)
-        return M.BuildControlSpecs(specs, {
-            dropdown = function(s, i) return BindAbsorbDropdown(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]), s[11] or s[4] or i end,
-            slider = function(s, i) return BindAbsorbSlider(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11]), s[12] or s[6] or i end,
-        })
-    end
-    M.BindDropdownWidget(ctx, absorbMode,
-        ReadAbsorbDisplayMode,
-        function(v)
-            local mode = (tonumber(v) == 1) and 1 or 2
-            BarScopeSet("absorbTextMode", mode, "MSUF2_ABSORB_MODE", true)
-            ApplyAbsorbRuntime("MSUF2_ABSORB_MODE")
-            SyncAbsorbControls()
-        end,
-        Meta("absorb.display_mode"))
-    W.MoveWidget(absorbMode, absorb, absorbLeftX, -70, absorbLeftW, "LEFT")
-    local predictionAnchors = VT(
-        1, "Anchor to left side", 2, "Anchor to right side", 3, "Follow HP bar",
-        4, "Follow HP bar (overflow)", 5, "Reverse from max")
-    local absorbControls = BuildAbsorbControlSpecs({
-        { "dropdown", "Absorb bar anchoring", AbsorbAnchorValues, "absorbAnchorMode", 2, "MSUF2_ABSORB_ANCHOR", absorbLeftX, -124, absorbLeftW, true, "anchor" },
-        { "dropdown", "Heal prediction anchoring", predictionAnchors, "healPredAnchorMode", 3, "MSUF2_HEALPRED_ANCHOR", absorbLeftX, -240, absorbLeftW, true, "healAnchor" },
-        { "slider", "Absorb bar opacity", 0, 1, 0.05, "absorbBarOpacity", 0.75, "MSUF2_ABSORB_OPACITY", absorbLeftX, -294, absorbLeftW, "opacity" },
-        { "dropdown", "Absorb bar texture (SharedMedia)", function() return TextureValues("Use foreground texture") end, "absorbBarTexture", function() return ReadG("absorbBarTexture", "") end, "MSUF2_ABSORB_TEXTURE", absorbRightX, -70, absorbRightW, nil, "texture" },
-        { "dropdown", "Heal-absorb texture", function() return TextureValues("Use foreground texture") end, "healAbsorbBarTexture", function() return ReadG("healAbsorbBarTexture", "") end, "MSUF2_HEAL_ABSORB_TEXTURE", absorbRightX, -124, absorbRightW, nil, "healTexture" },
-        { "slider", "Heal-absorb bar opacity", 0, 1, 0.05, "healAbsorbBarOpacity", 1, "MSUF2_HEAL_ABSORB_OPACITY", absorbRightX, -348, absorbRightW, "healOpacity" },
-    })
-    local healPredToggle = W.ToggleAt(absorb, "Heal Prediction Overlay", absorbLeftX, -186, absorbLeftW)
-    M.BindBoolWidget(ctx, healPredToggle,
-        function()
-            if GroupScope() then return BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true end
-            return ReadGBool("showSelfHealPrediction", false)
-        end,
-        function(v)
-            if GroupScope() then
-                BarScopeSet("healPredEnabled", v and true or false, "MSUF2_GF_HEALPRED", true)
-                ApplyBars("MSUF2_GF_HEALPRED")
-                SyncAbsorbControls()
-                return
-            end
-            G().showSelfHealPrediction = v and true or false
-            Call("MSUF_RefreshSelfHealPredUnitEvent")
-            ApplyBars("MSUF2_SELF_HEAL")
-            SyncAbsorbControls()
-        end,
-        Meta("absorb.heal_prediction.enabled"))
-    W.LabelAt(absorb, "Textures", absorbRightX, -42, absorbRightW, "GameFontNormalSmall", T.colors.accent)
-    local absorbTest = W.ToggleAt(absorb, "Test prediction bars", absorbRightX, -186, absorbRightW)
-    M.BindBoolWidget(ctx, absorbTest,
-        function() return _G.MSUF_AbsorbTextureTestMode and true or false end,
-        function(v) SetAbsorbTextureTest(v and true or false) end,
-        Meta("absorb.preview.test", "ephemeral"))
-    local overAbsorbOverlay = W.ToggleAt(absorb, "Over-absorb overlay", absorbRightX, -240, absorbRightW)
-    M.BindBoolWidget(ctx, overAbsorbOverlay,
-        function() return BarScopeGet("overAbsorbOverlay", ReadGBool("overAbsorbOverlay", false)) == true end,
-        function(v)
-            BarScopeSet("overAbsorbOverlay", v and true or false, "MSUF2_OVER_ABSORB_OVERLAY", true)
-            ApplyAbsorbRuntime("MSUF2_OVER_ABSORB_OVERLAY")
-            SyncAbsorbControls()
-        end,
-        Meta("absorb.over_absorb_overlay"))
-    local fullHealthStripe = W.ToggleAt(absorb, "Full-health absorb stripe", absorbRightX, -294, absorbRightW)
-    M.BindBoolWidget(ctx, fullHealthStripe,
-        function() return ReadGBool("fullHealthAbsorbStripe", false) end,
-        function(v)
-            G().fullHealthAbsorbStripe = v and true or false
-            ApplyAbsorbRuntime("MSUF2_FULL_HEALTH_ABSORB_STRIPE")
-            SyncAbsorbControls()
-        end,
-        Meta("absorb.full_health_stripe"))
-    if M.AddTooltip then
-        M.AddTooltip(fullHealthStripe, "Full-health absorb stripe",
-            "Show Blizzard's shield edge when health is full and an absorb is active.", { hook = true })
-    end
-    local absorbBarControls = { absorbControls.anchor, absorbControls.texture, absorbControls.healTexture, absorbControls.opacity, absorbControls.healOpacity, overAbsorbOverlay }
-    M.TrackRefresh(ctx, SyncAbsorbControls(function()
-        local mode = ReadAbsorbDisplayMode()
-        local showBar = mode == 2
-        local scopedActive = ScopedControls()
-        local sharedActive = SharedScope()
-        local groupScope = GroupScope()
-        local healPredOn
-        if groupScope then
-            healPredOn = BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true
-        else
-            healPredOn = ReadGBool("showSelfHealPrediction", false)
-        end
-        SetControlEnabled(absorbMode, scopedActive)
-        SetControlsEnabled(absorbBarControls, scopedActive and showBar)
-        SetControlEnabled(fullHealthStripe, showBar)
-        SetControlEnabled(absorbTest, true)
-        SetControlEnabled(healPredToggle, groupScope and scopedActive or sharedActive)
-        SetControlEnabled(absorbControls.healAnchor, scopedActive and healPredOn)
-        if absorbControls.anchor.RefreshPreview then absorbControls.anchor:RefreshPreview() end
     end))
 end
 
@@ -1607,7 +1408,6 @@ local function BuildAbsorbSection(ctx, b)
         "absorb.heal_prediction.enabled", function(value)
             if SharedScope() then
                 G().showSelfHealPrediction = value
-                Call("MSUF_RefreshSelfHealPredUnitEvent")
             end
         end)
     local healAnchor = BindDropdown(heal, "Anchor", healAnchorValues, "healPredAnchorMode", 3,
@@ -2033,8 +1833,6 @@ local function BuildHighlightSection(ctx, b)
             RequestBossTargetBorderRuntime()
         end,
         "highlight.boss_target.mode")
-    local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -510, hlLeftW, T.colors.dim)
-    if dispelPurgePtrHint.SetWordWrap then dispelPurgePtrHint:SetWordWrap(true) end
     local bossSharedHint = bossSupported and W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -540, hlLeftW, T.colors.dim)
     if bossSharedHint and bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
     local unitAuraDispelHint = W.Text(modesFrame, UNITFRAME_DISPEL_AURA_WARNING, hlLeftX, -570, hlLeftW, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
@@ -2051,7 +1849,7 @@ local function BuildHighlightSection(ctx, b)
                 references[i] = DISPEL_COLOR_REFERENCES[i]
             end
             references[#references + 1] = "bar.aggro_border"
-            if not PURGE_BORDER_121_PTR_DISABLED and PurgeScopeSupported() then
+            if PurgeScopeSupported() then
                 references[#references + 1] = "bar.purge_border"
             end
             if SharedScope() then references[#references + 1] = "highlight.boss_target" end
@@ -2108,20 +1906,18 @@ local function BuildHighlightSection(ctx, b)
         local purgeSupported = PurgeScopeSupported()
         local bossTargetOn = BossTargetBorderOn()
         ClearBorderTestIfDisabled("MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", aggroOn)
-        ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn and not DISPEL_BORDER_121_PTR_DISABLED)
-        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode",
-            purgeOn and purgeSupported and not PURGE_BORDER_121_PTR_DISABLED)
+        ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn)
+        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn and purgeSupported)
         ClearBorderTestIfDisabled("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", sharedActive and bossTargetOn)
         SetControlsEnabled(scopedBorderControls, scopedActive)
-        SetControlEnabled(dispelBorder, scopedActive and not DISPEL_BORDER_121_PTR_DISABLED)
-        SetControlEnabled(purge, scopedActive and purgeSupported and not PURGE_BORDER_121_PTR_DISABLED)
+        SetControlEnabled(dispelBorder, scopedActive)
+        SetControlEnabled(purge, scopedActive and purgeSupported)
         SetControlEnabled(bossTarget, sharedActive)
         SetControlEnabled(aggroMode, scopedActive and (sharedActive or GroupScope()))
         SetControlEnabled(aggroTest, scopedActive and aggroOn)
-        SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn and not DISPEL_BORDER_121_PTR_DISABLED)
-        SetControlEnabled(purgeTest, scopedActive and purgeSupported and purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
+        SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn)
+        SetControlEnabled(purgeTest, scopedActive and purgeSupported and purgeOn)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
-        if dispelPurgePtrHint and dispelPurgePtrHint.SetShown then dispelPurgePtrHint:SetShown(PURGE_BORDER_121_PTR_DISABLED) end
         if unitAuraDispelHint and unitAuraDispelHint.SetShown then
             unitAuraDispelHint:SetShown((not GroupScope()) and dispelOn and UnitFrameAuraSensorMissingForScope())
         end
@@ -2190,6 +1986,7 @@ local function BuildHighlightSection(ctx, b)
         prioContainer:SetActiveCount(prioCount)
         SetPriorityRowsEnabled(HighlightControls() and HighlightPriorityEnabled())
     end
+    if ctx.entry then ctx.entry.refreshHighlightPriorityColors = RefreshPriorityRows end
     M.TrackRefresh(ctx, RefreshPriorityRows)
 end
 

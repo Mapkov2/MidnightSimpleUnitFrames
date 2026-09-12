@@ -3,10 +3,7 @@
 --- It should not save positions directly; drag/commit code owns persistent layout writes.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -72,7 +69,7 @@ end
 local NormalizeKey = U.NormalizeFocusKey
 local NormalizeComponent = U.NormalizeFocusComponent
 local NormalizeSlot = U.NormalizeFocusSlot
-local UnitPageKey = U.UnitPageKey or function(unit) return unit == "player" and "uf_player" or false end
+local UnitPageKey = U.UnitPageKey
 
 local function IsEditActive()
     return EM2.State and EM2.State.IsActive and EM2.State.IsActive()

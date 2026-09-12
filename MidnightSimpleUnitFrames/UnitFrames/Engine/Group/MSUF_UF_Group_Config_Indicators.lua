@@ -6,7 +6,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -59,20 +58,9 @@ local function Scaled(value, scale, fallback)
   return floor((value * scale) + 0.5)
 end
 
-local function NormalizeFrameStrata(value, fallback)
-  local normalize = _G.MSUF_NormalizeFrameStrata
-  if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
-  if value == nil or value == "" then return fallback or "AUTO" end
-  value = tostring(value):upper()
-  if value == "AUTO" then return "AUTO" end
-  local rank = _G.MSUF_FRAME_STRATA_RANK
-  return rank and rank[value] and value or (fallback or "AUTO")
-end
+local NormalizeFrameStrata = _G.MSUF_NormalizeFrameStrata
 
-local function GeneralDB()
-  local db = _G.MSUF_DB
-  return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local GeneralDB = _G.MSUF_GetGeneralDB
 
 local CI_SLOT_FIELDS = {
   { "TL", "TOPLEFT", 2, -2 },
@@ -230,28 +218,13 @@ function GF.CompileCornerIndicators(conf)
   }
 end
 
-local function CopyTable(src)
-  if type(src) ~= "table" then return src end
-  local dst = {}
-  for k, v in pairs(src) do
-    dst[k] = CopyTable(v)
-  end
-  return dst
-end
+local CopyTable = _G.MSUF_GF_CopySpellConfig
 
 local function SpellIndicatorModule()
   return GF.SpellIndicators or _G.MSUF_GF_SpellIndicators
 end
 
-local function AddSpellID(hash, list, spellID)
-  spellID = tonumber(spellID)
-  if not spellID then return 0 end
-  spellID = floor(spellID + 0.5)
-  if spellID <= 0 or hash[spellID] == true then return 0 end
-  hash[spellID] = true
-  list[#list + 1] = spellID
-  return 1
-end
+local AddSpellID = AddCustomSpellID
 
 local function AddSpellIDAliases(hash, list, si, spellID)
   spellID = tonumber(spellID)
@@ -329,12 +302,7 @@ local function AddSpellIDsForAura(hash, list, si, specKey, auraName, entry)
   return count
 end
 
-local function SpellIDSignature(list)
-  if type(list) ~= "table" or #list == 0 then return nil end
-  local parts = {}
-  for i = 1, #list do parts[i] = tostring(list[i]) end
-  return table_concat(parts, ",")
-end
+local SpellIDSignature = CustomSpellIDSignature
 
 local function TrackableInfo(si, specKey, auraName)
   local list = si and si.TrackableAuras and si.TrackableAuras[specKey]

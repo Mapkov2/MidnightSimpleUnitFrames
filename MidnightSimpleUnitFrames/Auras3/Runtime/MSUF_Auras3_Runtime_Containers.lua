@@ -90,7 +90,7 @@ local function CreateNativeAuraContainer(root, parentOverride)
     local container = CreateFrame("AuraContainer", nil, parentOverride or root, "CustomAuraContainerTemplate")
     if not container then
         A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = "CustomAuraContainerTemplate is unavailable"
+        A3._RecordNativeAuraRuntimeError("CustomAuraContainerTemplate is unavailable")
         return nil
     end
     if not ValidateNativeAuraContainerContract(container) then
@@ -624,7 +624,7 @@ end
 local function CreateNativeDispelSensor(root, sensor, parentFrame)
     if not EnsureBlizzardAuraContainerLoaded() then
         A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
+        A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
         return nil
     end
     local container = CreateNativeAuraContainer(root)
@@ -635,7 +635,7 @@ end
 local function CreateNativeDispelSensorRoot(root, sensorRoot, parentFrame)
     if not EnsureBlizzardAuraContainerLoaded() then
         A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
+        A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
         return nil
     end
     local container = CreateNativeAuraContainer(root)
@@ -785,7 +785,7 @@ end
 local function CreateNativeGroupSlots(root, groupSlots, parentFrame)
     if not EnsureBlizzardAuraContainerLoaded() then
         A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
+        A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
         return nil
     end
     -- SecureGroupHeader births one container with each party/raid child. Adopt

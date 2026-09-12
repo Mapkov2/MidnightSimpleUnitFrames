@@ -4,6 +4,16 @@ MSUF = MSUF or _G.MSUF_NS or {}
 
 local C = MSUF.UFBarTextCommon
 if not C then return end
+local IsArenaOpponentUnit = C.IsArenaOpponentUnit or function(unit)
+  return unit == "arena1" or unit == "arena2" or unit == "arena3"
+    or unit == "arena4" or unit == "arena5"
+end
+
+local function SecretClassColorAllowed(unit)
+  return unit == "target" or unit == "targettarget" or unit == "focustarget"
+    or IsArenaOpponentUnit(unit)
+end
+
 
 -- UF text common export shim.
 -- Pulls the shared bar/text helper bundle into local symbols for legacy split modules. Keep
@@ -79,22 +89,13 @@ local PowerColor = C.PowerColor
 local Text = MSUF.UFText or {}
 MSUF.UFText = Text
 local Secrets = MSUF.Secrets or {}
-local IsSecret = C.IsSecret or Secrets.IsSecret or function(_) return false end
+
 -- Retail secret values can flow through health/color APIs during restricted
 -- states. Cache normal numbers, but never persist secret-backed color tuples.
 local nativeSecrets = _G.issecretvalue ~= nil
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local SECRET_NATIVE_CLASS_COLOR = 2
-local DispatchClassColor
-local IsArenaOpponentUnit = C.IsArenaOpponentUnit or function(unit)
-  return unit == "arena1" or unit == "arena2" or unit == "arena3"
-    or unit == "arena4" or unit == "arena5"
-end
-
-local function SecretClassColorAllowed(unit)
-  return unit == "target" or unit == "targettarget" or unit == "focustarget"
-    or IsArenaOpponentUnit(unit)
-end
+local DispatchClassColor = C.DispatchClassColor
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
@@ -111,35 +112,16 @@ local function ResolveRoleFont(font, role, size)
   return font
 end
 
-local function FontApplied(fs, requested, requestedSize)
-  local matches = _G.MSUF_FontApplicationMatches
-  if type(matches) == "function" then
-    return matches(fs, requested, requestedSize) == true
-  end
-  if type(fs.GetFont) ~= "function" then return true end
-  local actual, actualSize = fs:GetFont()
-  if not actual then return false end
-  local pathMatches = tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
-  actualSize, requestedSize = tonumber(actualSize), tonumber(requestedSize)
-  return pathMatches and actualSize ~= nil and requestedSize ~= nil and math.abs(actualSize - requestedSize) <= 0.01
-end
-
-local function ApplyFontChecked(fs, requested, size, flags)
-  if not (fs and type(fs.SetFont) == "function") then return false end
-  size = tonumber(size) or 12
-  if size <= 0 then size = 12 end
-  if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
-  return ok and applied ~= false and FontApplied(fs, requested, size)
-end
+-- The font clamp and the checked SetFont live in MSUF_UF_Shared.lua so the
+-- status indicator element and this text runtime apply fonts through one path.
+local ClampFontSize = UF.Shared.ClampFontSize
+local ApplyFontChecked = UF.Shared.ApplyFontChecked
 
 local function SetFont(fs, spec, size, role)
   if not fs then
     return true
   end
-  local fontSize = tonumber(size) or 12
-  if fontSize <= 0 then fontSize = 12 end
-  if fontSize < 6 then fontSize = 6 elseif fontSize > 128 then fontSize = 128 end
+  local fontSize = ClampFontSize(size, 12)
   local font = ResolveRoleFont((spec and spec.font) or STANDARD_FONT, role, fontSize)
   local flags = spec and spec.fontFlags or "OUTLINE"
   local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
@@ -376,7 +358,7 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
         rt._textGradientPct = nil
         return
       end
-      r, g, b = 0.12, 0.62, 0.95
+      r, g, b = 0.12, 0.62, 0.95 -- per-event path: literal stays inline (LOADK); mirrors UF.Shared.FallbackClassColor()
     end
     SetHealthTextColor(frame, rt, r, g, b, a)
     rt._textGradientPct = nil
@@ -436,20 +418,6 @@ local function PlainUnitIsPlayer(frame, unit)
   local isPlayer, known = ReadUnitIsPlayerCached(frame, unit)
   if known == true then return isPlayer == true end
   return nil
-end
-
-DispatchClassColor = function(frame, unit, allowSecretPassThrough)
-  local _, class = ReadUnitClassCached(frame, unit)
-  local classIsKnownPlain
-  if allowSecretPassThrough == true then
-    if issecretvalue(class) == true then
-      return class, nil, nil, SECRET_NATIVE_CLASS_COLOR
-    end
-    classIsKnownPlain = true
-  end
-  local r, g, b = ClassColorForToken(class, classIsKnownPlain)
-  if r ~= nil then return r, g, b end
-  return 0.12, 0.62, 0.95
 end
 
 local function DispatchClassToken(frame, unit)
@@ -592,7 +560,7 @@ local function ApplyNameTextColor(frame, unit)
       frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
       return
     end
-    r, g, b = 0.12, 0.62, 0.95
+    r, g, b = 0.12, 0.62, 0.95 -- per-event path: literal stays inline (LOADK); mirrors UF.Shared.FallbackClassColor()
   end
   SetNameTextColor(frame, r, g, b, a)
 end
@@ -604,19 +572,16 @@ local function ApplyInlineTextColor(frame, unit, inline)
       frame._msufInlineTextR, frame._msufInlineTextG, frame._msufInlineTextB, frame._msufInlineTextA = nil, nil, nil, nil
       return
     end
-    r, g, b = 0.12, 0.62, 0.95
+    r, g, b = 0.12, 0.62, 0.95 -- per-event path: literal stays inline (LOADK); mirrors UF.Shared.FallbackClassColor()
   end
   SetInlineTextColor(frame, r, g, b, a)
 end
 Text.C = C
 Text.UF = UF
 Text.Secrets = Secrets
-Text.IsSecret = Secrets.IsSecret or function(_) return false end
-Text.IsNil = Secrets.IsNil or function(value) return value == nil end
-Text.ValueOrDefault = Secrets.ValueOrDefault or function(value, fallback)
-  if value == nil then return fallback end
-  return value
-end
+Text.IsSecret = Secrets.IsSecret
+Text.IsNil = Secrets.IsNil
+Text.ValueOrDefault = Secrets.ValueOrDefault
 Text.CreateFrame = CreateFrame
 Text.UnitClass = UnitClass
 Text.UnitExists = UnitExists

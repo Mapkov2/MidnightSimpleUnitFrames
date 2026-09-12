@@ -10,6 +10,8 @@ if not Text then return end
 
 local Apply = MSUF.Apply or {}
 local luaType = type
+-- SlotFormatted counts its varargs on every formatted text write.
+local select = select
 local UnitPowerType = Text.UnitPowerType
 local ResolveDisplayedPowerIdentity = Text.ResolveDisplayedPowerIdentity
 local UnitHealthPercent = Text.UnitHealthPercent
@@ -39,26 +41,11 @@ local SCALE_100 = Text.SCALE_100
 local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
 local nativeSecrets = _G.issecretvalue ~= nil
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local TruncateWhenZero = _G.C_StringUtil and _G.C_StringUtil.TruncateWhenZero
 local WrapString = _G.C_StringUtil and _G.C_StringUtil.WrapString
 local ABSORB_ICON_MARKUP = "|TInterface\\Icons\\INV_Shield_06:0|t"
-local ApplyText = Apply.Text or function(fs, text)
-  if not fs then return end
-  if issecretvalue(text) == true then
-    fs._aText = nil
-    fs._aTextPlain = nil
-    fs:SetText(text)
-    return
-  end
-  text = text or ""
-  if fs._aTextPlain == true and fs._aText == text then
-    return
-  end
-  fs:SetText(text)
-  fs._aText = text
-  fs._aTextPlain = true
-end
+local ApplyText = Apply.Text
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
 end
@@ -291,24 +278,7 @@ local function SetTextCached(fs, text)
   ApplyText(fs, text)
 end
 
-local function SetTextPlainCached(fs, text)
-  if not fs then
-    return
-  end
-  if issecretvalue(text) == true then
-    fs._aText = nil
-    fs._aTextPlain = nil
-    fs:SetText(text)
-    return
-  end
-  text = text or ""
-  if fs._aTextPlain == true and fs._aText == text then
-    return
-  end
-  fs:SetText(text)
-  fs._aText = text
-  fs._aTextPlain = true
-end
+local SetTextPlainCached = ApplyText
 
 local function AddSuffix(text, suffix)
   if suffix then

@@ -28,7 +28,7 @@ local C_Timer = _G.C_Timer
 --- burst of deferrals costs table stores instead of one C_Timer object each.
 --- Exported by MSUF_Scheduler.lua, which loads long before Auras3.
 local RunNextFrame = _G.MSUF_RunNextFrame
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local ClampNumber, Clamp01
 
@@ -147,44 +147,16 @@ Clamp01 = function(value, fallback)
     return ClampNumber(value, fallback or 1, 0, 1)
 end
 
-local function NormalizeFrameStrata(value, fallback)
-    local normalize = _G.MSUF_NormalizeFrameStrata
-    if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
-    if issecretvalue(value) == true then return fallback or "AUTO" end
-    if value == nil or value == "" then return fallback or "AUTO" end
-    value = tostring(value):upper()
-    if value == "AUTO" then return "AUTO" end
-    local rank = _G.MSUF_FRAME_STRATA_RANK
-    return rank and rank[value] and value or (fallback or "AUTO")
-end
+local NormalizeFrameStrata = _G.MSUF_NormalizeFrameStrata
 
-local function ReadParentFrameStrata(parentFrame)
-    local strata
-    if parentFrame and parentFrame.GetFrameStrata then strata = parentFrame:GetFrameStrata() end
-    if issecretvalue(strata) == true then return nil end
-    return strata
-end
+local ReadParentFrameStrata = _G.MSUF_AuraReadParentFrameStrata
 
 local function ResolveFrameStrata(parentFrame, value)
     -- Legacy per-element strata cannot bypass the universal 0..30 order.
     return ReadParentFrameStrata(parentFrame)
 end
 
-local function SyncFrameStrata(frame, strata)
-    if not (frame and frame.SetFrameStrata) then return false end
-    if issecretvalue(strata) == true then return false end
-    if strata == nil or strata == "" then return false end
-    local cachedStrata = frame._msufA3FrameStrata
-    if issecretvalue(cachedStrata) ~= true and cachedStrata == strata then return false end
-    frame._msufA3FrameStrata = strata
-    local currentStrata
-    if frame.GetFrameStrata then currentStrata = frame:GetFrameStrata() end
-    if issecretvalue(currentStrata) == true or currentStrata ~= strata then
-        frame:SetFrameStrata(strata)
-        return true
-    end
-    return false
-end
+local SyncFrameStrata = _G.MSUF_AuraSyncFrameStrata
 
 return {
     AURA_CONTAINER_ADDON = AURA_CONTAINER_ADDON,

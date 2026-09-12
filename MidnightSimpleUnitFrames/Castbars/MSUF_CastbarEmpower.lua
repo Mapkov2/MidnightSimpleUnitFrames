@@ -8,10 +8,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
 local type = type
@@ -19,37 +16,10 @@ local tonumber = tonumber
 local tostring = tostring
 local math_abs = math.abs
 
-local function EnsureDBLazy()
-    local fn = _G.MSUF_EnsureDBLazy
-    if type(fn) == "function" then
-        fn()
-    elseif not _G.MSUF_DB and type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
-    end
-end
-
-local function PlainNumber(value)
-    local fn = _G.MSUF_CastbarRuntime_PlainNumber
-    if type(fn) == "function" then
-        return fn(value)
-    end
-
-    if value == nil then return nil end
-    local toPlain = _G.ToPlain
-    if type(toPlain) == "function" then
-        local plain = toPlain(value)
-        local number = tonumber(tostring(plain))
-        if number ~= nil then
-            return number
-        end
-    end
-
-    local valueType = type(value)
-    if valueType == "number" or valueType == "string" then
-        return tonumber(tostring(value))
-    end
-    return nil
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper and
+-- the lazy DB bootstrap.
+local EnsureDBLazy = _G.MSUF_EnsureDBLazy
+local PlainNumber = _G.MSUF_Castbar_PlainNumber
 
 local function DurationToSeconds(value)
     value = PlainNumber(value)

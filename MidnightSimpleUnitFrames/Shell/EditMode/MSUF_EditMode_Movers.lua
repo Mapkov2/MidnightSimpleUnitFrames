@@ -6,10 +6,7 @@
 --- Movers are dumb overlays. All drag math lives in Ticker.lua.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
 
@@ -51,7 +48,7 @@ local pendingDragFrame
 local pendingDragMover
 local pendingDragStartX
 local pendingDragStartY
-local PENDING_DRAG_THRESHOLD = 3
+
 local guidedCueMover
 
 local function GuidedPlacementPending()
@@ -144,20 +141,7 @@ end
 local IsConfigCombatLocked = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 
-local function FrameRectToUI(frame)
-    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
-        return nil
-    end
-    if frame.IsShown and not frame:IsShown() then return nil end
-    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-    if not (l and r and t and b) then return nil end
-    local fS = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
-    local uiS = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
-    if not fS or fS == 0 then fS = 1 end
-    if not uiS or uiS == 0 then uiS = 1 end
-    local ratio = fS / uiS
-    return l * ratio, r * ratio, t * ratio, b * ratio
-end
+local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
 
 local function ExpandBounds(bounds, l, r, t, b)
     if not l then return bounds end
@@ -290,13 +274,6 @@ local function StopPendingDrag(mover)
     end
 end
 
-local function EnsurePendingDragFrame()
-    if pendingDragFrame then return pendingDragFrame end
-    pendingDragFrame = CreateFrame("Frame", "MSUF_EM2_MoverPendingDragFrame", UIParent)
-    pendingDragFrame:Hide()
-    return pendingDragFrame
-end
-
 local UNIT_NAME_POSITION_LABELS = {
     player = "Player Name Position",
     target = "Target Name Position",
@@ -313,37 +290,6 @@ local function MoverLabelText(key, cfg)
         return string.format(Tr("%s Name Position"), tostring(cfg.label or key))
     end
     return Tr(cfg and cfg.label or key)
-end
-
-local function QueuePendingDrag(mover, button)
-    if button ~= "LeftButton" or not mover then return end
-    if IsConfigCombatLocked and IsConfigCombatLocked() then return end
-    local cx, cy = GetCursorPosition()
-    if not (cx and cy) then return end
-    pendingDragMover = mover
-    pendingDragStartX = cx
-    pendingDragStartY = cy
-    local frame = EnsurePendingDragFrame()
-    frame:SetScript("OnUpdate", function()
-        local target = pendingDragMover
-        if not target then
-            StopPendingDrag()
-            return
-        end
-        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
-            StopPendingDrag(target)
-            return
-        end
-        local mx, my = GetCursorPosition()
-        if not (mx and my) then return end
-        if max(math.abs(mx - (pendingDragStartX or mx)), math.abs(my - (pendingDragStartY or my))) < PENDING_DRAG_THRESHOLD then
-            return
-        end
-        local begin = target._msufEM2BeginDrag
-        StopPendingDrag(target)
-        if type(begin) == "function" then begin(target, "LeftButton", "mouse") end
-    end)
-    frame:Show()
 end
 
 local function CreateMover(key, cfg)
@@ -1006,7 +952,6 @@ local function OpenMoverPopup(prefix, fallback, unit, parent)
     end
 end
 
-ExportPublic("MSUF_UpdateEditModeInfo", LegacyNoop)
 ExportPublic("MSUF_UpdateCastbarEditInfo", LegacyNoop)
 ExportPublic("MSUF_UpdateGridOverlay", UpdateGridOverlay)
 ExportPublic("MSUF_UpdateEditModeVisuals", UpdateGridOverlay)
@@ -1129,10 +1074,19 @@ local function GetPreviewFrame(unitKey)
         or _G["MSUF_" .. unitKey]
 end
 
-local function ForPreviewFrames(fn)
+local function ReforcePreviewFrame(frame, _, want)
+    if frame.ForceUpdate then frame:ForceUpdate("EM2_PREVIEW") end
+    if want then
+        frame:Show()
+        if frame.SetAlpha then frame:SetAlpha(1) end
+        if frame.EnableMouse then frame:EnableMouse(true) end
+    end
+end
+
+local function ForPreviewFrames(fn, value)
     for _, unitKey in ipairs(PREVIEW_UNITS) do
         local frame = GetPreviewFrame(unitKey)
-        if frame then fn(frame, unitKey) end
+        if frame then fn(frame, unitKey, value) end
     end
 end
 
@@ -1202,14 +1156,7 @@ local function MSUF_SyncAllUnitPreviews()
         _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
     end
 
-    ForPreviewFrames(function(frame)
-        if frame.ForceUpdate then frame:ForceUpdate("EM2_PREVIEW") end
-        if want then
-            frame:Show()
-            if frame.SetAlpha then frame:SetAlpha(1) end
-            if frame.EnableMouse then frame:EnableMouse(true) end
-        end
-    end)
+    ForPreviewFrames(ReforcePreviewFrame, want)
     --- 3) Castbars
     local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
     local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
@@ -1260,7 +1207,7 @@ do
         "MSUF_UpdateCastbarVisuals_Immediate",
         "MSUF_UpdateCastbarTextures",
         "MSUF_UpdateCastbarTextures_Immediate",
-        "MSUF_RefreshDispelOutlineStates",
+        "MSUF_RefreshUnitDispelOverlays",
         "MSUF_ApplyAllAlpha",
     }
     local wrapped = {}
@@ -1395,14 +1342,7 @@ do
         end)
 
         Phase(0.04, function()
-            ForPreviewFrames(function(frame)
-                if frame.ForceUpdate then frame:ForceUpdate("EM2_PREVIEW") end
-                if want then
-                    frame:Show()
-                    if frame.SetAlpha then frame:SetAlpha(1) end
-                    if frame.EnableMouse then frame:EnableMouse(true) end
-                end
-            end)
+            ForPreviewFrames(ReforcePreviewFrame, want)
         end)
 
         Phase(0.06, function()
@@ -1467,7 +1407,7 @@ end
 ExportPublic("MSUF_SyncCastbarEditModeWithUnitEdit", MSUF_SyncCastbarEditModeWithUnitEdit)
 
 --- --- MSUF_SyncBossUnitframePreviewWithUnitEdit ---
-local MSUF_SyncBossUnitframePreviewWithUnitEdit = _G.MSUF_SyncBossUnitframePreviewWithUnitEdit or function()
+local MSUF_SyncBossUnitframePreviewWithUnitEdit = function()
     --- Provided by MidnightSimpleUnitFrames.lua; stub if not yet available
 end
 ExportPublic("MSUF_SyncBossUnitframePreviewWithUnitEdit", MSUF_SyncBossUnitframePreviewWithUnitEdit)
@@ -1543,12 +1483,9 @@ local function ApplyCastbarAnchorState(unit)
     end
 end
 
-local function RoundCastbarOffset(value)
-    value = tonumber(value) or 0
-    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
-end
+local RoundCastbarOffset = _G.MSUF_RoundOffset
 
-local MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or function(unit, anchored)
+local MSUF_EM_SetCastbarAnchoredToUnit = function(unit, anchored)
     if not unit then return end
     local db = _G.MSUF_DB; if not db then return end
     db.general = db.general or {}

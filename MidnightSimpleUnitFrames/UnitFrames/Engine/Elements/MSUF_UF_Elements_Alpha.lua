@@ -3,10 +3,7 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
@@ -21,8 +18,27 @@ local SetFrameAlpha = V.SetFrameAlpha
 local SetAlphaCached = V.SetAlphaCached
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
-local issecretvalue = _G.issecretvalue or function() return false end
+local issecretvalue = _G.issecretvalue
 local EvaluateColorValueFromBoolean = _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorValueFromBoolean
+
+-- Boss token -> index without a pattern match. Kernel/MSUF_Util.lua (TOC line
+-- order: Kernel before UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml)
+-- always publishes this in-game; the inline twin only covers harnesses that
+-- load this element standalone. Keep both shapes identical to MSUF_Util's.
+local GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
+if type(GetBossIndexFromToken) ~= "function" then
+  local strsub = string.sub
+  GetBossIndexFromToken = function(u)
+    if type(u) ~= "string" or strsub(u, 1, 4) ~= "boss" then
+      return nil
+    end
+    local n = tonumber(strsub(u, 5))
+    if n and n >= 1 then
+      return n
+    end
+    return nil
+  end
+end
 
 -- Retail live SimpleFrame/CurveUtil APIs accept protected booleans and alpha
 -- components. Select both conditions natively, retaining the ordinary spell
@@ -125,29 +141,61 @@ local function OocTrackFrame(frame, hasOoc)
   OocSyncDriver()
 end
 
+-- Resolved castbar per unit key, so the global reads and the "MSUF_BossCastbar"
+-- concat happen once per unit instead of on every alpha/range update.
+--   * A resolved MSUF-owned handle is terminal: MSUF_CreateCastBar only runs
+--     while the global is still nil, EnsureBossCastbars returns the existing
+--     pool, and nothing ever clears _msufCastbarDriver -- so no invalidation
+--     point exists or is needed for a positive hit.
+--   * `false` marks a unit that structurally cannot own a castbar (anything
+--     that is not target/focus/bossN). That verdict is pure, so it is cached.
+--   * A *missing* target/focus/boss castbar is never cached: those frames are
+--     built lazily when the feature is switched on, so that leg stays
+--     late-bound and re-resolves until the driver has published its global.
+local castbarCache = {}
+
 local function CastbarForUnit(unit)
   if not unit then
     return nil
   end
+  local cached = castbarCache[unit]
+  if cached ~= nil then
+    return cached or nil
+  end
+
   if unit == "target" then
-    return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
-      or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)
+    local castbar = _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
+    if castbar then
+      castbarCache[unit] = castbar
+      return castbar
+    end
+    local legacy = _G.TargetCastBar
+    return (legacy and legacy._msufCastbarDriver == true) and legacy or nil
   elseif unit == "focus" then
-    return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
-      or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
+    local castbar = _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
+    if castbar then
+      castbarCache[unit] = castbar
+      return castbar
+    end
+    local legacy = _G.FocusCastBar
+    return (legacy and legacy._msufCastbarDriver == true) and legacy or nil
   end
 
-  local bossIndex = tostring(unit):match("^boss(%d+)$")
-  if bossIndex then
-    local index = tonumber(bossIndex)
-    local bossCastbars = _G.MSUF_BossCastbars
-    return (bossCastbars and bossCastbars[index])
-      or _G["MSUF_BossCastbar" .. bossIndex]
-      or _G["MSUF_boss" .. bossIndex .. "CastBar"]
-      or _G["MSUF_Boss" .. bossIndex .. "CastBar"]
+  local index = GetBossIndexFromToken(unit)
+  if not index then
+    castbarCache[unit] = false
+    return nil
   end
 
-  return nil
+  local bossCastbars = _G.MSUF_BossCastbars
+  local castbar = (bossCastbars and bossCastbars[index])
+    or _G["MSUF_BossCastbar" .. index]
+    or _G["MSUF_boss" .. index .. "CastBar"]
+    or _G["MSUF_Boss" .. index .. "CastBar"]
+  if castbar then
+    castbarCache[unit] = castbar
+  end
+  return castbar
 end
 
 local function CastbarRangeAlpha(frame, mul)
@@ -679,7 +727,3 @@ local function ApplyUnitAlpha(frame, key)
   return true
 end
 ExportPublic("MSUF_ApplyUnitAlpha", ApplyUnitAlpha)
-
-local function AlphaUpdatePreserveMissingHP()
-end
-ExportPublic("MSUF_Alpha_UpdatePreserveMissingHP", AlphaUpdatePreserveMissingHP)

@@ -35,7 +35,7 @@ local function ContentHeight()
     return h
 end
 
-local SEARCH_KEYWORDS, SEARCH_TEXT_FOLDS, SEARCH_UTF_PUNCTUATION = M.PickDefaults(SearchData, [[KEYWORDS TEXT_FOLDS UTF_PUNCTUATION]])
+local SEARCH_KEYWORDS, SEARCH_TEXT_FOLDS, SEARCH_UTF_PUNCTUATION = SearchData.KEYWORDS or {}, SearchData.TEXT_FOLDS or {}, SearchData.UTF_PUNCTUATION or {}
 
 local function TrimText(text)
     text = tostring(text or "")

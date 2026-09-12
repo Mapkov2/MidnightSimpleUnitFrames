@@ -6,10 +6,7 @@
 --- ============================================================================
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 --- Shared UI primitives used by Menu2 and Edit Mode.
 --- Keep this layer independent from Menu2 load order: Edit Mode loads first.
@@ -22,6 +19,7 @@ local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local EXPRESSWAY_REGULAR = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf"
 local EXPRESSWAY_SEMIBOLD = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway SemiBold.ttf"
 local max = math.max
+local SetFontChecked = _G.MSUF_SetFontChecked
 
 -- One shared type scale for Menu2 and Edit Mode. Preview content may use the
 -- micro token, but configurable unit-frame text remains outside this system.
@@ -126,9 +124,9 @@ function UI.ApplyFontRole(fs, role, fallback, flags)
     local currentFont, _, currentFlags = fs.GetFont and fs:GetFont()
     local size = UI.FontSize(role)
     local fontPath = UI.ResolveConfiguredFontPath(role, fallback or currentFont or FONT, size, flags or currentFlags or "")
-    local ok, applied = pcall(fs.SetFont, fs, fontPath or fallback or currentFont or FONT, size, flags or currentFlags or "")
-    if (not ok or applied == false) and fontPath ~= fallback and fallback then
-        pcall(fs.SetFont, fs, fallback, size, flags or currentFlags or "")
+    local applied = SetFontChecked(fs, fontPath or fallback or currentFont or FONT, size, flags or currentFlags or "")
+    if not applied and fontPath ~= fallback and fallback then
+        SetFontChecked(fs, fallback, size, flags or currentFlags or "")
     end
     return fs
 end

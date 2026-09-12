@@ -17,7 +17,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     local pairs = pairs
     local table_sort = table.sort
     local C_Spell = _G.C_Spell
-    local GetSpellInfo = _G.GetSpellInfo
+
     local DEFAULT_SHARED = Schema.DEFAULT_SHARED
     local RUNTIME_FILTER_KEYS = Schema.RUNTIME_FILTER_KEYS
     local ClampNumber = Common.ClampNumber
@@ -284,7 +284,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     local function LiveAuraSecretHelpers()
         local Secrets = type(MSUF.Secrets) == "table" and MSUF.Secrets or nil
         local SafeNumber = Secrets and Secrets.SafeNumber or tonumber
-        local NotSecret = Secrets and Secrets.NotSecret or function(_) return true end
+        local NotSecret = Secrets and Secrets.NotSecret
         return SafeNumber, NotSecret, Secrets
     end
 
@@ -332,7 +332,6 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
         if LiveAuraAccessRestricted() then return false, 1 end
         local _, _, Secrets = LiveAuraSecretHelpers()
         local UnitThere = Secrets and Secrets.UnitExistsPlain
-            or function(unit) local exists = UnitExists(unit) return exists == true or exists == 1 end
         local filter = NormalizeKind(kind) == "debuff" and "HARMFUL" or "HELPFUL"
         local stop = false
         EachRuntimeUnit(scope, function(runtimeUnit)

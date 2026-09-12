@@ -3,10 +3,7 @@
 
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local Preview = MSUF.UFPreview or MSUF.MSUF_UFPreview or _G.MSUF_UFPreview
 if not Preview then return end
 local M = (MSUF and MSUF.MSUF2) or _G.MSUF2 or {}

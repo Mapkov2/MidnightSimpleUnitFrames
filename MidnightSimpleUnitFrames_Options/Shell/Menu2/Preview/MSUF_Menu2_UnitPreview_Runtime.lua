@@ -9,15 +9,7 @@ MSUF = MSUF or (_G.MSUF_NS) or {}
 local Runtime = MSUF.UFPreviewRuntime or {}
 MSUF.UFPreviewRuntime = Runtime
 local lastDBRef, lastProfileName
-local function CoreFrame(unit)
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame(unit)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
-    return unit and frames and frames[unit] or nil
-end
+local CoreFrame = MSUF.UF.GetFrame
 local function ClampRuntimeVisualScale(scale)
     scale = tonumber(scale)
     if not scale or scale <= 0 then return 1 end

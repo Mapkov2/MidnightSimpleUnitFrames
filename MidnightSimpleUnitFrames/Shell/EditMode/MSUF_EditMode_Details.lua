@@ -1,23 +1,15 @@
 --- Details! adapter for MSUF Edit Mode. Snapped windows move as one native group.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-
 local API = _G.MSUF_EditModeAPI
 if not (API and API.RegisterElement) then return end
 
 local OWNER, SETTING = "MSUF.Details", "detailsEditModeIntegration"
 local registered, active, listening = {}, false, false
 
-local function Export(name, value)
-    if type(MSUF.ExportPublic) == "function" then return MSUF.ExportPublic(name, value) end
-    _G[name] = value
-    return value
-end
+local Export = MSUF.ExportPublic
 
-local function General()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local General = _G.MSUF_GetGeneralDB
 
 local function Enabled()
     local general = General()
@@ -33,8 +25,8 @@ end
 local function Id(instance)
     if type(instance) ~= "table" then return nil end
     if type(instance.GetId) == "function" then
-        local ok, id = pcall(instance.GetId, instance)
-        if ok and tonumber(id) then return tonumber(id) end
+        local id = instance.GetId(instance)
+        if tonumber(id) then return tonumber(id) end
     end
     return tonumber(instance.meu_id)
 end
@@ -44,8 +36,8 @@ local function Instance(id)
     local instance = details and details:GetInstance(tonumber(id))
     if type(instance) ~= "table" or not instance.baseframe then return nil end
     if type(instance.IsEnabled) == "function" then
-        local ok, enabled = pcall(instance.IsEnabled, instance)
-        if not ok or enabled ~= true then return nil end
+        local enabled = instance.IsEnabled(instance)
+        if enabled ~= true then return nil end
     elseif instance.ativa ~= true then return nil end
     return instance
 end
@@ -54,8 +46,8 @@ local function Group(instance)
     if not instance then return {} end
     local group
     if type(instance.GetInstanceGroup) == "function" then
-        local ok, result = pcall(instance.GetInstanceGroup, instance)
-        if ok and type(result) == "table" then group = result end
+        local result = instance.GetInstanceGroup(instance)
+        if type(result) == "table" then group = result end
     end
     local result, seen = {}, {}
     for _, member in ipairs(group or { instance }) do
@@ -79,15 +71,15 @@ local function Save(group)
     for i = 1, #group do
         local instance = group[i]
         if type(instance.SaveMainWindowPosition) == "function" then
-            pcall(instance.SaveMainWindowPosition, instance)
+            instance.SaveMainWindowPosition(instance)
         end
     end
 end
 
 local function MemberScale(member)
     if type(member) ~= "table" or type(member.CreatePositionTable) ~= "function" then return nil end
-    local ok, position = pcall(member.CreatePositionTable, member)
-    return ok and type(position) == "table" and tonumber(position.scale) or nil
+    local position = member.CreatePositionTable(member)
+    return type(position) == "table" and tonumber(position.scale) or nil
 end
 
 local function Capture(id)
@@ -129,7 +121,7 @@ local function Restore(id, state, reason)
         local scale = tonumber(entry.scale)
         if member and scale and scale ~= MemberScale(member)
             and type(member.SetWindowScale) == "function" then
-            pcall(member.SetWindowScale, member, scale, false)
+            member.SetWindowScale(member, scale, false)
         end
     end
     if type(root.BaseFrameSnap) == "function" then root:BaseFrameSnap()
@@ -168,9 +160,11 @@ local function ScaleControl(id)
             local root = Root(id)
             value = tonumber(value)
             if not (root and value and type(root.SetWindowScale) == "function") then return false end
-            local ok = pcall(root.SetWindowScale, root, value / 100, true)
-            if ok then Save(Group(root)) end
-            return ok == true
+            root.SetWindowScale(root, value / 100, true)
+            do
+Save(Group(root))
+end
+            return true
         end,
     }
 end
@@ -235,12 +229,7 @@ local function Deactivate()
     return true
 end
 
-local function SetEnabled(enabled)
-    enabled = enabled ~= false
-    local general = General()
-    if general then general[SETTING] = enabled end
-    return enabled and Activate() or Deactivate()
-end
+local SetEnabled = _G.MSUF_EM2.ExternalProviders.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_DetailsEditMode_IsAvailable", function() return Details() ~= nil end)
 Export("MSUF_DetailsEditMode_SetEnabled", SetEnabled)

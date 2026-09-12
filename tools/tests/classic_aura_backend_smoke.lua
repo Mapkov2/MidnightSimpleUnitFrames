@@ -319,6 +319,8 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras
 namespace.GF = namespace.GF or {}
 namespace.GF.GetConf = function() return _G.MSUF_DB.gf_party end
 namespace.GF.GetScaledFrameMetrics = function() return 80, 32 end
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 local compiledGroupSpec = namespace.GF.CompileSpec("party")

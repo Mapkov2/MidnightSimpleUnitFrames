@@ -3,20 +3,9 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
-local function CoreFrame(unit)
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame(unit)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
-    return unit and frames and frames[unit] or nil
-end
+local CoreFrame = MSUF.UF.GetFrame
 
 local PREVIEW_LABELS = {
     player = "Player castbar preview",
@@ -74,24 +63,9 @@ local function Translate(value)
     return (type(locale) == "table" and rawget(locale, value)) or value
 end
 
-local function EnsureGeneralDB()
-    local ensure = _G.MSUF_EnsureDB or _G.EnsureDB
-    if type(ensure) == "function" then ensure() end
+local EnsureGeneralDB = _G.MSUF_EnsureCastbarGeneralDB
 
-    local db = _G.MSUF_DB
-    if not db then
-        db = {}
-        ExportPublic("MSUF_DB", db)
-    end
-    db.general = db.general or {}
-    return db.general
-end
-
-local function IsInCombat()
-    return _G.MSUF_InCombat == true
-        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
-        or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
-end
+local IsInCombat = _G.MSUF_IsPlayerInCombat
 
 local function GetPreviewScale()
     local general = EnsureGeneralDB()

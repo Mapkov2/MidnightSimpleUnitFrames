@@ -102,13 +102,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         return next(tbl) ~= nil
     end
 
-    local function TableHasAnyKey(tbl, keys)
-        if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
-        for key in pairs(keys) do
-            if tbl[key] ~= nil then return true end
-        end
-        return false
-    end
+    local TableHasAnyKey = _G.MSUF_AuraTableHasAnyKey
 
     local function ClearKeys(tbl, keys)
         if type(tbl) ~= "table" or type(keys) ~= "table" then return end
@@ -319,7 +313,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         EachRuntimeUnit(unit, function(runtimeUnit)
             local pu = PerUnit(auras, runtimeUnit, true)
             if not pu then return end
-            local styleKey = STYLE_LAYOUT_KEYS[key] == true or STYLE_SHARED_LAYOUT_KEYS[key] == true
+
             if SHARED_LAYOUT_KEYS[key] then
                 if type(pu.layoutShared) ~= "table" then pu.layoutShared = {} end
                 pu.overrideSharedLayout = true

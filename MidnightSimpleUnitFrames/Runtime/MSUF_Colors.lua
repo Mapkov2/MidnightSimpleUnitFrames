@@ -1,35 +1,40 @@
---- MSUF_ColorsCore.lua
---- Runtime color logic: Get/Set/Reset for all color categories,
---- PushVisualUpdates, and mouseover-highlight system.
+--- MSUF_Colors.lua
+--- Runtime color service: a cached MSUF_DB.general resolver, Get/Set/Reset
+--- accessors for every color category (global font, castbar, class, bar
+--- background, NPC, pet, absorb overlays, power-bar background, aggro border,
+--- bar outline), the coalesced and combat-deferred PushVisualUpdates /
+--- PushCastbarVisualUpdates repaint requests, and the mouseover-highlight
+--- shims that forward to MSUF.Highlight.
 --- Loaded early (before Gameplay, Castbars, Borders etc.) so hot-path
 --- consumers can call the getters at zero extra lookup cost.
---- The Options panel lives in MSUF_Options_Colors.lua.
+--- Exposed as MSUF._colorsAPI / MSUF.Public.Colors plus a few MSUF_* globals
+--- via ExportPublic. The options UI lives in the Menu2 pages of
+--- MidnightSimpleUnitFrames_Options (e.g. MSUF_Menu2_AdvancedColors.lua).
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF = _G.MSUF or MSUF
 MSUF.Public = MSUF.Public or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 ---
 --- Local shortcuts (core only - no UI-framework refs)
 ---
-local EnsureDB              = _G.MSUF_EnsureDB
+--- REQUIRED: State/MSUF_Defaults.lua is listed unconditionally in the TOC and
+--- exports MSUF_EnsureDB at its top level, long before this file. The cached
+--- resolver below rebuilds MSUF_DB.general through it on every profile switch,
+--- so a missing export must fail at load instead of silently skipping repair.
+local EnsureDB              = MSUF.Require("MSUF_EnsureDB", "Runtime/MSUF_Colors.lua")
 local RAID_CLASS_COLORS     = RAID_CLASS_COLORS
 local C_Timer               = C_Timer
 local _G                    = _G
 local type                  = type
 local tonumber              = tonumber
+local pairs                 = pairs
+local next                  = next
 local CreateFrame           = _G.CreateFrame
-local InCombatLockdown      = _G.InCombatLockdown
-local RunNextFrame          = _G.MSUF_RunNextFrame or _G.MSUF_Core_RunNextFrame or function(fn)
-    if type(fn) ~= "function" then return end
-    C_Timer.After(0, fn)
-end
+local RunNextFrame          = _G.MSUF_RunNextFrame or _G.MSUF_Core_RunNextFrame
 local COLOR_PUSH_DELAY      = 0.04
 
 ---
@@ -53,7 +58,7 @@ local function _general()
         return _cachedGen
     end
     --- First call or profile switch: resolve fresh.
-    if EnsureDB then EnsureDB() end
+    EnsureDB()
     db = MSUF_DB
     if not db then return nil end
     db.general = db.general or {}
@@ -77,9 +82,7 @@ local _combatDeferFrame
 local PushVisualUpdates
 local PushCastbarVisualUpdates
 
-local function InCombat()
-    return InCombatLockdown and InCombatLockdown()
-end
+local InCombat = MSUF.Util.InCombat
 
 local function EnsureCombatDeferFrame()
     if _combatDeferFrame or type(CreateFrame) ~= "function" then
@@ -173,8 +176,11 @@ local function _PushVisualUpdates_Flush()
         end
     end
 
-    --- Sync highlight priority stripe colors when border colors change.
-    _Call(_G.MSUF_PrioRows_Reinit)
+    --- No highlight-priority step here on purpose: the priority rows are
+    --- options-menu widgets owned by the Bars page, which repaints them from
+    --- its own page refresher. MSUF_PrioRows_Reinit was the pre-Menu2 panel
+    --- hook and died with that panel; the runtime border order itself is part
+    --- of the Borders refresh above.
 
     --- UF.RefreshColors already includes both Borders and Power. Running the
     --- legacy outline fanout afterwards would compile every unit spec and walk

@@ -125,14 +125,11 @@ end
 -- /msufgp drivers — every frame in the UI with an armed OnUpdate script.
 -- OnUpdate only runs while a frame is visible, so the visible rows ARE the
 -- steady per-frame consumers (across ALL addons).
-local function ReadFrameMember(frame, key)
-  return frame[key]
-end
 
 local function CallFrameMethod(frame, key, ...)
-  local readOK, method = pcall(ReadFrameMember, frame, key)
-  if not readOK or type(method) ~= "function" then return false end
-  return pcall(method, frame, ...)
+  local method = frame[key]
+  if type(method) ~= "function" then return false end
+  return true, method(frame, ...)
 end
 
 local function DumpDrivers()

@@ -2,6 +2,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local EnsureDB = M.EnsureDB
 local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Shared Unit page sections.
@@ -15,8 +16,14 @@ local UP = M.UnitPage or {}
 local floor = math.floor
 local max, min = math.max, math.min
 local VT = M.ValueTextList
-local UNIT_PAGES, LOAD_CONDITIONS, BOSS_LAYOUT_OPTIONS, SEPARATORS, UF_COPY_CATEGORIES = M.PickDefaults(UP, [[UNIT_PAGES LOAD_CONDITIONS BOSS_LAYOUT_OPTIONS SEPARATORS UF_COPY_CATEGORIES]])
-local GetConf, GetGeneral, Call, DefaultCopyTarget, UnitTopLabel, UnitTopPillWidth, NewCopyScopeDefaults, ConfirmCopyToAll, CopyUnitSettings, ToggleEditMode, IsEditModeActive, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive, ControlMeta, SettingMeta, ReviewedMeta, RegisterControl = M.Pick(UP, [[GetConf GetGeneral Call DefaultCopyTarget UnitTopLabel UnitTopPillWidth NewCopyScopeDefaults ConfirmCopyToAll CopyUnitSettings ToggleEditMode IsEditModeActive ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetControlEnabled NormalizeBossLayoutMode UpdateLoadActive ControlMeta SettingMeta ReviewedMeta RegisterControl]])
+local UNIT_PAGES, LOAD_CONDITIONS, BOSS_LAYOUT_OPTIONS = UP.UNIT_PAGES or {}, UP.LOAD_CONDITIONS or {}, UP.BOSS_LAYOUT_OPTIONS or {}
+local SEPARATORS, UF_COPY_CATEGORIES = UP.SEPARATORS or {}, UP.UF_COPY_CATEGORIES or {}
+local GetConf, GetGeneral, DefaultCopyTarget, UnitTopLabel = UP.GetConf, UP.GetGeneral, UP.DefaultCopyTarget, UP.UnitTopLabel
+local UnitTopPillWidth, NewCopyScopeDefaults, ConfirmCopyToAll = UP.UnitTopPillWidth, UP.NewCopyScopeDefaults, UP.ConfirmCopyToAll
+local CopyUnitSettings, ReadBool = UP.CopyUnitSettings, UP.ReadBool
+local SetBool, ReadNumber, SetNumber = UP.SetBool, UP.ReadNumber, UP.SetNumber
+local SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive = UP.SetControlEnabled, UP.NormalizeBossLayoutMode, UP.UpdateLoadActive
+local SettingMeta, ReviewedMeta, RegisterControl = UP.SettingMeta, UP.ReviewedMeta, UP.RegisterControl
 local UNIT_AURAS_MENU_UNITS = M.KeySetFromWords "player target focus boss arena"
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
 local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
@@ -76,8 +83,6 @@ local function FillDirectionValue(reverse, vertical)
     if vertical then return reverse and "tb" or "bt" end
     return reverse and "rl" or "lr"
 end
-local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
-local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
 
 local function AutomaticCooldownProvider()
     local getter = _G.MSUF_GetAutomaticCooldownAnchorProvider
@@ -91,12 +96,8 @@ local function CooldownAnchorEnabled()
     return type(_G.C_CooldownViewer) == "table" and type(general) == "table" and general.anchorToCooldown == true or false
 end
 --- Hides the anchor switch on clients that can never host a Cooldown Manager.
-local function CooldownAnchorSupported()
-    local supported = _G.MSUF_IsCooldownAnchorSupported
-    if type(supported) == "function" then return supported() == true end
-    return type(_G.C_CooldownViewer) == "table"
-end
-local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
+local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
+
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
 local ENABLED_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
 local TINTED_ENABLED_HEADER_BG = { 0, 0, 0, 0.48 }
@@ -112,17 +113,7 @@ local function EnabledHeaderColor()
     end
     return ENABLED_HEADER_BG
 end
-local TOP_BUTTON_STYLE = {
-    bg = { 0.022, 0.032, 0.064, 0.94 },
-    border = { 0.090, 0.135, 0.250, 0.58 },
-    textColor = { 0.78, 0.87, 0.98, 1 },
-    hoverBg = { 0.032, 0.046, 0.086, 0.96 },
-    hoverBorder = { 0.120, 0.215, 0.405, 0.72 },
-    activeBg = { 0.026, 0.038, 0.074, 0.96 },
-    activeBorder = { 0.145, 0.270, 0.560, 0.82 },
-    activeTextColor = { 0.90, 0.95, 1.00, 1 },
-    stripe = false,
-}
+
 
 local function CurrentApplyService()
     local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
@@ -228,7 +219,7 @@ end
 local function ToTInlineNPCColorAvailable()
     local fn = _G.MSUF_UFCore_IsToTInlineNPCColorModeAvailable
     if type(fn) == "function" then return fn() == true end
-    local db = _G.MSUF_DB
+    local db = EnsureDB()
     local gen = db and db.general
     local wantNpc = gen and gen.npcNameRed
     local conf = GetConf("targettarget")
@@ -280,7 +271,7 @@ local function ApplyUnitFrameEnabledGate(ctx, unit)
     end)
 end
 local UnitSectionShared = M.UnitSectionsShared or {}
-local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
+local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus
 -- Page-level previews are fixed chrome, not form content. Keep their geometry
 -- bounded so the settings ScrollFrame always starts below a predictable header.
 local UNIT_PREVIEW_BOX_HEIGHT = 132
@@ -415,7 +406,7 @@ local function BuildPreview(ctx, builder, unit)
                 if type(preview) == "table" and type(preview.RequestRefreshForBox) == "function" then
                     preview.RequestRefreshForBox(box, "MSUF2_UNIT_PAGE_SHOW")
                 else
-                    Call("MSUF_UFPreview_RequestRefresh", "MSUF2_UNIT_PAGE_SHOW")
+                    _G.MSUF_UFPreview_RequestRefresh("MSUF2_UNIT_PAGE_SHOW")
                 end
             end)
         end
@@ -446,7 +437,7 @@ local function BuildPreview(ctx, builder, unit)
                 return
             end
         end
-        Call("MSUF_UFPreview_RequestRefresh", reason)
+        _G.MSUF_UFPreview_RequestRefresh(reason)
     end
     -- Aura Style owns this exact embedded preview box. Publishing the scoped
     -- refresher avoids repainting Preview.active, which may belong to another
@@ -542,7 +533,7 @@ local function BuildPreview(ctx, builder, unit)
         RefreshThisPreview("MSUF2_ASSISTANT_UNIT_PREVIEW")
         return box ~= nil and PreviewHostShown()
     end
-    M.EnsureUnitPagePreviewForAssistant = M.EnsureUnitPagePreviewForAssistant or function(pageKey)
+    M.EnsureUnitPagePreviewForAssistant = function(pageKey)
         local ensure = M._assistantUnitPreviewEnsurers and M._assistantUnitPreviewEnsurers[pageKey]
         return type(ensure) == "function" and ensure() == true or false
     end
@@ -753,13 +744,7 @@ local function BuildTopActions(ctx, builder, unit, label)
         if copyPopup then copyPopup.Show(self) end
     end)
     if type(M.RegisterGuidedCopyPopup) == "function" then
-        M.RegisterGuidedCopyPopup("unit", ctx.key, function()
-            local popup = copyPopup and copyPopup.GetPopup and copyPopup.GetPopup()
-            if popup and popup.IsShown and popup:IsShown() then return true end
-            if copyPopup then copyPopup.Show(copy) end
-            popup = copyPopup and copyPopup.GetPopup and copyPopup.GetPopup()
-            return popup and popup.IsShown and popup:IsShown() or false
-        end)
+        M.RegisterGuidedCopyPopup("unit", ctx.key, M.CreateGuidedCopyOpener(copyPopup, copy))
     end
     sec:SetScript("OnHide", function()
         if copyPopup then copyPopup.Hide() end
@@ -987,7 +972,7 @@ local function BuildBasics(ctx, builder, unit, label)
         end
     end
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
-    local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit) or function() end
+    local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit)
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
     local unitLabel = label or UnitTopLabel(unit)
     local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -164, "Enable", 92)
@@ -1246,7 +1231,6 @@ local function BuildInlineText(ctx, builder, unit)
     local function ApplyToTInline(reason, forceToT, skipRefresh)
         RequestUnitRuntimeApply("target", reason, inlineApplyFlags)
         RequestUnitRuntimeApply("targettarget", reason, inlineApplyFlags, forceToT == true)
-        Call("MSUF_UpdateTargetToTInlineNow")
         if not skipRefresh and RefreshInlineControlState then RefreshInlineControlState() end
     end
     if W.AttachContextColorShortcut then
@@ -1429,28 +1413,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
     title:SetPoint("TOPLEFT", control, "TOPLEFT", 0, 0)
     control._msuf2Title = title
 
-    local function SetTileVisual(btn, active, hover)
-        if not btn then return end
-        if btn.SetBackdropColor then
-            if active then
-                btn:SetBackdropColor(0.100, 0.180, 0.300, hover and 0.98 or 0.92)
-                btn:SetBackdropBorderColor(0.260, 0.620, 1.000, 1.00)
-            elseif hover then
-                btn:SetBackdropColor(0.115, 0.135, 0.185, 0.95)
-                btn:SetBackdropBorderColor(0.380, 0.450, 0.620, 0.95)
-            else
-                btn:SetBackdropColor(0.045, 0.052, 0.076, 0.92)
-                btn:SetBackdropBorderColor(0.190, 0.220, 0.310, 0.85)
-            end
-        end
-        if btn._label then
-            if active then
-                btn._label:SetTextColor(0.95, 1.00, 1.00, 1)
-            else
-                btn._label:SetTextColor(0.74, 0.80, 0.90, 0.95)
-            end
-        end
-    end
+    local SetTileVisual = W.SetTileVisual
 
     local function DrawMiniBossPreview(btn, info)
         if not (btn and info) then return end

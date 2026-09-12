@@ -11,7 +11,7 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
-local GF = GP.GF or function() return MSUF and MSUF.GF end
+local GF = GP.GF
 local ScopeSection = GP.ScopeSection
 local ControlMeta = GP.ControlMeta
 local RegisterControl = GP.RegisterControl
@@ -43,9 +43,7 @@ local SLOT_VALUES = {
     { value = 4, text = "4" }, { value = 5, text = "5" },
 }
 
-local function Tr(text)
-    return type(M.Tr) == "function" and M.Tr(text) or tostring(text or "")
-end
+local Tr = M.Tr
 
 local function PriorityConf()
     local gf = GF()

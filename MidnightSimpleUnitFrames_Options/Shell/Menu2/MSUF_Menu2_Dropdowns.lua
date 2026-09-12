@@ -13,22 +13,13 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
-local Tr = M.TranslateText or function(text) return text end
-local InvokeDropdownProvider = M.InvokeBoundary or pcall
+local Tr = M.TranslateText
+
 local function SetSearchText(object, text)
     if object and text ~= nil then object._msuf2SearchText = text end
     return object
 end
-local function RegisterSearchObject(object, label, kind, opts)
-    SetSearchText(object, label)
-    if object and type(M.RegisterSearchWidget) == "function" then
-        opts = opts or {}
-        opts.label = opts.label or label
-        opts.kind = opts.kind or kind
-        M.RegisterSearchWidget(object, opts)
-    end
-    return object
-end
+local RegisterSearchObject = W.RegisterSearchObject
 local function NextRow(section, height)
     local x = section._msuf2ContentX or 14
     local y = section._msuf2CursorY or -38
@@ -61,13 +52,7 @@ local DROPDOWN_SMOOTH_SCROLL_EPSILON = 0.45
 local dropdownActiveRowHeight = DROPDOWN_ROW_H
 local CloseDropdown, HideDropdownItemTooltip
 local IsDescendantOf
-local function PixelBarTexture(texture)
-    if not texture then return texture end
-    texture:SetTexture("Interface\\Buttons\\WHITE8X8")
-    if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(true) end
-    if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
-    return texture
-end
+local PixelBarTexture = T.PixelBarTexture
 local function PaintDropdownScrollbar(hover)
     local bar = dropdownSlider
     if not bar then return end
@@ -499,8 +484,8 @@ local function DropdownItemTooltipField(item, key, fallbackKey)
     local value = item[key]
     if value == nil and fallbackKey then value = item[fallbackKey] end
     if type(value) == "function" then
-        local ok, resolved = InvokeDropdownProvider(value, item)
-        value = ok and resolved or nil
+        local resolved = value(item)
+        value = resolved or nil
     end
     if value == nil or value == "" then return nil end
     return Tr(tostring(value))
@@ -542,15 +527,15 @@ local function DropdownItemBarPreview(item)
     if type(item) ~= "table" or item.previewKind ~= "barOverlay" then return nil end
     local preview = item.barPreview or item.overlayPreview or item.preview
     if type(preview) == "function" then
-        local ok, resolved = InvokeDropdownProvider(preview, item)
-        preview = ok and resolved or nil
+        local resolved = preview(item)
+        preview = resolved or nil
     end
     return type(preview) == "table" and preview or nil
 end
 local function DropdownColorTuple(color)
     if type(color) == "function" then
-        local ok, resolved = InvokeDropdownProvider(color)
-        color = ok and resolved or nil
+        local resolved = color()
+        color = resolved or nil
     end
     if type(color) ~= "table" then return nil end
     local r = color.r or color[1]
@@ -572,14 +557,14 @@ local function DropdownItemDisabled(item)
     if DropdownItemHeader(item) then return true end
     local disabled = item.disabled
     if type(disabled) == "function" then
-        local ok, resolved = InvokeDropdownProvider(disabled, item)
-        disabled = ok and resolved or true
+        local resolved = disabled(item)
+        disabled = resolved or true
     end
     if disabled ~= nil then return disabled and true or false end
     local enabled = item.enabled
     if type(enabled) == "function" then
-        local ok, resolved = InvokeDropdownProvider(enabled, item)
-        enabled = ok and resolved or false
+        local resolved = enabled(item)
+        enabled = resolved or false
     end
     return enabled == false
 end
@@ -591,7 +576,7 @@ end
 local function RestoreDropdownDefaultFont(fs)
     local d = fs and fs._msuf2DropdownDefaultFont
     if d and fs.SetFont then
-        pcall(fs.SetFont, fs, d[1], d[2], d[3] or "")
+        _G.MSUF_SetFontChecked(fs, d[1], d[2], d[3] or "")
     elseif fs and fs.SetFontObject then
         fs:SetFontObject(GameFontHighlight)
     end
@@ -620,8 +605,7 @@ local function ApplyDropdownItemFont(fs, item)
     if type(fontPath) == "string" and fontPath ~= "" and fs.SetFont then
         local resolveSafe = _G.MSUF_ResolveSafeFontPath
         if type(resolveSafe) == "function" then fontPath = resolveSafe(fontPath, size, "", fontKey) end
-        local ok = pcall(fs.SetFont, fs, fontPath, size, "")
-        if ok then return end
+        if _G.MSUF_SetFontChecked(fs, fontPath, size, "") then return end
         RestoreDropdownDefaultFont(fs)
         return
     end
@@ -1022,8 +1006,16 @@ local function OpenDropdown(owner, valuesTable)
         end
         if DropdownItemHasFontPreview(item) then ApplyDropdownItemFont(row._msuf2Text, item) end
         local sr, sg, sb, sa = DropdownItemSwatch(item)
-        PaintDropdownChoice(row, row._msuf2Text, isHeader and nil or icon, isHeader and nil or sr, sg, sb, sa, -6,
-            isHeader and nil or statusbarTexture, isHeader and nil or barPreview)
+        local selectedValue1
+        if not (isHeader) then selectedValue1 = barPreview end
+        local selectedValue2
+        if not (isHeader) then selectedValue2 = statusbarTexture end
+        local selectedValue3
+        if not (isHeader) then selectedValue3 = sr end
+        local selectedValue4
+        if not (isHeader) then selectedValue4 = icon end
+        PaintDropdownChoice(row, row._msuf2Text, selectedValue4, selectedValue3, sg, sb, sa, -6,
+            selectedValue2, selectedValue1)
         row:Show()
     end
     for i = #valuesTable + 1, #dropdownRows do
@@ -1053,7 +1045,7 @@ function W.OpenDropdown(owner, values, currentValue, onSelect)
     CloseDropdown()
     owner._msuf2DropdownListValue = currentValue
     owner._msuf2DropdownListSelect = function(value, item)
-        if type(onSelect) == "function" then InvokeDropdownProvider(onSelect, value, item) end
+        if type(onSelect) == "function" then onSelect(value, item) end
     end
     OpenDropdown(owner, values)
     return true
@@ -1084,8 +1076,8 @@ function W.Dropdown(section, label, values, width)
     local function ResolveValues(self)
         local valuesTable = self.values
         if type(valuesTable) == "function" then
-            local ok, resolved = InvokeDropdownProvider(valuesTable)
-            valuesTable = ok and resolved or nil
+            local resolved = valuesTable()
+            valuesTable = resolved or nil
         end
         if type(valuesTable) ~= "table" then valuesTable = {} end
         return valuesTable

@@ -494,7 +494,15 @@ local function SyncContainerGeometry(container, lane, parentFrame, forceGeometry
     return true
 end
 
-local function PrepareAuraButton(button, lane, index)
+-- PrepareAuraButton runs once per native AuraButton from Blizzard's
+-- frame-creation initializeFrame callback (pool fill), never per UNIT_AURA.
+-- Its stages live on this table and PrepareAuraButton calls them in the
+-- original order, threading the shared values (visual owner, bar-only, icon,
+-- icon shape, text overlay, border binding) as plain arguments so no per-call
+-- table is ever allocated.
+local PrepareStage = {}
+
+function PrepareStage.BindLaneIdentity(button, lane, index)
     ValidateNativeAuraButtonContract(button)
     button._msufA3NativeButton = true
     button._msufA3LaneKind = lane.kind
@@ -511,9 +519,12 @@ local function PrepareAuraButton(button, lane, index)
     if cancelablePlayerBuff then
         button:SetCancelAuraButtons("RightButtonUp")
     end
-    -- One native AuraSlot owns the secret assignment. Spell Indicator icon
-    -- art lives on an independently levelled child, so its user Layer remains
-    -- independent from a full-frame effect without a second aura assignment.
+end
+
+-- One native AuraSlot owns the secret assignment. Spell Indicator icon
+-- art lives on an independently levelled child, so its user Layer remains
+-- independent from a full-frame effect without a second aura assignment.
+function PrepareStage.ResolveVisualOwner(button, lane)
     local visualOwner = button
     if lane.kind == "spellIndicator" and lane.frameEffect and lane.visual ~= "none" then
         visualOwner = button._msufA3SpellIndicatorVisualHost
@@ -530,10 +541,16 @@ local function PrepareAuraButton(button, lane, index)
         end
         visualOwner:Show()
     end
-    -- Normal aura lanes retain the reference-addon model: their AuraButton
-    -- inherits the container's strata and remains the sole visual owner. The
-    -- Spell Indicator exception above is established only in initializeFrame;
-    -- later secret-backed assignment never needs another hierarchy mutation.
+    return visualOwner
+end
+
+-- Normal aura lanes retain the reference-addon model: their AuraButton
+-- inherits the container's strata and remains the sole visual owner. The
+-- Spell Indicator exception above is established only in initializeFrame;
+-- later secret-backed assignment never needs another hierarchy mutation.
+-- Returns barOnly, spellIndicatorBar and the icon texture the shape stage
+-- masks (the pre-existing button.Icon, possibly nil, when bar-only).
+function PrepareStage.PrepareIcon(button, lane, index, visualOwner)
     local spellIndicatorBar = lane.kind == "spellIndicator" and lane.visual == "bar"
     local barOnly = spellIndicatorBar
         or (lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY")
@@ -568,13 +585,16 @@ local function PrepareAuraButton(button, lane, index)
             if mask and icon.AddMaskTexture then icon:AddMaskTexture(mask) end
         end
     end
+    return barOnly, spellIndicatorBar, icon
+end
 
-    -- Native cooldown swipe. Blizzard's ApplyDurationCooldown drives this from
-    -- the (secret) aura duration C-side, so there is no addon timer cost.
-    --
-    -- Use CooldownFrameTemplate for the actual swipe art, then immediately opt
-    -- out of countdown numbers, bling, and edge drawing. Created once per button
-    -- and reused.
+-- Native cooldown swipe. Blizzard's ApplyDurationCooldown drives this from
+-- the (secret) aura duration C-side, so there is no addon timer cost.
+--
+-- Use CooldownFrameTemplate for the actual swipe art, then immediately opt
+-- out of countdown numbers, bling, and edge drawing. Created once per button
+-- and reused.
+function PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
     if lane.showCooldownSwipe == true and not barOnly then
         local cooldownAnchor, cooldownLevel = A3._AuraCooldownAnchorAndLevel(button, lane)
         local cooldown = button._msufA3Cooldown
@@ -604,13 +624,19 @@ local function PrepareAuraButton(button, lane, index)
         button:ClearDurationCooldown()
         if button._msufA3Cooldown then button._msufA3Cooldown:Hide() end
     end
+end
 
-    -- Masking is stamped once in AuraContainer's initializeFrame callback.
-    -- Rectangular/default auras take the no-allocation branch and keep the
-    -- exact pre-shape icon, swipe, and border renderer.
+-- Masking is stamped once in AuraContainer's initializeFrame callback.
+-- Rectangular/default auras take the no-allocation branch and keep the
+-- exact pre-shape icon, swipe, and border renderer. Returns the icon shape
+-- the border and icon-style stages share.
+function PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
     local iconShape = not barOnly and (lane.iconShape or Shape.RECTANGLE) or Shape.RECTANGLE
     A3.ApplyAuraIconShape(visualOwner, iconShape, button._msufA3Cooldown, icon)
+    return iconShape
+end
 
+function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
     if lane.showDurationBar == true then
         local bar = button._msufA3DurationBar
         if not bar then
@@ -652,12 +678,18 @@ local function PrepareAuraButton(button, lane, index)
         button:ClearDurationBar()
         if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
     end
+end
 
-    local textOverlay
+-- Cooldown text and stack text share one overlay above the swipe; it exists
+-- only while at least one text element is on.
+function PrepareStage.ResolveTextOverlay(button, lane)
     if lane.showCooldownText == true or lane.showStacks == true then
-        textOverlay = EnsureAuraTextOverlay(button, lane) or button
+        return EnsureAuraTextOverlay(button, lane) or button
     end
+    return nil
+end
 
+function PrepareStage.PrepareCooldownText(button, lane, textOverlay)
     if lane.showCooldownText == true then
         local duration = button.Text or button.DurationText
         if not duration then
@@ -709,7 +741,9 @@ local function PrepareAuraButton(button, lane, index)
         local duration = button.Text or button.DurationText
         if duration then duration:Hide() end
     end
+end
 
+function PrepareStage.PrepareStackText(button, lane, textOverlay)
     if lane.showStacks == true then
         local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
         if not count then
@@ -735,7 +769,10 @@ local function PrepareAuraButton(button, lane, index)
         local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
         if count then count:Hide() end
     end
+end
 
+-- Returns whether a dispel-type border was bound; the aura symbol needs one.
+function PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, iconShape)
     local auraBorderBound = false
     if lane.showAuraBorder == true and not barOnly then
         local border = button._msufA3AuraBorder or button.AuraBorder or button.Border
@@ -756,10 +793,13 @@ local function PrepareAuraButton(button, lane, index)
         button:ClearDispelTypeTextures()
         if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end
     end
+    return auraBorderBound
+end
 
-    -- PTR 8 stealable filtering stays entirely inside Blizzard's native
-    -- AuraButton. The helpful button receives one display texture and no MSUF
-    -- aura-data reads, events, polling, or per-frame work.
+-- PTR 8 stealable filtering stays entirely inside Blizzard's native
+-- AuraButton. The helpful button receives one display texture and no MSUF
+-- aura-data reads, events, polling, or per-frame work.
+function PrepareStage.PrepareStealableMarker(button, lane, visualOwner, barOnly)
     if lane.showStealableMarker == true and not barOnly then
         local marker = button._msufA3StealableMarker
         if not marker then
@@ -778,7 +818,9 @@ local function PrepareAuraButton(button, lane, index)
     elseif button._msufA3StealableMarker then
         button._msufA3StealableMarker:Hide()
     end
+end
 
+function PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, auraBorderBound)
     if lane.showAuraSymbol == true and auraBorderBound == true and not barOnly then
         local symbol = button._msufA3AuraSymbol or button.AuraSymbol or button.Symbol
         if not symbol then
@@ -796,21 +838,25 @@ local function PrepareAuraButton(button, lane, index)
         button:ClearDispelTypeText()
         if button._msufA3AuraSymbol and button._msufA3AuraSymbol.Hide then button._msufA3AuraSymbol:Hide() end
     end
+end
 
-    -- Shared icon style: border ring + soft drop shadow. All regions are
-    -- button-owned textures created once here (initializeFrame); layer stack:
-    -- BACKGROUND(-7) shadow < BORDER(-1) ring < ARTWORK icon < OVERLAY dispel
-    -- border, so the dispel-type border overdraws the static ring for typed
-    -- debuffs. Scopes that opted out arrive with ICON_STYLE_OFF and take the
-    -- hide branches below.
+-- Shared icon style: border ring + soft drop shadow. All regions are
+-- button-owned textures created once here (initializeFrame); layer stack:
+-- BACKGROUND(-7) shadow < BORDER(-1) ring < ARTWORK icon < OVERLAY dispel
+-- border, so the dispel-type border overdraws the static ring for typed
+-- debuffs. Scopes that opted out arrive with ICON_STYLE_OFF and take the
+-- hide branches inside the two helpers.
+function PrepareStage.ApplyIconStyle(lane, visualOwner, barOnly, iconShape)
     local style
     if not barOnly then style = lane.iconStyle end
     local size = lane.size or 0
     ApplyIconStyleShadow(visualOwner, style, size, iconShape)
     ApplyIconStyleBorder(visualOwner, style, size, iconShape)
+end
 
+function PrepareStage.BindPandemicAndTooltip(button, lane)
     -- AddPandemicRegion controls only the host's secret Shown aspect. Every
-    -- child texture is static and was configured above/below once at creation.
+    -- child texture is static and was configured once at creation above.
     A3.BindPandemicRegion(button, lane)
 
     -- PTR 7 aura tooltips are native. Their lane switch is the complete
@@ -824,6 +870,23 @@ local function PrepareAuraButton(button, lane, index)
             button:SetHideTooltipInCombat(false)
         end
     end
+end
+
+local function PrepareAuraButton(button, lane, index)
+    PrepareStage.BindLaneIdentity(button, lane, index)
+    local visualOwner = PrepareStage.ResolveVisualOwner(button, lane)
+    local barOnly, spellIndicatorBar, icon = PrepareStage.PrepareIcon(button, lane, index, visualOwner)
+    PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
+    local iconShape = PrepareStage.ApplyIconShape(button, lane, visualOwner, barOnly, icon)
+    PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicatorBar)
+    local textOverlay = PrepareStage.ResolveTextOverlay(button, lane)
+    PrepareStage.PrepareCooldownText(button, lane, textOverlay)
+    PrepareStage.PrepareStackText(button, lane, textOverlay)
+    local auraBorderBound = PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, iconShape)
+    PrepareStage.PrepareStealableMarker(button, lane, visualOwner, barOnly)
+    PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, auraBorderBound)
+    PrepareStage.ApplyIconStyle(lane, visualOwner, barOnly, iconShape)
+    PrepareStage.BindPandemicAndTooltip(button, lane)
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
 end
 

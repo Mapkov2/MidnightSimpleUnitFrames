@@ -14,16 +14,19 @@ local InCombat = Shared.InCombat
 local FrameRectToUI = Shared.FrameRectToUI
 local FrameCenterUI = Shared.FrameCenterUI
 local ExpandBounds = Shared.ExpandBounds
-
 function Controller:ElementBounds(cfg, source)
     local bounds
     local movers = EM2.Movers
     if type(cfg and cfg.getMoverBounds) == "function" then
-        local ok, left, right, top, bottom = pcall(cfg.getMoverBounds)
-        if ok then bounds = ExpandBounds(bounds, left, right, top, bottom) end
+        local left, right, top, bottom = cfg.getMoverBounds()
+        do
+bounds = ExpandBounds(bounds, left, right, top, bottom)
+end
     elseif self:IsUnitConfig(cfg) and movers and type(movers.GetUnitVisualBounds) == "function" then
-        local ok, left, right, top, bottom = pcall(movers.GetUnitVisualBounds, source)
-        if ok then bounds = ExpandBounds(bounds, left, right, top, bottom) end
+        local left, right, top, bottom = movers.GetUnitVisualBounds(source)
+        do
+bounds = ExpandBounds(bounds, left, right, top, bottom)
+end
     end
     if not bounds then bounds = ExpandBounds(bounds, FrameRectToUI(source)) end
     return bounds
@@ -63,9 +66,9 @@ end
 function Controller:BridgeUndoCall(func, ...)
     if type(func) ~= "function" then return false end
     self.bridgeUndoDepth = self.bridgeUndoDepth + 1
-    local ok, result = pcall(func, ...)
+    local result = func(...)
     self.bridgeUndoDepth = self.bridgeUndoDepth - 1
-    return ok and result ~= false
+    return result ~= false
 end
 
 function Controller:CaptureMoveStart(binding)
@@ -188,11 +191,11 @@ function Controller:SyncProxy(externalKey, cfg, resolveSource)
     local source = self.sourceFrames[externalKey]
     local freshSourceMissing = false
     if resolveSource and cfg and type(cfg.getFrame) == "function" then
-        local ok, current = pcall(cfg.getFrame)
-        if ok then
-            freshSourceMissing = current == nil
+        local current = cfg.getFrame()
+        do
+freshSourceMissing = current == nil
             if current then source = current end
-        end
+end
     end
     self.sourceFrames[externalKey] = source
 
@@ -443,8 +446,8 @@ end
 function Controller:SyncSupplementalRegions(binding, mover)
     local getBounds = binding and binding.cfg and binding.cfg.getSupplementalMoverBounds
     if type(getBounds) ~= "function" then return end
-    local ok, bounds = pcall(getBounds)
-    if not ok then bounds = nil end
+    local bounds = getBounds()
+
     local regions = self.supplementalFrames[binding.externalKey] or {}
     self.supplementalFrames[binding.externalKey] = regions
     local proxy = self.resolvedFrames[binding.externalKey]
@@ -528,7 +531,7 @@ function Controller:SyncCastbarMover(unit)
     local api = self:GetAPI()
     if not (api and self:IsEnabled() and self.spec.IsModeActive(api)) then return false end
     if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
-        pcall(_G.MSUF_PositionCastbarPreviewUnit, unit)
+        _G.MSUF_PositionCastbarPreviewUnit(unit)
     end
     local externalKey = self:ExternalKey("castbar_" .. unit)
     local binding = self.externalBindings[externalKey]

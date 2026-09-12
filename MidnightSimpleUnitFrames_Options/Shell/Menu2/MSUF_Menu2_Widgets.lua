@@ -10,10 +10,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
     or "MidnightSimpleUnitFrames"
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
@@ -34,7 +31,7 @@ local ACCORDION_OPEN_CORNER_UV = 17 / 128
 -- Keep only the header cap inside the viewport; body layout remains unchanged.
 local ACCORDION_HEADER_RIGHT_INSET = 8
 local sliderSerial = 0
-local Tr = M.TranslateText or function(text) return text end
+local Tr = M.TranslateText
 local EM2Util = (_G.MSUF_EM2 and _G.MSUF_EM2.Util) or {}
 local function ThemeColor(name, fallback)
     local c = T and T.colors and T.colors[name]
@@ -316,7 +313,10 @@ local function CloseAutoFocusedSections(pageKey)
     end
     return changed and true or false
 end
-local function NotifyCollapsibleSectionState(entry, open)
+-- Everything private to W.PageBuilder lives here: the per-build method
+-- installers, the shared collapsible-header layout pass and the state notifier.
+local PageBuilderStages = {}
+function PageBuilderStages.NotifyCollapsibleSectionState(entry, open)
     if not entry then return end
     open = open and true or false
     if entry._msuf2LastNotifiedOpen == open then return end
@@ -473,11 +473,7 @@ function M.CloseAutoFocusedSections(pageKey)
     return CloseAutoFocusedSections(pageKey or M.activeKey)
 end
 local SLIDER_TEMPLATE_KEEP_KEYS, SLIDER_TEMPLATE_SUFFIXES = M.WordList "_msufTrack _msufTrackTop _msufTrackBottom _msufFill _msufFillGlow _msuf2Thumb _msufPeelTrack _msufPeelTrackFill", M.WordList "Left Middle Right Text Low High"
-local function IsTextureRegion(region)
-    if not region then return false end
-    if region.IsObjectType then return region:IsObjectType("Texture") and true or false end
-    return region.GetObjectType and region:GetObjectType() == "Texture"
-end
+local IsTextureRegion = T.IsTextureRegion
 local function HideSliderTemplateParts(slider)
     if not slider then return end
     local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
@@ -562,32 +558,99 @@ function W.RegisterGuidedRegion(ctx, frame, title, stableId)
     return RegisterGuidedTourRegion(ctx, frame, title, stableId)
 end
 
-function W.PageBuilder(ctx, opts)
-    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
-    opts = type(opts) == "table" and opts or {}
-    local contentX = tonumber(opts.contentX) or tonumber(ctx and ctx._msuf2ContentX) or 12
-    local topInset = tonumber(opts.topInset) or tonumber(ctx and ctx._msuf2TopInset) or 0
-    local function UpdateContentHeight(height)
-        if type(opts.onContentHeight) == "function" then
-            opts.onContentHeight(height)
-        elseif ctx.SetContentHeight then
-            ctx:SetContentHeight(height)
+--- Header layout for one collapsible entry: the UX summary, the badge row, or
+--- the hint. Shared by every accordion instead of one closure body per section;
+--- the section's wrapper hands in the regions it captured at creation.
+function PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, label, arrow, builder)
+    local headerW = (header.GetWidth and header:GetWidth()) or builder.width or 240
+    local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
+    local swatchReserve = (tonumber(entry._msuf2ColorSwatchReserve) or 0)
+        + (tonumber(entry._msuf2FeatureSwitchReserve) or 0)
+    if entry._msuf2UXSummary then
+        local actions = tonumber(entry._msuf2ActionReserve) or 0
+        if entry.featureSwitch then
+            entry.featureSwitch:ClearAllPoints()
+            entry.featureSwitch:SetPoint("RIGHT", header, "RIGHT", -14 - actions - (tonumber(entry._msuf2ColorSwatchReserve) or 0), 0)
         end
+        if entry._msuf2SectionActions then
+            entry._msuf2SectionActions:ClearAllPoints()
+            entry._msuf2SectionActions:SetPoint("RIGHT", header, "RIGHT", -10 - (tonumber(entry._msuf2ColorSwatchReserve) or 0), 0)
+        end
+        local right = 16 + swatchReserve + actions
+        local left = math.max(180, math.min(330, math.floor(headerW * 0.34)))
+        local room = headerW - left - right
+        local summary = entry._msuf2UXSummary
+        summary:ClearAllPoints()
+        summary:SetPoint("LEFT", header, "LEFT", left, 0)
+        summary:SetWidth(math.max(1, room))
+        local showSummary = not entry.open and room >= 110 and (summary:GetText() or "") ~= ""
+        summary:SetShown(showSummary)
+        hint:Hide()
+        for _, badge in ipairs(entry._msuf2Badges or {}) do badge:Hide() end
+        label:ClearAllPoints()
+        label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
+        label:SetPoint("RIGHT", header, "LEFT", showSummary and (left - 16) or math.max(80, headerW - right), 0)
+        return
     end
-    local b = {
-        ctx = ctx,
-        parent = opts.parent or ctx.wrapper,
-        x = contentX,
-        y = -12 - topInset,
-        width = tonumber(opts.width) or ctx.width or 720,
-        ancestorEntry = opts.ancestorEntry,
-        collapsibles = {},
-        layoutEntries = {},
-    }
-    if type(ctx) == "table" then
-        ctx._msuf2PageBuilders = ctx._msuf2PageBuilders or {}
-        ctx._msuf2PageBuilders[#ctx._msuf2PageBuilders + 1] = b
+    if not entry._msuf2ManualHintLayout then
+        local badges = entry._msuf2Badges
+        if badges and #badges > 0 then
+            local availableBadges = {}
+            local availableW = headerW - 12 - 28 - (headerW < 520 and 96 or 136) - swatchReserve
+            local totalW = 0
+            for i = 1, #badges do
+                local badge = badges[i]
+                if badge and badge._msuf2BadgeWantedShown ~= false then
+                    local bw = (badge.GetWidth and badge:GetWidth()) or 0
+                    if bw > 0 then
+                        totalW = totalW + bw + (#availableBadges > 0 and 8 or 0)
+                        availableBadges[#availableBadges + 1] = badge
+                    end
+                end
+            end
+            availableW = max(0, availableW)
+            while #availableBadges > 1 and totalW > availableW do
+                local badge = availableBadges[#availableBadges]
+                totalW = totalW - ((badge.GetWidth and badge:GetWidth()) or 0) - (#availableBadges > 1 and 8 or 0)
+                availableBadges[#availableBadges] = nil
+            end
+            if #availableBadges == 1 and totalW > availableW then availableBadges[1] = nil end
+            local right = -12 - swatchReserve
+            for i = #badges, 1, -1 do
+                local badge = badges[i]
+                if badge then badge:SetShown(false) end
+            end
+            for i = #availableBadges, 1, -1 do
+                local badge = availableBadges[i]
+                local bw = (badge.GetWidth and badge:GetWidth()) or 0
+                badge:ClearAllPoints()
+                badge:SetPoint("RIGHT", header, "RIGHT", right, 0)
+                badge:SetShown(true)
+                right = right - bw - 8
+            end
+            if #availableBadges > 0 then
+                if hint.Hide then hint:Hide() end
+                label:ClearAllPoints()
+                label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
+                label:SetPoint("RIGHT", header, "RIGHT", right - 8, 0)
+                label:SetJustifyH("LEFT")
+                return
+            end
+        end
+        if hint.Show then hint:Show() end
+        hint:ClearAllPoints()
+        hint:SetPoint("TOPRIGHT", header, "TOPRIGHT", -(12 + swatchReserve), -1)
+        hint:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -(12 + swatchReserve), 1)
+        hint:SetPoint("LEFT", header, "RIGHT", -(12 + reserve + swatchReserve), 0)
+        hint:SetJustifyH("RIGHT")
+        label:ClearAllPoints()
+        label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
+        label:SetPoint("RIGHT", hint, "LEFT", -8, 0)
+        label:SetJustifyH("LEFT")
     end
+end
+--- The builder's vertical-flow and relayout methods; installed once per build.
+function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
     function b:RequestRelayoutCollapsibles()
         if ctx and ctx._msuf2Building then
             self._msuf2RelayoutPending = true
@@ -644,7 +707,7 @@ function W.PageBuilder(ctx, opts)
                     T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
                     if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
                     if entry._msuf2RefreshColorSwatchVisibility then entry._msuf2RefreshColorSwatchVisibility() end
-                    NotifyCollapsibleSectionState(entry, open)
+                    PageBuilderStages.NotifyCollapsibleSectionState(entry, open)
                 end
                 local refreshState = entry._msuf2RefreshState
                 local refreshUntracked = opts and opts.refreshUntrackedState
@@ -700,6 +763,9 @@ function W.PageBuilder(ctx, opts)
         W.RegisterGuidedRegion(ctx, section, title)
         return section
     end
+end
+--- The accordion builder; installed once per build.
+function PageBuilderStages.InstallCollapsibleSection(b, ctx)
     function b:CollapsibleSection(id, title, height, defaultOpen)
         M.accordionState = MenuStateTable("accordionState")
         local collapseHintClickState = GetCollapseHintClickState()
@@ -788,92 +854,7 @@ function W.PageBuilder(ctx, opts)
         }
         RefreshCollapseHintSuppression(entry)
         local function RefreshHeaderLayout()
-            local headerW = (header.GetWidth and header:GetWidth()) or self.width or 240
-            local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
-            local swatchReserve = (tonumber(entry._msuf2ColorSwatchReserve) or 0)
-                + (tonumber(entry._msuf2FeatureSwitchReserve) or 0)
-            if entry._msuf2UXSummary then
-                local actions = tonumber(entry._msuf2ActionReserve) or 0
-                if entry.featureSwitch then
-                    entry.featureSwitch:ClearAllPoints()
-                    entry.featureSwitch:SetPoint("RIGHT", header, "RIGHT", -14 - actions - (tonumber(entry._msuf2ColorSwatchReserve) or 0), 0)
-                end
-                if entry._msuf2SectionActions then
-                    entry._msuf2SectionActions:ClearAllPoints()
-                    entry._msuf2SectionActions:SetPoint("RIGHT", header, "RIGHT", -10 - (tonumber(entry._msuf2ColorSwatchReserve) or 0), 0)
-                end
-                local right = 16 + swatchReserve + actions
-                local left = math.max(180, math.min(330, math.floor(headerW * 0.34)))
-                local room = headerW - left - right
-                local summary = entry._msuf2UXSummary
-                summary:ClearAllPoints()
-                summary:SetPoint("LEFT", header, "LEFT", left, 0)
-                summary:SetWidth(math.max(1, room))
-                local showSummary = not entry.open and room >= 110 and (summary:GetText() or "") ~= ""
-                summary:SetShown(showSummary)
-                hint:Hide()
-                for _, badge in ipairs(entry._msuf2Badges or {}) do badge:Hide() end
-                label:ClearAllPoints()
-                label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
-                label:SetPoint("RIGHT", header, "LEFT", showSummary and (left - 16) or math.max(80, headerW - right), 0)
-                return
-            end
-            if not entry._msuf2ManualHintLayout then
-                local badges = entry._msuf2Badges
-                if badges and #badges > 0 then
-                    local availableBadges = {}
-                    local availableW = headerW - 12 - 28 - (headerW < 520 and 96 or 136) - swatchReserve
-                    local totalW = 0
-                    for i = 1, #badges do
-                        local badge = badges[i]
-                        if badge and badge._msuf2BadgeWantedShown ~= false then
-                            local bw = (badge.GetWidth and badge:GetWidth()) or 0
-                            if bw > 0 then
-                                totalW = totalW + bw + (#availableBadges > 0 and 8 or 0)
-                                availableBadges[#availableBadges + 1] = badge
-                            end
-                        end
-                    end
-                    availableW = max(0, availableW)
-                    while #availableBadges > 1 and totalW > availableW do
-                        local badge = availableBadges[#availableBadges]
-                        totalW = totalW - ((badge.GetWidth and badge:GetWidth()) or 0) - (#availableBadges > 1 and 8 or 0)
-                        availableBadges[#availableBadges] = nil
-                    end
-                    if #availableBadges == 1 and totalW > availableW then availableBadges[1] = nil end
-                    local right = -12 - swatchReserve
-                    for i = #badges, 1, -1 do
-                        local badge = badges[i]
-                        if badge then badge:SetShown(false) end
-                    end
-                    for i = #availableBadges, 1, -1 do
-                        local badge = availableBadges[i]
-                        local bw = (badge.GetWidth and badge:GetWidth()) or 0
-                        badge:ClearAllPoints()
-                        badge:SetPoint("RIGHT", header, "RIGHT", right, 0)
-                        badge:SetShown(true)
-                        right = right - bw - 8
-                    end
-                    if #availableBadges > 0 then
-                        if hint.Hide then hint:Hide() end
-                        label:ClearAllPoints()
-                        label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
-                        label:SetPoint("RIGHT", header, "RIGHT", right - 8, 0)
-                        label:SetJustifyH("LEFT")
-                        return
-                    end
-                end
-                if hint.Show then hint:Show() end
-                hint:ClearAllPoints()
-                hint:SetPoint("TOPRIGHT", header, "TOPRIGHT", -(12 + swatchReserve), -1)
-                hint:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -(12 + swatchReserve), 1)
-                hint:SetPoint("LEFT", header, "RIGHT", -(12 + reserve + swatchReserve), 0)
-                hint:SetJustifyH("RIGHT")
-                label:ClearAllPoints()
-                label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
-                label:SetPoint("RIGHT", hint, "LEFT", -8, 0)
-                label:SetJustifyH("LEFT")
-            end
+            PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, label, arrow, self)
         end
         entry._msuf2RefreshLayout = RefreshHeaderLayout
         outer._msuf2CollapsibleEntry = entry
@@ -1003,6 +984,9 @@ function W.PageBuilder(ctx, opts)
         end
         return body
     end
+end
+--- Headers, spacers, auto-height and declarative cards; installed once per build.
+function PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
     function b:Header(title, subtitle, height)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.border)
         SetSearchTitle(section, title)
@@ -1102,6 +1086,36 @@ function W.PageBuilder(ctx, opts)
     function b:Card(spec)
         return W.BuildCard(self.ctx, self.parent, spec)
     end
+end
+function W.PageBuilder(ctx, opts)
+    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+    opts = type(opts) == "table" and opts or {}
+    local contentX = tonumber(opts.contentX) or tonumber(ctx and ctx._msuf2ContentX) or 12
+    local topInset = tonumber(opts.topInset) or tonumber(ctx and ctx._msuf2TopInset) or 0
+    local function UpdateContentHeight(height)
+        if type(opts.onContentHeight) == "function" then
+            opts.onContentHeight(height)
+        elseif ctx.SetContentHeight then
+            ctx:SetContentHeight(height)
+        end
+    end
+    local b = {
+        ctx = ctx,
+        parent = opts.parent or ctx.wrapper,
+        x = contentX,
+        y = -12 - topInset,
+        width = tonumber(opts.width) or ctx.width or 720,
+        ancestorEntry = opts.ancestorEntry,
+        collapsibles = {},
+        layoutEntries = {},
+    }
+    if type(ctx) == "table" then
+        ctx._msuf2PageBuilders = ctx._msuf2PageBuilders or {}
+        ctx._msuf2PageBuilders[#ctx._msuf2PageBuilders + 1] = b
+    end
+    PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
+    PageBuilderStages.InstallCollapsibleSection(b, ctx)
+    PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
     return b
 end
 
@@ -4732,3 +4746,84 @@ function W.Color(section, label)
     btn:SetScript("OnClick", ColorButtonOnClick)
     return btn
 end
+
+-- Nested aura sections share height ownership and deferred parent relayout.
+local function CreateNestedAuraBuilder(ctx, parentBuilder, body)
+    local entry = body and body._msuf2CollapsibleEntry
+    if not (entry and W.PageBuilder) then return parentBuilder end
+    local bodyWidth = body._msuf2Width or parentBuilder.width or 720
+    local nestedCtx = setmetatable({
+        wrapper = body,
+        width = max(320, bodyWidth - 24),
+        key = ctx and ctx.key,
+        entry = ctx and ctx.entry,
+        _msuf2ContentX = 12,
+        _msuf2TopInset = 0,
+    }, { __index = ctx })
+    function nestedCtx:SetContentHeight(height)
+        height = max(80, math.ceil(tonumber(height) or 80))
+        if entry.contentHeight == height then return end
+        entry.contentHeight = height
+        body:SetHeight(height)
+        if parentBuilder.RequestRelayoutCollapsibles then parentBuilder:RequestRelayoutCollapsibles() end
+    end
+    local nestedBuilder = W.PageBuilder(nestedCtx)
+    entry._msuf2SettleContentLayout = function()
+        if nestedBuilder.RelayoutCollapsibles then nestedBuilder:RelayoutCollapsibles() end
+        nestedCtx:SetContentHeight(math.abs(nestedBuilder.y) + 42)
+    end
+    return nestedBuilder
+end
+W.CreateNestedAuraBuilder = CreateNestedAuraBuilder
+
+W.ParseHexColor = HexColor
+
+local function SetTileVisual(btn, active, hover)
+    if not btn then return end
+    if btn.SetBackdropColor then
+        if active then
+            btn:SetBackdropColor(0.100, 0.180, 0.300, hover and 0.98 or 0.92)
+            btn:SetBackdropBorderColor(0.260, 0.620, 1.000, 1.00)
+        elseif hover then
+            btn:SetBackdropColor(0.115, 0.135, 0.185, 0.95)
+            btn:SetBackdropBorderColor(0.380, 0.450, 0.620, 0.95)
+        else
+            btn:SetBackdropColor(0.045, 0.052, 0.076, 0.92)
+            btn:SetBackdropBorderColor(0.190, 0.220, 0.310, 0.85)
+        end
+    end
+    if btn._label then
+        if active then
+            btn._label:SetTextColor(0.95, 1.00, 1.00, 1)
+        else
+            btn._label:SetTextColor(0.74, 0.80, 0.90, 0.95)
+        end
+    end
+end
+W.SetTileVisual = SetTileVisual
+
+local function ToggleBadge(label, enabled)
+    return { text = label .. (enabled and " On" or " Off"), kind = enabled and "accent" or "muted", showWhenClosed = true }
+end
+W.ToggleBadge = ToggleBadge
+
+local function ThemedControlCard(parent, title, subtitle, x, y, width, height)
+    local card = W.ControlCard(parent, title, subtitle, x, y, width, height)
+    if card and T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+    return card
+end
+W.ThemedControlCard = ThemedControlCard
+
+W.RegisterSearchObject = RegisterSearchObject
+
+local function SetTextLayout(fontString, width, justify)
+    if not fontString then return fontString end
+    fontString:SetWidth(math.max(1, width or 1))
+    fontString:SetJustifyH(justify or "LEFT")
+    if fontString.SetWordWrap then fontString:SetWordWrap(true) end
+    if fontString.SetNonSpaceWrap then fontString:SetNonSpaceWrap(true) end
+    return fontString
+end
+W.SetTextLayout = SetTextLayout
+
+W.ResolveContextColorOption = ResolveContextColorOption

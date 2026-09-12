@@ -3,10 +3,7 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
@@ -21,9 +18,9 @@ local UnitThreatSituation = V.UnitThreatSituation or UnitThreatSituation
 local tonumber = V.tonumber or tonumber
 local tostring = V.tostring or tostring
 local type = V.type or type
-local IsNil = V.IsNil or function(value) return value == nil end
-local NotSecretValue = V.NotSecretValue or function(_) return true end
-local IsSecretValue = _G.issecretvalue or function(_) return false end
+local IsNil = V.IsNil
+local NotSecretValue = V.NotSecretValue
+local IsSecretValue = _G.issecretvalue
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local BORDER_THREAT_EVENTS = V.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
 local GROUP_THREAT_EVENT = {
@@ -169,9 +166,7 @@ end
 
 -- Group frames seat the outline in the shared foreground band so its Layer is
 -- relational to text and icons; unit frames keep the legacy band. Cold path.
-local BorderLevelOffset = Layers.BorderOffset or function(_, offset, layer)
-  return (offset or BORDER_LEVEL_DEFAULT) + (layer or 0)
-end
+local BorderLevelOffset = Layers.BorderOffset
 
 local function SetBorderOverlayLevel(frame, offset, strata, layer)
   if not frame then return end
@@ -343,10 +338,7 @@ local function BorderNormalEnabled(cfg)
   return cfg and cfg.enabled == true and (tonumber(cfg.thickness) or 0) > 0
 end
 
-function IsBossUnit(unit)
-  return unit == "boss1" or unit == "boss2" or unit == "boss3"
-    or unit == "boss4" or unit == "boss5"
-end
+IsBossUnit = UF.IsBossUnit
 
 function IsAggroBorderUnit(frame)
   local unit = frame and frame.MSUFUnitKey
@@ -431,22 +423,22 @@ local function SetBorderTestMode(flag, scopeFlag, active, scope)
   return true
 end
 
-local SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active, scope)
+local SetAggroBorderTestMode = function(active, scope)
   return SetBorderTestMode("MSUF_AggroBorderTestMode", "MSUF_AggroBorderTestScope", active, scope)
 end
 ExportPublic("MSUF_SetAggroBorderTestMode", SetAggroBorderTestMode)
 
-local SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active, scope)
+local SetDispelBorderTestMode = function(active, scope)
   return SetBorderTestMode("MSUF_DispelBorderTestMode", "MSUF_DispelBorderTestScope", active, scope)
 end
 ExportPublic("MSUF_SetDispelBorderTestMode", SetDispelBorderTestMode)
 
-local SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(active, scope)
+local SetPurgeBorderTestMode = function(active, scope)
   return SetBorderTestMode("MSUF_PurgeBorderTestMode", "MSUF_PurgeBorderTestScope", active, scope)
 end
 ExportPublic("MSUF_SetPurgeBorderTestMode", SetPurgeBorderTestMode)
 
-local SetBossTargetBorderTestMode = _G.MSUF_SetBossTargetBorderTestMode or function(active)
+local SetBossTargetBorderTestMode = function(active)
   return SetBorderTestMode("MSUF_BossTargetBorderTestMode", nil, active, "boss")
 end
 ExportPublic("MSUF_SetBossTargetBorderTestMode", SetBossTargetBorderTestMode)
@@ -801,7 +793,9 @@ local function ApplyResolvedBorder(frame, cfg, source, level, thickness, r, g, b
   frame._msufBorderVisualCfg = cfg
   frame._msufBorderVisualSource = source
   frame._msufBorderVisualOffset = offset
-  frame._msufBorderVisualStrata = secret and nil or strata
+  local selectedValue1
+  if not (secret) then selectedValue1 = strata end
+  frame._msufBorderVisualStrata = selectedValue1
   frame._msufBorderVisualThickness = thickness
   if secret then
     frame._msufBorderVisualR, frame._msufBorderVisualG = nil, nil

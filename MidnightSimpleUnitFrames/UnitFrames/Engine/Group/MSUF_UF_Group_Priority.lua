@@ -8,7 +8,6 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -28,13 +27,10 @@ local GetRaidRosterInfo = GetRaidRosterInfo
 local UnitName = UnitName
 local UnitGUID = UnitGUID
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local wipe = _G.wipe or table.wipe
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local MAX_PRIORITY_FRAMES = 5
 local MAX_STORED_PINS = MAX_PRIORITY_FRAMES

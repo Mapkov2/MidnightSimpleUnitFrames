@@ -1,9 +1,14 @@
 --- MSUF_Modules.lua
 --- Lightweight module registry + lifecycle manager for Midnight Simple Unit Frames.
 ---
---- Modules register desired lifecycle hooks here. The registry owns ordering,
---- late registration, enable/disable state, settings refresh fanout, shutdown,
---- and debug toggles. Individual modules still own their runtime behavior.
+--- Modules register Enable/Disable/IsEnabled hooks here. The registry owns
+--- ordering, late registration and the idempotent enable/disable pass
+--- (MSUF_ApplyModules), which State/MSUF_Profiles.lua runs after every profile
+--- apply and Assistant actions run after ownership changes. RefreshSettings,
+--- Shutdown, GetModule, ToggleModule and ListModules are exported companions
+--- without in-addon callers. There is no Init phase: a module that needs login
+--- work wires it at file load (see Features/Versioning). Individual modules
+--- still own their runtime behavior.
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
@@ -14,12 +19,12 @@ local _G = _G
 MSUF.MSUF_Modules = MSUF.MSUF_Modules or {}
 MSUF.MSUF_ModulesByKey = MSUF.MSUF_ModulesByKey or {}
 
---- Internal flags
-MSUF.__MSUF_ModulesInitialized = MSUF.__MSUF_ModulesInitialized or false
+--- Internal flag: set once MSUF_ApplyModules has run, so late registrations
+--- apply themselves immediately.
 MSUF.__MSUF_ModulesApplied = MSUF.__MSUF_ModulesApplied or false
 
 local function SortModulesIfNeeded()
-    --- Only sort once, unless a late registration happens after init.
+    --- Only sort once, unless a late registration happens after the first apply.
     if MSUF.__MSUF_ModulesSorted then return end
     MSUF.__MSUF_ModulesSorted = true
 
@@ -36,7 +41,7 @@ end
 --- Public: Register a module.
 --- key: unique string
 --- module: table with optional fields:
---- order (number), Init(), Enable(), Disable(), IsEnabled(),
+--- order (number), Enable(), Disable(), IsEnabled(),
 --- RefreshSettings(self, source), Shutdown(self, reason)
 function MSUF.MSUF_RegisterModule(key, module)
     if type(key) ~= "string" or key == "" then return end
@@ -60,17 +65,8 @@ function MSUF.MSUF_RegisterModule(key, module)
 
     MSUF.MSUF_ModulesByKey[key] = module
 
-    --- Late registration after sort/init: re-sort once.
+    --- Late registration after sort/apply: re-sort once.
     MSUF.__MSUF_ModulesSorted = false
-
-    --- If core already initialized modules, init this one immediately.
-    if MSUF.__MSUF_ModulesInitialized and not module.__msufInited then
-        SortModulesIfNeeded()
-        module.__msufInited = true
-        if type(module.Init) == "function" then
-            module:Init()
-        end
-    end
 
     --- If core already applied desired states, apply this module immediately too.
     if MSUF.__MSUF_ModulesApplied then
@@ -97,23 +93,6 @@ local function GetDesiredEnabled(module)
     return true
 end
 
---- Public: Init all registered modules (Init only, no Enable/Disable).
-function MSUF.MSUF_InitModules()
-    SortModulesIfNeeded()
-
-    for i = 1, #MSUF.MSUF_Modules do
-        local m = MSUF.MSUF_Modules[i]
-        if m and not m.__msufInited then
-            m.__msufInited = true
-            if type(m.Init) == "function" then
-                m:Init()
-            end
-        end
-    end
-
-    MSUF.__MSUF_ModulesInitialized = true
-end
-
 --- Public: Apply desired enabled/disabled states to all modules.
 --- Apply is idempotent: it only calls Enable/Disable when the desired state
 --- differs from the current module state.
@@ -124,7 +103,7 @@ function MSUF.MSUF_ApplyModules()
         local m = MSUF.MSUF_Modules[i]
         if m then
             local desired = GetDesiredEnabled(m)
-            --- Phase 4: debug toggle override
+            --- MSUF_ToggleModule override
             if m.__msufDebugOff then desired = false end
             local current = not not m.__msufEnabled
 
@@ -143,21 +122,17 @@ function MSUF.MSUF_ApplyModules()
     end
 
     MSUF.__MSUF_ModulesApplied = true
-    --- Notify RoundedUF module (replaces former hooksecurefunc).
+    --- Notify the rounded unit-frame module (replaces former hooksecurefunc).
+    --- UnitFrames/Effects/MSUF_UF_RoundedFrames.lua exports the callback while
+    --- rounded frames are active; it re-applies masks after a profile apply.
     if _G.MSUF_RoundedUF_Active == true then
         local fnR = _G.MSUF_RoundedUF_OnModulesApplied; if fnR then fnR() end
     end
 end
 
---- Convenience: one-shot at startup.
-function MSUF.MSUF_Modules_InitAndApply()
-    MSUF.MSUF_InitModules()
-    MSUF.MSUF_ApplyModules()
-end
-
---- Phase 4: RefreshSettings - broadcast settings change to all enabled modules.
---- Called on: Options apply, profile switch, font/texture change.
---- Each module's RefreshSettings receives the module table as self.
+--- RefreshSettings - broadcast a settings change to all enabled modules.
+--- Each module's RefreshSettings receives the module table as self. Exported
+--- for external callers; nothing inside the addon calls it today.
 function MSUF.MSUF_RefreshModuleSettings(source)
     SortModulesIfNeeded()
     for i = 1, #MSUF.MSUF_Modules do
@@ -171,8 +146,9 @@ function MSUF.MSUF_RefreshModuleSettings(source)
     end
 end
 
---- Phase 4: Shutdown - cleanup all modules (profile switch, addon unload).
---- Calls Shutdown on every module that has one, regardless of enabled state.
+--- Shutdown - cleanup all modules. Calls Shutdown on every module that has
+--- one, regardless of enabled state. Exported for external callers; nothing
+--- inside the addon calls it today.
 function MSUF.MSUF_ShutdownModules(reason)
     SortModulesIfNeeded()
     for i = 1, #MSUF.MSUF_Modules do
@@ -188,13 +164,14 @@ function MSUF.MSUF_ShutdownModules(reason)
     MSUF.__MSUF_ModulesApplied = false
 end
 
---- Phase 4: GetModule - quick lookup by key.
+--- GetModule - quick lookup by key.
 function MSUF.MSUF_GetModule(key)
     return MSUF.MSUF_ModulesByKey[key]
 end
 
---- Phase 4: Debug toggle - disable/enable a single module at runtime.
---- Usage: /msuf debug toggle <key>
+--- Debug toggle - disable/enable a single module at runtime. Exported as
+--- MSUF_ToggleModule for use from external code or /run; there is no slash
+--- command for it.
 --- Returns new state (true = enabled, false = disabled).
 function MSUF.MSUF_ToggleModule(key)
     if type(key) ~= "string" then return nil end
@@ -221,7 +198,7 @@ function MSUF.MSUF_ToggleModule(key)
     end
 end
 
---- Phase 4: List all registered module keys (for debug/slash commands).
+--- List all registered module keys (debug helper).
 function MSUF.MSUF_ListModules()
     SortModulesIfNeeded()
     local out = {}
@@ -235,15 +212,10 @@ function MSUF.MSUF_ListModules()
 end
 
 --- Optional globals (useful for debugging / slash commands / external modules)
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 ExportPublic("MSUF_RegisterModule", MSUF.MSUF_RegisterModule)
-ExportPublic("MSUF_InitModules", MSUF.MSUF_InitModules)
 ExportPublic("MSUF_ApplyModules", MSUF.MSUF_ApplyModules)
-ExportPublic("MSUF_Modules_InitAndApply", MSUF.MSUF_Modules_InitAndApply)
 ExportPublic("MSUF_RefreshModuleSettings", MSUF.MSUF_RefreshModuleSettings)
 ExportPublic("MSUF_ShutdownModules", MSUF.MSUF_ShutdownModules)
 ExportPublic("MSUF_GetModule", MSUF.MSUF_GetModule)

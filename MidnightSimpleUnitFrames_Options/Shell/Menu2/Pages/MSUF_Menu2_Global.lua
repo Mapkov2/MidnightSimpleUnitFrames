@@ -1,9 +1,6 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
@@ -13,46 +10,10 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local VTP = M.ValueTextPairs
-local function NormalizeControlPath(value)
-    local path = tostring(value or "")
-    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
-    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
-    return path
-end
-local function ControlMeta(pageKey, domain, semanticPath, classification, exact)
-    local identity = table.concat({
-        NormalizeControlPath(pageKey),
-        NormalizeControlPath(domain),
-        NormalizeControlPath(semanticPath),
-    }, ".")
-    local meta = {
-        controlId = "menu2." .. identity,
-        identityKey = identity,
-        controlPath = identity:gsub("%.", "/"),
-        classification = classification or "setting",
-    }
-    if type(exact) == "table" then
-        for key, value in pairs(exact) do meta[key] = value end
-    end
-    return meta
-end
-local function RegisterControl(widget, meta, label, kind, values)
-    if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
-    local payload = {}
-    for key, value in pairs(meta) do payload[key] = value end
-    payload.label = label or payload.label
-    payload.kind = kind or payload.kind
-    payload.values = values or payload.values
-    M.RegisterSearchWidget(widget, payload)
-    return widget
-end
-local function Call(name, ...)
-    local apply = M.ApplyService
-    if apply and type(apply.CallGlobal) == "function" then return apply.CallGlobal(name, ...) end
-    local fn = _G[name]
-    if type(fn) == "function" then fn(...); return true end
-    return false
-end
+
+local ControlMeta = M.ControlMeta
+local RegisterControl = M.RegisterControlMetadata
+
 local function DB()
     return M.EnsureDB()
 end
@@ -594,10 +555,7 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
     local segment = W.ScopeOverrideBar(ctx, scope, scopeOpts)
     RegisterControl(segment, opts.selectorMeta, opts.selectorLabel or "Editing:", "segment", values)
     local override = W.ToggleAt(scope, opts.toggleLabel or "Use custom settings for this scope", 14, overrideY, opts.toggleWidth or 260)
-    M.BindBoolWidget(ctx, override, opts.getOverride or function()
-        local current = scopeOpts.getValue and scopeOpts.getValue()
-        return current ~= "shared" and opts.hasOverride and opts.hasOverride(current)
-    end, opts.setOverride or M.Noop, opts.overrideMeta)
+    M.BindBoolWidget(ctx, override, opts.getOverride, opts.setOverride or M.Noop, opts.overrideMeta)
     local overrideInfo = W.Text(scope, "", 14, overrideY, ctx.width - 130, T.colors.text)
     local reset = T.Button(scope, opts.resetLabel or "Reset", opts.resetWidth or 76, 22)
     reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -16, overrideY + 8)
@@ -900,7 +858,7 @@ local GlobalPage = M.GlobalPage or {}
 M.GlobalPage = GlobalPage
 M.Assign(GlobalPage, {
     UNIT_SCOPE_KEYS = UNIT_SCOPE_KEYS, GRADIENT_DIR_KEYS = GRADIENT_DIR_KEYS, PRIORITY_LABELS = PRIORITY_LABELS,
-    NormalizePriorityKey = NormalizePriorityKey, Call = Call, DB = DB, G = G, Bars = Bars, Unit = Unit,
+    NormalizePriorityKey = NormalizePriorityKey, DB = DB, G = G, Bars = Bars, Unit = Unit,
     ReadG = ReadG, Targeted = Targeted, SetG = SetG, ReadGBool = ReadGBool, SetGBool = SetGBool,
     ReadB = ReadB, SetB = SetB, NormalizeScopeKey = NormalizeScopeKey, ScopeDBKeys = ScopeDBKeys,
     ScopeHasOverride = ScopeHasOverride, ScopeSetOverride = ScopeSetOverride, ScopeRead = ScopeRead, ScopeWrite = ScopeWrite,

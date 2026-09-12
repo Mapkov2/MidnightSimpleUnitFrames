@@ -8,8 +8,6 @@ local WL = M.WordList
 local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
 local MenuSkin = MSUF.MenuSkin
 
-local InvokeThemeBoundary = M.InvokeBoundary or pcall
-
 T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
     micro = 9, caption = 11, supporting = 11, body = 13, control = 13,
     card = 13, accordion = 15, section = 15, heading = 17, hero = 21,
@@ -84,30 +82,11 @@ function M.GetLocaleCoverage()
 end
 local function Tr(text)
     if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then
-        local translated = MSUF.Translate(text)
-        TrackLocaleKey(text, translated ~= text)
-        return translated
-    end
-    local locale = MSUF.L or _G.MSUF_L
-    if type(locale) == "table" then
-        local direct = rawget(locale, text)
-        if direct ~= nil then
-            TrackLocaleKey(text, true)
-            return direct
-        end
-    end
-    if type(MSUF.TR) == "function" then
-        local translated = MSUF.TR(text)
-        if translated ~= nil and translated ~= text then
-            TrackLocaleKey(text, true)
-            return translated
-        end
-    end
-    TrackLocaleKey(text, false)
-    return text
+    local translated = MSUF.Translate(text)
+    TrackLocaleKey(text, translated ~= text)
+    return translated
 end
-M.Tr = M.Tr or Tr
+M.Tr = Tr
 local function ClientLocale()
     return (type(GetLocale) == "function" and GetLocale()) or MSUF.CLIENT_LOCALE or "enUS"
 end
@@ -172,7 +151,7 @@ function M.ApplyLocaleSelection(selection)
     end
     return active or MSUF.LOCALE, selected, reloadRequired
 end
-M.Format = M.Format or function(text, ...)
+M.Format = function(text, ...)
     local translated = M.Tr(text)
     if select("#", ...) == 0 then return translated end
     return string.format(translated, ...)
@@ -384,8 +363,8 @@ local function FontPathMatches(expected, actual)
     if expected == actual then return true end
     local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
     if type(matches) == "function" then
-        local ok, same = InvokeThemeBoundary(matches, expected, actual)
-        if ok and same == true then return true end
+        local same = matches(expected, actual)
+        if same == true then return true end
     end
     expected, actual = NormalizeAppliedFontPath(expected), NormalizeAppliedFontPath(actual)
     return expected ~= nil and actual ~= nil and expected == actual
@@ -406,8 +385,7 @@ local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFl
 end
 local function TryApplyStyledFont(fs, font, size, flags)
     if type(font) ~= "string" or font == "" then return false end
-    local ok, applied = pcall(fs.SetFont, fs, font, size, flags)
-    return ok and applied ~= false and FontApplicationMatches(fs, font, size, flags)
+    return _G.MSUF_SetFontChecked(fs, font, size, flags) and FontApplicationMatches(fs, font, size, flags)
 end
 local function ApplyStyledFont(fs, force)
     if not (fs and fs.GetFont and fs.SetFont) then return false end
@@ -427,10 +405,7 @@ local function ApplyStyledFont(fs, force)
         return true
     end
     local applied = TryApplyStyledFont(fs, nextFont, nextSize, nextFlags)
-    if not applied and nextFont ~= orig.font and orig.font then
-        applied = TryApplyStyledFont(fs, orig.font, nextSize, nextFlags)
-        if applied then fontKey = tostring(orig.font or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "") end
-    end
+    assert(applied, "MSUF menu font readback mismatch: " .. tostring(nextFont))
     if applied and fs._msuf2DropdownDefaultFont then
         local appliedFont, appliedSize, appliedFlags = fs:GetFont()
         if appliedFont and appliedSize then
@@ -441,7 +416,7 @@ local function ApplyStyledFont(fs, force)
     return applied
 end
 local function RegisterPageFontString(fs)
-    local entry = M._msuf2FontCollectionEntry
+    local entry = M.FindPageEntry(fs)
     if type(entry) ~= "table" or fs._msuf2FontCollectionEntry == entry then return end
     local fontStrings = entry.fontStrings
     if type(fontStrings) ~= "table" then
@@ -3178,3 +3153,6 @@ do
         end)
     end
 end
+
+T.PixelBarTexture = PixelBarTexture
+T.IsTextureRegion = IsTextureRegion

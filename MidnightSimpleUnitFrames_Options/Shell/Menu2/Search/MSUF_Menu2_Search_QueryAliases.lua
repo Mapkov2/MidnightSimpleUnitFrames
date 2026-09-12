@@ -8,12 +8,8 @@ MSUF.MSUF2 = M
 
 local Data = M.SearchData or {}
 M.SearchData = Data
-local Lines = M.Lines or function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end
-local KeySetFromWords = M.KeySetFromWords or function(text)
-    local out = {}
-    for word in tostring(text or ""):gmatch("%S+") do out[word] = true end
-    return out
-end
+local Lines = M.Lines
+local KeySetFromWords = M.KeySetFromWords
 
 -- Search query alias catalogue.
 -- Expands human terms and common misspellings into the canonical search keywords used by the

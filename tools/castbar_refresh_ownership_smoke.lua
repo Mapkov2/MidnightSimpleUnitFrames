@@ -160,7 +160,7 @@ assert(contains(player, "local INTERRUPT_IDENTITY_GRACE = 0.25"),
     "player interrupt feedback must retain a bounded STOP-before-INTERRUPTED identity window")
 assert(contains(player, "frame._msufPlayerInterruptCastGUID = interruptCastGUID")
     and contains(player, "select(2, ...) == frame._msufPlayerInterruptCastGUID")
-    and contains(player, "_G.GetTime() <= frame._msufPlayerInterruptCastDeadline"),
+    and contains(player, "GetTime() <= frame._msufPlayerInterruptCastDeadline"),
     "player interrupt feedback must match the stopped cast GUID before accepting the late terminal event")
 local playerEventStart = assert(player:find("local function PlayerCastbarOnEventImpl", 1, true))
 local playerInterruptStart = assert(player:find('if event == "UNIT_SPELLCAST_INTERRUPTED" then', playerEventStart, true))
@@ -207,8 +207,12 @@ assert(not contains(boss, 'frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
 assert(contains(boss,
         '_G.MSUF_EventBus_Register("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_BOSS_CASTBARS_ENGAGE", HandleBossPoolLifecycle)')
     and contains(boss,
-        '_G.MSUF_EventBus_Register("UNIT_TARGETABLE_CHANGED", "MSUF_BOSS_CASTBARS_TARGETABLE", HandleBossPoolLifecycle)'),
+        '_G.MSUF_EventBus_Register("UNIT_TARGETABLE_CHANGED", "MSUF_BOSS_CASTBARS_TARGETABLE", HandleBossPoolLifecycle, BOSS_LIFECYCLE_UNITS)'),
     "shared boss lifecycle driver is incomplete")
+-- The bus drops any UNIT_* subscription that carries no unit filter, so the
+-- boss unit list is what makes the targetable subscription exist at all.
+assert(contains(boss, 'BOSS_LIFECYCLE_UNITS[bossLifecycleIndex] = "boss" .. bossLifecycleIndex'),
+    "boss targetable subscription lost its boss unit filter")
 assert(contains(boss, 'scheduleOnce("MSUF_BOSS_POOL_LIFECYCLE", FlushBossPoolLifecycle)')
     and contains(boss, "bossPoolRefreshPendingGeneration ~= bossPoolRefreshGeneration"),
     "overlapping boss lifecycle events must coalesce and reject stale queued work")

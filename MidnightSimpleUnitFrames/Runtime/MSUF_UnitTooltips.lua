@@ -4,32 +4,22 @@
 --- and the Edit Mode tooltip position preview/drag handle.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
 end
 
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    local locale = MSUF.L or _G.MSUF_L
-    if type(locale) == "table" then
-        local translated = rawget(locale, text)
-        if translated ~= nil then return translated end
-    end
-    return text
-end
+local Tr = MSUF.Translate
+
+--- REQUIRED: State/MSUF_Defaults.lua is listed unconditionally in the TOC and
+--- exports MSUF_EnsureDB at its top level, far ahead of this file. The tooltip
+--- runtime reads MSUF_DB on every show, so a missing guard is a wiring bug and
+--- has to say so.
+local EnsureDB = MSUF.Require("MSUF_EnsureDB", "Runtime/MSUF_UnitTooltips.lua")
 
 local function MSUF_Chat_RunEnsureDB()
-    local ensureDB = _G.MSUF_EnsureDB
-    if type(ensureDB) == "function" then
-        ensureDB()
-        return true
-    end
-    return false
+    EnsureDB()
+    return true
 end
 
 local MSUF_PlayerInfoFrame
@@ -554,11 +544,11 @@ Tooltips.GetGeneral = Tooltips.GetGeneral or MSUF_GetTooltipGeneral
 Tooltips.Normalize = Tooltips.Normalize or MSUF_NormalizeTooltipSettings
 Tooltips.Refresh = Tooltips.Refresh or MSUF_RefreshTooltipCache
 Tooltips.TrackUnitHover = Tooltips.TrackUnitHover or MSUF_TrackUnitTooltipHover
-Tooltips.Allowed = Tooltips.Allowed or function()
+Tooltips.Allowed = function()
     local cache = MSUF_GetTooltipCache()
     return MSUF_TooltipModeAllowed(cache.mode, cache.modifier)
 end
-Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
+Tooltips.ShowUnit = function(owner, unit, opts)
     if not unit then return false end
     local exists = UnitExists(unit)
     if not MSUF_UnitInfo_IsSecret(exists) and not exists then return false end
@@ -615,7 +605,7 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
     gt:Show()
     return true
 end
-Tooltips.HideUnit = Tooltips.HideUnit or function(owner)
+Tooltips.HideUnit = function(owner)
     MSUF_ClearUnitTooltipHover(owner)
     if MSUF_PlayerInfoFrame
         and (MSUF_PlayerInfoFrame._msufEditPreviewActive == true
@@ -889,7 +879,7 @@ do
         size = tonumber(size) or 12
         if size <= 0 then size = 12 end
         if size < 6 then size = 6 elseif size > 128 then size = 128 end
-        pcall(fs.SetFont, fs, STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", size, "")
+        _G.MSUF_SetFontChecked(fs, STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", size, "")
         fs:SetShadowOffset(1, -1)
         fs:SetShadowColor(0, 0, 0, 0.9)
         fs:SetText(Tr(text))

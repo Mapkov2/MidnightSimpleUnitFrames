@@ -11,8 +11,6 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
 
-local InvokeOptional = M.InvokeBoundary or pcall
-
 local T = M.Theme
 local W = M.Widgets
 local Search = M.Search or {}
@@ -20,11 +18,17 @@ M.Search = Search
 local SearchData = M.SearchData or {}
 local NAV_ITEMS = M.navItems or {}
 
-local max = math.max
+
 local byte = string.byte
 
 local SearchText = Search.Text or {}
-local ContentWidth, ContentHeight, TrimText, ShortLabel, SearchPlaceholderText, SearchBoxHasText, RefreshSearchPlaceholder, UpdateSearchPlaceholder, NormalizeSearchText, DisplaySearchText, SearchEffectiveLocale, SearchDisplayText, AddSearchText, AddRawSearchText, AddToggleQuestionSearchText, AddControlQuestionSearchText = M.Pick(SearchText, [[ContentWidth ContentHeight TrimText ShortLabel SearchPlaceholderText SearchBoxHasText RefreshSearchPlaceholder UpdateSearchPlaceholder NormalizeSearchText DisplaySearchText SearchEffectiveLocale SearchDisplayText AddSearchText AddRawSearchText AddToggleQuestionSearchText AddControlQuestionSearchText]])
+local ContentWidth, ContentHeight, TrimText, ShortLabel = SearchText.ContentWidth, SearchText.ContentHeight, SearchText.TrimText, SearchText.ShortLabel
+local SearchPlaceholderText, SearchBoxHasText = SearchText.SearchPlaceholderText, SearchText.SearchBoxHasText
+local RefreshSearchPlaceholder, UpdateSearchPlaceholder = SearchText.RefreshSearchPlaceholder, SearchText.UpdateSearchPlaceholder
+local NormalizeSearchText, DisplaySearchText = SearchText.NormalizeSearchText, SearchText.DisplaySearchText
+local SearchEffectiveLocale, SearchDisplayText, AddSearchText = SearchText.SearchEffectiveLocale, SearchText.SearchDisplayText, SearchText.AddSearchText
+local AddRawSearchText, AddToggleQuestionSearchText = SearchText.AddRawSearchText, SearchText.AddToggleQuestionSearchText
+local AddControlQuestionSearchText = SearchText.AddControlQuestionSearchText
 local SEARCH_KEYWORDS = SearchText.KEYWORDS or SearchData.KEYWORDS or {}
 
 local MIN_SEARCH_QUERY_LEN = 2
@@ -88,19 +92,18 @@ local function CancelSearchBackgroundIndex()
     SEARCH_STATE.indexQueue = nil
 end
 
-local SEARCH_NOISE_TEXT, SEARCH_STOP_WORDS, SEARCH_QUERY_SOFT_STOP_WORDS, SEARCH_QUERY_ALIASES,
-    SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_OVERLAY_KEYWORDS,
-    SEARCH_DEBUFF_STRIPE_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, SEARCH_UNIT_AURA_DISPEL_KEYWORDS,
-    SEARCH_DASHBOARD_RECOVERY_KEYWORDS, SEARCH_DASHBOARD_DISCORD_KEYWORDS, SEARCH_DASHBOARD_SUPPORT_KEYWORDS,
-    SEARCH_DASHBOARD_WAGO_KEYWORDS, SEARCH_DASHBOARD_SCALING_KEYWORDS, SEARCH_DASHBOARD_CHANGELOG_KEYWORDS,
-    CONTROL_KIND_LABEL = M.PickDefaults(SearchData, [[
-        NOISE_TEXT STOP_WORDS QUERY_SOFT_STOP_WORDS QUERY_ALIASES
-        DISPEL_DEBUFF_KEYWORDS HIGHLIGHT_BORDER_KEYWORDS DISPEL_OVERLAY_KEYWORDS
-        DEBUFF_STRIPE_KEYWORDS BLIZZARD_DISPEL_KEYWORDS UNIT_AURA_DISPEL_KEYWORDS
-        DASHBOARD_RECOVERY_KEYWORDS DASHBOARD_DISCORD_KEYWORDS DASHBOARD_SUPPORT_KEYWORDS
-        DASHBOARD_WAGO_KEYWORDS DASHBOARD_SCALING_KEYWORDS DASHBOARD_CHANGELOG_KEYWORDS
-        CONTROL_KIND_LABEL
-    ]])
+local SEARCH_NOISE_TEXT, SEARCH_STOP_WORDS = SearchData.NOISE_TEXT or {}, SearchData.STOP_WORDS or {}
+local SEARCH_QUERY_SOFT_STOP_WORDS, SEARCH_QUERY_ALIASES = SearchData.QUERY_SOFT_STOP_WORDS or {}, SearchData.QUERY_ALIASES or {}
+local SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS = SearchData.DISPEL_DEBUFF_KEYWORDS or {}, SearchData.HIGHLIGHT_BORDER_KEYWORDS or {}
+local SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS = SearchData.DISPEL_OVERLAY_KEYWORDS or {}, SearchData.DEBUFF_STRIPE_KEYWORDS or {}
+local SEARCH_BLIZZARD_DISPEL_KEYWORDS = SearchData.BLIZZARD_DISPEL_KEYWORDS or {}
+local SEARCH_UNIT_AURA_DISPEL_KEYWORDS = SearchData.UNIT_AURA_DISPEL_KEYWORDS or {}
+local SEARCH_DASHBOARD_RECOVERY_KEYWORDS = SearchData.DASHBOARD_RECOVERY_KEYWORDS or {}
+local SEARCH_DASHBOARD_DISCORD_KEYWORDS = SearchData.DASHBOARD_DISCORD_KEYWORDS or {}
+local SEARCH_DASHBOARD_SUPPORT_KEYWORDS = SearchData.DASHBOARD_SUPPORT_KEYWORDS or {}
+local SEARCH_DASHBOARD_WAGO_KEYWORDS = SearchData.DASHBOARD_WAGO_KEYWORDS or {}
+local SEARCH_DASHBOARD_SCALING_KEYWORDS = SearchData.DASHBOARD_SCALING_KEYWORDS or {}
+local SEARCH_DASHBOARD_CHANGELOG_KEYWORDS, CONTROL_KIND_LABEL = SearchData.DASHBOARD_CHANGELOG_KEYWORDS or {}, SearchData.CONTROL_KIND_LABEL or {}
 
 local function SearchIgnoreQueryWord(word)
     return SEARCH_STOP_WORDS[word] or SEARCH_QUERY_SOFT_STOP_WORDS[word]
@@ -688,8 +691,8 @@ end
 
 local function AddValuesSearchText(parts, values)
     if type(values) == "function" then
-        local ok, resolved = InvokeOptional(values)
-        if not ok then return end
+        local resolved = values()
+
         values = resolved
     end
     if type(values) ~= "table" then return end
@@ -808,7 +811,7 @@ end
 local function ClearSearchRegistryPage(pageKey)
     if not pageKey then return end
     if type(M.ClearRuntimeControlsForPage) == "function" then
-        InvokeOptional(M.ClearRuntimeControlsForPage, pageKey)
+        M.ClearRuntimeControlsForPage(pageKey)
     end
     local ids = SEARCH_STATE.registryByPage[pageKey]
     if ids then
@@ -823,8 +826,8 @@ end
 
 local function CopyStaticSearchValues(values)
     if type(values) == "function" then
-        local ok, resolved = InvokeOptional(values)
-        if not ok then return nil end
+        local resolved = values()
+
         values = resolved
     end
     if type(values) ~= "table" then return nil end
@@ -885,9 +888,9 @@ local function RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, 
     payload.command = command
     local wasBusy = runtimeControlMetaScratchBusy
     runtimeControlMetaScratchBusy = true
-    local ok, result = InvokeOptional(M.RegisterRuntimeControl, widget, payload, "search")
+    local result = M.RegisterRuntimeControl(widget, payload, "search")
     runtimeControlMetaScratchBusy = wasBusy
-    return ok and result or nil
+    return result or nil
 end
 
 function M.UnregisterSearchWidget(widget)
@@ -916,7 +919,7 @@ function M.RegisterSearchWidget(widget, meta)
         return
     end
     EnsureSearchLocaleFresh()
-    local pageKey = meta.pageKey or M._msuf2SearchBuildKey or M.activeKey
+    local pageKey = meta.pageKey or M.PageKeyForWidget(widget) or M.activeKey
     if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
 
     local pageEntry = M.cache and M.cache[pageKey]
@@ -1142,8 +1145,8 @@ local function BuildButtonCommandAction(widget, entry)
     if not (widget and type(entry) == "table" and entry.kind == "button") then return nil end
     local function ReadClickHandler()
         if type(widget.GetScript) ~= "function" then return nil end
-        local ok, handler = InvokeOptional(widget.GetScript, widget, "OnClick")
-        if ok and type(handler) == "function" then return handler end
+        local handler = widget.GetScript(widget, "OnClick")
+        if type(handler) == "function" then return handler end
         return nil
     end
     if not ReadClickHandler() then return nil end
@@ -1154,8 +1157,8 @@ local function BuildButtonCommandAction(widget, entry)
             local handler = ReadClickHandler()
             if not handler then return false end
             if type(widget.IsEnabled) == "function" then
-                local ok, enabled = InvokeOptional(widget.IsEnabled, widget)
-                if not ok or enabled == false then return false end
+                local enabled = widget.IsEnabled(widget)
+                if enabled == false then return false end
             end
             if type(widget.Click) == "function" then
                 widget:Click("LeftButton", true)
@@ -1166,8 +1169,8 @@ local function BuildButtonCommandAction(widget, entry)
         end,
         labelFn = function()
             if widget.GetText then
-                local ok, text = InvokeOptional(widget.GetText, widget)
-                if ok and text and text ~= "" then return text end
+                local text = widget.GetText(widget)
+                if text and text ~= "" then return text end
             end
             return entry.label or "Button"
         end,
@@ -1243,7 +1246,7 @@ BuildRegistrySearchRecord = function(entry)
             rec.command = command
             rec.widget = widget
             if widget and type(M.RegisterRuntimeControl) == "function" then
-                local ok, controlId = InvokeOptional(M.RegisterRuntimeControl, widget, {
+                local controlId = M.RegisterRuntimeControl(widget, {
                     pageKey = entry.pageKey,
                     kind = entry.kind,
                     label = entry.label,
@@ -1262,7 +1265,7 @@ BuildRegistrySearchRecord = function(entry)
                     help = entry.help,
                     command = command,
                 }, "search-command")
-                if ok and controlId then entry.controlId = controlId end
+                if controlId then entry.controlId = controlId end
             end
         end
     end
@@ -1275,8 +1278,8 @@ end
 local function AddStaticIndexSearchRecords(records, covered)
     local staticIndex = Search.StaticIndex
     if not (staticIndex and type(staticIndex.GetRecords) == "function") then return end
-    local ok, staticRecords = InvokeOptional(staticIndex.GetRecords)
-    if not ok or type(staticRecords) ~= "table" then return end
+    local staticRecords = staticIndex.GetRecords()
+    if type(staticRecords) ~= "table" then return end
     for i = 1, #staticRecords do
         local rec = staticRecords[i]
         local identity = rec.searchIdentity

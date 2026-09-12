@@ -9,10 +9,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
 local RunNextFrame = _G.MSUF_RunNextFrame
@@ -269,57 +266,24 @@ local function UpdateChannelHasteMarkers(frame, force)
     end
 end
 
-local ToPlain = _G.ToPlain
-local RuntimePlainNumber = _G.MSUF_CastbarRuntime_PlainNumber
-local toPlainIsSecret = _G.issecretvalue or function(_) return false end
-local toPlainHuge = math.huge
+local toPlainIsSecret = _G.issecretvalue
 
-local function ToPlainNumber(value)
-    if value == nil then return nil end
-
-    -- PERF fast path: a plain finite number needs no tostring/tonumber
-    -- round-trip (that round-trip only exists to redact secrets and to map
-    -- nan/inf to nil, which the guards below preserve exactly).
-    if type(value) == "number" and toPlainIsSecret(value) ~= true
-        and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
-        return value
-    end
-
-    if RuntimePlainNumber then
-        return RuntimePlainNumber(value)
-    end
-
-    if ToPlain then
-        local plain = ToPlain(value)
-        local number = tonumber(tostring(plain))
-        if number ~= nil then
-            return number
-        end
-    end
-
-    local valueType = type(value)
-    if valueType == "number" or valueType == "string" then
-        return tonumber(tostring(value))
-    end
-
-    return nil
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper;
+-- harnesses that load the driver standalone load Utils first.
+local ToPlainNumber = _G.MSUF_Castbar_PlainNumber
 
 local function ToPlainBool(value)
     if value == nil then return false end
-    if toPlainIsSecret(value) == true and ToPlain then
-        value = ToPlain(value)
-    end
     return value == true or value == 1 or value == "true"
 end
 
+--- Tri-state read for lifecycle decisions: true/false only when the client
+--- handed us an ordinary value. The 12.x client exposes no unwrapper for secret
+--- values, so a secret stays `nil` == "unknown" and every caller must treat that
+--- as "no information" rather than as a state change.
 local function ToKnownPlainBool(value)
     if value == nil then return nil end
-    if toPlainIsSecret(value) == true then
-        if not ToPlain then return nil end
-        value = ToPlain(value)
-        if value == nil or toPlainIsSecret(value) == true then return nil end
-    end
+    if toPlainIsSecret(value) == true then return nil end
     if value == true or value == 1 or value == "true" then return true end
     if value == false or value == 0 or value == "false" then return false end
     return nil
@@ -405,7 +369,7 @@ local function MSUF_UpdateCastTimeText_FromStatusBar(frame)
     _G.MSUF_SetCastTimeText(frame, remaining, total)
 end
 
-local ClearEmpowerState = _G.MSUF_ClearEmpowerState or function() end
+local ClearEmpowerState = _G.MSUF_ClearEmpowerState
 
 local function ClearFrameOnUpdate(frame)
     if not (frame and frame.SetScript) or frame._msufDriverOnUpdateCleared == true then return end
@@ -650,6 +614,19 @@ local function StopDriverFrame(frame, reason)
     PublishState(frame, nil, reason)
 end
 
+-- Stop-confirmation timing (seconds). A UNIT_SPELLCAST_*_STOP can arrive a few
+-- frames before the follow-up cast/channel is visible, so the driver re-reads
+-- the engine after these delays instead of hiding on the event itself.
+local STOP_CONFIRM_FIRST_DELAY = 0.12       -- first re-check after a stop (cast and channel)
+local STOP_CONFIRM_CAST_FAILSAFE = 0.40     -- final re-check for a plain cast
+local CHANNEL_STOP_QUEUE_PAD = 0.08         -- added to the SpellQueueWindow CVar to form the channel stop window
+local CHANNEL_STOP_WINDOW_MIN = 0.20        -- clamp of that stop window
+local CHANNEL_STOP_WINDOW_MAX = 0.70
+local CHANNEL_STOP_SECOND_DELAY_MIN = 0.08  -- floor for the second channel re-check (also its default)
+local CHANNEL_STOP_FAILSAFE_PAD = 0.55      -- added to the stop window for the channel failsafe
+local CHANNEL_STOP_FAILSAFE_MIN = 0.70      -- clamp of that failsafe
+local CHANNEL_STOP_FAILSAFE_MAX = 1.20
+
 local function EnsureDriverCallbacks(frame)
     if frame._msufDriverCBReady then return end
     frame._msufDriverCBReady = true
@@ -677,10 +654,14 @@ local function EnsureDriverCallbacks(frame)
         end
 
         frame._msufStopTimer2 = true
-        ScheduleDelayed(frame._msufStopCB_chanT2, frame._msufStopT2 or 0.08)
+        ScheduleDelayed(frame._msufStopCB_chanT2, frame._msufStopT2 or CHANNEL_STOP_SECOND_DELAY_MIN)
     end
 
-    frame._msufStopCB_chanT2 = function()
+    -- The second channel re-check, the channel failsafe, and the plain-cast
+    -- re-check all confirm the same thing; only their delays differ. Nothing
+    -- compares the callbacks (cancellation is the token scheme), so one
+    -- closure serves all three slots.
+    local function ConfirmStopOrSucceed()
         if StopExpectationInvalid() then return end
 
         local state = BuildState(frame)
@@ -698,41 +679,9 @@ local function EnsureDriverCallbacks(frame)
         frame:SetSucceeded()
     end
 
-    frame._msufStopCB_failsafe = function()
-        if StopExpectationInvalid() then return end
-
-        local state = BuildState(frame)
-        if CastStateActive(state) then
-            StoreActiveStateIdentity(frame, state)
-            frame:Cast(state)
-            return
-        end
-
-        if ActiveSequenceChanged(frame, frame._msufStopExpSeq) then
-            RefreshFromEngine(frame)
-            return
-        end
-
-        frame:SetSucceeded()
-    end
-
-    frame._msufStopCB_castT1 = function()
-        if StopExpectationInvalid() then return end
-
-        local state = BuildState(frame)
-        if CastStateActive(state) then
-            StoreActiveStateIdentity(frame, state)
-            frame:Cast(state)
-            return
-        end
-
-        if ActiveSequenceChanged(frame, frame._msufStopExpSeq) then
-            RefreshFromEngine(frame)
-            return
-        end
-
-        frame:SetSucceeded()
-    end
+    frame._msufStopCB_chanT2 = ConfirmStopOrSucceed
+    frame._msufStopCB_failsafe = ConfirmStopOrSucceed
+    frame._msufStopCB_castT1 = ConfirmStopOrSucceed
 
     frame._msufStartRetryCB = function()
         frame._msufStartRetryPending = nil
@@ -914,6 +863,9 @@ local function ResolveCastTargetInfo(state)
         return engine:ResolveTargetInfo(state)
     end
 
+    -- No-Engine fallback only. Engine:ResolveTargetInfo (MSUF_CastbarEngine.lua)
+    -- additionally gates on state.active and caches the answer on the state;
+    -- this path is stateless, so the two are deliberately not shared.
     local unit = state and state.unit
     if not (unit and UnitShouldDisplaySpellTargetName and UnitSpellTargetName) then
         return nil
@@ -1036,23 +988,23 @@ local function ScheduleStopConfirmation(frame, castType)
             queueWindowMS = 0
         end
 
-        local stopWindow = (queueWindowMS / 1000) + 0.08
-        if stopWindow < 0.20 then stopWindow = 0.20 end
-        if stopWindow > 0.70 then stopWindow = 0.70 end
+        local stopWindow = (queueWindowMS / 1000) + CHANNEL_STOP_QUEUE_PAD
+        if stopWindow < CHANNEL_STOP_WINDOW_MIN then stopWindow = CHANNEL_STOP_WINDOW_MIN end
+        if stopWindow > CHANNEL_STOP_WINDOW_MAX then stopWindow = CHANNEL_STOP_WINDOW_MAX end
 
-        local firstDelay = 0.12
+        local firstDelay = STOP_CONFIRM_FIRST_DELAY
         if firstDelay > stopWindow then
             firstDelay = stopWindow
         end
 
         local secondDelay = stopWindow - firstDelay
-        if secondDelay < 0.08 then
-            secondDelay = 0.08
+        if secondDelay < CHANNEL_STOP_SECOND_DELAY_MIN then
+            secondDelay = CHANNEL_STOP_SECOND_DELAY_MIN
         end
 
-        local failsafeDelay = stopWindow + 0.55
-        if failsafeDelay < 0.70 then failsafeDelay = 0.70 end
-        if failsafeDelay > 1.20 then failsafeDelay = 1.20 end
+        local failsafeDelay = stopWindow + CHANNEL_STOP_FAILSAFE_PAD
+        if failsafeDelay < CHANNEL_STOP_FAILSAFE_MIN then failsafeDelay = CHANNEL_STOP_FAILSAFE_MIN end
+        if failsafeDelay > CHANNEL_STOP_FAILSAFE_MAX then failsafeDelay = CHANNEL_STOP_FAILSAFE_MAX end
 
         frame._msufStopT2 = secondDelay
         frame._msufStopTimer1 = true
@@ -1063,9 +1015,9 @@ local function ScheduleStopConfirmation(frame, castType)
     end
 
     frame._msufStopTimer1 = true
-    ScheduleDelayed(frame._msufStopCB_castT1, 0.12)
+    ScheduleDelayed(frame._msufStopCB_castT1, STOP_CONFIRM_FIRST_DELAY)
     frame._msufStopTimer3 = true
-    ScheduleDelayed(frame._msufStopCB_failsafe, 0.40)
+    ScheduleDelayed(frame._msufStopCB_failsafe, STOP_CONFIRM_CAST_FAILSAFE)
 end
 
 HandleUnitDeathEvent = function(frame, event)
@@ -1298,13 +1250,23 @@ local function BuildCastbarFrameElements(frame)
     return nil
 end
 
-local function CreateCastBar(frameName, unit)
+--- CreateCastBar build stage 1: the driver frame plus the identity fields the
+--- other castbar modules key on (_msufCastbarDriver, _msufBarKey).
+local function CreateDriverFrame(frameName, unit)
     local frame = CreateFrame("Frame", frameName, UIParent)
     frame:SetClampedToScreen(true)
     frame.unit = unit
     frame._msufCastbarDriver = true
     frame._msufBarKey = unit
     frame.reverseFill = false
+    return frame
+end
+
+--- CreateCastBar build stage 2: interruptibility tint method.
+local function InstallDriverColorMethod(frame)
+    -- Target/focus/boss tint. MSUF_PlayerCastbarRuntime.lua has a same-named
+    -- player-only routine that also honours the player color override and the
+    -- nameplate-derived interruptibility; the two are intentionally separate.
     function frame:UpdateColorForInterruptible()
         if not (self and self.statusBar and self.statusBar.SetStatusBarColor) then
             return
@@ -1353,11 +1315,19 @@ local function CreateCastBar(frameName, unit)
             _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, castR, castG, castB, 1)
         end
     end
+end
 
+--- CreateCastBar build stage 3: unit spellcast event script. HandleDriverEvent
+--- is a direct upvalue of this stage (boss_castbar_lifecycle_smoke reaches the
+--- real handler through it).
+local function WireDriverEventScript(frame)
     frame:SetScript("OnEvent", function(self, event, eventUnit, ...)
         return HandleDriverEvent(self, event, eventUnit, ...)
     end)
+end
 
+--- CreateCastBar build stage 4: cast lifecycle methods.
+local function InstallDriverCastMethods(frame)
     function frame:Cast(state)
         local hasSpell = CastStateHasSpell(state)
         if not (hasSpell and state.unit == self.unit) then
@@ -1483,7 +1453,7 @@ local function CreateCastBar(frameName, unit)
                 if type(RunNextFrame) == "function" then
                     RunNextFrame(self._msufInactiveRecheckCB)
                 else
-                    C_Timer.After(0, self._msufInactiveRecheckCB)
+                C_Timer.After(0, self._msufInactiveRecheckCB)
                 end
             end
         end
@@ -1571,7 +1541,11 @@ local function CreateCastBar(frameName, unit)
         _G.MSUF_CB_ResetStateOnStop(self, "SUCCEEDED")
         PublishState(self, nil, "SUCCEEDED")
     end
+end
 
+--- CreateCastBar build stage 5: event registration, unit-frame anchor, bar
+--- regions, native prewarm; the frame starts hidden.
+local function FinishDriverFrame(frame, unit)
     SetDriverEventsRegistered(frame, unit, true)
     AnchorDriverFrameToUnitFrame(frame, unit)
     BuildCastbarFrameElements(frame)
@@ -1586,7 +1560,10 @@ local function CreateCastBar(frameName, unit)
         runtime:PrewarmNativeTimeText(frame)
     end
     frame:Hide()
+end
 
+--- CreateCastBar build stage 6: legacy per-unit global handles.
+local function ExportDriverFrame(frame, unit)
     if unit == "target" then
         ExportPublic("MSUF_TargetCastbar", frame)
         ExportPublic("MSUF_TargetCastBar", frame)
@@ -1597,7 +1574,17 @@ local function CreateCastBar(frameName, unit)
         ExportPublic("MSUF_PlayerCastbar", frame)
         ExportPublic("MSUF_PlayerCastBar", frame)
     end
+end
 
+--- Cold path: builds one target/focus/boss driver frame. The stages run in the
+--- historical order; all _msuf* fields keep their names.
+local function CreateCastBar(frameName, unit)
+    local frame = CreateDriverFrame(frameName, unit)
+    InstallDriverColorMethod(frame)
+    WireDriverEventScript(frame)
+    InstallDriverCastMethods(frame)
+    FinishDriverFrame(frame, unit)
+    ExportDriverFrame(frame, unit)
     return frame
 end
 

@@ -66,6 +66,7 @@ local MSUF = {
     },
 }
 
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", MSUF)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua"))(
     "MidnightSimpleUnitFrames", MSUF)
 

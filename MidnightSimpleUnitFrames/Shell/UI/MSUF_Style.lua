@@ -6,10 +6,7 @@ local addonName, MSUF = ...
 if type(MSUF) ~= "table" then MSUF = {} end
 _G.MSUF = _G.MSUF or MSUF
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 MSUF.Style = MSUF.Style or {}
 local Style = MSUF.Style

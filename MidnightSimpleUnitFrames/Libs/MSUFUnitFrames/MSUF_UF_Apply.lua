@@ -13,9 +13,9 @@ MSUF.Apply = Apply
 --- comparing or storing them can be unsafe on Midnight clients.
 
 local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
+local IsSecret = Secrets.IsSecret
 Apply.IsSecret = IsSecret
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 function Apply.Texture(region, tex)
   if not region then return end
@@ -89,9 +89,9 @@ end
 function Apply.Text(region, text)
   if not region then return end
   if issecretvalue(text) == true then
-    region:SetText(text)
     region._aText = nil
     region._aTextPlain = nil
+    region:SetText(text)
     return
   end
   text = text or ""

@@ -167,10 +167,7 @@ local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_NOTICE_BG = { 0.105, 0.082, 0.052, 0.34 }
 local WARNING_NOTICE_TOP = { 0.48, 0.36, 0.20, 0.55 }
 local WARNING_NOTICE_BOTTOM = { 0.28, 0.21, 0.12, 0.48 }
-local function PortableControlToken(value, fallback)
-    local token = tostring(value or ""):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
-    return token ~= "" and token or (fallback or "control")
-end
+local PortableControlToken = M.PortableControlToken
 local function SharedControlMeta(opts, suffix, classification)
     if type(opts) ~= "table" or not opts.controlDomain or not opts.controlPath then return nil end
     local pageKey = PortableControlToken(opts.controlPageKey or M.activeKey, "unknown")
@@ -240,7 +237,7 @@ end
 function Shared.SetSectionHeaderStatus(sec, opts)
     local entry = sec and sec._msuf2CollapsibleEntry
     if not entry then return end
-    M.CallIf(T.ApplyCollapseVisual, entry.arrow, entry.hint, entry.open)
+    T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open)
     opts = opts or {}
     if W.SetCollapsibleHeaderBaseTone then
         local bg = opts.bg
@@ -269,7 +266,7 @@ function Shared.SetSectionHeaderStatus(sec, opts)
                 entry.hint:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
             end
         else
-            M.CallIf(T.ApplyCollapseVisual, entry.arrow, entry.hint, entry.open)
+            T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open)
         end
     end
     if entry._msuf2UXSummary and entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
@@ -549,11 +546,7 @@ end
 function Shared.TextBadgeValue(value)
     return tostring(value or ""):gsub("%s*/%s*", " + ")
 end
-function Shared.TextBadgeNumber(value)
-    value = tonumber(value) or 0
-    if value == math.floor(value) then return tostring(math.floor(value)) end
-    return string.format("%.1f", value)
-end
+Shared.TextBadgeNumber = M.BadgeNumber
 local HEALTH_ABSORB_BASE = {
     CURRENTABSORB = "CURRENT", FULLVALUEABSORB = "FULLVALUE", MAXABSORB = "MAX", DEFICITABSORB = "DEFICIT",
     CURMAXABSORB = "CURMAX", PERCENTABSORB = "PERCENT", CURPERCENTABSORB = "CURPERCENT",
@@ -680,7 +673,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24); box:SetSize(width, 24); box:SetAutoFocus(false)
     box:SetMaxLetters(opts.maxLetters or 100); box:SetJustifyH("LEFT")
     box._msuf2Title, box._msuf2ControlKind = label, "textinput"
-    M.CallIf(T.SkinEditBox, box)
+    T.SkinEditBox(box)
     local function Attach(widget) if opts.attachFocus then opts.attachFocus(widget) end end
     Attach(box)
     local function Refresh()

@@ -3,26 +3,20 @@
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF = _G.MSUF or MSUF
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
+local ExportPublic = MSUF.ExportPublic
+
+local function GetLSM()
+    local LSM = (MSUF and MSUF.LSM) or _G.MSUF_LSM
+    if not LSM and type(_G.LibStub) == "function" then
+        LSM = _G.LibStub("LibSharedMedia-3.0", true)
+    end
+    return LSM
 end
 
 local _MSUF_KnownFileAssetCache = {}
 local _MSUF_LSMFontAssetPaths = {}
 local _MSUF_FontApplyFailureSerial = tonumber(_G.MSUF_FontApplyFailureSerial) or 0
 _G.MSUF_FontApplyEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
-
-local function MSUF_InvokeLibraryBoundary(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local ok, r1, r2 = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, r1) end
-        return false, r1
-    end
-    return true, r1, r2
-end
 
 local function MSUF_NormalizeFileAssetPath(asset)
     if type(asset) ~= "string" or asset == "" then return nil end
@@ -102,8 +96,18 @@ local function MSUF_ApplyFontScaleAnimationMode(fs, flags)
     local useSlug = type(flags) == "string" and flags:upper():find("SLUG", 1, true) ~= nil
     local mode = useSlug and modes.Vertex or modes.FontSize
     if mode == nil or fs._msufFontScaleAnimationMode == mode then return end
-    local ok = pcall(fs.SetScaleAnimationMode, fs, mode)
-    if ok then fs._msufFontScaleAnimationMode = mode end
+    fs.SetScaleAnimationMode(fs, mode)
+    do
+fs._msufFontScaleAnimationMode = mode
+end
+end
+
+--- Native exceptions propagate; explicit API rejection is an error as well.
+local function MSUF_SetFontChecked(fs, path, size, flags)
+    if fs:SetFont(path, size, flags or "") == false then
+        error("MSUF SetFont rejected font: " .. tostring(path), 2)
+    end
+    return true
 end
 
 local function MSUF_ClearFontStringApplyCaches(fs)
@@ -138,7 +142,7 @@ local function MSUF_MarkFontApplyFailed()
     _MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial + 1
     _G.MSUF_FontApplyFailureSerial = _MSUF_FontApplyFailureSerial
     local notify = _G.MSUF_OnFontApplyFailed
-    if type(notify) == "function" then MSUF_InvokeLibraryBoundary(notify, _MSUF_FontApplyFailureSerial) end
+    if type(notify) == "function" then notify(_MSUF_FontApplyFailureSerial) end
     return _MSUF_FontApplyFailureSerial
 end
 
@@ -186,6 +190,7 @@ ExportPublic("MSUF_IsRegisteredLSMFontPath", MSUF_IsRegisteredLSMFontPath)
 ExportPublic("MSUF_FontApplicationMatches", MSUF_FontApplicationMatches)
 ExportPublic("MSUF_ApplyFontScaleAnimationMode", MSUF_ApplyFontScaleAnimationMode)
 ExportPublic("MSUF_ClearFontStringApplyCaches", MSUF_ClearFontStringApplyCaches)
+ExportPublic("MSUF_SetFontChecked", MSUF_SetFontChecked)
 ExportPublic("MSUF_MarkFontApplyFailed", MSUF_MarkFontApplyFailed)
 MSUF.Util = MSUF.Util or {}
 MSUF.Util.IsKnownFileAsset = MSUF.Util.IsKnownFileAsset or MSUF_IsKnownFileAsset
@@ -195,16 +200,9 @@ MSUF.Util.IsKnownFileAsset = MSUF.Util.IsKnownFileAsset or MSUF_IsKnownFileAsset
 
 --- Font pipeline v3: path-first, no visual guessing.
 --- A selected SharedMedia font is stored/resolved as the exact file path and is
---- applied directly. Fallback is only used after SetFont itself rejects the path.
+--- applied directly. A rejected path surfaces as an error with no replacement font.
 do
     local ADDON_FONT_BASE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\"
-    local FALLBACK_FONT = "Fonts\\FRIZQT___CYR.TTF"
-    local FALLBACK_FONT_ALTERNATES = {
-        "Fonts\\FRIZQT___CYR.TTF",
-        "Fonts\\FRIZQT__.TTF",
-        "Fonts\\ARIALN.TTF",
-    }
-
     local ALIAS_TO_PATH = {
         FRIZQT = "Fonts\\FRIZQT___CYR.TTF",
         ARIALN = "Fonts\\ARIALN.TTF",
@@ -258,13 +256,7 @@ do
         return path
     end
 
-    local function ResolveFallbackFontPath()
-        for i = 1, #FALLBACK_FONT_ALTERNATES do
-            local path = FontAssetAllowed(FALLBACK_FONT_ALTERNATES[i])
-            if path then return path end
-        end
-        return NormalizeFontPath(FALLBACK_FONT)
-    end
+
 
     local function IsPath(value)
         if type(value) ~= "string" or value == "" then return false end
@@ -280,14 +272,6 @@ do
         flags = flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
         if flags == "NONE" then return "" end
         return flags:gsub("%s*,%s*", ","):gsub(",+", ","):gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
-    end
-
-    local function GetLSM()
-        local LSM = (MSUF and MSUF.LSM) or _G.MSUF_LSM
-        if not LSM and type(_G.LibStub) == "function" then
-            LSM = _G.LibStub("LibSharedMedia-3.0", true)
-        end
-        return LSM
     end
 
     local function FetchLSMFontPath(key)
@@ -309,7 +293,7 @@ do
 
     local function ResolveFontKeyPath(value)
         if IsPath(value) then return FontAssetAllowed(value) end
-        if type(value) ~= "string" or value == "" then return FontAssetAllowed(ALIAS_TO_PATH.FRIZQT) or ResolveFallbackFontPath() end
+        if type(value) ~= "string" or value == "" then return FontAssetAllowed(ALIAS_TO_PATH.FRIZQT) end
         local normalized = type(_G.MSUF_NormalizeFontKey) == "function" and _G.MSUF_NormalizeFontKey(value) or value
         if IsPath(normalized) then return FontAssetAllowed(normalized) end
         return FontAssetAllowed(ALIAS_TO_PATH[normalized])
@@ -319,7 +303,10 @@ do
     end
 
     local function ResolveFontPath(path, _, _, fontKey)
-        return FontAssetAllowed(path) or ResolveFontKeyPath(fontKey) or ResolveFallbackFontPath()
+        if path ~= nil and path ~= "" then
+            return assert(FontAssetAllowed(path), "MSUF invalid font asset: " .. tostring(path))
+        end
+        return assert(ResolveFontKeyPath(fontKey), "MSUF unknown font key: " .. tostring(fontKey))
     end
 
     local function ApplyOne(fs, path, size, flags)
@@ -335,8 +322,7 @@ do
         then
             return true
         end
-        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
-        if ok and applied ~= false and MSUF_FontApplicationMatches(fs, path, size) then
+        if MSUF_SetFontChecked(fs, path, size, flags) and MSUF_FontApplicationMatches(fs, path, size) then
             fs._msufFontAppliedPath = path
             fs._msufFontAppliedSize = size
             fs._msufFontAppliedFlags = flags
@@ -353,50 +339,20 @@ do
         flags = NormalizeFlags(flags)
         local requested = ResolveFontPath(path, size, flags, fontKey)
         local epoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
-        if fs and fs._msufFontRequestPath == requested
+        if fs._msufFontRequestPath == requested
             and fs._msufFontRequestSize == size
             and fs._msufFontRequestFlags == flags
-            and fs._msufFontRequestEpoch == epoch
-        then
-            return true, fs._msufFontRequestAppliedPath or requested, fs._msufFontSource or "cached"
+            and fs._msufFontRequestEpoch == epoch then
+            return true, requested, "cached"
         end
-
-        if ApplyOne(fs, requested, size, flags) or (flags ~= "" and ApplyOne(fs, requested, size, "")) then
-            if fs then
-                fs._msufFontRequestPath = requested
-                fs._msufFontRequestSize = size
-                fs._msufFontRequestFlags = flags
-                fs._msufFontRequestAppliedPath = requested
-                fs._msufFontSource = "requested"
-                fs._msufFontRequestEpoch = epoch
-            end
-            return true, requested, "requested"
-        end
-        local fallback = ResolveFallbackFontPath()
-        if fallback ~= requested and (ApplyOne(fs, fallback, size, flags) or (flags ~= "" and ApplyOne(fs, fallback, size, ""))) then
-            -- Cache a readable fallback only for this epoch. The failure
-            -- serial keeps the generation unresolved; the next epoch retries
-            -- the requested path without imposing repeated hotpath SetFont.
-            if fs then
-                fs._msufFontRequestPath = requested
-                fs._msufFontRequestSize = size
-                fs._msufFontRequestFlags = flags
-                fs._msufFontRequestAppliedPath = fallback
-                fs._msufFontRequestEpoch = epoch
-                fs._msufFontSource = "fallback"
-            end
-            MSUF_MarkFontApplyFailed()
-            return true, fallback, "fallback"
-        end
-        if fs then
-            fs._msufFontRequestPath = nil
-            fs._msufFontRequestSize = nil
-            fs._msufFontRequestFlags = nil
-            fs._msufFontRequestAppliedPath = nil
-            fs._msufFontSource = nil
-        end
-        MSUF_MarkFontApplyFailed()
-        return false, requested, "failed"
+        assert(ApplyOne(fs, requested, size, flags), "MSUF font readback mismatch: " .. requested)
+        fs._msufFontRequestPath = requested
+        fs._msufFontRequestSize = size
+        fs._msufFontRequestFlags = flags
+        fs._msufFontRequestAppliedPath = requested
+        fs._msufFontSource = "requested"
+        fs._msufFontRequestEpoch = epoch
+        return true, requested, "requested"
     end
 
     local function MSUF_NormalizeFontFlags(flags)
@@ -427,20 +383,15 @@ do
         return ResolveFontPath(path, size, flags, fontKey)
     end
 
-    local function MSUF_ClearResolvedFontPathCache()
-    end
 
-    local function MSUF_PrewarmFontVisualCache()
-        return true
-    end
+
+
 
     local function MSUF_GetInternalFontPrimaryPath(key)
         return ResolveFontKeyPath(key)
     end
 
-    local function MSUF_GetInternalFontPathCandidates(key, path)
-        return { ResolveFontPath(path, 14, "", key), ResolveFallbackFontPath() }
-    end
+
 
     local function MSUF_DebugFontProbe(key)
         if key == nil and _G.MSUF_DB and _G.MSUF_DB.general then
@@ -477,10 +428,7 @@ do
     ExportPublic("MSUF_ResolveFontKeyPath", MSUF_ResolveFontKeyPath)
     ExportPublic("MSUF_ResolveFontPath", MSUF_ResolveFontPath)
     ExportPublic("MSUF_ApplyResolvedFont", ApplyResolvedFont)
-    ExportPublic("MSUF_ClearResolvedFontPathCache", MSUF_ClearResolvedFontPathCache)
-    ExportPublic("MSUF_PrewarmFontVisualCache", MSUF_PrewarmFontVisualCache)
     ExportPublic("MSUF_GetInternalFontPrimaryPath", MSUF_GetInternalFontPrimaryPath)
-    ExportPublic("MSUF_GetInternalFontPathCandidates", MSUF_GetInternalFontPathCandidates)
     ExportPublic("MSUF_DebugFontProbe", MSUF_DebugFontProbe)
 
     MSUF.Util = MSUF.Util or {}
@@ -521,11 +469,8 @@ if type(LSM_CALLBACK_OWNER) ~= "table" then
 end
 
 local _MSUF_StatusbarMediaRefreshPending = false
-local _MSUF_StatusbarMediaRefreshFrame
 local _MSUF_StatusIconMediaRefreshPending = false
-local _MSUF_StatusIconMediaRefreshFrame
 local _MSUF_FontMediaRefreshPending = false
-local _MSUF_FontMediaRefreshFrame
 local _MSUF_LSMFontMediaChangedInCombat = false
 local _MSUF_LSMCombatFrame
 local _MSUF_LSMCallbackActive = false
@@ -562,37 +507,6 @@ local function RunStatusbarMediaRefresh()
         _G.MSUF_ClassPower_RefreshTextures()
     end
 
-    local gf = (_G.MSUF_NS and _G.MSUF_NS.GF) or (MSUF and MSUF.GF)
-    if gf then
-        if type(gf.InvalidateConfCache) == "function" then gf.InvalidateConfCache() end
-        if type(gf.RefreshVisuals) == "function" then
-            gf.RefreshVisuals()
-        elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then
-            _G.MSUF_GF_RefreshOverlays()
-        end
-    elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then
-        _G.MSUF_GF_RefreshOverlays()
-    end
-end
-
-local function EnsureStatusbarMediaRefreshFrame()
-    if _MSUF_StatusbarMediaRefreshFrame or type(_G.CreateFrame) ~= "function" then
-        return _MSUF_StatusbarMediaRefreshFrame
-    end
-    local frame = _G.CreateFrame("Frame")
-    frame:SetScript("OnEvent", function(self, event)
-        if event ~= "PLAYER_REGEN_ENABLED" then return end
-        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        if _MSUF_StatusbarMediaRefreshPending then
-            if IsCombatLocked() then
-                self:RegisterEvent("PLAYER_REGEN_ENABLED")
-            else
-                RunStatusbarMediaRefresh()
-            end
-        end
-    end)
-    _MSUF_StatusbarMediaRefreshFrame = frame
-    return frame
 end
 
 local function RunStatusIconMediaRefresh()
@@ -606,37 +520,6 @@ local function RunStatusIconMediaRefresh()
         _G.MSUF_RequestStatusIconsRefreshForCurrent()
     end
 
-    local gf = (_G.MSUF_NS and _G.MSUF_NS.GF) or (MSUF and MSUF.GF)
-    if gf then
-        if type(gf.InvalidateConfCache) == "function" then gf.InvalidateConfCache() end
-        if type(gf.RefreshVisuals) == "function" then
-            gf.RefreshVisuals(nil, gf.DIRTY_VISUAL)
-        elseif type(_G.MSUF_GF_RefreshVisuals) == "function" then
-            _G.MSUF_GF_RefreshVisuals()
-        end
-    elseif type(_G.MSUF_GF_RefreshVisuals) == "function" then
-        _G.MSUF_GF_RefreshVisuals()
-    end
-end
-
-local function EnsureStatusIconMediaRefreshFrame()
-    if _MSUF_StatusIconMediaRefreshFrame or type(_G.CreateFrame) ~= "function" then
-        return _MSUF_StatusIconMediaRefreshFrame
-    end
-    local frame = _G.CreateFrame("Frame")
-    frame:SetScript("OnEvent", function(self, event)
-        if event ~= "PLAYER_REGEN_ENABLED" then return end
-        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        if _MSUF_StatusIconMediaRefreshPending then
-            if IsCombatLocked() then
-                self:RegisterEvent("PLAYER_REGEN_ENABLED")
-            else
-                RunStatusIconMediaRefresh()
-            end
-        end
-    end)
-    _MSUF_StatusIconMediaRefreshFrame = frame
-    return frame
 end
 
 local function RunFontMediaRefresh()
@@ -650,107 +533,48 @@ local function RunFontMediaRefresh()
     end
 end
 
-local function EnsureFontMediaRefreshFrame()
-    if _MSUF_FontMediaRefreshFrame or type(_G.CreateFrame) ~= "function" then
-        return _MSUF_FontMediaRefreshFrame
-    end
-    local frame = _G.CreateFrame("Frame")
-    frame:SetScript("OnEvent", function(self, event)
-        if event ~= "PLAYER_REGEN_ENABLED" then return end
-        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        if _MSUF_FontMediaRefreshPending then
-            if IsCombatLocked() then
-                self:RegisterEvent("PLAYER_REGEN_ENABLED")
-            else
-                RunFontMediaRefresh()
-            end
-        end
-    end)
-    _MSUF_FontMediaRefreshFrame = frame
-    return frame
-end
-
-local function FlushFontMediaRefresh()
-    if IsCombatLocked() then
-        local frame = EnsureFontMediaRefreshFrame()
-        if frame then
-            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-            return
-        end
-    end
-    RunFontMediaRefresh()
-end
-
-local function ScheduleFontMediaRefresh()
-    if _MSUF_FontMediaRefreshPending then return end
-    _MSUF_FontMediaRefreshPending = true
-    if IsCombatLocked() then
-        local frame = EnsureFontMediaRefreshFrame()
-        if frame then
-            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-            return
-        end
-    end
-    if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("LSM_FONT_MEDIA_REFRESH", FlushFontMediaRefresh)
+local function RefreshMediaGroupVisuals(statusbars)
+    local gf = (_G.MSUF_NS and _G.MSUF_NS.GF) or (MSUF and MSUF.GF)
+    if gf and type(gf.InvalidateConfCache) == "function" then gf.InvalidateConfCache() end
+    if gf and type(gf.RefreshVisuals) == "function" then
+        gf.RefreshVisuals(nil, not statusbars and gf.DIRTY_VISUAL or nil)
     else
-        _G.C_Timer.After(0, FlushFontMediaRefresh)
+        local refresh = statusbars and _G.MSUF_GF_RefreshOverlays or _G.MSUF_GF_RefreshVisuals
+        if type(refresh) == "function" then refresh() end
     end
 end
 
-local function FlushStatusbarMediaRefresh()
+-- One coalesced flush owns all changed media kinds. Combat deferral has one
+-- event listener; flags are cleared by each owner before it calls consumers.
+local mediaRefreshFrame
+local mediaRefreshQueued = false
+local function FlushMediaRefresh()
+    mediaRefreshQueued = false
     if IsCombatLocked() then
-        local frame = EnsureStatusbarMediaRefreshFrame()
-        if frame then
-            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-            return
+        mediaRefreshQueued = true
+        if not mediaRefreshFrame then
+            mediaRefreshFrame = _G.CreateFrame("Frame")
+            mediaRefreshFrame:SetScript("OnEvent", FlushMediaRefresh)
         end
+        mediaRefreshFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
     end
-    RunStatusbarMediaRefresh()
+    if mediaRefreshFrame then mediaRefreshFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
+    local statusbars, icons = _MSUF_StatusbarMediaRefreshPending, _MSUF_StatusIconMediaRefreshPending
+    if statusbars then RunStatusbarMediaRefresh() end
+    if icons then RunStatusIconMediaRefresh() end
+    if statusbars or icons then RefreshMediaGroupVisuals(statusbars) end
+    if _MSUF_FontMediaRefreshPending then RunFontMediaRefresh() end
 end
 
-local function ScheduleStatusbarMediaRefresh()
-    if _MSUF_StatusbarMediaRefreshPending then return end
-    _MSUF_StatusbarMediaRefreshPending = true
-    if IsCombatLocked() then
-        local frame = EnsureStatusbarMediaRefreshFrame()
-        if frame then
-            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-            return
-        end
-    end
+local function ScheduleMediaRefresh()
+    if mediaRefreshQueued then return end
+    if IsCombatLocked() then FlushMediaRefresh(); return end
+    mediaRefreshQueued = true
     if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("LSM_STATUSBAR_MEDIA_REFRESH", FlushStatusbarMediaRefresh)
+        _G.MSUF_ScheduleOnce("LSM_MEDIA_REFRESH", FlushMediaRefresh)
     else
-        _G.C_Timer.After(0, FlushStatusbarMediaRefresh)
-    end
-end
-
-local function FlushStatusIconMediaRefresh()
-    if IsCombatLocked() then
-        local frame = EnsureStatusIconMediaRefreshFrame()
-        if frame then
-            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-            return
-        end
-    end
-    RunStatusIconMediaRefresh()
-end
-
-local function ScheduleStatusIconMediaRefresh()
-    if _MSUF_StatusIconMediaRefreshPending then return end
-    _MSUF_StatusIconMediaRefreshPending = true
-    if IsCombatLocked() then
-        local frame = EnsureStatusIconMediaRefreshFrame()
-        if frame then
-            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-            return
-        end
-    end
-    if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("LSM_STATUS_ICON_MEDIA_REFRESH", FlushStatusIconMediaRefresh)
-    else
-        _G.C_Timer.After(0, FlushStatusIconMediaRefresh)
+        _G.C_Timer.After(0, FlushMediaRefresh)
     end
 end
 
@@ -774,16 +598,13 @@ local function SnapshotLSMMediaCounts(LSM)
 end
 
 local function RefreshFontMedia(key, forceApply, registeredPath)
-    if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
-        _G.MSUF_ClearResolvedFontPathCache()
-    end
     if type(_G.MSUF_RebuildFontChoices) == "function" then
         _G.MSUF_RebuildFontChoices()
     end
 
     local needsFontRefresh = forceApply == true
     if not needsFontRefresh and key ~= nil then
-        local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
+        local normalizeFontKey = _G.MSUF_NormalizeFontKey
         local general = _G.MSUF_DB and _G.MSUF_DB.general
         local configured = general and general.fontKey
         needsFontRefresh = configured ~= nil
@@ -791,7 +612,8 @@ local function RefreshFontMedia(key, forceApply, registeredPath)
                 or MSUF_FileAssetPathsEqual(configured, registeredPath))
     end
     if needsFontRefresh then
-        ScheduleFontMediaRefresh()
+        _MSUF_FontMediaRefreshPending = true
+        ScheduleMediaRefresh()
     end
 end
 
@@ -799,11 +621,13 @@ local function RefreshStatusbarMedia()
     if type(_G.MSUF_RebuildStatusbarChoices) == "function" then
         _G.MSUF_RebuildStatusbarChoices()
     end
-    ScheduleStatusbarMediaRefresh()
+    _MSUF_StatusbarMediaRefreshPending = true
+    ScheduleMediaRefresh()
 end
 
 local function RefreshStatusIconMedia()
-    ScheduleStatusIconMediaRefresh()
+    _MSUF_StatusIconMediaRefreshPending = true
+    ScheduleMediaRefresh()
 end
 
 local function RefreshChangedMediaAfterCombat()
@@ -885,8 +709,8 @@ RegisterLSMCallback = function()
     if IsCombatLocked() then return false end
     if _MSUF_LSMCallbackActive then return true end
 
-    local registered = MSUF_InvokeLibraryBoundary(LSM.RegisterCallback, LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
-    if not registered then return false end
+    LSM.RegisterCallback(LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
+
     _MSUF_LSMCallbackActive = true
     ExportPublic("MSUF_LSM_CallbackActive", true)
     return true
@@ -944,13 +768,7 @@ local FALLBACK_STATUSBAR_TEXTURES = {
     { key = "Parchment",     path = "Interface\\AchievementFrame\\UI-Achievement-StatsBackground" },
 }
 
-local function GetStatusbarLSM()
-    local LSM = (MSUF and MSUF.LSM) or _G.MSUF_LSM
-    if not LSM and type(_G.LibStub) == "function" then
-        LSM = _G.LibStub("LibSharedMedia-3.0", true)
-    end
-    return LSM
-end
+local GetStatusbarLSM = GetLSM
 
 local function StatusbarAssetAllowed(texture)
     if type(texture) ~= "string" or texture == "" then return nil end
@@ -1033,7 +851,7 @@ end
 MSUF.UI = MSUF.UI or {}
 MSUF.UI.StatusBarTextureItems = StatusBarTextureItems
 ExportPublic("MSUF_StatusBarTextureItems", StatusBarTextureItems)
-ExportPublic("MSUF_RebuildStatusbarChoices", _G.MSUF_RebuildStatusbarChoices or function() end)
+ExportPublic("MSUF_RebuildStatusbarChoices", _G.MSUF_RebuildStatusbarChoices)
 
 --- Bundled fonts (Media/Fonts)
 
@@ -1244,3 +1062,24 @@ local function MSUF_InstallGlobalScaleGate()
 end
 
 ExportPublic("MSUF_InstallGlobalScaleGate", MSUF_InstallGlobalScaleGate)
+
+-- Font flags have one owner for unit/group compilation, runtime and Options.
+local function MSUF_ComposeFontFlags(outline, monochrome, slug)
+    local flags = ""
+    outline = tostring(outline or "OUTLINE"):upper()
+    if slug == true then
+        return (outline == "NONE" or outline == "") and "SLUG" or "OUTLINE,SLUG"
+    end
+    if outline == "THICKOUTLINE" then
+        flags = "THICKOUTLINE"
+    elseif outline ~= "NONE" and outline ~= "" then
+        flags = "OUTLINE"
+    end
+    if monochrome == true then
+        flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
+    end
+    return flags
+end
+ExportPublic("MSUF_ComposeFontFlags", MSUF_ComposeFontFlags)
+
+ExportPublic("MSUF_GetSharedMedia", GetLSM)

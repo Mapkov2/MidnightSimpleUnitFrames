@@ -15,11 +15,7 @@ local max = math.max
 local min = math.min
 local format = string.format
 
-local InvokeLifecycleBoundary = M.InvokeBoundary or pcall
-
-local function Tr(text)
-    return type(M.Tr) == "function" and M.Tr(text) or text
-end
+local Tr = M.Tr
 
 local function Lifecycle()
     local firstLoad = MSUF and MSUF.FirstLoad6
@@ -29,8 +25,8 @@ end
 local function CallLifecycle(firstLoad, method, ...)
     local fn = firstLoad and firstLoad[method]
     if type(fn) ~= "function" then return false end
-    local called, result = InvokeLifecycleBoundary(fn, firstLoad, ...)
-    return called and result ~= false, result
+    local result = fn(firstLoad, ...)
+    return result ~= false, result
 end
 
 local function ShouldShow(firstLoad)
@@ -60,8 +56,8 @@ local function FirstLoadActionAvailability(firstLoad)
     -- warning and close onboarding behind the user's back.
     local highlights = MSUF and MSUF.UpgradeHighlights
     if type(highlights) == "table" and type(highlights.ShouldShow) == "function" then
-        local ok, shown = InvokeLifecycleBoundary(highlights.ShouldShow, highlights)
-        if ok and shown == true then
+        local shown = highlights.ShouldShow(highlights)
+        if shown == true then
             return false, Tr("Review or skip the release highlights on the Dashboard before using first-load actions.")
         end
     end
@@ -102,16 +98,7 @@ local function ActiveProfileName()
     return name ~= "" and name or "Default"
 end
 
-local function PlayerDisplayName()
-    local name
-    if type(_G.UnitName) == "function" then
-        name = _G.UnitName("player")
-    end
-    if type(_G.issecretvalue) == "function" and _G.issecretvalue(name) then name = nil end
-    if type(name) == "string" then name = name:match("^[^-]+") else name = nil end
-    if not name or name == "" or name == "Unknown" then name = Tr("Player") end
-    return name
-end
+local PlayerDisplayName = M.PlayerDisplayName
 
 local function RegisterControl(widget, suffix, label, classification, help)
     if not (widget and type(M.RegisterSearchWidget) == "function") then return widget end
@@ -143,14 +130,7 @@ local function AddTooltip(widget, title, body)
     return widget
 end
 
-local function SetTextLayout(fontString, width, justify)
-    if not fontString then return fontString end
-    fontString:SetWidth(max(1, width or 1))
-    fontString:SetJustifyH(justify or "LEFT")
-    if fontString.SetWordWrap then fontString:SetWordWrap(true) end
-    if fontString.SetNonSpaceWrap then fontString:SetNonSpaceWrap(true) end
-    return fontString
-end
+local SetTextLayout = M.Widgets.SetTextLayout
 
 local function CreateBackdropButton(parent, T, width, height, border, onClick)
     local template = _G.BackdropTemplateMixin and "BackdropTemplate" or nil

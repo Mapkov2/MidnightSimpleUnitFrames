@@ -8,10 +8,7 @@
 
 local _, ns = ...
 ns = ns or {}
-local ExportPublic = ns.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = ns.ExportPublic
 
 ns.MSUF_CastbarStyle = ns.MSUF_CastbarStyle or {}
 

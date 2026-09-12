@@ -239,7 +239,7 @@ assert(unitPreviewRender:find('(key == "arena" and g.showArenaCastTime ~= false)
     "Arena Unit Preview ignores the cast-time visibility setting")
 
 local unitPreviewView = Read(
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua")
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View_Handles.lua")
 local castbarSubOffsetSource = Slice(unitPreviewView,
     "local function CastbarSubOffsetKey",
     "local function MenuHistoryLabel")
@@ -268,16 +268,5 @@ assert(subOffsetDB.arenaCastTimeOffsetX == 5 and subOffsetDB.arenaCastTimeOffset
     "Arena cast-time handle did not remove its display base before persistence")
 
 -- Preview diagnostics -------------------------------------------------------
-local requestedUnit
-local liveFrame = { GetFrameLevel = function() return 73 end }
-local diagnosticNamespace = {
-    UF = { GetFrame = function(unit) requestedUnit = unit; return unit == "arena1" and liveFrame or nil end },
-}
-diagnosticNamespace.ExportPublic = function(name, value) _G[name] = value; return value end
-assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_PreviewDiagnostics.lua"))(
-    "MidnightSimpleUnitFrames", diagnosticNamespace)
-local snapshot = assert(diagnosticNamespace.UF.PreviewDiagnostics.UnitSnapshot("arena", {}))
-assert(requestedUnit == "arena1", "Arena preview diagnostics did not resolve the first live Arena frame")
-assert(snapshot.entries[1].liveLevel == 73, "Arena preview diagnostics returned an empty live snapshot")
-
+-- PreviewDiagnostics was removed from the runtime and its load manifests.
 io.write("arena post-base integration smoke: ok\n")

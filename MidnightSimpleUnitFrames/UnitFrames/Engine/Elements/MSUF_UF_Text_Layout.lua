@@ -17,6 +17,8 @@ local max = Text.max
 local abs = math.abs
 local concat = table.concat
 local tostring = tostring
+-- RefreshNameCenterClipFit and ApplyTextColor run on the warm name/color path.
+local type = type
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local DrawSubLayer = Text.DrawSubLayer
 local ClampFrameLayer = Text.ClampFrameLayer
@@ -26,15 +28,13 @@ local SetFrameLevelCached = Text.SetFrameLevelCached
 local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
 local SetFont = Text.SetFont
-local ApplyNameTextColor = Text.ApplyNameTextColor or function(frame, unit)
-  Text.SetNameTextColor(frame, Text.NameTextColor(frame, unit))
-end
+local ApplyNameTextColor = Text.ApplyNameTextColor
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local CompileTextRuntime = Text.CompileTextRuntime
 local SetHealthTextColor = Text.SetHealthTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local RefreshNameRelativeStatusAnchors = MSUF.UFStatusRuntime and MSUF.UFStatusRuntime.RefreshNameRelativeAnchors
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local function LayoutText(fs, point, relPoint, x, y, justify, relativeTo)
   if not fs then
     return
@@ -1274,7 +1274,11 @@ function Text.Apply(frame, spec)
   if SetFont(frame.powerTextLeft, spec, text.powerLeftFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
   if SetFont(frame.powerTextCenter, spec, text.powerCenterFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
   if SetFont(frame.powerTextRight, spec, text.powerRightFontSize or (spec and spec.powerFontSize), "power") == false then fontsReady = false end
-  frame._msufTextFontPending = fontsReady and nil or true
+  if fontsReady then
+    frame._msufTextFontPending = nil
+  else
+    frame._msufTextFontPending = true
+  end
   frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
   frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
   frame._msufPowerTextColorInitialized = nil

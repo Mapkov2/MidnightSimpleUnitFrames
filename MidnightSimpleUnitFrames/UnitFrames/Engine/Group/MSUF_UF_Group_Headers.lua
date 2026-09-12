@@ -7,7 +7,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -28,8 +27,8 @@ local UnitName = UnitName
 local UnitGUID = UnitGUID
 local UnitClass = UnitClass
 local Secrets = MSUF.Secrets or {}
-local UnitMissing = Secrets.UnitMissing or function(_) return false end
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local UnitMissing = Secrets.UnitMissing
+local issecretvalue = _G.issecretvalue
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
@@ -47,30 +46,9 @@ GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 local NIL_ATTR = {}
 local BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
 
-local IsUnitToken = UF and UF.IsUnitToken or function(unit)
-  return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
-end
+local IsUnitToken = UF and UF.IsUnitToken
 
-local function LiveGroupKind()
-  if type(GF.GetLiveGroupKind) == "function" then return GF.GetLiveGroupKind() end
-  if IsInRaid and IsInRaid() then
-    return type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
-  end
-  if IsInGroup and IsInGroup() then return "party" end
-  return nil
-end
-
-local VALID_POINTS = {
-  CENTER = true,
-  TOP = true,
-  BOTTOM = true,
-  LEFT = true,
-  RIGHT = true,
-  TOPLEFT = true,
-  TOPRIGHT = true,
-  BOTTOMLEFT = true,
-  BOTTOMRIGHT = true,
-}
+local LiveGroupKind = GF.GetLiveGroupKind
 
 local VALID_ROLES = {
   TANK = true,
@@ -305,14 +283,7 @@ function GF.ResolveAnchorFrame(conf, owner)
   return resolved, nil, nil
 end
 
-local function AnchorPoint(conf)
-  if GF.GetAnchorPoint then return GF.GetAnchorPoint(conf) end
-  local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
-  if not VALID_POINTS[point] then
-    point = "CENTER"
-  end
-  return point
-end
+local AnchorPoint = GF.GetAnchorPoint
 
 --- Both sides of a group anchor come from the single visible Anchor Point; see
 --- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
@@ -322,39 +293,9 @@ local function ResolveAnchorPoint(kind, conf, parent)
   return point, point
 end
 
-local function PointFraction(point)
-  local fx, fy
-  if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
-    fx = 0
-  elseif point == "RIGHT" or point == "TOPRIGHT" or point == "BOTTOMRIGHT" then
-    fx = 1
-  else
-    fx = 0.5
-  end
-  if point == "BOTTOM" or point == "BOTTOMLEFT" or point == "BOTTOMRIGHT" then
-    fy = 0
-  elseif point == "TOP" or point == "TOPLEFT" or point == "TOPRIGHT" then
-    fy = 1
-  else
-    fy = 0.5
-  end
-  return fx, fy
-end
+local PointFraction = _G.MSUF_UF_PointFraction
 
-local function ClampBoxAxis(minEdge, maxEdge, screenMax)
-  local size = (maxEdge or 0) - (minEdge or 0)
-  if size <= 0 or not (screenMax and screenMax > 0) then
-    return 0
-  end
-  if size <= screenMax then
-    if minEdge < 0 then return -minEdge end
-    if maxEdge > screenMax then return screenMax - maxEdge end
-    return 0
-  end
-  if minEdge > 0 then return -minEdge end
-  if maxEdge < screenMax then return screenMax - maxEdge end
-  return 0
-end
+local ClampBoxAxis = _G.MSUF_UF_ClampBoxAxis
 
 --- Keep anchor frames on screen when possible; child layout remains relative to
 --- the anchor so saved offsets stay meaningful.
@@ -1453,8 +1394,10 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     or BuildSortState(key, kind, conf)
   local groupFilter
   if sortState.sortMethod ~= "NAMELIST" then
+    local selectedValue1
+    if not (key == "party") then selectedValue1 = ResolveGroupFilter(conf) end
     groupFilter = preservedGroupIndex and tostring(preservedGroupIndex)
-      or (key == "party" and nil or ResolveGroupFilter(conf))
+      or (selectedValue1)
   end
   local childAnchorTopologyChanged = AttrChanged(header, "point", point)
     or AttrChanged(header, "columnAnchorPoint", columnAnchor)
@@ -1720,6 +1663,19 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
   return changed, shouldHide
 end
 
+--- Tag the priority header's children in one expansion. The caller hands the
+--- result of a single header:GetChildren(); the previous inline loop re-ran
+--- GetChildren() on every iteration, which is O(n^2) over the child list.
+local function TagPriorityChildren(kind, ...)
+  for i = 1, select("#", ...) do
+    local child = select(i, ...)
+    if child then
+      child._msufGFPriorityFrame = true
+      child._msufGFKind = kind
+    end
+  end
+end
+
 --- Configure the protected duplicate strip from a resolved full-name list.
 --- Every protected mutation remains on this OOC-only header ownership path.
 function GF.SetupPriorityHeader(kind, nameList, count)
@@ -1789,13 +1745,7 @@ function GF.SetupPriorityHeader(kind, nameList, count)
   EndHeaderLayoutRebind(header, coalescedShow)
 
   if needsScan and header.GetChildren then
-    for i = 1, select("#", header:GetChildren()) do
-      local child = select(i, header:GetChildren())
-      if child then
-        child._msufGFPriorityFrame = true
-        child._msufGFKind = kind
-      end
-    end
+    TagPriorityChildren(kind, header:GetChildren())
   end
   if needsScan and GF.ScheduleScan then GF.ScheduleScan("priority", kind) end
   return header, needsScan

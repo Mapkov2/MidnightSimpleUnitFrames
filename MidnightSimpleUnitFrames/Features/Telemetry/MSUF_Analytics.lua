@@ -4,10 +4,7 @@
 --- should not observe unit events, frame state, profile import payloads, or user text input.
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local LibStub = _G.LibStub
 local CreateFrame = _G.CreateFrame
@@ -50,7 +47,7 @@ local function EnsureGlobalAnalytics(create)
         ExportPublic("MSUF_GlobalDB", gdb)
     end
 
-    local global = gdb.global
+
     if type(global) ~= "table" then
         if not create then return nil end
         global = {}

@@ -6,10 +6,7 @@
 --- routing does not try to focus protected edit-mode surfaces at unsafe times.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
@@ -30,12 +27,8 @@ local ContentWidth = C.ContentWidth
 local ContentHeight = C.ContentHeight
 local DASHBOARD_ROUTE_RECOVERY = C.DASHBOARD_ROUTE_RECOVERY
 local DASHBOARD_ROUTE_SCALING = C.DASHBOARD_ROUTE_SCALING
-local Lines = M.Lines or function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end
-local KeySetFromWords = M.KeySetFromWords or function(text)
-    local out = {}
-    for word in tostring(text or ""):gmatch("%S+") do out[word] = true end
-    return out
-end
+local Lines = M.Lines
+local KeySetFromWords = M.KeySetFromWords
 
 if not (NormalizeSearchText and BuildSearchQueryClauses and BuildSearchTokenList and SearchEditDistanceWithin and SearchCombatLocked and ContentWidth and ContentHeight) then return end
 
@@ -1036,7 +1029,9 @@ local function SearchRouteForTarget(pageKey, query, fallback)
     SearchRouteUnitPage(route, pageKey, normalized)
     SearchRouteGroupPage(route, pageKey, normalized)
     SearchRouteGlobalPage(route, pageKey, normalized)
-    return SearchRouteIsEmpty(route) and nil or route
+    local selectedValue1
+    if not (SearchRouteIsEmpty(route)) then selectedValue1 = route end
+    return selectedValue1
 end
 
 local function ApplyRouteValues(target, values, setter)

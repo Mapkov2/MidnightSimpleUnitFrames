@@ -8,8 +8,7 @@ MSUF.Secrets = Secrets
 -- Secret-value compatibility helpers.
 -- War Within restricted APIs can return secret values that must not be compared, serialized,
 -- or coerced casually. Centralize the safe predicates so element files handle them the same.
-local issecretvalue = _G.issecretvalue or function(...) return false end
-local nativeSecrets = _G.issecretvalue ~= nil
+local issecretvalue = _G.issecretvalue
 local tonumber = tonumber
 
 local function IsSecret(value)
@@ -78,15 +77,6 @@ local function UnitExistsPlain(unit)
   return exists == true or exists == 1
 end
 
-if not nativeSecrets then
-  IsSecret       = function(_) return false end
-  NotSecret      = function(_) return true end
-  IsNil          = function(v) return v == nil end
-  ValueOrDefault = function(v, fb) return v ~= nil and v or fb end
-  PlainTrue      = function(v) return v == true or v == 1 end
-  PlainFalse     = function(v) return v == false or v == 0 end
-  SafeNumber     = tonumber
-end
 
 Secrets.IsSecret = IsSecret
 Secrets.NotSecret = NotSecret
@@ -97,3 +87,25 @@ Secrets.PlainFalse = PlainFalse
 Secrets.SafeNumber = SafeNumber
 Secrets.UnitMissing = UnitMissing
 Secrets.UnitExistsPlain = UnitExistsPlain
+
+local function PlainBool(value)
+  if issecretvalue(value) == true then
+    return nil
+  end
+  if value == true or value == 1 then
+    return true
+  end
+  if value == false or value == 0 then
+    return false
+  end
+  return nil
+end
+Secrets.PlainBool = PlainBool
+
+function Secrets.CanAccessTable(value)
+    return not issecretvalue(value) and type(value) == "table" and _G.canaccesstable(value)
+end
+function Secrets.CanAccessOptionalTable(value)
+    if issecretvalue(value) then return false end
+    return value == nil or Secrets.CanAccessTable(value)
+end
