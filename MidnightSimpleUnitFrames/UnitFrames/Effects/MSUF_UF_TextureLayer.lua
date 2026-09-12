@@ -10,10 +10,7 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local CreateFrame = CreateFrame
 local CreateColor = _G.CreateColor
@@ -31,7 +28,7 @@ local tostring = tostring
 local pairs = pairs
 local ipairs = ipairs
 local floor = math.floor
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local EDGE_SOFTNESS_MASK_ROOT = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\texture_layer_edge_softness_"
@@ -104,10 +101,7 @@ local VALID_POINTS = {
   LEFT = true, CENTER = true, RIGHT = true,
   BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
 }
-local VALID_STRATA = {
-  BACKGROUND = true, LOW = true, MEDIUM = true,
-  HIGH = true, DIALOG = true, TOOLTIP = true,
-}
+
 local GRADIENT_DIR_SUFFIXES = {
   right = "GradientDirRight",
   left = "GradientDirLeft",
@@ -1000,26 +994,26 @@ local function ApplyToUnitFrame(frame)
 end
 TextureLayer.ApplyToUnitFrame = ApplyToUnitFrame
 
-local function ApplySlotMask(frame, conf, unitKey, mask)
+local function ApplyMask(frame, conf, unitKey, mask, apply)
   if mask == 1 then
-    ApplySlot(frame, conf, unitKey, 1)
+    apply(frame, conf, unitKey, 1)
   elseif mask == 2 then
-    ApplySlot(frame, conf, unitKey, 2)
+    apply(frame, conf, unitKey, 2)
   elseif mask == 3 then
-    ApplySlot(frame, conf, unitKey, 1)
-    ApplySlot(frame, conf, unitKey, 2)
+    apply(frame, conf, unitKey, 1)
+    apply(frame, conf, unitKey, 2)
   elseif mask == 4 then
-    ApplySlot(frame, conf, unitKey, 3)
+    apply(frame, conf, unitKey, 3)
   elseif mask == 5 then
-    ApplySlot(frame, conf, unitKey, 1)
-    ApplySlot(frame, conf, unitKey, 3)
+    apply(frame, conf, unitKey, 1)
+    apply(frame, conf, unitKey, 3)
   elseif mask == 6 then
-    ApplySlot(frame, conf, unitKey, 2)
-    ApplySlot(frame, conf, unitKey, 3)
+    apply(frame, conf, unitKey, 2)
+    apply(frame, conf, unitKey, 3)
   elseif mask == 7 then
-    ApplySlot(frame, conf, unitKey, 1)
-    ApplySlot(frame, conf, unitKey, 2)
-    ApplySlot(frame, conf, unitKey, 3)
+    apply(frame, conf, unitKey, 1)
+    apply(frame, conf, unitKey, 2)
+    apply(frame, conf, unitKey, 3)
   end
 end
 
@@ -1053,29 +1047,6 @@ local function ApplyClassColorSlot(frame, conf, unitKey, slot)
     and holder._msufTexLayerBaseG == g
     and holder._msufTexLayerBaseB == b then return end
   ApplyBaseColor(holder, tex, r, g, b)
-end
-
-local function ApplyClassColorMask(frame, conf, unitKey, mask)
-  if mask == 1 then
-    ApplyClassColorSlot(frame, conf, unitKey, 1)
-  elseif mask == 2 then
-    ApplyClassColorSlot(frame, conf, unitKey, 2)
-  elseif mask == 3 then
-    ApplyClassColorSlot(frame, conf, unitKey, 1)
-    ApplyClassColorSlot(frame, conf, unitKey, 2)
-  elseif mask == 4 then
-    ApplyClassColorSlot(frame, conf, unitKey, 3)
-  elseif mask == 5 then
-    ApplyClassColorSlot(frame, conf, unitKey, 1)
-    ApplyClassColorSlot(frame, conf, unitKey, 3)
-  elseif mask == 6 then
-    ApplyClassColorSlot(frame, conf, unitKey, 2)
-    ApplyClassColorSlot(frame, conf, unitKey, 3)
-  elseif mask == 7 then
-    ApplyClassColorSlot(frame, conf, unitKey, 1)
-    ApplyClassColorSlot(frame, conf, unitKey, 2)
-    ApplyClassColorSlot(frame, conf, unitKey, 3)
-  end
 end
 
 local function ApplyHealthStateSlot(frame, conf, unit, slot, hp, maxHP, r, g, b)
@@ -1188,9 +1159,9 @@ local function RefreshDynamicMask(maskField, colorOnly)
       local conf = unitKey and ConfForUnitKey(unitKey)
       if conf then
         if colorOnly then
-          ApplyClassColorMask(frame, conf, unitKey, mask)
+          ApplyMask(frame, conf, unitKey, mask, ApplyClassColorSlot)
         else
-          ApplySlotMask(frame, conf, unitKey, mask)
+          ApplyMask(frame, conf, unitKey, mask, ApplySlot)
         end
       end
     end

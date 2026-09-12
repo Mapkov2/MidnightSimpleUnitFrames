@@ -193,7 +193,7 @@ local PORTRAIT_DIRECT_IDENTITY_EVENTS = {
 local PORTRAIT_UNITLESS_EVENTS = { "PORTRAITS_UPDATED" }
 local TARGET_PORTRAIT_EXTRA_EVENTS = { "PORTRAITS_UPDATED", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 local SetShown = V.SetShown
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 local Portrait = {}
 local ApplyUnitPortrait
@@ -936,7 +936,9 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
   -- file -- replaying either paints an empty or stale portrait on revisit.
   -- GetTexture() is not read back at all; on 12.1 it can also be secret.
   SetPortraitTexture(texture, unit, (p and p.shape == "BLIZZARD") or nil)
-  texture._msufPortraitGUID = guid or (exists and nil or false)
+  local selectedValue1
+  if not (exists) then selectedValue1 = false end
+  texture._msufPortraitGUID = guid or (selectedValue1)
   texture._msufPortraitKey = key
 end
 

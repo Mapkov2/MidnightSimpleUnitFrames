@@ -58,12 +58,8 @@ local spellSkip = {}
 local spellNames = {}
 local spellIcons = {}
 
-local function PlainNumber(value)
-    local plain = _G.MSUF_CastbarRuntime_PlainNumber
-    if type(plain) == "function" then return plain(value) end
-    if type(value) == "number" then return value end
-    return nil
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper.
+local PlainNumber = _G.MSUF_Castbar_PlainNumber
 
 --- Resolves and caches name/icon for an instant spell. Returns nil for
 --- hard-casts (and records them in the skip set).
@@ -356,10 +352,7 @@ driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- ============================================================
 -- Public API (menu + castbar apply pipeline)
 -- ============================================================
-local ExportPublic = ns.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = ns.ExportPublic
 
 ExportPublic("MSUF_IsGCDBarEnabled", IsGCDBarEnabled)
 ExportPublic("MSUF_GCDBar_SyncRegistration", SyncRegistration)

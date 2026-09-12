@@ -2,10 +2,7 @@
 -- Builds EditMode HUD widgets only; secure frame mutation stays behind EditMode helpers.
 local _, MSUFRoot = ...
 MSUFRoot = MSUFRoot or _G.MSUF_NS or {}
-local ExportPublic = MSUFRoot.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUFRoot.ExportPublic
 
 local function InstallEditModeHUD(...)
 local addonName, MSUF = ...
@@ -34,16 +31,6 @@ local ApplyDockLayout, RefreshPositionPopup, SetDockExpanded, ScheduleDockAutoHi
 local previewBtn, previewAnimBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
 local previewAddonSlot
 
-local function InvokeHUDOptional(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local ok, r1 = pcall(fn, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, r1) end
-        return false, r1
-    end
-    return true, r1
-end
 local previewAnimRefreshRegistered
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
@@ -162,11 +149,7 @@ end
 
 --- Clients without a Cooldown Manager never get the toolbar toggle: it would
 --- write a preference that no anchor can consume.
-function HUD.CooldownAnchorSupported()
-    local supported = _G.MSUF_IsCooldownAnchorSupported
-    if type(supported) == "function" then return supported() == true end
-    return type(_G.C_CooldownViewer) == "table"
-end
+HUD.CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
 
 function HUD.CooldownAnchorEnabled(general)
     local getter = _G.MSUF_IsCooldownAnchorEnabled
@@ -270,15 +253,7 @@ local function GroupGeometryMask(gf)
     return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
 end
 
-local function RequestGroupGeometryApply(kind, reason)
-    if not kind then return false end
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    local apply = (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
-    if not (apply and type(apply.RequestGroup) == "function") then return false end
-    apply.RequestGroup(kind, "geometry", reason or "EM2_GROUP_GEOMETRY")
-    if type(apply.Flush) == "function" then apply.Flush() end
-    return true
-end
+local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
 
 local function RefreshGroupGeometryScoped(kind)
     if not kind then return false end
@@ -419,8 +394,10 @@ local function SelectionValues(key, component, slot)
     if detail then label = label .. " / " .. HelpText(detail) end
     local frame = AuraSelectionFrame(key, component)
     if not frame and cfg and type(cfg.getFrame) == "function" then
-        local ok, resolved = pcall(cfg.getFrame)
-        if ok then frame = resolved end
+        local resolved = cfg.getFrame()
+        do
+frame = resolved
+end
     end
     if frame and type(U.FramePositionValues) == "function" then
         local x, y, width, height = U.FramePositionValues(frame)
@@ -440,10 +417,6 @@ local function FormatSelectionSummary(label, x, y, w, h)
         return string.format("%s   X %d   Y %d   W %d   H %d", label, x, y, w, h)
     end
     return string.format("%s   X %d   Y %d", label, x, y)
-end
-
-local function SelectionSummary(key, component, slot)
-    return FormatSelectionSummary(SelectionValues(key, component, slot))
 end
 
 local function SetHint(text, r, g, b, a)
@@ -797,16 +770,7 @@ end
 --- The toolbar is a cold, event-driven workspace preference.  It deliberately
 --- lives outside the active unit-frame profile so switching/importing profiles
 --- cannot move the user's Edit Mode chrome around the screen.
-local function DockCharKey()
-    local fn = rawget(_G, "MSUF_GetCharKey")
-    if type(fn) == "function" then
-        local key = fn()
-        if type(key) == "string" and key ~= "" then return key end
-    end
-    local name = (_G.UnitName and _G.UnitName("player")) or "Unknown"
-    local realm = (_G.GetRealmName and _G.GetRealmName()) or "Realm"
-    return tostring(name) .. "-" .. tostring(realm)
-end
+local DockCharKey = _G.MSUF_GetCharKey
 
 local function ClampDockNumber(value, low, high, fallback)
     value = tonumber(value)
@@ -819,6 +783,7 @@ end
 local function EnsureDockState()
     if DockUI.state then return DockUI.state end
     ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
+
     local global = _G.MSUF_GlobalDB
     global.char = type(global.char) == "table" and global.char or {}
     local charKey = DockCharKey()
@@ -1369,11 +1334,11 @@ local function OpenMenuGuidedTourAtEditMode()
     local menu = ResolveMenu2()
     local menuOpened = false
     if menu and type(menu.Open) == "function" then
-        local ok, result = InvokeHUDOptional(menu.Open)
-        menuOpened = ok and result ~= false
+        local result = menu.Open()
+        menuOpened = result ~= false
     elseif type(_G.MSUF2_Open) == "function" then
-        local ok, result = InvokeHUDOptional(_G.MSUF2_Open)
-        menuOpened = ok and result ~= false
+        local result = _G.MSUF2_Open()
+        menuOpened = result ~= false
     end
 
     -- Resolve again after opening: lazy menu installation may have populated
@@ -1381,8 +1346,8 @@ local function OpenMenuGuidedTourAtEditMode()
     menu = ResolveMenu2()
     local openStage = menu and menu.OpenGuidedTourAtStage
     if type(openStage) == "function" then
-        local ok, result = InvokeHUDOptional(openStage, "edit_mode")
-        if ok and result ~= false then
+        local result = openStage("edit_mode")
+        if result ~= false then
             guidedTourBridgeRequested = true
             return true
         end

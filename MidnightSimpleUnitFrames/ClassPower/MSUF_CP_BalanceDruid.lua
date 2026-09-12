@@ -10,20 +10,9 @@
 do
     local _, MSUF = ...
     MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-    local ExportPublic = MSUF.ExportPublic or function(name, value)
-        _G[name] = value
-        return value
-    end
+    local ExportPublic = MSUF.ExportPublic
 
-    local function CoreUnitFrame(unit)
-        local UF = MSUF and MSUF.UF
-        if UF and type(UF.GetFrame) == "function" then
-            local frame = UF.GetFrame(unit)
-            if frame then return frame end
-        end
-        local frames = UF and UF.frames
-        return unit and frames and frames[unit] or nil
-    end
+    local CoreUnitFrame = MSUF.UF.GetFrame
 
     local balanceBuilders = _G.MSUF_CP_FEATURE_BUILDERS
     if type(balanceBuilders) ~= "table" then
@@ -58,30 +47,19 @@ do
     local C_UnitAuras = C_UnitAuras
     local C_Spell = C_Spell
     local C_SpellBook = C_SpellBook
-    local type = type
+    local type, tonumber, pairs = type, tonumber, pairs
     local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
-    local PLAYER_CLASS = _playerClass
+
 
     local CPConst = _G.MSUF_CP_CONST or {}
 local CPK = CPConst.CPK or { BAL = {}, SPELL = {} }
 local _issecretvalue = _G.issecretvalue
 local _canaccesstable = _G.canaccesstable
-local function NotSecret(v)
-    if _issecretvalue then return _issecretvalue(v) == false end
-    return true
-end
+local NotSecret = MSUF.Secrets.NotSecret
 
-local function CanAccessTableValue(value)
-    if NotSecret(value) == false or value == nil or type(value) ~= "table" then return false end
-    if _canaccesstable and _canaccesstable(value) == false then return false end
-    return true
-end
+local CanAccessTableValue = MSUF.Secrets.CanAccessTable
 
-local function CanAccessOptionalTableValue(value)
-    if NotSecret(value) == false then return false end
-    if value == nil then return true end
-    return CanAccessTableValue(value)
-end
+local CanAccessOptionalTableValue = MSUF.Secrets.CanAccessOptionalTable
 
 local LUNAR_POWER = (Enum and Enum.PowerType and Enum.PowerType.LunarPower) or 8
 local _active = false

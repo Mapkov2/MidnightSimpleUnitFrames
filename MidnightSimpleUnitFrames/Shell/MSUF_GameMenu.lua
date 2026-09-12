@@ -8,10 +8,7 @@ local _G = _G
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local UI = MSUF.UI or _G.MSUF_UI
 local function Space(role, fallback)
     return UI and UI.Space and UI.Space(role, fallback) or fallback

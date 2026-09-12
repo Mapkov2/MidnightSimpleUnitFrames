@@ -111,18 +111,7 @@ function Factories.Common(Schema)
         return kind
     end
 
-    local function NormalizeDebuffTypeBorderMode(value, fallback)
-        if value == true then return "SYMBOL" end
-        if value == false then return "OFF" end
-        value = tostring(value or ""):upper()
-        if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
-        if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
-            or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
-            return "SYMBOL"
-        end
-        if value == "OFF" or value == "NONE" or value == "DISABLED" then return "OFF" end
-        return fallback or "OFF"
-    end
+    local NormalizeDebuffTypeBorderMode = _G.MSUF_NormalizeAuraDebuffTypeBorderMode
 
     local function NormalizeGroupScope(scope)
         scope = tostring(scope or "raid"):lower()

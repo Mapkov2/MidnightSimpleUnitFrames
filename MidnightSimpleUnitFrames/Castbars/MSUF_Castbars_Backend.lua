@@ -9,10 +9,7 @@
 local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
 
-local ExportPublic = ns.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = ns.ExportPublic
 
 local Backend = {}
 ns.MSUF_CastbarBackend = Backend

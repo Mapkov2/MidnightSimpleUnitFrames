@@ -9,33 +9,21 @@
 --- guarded by combat checks and explicit confirmation.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
 end
 
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    local locale = MSUF.L or _G.MSUF_L
-    if type(locale) == "table" then
-        local translated = rawget(locale, text)
-        if translated ~= nil then return translated end
-    end
-    return text
-end
+local Tr = MSUF.Translate
 
 MSUF.Debug = MSUF.Debug or {}
 local Debug = MSUF.Debug
 
-Debug.IsGFHoverEnabled = Debug.IsGFHoverEnabled or function()
+Debug.IsGFHoverEnabled = function()
     return Debug.gfHover == true
 end
 
-Debug.PrintGFHover = Debug.PrintGFHover or function(message, ...)
+Debug.PrintGFHover = function(message, ...)
     if Debug.gfHover ~= true then return end
     local prefix = "|cff7aa2f7MSUF GFDBG|r "
     if select("#", ...) > 0 then
@@ -44,13 +32,24 @@ Debug.PrintGFHover = Debug.PrintGFHover or function(message, ...)
     end
     print(prefix .. tostring(message))
 end
+--- REQUIRED: State/MSUF_Defaults.lua is listed unconditionally in the TOC and
+--- exports MSUF_EnsureDB at its top level, far ahead of this file. Slash
+--- commands that repair or read the DB must not degrade into a no-op when the
+--- export is renamed or dropped.
+local EnsureDB = MSUF.Require("MSUF_EnsureDB", "Runtime/MSUF_SlashCommands.lua")
+--- REQUIRED: the profile lifecycle API. State/MSUF_Profiles.lua is listed
+--- unconditionally in the TOC ahead of this file and is the single top-level
+--- writer of all five globals. The /msuf profile commands are the user-facing
+--- half of that API, so a rename has to surface at login rather than as a
+--- "profiles system unavailable" message that blames the user's install.
+local CreateProfile = MSUF.Require("MSUF_CreateProfile", "Runtime/MSUF_SlashCommands.lua")
+local SwitchProfile = MSUF.Require("MSUF_SwitchProfile", "Runtime/MSUF_SlashCommands.lua")
+local DeleteProfile = MSUF.Require("MSUF_DeleteProfile", "Runtime/MSUF_SlashCommands.lua")
+local ResetProfile = MSUF.Require("MSUF_ResetProfile", "Runtime/MSUF_SlashCommands.lua")
+local GetAllProfiles = MSUF.Require("MSUF_GetAllProfiles", "Runtime/MSUF_SlashCommands.lua")
 local function MSUF_Chat_RunEnsureDB()
-    local ensureDB = _G.MSUF_EnsureDB
-    if type(ensureDB) == "function" then
-        ensureDB()
-        return true
-    end
-    return false
+    EnsureDB()
+    return true
 end
 local function MSUF_Chat_RunApplyAllSettings()
     local UF = MSUF and MSUF.UF
@@ -326,8 +325,7 @@ local function CommandsAddonVersion()
 end
 
 local function CommandsProfileList()
-    if type(_G.MSUF_GetAllProfiles) ~= "function" then return nil end
-    local list = _G.MSUF_GetAllProfiles()
+    local list = GetAllProfiles()
     return (type(list) == "table") and list or nil
 end
 
@@ -449,16 +447,13 @@ Commands.Register({
             print(Tr("  /msuf load <name> switches profile, /msuf profile <name> saves a new one."))
             return
         end
-        if type(_G.MSUF_CreateProfile) ~= "function" or type(_G.MSUF_SwitchProfile) ~= "function" then
-            return CommandsProfilesUnavailable()
-        end
         --- Creating only copies a table, but the switch that follows runs the
         --- full apply pipeline, so the whole command stays out of combat.
         if CommandsInCombat() then
             print(Tr("|cffff0000MSUF:|r Cannot change profiles while in combat."))
             return
         end
-        if _G.MSUF_CreateProfile(rest) then _G.MSUF_SwitchProfile(rest) end
+        if CreateProfile(rest) then SwitchProfile(rest) end
     end,
 })
 
@@ -469,7 +464,6 @@ Commands.Register({
     usage = "/msuf load <name>",
     help = "Load one of your saved profiles.",
     run = function(rest)
-        if type(_G.MSUF_SwitchProfile) ~= "function" then return CommandsProfilesUnavailable() end
         if rest == "" then
             print(Tr("|cffffcc00MSUF:|r Usage: /msuf load <name>. Type /msuf profile to list them."))
             return
@@ -493,7 +487,7 @@ Commands.Register({
             print(string.format(Tr("|cffffd700MSUF:|r Profile '%s' is already active."), name))
             return
         end
-        _G.MSUF_SwitchProfile(name)
+        SwitchProfile(name)
     end,
 })
 
@@ -505,7 +499,6 @@ Commands.Register({
     usage = "/msuf delete <name>",
     help = "Delete one of your saved profiles. Repeat the command to confirm.",
     run = function(rest)
-        if type(_G.MSUF_DeleteProfile) ~= "function" then return CommandsProfilesUnavailable() end
         if rest == "" then
             print(Tr("|cffffcc00MSUF:|r Usage: /msuf delete <name>. Type /msuf profile to list them."))
             return
@@ -533,7 +526,7 @@ Commands.Register({
             return
         end
         MSUF_PendingProfileDelete = nil
-        _G.MSUF_DeleteProfile(name)
+        DeleteProfile(name)
     end,
 })
 
@@ -581,7 +574,6 @@ Commands.Register({
     usage = "/msuf default [confirm]",
     help = "Reset every setting in the active profile back to the defaults.",
     run = function(rest)
-        if type(_G.MSUF_ResetProfile) ~= "function" then return CommandsProfilesUnavailable() end
         if CommandsInCombat() then
             print(Tr("|cffff0000MSUF:|r Cannot reset a profile while in combat."))
             return
@@ -598,7 +590,7 @@ Commands.Register({
             return
         end
         MSUF_ProfileResetPending = false
-        _G.MSUF_ResetProfile(active ~= "" and active or nil)
+        ResetProfile(active ~= "" and active or nil)
     end,
 })
 

@@ -9,7 +9,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
@@ -29,8 +28,8 @@ local IsInInstance = IsInInstance
 local NewTimer = C_Timer.NewTimer
 local GetTime = GetTime
 
-local Secrets = MSUF.Secrets or {}
-local issecretvalue = _G.issecretvalue or function(_) return false end
+
+local issecretvalue = _G.issecretvalue
 -- Lazily resolved from the shared Alpha element (load-order safe); only
 -- consulted for members whose compiled spec carries oocFade.
 local OocFadeMul
@@ -85,18 +84,7 @@ function GroupRangeFade.GetUnitlessEvents(frame, spec)
   return EMPTY_EVENTS
 end
 
-local function SafeBool(value)
-  if issecretvalue(value) == true then
-    return nil
-  end
-  if value == true or value == 1 then
-    return true
-  end
-  if value == false or value == 0 then
-    return false
-  end
-  return nil
-end
+local SafeBool = MSUF.Secrets.PlainBool
 
 -- Blizzard treats UNIT_IN_RANGE_UPDATE as a wake-up and re-reads the bound
 -- unit. Issue #128 reports a PvP-instance stale member result, so mirror that

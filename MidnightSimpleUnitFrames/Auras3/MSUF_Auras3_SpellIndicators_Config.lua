@@ -15,7 +15,7 @@ local math_floor = math.floor
 local FrameLayers = MSUF.UF and MSUF.UF.Layers or {}
 local SPELL_ICON_BASE_OFFSET = tonumber(FrameLayers.SPELL_ICON_BASE_OFFSET) or 64
 local UNIT_SPELL_BASE_OFFSET = tonumber(FrameLayers.UNIT_AURA_BASE_OFFSET) or 10
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local MAX_FINITE_AURA_DURATION = 2147483647
 local Runtime = A3.SpellIndicators
 local DEFAULT_SHARED = {
@@ -48,23 +48,9 @@ local function Clamp01(value, fallback)
     return n
 end
 
-local function NormalizeFrameStrata(value, fallback)
-    local normalize = _G.MSUF_NormalizeFrameStrata
-    if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
-    if issecretvalue(value) == true then return fallback or "AUTO" end
-    if value == nil or value == "" then return fallback or "AUTO" end
-    value = tostring(value):upper()
-    if value == "AUTO" then return "AUTO" end
-    local rank = _G.MSUF_FRAME_STRATA_RANK
-    return rank and rank[value] and value or (fallback or "AUTO")
-end
+local NormalizeFrameStrata = _G.MSUF_NormalizeFrameStrata
 
-local function ReadParentFrameStrata(parentFrame)
-    local strata
-    if parentFrame and parentFrame.GetFrameStrata then strata = parentFrame:GetFrameStrata() end
-    if issecretvalue(strata) == true then return nil end
-    return strata
-end
+local ReadParentFrameStrata = _G.MSUF_AuraReadParentFrameStrata
 
 local function ResolveFrameStrata(parentFrame, value)
     -- Retained legacy strata values are migration data only. All layer-aware
@@ -72,21 +58,7 @@ local function ResolveFrameStrata(parentFrame, value)
     return ReadParentFrameStrata(parentFrame)
 end
 
-local function SyncFrameStrata(frame, strata)
-    if not (frame and frame.SetFrameStrata) then return false end
-    if issecretvalue(strata) == true then return false end
-    if strata == nil or strata == "" then return false end
-    local cachedStrata = frame._msufA3FrameStrata
-    if issecretvalue(cachedStrata) ~= true and cachedStrata == strata then return false end
-    frame._msufA3FrameStrata = strata
-    local currentStrata
-    if frame.GetFrameStrata then currentStrata = frame:GetFrameStrata() end
-    if issecretvalue(currentStrata) == true or currentStrata ~= strata then
-        frame:SetFrameStrata(strata)
-        return true
-    end
-    return false
-end
+local SyncFrameStrata = _G.MSUF_AuraSyncFrameStrata
 
 local VALID_NATIVE_FILTER_TOKENS = {
     HELPFUL = true, HARMFUL = true, PLAYER = true, RAID = true,
@@ -140,11 +112,7 @@ local function NormalizeNativeFilterString(filter, fallback)
     return table_concat(out, "|")
 end
 
-local function AuraSpellIDFromKey(value)
-    value = tostring(value or "")
-    local id = tonumber(value:match("spell:(%d+)") or value:match("#(%d+)") or value:match("^(%d+)$"))
-    return id and math_floor(id + 0.5) or nil
-end
+local AuraSpellIDFromKey = _G.MSUF_AuraSpellIDFromKey
 
 local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
     fieldName = fieldName or "includeSpellIDs"

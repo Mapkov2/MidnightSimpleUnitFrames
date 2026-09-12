@@ -3,10 +3,7 @@
 -- castbars. This is an edit-mode cold path and should not observe live cast events.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local UNIT_CONFIG = {
     player = {
@@ -54,24 +51,13 @@ local UNIT_CONFIG = {
 }
 local CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL = 0.05
 
-local function GeneralDB()
-    if type(EnsureDB) == "function" then
-        EnsureDB()
-    end
-
-    MSUF_DB = MSUF_DB or {}
-    MSUF_DB.general = MSUF_DB.general or {}
-    return MSUF_DB.general
-end
+local GeneralDB = _G.MSUF_EnsureCastbarGeneralDB
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
 end
 
-local function Round(value)
-    value = tonumber(value) or 0
-    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
-end
+local Round = _G.MSUF_RoundOffset
 
 local function OffsetX(general, config)
     return tonumber(general[config.x])

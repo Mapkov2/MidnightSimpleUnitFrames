@@ -1,9 +1,6 @@
 local _, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 -- Gameplay feature runtime.
 -- Coordinates optional gameplay overlays such as combat timer, crosshair, totem/statue
@@ -466,13 +463,11 @@ local function ApplyGameplayFont(fs, path, size, flags)
     if size <= 0 then size = 12 end
     if size < 6 then size = 6 elseif size > 128 then size = 128 end
     flags = flags or "OUTLINE"
-    local ok = pcall(fs.SetFont, fs, path, size, flags)
-    if ok and GameplayFontApplied(fs, path, size, flags) then
+    if _G.MSUF_SetFontChecked(fs, path, size, flags) and GameplayFontApplied(fs, path, size, flags) then
         return true
     end
     if path ~= GAMEPLAY_FALLBACK_FONT then
-        ok = pcall(fs.SetFont, fs, GAMEPLAY_FALLBACK_FONT, size, flags)
-        return ok == true
+        return _G.MSUF_SetFontChecked(fs, GAMEPLAY_FALLBACK_FONT, size, flags)
     end
     return false
 end
@@ -1330,7 +1325,6 @@ if type(reg) == "function" then
     reg("Gameplay", {
         order = 50,
         IsEnabled = IsGameplayModuleEnabled,
-        Init = GameplayDefaults,
         Enable = MSUF.MSUF_RequestGameplayApply,
         Disable = StopGameplayModule,
         RefreshSettings = MSUF.MSUF_RequestGameplayApply,

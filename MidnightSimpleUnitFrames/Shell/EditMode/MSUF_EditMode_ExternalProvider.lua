@@ -12,7 +12,6 @@ EM2.ExternalProviders = External
 
 local providers = External.providers or {}
 External.providers = providers
-
 local CASTBAR_FIELDS = {
     player = { x = "castbarPlayerOffsetX", y = "castbarPlayerOffsetY", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight" },
     target = { x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight" },
@@ -24,10 +23,7 @@ local CASTBAR_ENABLE_FIELDS = {
     focus = "enableFocusCastbar", boss = "enableBossCastbar",
 }
 
-local function General()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local General = _G.MSUF_GetGeneralDB
 
 local function InCombat()
     return _G.MSUF_InCombat == true
@@ -414,19 +410,19 @@ function Controller:ScheduleMenuPreviewReconcile()
         local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
         local activeKey = menu and menu.activeKey
         if menu and type(menu.RequestOrRefresh) == "function" then
-            pcall(menu.RequestOrRefresh, nil, self.spec.menuRefreshReason or "external-edit-close")
+            menu.RequestOrRefresh(nil, self.spec.menuRefreshReason or "external-edit-close")
         end
         if menu and type(menu.RequestBossPagePreviewForKey) == "function" then
-            pcall(menu.RequestBossPagePreviewForKey, activeKey, true)
+            menu.RequestBossPagePreviewForKey(activeKey, true)
         end
         if menu and type(menu.RequestGFPagePreviewForKey) == "function" then
-            pcall(menu.RequestGFPagePreviewForKey, activeKey, true)
+            menu.RequestGFPagePreviewForKey(activeKey, true)
         end
         if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-            pcall(_G.MSUF_UFPreview_RequestRefresh, self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
+            _G.MSUF_UFPreview_RequestRefresh(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
         end
         if menu and type(menu.RefreshGFNativePreviews) == "function" then
-            pcall(menu.RefreshGFNativePreviews, self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
+            menu.RefreshGFNativePreviews(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
         end
     end
     local timer = _G.C_Timer
@@ -648,4 +644,23 @@ function External.ClearMoveState(id)
     if not controller then return false end
     controller:ClearMoveState()
     return true
+end
+
+function External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
+    return function(enabled)
+        enabled = enabled ~= false
+        local general = General()
+        if general then general[SETTING] = enabled end
+        if enabled then return Activate() end
+        return Deactivate()
+    end
+end
+
+function External.CreateElementRegistrar(API, OWNER, registered)
+    return function(element)
+        if registered[element.id] then return true end
+        local ok = API.RegisterElement(OWNER, element)
+        if ok then registered[element.id] = true end
+        return ok == true
+    end
 end

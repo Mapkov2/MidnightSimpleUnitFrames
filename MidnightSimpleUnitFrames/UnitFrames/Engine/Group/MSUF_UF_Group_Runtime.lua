@@ -1,12 +1,8 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -24,7 +20,7 @@ local pairs = pairs
 local tonumber = tonumber
 local tostring = tostring
 local type = type
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 local eventFrame
 local runtimeObservers = {}
@@ -42,9 +38,7 @@ local function SyncCombatState(inCombat)
   return inCombat
 end
 
-local IsUnitToken = UF and UF.IsUnitToken or function(unit)
-  return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
-end
+local IsUnitToken = UF and UF.IsUnitToken
 
 local function Conf(kind)
   return GF.GetConf and GF.GetConf(kind) or nil
@@ -147,16 +141,7 @@ local function ConfEnabled(kind)
   return conf and conf.enabled == true
 end
 
-local function LiveGroupKind()
-  if type(GF.GetLiveGroupKind) == "function" then
-    return GF.GetLiveGroupKind()
-  end
-  if IsInRaid and IsInRaid() then
-    return type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
-  end
-  if IsInGroup and IsInGroup() then return "party" end
-  return nil
-end
+local LiveGroupKind = GF.GetLiveGroupKind
 
 local function ArenaPartyContext()
   return type(GF.IsArenaPartyContext) == "function" and GF.IsArenaPartyContext() == true
@@ -388,12 +373,7 @@ local function ApplyRefreshFrame(frame, _, frameKind, kind, mask, applyMask)
   return ApplyFrameDirty(frame, frameKind, mask, "MSUF_GF_REFRESH_VISUALS", applyMask)
 end
 
-local function MaskHas(mask, flag)
-  mask = tonumber(mask) or 0
-  flag = tonumber(flag) or 0
-  if flag <= 0 then return false end
-  return mask % (flag * 2) >= flag
-end
+local MaskHas = _G.MSUF_UF_MaskHas
 
 local function AddDirty(mask, flag)
   if not flag then return mask end

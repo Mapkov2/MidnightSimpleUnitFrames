@@ -18,10 +18,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local KEY = "MSUF_ClientVersionWarning"
 local POPUP_KEY = "MSUF_CLIENT_VERSION_WARNING"
@@ -32,13 +29,7 @@ local MIN_INTERFACE = 120100
 
 local type, tonumber, rawget, select = type, tonumber, rawget, select
 
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    local locale = MSUF.L or _G.MSUF_L
-    local translated = type(locale) == "table" and rawget(locale, text)
-    return translated or text
-end
+local Tr = MSUF.Translate
 
 --- Read exactly once per session, at file load. The build cannot change while
 --- the client runs, so nothing below ever queries the API again.
@@ -148,17 +139,6 @@ local function Init()
             Show()
         end
     end)
-end
-
---- Only a legacy client registers: on 12.1 the module array stays untouched, so
---- the ApplyModules / RefreshModuleSettings fanouts never walk a dead entry.
-if isLegacyClient and type(MSUF.MSUF_RegisterModule) == "function" then
-    MSUF.MSUF_RegisterModule("ClientVersionWarning", {
-        key = "ClientVersionWarning",
-        order = 998,
-        enabled = true,
-        Init = Init,
-    })
 end
 
 Init()

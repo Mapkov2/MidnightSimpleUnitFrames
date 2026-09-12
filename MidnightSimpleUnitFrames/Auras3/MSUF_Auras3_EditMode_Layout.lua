@@ -45,7 +45,7 @@ local function ApplyGroupScaleForFrame(group, frame)
     return scale
 end
 
-local AnchorOffset
+local AnchorOffset = _G.MSUF_AuraAnchorOffset
 
 local function AnchorBase(anchor, frame)
     local w = frame and frame.GetWidth and frame:GetWidth() or 0
@@ -53,28 +53,9 @@ local function AnchorBase(anchor, frame)
     return AnchorOffset(anchor, w, h)
 end
 
-AnchorOffset = function(anchor, w, h)
-    w = tonumber(w) or 0
-    h = tonumber(h) or 0
-    anchor = tostring(anchor or "TOPLEFT")
-    if anchor == "TOPLEFT" then return 0, h end
-    if anchor == "TOP" then return w * 0.5, h end
-    if anchor == "TOPRIGHT" then return w, h end
-    if anchor == "LEFT" then return 0, h * 0.5 end
-    if anchor == "CENTER" then return w * 0.5, h * 0.5 end
-    if anchor == "RIGHT" then return w, h * 0.5 end
-    if anchor == "BOTTOMLEFT" then return 0, 0 end
-    if anchor == "BOTTOM" then return w * 0.5, 0 end
-    if anchor == "BOTTOMRIGHT" then return w, 0 end
-    return 0, h
-end
 
-local function ButtonAnchor(xSign, ySign)
-    if ySign > 0 then
-        return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT"
-    end
-    return xSign < 0 and "TOPRIGHT" or "TOPLEFT"
-end
+
+local ButtonAnchor = _G.MSUF_AuraButtonAnchor
 
 local function GrowthParts(growth, rowWrap)
     if growth == "LEFTUP" then return -1, 1, false, "BOTTOMRIGHT" end
@@ -124,14 +105,7 @@ end
 
 --- Inward offset from the lane's initial corner for the shared style padding,
 --- mirroring the runtime container's SetFlowLayoutPadding inset.
-local function PaddingInset(anchor, pad)
-    pad = tonumber(pad) or 0
-    if pad == 0 then return 0, 0 end
-    anchor = tostring(anchor or "TOPLEFT")
-    local dx = anchor:find("LEFT", 1, true) and pad or (anchor:find("RIGHT", 1, true) and -pad or 0)
-    local dy = anchor:find("BOTTOM", 1, true) and pad or (anchor:find("TOP", 1, true) and -pad or 0)
-    return dx, dy
-end
+local PaddingInset = _G.MSUF_AuraPaddingInset
 
 --- Shared icon style for a previewed lane: the compiled runtime style when the
 --- lane metrics carry one, otherwise the scope-resolved preview style. Bar-only

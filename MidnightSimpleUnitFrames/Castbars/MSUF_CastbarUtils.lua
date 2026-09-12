@@ -9,10 +9,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
 local type = type
@@ -97,6 +94,14 @@ local function EnsureDBLazy()
     end
 end
 ExportPublic("MSUF_EnsureDBLazy", EnsureDBLazy)
+
+--- Single owner of the castbar OnUpdate teardown. Castbar Runtime and the
+--- player runtime alias this instead of carrying their own copy.
+local function DisableFrameOnUpdate(frame)
+    if not frame or not frame.SetScript then return end
+    frame:SetScript("OnUpdate", nil)
+end
+ExportPublic("MSUF_Castbar_DisableFrameOnUpdate", DisableFrameOnUpdate)
 
 local function GetAnchorFrame()
     EnsureDBLazy()
@@ -625,30 +630,62 @@ local function GetInterruptUnavailableTintArgs(frame)
 end
 ExportPublic("MSUF_Castbar_GetInterruptUnavailableTintArgs", GetInterruptUnavailableTintArgs)
 
-local toPlainIsSecret = _G.issecretvalue or function(_) return false end
+local toPlainIsSecret = _G.issecretvalue
 local toPlainHuge = math.huge
 
-local function ToPlainNumber(value)
-    -- PERF fast path: a plain finite number needs no tostring/tonumber
-    -- round-trip (that round-trip only exists to redact secrets and to map
-    -- nan/inf to nil, which the guards below preserve exactly).
-    if type(value) == "number" then
+--- Canonical castbar scalar unwrapper. Dragonflight+ APIs may return value
+--- wrappers; convert only to plain finite numbers so callers can compare and
+--- cache safely. Secret values, nan and inf all come back as nil.
+---
+--- This file loads before Runtime, Engine, Driver, PlayerCastbarRuntime,
+--- Castbars.lua, Empower and GCD, which alias the MSUF_Castbar_PlainNumber
+--- export instead of carrying a body of their own. A harness that loads one of
+--- those files standalone has to load this file first.
+local function PlainNumber(value)
+    if value == nil then
+        return nil
+    end
+
+    -- The duration APIs normally return an ordinary number. Avoid ToPlain and
+    -- the allocating tostring/tonumber round-trip on that overwhelmingly hot
+    -- path while retaining the wrapper fallback below.
+    if type(value) == "number" and toPlainIsSecret(value) ~= true
+        and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
+        return value
+    end
+
+    local toPlain = _G.ToPlain
+    if type(toPlain) == "function" then
+        local plain = toPlain(value)
+        if plain ~= nil and toPlainIsSecret(plain) ~= true then
+            local plainType = type(plain)
+            if plainType == "number" then
+                if plain == plain and plain ~= toPlainHuge and plain ~= -toPlainHuge then
+                    return plain
+                end
+                return nil
+            elseif plainType == "string" then
+                return tonumber(plain)
+            end
+
+            -- Compatibility fallback for an unexpected ToPlain wrapper type.
+            return tonumber(tostring(plain))
+        end
+    end
+
+    local valueType = type(value)
+    if valueType == "number" then
         if toPlainIsSecret(value) ~= true
             and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
             return value
         end
-        return tonumber(tostring(value))
+    elseif valueType == "string" and toPlainIsSecret(value) ~= true then
+        return tonumber(value)
     end
-    local fn = _G.MSUF_ToPlainNumber
-    if type(fn) == "function" then
-        local plain = fn(value)
-        if type(plain) == "number" then return tonumber(tostring(plain)) end
-        return plain
-    end
-    local valueType = type(value)
-    if valueType == "number" or valueType == "string" then return tonumber(tostring(value)) end
+
     return nil
 end
+ExportPublic("MSUF_Castbar_PlainNumber", PlainNumber)
 
 local glowEnabledCache
 local glowEnabledRevision = -1
@@ -712,8 +749,8 @@ local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
         return
     end
 
-    local remaining = ToPlainNumber(remainingSeconds)
-    local total = ToPlainNumber(totalSeconds)
+    local remaining = PlainNumber(remainingSeconds)
+    local total = PlainNumber(totalSeconds)
     if type(remaining) ~= "number" or type(total) ~= "number" or total <= 0 then return end
     if remaining < 0 then remaining = 0 end
     if remaining > total then remaining = total end
@@ -1068,3 +1105,25 @@ local function ClearEmpowerState(frame)
     end
 end
 ExportPublic("MSUF_ClearEmpowerState", ClearEmpowerState)
+
+local function EnsureGeneralDB()
+    local ensure = _G.MSUF_EnsureDB or _G.EnsureDB
+    if type(ensure) == "function" then ensure() end
+
+    local db = _G.MSUF_DB
+    if not db then
+        db = {}
+        ExportPublic("MSUF_DB", db)
+    end
+    db.general = db.general or {}
+    return db.general
+end
+ExportPublic("MSUF_EnsureCastbarGeneralDB", EnsureGeneralDB)
+
+local function CastTimeUnitKey(frame, unit)
+    unit = tostring(unit or ""):lower()
+    if frame and frame._msufIsBossCastbar then return "boss" end
+    if unit:match("^boss%d+$") then return "boss" end
+    return unit
+end
+ExportPublic("MSUF_CastTimeUnitKey", CastTimeUnitKey)

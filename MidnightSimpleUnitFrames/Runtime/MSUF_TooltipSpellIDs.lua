@@ -20,10 +20,7 @@ local type = type
 
 local CVAR_NAME = "tooltipShowAuraSpellIDs"
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local function IsEnabled()
     local db = _G.MSUF_DB

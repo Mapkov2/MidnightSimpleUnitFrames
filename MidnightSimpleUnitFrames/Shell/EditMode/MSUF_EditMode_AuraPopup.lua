@@ -43,14 +43,9 @@ local Sync
 local Util = EM2.Util or {}
 local FramePositionValues = Util.FramePositionValues
 local TranslateFramePosition = Util.TranslateFramePosition
-local SyncMovers = (EM2.Util and EM2.Util.SyncMovers) or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
-local UnitPageKey = Util.UnitPageKey or function() return "uf_player" end
-local NormalizeSimpleUnit = Util.NormalizeSimpleUnit or function(unit)
-    if unit == "boss" then return "boss1" end
-    if type(unit) == "string" and unit:match("^boss%d+$") then return unit end
-    if unit == "player" or unit == "target" or unit == "focus" then return unit end
-    return nil
-end
+local SyncMovers = (EM2.Util and EM2.Util.SyncMovers)
+local UnitPageKey = Util.UnitPageKey
+local NormalizeSimpleUnit = Util.NormalizeSimpleUnit
 local function NormalizeAuraUnit(unit)
     local normalized = NormalizeSimpleUnit(unit, true)
     return normalized ~= "pet" and normalized or nil
@@ -524,7 +519,7 @@ local function SetActiveGroup(kind)
     if current ~= kind and pf and pf.unit and pf.xBox then
         Apply()
     end
-    local export = (MSUF and MSUF.ExportPublic) or function(name, value) _G[name] = value end
+    local export = (MSUF and MSUF.ExportPublic)
     export("MSUF_EM2_ActiveAuraGroup", kind)
     if pf and pf.unit then export("MSUF_EM2_ActiveAuraUnit", pf.unit) end
     if pf and pf:IsShown() then Sync() end

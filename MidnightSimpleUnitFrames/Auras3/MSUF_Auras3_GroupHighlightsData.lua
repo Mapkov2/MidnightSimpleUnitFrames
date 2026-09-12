@@ -23,7 +23,7 @@ end
 local DATA_VERSION = "12.1.0.69497-v1"
 local EXPECTED_COUNT = 122
 local DATA_SIGNATURE = "groupHighlights:" .. DATA_VERSION .. ":" .. EXPECTED_COUNT
-local NEVER_MATCHED_SPELL_ID = 0
+
 
 A3.GroupHighlightsDataVersion = DATA_VERSION
 A3.GroupHighlightsDataCount = EXPECTED_COUNT

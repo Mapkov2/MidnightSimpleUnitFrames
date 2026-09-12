@@ -29,7 +29,7 @@ local LuaCurveType = Enum and Enum.LuaCurveType
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
 local UnitMissing
 do
-  local issv = _G.issecretvalue or function(_) return false end
+  local issv = _G.issecretvalue
   UnitMissing = function(frame, unit, unitSecret)
     if unitSecret == true then
       return false
@@ -54,7 +54,7 @@ do
     return exists == false or exists == 0
   end
 end
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 -- Heal/absorb prediction element.
 -- Owns incoming heal, absorb, and heal-absorb overlays for unitframes. The code supports

@@ -75,21 +75,32 @@ local function RefreshDriverRegistration(event, ev)
     if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
     local units = BuildUnitList(ev)
     if #units == 0 then return end
-    driver:RegisterUnitEvent(event, unpack(units))
+    --- RegisterUnitEvent reports failure by value (12.1 SimpleFrameAPI: it takes
+    --- a variadic unit-token list and returns a bool). A silent false leaves the
+    --- subscription missing, which stays invisible until the feature quietly
+    --- stops updating, so surface it instead of discarding the result.
+    if driver:RegisterUnitEvent(event, unpack(units)) == false then
+        local report = MSUF.ReportError or _G.MSUF_ReportError
+        if type(report) == "function" then
+            report("EventBus", "RegisterUnitEvent refused '" .. tostring(event)
+                .. "' for " .. #units .. " unit token(s)")
+        end
+    end
 end
 
 local function Compact(ev)
-    if not ev or not ev.dirty then return end
-    local list, idx, w = ev.list, ev.index, 0
-    for k in pairs(idx) do idx[k] = nil end
-    for i = 1, #list do
-        local h = list[i]
-        if h and h.fn and not h.dead then
-            w = w + 1; list[w] = h; idx[h.key] = w
+    if not ev.dirty then return end
+    -- Existing dispatches retain their array; only subscription changes copy.
+    -- Shared records are tombstoned immediately so cancelled callbacks stop.
+    local list, index = {}, {}
+    for i = 1, #ev.list do
+        local handler = ev.list[i]
+        if handler.fn and not handler.dead then
+            list[#list + 1] = handler
+            index[handler.key] = #list
         end
     end
-    for i = w + 1, #list do list[i] = nil end
-    ev.dirty = false
+    ev.list, ev.index, ev.dirty = list, index, false
 end
 
 local function MaybeUnregister(event)
@@ -98,7 +109,6 @@ local function MaybeUnregister(event)
         if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
         return
     end
-    if (ev.dd or 0) > 0 then return end
     if ev.dirty then Compact(ev) end
     if #ev.list == 0 then
         bus.handlers[event] = nil
@@ -118,7 +128,7 @@ function bus:Register(event, key, fn, unitFilter, once)
     end
     local ev = bus.handlers[event]
     if not ev then
-        ev = { list = {}, index = {}, dd = 0, dirty = false, unitEvent = unitEvent }
+        ev = { list = {}, index = {}, dirty = false, unitEvent = unitEvent }
         bus.handlers[event] = ev
     elseif ev.unitEvent ~= unitEvent then
         return false
@@ -144,124 +154,48 @@ function bus:Register(event, key, fn, unitFilter, once)
 end
 
 function bus:Unregister(event, key)
-    local ev = bus.handlers[event]; if not ev then return end
-    local idx = ev.index[key]; if not idx then return end
-    ev.index[key] = nil
-    if (ev.dd or 0) > 0 then
-        local h = ev.list[idx]; if h then h.fn = nil; h.dead = true end; ev.dirty = true; return
-    end
-    local last = #ev.list
-    if idx ~= last then
-        local tail = ev.list[last]; ev.list[idx] = tail
-        if tail and tail.key then ev.index[tail.key] = idx end
-    end
-    ev.list[last] = nil
+    local ev = bus.handlers[event]
+    local index = ev and ev.index[key]
+    if not index then return end
+    local handler = ev.list[index]
+    handler.fn, handler.dead = nil, true
+    ev.index[key], ev.dirty = nil, true
     MaybeUnregister(event)
 end
 
 function bus:UnregisterAll(prefix)
     if type(prefix) ~= "string" or prefix == "" then return end
-    local plen = #prefix
+    local length = #prefix
     for event, ev in pairs(bus.handlers) do
-        local list, changed = ev.list, false
-        if (ev.dd or 0) > 0 then
-            for i = 1, #list do
-                local h = list[i]
-                if h and h.fn and h.key and h.key:sub(1, plen) == prefix then
-                    ev.index[h.key] = nil; h.fn = nil; h.dead = true; changed = true
-                end
-            end
-            if changed then ev.dirty = true end
-        else
-            local i = #list
-            while i >= 1 do
-                local h = list[i]
-                if h and h.fn and h.key and h.key:sub(1, plen) == prefix then
-                    ev.index[h.key] = nil
-                    local last = #list
-                    if i ~= last then
-                        local tail = list[last]; list[i] = tail
-                        if tail and tail.key then ev.index[tail.key] = i end
-                    end
-                    list[last] = nil; changed = true
-                end
-                i = i - 1
+        for i = 1, #ev.list do
+            local handler = ev.list[i]
+            if handler.key:sub(1, length) == prefix then
+                handler.fn, handler.dead = nil, true
+                ev.index[handler.key], ev.dirty = nil, true
             end
         end
-        if changed then MaybeUnregister(event) end
+        if ev.dirty then MaybeUnregister(event) end
     end
 end
 
---- Dispatch can unregister handlers while iterating: a handler may call
---- bus:Unregister, which reaches MaybeUnregister and would otherwise Compact the
---- list this loop is walking. `dd` marks "fanout in progress" so removals only
---- mark handlers dead, and compaction happens once the fanout finishes.
----
---- Each subscriber is an independent fault boundary. A broken handler is
---- reported through the normal error handler, while later subscribers and the
---- dispatch-depth/compaction bookkeeping still complete. `dd` remains a real
---- counter because tests and addon code can legitimately fire the same driver
---- recursively even though Blizzard event delivery itself is not recursive.
-local function ReportHandlerError(err)
-    local handler = _G.geterrorhandler and _G.geterrorhandler()
-    if type(handler) == "function" then
-        local reported = pcall(handler, err)
-        if reported then return end
-    end
-    if type(_G.print) == "function" then
-        _G.print("|cffffd700MSUF EventBus:|r", tostring(err))
-    end
-end
-
-local function InvokeHandler(fn, event, ...)
-    local ok, err = pcall(fn, event, ...)
-    if not ok then ReportHandlerError(err) end
-end
-
+-- Dispatch owns no mutable depth/cleanup state. A thrown callback reaches the
+-- client error handler normally; subsequent events remain usable. Removing a
+-- once subscription before invocation also makes nested delivery deterministic.
 driver:SetScript("OnEvent", function(_, event, ...)
-    local ev = bus.handlers[event]; if not ev then return end
-    ev.dd = ev.dd + 1
-    local list, n = ev.list, #ev.list
-
-    if ev.unitEvent then
-        local unit = ...
-        for i = 1, n do
-            local h = list[i]
-            local fn = h and h.fn
-            local units = h and h.units
-            if fn and (not units or (unit and units[unit] == true)) then
-                InvokeHandler(fn, event, ...)
-                if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
-            end
-        end
-    else
-        for i = 1, n do
-            local h = list[i]
-            local fn = h and h.fn
-            if fn then
-                InvokeHandler(fn, event, ...)
-                if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
-            end
-        end
-    end
-
-    ev.dd = ev.dd - 1
-    if ev.dd <= 0 then
-        ev.dd = 0
-        if ev.dirty then Compact(ev) end
-        if #ev.list == 0 then
-            bus.handlers[event] = nil
-            if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
-        elseif ev.unitEvent then
-            RefreshDriverRegistration(event, ev)
+    local ev = bus.handlers[event]
+    if not ev then return end
+    local list, unit = ev.list, ...
+    for i = 1, #list do
+        local handler = list[i]
+        local callback, units = handler.fn, handler.units
+        if callback and (not ev.unitEvent or not units or (unit and units[unit] == true)) then
+            if handler.once then bus:Unregister(event, handler.key) end
+            callback(event, ...)
         end
     end
 end)
 --- Public API
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local function EventBusRegister(e, k, f, u, o) return bus:Register(e, k, f, u, o) end
 local function EventBusUnregister(e, k) return bus:Unregister(e, k) end

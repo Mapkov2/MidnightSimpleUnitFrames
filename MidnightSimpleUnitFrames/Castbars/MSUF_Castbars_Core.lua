@@ -9,10 +9,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local type = type
 local tonumber = tonumber
@@ -51,11 +48,7 @@ local function ResolveFontPath(path, size, flags)
     return path
 end
 
-local function IsInCombat()
-    return _G.MSUF_InCombat == true
-        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
-        or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
-end
+local IsInCombat = _G.MSUF_IsPlayerInCombat
 
 ExportPublic("MSUF_BossTestMode", _G.MSUF_BossTestMode or false)
 
@@ -218,7 +211,7 @@ local function GetFontPath()
 
     local media = lsm or (MSUF and MSUF.LSM) or _G.MSUF_LSM
     if media and fontKey and fontKey ~= "" then
-        local normalizer = _G.MSUF_NormalizeFontKey or function(value) return value end
+        local normalizer = _G.MSUF_NormalizeFontKey
         local normalized = normalizer(fontKey)
         local fetched
         if type(media.Fetch) == "function" then

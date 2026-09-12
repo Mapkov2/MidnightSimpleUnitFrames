@@ -6,7 +6,7 @@ MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.NativeApply = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
-local math_max = math.max
+
 local tostring = tostring
 local type = type
 local AURA_CONTAINER_ADDON = dependencies.Platform.AURA_CONTAINER_ADDON
@@ -21,7 +21,7 @@ local CreateManagedNativeLane = dependencies.Containers.CreateManagedNativeLane
 local CreateManagedNativeSlotLane = dependencies.Containers.CreateManagedNativeSlotLane
 local CreateManagedPriorityNativeLane = dependencies.Containers.CreateManagedPriorityNativeLane
 local CreateNativeAuraContainer = dependencies.Containers.CreateNativeAuraContainer
-local CreateNativeDispelSensor = dependencies.Containers.CreateNativeDispelSensor
+
 local CreateNativeDispelSensorRoot = dependencies.Containers.CreateNativeDispelSensorRoot
 local CreateNativeGroupSlots = dependencies.Containers.CreateNativeGroupSlots
 local EFFECT_ROOT_FIELDS = dependencies.OwnerConfig.EFFECT_ROOT_FIELDS
@@ -34,7 +34,7 @@ local LaneLayoutSignature = dependencies.Signatures.LaneLayoutSignature
 local GetNativeOwnerPlan = dependencies.OwnerConfig.GetNativeOwnerPlan
 local LaneStructuralSignature = dependencies.Signatures.LaneStructuralSignature
 local LaneTrackingSignature = dependencies.Signatures.LaneTrackingSignature
-local ManagedAuraKey = dependencies.Containers.ManagedAuraKey
+
 local ManagedLaneFrameLevel = dependencies.CustomConfig.ManagedLaneFrameLevel
 local NORMAL_LANE_ROOT_KEYS = dependencies.OwnerConfig.NORMAL_LANE_ROOT_KEYS
 local PrepareAuraButton = dependencies.ButtonVisuals.PrepareAuraButton
@@ -42,12 +42,12 @@ local RememberGroupOwner = dependencies.Containers.RememberGroupOwner
 local ResolveFrameStrata = dependencies.Platform.ResolveFrameStrata
 local ResolveLaneParentFrame = dependencies.CustomConfig.ResolveLaneParentFrame
 local RootAppliedConfigIsCurrent = dependencies.NativeContract.RootAppliedConfigIsCurrent
-local SensorLayoutSignature = dependencies.Signatures.SensorLayoutSignature
-local SensorStructuralSignature = dependencies.Signatures.SensorStructuralSignature
+
+
 local SetAssistAlpha = dependencies.Identity.SetAssistAlpha
 local Shape = dependencies.Appearance.Shape
 local SyncContainerGeometry = dependencies.ButtonVisuals.SyncContainerGeometry
-local SyncDispelSensorGeometry = dependencies.Containers.SyncDispelSensorGeometry
+
 local SyncDispelSensorRootGeometry = dependencies.Containers.SyncDispelSensorRootGeometry
 local SyncFrameStrata = dependencies.Platform.SyncFrameStrata
 local SyncGroupSlotsGeometry = dependencies.Containers.SyncGroupSlotsGeometry
@@ -124,7 +124,7 @@ end
 A3._CreateNativeLane = function(root, lane, parentFrame)
     if not EnsureBlizzardAuraContainerLoaded() then
         A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
+        A3._RecordNativeAuraRuntimeError(AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown"))
         return nil
     end
 
@@ -294,43 +294,6 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     return current
 end
 
-local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
-    if not (root and sensor and sensor.enabled) then return nil end
-    local key = sensor.rootKey
-    local structuralSignature = sensor._msufA3StructuralSignature or SensorStructuralSignature(sensor)
-    local layoutSignature = sensor._msufA3LayoutSignature or SensorLayoutSignature(sensor)
-    local current = root[key]
-    if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        A3._RebindNativeContainerUnit(current, sensor.unit)
-        local filters = current._msufA3SensorSlotFilterStrings or {}
-        current._msufA3SensorSlotFilterStrings = filters
-        for i = 1, math_max(1, sensor.max or 1) do
-            local slotKey = ManagedAuraKey(sensor) .. "_" .. tostring(i)
-            if filters[slotKey] ~= sensor.nativeFilter then
-                current:SetAuraSlotFilterString(slotKey, sensor.nativeFilter)
-                filters[slotKey] = sensor.nativeFilter
-            end
-        end
-        SyncDispelSensorGeometry(current, sensor, parentFrame)
-        current:Show()
-        if not RegisterNativeContainer(current) then return nil end
-        current._msufA3StructuralSignature = structuralSignature
-        current._msufA3LayoutSignature = layoutSignature
-        return current
-    end
-    A3._HideLane(current)
-    root[key] = nil
-    current = CreateNativeDispelSensor(root, sensor, parentFrame)
-    if current then
-        current._msufA3StructuralSignature = structuralSignature
-        current._msufA3LayoutSignature = layoutSignature
-        sensor._msufA3StructuralSignature = structuralSignature
-        sensor._msufA3LayoutSignature = layoutSignature
-        root[key] = current
-    end
-    return current
-end
-
 local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreate)
     if not (root and sensorRoot and sensorRoot.enabled == true and sensorRoot.sensorRoot == true) then return nil end
     local key = sensorRoot.rootKey or "DispelSensor"
@@ -439,8 +402,6 @@ RecreateGroupSlots = function(container)
 end
 
 A3._ApplyGroupSlots = ApplyGroupSlots
-
-
 
 local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame)
     lane = lane or (container and container._msufA3NativeLaneConfig)

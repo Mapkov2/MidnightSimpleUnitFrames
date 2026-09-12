@@ -3,10 +3,7 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local UF = MSUF.UF
 if not UF then return end
@@ -22,7 +19,7 @@ local UnitAffectingCombat = _G.UnitAffectingCombat
 local IsInInstance = _G.IsInInstance
 local C_Housing = _G.C_Housing
 local Secrets = MSUF.Secrets or {}
-local UnitExistsPlain = Secrets.UnitExistsPlain or function(_) return true end
+local UnitExistsPlain = Secrets.UnitExistsPlain
 local type = type
 local tonumber = tonumber
 

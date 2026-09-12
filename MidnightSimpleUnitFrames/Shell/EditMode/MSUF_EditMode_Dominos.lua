@@ -9,16 +9,9 @@ local OWNER, SETTING = "MSUF.Dominos", "dominosEditModeIntegration"
 local registered = {}
 local active, listening, syncQueued = false, false, false
 
-local function Export(name, value)
-    if type(MSUF.ExportPublic) == "function" then return MSUF.ExportPublic(name, value) end
-    _G[name] = value
-    return value
-end
+local Export = MSUF.ExportPublic
 
-local function General()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local General = _G.MSUF_GetGeneralDB
 
 local function Enabled()
     local general = General()
@@ -379,12 +372,7 @@ local function Deactivate()
     return true
 end
 
-local function SetEnabled(enabled)
-    enabled = enabled ~= false
-    local general = General()
-    if general then general[SETTING] = enabled end
-    return enabled and Activate() or Deactivate()
-end
+local SetEnabled = _G.MSUF_EM2.ExternalProviders.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_DominosEditMode_IsAvailable", function() return Dominos() ~= nil end)
 Export("MSUF_DominosEditMode_SetEnabled", SetEnabled)

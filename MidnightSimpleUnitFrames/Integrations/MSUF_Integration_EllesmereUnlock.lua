@@ -1,11 +1,24 @@
 local addonName, MSUF = ...
 
-MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+-- Foreign symbols this file depends on (EllesmereUI; none is documented API):
+--   EllesmereUI: the unlock-mode API table. RegisterUnlockElements,
+--     UnregisterUnlockElement, RegisterUnlockModeListener,
+--     UnregisterUnlockModeListener and IsUnlockModeActive are required; when
+--     any is missing this file returns before registering a provider and MSUF
+--     Edit Mode has no EllesmereUI bridge. MakeUnlockElement, OpenUnlockMode /
+--     _openUnlockMode, EnsureLoaded, ToggleUnlockMode, _unlockNudge,
+--     _unlockActive and _unlockModeActive are probed per call; an absent one
+--     falls back to the plain option table, "cannot open/close" or "not dirty".
+--   EllesmereUnlockMode: the unlock-mode root frame. The shared
+--     ExternalProviders controller parents its supplemental movers to it
+--     (UIParent when nil) and skips its mover scan while it is nil.
+--   Mover frames handed back by EllesmereUI: _barKey, _dragging, Sync,
+--     RefreshAnchoredText and the OnMouseUp script; each is type-checked and
+--     skipped when absent.
 
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic
+-- Isolate integration commands, but report failures with the throwing stack.
 local PROVIDER_ID = "ellesmere"
 local LISTENER_OWNER = addonName or "MidnightSimpleUnitFrames"
 
@@ -30,10 +43,7 @@ local EM2 = _G.MSUF_EM2
 local External = EM2 and EM2.ExternalProviders
 if not (External and type(External.Register) == "function") then return end
 
-local function General()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local General = _G.MSUF_GetGeneralDB
 
 local spec = {
     id = PROVIDER_ID,
@@ -75,7 +85,7 @@ local spec = {
         return opts
     end,
     RegisterElements = function(api, elements, folder)
-        return pcall(api.RegisterUnlockElements, api, elements, folder)
+        return true, api.RegisterUnlockElements(api, elements, folder)
     end,
     UnregisterElement = function(api, key)
         api:UnregisterUnlockElement(key)
@@ -104,26 +114,32 @@ local spec = {
         mover._dragging = false
         if releaseMouse and mover.GetScript then
             local mouseUp = mover:GetScript("OnMouseUp")
-            if mouseUp then pcall(mouseUp, mover, "LeftButton") end
+            if mouseUp then mouseUp(mover, "LeftButton") end
         end
     end,
     MarkDirty = function(api, mover)
         local nudge = api and api._unlockNudge
-        return type(nudge) == "function" and pcall(nudge, 0, 0, mover, true) or false
+        if type(nudge) ~= "function" then return false end
+        nudge(0, 0, mover, true)
+        return true
     end,
 
     PrepareOpen = function(api)
         if type(api.OpenUnlockMode) ~= "function" and type(api.EnsureLoaded) == "function" then
-            pcall(api.EnsureLoaded, api)
+            api.EnsureLoaded(api)
         end
         return type(api.OpenUnlockMode or api._openUnlockMode) == "function"
     end,
     OpenMode = function(api)
         local openUnlock = api.OpenUnlockMode or api._openUnlockMode
-        return type(openUnlock) == "function" and pcall(openUnlock, api) or false
+        if type(openUnlock) ~= "function" then return false end
+        openUnlock(api)
+        return true
     end,
     CloseMode = function(api)
-        return type(api.ToggleUnlockMode) == "function" and pcall(api.ToggleUnlockMode, api) or false
+        if type(api.ToggleUnlockMode) ~= "function" then return false end
+        api:ToggleUnlockMode()
+        return true
     end,
 }
 

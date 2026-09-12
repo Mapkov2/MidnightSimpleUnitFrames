@@ -24,8 +24,8 @@ local floor = math.floor
 local Clamp01 = UF.Clamp01
 
 local Secrets = MSUF.Secrets or {}
-local IsNil = Secrets.IsNil or function(value) return value == nil end
-local NotSecretValue = Secrets.NotSecret or function(_) return true end
+local IsNil = Secrets.IsNil
+local NotSecretValue = Secrets.NotSecret
 
 local EMPTY_EVENTS = {}
 local PORTRAIT_2D_EVENTS = { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }

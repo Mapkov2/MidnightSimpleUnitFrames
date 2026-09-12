@@ -46,18 +46,7 @@ local function ReadBool(primary, secondary, key, fallback)
     return value == true
 end
 
-local function NormalizeDebuffTypeBorderMode(value, fallback)
-    if value == true then return "SYMBOL" end
-    if value == false then return "OFF" end
-    value = tostring(value or ""):upper()
-    if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
-    if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
-        or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
-        return "SYMBOL"
-    end
-    if value == "OFF" or value == "NONE" or value == "DISABLED" then return "OFF" end
-    return fallback or "OFF"
-end
+local NormalizeDebuffTypeBorderMode = _G.MSUF_NormalizeAuraDebuffTypeBorderMode
 
 local function ReadDebuffTypeBorderMode(primary, secondary)
     local mode
@@ -137,10 +126,6 @@ local function ReadUnitStyleBool(layout, laneLayout, rootShared, key, fallback)
     return value == true
 end
 
-local function ReadUnitStyleNumber(layout, laneLayout, rootShared, key, fallback, minValue, maxValue)
-    return ClampNumber(ReadUnitStyleRaw(layout, laneLayout, rootShared, key), fallback, minValue, maxValue)
-end
-
 local function ReadUnitStyleAnchor(layout, laneLayout, rootShared, key, fallback)
     local value = ReadUnitStyleRaw(layout, laneLayout, rootShared, key)
     if value == "TOPLEFT" or value == "TOP" or value == "TOPRIGHT"
@@ -196,18 +181,6 @@ local function NormalizeDurationBarDisplay(value, fallback)
     value = tostring(value or fallback or "BAR_ONLY"):upper()
     if value == "ICON" or value == "ICONS" or value == "ICON_BAR" or value == "ICON+BAR" or value == "OVERLAY" then return "OVERLAY" end
     return "BAR_ONLY"
-end
-
-local function ReadDurationBarPosition(primary, secondary, key, fallback)
-    return NormalizeDurationBarPosition(ReadRaw(primary, secondary, key), fallback)
-end
-
-local function ReadDurationBarDirection(primary, secondary, key, fallback)
-    return NormalizeDurationBarDirection(ReadRaw(primary, secondary, key), fallback)
-end
-
-local function ReadDurationBarDisplay(primary, secondary, key, fallback)
-    return NormalizeDurationBarDisplay(ReadRaw(primary, secondary, key), fallback)
 end
 
 local function EnsureDB()
@@ -506,9 +479,6 @@ local function GridShape(maxCount, perRow, verticalGrowth)
     return major, minor
 end
 
-
-
-
 -- Appearance icon style (static border + soft shadow) is global per Aura
 -- product: Buff, Debuff, Player Defensives, or Dots on Target. Compiled once
 -- per product/runtime generation and stamped by reference onto each lane.
@@ -697,7 +667,7 @@ local function NativeFilter(baseFilter, filters)
     local auraUtil = _G.AuraUtil
     if auraUtil and type(auraUtil.IsValidFilterString) == "function"
         and auraUtil.IsValidFilterString(normalized) ~= true then
-        A3.nativeAuraRuntimeError = "invalid native filter: " .. tostring(normalized)
+        A3._RecordNativeAuraRuntimeError("invalid native filter: " .. tostring(normalized))
         return NormalizeNativeFilterString(baseFilter, baseFilter)
     end
     return normalized

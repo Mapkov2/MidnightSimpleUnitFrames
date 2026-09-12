@@ -8,10 +8,7 @@
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local EM2 = _G.MSUF_EM2
 if not EM2 or not EM2.Registry then return end
@@ -32,7 +29,7 @@ local UIParent = UIParent
 local hooksecurefunc = hooksecurefunc
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
-local abs = math.abs
+
 local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
 local function FontSize(role)
   return SharedUI and SharedUI.FontSize and SharedUI.FontSize(role) or (role == "caption" and 11 or 13)
@@ -79,7 +76,7 @@ local _pendingGroupDragKind
 local _pendingGroupDragSource
 local _pendingGroupDragStartX
 local _pendingGroupDragStartY
-local GROUP_DRAG_THRESHOLD = 3
+
 local STABLE_GRID_POSITION_MODE = "GRID_BOUNDS_V2"
 
 local function GF()
@@ -380,65 +377,7 @@ local function ResolveAnchorPoint(kind, conf, parent)
   return point, point
 end
 
-local function PointFraction(point)
-  local fx, fy
-  if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
-    fx = 0
-  elseif point == "RIGHT" or point == "TOPRIGHT" or point == "BOTTOMRIGHT" then
-    fx = 1
-  else
-    fx = 0.5
-  end
-  if point == "BOTTOM" or point == "BOTTOMLEFT" or point == "BOTTOMRIGHT" then
-    fy = 0
-  elseif point == "TOP" or point == "TOPLEFT" or point == "TOPRIGHT" then
-    fy = 1
-  else
-    fy = 0.5
-  end
-  return fx, fy
-end
-
-local function ClampBoxAxis(minEdge, maxEdge, screenMax)
-  local size = (maxEdge or 0) - (minEdge or 0)
-  if size <= 0 or not (screenMax and screenMax > 0) then
-    return 0
-  end
-  if size <= screenMax then
-    if minEdge < 0 then return -minEdge end
-    if maxEdge > screenMax then return screenMax - maxEdge end
-    return 0
-  end
-  if minEdge > 0 then return -minEdge end
-  if maxEdge < screenMax then return screenMax - maxEdge end
-  return 0
-end
-
-local function ClampAnchorOffsetOnScreen(point, relativePoint, parent, offsetX, offsetY, totalW, totalH)
-  if not (parent and parent.GetLeft and UIParent and UIParent.GetWidth) then
-    return offsetX, offsetY
-  end
-  local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
-  if not (screenW and screenH and screenW > 0 and screenH > 0) then
-    return offsetX, offsetY
-  end
-  local pLeft, pRight = parent:GetLeft(), parent:GetRight()
-  local pBottom, pTop = parent:GetBottom(), parent:GetTop()
-  if not (pLeft and pRight and pBottom and pTop) then
-    return offsetX, offsetY
-  end
-  local fx, fy = PointFraction(point)
-  local rfx, rfy = PointFraction(relativePoint)
-  local px = pLeft + (pRight - pLeft) * rfx + (offsetX or 0)
-  local py = pBottom + (pTop - pBottom) * rfy + (offsetY or 0)
-  local boxW, boxH = totalW or 0, totalH or 0
-  local left = px - boxW * fx
-  local bottom = py - boxH * fy
-  local dx = ClampBoxAxis(left, left + boxW, screenW)
-  local dy = ClampBoxAxis(bottom, bottom + boxH, screenH)
-  if dx == 0 and dy == 0 then return offsetX, offsetY end
-  return (offsetX or 0) + dx, (offsetY or 0) + dy
-end
+local ClampAnchorOffsetOnScreen = _G.MSUF_UF_ClampAnchorOffsetOnScreen
 
 local function IsPreviewActive(kind)
   if not (_em2Active and _previewShownByEM2 and ShouldShowPreviewKind(kind)) then
@@ -511,20 +450,7 @@ local function GetPositionCount(kind)
   return GetRequestedPreviewCount(kind)
 end
 
-local function FrameRectToUI(frame)
-  if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
-    return nil
-  end
-  if frame.IsShown and not frame:IsShown() then return nil end
-  local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-  if not (l and r and t and b) then return nil end
-  local fS = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
-  local uiS = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
-  if not fS or fS == 0 then fS = 1 end
-  if not uiS or uiS == 0 then uiS = 1 end
-  local ratio = fS / uiS
-  return l * ratio, r * ratio, t * ratio, b * ratio
-end
+local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
 
 local function ExpandBounds(bounds, frame)
   local l, r, t, b = FrameRectToUI(frame)
@@ -904,46 +830,6 @@ local function StopPendingGroupDrag(frame)
     _pendingGroupDragFrame:SetScript("OnUpdate", nil)
     _pendingGroupDragFrame:Hide()
   end
-end
-
-local function EnsurePendingGroupDragFrame()
-  if _pendingGroupDragFrame then return _pendingGroupDragFrame end
-  _pendingGroupDragFrame = CreateFrame("Frame", "MSUF_GF_EM2_PendingDragFrame", UIParent)
-  _pendingGroupDragFrame:Hide()
-  return _pendingGroupDragFrame
-end
-
-local function QueuePendingGroupDrag(frame, kind, source, button)
-  if button ~= "LeftButton" or not frame or ConfigLocked() then return end
-  local cx, cy = GetCursorPosition()
-  if not (cx and cy) then return end
-  _pendingGroupDragTarget = frame
-  _pendingGroupDragKind = kind
-  _pendingGroupDragSource = source
-  _pendingGroupDragStartX = cx
-  _pendingGroupDragStartY = cy
-  local driver = EnsurePendingGroupDragFrame()
-  driver:SetScript("OnUpdate", function()
-    local target = _pendingGroupDragTarget
-    if not target then
-      StopPendingGroupDrag()
-      return
-    end
-    if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
-      StopPendingGroupDrag(target)
-      return
-    end
-    local mx, my = GetCursorPosition()
-    if not (mx and my) then return end
-    if max(abs(mx - (_pendingGroupDragStartX or mx)), abs(my - (_pendingGroupDragStartY or my))) < GROUP_DRAG_THRESHOLD then
-      return
-    end
-    local dragKind = target._msufGFEM2Kind or _pendingGroupDragKind
-    local dragSource = _pendingGroupDragSource
-    StopPendingGroupDrag(target)
-    BeginGroupDrag(target, dragKind, dragSource)
-  end)
-  driver:Show()
 end
 
 local function ClickGroupFrame(frame, kind, button, source)

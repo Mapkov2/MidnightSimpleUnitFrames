@@ -13,7 +13,7 @@ local type, tostring, ipairs = type, tostring, ipairs
 local table_insert = table.insert
 local string_lower = string.lower
 local IsRegisteredLSMFontPath = G.MSUF_IsRegisteredLSMFontPath
-
+local SetFontChecked = G.MSUF_SetFontChecked
 local LSM = (MSUF and MSUF.LSM) or G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 
 --- Called by the LSM bootstrap when LibSharedMedia becomes available after this
@@ -32,14 +32,11 @@ if LSM and not G.MSUF_LSM_CallbacksRegistered and not G.MSUF_LSM_FontCallbackReg
     G.MSUF_LSM_FontCallbackRegistered = true
     LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
         if mediatype ~= "font" then return end
-        if type(G.MSUF_ClearResolvedFontPathCache) == "function" then
-            G.MSUF_ClearResolvedFontPathCache()
-        end
         if G.MSUF_RebuildFontChoices then
             G.MSUF_RebuildFontChoices()
         end
         local g = G.MSUF_DB and G.MSUF_DB.general
-        local normalizeFontKey = G.MSUF_NormalizeFontKey or function(k) return k end
+        local normalizeFontKey = G.MSUF_NormalizeFontKey
         local registeredKey = normalizeFontKey(key)
         local needsFontRefresh = g and normalizeFontKey(g.fontKey) == registeredKey
         if needsFontRefresh and not deferredFontsPending then
@@ -174,24 +171,11 @@ local function MSUF_FontPathIsLoadable(rawPath, size, flags)
         return true
     end
 
-    if type(G.CreateFont) ~= "function" then
-        return true
-    end
     if not MSUF_FontPathProbe then
-        local ok, probe = pcall(G.CreateFont, "MSUF_FontPathProbe")
-        if ok then
-            MSUF_FontPathProbe = probe
-        end
+        MSUF_FontPathProbe = G.CreateFont("MSUF_FontPathProbe")
     end
-    if not (MSUF_FontPathProbe and type(MSUF_FontPathProbe.SetFont) == "function") then
-        return true
-    end
-
-    -- Font APIs require a valid FontAsset. A stale Wago/SharedMedia path can
-    -- therefore raise before a `success` return exists; keep that rejection at
-    -- the probe boundary so profile import can warn and continue with fallback.
-    local ok, applied = pcall(MSUF_FontPathProbe.SetFont, MSUF_FontPathProbe, path, size, flags)
-    local loadable = ok and applied ~= false
+    -- Native asset errors propagate without populating the result cache.
+    local loadable = SetFontChecked(MSUF_FontPathProbe, path, size, flags)
     MSUF_FontPathLoadableCache[cacheKey] = loadable
     if type(rawPath) == "string" and rawPath ~= "" then
         local byPath = MSUF_FontPathLoadableFast[rawPath]
@@ -508,29 +492,10 @@ end
 
 -- Plain function instead of a per-call closure: this resolver runs for every
 -- text element of every preview refresh.
-local function MSUF_TrySafeFontPath(resolve, candidate, candidateKey, size, flags)
-    if type(candidate) ~= "string" or candidate == "" then return nil end
-    local resolved = type(resolve) == "function" and resolve(candidate, size, flags, candidateKey) or candidate
-    if type(resolved) == "string" and resolved ~= "" then
-        if MSUF_FontPathIsLoadable(resolved, size, flags) or (flags ~= "" and MSUF_FontPathIsLoadable(resolved, size, "")) then
-            return resolved
-        end
-    end
-    return nil
-end
+
 
 local function MSUF_ResolveSafeFontPath(path, size, flags, fontKey)
-    size = tonumber(size) or 14
-    if size <= 0 then size = 14 end
-    flags = flags or ""
-
-    local resolve = G.MSUF_ResolveFontPath
-    local internal = type(G.MSUF_GetInternalFontPathByKey) == "function" and G.MSUF_GetInternalFontPathByKey(fontKey) or nil
-    return MSUF_TrySafeFontPath(resolve, path, fontKey, size, flags)
-        or MSUF_TrySafeFontPath(resolve, internal, fontKey, size, flags)
-        or MSUF_TrySafeFontPath(resolve, FONT_LIST[1] and FONT_LIST[1].path, "FRIZQT", size, flags)
-        or MSUF_TrySafeFontPath(resolve, "Fonts\\FRIZQT__.TTF", "FRIZQT", size, flags)
-        or "Fonts\\FRIZQT__.TTF"
+    return G.MSUF_ResolveFontPath(path, size, flags, fontKey)
 end
 
 G.MSUF_ResolveSafeFontPath = MSUF_ResolveSafeFontPath
@@ -546,19 +511,8 @@ local function MSUF_GetFontPreviewObject(key)
         obj = G.CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
         MSUF_FontPreviewObjects[key] = obj
     end
-    local resolveKeyPath = G.MSUF_ResolveFontKeyPath
-    local path = type(resolveKeyPath) == "function" and resolveKeyPath(key, 14, "") or nil
-    local internalPath = type(G.MSUF_GetInternalFontPathByKey) == "function" and G.MSUF_GetInternalFontPathByKey(key) or nil
-    path = path or internalPath or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
-    path = MSUF_ResolveSafeFontPath(path, 14, "", key)
-    if path then
-        local okCall, applied = pcall(obj.SetFont, obj, path, 14, "")
-        local ok = okCall and applied ~= false
-        if (not ok) and FONT_LIST[1] and FONT_LIST[1].path then
-            local fallback = MSUF_ResolveSafeFontPath(FONT_LIST[1].path, 14, "", "FRIZQT")
-            pcall(obj.SetFont, obj, fallback, 14, "")
-        end
-    end
+    local path = assert(G.MSUF_ResolveFontKeyPath(key), "MSUF unknown font key: " .. tostring(key))
+    SetFontChecked(obj, path, 14, "")
     return obj
 end
 MSUF.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject

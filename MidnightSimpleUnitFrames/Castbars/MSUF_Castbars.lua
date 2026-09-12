@@ -7,10 +7,24 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = (MSUF.ExportPublic) or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = (MSUF.ExportPublic)
+
+-- File-level aliases for the manager tick/update paths; MSUF_* lookups stay
+-- late-bound on purpose.
+local type = type
+local tonumber = tonumber
+local tostring = tostring
+local next = next
+local math_floor = math.floor
+local math_abs = math.abs
+local GetTime = _G.GetTime
+local GetTimePreciseSec = _G.GetTimePreciseSec
+local C_Timer = _G.C_Timer
+local GetCVar = _G.GetCVar
+local UnitExists = _G.UnitExists
+local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
+local UnitHasVehicleUI = _G.UnitHasVehicleUI
+local UnitChannelInfo = _G.UnitChannelInfo
 
 local PlayerCastbarCast = _G.MSUF_PlayerCastbar_Cast
 local PlayerCastbarOnEvent = _G.MSUF_PlayerCastbar_OnEvent
@@ -38,6 +52,11 @@ local PLAYER_CAST_EVENTS = {
     "UNIT_SPELLCAST_INTERRUPTED",
 }
 
+-- Hard-stop grace for a channel whose end produced no stop event (seconds).
+local HARD_STOP_CHANNEL_THRESHOLD = 0.45      -- base grace before the silent end counts as finished
+local HARD_STOP_CHANNEL_QUEUE_PAD = 0.10      -- SpellQueueWindow CVar plus this pad, when larger than the base
+local HARD_STOP_CHANNEL_THRESHOLD_MAX = 0.80  -- ceiling for the queue-derived grace
+
 local RegisterCastbar
 local UnregisterCastbar
 local UpdateCastbarFrame
@@ -51,51 +70,15 @@ local function Now()
     return now()
 end
 
-local function EnsureGeneralDB()
-    local ensure = _G.MSUF_EnsureDB or _G.EnsureDB
-    if type(ensure) == "function" then ensure() end
+local EnsureGeneralDB = _G.MSUF_EnsureCastbarGeneralDB
 
-    local db = _G.MSUF_DB
-    if not db then
-        db = {}
-        ExportPublic("MSUF_DB", db)
-    end
-    db.general = db.general or {}
-    return db.general
-end
+local issecretvalue = _G.issecretvalue
 
-local issecretvalue = _G.issecretvalue or function(_) return false end
-local mathHuge = math.huge
-local ToPlain = _G.ToPlain
-
-local function ToPlainNumber(value)
-    -- PERF fast path: a plain finite number needs no tostring/tonumber
-    -- round-trip (that round-trip only exists to redact secrets and to map
-    -- nan/inf to nil, which the guards below preserve exactly).
-    if type(value) == "number" and issecretvalue(value) ~= true
-        and value == value and value ~= mathHuge and value ~= -mathHuge then
-        return value
-    end
-
-    if value == nil then return nil end
-    if issecretvalue(value) == true then
-        local converter = _G.MSUF_ToPlainNumber or ToPlain
-        if type(converter) ~= "function" then return nil end
-        value = converter(value)
-        if value == nil or issecretvalue(value) == true then return nil end
-    end
-
-    local valueType = type(value)
-    if valueType == "number" then
-        if value == value and value ~= mathHuge and value ~= -mathHuge then
-            return value
-        end
-        return nil
-    elseif valueType == "string" then
-        return tonumber(value)
-    end
-    return nil
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper. The
+-- former inline copy here only differed when a ToPlain or MSUF_ToPlainNumber
+-- global existed; neither is defined by the addon or the client, so the two
+-- were equivalent in practice.
+local ToPlainNumber = _G.MSUF_Castbar_PlainNumber
 
 local function SetText(fontString, text)
     if not fontString then return end
@@ -111,7 +94,7 @@ local function SyncTimeTextFollower(frame)
     local source = frame and frame.timeText
     if not (follower and source and source.GetText and follower.SetText) then return end
     local text = source:GetText()
-    if _G.issecretvalue and _G.issecretvalue(text) == true then
+    if issecretvalue(text) == true then
         follower:SetText(text)
     else
         follower:SetText(text or "")
@@ -132,8 +115,8 @@ end
 local function SetCastTimeTextIfChanged(frame, remaining, total)
     if not (frame and frame.timeText) then return end
 
-    local remainingDecimal = math.floor((remaining or 0) * 10)
-    local totalDecimal = total and math.floor((total or 0) * 10) or -1
+    local remainingDecimal = math_floor((remaining or 0) * 10)
+    local totalDecimal = total and math_floor((total or 0) * 10) or -1
     local format = frame._msufCastTimeFormat or "CURRENT"
     if remainingDecimal == frame._msufLastTimeDecimal
         and totalDecimal == frame._msufLastTimeTotalDecimal
@@ -406,12 +389,7 @@ end
 
 ExportPublic("MSUF_BumpCastTimeRev", BumpCastTimeRev)
 
-local function CastTimeUnitKey(frame, unit)
-    unit = tostring(unit or ""):lower()
-    if frame and frame._msufIsBossCastbar then return "boss" end
-    if unit:match("^boss%d+$") then return "boss" end
-    return unit
-end
+local CastTimeUnitKey = _G.MSUF_CastTimeUnitKey
 
 local function RefreshCastTimeEnabled(frame)
     if not (frame and frame.unit) then return true end
@@ -543,7 +521,7 @@ local function UpdateFastTextFrame(frame, elapsed)
         return true
     end
 
-    local decimal = math.floor(remaining * 10)
+    local decimal = math_floor(remaining * 10)
     local format = frame._msufCastTimeFormat or "CURRENT"
     if format == "CURRENT" then
         if decimal ~= frame._msufLastTimeDecimal then
@@ -1133,15 +1111,15 @@ local function CheckChannelHardStop(frame, sampleTime)
         if GetCVar then spellQueueMs = tonumber(GetCVar("SpellQueueWindow") or "0") or 0 end
         if spellQueueMs < 0 then spellQueueMs = 0 end
 
-        local threshold = 0.45
-        local queueThreshold = (spellQueueMs / 1000) + 0.10
+        local threshold = HARD_STOP_CHANNEL_THRESHOLD
+        local queueThreshold = (spellQueueMs / 1000) + HARD_STOP_CHANNEL_QUEUE_PAD
         if queueThreshold > threshold then threshold = queueThreshold end
-        if threshold > 0.80 then threshold = 0.80 end
+        if threshold > HARD_STOP_CHANNEL_THRESHOLD_MAX then threshold = HARD_STOP_CHANNEL_THRESHOLD_MAX end
         frame._msufHardStopChanThresh = threshold
         return false
     end
 
-    local threshold = frame._msufHardStopChanThresh or 0.45
+    local threshold = frame._msufHardStopChanThresh or HARD_STOP_CHANNEL_THRESHOLD
     if (sampleTime - noChannelSince) >= threshold then
         if frame.SetSucceeded then frame:SetSucceeded() else frame:Hide() end
         return true
@@ -1169,8 +1147,8 @@ local function InferRemainingFromStatusBar(frame)
         elseif frame.MSUF_timerDriven == true then
             assumeCountdown = frame.MSUF_isChanneled == true
         else
-            local fromMin = math.abs(value - minValue)
-            local fromMax = math.abs(maxValue - value)
+            local fromMin = math_abs(value - minValue)
+            local fromMax = math_abs(maxValue - value)
             assumeCountdown = fromMax < fromMin
         end
         frame._msufTimerAssumeCountdown = assumeCountdown

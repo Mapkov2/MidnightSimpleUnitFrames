@@ -1,9 +1,6 @@
 local _, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local S = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
 
 -- Blizzard totem/statue preview controller.
@@ -25,16 +22,7 @@ local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 local ONUPDATE_MODE_DISABLED = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.Disabled) or 0
 local ONUPDATE_MODE_RUN_WHEN_VISIBLE = (Enum and Enum.OnUpdateMode and Enum.OnUpdateMode.RunWhenVisible) or 1
 
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    local locale = MSUF.L or _G.MSUF_L
-    if type(locale) == "table" then
-        local translated = rawget(locale, text)
-        if translated ~= nil then return translated end
-    end
-    return text
-end
+local Tr = MSUF.Translate
 
 local _L_BLIZZARD_TOTEM_PREVIEW = Tr("Blizzard TotemFrame Preview")
 local _L_DRAG_OR_ARROW_KEYS = Tr("Drag or arrow keys to move.")

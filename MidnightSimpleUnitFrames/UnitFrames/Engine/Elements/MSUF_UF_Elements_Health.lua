@@ -22,12 +22,12 @@ local ApplyBarGradient = C and C.ApplyBarGradient
 local PrepareHealthGradientCurve = C and C.PrepareHealthGradientCurve
 local RefreshHealthBarBackgroundColor = _G.MSUF_RefreshHealthBarBackgroundColor
 local RefreshHealthGradientBackground = MSUF.Bars and MSUF.Bars.RefreshHealthGradientBackground
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
+-- UpdateSingle/UpdateGroupPercentLean run per UNIT_HEALTH; keep the finite
+-- checks off the global table (Prediction/Group_Visuals do the same).
+local type = type
 local math_max = math.max
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local Health = {}
 local EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" }
@@ -107,11 +107,7 @@ local function RuntimeColorEnabledForSpec(spec)
     or BackgroundRuntimeColorEnabledForSpec(spec)
 end
 
-local function RuntimeColorNeedsIdentityForSpec(spec)
-  local health = spec and spec.health
-  local mode = health and health.mode
-  return mode ~= "dark" and mode ~= "unified" and mode ~= "gradient"
-end
+local RuntimeColorNeedsIdentityForSpec = MSUF.UFBarTextCommon.HealthModeNeedsIdentity
 
 local function RuntimeColorOnHealthEvent(frame, value, valueSecret)
   local gradient = frame and frame._msufHealthRuntimeGradient

@@ -5,10 +5,7 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
 local OPTIONS_ADDON = "MidnightSimpleUnitFrames_Options"
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local menu = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = menu
@@ -41,12 +38,7 @@ local function PrintLoadFailure(detail)
     if type(_G.print) == "function" then _G.print(message) end
 end
 
-local function ConfigurationLocked()
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
-        return _G.MSUF_IsConfigCombatLocked() and true or false
-    end
-    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
-end
+local ConfigurationLocked = _G.InCombatLockdown
 
 local function ShowCombatLock()
     if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
@@ -70,12 +62,12 @@ local function EnsureOptionsLoaded(reason)
     --- and always clear the re-entry flag.
     local ok, loaded
     if type(loader) == "function" then
-        ok, loaded = pcall(loader, OPTIONS_ADDON)
+        ok, loaded = true, loader(OPTIONS_ADDON)
     else
         local api = _G.C_AddOns
         loader = (api and api.LoadAddOn) or _G.LoadAddOn
         if type(loader) == "function" then
-            ok, loaded = pcall(loader, OPTIONS_ADDON)
+            ok, loaded = true, loader(OPTIONS_ADDON)
         else
             ok, loaded = false, "LoadAddOn unavailable"
         end

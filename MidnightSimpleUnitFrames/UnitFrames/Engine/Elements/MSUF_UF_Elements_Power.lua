@@ -32,7 +32,7 @@ local type = type
 local math_floor = math.floor
 local math_max = math.max
 local math_min = math.min
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 local Power = {}
 local roundedBorderCallback
@@ -316,12 +316,7 @@ local function ApplyPowerBorder(bar, power)
   for i = 1, 4 do SetRegionShown(edges[i], true) end
 end
 
-local function ShapeOutlineAlpha(value)
-  value = tonumber(value) or 0
-  if value <= 0 then return 0 end
-  if value >= 8 then return 1 end
-  return 0.49 + (value * 0.065)
-end
+local ShapeOutlineAlpha = _G.MSUF_UF_ShapeOutlineAlpha
 
 local function NormalizeShape(shape)
   shape = tostring(shape or "BAR"):upper()

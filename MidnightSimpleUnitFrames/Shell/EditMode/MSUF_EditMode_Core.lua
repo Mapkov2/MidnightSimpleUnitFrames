@@ -1,21 +1,13 @@
---- MSUF_EM2_Core.lua - Registry + State + Undo + Init (consolidated)
-
---- MSUF_EM2_Registry.lua
-
---- MSUF_EM2_Registry.lua
+--- EditMode/MSUF_EditMode_Core.lua - Edit Mode registry, state, undo, and init
 --- Element registration API for Edit Mode 2.
 --- Every moveable element (unit frame, castbar, aura group, class power)
 --- registers here. EditMode core iterates the registry - never hardcoded lists.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
 end
-
 local EM2 = _G.MSUF_EM2
 if type(EM2) ~= "table" then EM2 = {} end
 PublishCompat("MSUF_EM2", EM2)
@@ -51,10 +43,7 @@ local function EditScreenCenter()
         ((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 0) * 0.5
 end
 
-local function EditRound(value)
-    value = tonumber(value) or 0
-    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
-end
+local EditRound = _G.MSUF_RoundOffset
 
 local function EditHorizontalPosition(left, right, centerX)
     if right <= centerX then return right - centerX end
@@ -132,15 +121,7 @@ local function EditCastbarUnitForKey(key)
     if key:match("^boss%d+$") then return "boss" end
 end
 
-local function RequestGroupGeometryApply(kind, reason)
-    if not kind then return false end
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    local apply = (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
-    if not (apply and type(apply.RequestGroup) == "function") then return false end
-    apply.RequestGroup(kind, "geometry", reason or "EM2_GROUP_GEOMETRY")
-    if type(apply.Flush) == "function" then apply.Flush() end
-    return true
-end
+local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
 
 local function ApplyGroupSettingsForKeySafe(kind)
     if RequestGroupGeometryApply(kind, "EM2_CORE_GROUP_GEOMETRY") then
@@ -219,18 +200,7 @@ function Util.ApplySettingsForKeySafe(key)
     return false
 end
 
-function Util.Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF) == "table" and type(MSUF.Translate) == "function" then
-        return MSUF.Translate(text)
-    end
-    local locale = (type(MSUF) == "table" and MSUF.L) or _G.MSUF_L
-    if type(locale) == "table" then
-        local translated = rawget(locale, text)
-        if translated ~= nil then return translated end
-    end
-    return text
-end
+Util.Tr = MSUF.Translate
 
 function Util.SharedUI()
     return (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
@@ -441,7 +411,7 @@ local registryListeners = {}
 local function NotifyRegistryListeners(action, key, cfg)
     for _, listener in pairs(registryListeners) do
         if type(listener) == "function" then
-            pcall(listener, action, key, cfg)
+            listener(action, key, cfg)
         end
     end
 end
@@ -1090,9 +1060,9 @@ function State.SuspendExternalPreview()
     if not active or provider ~= "ellesmere" or externalPreviewSuspended then return false end
     local suspendBridge = _G.MSUF_EllesmereEditMode_SuspendPreview
     if type(suspendBridge) == "function" then
-        pcall(suspendBridge)
+        suspendBridge()
     elseif type(_G.MSUF_EllesmereEditMode_ClearMoveState) == "function" then
-        pcall(_G.MSUF_EllesmereEditMode_ClearMoveState)
+        _G.MSUF_EllesmereEditMode_ClearMoveState()
     end
     externalPreviewSuspended = true
     SyncLegacy()
@@ -1120,7 +1090,7 @@ function State.ResumeExternalPreview()
     end
     NotifyListeners()
     local resumeBridge = _G.MSUF_EllesmereEditMode_ResumePreview
-    if type(resumeBridge) == "function" then pcall(resumeBridge) end
+    if type(resumeBridge) == "function" then resumeBridge() end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
     return true
 end

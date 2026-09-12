@@ -13,10 +13,7 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 --- Constants
 local MSG_PREFIX = "MSUF" --- 4 chars, well within 16-char limit
@@ -96,7 +93,10 @@ local function NotifyOnce()
     if notifiedUser then return end
     if highestSeenNum <= myVersionNum then return end
     notifiedUser = true
-    PrintUpdateMessage(highestSeenStr or NumberToVersion(highestSeenNum))
+    -- highestSeenNum only ever rises in OnBroadcastReceived, which sets
+    -- highestSeenStr from the same VersionToNumber call, so the string is
+    -- always present once this guard passes.
+    PrintUpdateMessage(highestSeenStr)
 end
 
 local function BroadcastOnce()

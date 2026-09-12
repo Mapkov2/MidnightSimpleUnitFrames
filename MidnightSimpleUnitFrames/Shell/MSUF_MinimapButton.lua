@@ -5,25 +5,13 @@ local addonName, addonNS = ...
 local MSUF = (_G.MSUF_NS) or addonNS or {}
 
 local _G = _G
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local ICON_PATH = "Interface/AddOns/" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "/Media/MSUF_MinimapIcon.tga"
 
-local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+local atan2 = math.atan2
 
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    local locale = MSUF.L or _G.MSUF_L
-    if type(locale) == "table" then
-        local translated = rawget(locale, text)
-        if translated ~= nil then return translated end
-    end
-    return text
-end
+local Tr = MSUF.Translate
 
 local function EnsureGeneralDB()
     if type(_G.MSUF_DB) ~= "table" then return nil end
@@ -157,6 +145,18 @@ local function ApplyShowHide(enabled)
     end
 end
 
+local HandleMinimapClick = function(_, button)
+if button == "RightButton" then
+                ToggleEditMode()
+            elseif IsShiftKeyDown() then
+                if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
+                    _G.MSUF_OpenStandaloneOptionsWindow("profiles")
+                end
+            else
+                ToggleOptionsWindow()
+            end
+end
+
 local function EnsureInitialized()
     local g = EnsureGeneralDB()
     if not g then return false end
@@ -169,17 +169,7 @@ local function EnsureInitialized()
                 type = "data source",
                 text = "MSUF",
                 icon = ICON_PATH,
-                OnClick = function(_, button)
-                    if button == "RightButton" then
-                        ToggleEditMode()
-                    elseif IsShiftKeyDown() then
-                        if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-                            _G.MSUF_OpenStandaloneOptionsWindow("profiles")
-                        end
-                    else
-                        ToggleOptionsWindow()
-                    end
-                end,
+                OnClick = HandleMinimapClick,
                 OnTooltipShow = function(tt)
                     BuildTooltip(tt)
                 end,
@@ -216,17 +206,7 @@ local function EnsureInitialized()
         icon:SetTexture(ICON_PATH)
         b._msufIcon = icon
 
-        b:SetScript("OnClick", function(_, button)
-            if button == "RightButton" then
-                ToggleEditMode()
-            elseif IsShiftKeyDown() then
-                if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-                    _G.MSUF_OpenStandaloneOptionsWindow("profiles")
-                end
-            else
-                ToggleOptionsWindow()
-            end
-        end)
+        b:SetScript("OnClick", HandleMinimapClick)
 
         b:SetScript("OnEnter", function(self)
             if _G.GameTooltip then

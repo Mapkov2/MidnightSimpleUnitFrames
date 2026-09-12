@@ -8,10 +8,7 @@
 --- Filters/GroupFilters handle rules; Presets supplies curated menu choices.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 local type, tostring = type, tostring
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then

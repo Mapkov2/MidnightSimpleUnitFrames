@@ -4,25 +4,11 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 if _G.MSUF_EnsureAnchorPicker then return end
 
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF) == "table" and type(MSUF.Translate) == "function" then
-        return MSUF.Translate(text)
-    end
-    local locale = (type(MSUF) == "table" and MSUF.L) or _G.MSUF_L
-    if type(locale) == "table" then
-        local translated = rawget(locale, text)
-        if translated ~= nil then return translated end
-    end
-    return text
-end
+local Tr = MSUF.Translate
 
 local function ThemeColor(key, fallback)
     local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
@@ -60,16 +46,14 @@ local FrameGetName = scriptRegion and scriptRegion.GetName
 local FrameGetParent = scriptRegion and scriptRegion.GetParent
 local FrameGetRect = scriptRegion and scriptRegion.GetRect
 
-local function SafeFrameCall(method, frame, ...)
-    if type(method) ~= "function" then return false end
-    return pcall(method, frame, ...)
-end
+-- Hover-loop hot path: the shared probe stays bound as a file-level upvalue.
+
 
 local function IsForbiddenFrame(frame)
     if not frame then return true end
     if type(FrameIsForbidden) ~= "function" then return false end
-    local ok, forbidden = SafeFrameCall(FrameIsForbidden, frame)
-    return not ok or PlainBool(forbidden) ~= false
+    local forbidden = FrameIsForbidden(frame)
+    return PlainBool(forbidden) ~= false
 end
 
 local function IsBlocked(frame)
@@ -92,12 +76,8 @@ end
 -- picker opened). It runs exactly once, when the user confirms a target.
 local function PickAllowed(ov, frame, name)
     if not (ov and type(ov._isCandidateAllowed) == "function") then return true end
-    local ok, allowed = pcall(ov._isCandidateAllowed, frame, name)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, allowed) end
-    end
-    return ok and allowed == true
+    local allowed = ov._isCandidateAllowed(frame, name)
+    return allowed == true
 end
 
 local function IsBlockedName(name)
@@ -110,8 +90,8 @@ end
 local function SafeGetRect(frame)
     if IsForbiddenFrame(frame) then return nil end
     if type(FrameGetRect) ~= "function" then return nil end
-    local ok, l, b, w, h = SafeFrameCall(FrameGetRect, frame)
-    if not ok then return nil end
+    local l, b, w, h = FrameGetRect(frame)
+
     if isSecretValue and (isSecretValue(l) or isSecretValue(b) or isSecretValue(w) or isSecretValue(h)) then return nil end
     l = tonumber(l); b = tonumber(b); w = tonumber(w); h = tonumber(h)
     if not (l and b and w and h) then return nil end
@@ -125,14 +105,14 @@ local function NamedFromFocus(frame)
     local seen = 0
     while frame and seen < 40 do
         if IsForbiddenFrame(frame) then return nil, nil end
-        local nameOK, n = SafeFrameCall(FrameGetName, frame)
-        if nameOK and n and not (isSecretValue and isSecretValue(n)) then
+        local n = FrameGetName(frame)
+        if n and not (isSecretValue and isSecretValue(n)) then
             if not IsBlocked(frame, n) then
                 if not IsBlockedName(n) then return frame, n end
             end
         end
-        local parentOK, parent = SafeFrameCall(FrameGetParent, frame)
-        if not parentOK or not parent or (isSecretValue and isSecretValue(parent)) then break end
+        local parent = FrameGetParent(frame)
+        if not parent or (isSecretValue and isSecretValue(parent)) then break end
         frame = parent
         seen = seen + 1
     end
@@ -145,8 +125,8 @@ local function FindNamedFromFocus()
     -- geometry walk does not. Climb anonymous focus regions to their first
     -- usable named parent and never scan the entire UI from this picker.
     if GetMouseFoci then
-        local ok, foci = pcall(GetMouseFoci)
-        if ok and type(foci) == "table" then
+        local foci = GetMouseFoci()
+        if type(foci) == "table" then
             for i = 1, #foci do
                 local f, n = NamedFromFocus(foci[i])
                 if n then return f, n end
@@ -154,11 +134,11 @@ local function FindNamedFromFocus()
         end
     end
     if GetMouseFocus then
-        local ok, focus = pcall(GetMouseFocus)
-        if ok then
-            local f, n = NamedFromFocus(focus)
+        local focus = GetMouseFocus()
+        do
+local f, n = NamedFromFocus(focus)
             if n then return f, n end
-        end
+end
     end
     return nil, nil
 end

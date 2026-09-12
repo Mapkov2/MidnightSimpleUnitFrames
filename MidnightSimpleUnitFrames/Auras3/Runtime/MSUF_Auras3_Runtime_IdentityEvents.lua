@@ -641,10 +641,7 @@ A3._SyncGroupAuraAssistFlagShards = function()
     return next(desired) ~= nil
 end
 
-local function DirectIdentityBossUnit(unit)
-    return unit == "boss1" or unit == "boss2" or unit == "boss3"
-        or unit == "boss4" or unit == "boss5"
-end
+local DirectIdentityBossUnit = MSUF.UF.IsBossUnit
 
 local function SetDirectIdentityRefreshEvent(frame, event, enabled, unit)
     local desiredMode = enabled == true and (unit and ("unit:" .. unit) or "global") or nil

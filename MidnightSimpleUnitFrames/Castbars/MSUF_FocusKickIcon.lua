@@ -5,10 +5,7 @@
 --- owns the draggable icon frame, copied time text, border coloring, and short
 --- interrupt feedback animation.
 
-local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic)
 
 local ParentFrame = UIParent
 local After = C_Timer and C_Timer.After
@@ -192,8 +189,7 @@ local function ApplyTimeTextFont()
             applyResolved(fs, fontPath, fontSize, fontFlags, g and g.fontKey)
             return
         end
-        local ok, applied = pcall(fs.SetFont, fs, fontPath, fontSize, fontFlags)
-        local ready = ok and applied ~= false
+        local ready = _G.MSUF_SetFontChecked(fs, fontPath, fontSize, fontFlags)
         local matches = _G.MSUF_FontApplicationMatches
         if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
         if not ready and type(_G.MSUF_MarkFontApplyFailed) == "function" then

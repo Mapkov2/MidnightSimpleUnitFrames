@@ -1,10 +1,7 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local UF = MSUF.UF
 if not UF then return end
@@ -136,17 +133,9 @@ end
 
 --- Fixed per client once the integration resolved it, so this stays a single
 --- boolean read on the cold anchor path.
-local function CooldownAnchorSupported()
-  local supported = _G.MSUF_IsCooldownAnchorSupported
-  if type(supported) == "function" then return supported() == true end
-  return type(_G.C_CooldownViewer) == "table"
-end
+local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
 
-local function IsGlobalCooldownAnchorEnabled(general)
-  local isEnabled = _G.MSUF_IsCooldownAnchorEnabled
-  if type(isEnabled) == "function" then return isEnabled(general) == true end
-  return CooldownAnchorSupported() and general and general.anchorToCooldown == true or false
-end
+local IsGlobalCooldownAnchorEnabled = _G.MSUF_GlobalCooldownAnchorEnabled
 
 local function CanonicalAnchorFrameName(name)
   if name == "UI_Parent" then return "UIParent" end
@@ -185,26 +174,16 @@ end
 
 local MAX_ANCHOR_DEPTH = 16
 
-local function ReadAnchorMember(region, key)
-  return region[key]
-end
-
-local function GetAnchorMember(region, key)
-  local ok, value = pcall(ReadAnchorMember, region, key)
-  if not ok then return false, nil end
-  return true, value
-end
-
-local function CallAnchorMethod(method, region, ...)
-  if type(method) ~= "function" then return false end
-  return pcall(method, region, ...)
-end
+-- Anchor candidates can be foreign frames: a raised index or accessor is a
+-- normal miss on the shared probe boundaries, never a reported error.
 
 local ANCHOR_CHECK_VISITING = 1
 local ANCHOR_CHECK_SAFE = 2
 
 local function FinishAnchorDependencyCheck(state, region, result)
-  state[region] = result and nil or ANCHOR_CHECK_SAFE
+  local selectedValue1
+  if not (result) then selectedValue1 = ANCHOR_CHECK_SAFE end
+  state[region] = selectedValue1
   return result
 end
 
@@ -225,25 +204,25 @@ local function AnchorDependsOn(region, target, state, depth)
   -- Anchor candidates resolve from user-supplied global names, so this can walk
   -- FOREIGN frames. Forbidden frames raise on any accessor; IsForbidden is the
   -- sanctioned no-throw probe (and a forbidden frame is not anchorable anyway).
-  local forbiddenRead, isForbidden = GetAnchorMember(region, "IsForbidden")
+  local forbiddenRead, isForbidden = true, region.IsForbidden
   if not forbiddenRead then return FinishAnchorDependencyCheck(state, region, true) end
   if type(isForbidden) == "function" then
-    local ok, forbidden = CallAnchorMethod(isForbidden, region)
-    if not ok or (issecretvalue and issecretvalue(forbidden)) or forbidden == true then
+    local forbidden = isForbidden(region)
+    if (issecretvalue and issecretvalue(forbidden)) or forbidden == true then
       return FinishAnchorDependencyCheck(state, region, true)
     end
   end
-  local numRead, getNumPoints = GetAnchorMember(region, "GetNumPoints")
-  local pointRead, getPoint = GetAnchorMember(region, "GetPoint")
+  local numRead, getNumPoints = true, region.GetNumPoints
+  local pointRead, getPoint = true, region.GetPoint
   if not numRead or not pointRead then return FinishAnchorDependencyCheck(state, region, true) end
   if type(getNumPoints) == "function" and type(getPoint) == "function" then
-    local countOK, count = CallAnchorMethod(getNumPoints, region)
-    if not countOK or (issecretvalue and issecretvalue(count)) or type(count) ~= "number" then
+    local count = getNumPoints(region)
+    if (issecretvalue and issecretvalue(count)) or type(count) ~= "number" then
       return FinishAnchorDependencyCheck(state, region, true)
     end
     for i = 1, count do
-      local pointOK, _, relativeTo = CallAnchorMethod(getPoint, region, i)
-      if not pointOK or (issecretvalue and issecretvalue(relativeTo)) then
+      local _, relativeTo = getPoint(region, i)
+      if (issecretvalue and issecretvalue(relativeTo)) then
         return FinishAnchorDependencyCheck(state, region, true)
       end
       if relativeTo == target or AnchorDependsOn(relativeTo, target, state, depth) then
@@ -251,12 +230,12 @@ local function AnchorDependsOn(region, target, state, depth)
       end
     end
   end
-  local parentRead, getParent = GetAnchorMember(region, "GetParent")
+  local parentRead, getParent = true, region.GetParent
   if not parentRead then return FinishAnchorDependencyCheck(state, region, true) end
   local parent
   if type(getParent) == "function" then
     local parentOK
-    parentOK, parent = CallAnchorMethod(getParent, region)
+    parentOK, parent = true, getParent(region)
     if not parentOK or (issecretvalue and issecretvalue(parent)) then
       return FinishAnchorDependencyCheck(state, region, true)
     end
@@ -302,7 +281,7 @@ end
 
 local function IsMSUFOwnedAnchor(anchor)
   if anchor == UIParent then return true end
-  local readable, owned = GetAnchorMember(anchor, "_msufOwnedAnchorRoot")
+  local readable, owned = true, anchor._msufOwnedAnchorRoot
   return readable and owned == true or false
 end
 
@@ -314,10 +293,10 @@ end
 local unitExternalAnchorProxies = {}
 
 local function AnchorHasResolvedCenter(anchor)
-  local readable, getCenter = GetAnchorMember(anchor, "GetCenter")
+  local readable, getCenter = true, anchor.GetCenter
   if not readable or type(getCenter) ~= "function" then return false end
-  local ok, x, y = CallAnchorMethod(getCenter, anchor)
-  if not ok or x == nil or y == nil then return false end
+  local x, y = getCenter(anchor)
+  if x == nil or y == nil then return false end
   if issecretvalue and (issecretvalue(x) or issecretvalue(y)) then return false end
   return true
 end

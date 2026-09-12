@@ -7,11 +7,7 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -114,12 +110,7 @@ local function IsRaidLikeKind(kind)
   return kind == "raid" or kind == "mythicraid"
 end
 
-local function AnchorPoint(conf)
-  if GF.GetAnchorPoint then return GF.GetAnchorPoint(conf) end
-  local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
-  if not VALID_POINTS[point] then point = "CENTER" end
-  return point
-end
+local AnchorPoint = GF.GetAnchorPoint
 
 --- Both sides of a group anchor come from the single visible Anchor Point; see
 --- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
@@ -129,65 +120,10 @@ local function ResolveAnchorPoint(kind, conf, parent)
   return point, point
 end
 
-local function PointFraction(point)
-  local fx, fy
-  if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
-    fx = 0
-  elseif point == "RIGHT" or point == "TOPRIGHT" or point == "BOTTOMRIGHT" then
-    fx = 1
-  else
-    fx = 0.5
-  end
-  if point == "BOTTOM" or point == "BOTTOMLEFT" or point == "BOTTOMRIGHT" then
-    fy = 0
-  elseif point == "TOP" or point == "TOPLEFT" or point == "TOPRIGHT" then
-    fy = 1
-  else
-    fy = 0.5
-  end
-  return fx, fy
-end
 
-local function ClampBoxAxis(minEdge, maxEdge, screenMax)
-  local size = (maxEdge or 0) - (minEdge or 0)
-  if size <= 0 or not (screenMax and screenMax > 0) then
-    return 0
-  end
-  if size <= screenMax then
-    if minEdge < 0 then return -minEdge end
-    if maxEdge > screenMax then return screenMax - maxEdge end
-    return 0
-  end
-  if minEdge > 0 then return -minEdge end
-  if maxEdge < screenMax then return screenMax - maxEdge end
-  return 0
-end
 
-local function ClampPreviewOffsetOnScreen(point, relativePoint, relative, x, y, totalW, totalH)
-  if not (relative and relative.GetLeft and UIParent and UIParent.GetWidth) then
-    return x, y
-  end
-  local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
-  if not (screenW and screenH and screenW > 0 and screenH > 0) then
-    return x, y
-  end
-  local pLeft, pRight = relative:GetLeft(), relative:GetRight()
-  local pBottom, pTop = relative:GetBottom(), relative:GetTop()
-  if not (pLeft and pRight and pBottom and pTop) then
-    return x, y
-  end
-  local fx, fy = PointFraction(point)
-  local rfx, rfy = PointFraction(relativePoint)
-  local px = pLeft + (pRight - pLeft) * rfx + (x or 0)
-  local py = pBottom + (pTop - pBottom) * rfy + (y or 0)
-  local boxW, boxH = totalW or 0, totalH or 0
-  local left = px - boxW * fx
-  local bottom = py - boxH * fy
-  local dx = ClampBoxAxis(left, left + boxW, screenW)
-  local dy = ClampBoxAxis(bottom, bottom + boxH, screenH)
-  if dx == 0 and dy == 0 then return x, y end
-  return (x or 0) + dx, (y or 0) + dy
-end
+
+local ClampPreviewOffsetOnScreen = _G.MSUF_UF_ClampAnchorOffsetOnScreen
 
 local function ResolveAnchorFrame(conf, owner)
   if type(GF.ResolveAnchorFrame) == "function" then
@@ -421,11 +357,11 @@ local function PlacePreviewText(fontString, owner, point, x, y)
   fontString:SetPoint(point, owner, point, tonumber(x) or 0, tonumber(y) or 0)
 end
 
-local function EnsureSpellIndicatorPreview(frame, index)
-  local pool = frame._msufGFSpellIndicatorPreviews
+local function EnsureAuraPreview(frame, index, poolKey)
+  local pool = frame[poolKey]
   if not pool then
     pool = {}
-    frame._msufGFSpellIndicatorPreviews = pool
+    frame[poolKey] = pool
   end
   local visual = pool[index]
   if visual then return visual end
@@ -457,23 +393,7 @@ local function EnsurePreviewFontString(visual, key)
   return fontString
 end
 
-local function EnsureFrameAuraPreview(frame, index)
-  local pool = frame._msufGFFrameAuraPreviews
-  if not pool then
-    pool = {}
-    frame._msufGFFrameAuraPreviews = pool
-  end
-  local visual = pool[index]
-  if visual then return visual end
 
-  visual = CreateFrame("Frame", nil, frame)
-  visual:EnableMouse(false)
-  if visual.SetMouseMotionEnabled then visual:SetMouseMotionEnabled(false) end
-  visual._texture = visual:CreateTexture(nil, "ARTWORK")
-  visual._texture:SetAllPoints(visual)
-  pool[index] = visual
-  return visual
-end
 
 local function EnsureFrameAuraLaneHost(frame, key)
   local hosts = frame._msufGFFrameAuraPreviewHosts
@@ -604,7 +524,9 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
     A3.ApplyAuraIconShape(visual, lane.iconShape, nil, texture, swipe)
   end
   if A3 and type(A3.ApplyIconStylePreview) == "function" then
-    A3.ApplyIconStylePreview(visual, barOnly and nil or lane.iconStyle, size, lane.iconShape)
+    local selectedValue2
+    if not (barOnly) then selectedValue2 = lane.iconStyle end
+    A3.ApplyIconStylePreview(visual, selectedValue2, size, lane.iconShape)
   end
   if lane.showAuraBorder == true and not barOnly then
     dispelBorder = EnsurePreviewTexture(visual, "_dispelBorder", "OVERLAY", 5)
@@ -688,7 +610,7 @@ function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiled
       local sampleCount = min(PREVIEW_AURA_SAMPLE_LIMIT, maxCount)
       for sampleIndex = 1, sampleCount do
         used = used + 1
-        ApplyFrameAuraPreview(frame, kind, EnsureFrameAuraPreview(frame, used),
+        ApplyFrameAuraPreview(frame, kind, EnsureAuraPreview(frame, used, "_msufGFFrameAuraPreviews"),
           lane, descriptor, sampleIndex - 1, sampleIndex + previewIndex + laneIndex, host)
       end
     else
@@ -940,7 +862,9 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     end
 
     if A3 and type(A3.ApplyIconStylePreview) == "function" then
-      A3.ApplyIconStylePreview(visual, barOnly and nil or slot.iconStyle, size)
+      local selectedValue1
+      if not (barOnly) then selectedValue1 = slot.iconStyle end
+      A3.ApplyIconStylePreview(visual, selectedValue1, size)
     end
   end
 
@@ -981,7 +905,7 @@ function GF.PreviewSpellIndicators(frame, kind, compiledSpec)
     local slot = slots[i]
     if slot and slot.enabled == true then
       used = used + 1
-      ApplySpellIndicatorPreview(frame, kind, EnsureSpellIndicatorPreview(frame, used), slot)
+      ApplySpellIndicatorPreview(frame, kind, EnsureAuraPreview(frame, used, "_msufGFSpellIndicatorPreviews"), slot)
     end
   end
   local pool = frame._msufGFSpellIndicatorPreviews

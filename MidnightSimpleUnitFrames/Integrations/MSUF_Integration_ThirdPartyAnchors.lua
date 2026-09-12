@@ -5,6 +5,34 @@ MSUF = MSUF or _G.MSUF_NS or {}
 -- Third-party anchor integration.
 -- Tracks ArcUI, Skiron, Coolinator and EllesmereUI stable cooldown anchors after they exist.
 -- Integration is deferred in combat and must not take ownership of external addon layouts.
+--
+-- Foreign symbols this file depends on. None is a documented public API; every
+-- read is type-checked and an absent symbol only leaves that provider
+-- unregistered, it never errors:
+--   ArcUI_Public.GetGroupAnchor("Essential"), .ANCHOR_CHANGED_EVENT (ArcUI):
+--     the Essential group anchor frame. Absent: RegisterArcUIAnchor returns
+--     false; the watcher retries on ADDON_LOADED "ArcUI".
+--   EventRegistry callbacks "ArcUI.AnchorProxy.SizeChanged" and
+--     "SkironCooldownManager.AnchorProxy.SizeChanged": provider resize
+--     notifications. Without EventRegistry neither provider registers.
+--   SCM_GroupAnchorProxy_1, SCM_GroupAnchor_1 (SkironCooldownManager): the
+--     proxy and group anchor frames. Absent: the timed retry ladder gives up
+--     and MSUF_SkironCooldownAnchor is never created or stays hidden.
+--   CoolinatorPrimaryGroupAnchor (Coolinator): stable primary group anchor.
+--     Absent: RegisterCoolinatorAnchor returns false unless the addon is
+--     loaded, in which case the retry ladder polls for it.
+--   _ECME_GetBarFrame("cooldowns") (EllesmereUICooldownManager): accessor for
+--     the movable Essential bar container. Absent: RegisterEllesmereCooldownAnchor
+--     returns false unless the addon is loaded, then the retry ladder polls.
+--   EssentialCooldownViewer, C_CooldownViewer.IsCooldownViewerAvailable,
+--     CVarCallbackRegistry / C_CVar "cooldownViewerEnabled" and
+--     Enum.CooldownViewerVisibleSetting (Blizzard_CooldownViewer): the
+--     fallback "Blizzard" provider. Absent: GetActiveCooldownAnchorProvider
+--     returns nil and the missing-anchor warning may show; without
+--     C_CooldownViewer the anchor reports itself unsupported until a layout
+--     provider is detected.
+--   C_AddOns.IsAddOnLoaded / IsAddOnLoaded (Blizzard): provider detection
+--     over AUTOMATIC_COOLDOWN_ADDONS; absent, no provider is auto-detected.
 local CreateFrame = CreateFrame
 local C_AddOns = C_AddOns
 local C_Timer = C_Timer
@@ -12,8 +40,9 @@ local EventRegistry = EventRegistry
 local InCombatLockdown = InCombatLockdown
 local UIParent = UIParent
 local type = type
-local pcall = pcall
 local issecretvalue = _G.issecretvalue
+-- Every provider frame and CVar accessor here is foreign; a raised probe is a
+-- normal miss on the shared boundary and is never reported.
 local format = string.format
 
 local ARCUI_ANCHOR_EVENT = "ArcUI.AnchorProxy.SizeChanged"
@@ -58,11 +87,24 @@ local automaticCooldownProviderId
 local automaticCooldownProviderLabel
 local automaticCooldownProviderResolved = false
 --- Whether this client can host an Essential Cooldown anchor at all.
---- Blizzard's namespace exists per client build and addons cannot be installed
+--- Blizzard ships the Cooldown Manager for the standard game family only
+--- (Blizzard_CooldownViewer.toc: AllowLoadGameType standard), yet the shared
+--- engine exposes the C_CooldownViewer namespace on every current client,
+--- Classic Era, TBC and Mists included. The namespace alone therefore proves
+--- nothing on a Classic client: the project gate decides first, and a layout
+--- provider cannot establish support there either. Addons cannot be installed
 --- mid-session, so the answer is fixed once resolved. Keeping it as a plain
 --- upvalue leaves every anchor consumer at a single boolean read and adds no
 --- probing to the cold anchor path.
-local cooldownAnchorSupported = type(_G.C_CooldownViewer) == "table"
+local function ClientHostsCooldownManager()
+    local projectID = _G.WOW_PROJECT_ID
+    local mainlineID = _G.WOW_PROJECT_MAINLINE
+    -- Harnesses without the project constants model the Mainline client.
+    if projectID == nil or mainlineID == nil then return true end
+    return projectID == mainlineID
+end
+local cooldownAnchorClientSupported = ClientHostsCooldownManager()
+local cooldownAnchorSupported = cooldownAnchorClientSupported and type(_G.C_CooldownViewer) == "table"
 local InCombat
 local cooldownConsentPromptProviderId
 local cooldownConsentPromptAfterCombat = false
@@ -128,8 +170,9 @@ local function RefreshAutomaticCooldownProvider(notify)
     automaticCooldownProviderId = providerId
     automaticCooldownProviderLabel = providerLabel
     -- A supported layout provider can own the anchor without Blizzard's
-    -- Cooldown Manager, so a detected provider also establishes support.
-    if providerId ~= nil then cooldownAnchorSupported = true end
+    -- Cooldown Manager, so a detected provider also establishes support on a
+    -- client that could host one.
+    if providerId ~= nil and cooldownAnchorClientSupported then cooldownAnchorSupported = true end
     if changed then
         cooldownConsentPromptProviderId = nil
         if type(_G.StaticPopup_Hide) == "function" then
@@ -282,6 +325,9 @@ end
 
 local function MaybeShowCooldownConsent()
     local providerId, providerLabel = MSUF.GetAutomaticCooldownAnchorProvider()
+    -- Consent offers the Cooldown Manager layout; a client that cannot host
+    -- the anchor has nothing to ask about.
+    if not cooldownAnchorSupported then return false end
     if not providerId or cooldownConsentPromptProviderId == providerId then return false end
     local db = _G.MSUF_DB
     local general = type(db) == "table" and db.general or nil
@@ -342,44 +388,32 @@ local function ReadOptionalFrameFlag(frame, key)
     return method(frame)
 end
 
-local function ProbeCooldownAnchorFrame(frame, requireHeight, requireSetPoint)
-    local getWidth = frame.GetWidth
-    local getHeight = requireHeight == true and frame.GetHeight or nil
-    return frame._msufLegacyCooldownAnchor,
-        ReadOptionalFrameFlag(frame, "CanBeAccessedInContext"),
-        ReadOptionalFrameFlag(frame, "IsForbidden"),
-        ReadOptionalFrameFlag(frame, "IsAnchoringRestricted"),
-        ReadOptionalFrameFlag(frame, "IsAnchoringSecret"),
-        ReadOptionalFrameFlag(frame, "IsShown"),
-        getWidth and getWidth(frame) or nil,
-        getHeight and getHeight(frame) or nil,
-        requireSetPoint == true and frame.SetPoint or nil
-end
-
 -- Cooldown providers may anchor their public frame to a restricted AuraContainer
 -- child. On 12.1 that makes geometry accessors return secret numbers, which must
--- never enter Lua comparisons or arithmetic. One protected probe batches every
--- foreign accessor; plain-value validation happens only after it returns.
+-- never enter Lua comparisons or arithmetic. Restrictions precede native reads.
 local function GetUsableCooldownAnchorSize(frame, requireHeight, requireSetPoint)
     if not frame or IsSecretValue(frame) or frame == UIParent or frame == _G.WorldFrame then
         return nil
     end
 
-    local ok, legacy, canAccess, forbidden, anchoringRestricted, anchoringSecret,
-        shown, width, height, setPoint = pcall(ProbeCooldownAnchorFrame, frame, requireHeight, requireSetPoint)
-    if not ok
-        or IsSecretValue(legacy) or IsSecretValue(canAccess) or IsSecretValue(forbidden)
-        or IsSecretValue(anchoringRestricted) or IsSecretValue(anchoringSecret)
-        or IsSecretValue(shown) or IsSecretValue(width) or IsSecretValue(height)
-        or IsSecretValue(setPoint) then
-        return nil
-    end
-    if legacy == true then return nil end
-    if canAccess ~= OPTIONAL_FRAME_FLAG_ABSENT and canAccess ~= true then return nil end
-    if forbidden ~= OPTIONAL_FRAME_FLAG_ABSENT and forbidden ~= false then return nil end
-    if anchoringRestricted ~= OPTIONAL_FRAME_FLAG_ABSENT and anchoringRestricted ~= false then return nil end
-    if anchoringSecret ~= OPTIONAL_FRAME_FLAG_ABSENT and anchoringSecret ~= false then return nil end
-    if shown ~= OPTIONAL_FRAME_FLAG_ABSENT and shown ~= true then return nil end
+    -- Access restrictions are checked before reading geometry. They describe
+    -- unavailable input; an exception from an allowed accessor still propagates.
+    local forbidden = ReadOptionalFrameFlag(frame, "IsForbidden")
+    if IsSecretValue(forbidden) or (forbidden ~= OPTIONAL_FRAME_FLAG_ABSENT and forbidden ~= false) then return nil end
+    local canAccess = ReadOptionalFrameFlag(frame, "CanBeAccessedInContext")
+    if IsSecretValue(canAccess) or (canAccess ~= OPTIONAL_FRAME_FLAG_ABSENT and canAccess ~= true) then return nil end
+    local anchoringRestricted = ReadOptionalFrameFlag(frame, "IsAnchoringRestricted")
+    if IsSecretValue(anchoringRestricted) or (anchoringRestricted ~= OPTIONAL_FRAME_FLAG_ABSENT and anchoringRestricted ~= false) then return nil end
+    local anchoringSecret = ReadOptionalFrameFlag(frame, "IsAnchoringSecret")
+    if IsSecretValue(anchoringSecret) or (anchoringSecret ~= OPTIONAL_FRAME_FLAG_ABSENT and anchoringSecret ~= false) then return nil end
+    local legacy = frame._msufLegacyCooldownAnchor
+    if IsSecretValue(legacy) or legacy == true then return nil end
+    local shown = ReadOptionalFrameFlag(frame, "IsShown")
+    if IsSecretValue(shown) or (shown ~= OPTIONAL_FRAME_FLAG_ABSENT and shown ~= true) then return nil end
+    local width = frame:GetWidth()
+    local height = requireHeight == true and frame:GetHeight() or nil
+    local setPoint = requireSetPoint == true and frame.SetPoint or nil
+    if IsSecretValue(width) or IsSecretValue(height) or IsSecretValue(setPoint) then return nil end
     if type(width) ~= "number" or width <= 0 then return nil end
     if requireHeight == true and (type(height) ~= "number" or height <= 0) then return nil end
     if requireSetPoint == true and type(setPoint) ~= "function" then return nil end
@@ -402,8 +436,8 @@ local function GetCooldownAnchorScaledWidth(frame, targetFrame, knownWidth)
     local width = knownWidth
     if width == nil then width = GetUsableCooldownAnchorSize(frame) end
     if type(width) ~= "number" or width <= 0 then return nil end
-    local ok, sourceScale, targetScale = pcall(ProbeCooldownAnchorScales, frame, targetFrame)
-    if not ok or IsSecretValue(sourceScale) or IsSecretValue(targetScale)
+    local sourceScale, targetScale = ProbeCooldownAnchorScales(frame, targetFrame)
+    if IsSecretValue(sourceScale) or IsSecretValue(targetScale)
         or type(sourceScale) ~= "number" or type(targetScale) ~= "number" then
         return nil
     end
@@ -438,10 +472,8 @@ local function IsFrameObservable(frame)
     if not frame or IsSecretValue(frame) or frame == UIParent or frame == _G.WorldFrame then
         return false
     end
-    local ok, legacy, canAccess, forbidden, anchoringRestricted, anchoringSecret, hookScript =
-        pcall(ProbeCooldownAnchorObserver, frame)
-    if not ok
-        or IsSecretValue(legacy) or IsSecretValue(canAccess) or IsSecretValue(forbidden)
+    local legacy, canAccess, forbidden, anchoringRestricted, anchoringSecret, hookScript = ProbeCooldownAnchorObserver(frame)
+    if IsSecretValue(legacy) or IsSecretValue(canAccess) or IsSecretValue(forbidden)
         or IsSecretValue(anchoringRestricted) or IsSecretValue(anchoringSecret)
         or IsSecretValue(hookScript) then
         return false
@@ -489,8 +521,10 @@ end
 local function GetEllesmereCooldownAnchorSource()
     local getBarFrame = _G._ECME_GetBarFrame
     if type(getBarFrame) ~= "function" then return nil end
-    local ok, source = pcall(getBarFrame, "cooldowns")
-    if ok then return source end
+    local source = getBarFrame("cooldowns")
+    do
+return source
+end
 end
 
 local function ResolveEllesmereCooldownAnchorSource()
@@ -667,21 +701,21 @@ local function BlizzardCooldownViewerEnabled()
     local registry = _G.CVarCallbackRegistry
     local getCached = registry and registry.GetCVarValueBool
     if type(getCached) == "function" then
-        local ok, enabled = pcall(getCached, registry, "cooldownViewerEnabled")
-        if ok and enabled ~= nil then return enabled == true end
+        local enabled = getCached(registry, "cooldownViewerEnabled")
+        if enabled ~= nil then return enabled == true end
     end
 
     local cvar = _G.C_CVar
     local getCVarBool = cvar and cvar.GetCVarBool
     if type(getCVarBool) == "function" then
-        local ok, enabled = pcall(getCVarBool, "cooldownViewerEnabled")
-        if ok and enabled ~= nil then return enabled == true end
+        local enabled = getCVarBool("cooldownViewerEnabled")
+        if enabled ~= nil then return enabled == true end
     end
 
     local legacy = _G.GetCVarBool
     if type(legacy) == "function" then
-        local ok, enabled = pcall(legacy, "cooldownViewerEnabled")
-        if ok and enabled ~= nil then return enabled == true end
+        local enabled = legacy("cooldownViewerEnabled")
+        if enabled ~= nil then return enabled == true end
     end
     return false
 end
@@ -690,8 +724,8 @@ local function BlizzardEssentialCooldownAnchorActive()
     local api = _G.C_CooldownViewer
     local isAvailable = api and api.IsCooldownViewerAvailable
     if type(isAvailable) ~= "function" then return false end
-    local ok, available = pcall(isAvailable)
-    if not ok or available ~= true or not BlizzardCooldownViewerEnabled() then return false end
+    local available = isAvailable()
+    if available ~= true or not BlizzardCooldownViewerEnabled() then return false end
 
     local viewer = _G.EssentialCooldownViewer
     if not viewer then return false end
@@ -821,6 +855,24 @@ local function RefreshEssentialCooldownAnchorConsumers(transition)
     end
 end
 
+-- Shared acquired/lost/switched follow-up for every provider. A source
+-- transition re-arms the width observers and notifies the anchor consumers
+-- once with that transition, a same-source resize requests one cold anchor
+-- snapshot instead, and either schedules the shared cooldown width refresh.
+local function NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
+    if changed then
+        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
+            _G.MSUF_EnsureCooldownWidthObservers(true)
+        end
+        RefreshEssentialCooldownAnchorConsumers(transition)
+    elseif sizeChanged == true then
+        RefreshEssentialCooldownAnchorConsumers("changed")
+    end
+    if (changed or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
+        _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
+    end
+end
+
 refreshArcUIAnchor = function(sizeChanged)
     local source = ResolveArcUIAnchorSource()
     local previousSource = arcUIAnchor
@@ -833,69 +885,28 @@ refreshArcUIAnchor = function(sizeChanged)
         return previousSource ~= nil
     end
     arcUIAnchor = source
-    if transition then
-        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-            _G.MSUF_EnsureCooldownWidthObservers(true)
-        end
-        RefreshEssentialCooldownAnchorConsumers(transition)
-    elseif sizeChanged == true then
-        RefreshEssentialCooldownAnchorConsumers("changed")
-    end
-    if (transition or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
-        _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
-    end
+    NotifyCooldownAnchorTransition(transition ~= nil, transition, sizeChanged)
     return source ~= nil
 end
 
 refreshSkironAnchorProxy = function(source, isActiveProxy, sizeChanged)
     local proxy, changed, transition, deferred = EnsureSkironAnchorProxy(source, isActiveProxy)
     if deferred then return proxy ~= nil end
-    if changed then
-        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-            _G.MSUF_EnsureCooldownWidthObservers(true)
-        end
-        RefreshEssentialCooldownAnchorConsumers(transition)
-    elseif sizeChanged == true then
-        RefreshEssentialCooldownAnchorConsumers("changed")
-    end
-    if (changed or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
-        _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
-    end
+    NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
     return proxy ~= nil
 end
 
 refreshCoolinatorAnchor = function(sizeChanged)
     local source, changed, transition, deferred = EnsureCoolinatorAnchorSource()
     if deferred then return source ~= nil end
-    if changed then
-        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-            _G.MSUF_EnsureCooldownWidthObservers(true)
-        end
-        RefreshEssentialCooldownAnchorConsumers(transition)
-        if type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
-            _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
-        end
-    elseif sizeChanged == true then
-        RefreshEssentialCooldownAnchorConsumers("changed")
-        if type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
-            _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
-        end
-    end
+    NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
     return source ~= nil
 end
 
 local function refreshEllesmereCooldownAnchor()
     local source, changed, transition, deferred = EnsureEllesmereCooldownAnchorSource()
     if deferred then return source ~= nil, true end
-    if changed then
-        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-            _G.MSUF_EnsureCooldownWidthObservers(true)
-        end
-        RefreshEssentialCooldownAnchorConsumers(transition)
-        if type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
-            _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
-        end
-    end
+    NotifyCooldownAnchorTransition(changed, transition, nil)
     return source ~= nil, false
 end
 

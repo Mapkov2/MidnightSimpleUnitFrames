@@ -61,7 +61,7 @@ local function ValidateNativeAuraContainerContract(container)
         local methodName = NATIVE_AURA_CONTAINER_METHODS[i]
         if type(container[methodName]) ~= "function" then
             A3.nativeAuraRuntimeAvailable = false
-            A3.nativeAuraRuntimeError = "native AuraContainer missing " .. methodName
+            A3._RecordNativeAuraRuntimeError("native AuraContainer missing " .. methodName)
             return false
         end
     end

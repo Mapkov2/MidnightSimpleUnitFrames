@@ -8,10 +8,7 @@
 --- Zero overhead when hidden (no OnUpdate, no timers).
 local _, MSUFRoot = ...
 MSUFRoot = MSUFRoot or _G.MSUF_NS or {}
-local ExportPublic = MSUFRoot.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUFRoot.ExportPublic
 
 local function InstallEditLayoutUI(...)
 local addonName, MSUF = ...
@@ -36,18 +33,6 @@ local IsConfigCombatLocked   = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 local ThemeColor             = U.ThemeColor
 
-local function ReportEditModeBoundaryError(err)
-    local handler = _G.geterrorhandler and _G.geterrorhandler()
-    if type(handler) == "function" then pcall(handler, err) end
-end
-
-local function InvokeEditModeBoundary(fn, ...)
-    if type(fn) ~= "function" then return false end
-    local ok, r1, r2 = pcall(fn, ...)
-    if not ok then ReportEditModeBoundaryError(r1); return false, r1 end
-    return true, r1, r2
-end
-
 local function NotifyGuidedEditModeMoved(key)
     local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
     if menu and type(menu.NotifyGuidedEditModeMoved) == "function" then
@@ -64,15 +49,7 @@ local function GroupGeometryMask(gf)
     return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
 end
 
-local function RequestGroupGeometryApply(kind, reason)
-    if not kind then return false end
-    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
-    local apply = (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
-    if not (apply and type(apply.RequestGroup) == "function") then return false end
-    apply.RequestGroup(kind, "geometry", reason or "EM2_GROUP_GEOMETRY")
-    if type(apply.Flush) == "function" then apply.Flush() end
-    return true
-end
+local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
 
 local function RefreshGroupGeometryScoped(kind)
     if not kind then return false end
@@ -468,17 +445,12 @@ function Grid.Rebuild()       RebuildLines() end
 local Snap = {}
 EM2.Snap = Snap
 
-local W8 = "Interface/Buttons/WHITE8X8"
-
 local enabled = false
 local THRESH  = 8
 
 --- Snap persists per profile via general.editModeSnapEnabled; the session
 --- local only covers reads before SavedVariables exist.
-local function SnapGeneral()
-    local db = _G.MSUF_DB
-    return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local SnapGeneral = _G.MSUF_GetGeneralDB
 
 function Snap.IsEnabled()
     local g = SnapGeneral()
@@ -935,15 +907,15 @@ end
 
 local function CallCastbarNudgeSync(fn, ...)
     if type(fn) ~= "function" then return true end
-    return InvokeEditModeBoundary(fn, ...)
+    return true, fn(...)
 end
 
 local function SyncCastbarNudge(unit)
     local ok = CallCastbarNudgeSync(_G.MSUF_SyncCastbarPositionPopup, unit)
     if type(_G.MSUF_SyncCastbarPositionPopup) ~= "function" and EM2.CastPopup and EM2.CastPopup.IsOpen then
-        local checked, popupOpen = InvokeEditModeBoundary(EM2.CastPopup.IsOpen)
-        ok = checked and ok
-        if checked and popupOpen then ok = CallCastbarNudgeSync(EM2.CastPopup.Sync) and ok end
+        local popupOpen = EM2.CastPopup.IsOpen()
+        ok = ok
+        if popupOpen then ok = CallCastbarNudgeSync(EM2.CastPopup.Sync) and ok end
     end
     if EM2.Movers then ok = CallCastbarNudgeSync(EM2.Movers.SyncAll) and ok end
     if EM2.Focus then ok = CallCastbarNudgeSync(EM2.Focus.NotifyPositionChanged, "castbar_" .. unit, true) and ok end
@@ -953,8 +925,8 @@ end
 
 local function ApplyCastbarNudge(unit)
     if type(ApplySettingsForKeySafe) ~= "function" then return false end
-    local called, applied = InvokeEditModeBoundary(ApplySettingsForKeySafe, "castbar_" .. unit)
-    return called and applied == true
+    local applied = ApplySettingsForKeySafe("castbar_" .. unit)
+    return applied == true
 end
 
 local function RestoreCastbarNudge(general, xKey, yKey, previousX, previousY, unit)
@@ -1000,8 +972,8 @@ local function NudgeCastbar(unit, ndx, ndy)
     if type(ApplySettingsForKeySafe) ~= "function" then return false end
     if not (undo and type(undo.PrepareChange) == "function" and type(undo.CommitPrepared) == "function") then return false end
 
-    local snapshotOK, snapshot = InvokeEditModeBoundary(undo.PrepareChange, "castbar", unit)
-    if not snapshotOK or type(snapshot) ~= "table" then return false end
+    local snapshot = undo.PrepareChange("castbar", unit)
+    if type(snapshot) ~= "table" then return false end
 
     local previousX, previousY = general[xKey], general[yKey]
     general[xKey], general[yKey] = nextX, nextY
@@ -1014,8 +986,8 @@ local function NudgeCastbar(unit, ndx, ndy)
         RestoreCastbarNudge(general, xKey, yKey, previousX, previousY, unit)
         return false
     end
-    local committedOK, committed = InvokeEditModeBoundary(undo.CommitPrepared, snapshot)
-    if not committedOK or committed ~= true then
+    local committed = undo.CommitPrepared(snapshot)
+    if committed ~= true then
         RestoreCastbarNudge(general, xKey, yKey, previousX, previousY, unit)
         return false
     end
@@ -1411,13 +1383,9 @@ local function ApplyFramePoint(frame, point, anchor, relativePoint, x, y)
     frame:SetPoint(point, anchor, relativePoint, x, y)
 end
 
-local function ReadEditAnchorOwnedMarker(anchor)
-    return anchor._msufOwnedAnchorRoot
-end
-
 local function IsExternalEditAnchor(anchor)
     if anchor == nil or anchor == UIParent or anchor == WorldFrame then return false end
-    local ok, owned = pcall(ReadEditAnchorOwnedMarker, anchor)
+    local ok, owned = true, anchor._msufOwnedAnchorRoot
     return not (ok and owned == true)
 end
 
@@ -1425,12 +1393,14 @@ local function CaptureFramePoints(frame)
     if not (frame and frame.GetPoint) then return nil end
     local count = 1
     if frame.GetNumPoints then
-        local ok, value = pcall(frame.GetNumPoints, frame)
-        if ok then count = tonumber(value) or 0 end
+        local value = frame.GetNumPoints(frame)
+        do
+count = tonumber(value) or 0
+end
     end
     local points = {}
     for i = 1, count do
-        local result = { pcall(frame.GetPoint, frame, i) }
+        local result = { true, frame.GetPoint(frame, i) }
         if result[1] and result[2] then
             points[#points + 1] = {
                 point = result[2],
@@ -1441,19 +1411,16 @@ local function CaptureFramePoints(frame)
             }
         end
     end
-    return #points > 0 and points or nil
+    return points
 end
 
 local function RestoreFramePoints(frame, points)
     if not (frame and points) then return false end
-    local cleared = pcall(frame.ClearAllPoints, frame)
-    if not cleared then return false end
+    frame.ClearAllPoints(frame)
+
     for i = 1, #points do
         local p = points[i]
-        if not pcall(frame.SetPoint, frame, p.point, p.anchor, p.relativePoint, p.x, p.y) then
-            pcall(frame.ClearAllPoints, frame)
-            return false
-        end
+        frame:SetPoint(p.point, p.anchor, p.relativePoint, p.x, p.y)
     end
     return true
 end
@@ -1476,13 +1443,8 @@ local function TryApplyFramePoint(frame, point, anchor, relativePoint, x, y)
         if not rollbackPoints then return false end
     end
 
-    local applied = pcall(ApplyFramePoint, frame, point, anchor, relativePoint, x, y)
-    if not applied then
-        -- ApplyFramePoint clears before it sets; a mid-apply error must not
-        -- leave the frame pointless.
-        if rollbackPoints then RestoreFramePoints(frame, rollbackPoints) end
-        return false
-    end
+    ApplyFramePoint(frame, point, anchor, relativePoint, x, y)
+
     if not externalAnchor then return true end
 
     -- Accept the live link only when the provider chain resolves to a real

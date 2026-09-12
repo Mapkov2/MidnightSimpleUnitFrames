@@ -2,10 +2,7 @@
 -- Owns popup composition only; protected frame edits route through EditMode apply helpers.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -15,7 +12,7 @@ if type(_G.MSUF_InstallEditPopupUI) == "function" then
 end
 
 local U = EM2.Util or {}
-local ApplyAllSettingsSafe = U.ApplyAllSettingsSafe or function() return false end
+local ApplyAllSettingsSafe = U.ApplyAllSettingsSafe
 local function ApplySettingsForKeySafe(key)
     local util = EM2 and EM2.Util or U
     local fn = util and util.ApplySettingsForKeySafe
@@ -28,10 +25,10 @@ local Quick = EM2.QuickPopup or Menu2Style.QuickPopup or {}
 local C = Factory.Colors or {}
 local W8 = Factory.WhiteTexture or "Interface/Buttons/WHITE8X8"
 local FS = Factory.FontString or Quick.FS
-local Tr = Factory.Tr or Quick.Tr or U.Tr or function(text) return text end
-local RefreshPalette = Factory.RefreshPalette or Quick.RefreshPalette or function() return C end
-local BlockConfigCombatLocked = Factory.BlockConfigCombatLocked or Quick.BlockConfigCombatLocked or U.BlockConfigCombatLocked or function() return false end
-local RefreshUFPreview = Factory.RefreshUFPreview or U.RefreshUFPreview or function() end
+local Tr = Factory.Tr or Quick.Tr or U.Tr
+local RefreshPalette = Factory.RefreshPalette or Quick.RefreshPalette
+local BlockConfigCombatLocked = Factory.BlockConfigCombatLocked or Quick.BlockConfigCombatLocked or U.BlockConfigCombatLocked
+local RefreshUFPreview = Factory.RefreshUFPreview or U.RefreshUFPreview
 --- Shared legal unit-frame size range (State/MSUF_Defaults.lua). Every
 --- width/height write below clamps against this table; the options unit
 --- preview clamps its mock to the same table, so popup writes and preview
@@ -156,9 +153,9 @@ local floor = math.floor
 local max, min = math.max, math.min
 local function DB() return _G.MSUF_DB end
 local function Conf(k) local db=DB(); return db and db[k] end
-local CK = U.NormalizeUnitKey or function(u) return u end
-local UnitLabel = U.UnitLabel or function(u) return tostring(u or "") end
-local UnitPageKey = U.UnitPageKey or function() return "uf_player" end
+local CK = U.NormalizeUnitKey
+local UnitLabel = U.UnitLabel
+local UnitPageKey = U.UnitPageKey
 local UNIT_COPY_TARGETS = {
     { key="player", label="Player" },
     { key="target", label="Target" },
@@ -178,8 +175,8 @@ end
 local pf
 local Sync
 local UnitSectionForComponent = U.UnitSectionForComponent
-local SyncMovers = U.SyncMovers or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
-local NotifyPositionChanged = U.NotifyPositionChanged or function(key, immediate) if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, immediate) end end
+local SyncMovers = U.SyncMovers
+local NotifyPositionChanged = U.NotifyPositionChanged
 local FramePositionValues = U.FramePositionValues
 local TranslateFramePosition = U.TranslateFramePosition
 
@@ -463,11 +460,7 @@ local function CopySizeTo(targetKey)
     Sync()
 end
 
-local function CaptureSizeRatio()
-    local w = pf and pf.wBox and tonumber(pf.wBox:GetText())
-    local h = pf and pf.hBox and tonumber(pf.hBox:GetText())
-    if w and h and h > 0 then pf._sizeRatio = w / h end
-end
+
 
 local function ApplySize(changed)
     if pf and pf._lockRatio then
@@ -488,7 +481,7 @@ end
 local function ToggleSizeRatio(checked)
     if not pf then return end
     pf._lockRatio = checked and true or false
-    if pf._lockRatio then CaptureSizeRatio() end
+    if pf._lockRatio then Quick.CaptureSizeRatio(pf) end
 end
 
 local function Build()
@@ -622,7 +615,7 @@ local function Build()
 end
 
 local UnitPopup = {}; EM2.UnitPopup = UnitPopup
-function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); if pf._lockRatio then CaptureSizeRatio() end; pf:Show(); if Menu2Style.FadeIn then Menu2Style.FadeIn(pf, 0.12, 0.86, 1) end; return true end
+function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); if pf._lockRatio then Quick.CaptureSizeRatio(pf) end; pf:Show(); if Menu2Style.FadeIn then Menu2Style.FadeIn(pf, 0.12, 0.86, 1) end; return true end
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end

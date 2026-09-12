@@ -1,10 +1,20 @@
 local addonName, MSUF = ...
 
+-- Foreign symbols this file depends on (MiniAuras / MiniCC; undocumented
+-- provider API):
+--   MiniAurasApi.v1 or MiniCCApi.v1: table whose RegisterFrameProvider(api,
+--     provider) accepts MSUF's party/raid frame provider. When neither exists
+--     at load, a watcher frame retries on ADDON_LOADED "MiniAuras"/"MiniCC"
+--     and gives up at PLAYER_LOGIN; MiniAuras then never sees MSUF's group
+--     frames. A registration that raises counts as absent.
+--   The refresh callback MiniAuras hands to provider.RegisterRefreshFrames:
+--     isolated on every frame-registry change; errors retain the callback stack.
+
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local GF = MSUF.GF
 if not (GF and type(GF.ForEachFrame) == "function"
     and type(GF.RegisterFrameRegistryObserver) == "function") then return end
-
+-- Failed integration calls are reported while independent addon work continues.
 local PROVIDER_NAME = "MidnightSimpleUnitFrames"
 local OBSERVER_OWNER = addonName or PROVIDER_NAME
 local providerFrames = {}
@@ -13,10 +23,7 @@ local observerRegistered = false
 local registered = false
 local loadWatcher
 
-local function IsGroupUnit(unit)
-    return type(unit) == "string"
-        and (unit:match("^party%d+$") ~= nil or unit:match("^raid%d+$") ~= nil)
-end
+local IsGroupUnit = _G.MSUF_IsGroupUnitToken
 
 local function CollectFrame(frame, unit)
     if frame and frame._msufGFIsPreviewFrame ~= true and IsGroupUnit(unit) then
@@ -31,7 +38,7 @@ local function GetFrames()
 end
 
 local function RequestRefresh()
-    if refreshFrames then pcall(refreshFrames) end
+    if refreshFrames then refreshFrames() end
 end
 
 local function RegisterRefreshFrames(callback)
@@ -61,7 +68,7 @@ local function TryRegister()
     local apiRoot = _G.MiniAurasApi or _G.MiniCCApi
     local api = type(apiRoot) == "table" and apiRoot.v1
     if type(api) ~= "table" or type(api.RegisterFrameProvider) ~= "function" then return false end
-    if not pcall(api.RegisterFrameProvider, api, provider) then return false end
+    api:RegisterFrameProvider(provider)
     registered = true
     StopLoadWatcher()
     return true

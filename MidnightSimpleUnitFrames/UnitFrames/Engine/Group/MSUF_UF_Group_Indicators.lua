@@ -6,7 +6,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
@@ -30,24 +29,11 @@ local type = type
 local pairs = pairs
 local floor = math.floor
 local max = math.max
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local Visuals = MSUF.UFVisuals or {}
 local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
 local Apply = MSUF.Apply or {}
-local ApplyColorTexture = Apply.ColorTexture or function(tex, r, g, b, a)
-  if not tex then return end
-  a = a or 1
-  if tex._aColorTexture ~= true or tex._aCTR ~= r or tex._aCTG ~= g
-    or tex._aCTB ~= b or tex._aCTA ~= a then
-    tex:SetColorTexture(r, g, b, a)
-    tex._aColorTexture = true
-    tex._aCTR = r
-    tex._aCTG = g
-    tex._aCTB = b
-    tex._aCTA = a
-    tex._aTex = nil
-  end
-end
+local ApplyColorTexture = Apply.ColorTexture
 
 local EMPTY = {}
 local CORNER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }

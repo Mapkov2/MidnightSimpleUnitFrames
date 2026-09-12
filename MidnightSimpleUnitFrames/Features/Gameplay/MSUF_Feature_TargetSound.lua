@@ -1,9 +1,6 @@
 local _, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local F = (MSUF.Cache and MSUF.Cache.F) or {}
 local UnitExists = type(F.UnitExists) == "function" and F.UnitExists or _G.UnitExists

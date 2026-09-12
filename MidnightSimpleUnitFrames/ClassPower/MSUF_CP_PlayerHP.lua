@@ -10,10 +10,7 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
@@ -65,7 +62,7 @@ builders.PLAYER_HP = function(E)
     local pairs = E.pairs or pairs
     local math_floor = E.math_floor or math.floor
     local string_format = E.string_format or string.format
-    local issecretvalue = _G.issecretvalue or function(_) return false end
+    local issecretvalue = _G.issecretvalue
     local UnitHealthPercent = _G.UnitHealthPercent
     local SCALE_100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
     local POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
@@ -154,11 +151,7 @@ builders.PLAYER_HP = function(E)
         return "GLOBAL"
     end
 
-    local function NormalizeClassPowerShape(value)
-        value = tostring(value or "BAR"):upper()
-        if value == "CIRCLE" or value == "DIAMOND" or value == "HEX" then return value end
-        return "BAR"
-    end
+    local NormalizeClassPowerShape = _G.MSUF_UF_NormalizeClassPowerShape
 
     local function NormalizePowerShape(value)
         value = tostring(value or "BAR"):upper()
@@ -166,11 +159,7 @@ builders.PLAYER_HP = function(E)
         return "BAR"
     end
 
-    local function NormalizeHPShape(value)
-        value = tostring(value or "BAR"):upper()
-        if value == "FOLLOW_POWER" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
-        return "BAR"
-    end
+    local NormalizeHPShape = _G.MSUF_UF_NormalizePlayerHPShape
 
     --- FOLLOW_POWER means "look like the detached player power bar if one is in
     --- use". This keeps the two auxiliary bars visually linked without making
@@ -198,12 +187,7 @@ builders.PLAYER_HP = function(E)
         return POWER_SHAPE_TEXTURES[NormalizePowerShape(shape)]
     end
 
-    local function ShapeOutlineAlpha(value)
-        value = tonumber(value) or 0
-        if value <= 0 then return 0 end
-        if value >= 8 then return 1 end
-        return 0.49 + (value * 0.065)
-    end
+    local ShapeOutlineAlpha = _G.MSUF_UF_ShapeOutlineAlpha
 
     local function Clamp(value, fallback, minValue, maxValue)
         value = tonumber(value) or fallback
@@ -533,9 +517,8 @@ builders.PLAYER_HP = function(E)
                 if type(applyResolved) == "function" then
                     applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
                 else
-                    local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-                    if not ok or applied == false or not FontApplied(fs, fontPath, size, fontFlags) then
-                        pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
+                    if not _G.MSUF_SetFontChecked(fs, fontPath, size, fontFlags) or not FontApplied(fs, fontPath, size, fontFlags) then
+                        _G.MSUF_SetFontChecked(fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
                         if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
                     end
                 end

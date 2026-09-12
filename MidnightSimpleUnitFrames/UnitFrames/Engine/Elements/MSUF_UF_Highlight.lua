@@ -1,10 +1,7 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 
 -- Unitframe highlight overlay runtime.
@@ -15,7 +12,7 @@ local CreateColor = _G.CreateColor
 local floor = math.floor
 local tonumber = tonumber
 local type = type
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 
 local Highlight = {}
 MSUF.Highlight = Highlight

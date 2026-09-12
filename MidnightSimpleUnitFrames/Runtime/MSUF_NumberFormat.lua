@@ -69,7 +69,6 @@ local compactOptions = nil
 local compactChecked = false
 
 local type = type
-local pcall = pcall
 local tostring = tostring
 
 local function Abbreviator()
@@ -80,8 +79,8 @@ end
 --- One real call decides: a candidate only wins after it produced a space-free
 --- string for the probe value. Runs once per style change and is cached.
 local function Accepts(fn, options)
-    local ok, text = pcall(fn, PROBE_VALUE, options)
-    if not ok then return false end
+    local text = fn(PROBE_VALUE, options)
+
     if type(text) ~= "string" or text == "" then return false end
     if text:find("%s") then return false end
     return true

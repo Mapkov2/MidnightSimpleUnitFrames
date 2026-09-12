@@ -5,6 +5,7 @@ MSUF = MSUF or _G.MSUF_NS or {}
 local UF = MSUF.UF
 if not UF then return end
 local Layers = UF.Layers or {}
+local Shared = UF.Shared
 
 -- Unitframe status indicator element.
 -- Owns level/classification/PvP/ready-check/role/raid-marker style icons for normal unit
@@ -44,10 +45,10 @@ local tonumber = tonumber
 local floor = math.floor
 local find = string.find
 local setmetatable = setmetatable
-local Secrets = MSUF.Secrets or {}
+
 local GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
 
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local function BoolTrue(value)
   -- Secret values from restricted APIs must not leak into boolean UI decisions. Treat them as
   -- unknown rather than truthy so protected/hidden state cannot accidentally show an icon.
@@ -84,44 +85,9 @@ local function UnitIsPlayerRuntime(unit, state, frame)
   return UnitIsPlayer and false or nil
 end
 local Apply = MSUF.Apply or {}
-local ApplyShown = Apply.Shown or function(region, show)
-  if not region then return end
-  show = show and true or false
-  if region._aShown ~= show then
-    region:SetShown(show)
-    region._aShown = show
-  end
-end
-local ApplyTexture = Apply.Texture or function(region, texture)
-  if not region then return end
-  if issecretvalue(texture) == true then
-    region._aTex = nil
-    region._aColorTexture = nil
-    region:SetTexture(texture)
-    return
-  end
-  if region._aTex ~= texture then
-    region:SetTexture(texture)
-    region._aTex = texture
-    region._aColorTexture = nil
-  end
-end
-local ApplyText = Apply.Text or function(region, text)
-  if not region then return end
-  if issecretvalue(text) == true then
-    region._aText = nil
-    region._aTextPlain = nil
-    region:SetText(text)
-    return
-  end
-  text = text or ""
-  if region._aTextPlain == true and region._aText == text then
-    return
-  end
-  region:SetText(text)
-  region._aText = text
-  region._aTextPlain = true
-end
+local ApplyShown = Apply.Shown
+local ApplyTexture = Apply.Texture
+local ApplyText = Apply.Text
 
 local EMPTY_EVENTS = {}
 local WHITE = "Interface\\Buttons\\WHITE8x8"
@@ -207,6 +173,11 @@ local READY_CHECK_TAIL = 0
 local READY_CHECK_TIMER_AT
 
 local Status = {}
+--- Exported runtime (MSUF.UFStatusRuntime). The per-indicator updaters, their
+--- event lists and the event resolvers live on it directly instead of as file
+--- locals: group status and the indicator registrations below read them from
+--- here, and the main chunk stays clear of Lua's 200-local ceiling.
+local Runtime = {}
 
 local function ClampLayer(layer, fallback)
   layer = floor((tonumber(layer) or fallback or 7) + 0.5)
@@ -218,10 +189,7 @@ local function ClampLayer(layer, fallback)
   return layer
 end
 
-local function GetLayerBaseLevel(frame)
-  local base = frame and (frame.Health or frame.hpBar or frame)
-  return base and base.GetFrameLevel and (base:GetFrameLevel() or 0) or 0
-end
+local GetLayerBaseLevel = Layers.BaseFrameLevel
 
 local function EnsureLayerFrame(frame, layer)
   if not frame then
@@ -382,35 +350,12 @@ local function SetText(region, text, raw)
   end
 end
 
-local function ApplyStatusFont(region, font, size, flags)
-  if not (region and region.SetFont and font) then
-    return false
-  end
-  size = tonumber(size) or 14
-  if size <= 0 then size = 14 end
-  if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  local ok, applied = pcall(region.SetFont, region, font, size, flags)
-  if not ok or applied == false then return false end
-  local matches = _G.MSUF_FontApplicationMatches
-  if type(matches) == "function" then
-    return matches(region, font, size) == true
-  end
-  if type(region.GetFont) ~= "function" then return true end
-  local actualFont, actualSize = region:GetFont()
-  if not actualFont then return false end
-  local pathMatches = tostring(actualFont):gsub("/", "\\"):lower() == tostring(font):gsub("/", "\\"):lower()
-  actualSize = tonumber(actualSize)
-  return pathMatches and actualSize ~= nil and math.abs(actualSize - size) <= 0.01
-end
-
 local function SetFont(region, spec, size, role)
   if not region or not region.SetFont then
     return true
   end
   local flags = spec and spec.fontFlags or "OUTLINE"
-  size = tonumber(size) or 14
-  if size <= 0 then size = 14 end
-  if size < 6 then size = 6 elseif size > 128 then size = 128 end
+  size = Shared.ClampFontSize(size, 14)
   local font = spec and spec.font
   local resolveRoleFont = MSUF.UFText and MSUF.UFText.ResolveRoleFont
   if role and type(resolveRoleFont) == "function" then
@@ -423,7 +368,7 @@ local function SetFont(region, spec, size, role)
       or region._msufStatusFontSize ~= size
       or region._msufStatusFontFlags ~= flags)
   then
-    if ApplyStatusFont(region, font, size, flags) then
+    if Shared.ApplyFontChecked(region, font, size, flags, 14) then
       region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
       region._msufStatusFontEpoch = fontEpoch
       region._msufStatusFontAttemptEpoch = fontEpoch
@@ -1012,7 +957,7 @@ local function ApplyDefaultRaidMarkerTexture(tex, index)
   tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
 end
 
-local function UpdateRaidMarker(frame, status)
+function Runtime.UpdateRaidMarker(frame, status)
   local cfg = status and status.raidMarker
   local tex = frame.raidTargetIcon
   local unit = frame.MSUFUnitKey
@@ -1062,7 +1007,7 @@ local function UpdateRaidMarker(frame, status)
   SetShown(tex, true)
 end
 
-local function UpdateLeader(frame, status)
+function Runtime.UpdateLeader(frame, status)
   local cfg = status and status.leader
   local tex = frame.LeaderIndicator
   local unit = frame.MSUFUnitKey
@@ -1084,7 +1029,7 @@ local function UpdateLeader(frame, status)
   end
 end
 
-local function UpdateLeaderPair(frame, status)
+function Runtime.UpdateLeaderPair(frame, status)
   local unit = frame and frame.MSUFUnitKey
   local leaderCfg = status and status.leader
   local assistCfg = status and status.assist
@@ -1286,7 +1231,7 @@ local function UpdatePowerRoleVisibility(frame, status)
   return hidden
 end
 
-local function UpdateRole(frame, status)
+function Runtime.UpdateRole(frame, status)
   local cfg = status and status.role
   local tex = frame and frame.roleIcon
   local unit = frame and frame.MSUFUnitKey
@@ -1315,7 +1260,7 @@ local function UpdateRole(frame, status)
   end
 end
 
-local function UpdateReadyCheck(frame, status, event)
+function Runtime.UpdateReadyCheck(frame, status, event)
   local cfg = status and status.readyCheck
   local tex = frame and frame.readyCheckIcon
   local unit = frame and frame.MSUFUnitKey
@@ -1343,7 +1288,7 @@ local function UpdateReadyCheck(frame, status, event)
   end
 end
 
-local function UpdateSummon(frame, status)
+function Runtime.UpdateSummon(frame, status)
   local cfg = status and status.summon
   local tex = frame and frame.summonIcon
   local unit = frame and frame.MSUFUnitKey
@@ -1374,7 +1319,7 @@ local function UpdateSummon(frame, status)
   end
 end
 
-local function UpdatePhase(frame, status)
+function Runtime.UpdatePhase(frame, status)
   local cfg = status and status.phase
   local tex = frame and frame.phaseIcon
   local unit = frame and frame.MSUFUnitKey
@@ -1437,7 +1382,7 @@ end
 
 local IDENTITY_TEXT_FIELDS = { "levelText", "raceText", "classStatusText" }
 
-local function UpdateIdentityTexts(frame, status)
+function Runtime.UpdateIdentityTexts(frame, status)
   local levelCfg = status and status.level
   local raceCfg = status and status.race
   local classCfg = status and status.classText
@@ -1482,7 +1427,7 @@ local function UpdateIdentityTexts(frame, status)
   if showClass then ShowIdentityText(frame.classStatusText, classText, classPresent) else SetShown(frame.classStatusText, false) end
 end
 
-local function UpdateBossNumber(frame, status)
+function Runtime.UpdateBossNumber(frame, status)
   local cfg = status and status.bossNumber
   local fs = frame and frame.bossNumberText
   local unit = frame and frame.MSUFUnitKey
@@ -1511,7 +1456,7 @@ end
 local RAID_TOKEN_INDEX = {}
 for i = 1, 40 do RAID_TOKEN_INDEX["raid" .. i] = i end
 
-local function UpdateRaidGroup(frame, status)
+function Runtime.UpdateRaidGroup(frame, status)
   local cfg = status and status.raidGroup
   local fs = frame.raidGroupNameText
   local unit = frame.MSUFUnitKey
@@ -1598,7 +1543,7 @@ local function EliteState(frame, unit, unitState)
   return nil
 end
 
-local function UpdateElite(frame, status)
+function Runtime.UpdateElite(frame, status)
   local cfg = status and status.elite
   local tex = frame.eliteIcon
   if not (cfg and cfg.enabled and tex) then
@@ -1787,7 +1732,7 @@ local function ClearStatusText(frame, fs)
   RefreshHealthAfterGoneStatus(frame, oldValue)
 end
 
-local function UpdateStatusText(frame, status, event, seedHP)
+function Runtime.UpdateStatusText(frame, status, event, seedHP)
   local cfg = status and status.statusText
   local fs = frame.statusIndicatorText
   local unit = frame.MSUFUnitKey
@@ -1872,7 +1817,7 @@ local function UpdateStatusText(frame, status, event, seedHP)
   end
 end
 
-local function UpdateCombat(frame, status)
+function Runtime.UpdateCombat(frame, status)
   local cfg = status and status.combat
   local tex = frame.combatStateIndicatorIcon
   local unit = frame.MSUFUnitKey
@@ -1895,7 +1840,7 @@ local function UpdateCombat(frame, status)
   end
 end
 
-local function UpdateResting(frame, status)
+function Runtime.UpdateResting(frame, status)
   local cfg = status and status.resting
   local tex = frame.restingIndicatorIcon
   if not (cfg and cfg.enabled and tex) then
@@ -1917,7 +1862,7 @@ local function UpdateResting(frame, status)
   end
 end
 
-local function UpdateIncomingRes(frame, status)
+function Runtime.UpdateIncomingRes(frame, status)
   local cfg = status and status.incomingRes
   local tex = frame.incomingResIndicatorIcon
   local unit = frame.MSUFUnitKey
@@ -1956,7 +1901,7 @@ local function PVPVariantForAtlas(atlas)
   return "Alliance"
 end
 
-local function UpdatePVP(frame, status)
+function Runtime.UpdatePVP(frame, status)
   local cfg = status and status.pvp
   local tex = frame and frame.pvpIndicatorIcon
   local unit = frame and frame.MSUFUnitKey
@@ -1980,8 +1925,8 @@ end
 --- reads are the player's own action-bar state, so they stay valid in combat
 --- and the text updates live while stance-dancing. Region creation, font,
 --- color and anchoring are owned by ApplyConfiguredRegions - this only moves
---- the text. Lives on Status rather than as a local: the file's main chunk
---- is at Lua's 200-local ceiling.
+--- the text. Lives on Status rather than as a local, like the per-indicator
+--- updaters on Runtime, to keep the main chunk clear of Lua's 200-local ceiling.
 function Status.UpdateStanceText(frame, status)
   local cfg = status and status.stance
   local fs = frame.stanceIndicatorText
@@ -2035,7 +1980,7 @@ function Status.Apply(frame, spec)
   -- base position/size until the next flags event.
   local status = spec and spec.status
   if frame and status then
-    UpdateStatusText(frame, status, "MSUF_ELEMENT_APPLY")
+    Runtime.UpdateStatusText(frame, status, "MSUF_ELEMENT_APPLY")
   end
 end
 
@@ -2051,29 +1996,29 @@ function Status.Disable(frame)
   CancelReadyCheckTimer(frame)
 end
 
-local RAID_MARKER_EVENTS = { "RAID_TARGET_UPDATE" }
-local LEADER_EVENTS = { "GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED" }
-local LEVEL_EVENTS = { "UNIT_LEVEL" }
-local LEVEL_UNITLESS_EVENTS = { "PLAYER_LEVEL_UP", "PLAYER_LEVEL_CHANGED" }
-local IDENTITY_NAME_EVENTS = { "UNIT_NAME_UPDATE" }
-local IDENTITY_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_LEVEL" }
-local RAID_GROUP_EVENTS = { "GROUP_ROSTER_UPDATE" }
-local ELITE_EVENTS = { "UNIT_CLASSIFICATION_CHANGED", "UNIT_LEVEL" }
-local STATUS_TEXT_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
-local STATUS_TEXT_CONNECTION_EVENTS = { "UNIT_CONNECTION" }
-local STATUS_TEXT_FLAGS_EVENTS = { "UNIT_FLAGS" }
+Runtime.RAID_MARKER_EVENTS = { "RAID_TARGET_UPDATE" }
+Runtime.LEADER_EVENTS = { "GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED" }
+Runtime.LEVEL_EVENTS = { "UNIT_LEVEL" }
+Runtime.LEVEL_UNITLESS_EVENTS = { "PLAYER_LEVEL_UP", "PLAYER_LEVEL_CHANGED" }
+Runtime.IDENTITY_NAME_EVENTS = { "UNIT_NAME_UPDATE" }
+Runtime.IDENTITY_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_LEVEL" }
+Runtime.RAID_GROUP_EVENTS = { "GROUP_ROSTER_UPDATE" }
+Runtime.ELITE_EVENTS = { "UNIT_CLASSIFICATION_CHANGED", "UNIT_LEVEL" }
+Runtime.STATUS_TEXT_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
+Runtime.STATUS_TEXT_CONNECTION_EVENTS = { "UNIT_CONNECTION" }
+Runtime.STATUS_TEXT_FLAGS_EVENTS = { "UNIT_FLAGS" }
 -- AFK/DND edges on observed units arrive as PLAYER_FLAGS_CHANGED (a unit event
 -- despite the prefix); UNIT_FLAGS never fires for another unit's AFK toggle.
-local STATUS_TEXT_AFK_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS", "PLAYER_FLAGS_CHANGED" }
-local STATUS_TEXT_FLAGS_AFK_EVENTS = { "UNIT_FLAGS", "PLAYER_FLAGS_CHANGED" }
-local STATUS_TEXT_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED" }
-local STATUS_TEXT_LIFECYCLE_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
-local STATUS_TEXT_PLAYER_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
-local COMBAT_EVENTS = { "UNIT_FLAGS" }
-local COMBAT_PLAYER_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
-local RESTING_PLAYER_EVENTS = { "PLAYER_UPDATE_RESTING", "PLAYER_ENTERING_WORLD" }
-local INCOMING_RES_EVENTS = { "INCOMING_RESURRECT_CHANGED" }
-local PVP_EVENTS = { "UNIT_FACTION" }
+Runtime.STATUS_TEXT_AFK_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS", "PLAYER_FLAGS_CHANGED" }
+Runtime.STATUS_TEXT_FLAGS_AFK_EVENTS = { "UNIT_FLAGS", "PLAYER_FLAGS_CHANGED" }
+Runtime.STATUS_TEXT_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED" }
+Runtime.STATUS_TEXT_LIFECYCLE_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
+Runtime.STATUS_TEXT_PLAYER_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
+Runtime.COMBAT_EVENTS = { "UNIT_FLAGS" }
+Runtime.COMBAT_PLAYER_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
+Runtime.RESTING_PLAYER_EVENTS = { "PLAYER_UPDATE_RESTING", "PLAYER_ENTERING_WORLD" }
+Runtime.INCOMING_RES_EVENTS = { "INCOMING_RESURRECT_CHANGED" }
+Runtime.PVP_EVENTS = { "UNIT_FACTION" }
 
 local function StatusEnabled(spec, key)
   local status = spec and spec.status
@@ -2091,26 +2036,26 @@ local function StatusEnabled(spec, key)
   return status and status.enabled == true and cfg and cfg.enabled == true
 end
 
-local function IdentityTextEvents(spec)
+function Runtime.IdentityTextEvents(spec)
   if not StatusEnabled(spec, "identityText") then return EMPTY_EVENTS end
   local status = spec.status
   local needsLevel = status.level and status.level.enabled == true
   local needsName = (status.race and status.race.enabled == true)
     or (status.classText and status.classText.enabled == true)
-  if needsLevel and needsName then return IDENTITY_EVENTS end
-  if needsName then return IDENTITY_NAME_EVENTS end
-  return needsLevel and LEVEL_EVENTS or EMPTY_EVENTS
+  if needsLevel and needsName then return Runtime.IDENTITY_EVENTS end
+  if needsName then return Runtime.IDENTITY_NAME_EVENTS end
+  return needsLevel and Runtime.LEVEL_EVENTS or EMPTY_EVENTS
 end
 
-local function IdentityTextUnitlessEvents(spec, frame)
+function Runtime.IdentityTextUnitlessEvents(spec, frame)
   if not (frame and frame.MSUFUnitKey == "player" and StatusEnabled(spec, "identityText")) then
     return EMPTY_EVENTS
   end
   local status = spec.status
-  return (status.level and status.level.enabled == true) and LEVEL_UNITLESS_EVENTS or EMPTY_EVENTS
+  return (status.level and status.level.enabled == true) and Runtime.LEVEL_UNITLESS_EVENTS or EMPTY_EVENTS
 end
 
-local function StatusTextEvents(spec, frame)
+function Runtime.StatusTextEvents(spec, frame)
   if not StatusEnabled(spec, "statusText") then
     return EMPTY_EVENTS
   end
@@ -2123,17 +2068,17 @@ local function StatusTextEvents(spec, frame)
   local needsPlayerFlags = player ~= true and (cfg.showAFK == true or cfg.showDND == true)
   if needsConnection then
     if needsPlayerFlags then
-      return STATUS_TEXT_AFK_EVENTS
+      return Runtime.STATUS_TEXT_AFK_EVENTS
     end
-    return needsFlags and STATUS_TEXT_EVENTS or STATUS_TEXT_CONNECTION_EVENTS
+    return needsFlags and Runtime.STATUS_TEXT_EVENTS or Runtime.STATUS_TEXT_CONNECTION_EVENTS
   end
   if needsPlayerFlags then
-    return STATUS_TEXT_FLAGS_AFK_EVENTS
+    return Runtime.STATUS_TEXT_FLAGS_AFK_EVENTS
   end
-  return needsFlags and STATUS_TEXT_FLAGS_EVENTS or EMPTY_EVENTS
+  return needsFlags and Runtime.STATUS_TEXT_FLAGS_EVENTS or EMPTY_EVENTS
 end
 
-local function StatusTextUnitlessEvents(spec, frame)
+function Runtime.StatusTextUnitlessEvents(spec, frame)
   if not StatusEnabled(spec, "statusText") then
     return EMPTY_EVENTS
   end
@@ -2144,72 +2089,35 @@ local function StatusTextUnitlessEvents(spec, frame)
   local needsFlags = cfg.showAFK == true or cfg.showDND == true
   local needsLifecycle = cfg.showDead == true or cfg.showGhost == true
   if needsFlags and needsLifecycle then
-    return STATUS_TEXT_PLAYER_UNITLESS_EVENTS
+    return Runtime.STATUS_TEXT_PLAYER_UNITLESS_EVENTS
   elseif needsFlags then
-    return STATUS_TEXT_UNITLESS_EVENTS
+    return Runtime.STATUS_TEXT_UNITLESS_EVENTS
   elseif needsLifecycle then
-    return STATUS_TEXT_LIFECYCLE_EVENTS
+    return Runtime.STATUS_TEXT_LIFECYCLE_EVENTS
   end
   return EMPTY_EVENTS
 end
 
-local function PVPEvents(spec)
-  return StatusEnabled(spec, "pvp") and PVP_EVENTS or EMPTY_EVENTS
+function Runtime.PVPEvents(spec)
+  return StatusEnabled(spec, "pvp") and Runtime.PVP_EVENTS or EMPTY_EVENTS
 end
 
-local function CombatEvents(spec, frame)
+function Runtime.CombatEvents(spec, frame)
   if frame and frame.MSUFUnitKey == "player" then
     return EMPTY_EVENTS
   end
-  return StatusEnabled(spec, "combat") and COMBAT_EVENTS or EMPTY_EVENTS
+  return StatusEnabled(spec, "combat") and Runtime.COMBAT_EVENTS or EMPTY_EVENTS
 end
 
-local Runtime = {
-  EMPTY_EVENTS = EMPTY_EVENTS,
-  RAID_MARKER_EVENTS = RAID_MARKER_EVENTS,
-  LEADER_EVENTS = LEADER_EVENTS,
-  LEVEL_EVENTS = LEVEL_EVENTS,
-  LEVEL_UNITLESS_EVENTS = LEVEL_UNITLESS_EVENTS,
-  IDENTITY_NAME_EVENTS = IDENTITY_NAME_EVENTS,
-  IDENTITY_EVENTS = IDENTITY_EVENTS,
-  IdentityTextEvents = IdentityTextEvents,
-  IdentityTextUnitlessEvents = IdentityTextUnitlessEvents,
-  RAID_GROUP_EVENTS = RAID_GROUP_EVENTS,
-  ELITE_EVENTS = ELITE_EVENTS,
-  STATUS_TEXT_EVENTS = STATUS_TEXT_EVENTS,
-  STATUS_TEXT_UNITLESS_EVENTS = STATUS_TEXT_UNITLESS_EVENTS,
-  StatusTextEvents = StatusTextEvents,
-  StatusTextUnitlessEvents = StatusTextUnitlessEvents,
-  CombatEvents = CombatEvents,
-  COMBAT_EVENTS = COMBAT_EVENTS,
-  COMBAT_PLAYER_EVENTS = COMBAT_PLAYER_EVENTS,
-  RESTING_PLAYER_EVENTS = RESTING_PLAYER_EVENTS,
-  INCOMING_RES_EVENTS = INCOMING_RES_EVENTS,
-  PVP_EVENTS = PVP_EVENTS,
-  StatusEnabled = StatusEnabled,
-  HideField = HideField,
-  ApplyConfiguredRegions = ApplyConfiguredRegions,
-  RefreshNameRelativeAnchors = RefreshNameRelativeAnchors,
-  CancelReadyCheckTimer = CancelReadyCheckTimer,
-  UpdateRaidMarker = UpdateRaidMarker,
-  UpdateLeader = UpdateLeader,
-  UpdateLeaderPair = UpdateLeaderPair,
-  UpdatePowerRoleVisibility = UpdatePowerRoleVisibility,
-  UpdateRole = UpdateRole,
-  UpdateReadyCheck = UpdateReadyCheck,
-  UpdateSummon = UpdateSummon,
-  UpdatePhase = UpdatePhase,
-  UpdateLevel = UpdateIdentityTexts,
-  UpdateIdentityTexts = UpdateIdentityTexts,
-  UpdateRaidGroup = UpdateRaidGroup,
-  RaidGroupText = RaidGroupText,
-  UpdateElite = UpdateElite,
-  UpdateStatusText = UpdateStatusText,
-  UpdateCombat = UpdateCombat,
-  UpdateResting = UpdateResting,
-  UpdateIncomingRes = UpdateIncomingRes,
-  UpdatePVP = UpdatePVP,
-}
+Runtime.EMPTY_EVENTS = EMPTY_EVENTS
+Runtime.StatusEnabled = StatusEnabled
+Runtime.HideField = HideField
+Runtime.ApplyConfiguredRegions = ApplyConfiguredRegions
+Runtime.RefreshNameRelativeAnchors = RefreshNameRelativeAnchors
+Runtime.CancelReadyCheckTimer = CancelReadyCheckTimer
+Runtime.UpdatePowerRoleVisibility = UpdatePowerRoleVisibility
+Runtime.UpdateLevel = Runtime.UpdateIdentityTexts
+Runtime.RaidGroupText = RaidGroupText
 MSUF.UFStatusRuntime = Runtime
 
 local StatusStructure = {}
@@ -2227,10 +2135,10 @@ local function RegisterStatusIndicator(def)
   -- elements are applied. Seed each child once on every spec apply; afterwards
   -- its narrow event route and the unit-identity path keep it current.
   local element = { UpdateOnApply = true }
-  local name, key, events, unitlessEvents = def[1], def[2], def[3], def[4]
-  local update, hide = def[5], def[6]
-  local noGroup, playerOnly, getEvents = def[7], def[8], def[9]
-  local getUnitlessEvents, playerUnitlessEvents, updateWithEvent = def[10], def[11], def[12]
+  local name, key, events, unitlessEvents = def.name, def.key, def.events, def.unitlessEvents
+  local update, hide = def.update, def.hide
+  local noGroup, playerOnly, getEvents = def.noGroup, def.playerOnly, def.getEvents
+  local getUnitlessEvents, playerUnitlessEvents, updateWithEvent = def.getUnitlessEvents, def.playerUnitlessEvents, def.updateWithEvent
 
   function element.IsEnabled(frame, spec)
     if playerOnly == true and not (frame and frame.MSUFUnitKey == "player") then
@@ -2291,25 +2199,35 @@ local function RegisterStatusIndicator(def)
   UF.RegisterElement(name, element)
 end
 
+-- Registration data, read once at load by RegisterStatusIndicator and never
+-- touched again. Field meanings:
+--   name / key            element name and spec.status key
+--   events / unitlessEvents   static unit / unitless event lists
+--   getEvents / getUnitlessEvents   resolvers (spec, frame) for dynamic lists
+--   playerUnitlessEvents  unitless list that only the player frame receives
+--   update / hide         updater (frame, status[, event, seedHP]) and the
+--                         region field(s) hidden on Disable
+--   noGroup / playerOnly  IsEnabled gates
+--   updateWithEvent       forward (event, seedHP) into the updater
 local STATUS_INDICATOR_DEFS = {
-  { "RaidMarkerIndicator", "raidMarker", nil, RAID_MARKER_EVENTS, UpdateRaidMarker, "raidTargetIcon", true },
-  { "LeaderIndicator", "leader", nil, LEADER_EVENTS, UpdateLeaderPair, { "LeaderIndicator", "leaderIcon", "assistIcon" }, true },
-  { "LevelIndicator", "identityText", nil, nil, UpdateIdentityTexts, { "levelText", "raceText", "classStatusText" }, nil, nil, IdentityTextEvents, IdentityTextUnitlessEvents },
-  { "BossNumberIndicator", "bossNumber", nil, nil, UpdateBossNumber, "bossNumberText", true },
-  { "RaidGroupIndicator", "raidGroup", nil, RAID_GROUP_EVENTS, UpdateRaidGroup, "raidGroupNameText", true },
-  { "EliteIndicator", "elite", ELITE_EVENTS, nil, UpdateElite, "eliteIcon" },
-  { "StatusTextIndicator", "statusText", nil, nil, UpdateStatusText, "statusIndicatorText", true, nil, StatusTextEvents, StatusTextUnitlessEvents, nil, true },
-  { "CombatIndicator", "combat", nil, nil, UpdateCombat, "combatStateIndicatorIcon", nil, nil, CombatEvents, nil, COMBAT_PLAYER_EVENTS },
-  { "RestingIndicator", "resting", nil, RESTING_PLAYER_EVENTS, UpdateResting, "restingIndicatorIcon", nil, true },
-  { "IncomingResIndicator", "incomingRes", INCOMING_RES_EVENTS, nil, UpdateIncomingRes, "incomingResIndicatorIcon", true },
-  { "PVPIndicator", "pvp", nil, nil, UpdatePVP, "pvpIndicatorIcon", true, nil, PVPEvents },
+  { name = "RaidMarkerIndicator", key = "raidMarker", unitlessEvents = Runtime.RAID_MARKER_EVENTS, update = Runtime.UpdateRaidMarker, hide = "raidTargetIcon", noGroup = true },
+  { name = "LeaderIndicator", key = "leader", unitlessEvents = Runtime.LEADER_EVENTS, update = Runtime.UpdateLeaderPair, hide = { "LeaderIndicator", "leaderIcon", "assistIcon" }, noGroup = true },
+  { name = "LevelIndicator", key = "identityText", update = Runtime.UpdateIdentityTexts, hide = { "levelText", "raceText", "classStatusText" }, getEvents = Runtime.IdentityTextEvents, getUnitlessEvents = Runtime.IdentityTextUnitlessEvents },
+  { name = "BossNumberIndicator", key = "bossNumber", update = Runtime.UpdateBossNumber, hide = "bossNumberText", noGroup = true },
+  { name = "RaidGroupIndicator", key = "raidGroup", unitlessEvents = Runtime.RAID_GROUP_EVENTS, update = Runtime.UpdateRaidGroup, hide = "raidGroupNameText", noGroup = true },
+  { name = "EliteIndicator", key = "elite", events = Runtime.ELITE_EVENTS, update = Runtime.UpdateElite, hide = "eliteIcon" },
+  { name = "StatusTextIndicator", key = "statusText", update = Runtime.UpdateStatusText, hide = "statusIndicatorText", noGroup = true, getEvents = Runtime.StatusTextEvents, getUnitlessEvents = Runtime.StatusTextUnitlessEvents, updateWithEvent = true },
+  { name = "CombatIndicator", key = "combat", update = Runtime.UpdateCombat, hide = "combatStateIndicatorIcon", getEvents = Runtime.CombatEvents, playerUnitlessEvents = Runtime.COMBAT_PLAYER_EVENTS },
+  { name = "RestingIndicator", key = "resting", unitlessEvents = Runtime.RESTING_PLAYER_EVENTS, update = Runtime.UpdateResting, hide = "restingIndicatorIcon", playerOnly = true },
+  { name = "IncomingResIndicator", key = "incomingRes", events = Runtime.INCOMING_RES_EVENTS, update = Runtime.UpdateIncomingRes, hide = "incomingResIndicatorIcon", noGroup = true },
+  { name = "PVPIndicator", key = "pvp", update = Runtime.UpdatePVP, hide = "pvpIndicatorIcon", noGroup = true, getEvents = Runtime.PVPEvents },
   -- Stance text events fire only on user action or a stance-bar rebuild
   -- (talents, level-up, loading screen). Never add
   -- UPDATE_SHAPESHIFT_COOLDOWN - it fires with practically every GCD and
   -- would turn this indicator into a hot path.
-  { "StanceIndicator", "stance", nil,
-    { "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "PLAYER_ENTERING_WORLD" },
-    Status.UpdateStanceText, "stanceIndicatorText", true, true },
+  { name = "StanceIndicator", key = "stance",
+    unitlessEvents = { "UPDATE_SHAPESHIFT_FORM", "UPDATE_SHAPESHIFT_FORMS", "PLAYER_ENTERING_WORLD" },
+    update = Status.UpdateStanceText, hide = "stanceIndicatorText", noGroup = true, playerOnly = true },
 }
 
 for i = 1, #STATUS_INDICATOR_DEFS do

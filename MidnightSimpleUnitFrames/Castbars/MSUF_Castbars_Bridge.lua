@@ -9,21 +9,7 @@
 local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
 
-local ExportPublic = ns.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
-
-local function InvokeNativeFrame(method, frame, ...)
-    if type(method) ~= "function" then return false end
-    local ok, err = pcall(method, frame, ...)
-    if not ok then
-        local handler = _G.geterrorhandler and _G.geterrorhandler()
-        if type(handler) == "function" then pcall(handler, err) end
-        return false, err
-    end
-    return true
-end
+local ExportPublic = ns.ExportPublic
 
 ns.UF = ns.UF or {}
 
@@ -36,34 +22,7 @@ local function GeneralDB()
 end
 
 local function GetBackend(unit)
-    local backend = ns.MSUF_CastbarBackend
-    if backend and type(backend.Resolve) == "function" then
-        return backend.Resolve(unit)
-    end
-
-    local getBackend = _G.MSUF_GetCastbarBackend
-    if type(getBackend) == "function" then
-        return getBackend(unit)
-    end
-
-    unit = type(unit) == "string" and unit:match("^boss%d*$") and "boss" or unit
-
-    local enableKey =
-        unit == "player" and "enablePlayerCastbar"
-        or unit == "target" and "enableTargetCastbar"
-        or unit == "focus" and "enableFocusCastbar"
-        or unit == "boss" and "enableBossCastbar"
-
-    if not enableKey then
-        return nil
-    end
-
-    local general = GeneralDB()
-    if general[enableKey] == false then
-        return unit == "player" and "BLIZZARD" or "HIDE"
-    end
-
-    return "MSUF"
+    return ns.MSUF_CastbarBackend.Resolve(unit)
 end
 
 local function ShouldUseMSUF(unit)
@@ -170,7 +129,8 @@ local function SetNativeFrameSuppressed(frame, suppressed)
 
         EnsureNativeHideGuard(frame, record)
         if type(frame.UnregisterAllEvents) == "function" then
-            record.detached = InvokeNativeFrame(frame.UnregisterAllEvents, frame) == true
+            frame:UnregisterAllEvents()
+            record.detached = true
         end
         if frame.Hide then frame:Hide() end
         return true
@@ -185,9 +145,8 @@ local function SetNativeFrameSuppressed(frame, suppressed)
     -- Blizzard never observes a nil unit from a subsequent event dispatch.
     record.suppressed = nil
     if record.detached and type(frame.SetUnit) == "function" then
-        InvokeNativeFrame(frame.SetUnit, frame, nil)
-        local restored = InvokeNativeFrame(frame.SetUnit, frame, record.unit or unit, record.showTradeSkills, record.showShield)
-        if not restored and frame.unit == nil then frame.unit = record.unit or unit end
+        frame:SetUnit(nil)
+        frame:SetUnit(record.unit or unit, record.showTradeSkills, record.showShield)
     end
     record.detached = nil
     return true

@@ -22,16 +22,12 @@ local TEST_FUNCS = {
 local pf
 local Sync
 local Util = EM2.Util or {}
-local SyncMovers = (EM2.Util and EM2.Util.SyncMovers) or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
-local UnitPageKey = Util.UnitPageKey or function() return "uf_player" end
-local UnitLabel = Util.UnitLabel or function(unit) return tostring(unit or "") end
+local SyncMovers = (EM2.Util and EM2.Util.SyncMovers)
+local UnitPageKey = Util.UnitPageKey
+local UnitLabel = Util.UnitLabel
 local FramePositionValues = Util.FramePositionValues
 local TranslateFramePosition = Util.TranslateFramePosition
-local NormalizeUnit = Util.NormalizeSimpleUnit or function(unit)
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
-    if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
-    return nil
-end
+local NormalizeUnit = Util.NormalizeSimpleUnit
 
 local function ButtonOpts(sync)
     return {
@@ -328,11 +324,7 @@ function Sync()
     end
 end
 
-local function CaptureSizeRatio()
-    local w = pf and pf.wBox and tonumber(pf.wBox:GetText())
-    local h = pf and pf.hBox and tonumber(pf.hBox:GetText())
-    if w and h and h > 0 then pf._sizeRatio = w / h end
-end
+
 
 local function ApplySize(changed)
     if pf and pf._lockRatio then
@@ -353,7 +345,7 @@ end
 local function ToggleSizeRatio(checked)
     if not pf then return end
     pf._lockRatio = checked and true or false
-    if pf._lockRatio then CaptureSizeRatio() end
+    if pf._lockRatio then Quick.CaptureSizeRatio(pf) end
 end
 
 local function Build()
@@ -407,7 +399,7 @@ function CastPopup.Open(unit, parent)
     Build()
     pf.unit, pf.parent = unit, parent
     Sync()
-    if pf._lockRatio then CaptureSizeRatio() end
+    if pf._lockRatio then Quick.CaptureSizeRatio(pf) end
     pf:Show()
     SetTest(unit, true)
     if Style.FadeIn then Style.FadeIn(pf, 0.12, 0.86, 1) end

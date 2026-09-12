@@ -107,66 +107,6 @@ local LANE_STYLE_KEYS = {
     },
 }
 
-local TEXT_STYLE_LAYOUT_KEYS = {
-    stackTextSize = true,
-    stackTextOffsetX = true,
-    stackTextOffsetY = true,
-    cooldownTextSize = true,
-    cooldownTextOffsetX = true,
-    cooldownTextOffsetY = true,
-    cooldownDecimalSeconds = true,
-    durationBarHeight = true,
-    buffStackTextSize = true,
-    buffStackTextOffsetX = true,
-    buffStackTextOffsetY = true,
-    buffCooldownTextSize = true,
-    buffCooldownTextOffsetX = true,
-    buffCooldownTextOffsetY = true,
-    buffCooldownDecimalSeconds = true,
-    buffDurationBarHeight = true,
-    debuffStackTextSize = true,
-    debuffStackTextOffsetX = true,
-    debuffStackTextOffsetY = true,
-    debuffCooldownTextSize = true,
-    debuffCooldownTextOffsetX = true,
-    debuffCooldownTextOffsetY = true,
-    debuffCooldownDecimalSeconds = true,
-    debuffDurationBarHeight = true,
-}
-local TEXT_STYLE_SHARED_KEYS = {
-    stackCountAnchor = true,
-    cooldownTextAnchor = true,
-    showStackCount = true,
-    showCooldownText = true,
-    showCooldownSwipe = true,
-    cooldownSwipeReverse = true,
-    showDurationBar = true,
-    durationBarDisplay = true,
-    durationBarPosition = true,
-    durationBarDirection = true,
-    buffStackCountAnchor = true,
-    buffCooldownTextAnchor = true,
-    buffShowStackCount = true,
-    buffShowCooldownText = true,
-    buffShowCooldownSwipe = true,
-    buffCooldownSwipeReverse = true,
-    buffShowDurationBar = true,
-    buffDurationBarDisplay = true,
-    buffDurationBarPosition = true,
-    buffDurationBarDirection = true,
-    debuffStackCountAnchor = true,
-    debuffCooldownTextAnchor = true,
-    debuffShowStackCount = true,
-    debuffShowCooldownText = true,
-    debuffShowCooldownSwipe = true,
-    debuffCooldownSwipeReverse = true,
-    debuffTypeBorderMode = true,
-    useDebuffTypeBorders = true,
-    debuffShowDurationBar = true,
-    debuffDurationBarDisplay = true,
-    debuffDurationBarPosition = true,
-    debuffDurationBarDirection = true,
-}
 local AURA_TEXT_ANCHOR_OK = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true,
     LEFT = true, CENTER = true, RIGHT = true,
@@ -313,26 +253,6 @@ local function GetSharedLayout(auras, unit)
         return pu.layoutShared
     end
     return nil
-end
-
-local function TableHasAnyKey(tbl, keys)
-    if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
-    for key in pairs(keys) do
-        if tbl[key] ~= nil then return true end
-    end
-    return false
-end
-
-local function UnitStyleOverrideActive(pu)
-    if type(pu) ~= "table" then return false end
-    if pu.overrideStyle ~= nil then return pu.overrideStyle == true end
-    return TableHasAnyKey(pu.layout, TEXT_STYLE_LAYOUT_KEYS) or TableHasAnyKey(pu.layoutShared, TEXT_STYLE_SHARED_KEYS)
-end
-
-local function ReadNumber(shared, layout, key, defaultValue, minValue, maxValue)
-    local v = shared and shared[key]
-    if layout and layout[key] ~= nil then v = layout[key] end
-    return Clamp(v, defaultValue, minValue, maxValue)
 end
 
 local function ReadRawNumber(shared, layout, key)

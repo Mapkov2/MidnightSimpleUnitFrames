@@ -15,7 +15,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     local tonumber = tonumber
     local tostring = tostring
     local pairs = pairs
-    local math_floor = math.floor
+
     local table_sort = table.sort
     local AuraFilter = Common.AuraFilter
     local ClampNumber = Common.ClampNumber
@@ -37,11 +37,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
 
     local _gfBlacklistHashCache = setmetatable({}, { __mode = "k" })
 
-    local function GroupBlacklistSpellID(value)
-        value = tostring(value or "")
-        local id = tonumber(value:match("spell:(%d+)") or value:match("#(%d+)") or value:match("^(%d+)$"))
-        return id and math_floor(id + 0.5) or nil
-    end
+    local GroupBlacklistSpellID = _G.MSUF_AuraSpellIDFromKey
 
     local function DirectGroupBlacklistSpells(group)
         if type(group) ~= "table" then return nil end
@@ -280,7 +276,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     -- !PLAYER adds a redundant caster-identity dependency on restricted group units.
     GF_AURA_FILTER.EXTERNALS_TOKEN = "HELPFUL|EXTERNAL_DEFENSIVE"
     GF_AURA_FILTER.BuildBlacklistHash = GF_AURA_FILTER.BuildBlacklistHash or BuildGroupBlacklistHash
-    GF_AURA_FILTER.InvalidateBlacklistHash = GF_AURA_FILTER.InvalidateBlacklistHash or function(group)
+    GF_AURA_FILTER.InvalidateBlacklistHash = function(group)
         if type(group) == "table" then _gfBlacklistHashCache[group] = nil end
     end
 

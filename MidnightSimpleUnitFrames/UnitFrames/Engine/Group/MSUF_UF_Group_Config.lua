@@ -7,9 +7,9 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF = MSUF
 
 local UF = MSUF.UF
+local Shared = UF.Shared
 local GF = MSUF.GF or {}
 MSUF.GF = GF
 
@@ -21,180 +21,20 @@ local floor = math.floor
 local GetNumGroupMembers = _G.GetNumGroupMembers
 local GetTime = _G.GetTime
 local wipe = _G.wipe or table.wipe
-local Clamp01 = UF.Clamp01 or function(value, fallback)
-  value = tonumber(value)
-  if value == nil then value = fallback end
-  value = value or 0
-  if value < 0 then return 0 end
-  if value > 1 then return 1 end
-  return value
-end
-local Num = UF.NumberWithFallback or function(value, fallback)
-  -- Perf smoke can load group config without the full UF core helper table.
-  -- Keep the compiled-spec path deterministic instead of depending on load-order side effects.
-  local number = tonumber(value)
-  if number ~= nil then return number end
-  return fallback
-end
-local NormalizeDispelDetectTrigger = UF.NormalizeDispelDetectTrigger or function(value)
-  value = tostring(value or ""):upper()
-  if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then return "BY_RAID" end
-  if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
-  if value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "DISPEL_TYPE" end
-  if value == "PLAYER_CAST" or value == "CAST_BY_ME" or value == "MY_DEBUFF" then return "PLAYER_CAST" end
-  return "BY_ME"
-end
-local NormalizeDispelOverlayTrigger = UF.NormalizeDispelOverlayTrigger or function(value)
-  value = tostring(value or ""):upper()
-  if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
-  return NormalizeDispelDetectTrigger(value)
-end
-local NormalizeDispelOverlayStyle = UF.NormalizeDispelOverlayStyle or function(value)
-  if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then return value end
-  return "FULL"
-end
+local Clamp01 = UF.Clamp01
+local Num = UF.NumberWithFallback
+local NormalizeDispelDetectTrigger = UF.NormalizeDispelDetectTrigger
+local NormalizeDispelOverlayTrigger = UF.NormalizeDispelOverlayTrigger
+local NormalizeDispelOverlayStyle = UF.NormalizeDispelOverlayStyle
 local DISPEL_OVERLAY_121_PTR_DISABLED = false
-local NormalizeRangeFadeLayerMode = UF.NormalizeRangeFadeLayerMode or function(value)
-  if value == "health" or value == "hp" or value == "hpbar" or value == "HP" or value == 2 then return "health" end
-  return "frame"
-end
-local NormalizeAbsorbTestScope = UF.NormalizeAbsorbTestScope or function(scope)
-  scope = tostring(scope or "shared"):lower()
-  scope = scope:gsub("%s+", "")
-  scope = scope:gsub("%-", "_")
-  if scope == "" or scope == "all" or scope == "global" then return "shared" end
-  if scope == "gf_party" or scope == "group_party" or scope == "gfparty" then return "party" end
-  if scope == "gf_raid" or scope == "gf_mythicraid" or scope == "group_raid" or scope == "gfraid" or scope == "mythic" or scope == "mythicraid" then return "raid" end
-  if scope == "focus_target" then return "focustarget" end
-  if scope == "targetoftarget" or scope == "tot" then return "targettarget" end
-  return scope
-end
-local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope or function(scope, category)
-  local modes = _G.MSUF_PredictionTestModes
-  if type(modes) == "table" then
-    local normalized = NormalizeAbsorbTestScope(scope)
-    local function Enabled(bucket)
-      if type(bucket) ~= "table" then return false end
-      if category == "heal" or category == "absorb" or category == "healAbsorb"
-        or category == "tempMaxHealth" then return bucket[category] == true end
-      return bucket.heal == true or bucket.absorb == true or bucket.healAbsorb == true
-    end
-    return Enabled(modes.shared) or (normalized ~= "shared" and Enabled(modes[normalized]))
-  end
-  if _G.MSUF_AbsorbTextureTestMode ~= true then return false end
-  local wanted = NormalizeAbsorbTestScope(_G.MSUF_AbsorbTextureTestScope)
-  return wanted == "shared" or wanted == NormalizeAbsorbTestScope(scope)
-end
-local ScopedValue = UF.ConfigScopedValue or function(conf, general, key, fallback)
-  if conf and conf.hlOverride == true and conf[key] ~= nil then return conf[key] end
-  if general and general[key] ~= nil then return general[key] end
-  return fallback
-end
-local CompileBorderPriority = UF.CompileBorderPriority or function(conf, general)
-  local function Read(key, legacyKey, fallback)
-    if conf and conf.hlOverride == true then
-      if conf[key] ~= nil then return conf[key] end
-      if legacyKey and conf[legacyKey] ~= nil then return conf[legacyKey] end
-    end
-    if general then
-      if general[key] ~= nil then return general[key] end
-      if legacyKey and general[legacyKey] ~= nil then return general[legacyKey] end
-    end
-    return fallback
-  end
-  local aliases = {
-    Dispel = "dispel", DISPEL = "dispel", Magic = "dispel", MAGIC = "dispel", Curse = "dispel", CURSE = "dispel",
-    Disease = "dispel", DISEASE = "dispel", Poison = "dispel", POISON = "dispel", Bleed = "dispel", BLEED = "dispel",
-    Aggro = "aggro", AGGRO = "aggro", Purge = "purge", PURGE = "purge", BossTarget = "bossTarget",
-    Boss_Target = "bossTarget", ["Boss Target"] = "bossTarget", ["boss target"] = "bossTarget",
-    boss_target = "bossTarget", bosstarget = "bossTarget", BOSS_TARGET = "bossTarget",
-  }
-  local allowed, defaults, order, used = { dispel = true, aggro = true, purge = true, bossTarget = true }, { "dispel", "aggro", "purge", "bossTarget" }, {}, {}
-  local raw = Read("hlPrioOrder", "highlightPrioOrder", nil)
-  if type(raw) == "table" then
-    for i = 1, #raw do
-      local key = raw[i]
-      if type(key) == "string" then key = aliases[key] or key end
-      if allowed[key] and not used[key] then order[#order + 1], used[key] = key, true end
-    end
-  end
-  for i = 1, #defaults do if not used[defaults[i]] then order[#order + 1], used[defaults[i]] = defaults[i], true end end
-  local enabled = Read("hlPrioEnabled", "highlightPrioEnabled", false)
-  return enabled == true or enabled == 1 or enabled == "1", order
-end
-local GRADIENT_DIR_KEYS = { LEFT = true, RIGHT = true, UP = true, DOWN = true }
-local function GradientKeyActive(conf, key)
-  if not (conf and conf.hlOverride == true and conf.gradientOverride == true) then return false end
-  if conf.gradientOverrideVersion ~= 2 then return conf[key] ~= nil end
-  return type(conf.gradientOverrideKeys) == "table" and conf.gradientOverrideKeys[key] == true
-end
+local NormalizeRangeFadeLayerMode = UF.NormalizeRangeFadeLayerMode
 
-local function GradientScopedValue(conf, general, key, fallback, legacyKey)
-  if GradientKeyActive(conf, key) and conf[key] ~= nil then return conf[key] end
-  if legacyKey and GradientKeyActive(conf, legacyKey) and conf[legacyKey] ~= nil then return conf[legacyKey] end
-  if general and general[key] ~= nil then return general[key] end
-  if legacyKey and general and general[legacyKey] ~= nil then return general[legacyKey] end
-  return fallback
-end
-
-local function FallbackResolveBarGradient(conf, general, enabledKey)
-  local power = enabledKey == "enablePowerGradient"
-  local useLegacyDirections = false
-  if power then
-    local scopedPower = GradientKeyActive(conf, "powerGradientDirLeft") or GradientKeyActive(conf, "powerGradientDirRight")
-      or GradientKeyActive(conf, "powerGradientDirUp") or GradientKeyActive(conf, "powerGradientDirDown")
-    local scopedLegacy = GradientKeyActive(conf, "gradientDirLeft") or GradientKeyActive(conf, "gradientDirRight")
-      or GradientKeyActive(conf, "gradientDirUp") or GradientKeyActive(conf, "gradientDirDown")
-    local generalPower = general and (general.powerGradientDirLeft ~= nil or general.powerGradientDirRight ~= nil
-      or general.powerGradientDirUp ~= nil or general.powerGradientDirDown ~= nil)
-    useLegacyDirections = not scopedPower and (scopedLegacy or not generalPower)
-  end
-  local prefix = power and not useLegacyDirections and "powerGradientDir" or "gradientDir"
-  local left = GradientScopedValue(conf, general, prefix .. "Left", false) == true
-  local right = GradientScopedValue(conf, general, prefix .. "Right", false) == true
-  local up = GradientScopedValue(conf, general, prefix .. "Up", false) == true
-  local down = GradientScopedValue(conf, general, prefix .. "Down", false) == true
-  if not (left or right or up or down) then
-    local directionKey = power and not useLegacyDirections and "powerGradientDirection" or "gradientDirection"
-    local legacy = GradientScopedValue(conf, general, directionKey, "RIGHT")
-    if not GRADIENT_DIR_KEYS[legacy] then legacy = "RIGHT" end
-    left, right, up, down = legacy == "LEFT", legacy == "RIGHT", legacy == "UP", legacy == "DOWN"
-  end
-  local strengthKey = power and "powerGradientStrength" or "gradientStrength"
-  local colorPrefix = power and "powerBarGradientColor" or "healthBarGradientColor"
-  return {
-    enabled = GradientScopedValue(conf, general, enabledKey, false) == true,
-    strength = Clamp01(GradientScopedValue(conf, general, strengthKey, 0.45,
-      power and "gradientStrength" or nil), 0.45),
-    r = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "R", 0), 0),
-    g = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "G", 0), 0),
-    b = Clamp01(GradientScopedValue(conf, general, colorPrefix .. "B", 0), 0),
-    left = left,
-    right = right,
-    up = up,
-    down = down,
-  }
-end
-
-local function FallbackFillPredictionColors(dst, general, conf, scopedValue, numberFn)
-  dst.healR = numberFn(general and general.healPredictionColorR, 0)
-  dst.healG = numberFn(general and general.healPredictionColorG, 1)
-  dst.healB = numberFn(general and general.healPredictionColorB, 0)
-  dst.healA = Clamp01(scopedValue(conf, general, "healPredictionBarOpacity", general and general.healPredictionColorA), 0.45)
-  dst.absorbR = numberFn(general and general.absorbBarColorR, 1)
-  dst.absorbG = numberFn(general and general.absorbBarColorG, 1)
-  dst.absorbB = numberFn(general and general.absorbBarColorB, 1)
-  dst.absorbA = Clamp01(scopedValue(conf, general, "absorbBarOpacity", general and general.absorbBarColorA), 0.75)
-  dst.healAbsorbR = numberFn(general and general.healAbsorbBarColorR, 0.7)
-  dst.healAbsorbG = numberFn(general and general.healAbsorbBarColorG, 0)
-  dst.healAbsorbB = numberFn(general and general.healAbsorbBarColorB, 0)
-  dst.healAbsorbA = Clamp01(scopedValue(conf, general, "healAbsorbBarOpacity", general and general.healAbsorbBarColorA), 1)
-end
-
--- These mirrors keep isolated compiler tests/load-order probes deterministic.
--- The live addon still uses the shared UF core helpers whenever they are loaded.
-local ResolveBarGradient = UF.ResolveBarGradient or FallbackResolveBarGradient
-local FillPredictionColors = UF.FillPredictionColors or FallbackFillPredictionColors
+local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope
+local ScopedValue = UF.ConfigScopedValue
+local CompileBorderPriority = UF.CompileBorderPriority
+-- The UF metadata owner precedes both compilers in the real TOC.
+local ResolveBarGradient = UF.ResolveBarGradient
+local FillPredictionColors = UF.FillPredictionColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local EMPTY_EVENTS = {}
@@ -210,14 +50,7 @@ local function Layer(value, fallback)
   return value
 end
 
-local function NormalizeFrameOutlineStrata(value)
-  local normalize = _G.MSUF_NormalizeFrameStrata
-  if type(normalize) == "function" then return normalize(value, "AUTO") end
-  if value == nil or value == "" then return "AUTO" end
-  value = tostring(value):upper()
-  local rank = _G.MSUF_FRAME_STRATA_RANK
-  return rank and rank[value] and value or "AUTO"
-end
+local NormalizeFrameOutlineStrata = Shared.NormalizeFrameOutlineStrata
 
 local _groupSizeCacheAt, _groupSizeCacheValue = 0, 0
 --- Group-size reads are used for dynamic aura scaling. Cache briefly so one
@@ -272,16 +105,7 @@ local function ResolveTexture(resolver, kind)
   return WHITE
 end
 
-local function ResolveStatusbarTextureKey(key, fallback)
-  if type(key) == "string" and key ~= "" then
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
-    local texture = type(resolve) == "function" and resolve(key) or nil
-    if type(texture) == "string" and texture ~= "" then
-      return texture
-    end
-  end
-  return fallback or WHITE
-end
+local ResolveStatusbarTextureKey = Shared.ResolveStatusbarTextureKey
 
 local function ResolveHighlightRGB()
   local general = _G.MSUF_DB and _G.MSUF_DB.general
@@ -309,10 +133,7 @@ local function SettingsCache()
   return nil
 end
 
-local function GeneralDB()
-  local db = _G.MSUF_DB
-  return type(db) == "table" and type(db.general) == "table" and db.general or nil
-end
+local GeneralDB = _G.MSUF_GetGeneralDB
 
 local HEALTH_MODE_ALIASES = {
   GRADIENT = "gradient", gradient = "gradient",
@@ -570,24 +391,8 @@ local function IsPowerTextEnabled(kind, conf)
   return conf.showPowerText == true or conf.showPower == true
 end
 
-local function ResolvePowerTextColorByType(conf, general)
-  local enabled = general and general.colorPowerTextByType == true
-  if conf and conf.fontOverride == true then
-    if conf.powerTextColorByType ~= nil then
-      enabled = conf.powerTextColorByType == true
-    elseif conf.colorPowerTextByType ~= nil then
-      enabled = conf.colorPowerTextByType == true
-    end
-  end
-  return enabled
-end
-
-local function ResolveTextSlotHidePercentSymbol(conf, general, key)
-  if conf and conf[key] ~= nil then
-    return conf[key] == true
-  end
-  return general and general.hidePercentSymbol == true
-end
+local ResolvePowerTextColorByType = Shared.ResolvePowerTextColorByType
+local ResolveTextSlotHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol
 
 local function GetRole(unit)
   if GF.GetUnitGroupRole then
@@ -610,13 +415,7 @@ local function EffectivePowerHeight(kind, unit, role, conf)
   return Num(conf.powerHeight, 4)
 end
 
-local function AddEvent(list, event)
-  if not list then
-    list = {}
-  end
-  list[#list + 1] = event
-  return list
-end
+local AddEvent = Shared.AddEvent
 
 local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextFlags, statusTextPlayerFlags, incomingRes, pvp)
   local events, unitlessEvents
@@ -852,10 +651,7 @@ local function CompilePrediction(kind, conf, texture)
   return out
 end
 
-local function ResolveTextSlotFontSize(conf, key, fallback)
-  local value = Num(conf and conf[key], fallback)
-  return value > 0 and value or fallback
-end
+local ResolveTextSlotFontSize = Shared.ResolveTextSlotFontSize
 
 local function CompileTempMaxHealth(kind, conf, texture)
   local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
@@ -1412,18 +1208,7 @@ local function CompileCoreAuras(kind, conf)
   local trackedBuffIncludeHash, trackedBuffCount, spellIndicatorAutoBlacklistHash = BuildSpellIndicatorAuraHashes(conf)
   local trackedBuffMax = Num(buff.trackedMax, Num(conf.trackedBuffMax, trackedBuffCount > 0 and trackedBuffCount or 8))
   local trackedBuffsEnabled = false
-  local function NormalizeDispelBorderMode(value, legacyEnabled)
-    if value == true then return "SYMBOL" end
-    if value == false then return "OFF" end
-    value = tostring(value or ""):upper()
-    if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
-    if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
-      or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
-      return "SYMBOL"
-    end
-    if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
-    return legacyEnabled == true and "SYMBOL" or "OFF"
-  end
+  local NormalizeDispelBorderMode = _G.MSUF_NormalizeLegacyDispelBorderMode
   local debuffDispelBorderMode = NormalizeDispelBorderMode(debuff.dispelBorderMode, debuff.showDispelBorder == true)
   local buffGrowthX, buffGrowthY = SplitAuraGrowth(buff.growth, "LEFTUP")
   local trackedBuffGrowthX, trackedBuffGrowthY = SplitAuraGrowth(buff.trackedGrowth or buff.growth, "RIGHTDOWN")
@@ -1536,23 +1321,6 @@ local function CompileCoreAuras(kind, conf)
   return out
 end
 
-local function CompileAlpha(conf)
-  local hpAlpha = Clamp01(conf and conf.hpBarAlpha, 1)
-  local oocAlpha = Clamp01(conf and conf.oocFadeAlpha, 0.5)
-  return {
-    active = hpAlpha < 1,
-    hpAlpha = hpAlpha,
-    excludeTextPortrait = conf and conf.alphaExcludeTextPortrait == true,
-    excludePredictionBars = conf and conf.alphaExcludePredictionBars == true,
-    -- Out-of-combat fade: composed by GroupRangeFade (CoreAlpha) rather than
-    -- the shared Alpha element; externalOoc keeps the element's frame lane
-    -- untouched so the group composer never reads a stale ooc value.
-    oocFade = conf ~= nil and conf.oocFadeEnabled == true and oocAlpha < 1,
-    oocAlpha = oocAlpha,
-    externalOoc = true,
-  }
-end
-
 local function CompileBarBackground(conf)
   return {
     r = Num(conf.bgR, 0.1),
@@ -1562,57 +1330,9 @@ local function CompileBarBackground(conf)
   }
 end
 
+--- Group portraits never offer the BLIZZARD ring (a unit-frame feature), so
+--- the shape set stays local; every other portrait normalizer is shared.
 local PORTRAIT_SHAPES = { CIRCLE = true, ROUNDED = true, DIAMOND = true }
-local PORTRAIT_BORDERS = { SOLID = true, CLASS_COLOR = true, REACTION = true, CUSTOM = true }
-local PORTRAIT_PLACEMENTS = { ATTACHED = true, DETACHED = true, OVERLAY = true }
-local PORTRAIT_POINTS = {
-  TOPLEFT = true, TOP = true, TOPRIGHT = true,
-  LEFT = true, CENTER = true, RIGHT = true,
-  BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
-}
-local PORTRAIT_OVERLAY_ALIGNMENTS = { LEFT = true, CENTER = true, RIGHT = true, FULL = true }
-local PORTRAIT_BORDER_DIRECTIONS = { UP = true, RIGHT = true, DOWN = true, LEFT = true }
-
-local function PortraitClassStyle(value)
-  local normalize = _G.MSUF_NormalizePortraitClassStyleValue
-  if type(normalize) == "function" then return normalize(value) end
-  local media = MSUF and MSUF.PortraitMedia
-  if media and type(media.NormalizeClassPack) == "function" then return media.NormalizeClassPack(value) end
-  if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then return value end
-  return "BLIZZARD"
-end
-
-local function PortraitLevel(value)
-  value = floor(Num(value, 7) + 0.5)
-  if value < 0 then return 0 end
-  if value > 30 then return 30 end
-  return value
-end
-
-local function PortraitPan(value)
-  value = Num(value, 0)
-  if value < -100 then return -100 end
-  if value > 100 then return 100 end
-  return value
-end
-
-local function CompilePortraitTexCoords(portrait, zoom, width, height, panX, panY)
-  zoom = Num(zoom, 100)
-  if zoom > 1 and zoom <= 2 then zoom = zoom * 100 end
-  if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
-  local span = 0.84 * (100 / zoom)
-  local spanX, spanY = span, span
-  if width > 0 and height > 0 and width ~= height then
-    if width > height then spanY = span * (height / width)
-    else spanX = span * (width / height) end
-  end
-  local slackX, slackY = (1 - spanX) * 0.5, (1 - spanY) * 0.5
-  local centerX = 0.5 + (PortraitPan(panX) / 100) * slackX
-  local centerY = 0.5 - (PortraitPan(panY) / 100) * slackY
-  portrait.zoom = zoom
-  portrait.texL, portrait.texR = centerX - spanX * 0.5, centerX + spanX * 0.5
-  portrait.texT, portrait.texB = centerY - spanY * 0.5, centerY + spanY * 0.5
-end
 
 --- Party is the only GroupFrames scope that owns portrait settings. Returning
 --- an explicit disabled spec for every other kind keeps stale/imported keys
@@ -1620,8 +1340,7 @@ end
 local function CompilePortrait(kind, conf, frameHeight)
   if kind ~= "party" then return { enabled = false } end
   conf = conf or {}
-  local mode = conf.portraitMode
-  if mode ~= "LEFT" and mode ~= "RIGHT" then mode = conf.showPortrait == true and "LEFT" or "OFF" end
+  local mode = Shared.NormalizePortraitMode(conf)
   local override = Num(conf.portraitSizeOverride, Num(conf.portraitSize, 0))
   local autoSize = math.max(16, Num(frameHeight, 40) - 4)
   -- `0` deliberately means automatic sizing. Every positive slider value is
@@ -1643,20 +1362,20 @@ local function CompilePortrait(kind, conf, frameHeight)
     height = height > 0 and math.max(8, height) or size
   end
   local shape = PORTRAIT_SHAPES[conf.portraitShape] and conf.portraitShape or "SQUARE"
-  local borderStyle = PORTRAIT_BORDERS[conf.portraitBorderStyle] and conf.portraitBorderStyle or "NONE"
-  local placement = PORTRAIT_PLACEMENTS[conf.portraitPlacement] and conf.portraitPlacement or "ATTACHED"
-  local point = PORTRAIT_POINTS[conf.portraitDetachedPoint] and conf.portraitDetachedPoint or "RIGHT"
-  local relPoint = PORTRAIT_POINTS[conf.portraitDetachedTo] and conf.portraitDetachedTo or "LEFT"
-  local overlayAlign = PORTRAIT_OVERLAY_ALIGNMENTS[conf.portraitOverlayAlign] and conf.portraitOverlayAlign or "LEFT"
-  local direction = PORTRAIT_BORDER_DIRECTIONS[conf.portraitBorderDirection] and conf.portraitBorderDirection or "UP"
+  local borderStyle = Shared.NormalizePortraitBorder(conf.portraitBorderStyle)
+  local placement = Shared.NormalizePortraitPlacement(conf.portraitPlacement)
+  local point = Shared.NormalizePortraitAnchorPoint(conf.portraitDetachedPoint, "RIGHT")
+  local relPoint = Shared.NormalizePortraitAnchorPoint(conf.portraitDetachedTo, "LEFT")
+  local overlayAlign = Shared.NormalizePortraitOverlayAlign(conf.portraitOverlayAlign)
+  local direction = Shared.NormalizePortraitBorderDirection(conf.portraitBorderDirection)
   local edgeSoftnessLevel = floor((Num(conf.portraitEdgeSoftness, 0) / 2) + 0.5)
   if edgeSoftnessLevel < 0 then edgeSoftnessLevel = 0 elseif edgeSoftnessLevel > 15 then edgeSoftnessLevel = 15 end
   if shape == "BLIZZARD" or borderStyle ~= "NONE" then edgeSoftnessLevel = 0 end
   local portrait = {
     enabled = mode ~= "OFF",
     side = mode == "RIGHT" and "RIGHT" or "LEFT",
-    render = conf.portraitRender == "CLASS" and "CLASS" or "2D",
-    classStyle = PortraitClassStyle(conf.portraitClassStyle),
+    render = Shared.NormalizePortraitRender(conf.portraitRender),
+    classStyle = Shared.NormalizePortraitClassStyle(conf.portraitClassStyle),
     castSpellIcon = conf.portraitCastSpellIcon == true,
     clickable = conf.portraitClickable == true,
     shape = shape,
@@ -1669,7 +1388,7 @@ local function CompilePortrait(kind, conf, frameHeight)
     placement = placement,
     point = point,
     relPoint = relPoint,
-    levelOffset = PortraitLevel(conf.portraitLevelOffset),
+    levelOffset = Shared.NormalizePortraitLevelOffset(conf.portraitLevelOffset),
     overlayAlign = overlayAlign,
     alpha = Clamp01(Num(conf.portraitAlpha, 100) / 100, 1),
     edgeSoftnessLevel = edgeSoftnessLevel,
@@ -1677,7 +1396,7 @@ local function CompilePortrait(kind, conf, frameHeight)
       style = borderStyle,
       thickness = math.max(1, Num(conf.portraitBorderThickness, 2)),
       fill = conf.portraitFillBorder == true,
-      art = conf.portraitBorderArt == "RELIEF" and "RELIEF" or "FLAT",
+      art = Shared.NormalizePortraitBorderArt(conf.portraitBorderArt),
       direction = direction,
       r = Num(conf.portraitBorderColorR, 1),
       g = Num(conf.portraitBorderColorG, 1),
@@ -1692,7 +1411,7 @@ local function CompilePortrait(kind, conf, frameHeight)
       a = Num(conf.portraitBgColorA, 0.85),
     },
   }
-  CompilePortraitTexCoords(portrait, conf.portraitZoom, width, height, conf.portraitPanX, conf.portraitPanY)
+  Shared.CompilePortraitTexCoords(portrait, conf.portraitZoom, width, height, conf.portraitPanX, conf.portraitPanY)
   return portrait
 end
 
@@ -1786,9 +1505,9 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     healthLeft = healthLeft,
     healthCenter = healthCenter,
     healthRight = healthRight,
-    healthLeftFontSize = ResolveTextSlotFontSize(conf, "hpTextLeftFontSize", hpFontSize),
-    healthCenterFontSize = ResolveTextSlotFontSize(conf, "hpTextCenterFontSize", hpFontSize),
-    healthRightFontSize = ResolveTextSlotFontSize(conf, "hpTextRightFontSize", hpFontSize),
+    healthLeftFontSize = ResolveTextSlotFontSize(conf, nil, "hpTextLeftFontSize", hpFontSize),
+    healthCenterFontSize = ResolveTextSlotFontSize(conf, nil, "hpTextCenterFontSize", hpFontSize),
+    healthRightFontSize = ResolveTextSlotFontSize(conf, nil, "hpTextRightFontSize", hpFontSize),
     healthLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol"),
     healthCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol"),
     healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol"),
@@ -1812,9 +1531,9 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     powerLeft = conf.powerTextLeft or "NONE",
     powerCenter = conf.powerTextCenter or "NONE",
     powerRight = conf.powerTextRight or "NONE",
-    powerLeftFontSize = ResolveTextSlotFontSize(conf, "powerTextLeftFontSize", powerFontSize),
-    powerCenterFontSize = ResolveTextSlotFontSize(conf, "powerTextCenterFontSize", powerFontSize),
-    powerRightFontSize = ResolveTextSlotFontSize(conf, "powerTextRightFontSize", powerFontSize),
+    powerLeftFontSize = ResolveTextSlotFontSize(conf, nil, "powerTextLeftFontSize", powerFontSize),
+    powerCenterFontSize = ResolveTextSlotFontSize(conf, nil, "powerTextCenterFontSize", powerFontSize),
+    powerRightFontSize = ResolveTextSlotFontSize(conf, nil, "powerTextRightFontSize", powerFontSize),
     powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol"),
     powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol"),
     powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol"),
@@ -1826,7 +1545,7 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     powerCenterY = powerY + Num(conf.powerTextCenterOffsetY, 0),
     powerRightX = powerX + Num(conf.powerTextRightOffsetX, 0),
     powerRightY = powerY + Num(conf.powerTextRightOffsetY, 0),
-    powerColorByType = ResolvePowerTextColorByType(conf, general),
+    powerColorByType = ResolvePowerTextColorByType(general, conf),
     shortNumbers = true,
   }
 end
@@ -1975,7 +1694,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
   local textSpec = CompileTextSpec(kind, conf, general, baselineOffset, nameTextOptions)
   local status = CompileStatus(kind, conf)
   local group = CompileGroupVisuals(kind, conf)
-  local alpha = CompileAlpha(conf)
+  local alpha = Shared.CompileAlpha({}, conf, true)
   local portrait = CompilePortrait(kind, conf, h)
   local nameFontSize = Num(conf.nameFontSize, 12)
 
@@ -2174,7 +1893,7 @@ local function RefreshColorDomain(kind, base, conf)
   text.nameColor = nameTextOptions.nameColor
   text.healthColorByHealth = nameTextOptions.healthColorByHealth == true
   text.healthColorByClass = nameTextOptions.healthColorByClass == true
-  text.powerColorByType = ResolvePowerTextColorByType(conf, general)
+  text.powerColorByType = ResolvePowerTextColorByType(general, conf)
   if oldHealthColorByHealth ~= (text.healthColorByHealth == true)
     or oldHealthColorByClass ~= (text.healthColorByClass == true)
     or oldPowerColorByType ~= (text.powerColorByType == true) then
@@ -2185,7 +1904,7 @@ local function RefreshColorDomain(kind, base, conf)
   base.prediction = ReplaceTableContents(base.prediction, CompilePrediction(kind, conf, texture))
   base.dispel = ReplaceTableContents(base.dispel, CompileDispelVisual(kind, conf))
   base.border = ReplaceTableContents(base.border, CompileBorderSpec(kind, conf, general))
-  base.alpha = ReplaceTableContents(base.alpha, CompileAlpha(conf))
+  base.alpha = ReplaceTableContents(base.alpha, Shared.CompileAlpha({}, conf, true))
 
   local nextGroup = CompileGroupVisuals(kind, conf)
   local group = base.group or {}

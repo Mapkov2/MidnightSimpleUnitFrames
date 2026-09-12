@@ -71,7 +71,7 @@ local function ApplyGlobalFont(fs, size)
         size = tonumber(size) or 14
         if size <= 0 then size = 14 end
         if size < 6 then size = 6 elseif size > 40 then size = 40 end
-        pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+        _G.MSUF_SetFontChecked(fs, fontPath, size, fontFlags)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then

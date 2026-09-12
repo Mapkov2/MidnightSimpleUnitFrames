@@ -1,9 +1,6 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-  _G[name] = value
-  return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 -- Rounded bar mask/edge runtime.
 -- Adds optional mask textures and edge overlays to MSUF bars while respecting combat lockdown:
@@ -36,7 +33,7 @@ local MAX_HIGHLIGHT_BORDER_THICKNESS = 30
 
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local STRETCHED_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
   and _G.Enum.UITextureSliceMode.Stretched
 
@@ -2488,13 +2485,6 @@ local Module = {
     return IsConfiguredEnabled()
   end,
 
-  Init = function()
-    if IsEnabled() then
-      SetRoundedCallbacksActive(true)
-      ApplyAll()
-    end
-  end,
-
   Enable = function()
     forceDisabled = false
     SetRoundedCallbacksActive(true)
@@ -2575,3 +2565,5 @@ local function ApplyRoundedUnitframes()
   RefreshFrozenDispelOverlayMasks()
 end
 ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)
+
+ExportPublic("MSUF_ClampRoundedEdgeSize", ClampEdgeSize)

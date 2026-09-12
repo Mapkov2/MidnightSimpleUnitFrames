@@ -42,13 +42,12 @@ local function ApplyFont(fs, size)
         -- boolean result is returned. Keep the load-order fallback just as
         -- defensive as the central font service so stale SharedMedia paths can
         -- never escape through profile/runtime apply.
-        local called, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-        local ready = called and applied ~= false
+        local ready = _G.MSUF_SetFontChecked(fs, fontPath, size, fontFlags)
         local matches = _G.MSUF_FontApplicationMatches
         if ready and type(matches) == "function" then ready = matches(fs, fontPath, size) == true end
         if not ready then
             if fontPath ~= STANDARD_TEXT_FONT and STANDARD_TEXT_FONT then
-                pcall(fs.SetFont, fs, STANDARD_TEXT_FONT, size, fontFlags)
+                _G.MSUF_SetFontChecked(fs, STANDARD_TEXT_FONT, size, fontFlags)
             end
             if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
         end

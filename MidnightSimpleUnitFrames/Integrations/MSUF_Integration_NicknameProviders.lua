@@ -1,6 +1,13 @@
 --- Versioned public nickname-provider API for unit and group frame display names.
 --- Providers are never invoked in combat. Changes received in combat are
 --- coalesced and applied once after PLAYER_REGEN_ENABLED.
+---
+--- Foreign symbols this file depends on: none. This is the inbound side of
+--- the integration: third-party addons (and MSUF_Integration_NSRTNicknames.lua)
+--- register resolvers through MSUF.API.Nicknames. Resolver exceptions propagate
+--- directly to the client. Only Blizzard API is read here (UnitName,
+--- UnitFullName, UnitIsPlayer, GetNormalizedRealmName, InCombatLockdown,
+--- issecretvalue).
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -15,11 +22,13 @@ local ReadUnitIsPlayerCached = MSUF.UF and MSUF.UF.ReadUnitIsPlayerCached
 local GetNormalizedRealmName = _G.GetNormalizedRealmName
 local CreateFrame = Text.CreateFrame or _G.CreateFrame
 local InCombatLockdown = Text.InCombatLockdown or _G.InCombatLockdown
-local issecretvalue = _G.issecretvalue or function(_) return false end
+local issecretvalue = _G.issecretvalue
 local type = type
 local pairs = pairs
-local pcall = pcall
 local sort = table.sort
+-- Providers are foreign code; registration-owned handlers report and quarantine
+-- failures before the resolver's stack unwinds.
+local ReportError = MSUF.ReportError or _G.MSUF_ReportError
 
 local API = { VERSION = 1 }
 local providers = {}
@@ -168,12 +177,7 @@ end
 local function ReportProviderError(record, err)
   local message = ("MSUF Nickname API (%s): resolver failed: %s"):format(
     record and record.owner or "?", tostring(err))
-  local handler = type(_G.geterrorhandler) == "function" and _G.geterrorhandler()
-  if type(handler) == "function" then
-    handler(message)
-  elseif type(_G.print) == "function" then
-    _G.print(message)
-  end
+  ReportError("NicknameProvider", message)
 end
 
 local function RebuildProviderOrder()
@@ -251,12 +255,8 @@ local function ResolveDisplayName(unit, frame)
   for i = 1, providerCount do
     local record = orderedProviders[i]
     if record and not record.failed then
-      local ok, result = pcall(record.resolve, unit, nativeName, fullName,
-        playerOnlyPrevalidated == true and record.playerOnly == true or nil, true)
-      if not ok then
-        record.failed = true
-        ReportProviderError(record, result)
-      elseif issecretvalue(result) ~= true
+      local result = record.resolve(unit, nativeName, fullName, playerOnlyPrevalidated == true and record.playerOnly == true or nil, true)
+      if issecretvalue(result) ~= true
         and type(result) == "string"
         and result ~= ""
         and result ~= nativeName then
@@ -480,13 +480,19 @@ function API.RegisterProvider(owner, provider, priority)
     return true, "unchanged"
   end
 
-  providers[ownerKey] = {
+  local record = {
     owner = owner,
     ownerKey = ownerKey,
     resolve = resolve,
     priority = priority,
     playerOnly = playerOnly,
   }
+  record.errorHandler = function(err)
+    record.failed = true
+    ReportProviderError(record, err)
+    return err
+  end
+  providers[ownerKey] = record
   orderDirty = true
   return RequestApply()
 end

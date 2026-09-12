@@ -5,20 +5,68 @@
 --- registration with the castbar manager, interrupt visuals, and stop cleanup all
 --- pass through here. Keep API reads in Engine/Driver and keep static frame
 --- construction in Frames.
+---
+--- Frame-field contract. Fields the runtime writes on a castbar frame (all
+--- cleared by Stop / ReleaseActive unless noted):
+---   MSUF_castActive               a cast or channel is currently displayed
+---   MSUF_durationObj              stable LuaDurationObject driving bar and text
+---   MSUF_isChanneled              the active cast is a channel
+---   MSUF_channelDirect            target/focus channel fed directly from events
+---   MSUF_timerDriven              the client StatusBar timer owns the fill
+---   _msufActiveDurationSeq/Type   sequence id and cast type of the applied cast
+---   _msufStableDurationObj        per-frame duration container reused via Assign
+---   _msufLastIncomingDuration     last duration object handed to StableDuration
+---   _msufPlainEndTime/_msufRemaining/_msufPlainTotal
+---                                 plain-number snapshot for Lua fallback paths
+---   _msufDurationSnapshotUnsafe   duration is secret; no Lua snapshot exists
+---   _msufCountsDown               bar value counts down (non-unified channel)
+---   _msufTimerAssumeCountdown     timer-driven bar known to count down
+---   _msufStripeReverseFill        reverse fill resolved for this cast
+---   _msufPushbackMS               NeverSecret pushback delay captured per cast
+---   _msufCastbarWorkMask          WorkMask bits still owed to the Lua manager
+---   _msufCastbarGlowTick          glow fade is part of the current work mask
+---   _msufCastTimeEnabled/_msufCastTimeFormat/_msufCastTimeRev/_msufCastbarConfigMask
+---                                 compiled cast-time settings for one revision
+---   _msufLastTimeDecimal/_msufLastTimeTotalDecimal/_msufLastTimeFormat
+---                                 last Lua time text written (duplicate skip)
+---   _msufDurationTextBinding/_msufDurationTextConfigured/
+---   _msufDurationTextFormat/_msufDurationTextDuration
+---                                 native DurationTextBinding and its last config
+---   _msufNativeTimeBound          native text binding is enabled on timeText
+---   _msufNativeTextUnsafe         binding lacks a method; Lua time text instead
+---   _msufNativeTimerUnsafe        SetTimerDuration unavailable; Lua fill instead
+---   _msufNativeCompletionTimer/_msufNativeCompletionDeadline/
+---   _msufNativeCompletionCallback C_Timer completion arming for native casts
+---   _msufNativeCompletionUnsafe   completion timer failed; stay on the manager
+---   _msufCastState/_msufCastPhase published cast-state table and phase
+---   _msufHideToken                bumped to invalidate pending hide timers
+---   _msufInUnregister             re-entrancy guard around Hide inside Stop
+--- Cleared here but written elsewhere: hideTimer/succeededTimer (driver),
+--- _msufFastText (manager), _msufLastSBValue (driver Lua fill),
+--- _msufHardStopNoChannelSince (manager hard stop), MSUF_timerRangeSet,
+--- _msufHardStopNoCastSince, castDuration, castElapsed (legacy). Read-only
+--- here: _msufCastLifecycleOwned (driver/boss), _msufBarKey, _msufIsBossCastbar,
+--- _msufTimeTextFollower, _msufForceLuaTimeTextFollower, _msufFocusKickSuppressed.
 
 local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
 
-local ExportPublic = ns.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = ns.ExportPublic
 
 local Runtime = ns.MSUF_CastbarRuntime or {}
 ns.MSUF_CastbarRuntime = Runtime
 ns.Castbars = ns.Castbars or {}
 ns.Castbars.Runtime = Runtime
 ExportPublic("MSUF_CastbarRuntime", Runtime)
+
+-- File-level aliases for the per-cast/per-tick paths. GetTime,
+-- GetTimePreciseSec, C_Timer and issecretvalue deliberately stay late-bound in
+-- this file: the hotpath harness re-stubs them per scenario after load.
+local type = type
+local tostring = tostring
+local pairs = pairs
+local math_abs = math.abs
+local C_DurationUtil = _G.C_DurationUtil
 
 local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
 local StatusBarTimerDirection = _G.Enum and _G.Enum.StatusBarTimerDirection
@@ -97,10 +145,9 @@ local function MaskAdd(mask, flag)
     return mask + flag
 end
 
-local function DisableFrameOnUpdate(frame)
-    if not frame or not frame.SetScript then return end
-    frame:SetScript("OnUpdate", nil)
-end
+-- MSUF_CastbarUtils.lua loads first and owns the shared OnUpdate teardown;
+-- harnesses that load this file standalone load Utils first.
+local DisableFrameOnUpdate = _G.MSUF_Castbar_DisableFrameOnUpdate
 
 local function HideAfterManagerUnregister(frame, managerUnregistered)
     if not (frame and frame.Hide) then return end
@@ -134,9 +181,6 @@ local function Now()
     return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
 end
 
-local plainIsSecret = _G.issecretvalue or function(_) return false end
-local plainHuge = math.huge
-
 local function DurationHasSecretValues(durationObj)
     local hasSecretValues = durationObj and durationObj.HasSecretValues
     if type(hasSecretValues) ~= "function" then
@@ -148,52 +192,10 @@ local function DurationHasSecretValues(durationObj)
     return hasSecretValues(durationObj) == true
 end
 
---- Dragonflight+ APIs may return value wrappers. Convert only to plain scalars
---- here so the rest of Runtime can compare and cache safely.
-local function PlainNumber(value)
-    if value == nil then
-        return nil
-    end
-
-    -- The duration APIs normally return an ordinary number. Avoid ToPlain and
-    -- the allocating tostring/tonumber round-trip on that overwhelmingly hot
-    -- path while retaining the wrapper fallback below.
-    if type(value) == "number" and plainIsSecret(value) ~= true
-        and value == value and value ~= plainHuge and value ~= -plainHuge then
-        return value
-    end
-
-    local toPlain = _G.ToPlain
-    if type(toPlain) == "function" then
-        local plain = toPlain(value)
-        if plain ~= nil and plainIsSecret(plain) ~= true then
-            local plainType = type(plain)
-            if plainType == "number" then
-                if plain == plain and plain ~= plainHuge and plain ~= -plainHuge then
-                    return plain
-                end
-                return nil
-            elseif plainType == "string" then
-                return tonumber(plain)
-            end
-
-            -- Compatibility fallback for an unexpected ToPlain wrapper type.
-            return tonumber(tostring(plain))
-        end
-    end
-
-    local valueType = type(value)
-    if valueType == "number" then
-        if plainIsSecret(value) ~= true
-            and value == value and value ~= plainHuge and value ~= -plainHuge then
-            return value
-        end
-    elseif valueType == "string" and plainIsSecret(value) ~= true then
-        return tonumber(value)
-    end
-
-    return nil
-end
+--- MSUF_CastbarUtils.lua loads first and owns the shared scalar unwrapper
+--- (secret/nan/inf -> nil, wrappers unwrapped). Harnesses that load Runtime
+--- standalone load Utils first.
+local PlainNumber = _G.MSUF_Castbar_PlainNumber
 
 local nativeTextFormats
 local nativeTextFormatsUnavailable
@@ -202,7 +204,7 @@ local function BuildNativeTextFormats(allowRetry)
     if nativeTextFormats then return nativeTextFormats end
     if nativeTextFormatsUnavailable then return nil end
 
-    local durationUtil = _G.C_DurationUtil
+    local durationUtil = C_DurationUtil
     local stringUtil = _G.C_StringUtil
     local durationProperties = _G.Enum and _G.Enum.DurationTextBindingProperty
     local rounding = _G.Enum and _G.Enum.NumericRuleFormatRounding
@@ -295,7 +297,7 @@ local function PrepareNativeTimeText(frame, format, allowRetry)
 
     local binding = frame._msufDurationTextBinding
     if not binding then
-        local createBinding = _G.C_DurationUtil and _G.C_DurationUtil.CreateDurationTextBinding
+        local createBinding = C_DurationUtil and C_DurationUtil.CreateDurationTextBinding
         if type(createBinding) ~= "function" then return false end
 
         binding = createBinding()
@@ -338,7 +340,7 @@ end
 local function PrepareStableDuration(frame)
     if not frame or frame._msufStableDurationObj then return true end
 
-    local createDuration = _G.C_DurationUtil and _G.C_DurationUtil.CreateDuration
+    local createDuration = C_DurationUtil and C_DurationUtil.CreateDuration
     if type(createDuration) ~= "function" then return false end
 
     local durationObj = createDuration()
@@ -444,12 +446,7 @@ function Runtime:DisableNativeTimeText(frame)
     DisableNativeTimeText(frame)
 end
 
-local function CastTimeUnitKey(frame, unit)
-    unit = tostring(unit or ""):lower()
-    if frame and frame._msufIsBossCastbar then return "boss" end
-    if unit:match("^boss%d+$") then return "boss" end
-    return unit
-end
+local CastTimeUnitKey = _G.MSUF_CastTimeUnitKey
 
 --- Compile settings shared by the text and manager paths.  DB reads are cold:
 --- one per castbar settings revision, not one per manager registration/tick.
@@ -655,7 +652,7 @@ function Runtime:ArmNativeCompletion(frame)
     local deadline = frame._msufPlainEndTime + 0.05
     if frame._msufNativeCompletionTimer
         and frame._msufNativeCompletionDeadline
-        and math.abs(frame._msufNativeCompletionDeadline - deadline) <= 0.001 then
+        and math_abs(frame._msufNativeCompletionDeadline - deadline) <= 0.001 then
         return true
     end
     self:CancelNativeCompletion(frame)
@@ -1105,67 +1102,17 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
     end
 end
 
+--- Public table-argument form. It only unpacks the options table; every
+--- default (barValue 1, "Interrupted" label, resolved feedback color, shake
+--- unless skipped) is applied by ApplyInterruptValues.
 function Runtime:ApplyInterrupt(frame, options)
     if not frame then
         return
     end
 
     options = options or EMPTY_OPTIONS
-    self:ReleaseActive(frame)
-    self:SetPhase(frame, self.Phase.INTERRUPT_HOLD)
-
-    local statusBar = frame.statusBar
-    if not statusBar then
-        return
-    end
-
-    if statusBar.SetMinMaxValues then
-        statusBar:SetMinMaxValues(0, 1)
-    end
-
-    if statusBar.SetValue then
-        statusBar:SetValue(options.barValue or 1)
-    end
-
-    if options.reverseFill ~= nil and statusBar.SetReverseFill then
-        statusBar:SetReverseFill(options.reverseFill and true or false)
-    end
-
-    local red, green, blue = options.colorR, options.colorG, options.colorB
-    if not (red and green and blue) then
-        local resolveColor = _G.MSUF_ResolveInterruptFeedbackCastColor
-        if type(resolveColor) == "function" then
-            red, green, blue = resolveColor()
-        end
-    end
-    if not (red and green and blue) then
-        red, green, blue = 1.0, 0.82, 0.0
-    end
-
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
-    elseif statusBar.SetStatusBarColor then
-        statusBar:SetStatusBarColor(red, green, blue, 1)
-    end
-
-    SetText(frame, "castText", options.label or "Interrupted")
-    SetText(frame, "timeText", "")
-
-    if frame.Show then
-        frame:Show()
-    end
-
-    if frame.SetAlpha and frame._msufFocusKickSuppressed ~= true then
-        frame:SetAlpha(1)
-    end
-
-    if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
-        _G.MSUF_UF_ApplyCastbarRangeAlpha(frame, nil, true)
-    end
-
-    if options.skipShake ~= true and type(_G.MSUF_PlayCastbarShake) == "function" then
-        _G.MSUF_PlayCastbarShake(frame)
-    end
+    self:ApplyInterruptValues(frame, options.barValue, options.reverseFill, options.label,
+        options.colorR, options.colorG, options.colorB, options.skipShake)
 end
 
 --- Stop cleanup must be centralized because casts can end through normal stop,
@@ -1321,8 +1268,11 @@ ExportPublic("MSUF_ApplyInterruptBarVisuals", function(frame, options)
     return Runtime:ApplyInterrupt(frame, options)
 end)
 
-ExportPublic("MSUF_CB_ResetStateOnStop", function(frame, reason, options)
-    return Runtime:Stop(frame, reason, options)
+-- Stop takes (frame, reason) where reason is a string or an options table;
+-- every caller passes a reason string, so the forwarder carries exactly that.
+ExportPublic("MSUF_CB_ResetStateOnStop", function(frame, reason)
+    return Runtime:Stop(frame, reason)
 end)
 
+-- Historical export name; the implementation lives in MSUF_CastbarUtils.lua.
 ExportPublic("MSUF_CastbarRuntime_PlainNumber", PlainNumber)

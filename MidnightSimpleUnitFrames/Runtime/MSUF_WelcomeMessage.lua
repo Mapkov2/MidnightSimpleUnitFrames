@@ -16,10 +16,7 @@ MSUF = MSUF or _G.MSUF_NS or {}
 local _G = _G
 local type, rawget, format = type, rawget, string.format
 
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 --- Brand colors: the two title colors from the TOC plus the Menu2 theme's
 --- `muted` ramp, so the login lines read as MSUF instead of a generic print.
@@ -33,13 +30,7 @@ local PREVIEW_BUILD_KEY = "|cffffd700MSUF 6.0 RC18|r \194\183 Built for WoW 12.1
 local PREVIEW_AURAS_KEY = "|cffffd700Auras|r use Blizzard's native 12.1 system."
 local PREVIEW_THANKS_KEY = "|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."
 
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    local locale = MSUF.L or _G.MSUF_L
-    local translated = type(locale) == "table" and rawget(locale, text)
-    return translated or text
-end
+local Tr = MSUF.Translate
 
 local function AddonVersion()
     local getMeta = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata

@@ -10,19 +10,18 @@ local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Icons = MSUF.Icons or {}
 MSUF.Icons._layout = MSUF.Icons._layout or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 local type, tonumber = type, tonumber
 local math_floor = math.floor
 
-local function EnsureDBSafe()
-    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
-        (_G.MSUF_EnsureDB)()
-    end
-end
+local EnsureDBSafe = MSUF.Util.EnsureDBSafe
+
+--- REQUIRED: Kernel/MSUF_Util.lua is listed unconditionally in the TOC well
+--- before this file and exports the boss-token helper at its top level, the
+--- same file this module already reads MSUF.Util.EnsureDBSafe from. A nil here
+--- is a broken export or load order, never a client difference.
+local GetBossIndexFromToken = MSUF.Require("MSUF_GetBossIndexFromToken", "Runtime/MSUF_IconLayoutRuntime.lua")
 
 local function GetConfigKeyForUnitSafe(unit)
     local UF = MSUF and MSUF.UF
@@ -32,8 +31,7 @@ local function GetConfigKeyForUnitSafe(unit)
     if unit == "player" or unit == "target" or unit == "focus" or unit == "focustarget" or unit == "targettarget" or unit == "pet" then
         return unit
     end
-    local bossIndex = _G.MSUF_GetBossIndexFromToken
-    if type(bossIndex) == "function" and bossIndex(unit) then
+    if GetBossIndexFromToken(unit) then
         return "boss"
     end
     return nil

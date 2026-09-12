@@ -17,11 +17,9 @@ local GetCursorPosition = _G.GetCursorPosition
 local IsMouseButtonDown = _G.IsMouseButtonDown
 local C_Timer = _G.C_Timer
 local issecretvalue = _G.issecretvalue
+-- Native aura buttons are Blizzard-owned; a raised accessor is a normal miss.
 local EM = A3.EditMode
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- driver disabled and silently kills the drag OnUpdate.
 local Enum = _G.Enum
@@ -412,13 +410,7 @@ local function EndAuraGroupDrag(self, button, suppressClick)
     self._lastDragY = nil
     return false
 end
-local function SafeFrameCall(frame, methodName, ...)
-    local method = frame and frame[methodName]
-    if type(method) ~= "function" then return nil end
-    local ok, value = pcall(method, frame, ...)
-    if ok then return value end
-    return nil
-end
+
 
 local function IsSecretValue(value)
     -- issecretvalue is the sanctioned never-throwing probe.
@@ -426,8 +418,10 @@ local function IsSecretValue(value)
     return issecretvalue(value) == true
 end
 
-local function SafeFrameBool(frame, methodName)
-    local value = SafeFrameCall(frame, methodName)
+local function ReadPublicMouseFlag(frame, methodName)
+    local method = frame and frame[methodName]
+    if type(method) ~= "function" then return nil end
+    local value = method(frame)
     if value == nil then return nil end
     if IsSecretValue(value) then return nil end
     return value == true
@@ -435,11 +429,11 @@ end
 
 local function StoreAuraMouseState(frame)
     if not frame or frame._msufA3EditMouseStored == true then return end
+    frame._msufA3EditMouseEnabled = ReadPublicMouseFlag(frame, "IsMouseEnabled")
+    frame._msufA3EditClickEnabled = ReadPublicMouseFlag(frame, "IsMouseClickEnabled")
+    frame._msufA3EditMotionEnabled = ReadPublicMouseFlag(frame, "IsMouseMotionEnabled")
+    frame._msufA3EditPropagateClicks = ReadPublicMouseFlag(frame, "GetPropagateMouseClicks")
     frame._msufA3EditMouseStored = true
-    frame._msufA3EditMouseEnabled = SafeFrameBool(frame, "IsMouseEnabled")
-    frame._msufA3EditClickEnabled = SafeFrameBool(frame, "IsMouseClickEnabled")
-    frame._msufA3EditMotionEnabled = SafeFrameBool(frame, "IsMouseMotionEnabled")
-    frame._msufA3EditPropagateClicks = SafeFrameBool(frame, "GetPropagateMouseClicks")
 end
 
 local function SuppressAuraMouse(frame, forwardClicks)
@@ -448,12 +442,12 @@ local function SuppressAuraMouse(frame, forwardClicks)
     local hasClick = type(frame.SetMouseClickEnabled) == "function"
     local hasMotion = type(frame.SetMouseMotionEnabled) == "function"
     if type(frame.EnableMouse) == "function" then
-        SafeFrameCall(frame, "EnableMouse", forwardClicks ~= false)
+        frame:EnableMouse(forwardClicks ~= false)
     end
-    if hasClick then SafeFrameCall(frame, "SetMouseClickEnabled", forwardClicks ~= false) end
-    if hasMotion then SafeFrameCall(frame, "SetMouseMotionEnabled", false) end
+    if hasClick then frame:SetMouseClickEnabled(forwardClicks ~= false) end
+    if hasMotion then frame:SetMouseMotionEnabled(false) end
     if forwardClicks ~= false then
-        SafeFrameCall(frame, "SetPropagateMouseClicks", true)
+        frame:SetPropagateMouseClicks(true)
         frame._msufA3EditPropagateChanged = true
     end
 end
@@ -467,18 +461,11 @@ local function RestoreAuraMouse(frame, motionEnabled, fallbackClickEnabled)
     local propagateClicks = frame._msufA3EditPropagateClicks
     local propagateChanged = frame._msufA3EditPropagateChanged
 
-    frame._msufA3EditMouseStored = nil
-    frame._msufA3EditMouseEnabled = nil
-    frame._msufA3EditClickEnabled = nil
-    frame._msufA3EditMotionEnabled = nil
-    frame._msufA3EditPropagateClicks = nil
-    frame._msufA3EditPropagateChanged = nil
-
     local hasClick = type(frame.SetMouseClickEnabled) == "function"
     local hasMotion = type(frame.SetMouseMotionEnabled) == "function"
     if type(frame.EnableMouse) == "function" then
         if mouseEnabled ~= nil then
-            SafeFrameCall(frame, "EnableMouse", mouseEnabled)
+            frame:EnableMouse(mouseEnabled)
         elseif not hasClick and not hasMotion then
             if stored ~= true or fallbackClickEnabled == true then
                 mouseEnabled = true
@@ -487,23 +474,29 @@ local function RestoreAuraMouse(frame, motionEnabled, fallbackClickEnabled)
             else
                 mouseEnabled = false
             end
-            SafeFrameCall(frame, "EnableMouse", mouseEnabled)
+            frame:EnableMouse(mouseEnabled)
         end
     end
     if hasClick then
         if clickEnabled == nil then clickEnabled = fallbackClickEnabled == true end
-        SafeFrameCall(frame, "SetMouseClickEnabled", clickEnabled)
+        frame:SetMouseClickEnabled(clickEnabled)
     end
     if hasMotion then
         if motionEnabled == nil then motionEnabled = storedMotionEnabled end
         if motionEnabled == nil then motionEnabled = false end
-        SafeFrameCall(frame, "SetMouseMotionEnabled", motionEnabled)
+        frame:SetMouseMotionEnabled(motionEnabled)
     end
     if propagateClicks ~= nil then
-        SafeFrameCall(frame, "SetPropagateMouseClicks", propagateClicks)
+        frame:SetPropagateMouseClicks(propagateClicks)
     elseif propagateChanged == true then
-        SafeFrameCall(frame, "SetPropagateMouseClicks", false)
+        frame:SetPropagateMouseClicks(false)
     end
+    frame._msufA3EditMouseStored = nil
+    frame._msufA3EditMouseEnabled = nil
+    frame._msufA3EditClickEnabled = nil
+    frame._msufA3EditMotionEnabled = nil
+    frame._msufA3EditPropagateClicks = nil
+    frame._msufA3EditPropagateChanged = nil
 end
 
 local function NativeAuraEditGroup(frame)
@@ -529,13 +522,13 @@ local function WireNativeAuraEditForward(frame, container)
     if not (frame and frame.HookScript) then return false end
     if frame._msufA3EditDragForwardHooked == true then return true end
     frame._msufA3EditForwardContainer = container or frame
-    local okDown = pcall(frame.HookScript, frame, "OnMouseDown", function(self, button)
+    frame.HookScript(frame, "OnMouseDown", function(self, button)
         ForwardNativeAuraMouse(self, "OnMouseDown", button)
     end)
-    local okUp = pcall(frame.HookScript, frame, "OnMouseUp", function(self, button)
+    frame.HookScript(frame, "OnMouseUp", function(self, button)
         ForwardNativeAuraMouse(self, "OnMouseUp", button)
     end)
-    frame._msufA3EditDragForwardHooked = (okDown or okUp) and true or nil
+    frame._msufA3EditDragForwardHooked = (true) and true or nil
     return frame._msufA3EditDragForwardHooked == true
 end
 
@@ -562,17 +555,17 @@ local function SetLaneMouseSuppressed(element, container, suppressed)
     -- Enumerate its public group API after MSUF's fixed slots; this also covers
     -- mixed Unit owners without retaining a second button registry.
     local groupKey = container._msufA3ManagedGroupKey
-    local groupCount = groupKey and SafeFrameCall(container, "GetAuraGroupFrameCount", groupKey)
+    local groupCount = groupKey and container.GetAuraGroupFrameCount and container:GetAuraGroupFrameCount(groupKey)
     local fixedCount = container._msufA3FixedButtonCount or 0
     local count = groupCount and (fixedCount + groupCount)
         or (type(container.GetAuraFrameCount) == "function" and container:GetAuraFrameCount())
         or tonumber(container.createdButtons) or 0
     for i = 1, count do
-        local ok, button
+        local button
         if groupCount and i > fixedCount then
-            ok, button = pcall(container.GetAuraGroupFrame, container, groupKey, i - fixedCount)
+            button = container.GetAuraGroupFrame(container, groupKey, i - fixedCount)
         elseif type(container.GetAuraFrame) == "function" then
-            ok, button = pcall(container.GetAuraFrame, container, i)
+            button = container.GetAuraFrame(container, i)
         end
         if not button then button = container[i] end
         if container._msufA3GroupSlotsRoot == true and button then

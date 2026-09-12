@@ -7,19 +7,22 @@
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF = _G.MSUF or MSUF
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
+local ExportPublic = MSUF.ExportPublic
 
 --- PERF LOCALS (core runtime)
 --- - Reduce global table lookups in high-frequency event/render paths.
 --- - Secret-safe: localizing function references only (no value comparisons).
-local type, tostring, tonumber, select = type, tostring, tonumber, select
+local type, tostring, tonumber = type, tostring, tonumber
 local pairs = pairs
 local string_sub, string_gsub, string_lower = string.sub, string.gsub, string.lower
+local math_abs = math.abs
 local InCombatLockdown = InCombatLockdown
-local CreateFrame, GetTime = CreateFrame, GetTime
+local GetTime = GetTime
+--- The change-gated setters below read `_G.issecretvalue` per call on purpose:
+--- the API is absent on older clients and test harnesses install it after this
+--- file loads, so the field stays late-bound. Only the table lookup itself is
+--- hoisted here.
+local _G = _G
 
 -- Built-in profilers were removed in favor of explicit disposable external traces.
 -- Drop their legacy SavedVariables payload once so old reports/armed trace state
@@ -621,7 +624,7 @@ end
 local function MSUF_SetAlphaIfChanged(f, a)
     if not f or not f.SetAlpha or a == nil then return end
     local prev = f._msufAlpha
-    if prev == nil or math.abs(prev - a) > 0.001 then
+    if prev == nil or math_abs(prev - a) > 0.001 then
         f:SetAlpha(a)
         f._msufAlpha = a
     end
@@ -630,7 +633,7 @@ end
 local function MSUF_SetWidthIfChanged(f, w)
     if not f or not f.SetWidth or not w or w <= 0 then return end
     local prev = f._msufW
-    if prev == nil or math.abs(prev - w) > 0.01 then
+    if prev == nil or math_abs(prev - w) > 0.01 then
         f:SetWidth(w)
         f._msufW = w
     end
@@ -639,7 +642,7 @@ end
 local function MSUF_SetHeightIfChanged(f, h)
     if not f or not f.SetHeight or not h or h <= 0 then return end
     local prev = f._msufH
-    if prev == nil or math.abs(prev - h) > 0.01 then
+    if prev == nil or math_abs(prev - h) > 0.01 then
         f:SetHeight(h)
         f._msufH = h
     end
@@ -727,6 +730,50 @@ ExportPublic("MSUF_SetPointIfChanged", MSUF_SetPointIfChanged)
 ExportPublic("MSUF_SetJustifyHIfChanged", MSUF_SetJustifyHIfChanged)
 ExportPublic("MSUF_SetSliderValueSilent", MSUF_SetSliderValueSilent)
 ExportPublic("MSUF_ClampToSlider", MSUF_ClampToSlider)
+
+--- Shared tiny helpers on the Bootstrap namespace. Runtime files alias these
+--- (`local EnsureDBSafe = MSUF.Util.EnsureDBSafe`) instead of carrying their own
+--- copy, so call sites and per-call cost stay the same.
+MSUF.Util = MSUF.Util or {}
+local Util = MSUF.Util
+
+--- Run the full DB bootstrap only while MSUF_DB does not exist yet. The lookup
+--- stays late-bound because State/MSUF_Defaults.lua loads after this file.
+local function EnsureDBSafe()
+    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
+        (_G.MSUF_EnsureDB)()
+    end
+end
+
+local function InCombat()
+    return InCombatLockdown and InCombatLockdown()
+end
+
+--- Read a per-unit setting with the documented fallback chain: the unit's own
+--- config table wins, then the shared `general` table, then the caller's
+--- default. `Num` additionally coerces to a number and falls back to the
+--- default when the stored value is not numeric; `Val` passes the value
+--- through untouched. Icon layout (Runtime/MSUF_IconLayoutRuntime.lua) reads
+--- every offset, size and anchor through these.
+local function ScopedValue(conf, g, key, default)
+    local value = conf and conf[key]
+    if value == nil and g then value = g[key] end
+    if value == nil then return default end
+    return value
+end
+
+local function ScopedNumber(conf, g, key, default)
+    local value = tonumber(ScopedValue(conf, g, key, nil))
+    if value == nil then return default end
+    return value
+end
+
+Util.EnsureDBSafe = EnsureDBSafe
+Util.InCombat = InCombat
+Util.DeepCopy = MSUF_DeepCopy
+Util.IsSecret = IsSecretValue
+Util.Val = ScopedValue
+Util.Num = ScopedNumber
 
 do
     local UIParent = UIParent
@@ -914,12 +961,8 @@ end
 --- Phase 2: Global helpers relocated from MSUF_UpdateManager.lua
 --- (These must load before any consumer; MSUF_Util.lua is in TOC slot 2.)
 
---- NOTE: MSUF_FastCall and MSUF_SafeCall were removed. SafeCall was pcall behind
---- a name, which made the protected-call surface invisible to a plain `grep
---- pcall` audit; FastCall was an unreferenced export. The two shared surfaces
---- that used SafeCall (EventBus dispatch, Scheduler flush) now call handlers
---- directly and keep their bookkeeping unwind-safe instead, so a handler error
---- reaches BugSack without stranding shared state.
+--- EventBus and Scheduler call handlers directly. Their queue/subscription
+--- bookkeeping is committed before invocation so errors cannot strand it.
 
 --- Global helper: "any edit mode" (MSUF Edit Mode OR Blizzard Edit Mode)
 local IsInAnyEditMode = _G.MSUF_IsInAnyEditMode
@@ -1066,226 +1109,6 @@ if type(GetProfileScopedCache) ~= "function" then
 end
 ExportPublic("MSUF_GetProfileScopedCache", GetProfileScopedCache)
 
---- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC)
-BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
-BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
-BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
-BINDING_NAME_MSUF_PRIORITY_TOGGLE = type(MSUF.Translate) == "function"
-    and MSUF.Translate("Pin or unpin hovered group member")
-    or "Pin or unpin hovered group member"
-local MSUF_BINDING_COMMANDS = {
-    "MSUF_TOGGLE_OPTIONS",
-    "MSUF_TOGGLE_EDITMODE",
-    "MSUF_PRIORITY_TOGGLE",
-}
-local MSUF_MANAGED_BINDING_COMMANDS = {}
-for i = 1, #MSUF_BINDING_COMMANDS do
-    MSUF_MANAGED_BINDING_COMMANDS[MSUF_BINDING_COMMANDS[i]] = true
-end
-
-local function MSUF_EnsureGlobalBindingState()
-    ExportPublic("MSUF_GlobalDB", _G.MSUF_GlobalDB or {})
-    local gdb = _G.MSUF_GlobalDB
-    gdb.global = gdb.global or {}
-    gdb.global.bindings = gdb.global.bindings or {}
-    gdb.global.bindings.commands = gdb.global.bindings.commands or {}
-    return gdb.global.bindings.commands
-end
-
-local function MSUF_GetBindingKeysForCommand(command)
-    local keys = {}
-    if type(command) ~= "string" or command == "" or type(_G.GetBindingKey) ~= "function" then
-        return keys
-    end
-
-    local seen = {}
-    local count = select("#", _G.GetBindingKey(command))
-    for i = 1, count do
-        local key = select(i, _G.GetBindingKey(command))
-        if type(key) == "string" and key ~= "" and not seen[key] then
-            seen[key] = true
-            keys[#keys + 1] = key
-        end
-    end
-
-    table.sort(keys)
-    return keys
-end
-
-local function MSUF_CopyBindingKeys(keys)
-    local out = {}
-    if type(keys) ~= "table" then return out end
-
-    local seen = {}
-    for i = 1, #keys do
-        local key = keys[i]
-        if type(key) == "string" and key ~= "" and not seen[key] then
-            seen[key] = true
-            out[#out + 1] = key
-        end
-    end
-
-    table.sort(out)
-    return out
-end
-
-local function MSUF_BindingListsEqual(a, b)
-    a = MSUF_CopyBindingKeys(a)
-    b = MSUF_CopyBindingKeys(b)
-    if #a ~= #b then return false end
-    for i = 1, #a do
-        if a[i] ~= b[i] then return false end
-    end
-    return true
-end
-
-local function MSUF_GetStoredBindingKeys(command)
-    local commands = MSUF_EnsureGlobalBindingState()
-    return MSUF_CopyBindingKeys(commands[command])
-end
-
-local function MSUF_SetStoredBindingKeys(command, keys)
-    if type(command) ~= "string" or command == "" then return end
-    local commands = MSUF_EnsureGlobalBindingState()
-    commands[command] = MSUF_CopyBindingKeys(keys)
-end
-
-local function MSUF_SyncCurrentBindingsIntoGlobalStore()
-    for i = 1, #MSUF_BINDING_COMMANDS do
-        local command = MSUF_BINDING_COMMANDS[i]
-        local liveKeys = MSUF_GetBindingKeysForCommand(command)
-        if not MSUF_BindingListsEqual(liveKeys, MSUF_GetStoredBindingKeys(command)) then
-            MSUF_SetStoredBindingKeys(command, liveKeys)
-        end
-    end
-end
-
-local keybindOptionsOpenPending = false
-local function MSUF_OpenLoadedOptionsFromKeybind()
-    keybindOptionsOpenPending = false
-    local open = _G.MSUF_OpenStandaloneOptionsWindow
-    if type(open) == "function" then
-        open()
-    end
-end
-
-function MSUF_Keybind_ToggleOptions()
-    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        local win = _G.MSUF_StandaloneOptionsWindow
-        if win and win.IsShown and win:IsShown() then
-            if _G.MSUF_HideStandaloneOptionsWindow then
-                _G.MSUF_HideStandaloneOptionsWindow()
-            elseif win.Hide then
-                win:Hide()
-            end
-        else
-            if keybindOptionsOpenPending then return end
-            local isLoaded = _G.MSUF_IsOptionsLoaded
-            local ensureLoaded = _G.MSUF_EnsureOptionsLoaded
-            if type(isLoaded) == "function" and isLoaded() ~= true
-                and type(ensureLoaded) == "function" then
-                if ensureLoaded("MSUF_OpenStandaloneOptionsWindow") ~= true then return end
-                local timer = _G.C_Timer
-                if timer and type(timer.After) == "function" then
-                    keybindOptionsOpenPending = true
-                    timer.After(0, MSUF_OpenLoadedOptionsFromKeybind)
-                    return
-                end
-            end
-            MSUF_OpenLoadedOptionsFromKeybind()
-        end
-    end
-end
-
-function MSUF_Keybind_ToggleEditMode()
-    if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
-        local st = _G.MSUF_EditState
-        local nextActive = true
-        if st and st.active ~= nil then
-            nextActive = not st.active
-        end
-        _G.MSUF_SetMSUFEditModeDirect(nextActive, nil)
-    elseif type(_G.MSUF_ToggleEditMode) == "function" then
-        _G.MSUF_ToggleEditMode()
-    end
-end
-
-local function MSUF_SaveCurrentBindings()
-    if type(_G.SaveBindings) ~= "function" then return end
-    local set = type(_G.GetCurrentBindingSet) == "function" and _G.GetCurrentBindingSet() or 1
-    _G.SaveBindings(set)
-end
-
-local function MSUF_GetManagedBindingKeys(command)
-    if not MSUF_MANAGED_BINDING_COMMANDS[command] then return {} end
-    return MSUF_GetBindingKeysForCommand(command)
-end
-ExportPublic("MSUF_GetManagedBindingKeys", MSUF_GetManagedBindingKeys)
-
-local function MSUF_SetManagedBinding(command, key, replaceConflict)
-    if not MSUF_MANAGED_BINDING_COMMANDS[command] then return false, "INVALID_COMMAND" end
-    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
-        return false, "COMBAT"
-    end
-    key = type(key) == "string" and key:upper() or nil
-    if not key or key == "" then return false, "INVALID_KEY" end
-    if type(_G.SetBinding) ~= "function" then return false, "UNAVAILABLE" end
-    local action = type(_G.GetBindingAction) == "function" and _G.GetBindingAction(key) or nil
-    if type(action) == "string" and action ~= "" and action ~= command and replaceConflict ~= true then
-        return false, "CONFLICT", action
-    end
-    local live = MSUF_GetBindingKeysForCommand(command)
-    if _G.SetBinding(key, command) == false then return false, "SET_FAILED" end
-    local cleared = {}
-    for i = 1, #live do
-        local oldKey = live[i]
-        if oldKey ~= key then
-            if _G.SetBinding(oldKey) == false then
-                for j = 1, #cleared do _G.SetBinding(cleared[j], command) end
-                if action and action ~= "" and action ~= command then
-                    _G.SetBinding(key, action)
-                elseif action ~= command then
-                    _G.SetBinding(key)
-                end
-                return false, "CLEAR_FAILED", oldKey
-            end
-            cleared[#cleared + 1] = oldKey
-        end
-    end
-    MSUF_SetStoredBindingKeys(command, { key })
-    MSUF_SaveCurrentBindings()
-    return true
-end
-ExportPublic("MSUF_SetManagedBinding", MSUF_SetManagedBinding)
-
-local function MSUF_ClearManagedBinding(command)
-    if not MSUF_MANAGED_BINDING_COMMANDS[command] then return false, "INVALID_COMMAND" end
-    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
-        return false, "COMBAT"
-    end
-    if type(_G.SetBinding) ~= "function" then return false, "UNAVAILABLE" end
-    local live = MSUF_GetBindingKeysForCommand(command)
-    local cleared = {}
-    for i = 1, #live do
-        local key = live[i]
-        if _G.SetBinding(key) == false then
-            for j = 1, #cleared do _G.SetBinding(cleared[j], command) end
-            return false, "CLEAR_FAILED", key
-        end
-        cleared[#cleared + 1] = key
-    end
-    MSUF_SetStoredBindingKeys(command, {})
-    MSUF_SaveCurrentBindings()
-    return true
-end
-ExportPublic("MSUF_ClearManagedBinding", MSUF_ClearManagedBinding)
-
-function MSUF_Keybind_TogglePriorityFrame()
-    if type(_G.MSUF_GF_ToggleHoveredPriority) == "function" then
-        return _G.MSUF_GF_ToggleHoveredPriority()
-    end
-end
-
 --- i18n UI helpers - prevent text overflow in translated locales.
 --- Checkbox text in narrow columns can overflow when German/Spanish/French
 --- strings are longer than English. These helpers clamp the FontString
@@ -1309,18 +1132,76 @@ local function MSUF_ClampCheckboxText(cb, maxWidth)
 end
 ExportPublic("MSUF_ClampCheckboxText", MSUF_ClampCheckboxText)
 
-do
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_LOGIN")
-    f:RegisterEvent("UPDATE_BINDINGS")
-    f:SetScript("OnEvent", function(_, event)
-        if event == "PLAYER_LOGIN" or event == "UPDATE_BINDINGS" then
-            -- WoW owns the active account/character binding set. Keep the
-            -- SavedVariables copy observational only: replaying account-wide
-            -- MSUF keys here can steal spell/action bindings on another
-            -- character when both use the same physical key. Explicit menu
-            -- changes still use the conflict-aware managed-binding functions.
-            MSUF_SyncCurrentBindingsIntoGlobalStore()
-        end
-    end)
+-- Shared coordinate conversion must precede both Edit Mode and UF engine loading.
+local function FrameRectToUI(frame)
+  if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
+    return nil
+  end
+  if frame.IsShown and not frame:IsShown() then return nil end
+  local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+  if not (l and r and t and b) then return nil end
+  local fS = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
+  local uiS = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+  if not fS or fS == 0 then fS = 1 end
+  if not uiS or uiS == 0 then uiS = 1 end
+  local ratio = fS / uiS
+  return l * ratio, r * ratio, t * ratio, b * ratio
 end
+U.FrameRectToUI = FrameRectToUI
+ExportPublic("MSUF_UF_FrameRectToUI", FrameRectToUI)
+
+-- Edit Mode UI loads before its controller; bind this optional LoD apply route early.
+local function RequestGroupGeometryApply(kind, reason)
+    if not kind then return false end
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local apply = (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
+    if not (apply and type(apply.RequestGroup) == "function") then return false end
+    apply.RequestGroup(kind, "geometry", reason or "EM2_GROUP_GEOMETRY")
+    if type(apply.Flush) == "function" then apply.Flush() end
+    return true
+end
+ExportPublic("MSUF_RequestGroupGeometryApply", RequestGroupGeometryApply)
+
+local function GetGeneralDB()
+    local db = _G.MSUF_DB
+    return type(db) == "table" and type(db.general) == "table" and db.general or nil
+end
+U.GetGeneralDB = GetGeneralDB
+ExportPublic("MSUF_GetGeneralDB", GetGeneralDB)
+
+local function CooldownAnchorSupported()
+  local supported = _G.MSUF_IsCooldownAnchorSupported
+  if type(supported) == "function" then return supported() == true end
+  return type(_G.C_CooldownViewer) == "table"
+end
+U.CooldownAnchorSupported = CooldownAnchorSupported
+ExportPublic("MSUF_CooldownAnchorSupported", CooldownAnchorSupported)
+
+local function IsPlayerInCombat()
+    return _G.MSUF_InCombat == true
+        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
+        or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
+end
+U.IsPlayerInCombat = IsPlayerInCombat
+ExportPublic("MSUF_IsPlayerInCombat", IsPlayerInCombat)
+
+local function RoundOffset(value)
+    value = tonumber(value) or 0
+    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
+end
+U.RoundOffset = RoundOffset
+ExportPublic("MSUF_RoundOffset", RoundOffset)
+
+local function IsGlobalCooldownAnchorEnabled(general)
+  local isEnabled = _G.MSUF_IsCooldownAnchorEnabled
+  if type(isEnabled) == "function" then return isEnabled(general) == true end
+  return CooldownAnchorSupported() and general and general.anchorToCooldown == true or false
+end
+U.IsGlobalCooldownAnchorEnabled = IsGlobalCooldownAnchorEnabled
+ExportPublic("MSUF_GlobalCooldownAnchorEnabled", IsGlobalCooldownAnchorEnabled)
+
+local function IsGroupUnitToken(unit)
+    return type(unit) == "string" and (unit:match("^party%d+$") ~= nil or unit:match("^raid%d+$") ~= nil)
+end
+U.IsGroupUnitToken = IsGroupUnitToken
+ExportPublic("MSUF_IsGroupUnitToken", IsGroupUnitToken)
