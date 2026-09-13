@@ -283,6 +283,9 @@ local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMu
     baseColor = baseColor or T.colors.pillBase or T.colors.panel2 or DEFAULT_PANEL_COLOR
     amountTop = amountTop or 0.16
     amountBottom = amountBottom or -0.20
+    if T.controlGradientScale then
+        amountTop, amountBottom = amountTop * T.controlGradientScale, amountBottom * T.controlGradientScale
+    end
     alphaMul = alphaMul or 1
     local top = fill._msuf2GradientTopColor or {}
     local bottom = fill._msuf2GradientBottomColor or {}
@@ -332,6 +335,9 @@ end
 local function ResolveMenuFontPath(size, flags, role)
     local g = MenuGeneralDB()
     local key = type(g) == "table" and g.menuFontKey or nil
+    if (key == nil or key == "") and (role == "heading" or role == "hero" or role == "section" or role == "accordion") then
+        key = T.headingFont
+    end
     if type(key) ~= "string" or key == "" then return nil end
     size = tonumber(size) or 14
     flags = flags or ""
@@ -441,6 +447,9 @@ function T.ApplyMenuFont(fs, bump, role)
     return fs
 end
 function T.StyleFontString(fs, color, bump, role)
+    if T.fontRoleColors and (color == nil or color == T.colors.text) then
+        color = T.fontRoleColors[role or (fs and fs._msuf2FontRole)] or color
+    end
     if MenuSkin then MenuSkin.TrackText(fs, color or T.colors.text) end
     if not fs then return fs end
     RegisterPageFontString(fs)
@@ -551,6 +560,9 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     inset = inset or 1
     fillLayer = fillLayer or "BACKGROUND"
     borderLayer = borderLayer or "BORDER"
+    -- The atlas edge is a solid silhouette, not a hollow mask. Keep it behind
+    -- the inset fill; painting it on BORDER would cover the entire button.
+    if T.classicAtlas then borderLayer = fillLayer end
     local h = (frame.GetHeight and frame:GetHeight()) or 22
     local fill = CreateSuperellipseParts(frame, fillLayer, 0)
     local border = CreateSuperellipseParts(frame, borderLayer, -1)
@@ -565,6 +577,7 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
         local innerW = math.max(1, w - p * 2)
         local innerH = math.max(1, h2 - p * 2)
         local nextCapW = math.min(math.floor(innerH * 0.5 + 0.5), math.floor(innerW * 0.5))
+        if T.controlCapWidth then nextCapW = math.min(nextCapW, T.controlCapWidth) end
         -- Authored Midnight nav art uses compact corners rather than stadium
         -- caps. Accent-colored procedural nav states must keep that silhouette.
         if frame._msuf2NavItem then nextCapW = math.min(nextCapW, 6) end
@@ -573,6 +586,7 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
         local borderInnerW = math.max(1, w - bInset * 2)
         local borderInnerH = math.max(1, h2 - bInset * 2)
         local borderCapW = math.min(math.floor(borderInnerH * 0.5 + 0.5), math.floor(borderInnerW * 0.5))
+        if T.controlCapWidth then borderCapW = math.min(borderCapW, T.controlCapWidth) end
         if frame._msuf2NavItem then borderCapW = math.min(borderCapW, 6) end
         LayoutSuperellipseParts(border, frame, bInset, borderCapW, rightPad)
     end
@@ -1121,6 +1135,12 @@ local function ApplyPanelAsset(frame, variant)
     end
     if frame.SetBackdropColor then frame:SetBackdropColor(0, 0, 0, 0.001) end
     if frame.SetBackdropBorderColor then frame:SetBackdropBorderColor(0, 0, 0, 0.001) end
+    if T.classicAtlas then
+        -- One alpha-bearing surface, not bitmap + gradient + fallback fill.
+        -- Text and controls retain their own alpha; never fade the whole frame.
+        HideFrameTexture(frame, "_msuf2MaterialGradient")
+        HideFrameTexture(frame, "_msuf2Bg")
+    end
     frame._msuf2PanelAssetApplied = true
     return true
 end
@@ -1221,6 +1241,8 @@ local function StartPanelNeonPulse(depth, strong, frameWidth, glintWidth)
     if depth._neonPulse2 and depth._neonPulse2.Play and (not depth._neonPulse2.IsPlaying or not depth._neonPulse2:IsPlaying()) then depth._neonPulse2:Play() end
 end
 local function ApplyPanelAssetDepth(frame, variant)
+    -- Atlas panel artwork already contains its bevel and engraved rim.
+    if T.staticMaterials then return end
     local depth = EnsurePanelAssetDepth(frame)
     if not depth then return end
     local strong = variant == "shell" or variant == "rail" or variant == "popup"
@@ -1371,6 +1393,7 @@ function T.ApplyGlass(frame, variant)
         frame._msuf2GlassApplied = true
         HideLegacyGlassLayers(frame)
         ApplyPanelAssetDepth(frame, variant or "card")
+        if T.ApplyAtlasDecoration then T.ApplyAtlasDecoration(frame, variant) end
         return frame
     end
     if frame._msuf2PanelAssetApplied then
@@ -2281,7 +2304,7 @@ local function PaintNavPillGlowArt(art, path, state)
     if not art then return end
     local active = state == "active"
     local hover = state == "hover"
-    if not (active or hover) then
+    if T.staticMaterials or not (active or hover) then
         StopNavPillGlowPulse(art)
         if art.hoverWash then art.hoverWash:Hide() end
         if art.glow then art.glow:Hide() end
@@ -2422,7 +2445,7 @@ local function EnsureNavActiveFX(btn)
     return fx
 end
 local function SetNavActiveFX(btn, active, hover)
-    if not active then
+    if T.staticMaterials or not active then
         local fx = btn and btn._msuf2NavActiveFX
         if not fx then return end
         SetSuperellipsePartsShown(fx.glowFill, false)

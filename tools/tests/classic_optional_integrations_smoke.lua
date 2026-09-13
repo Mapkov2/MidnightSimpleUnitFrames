@@ -12,7 +12,21 @@ local ns = {}
 local function load(path)
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", ns)
 end
-load("Game/Shared/Initialize.lua")
+-- Follow the actual TOC before bootstrap: a manually loaded initializer hid
+-- a missing Mainline entry and allowed PTR startup to fail in RuntimeContracts.
+local toc = assert(io.open(repo .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_" .. flavor .. ".toc", "r"))
+local initialized = false
+for line in toc:lines() do
+    local path = line:gsub("\\", "/"):match("^%s*(.-)%s*$")
+    if path == "Kernel/MSUF_Bootstrap.lua" then break end
+    if path == "Game/Shared/Initialize.lua" then
+        assert(not initialized, "duplicate client initializer")
+        load(path)
+        initialized = true
+    end
+end
+toc:close()
+assert(initialized and ns.Client, "TOC must initialize Client before bootstrap")
 ns.ExportPublic = function(name, value) _G[name] = value end
 MSUF_DB = { general = {} }
 MSUF_GetGeneralDB = function() return MSUF_DB.general end

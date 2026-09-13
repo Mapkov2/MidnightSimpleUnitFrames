@@ -276,6 +276,10 @@ _G.C_UnitAuras = {
 _G.AuraUtil = {}
 
 assert(loadfile(corePath))("MidnightSimpleUnitFrames", namespace)
+local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
+manifest.LoadSelected(root, "Vanilla", namespace, {
+    "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_Preview.lua",
+})
 if visualsPath then
     assert(loadfile(visualsPath))("MidnightSimpleUnitFrames", namespace)
 end

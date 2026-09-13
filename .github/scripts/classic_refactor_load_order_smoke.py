@@ -34,8 +34,13 @@ def load_order(toc):
 
 for client in ("Mainline", "Vanilla", "Mists", "TBC"):
     order = load_order(CORE / f"MidnightSimpleUnitFrames_{client}.toc")
+    assert len(order) == len(set(order)), (client, "duplicate core Lua load")
     prefix = "MidnightSimpleUnitFrames/"
     for provider, consumer in (
+        ("Game/Shared/Initialize.lua", "Kernel/MSUF_Bootstrap.lua"),
+        ("Kernel/MSUF_Bootstrap.lua", "Kernel/MSUF_RuntimeContracts.lua"),
+        ("State/MSUF_AuraDefaults.lua", "Auras3/MSUF_Auras3_Core.lua"),
+        ("Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua"),
         ("Kernel/MSUF_Require.lua", "State/MSUF_Profiles.lua"),
         ("State/MSUF_StateHelpers.lua", "State/MSUF_Profiles.lua"),
         ("State/MSUF_ProfileCodec.lua", "State/MSUF_Profiles.lua"),
@@ -46,12 +51,30 @@ for client in ("Mainline", "Vanilla", "Mists", "TBC"):
         ("GroupFrames/MSUF_GroupFrames_DB_Migrations.lua", "UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua"),
     ):
         assert order.index(prefix + provider) < order.index(prefix + consumer), (client, provider, consumer)
+    defaults = "State/MSUF_Defaults.lua" if client == "Mainline" else "Game/Classic/State/MSUF_Defaults.lua"
+    for provider in ("State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+                     "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua"):
+        assert order.index(prefix + provider) < order.index(prefix + defaults), (client, provider)
+    if client != "Mainline":
+        assert order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_Preview.lua") < order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
     controller = "ClassPower/MSUF_CP_Controller.lua" if client == "Mainline" else "Game/Classic/ClassPower/MSUF_CP_Controller.lua"
     for part in ("Config", "Colors", "Surface"):
         assert order.index(prefix + f"ClassPower/MSUF_CP_Controller_{part}.lua") < order.index(prefix + controller)
     options = load_order(ROOT / f"MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options_{client}.toc")
+    assert len(options) == len(set(options)), (client, "duplicate options Lua load")
     menu = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
+    if client != "Mainline":
+        assert options.index(menu + "MSUF_Menu2_Theme_Classic.lua") < options.index(menu + "MSUF_Menu2_Theme_Tokens.lua") < options.index(menu + "MSUF_Menu2_Theme.lua"), (client, "atlas must precede theme capture")
+    else:
+        assert menu + "MSUF_Menu2_Theme_Classic.lua" not in options, "Mainline must not load the Classic skin"
+    assert options.index(menu + "MSUF_Menu2_ColorPicker.lua") < options.index(menu + "MSUF_Menu2_Widgets.lua")
+    if client != "Mainline":
+        for helper in ("AuraPreview",):
+            assert options.index(menu + "Pages/MSUF_Menu2_" + helper + "_Classic.lua") < options.index(menu + "Pages/MSUF_Menu2_Auras_Classic.lua")
     suffix = "" if client == "Mainline" else "_Classic"
+    workspace = menu + "Pages/MSUF_Menu2_Auras_CustomWorkspace.lua"
+    assert options.count(workspace) == 1, (client, "shared Custom workspace must load exactly once")
+    assert options.index(menu + "Pages/MSUF_Menu2_Auras" + suffix + ".lua") < options.index(workspace)
     for helper in ("AuraSettings", "AuraControls"):
         assert options.index(menu + f"Pages/MSUF_Menu2_{helper}.lua") < options.index(menu + f"Pages/MSUF_Menu2_Auras{suffix}.lua")
     for provider, consumer in (

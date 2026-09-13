@@ -13,7 +13,6 @@ local type, tostring, ipairs = type, tostring, ipairs
 local table_insert = table.insert
 local string_lower = string.lower
 local IsRegisteredLSMFontPath = G.MSUF_IsRegisteredLSMFontPath
-local SetFontChecked = G.MSUF_SetFontChecked
 local LSM = (MSUF and MSUF.LSM) or G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 
 --- Called by the LSM bootstrap when LibSharedMedia becomes available after this
@@ -109,89 +108,41 @@ end
 
 G.MSUF_FONT_LIST = G.MSUF_FONT_LIST or FONT_LIST
 
-local MSUF_FontPathProbe
-local MSUF_FontPathLoadableCache = {}
--- Preview refreshes probe the same font paths thousands of times per menu
--- session. The nested raw-path cache answers repeat probes without the
--- gsub/lower/concat allocations of the normalized cache key. Results stay
--- stable except that an exact late LSM registration may promote a prior false.
-local MSUF_FontPathLoadableFast = {}
-
-local function MSUF_NormalizeFontPathForProbe(path)
-    if type(path) ~= "string" or path == "" then return nil end
-    return path:gsub("/", "\\")
+-- Availability is registry metadata, not a speculative SetFont call. Unknown
+-- imported paths stay in saved variables and use the configured default until
+-- their provider registers them. Actual font application retains native errors.
+local availableFontPaths = {}
+local fontAvailabilityCache = {}
+local function RememberAvailableFont(path)
+    if type(path) == "string" and path ~= "" then
+        availableFontPaths[path:gsub("/", "\\"):lower()] = true
+    end
 end
+for i = 1, #FONT_LIST do RememberAvailableFont(FONT_LIST[i].path) end
+for _, path in ipairs({
+    "Fonts\\FRIZQT__.TTF", "Fonts\\ARIALN.TTF", "Fonts\\MORPHEUS.TTF", "Fonts\\SKURRI.TTF",
+}) do RememberAvailableFont(path) end
+RememberAvailableFont(G.STANDARD_TEXT_FONT)
+RememberAvailableFont(G.UNIT_NAME_FONT)
+RememberAvailableFont(G.DAMAGE_TEXT_FONT)
 
-local function MSUF_FontPathIsLoadable(rawPath, size, flags)
-    size = tonumber(size) or 14
-    if size <= 0 then size = 14 end
-    flags = flags or ""
-    if type(rawPath) == "string" and rawPath ~= "" then
-        local byPath = MSUF_FontPathLoadableFast[rawPath]
-        local bySize = byPath and byPath[size]
-        local fast = bySize and bySize[flags]
-        if fast ~= nil then
-            if fast == false and type(IsRegisteredLSMFontPath) == "function" and IsRegisteredLSMFontPath(rawPath) then
-                bySize[flags] = true
-                return true
-            end
-            return fast
-        end
-    end
-    local path = MSUF_NormalizeFontPathForProbe(rawPath)
-    if not path then return false end
-
-    local cacheKey = path:lower() .. "|" .. tostring(size) .. "|" .. tostring(flags)
-    local cached = MSUF_FontPathLoadableCache[cacheKey]
-    if cached ~= nil then
-        if cached == false and type(IsRegisteredLSMFontPath) == "function" and IsRegisteredLSMFontPath(path) then
-            cached = true
-            MSUF_FontPathLoadableCache[cacheKey] = true
-        end
-        local byPath = MSUF_FontPathLoadableFast[rawPath]
-        if not byPath then byPath = {}; MSUF_FontPathLoadableFast[rawPath] = byPath end
-        local bySize = byPath[size]
-        if not bySize then bySize = {}; byPath[size] = bySize end
-        bySize[flags] = cached
-        return cached
-    end
-
-    -- Exact LSM registration is authoritative metadata. Preserve its path and
-    -- let the real FontString SetFont + GetFont readback be the final check;
-    -- arbitrary/unregistered paths retain the permanent negative probe cache.
-    if type(IsRegisteredLSMFontPath) == "function" and IsRegisteredLSMFontPath(path) then
-        MSUF_FontPathLoadableCache[cacheKey] = true
-        if type(rawPath) == "string" and rawPath ~= "" then
-            local byPath = MSUF_FontPathLoadableFast[rawPath]
-            if not byPath then byPath = {}; MSUF_FontPathLoadableFast[rawPath] = byPath end
-            local bySize = byPath[size]
-            if not bySize then bySize = {}; byPath[size] = bySize end
-            bySize[flags] = true
-        end
+local function MSUF_IsAvailableFontPath(rawPath)
+    if type(rawPath) ~= "string" or rawPath == "" then return false end
+    local cached = fontAvailabilityCache[rawPath]
+    if cached == true then return true end
+    -- A late LSM registration promotes a previously unavailable imported face.
+    if IsRegisteredLSMFontPath(rawPath) then
+        fontAvailabilityCache[rawPath] = true
         return true
     end
-
-    if not MSUF_FontPathProbe then
-        MSUF_FontPathProbe = G.CreateFont("MSUF_FontPathProbe")
-    end
-    -- Imported paths can outlive the addon that supplied them. Catch native
-    -- asset errors at the probe boundary so a missing file is cached as invalid.
-    -- Keep SetFontChecked's cold-client return handling unchanged.
-    local ok, result = pcall(SetFontChecked, MSUF_FontPathProbe, path, size, flags)
-    local loadable = ok and result == true
-    MSUF_FontPathLoadableCache[cacheKey] = loadable
-    if type(rawPath) == "string" and rawPath ~= "" then
-        local byPath = MSUF_FontPathLoadableFast[rawPath]
-        if not byPath then byPath = {}; MSUF_FontPathLoadableFast[rawPath] = byPath end
-        local bySize = byPath[size]
-        if not bySize then bySize = {}; byPath[size] = bySize end
-        bySize[flags] = loadable
-    end
-    return loadable
+    if cached == false then return false end
+    local available = availableFontPaths[rawPath:gsub("/", "\\"):lower()] == true
+    fontAvailabilityCache[rawPath] = available
+    return available
 end
 
-G.MSUF_FontPathIsLoadable = MSUF_FontPathIsLoadable
-MSUF.MSUF_FontPathIsLoadable = MSUF_FontPathIsLoadable
+G.MSUF_IsAvailableFontPath = MSUF_IsAvailableFontPath
+MSUF.MSUF_IsAvailableFontPath = MSUF_IsAvailableFontPath
 
 local MSUF_INTERNAL_LSM_FONT_KEYS = {
     ["Friz Quadrata TT"] = "FRIZQT",

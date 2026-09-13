@@ -31,12 +31,10 @@ end
 
 local addonName = "MidnightSimpleUnitFrames"
 local namespace = {}
-local clientChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"))
-clientChunk(addonName, namespace)
-if spec.classic then
-    local classicChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Classic/Initialize.lua"))
-    classicChunk(addonName, namespace)
-end
+local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
+local providers = { "Game/Shared/Initialize.lua" }
+if spec.classic then providers[#providers + 1] = "Game/Classic/Initialize.lua" end
+manifest.LoadSelected(repo, flavor, namespace, providers)
 
 assert(MSUF == namespace, "client bootstrap did not publish MSUF")
 assert(namespace.Client.Flavor == flavor, "wrong flavor")

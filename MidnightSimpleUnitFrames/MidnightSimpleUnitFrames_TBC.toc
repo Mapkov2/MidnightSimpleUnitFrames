@@ -68,6 +68,10 @@ Kernel\MSUF_Util.lua
 Kernel\MSUF_Keybinds.lua
 State\MSUF_StateHelpers.lua
 Game\Classic\State\MSUF_Changelog.lua
+State\MSUF_AuraDefaults.lua
+State\Defaults\MSUF_Defaults_Shell.lua
+State\Defaults\MSUF_Defaults_Bars.lua
+State\Defaults\MSUF_Defaults_Units.lua
 Game\Classic\State\MSUF_Defaults.lua
 Runtime\MSUF_NumberFormat.lua
 State\MSUF_ProfileCodec.lua

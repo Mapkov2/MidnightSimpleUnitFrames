@@ -251,8 +251,8 @@ do
         if registered then return registered end
         local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
         if type(isKnown) == "function" and isKnown(path) == false then return nil end
-        local isLoadable = _G.MSUF_FontPathIsLoadable
-        if type(isLoadable) == "function" and isLoadable(path, 14, "") == false then return nil end
+        local isAvailable = _G.MSUF_IsAvailableFontPath
+        if type(isAvailable) == "function" and not isAvailable(path) then return nil end
         return path
     end
 

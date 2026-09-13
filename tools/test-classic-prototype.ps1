@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$RetailReferenceRoot = ""
 )
@@ -236,15 +236,15 @@ $elementsRoot = Join-Path $root "MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF
 $gameRoot = Join-Path $root "MidnightSimpleUnitFrames/Game"
 $classicSharedElementsPath = Join-Path $gameRoot "Classic/UnitFrames/MSUF_UFCore_Elements.xml"
 $retailSharedElementsPath = Join-Path $elementsRoot "MSUF_UFCore_Elements.xml"
-$auraCorePath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"))
+$auraCorePath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))
 $retailSharedLoadOrder = @(Get-XmlLuaLoadPaths -Path $retailSharedElementsPath)
 $auraCoreIndex = [Array]::IndexOf($retailSharedLoadOrder, $auraCorePath)
 if ($auraCoreIndex -lt 0) {
-    throw "Retail element manifest no longer loads the shared Auras3 core"
+    throw "Retail element manifest no longer loads the shared Auras3 icon definitions"
 }
 $classicSharedLoadOrder = @(Get-XmlLuaLoadPaths -Path $classicSharedElementsPath)
 if ($classicSharedLoadOrder.Count -ne ($auraCoreIndex + 1)) {
-    throw "Classic shared element manifest must match the Retail prefix through Auras3 core"
+    throw "Classic shared element manifest must match the Retail prefix through shared Auras3 icon definitions"
 }
 for ($index = 0; $index -le $auraCoreIndex; $index++) {
     if ($classicSharedLoadOrder[$index] -ne $retailSharedLoadOrder[$index]) {
@@ -728,16 +728,23 @@ $retailParityTargets = @(
 )
 $mainlineOwnedLuaExtras = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($extraPath in @(
+    "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_AuraDefaults.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Bars.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Units.lua",
+    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"
 )) {
     if (-not $ownedAddonPaths.Contains($extraPath)) {
-        throw "Mainline Arena addition must be declared in Classic ownership: $extraPath"
+        throw "Mainline shared/Arena addition must be declared in Classic ownership: $extraPath"
     }
     if ($overrideBaseBlobs.ContainsKey($extraPath)) {
-        throw "Mainline Arena addition cannot also be a Retail override: $extraPath"
+        throw "Mainline shared/Arena addition cannot also be a Retail override: $extraPath"
     }
     [void]$mainlineOwnedLuaExtras.Add($extraPath)
 }
@@ -801,7 +808,7 @@ foreach ($parityTarget in $retailParityTargets) {
                     throw "$($parityTarget.Label) Mainline inserted or reordered an undeclared Lua path before Retail index $referenceIndex`: $extraPath"
                 }
                 if (-not $actualMainlineOwnedLuaExtras.Add($extraPath)) {
-                    throw "Mainline Arena addition is loaded more than once across addon TOCs: $extraPath"
+                    throw "Mainline shared/Arena addition is loaded more than once across addon TOCs: $extraPath"
                 }
                 $currentIndex++
             }
@@ -826,7 +833,7 @@ foreach ($parityTarget in $retailParityTargets) {
                 throw "$($parityTarget.Label) Mainline appends an undeclared Lua path: $extraPath"
             }
             if (-not $actualMainlineOwnedLuaExtras.Add($extraPath)) {
-                throw "Mainline Arena addition is loaded more than once across addon TOCs: $extraPath"
+                throw "Mainline shared/Arena addition is loaded more than once across addon TOCs: $extraPath"
             }
             $currentIndex++
         }
@@ -944,10 +951,26 @@ if ($luac) {
 
 $lua = Get-Command lua -ErrorAction SilentlyContinue
 if ($lua) {
+    foreach ($flavor in @("Mainline", "Vanilla", "TBC", "Mists", "FutureVanilla")) {
+        & $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Classic atlas menu smoke failed: $flavor" }
+    }
+    & $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root "Vanilla" "tinted"
+    if ($LASTEXITCODE -ne 0) { throw "Classic atlas custom-tint smoke failed" }
+    foreach ($flavor in @("Vanilla", "TBC", "Mists")) {
+        & $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root $flavor "midnight"
+        if ($LASTEXITCODE -ne 0) { throw "Classic Midnight appearance preset smoke failed: $flavor" }
+    }
     $smoke = Join-Path $root "tools/tests/classic_client_bootstrap_smoke.lua"
-    foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
+    foreach ($flavor in @("Mainline", "Vanilla", "Mists", "TBC")) {
         & $lua.Source $auraTestDriver $smoke $flavor ($root -replace '\\', '/')
         if ($LASTEXITCODE -ne 0) { throw "Client bootstrap smoke failed: $flavor" }
+    }
+    & $lua.Source (Join-Path $root "tools/tests/classic_scheduler_contract_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Scheduler contract regression failed" }
+    foreach ($flavor in @("Mainline", "Vanilla", "Mists", "TBC")) {
+        & $lua.Source (Join-Path $root "tools/tests/classic_shared_definitions_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Shared aura definitions failed: $flavor" }
     }
     $classicProfilePolicySmoke = Join-Path $root "tools/tests/classic_profile_60_only_smoke.lua"
     & $lua.Source $auraTestDriver $classicProfilePolicySmoke ($root -replace '\\', '/')
@@ -955,6 +978,8 @@ if ($lua) {
     $classResourceSmoke = Join-Path $root "tools/tests/classic_class_resources_smoke.lua"
     & $lua.Source $auraTestDriver $classResourceSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic class-resource ownership smoke failed" }
+    & $lua.Source (Join-Path $root "tools/tests/classic_texture_layer_contract_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Texture Layer menu contract failed" }
     & $lua.Source (Join-Path $root "tools/tests/classic_font_return_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Classic font return contract failed" }
     & $lua.Source (Join-Path $root "tools/tests/classic_defaults_refactor_smoke.lua") $root
@@ -1087,5 +1112,5 @@ Write-Host "Client TOCs: 12 manifests passed (Mainline, Vanilla, Mists, TBC)"
 Write-Host "XML load graph: $($seenXml.Count) manifests resolved"
 Write-Host "Mainline exact Lua: $mainlineExactLuaCount Retail paths retain order and Git blobs"
 Write-Host "Mainline override Lua: $mainlineOverrideLuaCount Retail paths retain order with reviewed P blobs"
-Write-Host "Mainline owned Lua: $($actualMainlineOwnedLuaExtras.Count) declared O Arena additions; no Game/Classic load"
+Write-Host "Mainline owned Lua: $($actualMainlineOwnedLuaExtras.Count) declared O shared/Arena additions; no Game/Classic load"
 Write-Host "Retail zero-overhead load graph: $($mainlineLoaded.Count) core files, $currentRetailHashCount Retail Lua paths across Core/Options/Assistant validated against $retailReferenceLabel"

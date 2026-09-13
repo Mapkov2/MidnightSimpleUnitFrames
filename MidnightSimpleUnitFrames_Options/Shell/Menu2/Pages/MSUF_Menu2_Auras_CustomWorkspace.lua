@@ -5,16 +5,16 @@ MSUF.MSUF2 = M
 
 -- Menu2 Auras page: compact Custom Aura workspace.
 -- Owns M.BuildAuras3CompactCustomWorkspace, the one-tool-at-a-time editor for
--- Custom 1-3, Defensive Buffs and Dots on target inside UnitFrame > Auras. Split
+-- Custom 1-3, Defensive Buffs and Dots on target for every supported client.
 -- It binds AuraSettings/AuraControls directly and is called lazily from the
 -- unit Auras section.
-local AurasPage = M.AurasPage
-if type(AurasPage) ~= "table" then return end
 local W = M.Widgets
 local T = M.Theme
 local A3 = MSUF.MSUF_Auras3
 local Model = A3 and A3.MenuModel
 local VTP = M.ValueTextPairs
+assert(W and T and Model and M.AuraSettings and M.AuraControls,
+    "Custom aura workspace requires widgets, theme, model and shared aura controls")
 local CreateFrame = _G.CreateFrame
 local floor, ceil, max, min = math.floor, math.ceil, math.max, math.min
 local tonumber, tostring, type, pairs = tonumber, tostring, type, pairs

@@ -62,6 +62,9 @@ end
 
 -- 2) State seeding -----------------------------------------------------------
 local defaults = Read("MidnightSimpleUnitFrames/State/MSUF_Defaults.lua")
+    .. Read("MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Units.lua")
+    .. Read("MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Bars.lua")
+    .. Read("MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua")
 Check(defaults:find('fill("arena", {', 1, true),
     "State defaults no longer seed the arena scope")
 Check(defaults:find('"arena",\n}', 1, true) or defaults:find('"arena",', 1, true),

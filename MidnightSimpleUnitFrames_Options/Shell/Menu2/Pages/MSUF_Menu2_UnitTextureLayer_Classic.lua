@@ -365,7 +365,8 @@ local function BuildTextureLayer(ctx, builder, unit)
     local SetControlEnabled = UP.SetControlEnabled
     local GetConf = UP.GetConf
     local ReviewedMeta = UP.ReviewedMeta
-    if not (ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf and ReviewedMeta) then return end
+    assert(ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf and ReviewedMeta,
+        "Texture Layer requires the UnitPage settings API")
 
     M.unitTexLayerSlot = M.unitTexLayerSlot or {}
     M.unitTexLayerTab = M.unitTexLayerTab or {}

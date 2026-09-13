@@ -77,12 +77,12 @@ local function QueueNextFrame(key, fn)
 end
 
 function Scheduler.RunNextFrame(fn)
-    if type(fn) ~= "function" then return end
+    assert(type(fn) == "function", "MSUF scheduler requires a callback function")
     QueueNextFrame(fn, fn)
 end
 
 function Scheduler.ScheduleOnce(key, fn)
-    if type(fn) ~= "function" then return end
+    assert(type(fn) == "function", "MSUF scheduler requires a callback function")
     key = key or fn
     QueueNextFrame(key, fn)
 end
@@ -119,6 +119,13 @@ if signalMap == nil then
     Scheduler.signalMap = signalMap
 end
 
+-- Resolve the supported timer backend once. Missing platform services are a
+-- startup error; a delayed callback must never silently become synchronous.
+local after
+if not signalMap then
+    after = assert(_G.C_Timer and _G.C_Timer.After, "MSUF scheduler requires C_Timer.After")
+end
+
 local function RunDelayed(key)
     local fn = delayedPending[key]
     if fn == nil then return end
@@ -130,10 +137,10 @@ end
 --- replaces both the pending function and its deadline, which is the debounce
 --- shape most C_Timer.After callers hand-rolled with a guard flag.
 function Scheduler.ScheduleAfter(key, delay, fn)
-    if type(fn) ~= "function" then return false end
+    assert(type(fn) == "function", "MSUF scheduler requires a callback function")
     key = key or fn
-    delay = tonumber(delay) or 0
-    if delay < 0 then delay = 0 end
+    assert(type(delay) == "number" and delay >= 0 and delay < math.huge,
+        "MSUF scheduler requires a finite, non-negative delay")
     delayedPending[key] = fn
 
     if signalMap then
@@ -150,14 +157,10 @@ function Scheduler.ScheduleAfter(key, delay, fn)
     -- generation counter retires the stale one instead of cancelling it.
     local generation = (delayedGenerations[key] or 0) + 1
     delayedGenerations[key] = generation
-    if C_Timer and C_Timer.After then
-        C_Timer.After(delay, function()
-            if delayedGenerations[key] ~= generation then return end
-            RunDelayed(key)
-        end)
-        return true
-    end
-    RunDelayed(key)
+    after(delay, function()
+        if delayedGenerations[key] ~= generation then return end
+        RunDelayed(key)
+    end)
     return true
 end
 

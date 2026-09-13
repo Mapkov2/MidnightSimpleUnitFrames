@@ -31,6 +31,7 @@ Libs\LibStub\LibStub.lua
 Libs\WagoAnalyticsShim\Shim.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+Game\Shared\Initialize.lua
 Kernel\MSUF_Bootstrap.lua
 Kernel\MSUF_Boundary.lua
 Kernel\MSUF_Require.lua
@@ -64,6 +65,10 @@ Kernel\MSUF_Util.lua
 Kernel\MSUF_Keybinds.lua
 State\MSUF_Changelog.lua
 State\MSUF_StateHelpers.lua
+State\MSUF_AuraDefaults.lua
+State\Defaults\MSUF_Defaults_Shell.lua
+State\Defaults\MSUF_Defaults_Bars.lua
+State\Defaults\MSUF_Defaults_Units.lua
 State\MSUF_Defaults.lua
 Runtime\MSUF_NumberFormat.lua
 State\MSUF_ProfileCodec.lua

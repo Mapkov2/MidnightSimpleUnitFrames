@@ -27,6 +27,7 @@ local tokens = {
     -- danger/ok/warning and arbitrary preview colors deliberately retain MSUF semantics.
 }
 local surfaceKeys = {
+    "_msuf2AtlasDecoration",
     "_msuf2Bg", "_msufUIGradient", "_msuf2MaterialGradient", "_msuf2PanelAsset", "_msuf2PanelAssetDepth",
     "_msuf2GlassTint", "_msuf2GlassWash", "_msuf2GlassDepth", "_msuf2GlassGrain", "_msuf2GlassOuterGlow",
     "_msuf2GlassTopGlow", "_msuf2GlassTopLine", "_msuf2GlassBottomLine", "_msuf2GlassLeftLine", "_msuf2GlassRightLine",

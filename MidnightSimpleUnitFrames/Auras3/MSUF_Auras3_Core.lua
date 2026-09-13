@@ -10,8 +10,6 @@ local ExportPublic = MSUF.ExportPublic
 
 local type = type
 local tostring = tostring
--- Canonical factories can be absent during bootstrap; a present factory is
--- our own provider and a programming error must propagate.
 
 local function DeepCopy(value, seen)
     if type(value) ~= "table" then return value end
@@ -41,58 +39,8 @@ local function FillMissing(dst, defaults)
     return dst
 end
 
-local function NewPlayerDefensiveContainer()
-    local createCanonical = (type(MSUF) == "table"
-            and MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer)
-        or _G.MSUF_CreateCanonicalPlayerDefensiveAuraContainer
-    if type(createCanonical) == "function" then
-        local item = createCanonical()
-        if type(item) == "table" then return item end
-    end
-    return {
-        enabled = true,
-        name = "Defensive Buffs",
-        auraType = "BUFF",
-        sourceUnit = "player",
-        playerDefensives = true,
-        portraitIcon = false,
-        portraitMaxIcons = 1,
-        portraitCooldownText = true,
-        portraitPositionWhenDisabled = false,
-        autoBlacklistPlayerBuffs = true,
-        disabledPredefinedSpellIDs = {},
-        spellIDs = "",
-        filters = {
-            enabled = true,
-            hidePermanent = false,
-            onlyMine = false,
-            onlyImportant = false,
-            raid = false,
-            raidInCombat = false,
-            includeNameplateOnly = false,
-            includeDispellable = false,
-            dispellableAny = false,
-            cancelable = false,
-            notCancelable = false,
-            crowdControl = false,
-            externalDefensive = false,
-            bigDefensive = false,
-            exclusive = "none",
-        },
-        placed = {
-            type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
-            x = 0, y = 0, size = 24, barWidth = 54,
-            max = 8, perRow = 4, spacing = 2, stylePadding = 0,
-            showCooldown = true, showCooldownSwipe = true, showStacks = true,
-        },
-        layer = 9,
-        strata = "AUTO",
-        frame = {
-            type = "none", color = { 0.69, 0.50, 0.88, 0.80 },
-            priority = 5, thickness = 2, layer = 0, strata = "AUTO",
-        },
-    }
-end
+local NewPlayerDefensiveContainer = assert(MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer,
+    "Aura defaults must load before Auras3 core")
 
 local function EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
     if type(auras) ~= "table" then return nil end

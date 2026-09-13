@@ -85,27 +85,30 @@ local marker = {}
 local broken = { SetFont = function() error(marker) end, GetFont = function() error("unexpected readback") end }
 local ok, err = pcall(MSUF_SetFontChecked, broken, path, 14, "")
 assert(not ok and err == marker, "native error was swallowed or replaced")
--- Missing imported media is rejected at the probe boundary, before application.
+-- Unknown imported media is resolved from availability metadata, without
+-- probing a native API or converting unrelated errors into a missing font.
 local missing = "Interface\\AddOns\\ChonkyCharacterSheet\\Media\\Fonts\\FiraSans-Medium.ttf"
-local probes = 0
-CreateFont = function()
-    return { SetFont = function(_, requested)
-        if requested == missing then
-            probes = probes + 1
-            error("Invalid font asset: file not found")
-        end
-        return false -- Cold Classic success must remain accepted by the wrapper.
-    end }
-end
+CreateFont = function() error("font resolution must not create native probes") end
+local registered = {}
+local isRegistered = MSUF_IsRegisteredLSMFontPath
+MSUF_IsRegisteredLSMFontPath = function(value) return registered[value] or isRegistered(value) end
 load("Runtime/MSUF_FontRegistry.lua")
+MSUF_DB.general.fontKey = missing
 for i = 1, 51 do
     assert(MSUF_ResolveFontKeyPath(missing) == nil)
     assert(MSUF_ResolveFontPath(missing, 14, "") == "Fonts\\FRIZQT___CYR.TTF")
 end
-assert(probes == 1, "missing font must be negatively cached")
+assert(MSUF_DB.general.fontKey == missing, "imported selection must remain saved")
 assert(MSUF_ApplyResolvedFont(fs, missing, 14, ""))
-assert(fs.path == "Fonts\\FRIZQT___CYR.TTF", "missing media must use the default face")
-assert(MSUF_FontPathIsLoadable(path, 14, ""), "cold valid fonts must remain loadable")
+assert(fs.path == "Fonts\\FRIZQT___CYR.TTF", "unavailable media must use the default face")
+assert(MSUF_IsAvailableFontPath(path), "bundled fonts must remain available")
+assert(MSUF_IsAvailableFontPath(path:gsub("\\", "/"):upper()), "path aliases must resolve")
+-- Registration after a negative lookup must become visible immediately.
+registered[missing] = true
+assert(MSUF_IsAvailableFontPath(missing), "late media registration was negatively cached")
+assert(MSUF_ResolveFontKeyPath(missing) == missing)
+local applied, nativeError = pcall(MSUF_ApplyResolvedFont, broken, missing, 14, "")
+assert(not applied and nativeError == marker, "registered font application error was hidden")
 -- Standalone aura harnesses must load the same native error boundary.
 MSUF_SetFontChecked = nil
 local Loader = assert(loadfile(repo .. "/.github/scripts/auras3_test_loader.lua"))()

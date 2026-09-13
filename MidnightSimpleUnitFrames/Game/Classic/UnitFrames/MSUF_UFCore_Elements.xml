@@ -21,4 +21,5 @@
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_LoadConditions.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Bridges.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_IconShape.lua"/>
 </Ui>

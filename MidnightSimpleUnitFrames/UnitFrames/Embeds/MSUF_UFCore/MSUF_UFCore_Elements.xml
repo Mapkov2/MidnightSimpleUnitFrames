@@ -21,6 +21,7 @@
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_LoadConditions.lua"/>
   <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Bridges.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_IconShape.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_DotData.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_DefensiveData.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_GroupHighlightsData.lua"/>

@@ -10,7 +10,12 @@ function InCombatLockdown() return false end
 local function load(path) assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MSUF", ns) end
 load("State/MSUF_StateHelpers.lua")
 load("State/MSUF_ProfileCodec.lua")
-load("Game/Classic/State/MSUF_Defaults.lua")
+local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
+manifest.LoadSelected(repo, "Vanilla", ns, {
+    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+    "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
+    "Game/Classic/State/MSUF_Defaults.lua",
+})
 MSUF_DB = { _msufProfileSchema = 600, general = {}, player = { enabled = false },
     pet = { petHappinessIndicatorOffsetX = "19", showPetHappinessIndicator = false },
     arena1 = { enabled = false, nameOffsetX = 37 } }

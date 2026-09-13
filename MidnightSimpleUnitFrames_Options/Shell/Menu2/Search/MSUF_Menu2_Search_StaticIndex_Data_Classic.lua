@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "3F5406A7A098F6A74E21B60346BC6A90E2DCDA89114F825BAC166F52CED8556C"
-Search.StaticIndexRecordCount = 3299
+Search.StaticIndexSourceSha256 = "6FAE8DEEA5CE3070A602C627F34099FC474053765D5733D09EC2368CA85EBFBB"
+Search.StaticIndexRecordCount = 3300
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha				border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Alpha (%)	slider			Shared > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eshared%2Eicon-style%2Estylebordercolor-alpha	aura_style_shared_buff_icon_style			border alpha shared icon style auras style shared icon style stylebordercolor alpha auras3 buffs slider
@@ -941,6 +941,7 @@ opt_misc	Enable version check (peer-to-peer)	toggle	general.versionCheckEnabled	
 opt_misc	Hide Advanced menu section	toggle	general.hideAdvancedMenu		Hide > Advanced	hide advanced menu section	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Ehide%2Eadvanced%2Emenu	misc_menu_behavior			hide advanced menu section hide advanced opt misc global setting hide advanced menu opt misc toggle general hideadvancedmenu
 opt_misc	MSUF menu font	dropdown	general.menuFontKey		Global > Menu	msuf menu font	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Emenu%2Efont	misc_menu_behavior			msuf menu font global menu opt misc global menu font opt misc dropdown general menufontkey
 opt_misc	Menu accent color	dropdown	general.menuAccent		Setting > Menu	menu accent color	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Emenu%2Eaccent	misc_menu_behavior			menu accent color setting menu opt misc global setting menu accent opt misc dropdown general menuaccent
+opt_misc	Menu appearance preset	dropdown	general.menuAppearancePreset		Menu > Appearance	menu appearance preset	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Emenu%2Eappearance%2Epreset	misc_menu_behavior			menu appearance preset menu appearance opt misc global setting menu appearance preset opt misc dropdown general menuappearancepreset
 opt_misc	Menu language	dropdown	general.menuLocale		Global > Language	menu language	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Elanguage%2Eselection	misc_language			menu language global language opt misc global language selection opt misc dropdown general menulocale
 opt_misc	Modifier key	dropdown	general.unitTooltipModifier		Global > Tooltips	modifier key	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Etooltips%2Emodifier	misc_tooltips			modifier key global tooltips opt misc global tooltips modifier opt misc dropdown general unittooltipmodifier
 opt_misc	Mythic Raid frames	toggle	gf_mythicraid.targetIndicator		Group > Target	mythic raid frames	idopt_miscmenu2%2Eopt%2Emisc%2Eglobal%2Egroup%2Etarget%2Emythicraid	misc_mouseover_highlight			mythic raid frames group target opt misc global group target mythicraid opt misc toggle gf mythicraid targetindicator

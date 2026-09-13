@@ -321,7 +321,7 @@ local NON_MIDNIGHT_ACCENT_BRIGHT_MAX_VALUE = 0.82
 local NON_MIDNIGHT_ACCENT_BRIGHT_SCALE = 1.14
 local function AccentToneIndex(color)
     for i = 1, 3 do
-        local ref = ACCENT_SOURCE_TONES[i]
+        local ref = (T.accentSourceTones or ACCENT_SOURCE_TONES)[i]
         if math.abs(color[1] - ref[1]) < 0.006
             and math.abs(color[2] - ref[2]) < 0.006
             and math.abs(color[3] - ref[3]) < 0.006 then
@@ -633,6 +633,7 @@ function T.ApplyMenuAccent()
     local M2 = MSUF.MSUF2
     local g = M2 and type(M2.GetGeneralDB) == "function" and M2.GetGeneralDB() or nil
     if type(g) ~= "table" then return nil end
+    if T.PrepareMenuAccent then T.PrepareMenuAccent(g) end
     local sig = T.MenuAccentSignature(g)
     T._menuAccentApplied = sig
     if sig == "midnight" then return sig end
@@ -699,3 +700,6 @@ function T.ApplyMenuAccent()
     EnforceTextContrast()
     return sig
 end
+
+-- Registered only by Classic Options manifests; Mainline keeps stock tokens.
+if MSUF.ApplyClassicMenuTheme then MSUF.ApplyClassicMenuTheme(T) end

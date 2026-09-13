@@ -275,6 +275,27 @@ local function PrepareDirectContracts(source, namespace)
     if Uses("_G.MSUF_EnsureCastbarGeneralDB") then
         _G.MSUF_EnsureCastbarGeneralDB = Bind("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua", "EnsureGeneralDB", "local ExportPublic = ...\n", namespace.ExportPublic or function(name, value) _G[name] = value; return value end)
     end
+    if Uses("MSUF.DefaultsStageFactories") or Uses("A3.NormalizeProfileDB") or Uses("MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer") then
+        local manifest = assert(originalLoadfile("tools/tests/client_manifest.lua"))()
+        namespace.Client = namespace.Client or { IsClassic = false }
+        local flavor = namespace.Client.IsClassic and "Vanilla" or "Mainline"
+        manifest.LoadSelected(".", flavor, namespace, {
+            "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+            "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
+        }, originalLoadfile)
+    end
+    if Uses("local Shape = A3.IconShape") then
+        assert(originalLoadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
+    end
+    if Uses("MSUF.InstallClassicAuraPreview({") then
+        assert(originalLoadfile("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Preview.lua"))("MidnightSimpleUnitFrames", namespace)
+    end
+    if Uses("M.InstallColorPicker({") then
+        assert(originalLoadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua"))("MidnightSimpleUnitFrames", namespace)
+    end
+    if Uses("M.InstallClassicAuraPreview({") then
+        assert(originalLoadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AuraPreview_Classic.lua"))("MidnightSimpleUnitFrames", namespace)
+    end
     if Uses("A3.NormalizeProfileDB") and not namespace.MSUF_MaterializeUnitAuraLaneOwners then
         assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_StateHelpers.lua")))("MSUF", namespace)
             assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_Defaults.lua")))("MSUF", namespace)
