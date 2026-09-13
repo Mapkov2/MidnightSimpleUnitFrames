@@ -107,15 +107,18 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     _G.MSUF_TargetSoundDriver_ApplySetting()
     _G.MSUF_NSRTNicknames_ApplySetting()
     local activeGeneral = _G.MSUF_DB and _G.MSUF_DB.general
-    _G.MSUF_EllesmereEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.ellesmereEditModeIntegration == false))
+    if MSUF.Client.SupportsEllesmereEditMode then
+        _G.MSUF_EllesmereEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.ellesmereEditModeIntegration == false))
+    end
     _G.MSUF_Grid2EditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.grid2EditModeIntegration == false))
     _G.MSUF_DetailsEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.detailsEditModeIntegration == false))
     _G.MSUF_DominosEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.dominosEditModeIntegration == false))
     _G.MSUF_DandersEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.dandersEditModeIntegration == false))
-    _G.MSUF_BlizzardEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.blizzardEditModeIntegration == false))
-    --- The profile carries the last committed Blizzard Edit Mode arrangement
-    --- (general.blizzardEditModeSnapshot); re-apply it for the new profile.
-    _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+    if MSUF.Client.SupportsBlizzardEditMode then
+        _G.MSUF_BlizzardEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.blizzardEditModeIntegration == false))
+        --- Re-apply the stored layout only when the client provides Edit Mode.
+        _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+    end
     --- Group-frame config tables are cached by identity. Drop those references
     --- before the runtime rebuild reads the newly active profile root.
     _G.MSUF_GF_InvalidateConfCache()

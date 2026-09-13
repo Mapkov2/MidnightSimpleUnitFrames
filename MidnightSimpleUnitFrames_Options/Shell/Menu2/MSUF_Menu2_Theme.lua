@@ -405,7 +405,8 @@ local function ApplyStyledFont(fs, force)
         return true
     end
     local applied = TryApplyStyledFont(fs, nextFont, nextSize, nextFlags)
-    assert(applied, "MSUF menu font readback mismatch: " .. tostring(nextFont))
+    -- Cold font readback can lag the native request. Leave it uncached for the
+    -- next layout/font refresh; never abort construction of the options window.
     if applied and fs._msuf2DropdownDefaultFont then
         local appliedFont, appliedSize, appliedFlags = fs:GetFont()
         if appliedFont and appliedSize then

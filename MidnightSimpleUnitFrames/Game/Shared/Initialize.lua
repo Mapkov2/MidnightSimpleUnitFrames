@@ -52,6 +52,8 @@ Client.IsMists = isMists
 Client.IsTBC = isTBC
 Client.IsClassic = isVanilla or isMists or isTBC
 Client.SupportsPetHappiness = isVanilla or isTBC
+Client.SupportsEllesmereEditMode = isRetail
+Client.SupportsBlizzardEditMode = type(_G.Enum) == "table" and type(_G.Enum.EditModeSystem) == "table"
 Client.IsSupported = isRetail or isVanilla or isMists or isTBC
 
 local unsupportedEvents = Client.UnsupportedEvents or {}

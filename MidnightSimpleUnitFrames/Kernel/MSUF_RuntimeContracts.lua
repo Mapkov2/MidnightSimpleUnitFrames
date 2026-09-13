@@ -4,16 +4,23 @@ local _, MSUF = ...
 local globals = {
     "MSUF_ApplyMsufScale",
     "MSUF_TargetSoundDriver_ApplySetting", "MSUF_NSRTNicknames_ApplySetting",
-    "MSUF_EllesmereEditMode_SetEnabled", "MSUF_Grid2EditMode_SetEnabled",
+    "MSUF_Grid2EditMode_SetEnabled",
     "MSUF_DetailsEditMode_SetEnabled", "MSUF_DominosEditMode_SetEnabled",
-    "MSUF_DandersEditMode_SetEnabled", "MSUF_BlizzardEditMode_SetEnabled",
-    "MSUF_BlizzardEditMode_ApplyProfileSnapshot", "MSUF_GF_InvalidateConfCache",
+    "MSUF_DandersEditMode_SetEnabled", "MSUF_GF_InvalidateConfCache",
     "MSUF_UFCore_NotifyConfigChanged", "MSUF_ApplyModules", "MSUF_GF_RebuildAll",
     "MSUF_ClassPower_Apply", "MSUF_ApplyPowerBarEmbedLayout_All",
     "MSUF_Castbars_OnSettingsChanged", "MSUF_ApplyAllCastbarsAndSync",
     "MSUF_UpdateAllFonts_Immediate", "MSUF_UpdateCastbarVisuals_Immediate",
     "MSUF_ApplyCastbarVisualsForUnit",
 }
+-- Require adapters only on clients that load/support them.
+if MSUF.Client.SupportsEllesmereEditMode then
+    globals[#globals + 1] = "MSUF_EllesmereEditMode_SetEnabled"
+end
+if MSUF.Client.SupportsBlizzardEditMode then
+    globals[#globals + 1] = "MSUF_BlizzardEditMode_SetEnabled"
+    globals[#globals + 1] = "MSUF_BlizzardEditMode_ApplyProfileSnapshot"
+end
 for i = 1, #globals do
     local name = globals[i]
     if type(_G[name]) ~= "function" then

@@ -4,11 +4,8 @@ local addonName, MSUF = ...
 --   EllesmereUI: the unlock-mode API table. RegisterUnlockElements,
 --     UnregisterUnlockElement, RegisterUnlockModeListener,
 --     UnregisterUnlockModeListener and IsUnlockModeActive are required; when
---     any is missing this file returns before registering a provider and MSUF
---     Edit Mode has no EllesmereUI bridge. MakeUnlockElement, OpenUnlockMode /
---     _openUnlockMode, EnsureLoaded, ToggleUnlockMode, _unlockNudge,
---     _unlockActive and _unlockModeActive are probed per call; an absent one
---     falls back to the plain option table, "cannot open/close" or "not dirty".
+--     any is missing the controller remains unavailable, but its public
+--     profile setter still owns the saved preference.
 --   EllesmereUnlockMode: the unlock-mode root frame. The shared
 --     ExternalProviders controller parents its supplemental movers to it
 --     (UIParent when nil) and skips its mover scan while it is nil.
@@ -35,13 +32,11 @@ local function EllesmereAPI()
     return api
 end
 
---- EllesmereUI is an OptionalDep and its lightweight Unlock header is ready
---- before MSUF. The heavy body remains deferred until the user opens Edit Mode.
-if not EllesmereAPI() then return end
-
+--- Register the MSUF provider even when the optional addon is absent.
+--- The controller checks its API before activating any integration.
 local EM2 = _G.MSUF_EM2
 local External = EM2 and EM2.ExternalProviders
-if not (External and type(External.Register) == "function") then return end
+assert(External and type(External.Register) == "function", "MSUF Ellesmere bridge requires ExternalProviders")
 
 local General = _G.MSUF_GetGeneralDB
 

@@ -102,11 +102,11 @@ fs._msufFontScaleAnimationMode = mode
 end
 end
 
---- Native exceptions propagate; explicit API rejection is an error as well.
+--- SetFont validates assets/arguments natively. Its return value and immediate
+--- readback are not synchronous readiness guarantees on cold Classic clients.
+--- Native errors propagate; readiness belongs to the caller and font coordinator.
 local function MSUF_SetFontChecked(fs, path, size, flags)
-    if fs:SetFont(path, size, flags or "") == false then
-        error("MSUF SetFont rejected font: " .. tostring(path), 2)
-    end
+    fs:SetFont(path, size, flags or "")
     return true
 end
 
@@ -345,7 +345,10 @@ do
             and fs._msufFontRequestEpoch == epoch then
             return true, requested, "cached"
         end
-        assert(ApplyOne(fs, requested, size, flags), "MSUF font readback mismatch: " .. requested)
+        if not ApplyOne(fs, requested, size, flags) then
+            MSUF_MarkFontApplyFailed()
+            return false, requested, "pending"
+        end
         fs._msufFontRequestPath = requested
         fs._msufFontRequestSize = size
         fs._msufFontRequestFlags = flags

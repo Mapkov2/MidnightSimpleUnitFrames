@@ -955,6 +955,8 @@ if ($lua) {
     $classResourceSmoke = Join-Path $root "tools/tests/classic_class_resources_smoke.lua"
     & $lua.Source $auraTestDriver $classResourceSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic class-resource ownership smoke failed" }
+    & $lua.Source (Join-Path $root "tools/tests/classic_font_return_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Classic font return contract failed" }
     & $lua.Source (Join-Path $root "tools/tests/classic_defaults_refactor_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Classic split defaults contract failed" }
     $classPowerProviderSmoke = Join-Path $root "tools/tests/classic_classpower_provider_smoke.lua"
@@ -1050,6 +1052,10 @@ if ($lua) {
     $classicPetHappinessSmoke = Join-Path $root "tools/tests/classic_pet_happiness_smoke.lua"
     & $lua.Source $auraTestDriver $classicPetHappinessSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Pet Happiness smoke failed" }
+    foreach ($flavor in @("Mainline", "Vanilla", "Mists", "TBC")) {
+        & $lua.Source (Join-Path $root "tools/tests/classic_optional_integrations_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Optional integration contract failed: $flavor" }
+    }
     $classicEditModeSmoke = Join-Path $root "tools/tests/classic_editmode_smoke.lua"
     & $lua.Source $auraTestDriver $classicEditModeSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Edit Mode smoke failed" }
