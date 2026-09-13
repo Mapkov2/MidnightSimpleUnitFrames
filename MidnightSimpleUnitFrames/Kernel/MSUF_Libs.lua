@@ -303,10 +303,15 @@ do
     end
 
     local function ResolveFontPath(path, _, _, fontKey)
+        local resolved
         if path ~= nil and path ~= "" then
-            return assert(FontAssetAllowed(path), "MSUF invalid font asset: " .. tostring(path))
+            resolved = FontAssetAllowed(path)
+        else
+            resolved = ResolveFontKeyPath(fontKey)
         end
-        return assert(ResolveFontKeyPath(fontKey), "MSUF unknown font key: " .. tostring(fontKey))
+        -- Missing external media must not abort frame construction. Keep the
+        -- stored selection intact so a later registration can restore it.
+        return resolved or ALIAS_TO_PATH.FRIZQT
     end
 
     local function ApplyOne(fs, path, size, flags)

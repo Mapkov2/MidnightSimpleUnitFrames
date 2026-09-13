@@ -174,8 +174,11 @@ local function MSUF_FontPathIsLoadable(rawPath, size, flags)
     if not MSUF_FontPathProbe then
         MSUF_FontPathProbe = G.CreateFont("MSUF_FontPathProbe")
     end
-    -- Native asset errors propagate without populating the result cache.
-    local loadable = SetFontChecked(MSUF_FontPathProbe, path, size, flags)
+    -- Imported paths can outlive the addon that supplied them. Catch native
+    -- asset errors at the probe boundary so a missing file is cached as invalid.
+    -- Keep SetFontChecked's cold-client return handling unchanged.
+    local ok, result = pcall(SetFontChecked, MSUF_FontPathProbe, path, size, flags)
+    local loadable = ok and result == true
     MSUF_FontPathLoadableCache[cacheKey] = loadable
     if type(rawPath) == "string" and rawPath ~= "" then
         local byPath = MSUF_FontPathLoadableFast[rawPath]
