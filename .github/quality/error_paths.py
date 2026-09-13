@@ -80,6 +80,12 @@ def main():
         source = path.read_text(encoding="utf-8-sig")
         for token, offset in tokens(source):
             if token in BANNED:
+                # A saved external font may no longer exist. Only its asset
+                # probe may catch that native failure; real application stays direct.
+                if (path.relative_to(ROOT).as_posix() == "MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua"
+                        and token == "pcall"
+                        and source[offset:].startswith("pcall(SetFontChecked, MSUF_FontPathProbe, path, size, flags)")):
+                    continue
                 line = source.count("\n", 0, offset) + 1
                 failures.append(f"{path.relative_to(ROOT).as_posix()}:{line}: {token}")
     if failures:

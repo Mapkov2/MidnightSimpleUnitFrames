@@ -1,5 +1,11 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha19 - 2026-09-13
+
+### Fixes & Performance
+
+- Fixed repeated startup errors when a saved font points to a missing file from another addon. Failed font probes are cached and unavailable fonts use Friz Quadrata while retaining the saved selection.
+
 ## 6.5-alpha18 - 2026-09-13
 
 ### Fixes & Performance

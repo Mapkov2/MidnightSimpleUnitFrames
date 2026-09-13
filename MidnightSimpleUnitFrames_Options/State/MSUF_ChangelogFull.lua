@@ -8,12 +8,24 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "93A5B6ED29B535168F59264BAF3421FACE20BEF89801F9629AEE8B6518312152",
-    currentVersion = "6.5-alpha18",
+    sourceSha256 = "ECAF3AF01B99610F58E1C832772A3D69D150A81B9FB96E1E08014DA96B2378D2",
+    currentVersion = "6.5-alpha19",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-alpha17",
-    rangeLabel = "6.5-alpha17 -> 6.5-alpha18",
+    previousVersion = "6.5-alpha18",
+    rangeLabel = "6.5-alpha18 -> 6.5-alpha19",
     entries = {
+        {
+            version = "6.5-alpha19",
+            date = "2026-09-13",
+            sections = {
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed repeated startup errors when a saved font points to a missing file from another addon. Failed font probes are cached and unavailable fonts use Friz Quadrata while retaining the saved selection.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha18",
             date = "2026-09-13",

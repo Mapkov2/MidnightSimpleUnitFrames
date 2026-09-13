@@ -8,12 +8,24 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "93A5B6ED29B535168F59264BAF3421FACE20BEF89801F9629AEE8B6518312152",
-    currentVersion = "6.5-alpha18",
-    historyFromVersion = "6.5-alpha15",
-    previousVersion = "6.5-alpha17",
-    rangeLabel = "6.5-alpha17 -> 6.5-alpha18",
+    sourceSha256 = "ECAF3AF01B99610F58E1C832772A3D69D150A81B9FB96E1E08014DA96B2378D2",
+    currentVersion = "6.5-alpha19",
+    historyFromVersion = "6.5-alpha16",
+    previousVersion = "6.5-alpha18",
+    rangeLabel = "6.5-alpha18 -> 6.5-alpha19",
     entries = {
+        {
+            version = "6.5-alpha19",
+            date = "2026-09-13",
+            sections = {
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed repeated startup errors when a saved font points to a missing file from another addon. Failed font probes are cached and unavailable fonts use Friz Quadrata while retaining the saved selection.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha18",
             date = "2026-09-13",
@@ -74,23 +86,6 @@ local data = {
                         "With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.",
                         "A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.",
                         "Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-alpha15",
-            date = "2026-09-09",
-            sections = {
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Dispel symbols now render on every Classic client. Clients without the 12.1 debuff atlases fell through to a blank texture and drew nothing; they now fall back to MSUF's own symbol art. A dispel type whose color you overrode is repainted the way it already is on Retail.",
-                        "The Cooldown Manager anchor is resolved from what the client can actually provide. Clients without a Cooldown Manager no longer show the login warning that could never be satisfied, and the anchor switch is hidden instead of offered; your stored preference is kept, so the profile still works on a client that has one.",
-                        "An imported profile that anchors Unit Frames to Essential Cooldowns no longer scatters them on a client without that frame; those frames fall back to the normal global anchor.",
-                        "The Aggro border works on a fresh profile. Bars advertised it as On while the frames still treated it as Off, so it only lit up after toggling the dropdown off and on.",
-                        "The Dispel Border hint no longer asks you to enable Aura sensors for Focus, Boss, or Arena frames on clients that do not have them.",
-                        "Turning a Dispel Symbol off now clears it. It could stay frozen on the frame until the next reload.",
                     },
                 },
             },
