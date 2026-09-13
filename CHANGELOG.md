@@ -1,5 +1,15 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-alpha18 - 2026-09-13
+
+### Fixes & Performance
+
+- Fixed options-menu and Edit Mode startup failures caused by fonts reporting incomplete values during client startup. Font readiness no longer aborts UI construction, and pending applications remain uncached until they are ready.
+- MSUF starts and applies profiles without optional integration addons installed. Classic clients no longer require unavailable EllesmereUI or Blizzard Edit Mode adapters.
+- Consolidated shared Defaults, ClassPower, aura-menu and preview helpers across Classic clients while preserving their class resources, pet happiness and Arena support.
+- Removed redundant protected calls and no-op substitutes so native Lua errors remain visible to BugSack/BugGrabber.
+- Corrected shared-helper load order and refreshed menu search indexes for Vanilla, TBC, Mists and Mainline.
+
 ## 6.5-alpha17 - 2026-09-11
 
 ### Changes

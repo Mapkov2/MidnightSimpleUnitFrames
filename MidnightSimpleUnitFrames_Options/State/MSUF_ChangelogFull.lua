@@ -8,12 +8,28 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "B4B4ADA8E51E0FFD1DD4B4BDC9FE3219CB4B083EA7F194F845EE5283F131D8D0",
-    currentVersion = "6.5-alpha17",
+    sourceSha256 = "93A5B6ED29B535168F59264BAF3421FACE20BEF89801F9629AEE8B6518312152",
+    currentVersion = "6.5-alpha18",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-alpha16",
-    rangeLabel = "6.5-alpha16 -> 6.5-alpha17",
+    previousVersion = "6.5-alpha17",
+    rangeLabel = "6.5-alpha17 -> 6.5-alpha18",
     entries = {
+        {
+            version = "6.5-alpha18",
+            date = "2026-09-13",
+            sections = {
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Fixed options-menu and Edit Mode startup failures caused by fonts reporting incomplete values during client startup. Font readiness no longer aborts UI construction, and pending applications remain uncached until they are ready.",
+                        "MSUF starts and applies profiles without optional integration addons installed. Classic clients no longer require unavailable EllesmereUI or Blizzard Edit Mode adapters.",
+                        "Consolidated shared Defaults, ClassPower, aura-menu and preview helpers across Classic clients while preserving their class resources, pet happiness and Arena support.",
+                        "Removed redundant protected calls and no-op substitutes so native Lua errors remain visible to BugSack/BugGrabber.",
+                        "Corrected shared-helper load order and refreshed menu search indexes for Vanilla, TBC, Mists and Mainline.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha17",
             date = "2026-09-11",
