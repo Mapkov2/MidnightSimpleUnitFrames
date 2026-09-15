@@ -4013,6 +4013,7 @@ L["List every MSUF command that is currently loaded."] = "Показывает �
 L["Print the addon version, the active profile and the Edit Mode state."] = "Выводит версию аддона, активный профиль и состояние режима редактирования."
 L["Reload the interface, same as /rl."] = "Перезагружает интерфейс, как /rl."
 L["Reload the interface."] = "Перезагружает интерфейс."
+L["Print the client, game mode and Blizzard addon facts for a bug report."] = "Print the client, game mode and Blizzard addon facts for a bug report."
 L["Toggle the absorb bars on and off."] = "Включает или выключает полосы поглощения."
 L["List your profiles, or save the current settings as a new profile."] = "Показывает ваши профили или сохраняет текущие настройки в новый профиль."
 L["Load one of your saved profiles."] = "Загружает один из сохранённых профилей."

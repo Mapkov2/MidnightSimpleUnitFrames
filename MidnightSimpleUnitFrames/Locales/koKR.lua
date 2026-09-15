@@ -3972,6 +3972,7 @@ L["List every MSUF command that is currently loaded."] = "현재 불러온 모�
 L["Print the addon version, the active profile and the Edit Mode state."] = "애드온 버전, 활성 프로필, 편집 모드 상태를 출력합니다."
 L["Reload the interface, same as /rl."] = "인터페이스를 다시 불러옵니다. /rl 과 동일합니다."
 L["Reload the interface."] = "인터페이스를 다시 불러옵니다."
+L["Print the client, game mode and Blizzard addon facts for a bug report."] = "Print the client, game mode and Blizzard addon facts for a bug report."
 L["Toggle the absorb bars on and off."] = "흡수량 바를 켜거나 끕니다."
 L["List your profiles, or save the current settings as a new profile."] = "프로필 목록을 보거나 현재 설정을 새 프로필로 저장합니다."
 L["Load one of your saved profiles."] = "저장된 프로필 중 하나를 불러옵니다."

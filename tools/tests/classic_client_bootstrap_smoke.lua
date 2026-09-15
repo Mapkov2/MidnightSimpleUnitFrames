@@ -67,6 +67,11 @@ assert(namespace.Client.IsEra == (expect == "Vanilla"), "wrong Era flag")
 assert(namespace.Client.IsMists == (expect == "Mists"), "wrong Mists flag")
 assert(namespace.Client.IsTBC == (expect == "TBC"), "wrong TBC flag")
 assert(namespace.Client.IsRetail == (expect == "Mainline"), "wrong Retail flag")
+assert(namespace.Client.Family == (expect == "Mainline" and "Mainline" or spec.classic and "Classic" or "Unknown"),
+    "wrong code family: " .. tostring(namespace.Client.Family))
+-- The harness defines no C_GameRules, like every client before game modes: Standard.
+assert(namespace.Client.IsStandardGameMode == true and namespace.Client.GameModeRecognized == true,
+    "a client without C_GameRules must count as the Standard game mode")
 assert(namespace.Client.SupportsPetHappiness == (expect == "Vanilla" or expect == "TBC"),
     "wrong Pet Happiness capability")
 assert(namespace.Client.MaxArenaOpponents == spec.arena,

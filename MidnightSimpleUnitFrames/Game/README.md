@@ -34,3 +34,8 @@ Classic branches, so it proves nothing about whether one flavor has an API.
 Look for a call site in a file that the flavor's TOC actually loads, checking
 its `AllowLoadGameType` tags the way `tools/audit-classic-ui-source.ps1` does,
 or follow the client gates ElvUI applies.
+
+Game modes (`MSUF.Client.GameMode`, such as Standard or a future WoW Forever
+mode) get no folder here. A Mainline game mode shares the Mainline build, and a
+folder is only warranted once a mode's data really diverges. Code branches on
+`MSUF.Client` facts and capabilities, never on client names.

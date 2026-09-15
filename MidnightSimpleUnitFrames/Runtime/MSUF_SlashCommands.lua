@@ -387,6 +387,30 @@ Commands.Register({
 })
 
 Commands.Register({
+    name = "clientinfo",
+    aliases = { "client" },
+    group = "diagnostics",
+    usage = "/msuf clientinfo",
+    help = "Print the client, game mode and Blizzard addon facts for a bug report.",
+    --- Print-only English, like the login diagnostic it extends: it works in
+    --- combat, needs no Options addon and reads no unit data. The facts come
+    --- from Game/Shared/Initialize.lua, which every TOC loads first.
+    run = function()
+        local client = MSUF.Client
+        local describe = type(client) == "table" and client.DescribeLines or nil
+        if type(describe) ~= "function" then
+            print("|cff00b7ebMSUF|r client info is unavailable: client detection did not run.")
+            return
+        end
+        local lines = describe()
+        print("|cff00b7ebMSUF|r client info")
+        for i = 1, #lines do
+            print("  " .. tostring(lines[i]))
+        end
+    end,
+})
+
+Commands.Register({
     name = "reload",
     group = "general",
     usage = "/msuf reload",

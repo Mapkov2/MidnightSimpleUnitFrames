@@ -41,24 +41,36 @@ $clientMatrixPath = Join-Path $root "tools/classic-client-matrix.tsv"
 if (-not (Test-Path -LiteralPath $clientMatrixPath -PathType Leaf)) {
     throw "Client matrix is missing: $clientMatrixPath"
 }
-$branches = @(Import-Csv -LiteralPath $clientMatrixPath -Delimiter "`t" |
+$clientMatrix = @(Import-Csv -LiteralPath $clientMatrixPath -Delimiter "`t")
+$branches = @($clientMatrix |
     Where-Object { $_.IsClassic -ceq "true" } |
-    ForEach-Object { @{ Name = $_.Suffix; Ref = $_.MirrorBranch; GameType = $_.GameType } })
+    ForEach-Object { @{ Name = $_.Suffix; Ref = $_.MirrorBranch; GameType = $_.GameType; Family = "classic" } })
 if ($branches.Count -eq 0) { throw "Client matrix names no Classic client: $clientMatrixPath" }
 
 # Blizzard_APIDocumentationGenerated is shared by every Classic family and proves
 # nothing about which client actually has an API. A call from a file that the
-# flavor's TOC loads does. Family tokens: classic = vanilla/tbc/.../mists.
-$gameTypeFamilies = @{ vanilla = "classic"; tbc = "classic"; mists = "classic"; mainline = "standard" }
-function Test-GameTypeAllowed {
-    param([Parameter(Mandatory = $true)][string]$Tags, [Parameter(Mandatory = $true)][string]$GameType)
-    $tokens = @($Tags -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
-    return ($tokens -contains $GameType) -or ($gameTypeFamilies[$GameType] -and ($tokens -contains $gameTypeFamilies[$GameType]))
+# flavor's TOC loads does. TOC tags name game types (vanilla, tbc, mists,
+# standard, ...) and family tokens (classic, mainline), separated by commas or
+# spaces. A client loads a tagged file when an AllowLoadGameType tag names its
+# game type or its family, and skips it when an ExcludeLoadGameType tag does.
+function Get-GameTypeTokens {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Tags)
+    return @($Tags -split '[,\s]+' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
+}
+function Test-GameTypeNamed {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Tags,
+        [Parameter(Mandatory = $true)][string]$GameType,
+        [Parameter(Mandatory = $true)][string]$Family
+    )
+    $tokens = Get-GameTypeTokens -Tags $Tags
+    return ($tokens -contains $GameType) -or ($tokens -contains $Family)
 }
 function Assert-GameTypeCallSite {
     param(
         [Parameter(Mandatory = $true)][string]$Ref,
         [Parameter(Mandatory = $true)][string]$GameType,
+        [Parameter(Mandatory = $true)][string]$Family,
         [Parameter(Mandatory = $true)][string]$Toc,
         [Parameter(Mandatory = $true)][string]$Entry,
         [Parameter(Mandatory = $true)][string]$File,
@@ -66,16 +78,20 @@ function Assert-GameTypeCallSite {
         [Parameter(Mandatory = $true)][string]$Context
     )
     $tocText = Read-BranchFile $Ref $Toc
-    $header = [regex]::Match($tocText, '(?m)^## AllowLoadGameType:\s*(.+?)\s*$')
-    if ($header.Success -and -not (Test-GameTypeAllowed -Tags $header.Groups[1].Value -GameType $GameType)) {
-        throw "$Context`: $Toc does not load for game type $GameType"
+    foreach ($header in [regex]::Matches($tocText, '(?m)^##\s*(?<kind>Allow|Exclude)LoadGameType:\s*(?<tags>.+?)\s*$')) {
+        $named = Test-GameTypeNamed -Tags $header.Groups['tags'].Value -GameType $GameType -Family $Family
+        if (($header.Groups['kind'].Value -ceq "Allow") -ne $named) {
+            throw "$Context`: $Toc does not load for game type $GameType"
+        }
     }
     $lines = @($tocText -split "`n" | ForEach-Object { $_.Trim() } |
-        Where-Object { $_ -ceq $Entry -or $_.StartsWith("$Entry [", [StringComparison]::Ordinal) })
+        Where-Object { $_ -ceq $Entry -or $_ -match ('^' + [regex]::Escape($Entry) + '\s+\[') })
     if ($lines.Count -ne 1) { throw "$Context`: $Toc lists '$Entry' $($lines.Count) times" }
-    $tag = [regex]::Match($lines[0], '\[AllowLoadGameType\s+([^\]]+)\]')
-    if ($tag.Success -and -not (Test-GameTypeAllowed -Tags $tag.Groups[1].Value -GameType $GameType)) {
-        throw "$Context`: $Entry is not loaded for game type $GameType"
+    foreach ($tag in [regex]::Matches($lines[0], '\[(?<kind>Allow|Exclude)LoadGameType\s+(?<tags>[^\]]+)\]')) {
+        $named = Test-GameTypeNamed -Tags $tag.Groups['tags'].Value -GameType $GameType -Family $Family
+        if (($tag.Groups['kind'].Value -ceq "Allow") -ne $named) {
+            throw "$Context`: $Entry is not loaded for game type $GameType"
+        }
     }
     Assert-Contains (Read-BranchFile $Ref $File) $Needles $Context
 }
@@ -128,17 +144,17 @@ foreach ($target in $branches) {
         'Name = "SaveLayouts"',
         'Name = "SetActiveLayout"'
     ) "$($target.Name) Edit Mode API"
-    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType `
+    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType -Family $target.Family `
         -Toc "Interface/AddOns/Blizzard_FrameXMLUtil/Blizzard_FrameXMLUtil.toc" -Entry "AuraUtil.lua" `
         -File "Interface/AddOns/Blizzard_FrameXMLUtil/AuraUtil.lua" `
         -Needles @('local AuraUtilDataProvider = C_UnitAuras;', 'CallDataProviderMethod("GetAuraSlots"', 'CallDataProviderMethod("GetAuraDataBySlot"') `
         -Context "$($target.Name) loaded C_UnitAuras slot-scan call site"
-    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType `
+    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType -Family $target.Family `
         -Toc "Interface/AddOns/Blizzard_EditMode/Blizzard_EditMode.toc" -Entry "Shared\EditModeManager.lua" `
         -File "Interface/AddOns/Blizzard_EditMode/Shared/EditModeManager.lua" `
         -Needles @('C_EditMode.GetLayouts()', 'C_EditMode.SaveLayouts(', 'C_EditMode.SetActiveLayout(') `
         -Context "$($target.Name) loaded C_EditMode call site"
-    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType `
+    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType -Family $target.Family `
         -Toc "Interface/AddOns/Blizzard_NamePlates/Blizzard_NamePlates.toc" -Entry "Blizzard_NamePlateAuras.lua" `
         -File "Interface/AddOns/Blizzard_NamePlates/Blizzard_NamePlateAuras.lua" `
         -Needles @('C_UnitAuras.IsAuraFilteredOutByInstanceID(') `
@@ -214,4 +230,57 @@ foreach ($ref in @("upstream/ptr", "upstream/ptr2", "upstream/classic_ptr", "ups
     $statusBarAPI = Read-BranchFile $ref "Interface/AddOns/Blizzard_APIDocumentationGenerated/SimpleStatusBarAPIDocumentation.lua"
     Assert-Contains $statusBarAPI @('Name = "SetTimerDuration"') "$ref status-bar timer API"
     Write-Host "Blizzard PTR aura drift contract passed: $ref"
+}
+
+# Game-type tripwire. Every game-type token in Blizzard's TOC tags and every
+# C_GameRules Is* function is pinned for the matrix branches and the PTR
+# sentinels. A new client or game mode (WoW Forever) adds a token or an Is<Mode>
+# function there before addons can rely on it, so a refreshed mirror fails here
+# until Game/Shared/Initialize.lua handles it. Update the pins together with that
+# change; AGENTS.md has the Forever hour-0 runbook.
+$knownGameTypeTokens = @("cata", "classic", "mainline", "mists", "plunderstorm", "standard", "tbc", "vanilla", "wowhack", "wrath")
+$knownGameRuleFunctions = @(
+    "IsCharacterlessLoginActive", "IsClassAllowedForGameMode", "IsGameModeEnabled", "IsGameRuleActive",
+    "IsHardcoreActive", "IsMultiActionBarVisibilityForced", "IsPersonalResourceDisplayEnabled",
+    "IsPlunderstorm", "IsSelfFoundAllowed", "IsStandard", "IsWoWHack"
+)
+$tripwireRefs = [Collections.Generic.List[string]]::new()
+foreach ($client in $clientMatrix) {
+    if (-not $tripwireRefs.Contains($client.MirrorBranch)) { $tripwireRefs.Add($client.MirrorBranch) }
+}
+foreach ($ref in @("upstream/ptr", "upstream/ptr2", "upstream/classic_ptr", "upstream/classic_era_ptr")) {
+    if ($tripwireRefs.Contains($ref)) { continue }
+    git -C $MirrorPath rev-parse --verify $ref 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $tripwireRefs.Add($ref) }
+}
+foreach ($ref in $tripwireRefs) {
+    git -C $MirrorPath rev-parse --verify $ref 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Missing Blizzard source ref: $ref" }
+    $tagLines = @(git -C $MirrorPath grep -h -E "(Allow|Exclude)LoadGameType" $ref -- "*.toc")
+    if ($LASTEXITCODE -ne 0 -or $tagLines.Count -eq 0) {
+        throw "$ref`: no TOC game-type tags found; the tripwire would pass without checking anything"
+    }
+    $tokens = [Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($tagLine in $tagLines) {
+        foreach ($tagMatch in [regex]::Matches($tagLine, '(?:^\s*##\s*(?:Allow|Exclude)LoadGameType:\s*(?<tags>.+?)\s*$)|(?:\[(?:Allow|Exclude)LoadGameType\s+(?<tags>[^\]]+)\])')) {
+            foreach ($token in (Get-GameTypeTokens -Tags $tagMatch.Groups['tags'].Value)) { [void]$tokens.Add($token) }
+        }
+    }
+    $newTokens = @($tokens | Where-Object { $knownGameTypeTokens -notcontains $_ })
+    if ($newTokens.Count -gt 0) {
+        throw "$ref`: Blizzard TOCs use new game-type token(s): $($newTokens -join ', '). A new client or game mode shipped; follow the Forever hour-0 runbook in AGENTS.md, then pin the token(s) here."
+    }
+    $rulesDoc = Read-BranchFile $ref "Interface/AddOns/Blizzard_APIDocumentationGenerated/GameRulesDocumentation.lua"
+    $functions = [Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($functionMatch in [regex]::Matches($rulesDoc, 'Name = "(?<name>Is[A-Z][A-Za-z0-9_]*)"')) {
+        [void]$functions.Add($functionMatch.Groups['name'].Value)
+    }
+    if ($functions.Count -eq 0) {
+        throw "$ref`: GameRulesDocumentation.lua lists no Is* function; the tripwire would pass without checking anything"
+    }
+    $newFunctions = @($functions | Where-Object { $knownGameRuleFunctions -cnotcontains $_ })
+    if ($newFunctions.Count -gt 0) {
+        throw "$ref`: C_GameRules has new Is* function(s): $($newFunctions -join ', '). A new game mode may have shipped; follow the Forever hour-0 runbook in AGENTS.md, then pin the function(s) here."
+    }
+    Write-Host "Blizzard game-type tripwire passed: $ref ($($tokens.Count) TOC tokens, $($functions.Count) C_GameRules Is functions)"
 }

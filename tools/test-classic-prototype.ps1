@@ -1316,6 +1316,10 @@ if ($lua) {
     # hide the missing secret-value API case this smoke pins.
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_client_detection_smoke.lua") ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Client detection smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/client_info_command_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Client info command smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_project_id_reads_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Project ID read inventory smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_scheduler_contract_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Scheduler contract regression failed" }
     foreach ($flavor in $clientSuffixes) {

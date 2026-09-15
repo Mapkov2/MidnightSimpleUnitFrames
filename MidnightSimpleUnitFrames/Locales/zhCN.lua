@@ -4614,6 +4614,7 @@ L["List every MSUF command that is currently loaded."] = "列出当前已加载�
 L["Print the addon version, the active profile and the Edit Mode state."] = "输出插件版本、当前配置文件和编辑模式状态。"
 L["Reload the interface, same as /rl."] = "重新载入界面，与 /rl 相同。"
 L["Reload the interface."] = "重新载入界面。"
+L["Print the client, game mode and Blizzard addon facts for a bug report."] = "Print the client, game mode and Blizzard addon facts for a bug report."
 L["Toggle the absorb bars on and off."] = "开启或关闭吸收条。"
 L["List your profiles, or save the current settings as a new profile."] = "列出你的配置文件，或把当前设置保存为新的配置文件。"
 L["Load one of your saved profiles."] = "载入你保存的某个配置文件。"

@@ -51,6 +51,7 @@ local function Load(label, case)
                 return nil
             end,
         }
+        for name, fn in pairs(case.addOns or {}) do C_AddOns[name] = fn end
     end
     GetBuildInfo = function() return "test", "test", "test", case.interface end
     if case.noSecret then
@@ -68,13 +69,15 @@ local function Load(label, case)
     MAX_ARENA_ENEMIES = case.maxArenaEnemies
     -- A stale value proves every load publishes its own arena slot count.
     MSUF_MAX_ARENA_FRAMES = 99
-    Enum = nil
+    Enum = case.enum
+    C_GameRules = case.gameRules
     MSUF = nil
     MSUF_NS = nil
 
-    local addOns, eventUtils = C_AddOns, C_EventUtils
+    local addOns, eventUtils, gameRules = C_AddOns, C_EventUtils, C_GameRules
     local addOnKeys = addOns and CountKeys(addOns)
     local eventUtilKeys = eventUtils and CountKeys(eventUtils)
+    local gameRuleKeys = gameRules and CountKeys(gameRules)
     local printedBefore = #printed
     local namespace = {}
     chunk("MidnightSimpleUnitFrames", namespace)
@@ -83,9 +86,11 @@ local function Load(label, case)
     local client = assert(namespace.Client, label .. ": Client missing")
     assert(namespace.Compat.Client == client, label .. ": compat bridge missing")
     assert(#printed == printedBefore, label .. ": printed during file load")
-    assert(C_AddOns == addOns and C_EventUtils == eventUtils, label .. ": Blizzard namespace replaced")
+    assert(C_AddOns == addOns and C_EventUtils == eventUtils and C_GameRules == gameRules,
+        label .. ": Blizzard namespace replaced")
     if addOns then assert(CountKeys(addOns) == addOnKeys, label .. ": C_AddOns gained keys") end
     if eventUtils then assert(CountKeys(eventUtils) == eventUtilKeys, label .. ": C_EventUtils gained keys") end
+    if gameRules then assert(CountKeys(gameRules) == gameRuleKeys, label .. ": C_GameRules gained keys") end
     if case.noSecret then
         assert(issecretvalue == nil, label .. ": a global issecretvalue fallback was defined")
     end
@@ -367,7 +372,8 @@ do
         if not columns then
             columns = {}
             for index, name in ipairs(fields) do columns[name] = index end
-            assert(columns.Suffix and columns.Interfaces and columns.ProjectGlobal, "o: client matrix columns changed")
+            assert(columns.Suffix and columns.Interfaces and columns.ProjectGlobal and columns.IsClassic,
+                "o: client matrix columns changed")
         else
             local suffix = fields[columns.Suffix]
             local label = "o/" .. suffix
@@ -377,11 +383,172 @@ do
             local interface = assert(tonumber(fields[columns.Interfaces]:match("%d+")), label .. ": no interface")
             local client = Load(label, { project = project, interface = interface, noMetadata = true })
             assert(client.Flavor == suffix, label .. ": project placed flavor " .. tostring(client.Flavor))
+            local family = fields[columns.IsClassic] == "true" and "Classic" or "Mainline"
+            assert(client.Family == family, label .. ": family " .. tostring(client.Family) .. ", expected " .. family)
+            assert(client.IsStandardGameMode == true and client.GameModeRecognized == true,
+                label .. ": a client without C_GameRules must count as the Standard game mode")
             AssertArenaSlots(label, client, slots)
             rows = rows + 1
         end
     end
     assert(rows >= 4, "o: the client matrix lists fewer than four flavors")
+end
+
+-- (p) Game mode. Test values only: Blizzard does not document the Enum.GameMode
+-- numbers. A Mainline client keeps Mainline behaviour in every mode; only a mode
+-- MSUF does not recognize prints the login line, and Classic never does.
+local GAME_MODES = { Standard = 0, Plunderstorm = 1, WoWHack = 2 }
+local MAINLINE = { project = 1, interface = 120105 }
+
+local function GameRules(mode)
+    return {
+        GetActiveGameMode = function() return mode end,
+        IsStandard = function() return mode == GAME_MODES.Standard end,
+        IsPlunderstorm = function() return mode == GAME_MODES.Plunderstorm end,
+        IsWoWHack = function() return mode == GAME_MODES.WoWHack end,
+        IsGameRuleActive = function(rule) return rule == 7 end,
+        IsClassAllowedForGameMode = function() error("a C_GameRules function that takes arguments was called blindly") end,
+    }
+end
+
+local function GameModeEnum(extra)
+    local modes = {}
+    for key, value in pairs(GAME_MODES) do modes[key] = value end
+    for key, value in pairs(extra or {}) do modes[key] = value end
+    return { GameMode = modes, GameRule = { EditModeDisabled = 7, TargetFrameDisabled = 8 } }
+end
+
+local function Merge(case, extra)
+    local copy = {}
+    for k, v in pairs(case) do copy[k] = v end
+    for k, v in pairs(extra) do copy[k] = v end
+    return copy
+end
+
+do
+    -- (p1) No C_GameRules and no Enum: every client before game modes, Standard.
+    local client = Load("p1", MAINLINE)
+    assert(client.Family == "Mainline" and client.GameMode == nil and client.GameModeName == nil, "p1: game mode facts")
+    assert(client.IsStandardGameMode == true and client.GameModeRecognized == true, "p1: not Standard")
+    AssertNoDiagnostic("p1", client)
+
+    -- (p2) Mainline in the Standard mode.
+    client = Load("p2", Merge(MAINLINE, { gameRules = GameRules(GAME_MODES.Standard), enum = GameModeEnum() }))
+    assert(client.GameMode == 0 and client.GameModeName == "Standard", "p2: mode " .. tostring(client.GameModeName))
+    assert(client.IsStandardGameMode == true and client.GameModeRecognized == true, "p2: Standard not recognized")
+    AssertNoDiagnostic("p2", client)
+    AssertArenaSlots("p2", client, 3)
+
+    -- (p3) Blizzard's other known Mainline modes are recognized and stay silent.
+    for _, key in ipairs({ "Plunderstorm", "WoWHack" }) do
+        local label = "p3/" .. key
+        client = Load(label, Merge(MAINLINE, { gameRules = GameRules(GAME_MODES[key]), enum = GameModeEnum() }))
+        assert(client.GameModeName == key and client.IsStandardGameMode == false, label .. ": mode facts")
+        assert(client.GameModeRecognized == true and client.IsRetail == true, label .. ": recognition")
+        AssertNoDiagnostic(label, client)
+        AssertArenaSlots(label, client, 3)
+    end
+
+    -- (p4) A mode key MSUF does not know keeps Mainline behaviour and says so once.
+    client = Load("p4", Merge(MAINLINE, { gameRules = GameRules(9), enum = GameModeEnum({ Example = 9 }) }))
+    assert(client.GameModeName == "Example" and client.GameModeRecognized == false, "p4: mode facts")
+    assert(client.Flavor == "Mainline" and client.IsRetail == true and client.IsForever == false, "p4: Mainline behaviour")
+    AssertArenaSlots("p4", client, 3)
+    for _, fragment in ipairs({ "MSUF: game mode Example (9) is not recognized", "project 1, interface 120105",
+        "running the Mainline build", "/msuf clientinfo" }) do
+        Contains(client.Diagnostic, fragment, "p4")
+    end
+    assert(#frames == 1, "p4: expected exactly one diagnostic frame, got " .. #frames)
+    local handler = assert(frames[1].scripts.OnEvent, "p4: OnEvent not set")
+    local before = #printed
+    handler(frames[1], "PLAYER_LOGIN")
+    assert(#printed == before + 1 and printed[#printed] == client.Diagnostic, "p4: login line not printed exactly once")
+
+    -- (p5) A mode number missing from Enum.GameMode is named by its number.
+    client = Load("p5", Merge(MAINLINE, { gameRules = GameRules(42), enum = GameModeEnum() }))
+    assert(client.GameMode == 42 and client.GameModeName == nil and client.GameModeRecognized == false, "p5: mode facts")
+    Contains(client.Diagnostic, "game mode ? (42) is not recognized", "p5")
+
+    -- (p6) Classic never builds a game-mode line, whatever mode it reports.
+    for _, mode in ipairs({ GAME_MODES.Plunderstorm, 42 }) do
+        local label = "p6/" .. mode
+        client = Load(label, { project = 2, interface = 11509, tag = "Vanilla",
+            gameRules = GameRules(mode), enum = GameModeEnum() })
+        assert(client.Family == "Classic" and client.IsStandardGameMode == false, label .. ": facts")
+        AssertNoDiagnostic(label, client)
+    end
+
+    -- (p7) Without a Standard key there is nothing to compare: Standard.
+    client = Load("p7", Merge(MAINLINE, { gameRules = GameRules(9), enum = { GameMode = { Example = 9 } } }))
+    assert(client.IsStandardGameMode == true and client.GameModeRecognized == true, "p7: missing Standard key")
+    AssertNoDiagnostic("p7", client)
+
+    -- (p8) Two keys sharing a value resolve to the first key in sorted order.
+    client = Load("p8", Merge(MAINLINE, { gameRules = GameRules(5),
+        enum = { GameMode = { Standard = 0, Zeta = 5, Alpha = 5 } } }))
+    assert(client.GameModeName == "Alpha", "p8: key " .. tostring(client.GameModeName))
+
+    -- (p9) An unrecognized mode and a missing secret-value API are both named.
+    client = Load("p9", Merge(MAINLINE, { gameRules = GameRules(9), enum = GameModeEnum({ Example = 9 }), noSecret = true }))
+    Contains(client.Diagnostic, "game mode Example (9) is not recognized", "p9")
+    Contains(client.Diagnostic, "issecretvalue", "p9")
+end
+
+-- (q) Game rules are looked up by key; a missing rule or API answers nil.
+do
+    local client = Load("q1", MAINLINE)
+    assert(client.IsGameRuleActive("EditModeDisabled") == nil, "q1: no Enum or API must answer nil")
+    client = Load("q2", Merge(MAINLINE, { enum = GameModeEnum() }))
+    assert(client.IsGameRuleActive("EditModeDisabled") == nil, "q2: no C_GameRules must answer nil")
+    client = Load("q3", Merge(MAINLINE, { gameRules = GameRules(GAME_MODES.Standard), enum = GameModeEnum() }))
+    assert(client.IsGameRuleActive("EditModeDisabled") == true, "q3: active rule")
+    assert(client.IsGameRuleActive("TargetFrameDisabled") == false, "q3: inactive rule")
+    assert(client.IsGameRuleActive("PlayerFrameDisabled") == nil, "q3: a rule this client lacks")
+    assert(client.IsGameRuleActive(nil) == nil and client.IsGameRuleActive(7) == nil, "q3: non-string rule key")
+end
+
+-- (r) DescribeLines reads plain client metadata, calls only the no-argument mode
+-- predicates, lists every other Is* function by name, and writes nothing.
+do
+    local client = Load("r1", MAINLINE)
+    local text = table.concat(client.DescribeLines(), "\n")
+    for _, fragment in ipairs({ "Project 1 (WOW_PROJECT_MAINLINE)", "interface 120105",
+        "TOC X-MSUF-Client none; family Mainline, flavor Mainline", "Game mode ? (nil) at load, ? (nil) now",
+        "C_GameRules is missing", "Game rules: none of the reported rules exist",
+        "Blizzard_AuraContainer unknown", "Login diagnostic: none" }) do
+        Contains(text, fragment, "r1")
+    end
+
+    local rules = GameRules(GAME_MODES.Standard)
+    rules.IsExample = function() error("IsExample must be listed, never called") end
+    local existing = { Blizzard_AuraContainer = true, Blizzard_EditMode = true }
+    client = Load("r2", Merge(MAINLINE, {
+        gameRules = rules,
+        enum = GameModeEnum(),
+        addOns = {
+            DoesAddOnExist = function(name) return existing[name] == true end,
+            IsAddOnLoaded = function(name) return name == "Blizzard_AuraContainer" end,
+            GetAddOnInfo = function(name) return name, name, "", false, "DISABLED" end,
+        },
+    }))
+    local addOnKeys, ruleKeys = CountKeys(C_AddOns), CountKeys(C_GameRules)
+    local printedBefore = #printed
+    text = table.concat(client.DescribeLines(), "\n")
+    assert(#printed == printedBefore, "r2: DescribeLines printed")
+    assert(CountKeys(C_AddOns) == addOnKeys and CountKeys(C_GameRules) == ruleKeys,
+        "r2: DescribeLines wrote into a Blizzard namespace")
+    for _, fragment in ipairs({ "Game mode Standard (0) at load, Standard (0) now",
+        "C_GameRules IsStandard=true IsPlunderstorm=false IsWoWHack=false",
+        "other Is functions: IsClassAllowedForGameMode IsExample IsGameRuleActive",
+        "Game rules: EditModeDisabled=true TargetFrameDisabled=false",
+        "Blizzard_AuraContainer loaded", "Blizzard_CooldownViewer absent",
+        "Blizzard_EditMode not loadable (DISABLED)", "Blizzard_ArenaUI absent" }) do
+        Contains(text, fragment, "r2")
+    end
+
+    -- The live mode is read when the report is built; the load-time fact stays.
+    rules.GetActiveGameMode = function() return GAME_MODES.WoWHack end
+    Contains(table.concat(client.DescribeLines(), "\n"), "Game mode Standard (0) at load, WoWHack (2) now", "r3")
 end
 
 print = originalPrint

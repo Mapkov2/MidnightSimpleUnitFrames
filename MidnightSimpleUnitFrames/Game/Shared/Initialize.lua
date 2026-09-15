@@ -1,4 +1,5 @@
---- Client flavor detection shared by Retail and the supported Classic clients.
+--- Client detection shared by Retail and the supported Classic clients: code
+--- family, flavor and game mode.
 ---
 --- This file intentionally loads before Kernel/MSUF_Bootstrap.lua.  Keep it
 --- dependency-free: its job is to establish stable client flags that later
@@ -65,8 +66,48 @@ Client.ProjectIDRecognized = isRetail or projectIsVanilla or projectIsMists or p
 -- Capability fact only. Never define a global issecretvalue fallback here:
 -- other addons probe that global to detect the secret-value API.
 Client.HasSecretValueAPI = type(_G.issecretvalue) == "function"
--- Placeholder until Blizzard publishes a real Forever client fact. Never invent
--- a Forever project ID, interface number or TOC suffix.
+-- The code family decides which build runs: Mainline loads the Retail tree plus
+-- Game/Shared, Classic adds Game/Classic and its flavor folder.
+Client.Family = Client.Flavor == "Mainline" and "Mainline" or Client.IsClassic and "Classic" or "Unknown"
+
+-- Game mode, one level below the family. C_GameRules.GetActiveGameMode exists on
+-- every current client and is final before addons load: Blizzard_SharedXML reads
+-- it at file scope. Enum.GameMode keys are not TOC game types: Classic clients
+-- run Standard, and Plunderstorm ships its own TOC suffix.
+local KNOWN_GAME_MODES = { Standard = true, Plunderstorm = true, WoWHack = true }
+local gameModeEnum = type(_G.Enum) == "table" and type(_G.Enum.GameMode) == "table" and _G.Enum.GameMode or nil
+
+local function ReadActiveGameMode()
+    local gameRules = _G.C_GameRules
+    local getActiveGameMode = type(gameRules) == "table" and gameRules.GetActiveGameMode or nil
+    if type(getActiveGameMode) ~= "function" then return nil end
+    return getActiveGameMode()
+end
+
+-- Keys are visited in sorted order so the answer stays stable if two keys ever
+-- share a value.
+local function GameModeKey(mode)
+    if mode == nil or not gameModeEnum then return nil end
+    local keys = {}
+    for key, value in pairs(gameModeEnum) do
+        if value == mode and type(key) == "string" then keys[#keys + 1] = key end
+    end
+    table.sort(keys)
+    return keys[1]
+end
+
+local gameMode = ReadActiveGameMode()
+local gameModeName = GameModeKey(gameMode)
+local standardGameMode = gameModeEnum and gameModeEnum.Standard
+Client.GameMode = gameMode
+Client.GameModeName = gameModeName
+-- Without the API or the Standard key there is nothing to compare, so the
+-- client counts as Standard, which every client ran before game modes existed.
+Client.IsStandardGameMode = gameMode == nil or standardGameMode == nil or gameMode == standardGameMode
+Client.GameModeRecognized = Client.IsStandardGameMode or KNOWN_GAME_MODES[gameModeName] == true
+-- Placeholder until WoW Forever ships. At hour 0 this becomes a comparison of
+-- Client.GameModeName with the key the Forever client reports. Never invent a
+-- Forever project ID, interface number, TOC suffix or Enum.GameMode key.
 Client.IsForever = false
 
 local unsupportedEvents = Client.UnsupportedEvents or {}
@@ -117,15 +158,15 @@ if flavorUnsupportedUnits then
 end
 
 -- Arena opponent slots are a client fact, published as Client.MaxArenaOpponents
--- and _G.MSUF_MAX_ARENA_FRAMES: 3 on Mainline (MSUF keeps 3 arena frames there
--- even though Retail's Blizzard_ArenaUI defines MAX_ARENA_ENEMIES = 5), 5 on TBC
--- and Mists, none on Classic Era (no arena units), and none on an Unknown
--- client, the most conservative answer.
--- The MAX_ARENA_ENEMIES read is defensive only. Blizzard_ArenaUI is LoadOnDemand
--- and this file loads near the top of every TOC, before it, so in game the
--- global is always nil here and TBC/Mists always get 5. It only matters on a
--- client that defines the global up front; the detection smoke cases that
--- preset it pin that defensive branch.
+-- and _G.MSUF_MAX_ARENA_FRAMES: 3 on Mainline, whatever MAX_ARENA_ENEMIES says
+-- there, 5 on TBC and Mists, none on Classic Era (no arena units), and none on
+-- an Unknown client, the most conservative answer. Mainline never reads the
+-- global; its Blizzard_Deprecated_ArenaUI defines it before addons load.
+-- On TBC and Mists the MAX_ARENA_ENEMIES read is defensive only. Their
+-- Blizzard_ArenaUI is LoadOnDemand and this file loads near the top of every
+-- TOC, before it, so in game the global is nil here and they get 5. It only
+-- matters on a client that defines the global up front; the detection smoke
+-- cases that preset it pin that defensive branch.
 local arenaSlots = 0
 if unsupportedUnits.arena == true then
     arenaSlots = 0
@@ -146,6 +187,125 @@ end
 
 function Client.SupportsGroupKind(kind)
     return kind ~= "mythicraid" or Client.IsRetail == true
+end
+
+-- Game rules are Blizzard's switches for what a game mode allows, such as
+-- EditModeDisabled or TargetFrameDisabled. Returns true or false, or nil when
+-- this client has no such rule or no C_GameRules API. Rule keys differ between
+-- clients, so a rule is looked up by key instead of being assumed.
+function Client.IsGameRuleActive(ruleKey)
+    local enum = _G.Enum
+    local rules = type(enum) == "table" and enum.GameRule or nil
+    local rule = type(rules) == "table" and type(ruleKey) == "string" and rules[ruleKey] or nil
+    local gameRules = _G.C_GameRules
+    local isGameRuleActive = type(gameRules) == "table" and gameRules.IsGameRuleActive or nil
+    if rule == nil or type(isGameRuleActive) ~= "function" then return nil end
+    return isGameRuleActive(rule) == true
+end
+
+-- English report lines for /msuf clientinfo, built only when the command runs.
+-- Everything here is plain client metadata, never unit data or a secret value.
+-- Only the no-argument mode predicates are called; every other C_GameRules Is*
+-- function is listed by name, so a new game mode shows up without guessing its
+-- API.
+local PROJECT_GLOBALS = { "WOW_PROJECT_MAINLINE", "WOW_PROJECT_CLASSIC",
+    "WOW_PROJECT_BURNING_CRUSADE_CLASSIC", "WOW_PROJECT_MISTS_CLASSIC" }
+local MODE_PREDICATES = { "IsStandard", "IsPlunderstorm", "IsWoWHack" }
+local REPORTED_GAME_RULES = { "EditModeDisabled", "PlayerFrameDisabled", "TargetFrameDisabled",
+    "UnitFramePvPContextualDisabled" }
+local REPORTED_ADDONS = { "Blizzard_AuraContainer", "Blizzard_CooldownViewer", "Blizzard_EditMode",
+    "Blizzard_CompactRaidFrames", "Blizzard_ArenaUI" }
+
+local function JoinOr(list, empty)
+    return #list > 0 and table.concat(list, " ") or empty
+end
+
+-- DoesAddOnExist comes first: GetAddOnInfo is only asked about an addon this
+-- client actually ships.
+local function DescribeAddOn(name)
+    local addOns = _G.C_AddOns
+    local doesAddOnExist = type(addOns) == "table" and addOns.DoesAddOnExist or nil
+    if type(doesAddOnExist) ~= "function" then return "unknown" end
+    if doesAddOnExist(name) ~= true then return "absent" end
+    local isAddOnLoaded = addOns.IsAddOnLoaded
+    if type(isAddOnLoaded) == "function" and isAddOnLoaded(name) then return "loaded" end
+    local getAddOnInfo = addOns.GetAddOnInfo
+    if type(getAddOnInfo) ~= "function" then return "present" end
+    local _, _, _, loadable, reason = getAddOnInfo(name)
+    return loadable and "loadable" or ("not loadable (" .. tostring(reason) .. ")")
+end
+
+function Client.DescribeLines()
+    local lines = {}
+    local projectName = "unrecognized"
+    for i = 1, #PROJECT_GLOBALS do
+        local id = _G[PROJECT_GLOBALS[i]]
+        if id ~= nil and id == projectID then
+            projectName = PROJECT_GLOBALS[i]
+            break
+        end
+    end
+    local version, build
+    if type(_G.GetBuildInfo) == "function" then
+        version, build = _G.GetBuildInfo()
+    end
+    lines[#lines + 1] = "Project " .. tostring(projectID) .. " (" .. projectName .. "), build "
+        .. tostring(version) .. " (" .. tostring(build) .. "), interface " .. tostring(interfaceNumber)
+    lines[#lines + 1] = "TOC X-MSUF-Client " .. ((tocFlavor ~= nil and tocFlavor ~= "") and tocFlavor or "none")
+        .. "; family " .. Client.Family .. ", flavor " .. Client.Flavor
+        .. (Client.IsSupported and "" or " (not supported)")
+
+    local gameRules = _G.C_GameRules
+    local liveMode
+    if type(gameRules) == "table" and type(gameRules.GetActiveGameMode) == "function" then
+        liveMode = gameRules.GetActiveGameMode()
+    end
+    lines[#lines + 1] = "Game mode " .. tostring(gameModeName or "?") .. " (" .. tostring(gameMode) .. ") at load, "
+        .. tostring(GameModeKey(liveMode) or "?") .. " (" .. tostring(liveMode) .. ") now"
+        .. (Client.GameModeRecognized and "" or "; not recognized")
+
+    if type(gameRules) == "table" then
+        local predicates, others, called = {}, {}, {}
+        for i = 1, #MODE_PREDICATES do
+            local name = MODE_PREDICATES[i]
+            called[name] = true
+            if type(gameRules[name]) == "function" then
+                predicates[#predicates + 1] = name .. "=" .. tostring(gameRules[name]() == true)
+            end
+        end
+        for name, value in pairs(gameRules) do
+            if type(name) == "string" and type(value) == "function" and name:find("^Is") and not called[name] then
+                others[#others + 1] = name
+            end
+        end
+        table.sort(others)
+        lines[#lines + 1] = "C_GameRules " .. JoinOr(predicates, "has no mode predicates")
+            .. "; other Is functions: " .. JoinOr(others, "none")
+    else
+        lines[#lines + 1] = "C_GameRules is missing"
+    end
+
+    local rules = {}
+    for i = 1, #REPORTED_GAME_RULES do
+        local active = Client.IsGameRuleActive(REPORTED_GAME_RULES[i])
+        if active ~= nil then rules[#rules + 1] = REPORTED_GAME_RULES[i] .. "=" .. tostring(active) end
+    end
+    lines[#lines + 1] = "Game rules: " .. JoinOr(rules, "none of the reported rules exist")
+
+    local units = {}
+    for unit in pairs(unsupportedUnits) do units[#units + 1] = unit end
+    table.sort(units)
+    lines[#lines + 1] = "issecretvalue " .. (Client.HasSecretValueAPI and "present" or "missing")
+        .. "; arena slots " .. tostring(Client.MaxArenaOpponents)
+        .. "; unsupported units: " .. JoinOr(units, "none")
+
+    local addOnStates = {}
+    for i = 1, #REPORTED_ADDONS do
+        addOnStates[i] = REPORTED_ADDONS[i] .. " " .. DescribeAddOn(REPORTED_ADDONS[i])
+    end
+    lines[#lines + 1] = "Blizzard addons: " .. table.concat(addOnStates, ", ")
+    lines[#lines + 1] = "Login diagnostic: " .. (Client.Diagnostic or "none")
+    return lines
 end
 
 -- Short aliases match the style used by ElvUI's shared client initializer and
@@ -175,6 +335,12 @@ do
     elseif not Client.ProjectIDRecognized then
         diagnostic = "MSUF: unrecognized project ID (" .. ClientDetails() .. "); using the "
             .. Client.Flavor .. " TOC build."
+    elseif Client.Family == "Mainline" and not Client.GameModeRecognized then
+        -- A new Mainline game mode keeps full Mainline behaviour; the line only
+        -- makes the mode visible in bug reports from its first login.
+        diagnostic = "MSUF: game mode " .. tostring(gameModeName or "?") .. " (" .. tostring(gameMode)
+            .. ") is not recognized (" .. ClientDetails() .. "); running the Mainline build."
+            .. " Please report /msuf clientinfo."
     end
     if not Client.HasSecretValueAPI then
         diagnostic = (diagnostic or ("MSUF: " .. Client.Flavor .. " client (" .. ClientDetails() .. ")."))

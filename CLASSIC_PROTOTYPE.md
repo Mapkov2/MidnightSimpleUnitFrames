@@ -151,6 +151,40 @@ calculator would be less correct and more expensive.
 - Options and Assistant keep their original zero-idle LoadOnDemand architecture
   and have suffix TOCs for every supported client.
 
+## Client model: family and game mode
+
+`Game/Shared/Initialize.lua` describes a client on three levels, and code keys
+on these facts instead of repeating project checks:
+
+- `Client.Family` is the code family, `Mainline` or `Classic` (`Unknown` when
+  detection cannot place the client). It decides which build runs: Mainline
+  loads the Retail tree plus `Game/Shared`, Classic adds `Game/Classic` and its
+  flavor folder.
+- `Client.Flavor` is the client inside the family: `Mainline`, `Vanilla`, `TBC`
+  or `Mists`, placed by project ID and the `X-MSUF-Client` tag.
+- `Client.GameMode` and `Client.GameModeName` come from
+  `C_GameRules.GetActiveGameMode()` and its `Enum.GameMode` key, read once at
+  load; Blizzard's own code reads the mode at file scope. `IsStandardGameMode`
+  is true for Standard and for clients without the API, and
+  `GameModeRecognized` covers Standard, Plunderstorm and WoWHack.
+
+Game modes are not TOC game types: Classic clients run the Standard mode while
+their TOCs use `vanilla`, `tbc` or `mists`, and Plunderstorm ships its own TOC
+suffix. A Mainline client in a game mode MSUF does not recognize keeps full
+Mainline behaviour and prints one login line naming the mode.
+`Client.IsGameRuleActive(ruleKey)` reads Blizzard's game rules, such as
+`EditModeDisabled`, and returns nil when a client has no such rule.
+`/msuf clientinfo` prints every fact above plus the state of the Blizzard addons
+MSUF integrates with, so the first bug report from a new client carries what is
+needed to support it.
+
+Two checks keep the model honest. `tools/tests/classic_project_id_reads_smoke.lua`
+limits raw `WOW_PROJECT_ID` reads in Classic-owned and override files to a
+reviewed allowlist. `tools/audit-classic-ui-source.ps1` pins every TOC
+game-type token and every `C_GameRules` `Is*` function on the mirror branches,
+so a refreshed mirror that brings a new client or game mode fails the full gate
+until the client model handles it.
+
 ## Install for testing
 
 Copy these three folders into the selected Classic client's
@@ -395,3 +429,36 @@ ElvUI reference inspected locally at commit
 combine shared modules with client-only files. MSUF now uses the same
 shared/classic/client-folder pattern and keeps a dedicated unit-frame manifest
 for each supported client.
+
+## Adding a game mode or a Mainline-family client
+
+A new game mode inside the Mainline family, such as WoW Forever, is added only
+with values its client has shipped. Nothing is prepared under a guessed project
+ID, interface number, TOC suffix or `Enum.GameMode` key. Once a build exists:
+
+1. Run `/msuf clientinfo` on it and record the project ID, interface number,
+   build, game mode key and number, the `C_GameRules` `Is*` functions, the game
+   rules and the Blizzard addon states.
+2. If the client loads `MidnightSimpleUnitFrames_Mainline.toc`, add its interface
+   number to the Mainline row of `tools/classic-client-matrix.tsv` and to the
+   three `_Mainline.toc` files. The gate already allows the Mainline
+   `## Interface` line to differ from Retail.
+3. If the client needs its own TOC suffix instead, add a matrix row and the three
+   suffixed TOCs. The gate currently accepts exactly one non-Classic client, so
+   `tools/test-classic-prototype.ps1` first needs a second Mainline-family client
+   in its single-Mainline check, the Retail TOC name mapping, the Mainline load
+   graph and the Retail parity targets.
+4. Add the shipped `Enum.GameMode` key to the recognized game modes in
+   `Game/Shared/Initialize.lua`, derive the mode's flag (such as
+   `Client.IsForever`) from `Client.GameModeName`, and extend
+   `tools/tests/classic_client_detection_smoke.lua` and
+   `tools/tests/classic_client_bootstrap_smoke.lua`.
+5. Refresh the Blizzard UI source mirror. When the new client's TOC tokens or
+   `C_GameRules` functions appear, the audit tripwire names them; pin them in
+   `tools/audit-classic-ui-source.ps1` once the client model handles them.
+6. Check the Blizzard addons gated by game type. `Blizzard_CooldownViewer` loads
+   only for `standard` today, so the cooldown anchor in
+   `Integrations/MSUF_Integration_ThirdPartyAnchors.lua` needs a game-mode check
+   if the new mode lacks it.
+7. Confirm the CurseForge game version names exist before a release lists the
+   new client.
