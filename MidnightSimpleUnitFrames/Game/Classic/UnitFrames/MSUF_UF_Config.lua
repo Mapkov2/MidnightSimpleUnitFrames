@@ -16,6 +16,7 @@ end
 local UF = MSUF.UF
 UF.Config = UF.Config or {}
 local Config = UF.Config
+local Shared = UF.Shared
 
 local type = type
 local tonumber = tonumber
@@ -146,7 +147,7 @@ local function ResolveClassColor(db, token)
   end
   local color = token and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
   if color then return color.r or 0.12, color.g or 0.62, color.b or 0.95 end
-  return 0.12, 0.62, 0.95
+  return Shared.FallbackClassColor()
 end
 
 local NPC_COLOR_DEFAULTS = {
@@ -209,15 +210,6 @@ local function OutlineModeEnabled(value, fallback)
   value = tonumber(value)
   if value == nil then return fallback == true end
   return value == 1
-end
-
-local function NormalizeFrameOutlineStrata(value)
-  local normalize = _G.MSUF_NormalizeFrameStrata
-  if type(normalize) == "function" then return normalize(value, "AUTO") end
-  if value == nil or value == "" then return "AUTO" end
-  value = tostring(value):upper()
-  local rank = _G.MSUF_FRAME_STRATA_RANK
-  return rank and rank[value] and value or "AUTO"
 end
 
 local function CopyColor(dst, r, g, b, a)
@@ -311,12 +303,6 @@ local function ApplySideTextOffsets(text, outPrefix, confPrefix, legacyPrefix, b
     text[outKey .. "Y"] = baseY + Number(conf[confPrefix .. side .. "OffsetY"] or conf[legacyPrefix .. side .. "OffsetY"]
       or general[confPrefix .. side .. "OffsetY"] or general[legacyPrefix .. side .. "OffsetY"], 0)
   end
-end
-
-local function ResolveTextSlotFontSize(conf, general, key, fallback)
-  local value = Number((conf and conf[key]) or (general and general[key]), fallback)
-  if value <= 0 then return fallback end
-  return value
 end
 
 local function ResolveBarMode(general)
@@ -558,13 +544,6 @@ local function PowerTextModeNeedsValueTicks(mode)
   return mode ~= nil and mode ~= "NONE" and mode ~= "MAX"
 end
 
-local function ResolveTextSlotHidePercentSymbol(conf, general, key)
-  if conf and conf[key] ~= nil then
-    return conf[key] == true
-  end
-  return general and general.hidePercentSymbol == true
-end
-
 local function ResolveNameShortening(db, general, conf, unit, text)
   local shorten = db and db.shortenNames == true
   local maxChars = Number(general and general.shortenNameMaxChars, 6)
@@ -655,18 +634,6 @@ local function ResolveHealthTextColorMode(general, conf)
   return "DEFAULT"
 end
 
-local function ResolvePowerTextColorByType(general, conf)
-  local enabled = general and general.colorPowerTextByType == true
-  if conf and conf.fontOverride == true then
-    if conf.powerTextColorByType ~= nil then
-      enabled = conf.powerTextColorByType == true
-    elseif conf.colorPowerTextByType ~= nil then
-      enabled = conf.colorPowerTextByType == true
-    end
-  end
-  return enabled
-end
-
 local function Utf8Prefix(value, maxChars)
   value = tostring(value or "")
   maxChars = tonumber(maxChars) or 0
@@ -747,119 +714,6 @@ local function ResolveToTInline(db, general, unit, targetText)
   inline.targetNameNpcClassColor = targetText.nameNpcClassColor == true
   inline.totNameClassColor, inline.totNameNpcColor, inline.totNameNpcClassColor = ResolveNameColorFlags(general, tot)
   inline.totNameNpcColor = inline.totNameNpcColor == true or targetNpcTypeColor
-end
-
-local function NormalizePortraitMode(conf)
-  local mode = conf and conf.portraitMode
-  if mode == "LEFT" or mode == "RIGHT" then
-    return mode
-  end
-  if conf and conf.showPortrait == true then
-    return "LEFT"
-  end
-  return "OFF"
-end
-
-local function NormalizePortraitRender(mode)
-  return mode == "CLASS" and "CLASS" or "2D"
-end
-
-local function NormalizePortraitClassStyle(value)
-  local fn = _G.MSUF_NormalizePortraitClassStyleValue
-  if type(fn) == "function" then
-    return fn(value)
-  end
-  local PM = MSUF and MSUF.PortraitMedia
-  if PM and type(PM.NormalizeClassPack) == "function" then
-    return PM.NormalizeClassPack(value)
-  end
-  if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then
-    return value
-  end
-  return "BLIZZARD"
-end
-
---- BLIZZARD is the stock player-frame dressing: the client's own circular
---- portrait mask plus the untinted gold ring cut from Blizzard's frame atlas.
-local function NormalizePortraitShape(shape)
-  if shape == "CIRCLE" or shape == "ROUNDED" or shape == "DIAMOND" or shape == "BLIZZARD" then
-    return shape
-  end
-  return "SQUARE"
-end
-
-local function NormalizePortraitBorder(style)
-  if style == "SOLID" or style == "CLASS_COLOR" or style == "REACTION" or style == "CUSTOM" then
-    return style
-  end
-  return "NONE"
-end
-
---- Border renderer: FLAT is the geometric edge/ring pair, RELIEF swaps in the
---- beveled ring art. The art is greyscale, so the border colour still tints it.
-local function NormalizePortraitBorderArt(value)
-  return value == "RELIEF" and "RELIEF" or "FLAT"
-end
-
-local PORTRAIT_BORDER_DIRECTIONS = { UP = true, RIGHT = true, DOWN = true, LEFT = true }
-local function NormalizePortraitBorderDirection(value)
-  return PORTRAIT_BORDER_DIRECTIONS[value] == true and value or "UP"
-end
-
-local function NormalizePortraitZoom(value)
-  value = Number(value, 100)
-  if value > 1 and value <= 2 then
-    value = value * 100
-  end
-  if value < 100 then
-    return 100
-  elseif value > 200 then
-    return 200
-  end
-  return value
-end
-
-local PORTRAIT_PLACEMENTS = { ATTACHED = true, DETACHED = true, OVERLAY = true }
-local PORTRAIT_ANCHOR_POINTS = {
-  TOPLEFT = true, TOP = true, TOPRIGHT = true,
-  LEFT = true, CENTER = true, RIGHT = true,
-  BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
-}
-local PORTRAIT_OVERLAY_ALIGNMENTS = { LEFT = true, CENTER = true, RIGHT = true, FULL = true }
-
-local function NormalizePortraitPlacement(value)
-  return PORTRAIT_PLACEMENTS[value] == true and value or "ATTACHED"
-end
-
-local function NormalizePortraitAnchorPoint(value, fallback)
-  return PORTRAIT_ANCHOR_POINTS[value] == true and value or fallback
-end
-
-local function NormalizePortraitOverlayAlign(value)
-  return PORTRAIT_OVERLAY_ALIGNMENTS[value] == true and value or "LEFT"
-end
-
---- Portrait layer rides the shared 0..30 unit-frame scale, measured from the
---- frame itself. The health bar sits at frame+1, so layer 0 parks an overlay
---- portrait behind the bars while the default 7 reproduces the pre-6.0 stacking.
-local function NormalizePortraitLevelOffset(value, fallback)
-  value = math.floor(Number(value, fallback or 7) + 0.5)
-  if value < 0 then
-    return 0
-  elseif value > 30 then
-    return 30
-  end
-  return value
-end
-
-local function NormalizePortraitPan(value)
-  value = Number(value, 0)
-  if value < -100 then
-    return -100
-  elseif value > 100 then
-    return 100
-  end
-  return value
 end
 
 --- 2D portrait art is square. Baking zoom, the holder aspect ratio and the pan
@@ -1295,23 +1149,12 @@ local function BackgroundTextureFromGlobal()
   return WHITE
 end
 
-local function ResolveStatusbarTextureKey(key, fallback)
-  if type(key) == "string" and key ~= "" then
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
-    local texture = type(resolve) == "function" and resolve(key) or nil
-    if type(texture) == "string" and texture ~= "" then
-      return texture
-    end
-  end
-  return fallback or WHITE
-end
-
 local function TextureFromScope(conf, general)
   -- Unit-frame textures are shared-only. Party/Raid texture overrides are
   -- resolved by the GroupFrames compiler path.
   local key = general and general.barTexture
   if key ~= nil then
-    return ResolveStatusbarTextureKey(key, TextureFromGlobal())
+    return Shared.ResolveStatusbarTextureKey(key, TextureFromGlobal())
   end
   return TextureFromGlobal()
 end
@@ -1326,7 +1169,7 @@ local function BackgroundTextureFromScope(conf, general, foregroundTexture)
     if key == "" then
       return foregroundTexture or TextureFromScope(conf, general)
     end
-    return ResolveStatusbarTextureKey(key, foregroundTexture or WHITE)
+    return Shared.ResolveStatusbarTextureKey(key, foregroundTexture or WHITE)
   end
   return BackgroundTextureFromGlobal()
 end
@@ -1345,7 +1188,7 @@ local function PowerTextureFromScope(conf, bars, fallback)
     key = bars and bars.powerBarTexture
   end
   if type(key) == "string" and key ~= "" then
-    return ResolveStatusbarTextureKey(key, fallback or TextureFromGlobal())
+    return Shared.ResolveStatusbarTextureKey(key, fallback or TextureFromGlobal())
   end
   return fallback
 end
@@ -1356,7 +1199,7 @@ local function PowerBackgroundTextureFromScope(conf, bars, fallback)
     key = bars and bars.powerBarBgTexture
   end
   if type(key) == "string" and key ~= "" then
-    return ResolveStatusbarTextureKey(key, fallback or WHITE)
+    return Shared.ResolveStatusbarTextureKey(key, fallback or WHITE)
   end
   return fallback
 end
@@ -1648,7 +1491,7 @@ end
 
 local function CompileUnitPortrait(out, conf, general)
   out.portrait = out.portrait or {}
-  local portraitMode = NormalizePortraitMode(conf)
+  local portraitMode = Shared.NormalizePortraitMode(conf)
   local portraitOverride = Number(conf.portraitSizeOverride, Number(conf.portraitSize, 0))
   local portraitAutoSize = max(16, Number(out.height, 30) - 4)
   local portraitSize = portraitOverride > 0 and max(1, portraitOverride) or portraitAutoSize
@@ -1661,11 +1504,11 @@ local function CompileUnitPortrait(out, conf, general)
   end
   out.portrait.enabled = portraitMode ~= "OFF"
   out.portrait.side = portraitMode == "RIGHT" and "RIGHT" or "LEFT"
-  out.portrait.render = NormalizePortraitRender(conf.portraitRender)
-  out.portrait.classStyle = NormalizePortraitClassStyle(conf.portraitClassStyle)
+  out.portrait.render = Shared.NormalizePortraitRender(conf.portraitRender)
+  out.portrait.classStyle = Shared.NormalizePortraitClassStyle(conf.portraitClassStyle)
   out.portrait.castSpellIcon = conf.portraitCastSpellIcon == true
   out.portrait.clickable = conf.portraitClickable == true
-  out.portrait.shape = NormalizePortraitShape(conf.portraitShape)
+  out.portrait.shape = Shared.NormalizePortraitShape(conf.portraitShape)
   out.portrait.size = portraitSize
   out.portrait.sizeMode = portraitSizeMode
   out.portrait.x = Number(conf.portraitOffsetX, 0)
@@ -1684,25 +1527,25 @@ local function CompileUnitPortrait(out, conf, general)
     out.portrait.width = portraitWidth > 0 and max(8, portraitWidth) or portraitSize
     out.portrait.height = portraitHeight > 0 and max(8, portraitHeight) or portraitSize
   end
-  out.portrait.placement = NormalizePortraitPlacement(conf.portraitPlacement)
-  out.portrait.point = NormalizePortraitAnchorPoint(conf.portraitDetachedPoint, "RIGHT")
-  out.portrait.relPoint = NormalizePortraitAnchorPoint(conf.portraitDetachedTo, "LEFT")
-  out.portrait.levelOffset = NormalizePortraitLevelOffset(conf.portraitLevelOffset, 7)
-  out.portrait.overlayAlign = NormalizePortraitOverlayAlign(conf.portraitOverlayAlign)
+  out.portrait.placement = Shared.NormalizePortraitPlacement(conf.portraitPlacement)
+  out.portrait.point = Shared.NormalizePortraitAnchorPoint(conf.portraitDetachedPoint, "RIGHT")
+  out.portrait.relPoint = Shared.NormalizePortraitAnchorPoint(conf.portraitDetachedTo, "LEFT")
+  out.portrait.levelOffset = Shared.NormalizePortraitLevelOffset(conf.portraitLevelOffset, 7)
+  out.portrait.overlayAlign = Shared.NormalizePortraitOverlayAlign(conf.portraitOverlayAlign)
   out.portrait.alpha = Clamp01(Number(conf.portraitAlpha, 100) / 100, 1)
   CompilePortraitTexCoords(
     out.portrait,
-    NormalizePortraitZoom(conf.portraitZoom),
+    Shared.NormalizePortraitZoom(conf.portraitZoom),
     out.portrait.width,
     out.portrait.height,
-    NormalizePortraitPan(conf.portraitPanX),
-    NormalizePortraitPan(conf.portraitPanY))
+    Shared.NormalizePortraitPan(conf.portraitPanX),
+    Shared.NormalizePortraitPan(conf.portraitPanY))
   out.portrait.border = out.portrait.border or {}
-  out.portrait.border.style = NormalizePortraitBorder(conf.portraitBorderStyle)
+  out.portrait.border.style = Shared.NormalizePortraitBorder(conf.portraitBorderStyle)
   out.portrait.border.thickness = max(1, Number(conf.portraitBorderThickness, 2))
   out.portrait.border.fill = conf.portraitFillBorder == true
-  out.portrait.border.art = NormalizePortraitBorderArt(conf.portraitBorderArt)
-  out.portrait.border.direction = NormalizePortraitBorderDirection(conf.portraitBorderDirection)
+  out.portrait.border.art = Shared.NormalizePortraitBorderArt(conf.portraitBorderArt)
+  out.portrait.border.direction = Shared.NormalizePortraitBorderDirection(conf.portraitBorderDirection)
   out.portrait.border.r = Number(general.portraitBorderColorR, 1)
   out.portrait.border.g = Number(general.portraitBorderColorG, 1)
   out.portrait.border.b = Number(general.portraitBorderColorB, 1)
@@ -1914,12 +1757,12 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.healthLeft = NormalizeHealthTextMode(conf.textLeft, "NONE")
   text.healthCenter = NormalizeHealthTextMode(conf.textCenter, "NONE")
   text.healthRight = NormalizeHealthTextMode(conf.textRight or conf.hpTextMode or general.hpTextMode, "CURPERCENT")
-  text.healthLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol")
-  text.healthCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol")
-  text.healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol")
-  text.healthLeftFontSize = ResolveTextSlotFontSize(conf, general, "hpTextLeftFontSize", out.healthFontSize)
-  text.healthCenterFontSize = ResolveTextSlotFontSize(conf, general, "hpTextCenterFontSize", out.healthFontSize)
-  text.healthRightFontSize = ResolveTextSlotFontSize(conf, general, "hpTextRightFontSize", out.healthFontSize)
+  text.healthLeftHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol")
+  text.healthCenterHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol")
+  text.healthRightHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol")
+  text.healthLeftFontSize = Shared.ResolveTextSlotFontSize(conf, general, "hpTextLeftFontSize", out.healthFontSize)
+  text.healthCenterFontSize = Shared.ResolveTextSlotFontSize(conf, general, "hpTextCenterFontSize", out.healthFontSize)
+  text.healthRightFontSize = Shared.ResolveTextSlotFontSize(conf, general, "hpTextRightFontSize", out.healthFontSize)
   if conf.hpTextReverse ~= nil then
     text.healthReverse = conf.hpTextReverse == true
   else
@@ -1953,12 +1796,12 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   if key == "player" and _G.MSUF_AugEvokerActive == true then
     text.powerLeft, text.powerCenter, text.powerRight = "NONE", "NONE", "NONE"
   end
-  text.powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")
-  text.powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol")
-  text.powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol")
-  text.powerLeftFontSize = ResolveTextSlotFontSize(conf, general, "powerTextLeftFontSize", out.powerFontSize)
-  text.powerCenterFontSize = ResolveTextSlotFontSize(conf, general, "powerTextCenterFontSize", out.powerFontSize)
-  text.powerRightFontSize = ResolveTextSlotFontSize(conf, general, "powerTextRightFontSize", out.powerFontSize)
+  text.powerLeftHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")
+  text.powerCenterHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol")
+  text.powerRightHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol")
+  text.powerLeftFontSize = Shared.ResolveTextSlotFontSize(conf, general, "powerTextLeftFontSize", out.powerFontSize)
+  text.powerCenterFontSize = Shared.ResolveTextSlotFontSize(conf, general, "powerTextCenterFontSize", out.powerFontSize)
+  text.powerRightFontSize = Shared.ResolveTextSlotFontSize(conf, general, "powerTextRightFontSize", out.powerFontSize)
   text.powerDelimiter = conf.powerTextSeparator or general.powerTextSeparator or text.healthDelimiter
   text.powerX = Number(conf.powerOffsetX or conf.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX, -4)
   text.powerY = Number(conf.powerOffsetY or conf.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY, 4) + fontBaselineOffset
@@ -1973,7 +1816,11 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   ApplyNpcTypeFlags(text, general, "npcTypeColorText")
   local nameCustomColor
   if customR then
-    -- The table is reused across compiles so a config apply allocates nothing.
+    -- ResolveUnit wipes the spec table before every compile, which nils out.text
+    -- as well, so `text` is a fresh table here and this color table really is
+    -- allocated again on each compile. The nil-check is a correctness guard for
+    -- a caller that compiles into a table nobody wiped, not a no-allocation
+    -- guarantee. Compiling a unit spec is a cold path (profile/option changes).
     nameCustomColor = text.nameCustomColor
     if not nameCustomColor then
       nameCustomColor = {}
@@ -1989,7 +1836,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   local healthTextColorMode = ResolveHealthTextColorMode(general, conf)
   text.healthColorByHealth = healthTextColorMode == "HEALTH"
   text.healthColorByClass = healthTextColorMode == "CLASS"
-  text.powerColorByType = ResolvePowerTextColorByType(general, conf)
+  text.powerColorByType = Shared.ResolvePowerTextColorByType(general, conf)
   text.directLayout = conf.directTextLayout == true
   if text.directLayout == true then
     CopyDirectTextLayout(text, conf)
@@ -2074,7 +1921,7 @@ local function CompileUnitTempMaxHealth(out, conf, general, key)
   local test = AbsorbTextureTestEnabledForScope(key, "tempMaxHealth")
   cfg.test = test == true
   cfg.enabled = ScopedValue(conf, general, "tempMaxHealthEnabled", false) == true or cfg.test
-  cfg.texture = ResolveStatusbarTextureKey(
+  cfg.texture = Shared.ResolveStatusbarTextureKey(
     ScopedValue(conf, general, "tempMaxHealthTexture", ""), out.texture)
   cfg.r = Clamp01(ScopedValue(conf, general, "tempMaxHealthColorR", 0.70), 0.70)
   cfg.g = Clamp01(ScopedValue(conf, general, "tempMaxHealthColorG", 0.10), 0.10)
@@ -2279,7 +2126,7 @@ local function CompileUnitBorder(out, conf, general, bars)
   border.enabled = bars.showBarBorder ~= false and border.thickness > 0
   local outlineLayer = conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or bars.barOutlineLayer
   border.layer = max(0, min(30, floor((tonumber(outlineLayer) or 0) + 0.5)))
-  border.strata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
+  border.strata = Shared.NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
   -- Optional typed outline media. True borders use eight-piece edgeFile
   -- geometry; statusbar textures keep the historic four stretched edges.
   -- Rounded Frames ignores both and keeps its tinted rounded edge.

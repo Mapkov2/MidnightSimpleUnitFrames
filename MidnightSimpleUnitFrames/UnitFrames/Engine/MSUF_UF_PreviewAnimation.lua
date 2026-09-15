@@ -21,6 +21,9 @@ local NO_TARGET_GRACE = 0.35
 local PREVIEW_UNITS = { "target", "focus", "targettarget", "focustarget", "pet" }
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local ARENA_UNITS = { "arena1", "arena2", "arena3" }
+for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+  ARENA_UNITS[#ARENA_UNITS + 1] = "arena" .. i
+end
 local PREVIEW_NAME_LABELS = {
   player = "Player Name Position",
   target = "Target Name Position",

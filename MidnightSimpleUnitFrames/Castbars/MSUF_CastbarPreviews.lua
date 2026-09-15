@@ -458,7 +458,7 @@ end
 ExportPublic("MSUF_SetBossCastbarTestMode", SetBossCastbarTestMode)
 
 local function ForEachArenaPreview(callback)
-    for index = 1, 3 do
+    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         local frame = _G["MSUF_ArenaCastbarPreview" .. index]
         if frame then callback(frame, index) end
     end
@@ -476,7 +476,7 @@ local function SetArenaCastbarTestMode(enabled, transient)
     if active then
         local createArenaPreview = _G.MSUF_CreateArenaCastbarPreview
         if type(createArenaPreview) == "function" then
-            for index = 1, 3 do createArenaPreview(index) end
+            for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do createArenaPreview(index) end
         end
     end
     if not IsInCombat() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
@@ -827,7 +827,7 @@ local function HideAllCastbarPreviews()
         HideCastbarPreviewFrame(_G["MSUF_BossCastbarPreview" .. index])
     end
     HideCastbarPreviewFrame(_G.MSUF_ArenaCastbarPreview)
-    for index = 1, 3 do
+    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         HideCastbarPreviewFrame(_G["MSUF_ArenaCastbarPreview" .. index])
     end
 end
@@ -933,7 +933,7 @@ local function PagePreviewActivate(unit)
     local createArenaPreview = _G.MSUF_CreateArenaCastbarPreview
     if type(createArenaPreview) ~= "function" then return false end
     local shown = false
-    for index = 1, 3 do
+    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         local frame = createArenaPreview(index)
         if frame then
             if type(_G.MSUF_ApplyArenaCastbarPreviewLayout) == "function" then

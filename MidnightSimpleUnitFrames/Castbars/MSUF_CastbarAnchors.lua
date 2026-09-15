@@ -1131,7 +1131,7 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
 
     if unit == "arena" then
         local applied = false
-        for i = 1, 3 do
+        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
             local frame = (_G.MSUF_ArenaCastbars and _G.MSUF_ArenaCastbars[i]) or _G["MSUF_ArenaCastbar" .. i]
             if frame then
                 local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240

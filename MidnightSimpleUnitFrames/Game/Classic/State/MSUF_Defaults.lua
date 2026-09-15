@@ -787,11 +787,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         SetDefault(g, "showGameMenuButton", true)
         SetDefault(g, "previewDragHintAnimationEnabled", true)
         g._msufPreviewDragHintExperienced = false
-        --- Factory profiles always teach preview interaction with the Guides
-        --- layer visible. Both toggles remain ordinary persisted user choices
-        --- after the factory profile has been created.
-        g.unitPreviewGuidesEnabled = true
-        g.classPowerPreviewGuidesEnabled = true
+        -- Start previews clean; the Guides layer is an explicit user choice.
+        g.unitPreviewGuidesEnabled = false
+        g.classPowerPreviewGuidesEnabled = false
         --- Factory Edit Mode baseline: grid on at 36px with snap, backdrop
         --- dimmed to 55%. The compact snapshot predates these tuned values,
         --- so they are set unconditionally over its stale ones.
@@ -823,6 +821,10 @@ local MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS = {
     "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5",
     "arena1", "arena2", "arena3",
 }
+-- TBC and Mists field five arena opponents (Game/Shared/Initialize.lua).
+for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS[#MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS + 1] = "arena" .. i
+end
 local MSUF_DEFAULTS_UNIT_AURA_LANES = {
     buff = {
         prefix = "buff",
@@ -908,12 +910,37 @@ local function MSUF_Defaults_WriteAuraOwnedValue(owner, key, value)
     owner[key] = MSUF_Defaults_CopyAuraOwnedValue(value)
 end
 
+-- Profiles saved with three arena Aura owners gain arena4..N as copies of
+-- arena1 once, on clients with more arena slots (TBC and Mists). Existing
+-- owners are never overwritten. Without arena1 the slot marker stays unset,
+-- so a later pass seeds once arena1 exists. Mainline (3 slots) is a no-op.
+local function MSUF_Defaults_SeedExtraArenaAuraOwners(auras)
+    local slots = tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3
+    if slots <= 3 or type(auras) ~= "table" then return false end
+    if (tonumber(auras._msufA3ArenaAuraSlots) or 3) >= slots then return false end
+    local perUnit = auras.perUnit
+    local source = type(perUnit) == "table" and perUnit.arena1 or nil
+    if type(source) ~= "table" then return false end
+    for i = 4, slots do
+        if type(perUnit["arena" .. i]) ~= "table" then
+            perUnit["arena" .. i] = MSUF_Defaults_CopyAuraOwnedValue(source)
+        end
+    end
+    auras._msufA3ArenaAuraSlots = slots
+    return true
+end
+
 local function MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     if type(auras) ~= "table" then return false end
-    if auras._msufA3UnitLaneOwners_v1 == true then return false end
+    if auras._msufA3UnitLaneOwners_v1 == true then
+        return MSUF_Defaults_SeedExtraArenaAuraOwners(auras)
+    end
     auras.shared = type(auras.shared) == "table" and auras.shared or {}
     auras.perUnit = type(auras.perUnit) == "table" and auras.perUnit or {}
     local shared = auras.shared
+    -- Seed before the snapshot too, so a legacy arena1 owner (not the Shared
+    -- fallback) becomes the source of the new arena4..N lanes.
+    MSUF_Defaults_SeedExtraArenaAuraOwners(auras)
 
     for i = 1, #MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS do
         local unit = MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS[i]
@@ -1038,6 +1065,7 @@ local function MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
 
     auras.profileModelRevision = MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION
     auras._msufA3UnitLaneOwners_v1 = true
+    MSUF_Defaults_SeedExtraArenaAuraOwners(auras)
     return true
 end
 ExportPublic("MSUF_MaterializeUnitAuraLaneOwners", MSUF_Defaults_MaterializeUnitAuraLaneOwners)
@@ -1238,9 +1266,9 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
             filters = Filters(),
         }
     end
-    --- Arena per-unit defaults (1-3): debuffs matter most on enemy players,
-    --- keep the compact boss-style lane geometry.
-    for i = 1, 3 do
+    --- Arena per-unit defaults (1-3, 1-5 on TBC and Mists): debuffs matter
+    --- most on enemy players, keep the compact boss-style lane geometry.
+    for i = 1, math.max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) do
         local key = "arena" .. i
         auras.perUnit[key] = {
             overrideLayout = true,
@@ -1321,7 +1349,7 @@ local function MSUF_Defaults_CreateFactoryUnitAuras()
         SetScope("boss" .. i, { buffX = -1, buffY = 28, debuffX = 131, debuffY = -2,
             maxBuffs = 3, maxDebuffs = 4 })
     end
-    for i = 1, 3 do
+    for i = 1, math.max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) do
         SetScope("arena" .. i, { buffX = -1, buffY = 28, debuffX = 131, debuffY = -2,
             maxBuffs = 3, maxDebuffs = 4 })
     end

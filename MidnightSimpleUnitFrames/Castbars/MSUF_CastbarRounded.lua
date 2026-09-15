@@ -278,7 +278,7 @@ local function ForEachCastbar(callback)
     end
     Visit(_G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1)
     local arenaCastbars = _G.MSUF_ArenaCastbars
-    for index = 1, 3 do
+    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         Visit(type(arenaCastbars) == "table" and arenaCastbars[index] or nil)
         Visit(_G["MSUF_ArenaCastbar" .. index])
         Visit(_G["MSUF_ArenaCastbarPreview" .. index])

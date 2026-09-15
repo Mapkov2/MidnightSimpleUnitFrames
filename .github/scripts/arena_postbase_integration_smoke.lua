@@ -96,13 +96,18 @@ assert(interruptedFrame.hidden == true and interruptedFrame.interrupted == nil,
 local refreshAllSource = Slice(driver,
     "local function RefreshAllCastTargetTextColors",
     'ExportPublic("MSUF_RefreshAllCastTargetTextColors"')
-local refreshAll, liveVisited, previewVisited = Compile([[
+local refreshAllHarness = [[
 local liveVisited, previewVisited = {}, {}
 local function RefreshCastTargetText(frame) liveVisited[#liveVisited + 1] = frame end
 local function ApplyCastTargetTextColor(frame) previewVisited[#previewVisited + 1] = frame end
 ]] .. refreshAllSource .. [[
 return RefreshAllCastTargetTextColors, liveVisited, previewVisited
-]], "Arena cast-target color refresh harness")()
+]]
+local refreshAll, liveVisited, previewVisited =
+    Compile(refreshAllHarness, "Arena cast-target color refresh harness")()
+-- 3-slot pass: MSUF_MAX_ARENA_FRAMES unset (Mainline fallback 3); slots 4..5
+-- are decoys that must stay untouched.
+_G.MSUF_MAX_ARENA_FRAMES = nil
 local arenaLive, arenaPreview = {}, {}
 for index = 1, 3 do
     arenaLive[index] = { castTargetText = {} }
@@ -110,11 +115,48 @@ for index = 1, 3 do
     _G["MSUF_ArenaCastbar" .. index] = arenaLive[index]
     _G["MSUF_ArenaCastbarPreview" .. index] = arenaPreview[index]
 end
+for index = 4, 5 do
+    _G["MSUF_ArenaCastbar" .. index] = { castTargetText = {} }
+    _G["MSUF_ArenaCastbarPreview" .. index] = { castTargetText = {} }
+end
 _G.MSUF_ArenaCastbars = { arenaLive[1], arenaLive[2], arenaLive[3] }
 _G.MSUF_ArenaCastbarPreview = arenaPreview[1]
 refreshAll()
 AssertList(liveVisited, arenaLive, "Arena live cast-target color refresh")
 AssertList(previewVisited, arenaPreview, "Arena preview cast-target color refresh")
+
+-- 5-slot pass: TBC and Mists publish MSUF_MAX_ARENA_FRAMES = 5. The live table
+-- has gaps (named globals fill slots 2 and 5); slot 6 is a decoy.
+local arenaLive5, arenaPreview5, expectedLive5, expectedPreview5 = {}, {}, {}, {}
+for index = 1, 6 do
+    arenaLive5[index] = { castTargetText = {} }
+    arenaPreview5[index] = { castTargetText = {} }
+    _G["MSUF_ArenaCastbar" .. index] = arenaLive5[index]
+    _G["MSUF_ArenaCastbarPreview" .. index] = arenaPreview5[index]
+    if index <= 5 then
+        expectedLive5[index] = arenaLive5[index]
+        expectedPreview5[index] = arenaPreview5[index]
+    end
+end
+_G.MSUF_ArenaCastbars = { arenaLive5[1], nil, arenaLive5[3], arenaLive5[4], nil, arenaLive5[6] }
+_G.MSUF_ArenaCastbarPreview = arenaPreview5[1]
+_G.MSUF_MAX_ARENA_FRAMES = 5
+local refreshAll5, liveVisited5, previewVisited5 =
+    Compile(refreshAllHarness, "Arena cast-target color refresh 5-slot harness")()
+refreshAll5()
+AssertList(liveVisited5, expectedLive5, "5-slot Arena live cast-target color refresh")
+AssertList(previewVisited5, expectedPreview5, "5-slot Arena preview cast-target color refresh")
+_G.MSUF_MAX_ARENA_FRAMES = nil
+for index = 4, 6 do
+    _G["MSUF_ArenaCastbar" .. index] = nil
+    _G["MSUF_ArenaCastbarPreview" .. index] = nil
+end
+for index = 1, 3 do
+    _G["MSUF_ArenaCastbar" .. index] = arenaLive[index]
+    _G["MSUF_ArenaCastbarPreview" .. index] = arenaPreview[index]
+end
+_G.MSUF_ArenaCastbars = { arenaLive[1], arenaLive[2], arenaLive[3] }
+_G.MSUF_ArenaCastbarPreview = arenaPreview[1]
 
 -- Global Bars Dispel sensor -------------------------------------------------
 local globalBars = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua")
@@ -180,8 +222,35 @@ AssertList(refreshRequests, { "arena1", "arena2", "arena3" }, "Arena aura runtim
 AssertList(previewRequests, { "arena" }, "Arena aura preview refresh collapse")
 assert(auraPopup:find('local scope = AuraScope(unit)', 1, true),
     "Arena custom aura containers do not resolve through their canonical scope")
-assert(auraPopup:find('pf.arenaTogetherBtn = Quick.ToggleAt(pf, "Edit Arena 1-3 together"', 1, true),
+local ARENA_TOGETHER_LABEL_LINE = 'local arenaTogetherLabel = (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) > 3'
+    .. ' and "Edit Arena 1-5 together" or "Edit Arena 1-3 together"'
+assert(auraPopup:find(ARENA_TOGETHER_LABEL_LINE, 1, true),
+    "Arena aura edit-together label does not follow the client arena slot count")
+assert(auraPopup:find("pf.arenaTogetherBtn = Quick.ToggleAt(pf, arenaTogetherLabel,", 1, true),
     "Arena aura edit-together setting is not visible in the popup")
+for _, label in ipairs({ "Edit Arena 1-3 together", "Edit Arena 1-5 together" }) do
+    assert(auraPopup:find('"' .. label .. '"', 1, true), "Arena aura popup lost its label: " .. label)
+end
+local arenaTogetherLabel = Compile(ARENA_TOGETHER_LABEL_LINE .. "\nreturn arenaTogetherLabel",
+    "Arena edit-together label harness")
+for _, case in ipairs({ { nil, "Edit Arena 1-3 together" }, { 3, "Edit Arena 1-3 together" },
+    { 5, "Edit Arena 1-5 together" } }) do
+    _G.MSUF_MAX_ARENA_FRAMES = case[1]
+    assert(arenaTogetherLabel() == case[2],
+        "Arena edit-together label for MSUF_MAX_ARENA_FRAMES=" .. tostring(case[1]) .. " is not " .. case[2])
+end
+-- 5-slot pass: TBC and Mists fan the aura edit-together write out to arena1-5.
+_G.MSUF_MAX_ARENA_FRAMES = 5
+AssertList(affectedUnits("arena2", { arenaEditTogether = true }),
+    { "arena1", "arena2", "arena3", "arena4", "arena5" }, "5-slot Arena aura edit-together fan-out")
+AssertList(affectedUnits("arena4", { arenaEditTogether = false }),
+    { "arena4" }, "5-slot Arena individual aura edit")
+AssertList(affectedUnits("boss2", { bossEditTogether = true }),
+    { "boss1", "boss2", "boss3", "boss4", "boss5" }, "5-slot Arena pass changed the Boss fan-out")
+_G.MSUF_MAX_ARENA_FRAMES = 3
+AssertList(affectedUnits("arena2", { arenaEditTogether = true }),
+    { "arena1", "arena2", "arena3" }, "Mainline Arena aura edit-together fan-out")
+_G.MSUF_MAX_ARENA_FRAMES = nil
 
 -- Generic Unit Preview Arena parity ----------------------------------------
 local unitPreviewAuras = Read(
@@ -219,6 +288,14 @@ assert(refreshRuntime("arena", "ARENA_PREVIEW_SMOKE") == true,
     "generic aura preview rejected an Arena runtime refresh")
 AssertList(auraPreviewRefreshes, { "arena1", "arena2", "arena3" },
     "generic aura-preview Arena runtime fan-out")
+-- 5-slot pass: TBC and Mists refresh arena1-5 from the generic aura preview.
+for index = #auraPreviewRefreshes, 1, -1 do auraPreviewRefreshes[index] = nil end
+_G.MSUF_MAX_ARENA_FRAMES = 5
+assert(refreshRuntime("arena", "ARENA_PREVIEW_SMOKE") == true,
+    "generic aura preview rejected a 5-slot Arena runtime refresh")
+AssertList(auraPreviewRefreshes, { "arena1", "arena2", "arena3", "arena4", "arena5" },
+    "5-slot generic aura-preview Arena runtime fan-out")
+_G.MSUF_MAX_ARENA_FRAMES = nil
 
 for _, marker in ipairs({
     'unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena"',

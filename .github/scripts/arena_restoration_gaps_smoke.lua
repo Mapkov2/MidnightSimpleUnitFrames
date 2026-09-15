@@ -129,10 +129,17 @@ local function NewFrame(label)
 end
 local arenaLive = { NewFrame("arena-live-1"), NewFrame("arena-live-2"), NewFrame("arena-live-3") }
 local arenaPreview = { NewFrame("arena-preview-1"), NewFrame("arena-preview-2"), NewFrame("arena-preview-3") }
-_G.MSUF_ArenaCastbars = { arenaLive[1], nil, arenaLive[3] }
+-- 3-slot pass: MSUF_MAX_ARENA_FRAMES unset (Mainline fallback 3). Slots 4..5
+-- hold decoy frames that a walker reading past the fallback would collect.
+_G.MSUF_MAX_ARENA_FRAMES = nil
+_G.MSUF_ArenaCastbars = { arenaLive[1], nil, arenaLive[3], NewFrame("arena-live-decoy-4") }
 for index = 1, 3 do
     _G["MSUF_ArenaCastbar" .. index] = arenaLive[index]
     _G["MSUF_ArenaCastbarPreview" .. index] = arenaPreview[index]
+end
+for index = 4, 5 do
+    _G["MSUF_ArenaCastbar" .. index] = NewFrame("arena-live-decoy-" .. index)
+    _G["MSUF_ArenaCastbarPreview" .. index] = NewFrame("arena-preview-decoy-" .. index)
 end
 _G.MSUF_ArenaCastbarPreview = arenaPreview[1]
 
@@ -172,6 +179,41 @@ applyAllRoundedCastbars(true)
 AssertVisitedExactlyOnce(appliedRounded, expectedArenaFrames, "rounded castbar enable")
 applyAllRoundedCastbars(false)
 AssertVisitedExactlyOnce(clearedRounded, expectedArenaFrames, "rounded castbar disable")
+
+-- 5-slot pass: TBC and Mists publish MSUF_MAX_ARENA_FRAMES = 5. Slot 6 is a
+-- decoy. Live slot 4 exists only in the pool table and slots 2 and 5 only as
+-- named globals, so both the pool-table loop and the named-global loop must
+-- reach slot 5 on their own.
+local arenaLive5, arenaPreview5 = {}, {}
+for index = 1, 6 do
+    arenaLive5[index] = NewFrame("arena5-live-" .. index)
+    arenaPreview5[index] = NewFrame("arena5-preview-" .. index)
+    _G["MSUF_ArenaCastbar" .. index] = index ~= 4 and arenaLive5[index] or nil
+    _G["MSUF_ArenaCastbarPreview" .. index] = arenaPreview5[index]
+end
+_G.MSUF_ArenaCastbars = { arenaLive5[1], nil, arenaLive5[3], arenaLive5[4], nil, arenaLive5[6] }
+_G.MSUF_ArenaCastbarPreview = arenaPreview5[1]
+_G.MSUF_MAX_ARENA_FRAMES = 5
+local expectedArenaFrames5 = {}
+for index = 1, 5 do expectedArenaFrames5[#expectedArenaFrames5 + 1] = arenaLive5[index] end
+for index = 1, 5 do expectedArenaFrames5[#expectedArenaFrames5 + 1] = arenaPreview5[index] end
+
+AssertVisitedExactlyOnce(collectScaleFrames(), expectedArenaFrames5, "5-slot UI scale collector")
+
+local applyAllRoundedCastbars5, appliedRounded5, clearedRounded5 =
+    assert(compile(roundedHarness, "Arena rounded castbar 5-slot harness"))()
+applyAllRoundedCastbars5(true)
+AssertVisitedExactlyOnce(appliedRounded5, expectedArenaFrames5, "5-slot rounded castbar enable")
+applyAllRoundedCastbars5(false)
+AssertVisitedExactlyOnce(clearedRounded5, expectedArenaFrames5, "5-slot rounded castbar disable")
+
+_G.MSUF_MAX_ARENA_FRAMES = nil
+_G.MSUF_ArenaCastbars = nil
+_G.MSUF_ArenaCastbarPreview = nil
+for index = 1, 6 do
+    _G["MSUF_ArenaCastbar" .. index] = nil
+    _G["MSUF_ArenaCastbarPreview" .. index] = nil
+end
 
 local roundedController = Read("MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua")
 local controllerApplyAll = Slice(

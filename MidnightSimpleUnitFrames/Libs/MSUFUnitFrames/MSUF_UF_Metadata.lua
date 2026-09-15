@@ -248,6 +248,16 @@ UF.unitOrder = UF.unitOrder or {
   "boss1", "boss2", "boss3", "boss4", "boss5",
   "arena1", "arena2", "arena3",
 }
+-- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on
+-- Mainline and in sliced harnesses). Idempotent: present tokens are skipped.
+for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+  local token = "arena" .. arenaIndex
+  local present = false
+  for i = 1, #UF.unitOrder do
+    if UF.unitOrder[i] == token then present = true break end
+  end
+  if not present then UF.unitOrder[#UF.unitOrder + 1] = token end
+end
 
 -- Prune unsupported client tokens before factories, events and edit-mode owners
 -- consume the managed-unit list. Imported profiles cannot re-enable these units.
@@ -285,6 +295,17 @@ local BOSS_UNITS = {
 local ARENA_UNITS = {
   arena1 = true, arena2 = true, arena3 = true,
 }
+-- Arena slots 4..N join the arena config key and ConfigKeyForUnit (idempotent).
+for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+  local token = "arena" .. arenaIndex
+  local arenaKeyUnits = UF.configKeyUnits.arena
+  local present = false
+  for i = 1, #arenaKeyUnits do
+    if arenaKeyUnits[i] == token then present = true break end
+  end
+  if not present then arenaKeyUnits[#arenaKeyUnits + 1] = token end
+  ARENA_UNITS[token] = true
+end
 
 UF.dependentUnitParents = UF.dependentUnitParents or {
   targettarget = "target",

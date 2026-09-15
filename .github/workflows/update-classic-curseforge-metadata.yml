@@ -73,7 +73,24 @@ jobs:
             "X-Api-Token" = $env:CF_API_KEY
             Accept = "application/json"
           }
-          $gameVersionNames = @("12.1.5", "1.15.9", "2.5.6", "5.5.4")
+          $clientMatrix = @(Import-Csv -LiteralPath "tools/classic-client-matrix.tsv" -Delimiter "`t")
+          if ($clientMatrix.Count -eq 0) {
+            throw "tools/classic-client-matrix.tsv names no clients."
+          }
+          # CurseForge lists the Retail client first, then Classic clients from the oldest game generation up.
+          $versionClients = @($clientMatrix | Sort-Object -Property @(
+            @{ Expression = { $_.IsClassic -ceq "true" } },
+            @{ Expression = { @(([string]$_.Interfaces -split ',') | ForEach-Object { [int]$_.Trim() } | Sort-Object)[0] } }
+          ))
+          $gameVersionNames = @(
+            foreach ($client in $versionClients) {
+              foreach ($versionName in ([string]$client.CurseForgeVersions -split ',')) { $versionName.Trim() }
+            }
+          )
+          if ($gameVersionNames.Count -eq 0 -or @($gameVersionNames | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+            throw "tools/classic-client-matrix.tsv must give every client at least one CurseForge game version and no blank names. Got: [$($gameVersionNames -join ', ')]"
+          }
+          "game_versions=$($gameVersionNames -join ', ')" >> $env:GITHUB_OUTPUT
           $versionResponse = Invoke-RestMethod `
             -Method Get `
             -Uri "https://wow.curseforge.com/api/game/versions" `
@@ -118,7 +135,7 @@ jobs:
 
           - File: ``${{ steps.curseforge.outputs.updated_file_id }}``
           - Display name: ``$env:CF_DISPLAY_NAME``
-          - Game versions: ``12.0.7``, ``12.1.0``, ``12.1.5``, ``1.15.9``, ``2.5.6``, ``5.5.4``
+          - Game versions: ``${{ steps.curseforge.outputs.game_versions }}``
           - Release type: ``alpha``
           - No new file was uploaded.
           "@ >> $env:GITHUB_STEP_SUMMARY

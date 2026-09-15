@@ -1,6 +1,7 @@
 -- Runtime smoke for the shared Retail/Classic arena trinket provider.
 -- Covers Retail DurationObject/native texture relay, Classic C_PvP timing,
--- and the event-driven Mists combat-log fallback.
+-- the event-driven Mists combat-log fallback, and the 5-slot TBC/Mists
+-- arena slot count (Mainline stays at three).
 
 local function Check(ok, message)
     if not ok then error(message, 2) end
@@ -57,12 +58,17 @@ local function RunScenario(kind)
     local allFrames = {}
     local callbacks = {}
     local arenaFrames = {}
-    local liveUnits = { arena1 = true }
+    local slot = kind == "tbc5" and 5 or 1
+    local slotUnit = "arena" .. slot
+    local liveUnits = { [slotUnit] = true }
     local requests = 0
     local now = 50
     local currentClassicInfo = { 42292, 0, 5000, 120000 }
 
-    for index = 1, 3 do arenaFrames["arena" .. index] = NewFrame("arena" .. index) end
+    for index = 1, 6 do arenaFrames["arena" .. index] = NewFrame("arena" .. index) end
+    -- Mainline publishes 3 slots and TBC/Mists 5. The 3-slot Classic scenario
+    -- leaves the global unset to exercise the module fallback of three.
+    _G.MSUF_MAX_ARENA_FRAMES = ({ retail = 3, mists = 5, tbc5 = 5 })[kind]
 
     _G.UIParent = NewFrame("UIParent")
     _G.CreateFrame = function(_, name, parent)
@@ -74,7 +80,7 @@ local function RunScenario(kind)
     _G.UnitExists = function(unit) return liveUnits[unit] == true end
     _G.IsInInstance = function() return true, "arena" end
     _G.GetTime = function() return now end
-    _G.UnitGUID = function(unit) return unit == "arena1" and "enemy-guid-1" or nil end
+    _G.UnitGUID = function(unit) return unit == slotUnit and "enemy-guid-1" or nil end
     _G.GetSpellTexture = function(spellID) return spellID + 1000, spellID + 2000 end
     _G.C_Item = { GetItemIconByID = function(itemID) return itemID + 3000 end }
     _G.issecretvalue = function(value) return type(value) == "table" and value.secret == true end
@@ -82,8 +88,8 @@ local function RunScenario(kind)
         if _G.issecretvalue(value) then error("secret value reached tonumber") end
         return baseTonumber(value, base)
     end
-    _G.WOW_PROJECT_MAINLINE = 1
-    _G.WOW_PROJECT_ID = kind == "retail" and 1 or 2
+    _G.WOW_PROJECT_MAINLINE = nil
+    _G.WOW_PROJECT_ID = nil
     _G.Enum = { PvPMatchState = { Engaged = 3 } }
     _G.MSUF_DB = { arena = { enabled = true, showTrinket = true } }
     _G.MSUF_EventBus_Register = function(event, _, callback) callbacks[event] = callback end
@@ -111,7 +117,7 @@ local function RunScenario(kind)
         IsMatchComplete = function() return false end,
         GetActiveMatchState = function() return _G.Enum.PvPMatchState.Engaged end,
         RequestCrowdControlSpell = function(unit)
-            Check(unit == "arena1", kind .. " requested the wrong unit")
+            Check(unit == slotUnit, kind .. " requested the wrong unit")
             requests = requests + 1
         end,
         GetArenaCrowdControlDuration = function() return durationObject end,
@@ -123,11 +129,9 @@ local function RunScenario(kind)
 
     local MSUF = {
         Client = {
-            -- Retail intentionally exercises the Mainline project-ID fallback:
-            -- its canonical TOC does not populate MSUF.Client.
-            IsRetail = kind ~= "retail" and false or nil,
+            IsRetail = kind == "retail",
             IsMists = kind == "mists",
-            IsTBC = kind == "classic",
+            IsTBC = kind == "classic" or kind == "tbc5",
         },
         UF = { GetFrame = function(unit) return arenaFrames[unit] end },
         Secrets = { UnitExistsPlain = function(unit) return liveUnits[unit] == true end },
@@ -152,7 +156,7 @@ local function RunScenario(kind)
     end
 
     assert(loadfile(modulePath))("MidnightSimpleUnitFrames", MSUF)
-    local holder = framesByName.MSUF_ArenaTrinket1
+    local holder = framesByName["MSUF_ArenaTrinket" .. slot]
     Check(holder and holder.createdTexture, kind .. " did not create the trinket holder")
     Check(holder.shown == true, kind .. " did not show the live arena slot")
 
@@ -169,7 +173,7 @@ local function RunScenario(kind)
             "Retail did not use the secret-safe DurationObject")
 
         callbacks.ARENA_CROWD_CONTROL_SPELL_UPDATE(
-            "ARENA_CROWD_CONTROL_SPELL_UPDATE", "arena1", { secret = true }, { secret = true })
+            "ARENA_CROWD_CONTROL_SPELL_UPDATE", slotUnit, { secret = true }, { secret = true })
         Check(holder.cooldown.durationObject == durationObject,
             "Retail secret response escaped into the Classic numeric path")
 
@@ -182,7 +186,13 @@ local function RunScenario(kind)
             "Retail native cooldown hook did not refresh the DurationObject")
         callbacks.ARENA_COOLDOWNS_UPDATE("ARENA_COOLDOWNS_UPDATE")
         Check(requests == 1, "Retail response event re-requested crowd-control data")
-    elseif kind == "classic" then
+
+        liveUnits.arena4 = true
+        callbacks.ARENA_OPPONENT_UPDATE("ARENA_OPPONENT_UPDATE", "arena4", "seen")
+        Check(framesByName.MSUF_ArenaTrinket4 == nil,
+            "Retail created a trinket holder beyond its three arena slots")
+        Check(requests == 1, "Retail requested crowd-control data for arena4")
+    elseif kind == "classic" or kind == "tbc5" then
         Check(callbacks.PVP_MATCH_STATE_CHANGED == nil,
             "Classic registered the Retail match-state event")
         Check(holder.cooldown.startTime == 5 and holder.cooldown.duration == 120,
@@ -192,7 +202,7 @@ local function RunScenario(kind)
 
         currentClassicInfo = { 59752, 123, 9000, 90000 }
         callbacks.ARENA_CROWD_CONTROL_SPELL_UPDATE(
-            "ARENA_CROWD_CONTROL_SPELL_UPDATE", "arena1", 59752, 123)
+            "ARENA_CROWD_CONTROL_SPELL_UPDATE", slotUnit, 59752, 123)
         Check(holder.cooldown.startTime == 9 and holder.cooldown.duration == 90,
             "Classic spell response did not refresh the cooldown")
         Check(holder.createdTexture.texture == 3123,
@@ -200,9 +210,17 @@ local function RunScenario(kind)
         Check(requests == 1, "Classic response event re-requested crowd-control data")
 
         callbacks.ARENA_CROWD_CONTROL_SPELL_UPDATE(
-            "ARENA_CROWD_CONTROL_SPELL_UPDATE", "arena1", { secret = true }, { secret = true })
+            "ARENA_CROWD_CONTROL_SPELL_UPDATE", slotUnit, { secret = true }, { secret = true })
         Check(holder.createdTexture.texture == 3123,
             "Classic secret response replaced the last plain trinket texture")
+        if kind == "tbc5" then
+            Check(holder.name == "MSUF_ArenaTrinket5" and holder.relativeTo == arenaFrames.arena5,
+                "TBC 5-slot client did not anchor the arena5 trinket holder")
+            Check(framesByName.MSUF_ArenaTrinket4 and framesByName.MSUF_ArenaTrinket4.shown == false,
+                "TBC 5-slot client did not keep the empty arena4 holder hidden")
+            Check(framesByName.MSUF_ArenaTrinket6 == nil,
+                "TBC 5-slot client created a trinket holder beyond arena5")
+        end
     else
         Check(callbacks.COMBAT_LOG_EVENT_UNFILTERED ~= nil,
             "Mists did not register its combat-log fallback")
@@ -228,5 +246,12 @@ end
 RunScenario("retail")
 RunScenario("classic")
 RunScenario("mists")
+RunScenario("tbc5")
+
+local moduleHandle = assert(io.open(modulePath, "rb"))
+local moduleSource = moduleHandle:read("*a")
+moduleHandle:close()
+Check(not moduleSource:find("WOW_PROJECT_ID", 1, true),
+    "arena trinkets must trust Client.IsRetail, not a WOW_PROJECT_ID fallback")
 
 print("arena_trinket_tracking_smoke: ok")

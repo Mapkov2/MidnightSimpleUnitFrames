@@ -251,7 +251,7 @@ local function RefreshRuntime(unit, reason)
     if unit == "boss" then
         for i = 1, 5 do Refresh("boss" .. i) end
     elseif unit == "arena" then
-        for i = 1, 3 do Refresh("arena" .. i) end
+        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do Refresh("arena" .. i) end
     else
         Refresh(unit)
     end

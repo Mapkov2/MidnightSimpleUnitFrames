@@ -84,19 +84,32 @@ function SI.BuildReverseLookup(specKey)
   return lookup
 end
 
---- TBC has no specialization API: the "spec" is the talent tree holding the
---- most points (the same rule every Classic addon uses), and it only changes
---- on PLAYER_TALENT_UPDATE / CHARACTER_POINTS_CHANGED, which the shared
---- registry already treats as spec-change events.
+--- Points spent in one talent tree. The first source that answers wins:
+---   C_SpecializationInfo.GetSpecializationInfo(tab): pointsSpent is the 7th return;
+---   GetTalentTabInfo(tab) returning a table: its pointsSpent field;
+---   GetTalentTabInfo(tab) deprecation shim (specId, name, description, icon, pointsSpent, ...);
+---   legacy GetTalentTabInfo(tab) (name, texture, pointsSpent, ...).
+local function TalentTabPoints(tab)
+  if C_SpecializationInfo and type(C_SpecializationInfo.GetSpecializationInfo) == "function" then
+    local points = tonumber((select(7, C_SpecializationInfo.GetSpecializationInfo(tab))))
+    if points then return points end
+  end
+  if type(GetTalentTabInfo) ~= "function" then return nil end
+  local first, _, third, _, fifth = GetTalentTabInfo(tab)
+  if type(first) == "table" then return tonumber(first.pointsSpent) end
+  if type(first) == "number" then return tonumber(fifth) end
+  return tonumber(third)
+end
+
+--- TBC talent trees are not a specialization choice: the "spec" is the tree
+--- holding the most points (the same rule every Classic addon uses), and it
+--- only changes on PLAYER_TALENT_UPDATE / CHARACTER_POINTS_CHANGED, which the
+--- shared registry already treats as spec-change events.
 local function DominantTalentTab()
-  local numTabs = type(GetNumTalentTabs) == "function" and GetNumTalentTabs() or 0
-  if type(GetTalentTabInfo) ~= "function" or numTabs < 1 then return nil end
+  local numTabs = type(GetNumTalentTabs) == "function" and tonumber(GetNumTalentTabs()) or 0
   local bestIndex, bestPoints = nil, -1
   for tab = 1, numTabs do
-    local info = { GetTalentTabInfo(tab) }
-    -- Classic returns (name, texture, pointsSpent, ...); newer Classic builds
-    -- may return a table with pointsSpent instead.
-    local points = type(info[1]) == "table" and tonumber(info[1].pointsSpent) or tonumber(info[3])
+    local points = TalentTabPoints(tab)
     if points and points > bestPoints then
       bestIndex, bestPoints = tab, points
     end
@@ -109,13 +122,25 @@ function SI.GetPlayerSpec()
   local _, classToken = UnitClass("player")
   if not classToken then return nil end
   local specIndex
-  if type(GetSpecialization) == "function" then
-    specIndex = GetSpecialization()
-  elseif C_SpecializationInfo and type(C_SpecializationInfo.GetSpecialization) == "function" then
-    specIndex = C_SpecializationInfo.GetSpecialization()
+  local client = ns.Client
+  if client and (client.IsVanilla == true or client.IsSupported == false) then
+    -- Era data keys one combined set per class (index 0). A talent-tree index
+    -- from the specialization API would miss every SpecMap key. An unplaced
+    -- client (IsSupported false) cannot trust a spec index either, so it
+    -- takes the same conservative class-wide path.
+    specIndex = 0
+  else
+    if type(GetSpecialization) == "function" then
+      specIndex = GetSpecialization()
+    elseif C_SpecializationInfo and type(C_SpecializationInfo.GetSpecialization) == "function" then
+      specIndex = C_SpecializationInfo.GetSpecialization()
+    end
+    -- TBC data keys talent trees 1..3; only trust the API when its index is mapped.
+    if client and client.IsTBC == true
+      and (specIndex == nil or SI.SpecMap[classToken .. "_" .. specIndex] == nil) then
+      specIndex = DominantTalentTab()
+    end
   end
-  if not specIndex and ns.Client and ns.Client.IsVanilla == true then specIndex = 0 end
-  if not specIndex and ns.Client and ns.Client.IsTBC == true then specIndex = DominantTalentTab() end
   if not specIndex then return nil end
   if classToken == cachedClass and specIndex == cachedIndex then return cachedKey end
   cachedClass, cachedIndex = classToken, specIndex

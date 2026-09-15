@@ -7,7 +7,8 @@ MSUF.MSUF2 = M
 
 -- Menu2 Auras page.
 -- Builds controls for Auras3 unit/group scopes, lanes, filters, and visual options. The page
--- talks to the Auras3 menu model; live tracking/filtering is handled by native 12.1 aura containers.
+-- talks to the Auras3 menu model; live tracking/filtering is handled by the Classic scan backend
+-- (Game/Classic/Auras), which offers only the Only mine and Hide permanent filters.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
@@ -23,8 +24,8 @@ local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = TEX_W8, color = function() return 1, 1, 1, 0.95 end }
 -- Icon-style art shared with the runtime. Parked on M rather than a file local:
--- this chunk is at Lua 5.1's 200 upvalue ceiling, so new file-scope locals here
--- break the whole page.
+-- the main chunk runs close to its Lua 5.1 local budget (200 locals per function),
+-- so new file-scope locals here can break the whole page.
 M.AURA_SHADOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
     .. "\\Media\\Borders\\msuf_aura_border_shadow.tga"
 M.AURA_ICON_STYLE_APPLY_DELAY = 0.18
@@ -47,7 +48,6 @@ M.SHARED_AURA_STYLE_CONTAINER_VALUES = VTP
     "buff=Buffs|debuff=Debuffs|playerDefensives=Player Defensives|targetDots=Dots on Target"
 local UNIT_STYLE_CONTAINER_VALUES = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target"
 local UNIT_STYLE_CONTAINER_VALUES_PLAYER = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensive Buffs"
-local CUSTOM_FRAME_EFFECTS = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Overlay"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
 M.AURA_STEALABLE_STYLE_VALUES = M.AURA_STEALABLE_STYLE_VALUES
@@ -126,46 +126,8 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
 }
-local NATIVE_EXACT_AURA_FILTERS_ENABLED = true
-local NATIVE_EXACT_AURA_FILTERS_TEXT = "Exact Spell IDs are used when Blizzard exposes them."
 M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client and MSUF.Client.IsClassic == true
     or (_G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE)
-local GROUP_NATIVE_FILTER_LABELS = {
-    ALL = "All",
-    MSUF_GROUP_HIGHLIGHTS_V1 = "MSUF Highlights",
-    Player = "Player",
-    BigDefensivePlayer = "Big Defensive Player",
-    ExternalDefensivePlayer = "External Defensive Player",
-    RaidInCombatPlayer = "Raid In Combat Player",
-    CancelablePlayer = "Cancelable Player",
-    NotCancelablePlayer = "Not Cancelable Player",
-    RaidPlayer = "Raid Player",
-    BigDefensive = "Big Defensive",
-    ExternalDefensive = "External Defensive",
-    RaidInCombat = "Raid In Combat",
-    Cancelable = "Cancelable",
-    NotCancelable = "Not Cancelable",
-    Raid = "Raid",
-    INCLUDE_NAME_PLATE_ONLY = "Include Nameplate-only",
-    RAID_PLAYER_DISPELLABLE = "Dispellable by Group",
-    DISPELLABLE = "Any Dispel Type",
-    IMPORTANT = "Important",
-    CROWD_CONTROL = "Crowd Control",
-}
-local GROUP_NATIVE_FILTER_ALLOWED = {
-    buff = {
-        ALL = true, MSUF_GROUP_HIGHLIGHTS_V1 = true,
-        Player = true, BigDefensivePlayer = true, ExternalDefensivePlayer = true,
-        RaidInCombatPlayer = true, CancelablePlayer = true, NotCancelablePlayer = true,
-        RaidPlayer = true, BigDefensive = true, ExternalDefensive = true, RaidInCombat = true,
-        Cancelable = true, NotCancelable = true, Raid = true, IMPORTANT = true,
-    },
-    debuff = {
-        ALL = true, Player = true, RaidPlayer = true, RaidInCombatPlayer = true,
-        Raid = true, RaidInCombat = true, INCLUDE_NAME_PLATE_ONLY = true,
-        RAID_PLAYER_DISPELLABLE = true, DISPELLABLE = true, IMPORTANT = true, CROWD_CONTROL = true,
-    },
-}
 local GROUP_NATIVE_FILTER_CANONICAL = {
     ALL = "ALL",
     MSUFGROUPHIGHLIGHTSV1 = "MSUF_GROUP_HIGHLIGHTS_V1",
@@ -207,12 +169,6 @@ end
 local function AuraCatalogPageKey(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     return token ~= "" and token or (fallback or "auras")
-end
-local function LaneFrameEffectAssistantContract()
-    return {
-        assistantDisposition = "compound",
-        assistantDispositionReason = "This scope-aware Buff/Debuff Full-Frame effect writes the active shared or per-unit Aura style and has no Assistant setting contract yet.",
-    }
 end
 M._customContainerAssistantSuffixes = {
     "enabled", "filters.enabled", "filters.hidePermanent", "filters.onlyMine",
@@ -325,11 +281,6 @@ local function CreateCustomDebuffBlacklistInfoButton(parent, input, unit)
     return button
 end
 
-local function Card(parent, title, subtitle, x, y, width, height)
-    local card = W.ControlCard(parent, title, subtitle, x, y, width, height)
-    if card and T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
-    return card
-end
 local Rebuild = M.AuraControls.Rebuild
 local function SelectPage(pageKey, scope)
     if scope then
@@ -404,9 +355,8 @@ local function QueueAuraPageControlRefresh(ctx, reason)
     if C_Timer and C_Timer.After then C_Timer.After(0, Flush) else Flush() end
 end
 local ApplyUnit = M.AuraControls.ApplyUnit
-local BindSwitch, BindToggle, BindSlider = M.BindSwitchAt, M.BindToggleAt, M.BindSliderAt
+local BindSwitch, BindSlider = M.BindSwitchAt, M.BindSliderAt
 local BindDropdown, BindTextInput = M.BindDropdownAt, M.BindTextInputAt
-local ConfigureMaxDurationSlider = M.AuraControls.ConfigureMaxDurationSlider
 local UNIT_AURA_WORKSPACE_TAB_STYLE = {
     bg = { 0.012, 0.025, 0.052, 0.90 },
     border = { 0.070, 0.130, 0.235, 0.52 },
@@ -492,7 +442,6 @@ function SetCurrentLane(stateKey, lane)
     M.SetMenuStateValue(stateKey, lane)
     if stateKey ~= "auraStyleGFLane" then M.SetMenuStateValue("auraStyleGFLane", lane) end
 end
-local BuildLaneTabs = M.AuraControls.BuildLaneTabs
 local LaneTitle = M.AuraSettings.LaneTitle
 local LanePlural = M.AuraSettings.LanePlural
 local function CurrentAuraStyleContainer(scope)
@@ -633,10 +582,6 @@ local function SetUnitLaneShown(ctx, unit, kind, shown, reason)
     ApplyUnit(ctx, unit, reason or "AURAS3_VISIBILITY", true)
     if UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit) then ShowNoUnitAuraDispelWarning() end
 end
-local function GF()
-    if type(GP.GF) == "function" then return GP.GF() end
-    return MSUF and MSUF.GF
-end
 local function RefreshGFPreview()
     if type(GP.RefreshGFPreview) == "function" then GP.RefreshGFPreview() end
 end
@@ -732,68 +677,6 @@ local function GFWriteGroupValues(scope, groupKey, values, mode)
 end
 local function GFWriteRootValue(scope, key, value, mode)
     GFWriteScopeValue(scope, mode, GFAurasRoot, key, value)
-end
-local function AuraFilter()
-    local gf = GF()
-    return (gf and gf.AuraFilter) or _G.MSUF_GF_AuraFilter
-end
-local function GroupFilterValues(groupKey)
-    if M.CLASSIC_AURA_FILTERS_REDUCED == true then
-        return M.ValueTextList("ALL", "All", "Player", "Only mine")
-    end
-    local af = AuraFilter()
-    local source = groupKey == "debuff" and af and af.DEBUFF_FILTER_ITEMS or af and af.BUFF_FILTER_ITEMS
-    local allowed = GROUP_NATIVE_FILTER_ALLOWED[groupKey == "debuff" and "debuff" or "buff"]
-    local out = {}
-    if type(source) == "table" then
-        for i = 1, #source do
-            local item = source[i]
-            local value = CanonicalGroupFilterValue(item and (item.value or item.key))
-            if allowed[value] then
-                out[#out + 1] = {
-                    value = value,
-                    text = GROUP_NATIVE_FILTER_LABELS[value] or item.text or item.label or value,
-                    tooltipTitle = item.tooltipTitle,
-                    tooltip = item.tooltip,
-                    description = item.description,
-                }
-            end
-        end
-    end
-    if #out > 0 then return out end
-    if groupKey == "buff" then
-        return M.ValueTextList(
-            "ALL", "All Buffs",
-            "MSUF_GROUP_HIGHLIGHTS_V1", "MSUF Highlights",
-            "Player", "Cast by Me",
-            "BigDefensivePlayer", "Big Defensive Player",
-            "ExternalDefensivePlayer", "External Defensive Player",
-            "RaidInCombatPlayer", "Raid In Combat Player",
-            "CancelablePlayer", "Cancelable Player",
-            "NotCancelablePlayer", "Not Cancelable Player",
-            "RaidPlayer", "Raid Player",
-            "BigDefensive", "Big Defensive",
-            "ExternalDefensive", "External Defensive",
-            "RaidInCombat", "Raid In Combat",
-            "Cancelable", "Cancelable",
-            "NotCancelable", "Not Cancelable",
-            "Raid", "Applicable by Me (Raid)",
-            "IMPORTANT", "Important"
-        )
-    end
-    return M.ValueTextList(
-        "ALL", "All Debuffs",
-        "Player", "Cast by Me",
-        "RaidPlayer", "Raid Player",
-        "RaidInCombatPlayer", "Raid In Combat Player",
-        "Raid", "Dispellable by Me (Raid)",
-        "RaidInCombat", "Raid In Combat",
-        "INCLUDE_NAME_PLATE_ONLY", "Include Nameplate-only",
-        "RAID_PLAYER_DISPELLABLE", "Dispellable by Group",
-        "DISPELLABLE", "Any Dispel Type",
-        "IMPORTANT", "Important",
-        "CROWD_CONTROL", "Crowd Control"
-    )
 end
 local function GFAnchorValues()
     local values = GP.STATUS_ICON_ANCHORS or GP.AURA_ANCHORS
@@ -1128,7 +1011,7 @@ local function BuildUnitStyle(ctx, b, scope, options)
         BindStyleSwitch(frameBasics, "Show Cooldown Swipe", 24, -140, basicsCol,
             "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
         if stealableLane then
-            local stealableEnabled = BindStyleSwitch(frameBasics, "Mark Stealable Buffs", basicsRightX, -140,
+            BindStyleSwitch(frameBasics, "Mark Stealable Buffs", basicsRightX, -140,
                 basicsCol, "showStealable", false, "AURAS3_STEALABLE_MARKER")
             stealableStyleControl = BindStyleDropdown(frameBasics, "Stealable Marker Style", basicsRightX, -174,
                 M.AURA_STEALABLE_STYLE_VALUES, basicsCol,
@@ -1142,8 +1025,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
                     end
                 end,
                 "AURAS3_STEALABLE_MARKER_STYLE")
-            AddTooltip(stealableEnabled, "Native stealable marker",
-                "Uses Blizzard's 12.1 AuraButton stealable filter. It adds no MSUF aura scan, ticker, or OnUpdate.")
             M.TrackRefresh(ctx, function()
                 W.SetControlEnabled(stealableStyleControl, ReadScopeBool("showStealable", false))
             end)
@@ -1382,6 +1263,10 @@ local function BuildUnitStyle(ctx, b, scope, options)
     iconStyleGates.shadow[1] = IconStyleSlider("Shadow Size", 0, -210, 1, 16, "styleShadowSize", 4, "AURAS3_ICON_STYLE_SHADOW")
     iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)", 1, -210, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
     end
+    -- Re-apply the master-toggle gates whenever any shared Appearance page is
+    -- revisited. This must not live in the Buff-only Native Aura Flow section:
+    -- Debuffs, Player Defensives and Dots on Target share these controls.
+    if sharedGlobalsOnly then M.TrackRefresh(ctx, function() iconStyleGates.Apply(true) end) end
 
     if sharedGlobalsOnly and previewContainer == "buff" then
         local nativeFlow = b:CollapsibleSection(baseId .. "_native_flow", "Native Aura Flow", 112, false)
@@ -1397,7 +1282,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
         AddTooltip(weaponEnchants, "Native weapon enchant auras",
             "Adds Blizzard's temporary weapon-enchantment buttons to the Player Buff container. This is one shared setting and uses the native aura flow without an MSUF ticker or OnUpdate.")
         M.TrackRefresh(ctx, function()
-            iconStyleGates.Apply(true)
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(nativeFlow, { {
                     text = Model.ReadSharedBool("showWeaponEnchants", false) and "Weapon Enchants On" or "Weapon Enchants Off",
@@ -1522,73 +1406,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
         durationChoiceWidth, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION", refreshDurationBarSummary),
         "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
 
-    local effectPrefix = lane == "buff" and "buff" or "debuff"
-    local function EffectKey(suffix) return effectPrefix .. "FrameEffect" .. suffix end
-    local function ReadEffectValue(suffix, fallback)
-        return Model.ReadValue(unit, EffectKey(suffix), fallback)
-    end
-    local function WriteEffectValue(suffix, value, reason)
-        Model.WriteValue(unit, EffectKey(suffix), value)
-        ApplyUnit(ctx, unit, reason)
-        RefreshStylePreview()
-    end
-    local frameEffect = b:CollapsibleSection(baseId .. "_full_frame", "Full-Frame Effect", 210, false)
-    local few = BodyWidth(frameEffect)
-    local effectCol = max(140, floor((few - 68) / 3))
-    local effectGap = 10
-    AddStyleControl(BindDropdown(ctx, frameEffect, "Effect", 24, -34, CUSTOM_FRAME_EFFECTS, few - 48,
-        function() return tostring(ReadEffectValue("Type", "none")) end,
-        function(value) WriteEffectValue("Type", value or "none", "AURAS3_LANE_FRAME_EFFECT") end,
-        AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame.type", nil,
-            LaneFrameEffectAssistantContract())))
-    local effectColor = W.Color(frameEffect, "Color")
-    M.BindColor(ctx, effectColor,
-        function()
-            local c = ReadEffectValue("Color", { 0.69, 0.50, 0.88, 0.80 })
-            return c[1] or 0.69, c[2] or 0.50, c[3] or 0.88
-        end,
-        function(r, g, blue)
-            local c = ReadEffectValue("Color", { 0.69, 0.50, 0.88, 0.80 })
-            WriteEffectValue("Color", { r, g, blue, c[4] or 0.80 }, "AURAS3_LANE_FRAME_EFFECT_COLOR")
-        end,
-        AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame.color", nil,
-            LaneFrameEffectAssistantContract()))
-    -- BindColor remains the single command/history owner and automatically
-    -- feeds the card's three-dot picker.  The duplicate inline swatch is hidden
-    -- so Full-Frame colors have one visible entry point only.
-    effectColor:Hide()
-    if effectColor._msuf2Title then
-        effectColor._msuf2Title:Hide()
-        effectColor._msuf2Title._msuf2AlwaysHidden = true
-    end
-    AddStyleControl(effectColor)
-    local function EffectSlider(label, col, y, minValue, maxValue, step, suffix, fallback, reason)
-        return AddStyleControl(BindSlider(ctx, frameEffect, label, 24 + col * (effectCol + effectGap), y,
-            minValue, maxValue, step, effectCol,
-            function()
-                local value = ReadEffectValue(suffix, fallback)
-                if suffix == "Alpha" then
-                    local c = ReadEffectValue("Color", { 0.69, 0.50, 0.88, 0.80 })
-                    return floor(((tonumber(c[4]) or fallback) * 100) + 0.5)
-                end
-                return tonumber(value) or fallback
-            end,
-            function(value)
-                if suffix == "Alpha" then
-                    local c = ReadEffectValue("Color", { 0.69, 0.50, 0.88, 0.80 })
-                    WriteEffectValue("Color", { c[1] or 0.69, c[2] or 0.50, c[3] or 0.88, (tonumber(value) or 80) / 100 }, reason)
-                else
-                    WriteEffectValue(suffix, tonumber(value) or fallback, reason)
-                end
-            end,
-            AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame." .. AuraCatalogToken(suffix), nil,
-                LaneFrameEffectAssistantContract())))
-    end
-    EffectSlider("Opacity", 0, -96, 5, 100, 5, "Alpha", 0.80, "AURAS3_LANE_FRAME_EFFECT_ALPHA")
-    EffectSlider("Layer (0-30)", 1, -96, 0, 30, 1, "Layer", 0, "AURAS3_LANE_FRAME_EFFECT_LAYER")
-    EffectSlider("Thickness", 2, -96, 1, 16, 1, "Thickness", 2, "AURAS3_LANE_FRAME_EFFECT_THICKNESS")
-    EffectSlider("Priority", 0, -150, 1, 10, 1, "Priority", 5, "AURAS3_LANE_FRAME_EFFECT_PRIORITY")
-
     M.TrackRefresh(ctx, function()
         -- Individual Style editors are always actionable. The first write to a
         -- formerly inherited lane activates its sparse per-frame override.
@@ -1639,13 +1456,6 @@ local function BuildUnitStyle(ctx, b, scope, options)
             })
 
             refreshDurationBarSummary()
-
-            local effectType = tostring(ReadEffectValue("Type", "none"))
-            W.SetCollapsibleBadges(frameEffect, {{
-                text = ChoiceLabel(CUSTOM_FRAME_EFFECTS, effectType, effectType),
-                kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
-            }})
-
         end
     end)
 end
@@ -1986,308 +1796,6 @@ local function BuildAuraStyleLanePage(ctx, lane)
     M.SetMenuStateValue("auraSharedStyleContainer", lane)
     BuildAuraStylePage(ctx)
 end
-local function GFReadBlacklistCat(scope, groupKey, catKey)
-    if Model and type(Model.ReadGroupBlacklistCategory) == "function" then return Model.ReadGroupBlacklistCategory(scope, groupKey, catKey) end
-    local group = GFReadGroup(scope, groupKey)
-    return type(group.blacklistCats) == "table" and group.blacklistCats[catKey] == true
-end
-local function GFInvalidateBlacklist(scope, groupKey)
-    local af = AuraFilter()
-    local a, b = GroupScopeKinds(scope)
-    if af and type(af.InvalidateBlacklistHash) == "function" then
-        af.InvalidateBlacklistHash(GFAuraGroup(a, groupKey))
-        if b then af.InvalidateBlacklistHash(GFAuraGroup(b, groupKey)) end
-    end
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.InvalidateCompiledSpecs) == "function" then
-        gf.InvalidateCompiledSpecs(a)
-        if b then gf.InvalidateCompiledSpecs(b) end
-    end
-end
-local function GFWriteBlacklistCat(scope, groupKey, catKey, value)
-    if Model and type(Model.WriteGroupBlacklistCategory) == "function" then
-        local changed = Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, value)
-        if changed then QueueGroupScope(scope, "auras") end
-        return
-    end
-    local changed
-    local a, b = GroupScopeKinds(scope)
-    local function write(kind)
-        local group = GFAuraGroup(kind, groupKey)
-        group.blacklistCats = group.blacklistCats or {}
-        local nextValue = value and true or nil
-        if group.blacklistCats[catKey] == nextValue then return end
-        group.blacklistCats[catKey] = nextValue
-        changed = true
-    end
-    write(a)
-    if b then write(b) end
-    if changed then
-        GFInvalidateBlacklist(scope, groupKey)
-        QueueGroupScope(scope, "auras")
-    end
-end
-local function CategoryLabel(cat)
-    if cat and cat.key == "RAID_BUFFS" then return "Raid / Mythic Buffs" end
-    return (cat and cat.label) or (cat and cat.key) or ""
-end
-local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
-    opts = opts or {}
-    local laneKey = fixedLane == "debuff" and "debuff" or (fixedLane == "buff" and "buff" or CurrentLane("auraFilterLane", "buff"))
-    local embedded = opts.parent ~= nil
-    local tool = embedded and tostring(opts.tool or "") or ""
-    local showFilter = tool ~= "blacklist"
-    local showBlacklist = tool ~= "filters"
-    local af = AuraFilter()
-    local meta = af and af.DECLASSIFIED_META
-    if type(meta) ~= "table" then meta = {} end
-    local half = ceil(#meta / 2)
-    local categoryHeight = max(356, 180 + half * 30)
-    local originY = embedded and (tonumber(opts.originY) or -400) or 0
-    local blacklistY = showFilter and (originY - 362) or (originY - 42)
-    local directY = blacklistY - categoryHeight - 24
-    local standaloneHeight = max(930, abs(directY) + (laneKey == "debuff" and 270 or 324))
-    local section = opts.parent or b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", standaloneHeight, false)
-    local w = section._msuf2Width or b.width or 720
-    local lane = laneKey
-    local groupActionPath = "group-blacklist.scope." .. AuraCatalogToken(scope)
-        .. ".lane." .. AuraCatalogToken(lane)
-    local laneText = lane == "buff" and "Buff" or "Debuff"
-    local function ReadHidePermanent()
-        return type(Model.ReadGroupBlacklistHidePermanent) == "function"
-            and Model.ReadGroupBlacklistHidePermanent(scope, lane) == true
-    end
-    local function WriteHidePermanent(value)
-        if type(Model.WriteGroupBlacklistHidePermanent) == "function"
-            and Model.WriteGroupBlacklistHidePermanent(scope, lane, value) then
-            QueueGroupScope(scope, "auras")
-        end
-    end
-    local function ReadMaxDuration()
-        return type(Model.ReadGroupBlacklistMaxDuration) == "function"
-            and Model.ReadGroupBlacklistMaxDuration(scope, lane) or 0
-    end
-    local function WriteMaxDuration(value)
-        if type(Model.WriteGroupBlacklistMaxDuration) == "function"
-            and Model.WriteGroupBlacklistMaxDuration(scope, lane, value) then
-            QueueGroupScope(scope, "auras")
-        end
-    end
-    local function AddHidePermanentTooltip(control)
-        AddTooltip(control, "Hide permanent auras", "Always excludes auras without a duration. This native rule wins over SpellID blacklists and whitelists.")
-    end
-    local filterW = w - 48
-    if embedded and tool == "" then
-        W.DividerAt(section, originY - 4, 16, 16)
-        W.LabelAt(section, "Blizzard Filters & Lists", 24, originY - 24, w - 48, "GameFontNormal", T.colors.accent)
-    end
-    if showFilter then
-        local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)), M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, 296)
-        W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or Tr("Filter Type"), 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
-        if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
-        local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
-        BindGroupDropdown(ctx, filter, M.Format("%s Filter", Tr(laneText)), 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "auras")
-        W.Text(filter, "Choose which auras Blizzard provides for this lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
-        local hidePermanent = BindSwitch(ctx, filter, "Hide permanent auras", 16, -192, dropdownW,
-            ReadHidePermanent, WriteHidePermanent,
-            AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".hide-permanent"))
-        AddHidePermanentTooltip(hidePermanent)
-        if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
-            ConfigureMaxDurationSlider(BindSlider(ctx, filter, "Maximum duration", 16, -230, 0, 180, 1, filterW - 32,
-                ReadMaxDuration, WriteMaxDuration,
-                AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".max-duration", nil, {
-                    assistantDisposition = "compound",
-                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-                })))
-        end
-    end
-    if not showBlacklist then return end
-    local blacklist = Card(section, "Category Blacklist", nil, 24, blacklistY, w - 48, categoryHeight)
-    W.LabelAt(blacklist, "Active", 16, -50, 70, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(blacklist, lane == "buff" and "Buff category blacklist" or "Debuff category blacklist", 86, -50, 260, "GameFontHighlightSmall", T.colors.text)
-    W.Text(blacklist, NATIVE_EXACT_AURA_FILTERS_TEXT, 16, -72, w - 96, T.colors.muted)
-    if #meta == 0 then
-        W.Text(blacklist, "No public aura category data is loaded.", 16, -132, w - 96, T.colors.muted)
-    end
-    local catColW = max(230, floor((w - 104) / 2))
-    local x2 = 16 + catColW + 24
-    local startY = -152
-    local categoryControls = {}
-    for i = 1, #meta do
-        local cat = meta[i]
-        local col = i <= half and 0 or 1
-        local row = col == 0 and (i - 1) or (i - half - 1)
-        local tx = col == 0 and 16 or x2
-        local toggle = BindToggle(ctx, blacklist, CategoryLabel(cat), tx, startY - row * 30, catColW,
-            function() return GFReadBlacklistCat(scope, lane, cat.key) end,
-            function(v) GFWriteBlacklistCat(scope, lane, cat.key, v) end,
-            AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".category." .. AuraCatalogToken(cat.key)))
-        if cat.tooltip then AddTooltip(toggle, CategoryLabel(cat), cat.tooltip) end
-        categoryControls[#categoryControls + 1] = toggle
-    end
-    local direct = Card(section, "Exact SpellID Blacklist", "Frame-specific exclusions for this Group Frame lane.", 24, directY, w - 48, lane == "debuff" and 246 or 300)
-    -- Debuff lane only: the free-form spell-ID entry was removed on purpose.
-    -- 12.x debuff data is secret at runtime, so only the curated never-secret
-    -- preset spells can actually match; entries come from the presets below.
-    local directInput, directAdd, directRemove
-    if lane ~= "debuff" then
-        local directInputValue = ""
-        local directInputW = max(260, floor((w - 96) * 0.46))
-        directInput = BindTextInput(ctx, direct, "Spell ID, spell link, or spell name", 16, -72, directInputW,
-            function() return directInputValue end,
-            function(value) directInputValue = value or "" end,
-            false, AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".manual-input", "ephemeral"))
-        directAdd = ActionButton(direct, "Add", 90)
-        directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", 28 + directInputW, -92)
-        directAdd:SetScript("OnClick", function()
-            local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
-            local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
-            if changed then
-                if directInput and directInput.SetText then directInput:SetText("") end
-                directInputValue = ""
-                QueueGroupScope(scope, "auras")
-                Rebuild(ctx)
-            end
-            return changed and true or false
-        end)
-        RegisterAuraTextAction(ctx, directAdd, directInput, "Add", groupActionPath .. ".add", {
-            actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
-        })
-        directRemove = ActionButton(direct, "Remove", 96)
-        directRemove:SetPoint("LEFT", directAdd, "RIGHT", 8, 0)
-        directRemove:SetScript("OnClick", function()
-            local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
-            local changed = Model.RemoveGroupBlacklistSpell(scope, lane, value)
-            if changed then
-                QueueGroupScope(scope, "auras")
-                Rebuild(ctx)
-            end
-            return changed and true or false
-        end)
-        RegisterAuraTextAction(ctx, directRemove, directInput, "Remove", groupActionPath .. ".remove", {
-            actionKey = "aura_group_blacklist_remove_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
-        })
-    end
-    local presetW = max(152, floor((w - 96) * 0.22))
-    local spellW = max(210, floor((w - 96) * 0.30))
-    local function PresetValues()
-        return type(Model.GroupBlacklistPresetValues) == "function"
-            and Model.GroupBlacklistPresetValues(lane) or Model.BlacklistPresetValues()
-    end
-    local function CurrentPreset()
-        local defaultKey = lane == "debuff" and "SATED" or "RAID_BUFFS"
-        local key = M.auraBlacklistPreset or defaultKey
-        local values = PresetValues()
-        for i = 1, #values do if values[i].value == key then return key end end
-        return values[1] and values[1].value or defaultKey
-    end
-    local function PresetSpellValues()
-        return type(Model.GroupBlacklistSpellValues) == "function"
-            and Model.GroupBlacklistSpellValues(lane, CurrentPreset()) or Model.BlacklistSpellValues(CurrentPreset())
-    end
-    local directPresetY = lane == "debuff" and -72 or -126
-    local preset = W.Dropdown(direct, "Preset", PresetValues, presetW)
-    W.MoveWidget(preset, direct, 16, directPresetY, presetW)
-    M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value)
-        M.auraBlacklistPreset = value
-        M.auraBlacklistSpell = nil
-        QueueAurasPageRefresh(ctx, "group-aura-blacklist-preset")
-    end, AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".preset-selection", "ephemeral"))
-    local spell = W.Dropdown(direct, "Spell", PresetSpellValues, spellW)
-    W.MoveWidget(spell, direct, 26 + presetW, directPresetY, spellW)
-    M.BindDropdownWidget(ctx, spell,
-        function()
-            local values, selected = PresetSpellValues(), M.auraBlacklistSpell
-            for i = 1, #values do if values[i].value == selected then return selected end end
-            return values[1] and values[1].value or nil
-        end,
-        function(value) M.auraBlacklistSpell = value end,
-        AuraControlMeta(ctx, "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".spell-selection", "ephemeral"))
-    local addSpell = ActionButton(direct, "Add spell", 96)
-    addSpell:SetPoint("TOPLEFT", direct, "TOPLEFT", 36 + presetW + spellW, directPresetY - 22)
-    addSpell:SetScript("OnClick", function()
-        local values = PresetSpellValues()
-        local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
-        if Model.AddGroupBlacklistSpell(scope, lane, spellID) then
-            QueueGroupScope(scope, "auras")
-            Rebuild(ctx)
-        end
-    end)
-    RegisterAuraControl(ctx, addSpell, "Add spell", "button", groupActionPath .. ".add-preset-spell", "action", {
-        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
-    })
-    local addSet = ActionButton(direct, "Add set", 88)
-    addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
-    addSet:SetScript("OnClick", function()
-        if Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset()) > 0 then
-            QueueGroupScope(scope, "auras")
-            Rebuild(ctx)
-        end
-    end)
-    RegisterAuraControl(ctx, addSet, "Add set", "button", groupActionPath .. ".add-preset-set", "action", {
-        actionKey = "aura_group_blacklist_add_preset", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "preset",
-    })
-    local prepared = W.Text(direct, "", 16, directPresetY - 84, w - 80, T.colors.accent)
-    local empty = W.Text(direct, lane == "debuff" and "No blacklisted spells. Add one from the presets above."
-        or "No blacklisted spells. Add one above or use a preset.", 16, directPresetY - 120, w - 80, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, direct)
-    listScroll:SetPoint("TOPLEFT", direct, "TOPLEFT", 16, directPresetY - 110)
-    listScroll:SetSize(w - 108, 48)
-    local listChild = CreateFrame("Frame", nil, listScroll)
-    listChild:SetSize(w - 130, 48)
-    listScroll:SetScrollChild(listChild)
-    M._StyleNestedAuraScrollFrame(listScroll, direct, 28)
-    local rows = {}
-    local function EnsureRow(index)
-        local row = rows[index]
-        if row then return row end
-        row = CreateFrame("Button", nil, listChild)
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((index - 1) * 24))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((index - 1) * 24))
-        row:SetHeight(20)
-        row.icon = row:CreateTexture(nil, "ARTWORK")
-        row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
-        row.icon:SetSize(17, 17)
-        row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
-        row:SetScript("OnClick", function(self)
-            if self._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, self._spellID) then
-                QueueGroupScope(scope, "auras")
-                Rebuild(ctx)
-            end
-        end)
-        rows[index] = row
-        return row
-    end
-    M.TrackRefresh(ctx, function()
-        W.SetControlsEnabled(categoryControls, NATIVE_EXACT_AURA_FILTERS_ENABLED)
-        W.SetControlsEnabled({ preset, spell, addSpell, addSet }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
-        if directInput then
-            W.SetControlsEnabled({ directInput, directAdd, directRemove }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
-        end
-        local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
-        prepared:SetText(#entries == 1 and Tr("1 blocked spell · click an entry to remove")
-            or M.Format("%d blocked spells · click an entry to remove", #entries))
-        empty:SetShown(#entries == 0)
-        listScroll:SetShown(#entries > 0)
-        listChild:SetHeight(max(48, #entries * 24))
-        for i = 1, max(#rows, #entries) do
-            local row, entry = rows[i], entries[i]
-            if entry then
-                row = EnsureRow(i)
-                row._spellID = entry.value
-                row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                row.text:SetText(entry.text or entry.value)
-                RegisterAuraControl(ctx, row, entry.text or entry.value or "Blacklist entry", "button",
-                    "group-blacklist.lane." .. AuraCatalogToken(lane) .. ".entry." .. AuraCatalogToken(entry.value) .. ".remove", "action")
-                row:Show()
-            elseif row then
-                row._spellID = nil
-                row:Hide()
-            end
-        end
-    end)
-end
 local function UniformChoiceWidths(values, width)
     for i = 1, #values do values[i].width = width end
     return values
@@ -2432,60 +1940,32 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
 end
 
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
-    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters",
-        M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or 256)
+    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", 118)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
     local colW = floor((inner - gap * 3) / 4)
-    local filterControls = {}
-    if M.CLASSIC_AURA_FILTERS_REDUCED == true then
-        local onlyMine = BindSwitch(ctx, section, "Only mine", 24, -42, colW,
-            function()
-                return Model.ScopeFiltersEnabled(unit)
-                    and Model.ReadFilter(unit, lane, "onlyMine", false) == true
-            end,
-            function(value)
-                if value == true and Model.ScopeFiltersEnabled(unit) ~= true then
-                    Model.SetScopeFiltersEnabled(unit, true)
-                end
-                Model.WriteFilter(unit, lane, "onlyMine", value == true)
-                ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_onlyMine", true)
-            end,
-            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil,
-                "auras3." .. unit .. "." .. lane .. ".filter.onlyMine"))
-        AddTooltip(onlyMine, "Only mine", lane == "debuff"
-            and "Only Debuffs applied by the player."
-            or "Only auras applied by the player.")
-        local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
-            function()
-                return type(Model.ReadBlacklistHidePermanent) == "function"
-                    and Model.ReadBlacklistHidePermanent(unit, lane) == true
-            end,
-            function(value)
-                if type(Model.WriteBlacklistHidePermanent) == "function"
-                    and Model.WriteBlacklistHidePermanent(unit, lane, value) then
-                    ApplyUnit(ctx, unit, "AURAS3_HIDE_PERMANENT", true)
-                end
-            end,
-            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil,
-                "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
-        AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
-        M.TrackRefresh(ctx, function()
-            W.SetControlEnabled(onlyMine, true)
-            W.SetControlEnabled(hidePermanent, true)
-        end)
-        return
-    end
-    -- Filter ownership is an internal compatibility detail. Migrated Auras2
-    -- profiles keep overrideFilters exactly as saved; the first edit in this
-    -- unit workspace materializes a private copy through the model setters.
-    local enabled = BindSwitch(ctx, section, "Enable filters", 24, -42, colW,
-        function() return Model.ScopeFiltersEnabled(unit) end,
-        function(value) Model.SetScopeFiltersEnabled(unit, value); ApplyUnit(ctx, unit, "AURAS3_FILTER_ENABLE", true) end,
-        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.enabled", nil,
-            "auras3." .. unit .. ".filtersEnabled"))
-    AddTooltip(enabled, "Enable filters", "Turns Blizzard token filters on or off for this frame. The first change automatically creates frame-specific rules; migrated Shared rules remain Shared until edited.")
+    local onlyMine = BindSwitch(ctx, section, "Only mine", 24, -42, colW,
+        function()
+            return Model.ScopeFiltersEnabled(unit)
+                and Model.ReadFilter(unit, lane, "onlyMine", false) == true
+        end,
+        function(value)
+            if value == true and Model.ScopeFiltersEnabled(unit) ~= true then
+                Model.SetScopeFiltersEnabled(unit, true)
+            end
+            -- Only mine and Non-player auras are mutually exclusive. Classic has no
+            -- Non-player control, so clear a nonPlayer flag imported from Retail
+            -- instead of combining both filters into an always-empty Debuff lane.
+            if value == true and lane == "debuff" then Model.WriteFilter(unit, lane, "nonPlayer", false) end
+            Model.WriteFilter(unit, lane, "onlyMine", value == true)
+            ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_onlyMine", true)
+        end,
+        AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil,
+            "auras3." .. unit .. "." .. lane .. ".filter.onlyMine"))
+    AddTooltip(onlyMine, "Only mine", lane == "debuff"
+        and "Only Debuffs applied by the player."
+        or "Only auras applied by the player.")
     local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
@@ -2499,89 +1979,10 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil,
             "auras3." .. unit .. "." .. lane .. ".blacklist.hidePermanent"))
-    AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration, even when Blizzard token filters are disabled.")
-    local maxDuration
-    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
-        maxDuration = ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -174, 0, 180, 1, inner,
-            function()
-                return type(Model.ReadBlacklistMaxDuration) == "function"
-                    and Model.ReadBlacklistMaxDuration(unit, lane) or 0
-            end,
-            function(value)
-                if type(Model.WriteBlacklistMaxDuration) == "function"
-                    and Model.WriteBlacklistMaxDuration(unit, lane, value) then
-                    ApplyUnit(ctx, unit, "AURAS3_" .. tostring(lane):upper() .. "_MAX_DURATION", true)
-                end
-            end,
-            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {
-                assistantDisposition = "compound",
-                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-            })))
-    end
-    local specs = lane == "buff" and {
-        { "Only mine", "onlyMine", "Only auras applied by the player." },
-        { "Important", "onlyImportant", "Only auras Blizzard flags as important." },
-        { "Applicable by me", "raid", "Helpful auras your character can apply (Blizzard RAID token)." },
-        { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Buff filter." },
-        { "Nameplate-only", "includeNameplateOnly", "Include Buffs marked nameplate-only." },
-        { "Dispellable / stealable by group", "includeDispellable", "Helpful enemy auras someone in your group can dispel, purge, or steal." },
-        { "Any dispel / steal type", "dispellableAny", "Helpful enemy auras with any dispel type, even when your group cannot remove them." },
-        { "External defensive", "externalDefensive", "External defensive Buffs." },
-        { "Big defensive", "bigDefensive", "Major defensive Buffs." },
-        { "Cancelable", "cancelable", "Only cancelable Buffs.", { "notCancelable" } },
-        { "Not cancelable", "notCancelable", "Only non-cancelable Buffs.", { "cancelable" } },
-    } or {
-        { "Only mine", "onlyMine", "Only Debuffs applied by the player." },
-        { "Important", "onlyImportant", "Only Debuffs Blizzard flags as important." },
-        { "Dispellable by me", "raid", "Harmful auras your character can dispel (Blizzard RAID token)." },
-        { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Debuff filter." },
-        { "Nameplate-only", "includeNameplateOnly", "Include Debuffs marked nameplate-only." },
-        { "Dispellable by group", "includeDispellable", "Debuffs someone in your group can dispel." },
-        { "Any dispel type", "dispellableAny", "Debuffs with a dispel type, even when your group cannot remove them." },
-        { "Crowd control", "crowdControl", "Crowd-control Debuffs." },
-    }
-    for i = 1, #specs do
-        local spec = specs[i]
-        local col = ((i - 1) % 4)
-        local row = floor((i - 1) / 4)
-        local settingContract = "auras3." .. unit .. "." .. lane .. ".filter." .. spec[2]
-        if lane == "debuff" and spec[2] == "raid" then
-            settingContract = {
-                assistantDisposition = "dynamic",
-                assistantDispositionReason = "The visible Raid switch folds the legacy exclusive Raid value into the canonical Debuff Raid filter.",
-                assistantSettingKeys = {
-                    "auras3." .. unit .. ".debuff.filter.raid",
-                    "auras3." .. unit .. ".debuff.filter.exclusive",
-                },
-            }
-        end
-        local control = BindSwitch(ctx, section, spec[1], 24 + col * (colW + gap), -78 - row * 32, colW,
-            function()
-                if spec[2] == "raid" and Model.ReadFilter(unit, lane, "exclusive", "none") == "raid" then
-                    return true
-                end
-                return Model.ReadFilter(unit, lane, spec[2], false) == true
-            end,
-            function(value)
-                if value == true and type(spec[4]) == "table" then for j = 1, #spec[4] do Model.WriteFilter(unit, lane, spec[4][j], false) end end
-                -- Older profiles stored the same RAID token in a second
-                -- Exclusive dropdown. Fold it into the visible Raid switch so
-                -- the legacy restriction can also be turned off here.
-                if spec[2] == "raid" then Model.WriteFilter(unit, lane, "exclusive", "none") end
-                Model.WriteFilter(unit, lane, spec[2], value)
-                ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_" .. spec[2], true)
-                if spec[4] then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
-            end,
-            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters." .. AuraCatalogToken(spec[2]), nil,
-                settingContract))
-        AddTooltip(control, spec[1], spec[3])
-        filterControls[#filterControls + 1] = control
-    end
+    AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
     M.TrackRefresh(ctx, function()
-        W.SetControlEnabled(enabled, true)
+        W.SetControlEnabled(onlyMine, true)
         W.SetControlEnabled(hidePermanent, true)
-        W.SetControlEnabled(maxDuration, true)
-        W.SetControlsEnabled(filterControls, Model.ScopeFiltersEnabled(unit))
     end)
 end
 
@@ -2835,8 +2236,8 @@ local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
         AddTooltip(startScan, "Start combat scan",
             "Closes the menu and keeps scanning this frame's auras until combat ends or you press Stop. Every aura an addon can block is captured with its icon - auras Blizzard keeps secret cannot be blocked by any addon.")
         startScan:SetScript("OnClick", function()
-            -- The scanner overlay is a shared singleton parked on M (this file
-            -- sits at the 200-upvalue ceiling, so no new file-scope locals).
+            -- The scanner overlay is a shared singleton parked on M (this file's
+            -- main chunk is held to its Lua 5.1 local budget, so no new file-scope locals).
             local s = M._auraCombatScanner
             if not s then
                 s = CreateFrame("Frame", nil, _G.UIParent)
@@ -3202,64 +2603,29 @@ end
 
 local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
-    if M.CLASSIC_AURA_FILTERS_REDUCED == true then
-        local section = b:Section(laneTitle .. " Filters", 118)
-        local w = section._msuf2Width or b.width or 720
-        local inner = w - 48
-        local gap = 12
-        local colW = floor((inner - gap * 3) / 4)
-        local onlyMine = BindSwitch(ctx, section, "Only mine", 24, -42, colW,
-            function()
-                local group = GFReadGroup(scope, lane)
-                return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == "Player"
-            end,
-            function(value)
-                GFWriteGroupValue(scope, lane, "filterToken", value == true and "Player" or "ALL", "auras")
-            end,
-            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil, {
-                assistantDisposition = "dynamic",
-                assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
-                assistantSettingKeys = GroupAssistantSettingKeys(scope,
-                    ".auras." .. lane .. ".filterToken"),
-            }))
-        AddTooltip(onlyMine, "Only mine", lane == "debuff"
-            and "Only Debuffs applied by the player."
-            or "Only auras applied by the player.")
-        local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
-            function()
-                return type(Model.ReadGroupBlacklistHidePermanent) == "function"
-                    and Model.ReadGroupBlacklistHidePermanent(scope, lane) == true
-            end,
-            function(value)
-                if type(Model.WriteGroupBlacklistHidePermanent) == "function"
-                    and Model.WriteGroupBlacklistHidePermanent(scope, lane, value) then
-                    QueueGroupScope(scope, "auras")
-                end
-            end,
-            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil, {
-                assistantDisposition = "dynamic",
-                assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
-                assistantSettingKeys = GroupAssistantBlacklistSettingKeys(scope,
-                    ".auras." .. lane .. ".blacklist.hidePermanent"),
-            }))
-        AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
-        M.TrackRefresh(ctx, function()
-            W.SetControlEnabled(onlyMine, true)
-            W.SetControlEnabled(hidePermanent, true)
-        end)
-        return
-    end
-    local values = GroupFilterValues(lane)
-    local optionRows = max(1, ceil(#values / 4))
-    local sectionHeight = max(150, 104 + optionRows * 32)
-        + (M.CLASSIC_AURA_FILTERS_REDUCED ~= true and 58 or 0)
-    local section = b:Section(laneTitle .. " Filters", sectionHeight)
+    local section = b:Section(laneTitle .. " Filters", 118)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
     local colW = floor((inner - gap * 3) / 4)
-    W.Text(section, "Show auras", 24, -42, colW * 2 + gap, T.colors.muted)
-    local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + 2 * (colW + gap), -42, colW * 2 + gap,
+    local onlyMine = BindSwitch(ctx, section, "Only mine", 24, -42, colW,
+        function()
+            local group = GFReadGroup(scope, lane)
+            return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == "Player"
+        end,
+        function(value)
+            GFWriteGroupValue(scope, lane, "filterToken", value == true and "Player" or "ALL", "auras")
+        end,
+        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil, {
+            assistantDisposition = "dynamic",
+            assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
+            assistantSettingKeys = GroupAssistantSettingKeys(scope,
+                ".auras." .. lane .. ".filterToken"),
+        }))
+    AddTooltip(onlyMine, "Only mine", lane == "debuff"
+        and "Only Debuffs applied by the player."
+        or "Only auras applied by the player.")
+    local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
         function()
             return type(Model.ReadGroupBlacklistHidePermanent) == "function"
                 and Model.ReadGroupBlacklistHidePermanent(scope, lane) == true
@@ -3276,52 +2642,11 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
             assistantSettingKeys = GroupAssistantBlacklistSettingKeys(scope,
                 ".auras." .. lane .. ".blacklist.hidePermanent"),
         }))
-    AddTooltip(hidePermanent, "Hide permanent auras",
-        "Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible.")
-    local selectedFilterToken = CanonicalGroupFilterValue((GFReadGroup(scope, lane) or {}).filterToken or "ALL")
-    for i = 1, #values do
-        local item = values[i]
-        local col = (i - 1) % 4
-        local row = floor((i - 1) / 4)
-        local control = BindSwitch(ctx, section, item.text or item.value, 24 + col * (colW + gap), -78 - row * 32, colW,
-            function()
-                local group = GFReadGroup(scope, lane)
-                return CanonicalGroupFilterValue(group.filterToken or "ALL") == item.value
-            end,
-            function(enabled)
-                local group = GFReadGroup(scope, lane)
-                local current = CanonicalGroupFilterValue(group.filterToken or "ALL")
-                local value = enabled and item.value or (current == item.value and "ALL" or current)
-                GFWriteGroupValue(scope, lane, "filterToken", value, "auras")
-                QueueAurasPageRefresh(ctx, "group-native-filter-choice")
-            end,
-            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.native." .. AuraCatalogToken(item.value), nil,
-                item.value == selectedFilterToken and {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "The active native-filter choice represents Filter Token for the selected Group scope and Aura lane.",
-                    assistantSettingKeys = GroupAssistantSettingKeys(scope,
-                        ".auras." .. lane .. ".filterToken"),
-                } or nil))
-        AddTooltip(control, item.tooltipTitle or item.text or item.value,
-            item.tooltip or item.description or "Only one filter can be active.")
-    end
-    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
-        ConfigureMaxDurationSlider(BindSlider(ctx, section, "Maximum duration", 24, -78 - optionRows * 32, 0, 180, 1, inner,
-            function()
-                return type(Model.ReadGroupBlacklistMaxDuration) == "function"
-                    and Model.ReadGroupBlacklistMaxDuration(scope, lane) or 0
-            end,
-            function(value)
-                if type(Model.WriteGroupBlacklistMaxDuration) == "function"
-                    and Model.WriteGroupBlacklistMaxDuration(scope, lane, value) then
-                    QueueGroupScope(scope, "auras")
-                end
-            end,
-            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {
-                assistantDisposition = "compound",
-                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-            })))
-    end
+    AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
+    M.TrackRefresh(ctx, function()
+        W.SetControlEnabled(onlyMine, true)
+        W.SetControlEnabled(hidePermanent, true)
+    end)
 end
 
 local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
@@ -3541,19 +2866,16 @@ function M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, lane, opts)
         SetCurrentLane("auraStyleGFLane", lane)
         SetCurrentLane("auraFilterLane", lane)
     end
-    if opts and opts.compact == true then
-        if opts.tool == "style" then
-            BuildGroupStyle(ctx, b, scope, { embeddedGroupPreview = true, lane = lane })
-        elseif opts.tool == "behavior" then
-            BuildGroupOrdering(ctx, b, scope, lane)
-        elseif opts.tool == "blacklist" then
-            BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
-        else
-            BuildCompactGroupAuraFilters(ctx, b, scope, lane)
-        end
-        return
+    local tool = opts and opts.tool
+    if tool == "style" then
+        BuildGroupStyle(ctx, b, scope, { embeddedGroupPreview = true, lane = lane })
+    elseif tool == "behavior" then
+        BuildGroupOrdering(ctx, b, scope, lane)
+    elseif tool == "blacklist" then
+        BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
+    else
+        BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     end
-    BuildGroupFilters(ctx, b, scope, lane, opts)
 end
 
 local function CreateNestedAuraBuilder(ctx, parentBuilder, body)

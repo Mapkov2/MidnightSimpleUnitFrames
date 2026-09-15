@@ -848,7 +848,16 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
     if not (frame and cfg and cfg.enabled == true and type(present) == "table") then
         return V.HideDispelSymbols(frame, preview)
     end
-    local selected = {}
+    -- Per-frame scratch list reused across updates; only its array part is
+    -- ever filled, so clearing that part is a full reset.
+    local selectedKey = preview == true and "_msufA3ClassicDispelSymbolPreviewSelected" or "_msufA3ClassicDispelSymbolSelected"
+    local selected = frame[selectedKey]
+    if selected then
+        for i = #selected, 1, -1 do selected[i] = nil end
+    else
+        selected = {}
+        frame[selectedKey] = selected
+    end
     for i = 1, #V.DispelTypes do
         local dispelType = V.DispelTypes[i]
         if present[dispelType] == true then

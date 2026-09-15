@@ -58,8 +58,11 @@ assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSU
 local shouldTint = assert(_G.MSUF_Castbar_ShouldUseInterruptUnavailableColor)
 assert(shouldTint({ unit = "arena1" }) == true,
     "Arena castbar did not receive Interrupt Ready fill tint")
+-- TBC and Mists publish five arena slots; arena5 shares the arena scope.
+assert(shouldTint({ unit = "arena5" }) == true,
+    "Arena slot 5 castbar did not receive Interrupt Ready fill tint")
 _G.MSUF_ShouldUseMSUFCastbar = function() return false end
-assert(shouldTint({ unit = "arena1" }) == false,
+assert(shouldTint({ unit = "arena1" }) == false and shouldTint({ unit = "arena5" }) == false,
     "Arena Interrupt Ready fill tint ignored backend ownership")
 
 print("arena_interrupt_ready_smoke: ok")

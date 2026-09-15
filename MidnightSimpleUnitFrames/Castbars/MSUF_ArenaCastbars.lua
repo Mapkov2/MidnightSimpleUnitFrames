@@ -13,7 +13,10 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local MAX_ARENA_FRAMES = 3
+-- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
+-- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
+-- 0..5 and fall back to 3 when the client initializer did not run.
+local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
 local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
     and type(_G.C_EventUtils.IsEventValid) == "function"
     and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
@@ -51,6 +54,8 @@ local function InCombat()
 end
 
 local function ArenaCastbarsEnabled()
+    -- Defensive: Client.UnsupportedUnits marks arena absent on Classic Era, whose
+    -- TOC still loads this module.
     if MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("arena") then return false end
     EnsureDB()
 

@@ -15,7 +15,10 @@ Spec("PALADIN", 0, "ClassicPaladin")
 
 SI.SpellIDs = {
   ClassicDruid = { Rejuvenation = 774, Regrowth = 8936 },
-  ClassicShaman = {},
+  -- Baseline: the ElvUI Classic Filters SHAMAN aura watch (Healing Way,
+  -- Ancestral Fortitude). One rank ID is stored; the flavor SpellName alias
+  -- catalog matches every same-name rank when the indicator hashes compile.
+  ClassicShaman = { HealingWay = 29203, AncestralFortitude = 16237 },
   ClassicPriest = { PowerWordShield = 17, Renew = 139, PowerInfusion = 10060 },
   ClassicPaladin = {
     BlessingOfProtection = 1022, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044,
@@ -31,7 +34,10 @@ SI.TrackableAuras = {
     Aura("Rejuvenation", 0.51, 0.78, 0.52),
     Aura("Regrowth", 0.31, 0.76, 0.97),
   },
-  ClassicShaman = {},
+  ClassicShaman = {
+    Aura("HealingWay", 0.70, 0.30, 0.70, "Healing Way"),
+    Aura("AncestralFortitude", 0.20, 0.20, 1.00, "Ancestral Fortitude"),
+  },
   ClassicPriest = {
     Aura("PowerWordShield", 1.00, 0.84, 0.28, "PW: Shield"),
     Aura("Renew", 0.56, 0.93, 0.56),
@@ -49,7 +55,10 @@ SI.SpecDefaults = {
     Rejuvenation = Placed("icon", "TOPLEFT", 1, -1, 22),
     Regrowth = Placed("icon", "TOPRIGHT", -1, -1, 22),
   },
-  ClassicShaman = {},
+  ClassicShaman = {
+    HealingWay = Placed("icon", "TOPLEFT", 1, -1, 22),
+    AncestralFortitude = Placed("icon", "TOPRIGHT", -1, -1, 22),
+  },
   ClassicPriest = {
     PowerWordShield = Placed("icon", "TOPRIGHT", -1, -1, 22),
     Renew = Placed("icon", "TOPLEFT", 1, -1, 22),

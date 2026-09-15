@@ -34,6 +34,13 @@ function Factories.Schema(A3)
         arena2 = "showArena",
         arena3 = "showArena",
     }
+    -- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on Mainline).
+    for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+        local arenaUnit = "arena" .. arenaIndex
+        ARENA_UNITS[#ARENA_UNITS + 1] = arenaUnit
+        ARENA_LOOKUP[arenaUnit] = true
+        UNIT_FLAG[arenaUnit] = "showArena"
+    end
 
     local PUBLIC_UNITS = {
         { value = "player", text = "Player" },

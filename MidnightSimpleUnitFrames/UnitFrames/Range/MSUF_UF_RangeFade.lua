@@ -35,8 +35,19 @@ local tonumber = tonumber
 
 local C_Spell = _G.C_Spell
 local C_SpellBook = _G.C_SpellBook
-local IsSpellInRange = C_Spell and C_Spell.IsSpellInRange or _G.IsSpellInRange
-local EnableSpellRangeCheck = C_Spell and C_Spell.EnableSpellRangeCheck
+-- Classic clients (Vanilla, TBC, Mists): no Classic-loaded Blizzard code arms
+-- C_Spell.EnableSpellRangeCheck or listens for SPELL_RANGE_CHECK_UPDATE, and no
+-- in-game check has shown that event firing there. Classic therefore never arms
+-- target spells: the target stays blind like every other unit, so the poll keeps
+-- sampling it, and TargetRange/TargetRefresh query it directly through
+-- DirectRange (spell range first, then CheckInteractDistance out of combat), as
+-- ElvUI does. Retail keeps its event-owned target path unchanged.
+local CLASSIC_TARGET_SAMPLING = MSUF.Client and MSUF.Client.IsClassic == true or false
+-- No _G.IsSpellInRange fallback: the legacy global takes a spell name or a
+-- spellbook slot, never a spell ID, so SpellRange's numeric IDs would be read
+-- as book slots and return wrong answers instead of failing visibly.
+local IsSpellInRange = C_Spell and C_Spell.IsSpellInRange
+local EnableSpellRangeCheck = not CLASSIC_TARGET_SAMPLING and C_Spell and C_Spell.EnableSpellRangeCheck or nil
 local GetSpellIDForSpellIdentifier = C_Spell and C_Spell.GetSpellIDForSpellIdentifier or _G.GetSpellIDForSpellIdentifier
 local GetOverrideSpell = C_Spell and C_Spell.GetOverrideSpell
 local IsPlayerSpell = _G.IsPlayerSpell
@@ -80,6 +91,9 @@ local UNIT_EVENTS = {
 }
 local TARGET_UNIT_EVENT = "UNIT_TARGET"
 
+-- ACTIVE_PLAYER_SPECIALIZATION_CHANGED and TRAIT_CONFIG_UPDATED are Retail
+-- talent events that never fire on Classic; registering them there is harmless,
+-- and SPELLS_CHANGED / PLAYER_TALENT_UPDATE still rebuild the spell picks.
 local SPELL_UPDATE_EVENTS = {
   "SPELLS_CHANGED", "PLAYER_TALENT_UPDATE",
   "ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "TRAIT_CONFIG_UPDATED",
@@ -94,6 +108,19 @@ local BOSS_UNIT_SET = {
   boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
 local ARENA_UNITS = { "arena1", "arena2", "arena3" }
+-- arena4..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
+-- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
+-- the two extra bits below. Mainline (3, or unset) appends nothing.
+do
+  local extraArenaBits = { 8192, 16384 }
+  for i = 4, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)) do
+    local unit = "arena" .. i
+    SUPPORTED_UNITS[unit] = true
+    RANGE_UNITS[#RANGE_UNITS + 1] = unit
+    RANGE_UNIT_BITS[unit] = extraArenaBits[i - 3]
+    ARENA_UNITS[#ARENA_UNITS + 1] = unit
+  end
+end
 local UNIT_EVENT_FILTER_LIMIT = 4
 
 local ENEMY_SPELLS = {
@@ -342,6 +369,9 @@ local function UnitInRangeChecked(unit)
   return nil, false
 end
 
+-- CheckInteractDistance is restricted in combat. In combat a unit with no
+-- usable spell therefore resolves to nil, which is full alpha -- the same as
+-- ElvUI. It fades again once PLAYER_REGEN_ENABLED re-evaluates it.
 local function CanUseInteractDistance()
   return CheckInteractDistance and not (InCombatLockdown and InCombatLockdown())
 end
@@ -419,6 +449,7 @@ local function TargetRange(existsKnown)
   end
   if checked then return inRange, checked end
   if targetChecked > 0 then return targetInRange > 0 end
+  if CLASSIC_TARGET_SAMPLING then return DirectRange("target") end
   local frame = FrameForUnit("target")
   return frame and frame._msufRangeInRange
 end
@@ -608,6 +639,10 @@ TargetRefresh = function(force, preparedFrame)
     ApplyMul(frame, targetInRange > 0, force)
     return true
   end
+  if CLASSIC_TARGET_SAMPLING then
+    ApplyMul(frame, DirectRange("target"), force)
+    return true
+  end
   ApplyMul(frame, nil, force)
   return true
 end
@@ -703,6 +738,10 @@ local MAX_BOSS_UPDATE_RATE = 20
 -- client fires SPELL_RANGE_CHECK_UPDATE for every armed spell whenever its range
 -- to the target changes, including range changes the target itself caused. With
 -- no armed spell there is nothing to hear and the target falls back to sampling.
+-- That Retail event model is unproven on Classic, so Classic clients
+-- (CLASSIC_TARGET_SAMPLING) never arm a spell: EnableSpellRangeCheck is nil there,
+-- the target is always blind, and TargetRange/TargetRefresh query it directly
+-- through DirectRange, so a poll re-samples it instead of replaying the cache.
 local function UnitRangeIsBlind(unit)
   if unit ~= "target" then return true end
   if not EnableSpellRangeCheck then return true end
@@ -863,8 +902,8 @@ local function RebuildPollSet(deferScheduler)
 end
 
 local driver
-local secondaryUnitDriver
-local tertiaryUnitDriver
+-- Driver frames for unit spans after the main driver's first four tokens.
+local extraUnitDrivers = {}
 local SyncRuntime
 local visibilitySyncQueued = false
 local function FlushVisibilityRuntime()
@@ -1246,20 +1285,14 @@ local function EnsureDriver()
   return driver
 end
 
-local function EnsureSecondaryUnitDriver()
-  if secondaryUnitDriver then return secondaryUnitDriver end
+local function EnsureExtraUnitDriver(index)
+  local frame = extraUnitDrivers[index]
+  if frame then return frame end
   if not CreateFrame then return nil end
-  secondaryUnitDriver = CreateFrame("Frame")
-  secondaryUnitDriver:SetScript("OnEvent", DriverOnEvent)
-  return secondaryUnitDriver
-end
-
-local function EnsureTertiaryUnitDriver()
-  if tertiaryUnitDriver then return tertiaryUnitDriver end
-  if not CreateFrame then return nil end
-  tertiaryUnitDriver = CreateFrame("Frame")
-  tertiaryUnitDriver:SetScript("OnEvent", DriverOnEvent)
-  return tertiaryUnitDriver
+  frame = CreateFrame("Frame")
+  frame:SetScript("OnEvent", DriverOnEvent)
+  extraUnitDrivers[index] = frame
+  return frame
 end
 
 local function ClearDriverUnitSpan(frame)
@@ -1333,9 +1366,13 @@ local function RegisterDriver()
     or activeUnits.boss3 == true
     or activeUnits.boss4 == true
     or activeUnits.boss5 == true
-  local arenaActive = activeUnits.arena1 == true
-    or activeUnits.arena2 == true
-    or activeUnits.arena3 == true
+  local arenaActive = false
+  for i = 1, #ARENA_UNITS do
+    if activeUnits[ARENA_UNITS[i]] == true then
+      arenaActive = true
+      break
+    end
+  end
 
   local eventMask = 0
   if activeCount > 0 then eventMask = eventMask + DRIVER_EVENT_ACTIVE_BIT end
@@ -1360,31 +1397,29 @@ local function RegisterDriver()
   if not driverRegistered or driverUnitMask ~= unitMask then
     if driverRegistered and driverUnitMask and driverUnitMask ~= 0 then
       UnregisterDriverUnitEvents(f)
-      UnregisterDriverUnitEvents(secondaryUnitDriver)
-      UnregisterDriverUnitEvents(tertiaryUnitDriver)
+      for i = 1, #extraUnitDrivers do
+        UnregisterDriverUnitEvents(extraUnitDrivers[i])
+      end
     end
+    local extraUsed = 0
     if unitCount > 0 then
       -- RegisterUnitEvent accepts at most UNIT_EVENT_FILTER_LIMIT (4) unit
-      -- tokens. With boss1-5 plus arena1-3 active the unit list can reach 11
-      -- tokens, so spread the spans over up to three driver frames.
-      local firstLast = math.min(unitCount, UNIT_EVENT_FILTER_LIMIT)
-      RegisterDriverUnitChunk(f, 1, firstLast)
-      if unitCount > firstLast then
-        local secondLast = math.min(unitCount, firstLast + UNIT_EVENT_FILTER_LIMIT)
-        RegisterDriverUnitChunk(EnsureSecondaryUnitDriver(), firstLast + 1, secondLast)
-        if unitCount > secondLast then
-          RegisterDriverUnitChunk(EnsureTertiaryUnitDriver(), secondLast + 1, unitCount)
-        elseif tertiaryUnitDriver then
-          ClearDriverUnitSpan(tertiaryUnitDriver)
-        end
-      else
-        if secondaryUnitDriver then ClearDriverUnitSpan(secondaryUnitDriver) end
-        if tertiaryUnitDriver then ClearDriverUnitSpan(tertiaryUnitDriver) end
+      -- tokens. target, focus and pet with boss1-5 plus arena1-5 can reach 13
+      -- tokens, so spread the spans over as many 4-token driver frames as
+      -- needed. The main driver always keeps the first span (first == 1).
+      local chunkLast = math.min(unitCount, UNIT_EVENT_FILTER_LIMIT)
+      RegisterDriverUnitChunk(f, 1, chunkLast)
+      while chunkLast < unitCount do
+        local chunkFirst = chunkLast + 1
+        chunkLast = math.min(unitCount, chunkLast + UNIT_EVENT_FILTER_LIMIT)
+        extraUsed = extraUsed + 1
+        RegisterDriverUnitChunk(EnsureExtraUnitDriver(extraUsed), chunkFirst, chunkLast)
       end
     else
       ClearDriverUnitSpan(f)
-      ClearDriverUnitSpan(secondaryUnitDriver)
-      ClearDriverUnitSpan(tertiaryUnitDriver)
+    end
+    for i = extraUsed + 1, #extraUnitDrivers do
+      ClearDriverUnitSpan(extraUnitDrivers[i])
     end
   end
 
@@ -1440,13 +1475,10 @@ local function UnregisterDriver()
   if not driverRegistered or not driver then return end
   driver:UnregisterAllEvents()
   ClearDriverUnitSpan(driver)
-  if secondaryUnitDriver then
-    secondaryUnitDriver:UnregisterAllEvents()
-    ClearDriverUnitSpan(secondaryUnitDriver)
-  end
-  if tertiaryUnitDriver then
-    tertiaryUnitDriver:UnregisterAllEvents()
-    ClearDriverUnitSpan(tertiaryUnitDriver)
+  for i = 1, #extraUnitDrivers do
+    local extra = extraUnitDrivers[i]
+    extra:UnregisterAllEvents()
+    ClearDriverUnitSpan(extra)
   end
   driverRegistered = false
   driverUnitMask = nil

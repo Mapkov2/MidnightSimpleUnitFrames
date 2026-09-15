@@ -414,4 +414,114 @@ end
 ExerciseArenaCastbarEventGate(false)
 ExerciseArenaCastbarEventGate(true)
 
+-- 6) Arena slot count ------------------------------------------------------------
+-- Game/Shared/Initialize.lua publishes MSUF_MAX_ARENA_FRAMES (3 on Mainline, 5 on
+-- TBC/Mists, 0 on Classic Era). Every arena module clamps it to 0..5, falling
+-- back to three slots when the client initializer did not run.
+local ARENA_SLOT_READ = "math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))"
+for _, path in ipairs({
+    "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
+    "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
+    "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
+    "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
+}) do
+    local source = Read(path)
+    Check(source:find(ARENA_SLOT_READ, 1, true),
+        "arena module does not clamp MSUF_MAX_ARENA_FRAMES: " .. path)
+    Check(not source:find("MAX_ARENA = 3\n", 1, true) and not source:find("MAX_ARENA_FRAMES = 3\n", 1, true),
+        "arena module still hardcodes three arena slots: " .. path)
+end
+Check(not match:find('LiveUnitExists("arena3")', 1, true),
+    "arena match live-unit check does not loop over the arena slots")
+Check(not trinkets:find("WOW_PROJECT_ID", 1, true),
+    "arena trinkets reintroduced the WOW_PROJECT_ID fallback")
+
+local function ArenaNamespace()
+    return {
+        ExportPublic = function(name, value)
+            _G[name] = value
+            return value
+        end,
+    }
+end
+
+local function ExerciseArenaCastbarPool(slots, expected)
+    _G.MSUF_MAX_ARENA_FRAMES = slots
+    _G.MSUF_ArenaCastbars = nil
+    for index = 1, 6 do _G["MSUF_ArenaCastbar" .. index] = nil end
+    local created = 0
+    _G.C_EventUtils = { IsEventValid = function() return true end }
+    _G.MSUF_DB = { general = { enableArenaCastbar = true } }
+    _G.EnsureDB = function() end
+    _G.MSUF_ShouldUseMSUFCastbar = function() return true end
+    _G.MSUF_EventBus_Register = function() return true end
+    _G.MSUF_EventBus_Unregister = function() return true end
+    _G.UnitExists = function() return false end
+    _G.MSUF_CreateCastBar = function(name, unit)
+        local frame = { createdUnit = unit, width = 240, height = 18 }
+        function frame:SetFrameStrata() end
+        function frame:SetFrameLevel() end
+        function frame:HookScript() end
+        function frame:RegisterUnitEvent() end
+        function frame:UnregisterAllEvents() end
+        function frame:Hide() self.shown = false end
+        function frame:IsShown() return self.shown == true end
+        function frame:GetPoint() return self.point end
+        function frame:ClearAllPoints() self.point = nil end
+        function frame:SetPoint(point) self.point = point end
+        function frame:GetWidth() return self.width end
+        function frame:SetWidth(width) self.width = width end
+        function frame:GetHeight() return self.height end
+        function frame:SetHeight(height) self.height = height end
+        created = created + 1
+        _G[name] = frame
+        return frame
+    end
+    assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua"))(
+        "MidnightSimpleUnitFrames", ArenaNamespace())
+    _G.MSUF_ApplyArenaCastbarPositionSetting(true, true)
+    local pool = _G.MSUF_ArenaCastbars
+    local label = tostring(slots)
+    Check(type(pool) == "table" and #pool == expected and created == expected,
+        "arena castbar pool for MSUF_MAX_ARENA_FRAMES=" .. label .. " did not build " .. expected .. " bars")
+    for index = 1, expected do
+        local frame = pool[index]
+        Check(frame == _G["MSUF_ArenaCastbar" .. index] and frame.unit == "arena" .. index
+                and frame.createdUnit == "arena" .. index,
+            "arena castbar pool slot " .. index .. " is not bound to its arena unit")
+    end
+    Check(_G["MSUF_ArenaCastbar" .. (expected + 1)] == nil,
+        "arena castbar pool for MSUF_MAX_ARENA_FRAMES=" .. label .. " created an extra bar")
+end
+
+ExerciseArenaCastbarPool(5, 5)
+Check(_G.MSUF_ArenaCastbar5 and _G.MSUF_ArenaCastbar5.unit == "arena5",
+    "5-slot arena castbar pool did not bind arena5")
+ExerciseArenaCastbarPool(nil, 3)
+ExerciseArenaCastbarPool(3, 3)
+ExerciseArenaCastbarPool(9, 5)
+ExerciseArenaCastbarPool(0, 0)
+
+local function ExerciseArenaPreviewHide(slots, expected)
+    _G.MSUF_MAX_ARENA_FRAMES = slots
+    local hidden = {}
+    for index = 1, 6 do
+        _G["MSUF_ArenaCastbarPreview" .. index] = { Hide = function() hidden[index] = true end }
+    end
+    assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua"))(
+        "MidnightSimpleUnitFrames", ArenaNamespace())
+    _G.MSUF_HideAllArenaCastbarPreviews()
+    for index = 1, 6 do
+        Check((hidden[index] == true) == (index <= expected),
+            "arena castbar previews for MSUF_MAX_ARENA_FRAMES=" .. tostring(slots)
+                .. " hid the wrong slot: " .. index)
+        _G["MSUF_ArenaCastbarPreview" .. index] = nil
+    end
+end
+
+ExerciseArenaPreviewHide(5, 5)
+ExerciseArenaPreviewHide(nil, 3)
+ExerciseArenaPreviewHide(9, 5)
+_G.MSUF_MAX_ARENA_FRAMES = nil
+
 print("arena_unit_scope_smoke: ok")

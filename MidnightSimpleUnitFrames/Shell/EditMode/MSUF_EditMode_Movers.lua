@@ -619,7 +619,7 @@ end
 
 local function GetArenaSupplementalMoverBounds()
     local bounds = {}
-    for i = 2, 3 do
+    for i = 2, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         local l, r, t, b = UnitVisualBounds(GetArenaUF(i))
         if l then
             bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
@@ -630,7 +630,7 @@ end
 
 local function GetArenaCastbarSupplementalMoverBounds()
     local bounds = {}
-    for i = 2, 3 do
+    for i = 2, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         local l, r, t, b = FrameRectToUI(GetArenaCastbarFrame(i))
         if l then
             bounds[#bounds + 1] = { l = l, r = r, t = t, b = b }
@@ -796,8 +796,9 @@ local function RegisterAll()
         isEnabled = BossEnabled(1),
     })
 
-    --- Arena 1-3 mirror the boss cluster: one mover/config, one mouse region
-    --- per frame, dragging any arena frame moves the whole group.
+    --- Arena 1-N mirror the boss cluster: one mover/config, one mouse region
+    --- per frame, dragging any arena frame moves the whole group. N is the
+    --- client arena slot fact (MSUF_MAX_ARENA_FRAMES: 3 Mainline, 5 TBC/Mists).
     Reg.Register({
         key       = "arena",
         label     = "Arena",

@@ -133,6 +133,8 @@ assert(MSUF_ImportFromString("unversioned") == false and MSUF_DB.general.marker 
     "unversioned profile reached the active profile")
 assert(MSUF_ImportFromString("badEmbedded") == false and MSUF_DB.general.marker == "embedded",
     "invalid embedded profile reached the active profile")
+assert(select(2, MSUF_ImportFromString("old")) ~= nil,
+    "rejected profile import did not report a reason")
 
 for _, suffix in ipairs({ "Vanilla", "Mists", "TBC" }) do
     local toc = assert(io.open(repo .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_" .. suffix .. ".toc", "rb"))

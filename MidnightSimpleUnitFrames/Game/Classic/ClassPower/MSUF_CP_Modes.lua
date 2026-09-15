@@ -1,8 +1,7 @@
---- ClassPower/MSUF_CP_Modes.lua - class power render modes
+--- Game/Classic/ClassPower/MSUF_CP_Modes.lua - Classic class power render modes
+--- Unreachable on Classic, kept for closeness to Retail: TIMER, STAGGER, AURA single (Devourer), SEGMENTED Essence.
 
---- MSUF_CP_Mode_Segmented.lua
---- Phase 2 ClassPower split: segmented base mode extracted from the core file.
---- Includes smooth Essence recharge animation (Evoker pip fill).
+--- SEGMENTED: point resources such as combo points, Holy Power and Chi.
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -12,8 +11,7 @@ local modeBuilders = _G.MSUF_CP_MODE_BUILDERS or {}
 ExportPublic("MSUF_CP_MODE_BUILDERS", modeBuilders)
 
 --- Perf locals: the stamp helpers and the native-timer plumbing below run per
---- pip on every power/aura event, and the Essence path runs per
---- UNIT_POWER_FREQUENT.
+--- pip on every power/aura event.
 local type = type
 local math_abs = math.abs
 local _issecretvalue = _G.issecretvalue
@@ -83,8 +81,8 @@ local function CP_StampText(txt, value)
     txt._msufCPText = value
 end
 
--- FontString:SetText/SetFormattedText explicitly accept secret text arguments
--- on 12.1. Pass restricted resource values straight to the native widget; never
+-- FontString:SetText/SetFormattedText explicitly accept secret text arguments.
+-- Pass restricted resource values straight to the native widget; never
 -- compare, format, concatenate, or cache them in Lua.
 local function CP_SetPassthroughText(txt, value)
     if not txt then return end
@@ -151,7 +149,7 @@ local function CP_StampMinMax(bar, minValue, maxValue)
     bar:SetMinMaxValues(minValue, maxValue)
 end
 
---- Native 12.1 duration plumbing shared by the timer-backed modes. Objects are
+--- Native duration plumbing shared by the timer-backed modes. Objects are
 --- created only when a timer actually becomes active and then reused by their
 --- owning bar. The legacy Lua ticks remain available only as a degraded path
 --- for incomplete API environments (notably standalone smoke harnesses).
@@ -159,7 +157,8 @@ local nativeTimerSupportCache = setmetatable({}, { __mode = "k" })
 --- Direct calls per the 12.1 C_DurationUtil contract (args
 --- AllowedWhenUntainted, no documented rejection). Secret aura state comes
 --- back as secret RETURNS, handled by NotSecret/PlainNumber value checks; API
---- absence on the 120007 client is covered by the type guards.
+--- absence (the 120007 client, or any client without these APIs) is covered by
+--- the type guards.
 local function CreateNativeTimerSupport(E)
     local durationUtil = E.C_DurationUtil or _G.C_DurationUtil
     local stringUtil = E.C_StringUtil or _G.C_StringUtil
@@ -323,7 +322,7 @@ modeBuilders.SEGMENTED = function(E)
     local GetPowerRegenForPowerType = E.GetPowerRegenForPowerType
     local nativeTimer = CreateNativeTimerSupport(E)
 
-    --- Essence smooth recharge (Evoker only)
+    --- Essence smooth recharge (Evoker, Retail-only; no Classic provider routes Essence)
     local _essPrevCur    = nil
     local _essRechargeAt = 0
     local _essRate       = 0
@@ -749,8 +748,7 @@ modeBuilders.SEGMENTED = function(E)
     return { Update = Update, StopEssenceOnUpdates = StopEssenceOnUpdates, RuntimeTick = RuntimeTick }
 end
 
---- MSUF_CP_Mode_Fractional.lua
---- Phase 2 ClassPower split: fractional mode extracted from the core file.
+--- FRACTIONAL: partial-point resources (on Classic, Mists Burning Embers).
 
 modeBuilders.FRACTIONAL = function(E)
     local tonumber = tonumber
@@ -871,8 +869,8 @@ modeBuilders.FRACTIONAL = function(E)
     return { Update = Update }
 end
 
---- MSUF_CP_Mode_Rune.lua
---- DK rune mode. Native durations drive fill/text; RuntimeTick is degraded-only.
+--- RUNE: DK rune mode (on Classic, Mists only). Native durations drive fill/text;
+--- RuntimeTick is degraded-only.
 
 modeBuilders.RUNE = function(E)
     local math_floor = math.floor
@@ -976,7 +974,7 @@ modeBuilders.RUNE = function(E)
         end
     end
 
-    --- Degraded per-bar tick logic; retail 12.1 uses native durations above.
+    --- Degraded per-bar tick logic, used when the native duration path above is unavailable.
     local function RuneBarTick(bar, elapsed)
         local start = bar._runeStart
         local dur = start and (GetTime() - start) or ((bar._runeDuration or 0) + elapsed)
@@ -1202,10 +1200,9 @@ modeBuilders.RUNE = function(E)
     }
 end
 
---- MSUF_CP_Mode_Aura.lua
---- Phase 2 ClassPower split: aura-driven modes extracted from the core file.
+--- AURA: aura-driven modes (on Classic, Mists Arcane Charges via AURA_SEGMENTED).
 --- Secret-safe: C_UnitAuras fields (applications) and C_Spell returns can be
---- secret in Midnight/12.1. All Lua-side comparisons/arithmetic guarded with NotSecret.
+--- secret. All Lua-side comparisons/arithmetic guarded with NotSecret.
 
 modeBuilders.AURA = function(E)
     local type = type
@@ -1261,7 +1258,9 @@ modeBuilders.AURA = function(E)
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
         if powerType == "SOUL_FRAGMENTS_VENG" then
-            local rawCur = C_Spell.GetSpellCastCount(CPK.SPELL.SOUL_CLEAVE)
+            local getCastCount = C_Spell and C_Spell.GetSpellCastCount
+            local rawCur
+            if type(getCastCount) == "function" then rawCur = getCastCount(CPK.SPELL.SOUL_CLEAVE) end
             local curSafe = NotSecret(rawCur)
             local rawCurSecret = not curSafe
             if curSafe and rawCur == nil then rawCur = 0 end
@@ -1392,7 +1391,7 @@ modeBuilders.AURA = function(E)
     end
 
     local function UpdateSingle()
-        --- Devourer mirrors Blizzard's 12.1 Soul Fragments bar and Elemental's
+        --- Retail-only: Devourer mirrors Blizzard's Soul Fragments bar and Elemental's
         --- MSUF presentation: one continuous bar normalized to the real maximum.
         local cur, displayCur, inMeta = 0, 0, false
         local textValue = 0
@@ -1415,7 +1414,9 @@ modeBuilders.AURA = function(E)
         else
             --- Read Blizzard's live maximum just like its own bar and ElvUI do;
             --- talent setups can expose 40, 50, or another supported maximum.
-            local rawMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.DARK_HEART)
+            local getMaxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+            local rawMax
+            if type(getMaxApplications) == "function" then rawMax = getMaxApplications(CPK.SPELL.DARK_HEART) end
             if NotSecret(rawMax) and rawMax ~= nil then progressMax = tonumber(rawMax) end
             local darkHeart = GetPlayerAura(CPK.SPELL.DARK_HEART)
             if darkHeart then
@@ -1470,9 +1471,9 @@ modeBuilders.AURA = function(E)
     return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle }
 end
 
---- 12.1 Ebon presentation host. Aura discovery and the countdown are owned by
---- MSUF_CP_EbonMight's native CustomAuraContainer; Lua never reads or ticks the
---- aura duration here.
+--- TIMER: Retail's Ebon Might presentation host, kept for closeness to Retail.
+--- No Classic provider routes TIMER_BAR and no Classic TOC loads
+--- ClassPower/MSUF_CP_EbonMight.lua.
 modeBuilders.TIMER = function(E)
     local CP = E.CP
     local CP_CheckAutoHide = E.CP_CheckAutoHide
@@ -1515,11 +1516,10 @@ modeBuilders.TIMER = function(E)
     return { Update = Update }
 end
 
---- MSUF_CP_Mode_Continuous.lua
---- Phase 4 ClassPower split: continuous single-bar mode extracted from the core
---- file (e.g. Elemental Maelstrom).
---- Secret-safe: UnitPower/UnitPowerMax return secret values in 12.0.
---- C API (SetMinMaxValues, SetValue) accepts secrets natively for bar fill.
+--- CONTINUOUS: single-bar modes (on Classic, Mists Demonic Fury, plus Balance
+--- Eclipse through UpdateSigned).
+--- Secret-safe: UnitPower/UnitPowerMax can return secret values; the C API
+--- (SetMinMaxValues, SetValue) accepts secrets natively for bar fill.
 
 modeBuilders.CONTINUOUS = function(E)
     local tonumber = tonumber
@@ -1661,9 +1661,8 @@ modeBuilders.CONTINUOUS = function(E)
     }
 end
 
---- MSUF_CP_Mode_Stagger.lua
---- Phase 4 ClassPower split: Brewmaster stagger mode extracted from the core
---- file.
+--- STAGGER: Retail's Brewmaster stagger mode, kept for closeness to Retail; no
+--- Classic provider routes it.
 
 modeBuilders.STAGGER = function(E)
     local type = type

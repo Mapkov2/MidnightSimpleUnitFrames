@@ -55,7 +55,7 @@ MSUF is made for players who want clear combat information, extensive visual con
 | --- | --- |
 | **Unit Frames** | Player, Target, Focus, Focus Target, Pet, Target-of-Target and Boss frames with configurable health, power, text, portraits, colors, textures, layers and status indicators. Every frame can fill its Health and Power bars horizontally or vertically in either direction. |
 | **Group Frames** | Party, Raid and Mythic Raid layouts with role/status indicators, range fading, spell indicators, healer tools and native private-aura support. |
-| **Auras 3** | Blizzard-native 12.1 aura containers, custom spell matching, per-lane filters, icon shapes, cooldown text, growth/layout controls and portrait tracking. |
+| **Auras 3** | Blizzard-native 12.1 aura containers on Mainline and a scan-based aura backend on the Classic flavors, custom spell matching, per-lane filters, icon shapes, cooldown text, growth/layout controls and portrait tracking. |
 | **Castbars** | Player, Target, Focus and Boss castbars with interrupt feedback, channel support, configurable text/icons, rounded styling and secret-safe timing paths. |
 | **Edit Mode** | Live frame positioning, draggable elements, previews, snapping, layer controls and direct navigation to the matching setting. |
 | **Profiles** | Specialization-aware profiles, copy tools and robust import/export including migration from legacy 5.x profiles. |

@@ -3,6 +3,7 @@ MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua
 MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua
 MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua
 MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua
+MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_DataShared.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Menu_Compat.lua
@@ -21,7 +22,6 @@ MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Changelog.lua
 MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Effects/MSUF_UF_TextureLayer.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_Blizzard.lua
-MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_Headers.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_SpellIndicators_Data_Base.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UFCore_Elements.xml
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_Config.lua

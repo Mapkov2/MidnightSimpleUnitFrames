@@ -303,7 +303,7 @@ function Style:ApplyCastbarOutlineToAll(force)
         end
     end
 
-    for arenaIndex = 1, 3 do
+    for arenaIndex = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         frames[#frames + 1] = _G["MSUF_ArenaCastbarPreview" .. arenaIndex]
     end
     local arenaCastbars = _G.MSUF_ArenaCastbars

@@ -417,6 +417,9 @@ local function IsDifferentActiveCast(frame, castGUID, spellID, castBarID)
     return false
 end
 
+-- _msufPushbackCastID/_msufPushbackStartMS are deliberately not cleared here:
+-- the legacy pushback delay is the start shift since the first sighting of the
+-- same cast, and CaptureCastTimes runs this reset on every re-read.
 local function ResetTimingFields(frame)
     if not frame then return end
     frame.endTime = nil
@@ -645,8 +648,14 @@ local function ApplyCastState(frame, state)
     )
     -- After ApplyActiveCast: it runs CaptureCastTimes, which resets the timing
     -- fields this value lives next to. delayTimeMs is NeverSecret, so it needs
-    -- no secret-safe unwrapping.
-    frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
+    -- no secret-safe unwrapping. The shared resolver also measures the legacy
+    -- start shift on clients whose cast tuple carries no delay.
+    local resolvePushback = _G.MSUF_Castbar_ResolvePushbackMS
+    if type(resolvePushback) == "function" then
+        frame._msufPushbackMS = resolvePushback(frame, state)
+    else
+        frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
+    end
     if frame.castText and type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then
         _G.MSUF_RefreshCastbarSpellNameText(frame)
     end

@@ -22,7 +22,10 @@ local function CoreFrame(unit)
     return unit and frames and frames[unit] or nil
 end
 
-local MAX_ARENA_FRAMES = 3
+-- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
+-- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
+-- 0..5 and fall back to 3 when the client initializer did not run.
+local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
 
 local function GeneralDB()
     if type(EnsureDB) == "function" then

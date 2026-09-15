@@ -199,19 +199,88 @@ for i = 1, #queued do
         "Classic group filter change did not request the focused Aura dirty path")
 end
 
--- The same shared file is also loaded by this repository's Mainline TOC. Force
--- its missing-data fallback so the former nil VT call remains covered too.
-controls, sections, refreshers = {}, {}, {}
-menu.CLASSIC_AURA_FILTERS_REDUCED = false
-namespace.GF = nil
-MSUF_GF_AuraFilter = nil
-menu.BuildAuras3GroupLaneWorkspace({ key = "gf_auras" }, builder, "raid", "buff",
-    { compact = true, tool = "filters" })
-local fallback = {}
-for i = 1, #controls do fallback[controls[i].label] = true end
-assert(fallback["All Buffs"] == true and fallback["Cast by Me"] == true,
-    "Mainline group filter fallback did not build through M.ValueTextList")
-assert(fallback["Maximum duration"] == true,
-    "Mainline group filter fallback lost the current Retail duration control")
+-- Unit workspace filters. Only mine and Non-player auras are mutually exclusive
+-- and Classic has no Non-player control, so enabling Debuff Only mine must clear
+-- a nonPlayer flag imported from Retail. Buff lanes and turning Only mine off
+-- must leave nonPlayer untouched.
+local unitFilters, unitApplies
+function model.UnitSupported(unit) return unit == "target" end
+function model.UnitEnabled() return true end
+function model.ScopeFiltersEnabled() return unitFilters.enabled == true end
+function model.SetScopeFiltersEnabled(_, enabled) unitFilters.enabled = enabled == true end
+function model.ReadFilter(_, lane, key, defaultValue)
+    local value = unitFilters[lane == "buff" and "buffs" or "debuffs"][key]
+    if value == nil then return defaultValue end
+    return value
+end
+function model.WriteFilter(_, lane, key, value)
+    unitFilters[lane == "buff" and "buffs" or "debuffs"][key] = value
+end
+function model.Apply() unitApplies = unitApplies + 1 end
+
+local function StubObject()
+    local noop = function() end
+    return { Hide = noop, SetPoint = noop, SetScript = noop, SetText = noop }
+end
+widgets.Text = StubObject
+widgets.RoleButton = StubObject
+widgets.ScopeOverrideBar = function() return {} end
+
+local unitBuilder = { width = 720 }
+function unitBuilder:Section(title, height)
+    local section = { sectionTitle = title, height = height, _msuf2Width = self.width }
+    sections[#sections + 1] = section
+    return section
+end
+function unitBuilder:CollapsibleSection(_, title, height)
+    return { sectionTitle = title, height = height }
+end
+
+assert(type(menu.BuildAuras3UnitSection) == "function",
+    "Classic unit Aura workspace builder was not exported")
+
+for _, lane in ipairs({ "debuff", "buff" }) do
+    local otherLane = lane == "buff" and "debuffs" or "buffs"
+    local laneKey = lane == "buff" and "buffs" or "debuffs"
+    unitFilters = { enabled = false, buffs = { nonPlayer = true }, debuffs = { nonPlayer = true } }
+    unitApplies = 0
+    controls, sections, refreshers = {}, {}, {}
+    menu.unitAuraTabSelection = { target = lane }
+    menu.unitAuraToolSelection = { target = { [lane] = "filters" } }
+    menu.BuildAuras3UnitSection({ key = "uf_target" }, unitBuilder, "target")
+
+    local filterSection = sections[#sections]
+    assert(filterSection and filterSection.sectionTitle == (lane == "buff" and "Buff" or "Debuff") .. " Filters"
+        and filterSection.height == 118,
+        lane .. " unit workspace did not build the compact Filters section")
+    assert(#controls == 2, lane .. " unit filters must expose only Only mine and Hide permanent")
+    local byLabel = {}
+    for i = 1, #controls do byLabel[controls[i].label] = controls[i] end
+    local onlyMine = assert(byLabel["Only mine"], lane .. " unit Only mine switch missing")
+    assert(byLabel["Hide permanent"], lane .. " unit Hide permanent switch missing")
+
+    assert(onlyMine.getValue() == false, lane .. " unit Only mine did not default off")
+    onlyMine.setValue(true)
+    assert(unitFilters.enabled == true, lane .. " unit Only mine did not enable the scope filters")
+    assert(unitFilters[laneKey].onlyMine == true and onlyMine.getValue() == true,
+        lane .. " unit Only mine did not write and read back onlyMine")
+    if lane == "debuff" then
+        assert(unitFilters.debuffs.nonPlayer == false,
+            "unit Debuff Only mine did not clear the mutually exclusive nonPlayer filter")
+    else
+        assert(unitFilters.buffs.nonPlayer == true,
+            "unit Buff Only mine must leave the nonPlayer filter untouched")
+    end
+    assert(unitFilters[otherLane].nonPlayer == true,
+        lane .. " unit Only mine changed the other lane's nonPlayer filter")
+
+    unitFilters[laneKey].nonPlayer = true
+    onlyMine.setValue(false)
+    assert(unitFilters[laneKey].onlyMine == false and onlyMine.getValue() == false,
+        lane .. " unit Only mine did not turn off")
+    assert(unitFilters[laneKey].nonPlayer == true,
+        lane .. " turning unit Only mine off must leave the nonPlayer filter untouched")
+    assert(unitApplies == 2, lane .. " unit Only mine did not request the Aura runtime apply")
+end
 
 print("classic Aura menu filter smoke passed")

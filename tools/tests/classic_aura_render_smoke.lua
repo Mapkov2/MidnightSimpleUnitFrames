@@ -182,7 +182,7 @@ _G.CreateFrame = function(frameType, _, parent)
 end
 local targetExists = true
 _G.UnitExists = function(unit)
-    return unit == "player" or unit == "party1" or (unit == "target" and targetExists)
+    return unit == "player" or unit == "party1" or unit == "party3" or (unit == "target" and targetExists)
 end
 _G.UnitIsUnit = function(left, right)
     if left == right then return true end
@@ -229,18 +229,27 @@ local harmfulSlots = { 202 }
 local nativePlayerAuraIDs = {}
 local playerFilterLeaksAll = false
 local partyInRange = true
+-- The backend binds UnitInRange at load, so the count lives in this stub.
+local unitInRangeCalls = 0
 _G.UnitInRange = function(unit)
+    unitInRangeCalls = unitInRangeCalls + 1
     if unit == "party1" then return partyInRange, true end
     return true, true
 end
+-- nil leaves HARMFUL|RAID_PLAYER_DISPELLABLE unmodelled (every harmful aura is
+-- a member); a set limits that filter to the aura instance IDs it holds.
+local dispellableAuraIDs
 local function FilteredAuraSlots(slots, filter)
     local playerOnly = filter and filter:find("|PLAYER", 1, true) ~= nil
+    local dispellableOnly = dispellableAuraIDs ~= nil and filter ~= nil
+        and filter:find("RAID_PLAYER_DISPELLABLE", 1, true) ~= nil
     local out = {}
     for i = 1, #slots do
         local slot = slots[i]
         local data = auraBySlot[slot]
         if data and (not playerOnly or playerFilterLeaksAll
-            or nativePlayerAuraIDs[data.auraInstanceID] == true) then
+            or nativePlayerAuraIDs[data.auraInstanceID] == true)
+            and (not dispellableOnly or dispellableAuraIDs[data.auraInstanceID] == true) then
             out[#out + 1] = slot
         end
     end
@@ -279,6 +288,7 @@ assert(loadfile(corePath))("MidnightSimpleUnitFrames", namespace)
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(root, "Vanilla", namespace, {
     "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_Preview.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
 })
 if visualsPath then
     assert(loadfile(visualsPath))("MidnightSimpleUnitFrames", namespace)
@@ -467,6 +477,135 @@ assert(_G.MSUF_ApplyDispelSymbolPreviewToFrame(frame) == true
     "Classic dispel-symbol preview did not render")
 _G.MSUF_SetDispelOverlayPreview(false)
 _G.MSUF_SetDispelSymbolPreview(false)
+
+-- The live dispel-symbol path reuses per-frame scratch tables: the backend's
+-- present set and the renderer's selected list. Shrinking the dispel-type set
+-- must drop the previous update's types from both, or stale tiles survive.
+local symbolHost = frame._msufA3ClassicDispelSymbolHost
+local savedHarmfulAura = auraBySlot[202]
+auraBySlot[202] = {
+    auraInstanceID = 4204, spellId = 900024, name = "Symbol Magic Target",
+    icon = 134424, applications = 1, duration = 15, expirationTime = 65,
+    isHelpful = false, isHarmful = true, isFromPlayerOrPlayerPet = true, dispelName = "Magic",
+}
+auraBySlot[203] = {
+    auraInstanceID = 4205, spellId = 900025, name = "Symbol Curse Target",
+    icon = 134425, applications = 1, duration = 15, expirationTime = 65,
+    isHelpful = false, isHarmful = true, isFromPlayerOrPlayerPet = true, dispelName = "Curse",
+}
+harmfulSlots[2] = 203
+assert(registered.Update(frame, "UNIT_AURA", "target", { isFullUpdate = true }) == true,
+    "Classic two-type dispel-symbol refresh did not run")
+assert(symbolHost._shown == true and symbolHost.tiles[1] and symbolHost.tiles[1]._shown == true
+    and tostring(symbolHost.tiles[1]._texture):find("magic.tga", 1, true)
+    and symbolHost.tiles[2] and symbolHost.tiles[2]._shown == true
+    and tostring(symbolHost.tiles[2]._texture):find("curse.tga", 1, true),
+    "Classic live dispel symbol did not render both dispel types")
+harmfulSlots[2] = nil
+auraBySlot[203] = nil
+auraBySlot[202] = savedHarmfulAura
+assert(registered.Update(frame, "UNIT_AURA", "target", { isFullUpdate = true }) == true,
+    "Classic one-type dispel-symbol refresh did not run")
+assert(frame._msufA3ClassicDispelPresent and frame._msufA3ClassicDispelPresent.Magic == nil
+    and frame._msufA3ClassicDispelPresent.Curse == true,
+    "Classic dispel-symbol present set kept the previous update's dispel type")
+assert(symbolHost._shown == true and symbolHost.tiles[1]._shown == true
+    and tostring(symbolHost.tiles[1]._texture):find("curse.tga", 1, true)
+    and symbolHost.tiles[2]._shown == false and symbolHost.tiles[3] == nil,
+    "Classic dispel-symbol tiles kept the previous update's dispel type")
+
+-- Dispel-lane membership: the frame overlay, the frame symbols and the
+-- per-aura type border follow the configured trigger. DISPEL_TYPE needs a
+-- readable dispel type; BY_ME needs native RAID_PLAYER_DISPELLABLE membership.
+do
+    local A3 = namespace.MSUF_Auras3
+    local function DispelLane(label)
+        assert(registered.Update(frame, "UNIT_AURA", "target", { isFullUpdate = true }) == true,
+            label .. ": refresh did not run")
+    end
+    local function OverlayActive()
+        return frame._msufA3DispelOverlayActive == true and frame._msufA3ClassicDispelOverlayActive == true
+    end
+    local function SymbolsActive()
+        return frame._msufA3ClassicDispelSymbolsActive == true
+    end
+    local savedDispelAura = auraBySlot[202]
+    auraBySlot[202] = {
+        auraInstanceID = 4301, spellId = 900031, name = "Typeless Harmful Target",
+        icon = 134431, applications = 1, duration = 15, expirationTime = 65,
+        isHelpful = false, isHarmful = true, isFromPlayerOrPlayerPet = true,
+    }
+    DispelLane("typeless debuff")
+    local typelessOverlay = debuff[1]._msufA3DispelOverlay
+    local typelessSymbol = debuff[1]._msufA3DispelTypeSymbol
+    assert(debuff.visible == 1 and debuff.active[4301] == true, "typeless debuff did not render")
+    assert(not OverlayActive() and frame._msufA3DispelOverlayActive ~= true,
+        "Classic DISPEL_TYPE overlay matched a debuff without a dispel type")
+    assert(not SymbolsActive(), "Classic DISPEL_TYPE symbols matched a debuff without a dispel type")
+    assert((typelessOverlay == nil or typelessOverlay._shown == false)
+        and (typelessSymbol == nil or typelessSymbol._shown == false),
+        "Classic per-aura dispel border marked a debuff without a dispel type")
+
+    auraBySlot[202] = {
+        auraInstanceID = 4302, spellId = 900032, name = "Magic Harmful Target",
+        icon = 134432, applications = 1, duration = 15, expirationTime = 65,
+        isHelpful = false, isHarmful = true, isFromPlayerOrPlayerPet = true, dispelName = "Magic",
+    }
+    DispelLane("magic debuff")
+    assert(OverlayActive() and SymbolsActive(),
+        "Classic DISPEL_TYPE overlay or symbols missed a Magic debuff")
+    assert(debuff[1]._msufA3DispelOverlay and debuff[1]._msufA3DispelOverlay._shown == true,
+        "Classic per-aura dispel border missed a Magic debuff")
+
+    -- BY_ME: a Magic debuff the player cannot dispel stays out of the lane; a
+    -- member shows it only while that member is present.
+    frame.MSUFSpec.dispelOverlay.trigger = "BY_ME"
+    frame.MSUFSpec.dispelSymbol.trigger = "BY_ME"
+    dispellableAuraIDs = {}
+    A3.BumpRuntimeConfig()
+    DispelLane("BY_ME non-member")
+    assert(debuff.visible == 1 and not OverlayActive() and not SymbolsActive(),
+        "Classic BY_ME dispel lane matched a debuff outside RAID_PLAYER_DISPELLABLE")
+
+    auraBySlot[203] = {
+        auraInstanceID = 4303, spellId = 900033, name = "Dispellable Harmful Target",
+        icon = 134433, applications = 1, duration = 15, expirationTime = 65,
+        isHelpful = false, isHarmful = true, isFromPlayerOrPlayerPet = true, dispelName = "Magic",
+    }
+    harmfulSlots[2] = 203
+    dispellableAuraIDs[4303] = true
+    assert(registered.Update(frame, "UNIT_AURA", "target", { addedAuras = { auraBySlot[203] } }) == true,
+        "Classic BY_ME member add did not render")
+    assert(debuff.active[4303] == true and OverlayActive() and SymbolsActive(),
+        "Classic BY_ME dispel lane missed a RAID_PLAYER_DISPELLABLE member")
+
+    harmfulSlots[2] = nil
+    auraBySlot[203] = nil
+    dispellableAuraIDs[4303] = nil
+    assert(registered.Update(frame, "UNIT_AURA", "target", { removedAuraInstanceIDs = { 4303 } }) == true,
+        "Classic BY_ME member removal did not render")
+    assert(debuff.active[4303] == nil and not OverlayActive() and not SymbolsActive(),
+        "Classic BY_ME dispel lane stayed active after its member left")
+
+    -- Symbols off makes the visual direct (one native query per trigger). The
+    -- disabled border must not veto an overlay that inherits its trigger there
+    -- either; the stub's direct query ignores RAID_PLAYER_DISPELLABLE.
+    frame.MSUFSpec.dispelSymbol.enabled = false
+    A3.BumpRuntimeConfig()
+    DispelLane("direct BY_ME overlay")
+    assert(frame._msufA3State.config.visualDirect == true and OverlayActive(),
+        "Classic direct dispel overlay was vetoed by the disabled border")
+    frame.MSUFSpec.dispelSymbol.enabled = true
+
+    frame.MSUFSpec.dispelOverlay.trigger = "DISPEL_TYPE"
+    frame.MSUFSpec.dispelSymbol.trigger = "DISPEL_TYPE"
+    dispellableAuraIDs = nil
+    auraBySlot[202] = savedDispelAura
+    A3.BumpRuntimeConfig()
+    DispelLane("restored DISPEL_TYPE")
+    assert(OverlayActive() and SymbolsActive() and debuff[1].auraInstanceID == savedDispelAura.auraInstanceID,
+        "Classic dispel lane did not recover its DISPEL_TYPE trigger")
+end
 
 -- A valid permanent aura still has a LuaDurationObject in current Classic,
 -- but it must not resurrect a full/stale cooldown swipe over its icon.
@@ -676,6 +815,37 @@ assert(registered.Update(frame, "UNIT_AURA", "target", { removedAuraInstanceIDs 
 assert(buff.visible == 1 and buff.active[7010] ~= true,
     "Classic only-mine delta cleanup retained the removed buff")
 
+-- Native PLAYER filter trust belongs to the unit, not the lane: one delta event
+-- evaluates UnitInRange once however many lanes use the native filter, and the
+-- player never needs it.
+do
+    local A3 = namespace.MSUF_Auras3
+    unitInRangeCalls = 0
+    assert(registered.Update(frame, "UNIT_AURA", "target", { updatedAuraInstanceIDs = { 7007 } }) ~= nil,
+        "Classic only-mine range-trust delta did not run")
+    assert(unitInRangeCalls == 1, "Classic only-mine delta evaluated UnitInRange "
+        .. unitInRangeCalls .. " times for two native-filter lanes, expected once")
+    assert(buff._msufA3NativePlayerFilterTrusted == true and debuff._msufA3NativePlayerFilterTrusted == true,
+        "Classic only-mine range trust did not reach both native-filter lanes")
+
+    _G.MSUF_DB.auras3.perUnit.player = {
+        overrideFilters = true,
+        filters = { buffs = { enabled = true, onlyMine = true }, debuffs = { enabled = true, onlyMine = true } },
+    }
+    assert(A3.RequestScope("player", "render-smoke-player-only-mine") == true,
+        "Classic player only-mine apply did not run")
+    local playerLanes = playerFrame._msufA3State.lanes
+    assert(playerLanes.buff.config.nativePlayerFilter == true and playerLanes.debuff.config.nativePlayerFilter == true,
+        "Classic player only-mine lanes did not use native PLAYER scans")
+    unitInRangeCalls = 0
+    registered.Update(playerFrame, "UNIT_AURA", "player", { updatedAuraInstanceIDs = { 1001 } })
+    assert(unitInRangeCalls == 0, "Classic player aura event evaluated UnitInRange "
+        .. unitInRangeCalls .. " times")
+    _G.MSUF_DB.auras3.perUnit.player = nil
+    assert(A3.RequestScope("player", "render-smoke-player-filters-restored") == true,
+        "Classic player filter restore did not run")
+end
+
 -- A false legacy flag and missing caster must not hide an aura which the
 -- native PLAYER filter identifies as the player's own cast.
 auraBySlot[101].sourceUnit = "party1"
@@ -817,6 +987,66 @@ assert(groupBuff.visible == 0 and groupBuff[1]._shown == false,
     "Classic group Hide Permanent retained a protected permanent buff")
 assert(groupDebuff.visible == 0 and groupDebuff[1]._shown == false,
     "Classic group Hide Permanent retained a protected permanent debuff")
+
+-- A secure header can rebind a group button to another unit in combat. The
+-- config recompile may wait for combat end, but the aura rescan must run now
+-- or the button keeps showing the previous unit's buffs and debuffs.
+local savedAura101, savedAura103 = auraBySlot[101], auraBySlot[103]
+local savedAura202, savedAura204 = auraBySlot[202], auraBySlot[204]
+local savedHelpfulSlot2, savedHarmfulSlot2 = helpfulSlots[2], harmfulSlots[2]
+local savedGroupUnitKey, savedGroupUnit = groupFrame.MSUFUnitKey, groupFrame.unit
+helpfulSlots[2] = nil
+harmfulSlots[2] = nil
+auraBySlot[103] = nil
+auraBySlot[204] = nil
+auraBySlot[101] = {
+    auraInstanceID = 7301, spellId = 900301, name = "Rebound Group Buff",
+    icon = 134420, applications = 1, duration = 20, expirationTime = 70,
+    isHelpful = true, isHarmful = false, sourceUnit = "player",
+}
+auraBySlot[202] = {
+    auraInstanceID = 8301, spellId = 900401, name = "Rebound Group Debuff",
+    icon = 134421, applications = 1, duration = 18, expirationTime = 68,
+    isHelpful = false, isHarmful = true, sourceUnit = "player",
+}
+nativePlayerAuraIDs[7301] = true
+nativePlayerAuraIDs[8301] = true
+combat = true
+groupFrame.MSUFUnitKey = "party3"
+assert(namespace.MSUF_Auras3.OnFrameUnitChanged(groupFrame, "party1", "party3") == true,
+    "Classic in-combat group rebind did not rescan the new unit")
+assert(groupBuff.visible == 1 and groupBuff[1].auraInstanceID == 7301
+    and groupDebuff.visible == 1 and groupDebuff[1].auraInstanceID == 8301,
+    "Classic in-combat group rebind kept the previous unit's auras")
+assert(namespace.MSUF_Auras3._deferredAuraRuntime == true,
+    "Classic in-combat group rebind did not defer its config recompile")
+combat = false
+local rebindDriver = assert(namespace.MSUF_Auras3._deferredAuraRuntimeFrame,
+    "Classic in-combat group rebind deferred driver missing")
+rebindDriver._scripts.OnEvent(rebindDriver, "PLAYER_REGEN_ENABLED")
+assert(namespace.MSUF_Auras3._deferredAuraRuntime ~= true,
+    "Classic in-combat group rebind deferral did not flush after combat")
+
+-- A hidden group child receives no UNIT_AURA. A removal delivered while it is
+-- hidden must be reconciled on the next show edge instead of leaving a stale icon.
+assert(groupFrame._scripts and type(groupFrame._scripts.OnHide) == "function",
+    "Classic group aura OnHide reconcile hook missing")
+groupFrame._shown = false
+groupFrame._scripts.OnHide(groupFrame)
+auraBySlot[202] = nil
+groupFrame._shown = true
+groupFrame._scripts.OnShow(groupFrame)
+assert(groupDebuff.visible == 0 and groupBuff.visible == 1 and groupBuff[1].auraInstanceID == 7301,
+    "Classic group aura OnShow did not reconcile an aura removed while hidden")
+assert(groupFrame._msufA3ClassicHiddenStale == nil,
+    "Classic group aura OnShow left its hidden-stale marker set")
+
+auraBySlot[101], auraBySlot[103] = savedAura101, savedAura103
+auraBySlot[202], auraBySlot[204] = savedAura202, savedAura204
+helpfulSlots[2], harmfulSlots[2] = savedHelpfulSlot2, savedHarmfulSlot2
+nativePlayerAuraIDs[7301] = nil
+nativePlayerAuraIDs[8301] = nil
+groupFrame.MSUFUnitKey, groupFrame.unit = savedGroupUnitKey, savedGroupUnit
 registered.Disable(groupFrame)
 auraBySlot[101] = {
     auraInstanceID = 7007, spellId = 900007, name = "Own HoT",
@@ -893,5 +1123,238 @@ combat = false
 deferred._scripts.OnEvent(deferred, "PLAYER_REGEN_ENABLED")
 assert(namespace.MSUF_Auras3._deferredAuraRuntime ~= true,
     "Classic deferred aura apply did not flush after combat")
+
+-- Weapon-enchant synthetic auras reuse one data table per slot on the lane.
+-- Consecutive full scans must yield identical entries on the same tables,
+-- refresh changed fields in place, and leave no entry for an ended enchant.
+local ENCHANT_FIELDS = {
+    "auraInstanceID", "isHelpful", "isHarmful", "isFromPlayerOrPlayerPet", "isPlayerAura", "name",
+    "icon", "applications", "duration", "expirationTime", "timeMod", "spellId", "_msufA3WeaponEnchantSlot",
+}
+local function EnchantExpected(slot, icon, applications, duration, expirationTime)
+    return {
+        auraInstanceID = -1000 - slot, isHelpful = true, isHarmful = false,
+        isFromPlayerOrPlayerPet = true, isPlayerAura = true, name = _G.ENCHANTED or "Weapon Enchant",
+        icon = icon, applications = applications, duration = duration,
+        expirationTime = expirationTime, timeMod = 1, spellId = 0, _msufA3WeaponEnchantSlot = slot,
+    }
+end
+local function AssertEnchantEntry(data, expected, label)
+    assert(type(data) == "table", label .. ": weapon enchant entry missing")
+    local expectedCount = 0
+    for i = 1, #ENCHANT_FIELDS do
+        local field = ENCHANT_FIELDS[i]
+        if expected[field] ~= nil then expectedCount = expectedCount + 1 end
+        assert(data[field] == expected[field], label .. ": weapon enchant field " .. field .. " was "
+            .. tostring(data[field]) .. ", expected " .. tostring(expected[field]))
+    end
+    local fieldCount = 0
+    for _ in pairs(data) do fieldCount = fieldCount + 1 end
+    assert(fieldCount == expectedCount, label .. ": weapon enchant entry carried " .. fieldCount
+        .. " fields, expected " .. expectedCount)
+end
+local function OrderedIDs(lane)
+    local ids = {}
+    for i = 1, lane.orderedCount or 0 do ids[#ids + 1] = tostring(lane.ordered[i]) end
+    return table.concat(ids, ",")
+end
+local function EnchantScan(label)
+    assert(registered.Update(playerFrame, "WEAPON_ENCHANT_CHANGED") == true, label .. " did not run")
+end
+
+EnchantScan("first weapon-enchant scan")
+local mainEnchant, offEnchant = playerBuff.all[-1016], playerBuff.all[-1017]
+AssertEnchantEntry(playerBuff.all[-1016], EnchantExpected(16, 160, 2, 600, 350), "first scan main hand")
+AssertEnchantEntry(playerBuff.all[-1017], EnchantExpected(17, 170, 1, 1800, 1250), "first scan off hand")
+local firstVisible, firstOrder = playerBuff.visible, OrderedIDs(playerBuff)
+assert(firstOrder:find("^%-1017,%-1016") and playerBuff.active[-1017] == true
+    and playerBuff.active[-1016] == true and playerBuff[1]._msufA3WeaponEnchantSlot == 17
+    and playerBuff[2]._msufA3WeaponEnchantSlot == 16,
+    "first weapon-enchant scan changed lane order or activity: " .. firstOrder)
+
+EnchantScan("second weapon-enchant scan")
+assert(rawequal(playerBuff.all[-1016], mainEnchant) and rawequal(playerBuff.all[-1017], offEnchant),
+    "consecutive weapon-enchant scans did not reuse the per-slot data tables")
+AssertEnchantEntry(playerBuff.all[-1016], EnchantExpected(16, 160, 2, 600, 350), "second scan main hand")
+AssertEnchantEntry(playerBuff.all[-1017], EnchantExpected(17, 170, 1, 1800, 1250), "second scan off hand")
+assert(playerBuff.visible == firstVisible and OrderedIDs(playerBuff) == firstOrder
+    and playerBuff[1]._msufA3WeaponEnchantSlot == 17 and playerBuff[2]._msufA3WeaponEnchantSlot == 16,
+    "consecutive weapon-enchant scans produced different lane results")
+
+local savedEnchantInfo, savedItemTexture = _G.GetWeaponEnchantInfo, _G.GetInventoryItemTexture
+_G.GetWeaponEnchantInfo = function()
+    return true, 900000, 5, 0, false, nil, 0, 0, false, nil, 0, 0
+end
+_G.GetInventoryItemTexture = function(_, slot)
+    if slot == 16 then return nil end
+    return slot * 10
+end
+EnchantScan("weapon-enchant scan after the off-hand enchant ended")
+assert(playerBuff.all[-1017] == nil and playerBuff.active[-1017] == nil
+    and (playerBuff.visibleByID or {})[-1017] == nil
+    and not ("," .. OrderedIDs(playerBuff) .. ","):find(",-1017,", 1, true),
+    "ended off-hand weapon enchant left a stale lane entry")
+assert(rawequal(playerBuff.all[-1016], mainEnchant),
+    "changed main-hand weapon enchant did not reuse its slot data table")
+AssertEnchantEntry(playerBuff.all[-1016], EnchantExpected(16, nil, 5, 1800, 950), "changed main hand")
+assert(playerBuff.visible == firstVisible - 1 and playerBuff[1]._msufA3WeaponEnchantSlot == 16,
+    "ended off-hand weapon enchant still rendered")
+for i = 1, playerBuff.visible do
+    assert(playerBuff[i]._msufA3WeaponEnchantSlot ~= 17,
+        "ended off-hand weapon enchant kept a visible button")
+end
+
+_G.GetWeaponEnchantInfo, _G.GetInventoryItemTexture = savedEnchantInfo, savedItemTexture
+EnchantScan("weapon-enchant scan after the off-hand enchant returned")
+assert(rawequal(playerBuff.all[-1017], offEnchant) and rawequal(playerBuff.all[-1016], mainEnchant),
+    "returning weapon enchant did not reuse its slot data table")
+AssertEnchantEntry(playerBuff.all[-1016], EnchantExpected(16, 160, 2, 600, 350), "restored main hand")
+AssertEnchantEntry(playerBuff.all[-1017], EnchantExpected(17, 170, 1, 1800, 1250), "restored off hand")
+assert(playerBuff.visible == firstVisible and OrderedIDs(playerBuff) == firstOrder,
+    "restored weapon enchants changed lane results")
+
+-- Token-filter membership is cached per unit and per filter until that unit's
+-- next UNIT_AURA bumps its serial. Two units and two filters must never share
+-- a cached set, a repeat query must not rescan, and an aura add or remove must
+-- reach only the unit whose event arrived.
+local tokenSet = assert(namespace.MSUF_Auras3._ClassicAuraTokenSet,
+    "Classic token-membership accessor missing")
+local memberIDs = {
+    target = { ["HELPFUL|PLAYER"] = { 7007 }, ["HARMFUL|PLAYER"] = { 7201 } },
+    player = { ["HELPFUL|PLAYER"] = { 9101 }, ["HARMFUL|PLAYER"] = { 9201, 9202 } },
+}
+local membershipScans = {}
+_G.C_UnitAuras.GetUnitAuraInstanceIDs = function(unit, filter)
+    local scanKey = unit .. "/" .. filter
+    membershipScans[scanKey] = (membershipScans[scanKey] or 0) + 1
+    local ids = memberIDs[unit] and memberIDs[unit][filter] or {}
+    local out = {}
+    for i = 1, #ids do out[i] = ids[i] end
+    return out
+end
+local MEMBERSHIP_QUERIES = {
+    { "target", "HELPFUL|PLAYER" }, { "target", "HARMFUL|PLAYER" },
+    { "player", "HELPFUL|PLAYER" }, { "player", "HARMFUL|PLAYER" },
+}
+local function AssertMembership(expected, expectedScans, label)
+    for i = 1, #MEMBERSHIP_QUERIES do
+        local unit, filter = MEMBERSHIP_QUERIES[i][1], MEMBERSHIP_QUERIES[i][2]
+        local ids = {}
+        for id in pairs(tokenSet(unit, filter)) do ids[#ids + 1] = id end
+        table.sort(ids)
+        local actual = table.concat(ids, ",")
+        assert(actual == expected[i], label .. ": " .. unit .. " " .. filter
+            .. " membership was '" .. actual .. "', expected '" .. expected[i] .. "'")
+        local scans = membershipScans[unit .. "/" .. filter] or 0
+        assert(scans == expectedScans[i], label .. ": " .. unit .. " " .. filter
+            .. " membership scanned " .. scans .. " times, expected " .. expectedScans[i])
+    end
+end
+
+-- Bump both serials first so sets cached by earlier sections cannot answer.
+registered.Update(frame, "UNIT_AURA", "target", { isFullUpdate = true })
+registered.Update(playerFrame, "UNIT_AURA", "player", { isFullUpdate = true })
+AssertMembership({ "7007", "7201", "9101", "9201,9202" }, { 1, 1, 1, 1 }, "initial token membership")
+AssertMembership({ "7007", "7201", "9101", "9201,9202" }, { 1, 1, 1, 1 }, "repeat token membership")
+assert(rawequal(tokenSet("target", "HELPFUL|PLAYER"), tokenSet("target", "HELPFUL|PLAYER"))
+    and not rawequal(tokenSet("target", "HELPFUL|PLAYER"), tokenSet("player", "HELPFUL|PLAYER"))
+    and not rawequal(tokenSet("target", "HELPFUL|PLAYER"), tokenSet("target", "HARMFUL|PLAYER")),
+    "Classic token membership sets were shared across units or filters")
+
+-- An aura added on the target stays invisible to the cached set until the
+-- target's own UNIT_AURA arrives, and that event must not rescan the player.
+memberIDs.target["HELPFUL|PLAYER"] = { 7007, 7011 }
+AssertMembership({ "7007", "7201", "9101", "9201,9202" }, { 1, 1, 1, 1 }, "token membership before the target add event")
+registered.Update(frame, "UNIT_AURA", "target", { addedAuras = { {
+    auraInstanceID = 7011, spellId = 900011, name = "Membership Add",
+    icon = 134430, applications = 1, duration = 10, expirationTime = 60,
+    isHelpful = true, isHarmful = false, sourceUnit = "player",
+} } })
+AssertMembership({ "7007,7011", "7201", "9101", "9201,9202" }, { 2, 2, 1, 1 }, "token membership after the target add")
+
+memberIDs.player["HARMFUL|PLAYER"] = { 9202 }
+registered.Update(playerFrame, "UNIT_AURA", "player", { removedAuraInstanceIDs = { 9201 } })
+AssertMembership({ "7007,7011", "7201", "9101", "9202" }, { 2, 2, 2, 2 }, "token membership after the player remove")
+
+memberIDs.target["HELPFUL|PLAYER"] = { 7007 }
+registered.Update(frame, "UNIT_AURA", "target", { removedAuraInstanceIDs = { 7011 } })
+AssertMembership({ "7007", "7201", "9101", "9202" }, { 3, 3, 2, 2 }, "token membership after the target remove")
+
+-- An update-only payload refreshes existing auras and cannot change filter
+-- membership, so the cached sets must answer; a full update rebuilds them.
+registered.Update(frame, "UNIT_AURA", "target", { updatedAuraInstanceIDs = { 7007 } })
+AssertMembership({ "7007", "7201", "9101", "9202" }, { 3, 3, 2, 2 }, "token membership after a target update-only payload")
+registered.Update(frame, "UNIT_AURA", "target", { isFullUpdate = true })
+AssertMembership({ "7007", "7201", "9101", "9202" }, { 4, 4, 2, 2 }, "token membership after a target full update")
+-- A newly applied config rescans its lanes, so even an update-only payload
+-- that applies it must rebuild the sets.
+namespace.MSUF_Auras3.BumpRuntimeConfig()
+registered.Update(frame, "UNIT_AURA", "target", { updatedAuraInstanceIDs = { 7007 } })
+AssertMembership({ "7007", "7201", "9101", "9202" }, { 5, 5, 2, 2 }, "token membership after a target config apply")
+_G.C_UnitAuras.GetUnitAuraInstanceIDs = nil
+
+-- A deferred flush consumes its queue only as work completes. A Lua error while
+-- applying one scope must keep that scope queued and PLAYER_REGEN_ENABLED
+-- registered; a scope that already applied is consumed.
+do
+    local A3 = namespace.MSUF_Auras3
+    assert(A3._deferredAuraRuntime == nil, "Classic deferred aura queue was not empty before the flush checks")
+    local driver = assert(A3._deferredAuraRuntimeFrame, "Classic deferred driver missing")
+    local function Armed() return driver._events ~= nil and driver._events.PLAYER_REGEN_ENABLED == true end
+    local function QueueInCombat(...)
+        combat = true
+        for i = 1, select("#", ...) do
+            assert(A3.RefreshUnit((select(i, ...))) == false, "Classic in-combat RefreshUnit was not deferred")
+        end
+        combat = false
+    end
+    local realRefreshUnit = A3.RefreshUnit
+    local calls = {}
+    local function FailOnCall(failAt)
+        calls = {}
+        A3.RefreshUnit = function(scope)
+            calls[#calls + 1] = scope
+            if #calls == failAt then error("render smoke: injected aura apply failure", 0) end
+            return realRefreshUnit(scope)
+        end
+    end
+
+    QueueInCombat("target", "focus")
+    assert(A3._deferredAuraRuntime == true and A3._deferredAuraRuntimeScopes.target == true
+        and A3._deferredAuraRuntimeScopes.focus == true and Armed(),
+        "Classic in-combat RefreshUnit did not queue both scopes with the combat-end event")
+    -- Fire the combat-end event itself, so the driver's own unregister is
+    -- covered along with the flush.
+    FailOnCall(2)
+    local ok, err = pcall(driver._scripts.OnEvent, driver, "PLAYER_REGEN_ENABLED")
+    A3.RefreshUnit = realRefreshUnit
+    assert(ok == false and tostring(err):find("injected aura apply failure", 1, true) and #calls == 2,
+        "Classic deferred flush did not surface the injected apply failure")
+    local scopes = A3._deferredAuraRuntimeScopes
+    assert(A3._deferredAuraRuntime == true and scopes ~= nil and scopes[calls[2]] == true,
+        "Classic deferred flush dropped the scope whose apply failed")
+    assert(scopes[calls[1]] == nil, "Classic deferred flush kept a scope that already applied")
+    assert(Armed(), "Classic deferred flush unregistered PLAYER_REGEN_ENABLED before its queue was consumed")
+    driver._scripts.OnEvent(driver, "PLAYER_REGEN_ENABLED")
+    assert(A3._deferredAuraRuntime == nil and A3._deferredAuraRuntimeScopes == nil and not Armed(),
+        "Classic combat-end retry did not consume the stale aura queue")
+
+    -- Out of combat, RefreshAll and a scoped RequestApply also retry a stale queue.
+    QueueInCombat("target")
+    FailOnCall(1)
+    assert(pcall(A3._FlushDeferredAuraRuntime) == false, "Classic deferred flush ignored the injected failure")
+    A3.RefreshUnit = realRefreshUnit
+    assert(A3._deferredAuraRuntimeScopes.target == true and Armed(), "Classic failed flush lost its queue")
+    assert(A3.RefreshAll() == true and A3._deferredAuraRuntime == nil and not Armed(),
+        "Classic RefreshAll did not consume a stale aura queue")
+
+    QueueInCombat("target")
+    FailOnCall(1)
+    assert(pcall(A3._FlushDeferredAuraRuntime) == false, "Classic deferred flush ignored the injected failure")
+    A3.RefreshUnit = realRefreshUnit
+    A3.RequestApply("focus", "render-smoke-stale-queue")
+    assert(A3._deferredAuraRuntime == nil and A3._deferredAuraRuntimeScopes == nil and not Armed(),
+        "Classic scoped RequestApply did not consume a stale aura queue")
+end
 
 print("classic aura render smoke passed: " .. backendPath)

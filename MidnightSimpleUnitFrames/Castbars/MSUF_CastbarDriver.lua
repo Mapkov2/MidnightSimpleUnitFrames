@@ -402,6 +402,9 @@ local function InvalidateBuildState(unit)
     end
 end
 
+-- _msufPushbackCastID/_msufPushbackStartMS are deliberately not cleared here:
+-- the legacy pushback delay is the start shift since the first sighting of the
+-- same cast, and every DELAYED re-read passes through this reset first.
 local function ResetFallbackTiming(frame)
     frame.endTime = nil
     frame._msufPlainEndTime = nil
@@ -506,7 +509,21 @@ local function ApplyFallbackActiveDuration(frame, state, isChannel)
     local countsDown = type(_G.MSUF_GetCastbarCountsDown) == "function"
         and _G.MSUF_GetCastbarCountsDown(frame, isChannel and true or false) == true
     frame._msufCountsDown = countsDown
-    frame._msufPushbackMS = ToPlainNumber(state.delayTimeMS)
+    local resolvePushback = _G.MSUF_Castbar_ResolvePushbackMS
+    if type(resolvePushback) == "function" then
+        frame._msufPushbackMS = resolvePushback(frame, state)
+    else
+        frame._msufPushbackMS = ToPlainNumber(state.delayTimeMS)
+    end
+    -- The cast text above was written before the legacy delay was known, so a
+    -- measured start shift repaints it once with the "+x.x" suffix.
+    if state.delayTimeMS == nil
+        and frame._msufPushbackMS ~= nil
+        and frame.castText
+        and type(_G.MSUF_RefreshCastbarSpellNameText) == "function"
+    then
+        _G.MSUF_RefreshCastbarSpellNameText(frame)
+    end
     if not SetFallbackStatusBar(frame, remaining, total, reverseFill, countsDown) then
         return false
     end
@@ -936,7 +953,7 @@ local function RefreshAllCastTargetTextColors()
     end
 
     local arenaCastbars = _G.MSUF_ArenaCastbars
-    for index = 1, 3 do
+    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         RefreshLive((arenaCastbars and arenaCastbars[index]) or _G["MSUF_ArenaCastbar" .. index])
         RefreshPreview(index == 1 and (_G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1)
             or _G["MSUF_ArenaCastbarPreview" .. index])

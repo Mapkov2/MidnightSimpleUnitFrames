@@ -33,8 +33,12 @@ end
 local status = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection_Classic.lua")
 assert(status:find("identityRestrictionWarning", 1, true),
     "Classic status menu lost the current Retail identity warning")
-assert(status:find("textColor", 1, true),
-    "Classic status menu lost its Classic text-color control")
+-- Retail b2abf551: the ::: text shortcut is the single status text-color entry
+-- point, so it carries the color search and the placement swatch is gone.
+assert(status:find("status.selected.text_settings", 1, true),
+    "Classic status menu no longer registers the ::: text shortcut for search")
+assert(not status:find('W.Color(placementCard, "Text color")', 1, true),
+    "Classic status menu brought back the duplicate placement text-color swatch")
 
 local specs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs_Classic.lua")
 assert(specs:find("statusPetHappiness", 1, true) and specs:find("stance|showStanceIndicator", 1, true),
@@ -52,5 +56,109 @@ for _, contract in ipairs({
     assert(search:find(contract, 1, true),
         "Classic search index is missing a current menu contract: " .. contract)
 end
+assert(not search:find("status%2Eselected%2Etext_color", 1, true),
+    "Classic search index still lists the removed placement status text-color swatch")
+-- Settings the Classic menu no longer builds must not stay searchable.
+for _, key in ipairs({
+    "showGCDBar", "showGCDBarTime", "showGCDBarSpell",
+    "empowerColorStages", "empowerStageBlink", "empowerStageBlinkTime",
+    "tooltipShowAuraSpellIDs", "tooltipShowAuraCasterNames",
+}) do
+    assert(not search:find("\tgeneral." .. key .. "\t", 1, true),
+        "Classic search index lists a setting with no Classic control: general." .. key)
+end
+
+local aurasPage = (Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Classic.lua"):gsub("\r\n", "\n"))
+assert(not aurasPage:find("BuildGroupFilters", 1, true),
+    "Classic Aura menu kept the unreachable Retail group filter builder")
+assert(not aurasPage:find('"Full-Frame Effect"', 1, true),
+    "Classic Aura menu exposes the lane Full-Frame Effect section that no Classic runtime renders")
+-- Whole live source lines, so a commented-out, disabled or inverted guard fails.
+-- classic_aura_menu_filters_smoke.lua drives the same setter for behaviour.
+assert(aurasPage:find('\n[ \t]*if value == true and lane == "debuff" then Model%.WriteFilter%(unit, lane, "nonPlayer", false%) end\n'),
+    "Classic Only mine no longer clears the mutually exclusive nonPlayer debuff filter")
+local shadowAlphaAt = assert(aurasPage:find('iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)"', 1, true),
+    "Classic Aura menu lost the shared icon-style Shadow Alpha slider")
+local gateRefreshAt = assert(aurasPage:find("\n[ \t]*if sharedGlobalsOnly then M%.TrackRefresh%(ctx, function%(%) iconStyleGates%.Apply%(true%) end%) end\n", shadowAlphaAt),
+    "Classic icon-style gates are not refreshed on every shared Appearance page")
+local buffOnlyAt = assert(aurasPage:find('if sharedGlobalsOnly and previewContainer == "buff" then', shadowAlphaAt, true),
+    "Classic Aura menu lost the Buff-only Native Aura Flow section")
+assert(gateRefreshAt < buffOnlyAt,
+    "Classic icon-style gate refresh must be registered before the Buff-only Native Aura Flow section")
+local _, gateApplyCount = aurasPage:gsub("iconStyleGates%.Apply%(true%)", "")
+assert(gateApplyCount == 1,
+    "Classic icon-style gates must be re-applied from exactly one shared Appearance refresher")
+
+local function ReadLF(relativePath)
+    return (Read(relativePath):gsub("\r\n", "\n"))
+end
+local function CountPlain(haystack, needle)
+    local count, at = 0, 1
+    while true do
+        local _, finish = haystack:find(needle, at, true)
+        if not finish then return count end
+        count, at = count + 1, finish + 1
+    end
+end
+
+-- Castbar sections that no Classic client can drive stay off the page.
+local castbars = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars.lua")
+for _, contract in ipairs({
+    "if GCDBarSupported() then",
+    "GetSpellCooldownDuration",
+    "SetTimerDuration",
+    "MSUF.Client.IsClassic == true) then",
+    'M.SupportsFrameScope("focus") then',
+}) do
+    assert(castbars:find(contract, 1, true),
+        "Classic Castbar page lost a client capability gate: " .. contract)
+end
+
+-- Only the Mainline TOC loads Runtime/MSUF_TooltipSpellIDs.lua.
+local misc = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")
+assert(misc:find('\n[ \t]*if IS_MAINLINE then\n[ \t]*local tooltipSpellIDs = BindMiscToggle%(tooltips, "Show spell IDs in aura tooltips"'),
+    "Misc page builds the Mainline-only aura tooltip spell-ID switch outside the IS_MAINLINE gate")
+
+-- UnitSections hides "Reset section" for every section whose fields are missing.
+local sections = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")
+local sectionFieldCount = 0
+for key in sections:gmatch("fields = fields%.([%w_]+)") do
+    sectionFieldCount = sectionFieldCount + 1
+    assert(unit:find(key .. " = table.concat(COPY_", 1, true),
+        "Classic Unit page does not publish SectionFields." .. key .. ", so its Reset section action is hidden")
+end
+assert(sectionFieldCount >= 6, "MSUF_Menu2_UnitSections.lua no longer reads the SectionFields contract")
+assert(unit:find("loadCondShowWhenInjured loadCondActive", 1, true),
+    "Classic Load Conditions copy and reset skip loadCondShowWhenInjured")
+
+-- Arena preview branches from the Mainline Render, and Retail 7f0aa2c6 guides.
+local render = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render_Classic.lua")
+for _, contract in ipairs({
+    '(key == "arena" and "Greater Pyroblast")',
+    '(key == "arena" and g.showArenaCastTime ~= false)',
+    "timeX = -2 + (tonumber(g.arenaCastTimeOffsetX) or 0)",
+    "timeY = tonumber(g.arenaCastTimeOffsetY) or 0",
+    '((key == "boss" or key == "arena") and 180 or (key == "focus" and 180 or 275))',
+    '((key == "boss" or key == "arena") and 30 or (key == "focus" and 30 or 40))',
+    'ReadCastbarSize(key, g, w, (key == "boss" or key == "arena") and 12 or 18)',
+    'if (key == "boss" or key == "arena")\n',
+    '(key == "target" or key == "boss" or key == "arena" or key == "focus" or key == "focustarget")',
+    "box.layerVisibility.guides = g.unitPreviewGuidesEnabled == true",
+}) do
+    assert(render:find(contract, 1, true),
+        "Classic unit preview lost an Arena or Retail parity branch: " .. contract)
+end
+assert(CountPlain(render, '(key == "arena" and "arena1")') == 2,
+    "Classic unit preview must resolve arena to arena1 for the live frame and the spell-name shortener")
+assert(CountPlain(render, '(key == "arena" and g.showArenaCastTargetName == true)') == 2,
+    "Classic unit preview must honor showArenaCastTargetName in the castbar details and the footprint")
+assert(CountPlain(render, 'elseif key == "boss" or key == "arena" then') == 2,
+    "Classic unit preview must anchor the Arena castbar below the frame in both the footprint and the render")
+local classicDefaults = Read("MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua")
+assert(classicDefaults:find("g.unitPreviewGuidesEnabled = false", 1, true)
+    and classicDefaults:find("g.classPowerPreviewGuidesEnabled = false", 1, true),
+    "Classic factory profile no longer starts the previews with the Guides layer off")
+assert(not classicDefaults:find("PreviewGuidesEnabled = true", 1, true),
+    "Classic factory profile forces a preview Guides layer back on")
 
 print("Classic Menu2 Retail parity smoke passed")

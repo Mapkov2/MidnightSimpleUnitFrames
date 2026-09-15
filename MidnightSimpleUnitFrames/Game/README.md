@@ -1,20 +1,36 @@
 # MSUF client layout
 
-This directory is the client boundary for MSUF, following ElvUI's
-`Game/Shared`, `Game/Mainline`, `Game/Mists`, `Game/TBC` layout.
+This directory is the client boundary for MSUF, following ElvUI's layout:
+`Game/Shared` plus one folder per Classic client family or flavor.
 
 - `Shared` contains bootstrap code that must behave identically everywhere.
-- `Classic` contains implementations shared by more than one Classic client.
-- `Mainline`, `Mists`, and `TBC` contain the loader and adapters selected only
-  by that client's suffixed TOC.
+- `Classic` contains implementations shared by Vanilla, TBC, and Mists.
+- `Vanilla`, `TBC`, and `Mists` contain the loader manifests, adapters and data
+  selected only by that client's suffixed TOC.
+- Mainline has no folder here. `MidnightSimpleUnitFrames_Mainline.toc` loads
+  the Retail tree plus `Shared`, and never loads `Classic`, `Vanilla`, `TBC`,
+  or `Mists`.
 
 Client-only code belongs here instead of adding flavor checks to shared event
-or rendering hot paths. Mists and TBC may include an implementation from
+or rendering hot paths. Vanilla, TBC, and Mists include implementations from
 `Classic`, but they keep separate loader manifests so their contracts can
 diverge without copying the backend.
 
-The local Blizzard UI source branches used for these contracts are:
+`tools/classic-client-matrix.tsv` maps each client to the branch of the local
+Blizzard UI source mirror (`_local_workflows/references/wow-ui-source`) that
+its contracts are checked against:
 
-- `upstream/ptr`: Mainline 12.1
-- `upstream/classic`: Mists Classic
+- `upstream/classic_era`: Vanilla (Classic Era)
 - `upstream/classic_anniversary`: TBC Classic
+- `upstream/classic`: Mists Classic
+- `upstream/live`: Mainline
+
+The ptr branches (`upstream/ptr`, `upstream/ptr2`, `upstream/classic_ptr`,
+`upstream/classic_era_ptr`) are drift sentinels only. The source audit checks
+their aura API contracts when they exist; no client is packaged from them.
+
+Warning: `Blizzard_APIDocumentationGenerated` is nearly identical across the
+Classic branches, so it proves nothing about whether one flavor has an API.
+Look for a call site in a file that the flavor's TOC actually loads, checking
+its `AllowLoadGameType` tags the way `tools/audit-classic-ui-source.ps1` does,
+or follow the client gates ElvUI applies.

@@ -15,22 +15,19 @@ MSUF = MSUF or _G.MSUF_NS or {}
 
 local type = type
 local tonumber = tonumber
-local MAX_ARENA = 3
+-- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
+-- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
+-- 0..5 and fall back to 3 when the client initializer did not run.
+local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
 local RETAIL_TRINKET_TEXTURE = 1322720 -- inv_jewelry_trinketpvp_01
 local CLASSIC_TRINKET_TEXTURE = 133453 -- inv_jewelry_trinketpvp_02
 local MISTS_TRINKET_SPELL_ID = 42292
 local MISTS_TRINKET_DURATION = 120
 
 local Client = MSUF.Client or {}
--- The canonical Retail TOC does not load Game/Shared/Initialize.lua. Prefer its
--- flag when present, but derive Mainline directly when this shared feature is
--- loaded by that TOC so Retail can never fall into the numeric Classic path.
+-- Every suffixed TOC (Mainline, TBC, Mists, Vanilla) loads
+-- Game/Shared/Initialize.lua before this file, so Client.IsRetail is set.
 local IS_RETAIL = Client.IsRetail == true
-if Client.IsRetail == nil then
-    local projectID = _G.WOW_PROJECT_ID
-    local mainlineID = _G.WOW_PROJECT_MAINLINE
-    IS_RETAIL = mainlineID ~= nil and projectID == mainlineID
-end
 local IS_MISTS = Client.IsMists == true
 local FALLBACK_TEXTURE = IS_RETAIL and RETAIL_TRINKET_TEXTURE or CLASSIC_TRINKET_TEXTURE
 
@@ -438,10 +435,15 @@ local function WireEvents()
     for index = 1, #events do eventFrame:RegisterEvent(events[index][1]) end
 end
 
-WireEvents()
--- Attach Retail texture relays before the first arena response whenever the
--- native CompactArenaFrame already exists. World/opponent events retry later.
-SyncTrinketIcons(false)
+-- Defensive: Client.UnsupportedUnits marks arena absent on Classic Era, whose
+-- TOC still loads this module. The trinket export stays, but no arena event is
+-- subscribed and no relay is attached there.
+if not (type(Client.SupportsUnit) == "function" and Client.SupportsUnit("arena1") == false) then
+    WireEvents()
+    -- Attach Retail texture relays before the first arena response whenever the
+    -- native CompactArenaFrame already exists. World/opponent events retry later.
+    SyncTrinketIcons(false)
+end
 
 ExportPublic("MSUF_ArenaMatch_SyncTrinketIcons", function()
     SyncTrinketIcons(true)

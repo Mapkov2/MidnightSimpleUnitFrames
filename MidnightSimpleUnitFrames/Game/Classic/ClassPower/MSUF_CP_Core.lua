@@ -1,5 +1,5 @@
---- ClassPower/MSUF_CP_Core.lua
---- Builder bundle for the ClassPower controller.
+--- Game/Classic/ClassPower/MSUF_CP_Core.lua
+--- Builder bundle for the Classic ClassPower controller.
 ---
 --- The controller owns events and live state; this file contributes closures for
 --- build, layout, presentation, runtime routing, and class-specific prediction.
@@ -217,7 +217,14 @@ builders.BUILD = function(E)
 
         --- Parent to the player frame so ClassPower follows scale, strata, and
         --- secure visibility rules from the owning unit frame.
-        local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame)
+        --- Parent follows Retail: the health visual root (UF.EnsureHealthVisualRoot,
+        --- built by the factory on every Classic TOC). Its only alpha writer is the
+        --- showWhenInjured load condition, so the bar fades with the frame's health
+        --- visuals exactly as on Retail; frames without the root keep the player frame.
+        local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame._msufHealthVisualRoot or playerFrame)
+        -- Native pixel rounding; the pips anchor against this rect.
+        local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+        if type(roundLayout) == "function" then roundLayout(c, true) end
         c._msufOwnedAnchorRoot = true
         local b = _cpDB.bars or {}
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
@@ -847,6 +854,10 @@ builders.PRESENTATION = function(E)
         region._msufCPShadowX, region._msufCPShadowY = targetShadowX, targetShadowY
     end
 
+    --- Bound directly instead of Retail's ApplyClassPowerFont wrapper: the shared
+    --- Kernel resolver (MSUF_Libs.lua) already substitutes FRIZQT for missing
+    --- media and calls MSUF_MarkFontApplyFailed when an apply does not stick,
+    --- and CP_ApplyFont ignores the result because its font stamps own retries.
     local ApplyClassPowerFont = _G.MSUF_ApplyResolvedFont
 
     --- Font refresh is driven by global font serials and ClassPower options.
@@ -1057,7 +1068,11 @@ builders.RUNTIME = function(env)
         elseif mode == CPK.MODE.AURA_SEGMENTED then
             if powerType == "MAELSTROM_WEAPON" then
                 maxP = 10
-                local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
+                local getMaxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+                local spellMax
+                if type(getMaxApplications) == "function" then
+                    spellMax = getMaxApplications(CPK.SPELL.MAELSTROM_WEAPON)
+                end
                 if NotSecret(spellMax) and type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6
@@ -1153,6 +1168,18 @@ builders.RUNTIME = function(env)
         end
     end
 
+    --- Deferred structural rebuild. A form change delivers UPDATE_SHAPESHIFT_FORM
+    --- and UNIT_DISPLAYPOWER together; the display-power path usually rebuilds
+    --- first, so the timer re-checks the signature instead of rebuilding twice.
+    local function RefreshIfStructureStillChanged()
+        local flags, powerType, renderMode = CP_ComputeStructuralSignature()
+        if flags ~= CP.structuralFlags
+            or powerType ~= CP.structuralPowerType
+            or renderMode ~= CP.structuralRenderMode then
+            FullRefresh()
+        end
+    end
+
     --- Talent/spec/display events can invalidate render mode. Compare the
     --- structural signature first; only fall back to FullRefresh when the shape
     --- of the resource display actually changed.
@@ -1163,7 +1190,7 @@ builders.RUNTIME = function(env)
                 or powerType ~= CP.structuralPowerType
                 or renderMode ~= CP.structuralRenderMode then
                 if useTimer then
-                    C_Timer.After(0.1, FullRefresh)
+                    C_Timer.After(0.1, RefreshIfStructureStillChanged)
                 else
                     ThrottledFullRefresh()
                 end
@@ -1205,8 +1232,8 @@ builders.RUNTIME = function(env)
     end
 
     --- Aura-backed class resources keep their own player-only UNIT_AURA traffic.
-    --- Ebon Might is native AuraContainer-owned in 12.1 and never enters this
-    --- path; only segmented aura resources and Stagger update here.
+    --- Only aura resources (on Classic, Mists Arcane Charges) and the Retail-only
+    --- Stagger mode update here.
     local function OnAuraUpdate(unit)
         if CP.visible and CP.isAuraPower then
             RunActiveUpdate(CP.powerType, CP.currentMax)

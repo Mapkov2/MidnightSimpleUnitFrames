@@ -26,6 +26,10 @@ local BOSS_LOOKUP = {
 }
 local ARENA_UNITS = { "arena1", "arena2", "arena3" }
 local ARENA_LOOKUP = { arena1 = true, arena2 = true, arena3 = true }
+for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    ARENA_UNITS[#ARENA_UNITS + 1] = "arena" .. i
+    ARENA_LOOKUP["arena" .. i] = true
+end
 
 local function AuraDB()
     local auras, shared

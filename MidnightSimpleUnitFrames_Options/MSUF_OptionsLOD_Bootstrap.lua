@@ -39,6 +39,11 @@ end
 function menu.SupportsUnitPage(pageKey, settingKey)
     local unit = type(pageKey) == "string" and pageKey:match("^uf_(.+)$")
     if settingKey == "general.bossTargetOutlineMode" then unit = "boss" end
+    -- Focus Kick tracks the focus unit, so its settings follow the focus scope.
+    if settingKey == "general.enableFocusKickIcon"
+        or (type(settingKey) == "string" and settingKey:find("^general%.focusKick")) then
+        unit = "focus"
+    end
     local settingScope = type(settingKey) == "string" and settingKey:match("^([^%.]+)%.")
     if settingScope and not menu.SupportsFrameScope(settingScope) then return false end
     return not unit or menu.SupportsFrameScope(unit)

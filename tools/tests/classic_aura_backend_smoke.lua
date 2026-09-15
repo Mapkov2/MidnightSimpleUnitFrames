@@ -100,6 +100,7 @@ local classicPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_A
 local featuresPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
 local retailPath = root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 assert(loadfile(featuresPath))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(classicPath))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(retailPath))("MidnightSimpleUnitFrames", namespace)
 

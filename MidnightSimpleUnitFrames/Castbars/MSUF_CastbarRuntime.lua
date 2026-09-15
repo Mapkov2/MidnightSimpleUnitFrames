@@ -23,6 +23,7 @@
 ---   _msufTimerAssumeCountdown     timer-driven bar known to count down
 ---   _msufStripeReverseFill        reverse fill resolved for this cast
 ---   _msufPushbackMS               NeverSecret pushback delay captured per cast
+---                                 (shared resolver) before the castText write
 ---   _msufCastbarWorkMask          WorkMask bits still owed to the Lua manager
 ---   _msufCastbarGlowTick          glow fade is part of the current work mask
 ---   _msufCastTimeEnabled/_msufCastTimeFormat/_msufCastTimeRev/_msufCastbarConfigMask
@@ -34,7 +35,7 @@
 ---                                 native DurationTextBinding and its last config
 ---   _msufNativeTimeBound          native text binding is enabled on timeText
 ---   _msufNativeTextUnsafe         binding lacks a method; Lua time text instead
----   _msufNativeTimerUnsafe        SetTimerDuration unavailable; Lua fill instead
+---   _msufNativeTimerUnsafe        no SetTimerDuration: manager drives only time text + completion (legacy casts: endTime Lua fill)
 ---   _msufNativeCompletionTimer/_msufNativeCompletionDeadline/
 ---   _msufNativeCompletionCallback C_Timer completion arming for native casts
 ---   _msufNativeCompletionUnsafe   completion timer failed; stay on the manager
@@ -970,6 +971,17 @@ function Runtime:ApplyActive(frame, state, options)
         frame.icon:SetTexture(state.icon)
     end
 
+    -- Pushback: NeverSecret, captured once per cast so the text writer only
+    -- reads a frame field. It is stored before the cast text write, which
+    -- composes the "+x.x" suffix, so a pushed-back cast carries the suffix on
+    -- its first paint. The shared resolver passes a client delayTimeMS through;
+    -- nil when the state carries no delay.
+    local resolvePushback = _G.MSUF_Castbar_ResolvePushbackMS
+    if type(resolvePushback) == "function" then
+        frame._msufPushbackMS = resolvePushback(frame, state)
+    else
+        frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
+    end
     SetText(frame, "castText", state.text or spellName or "")
 
     local reverseFill = ResolveReverseFill(frame, state, isChanneled)
@@ -978,9 +990,6 @@ function Runtime:ApplyActive(frame, state, options)
     -- count direction from the cast type instead of inferring it from the anchor.
     local countsDown = CountsDown(frame, isChanneled)
     frame._msufCountsDown = countsDown
-    -- Pushback: NeverSecret, captured once per cast so the text writer only
-    -- reads a frame field. nil when the state carries no delay.
-    frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
     -- StableDuration just re-assigned this cast's times into the shared
     -- container, so the bar must rebind even when the object identity matches.
     local timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled, true) and true or false

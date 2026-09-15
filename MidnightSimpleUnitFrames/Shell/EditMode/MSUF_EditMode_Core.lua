@@ -696,6 +696,10 @@ local function HardHideEditModePreviews()
     PublishCompat("MSUF_PreviewTestMode", false)
     PublishCompat("MSUF_BossTestMode", false)
     PublishCompat("MSUF2_BossUnitframePreviewActive", nil)
+    --- Arena mirrors the boss preview flags. Leaving them raised keeps the
+    --- secure "[nocombat] show" driver on arena1-N after exit.
+    PublishCompat("MSUF_ArenaTestMode", false)
+    PublishCompat("MSUF2_ArenaUnitframePreviewActive", nil)
 
     local hideCastbars = _G.MSUF_HideAllCastbarPreviews
     if type(hideCastbars) == "function" then
@@ -723,11 +727,22 @@ local function StopLogoIntro()
 end
 
 local function RestoreRuntimeAfterEditModeExit()
+    --- The arena preview writes synthetic opponent data into the real arena
+    --- buttons; its owner strips that data (combat-safe) and re-applies the
+    --- arena visibility, alpha, aura and castbar-preview lanes.
+    if _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit then
+        _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit()
+    end
     if _G.MSUF_RefreshAllUnitVisibilityDrivers then
         _G.MSUF_RefreshAllUnitVisibilityDrivers(false)
     end
     if _G.MSUF_UpdateBossCastbarPreview then
         _G.MSUF_UpdateBossCastbarPreview()
+    end
+    --- Inside an arena preparation room the preview replaced the prep
+    --- opponent identity; re-seed it exactly as PLAYER_ENTERING_WORLD does.
+    if _G.MSUF_ArenaMatch_SyncPrepDisplay then
+        _G.MSUF_ArenaMatch_SyncPrepDisplay()
     end
     local a3 = MSUF and MSUF.MSUF_Auras3
     if a3 and type(a3.RefreshEditPreview) == "function" then
@@ -938,6 +953,7 @@ function State.Exit(source)
     provider = nil
     externalPreviewSuspended = false
     PublishCompat("MSUF_BossTestMode", false)
+    PublishCompat("MSUF_ArenaTestMode", false)
     PublishCompat("MSUF_PreviewTestMode", false)
     SyncLegacy()
     StopLogoIntro()
@@ -1016,6 +1032,7 @@ function State.CancelAll()
     provider = nil
     externalPreviewSuspended = false
     PublishCompat("MSUF_BossTestMode", false)
+    PublishCompat("MSUF_ArenaTestMode", false)
     PublishCompat("MSUF_PreviewTestMode", false)
     PublishCompat("MSUF_UnitPreviewActive", false)
     SyncLegacy()

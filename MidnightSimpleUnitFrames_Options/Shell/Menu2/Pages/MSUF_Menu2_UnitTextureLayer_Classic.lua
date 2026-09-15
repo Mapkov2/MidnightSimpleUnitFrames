@@ -17,7 +17,7 @@ local min = math.min
 -- set: the slot bar picks the layer, the category bar picks the sub-page
 -- (General / Placement / Style / Visibility), and every binding resolves its
 -- DB key against the selected slot at read/write time. The runtime lives in
--- UnitFrames/Effects/MSUF_UF_TextureLayer.lua and re-stamps cold path only.
+-- Game/Classic/UnitFrames/Effects/MSUF_UF_TextureLayer.lua and re-stamps cold path only.
 local SLOT_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
 local TEXLAYER_ANCHORS = VTP "TOPLEFT=Top Left|TOP=Top|TOPRIGHT=Top Right|LEFT=Left|CENTER=Center|RIGHT=Right|BOTTOMLEFT=Bottom Left|BOTTOM=Bottom|BOTTOMRIGHT=Bottom Right"
 local TEXLAYER_STRATA = VTP "AUTO=Frame default|BACKGROUND=Background|LOW=Low|MEDIUM=Medium|HIGH=High|DIALOG=Dialog|TOOLTIP=Tooltip"

@@ -3317,7 +3317,7 @@ function Render.Install(Preview, deps)
     --- Mock body clamp = the shared legal size range every conf.width/height
     --- writer enforces (State/MSUF_Defaults.lua exports it; the EM2 popup
     --- clamps writes against the same table). Clamping the mock any narrower
-    --- makes the preview lie about tall/narrow frames â€” and every
+    --- makes the preview lie about tall/narrow frames — and every
     --- frame-relative offset (status icons, drag targets) with it.
     renderState.ClampUnitPreviewSize = function(w, h)
         local b = _G.MSUF_UnitFrameSizeBounds

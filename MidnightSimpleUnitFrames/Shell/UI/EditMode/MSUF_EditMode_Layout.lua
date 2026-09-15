@@ -1050,7 +1050,10 @@ local function NudgeTarget(dx, dy, exactDelta)
                 if isBoss and a2.shared and a2.shared.bossEditTogether ~= false then
                     applyKeys = { "boss1","boss2","boss3","boss4","boss5" }
                 elseif isArena and a2.shared and a2.shared.arenaEditTogether ~= false then
-                    applyKeys = { "arena1","arena2","arena3" }
+                    applyKeys = {}
+                    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+                        applyKeys[i] = "arena" .. i
+                    end
                 else
                     applyKeys = { unitKey }
                 end
@@ -1503,7 +1506,7 @@ local function SetBossPreviewPosition(point, anchor, relativePoint, x, y, conf, 
 end
 
 local function SetArenaPreviewPosition(point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
-    return SetStackedPreviewPosition("arena", 3, _G.MSUF_GetArenaLayoutDelta,
+    return SetStackedPreviewPosition("arena", tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3, _G.MSUF_GetArenaLayoutDelta,
         point, anchor, relativePoint, x, y, conf, rollbackX, rollbackY)
 end
 
@@ -1826,7 +1829,7 @@ local function SetActiveDragFlags(d, active)
     end
     if d.isArenaLayout then
         local frames = MSUF and MSUF.UF and MSUF.UF.frames
-        for i = 1, 3 do
+        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
             local frame = (frames and frames["arena" .. i]) or _G["MSUF_arena" .. i]
             if frame then frame._msufDragActive = active end
         end

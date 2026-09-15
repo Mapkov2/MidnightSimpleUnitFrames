@@ -138,7 +138,9 @@ local function AffectedUnits(unit, shared)
     if IsBoss(unit) and (not shared or shared.bossEditTogether ~= false) then
         return { "boss1", "boss2", "boss3", "boss4", "boss5" }
     elseif IsArena(unit) and (not shared or shared.arenaEditTogether ~= false) then
-        return { "arena1", "arena2", "arena3" }
+        local units = {}
+        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do units[i] = "arena" .. i end
+        return units
     end
     return { unit }
 end
@@ -636,7 +638,8 @@ local function Build()
     }, { height = 132, boxWidth = 64, peelSkin = true })
     pf.bossTogetherBtn = Quick.ToggleAt(pf, "Edit Boss 1-5 together", 160, -242, 240, 28, ApplyBossTogether,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
-    pf.arenaTogetherBtn = Quick.ToggleAt(pf, "Edit Arena 1-3 together", 160, -242, 240, 28, ApplyArenaTogether,
+    local arenaTogetherLabel = (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) > 3 and "Edit Arena 1-5 together" or "Edit Arena 1-3 together"
+    pf.arenaTogetherBtn = Quick.ToggleAt(pf, arenaTogetherLabel, 160, -242, 240, 28, ApplyArenaTogether,
         ButtonOpts(function() if pf and pf:IsShown() then Sync() end end))
     pf.unitAurasBtn = WirePopupFocus(Quick.ButtonAt(pf, "Open detailed settings", 20, -244, 334, 34, OpenUnitAuras, {
         variant = "primary", hoverWash = true,

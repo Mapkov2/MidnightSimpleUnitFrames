@@ -308,7 +308,7 @@ for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
         COPY_TEXLAYER_FIELDS[#COPY_TEXLAYER_FIELDS + 1] = texP .. texBase
     end
 end
-local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondHideInHousing loadCondActive]]
+local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondHideInHousing loadCondShowWhenInjured loadCondActive]]
 --- Size only. Placement (offsetX/offsetY, point/relativePoint, anchorFrameName and
 --- anchorToUnitframe) must never travel through Copy To: two unit frames sharing a
 --- placement land exactly on top of each other, and the covered one is then
@@ -330,6 +330,7 @@ do
 end
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
+for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do AURA_ARENA_RUNTIME_UNITS[#AURA_ARENA_RUNTIME_UNITS + 1] = "arena" .. arenaIndex end
 local UF_COPY_CATEGORIES = {
     { key = "basics",       label = "Frame Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
     { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, plus this unit's font overrides: font, outline, shadow, text color and name shortening." },
@@ -991,7 +992,7 @@ local function ClearArenaPagePreviewForCombat()
 end
 local function ArenaPreviewFramesVisible()
     local sawFrame = false
-    for i = 1, 3 do
+    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         local unit = "arena" .. i
         local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
         if frame then
@@ -1242,6 +1243,16 @@ end
 local UnitPage = M.UnitPage or {}
 M.UnitPage = UnitPage
 M.Assign(UnitPage, {
+    -- Read by MSUF_Menu2_UnitSections.lua: a section without fields hides its
+    -- "Reset section" action, so every copyable section publishes its key list.
+    SectionFields = {
+        portrait = table.concat(COPY_PORTRAIT_FIELDS, " "),
+        power_bar = table.concat(COPY_POWER_BAR_FIELDS, " "),
+        text = table.concat(COPY_TEXT_FIELDS, " "),
+        transparency = table.concat(COPY_TRANSPARENCY_FIELDS, " "),
+        load_conditions = table.concat(COPY_LOAD_CONDITION_FIELDS, " "),
+        texture_layer = table.concat(COPY_TEXLAYER_FIELDS, " "),
+    },
     UNIT_PAGES = UNIT_PAGES,
     POWER_UNITS = POWER_UNITS,
     CASTBAR_FIELDS = CASTBAR_FIELDS,

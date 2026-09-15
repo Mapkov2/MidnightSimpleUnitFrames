@@ -900,7 +900,7 @@ end
 local function ApplyArenaRuntimeVisuals(general)
     local did = false
     local arenaCastbars = _G.MSUF_ArenaCastbars
-    for index = 1, 3 do
+    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         local frame = (arenaCastbars and arenaCastbars[index])
             or _G["MSUF_ArenaCastbar" .. index]
             or _G["MSUF_arena" .. index .. "CastBar"]
@@ -921,7 +921,7 @@ local function RefreshArenaPreviews(general)
     end
 
     local did = false
-    for index = 1, 3 do
+    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         did = ApplyCastbarVisualFrameCold(_G["MSUF_ArenaCastbarPreview" .. index], general, "arena") or did
     end
     return did

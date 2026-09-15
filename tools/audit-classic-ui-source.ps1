@@ -37,11 +37,48 @@ function Assert-Contains {
     }
 }
 
-$branches = @(
-    @{ Name = "Vanilla"; Ref = "upstream/classic_era" },
-    @{ Name = "Mists"; Ref = "upstream/classic" },
-    @{ Name = "TBC"; Ref = "upstream/classic_anniversary" }
-)
+$clientMatrixPath = Join-Path $root "tools/classic-client-matrix.tsv"
+if (-not (Test-Path -LiteralPath $clientMatrixPath -PathType Leaf)) {
+    throw "Client matrix is missing: $clientMatrixPath"
+}
+$branches = @(Import-Csv -LiteralPath $clientMatrixPath -Delimiter "`t" |
+    Where-Object { $_.IsClassic -ceq "true" } |
+    ForEach-Object { @{ Name = $_.Suffix; Ref = $_.MirrorBranch; GameType = $_.GameType } })
+if ($branches.Count -eq 0) { throw "Client matrix names no Classic client: $clientMatrixPath" }
+
+# Blizzard_APIDocumentationGenerated is shared by every Classic family and proves
+# nothing about which client actually has an API. A call from a file that the
+# flavor's TOC loads does. Family tokens: classic = vanilla/tbc/.../mists.
+$gameTypeFamilies = @{ vanilla = "classic"; tbc = "classic"; mists = "classic"; mainline = "standard" }
+function Test-GameTypeAllowed {
+    param([Parameter(Mandatory = $true)][string]$Tags, [Parameter(Mandatory = $true)][string]$GameType)
+    $tokens = @($Tags -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
+    return ($tokens -contains $GameType) -or ($gameTypeFamilies[$GameType] -and ($tokens -contains $gameTypeFamilies[$GameType]))
+}
+function Assert-GameTypeCallSite {
+    param(
+        [Parameter(Mandatory = $true)][string]$Ref,
+        [Parameter(Mandatory = $true)][string]$GameType,
+        [Parameter(Mandatory = $true)][string]$Toc,
+        [Parameter(Mandatory = $true)][string]$Entry,
+        [Parameter(Mandatory = $true)][string]$File,
+        [Parameter(Mandatory = $true)][string[]]$Needles,
+        [Parameter(Mandatory = $true)][string]$Context
+    )
+    $tocText = Read-BranchFile $Ref $Toc
+    $header = [regex]::Match($tocText, '(?m)^## AllowLoadGameType:\s*(.+?)\s*$')
+    if ($header.Success -and -not (Test-GameTypeAllowed -Tags $header.Groups[1].Value -GameType $GameType)) {
+        throw "$Context`: $Toc does not load for game type $GameType"
+    }
+    $lines = @($tocText -split "`n" | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -ceq $Entry -or $_.StartsWith("$Entry [", [StringComparison]::Ordinal) })
+    if ($lines.Count -ne 1) { throw "$Context`: $Toc lists '$Entry' $($lines.Count) times" }
+    $tag = [regex]::Match($lines[0], '\[AllowLoadGameType\s+([^\]]+)\]')
+    if ($tag.Success -and -not (Test-GameTypeAllowed -Tags $tag.Groups[1].Value -GameType $GameType)) {
+        throw "$Context`: $Entry is not loaded for game type $GameType"
+    }
+    Assert-Contains (Read-BranchFile $Ref $File) $Needles $Context
+}
 
 foreach ($target in $branches) {
     $ref = $target.Ref
@@ -91,6 +128,22 @@ foreach ($target in $branches) {
         'Name = "SaveLayouts"',
         'Name = "SetActiveLayout"'
     ) "$($target.Name) Edit Mode API"
+    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType `
+        -Toc "Interface/AddOns/Blizzard_FrameXMLUtil/Blizzard_FrameXMLUtil.toc" -Entry "AuraUtil.lua" `
+        -File "Interface/AddOns/Blizzard_FrameXMLUtil/AuraUtil.lua" `
+        -Needles @('local AuraUtilDataProvider = C_UnitAuras;', 'CallDataProviderMethod("GetAuraSlots"', 'CallDataProviderMethod("GetAuraDataBySlot"') `
+        -Context "$($target.Name) loaded C_UnitAuras slot-scan call site"
+    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType `
+        -Toc "Interface/AddOns/Blizzard_EditMode/Blizzard_EditMode.toc" -Entry "Shared\EditModeManager.lua" `
+        -File "Interface/AddOns/Blizzard_EditMode/Shared/EditModeManager.lua" `
+        -Needles @('C_EditMode.GetLayouts()', 'C_EditMode.SaveLayouts(', 'C_EditMode.SetActiveLayout(') `
+        -Context "$($target.Name) loaded C_EditMode call site"
+    Assert-GameTypeCallSite -Ref $ref -GameType $target.GameType `
+        -Toc "Interface/AddOns/Blizzard_NamePlates/Blizzard_NamePlates.toc" -Entry "Blizzard_NamePlateAuras.lua" `
+        -File "Interface/AddOns/Blizzard_NamePlates/Blizzard_NamePlateAuras.lua" `
+        -Needles @('C_UnitAuras.IsAuraFilteredOutByInstanceID(') `
+        -Context "$($target.Name) loaded aura filter call site"
+    Write-Host "Blizzard source contract: $($target.Name) documents C_UnitAuras.GetAuraDuration and StatusBar:SetTimerDuration without a call site its client loads; MSUF treats both as optional"
     $editModeSystemXML = Read-BranchFile $ref "Interface/AddOns/Blizzard_EditMode/Shared/EditModeSystemTemplates.xml"
     Assert-Contains $editModeSystemXML @(
         'Enum.EditModeSystem.DamageMeter'

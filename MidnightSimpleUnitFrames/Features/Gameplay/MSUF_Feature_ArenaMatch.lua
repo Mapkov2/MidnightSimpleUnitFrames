@@ -1,5 +1,6 @@
 --- Features/Gameplay/MSUF_Feature_ArenaMatch.lua
---- Arena match helpers for the dedicated arena1-3 unit frames:
+--- Arena match helpers for the dedicated arena1..N unit frames
+--- (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists):
 ---   1. Prep-room opponent display: before the gates open the arena units do
 ---      not exist, so RegisterUnitWatch keeps the frames hidden. During the
 ---      preparation phase this module force-shows the frames (out of combat,
@@ -18,7 +19,10 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local MAX_ARENA = 3
+-- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
+-- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
+-- 0..5 and fall back to 3 when the client initializer did not run.
+local MAX_ARENA = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
 local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
     and type(_G.C_EventUtils.IsEventValid) == "function"
     and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
@@ -118,7 +122,8 @@ local function SyncPrepVisibility(opponentCount)
         return false
     end
 
-    -- arena1..3 do not exist during preparation. Their ordinary
+    -- arena1..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on
+    -- TBC/Mists) do not exist during preparation. Their ordinary
     -- RegisterUnitWatch owner therefore keeps the protected buttons hidden and
     -- wins over a direct frame:Show(). Hand visibility to LoadConditions for
     -- this out-of-combat phase; it installs the existing secure
@@ -246,6 +251,13 @@ local function LiveUnitExists(unit)
     local exists = _G.UnitExists and _G.UnitExists(unit)
     if _G.issecretvalue and _G.issecretvalue(exists) == true then return true end
     return exists == true
+end
+
+local function AnyLiveArenaUnit()
+    for index = 1, MAX_ARENA do
+        if LiveUnitExists("arena" .. index) then return true end
+    end
+    return false
 end
 
 local function SyncPrepDisplay()
@@ -392,8 +404,7 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
     end
     if event == "PLAYER_ENTERING_WORLD" then
         if HAS_PVP_MATCH_STATE_CHANGED ~= true then
-            classicMatchEngaged = LiveUnitExists("arena1")
-                or LiveUnitExists("arena2") or LiveUnitExists("arena3")
+            classicMatchEngaged = AnyLiveArenaUnit()
         end
         for index = 1, MAX_ARENA do
             unseenSlots[index] = nil
@@ -433,7 +444,13 @@ local function WireEvents()
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 
-WireEvents()
+-- Defensive: Client.UnsupportedUnits marks arena absent on Classic Era, whose
+-- TOC still loads this module. The helpers stay exported, but no arena event
+-- is subscribed there.
+local client = MSUF.Client
+if not (client and type(client.SupportsUnit) == "function" and client.SupportsUnit("arena1") == false) then
+    WireEvents()
+end
 
 ExportPublic("MSUF_ArenaMatch_SyncPrepDisplay", SyncPrepDisplay)
 ExportPublic("MSUF_ArenaMatch_SyncStealthOverlays", SyncStealthOverlays)

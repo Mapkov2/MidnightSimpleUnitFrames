@@ -16,23 +16,34 @@ $addonNames = @(
     "MidnightSimpleUnitFrames_Options",
     "MidnightSimpleUnitFrames_Assistant"
 )
-$flavors = @("Mainline", "Vanilla", "Mists", "TBC")
-$classicFlavors = @("Vanilla", "Mists", "TBC")
-$classicInterfaces = [ordered]@{
-    Vanilla = "11509"
-    TBC = "20506"
-    Mists = "50504"
+$clientMatrixPath = Join-Path $repoRoot "tools/classic-client-matrix.tsv"
+if (-not (Test-Path -LiteralPath $clientMatrixPath -PathType Leaf)) {
+    throw "Client matrix is missing: $clientMatrixPath"
+}
+$clientMatrix = @(Import-Csv -LiteralPath $clientMatrixPath -Delimiter "`t")
+$flavors = @($clientMatrix | ForEach-Object { $_.Suffix })
+$classicFlavors = @($clientMatrix | Where-Object { $_.IsClassic -ceq "true" } | ForEach-Object { $_.Suffix })
+$mainlineFlavors = @($clientMatrix | Where-Object { $_.IsClassic -ceq "false" } | ForEach-Object { $_.Suffix })
+if ($classicFlavors.Count -eq 0 -or $mainlineFlavors.Count -ne 1 -or $mainlineFlavors[0] -cne "Mainline" -or
+    ($classicFlavors.Count + $mainlineFlavors.Count) -ne $flavors.Count) {
+    throw "Client matrix must list exactly one Mainline client and at least one Classic client: $clientMatrixPath"
+}
+$classicInterfaces = [ordered]@{}
+foreach ($client in @($clientMatrix | Where-Object { $_.IsClassic -ceq "true" })) {
+    $classicInterfaces[$client.Suffix] = $client.Interfaces
 }
 
 function Normalize-ClassicReleaseVersion {
     param([Parameter(Mandatory = $true)][string]$Value)
 
     $candidate = $Value.Trim() -replace '^refs/tags/', ''
-    if ($candidate -notmatch '^classic-v(?<base>\d+(?:\.\d+)*)-alpha(?<number>\d+)$') {
-        throw "Classic release version must use 'classic-v<version>-alpha<number>'. Got: $Value"
+    if ($candidate -notmatch '^classic-v(?<base>(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*)-alpha(?<number>0|[1-9][0-9]*)$') {
+        throw "Classic release version must use 'classic-v<version>-alpha<number>' without leading zeros. Got: $Value"
     }
 
-    $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+    # The authored base is the release identity: 6.05 and 6.5 are different
+    # releases, so the components are never int-cast (which would merge them).
+    $base = $Matches["base"]
     $number = [int]$Matches["number"]
     return "$base-alpha$number"
 }
@@ -46,7 +57,8 @@ function Normalize-VersionKey {
     $candidate = $candidate -replace '(?i)^classic[\s._-]*', ''
     $candidate = $candidate -replace '^v(?=\d)', ''
     if ($candidate -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|a)[\s._-]*(?<number>\d+))\s*$') {
-        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        # Keep the authored base so a 6.05 heading can never select the 6.5 section.
+        $base = $Matches["base"]
         return "$base-alpha$([int]$Matches["number"])"
     }
     return $candidate.ToLowerInvariant()
@@ -89,6 +101,16 @@ function Get-TocField {
         throw "Expected exactly one '$Name' field in TOC content; found $($matches.Count)."
     }
     return $matches[0].Groups[1].Value.Trim()
+}
+
+function Get-InterfaceSetKey {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value)
+
+    $items = @($Value -split ',' | ForEach-Object { $_.Trim() })
+    foreach ($item in $items) {
+        if ($item -notmatch '^[1-9][0-9]*$') { throw "Malformed interface list: '$Value'" }
+    }
+    return ((@($items | ForEach-Object { [int]$_ }) | Sort-Object -Unique) -join ',')
 }
 
 function Set-StagedTocVersion {
@@ -326,7 +348,7 @@ $sourceTocRelativePaths = @($sourceTocFiles | ForEach-Object {
     $_.FullName.Substring($repoRoot.TrimEnd('\', '/').Length + 1).Replace('\', '/')
 } | Sort-Object)
 if (($sourceTocRelativePaths -join "`n") -ne (($expectedTocRelativePaths | Sort-Object) -join "`n")) {
-    throw "Classic source must contain exactly 12 suffixed TOCs. Expected [$($expectedTocRelativePaths -join ', ')], got [$($sourceTocRelativePaths -join ', ')]."
+    throw "Classic source must contain exactly $($expectedTocRelativePaths.Count) suffixed TOCs. Expected [$($expectedTocRelativePaths -join ', ')], got [$($sourceTocRelativePaths -join ', ')]."
 }
 
 $mainlineSourceHashes = @{}
@@ -340,8 +362,8 @@ foreach ($addon in $addonNames) {
         $actualVersion = Get-TocField -Content $content -Name 'Version'
         if ($classicInterfaces.Contains($flavor)) {
             $actualInterface = Get-TocField -Content $content -Name 'Interface'
-            if ($actualInterface -ne $classicInterfaces[$flavor]) {
-                throw "$relative has Interface '$actualInterface'; expected '$($classicInterfaces[$flavor])'."
+            if ((Get-InterfaceSetKey $actualInterface) -cne (Get-InterfaceSetKey $classicInterfaces[$flavor])) {
+                throw "$relative has Interface '$actualInterface'; expected the client matrix set '$($classicInterfaces[$flavor])'."
             }
             if ($actualVersion -ne $release) {
                 throw "$relative has Version '$actualVersion'; expected Classic release '$release'."
@@ -392,7 +414,7 @@ if (-not $stageRoot.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase)
 }
 
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-$zipPath = Join-Path $outputRoot "MSUF-$release-Mainline-Vanilla-Mists-TBC.zip"
+$zipPath = Join-Path $outputRoot ('MSUF-' + $release + '-' + ($flavors -join '-') + '.zip')
 $releaseNotesMarkdownPath = Join-Path $outputRoot 'RELEASE_NOTES_CLASSIC.md'
 $releaseNotesHtmlPath = Join-Path $outputRoot 'RELEASE_NOTES_CLASSIC_CF.html'
 
@@ -429,7 +451,7 @@ try {
         Get-RelativePath -Root $stageRoot -FullName $_.FullName
     } | Sort-Object)
     if (($stagedTocs -join "`n") -ne (($expectedTocRelativePaths | Sort-Object) -join "`n")) {
-        throw "Classic package stage must contain exactly the expected 12 suffixed TOCs."
+        throw "Classic package stage must contain exactly the expected $($expectedTocRelativePaths.Count) suffixed TOCs."
     }
 
     [IO.File]::WriteAllText($releaseNotesMarkdownPath, $releaseNotesMarkdown, [Text.UTF8Encoding]::new($false))
@@ -450,7 +472,7 @@ try {
 
         $zipTocs = @($fileEntryNames | Where-Object { $_ -match '(?i)\.toc$' } | Sort-Object)
         if (($zipTocs -join "`n") -ne (($expectedTocRelativePaths | Sort-Object) -join "`n")) {
-            throw "Release zip must contain exactly the expected 12 suffixed TOCs. Got [$($zipTocs -join ', ')]."
+            throw "Release zip must contain exactly the expected $($expectedTocRelativePaths.Count) suffixed TOCs. Got [$($zipTocs -join ', ')]."
         }
 
         $forbiddenEntries = @($fileEntryNames | Where-Object { Test-ForbiddenArtifactPath -RelativePath $_ })
@@ -501,7 +523,7 @@ try {
 $zipHash = Get-Sha256 $zipPath
 Write-Host "Classic release package validated: $zipPath"
 Write-Host "Classic release version: $release"
-Write-Host "Classic TOCs stamped: 9 (Vanilla, TBC, Mists); Mainline TOCs unchanged: 3"
+Write-Host "Classic TOCs stamped: $($addonNames.Count * $classicFlavors.Count) ($($classicFlavors -join ', ')); Mainline TOCs unchanged: $($addonNames.Count * $mainlineFlavors.Count)"
 Write-Host "CurseForge project: $expectedProjectId"
 Write-Host "Classic TOC interfaces: $($classicInterfaces.Values -join ', ')"
 Write-Host "SHA-256: $zipHash"

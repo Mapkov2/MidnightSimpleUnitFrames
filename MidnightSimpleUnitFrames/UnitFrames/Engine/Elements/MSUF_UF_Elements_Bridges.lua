@@ -100,7 +100,7 @@ local function HideMSUFCastbar(unit)
       HideFrame(_G["MSUF_Boss" .. i .. "CastBar"])
     end
   elseif unit == "arena" then
-    for i = 1, 3 do
+    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
       HideFrame(_G["MSUF_arena" .. i .. "CastBar"])
       HideFrame(_G["MSUF_Arena" .. i .. "CastBar"])
     end

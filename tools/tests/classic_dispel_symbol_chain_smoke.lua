@@ -28,6 +28,7 @@ local function Read(relative)
 end
 
 local runtime = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
+  .. "\n" .. Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua")
 local visuals = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua")
 local unitConfig = Read("MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_Config.lua")
 local groupConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua")
@@ -116,7 +117,7 @@ Check(not visuals:find("texture:SetTexture(nil)", 1, true),
   "the symbol art resolver still blanks the texture instead of falling back")
 local fallbackFolder = visuals:match('local DISPEL_ART_FALLBACK_FOLDER = "([A-Za-z]+)"')
 Check(fallbackFolder, "the symbol art fallback set is gone")
-Check(visuals:find('%s*' .. fallbackFolder .. ' = "', 1, false) or visuals:find(fallbackFolder, 1, true),
+Check(visuals:find('MSUF_[A-Z_]+%s*=%s*"' .. fallbackFolder .. '"'),
   "the symbol art fallback names a set the resolver does not know")
 for i = 1, #TYPES do
   local file = root .. "/MidnightSimpleUnitFrames/Media/Icons/DispelTypes/"

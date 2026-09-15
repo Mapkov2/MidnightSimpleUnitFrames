@@ -21,7 +21,7 @@ end
 
 local function ForEachArenaUnit(fn)
     if type(fn) ~= "function" then return end
-    for i = 1, 3 do fn("arena" .. i) end
+    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do fn("arena" .. i) end
 end
 
 

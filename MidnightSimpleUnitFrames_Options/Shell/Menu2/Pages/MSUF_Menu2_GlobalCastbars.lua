@@ -18,6 +18,23 @@ local SetControlEnabled, SetControlsEnabled, ApplyCastbars = GP.SetControlEnable
 local RegisterControl, Meta, ScheduleCastbarPageWork = GP.RegisterControl, GP.CastbarControlMeta, GP.ScheduleCastbarPageWork
 local CASTBAR_PAGE_WORK_DELAY, CASTBAR_PREVIEW_REFRESH_INTERVAL = GP.CASTBAR_PAGE_WORK_DELAY, GP.CASTBAR_PREVIEW_REFRESH_INTERVAL
 local BuildCastbarPagePreview = GP.BuildCastbarPagePreview
+-- The GCD bar is filled only C-side: MSUF_CastbarGCD.lua has no Lua fallback and
+-- stops without C_Spell.GetSpellCooldownDuration or StatusBar:SetTimerDuration.
+-- Probe the capability once, never the flavor, and offer the section only when
+-- the client can drive the bar. The probe bar is created only when the API exists.
+local gcdBarSupported
+local function GCDBarSupported()
+    if gcdBarSupported ~= nil then return gcdBarSupported end
+    local spellAPI = _G.C_Spell
+    gcdBarSupported = false
+    if type(spellAPI) == "table" and type(spellAPI.GetSpellCooldownDuration) == "function" then
+        local castbar = _G.MSUF_PlayerCastbar
+        local bar = castbar and castbar.statusBar
+        if not bar and type(_G.CreateFrame) == "function" then bar = _G.CreateFrame("StatusBar") end
+        gcdBarSupported = bar ~= nil and type(bar.SetTimerDuration) == "function"
+    end
+    return gcdBarSupported
+end
 -- Section builders take the page state table built by CreateCastbarPageState
 -- (preview handle, refresh requests and the shared cast-control binders) and
 -- re-establish the binder names they use before their unchanged bodies.
@@ -470,11 +487,19 @@ local function BuildCastbars(ctx)
     local LazyCastbarSection = S.LazyCastbarSection
     LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 196, defaultOpen = true, build = function(_, secBuilder) return BuildBehaviorSection(S, secBuilder) end })
     LazyCastbarSection({ sectionId = "castbar_filters", title = "Filtering & Feedback", height = 110, build = function(_, secBuilder) return BuildFilterSection(S, secBuilder) end })
-    LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 148, build = function(_, secBuilder) return BuildGCDSection(S, secBuilder) end })
+    if GCDBarSupported() then
+        LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 148, build = function(_, secBuilder) return BuildGCDSection(S, secBuilder) end })
+    end
     LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 220, build = function(_, secBuilder) return BuildTexturesSection(S, secBuilder) end })
-    LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130, build = function(_, secBuilder) return BuildEmpoweredSection(S, secBuilder) end })
+    -- Empowered casts are a Retail Evoker mechanic; no Classic client has them.
+    if not (MSUF.Client and MSUF.Client.IsClassic == true) then
+        LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130, build = function(_, secBuilder) return BuildEmpoweredSection(S, secBuilder) end })
+    end
     LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154, build = function(_, secBuilder) return BuildNameShorteningSection(S, secBuilder) end })
-    LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 352, build = function(_, secBuilder) return BuildFocusKickSection(S, secBuilder) end })
+    -- Focus Kick tracks the focus unit, which Classic Era does not have.
+    if not M.SupportsFrameScope or M.SupportsFrameScope("focus") then
+        LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 352, build = function(_, secBuilder) return BuildFocusKickSection(S, secBuilder) end })
+    end
     LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 382, build = function(_, secBuilder) return BuildInterruptReadySection(S, secBuilder) end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end

@@ -1,4 +1,4 @@
-"""Reject protected-call aliases in owned runtime Lua, including string lookups."""
+"""Reject protected-call aliases in owned runtime Lua and XML, including string lookups."""
 from pathlib import Path
 import re
 
@@ -8,6 +8,8 @@ BANNED = {
     "MSUF_SafeCall", "MSUF_FastCall", "InvokeBoundary", "InvokeLabeledBoundary",
     "ProfileIO_RunProtected", "MSUF_ProfileIO_RunProtected", "CallIf",
     "SafeFrameCall", "TryCodecCall", "CallAnchorMethod",
+    # coroutine.resume/wrap capture errors exactly like pcall does.
+    "coroutine",
 }
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
 LONG = re.compile(r"\[(=*)\[")
@@ -62,11 +64,12 @@ def tokens(source):
 
 def owned_files():
     for addon in ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options"):
-        for path in sorted((ROOT / addon).rglob("*.lua")):
+        # XML <Script> bodies and On* handlers are Lua too.
+        for path in sorted([*(ROOT / addon).rglob("*.lua"), *(ROOT / addon).rglob("*.xml")]):
             relative = path.relative_to(ROOT).as_posix()
             if any(part in {"tools", "tests", "scripts", ".codex-remote-attachments"} for part in path.relative_to(ROOT).parts):
                 continue
-            if "Assistant" in relative:
+            if relative == "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_AssistantBridge.lua":
                 continue
             if "/Libs/" in relative and "/Libs/MSUFUnitFrames/" not in relative:
                 continue
@@ -84,7 +87,7 @@ def main():
                 failures.append(f"{path.relative_to(ROOT).as_posix()}:{line}: {token}")
     if failures:
         raise SystemExit("Forbidden runtime call boundary:\n" + "\n".join(failures))
-    print(f"PASS direct error paths: {count} owned Lua files; no protected-call names or aliases")
+    print(f"PASS direct error paths: {count} owned Lua/XML files; no protected-call names or aliases")
 
 
 if __name__ == "__main__":

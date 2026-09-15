@@ -151,6 +151,14 @@ local function ArenaPartyHeaderActive()
   return ArenaPartyContext() and ConfEnabled("party")
 end
 
+-- PVP_MATCH_STATE_CHANGED is Retail-only; Classic arena clients reject the
+-- registration. Harnesses without MSUF.Client keep the Retail behaviour.
+local function MatchStateEventSupported()
+  local client = MSUF.Client
+  if not (client and type(client.SupportsEvent) == "function") then return true end
+  return client.SupportsEvent("PVP_MATCH_STATE_CHANGED") == true
+end
+
 --- Only a Party ROLE sort with Player-first emits MSUF's native nameList.
 --- Keep its identity catch-up completely absent from PvE and from Arena
 --- configurations that stay on SecureGroupHeader's ordinary roster path.
@@ -206,8 +214,8 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
     eventFrame:RegisterEvent(RUNTIME_EVENTS[i])
   end
   -- Match-state transitions are the authoritative extra boundary for Arena
-  -- round/team swaps. Never subscribe in PvE.
-  if ArenaPartyHeaderActive() then
+  -- round/team swaps. Never subscribe in PvE or on clients that lack the event.
+  if ArenaPartyHeaderActive() and MatchStateEventSupported() then
     eventFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED")
   end
   if PriorityNameRefreshActive() or ArenaPartyNameListActive() then

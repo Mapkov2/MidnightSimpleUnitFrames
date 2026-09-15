@@ -285,11 +285,6 @@ local function ProfileExists(name)
     local profiles = type(gdb) == "table" and gdb.profiles or nil
     return type(profiles) == "table" and profiles[name] ~= nil
 end
-local function DeleteCreatedProfile(name)
-    local gdb = _G.MSUF_GlobalDB
-    local profiles = type(gdb) == "table" and gdb.profiles or nil
-    if type(profiles) == "table" then profiles[name] = nil end
-end
 -- The page builds in stages that share one per-call state table. Every stage runs
 -- once, in order, from ProfilesPage.Build; Prepare owns the helpers the rest use.
 local ProfilesPage = {}
@@ -1003,36 +998,26 @@ function ProfilesPage.ImportActions(state)
             PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
             return false
         end
-        if type(_G.MSUF_CreateProfile) ~= "function"
-            or type(_G.MSUF_SwitchProfile) ~= "function"
-            or type(_G.MSUF_ImportFromString) ~= "function"
-        then
+        if type(_G.MSUF_ImportIntoNewProfile) ~= "function" then
             PrintProfileMessage("|cffff0000", "Import failed: profile API is not available.")
             return false
         end
 
-        -- New-profile import is transactional at the SavedVariables level: create, switch,
-        -- import, then roll back the created profile if any required step fails.
-        local previous = ActiveProfileName()
-        _G.MSUF_CreateProfile(name)
-        if not ProfileExists(name) then
-            PrintProfileMessage("|cffff0000", M.Format("Import failed: could not create profile '%s'.", name))
-            return false
-        end
-        local previousExists = ProfileExists(previous)
-        _G.MSUF_SwitchProfile(name)
-        if _G.MSUF_ActiveProfile ~= name then
-            if previousExists then _G.MSUF_SwitchProfile(previous) end
-            DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", M.Format("Import failed: could not switch to profile '%s'.", name))
-            return false
-        end
-        local imported = _G.MSUF_ImportFromString(text)
-        if imported ~= true then
-            if previousExists then _G.MSUF_SwitchProfile(previous) end
-            DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", M.Tr("Import failed."))
-            RefreshAfterProfileChange(ctx)
+        -- MSUF_ImportIntoNewProfile decodes, validates and stages the string before it creates
+        -- or switches a profile; a rejected string leaves SavedVariables untouched.
+        local ok, _, stage = _G.MSUF_ImportIntoNewProfile(name, text)
+        if ok ~= true then
+            if stage == "create" then
+                PrintProfileMessage("|cffff0000", M.Format("Import failed: could not create profile '%s'.", name))
+                RefreshAfterProfileChange(ctx)
+            elseif stage == "switch" then
+                PrintProfileMessage("|cffff0000", M.Format("Import failed: could not switch to profile '%s'.", name))
+                RefreshAfterProfileChange(ctx)
+            elseif stage == "exists" then
+                PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
+            else
+                PrintProfileMessage("|cffff0000", M.Tr("Import failed."))
+            end
             return false
         end
         ClearProfileHistory()

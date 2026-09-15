@@ -10,7 +10,13 @@ local CPK = K.CPK or {}
 local MODE = CPK.MODE or {}
 local PT = K.PT or {}
 local NativeUnitPower = _G.UnitPower
+local NativeUnitPowerDisplayMod = _G.UnitPowerDisplayMod
 local GetComboPoints = _G.GetComboPoints
+--- Blizzard Mists ShardBar.lua: MAX_POWER_PER_EMBER = 10 raw power per ember.
+local EMBER_POWER_SCALE = 10
+--- Owner of the combo points being shown. Resolve switches it to "vehicle"
+--- while the vehicle route is active; every caller still passes "player".
+local comboUnit = "player"
 
 local Provider = {
     Flavor = "Mists",
@@ -20,18 +26,30 @@ local Provider = {
 --- than the modern player UnitPower contract.
 function Provider.UnitPower(unit, powerType, unmodified)
     if powerType == PT.ComboPoints and type(GetComboPoints) == "function" then
-        return GetComboPoints(unit == "vehicle" and "vehicle" or "player", "target") or 0
+        return GetComboPoints(comboUnit, "target") or 0
     end
     return NativeUnitPower(unit, powerType, unmodified)
+end
+
+--- Burning Embers use a fixed 10-per-ember scale (Blizzard ShardBar, ElvUI
+--- `cur * 0.1`) instead of trusting the client display modifier.
+function Provider.UnitPowerDisplayMod(powerType)
+    if powerType == PT.BurningEmbers then return EMBER_POWER_SCALE end
+    if type(NativeUnitPowerDisplayMod) == "function" then
+        return NativeUnitPowerDisplayMod(powerType)
+    end
+    return nil
 end
 
 function Provider.Resolve(env)
     local class = env.playerClass
     local spec = env.spec
+    comboUnit = "player"
 
     if env.inVehicle then
         local vehiclePower = type(_G.UnitPowerType) == "function" and _G.UnitPowerType("vehicle") or nil
         if env.vehicleHasCombo or vehiclePower == PT.ComboPoints then
+            comboUnit = "vehicle"
             return true, PT.ComboPoints, MODE.SEGMENTED, false
         end
         return true, nil, MODE.NONE, false
@@ -130,6 +148,10 @@ elseif playerClass == "WARLOCK" then
     Provider.BlizzardFrames = {
         { name = "WarlockPowerFrame", restore = function(frame) RestoreShown(frame, "SetUpCurrentPower") end },
     }
+    --- Affliction shards require a known spell (74434). Blizzard Mists
+    --- ShardBar.lua:80-90 re-checks on SPELLS_CHANGED; the controller binds it
+    --- as a structural event and rebuilds only when the route really changed.
+    Provider.StructuralEvents = { "SPELLS_CHANGED" }
 elseif playerClass == "MONK" then
     Provider.BlizzardFrames = {
         { name = "MonkHarmonyBar", restore = function(frame) frame:Show(); RestoreShown(frame, "Update") end },

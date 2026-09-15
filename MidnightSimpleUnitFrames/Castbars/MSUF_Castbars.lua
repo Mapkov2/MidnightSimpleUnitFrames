@@ -482,6 +482,9 @@ local failsafeOnlyCount = 0
 local lowFrequencyInterval = 0.10
 local failsafeInterval = 0.25
 local managerTime = 0
+-- Clock sampled once per rendered frame before the high bucket runs; only
+-- frames in that bucket (_msufLuaFill) read it.
+local managerFrameNow = 0
 local lowFrequencyTicker
 local lowFrequencyLastTime
 local failsafeTicker
@@ -575,12 +578,35 @@ local function UpdateFastTextFrame(frame, elapsed)
 end
 
 local function UpdateHeavyFrame(frame, elapsed)
+    -- Plain end-time casts without a native timer fill every rendered frame
+    -- (one subtraction, at most one SetValue), as Blizzard's Classic castbar
+    -- does. Text, glow and hard stops keep the heavy cadence below. The flag
+    -- is only set for high-bucket frames, so managerFrameNow is this frame's.
+    local frameNow
+    if frame._msufLuaFill then
+        frameNow = managerFrameNow
+        local endTime, total = frame._msufPlainEndTime, frame._msufPlainTotal
+        if endTime and total and total > 0 then
+            local remaining = endTime - frameNow
+            if remaining < 0 then
+                remaining = 0
+            elseif remaining > total then
+                remaining = total
+            end
+            local value = frame._msufCountsDown and remaining or (total - remaining)
+            if value ~= frame._msufLuaFillValue then
+                frame._msufLuaFillValue = value
+                frame.statusBar:SetValue(value)
+            end
+        end
+    end
+
     local heavyIn = frame._msufHeavyIn or 0
     heavyIn = heavyIn - elapsed
     if heavyIn <= 0 then
         heavyIn = frame._msufTickInterval or 0.10
         local updater = updateCastbarFrameRef or _G.MSUF_UpdateCastbarFrame
-        if updater then updater(frame, elapsed, nil, managerTime) end
+        if updater then updater(frame, elapsed, frameNow, managerTime) end
     end
     frame._msufHeavyIn = heavyIn
 end
@@ -694,6 +720,7 @@ local function ManagerOnUpdate(manager, elapsed)
     managerTime = managerTime + elapsed
 
     if highFrequencyCount > 0 then
+        managerFrameNow = Now()
         UpdateBucket(manager.high, elapsed)
     end
 
@@ -898,6 +925,16 @@ RegisterCastbar = function(frame)
     if failsafeOnlyCount < 0 then failsafeOnlyCount = 0 end
     frame._msufManagerHighFreq = highFrequency or nil
     frame._msufManagerFailsafeOnly = failsafeOnly or nil
+    -- Per-frame Lua fill (see UpdateHeavyFrame): a readable end time with no
+    -- native timer or duration object. Re-registration (start, pushback)
+    -- clears the dedupe stamp so the next frame always repaints.
+    frame._msufLuaFill = (highFrequency
+        and frame.MSUF_timerDriven ~= true
+        and not frame.isEmpower
+        and frame.MSUF_durationObj == nil
+        and frame._msufPlainEndTime ~= nil
+        and (frame._msufPlainTotal or 0) > 0) or nil
+    frame._msufLuaFillValue = nil
 
     local oldBucket = frame._msufManagerBucket
     local newBucket = failsafeOnly and CastbarManager.failsafe
@@ -974,6 +1011,8 @@ UnregisterCastbar = function(frame)
     frame._msufLastTimeTotalDecimal = nil
     frame._msufLastTimeFormat = nil
     frame._msufFastText = nil
+    frame._msufLuaFill = nil
+    frame._msufLuaFillValue = nil
     frame._msufRemaining = nil
     frame._msufGlowIn = nil
     frame._msufCastTimeWasEnabled = nil
@@ -1290,7 +1329,12 @@ local function UpdateEndTimeFrame(frame, now)
         local value = frame._msufCountsDown and remaining or (total - remaining)
         if value < 0 then value = 0 end
         if value > total then value = total end
-        frame.statusBar:SetValue(value)
+        -- The per-frame Lua fill already painted this value in the same frame;
+        -- frames without it keep a nil stamp and always write.
+        if value ~= frame._msufLuaFillValue then
+            frame.statusBar:SetValue(value)
+            if frame._msufLuaFill then frame._msufLuaFillValue = value end
+        end
     end
 
     if frame.timeText
@@ -1300,18 +1344,15 @@ local function UpdateEndTimeFrame(frame, now)
         SetCastTimeTextIfChanged(frame, remaining, total)
     end
 
-    if frame._msufCastbarGlowTick
-        and applyGlowFade
-        and frame.statusBar
-        and frame.statusBar.GetMinMaxValues
-    then
-        local minValue, maxValue = frame.statusBar:GetMinMaxValues()
-        minValue = ToPlainNumber(minValue) or 0
-        maxValue = ToPlainNumber(maxValue)
-        if maxValue and maxValue > minValue then
-            local statusTotal = maxValue - minValue
-            if statusTotal and statusTotal > 0 then
-                applyGlowFade(frame, remaining, statusTotal)
+    if frame._msufCastbarGlowTick and applyGlowFade then
+        if total and total > 0 then
+            applyGlowFade(frame, remaining, total)
+        elseif frame.statusBar and frame.statusBar.GetMinMaxValues then
+            local minValue, maxValue = frame.statusBar:GetMinMaxValues()
+            minValue = ToPlainNumber(minValue) or 0
+            maxValue = ToPlainNumber(maxValue)
+            if maxValue and maxValue > minValue then
+                applyGlowFade(frame, remaining, maxValue - minValue)
             end
         end
     end

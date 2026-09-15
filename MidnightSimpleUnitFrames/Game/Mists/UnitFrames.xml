@@ -19,6 +19,7 @@
   <Script file="..\Classic\Auras\MSUF_Auras3_Visuals.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_Features.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_Preview.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_Compile.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_UnitFrames.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Config.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Layout.lua"/>

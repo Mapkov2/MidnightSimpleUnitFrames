@@ -1,0 +1,57 @@
+RetailPath	Flavors	Reason
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_Common.lua	*	Retail 12.1.0 SpellName alias catalog (Common); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_deDE.lua	*	Retail 12.1.0 SpellName alias catalog (deDE); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_enUS.lua	*	Retail 12.1.0 SpellName alias catalog (enUS); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_esES.lua	*	Retail 12.1.0 SpellName alias catalog (esES); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_esMX.lua	*	Retail 12.1.0 SpellName alias catalog (esMX); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_frFR.lua	*	Retail 12.1.0 SpellName alias catalog (frFR); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_itIT.lua	*	Retail 12.1.0 SpellName alias catalog (itIT); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_koKR.lua	*	Retail 12.1.0 SpellName alias catalog (koKR); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_ptBR.lua	*	Retail 12.1.0 SpellName alias catalog (ptBR); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_ruRU.lua	*	Retail 12.1.0 SpellName alias catalog (ruRU); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_zhCN.lua	*	Retail 12.1.0 SpellName alias catalog (zhCN); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_zhTW.lua	*	Retail 12.1.0 SpellName alias catalog (zhTW); each Classic flavor loads the catalog generated from its own client build under Game/<Flavor>/Auras/AliasData
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua	*	Retail 12.x curated defensive aura IDs; each Classic flavor loads Game/<Flavor>/Auras/MSUF_Auras3_DefensiveData.lua
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DotData.lua	*	Retail 12.x curated player DoT aura IDs; each Classic flavor loads Game/<Flavor>/Auras/MSUF_Auras3_DotData.lua
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_GroupHighlightsData.lua	*	Retail 12.1.0 aura-ID catalog for the Group Highlights filter; Classic ships no Group Highlights dataset, so A3.GetGroupHighlightsSpellIDHash stays undefined there
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua	*	Retail group spell-indicator renderer on 12.1 CustomAuraContainer slots; Blizzard_AuraContainer ships only on upstream/live and the gate forbids this runtime on Classic
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators_Config.lua	*	Submodule of Auras3/MSUF_Auras3_SpellIndicators.lua, the Retail 12.1 CustomAuraContainer spell-indicator renderer
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators_Effects.lua	*	Submodule of Auras3/MSUF_Auras3_SpellIndicators.lua, the Retail 12.1 CustomAuraContainer spell-indicator renderer
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators_Reminders.lua	*	Submodule of Auras3/MSUF_Auras3_SpellIndicators.lua, the Retail 12.1 CustomAuraContainer spell-indicator renderer
+MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua	*	Mainline-only 12.1 native AuraContainer runtime; Classic flavors load Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua instead
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Appearance.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_ButtonVisuals.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_ConfigValues.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_CustomConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_DispelConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_DispelVisuals.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_DurationText.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_EffectPreview.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_GroupConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Identity.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_IdentityEvents.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_LaneConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeApply.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_NativeContract.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_OwnerConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Platform.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Presence.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Schema.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Signatures.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Sort.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_UnitConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
+MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua	*	Evoker empowered-cast stages; Evokers and empowered casts exist only on Retail
+MidnightSimpleUnitFrames/ClassPower/MSUF_CP_BalanceDruid.lua	*	Retail Astral Power prediction and eclipse colors; Mists Balance uses the SIGNED_CONTINUOUS route in Game/Mists/ClassPower.lua
+MidnightSimpleUnitFrames/ClassPower/MSUF_CP_EbonMight.lua	*	Augmentation Evoker Ebon Might bar on the 12.1 CustomAuraContainer; no Classic client has Evokers
+MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Ironfur.lua	*	Guardian Druid Ironfur tracker; Ironfur is a Legion spell that Vanilla, TBC and Mists do not have
+MidnightSimpleUnitFrames/ClassPower/MSUF_CP_NativeAuras.lua	*	12.1 CustomAuraButton class-resource displays; Blizzard_AuraContainer ships only on upstream/live
+MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua	*	EllesmereUI unlock-mode bridge; Client.SupportsEllesmereEditMode is Retail-only and classic_optional_integrations_smoke pins its API absent on Classic
+MidnightSimpleUnitFrames/Integrations/MSUF_Integration_MiniAuras.lua	*	MiniAuras/MiniCC party and raid frame-provider bridge; sync 219c0dbf added it to the Mainline TOC only and its provider API has not been reviewed on Classic clients
+MidnightSimpleUnitFrames/Runtime/MSUF_TooltipSpellIDs.lua	*	Persists the 12.1 tooltipShowAuraSpellIDs CVar; MSUF_Menu2_GlobalMisc.lua builds its switches only on Mainline
+MidnightSimpleUnitFrames/State/MSUF_Changelog.lua	*	Retail changelog data; Classic flavors load Game/Classic/State/MSUF_Changelog.lua instead
+MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_SpellIndicators_Data.lua	*	Retail built-in spell-indicator data; Classic loads Game/Classic/UnitFrames/Group/MSUF_UF_Group_SpellIndicators_Data_Base.lua plus Game/<Flavor>/UnitFrames/Group/MSUF_UF_Group_SpellIndicators_Data.lua
+MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Group.lua	*	Retail group-scope aura page; MSUF_Menu2_AfterGroupPreview_Classic.xml loads Pages/MSUF_Menu2_Auras_Classic.lua, which also serves group scopes
+MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua	*	Generated Retail search inventory; Classic loads the generated Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua
+MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua	*	Full Retail changelog; only the Mainline Options TOC loads it, and MSUF_Menu2_Changelog.lua falls back to MSUF_Changelog

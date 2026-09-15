@@ -14,6 +14,11 @@ local math_floor = math.floor
 local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5", "arena1", "arena2", "arena3" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local ARENA_UNITS = { arena1=true, arena2=true, arena3=true }
+-- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on Mainline).
+for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    AURA_UNITS[#AURA_UNITS + 1] = "arena" .. arenaIndex
+    ARENA_UNITS["arena" .. arenaIndex] = true
+end
 local GROUPS = {
     buff = {
         label = "Buffs",

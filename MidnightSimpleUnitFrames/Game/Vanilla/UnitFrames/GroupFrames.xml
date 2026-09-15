@@ -8,7 +8,7 @@
   <Script file="..\..\..\GroupFrames\MSUF_GroupFrames_DB_SpellIndicators.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Config_Indicators.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Config.lua"/>
-  <Script file="..\..\Classic\UnitFrames\Group\MSUF_UF_Group_Headers.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Headers.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Adapter.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Priority.lua"/>
   <Script file="..\..\Classic\UnitFrames\Group\MSUF_UF_Group_Blizzard.lua"/>

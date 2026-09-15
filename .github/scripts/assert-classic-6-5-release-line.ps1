@@ -32,23 +32,31 @@ $addons = @(
     "MidnightSimpleUnitFrames_Options",
     "MidnightSimpleUnitFrames_Assistant"
 )
-$classicInterfaces = [ordered]@{
-    Vanilla = "11509"
-    TBC = "20506"
-    Mists = "50504"
+$clientMatrixPath = Join-Path $RepositoryRoot "tools/classic-client-matrix.tsv"
+if (-not (Test-Path -LiteralPath $clientMatrixPath -PathType Leaf)) {
+    throw "Client matrix is missing: $clientMatrixPath"
+}
+$clientMatrix = @(Import-Csv -LiteralPath $clientMatrixPath -Delimiter "`t")
+if ($clientMatrix.Count -eq 0) { throw "Client matrix names no clients: $clientMatrixPath" }
+function Get-InterfaceSetKey {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value)
+    $items = @($Value -split ',' | ForEach-Object { $_.Trim() })
+    foreach ($item in $items) {
+        if ($item -notmatch '^[1-9][0-9]*$') { throw "Malformed interface list: '$Value'" }
+    }
+    return ((@($items | ForEach-Object { [int]$_ }) | Sort-Object -Unique) -join ',')
 }
 foreach ($addon in $addons) {
-    $mainlineToc = Join-Path $RepositoryRoot "$addon/${addon}_Mainline.toc"
-    $mainline = [IO.File]::ReadAllText($mainlineToc)
-    if ($mainline -notmatch '(?m)^## Interface: 120007, 120100, 120105\s*$') {
-        throw "Classic 6.5 Mainline must declare Retail 12.0.7, 12.1.0 and 12.1.5: $mainlineToc"
-    }
-    foreach ($flavor in $classicInterfaces.Keys) {
+    foreach ($client in $clientMatrix) {
+        $flavor = $client.Suffix
         $tocPath = Join-Path $RepositoryRoot "$addon/${addon}_${flavor}.toc"
         $toc = [IO.File]::ReadAllText($tocPath)
-        if ($toc -notmatch "(?m)^## Interface: $([regex]::Escape($classicInterfaces[$flavor]))\s*$") {
-            throw "Classic 6.5 has the wrong $flavor interface: $tocPath"
+        $interfaceFields = [regex]::Matches($toc, '(?m)^## Interface:\s*(.+?)\s*$')
+        if ($interfaceFields.Count -ne 1 -or
+            (Get-InterfaceSetKey -Value $interfaceFields[0].Groups[1].Value) -cne (Get-InterfaceSetKey -Value $client.Interfaces)) {
+            throw "Classic 6.5 has the wrong $flavor interface set (expected $($client.Interfaces)): $tocPath"
         }
+        if ($client.IsClassic -cne "true") { continue }
         if ($toc -notmatch "(?m)^## Version: $([regex]::Escape($normalizedVersion))\s*$") {
             throw "Classic 6.5 has a stale $flavor version: $tocPath"
         }

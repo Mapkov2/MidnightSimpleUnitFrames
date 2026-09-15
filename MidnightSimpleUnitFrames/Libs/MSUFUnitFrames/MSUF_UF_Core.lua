@@ -612,7 +612,8 @@ local function OnShowIdentityFollowupEvent(unit)
     or unit == "boss4" or unit == "boss5" then
     return "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
   end
-  if unit == "arena1" or unit == "arena2" or unit == "arena3" then
+  if unit == "arena1" or unit == "arena2" or unit == "arena3"
+    or unit == "arena4" or unit == "arena5" then
     return "ARENA_OPPONENT_UPDATE"
   end
   return nil
@@ -1989,6 +1990,7 @@ UF.IsBossUnit = IsBossUnit
 
 local function IsArenaUnit(unit)
   return unit == "arena1" or unit == "arena2" or unit == "arena3"
+    or unit == "arena4" or unit == "arena5"
 end
 
 local function ArenaOpponentIdentityUpdate(frame, event, unit)

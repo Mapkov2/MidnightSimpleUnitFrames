@@ -1,22 +1,19 @@
---- ClassPower/MSUF_CP_Controller.lua - class resource controller
---- Features:
---- 1. ClassPower (segmented): Combo Points, Holy Power, Soul Shards (incl.
---- fractional for Destruction), Arcane Charges, Chi, Essence.
---- 2. DK Runes: individual per-rune cooldown animation + sort order.
---- 3. DH Devourer: Soul Fragments (aura-based, normalized 0-1, dual color).
---- 4. Enh Shaman: Maelstrom Weapon stacks (aura-based segments).
---- 5. Vehicle: auto-switch to combo points in vehicle UI.
---- 6. AltMana: extra Mana bar for dual-resource specs.
---- 7. Stagger: Brewmaster Monk stagger bar (3-color threshold).
---- Architecture:
---- - Self-contained: own event frame, own DB defaults, own layout.
---- - Independent overlay (Unhalted approach): no HP bar reservation.
---- - Render modes: each class/spec resolves to a render mode at FullRefresh.
---- Hot-path dispatch is a single mode check - zero branching for inactive.
---- - Secret-safe: raw UnitPower/UnitPowerMax (2 args), nil-guarded.
---- - Max performance: Rune and Essence use native 12.1 duration objects;
---- Ebon is fully AuraContainer-owned. Lua polling remains only for active
---- Stagger or a degraded non-Ebon API path.
+--- Game/Classic/ClassPower/MSUF_CP_Controller.lua - Classic class resource controller
+--- Loaded only by the Vanilla, TBC and Mists TOCs; Mainline loads the Retail
+--- ClassPower/MSUF_CP_Controller.lua.
+--- Contract:
+--- - Routing belongs to the flavor provider MSUF.CPClient (Game/<Flavor>/ClassPower.lua):
+---   Provider.Resolve(env) returns handled, powerType, renderMode, isAuraPower.
+---   Vanilla and TBC route only target-owned combo points (SEGMENTED). Mists adds
+---   RUNE_CD, FRACTIONAL (Burning Embers), CONTINUOUS (Demonic Fury),
+---   SIGNED_CONTINUOUS (Balance) and AURA_SEGMENTED (Arcane Charges).
+--- - Optional provider hooks: UnitPower, UnitPowerDisplayMod, UseFrequentPower,
+---   NeedsTargetChanged, AcceptPowerToken, StructuralEvents, BlizzardFrames.
+--- - Every event registration is gated by MSUF.Client.SupportsEvent.
+--- - The shared mode builders still carry Retail-only modes (Essence, Stagger,
+---   Ebon Might timer, Devourer); no Classic provider routes to them.
+--- - Self-contained: own event frame, cached DB config and layout. Hot-path
+---   dispatch is the mode update cached in CP.updateFn.
 
 --- Guard: only load once.
 if _G.__MSUF_ClassPower_Loaded then return end
@@ -26,8 +23,8 @@ local MSUF = select(2, ...)
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
---- The player-frame resolver is owned by ClassPower/MSUF_CP_Core.lua, which
---- the TOC loads before this file.
+--- The player-frame resolver is owned by Game/Classic/ClassPower/MSUF_CP_Core.lua,
+--- which the TOC loads before this file.
 local CoreUnitFrame = _G.MSUF_CP_CoreUnitFrame
 
 --- Perf locals (eliminate global lookups in hot paths)
@@ -43,25 +40,26 @@ local UnitPowerMax = UnitPowerMax
 local UnitPartialPower = UnitPartialPower
 local UnitHealth = UnitHealth
 local UnitPowerType = UnitPowerType
-local UnitPowerDisplayMod = UnitPowerDisplayMod
+local UnitPowerDisplayMod = (MSUF.CPClient and MSUF.CPClient.UnitPowerDisplayMod) or UnitPowerDisplayMod
 local UnitClass = UnitClass
 local UnitStagger = UnitStagger
 local UnitHealthMax = UnitHealthMax
 local UnitHasVehicleUI = UnitHasVehicleUI
 local GetRuneCooldown = GetRuneCooldown
 local InCombatLockdown = InCombatLockdown
+local UnitAffectingCombat = UnitAffectingCombat
 local GetTime = GetTime
 local C_Timer = C_Timer
 local GetPowerRegenForPowerType = GetPowerRegenForPowerType
 local SMOOTH_INTERP = _G.Enum and _G.Enum.StatusBarInterpolation
 SMOOTH_INTERP = SMOOTH_INTERP and SMOOTH_INTERP.ExponentialEaseOut or nil
 
---- Aura API (player-only class resources; unitframe aura display is native 12.1)
+--- Aura API (player-only class resources)
 local C_UnitAuras = C_UnitAuras
 local C_Spell = C_Spell
 local C_SpellBook = C_SpellBook
 
---- Secret-value guard (Midnight/12.1)
+--- Secret-value guard
 local _issecretvalue = _G.issecretvalue
 local _canaccesstable = _G.canaccesstable
 local NotSecret = MSUF.Secrets.NotSecret
@@ -70,15 +68,15 @@ local CanAccessTableValue = MSUF.Secrets.CanAccessTable
 
 local CanAccessOptionalTableValue = MSUF.Secrets.CanAccessOptionalTable
 
---- Spec API (12.0: C_SpecializationInfo preferred, fallback to global)
+--- Spec API (C_SpecializationInfo preferred, fallback to the global)
 local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization)
     or GetSpecialization
 
 --- Player class (resolved once, never changes)
 local PLAYER_CLASS = select(2, UnitClass("player"))
 
---- Phase 1 CP split: shared constants / profiles now live in ClassPower/*.lua
---- Keeps the core chunk smaller and reduces WoW's top-level local pressure.
+--- Shared constants and mode event profiles come from
+--- Game/Classic/ClassPower/MSUF_CP_Constants.lua, which keeps this chunk's local count down.
 local CPConst = assert(_G.MSUF_CP_CONST, "Classic ClassPower constants must load first")
 local CPK = CPConst.CPK
 local TIP = CPConst.TIP or {}
@@ -86,21 +84,7 @@ local PT = CPConst.PT or {}
 local POWER_TYPE_TOKENS = CPConst.POWER_TYPE_TOKENS or {}
 
 --- Cached split registries (load-time only; avoids repeated global table lookups
---- and keeps the post-split core wiring easier to follow).
-
---- ---
---- ALT_MANA builder - registered EARLY so the consumer ~line 1134
---- (CPCoreBuilders.ALT_MANA(...)) sees it at file-parse
---- time. Previous layout had this block at file bottom -> builder was
---- nil when consumer ran -> AM_Create/AM_Layout/AM_ApplyColor/AM_UpdateValue
---- stayed nil -> FullRefresh crashed for every spec with a mana pool
---- (Shadow Priest, Druid, Monk WW, Ret Pala, Shaman Ele/Enh, Aug Evoker)
---- whenever needsAlt==true. Wrapped in do...end to scope the 'builders'
---- local (avoids shadowing the 'builders' locals at later file sections).
---- ---
-
---- AltMana builder moved to ClassPower\\MSUF_CP_AltMana.lua.
-
+--- and keeps the core wiring easier to follow).
 local CPCoreBuilders = _G.MSUF_CP_CORE_BUILDERS
 local CPModeBuilders = _G.MSUF_CP_MODE_BUILDERS
 local CPFeatureBuilders = _G.MSUF_CP_FEATURE_BUILDERS
@@ -109,17 +93,10 @@ local function RefreshPlayerPowerBar()
     local refresh = _G.MSUF_RefreshPlayerPowerBar
     if refresh then refresh() end
 end
---- DH Vengeance: Soul Fragments via C_Spell.GetSpellCastCount (MCR-sourced)
+--- Mists Balance renders through the provider's SIGNED_CONTINUOUS route; no Classic TOC loads ClassPower/MSUF_CP_BalanceDruid.lua.
 
---- Phase 5 CP split: Balance Druid Astral Power prediction + eclipse colors now
---- live in ClassPower/MSUF_CP_BalanceDruid.lua. The core keeps only the
---- global color invalidation hook call, so this file stays closer to a pure
---- orchestrator.
-
---- Hunter Survival: Tip of the Spear (talent 260285)
---- Evoker Augmentation: native 12.1 Ebon Might duration text.
-
---- The TOC-loaded AltMana builder replaces this before any consumer runs.
+--- The TOC-loaded AltMana builder (ClassPower/MSUF_CP_AltMana.lua) replaces
+--- this before any consumer runs.
 local NeedsAltManaBar
 
 --- Cold configuration helpers live in ClassPower/MSUF_CP_Controller_Config.lua:
@@ -127,9 +104,20 @@ local NeedsAltManaBar
 --- class/spec -> render-mode routing, the structural signature and the per-mode
 --- event profile. Hot paths keep _cpDB as an upvalue; everything else runs at
 --- FullRefresh cadence and is read through the CPConfig table.
-local function ResolveClassicClassPower()
-    local clientProvider = MSUF.CPClient
-    do
+local ResolveClassicClassPower
+do
+    --- The structural signature resolves on every UNIT_DISPLAYPOWER and
+    --- structural event, so one env table is refreshed in place and the spell
+    --- check is a single closure instead of per-call allocations.
+    local resolveEnv = {}
+
+    local function IsPlayerSpell(spellID)
+        local known = C_SpellBook and (C_SpellBook.IsSpellKnown or C_SpellBook.IsSpellKnownOrInSpellBook)
+        return type(known) == "function" and known(spellID) == true
+    end
+
+    ResolveClassicClassPower = function()
+        local clientProvider = MSUF.CPClient
         assert(type(clientProvider.Resolve) == "function", "Missing Classic ClassPower provider")
         local spec = GetSpec and GetSpec()
         local primaryPower = UnitPowerType("player")
@@ -142,23 +130,17 @@ local function ResolveClassicClassPower()
                 vehicleHasCombo = UnitPowerType("vehicle") == PT.ComboPoints
             end
         end
-        local isPlayerSpell = function(spellID)
-            local known = C_SpellBook and (C_SpellBook.IsSpellKnown or C_SpellBook.IsSpellKnownOrInSpellBook)
-            return type(known) == "function" and known(spellID) == true
-        end
-        local handled, powerType, renderMode, isAuraPower = clientProvider.Resolve({
-            playerClass = PLAYER_CLASS,
-            spec = spec,
-            primaryPower = NotSecret(primaryPower) and primaryPower or nil,
-            formID = GetShapeshiftFormID and GetShapeshiftFormID() or nil,
-            inVehicle = inVehicle,
-            vehicleHasCombo = vehicleHasCombo,
-            isPlayerSpell = isPlayerSpell,
-        })
+        resolveEnv.playerClass = PLAYER_CLASS
+        resolveEnv.spec = spec
+        resolveEnv.primaryPower = NotSecret(primaryPower) and primaryPower or nil
+        resolveEnv.formID = GetShapeshiftFormID and GetShapeshiftFormID() or nil
+        resolveEnv.inVehicle = inVehicle
+        resolveEnv.vehicleHasCombo = vehicleHasCombo
+        resolveEnv.isPlayerSpell = IsPlayerSpell
+        local handled, powerType, renderMode, isAuraPower = clientProvider.Resolve(resolveEnv)
         assert(handled, "Classic ClassPower provider did not handle its client")
         return powerType, renderMode, isAuraPower
     end
-
 end
 
 local CPConfig = CPCoreBuilders.CONTROLLER_CONFIG({
@@ -430,8 +412,7 @@ function CPAuras.Get(spellID)
     if not spellID then return nil end
 
     local aura = CPAuras.bySpell[spellID]
-    do
-        assert(type(aura) == "table", "Missing Classic ClassPower aura builder result")
+    if aura then
         if not CPAuras.IsExpired(aura) then return aura end
         CPAuras.ClearSpell(spellID, CPAuras.AuraInstanceID(aura))
     end
@@ -467,7 +448,7 @@ end
 function CPAuras.CanProcessIncrementalUpdate(unitAuraUpdateInfo)
     if not CanAccessTableValue(unitAuraUpdateInfo) then return false end
 
-    --- Midnight/PTR can mark UNIT_AURA update fields secret. Addon code may
+    --- The client can mark UNIT_AURA update fields secret. Addon code may
     --- pass those values to issecretvalue, but it must not branch on them or
     --- iterate secret tables. Fall back to the small player-aura rebuild.
     local isFullUpdate = unitAuraUpdateInfo.isFullUpdate
@@ -494,7 +475,7 @@ function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode
     if powerType == "ICICLES" then
         --- Icicles owns one exact player aura. Refresh it directly on each
         --- UNIT_AURA signal instead of relying on incremental aura identity,
-        --- which can be restricted, incomplete, or unrelated on Midnight.
+        --- which can be restricted, incomplete, or unrelated.
         --- The returned applications value remains secret-safe because the
         --- segmented renderer passes it only to native StatusBar setters.
         CPAuras.RefreshSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
@@ -502,7 +483,7 @@ function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode
     end
 
     if not CPAuras.CanProcessIncrementalUpdate(unitAuraUpdateInfo) then
-        --- Midnight can hide the incremental payload. Refresh only the aura(s)
+        --- The client can hide the incremental payload. Refresh only the aura(s)
         --- consumed by the active resource instead of querying every class.
         return CPAuras.RefreshActive(powerType, renderMode)
     end
@@ -554,15 +535,8 @@ function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode
     return changed
 end
 
-CPAuras.AddSpell(CPK.SPELL.MAELSTROM_WEAPON)
-CPAuras.AddSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID)
+--- Mists Arcane Charges is the only aura resource a Classic provider routes.
 CPAuras.AddSpell(CPK.SPELL.MISTS_ARCANE_CHARGE)
-CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
-CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
-CPAuras.AddSpell(CPK.SPELL.DARK_HEART)
-for spellID in pairs(CPConst.ECLIPSE_AURAS or {}) do
-    CPAuras.AddSpell(spellID)
-end
 
 ExportPublic("MSUF_CP_GetTrackedPlayerAura", CPAuras.Get)
 
@@ -653,8 +627,8 @@ do
     end
 end
 
---- Font / text-offset presentation helpers now live in the PRESENTATION
---- builder of ClassPower/MSUF_CP_Core.lua.
+--- Font / text-offset presentation helpers live in the PRESENTATION
+--- builder of Game/Classic/ClassPower/MSUF_CP_Core.lua.
 local CP_ApplyFont
 local CP_ApplyColors
 local CP_RefreshTexture
@@ -674,8 +648,10 @@ local function CP_CheckAutoHide(cur, maxP)
 
     local b = _cpDB.bars or {}
 
-    --- OOC: hide when out of combat
-    if b.classPowerHideOOC and not InCombatLockdown() then
+    --- OOC: hide when out of combat. PLAYER_REGEN_DISABLED is delivered before
+    --- InCombatLockdown() turns true, so the combat-entry re-check also reads
+    --- UnitAffectingCombat("player").
+    if b.classPowerHideOOC and not (InCombatLockdown() or (UnitAffectingCombat and UnitAffectingCombat("player"))) then
         CP.container:SetAlpha(0)
         return
     end
@@ -726,9 +702,8 @@ do
 end
 
 --- Secret-safe value update + per-bar coloring (charged/empowered support)
---- Phase 2 CP split: segmented / fractional / aura mode runners now live in
---- ClassPower/MSUF_CP_Modes.lua. The core builds them with local env closures so
---- the public runtime stays identical while the main chunk gets smaller.
+--- The mode runners live in Game/Classic/ClassPower/MSUF_CP_Modes.lua. The core
+--- builds them with local env closures to keep the main chunk small.
 local CP_UpdateValues
 local CP_UpdateValues_Fractional
 local CP_UpdateValues_AuraSegmented
@@ -806,9 +781,8 @@ do
 
 end
 
---- Phase 7A CP split: pure presentation helpers now live in the PRESENTATION
---- builder of ClassPower/MSUF_CP_Core.lua. This keeps the core smaller without
---- touching build/layout/value flow.
+--- Pure presentation helpers come from the PRESENTATION builder of
+--- Game/Classic/ClassPower/MSUF_CP_Core.lua.
 do
     local presentation = CPCoreBuilders.PRESENTATION({
             CP = CP,
@@ -847,12 +821,8 @@ local CPSurface = CPCoreBuilders.CONTROLLER_SURFACE({
     CP_Layout = CP_Layout,
 })
 
---- CPK.MODE.FRACTIONAL: Destruction Warlock - partial Soul Shard fill.
---- UnitPower(unit, type, true) / UnitPowerDisplayMod(type) gives e.g. 3.7
---- Fractional mode runner moved to ClassPower/MSUF_CP_Modes.lua (FRACTIONAL builder)
-
---- Rune cooldown animation and the Stagger fallback share one central driver.
---- Ebon Might is fully native in 12.1 and never enters this driver.
+--- Rune cooldown animation shares the central driver below with the Stagger and
+--- Essence ticks; no Classic provider routes the Stagger or Essence modes.
 local CP_StopRuneOnUpdates
 
 --- Central CP runtime tick for Stagger and guarded degraded fallbacks.
@@ -973,7 +943,7 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
         if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
         CP_StopCentralTick()
     else
-        --- SEGMENTED mode: essence may tick.
+        --- SEGMENTED mode: the Retail-only Essence path may tick.
         if CP.essenceOUAAny and _essenceRuntimeTick then
             CP_StartCentralTick(_essenceRuntimeTick)
         else
@@ -984,10 +954,8 @@ end
 
 local CP_RunActiveUpdate
 
---- Phase 5 CP split: class/resource specials now live in the SPECIALS builder
---- of ClassPower/MSUF_CP_Core.lua. The core builds the handlers from a
---- small feature builder so event wiring stays identical while class-specific
---- logic stops bloating the orchestrator chunk.
+--- Class/resource special handlers come from the SPECIALS builder of
+--- Game/Classic/ClassPower/MSUF_CP_Core.lua.
 local OnWarlockCastStart
 local OnWarlockCastEnd
 local OnTipOfTheSpearSpellCast
@@ -1034,10 +1002,8 @@ do
 
 end
 
---- Phase 4 CP split: continuous + stagger mode runners now live in the
---- CONTINUOUS and STAGGER builders of ClassPower/MSUF_CP_Modes.lua.
---- The core keeps only orchestration and event wiring, while the heavy single-bar
---- runners live outside the main chunk.
+--- The continuous and stagger runners come from the CONTINUOUS and STAGGER
+--- builders of Game/Classic/ClassPower/MSUF_CP_Modes.lua, outside the main chunk.
 
 local CP_RefreshEventBindings
 --- Update function dispatch table (set in FullRefresh, called in hot path)
@@ -1124,8 +1090,8 @@ end
 --- that transition - the cooldown-width observers watch Blizzard viewers - so
 --- notify the Power element from the show/hide path itself. Width-only: no config
 --- compile and no element routing.
---- Lives on CP instead of a file-scope local: this file is at the Lua 5.1
---- 200-local ceiling.
+--- Lives on CP instead of a file-scope local: the main chunk's Lua 5.1 local
+--- budget (200) is kept for hot-path upvalues.
 function CP.RefreshSyncedPowerWidth(playerFrame)
     playerFrame = playerFrame or GetPlayerFrame()
     local spec = playerFrame and playerFrame.MSUFSpec
@@ -1183,15 +1149,16 @@ end
 
 --- Full refresh (called on spec change, form change, config change)
 --- FullRefresh runs a fixed sequence of cold stages. The stage functions live
---- on one table so the split spends a single main-chunk local (this file sits
---- near the Lua 5.1 local ceiling). Execution order is unchanged: every stage
+--- on one table so the split spends a single main-chunk local (the Lua 5.1
+--- budget of 200 is kept for hot-path upvalues). Execution order is unchanged: every stage
 --- runs exactly where its body used to sit inline.
 local Refresh = {}
 
 --- Player Power source override. Missing/AUTO preserves the exact existing
---- profile behavior below (Elemental/Shadow row ownership and Aug Ebon
---- Might). MANA is explicit, applies only to a real player Mana pool, and
---- yields to vehicle power until the structural exit event fires.
+--- profile behavior below (the Retail Elemental/Shadow row ownership; no
+--- Classic provider routes Maelstrom or Insanity). MANA is explicit, applies
+--- only to a real player Mana pool, and yields to vehicle power until the
+--- structural exit event fires.
 function Refresh.ResolveDisplayOwnership(cpEnabled, powerType, renderMode)
     local inVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
     local playerManaEnabled = CPConfig.PlayerManaOverrideEnabled(inVehicle)
@@ -1233,7 +1200,11 @@ function Refresh.ResolveMaxPower(powerType, renderMode)
         if powerType == "MAELSTROM_WEAPON" then
             --- Maelstrom Weapon: max stacks from spell data
             maxP = 10  --- default
-            local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
+            local getMaxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+            local spellMax
+            if type(getMaxApplications) == "function" then
+                spellMax = getMaxApplications(CPK.SPELL.MAELSTROM_WEAPON)
+            end
             if NotSecret(spellMax) and spellMax ~= nil then
                 local resolvedMax = tonumber(spellMax)
                 if resolvedMax and resolvedMax > 0 then maxP = resolvedMax end
@@ -1344,8 +1315,7 @@ function Refresh.ShowClassPower(playerFrame, b, cpHeight, powerType, renderMode,
     --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
     if CP._outline then
         local outlineBars = _cpDB.bars or {}
-        local outlineShape = renderMode == CPK.MODE.NATIVE_AURA and "BAR"
-            or tostring(outlineBars.classPowerShape or "BAR"):upper()
+        local outlineShape = tostring(outlineBars.classPowerShape or "BAR"):upper()
         local outlineSize = tonumber(outlineBars.classPowerOutline) or 1
         if outlineShape == "BAR" and outlineSize > 0 and CP._msufRoundedOutlineSuppressed ~= true then
             CP._outline:Show()
@@ -1515,12 +1485,8 @@ local function FullRefresh()
 end
 
 --- Event-driven updates (hot path: minimal work)
---- Runtime handlers now come from the CP runtime feature builder below.
-
---- Phase 6 CP split: runtime/light-refresh handlers now live in the RUNTIME
---- builder of ClassPower/MSUF_CP_Core.lua. The core keeps event-frame wiring,
---- while hot-path glue and structural light-refresh helpers live in that
---- feature builder to keep the orchestrator chunk thin.
+--- Runtime and light-refresh handlers come from the RUNTIME builder of
+--- Game/Classic/ClassPower/MSUF_CP_Core.lua; the core keeps event-frame wiring.
 
 local ThrottledFullRefresh
 local CP_ShouldUseLiteBindings
@@ -1529,29 +1495,43 @@ local CP_ShouldUseLiteBindings
 local eventFrame = CreateFrame("Frame")
 local _cpStructuralEventsBound = false
 
+--- Structural and startup (un)registration. Events the client's
+--- MSUF.Client.SupportsEvent rejects are never registered or unregistered.
+local function CP_SetSupportedEvent(event, active, unit)
+    local client = MSUF.Client
+    if client and type(client.SupportsEvent) == "function" and not client.SupportsEvent(event) then
+        return
+    end
+    if not active then
+        eventFrame:UnregisterEvent(event)
+    elseif unit then
+        eventFrame:RegisterUnitEvent(event, unit)
+    else
+        eventFrame:RegisterEvent(event)
+    end
+end
+
 CP_SetStructuralEventsBound = function(active)
     active = active and true or false
     if _cpStructuralEventsBound == active then return end
-    _cpStructuralEventsBound = active
-    if active then
-        eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        eventFrame:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
-        eventFrame:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
-        eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
-        eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
-        eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
-    else
-        eventFrame:UnregisterEvent("PLAYER_ENTERING_WORLD")
-        eventFrame:UnregisterEvent("UNIT_ENTERED_VEHICLE")
-        eventFrame:UnregisterEvent("UNIT_EXITED_VEHICLE")
-        eventFrame:UnregisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:UnregisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:UnregisterEvent("PLAYER_TALENT_UPDATE")
-        eventFrame:UnregisterEvent("TRAIT_CONFIG_UPDATED")
-        eventFrame:UnregisterEvent("UPDATE_SHAPESHIFT_FORM")
+    CP_SetSupportedEvent("PLAYER_ENTERING_WORLD", active)
+    CP_SetSupportedEvent("UNIT_ENTERED_VEHICLE", active, "player")
+    CP_SetSupportedEvent("UNIT_EXITED_VEHICLE", active, "player")
+    CP_SetSupportedEvent("PLAYER_SPECIALIZATION_CHANGED", active)
+    CP_SetSupportedEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", active)
+    CP_SetSupportedEvent("PLAYER_TALENT_UPDATE", active)
+    CP_SetSupportedEvent("TRAIT_CONFIG_UPDATED", active)
+    CP_SetSupportedEvent("UPDATE_SHAPESHIFT_FORM", active)
+    --- Provider extras, e.g. Mists Warlock SPELLS_CHANGED for the shard spell gate.
+    local provider = MSUF.CPClient
+    local extras = provider and provider.StructuralEvents
+    if type(extras) == "table" then
+        for i = 1, #extras do
+            CP_SetSupportedEvent(extras[i], active)
+        end
     end
+    --- Flag last: a registration that throws must not block the next attempt.
+    _cpStructuralEventsBound = active
 end
 
 --- Throttle for rare events (spec/form changes)
@@ -1659,23 +1639,32 @@ end
 local _cpBoundEvents = {}
 local _cpBoundUnits = {}
 
-local function CP_SetEventBound(frame, event, want, unit)
+--- withVehicle adds the vehicle unit to a player unit event (Mists vehicle
+--- combo points). Its cache key is a constant string, so no allocation.
+local function CP_SetEventBound(frame, event, want, unit, withVehicle)
     local client = MSUF.Client
     if client and type(client.SupportsEvent) == "function" and not client.SupportsEvent(event) then
         _cpBoundEvents[event] = false
         _cpBoundUnits[event] = nil
         return
     end
-    if _cpBoundEvents[event] == want and _cpBoundUnits[event] == unit then return end
-    frame:UnregisterEvent(event)
+    local unitKey = unit
+    if withVehicle == true and unit == "player" then unitKey = "player+vehicle" end
+    if _cpBoundEvents[event] == want and _cpBoundUnits[event] == unitKey then return end
+    --- Never-bound events (nil) were not registered by this binder.
+    if _cpBoundEvents[event] ~= nil then
+        frame:UnregisterEvent(event)
+    end
     if want then
-        if unit then
+        if unitKey == "player+vehicle" then
+            frame:RegisterUnitEvent(event, unit, "vehicle")
+        elseif unit then
             frame:RegisterUnitEvent(event, unit)
         else
             frame:RegisterEvent(event)
         end
         _cpBoundEvents[event] = true
-        _cpBoundUnits[event] = unit
+        _cpBoundUnits[event] = unitKey
     else
         _cpBoundEvents[event] = false
         _cpBoundUnits[event] = nil
@@ -1754,13 +1743,17 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "PLAYER_DEAD", false)
         CP_SetEventBound(eventFrame, "PLAYER_ALIVE", false)
         CP_SetEventBound(eventFrame, "PLAYER_TARGET_CHANGED", false)
+        CP_SetEventBound(eventFrame, "COMBO_TARGET_CHANGED", false)
         CP.CDMWidthSetEvents()
         return
     end
 
+    --- Vehicle combo points arrive on the vehicle unit (Blizzard ComboFrame).
+    local comboVehicle = CP.isVehicle == true and CP.powerType == PT.ComboPoints
+
     if not useLite then
         CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", true, "player")
+        CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", true, "player", comboVehicle)
         CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", true, "player")
         CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", true, "player")
         CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", true, "player")
@@ -1780,6 +1773,7 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "PLAYER_DEAD", true)
         CP_SetEventBound(eventFrame, "PLAYER_ALIVE", true)
         CP_SetEventBound(eventFrame, "PLAYER_TARGET_CHANGED", CP.visible and CP.powerType == PT.ComboPoints)
+        CP_SetEventBound(eventFrame, "COMBO_TARGET_CHANGED", CP.visible and CP.powerType == PT.ComboPoints)
         CP.CDMWidthSetEvents()
         return
     end
@@ -1810,7 +1804,7 @@ CP_RefreshEventBindings = function()
 
     local wantFrequentPower = wantPower and CP_ShouldUseFrequentPowerEvents()
     CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", wantPower and not wantFrequentPower, "player")
-    CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", wantFrequentPower, "player")
+    CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", wantFrequentPower, "player", comboVehicle)
     CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", wantMaxPower, "player")
     CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", wantDisplayPower, "player")
     CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", wantPointCharge, "player")
@@ -1829,6 +1823,7 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "PLAYER_DEAD", wantDeadAlive)
     CP_SetEventBound(eventFrame, "PLAYER_ALIVE", wantDeadAlive)
     CP_SetEventBound(eventFrame, "PLAYER_TARGET_CHANGED", wantTargetChanged)
+    CP_SetEventBound(eventFrame, "COMBO_TARGET_CHANGED", wantTargetChanged)
     CP.CDMWidthSetEvents()
 end
 
@@ -1872,6 +1867,9 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         if arg1 == "player" then
             OnPowerUpdate(arg2)
             OnManaUpdate(arg2)
+        elseif arg1 == "vehicle" then
+            --- Registered for the vehicle unit only while vehicle combo points show.
+            OnPowerUpdate(arg2)
         end
         return
     end
@@ -1894,6 +1892,14 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
     if event == "RUNE_POWER_UPDATE" then
         --- arg1 = runeID (1-6), arg2 = energize boolean
         OnRuneUpdate(arg1, arg2)
+        return
+    end
+
+    --- Combo points can move to a new target without PLAYER_TARGET_CHANGED.
+    if event == "COMBO_TARGET_CHANGED" then
+        if CP.visible and CP.powerType == PT.ComboPoints then
+            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+        end
         return
     end
 
@@ -2036,6 +2042,18 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         return
     end
 
+    --- Provider structural extra (Mists Warlock): rebuild only when a learned or
+    --- lost spell really changes the route, e.g. the Affliction shard gate.
+    if event == "SPELLS_CHANGED" then
+        local flags, powerType, renderMode = CPConfig.ComputeStructuralSignature()
+        if flags ~= CP.structuralFlags
+            or powerType ~= CP.structuralPowerType
+            or renderMode ~= CP.structuralRenderMode then
+            ThrottledFullRefresh()
+        end
+        return
+    end
+
     --- Rare: only rebuild on actual structural changes; otherwise do a light re-sync.
     if event == "PLAYER_SPECIALIZATION_CHANGED"
     or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
@@ -2108,9 +2126,9 @@ CP.SyncControllerEvents = function(active)
         end
         return false
     end
-    eventFrame:RegisterEvent("PLAYER_LOGIN")
-    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    eventFrame:RegisterEvent("ADDON_LOADED")
+    CP_SetSupportedEvent("PLAYER_LOGIN", true)
+    CP_SetSupportedEvent("PLAYER_ENTERING_WORLD", true)
+    CP_SetSupportedEvent("ADDON_LOADED", true)
     return true
 end
 
@@ -2382,7 +2400,7 @@ function CP.DisableNow()
     if augWasActive or displayPowerWasOverridden then RefreshPlayerPowerBar() end
 end
 
---- Phase 4: Module Registration
+--- Module Registration
 do
     if type(_G.MSUF_RegisterModule) == "function" then
         _G.MSUF_RegisterModule("ClassPower", {
@@ -2425,5 +2443,3 @@ do
         })
     end
 end
-
---- Balance Druid prediction/runtime moved to ClassPower\\MSUF_CP_BalanceDruid.lua.

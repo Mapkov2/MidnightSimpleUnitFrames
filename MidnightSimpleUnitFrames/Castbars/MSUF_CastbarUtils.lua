@@ -1038,6 +1038,45 @@ local function PushbackSuffix(frame)
     return string.format(" +%.1f", delayMS / 1000)
 end
 
+--- Cold path (one call per cast apply): the pushback delay for the suffix.
+--- A client delayTimeMS wins whenever it exists. The legacy Classic tuple has
+--- none, but UNIT_SPELLCAST_DELAYED moves the cast's start time forward, so the
+--- delay there is the shift from the first start seen for the same castID.
+--- Channels and casts carrying a Retail castBarID never use the legacy measure.
+--- The identity fields are frame-local and survive the timing resets on purpose:
+--- the re-read after DELAYED runs those resets before it asks for the delay.
+local function ResolveCastbarPushbackMS(frame, state)
+    if not state then return nil end
+
+    local delayMS = PlainNumber(state.delayTimeMS)
+    if delayMS ~= nil or not frame then return delayMS end
+
+    if state.castType ~= "CAST" or state.castBarID ~= nil then
+        frame._msufPushbackCastID = nil
+        frame._msufPushbackStartMS = nil
+        return nil
+    end
+
+    local castID = state.castID
+    local startMS = PlainNumber(state.startTimeMS)
+    if castID == nil or startMS == nil or (IsSecretValue and IsSecretValue(castID) == true) then
+        frame._msufPushbackCastID = nil
+        frame._msufPushbackStartMS = nil
+        return nil
+    end
+
+    if castID ~= frame._msufPushbackCastID then
+        frame._msufPushbackCastID = castID
+        frame._msufPushbackStartMS = startMS
+        return nil
+    end
+
+    local moved = startMS - frame._msufPushbackStartMS
+    if moved > 0 then return moved end
+    return nil
+end
+ExportPublic("MSUF_Castbar_ResolvePushbackMS", ResolveCastbarPushbackMS)
+
 local function ComposeCastText(frame, text)
     local out = ShortenCastbarSpellName(frame, text)
     if type(out) ~= "string" then return out end

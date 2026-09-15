@@ -690,7 +690,7 @@ local function RefreshBossPhysicalGeometry()
       changed = true
     end
   end
-  for index = 1, 3 do
+  for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
     local unit = "arena" .. index
     local frame = (UF.frames and UF.frames[unit]) or _G["MSUF_" .. unit]
     if frame and ApplyBossPhysicalBarGeometry(frame) then

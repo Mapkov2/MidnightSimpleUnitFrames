@@ -87,7 +87,7 @@ local function RefreshAffectedRuntimeUnits(unit, shared)
             A3.RefreshUnit("boss" .. i)
         end
     elseif ARENA_UNITS[unit] and shared and shared.arenaEditTogether ~= false then
-        for i = 1, 3 do
+        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
             A3.RefreshUnit("arena" .. i)
         end
     elseif unit then
@@ -143,7 +143,7 @@ local function ApplyDragDelta(self, dx, dy, elapsed)
             ApplyDragUnit(auras, "boss" .. i, moverKind, x, y)
         end
     elseif ARENA_UNITS[baseUnit] and shared.arenaEditTogether ~= false then
-        for i = 1, 3 do
+        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
             ApplyDragUnit(auras, "arena" .. i, moverKind, x, y)
         end
     elseif baseUnit then

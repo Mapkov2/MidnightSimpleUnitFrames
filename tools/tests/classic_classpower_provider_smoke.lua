@@ -5,7 +5,11 @@ function UnitPower(_, powerType)
     if powerType == 0 then return 99 end
     return 0
 end
-function GetComboPoints() return 3 end
+function GetComboPoints(unit)
+    if unit == "vehicle" then return 4 end
+    return 3
+end
+function UnitPowerDisplayMod() return 100 end
 
 local addonName = "MidnightSimpleUnitFrames"
 local namespace = { ExportPublic = function(name, value) _G[name] = value end }
@@ -22,6 +26,11 @@ assert(mists.UseFrequentPower(PT.ComboPoints, MODE.SEGMENTED) == true)
 assert(mists.NeedsTargetChanged(PT.ComboPoints) == true)
 assert(mists.AcceptPowerToken(PT.ComboPoints, "ENERGY", "COMBO_POINTS", "ROGUE") == true)
 assert(mists.AcceptPowerToken(PT.ComboPoints, "MANA", "COMBO_POINTS", "ROGUE") == false)
+assert(mists.UnitPowerDisplayMod(PT.BurningEmbers) == 10,
+    "Mists Burning Embers must use the 10-per-ember scale")
+assert(mists.UnitPowerDisplayMod(PT.SoulShards) == 100,
+    "Mists display modifier did not delegate to the client")
+assert(mists.StructuralEvents == nil, "only Mists Warlocks bind extra structural events")
 
 local function resolve(provider, playerClass, spec, primaryPower, formID, spellKnown)
     local handled, powerType, mode, aura = provider.Resolve({
@@ -59,6 +68,19 @@ powerType, mode = resolve(mists, "DRUID", 1, PT.Mana, nil)
 assert(powerType == PT.Balance and mode == MODE.SIGNED_CONTINUOUS)
 powerType, mode = resolve(mists, "WARRIOR", 1)
 assert(powerType == nil and mode == MODE.NONE)
+local vehicleHandled, vehiclePower, vehicleMode = mists.Resolve({
+    playerClass = "WARRIOR",
+    spec = 1,
+    inVehicle = true,
+    vehicleHasCombo = true,
+    isPlayerSpell = function() return false end,
+})
+assert(vehicleHandled == true and vehiclePower == PT.ComboPoints and vehicleMode == MODE.SEGMENTED)
+assert(mists.UnitPower("player", PT.ComboPoints) == 4,
+    "Mists vehicle combo points did not read the vehicle unit")
+resolve(mists, "ROGUE", 1, PT.Energy)
+assert(mists.UnitPower("player", PT.ComboPoints) == 3,
+    "Mists combo points stayed on the vehicle after the vehicle route ended")
 
 local tbcNamespace = {}
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/TBC/ClassPower.lua"))(addonName, tbcNamespace)

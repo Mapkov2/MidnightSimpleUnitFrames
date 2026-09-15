@@ -1,6 +1,6 @@
---- MSUF_CP_Constants.lua
---- Phase 1 ClassPower split: shared constants/data extracted from the core file.
---- Loaded before the ClassPower controller.
+--- Game/Classic/ClassPower/MSUF_CP_Constants.lua
+--- Shared ClassPower constants and data. Loaded before the flavor provider and
+--- the ClassPower controller.
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -210,10 +210,7 @@ K.CDM_HOOK_DEFS = {
     { name = "BuffIconCooldownViewer", flag = "_bicvHooked", mode = "tracked_buffs" },
 }
 
---- Profiles (from MSUF_CP_Profiles.lua)
---- MSUF_CP_Profiles.lua
---- Phase 1 ClassPower split: data-only event profiles for active render modes.
---- Loaded before the ClassPower controller.
+--- Data-only event profiles for each render mode.
 
 local K = _G.MSUF_CP_CONST or {}
 local CPK = K.CPK or {}

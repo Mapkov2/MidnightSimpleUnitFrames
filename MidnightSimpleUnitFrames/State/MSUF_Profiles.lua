@@ -68,7 +68,11 @@ local ApplyProfileRuntime = MSUF.ProfileRuntime.Apply
 --- slash handlers, and legacy callers, so the public surface stays global even
 --- though the implementation is isolated in this State module.
 function MSUF_GetCharKey()
-    return UnitName("player") .. "-" .. GetRealmName()
+    -- A client without realms may report no realm name. Coerce it to "" so the
+    -- key stays stable and profile bootstrap never concatenates nil.
+    local realm = GetRealmName()
+    if type(realm) ~= "string" then realm = "" end
+    return UnitName("player") .. "-" .. realm
 end
 local function MSUF_ProfileIO_EnsureProfileRoots()
     if type(MSUF_GlobalDB) ~= "table" then
@@ -493,7 +497,7 @@ end
 ---
 local function MSUF_GetCharMeta()
     local _, chars = MSUF_ProfileIO_EnsureProfileRoots()
-    local charKey = (type(_G.MSUF_GetCharKey) == "function") and _G.MSUF_GetCharKey() or (UnitName("player") .. "-" .. GetRealmName())
+    local charKey = MSUF_GetCharKey()
     local char = chars[charKey]
     if type(char) ~= "table" then
         char = {}
@@ -1055,6 +1059,12 @@ local function MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
 end
 
 local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }
+--- Arena slot ledgers: arena1..3 stay literal on every flavor (pinned by
+--- tools/arena_unit_scope_smoke.lua) and arena4..N follow the client fact
+--- published by Game/Shared/Initialize.lua (5 on TBC/Mists, 3 on Mainline,
+--- 0 on Vanilla). Clamped to 3..5 so Mainline and Vanilla keep the exact
+--- arena1..3 import, reset and text-scope behavior.
+local MSUF_PROFILEIO_ARENA_SLOTS = math.max(3, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
 local MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES = {
     { canonical = "targettarget", aliases = { "tot", "targetoftarget", "target_of_target" } },
     { canonical = "focustarget", aliases = { "focus_target", "focustargettarget" } },
@@ -1198,7 +1208,7 @@ local function MSUF_ProfileIO_NormalizeUnitFramePositionDB(profile, preferLegacy
     for i = 1, 5 do
         NormalizeUnit(profile["boss" .. i])
     end
-    for i = 1, 3 do
+    for i = 1, MSUF_PROFILEIO_ARENA_SLOTS do
         NormalizeUnit(profile["arena" .. i])
     end
     if type(profile.general) == "table" and profile.general.anchorName == "UI_Parent" then
@@ -1319,6 +1329,10 @@ local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "arena", "arena1", "arena2", "arena3",
     "gf_party", "gf_raid", "gf_mythicraid",
 }
+for i = 4, MSUF_PROFILEIO_ARENA_SLOTS do
+    MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS[#MSUF_PROFILEIO_UNIT_AURA_RESET_UNITS + 1] = "arena" .. i
+    MSUF_PROFILEIO_TEXT_SCOPE_KEYS[#MSUF_PROFILEIO_TEXT_SCOPE_KEYS + 1] = "arena" .. i
+end
 local MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS = {
     "player", "target", "targettarget", "tot", "targetoftarget",
     "focus", "focustarget", "focus_target", "focustargettarget",
@@ -2709,7 +2723,7 @@ end
 --- Blizzard Edit Mode data in profile strings is strictly opt-in, per
 --- direction: exports never carry general.blizzardEditModeSnapshot and
 --- imports never apply it unless the profiles-page switch is on. Both flags
---- are session-transient by design â€” the user decides per session.
+--- are session-transient by design — the user decides per session.
 local MSUF_ProfileIO_ExportBlizzardEM = false
 local MSUF_ProfileIO_ImportBlizzardEM = false
 ExportPublic("MSUF_Profiles_SetExportBlizzardEditMode", function(value)
@@ -2978,44 +2992,155 @@ local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
         end
     end
 end
-local function MSUF_ApplySnapshotToActiveProfile(snapshot)
-    if not snapshot then  return false, "not a table" end
-    local valid, validationError = MSUF.ProfileIOValidateImportValue(snapshot)
-    if not valid then return false, validationError end
-    local stagedSnapshot = MSUF_DeepCopy(snapshot)
-    if type(stagedSnapshot) ~= "table" then
-        return false, "profile staging failed: " .. tostring(stagedSnapshot)
+--- Import transaction, step 1 of 2: decode, select, validate and stage.
+--- Runs before anything is written. It performs no SavedVariables writes, no
+--- ExportPublic and no prints, so every rejection (including a truncated
+--- string pasted into new-profile import) leaves the stored profiles
+--- untouched. A native decoder that raises propagates from here, which is
+--- still ahead of every write. mode is "active" (current or new profile) or
+--- "external" (MSUF_ImportExternal). Returns a plan table, or nil plus reason
+--- plus (active mode) the exact chat line the pre-transaction entry points
+--- printed for that rejection. External reasons keep their old strings too.
+local function MSUF_ProfileIO_PrepareImport(str, mode)
+    local external = (mode == "external")
+    if type(str) ~= "string" or not str:match("%S") then
+        return nil, "empty string", "|cffff0000MSUF:|r Import failed (empty string)."
     end
-    snapshot = MSUF_ProfileIO_SelectSupportedProfile(stagedSnapshot)
-    if not snapshot then
-        return false, "MSUF 6.x profile required (schema 600)"
+    local decoded, why
+    local tryDec = _G.MSUF_TryDecodeCompactString
+    if type(tryDec) == "function" then
+        decoded = tryDec(str)
     end
-    local kind = snapshot.kind
-    if kind == "groupframes" then
-        kind = "groupframe"
+    if type(decoded) ~= "table" then
+        --- A compact MSUF2/MSUF3/MSUF4 string that failed to decode is NEVER
+        --- retried as a table literal.
+        local prefix = str:match("^%s*(MSUF%d+):")
+        if prefix == "MSUF2" or prefix == "MSUF3" or prefix == "MSUF4" then
+            why = "could not decode compact profile string (" .. prefix .. ")"
+            return nil, why, "|cffff0000MSUF:|r Import failed: " .. why .. "."
+        end
+        decoded, why = MSUF.ProfileIOParseTableLiteral(str)
+        if type(decoded) ~= "table" then
+            if external then return nil, "invalid lua table string" end
+            return nil, tostring(why), "|cffff0000MSUF:|r Import failed: " .. tostring(why)
+        end
     end
-    local payload = snapshot.payload
-    if type(kind) ~= "string" or type(payload) ~= "table" then
-         return false, "invalid snapshot"
+    --- Source-client stamp: `decoded` is still the raw decoded envelope here.
+    --- A reader of the exporting client's stamp belongs at this point, before
+    --- SelectSupportedProfile rebuilds or drops the envelope.
+    local selected = MSUF_ProfileIO_SelectSupportedProfile(decoded)
+    local schemaWhy = "MSUF 6.x profile required (schema 600)"
+    if type(selected) ~= "table" then
+        return nil, schemaWhy, "|cffff0000MSUF:|r Import failed: " .. schemaWhy .. "."
     end
-    --- Opt-in gate for imported Blizzard Edit Mode data: stripped before the
-    --- merge unless the profiles-page switch is on, so a foreign string can
-    --- never silently rearrange the local Blizzard HUD.
-    if not MSUF_ProfileIO_ImportBlizzardEM and type(payload.general) == "table" then
-        payload.general.blizzardEditModeSnapshot = nil
+    local isSnapshot = selected.addon == "MSUF" and tonumber(selected.fmt) == 2
+        and type(selected.payload) == "table" and type(selected.kind) == "string"
+    --- Rejection order follows the pre-transaction entry points: external
+    --- import rejects any snapshot that is not kind "all" before validating,
+    --- and an active full profile checks its schema stamp before validating.
+    if isSnapshot and external and selected.kind ~= "all" then
+        return nil, "external import requires a full profile snapshot"
     end
-    if kind == "unitframe" or kind == "groupframe" or kind == "all" then
-        MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
-            source = "snapshot_import",
-            schema = snapshot.schema,
-            markProfile = (kind == "all"),
-            createGeneral = (kind == "all") or type(payload.general) == "table",
-            normalizePositions = (kind == "unitframe" or kind == "all"),
-        })
+    if not isSnapshot and not external
+        and tonumber(selected._msufProfileSchema) ~= MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
+        return nil, schemaWhy, "|cffff0000MSUF:|r Import failed: " .. schemaWhy .. "."
+    end
+    local valid, validationError = MSUF.ProfileIOValidateImportValue(selected)
+    if not valid then
+        return nil, validationError, (isSnapshot and "|cffff0000MSUF:|r Import failed: "
+            or "|cffff0000MSUF:|r Profile import failed: ") .. tostring(validationError)
+    end
+    local staged = MSUF_DeepCopy(selected)
+    local plan = {
+        isSnapshot = isSnapshot,
+        schema = staged.schema,
+    }
+    local kind
+    if plan.isSnapshot then
+        kind = staged.kind
+        if kind == "groupframes" then
+            kind = "groupframe"
+        end
+        if kind ~= "unitframe" and kind ~= "groupframe" and kind ~= "castbar"
+            and kind ~= "colors" and kind ~= "gameplay" and kind ~= "all" then
+            return nil, "unknown kind", "|cffff0000MSUF:|r Import failed: unknown kind"
+        end
+        plan.snapshotKind, plan.payload = staged.kind, staged.payload
     else
-        MSUF_ProfileIO_NormalizeImportedFontSizes(payload)
+        kind = "all"
+        plan.payload = staged
+    end
+    plan.kind = kind
+    local payload = plan.payload
+    if mode == "external" then
+        MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
+            source = "external_import",
+            markProfile = true,
+        })
+        if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
+            _G.MSUF_NormalizePortraitRenderDB(payload)
+        end
+        if type(_G.MSUF_MigrateDispelPriorityProfile) == "function" then
+            _G.MSUF_MigrateDispelPriorityProfile(payload, true)
+        end
+    elseif not plan.isSnapshot then
+        MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
+            source = "profile_import",
+            markProfile = true,
+        })
+        if not MSUF_ProfileIO_ImportBlizzardEM and type(payload.general) == "table" then
+            payload.general.blizzardEditModeSnapshot = nil
+        end
+    else
+        --- Opt-in gate for imported Blizzard Edit Mode data: stripped before the
+        --- merge unless the profiles-page switch is on, so a foreign string can
+        --- never silently rearrange the local Blizzard HUD.
+        if not MSUF_ProfileIO_ImportBlizzardEM and type(payload.general) == "table" then
+            payload.general.blizzardEditModeSnapshot = nil
+        end
+        if kind == "unitframe" or kind == "groupframe" or kind == "all" then
+            MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
+                source = "snapshot_import",
+                schema = plan.schema,
+                markProfile = (kind == "all"),
+                createGeneral = (kind == "all") or type(payload.general) == "table",
+                normalizePositions = (kind == "unitframe" or kind == "all"),
+            })
+        else
+            MSUF_ProfileIO_NormalizeImportedFontSizes(payload)
+        end
     end
     MSUF_ProfileIO_CollectProfileMediaWarnings(payload)
+    return plan
+end
+--- Import transaction, step 2 of 2: write an accepted plan into the active
+--- profile. Everything that can reject a string already ran in
+--- MSUF_ProfileIO_PrepareImport, so this step has no failure return.
+local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
+    local kind, payload = plan.kind, plan.payload
+    if not plan.isSnapshot then
+        MSUF_ProfileIO_RunEnsureDB()
+        --- Keep profile table reference stable; wipe + copy.
+        if type(MSUF_DB) ~= "table" then
+            MSUF_DB = {}
+        end
+        MSUF_WipeTable(MSUF_DB)
+        for k, v in pairs(payload) do
+            MSUF_DB[k] = v
+        end
+        if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
+            MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
+        end
+        MSUF_ProfileIO_RunEnsureDB(true)
+        MSUF.ProfileIOCompleteFirstLoadImport()
+        MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+        MSUF_ProfileIO_PostImportApply_Auras("all", payload)
+        MSUF_ProfileIO_PostImportApply_GroupFrames("all", payload)
+        MSUF_ProfileIO_PostImportApply_UnitAlphas("all", payload)
+        ApplyProfileRuntime("PROFILE_IMPORT", true)
+        MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
+        return true
+    end
     MSUF_ProfileIO_RunEnsureDB()
 
     --- Always keep the profile-table reference stable (important!).
@@ -3139,8 +3264,6 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
         for kk, vv in pairs(payload) do
             MSUF_DB[kk] = MSUF_DeepCopy(vv)
         end
-    else
-         return false, "unknown kind"
     end
     --- Ensure the active profile table in GlobalDB points to MSUF_DB.
     if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
@@ -3148,10 +3271,10 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     end
     MSUF_ProfileIO_RunEnsureDB(true)
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
-    MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
-    MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
+    MSUF_ProfileIO_PostImportApply_Auras(plan.snapshotKind, payload)
+    MSUF_ProfileIO_PostImportApply_GroupFrames(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
-    if type(payload.general) == "table"
+    if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
         and type(payload.general.blizzardEditModeSnapshot) == "table" then
         _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
     end
@@ -3170,127 +3293,70 @@ function MSUF_ExportSelectionToString(kind)
     return _G.MSUF_EncodeCompactTable(snap)
 end
 
-local function MSUF_ApplyFullProfileToActiveProfile(tbl)
-    if type(tbl) ~= "table" then
-        print("|cffff0000MSUF:|r Profile import failed: not a table.")
-        return false
+--- Imports schema-600 MSUF2/MSUF3/MSUF4 strings or safe text snapshots into
+--- the active profile. Returns true, or false plus the rejection reason.
+function MSUF_ImportFromString(str)
+    MSUF_ProfileIO_ResetImportWarnings()
+    local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active")
+    if not plan then
+        print(chatLine)
+        return false, why
     end
-    if tonumber(tbl._msufProfileSchema) ~= MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
-        print("|cffff0000MSUF:|r Import failed: MSUF 6.x profile required (schema 600).")
-        return false
+    MSUF_ProfileIO_CommitImportToActiveProfile(plan)
+    if plan.isSnapshot then
+        print("|cff00ff00MSUF:|r Imported " .. tostring(plan.snapshotKind) .. " settings into the active profile.")
+    else
+        print("|cff00ff00MSUF:|r Profile imported into the active profile.")
     end
-    local valid, validationError = MSUF.ProfileIOValidateImportValue(tbl)
-    if not valid then
-        print("|cffff0000MSUF:|r Profile import failed: " .. tostring(validationError))
-        return false
-    end
-    local staged = (function()
-        local copy = MSUF_DeepCopy(tbl)
-        MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
-            source = "profile_import",
-            markProfile = true,
-        })
-        return copy
-    end)()
-    if type(staged) ~= "table" then
-        print("|cffff0000MSUF:|r Profile import failed during staging: " .. tostring(staged))
-        return false
-    end
-    tbl = staged
-    if not MSUF_ProfileIO_ImportBlizzardEM and type(tbl.general) == "table" then
-        tbl.general.blizzardEditModeSnapshot = nil
-    end
-    MSUF_ProfileIO_RunEnsureDB()
-    MSUF_ProfileIO_CollectProfileMediaWarnings(tbl)
-    --- Keep profile table reference stable; wipe + copy.
-    if type(MSUF_DB) ~= "table" then
-        MSUF_DB = {}
-    end
-    MSUF_WipeTable(MSUF_DB)
-    for k, v in pairs(tbl) do
-        MSUF_DB[k] = v
-    end
-    if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
-        MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
-    end
-    MSUF_ProfileIO_RunEnsureDB(true)
-    MSUF.ProfileIOCompleteFirstLoadImport()
-    MSUF_ProfileIO_EnsureUnitframeAlphaDB()
-    MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
-    MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
-    MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
-    ApplyProfileRuntime("PROFILE_IMPORT", true)
-    MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
-    print("|cff00ff00MSUF:|r Profile imported into the active profile.")
     MSUF_ProfileIO_ReportImportWarnings()
     return true
 end
---- Imports schema-600 MSUF2/MSUF3/MSUF4 strings or safe text snapshots.
-function MSUF_ImportFromString(str)
+--- Imports a string into a new profile and switches to it. The string is
+--- decoded, validated and staged BEFORE the profile is created or switched, so
+--- a rejected string creates nothing, switches nothing and leaves
+--- SavedVariables untouched. A failed create stops there; a failed switch
+--- switches back and removes the created profile.
+--- Returns true, or false plus reason plus stage ("name", "exists", "decode",
+--- "create" or "switch").
+function MSUF_ImportIntoNewProfile(name, str)
     MSUF_ProfileIO_ResetImportWarnings()
-    if not str or not str:match("%S") then
-        print("|cffff0000MSUF:|r Import failed (empty string).")
-         return false
+    name = type(name) == "string" and name:match("^%s*(.-)%s*$") or ""
+    if name == "" then
+        return false, "enter a new profile name", "name"
     end
-    --- NEW: compact path (no loadstring)
-    local tryDec = _G.MSUF_TryDecodeCompactString
-    if type(tryDec) == "function" then
-        local decoded = tryDec(str)
-        if type(decoded) == "table" then
-            local tbl = MSUF_ProfileIO_SelectSupportedProfile(decoded)
-            if not tbl then
-                print("|cffff0000MSUF:|r Import failed: MSUF 6.x profile required (schema 600).")
-                return false
-            end
-            --- Snapshot format?
-            if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
-                local okApply, why = MSUF_ApplySnapshotToActiveProfile(tbl)
-                if okApply then
-                    print("|cff00ff00MSUF:|r Imported " .. tostring(tbl.kind) .. " settings into the active profile.")
-                    MSUF_ProfileIO_ReportImportWarnings()
-                else
-                    print("|cffff0000MSUF:|r Import failed: " .. tostring(why))
-                end
-                 return okApply == true
-            end
-            return MSUF_ApplyFullProfileToActiveProfile(tbl)
-        end
+    --- Read-only existence check: the profile roots are not created before
+    --- the string has been accepted.
+    local profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
+    if type(profiles) == "table" and profiles[name] ~= nil then
+        return false, "profile already exists", "exists"
     end
-    --- If this looks like a compact MSUF2/MSUF3/MSUF4 string, NEVER attempt loadstring.
-    local prefix = str:match("^%s*(MSUF%d+):")
-    if prefix == "MSUF2" or prefix == "MSUF3" or prefix == "MSUF4" then
-        print("|cffff0000MSUF:|r Import failed: could not decode compact profile string (" .. prefix .. ").")
-         return false
+    local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active")
+    if not plan then
+        print(chatLine)
+        return false, why, "decode"
     end
-    local func, err = MSUF.ProfileIOLoadTableLiteral(str)
-    if not func then
-        print("|cffff0000MSUF:|r Import failed: " .. tostring(err))
-         return false
+    local previous = MSUF_ActiveProfile or "Default"
+    MSUF_CreateProfile(name)
+    profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
+    if type(profiles) ~= "table" or type(profiles[name]) ~= "table" then
+        return false, "could not create profile", "create"
     end
-    -- LoadTableLiteral wraps a sandboxed literal parser that reports failure by
-    -- returning nil plus a reason; it does not raise.
-    local tbl = func()
-    if type(tbl) ~= "table" then
-        print("|cffff0000MSUF:|r Import failed: not a table.")
-         return false
+    local previousExists = type(profiles[previous]) == "table"
+    MSUF_SwitchProfile(name)
+    if MSUF_ActiveProfile ~= name then
+        if previousExists then MSUF_SwitchProfile(previous) end
+        profiles[name] = nil
+        return false, "could not switch profile", "switch"
     end
-    tbl = MSUF_ProfileIO_SelectSupportedProfile(tbl)
-    if not tbl then
-        print("|cffff0000MSUF:|r Import failed: MSUF 6.x profile required (schema 600).")
-        return false
+    MSUF_ProfileIO_CommitImportToActiveProfile(plan)
+    if plan.isSnapshot then
+        print("|cff00ff00MSUF:|r Imported " .. tostring(plan.snapshotKind) .. " settings into the active profile.")
+    else
+        print("|cff00ff00MSUF:|r Profile imported into the active profile.")
     end
-    if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
-        local okApply, why = MSUF_ApplySnapshotToActiveProfile(tbl)
-        if okApply then
-            print("|cff00ff00MSUF:|r Imported " .. tostring(tbl.kind) .. " settings into the active profile.")
-            MSUF_ProfileIO_ReportImportWarnings()
-        else
-            print("|cffff0000MSUF:|r Import failed: " .. tostring(why))
-        end
-         return okApply == true
-    end
-    return MSUF_ApplyFullProfileToActiveProfile(tbl)
- end
+    MSUF_ProfileIO_ReportImportWarnings()
+    return true
+end
 ---
 --- External Wago UI Packs API (stateless by profileKey)
 --- Goals:
@@ -3341,27 +3407,8 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
     if type(newTable) ~= "table" then
          return false, "not a table"
     end
-    local valid, validationError = MSUF.ProfileIOValidateImportValue(newTable)
-    if not valid then return false, validationError end
-    local staged = (function()
-        local copy = MSUF_DeepCopy(newTable)
-        MSUF_ProfileIO_TranslateProfileToCurrent(copy, {
-            source = "external_import",
-            markProfile = true,
-        })
-        if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
-            _G.MSUF_NormalizePortraitRenderDB(copy)
-        end
-        if type(_G.MSUF_MigrateDispelPriorityProfile) == "function" then
-            _G.MSUF_MigrateDispelPriorityProfile(copy, true)
-        end
-        return copy
-    end)()
-    if type(staged) ~= "table" then
-        return false, "profile staging failed: " .. tostring(staged)
-    end
-    newTable = staged
-    MSUF_ProfileIO_CollectProfileMediaWarnings(newTable)
+    --- newTable is the staged payload of an accepted MSUF_ProfileIO_PrepareImport
+    --- plan: it is already validated, translated and media-checked.
     MSUF_ProfileIO_EnsureProfileSystemInitialized()
     local existing = MSUF_GlobalDB.profiles[profileKey]
     local isActive = (profileKey == MSUF_ActiveProfile)
@@ -3445,49 +3492,11 @@ function MSUF_ImportExternal(profileString, profileKey)
     if type(profileKey) ~= "string" or profileKey == "" then
          return false, "invalid profileKey"
     end
-    --- Prefer compact decode (no loadstring).
-    local tryDec = _G.MSUF_TryDecodeCompactString
-    if type(tryDec) == "function" then
-        local decoded = tryDec(profileString)
-        if type(decoded) == "table" then
-            local tbl = MSUF_ProfileIO_SelectSupportedProfile(decoded)
-            if not tbl then
-                return false, "MSUF 6.x profile required (schema 600)"
-            end
-            if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
-                if tbl.kind == "all" then
-                    return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl.payload)
-                end
-                return false, "external import requires a full profile snapshot"
-            end
-            return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
-        end
+    local plan, why = MSUF_ProfileIO_PrepareImport(profileString, "external")
+    if not plan then
+        return false, why
     end
-    --- If it looks like a compact MSUF2/MSUF3/MSUF4 string, but decode failed, do NOT loadstring it.
-    local prefix = profileString:match("^%s*(MSUF%d+):")
-    if prefix == "MSUF2" or prefix == "MSUF3" or prefix == "MSUF4" then
-        return false, "could not decode compact profile string (" .. tostring(prefix) .. ")"
-    end
-    --- Safe table-literal support for schema-600 text snapshots.
-    local func = MSUF.ProfileIOLoadTableLiteral(profileString)
-    if not func then
-         return false, "invalid lua table string"
-    end
-    local tbl = func()
-    if type(tbl) ~= "table" then
-         return false, "lua decode failed"
-    end
-    tbl = MSUF_ProfileIO_SelectSupportedProfile(tbl)
-    if not tbl then
-        return false, "MSUF 6.x profile required (schema 600)"
-    end
-    if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
-        if tbl.kind == "all" then
-            return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl.payload)
-        end
-        return false, "external import requires a full profile snapshot"
-    end
-    return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
+    return MSUF_ProfileIO_OverwriteProfile(profileKey, plan.payload)
 end
 --- Expose real implementations under stable, explicit names for load-order proxies.
 ExportPublic("MSUF_Profiles_ExportExternal", MSUF_ExportExternal)
@@ -3499,6 +3508,8 @@ ExportPublic("MSUF_ImportFromString", MSUF_ImportFromString)
 --- This lets other modules (or load-order proxies) call the correct logic even if _G.MSUF_ImportFromString was set earlier.
 ExportPublic("MSUF_Profiles_ExportSelectionToString", MSUF_ExportSelectionToString)
 ExportPublic("MSUF_Profiles_ImportFromString", MSUF_ImportFromString)
+ExportPublic("MSUF_ImportIntoNewProfile", MSUF_ImportIntoNewProfile)
+ExportPublic("MSUF_Profiles_ImportIntoNewProfile", MSUF_ImportIntoNewProfile)
 ExportPublic("MSUF_ProfileIO_TranslateProfileToCurrent", MSUF_ProfileIO_TranslateProfileToCurrent)
 ExportPublic("MSUF_ProfileIO_TranslateProfilesToCurrent", MSUF_ProfileIO_TranslateProfilesToCurrent)
 ExportPublic("MSUF_CreateProfile", MSUF_CreateProfile)
@@ -3511,6 +3522,7 @@ ExportPublic("MSUF_GetAllProfiles", MSUF_GetAllProfiles)
 if type(MSUF) == "table" then
     MSUF.MSUF_ExportSelectionToString = MSUF_ExportSelectionToString
     MSUF.MSUF_ImportFromString        = MSUF_ImportFromString
+    MSUF.MSUF_ImportIntoNewProfile    = MSUF_ImportIntoNewProfile
     MSUF.MSUF_ProfileIO_TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent
     MSUF.MSUF_ProfileIO_TranslateProfilesToCurrent = MSUF_ProfileIO_TranslateProfilesToCurrent
 end

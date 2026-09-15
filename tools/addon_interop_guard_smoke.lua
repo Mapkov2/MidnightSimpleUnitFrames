@@ -158,6 +158,13 @@ _G.SLASH_RIVALRELOADUI2 = "/reloadui"
 local chatMSUF = { UF = {} }
 chatMSUF.ExportPublic = function(name, value) _G[name] = value; return value end
 
+--- Kernel/MSUF_Require.lua loads right after Kernel/MSUF_Boundary.lua in the
+--- TOC and installs MSUF.Require, which the slash runtime uses to declare
+--- MSUF_EnsureDB (stubbed above) a hard dependency.
+chunk, err = loadfile(ResolvePath("Kernel/MSUF_Require.lua"))
+assert(chunk, err)
+chunk("MidnightSimpleUnitFrames", chatMSUF)
+
 chunk, err = loadfile(ResolvePath("Runtime/MSUF_SlashCommands.lua"))
 assert(chunk, err)
 chunk("MidnightSimpleUnitFrames", chatMSUF)
@@ -190,7 +197,7 @@ local function ReadSource(path)
     return source
 end
 
-local toc = ReadSource("MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc")
+local toc = ReadSource("MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc")
 local optionalDeps = toc:match("## OptionalDeps:[^\r\n]*") or ""
 assert(not optionalDeps:lower():find("masque", 1, true),
     "MSUF must not advertise Masque as an optional dependency")
@@ -210,17 +217,16 @@ for path in pipe:lines() do
         local source = ReadSource(path)
         shippedSourceCount = shippedSourceCount + 1
         local _, retiredSettingCount = source:gsub("masqueEnabled", "")
-        if path == "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua" then
+        if path == "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua" or path == "MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua" then
             assert(retiredSettingCount == 2
                     and source:find("scope.masqueEnabled ~= nil", 1, true)
                     and source:find("scope.masqueEnabled = nil", 1, true),
                 "State defaults may only inspect and purge the retired Masque setting")
-        elseif path == "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua" then
-            assert(retiredSettingCount == 3
-                    and source:find("db.gf_party.masqueEnabled = nil", 1, true)
-                    and source:find("db.gf_raid.masqueEnabled = nil", 1, true)
-                    and source:find("db.gf_mythicraid.masqueEnabled = nil", 1, true),
-                "Group defaults may only purge the retired Masque setting")
+        elseif path == "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Migrations.lua" then
+            -- One pipeline step, applied to gf_party, gf_raid and gf_mythicraid.
+            assert(retiredSettingCount == 1
+                    and source:find('{ name = "masque", run = function(conf) conf.masqueEnabled = nil end },', 1, true),
+                "Group DB repair may only purge the retired Masque setting")
         else
             assert(retiredSettingCount == 0,
                 "retired Masque setting found outside the profile cleanup path in " .. path)
@@ -241,6 +247,29 @@ local router = ReadSource("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_Ass
 assert(router:find("does not register its aura buttons with Masque", 1, true),
     "Assistant must describe Masque as unsupported by MSUF 6.0")
 
+--- ---------------------------------------------------------------------------
+--- 4. Blizzard's Objective Tracker remains Blizzard-owned.
+--- ---------------------------------------------------------------------------
+--- Its dirty layout can reach combat-secret aura APIs. Registering it as an
+--- MSUF mover or applying its manager settings from addon execution can carry
+--- MSUF taint into the deferred tracker update.
+local blizzardEditMode = ReadSource(
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Blizzard.lua")
+assert(not blizzardEditMode:find("systemEnum.ObjectiveTracker", 1, true),
+    "MSUF must not register, snapshot, move or restore the Objective Tracker")
+assert(not blizzardEditMode:find("_G.ObjectiveTrackerManager", 1, true),
+    "MSUF must not apply Objective Tracker manager settings")
+
+--- Group Edit Mode already receives State.Enter/Exit through the shared
+--- listener. A second secure hook of the addon-global transition function is
+--- redundant and makes Blizzard read the tainted global during installation.
+local groupEditMode = ReadSource(
+    "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua")
+assert(groupEditMode:find("MSUF_RegisterAnyEditModeListener", 1, true),
+    "Group Edit Mode must retain the shared state listener")
+assert(not groupEditMode:find('hooksecurefunc("MSUF_SetMSUFEditModeDirect"', 1, true),
+    "Group Edit Mode must not secure-hook the addon-global direct transition")
+
 print(string.format(
-    "PASS addon interop guards: boss settled in %d SetParent calls, /rl yielded, Masque absent across %d sources",
+    "PASS addon interop guards: boss settled in %d SetParent calls, /rl yielded, Masque absent across %d sources, Objective Tracker delegated",
     setParentCalls, shippedSourceCount))

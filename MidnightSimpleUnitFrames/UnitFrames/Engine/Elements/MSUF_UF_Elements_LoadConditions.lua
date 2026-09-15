@@ -58,6 +58,8 @@ local ARENA_PREVIEW_UNITS = {
   arena1 = true,
   arena2 = true,
   arena3 = true,
+  arena4 = true,
+  arena5 = true,
 }
 local BOSS_PREVIEW_REFRESH_ELEMENTS = {
   "Health",
@@ -865,13 +867,15 @@ local ARENA_PREVIEW_LIGHT_REASONS = {
   MSUF2_ARENA_PAGE_FALLBACK = true,
 }
 -- Fixed per-slot identities keep the preview deterministic across sessions.
-local ARENA_PREVIEW_CLASSES = { "MAGE", "ROGUE", "PRIEST" }
+local ARENA_PREVIEW_CLASSES = { "MAGE", "ROGUE", "PRIEST", "WARRIOR", "DRUID" }
 local ARENA_PREVIEW_CLASS_FALLBACK_COLORS = {
   MAGE = { 0.25, 0.78, 0.92 },
   ROGUE = { 1, 0.96, 0.41 },
   PRIEST = { 1, 1, 1 },
+  WARRIOR = { 0.78, 0.61, 0.43 },
+  DRUID = { 1, 0.49, 0.04 },
 }
-local ARENA_PREVIEW_HP_PERCENT = { 65, 45, 80 }
+local ARENA_PREVIEW_HP_PERCENT = { 65, 45, 80, 55, 90 }
 
 local function ArenaPreviewClassColor(classToken)
   local getColor = _G.C_ClassColor and _G.C_ClassColor.GetClassColor
@@ -1015,7 +1019,7 @@ end
 local function ClearArenaPreviewFramesForCombat()
   _G.MSUF2_ArenaUnitframePreviewActive = nil
   local cleared = false
-  for i = 1, 3 do
+  for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
     local frame = UF.frames and UF.frames["arena" .. i]
     if ClearArenaPreviewFrameForRuntime(frame, true) then cleared = true end
   end
@@ -1026,7 +1030,7 @@ UF.ClearArenaPreviewFramesForCombat = ClearArenaPreviewFramesForCombat
 ExportPublic("MSUF_ClearArenaUnitframePreviewForCombat", ClearArenaPreviewFramesForCombat)
 
 local function ApplyArenaPreviewFrames(active)
-  for i = 1, 3 do
+  for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
     local frame = UF.frames and UF.frames["arena" .. i]
     local unit = "arena" .. i
     if frame and active and not ArenaLiveUnitExists(unit) then
@@ -1054,7 +1058,7 @@ local function ArenaPreviewFramesReady(active)
     return false
   end
   local sawFrame = false
-  for i = 1, 3 do
+  for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
     local frame = frames["arena" .. i]
     if frame then
       sawFrame = true
@@ -1096,7 +1100,7 @@ local function RefreshArenaAuras()
     return
   end
   if A3 and type(A3.RefreshUnit) == "function" then
-    for i = 1, 3 do
+    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
       A3.RefreshUnit("arena" .. i)
     end
     return

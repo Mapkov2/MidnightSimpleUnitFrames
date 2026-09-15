@@ -49,10 +49,15 @@ do
 end
 
 --- Only a positively detected pre-12.1 build warns. An unreadable build stays
---- silent so odd environments never get a popup they cannot act on.
+--- silent so odd environments never get a popup they cannot act on. Classic
+--- flavors never warn, and neither does an unrecognized client
+--- (Client.IsSupported == false): Game/Shared/Initialize.lua already prints the
+--- unrecognized-client diagnostic for it.
 local client = type(MSUF.Client) == "table" and MSUF.Client or nil
 local isClassicClient = client and client.IsClassic == true or false
+local isUnknownClient = client and client.IsSupported == false or false
 local isLegacyClient = not isClassicClient
+    and not isUnknownClient
     and (interfaceNumber ~= nil)
     and (interfaceNumber < MIN_INTERFACE)
     or false

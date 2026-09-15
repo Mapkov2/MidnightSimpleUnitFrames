@@ -163,18 +163,6 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         assistantDisposition = "dynamic",
         assistantDispositionReason = "This editor targets whichever status indicator is selected in the adjacent selector.",
     }
-    local selectedStatusColorContract = {
-        assistantDisposition = "dynamic",
-        assistantDispositionReason = "This color swatch targets whichever text status indicator is selected in the adjacent selector.",
-        assistantSettingKeys = {},
-    }
-    for _, prefix in ipairs({
-        "levelIndicator", "raceIndicator", "classTextIndicator", "raidGroupName",
-        "statusText", "statusGhostText", "statusAFKText", "statusDNDText",
-    }) do
-        selectedStatusColorContract.assistantSettingKeys[#selectedStatusColorContract.assistantSettingKeys + 1] =
-            tostring(unit) .. "." .. prefix .. "Color"
-    end
     local function RegisterStatusSearch(control, label, extraKeywords, values, help, semanticPath, classification, assistantContract)
         if not (control and type(M.RegisterSearchWidget) == "function") then return end
         local meta = ControlMeta(ctx, semanticPath, classification)
@@ -279,7 +267,6 @@ function StatusSection.PrepareBinders(state, ctx, unit)
             "status.selected." .. tostring(specField), nil, selectedStatusContract)
         return control
     end
-    state.selectedStatusColorContract = selectedStatusColorContract
     state.RefreshStatusMenu, state.ReadStatusEnabled, state.StatusSearchKeywords, state.selectedStatusContract =
         RefreshStatusMenu, ReadStatusEnabled, StatusSearchKeywords, selectedStatusContract
     state.RegisterStatusSearch, state.BindStatusPlacementSlider, state.ClampSelectedStatusLayer, state.BindStatusTestToggle =
@@ -582,6 +569,23 @@ function StatusSection.BuildIconStyleControls(state, ctx, unit)
         local current = CurrentStatusSpec(unit)
         selectedTextShortcut:SetShown(current and (current.textIndicator == true
             or current.inlineName == true or current.statusTextState ~= nil))
+        -- This shortcut is the only text-color entry point left in the section, so the
+        -- color searches have to land on it. Registered by hand rather than through
+        -- RegisterStatusSearch: that helper anchors the highlight on _msuf2Title or
+        -- _msuf2Label, and the shortcut's label is the permanently hidden bullet text.
+        if type(M.RegisterSearchWidget) == "function" then
+            local shortcutMeta = ControlMeta(ctx, "status.selected.text_settings", "ephemeral")
+            shortcutMeta.label = "Status text settings"
+            shortcutMeta.kind = "button"
+            shortcutMeta.anchor = selectedTextShortcut
+            shortcutMeta.keywords = StatusSearchKeywords({
+                "level color", "level text color", "race text color", "class text color",
+                "raid group color", "dead text color", "ghost text color", "afk text color", "dnd text color",
+                "status text color", "indicator color", "status text font", "status text settings",
+            })
+            shortcutMeta.help = "Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."
+            M.RegisterSearchWidget(selectedTextShortcut, shortcutMeta)
+        end
     end
     state.symbol, state.iconPack, state.customIcon, state.selectedTextShortcut = symbol, iconPack, customIcon, selectedTextShortcut
 end
@@ -646,68 +650,11 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
     local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -178, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
         "level layer", "indicator layer", "layer", "above text", "behind text",
     }, ClampSelectedStatusLayer)
-    -- Text indicators inherit the frame's resolved font color until a complete
-    -- triple is stored, so the swatch shows the effective color and a
-    -- right-click clears the override rather than pinning the inherited value.
-    -- Icon indicators have no colorPrefix and never show this control.
-    local function SelectedStatusColorRGB()
-        local spec = CurrentStatusSpec(unit)
-        local prefix = spec and spec.colorPrefix
-        if prefix then
-            local conf = GetConf(unit)
-            local r = tonumber(conf and conf[prefix .. "ColorR"])
-            local g = tonumber(conf and conf[prefix .. "ColorG"])
-            local b = tonumber(conf and conf[prefix .. "ColorB"])
-            if r and g and b then return r, g, b end
-        end
-        local getFont = _G.MSUF_GetConfiguredFontColor
-        if type(getFont) == "function" then
-            local r, g, b = getFont()
-            return tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1
-        end
-        return 1, 1, 1
-    end
-    local function WriteSelectedStatusColor(r, g, b)
-        local spec = CurrentStatusSpec(unit)
-        local prefix = spec and spec.colorPrefix
-        if not prefix then return end
-        SetNumber(unit, prefix .. "ColorR", r, "MSUF2_STATUS_TEXT_COLOR", { preview = true })
-        SetNumber(unit, prefix .. "ColorG", g, "MSUF2_STATUS_TEXT_COLOR", { preview = true })
-        SetNumber(unit, prefix .. "ColorB", b, "MSUF2_STATUS_TEXT_COLOR", { preview = true })
-        RefreshStatusRuntime(unit, spec)
-    end
-    local textColor = W.Color(placementCard, "Text color")
-    local metadata = ControlMeta(ctx, "status.selected.text_color")
-    for key, value in pairs(state.selectedStatusColorContract) do metadata[key] = value end
-    M.BindColor(ctx, textColor, SelectedStatusColorRGB, WriteSelectedStatusColor, metadata)
-    if textColor.RegisterForClicks then textColor:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
-    local textColorBaseClick = textColor.GetScript and textColor:GetScript("OnClick")
-    textColor:SetScript("OnClick", function(self, mouseButton, ...)
-        if mouseButton == "RightButton" then
-            if self.IsEnabled and not self:IsEnabled() then return end
-            local spec = CurrentStatusSpec(unit)
-            local prefix = spec and spec.colorPrefix
-            if not prefix then return end
-            M.RunWithHistory("Reset: " .. tostring(spec.text or spec.value or "Status text") .. " color",
-                "status:color-reset:" .. tostring(unit) .. ":" .. tostring(spec.value), function()
-                    local conf = GetConf(unit)
-                    conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = nil, nil, nil
-                    RefreshStatusRuntime(unit, spec)
-                end)
-            self:SetRGB(SelectedStatusColorRGB())
-            return
-        end
-        if type(textColorBaseClick) == "function" then textColorBaseClick(self, mouseButton, ...) end
-    end)
-    if M.AddTooltip then
-        M.AddTooltip(textColor, "Text color",
-            "Color for the selected text indicator. Right-click to follow the frame font color again.", { hook = true })
-    end
-    RegisterStatusSearch(textColor, "Status text color", {
-        "level color", "level text color", "race text color", "class text color",
-        "raid group color", "dead text color", "ghost text color", "afk text color", "dnd text color",
-        "status text color", "indicator color",
-    }, nil, nil, "status.selected.text_color", nil, state.selectedStatusColorContract)
+    -- The selected indicator's text color is edited through the ::: text shortcut on the
+    -- Selected card, next to the font settings it belongs to, and on the canonical Colors
+    -- page. Placement used to carry a second swatch for the same three keys: two entry
+    -- points for one color, and because the swatch generated its own card shortcut only
+    -- while the indicator was enabled, the ::: row differed from indicator to indicator.
     local reset = W.Button(placementCard, "Reset selected", 150)
     PlaceButton(reset, placementCard, placeRightX, -54, 150)
     reset._msuf2SkipHistoryCheckpoint = true
@@ -891,15 +838,6 @@ function StatusSection.BindRefreshState(state, ctx, unit)
             return
         end
         PlaceButton(reset, placementCard, placeRightX, -54, 150)
-        if textColor and textColor._msuf2Title then
-            local labelW = math.max(86, math.min(160, placeLeftW - 60))
-            textColor._msuf2Title:ClearAllPoints()
-            textColor._msuf2Title:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeRightX, -116)
-            textColor._msuf2Title:SetWidth(labelW)
-            textColor:SetSize(44, 18)
-            textColor:ClearAllPoints()
-            textColor:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeRightX + labelW + 12, -114)
-        end
     end
     local function ShowControl(control, shown)
         if W.SetControlShown then
@@ -935,7 +873,6 @@ function StatusSection.BindRefreshState(state, ctx, unit)
         ShowControl(iconPack, hasIconPack)
         ShowControl(customIcon, hasCustomIcon)
         ShowControl(selectedTextShortcut, isTextIndicator)
-        ShowControl(textColor, spec ~= nil and spec.colorPrefix ~= nil)
         ShowControl(identityRestrictionWarning, isIdentityText and isEnabled)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
@@ -949,8 +886,6 @@ function StatusSection.BindRefreshState(state, ctx, unit)
         SetControlEnabled(iconPack, hasIconPack and isEnabled)
         SetControlEnabled(customIcon, hasCustomIcon and isEnabled)
         SetControlEnabled(raidGroupStyle, inlineName and isEnabled)
-        SetControlEnabled(textColor, spec ~= nil and spec.colorPrefix ~= nil and isEnabled)
-        if textColor and textColor.SetRGB then textColor:SetRGB(SelectedStatusColorRGB()) end
         SetControlsEnabled(statusEnabledControls, isEnabled)
         SetControlEnabled(reset, spec ~= nil)
         SetControlEnabled(advanced.reset, spec ~= nil)

@@ -1,20 +1,141 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$RetailReferenceRoot = ""
+    [string]$RetailReferenceRoot = "",
+    [switch]$SelfContained,
+    [switch]$AllowMissingTools
 )
 
 $ErrorActionPreference = "Stop"
+# -SelfContained is the CI subset: everything that needs neither a Retail
+# checkout nor the Blizzard UI source mirror. It never replaces the full gate.
+if ($SelfContained -and -not [string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
+    throw "-SelfContained validates without a Retail reference; do not combine it with -RetailReferenceRoot"
+}
 $auraTestDriver = Join-Path $PSScriptRoot "../.github/scripts/auras3_test_driver.lua"
 $root = (git rev-parse --show-toplevel).Trim()
 $rootFull = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
+Push-Location -LiteralPath $root
+$skippedSteps = [Collections.Generic.List[string]]::new()
 
-& python (Join-Path $root ".github/scripts/classic_refactor_load_order_smoke.py")
+# Every smoke the gate starts goes through Invoke-GateSmoke, which records the
+# smoke file before running the command. The inventory check near the end
+# compares that record with the tracked smokes, so a smoke named only in a
+# comment or an unused list never counts as covered.
+$smokeFilePattern = '(?:_smoke\.(?:lua|py)|_contract\.lua)$'
+$ranSmokes = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+function Invoke-GateSmoke {
+    $command = $args[0]
+    $arguments = @($args | Select-Object -Skip 1)
+    foreach ($argument in $arguments) {
+        $text = [string]$argument
+        if ($text -notmatch $smokeFilePattern) { continue }
+        $full = if ([IO.Path]::IsPathRooted($text)) { [IO.Path]::GetFullPath($text) } else { [IO.Path]::GetFullPath((Join-Path $rootFull $text)) }
+        if (-not $full.StartsWith($rootFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Gate smoke lies outside the repository: $text"
+        }
+        [void]$ranSmokes.Add($full.Substring($rootFull.Length + 1).Replace([char]92, [char]47))
+    }
+    & $command @arguments
+}
+
+function ConvertTo-InterfaceSet {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $set = [Collections.Generic.SortedSet[int]]::new()
+    foreach ($item in @($Value -split ',' | ForEach-Object { $_.Trim() })) {
+        if ($item -notmatch '^[1-9][0-9]*$') { throw "$Label has a malformed interface list: '$Value'" }
+        if (-not $set.Add([int]$item)) { throw "$Label repeats interface $item" }
+    }
+    return [int[]]@($set)
+}
+
+# tools/classic-client-matrix.tsv is the single list of supported clients.
+# Every client loop, interface check and summary count below reads it.
+$clientMatrixRelative = "tools/classic-client-matrix.tsv"
+$clientMatrixPath = Join-Path $root $clientMatrixRelative
+if (-not (Test-Path -LiteralPath $clientMatrixPath -PathType Leaf)) { throw "Client matrix is missing: $clientMatrixRelative" }
+$clientMatrix = @(Import-Csv -LiteralPath $clientMatrixPath -Delimiter "`t")
+$clientMatrixColumns = @("Suffix", "Interfaces", "ClientToken", "ProjectGlobal", "GameType", "MirrorBranch", "CurseForgeVersions", "IsClassic")
+if ($clientMatrix.Count -eq 0) { throw "Client matrix has no clients: $clientMatrixRelative" }
+$actualMatrixColumns = @($clientMatrix[0].PSObject.Properties | ForEach-Object { $_.Name })
+if (($actualMatrixColumns -join "`t") -cne ($clientMatrixColumns -join "`t")) {
+    throw "Client matrix columns must be exactly: $($clientMatrixColumns -join ', ')"
+}
+$clientSuffixSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($client in $clientMatrix) {
+    if ($client.Suffix -cnotmatch '^[A-Z][A-Za-z0-9]*$' -or -not $clientSuffixSet.Add($client.Suffix)) {
+        throw "Client matrix suffix is malformed or duplicated: '$($client.Suffix)'"
+    }
+    if ($client.IsClassic -cne "true" -and $client.IsClassic -cne "false") {
+        throw "Client matrix IsClassic must be true or false: $($client.Suffix)"
+    }
+    [void](ConvertTo-InterfaceSet -Value $client.Interfaces -Label "Client matrix $($client.Suffix)")
+    if (($client.IsClassic -ceq "true") -ne ($client.ClientToken -cne "")) {
+        throw "Client matrix $($client.Suffix): Classic clients need an X-MSUF-Client token and Mainline must not declare one"
+    }
+    if ($client.ProjectGlobal -cnotmatch '^WOW_PROJECT_[A-Z_]+$' -or $client.GameType -cnotmatch '^[a-z]+$' -or
+        $client.MirrorBranch -cnotmatch '^upstream/[a-z0-9_]+$' -or [string]::IsNullOrWhiteSpace($client.CurseForgeVersions)) {
+        throw "Client matrix row is incomplete: $($client.Suffix)"
+    }
+}
+$mainlineMatrixClients = @($clientMatrix | Where-Object { $_.IsClassic -ceq "false" })
+if ($mainlineMatrixClients.Count -ne 1 -or $mainlineMatrixClients[0].Suffix -cne "Mainline") {
+    throw "Client matrix must contain exactly one non-Classic client, named Mainline"
+}
+$clientSuffixes = @($clientMatrix | ForEach-Object { $_.Suffix })
+$classicSuffixes = @($clientMatrix | Where-Object { $_.IsClassic -ceq "true" } | ForEach-Object { $_.Suffix })
+$classicDirectoryPattern = '(' + ((@("Classic") + $classicSuffixes | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')'
+
+# Tool preflight runs before any expensive step. A missing tool fails the gate
+# unless -AllowMissingTools is passed; every step that is then skipped is
+# reported as a SKIPPED line at the end, so a partial run never reads as a pass.
+$luac = Get-Command luac -ErrorAction SilentlyContinue
+if ($luac) {
+    $luacVersion = (& $luac.Source -v | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $luacVersion -notmatch '^Lua 5\.1(?:\.\d+)?\s') {
+        throw "luac must be Lua 5.1: $($luac.Source) reports '$luacVersion'"
+    }
+} elseif ($AllowMissingTools) {
+    $skippedSteps.Add("Lua 5.1 syntax check (luac not found)")
+} else {
+    throw "luac (Lua 5.1) is required on PATH for the Lua 5.1 syntax check; pass -AllowMissingTools only for a structure-only run"
+}
+$lua = Get-Command lua -ErrorAction SilentlyContinue
+if ($lua) {
+    $luaVersion = (& $lua.Source -e "io.write(_VERSION)" | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $luaVersion -cne "Lua 5.1") {
+        throw "lua must be Lua 5.1: $($lua.Source) reports '$luaVersion'"
+    }
+} elseif ($AllowMissingTools) {
+    $skippedSteps.Add("Lua behavioural smokes (lua not found)")
+} else {
+    throw "lua (Lua 5.1) is required on PATH for the behavioural smokes; pass -AllowMissingTools only for a structure-only run"
+}
+$uiMirror = Join-Path $root "_local_workflows/references/wow-ui-source/.git"
+$uiMirrorPresent = Test-Path -LiteralPath $uiMirror -PathType Container
+if ($SelfContained) {
+    # The mirror is a local reference checkout; a self-contained run never needs it.
+    $skippedSteps.Add("Blizzard UI source audit (self-contained run)")
+} elseif (-not $uiMirrorPresent) {
+    # Retail's sync workflow runs this gate in CI, where the mirror never exists.
+    if ($AllowMissingTools -or $env:GITHUB_ACTIONS -eq "true") {
+        $skippedSteps.Add("Blizzard UI source audit (no mirror at _local_workflows/references/wow-ui-source)")
+    } else {
+        throw "Blizzard UI source mirror is missing at _local_workflows/references/wow-ui-source; pass -AllowMissingTools only for a run that may skip the source audit"
+    }
+}
+
+Invoke-GateSmoke python (Join-Path $root ".github/scripts/classic_refactor_load_order_smoke.py")
 if ($LASTEXITCODE -ne 0) { throw "Classic refactor load-order contract failed" }
 & python (Join-Path $root ".github/quality/error_paths.py")
 if ($LASTEXITCODE -ne 0) { throw "Classic error visibility contract failed" }
 
 $retailReferenceRootFull = $null
-if ([string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
+if ($SelfContained) {
+    # No sibling auto-detection: a self-contained run must not pick up a Retail checkout.
+} elseif ([string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
     $candidate = Join-Path (Split-Path -Parent $rootFull) "MidnightSimpleUnitFrames"
     $candidateToc = Join-Path $candidate "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
     if (Test-Path -LiteralPath $candidateToc -PathType Leaf) {
@@ -29,6 +150,8 @@ if ([string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
 }
 $retailReferenceLabel = if ($retailReferenceRootFull) {
     "working tree at $retailReferenceRootFull"
+} elseif ($SelfContained) {
+    "no Retail reference (self-contained run)"
 } else {
     "repository HEAD"
 }
@@ -53,12 +176,7 @@ $targets = @(
     @{ Folder = "MidnightSimpleUnitFrames_Options"; Base = "MidnightSimpleUnitFrames_Options" },
     @{ Folder = "MidnightSimpleUnitFrames_Assistant"; Base = "MidnightSimpleUnitFrames_Assistant" }
 )
-$clients = @(
-    @{ Suffix = "Mainline"; Interface = "120007, 120100, 120105" },
-    @{ Suffix = "Vanilla"; Interface = "11509" },
-    @{ Suffix = "Mists"; Interface = "50504" },
-    @{ Suffix = "TBC"; Interface = "20506" }
-)
+$clients = $clientMatrix
 $expectedVersion = (Get-Content -LiteralPath (Join-Path $root "VERSION") -Raw).Trim()
 & (Join-Path $root ".github/scripts/assert-classic-6-5-release-line.ps1") `
     -RepositoryRoot $root -ReleaseVersion $expectedVersion
@@ -148,8 +266,15 @@ foreach ($target in $targets) {
         $content = Get-Content -LiteralPath $tocPath
         $interfaceLine = $content | Where-Object { $_ -match '^## Interface:' } | Select-Object -First 1
         $actualInterface = ($interfaceLine -replace '^## Interface:\s*', '').Trim()
-        if ($actualInterface -ne $client.Interface) {
-            throw "$tocName has interface '$actualInterface', expected '$($client.Interface)'"
+        $actualInterfaceSet = ConvertTo-InterfaceSet -Value $actualInterface -Label $tocName
+        $expectedInterfaceSet = ConvertTo-InterfaceSet -Value $client.Interfaces -Label "Client matrix $($client.Suffix)"
+        if (($actualInterfaceSet -join ',') -cne ($expectedInterfaceSet -join ',')) {
+            throw "$tocName has interfaces '$actualInterface', expected the client matrix set '$($client.Interfaces)'"
+        }
+        $clientTokenLines = @($content | Where-Object { $_ -match '^## X-MSUF-Client:' })
+        $actualClientToken = if ($clientTokenLines.Count -gt 0) { ($clientTokenLines[0] -replace '^## X-MSUF-Client:\s*', '').Trim() } else { "" }
+        if ($clientTokenLines.Count -gt 1 -or $actualClientToken -cne $client.ClientToken) {
+            throw "$tocName declares X-MSUF-Client '$actualClientToken', expected '$($client.ClientToken)'"
         }
 
         $versionLine = $content | Where-Object { $_ -match '^## Version:' } | Select-Object -First 1
@@ -162,13 +287,14 @@ foreach ($target in $targets) {
                 Select-Object -First 1
             $expectedClientVersion = ($referenceVersionLine -replace '^## Version:\s*', '').Trim()
         }
-        if ($versions[$client.Suffix] -ne $expectedClientVersion) {
+        # Mainline carries the Retail version, which only a Retail reference can supply.
+        if (($client.IsClassic -ceq "true" -or $retailReferenceRootFull) -and $versions[$client.Suffix] -ne $expectedClientVersion) {
             throw "$tocName has version '$($versions[$client.Suffix])', expected '$expectedClientVersion'"
         }
         if ($client.Suffix -eq "Mainline" -and $retailReferenceRootFull) {
             $referenceMetadata = @(Get-Content -LiteralPath $referenceToc | Where-Object { $_ -match '^## ' } |
                 ForEach-Object {
-                    if ($_ -match '^## Interface:') { "## Interface: $($client.Interface)" } else { $_ }
+                    if ($_ -match '^## Interface:') { $interfaceLine } else { $_ }
                 })
             $currentMetadata = @($content | Where-Object { $_ -match '^## ' })
             if ($referenceMetadata.Count -ne $currentMetadata.Count -or
@@ -193,7 +319,7 @@ foreach ($target in $targets) {
 # Player castbar event handling is client-neutral. Classic flavors must load
 # the synchronized Retail runtime directly so STOP/INTERRUPTED ordering fixes
 # cannot drift in an unreviewed duplicate again.
-foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
+foreach ($flavor in $classicSuffixes) {
     $coreFlavorToc = Join-Path $root "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_$flavor.toc"
     $coreFlavorEntries = @(Get-Content -LiteralPath $coreFlavorToc)
     if ([Array]::IndexOf($coreFlavorEntries, "Castbars\MSUF_PlayerCastbarRuntime.lua") -lt 0) {
@@ -253,6 +379,7 @@ for ($index = 0; $index -le $auraCoreIndex; $index++) {
 }
 
 $classicAuraBackendPath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"))
+$classicAuraCompilePath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua"))
 $forbiddenRetailAuraPaths = @(
     "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DotData.lua",
     "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua",
@@ -260,11 +387,12 @@ $forbiddenRetailAuraPaths = @(
     "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua",
     "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 ) | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $root $_)) }
-foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
+foreach ($flavor in $classicSuffixes) {
     $classicManifestPath = Join-Path $gameRoot "$flavor/UnitFrames.xml"
     $classicElements = Get-Content -LiteralPath $classicManifestPath -Raw
     if ($classicElements -notmatch '\.\.\\Classic\\Auras\\MSUF_Auras3_Features\.lua' -or
         $classicElements -notmatch '\.\.\\Classic\\Auras\\MSUF_Auras3_Visuals\.lua' -or
+        $classicElements -notmatch '\.\.\\Classic\\Auras\\MSUF_Auras3_Compile\.lua' -or
         $classicElements -notmatch '\.\.\\Classic\\Auras\\MSUF_Auras3_UnitFrames\.lua' -or
         $classicElements -notmatch '\.\.\\Classic\\UnitFrames\\MSUF_UFCore_Elements\.xml' -or
         $classicElements -notmatch 'Auras\\MSUF_Auras3_DotData\.lua' -or
@@ -284,6 +412,11 @@ foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
     if ($classicAuraBackendIndex -lt 0 -or $classicAuraCoreIndex -lt 0 -or
         $classicAuraCoreIndex -gt $classicAuraBackendIndex) {
         throw "$flavor must load Auras3 core before the Classic aura backend"
+    }
+    # The backend imports its config compiler through A3._ClassicCompile at load time.
+    $classicAuraCompileIndex = [Array]::IndexOf($classicLoadOrder, $classicAuraCompilePath)
+    if ($classicAuraCompileIndex -lt 0 -or $classicAuraCompileIndex -gt $classicAuraBackendIndex) {
+        throw "$flavor must load the Classic aura compiler before the Classic aura backend"
     }
     $groupElements = Get-Content -LiteralPath (Join-Path $gameRoot "$flavor/UnitFrames/GroupFrames.xml") -Raw
     if ($groupElements -notmatch 'Group\\MSUF_UF_Group_SpellIndicators_Data\.lua' -or
@@ -434,8 +567,56 @@ foreach ($overrideLine in $overrideLines) {
 }
 Assert-OrdinalPathOrder -Paths $overridePathsInOrder.ToArray() -Label "Classic Retail override manifest"
 
-if ($overrideBaseBlobs.Count -gt 0 -and -not $retailReferenceRootFull) {
+# O files that are whole-file shadows of a Retail file record that Retail
+# counterpart and the Retail blob the shadow was last reconciled with. A
+# malformed manifest fails here; drift against current Retail is reported in
+# the reference block below.
+$shadowManifestRelative = "tools/classic-owned-shadows.tsv"
+$shadowManifestPath = Join-Path $root $shadowManifestRelative
+if (-not (Test-Path -LiteralPath $shadowManifestPath -PathType Leaf)) {
+    throw "Classic owned-shadow manifest is missing: $shadowManifestRelative"
+}
+Assert-TrackedFile -RelativePath $shadowManifestRelative -Label "Classic owned-shadow manifest"
+$shadowBaseBlobs = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+$shadowRetailPaths = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+$shadowPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+$shadowLines = [string[]][IO.File]::ReadAllLines($shadowManifestPath)
+if ($shadowLines.Count -eq 0) { throw "Classic owned-shadow manifest is empty" }
+$shadowPathsInOrder = [Collections.Generic.List[string]]::new()
+foreach ($shadowLine in $shadowLines) {
+    $fields = $shadowLine.Split([char]9)
+    if ($fields.Count -ne 3) {
+        throw "Classic owned-shadow entry must be owned-path<TAB>Retail-path<TAB>Retail-base-blob: $shadowLine"
+    }
+    $shadowPath = $fields[0]
+    $shadowRetailPath = $fields[1]
+    $shadowBlob = $fields[2]
+    Assert-NormalizedAddonPath -RelativePath $shadowPath -Label "Classic owned-shadow entry"
+    Assert-NormalizedAddonPath -RelativePath $shadowRetailPath -Label "Classic owned-shadow Retail counterpart"
+    if (-not $ownedAddonPaths.Contains($shadowPath)) {
+        throw "Classic owned-shadow entry must be a declared Classic-owned path: $shadowPath"
+    }
+    if ($ownedAddonPathCase.ContainsKey($shadowRetailPath)) {
+        throw "Classic owned-shadow Retail counterpart cannot itself be Classic-owned: $shadowRetailPath"
+    }
+    if ($shadowBlob -cnotmatch '^[0-9a-f]{40}$') {
+        throw "Classic owned-shadow base must be a lowercase SHA-1 Git blob: $shadowLine"
+    }
+    if ($shadowPathCase.ContainsKey($shadowPath)) {
+        throw "Duplicate or case-colliding Classic owned-shadow path: $($shadowPathCase[$shadowPath]) versus $shadowPath"
+    }
+    $shadowPathCase.Add($shadowPath, $shadowPath)
+    $shadowBaseBlobs.Add($shadowPath, $shadowBlob)
+    $shadowRetailPaths.Add($shadowPath, $shadowRetailPath)
+    $shadowPathsInOrder.Add($shadowPath)
+}
+Assert-OrdinalPathOrder -Paths $shadowPathsInOrder.ToArray() -Label "Classic owned-shadow manifest"
+
+if ($overrideBaseBlobs.Count -gt 0 -and -not $retailReferenceRootFull -and -not $SelfContained) {
     throw "Retail overrides require -RetailReferenceRoot so their recorded base blobs can be checked against current Retail Git HEAD"
+}
+if ($SelfContained) {
+    $skippedSteps.Add("Retail parity, override base and owned-shadow drift checks (self-contained run)")
 }
 
 if ($retailReferenceRootFull) {
@@ -518,6 +699,21 @@ if ($retailReferenceRootFull) {
         }
     }
 
+    # Owned-shadow drift is report-only: Retail's sync workflow runs this gate,
+    # and a hard failure would block every sync that touches a shadowed file.
+    # The recorded blobs were taken on 2026-09-14 from Retail-Source ace807b7.
+    # They mark where drift tracking starts; they do not certify that Retail
+    # changes made before that commit were already ported into the shadows.
+    $shadowDriftLines = [Collections.Generic.List[string]]::new()
+    foreach ($shadowPath in $shadowPathsInOrder) {
+        $shadowRetailPath = $shadowRetailPaths[$shadowPath]
+        if (-not $retailMappedBlobs.ContainsKey($shadowRetailPath)) {
+            $shadowDriftLines.Add("$shadowPath`: Retail counterpart $shadowRetailPath no longer exists; review the removal and update $shadowManifestRelative")
+        } elseif ($retailMappedBlobs[$shadowRetailPath] -cne $shadowBaseBlobs[$shadowPath]) {
+            $shadowDriftLines.Add("$shadowPath`: Retail counterpart $shadowRetailPath changed (recorded=$($shadowBaseBlobs[$shadowPath]) current=$($retailMappedBlobs[$shadowRetailPath])); port or consciously reject the delta, then update the recorded blob")
+        }
+    }
+
     $candidateBlobLines = @($retailMappedPathOrder.ToArray() | & git -C $root hash-object --stdin-paths 2>&1)
     if ($LASTEXITCODE -ne 0 -or $candidateBlobLines.Count -ne $retailMappedPathOrder.Count) {
         throw "Unable to hash every mapped Classic candidate: expected=$($retailMappedPathOrder.Count) actual=$($candidateBlobLines.Count)"
@@ -579,6 +775,10 @@ if ($retailReferenceRootFull) {
     Write-Host "Retail exact paths: $retailExactCount mapped paths ($retailExactTocCount Mainline TOCs) match current Retail Git blobs byte-for-byte"
     Write-Host "Retail override paths: $retailOverrideCount mapped paths ($retailOverrideTocCount Mainline TOCs) are pinned to current Retail base blobs; $retailOverrideDifferenceCount currently differ"
     Write-Host "Classic-owned paths: $($ownedAddonPaths.Count) additive tracked files are declared"
+    Write-Host "Classic-owned shadows: $($shadowBaseBlobs.Count) tracked; $($shadowDriftLines.Count) Retail counterparts changed since the recorded base"
+    foreach ($shadowDriftLine in $shadowDriftLines) {
+        Write-Host "    $shadowDriftLine"
+    }
     Write-Host "Classic addon inventory: $($actualAddonPaths.Count) paths equal mapped Retail $($retailMappedPaths.Count) union owned $($ownedAddonPaths.Count)"
 }
 
@@ -605,14 +805,14 @@ foreach ($entry in (Get-Content -LiteralPath $mainlineTocPath | Where-Object { $
     Add-MainlineLoadPath ([IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $mainlineTocPath) $entry.Trim())))
 }
 foreach ($path in $mainlineLoaded) {
-    if ($path -match '[\\/]Game[\\/](Classic|Vanilla|Mists|TBC)[\\/]') {
+    if ($path -match ('[\\/]Game[\\/]' + $classicDirectoryPattern + '[\\/]')) {
         throw "Retail zero-overhead violation: Mainline transitively loads $path"
     }
 }
 
 # Strong Mainline gate: preserve every Retail Lua path in order, permit content
 # differences only for reviewed P entries, and permit additional Lua loads only
-# for the four explicit Arena files in O. Client compatibility trees remain
+# for the declared shared/Arena additions in O. Client compatibility trees remain
 # unreachable from Mainline.
 function Get-CurrentLuaLoadHashes {
     param([Parameter(Mandatory = $true)][string]$TocPath)
@@ -781,11 +981,14 @@ foreach ($parityTarget in $retailParityTargets) {
     $currentRelativePaths = [Collections.Generic.List[string]]::new()
     foreach ($currentPath in $currentPaths) {
         $currentRelative = Get-RepositoryRelativePath -RepositoryFull $rootFull -FullPath $currentPath -Label "$($parityTarget.Label) Mainline path"
-        if ($currentRelative -match '(^|/)Game/(Classic|Vanilla|Mists|TBC)/' -or $currentRelative -match '_Classic[.]lua$') {
+        if ($currentRelative -match ('(^|/)Game/' + $classicDirectoryPattern + '/') -or $currentRelative -match '_Classic[.]lua$') {
             throw "$($parityTarget.Label) Mainline loads a Classic-only blob: $currentRelative"
         }
         $currentRelativePaths.Add($currentRelative)
     }
+    # Without a Retail reference there is nothing to compare the Mainline load
+    # order against; the Classic-only blob check above still ran.
+    if ($SelfContained) { continue }
 
     if ($retailReferenceRootFull) {
         $referencePaths = Get-CurrentLuaLoadPaths (Join-Path $retailReferenceRootFull $parityTarget.Reference)
@@ -852,11 +1055,124 @@ foreach ($parityTarget in $retailParityTargets) {
         $currentRetailHashCount += $referenceHashes.Count
     }
 }
-if (-not $actualMainlineOwnedLuaExtras.SetEquals($mainlineOwnedLuaExtras)) {
+if (-not $SelfContained -and -not $actualMainlineOwnedLuaExtras.SetEquals($mainlineOwnedLuaExtras)) {
     $missingMainlineOwned = [string[]]@($mainlineOwnedLuaExtras | Where-Object { -not $actualMainlineOwnedLuaExtras.Contains($_) })
     [Array]::Sort($missingMainlineOwned, [StringComparer]::Ordinal)
-    throw "Mainline must load exactly the four declared Arena additions; missing=[$($missingMainlineOwned -join ', ')]"
+    throw "Mainline must load exactly the declared shared/Arena additions; missing=[$($missingMainlineOwned -join ', ')]"
 }
+
+# Flavor load coverage. Every Lua file the Mainline core and Options TOCs load
+# must, on each Classic flavor in the client matrix, be loaded, be replaced by a
+# loaded owned shadow (tools/classic-owned-shadows.tsv), or be excluded with a
+# reason in tools/classic-flavor-load-exclusions.tsv. A Lua file Retail adds to
+# a manifest Classic copies therefore cannot go missing on Classic unnoticed.
+# Every exclusion row must still be needed. The Assistant addon is not covered.
+$flavorExclusionRelative = "tools/classic-flavor-load-exclusions.tsv"
+$flavorExclusionPath = Join-Path $root $flavorExclusionRelative
+if (-not (Test-Path -LiteralPath $flavorExclusionPath -PathType Leaf)) {
+    throw "Classic flavor load exclusion manifest is missing: $flavorExclusionRelative"
+}
+Assert-TrackedFile -RelativePath $flavorExclusionRelative -Label "Classic flavor load exclusion manifest"
+$coverageAddons = @("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options")
+function Get-FlavorLuaLoadPaths {
+    param([Parameter(Mandatory = $true)][string]$Suffix)
+    $paths = [Collections.Generic.List[string]]::new()
+    foreach ($addon in $coverageAddons) {
+        $tocPath = Join-Path $root "$addon/$($addon)_$Suffix.toc"
+        foreach ($loadPath in @(Get-CurrentLuaLoadPaths -TocPath $tocPath)) {
+            $paths.Add((Get-RepositoryRelativePath -RepositoryFull $rootFull -FullPath $loadPath -Label "$Suffix $addon load path"))
+        }
+    }
+    return $paths.ToArray()
+}
+$mainlineCoveragePaths = @(Get-FlavorLuaLoadPaths -Suffix "Mainline")
+$mainlineCoverageSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($coveragePath in $mainlineCoveragePaths) { [void]$mainlineCoverageSet.Add($coveragePath) }
+$shadowsByRetailPath = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+foreach ($shadowPath in $shadowPathsInOrder) {
+    $shadowRetailPath = $shadowRetailPaths[$shadowPath]
+    if (-not $shadowsByRetailPath.ContainsKey($shadowRetailPath)) {
+        $shadowsByRetailPath.Add($shadowRetailPath, [Collections.Generic.List[string]]::new())
+    }
+    $shadowsByRetailPath[$shadowRetailPath].Add($shadowPath)
+}
+
+$flavorExclusionLines = [string[]][IO.File]::ReadAllLines($flavorExclusionPath)
+if ($flavorExclusionLines.Count -eq 0 -or $flavorExclusionLines[0] -cne "RetailPath`tFlavors`tReason") {
+    throw "Classic flavor load exclusion manifest must start with the header RetailPath<TAB>Flavors<TAB>Reason"
+}
+$flavorExclusions = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+$flavorExclusionPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+$flavorExclusionPathsInOrder = [Collections.Generic.List[string]]::new()
+for ($lineIndex = 1; $lineIndex -lt $flavorExclusionLines.Count; $lineIndex++) {
+    $exclusionLine = $flavorExclusionLines[$lineIndex]
+    $fields = $exclusionLine.Split([char]9)
+    if ($fields.Count -ne 3) {
+        throw "Classic flavor load exclusion must be RetailPath<TAB>Flavors<TAB>Reason: $exclusionLine"
+    }
+    $exclusionPath = $fields[0]
+    Assert-NormalizedAddonPath -RelativePath $exclusionPath -Label "Classic flavor load exclusion"
+    if (@($coverageAddons | Where-Object { $exclusionPath.StartsWith($_ + '/', [StringComparison]::Ordinal) }).Count -eq 0) {
+        throw "Classic flavor load exclusions cover only the core and Options addons: $exclusionPath"
+    }
+    if ($flavorExclusionPathCase.ContainsKey($exclusionPath)) {
+        throw "Duplicate or case-colliding Classic flavor load exclusion: $($flavorExclusionPathCase[$exclusionPath]) versus $exclusionPath"
+    }
+    $excludedFlavors = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    if ($fields[1] -ceq "*") {
+        foreach ($classicSuffix in $classicSuffixes) { [void]$excludedFlavors.Add($classicSuffix) }
+    } else {
+        foreach ($classicSuffix in $fields[1].Split(',')) {
+            if ([Array]::IndexOf($classicSuffixes, $classicSuffix) -lt 0 -or -not $excludedFlavors.Add($classicSuffix)) {
+                throw "Classic flavor load exclusion names an unknown or repeated Classic flavor '$classicSuffix': $exclusionLine"
+            }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($fields[2]) -or $fields[2] -cne $fields[2].Trim()) {
+        throw "Classic flavor load exclusion needs a trimmed reason: $exclusionLine"
+    }
+    if (-not $mainlineCoverageSet.Contains($exclusionPath)) {
+        throw "Stale Classic flavor load exclusion: Mainline no longer loads $exclusionPath; remove its row from $flavorExclusionRelative"
+    }
+    $flavorExclusionPathCase.Add($exclusionPath, $exclusionPath)
+    $flavorExclusions.Add($exclusionPath, $excludedFlavors)
+    $flavorExclusionPathsInOrder.Add($exclusionPath)
+}
+if ($flavorExclusionPathsInOrder.Count -gt 0) {
+    Assert-OrdinalPathOrder -Paths $flavorExclusionPathsInOrder.ToArray() -Label "Classic flavor load exclusion manifest"
+}
+
+$coverageLoadedCount = 0
+$coverageReplacedCount = 0
+$coverageExcludedCount = 0
+foreach ($classicSuffix in $classicSuffixes) {
+    $flavorLoaded = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($coveragePath in @(Get-FlavorLuaLoadPaths -Suffix $classicSuffix)) { [void]$flavorLoaded.Add($coveragePath) }
+    foreach ($coveragePath in $mainlineCoveragePaths) {
+        $isLoaded = $flavorLoaded.Contains($coveragePath)
+        $isReplaced = $false
+        if ($shadowsByRetailPath.ContainsKey($coveragePath)) {
+            foreach ($shadowPath in $shadowsByRetailPath[$coveragePath]) {
+                if ($flavorLoaded.Contains($shadowPath)) { $isReplaced = $true }
+            }
+        }
+        $isExcluded = $flavorExclusions.ContainsKey($coveragePath) -and $flavorExclusions[$coveragePath].Contains($classicSuffix)
+        if (($isLoaded -or $isReplaced) -and $isExcluded) {
+            $coverageState = if ($isLoaded) { 'loads' } else { 'replaces' }
+            throw "Stale Classic flavor load exclusion: $classicSuffix $coverageState $coveragePath; drop $classicSuffix from its row in $flavorExclusionRelative"
+        }
+        if ($isLoaded) {
+            $coverageLoadedCount++
+        } elseif ($isReplaced) {
+            $coverageReplacedCount++
+        } elseif ($isExcluded) {
+            $coverageExcludedCount++
+        } else {
+            throw "Classic flavor load coverage: $classicSuffix neither loads nor replaces Mainline Lua $coveragePath; load it from the $classicSuffix manifests, declare its owned shadow in $shadowManifestRelative, or add a row with a reason to $flavorExclusionRelative"
+        }
+    }
+}
+Write-Host "Classic flavor load coverage: $($mainlineCoveragePaths.Count) Mainline Lua paths x $($classicSuffixes.Count) flavors; $coverageLoadedCount loaded, $coverageReplacedCount replaced, $coverageExcludedCount excluded with reason"
 # Other Classic-only features remain behind the Vanilla/Mists/TBC manifests.
 $textureRuntimePath = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Effects/MSUF_UF_TextureLayer.lua"
 $textureOptionsPath = Join-Path $root "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer_Classic.lua"
@@ -934,8 +1250,13 @@ foreach ($requiredContract in @('Client.IsClassic', 'AuraUtil.ForEachAura', 'C_U
 if ($classicAuraSource -match 'CustomAuraContainerTemplate|AURA_CONTAINER_ADDON') {
     throw "Classic aura backend must not depend on Blizzard_AuraContainer"
 }
+$classicAuraCompileSource = Get-Content -LiteralPath $classicAuraCompilePath -Raw
+if ($classicAuraCompileSource -match 'CustomAuraContainerTemplate|AURA_CONTAINER_ADDON') {
+    throw "Classic aura compiler must not depend on Blizzard_AuraContainer"
+}
 
-$luac = Get-Command luac -ErrorAction SilentlyContinue
+# $luac and $lua were resolved and version-checked by the tool preflight; a
+# missing tool was either fatal there or recorded as a skipped step.
 if ($luac) {
     $luaFiles = foreach ($target in $targets) {
         Get-ChildItem -LiteralPath (Join-Path $root $target.Folder) -Recurse -Filter "*.lua" -File
@@ -945,78 +1266,133 @@ if ($luac) {
         if ($LASTEXITCODE -ne 0) { throw "Lua 5.1 syntax failed: $($file.FullName)" }
     }
     Write-Host "Lua 5.1 syntax: $($luaFiles.Count) files passed"
-} else {
-    Write-Warning "luac not found; Lua 5.1 syntax check skipped"
+
+    # Lua 5.1 allows at most 200 locals in one function. These files were split
+    # to get away from that ceiling; each budget keeps room before a file drifts
+    # back to it. The main-chunk header of `luac -l` carries the local count.
+    $classicLocalBudgets = [ordered]@{
+        "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua" = 175
+        "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua" = 120
+        "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Classic.lua" = 180
+    }
+    foreach ($budgetPath in $classicLocalBudgets.Keys) {
+        $budgetListing = @(& $luac.Source -l -p (Join-Path $root $budgetPath))
+        if ($LASTEXITCODE -ne 0) { throw "Lua 5.1 local budget listing failed: $budgetPath" }
+        $mainHeader = $budgetListing | Where-Object { $_ -match '^0\+ params, \d+ slots, \d+ upvalues, \d+ locals' } | Select-Object -First 1
+        if (-not $mainHeader -or $mainHeader -notmatch '^0\+ params, \d+ slots, \d+ upvalues, (\d+) locals') {
+            throw "Lua 5.1 local budget: main-chunk header not found for $budgetPath"
+        }
+        $mainLocals = [int]$Matches[1]
+        if ($mainLocals -gt $classicLocalBudgets[$budgetPath]) {
+            throw "Lua 5.1 local budget exceeded: $budgetPath has $mainLocals main-chunk locals; budget $($classicLocalBudgets[$budgetPath])"
+        }
+        Write-Host "Lua 5.1 local budget: $budgetPath $mainLocals/$($classicLocalBudgets[$budgetPath])"
+    }
 }
 
-$lua = Get-Command lua -ErrorAction SilentlyContinue
 if ($lua) {
-    foreach ($flavor in @("Mainline", "Vanilla", "TBC", "Mists", "FutureVanilla")) {
-        & $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root $flavor
+    foreach ($flavor in @($clientSuffixes) + @("FutureVanilla")) {
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root $flavor
         if ($LASTEXITCODE -ne 0) { throw "Classic atlas menu smoke failed: $flavor" }
     }
-    & $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root "Vanilla" "tinted"
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root "Vanilla" "tinted"
     if ($LASTEXITCODE -ne 0) { throw "Classic atlas custom-tint smoke failed" }
-    foreach ($flavor in @("Vanilla", "TBC", "Mists")) {
-        & $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root $flavor "midnight"
+    foreach ($flavor in $classicSuffixes) {
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root $flavor "midnight"
         if ($LASTEXITCODE -ne 0) { throw "Classic Midnight appearance preset smoke failed: $flavor" }
     }
     $smoke = Join-Path $root "tools/tests/classic_client_bootstrap_smoke.lua"
-    foreach ($flavor in @("Mainline", "Vanilla", "Mists", "TBC")) {
-        & $lua.Source $auraTestDriver $smoke $flavor ($root -replace '\\', '/')
+    foreach ($flavor in @($clientSuffixes) + @("FutureTaggedVanilla", "FutureProjectVanilla", "UnknownUntagged")) {
+        Invoke-GateSmoke $lua.Source $auraTestDriver $smoke $flavor ($root -replace '\\', '/')
         if ($LASTEXITCODE -ne 0) { throw "Client bootstrap smoke failed: $flavor" }
     }
-    & $lua.Source (Join-Path $root "tools/tests/classic_scheduler_contract_smoke.lua") $root
+    # Each X-MSUF-Client token in the client matrix must place its flavor on its
+    # own, under a project ID no client knows; the smoke reads the token from arg[3].
+    foreach ($client in @($clientMatrix | Where-Object { $_.ClientToken -cne "" })) {
+        Invoke-GateSmoke $lua.Source $auraTestDriver $smoke ("TagOnly" + $client.Suffix) ($root -replace '\\', '/') $client.ClientToken
+        if ($LASTEXITCODE -ne 0) { throw "Client bootstrap tag-only smoke failed: $($client.Suffix)" }
+    }
+    # Plain Lua on purpose: the aura test driver stubs issecretvalue, which would
+    # hide the missing secret-value API case this smoke pins.
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_client_detection_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Client detection smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_scheduler_contract_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Scheduler contract regression failed" }
-    foreach ($flavor in @("Mainline", "Vanilla", "Mists", "TBC")) {
-        & $lua.Source (Join-Path $root "tools/tests/classic_shared_definitions_smoke.lua") $root $flavor
+    foreach ($flavor in $clientSuffixes) {
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_shared_definitions_smoke.lua") $root $flavor
         if ($LASTEXITCODE -ne 0) { throw "Shared aura definitions failed: $flavor" }
     }
     $classicProfilePolicySmoke = Join-Path $root "tools/tests/classic_profile_60_only_smoke.lua"
-    & $lua.Source $auraTestDriver $classicProfilePolicySmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicProfilePolicySmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic 6.0-only profile policy smoke failed" }
-    $classResourceSmoke = Join-Path $root "tools/tests/classic_class_resources_smoke.lua"
-    & $lua.Source $auraTestDriver $classResourceSmoke ($root -replace '\\', '/')
-    if ($LASTEXITCODE -ne 0) { throw "Classic class-resource ownership smoke failed" }
-    & $lua.Source (Join-Path $root "tools/tests/classic_texture_layer_contract_smoke.lua") $root
-    if ($LASTEXITCODE -ne 0) { throw "Texture Layer menu contract failed" }
-    & $lua.Source (Join-Path $root "tools/tests/classic_font_return_smoke.lua") $root
-    if ($LASTEXITCODE -ne 0) { throw "Classic font return contract failed" }
-    & $lua.Source (Join-Path $root "tools/tests/classic_defaults_refactor_smoke.lua") $root
-    if ($LASTEXITCODE -ne 0) { throw "Classic split defaults contract failed" }
-    $classPowerProviderSmoke = Join-Path $root "tools/tests/classic_classpower_provider_smoke.lua"
-    & $lua.Source $auraTestDriver $classPowerProviderSmoke ($root -replace '\\', '/')
-    if ($LASTEXITCODE -ne 0) { throw "Client ClassPower provider smoke failed" }
-    foreach ($flavor in @("Vanilla", "Mists", "TBC")) {
-        & $lua.Source (Join-Path $root "tools/tests/classic_classpower_runtime_smoke.lua") $root $flavor
-        if ($LASTEXITCODE -ne 0) { throw "Classic ClassPower runtime contract failed: $flavor" }
+    $classicProfileCrossFlavorSmoke = Join-Path $root "tools/tests/classic_profile_cross_flavor_smoke.lua"
+    foreach ($flavor in $clientSuffixes) {
+        Invoke-GateSmoke $lua.Source $auraTestDriver $classicProfileCrossFlavorSmoke $flavor ($root -replace '\\', '/')
+        if ($LASTEXITCODE -ne 0) { throw "Cross-flavor profile smoke failed: $flavor" }
     }
+    $classicProfileImportTxnSmoke = Join-Path $root "tools/tests/classic_profile_import_transaction_smoke.lua"
+    foreach ($flavor in $clientSuffixes) {
+        foreach ($codecMode in @("raise", "nil")) {
+            Invoke-GateSmoke $lua.Source $auraTestDriver $classicProfileImportTxnSmoke $flavor $codecMode ($root -replace '\\', '/')
+            if ($LASTEXITCODE -ne 0) { throw "Profile import transaction smoke failed: $flavor $codecMode" }
+        }
+    }
+    $classResourceSmoke = Join-Path $root "tools/tests/classic_class_resources_smoke.lua"
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classResourceSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic class-resource ownership smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_texture_layer_contract_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Texture Layer menu contract failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_font_return_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Classic font return contract failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_defaults_refactor_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Classic split defaults contract failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_arena_five_slot_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Classic arena five-slot contract failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_arena_legacy_hider_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Classic legacy arena hider smoke failed" }
+    $classPowerProviderSmoke = Join-Path $root "tools/tests/classic_classpower_provider_smoke.lua"
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classPowerProviderSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Client ClassPower provider smoke failed" }
+    foreach ($flavor in $classicSuffixes) {
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_classpower_runtime_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Classic ClassPower runtime contract failed: $flavor" }
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_classpower_enabled_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Classic ClassPower enabled routes failed: $flavor" }
+    }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/mainline_classpower_ooc_autohide_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Mainline ClassPower OOC auto-hide smoke failed" }
     $classicCastbarSmoke = Join-Path $root "tools/tests/classic_castbar_engine_smoke.lua"
-    & $lua.Source $auraTestDriver $classicCastbarSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicCastbarSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic castbar engine smoke failed" }
-    & $lua.Source $auraTestDriver (Join-Path $root "tools/tests/classic_transition_regression_smoke.lua") $root
+    Invoke-GateSmoke $lua.Source $auraTestDriver (Join-Path $root "tools/tests/classic_transition_regression_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Classic transition regression failed" }
+    $classicGroupRuntimeEventGateSmoke = Join-Path $root "tools/tests/classic_group_runtime_event_gate_smoke.lua"
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicGroupRuntimeEventGateSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic group runtime event gate smoke failed" }
     $classicCastbarVisualSmoke = Join-Path $root "tools/tests/classic_castbar_visual_compat_smoke.lua"
-    & $lua.Source $auraTestDriver $classicCastbarVisualSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicCastbarVisualSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic castbar visual compatibility smoke failed" }
+    $classicCastbarLuaFillSmoke = Join-Path $root "tools/tests/classic_castbar_lua_fill_smoke.lua"
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicCastbarLuaFillSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic castbar Lua fill smoke failed" }
     $ptr1215RuntimeSmoke = Join-Path $root ".github/scripts/ptr_12_1_5_runtime_smoke.lua"
-    & $lua.Source $auraTestDriver $ptr1215RuntimeSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $ptr1215RuntimeSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "PTR 12.1.5 runtime smoke failed" }
     $retail1210FallbackSmoke = Join-Path $root ".github/scripts/retail_12_1_0_fallback_smoke.lua"
-    & $lua.Source $auraTestDriver $retail1210FallbackSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $retail1210FallbackSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Retail 12.1.0 fallback smoke failed" }
     $roundedHighlightSmoke = Join-Path $root ".github/scripts/rounded_border_highlight_smoke.lua"
-    & $lua.Source $auraTestDriver $roundedHighlightSmoke
+    Invoke-GateSmoke $lua.Source $auraTestDriver $roundedHighlightSmoke
     if ($LASTEXITCODE -ne 0) { throw "Rounded border highlight startup smoke failed" }
-    & $lua.Source $auraTestDriver $roundedHighlightSmoke --startup-disabled
+    Invoke-GateSmoke $lua.Source $auraTestDriver $roundedHighlightSmoke --startup-disabled
     if ($LASTEXITCODE -ne 0) { throw "Rounded border highlight enable smoke failed" }
-    & $lua.Source $auraTestDriver (Join-Path $root ".github/scripts/rounded_forbidden_mask_owner_smoke.lua")
+    Invoke-GateSmoke $lua.Source $auraTestDriver (Join-Path $root ".github/scripts/rounded_forbidden_mask_owner_smoke.lua")
     if ($LASTEXITCODE -ne 0) { throw "Rounded native aura ownership smoke failed" }
     $castbarOwnershipSmoke = Join-Path $root "tools/castbar_refresh_ownership_smoke.lua"
-    & $lua.Source $auraTestDriver $castbarOwnershipSmoke
+    Invoke-GateSmoke $lua.Source $auraTestDriver $castbarOwnershipSmoke
     if ($LASTEXITCODE -ne 0) { throw "Shared castbar refresh ownership smoke failed" }
     $auraFontFanoutSmoke = Join-Path $root "tools/aura_font_fanout_smoke.lua"
-    & $lua.Source $auraTestDriver $auraFontFanoutSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $auraFontFanoutSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Shared aura font fanout smoke failed" }
     foreach ($arenaSmoke in @(
         "tools/arena_unit_scope_smoke.lua",
@@ -1028,89 +1404,151 @@ if ($lua) {
         ".github/scripts/arena_postbase_integration_smoke.lua",
         ".github/scripts/arena_restoration_gaps_smoke.lua"
     )) {
-        & $lua.Source $auraTestDriver (Join-Path $root $arenaSmoke)
+        Invoke-GateSmoke $lua.Source $auraTestDriver (Join-Path $root $arenaSmoke)
         if ($LASTEXITCODE -ne 0) { throw "Arena frame regression smoke failed: $arenaSmoke" }
     }
     $nicknameProviderSmoke = Join-Path $root "tools/nickname_provider_api_smoke.lua"
-    & $lua.Source $auraTestDriver $nicknameProviderSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $nicknameProviderSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic nickname provider API smoke failed" }
     $eliteClassificationSmoke = Join-Path $root ".github/scripts/tests/elite_indicator_classification_smoke.lua"
-    & $lua.Source $auraTestDriver $eliteClassificationSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $eliteClassificationSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Elite indicator classification smoke failed" }
+    # Retail-shared smokes cover code Classic loads unchanged. They run through
+    # the driver with the repository root only. The health, text and castbar-tint
+    # parity smokes also accept a pre-refactor source root in arg[2]; that mode
+    # asserts strictly less Lua work than the baseline, so it fits only a one-off
+    # refactor review. No standing baseline exists: the Retail reference fails
+    # those asserts by design, because identical code does equal work.
+    foreach ($retailSharedSmoke in @(
+        "tools/addon_interop_guard_smoke.lua",
+        "tools/slash_command_registry_smoke.lua",
+        ".github/scripts/health_background_sample_parity_smoke.lua",
+        ".github/scripts/health_runtime_equivalence_smoke.lua",
+        ".github/scripts/text_runtime_value_parity_smoke.lua",
+        ".github/scripts/castbar_tint_parity_smoke.lua"
+    )) {
+        Invoke-GateSmoke $lua.Source $auraTestDriver (Join-Path $root $retailSharedSmoke) ($root -replace '\\', '/')
+        if ($LASTEXITCODE -ne 0) { throw "Retail-shared runtime smoke failed: $retailSharedSmoke" }
+    }
     foreach ($v604Smoke in @(
         "tools/aura_big_defensive_filter_smoke.lua",
         "tools/aura_group_slot_layer_smoke.lua",
         "tools/group_preview_roster_handoff_smoke.lua",
         "tools/unit_name_anchor_reflow_smoke.lua"
     )) {
-        & $lua.Source $auraTestDriver (Join-Path $root $v604Smoke)
+        Invoke-GateSmoke $lua.Source $auraTestDriver (Join-Path $root $v604Smoke)
         if ($LASTEXITCODE -ne 0) { throw "v6.04 parity smoke failed: $v604Smoke" }
     }
     foreach ($clientVisualSmoke in @("classic_unit_availability_smoke.lua", "classic_portrait_gold_smoke.lua", "classic_minimap_click_smoke.lua")) {
-        & $lua.Source $auraTestDriver (Join-Path $root ("tools/tests/" + $clientVisualSmoke))
+        Invoke-GateSmoke $lua.Source $auraTestDriver (Join-Path $root ("tools/tests/" + $clientVisualSmoke))
         if ($LASTEXITCODE -ne 0) { throw "Classic unit/portrait regression failed: $clientVisualSmoke" }
     }
     $classicPredictionSmoke = Join-Path $root "tools/tests/classic_prediction_contract_smoke.lua"
-    & $lua.Source $auraTestDriver $classicPredictionSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicPredictionSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic prediction contract smoke failed" }
     $classicAuraSmoke = Join-Path $root "tools/tests/classic_aura_backend_smoke.lua"
-    & $lua.Source $auraTestDriver $classicAuraSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicAuraSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura backend smoke failed" }
     $classicDispelSymbolSmoke = Join-Path $root "tools/tests/classic_dispel_symbol_chain_smoke.lua"
-    & $lua.Source $auraTestDriver $classicDispelSymbolSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicDispelSymbolSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic dispel symbol chain smoke failed" }
     $classicAuraMenuFilterSmoke = Join-Path $root "tools/tests/classic_aura_menu_filters_smoke.lua"
-    & $lua.Source $auraTestDriver $classicAuraMenuFilterSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicAuraMenuFilterSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Aura menu filter smoke failed" }
     $classicAuraFeatureSmoke = Join-Path $root "tools/tests/classic_aura_features_smoke.lua"
-    & $lua.Source $auraTestDriver $classicAuraFeatureSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicAuraFeatureSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura feature compiler smoke failed" }
+    $classicAuraCompileFilterSmoke = Join-Path $root "tools/tests/classic_aura_compile_filter_smoke.lua"
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicAuraCompileFilterSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic aura compile filter smoke failed" }
     $classicAuraAliasSmoke = Join-Path $root "tools/tests/classic_aura_alias_catalog_smoke.lua"
-    & $lua.Source $auraTestDriver $classicAuraAliasSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicAuraAliasSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura alias catalog smoke failed" }
     $classicGroupDataSmoke = Join-Path $root "tools/tests/classic_group_indicator_data_smoke.lua"
-    & $lua.Source $auraTestDriver $classicGroupDataSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicGroupDataSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic group indicator data smoke failed" }
     $classicRaidManagerSmoke = Join-Path $root "tools/tests/classic_raid_manager_mode_smoke.lua"
-    & $lua.Source $auraTestDriver $classicRaidManagerSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicRaidManagerSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Raid Manager mode smoke failed" }
     $classicPetHappinessSmoke = Join-Path $root "tools/tests/classic_pet_happiness_smoke.lua"
-    & $lua.Source $auraTestDriver $classicPetHappinessSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicPetHappinessSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Pet Happiness smoke failed" }
-    foreach ($flavor in @("Mainline", "Vanilla", "Mists", "TBC")) {
-        & $lua.Source (Join-Path $root "tools/tests/classic_optional_integrations_smoke.lua") $root $flavor
+    $classicRangeFadeSmoke = Join-Path $root "tools/tests/classic_range_fade_smoke.lua"
+    Invoke-GateSmoke $lua.Source $classicRangeFadeSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic range fade smoke failed" }
+    foreach ($flavor in $clientSuffixes) {
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_optional_integrations_smoke.lua") $root $flavor
         if ($LASTEXITCODE -ne 0) { throw "Optional integration contract failed: $flavor" }
     }
     $classicEditModeSmoke = Join-Path $root "tools/tests/classic_editmode_smoke.lua"
-    & $lua.Source $auraTestDriver $classicEditModeSmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicEditModeSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Edit Mode smoke failed" }
+    $arenaEditModeExitSmoke = Join-Path $root "tools/tests/arena_editmode_exit_restore_smoke.lua"
+    Invoke-GateSmoke $lua.Source $auraTestDriver $arenaEditModeExitSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Arena Edit Mode exit restore smoke failed" }
     $classicMenuParitySmoke = Join-Path $root "tools/tests/classic_menu_retail_parity_smoke.lua"
-    & $lua.Source $auraTestDriver $classicMenuParitySmoke ($root -replace '\\', '/')
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicMenuParitySmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Menu2 Retail parity smoke failed" }
     $classicAuraRenderSmoke = Join-Path $root "tools/tests/classic_aura_render_smoke.lua"
     $classicAuraBackend = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"
     $classicAuraFeatures = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
     $classicAuraVisuals = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua"
     $classicAuraCore = Join-Path $root "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"
-    & $lua.Source $auraTestDriver $classicAuraRenderSmoke ($root -replace '\\', '/') `
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicAuraRenderSmoke ($root -replace '\\', '/') `
         ($classicAuraBackend -replace '\\', '/') ($classicAuraFeatures -replace '\\', '/') `
         ($classicAuraCore -replace '\\', '/') ($classicAuraVisuals -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura live-render smoke failed" }
-} else {
-    Write-Warning "lua not found; client bootstrap smoke skipped"
 }
 
-$uiMirror = Join-Path $root "_local_workflows/references/wow-ui-source/.git"
-if (Test-Path -LiteralPath $uiMirror -PathType Container) {
+# Every tracked smoke either ran through Invoke-GateSmoke above or is retired
+# with a recorded reason, so no smoke silently rots.
+$retiredSmokes = [ordered]@{
+    ".github/scripts/mapkoskin_menu_integration_contract.lua" = "runs only under the external tests/MapkoSkin/run.lua harness, which this repository does not contain"
+    ".github/scripts/prediction_data_writer_parity_smoke.lua" = "compares against an immutable pre-refactor source root in arg[2]; a self-comparison fails by design"
+}
+$trackedSmokes = [Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+$trackedToolingPaths = @(& git -C $root ls-files -- tools .github 2>&1)
+if ($LASTEXITCODE -ne 0) { throw "Unable to enumerate tracked smokes: $($trackedToolingPaths -join ', ')" }
+foreach ($trackedToolingPath in $trackedToolingPaths) {
+    $trackedToolingPath = $trackedToolingPath.Replace([char]92, [char]47)
+    if ($trackedToolingPath -match $smokeFilePattern) { [void]$trackedSmokes.Add($trackedToolingPath) }
+}
+foreach ($retiredSmoke in $retiredSmokes.Keys) {
+    if (-not $trackedSmokes.Contains($retiredSmoke)) {
+        throw "Retired smoke entry names no tracked smoke: $retiredSmoke"
+    }
+    if ($ranSmokes.Contains($retiredSmoke)) {
+        throw "Retired smoke still runs in the Classic gate: $retiredSmoke"
+    }
+}
+foreach ($ranSmoke in $ranSmokes) {
+    if (-not $trackedSmokes.Contains($ranSmoke)) {
+        throw "The Classic gate ran an untracked smoke; track it with git add -f: $ranSmoke"
+    }
+}
+# Without lua no Lua smoke ran; the preflight already recorded that skip.
+if ($lua) {
+    $unrunSmokes = [string[]]@($trackedSmokes | Where-Object { -not $ranSmokes.Contains($_) -and -not $retiredSmokes.Contains($_) })
+    if ($unrunSmokes.Count -gt 0) {
+        throw "Tracked smokes neither ran in the Classic gate nor are listed as retired: $($unrunSmokes -join ', ')"
+    }
+}
+Write-Host "Smoke inventory: $($trackedSmokes.Count) tracked smokes; $($ranSmokes.Count) ran; $($retiredSmokes.Count) retired with a recorded reason"
+
+if (-not $SelfContained -and $uiMirrorPresent) {
     & (Join-Path $root "tools/audit-classic-ui-source.ps1")
     if ($LASTEXITCODE -ne 0) { throw "Blizzard Classic source contract audit failed" }
-} else {
-    Write-Warning "Blizzard UI source mirror missing; source contract audit skipped"
 }
 
-Write-Host "Client TOCs: 12 manifests passed (Mainline, Vanilla, Mists, TBC)"
+Write-Host "Client TOCs: $($targets.Count * $clientMatrix.Count) manifests passed ($($clientSuffixes -join ', '))"
 Write-Host "XML load graph: $($seenXml.Count) manifests resolved"
 Write-Host "Mainline exact Lua: $mainlineExactLuaCount Retail paths retain order and Git blobs"
 Write-Host "Mainline override Lua: $mainlineOverrideLuaCount Retail paths retain order with reviewed P blobs"
-Write-Host "Mainline owned Lua: $($actualMainlineOwnedLuaExtras.Count) declared O shared/Arena additions; no Game/Classic load"
+if (-not $SelfContained) {
+    Write-Host "Mainline owned Lua: $($actualMainlineOwnedLuaExtras.Count) of $($mainlineOwnedLuaExtras.Count) declared O shared/Arena additions loaded; no Game/Classic load"
+}
 Write-Host "Retail zero-overhead load graph: $($mainlineLoaded.Count) core files, $currentRetailHashCount Retail Lua paths across Core/Options/Assistant validated against $retailReferenceLabel"
+foreach ($skippedStep in $skippedSteps) {
+    Write-Host "SKIPPED: $skippedStep"
+}
+Pop-Location

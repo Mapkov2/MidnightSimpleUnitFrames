@@ -12,6 +12,7 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     _G.WOW_PROJECT_MAINLINE, _G.WOW_PROJECT_CLASSIC = 1, 2
     _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC, _G.WOW_PROJECT_MISTS_CLASSIC = 5, 19
     _G.WOW_PROJECT_ID = ({ Vanilla = 2, TBC = 5, Mists = 19, Mainline = 1 })[flavor]
+    _G.MAX_ARENA_ENEMIES = nil
     local ns = {}
     assert(loadfile(core .. "Game/Shared/Initialize.lua"))("MSUF", ns)
     assert(loadfile(core .. "Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("MSUF", ns)
@@ -22,6 +23,36 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     local arena = flavor ~= "Vanilla"
     assert(ns.UF.IsManagedUnit("boss1") == boss, flavor .. " boss allocation")
     assert(ns.UF.IsManagedUnit("arena1") == arena, flavor .. " arena allocation")
+    -- Arena opponent slots follow the client fact: Era 0, TBC/Mists 5, Mainline 3.
+    local slots = ({ Vanilla = 0, TBC = 5, Mists = 5, Mainline = 3 })[flavor]
+    assert(_G.MSUF_MAX_ARENA_FRAMES == slots, flavor .. " arena slot fact")
+    assert(ns.UF.IsManagedUnit("arena4") == (slots >= 4), flavor .. " arena4 allocation")
+    assert(ns.UF.IsManagedUnit("arena5") == (slots >= 5), flavor .. " arena5 allocation")
+    local arenaTokens = 0
+    for i, unit in ipairs(ns.UF.unitOrder) do
+        if unit:match("^arena%d+$") then
+            arenaTokens = arenaTokens + 1
+            assert(unit == "arena" .. arenaTokens, flavor .. " arena tokens out of order")
+        end
+    end
+    assert(arenaTokens == slots, flavor .. " arena tokens in UF.unitOrder: " .. arenaTokens)
+    if arena then
+        local arenaKeyUnits = ns.UF.UnitsForConfigKey("arena")
+        assert(#arenaKeyUnits == slots, flavor .. " arena config-key units: " .. #arenaKeyUnits)
+        for i = 1, slots do
+            assert(arenaKeyUnits[i] == "arena" .. i, flavor .. " arena config-key order")
+            assert(ns.UF.ConfigKeyForUnit("arena" .. i) == "arena", flavor .. " arena" .. i .. " config key")
+        end
+    end
+    assert((ns.UF.ConfigKeyForUnit("arena5") == "arena") == (slots >= 5), flavor .. " arena5 config key")
+    -- Re-running the metadata chunk against the same namespace must not duplicate slots.
+    assert(loadfile(core .. "Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("MSUF", ns)
+    local rerunTokens = 0
+    for _, unit in ipairs(ns.UF.unitOrder) do
+        if unit:match("^arena%d+$") then rerunTokens = rerunTokens + 1 end
+    end
+    assert(rerunTokens == slots, flavor .. " metadata re-run duplicated arena tokens")
+    if arena then assert(#ns.UF.UnitsForConfigKey("arena") == slots, flavor .. " re-run duplicated arena config-key units") end
     for _, unit in ipairs(ns.UF.unitOrder) do
         assert(ns.Client.SupportsUnit(unit), flavor .. " contains unsupported managed unit")
     end
@@ -30,6 +61,11 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     assert(menu.SupportsUnitPage("opt_bars", "general.bossTargetOutlineMode") == boss)
     assert(menu.SupportsUnitPage("uf_boss") == boss)
     assert(menu.SupportsUnitPage("uf_arena") == arena)
+    -- Focus Kick settings follow the focus unit; ordinary general castbar keys do not.
+    local focus = flavor ~= "Vanilla"
+    assert(menu.SupportsUnitPage("opt_castbar", "general.enableFocusKickIcon") == focus, flavor .. " focus kick toggle gate")
+    assert(menu.SupportsUnitPage("opt_castbar", "general.focusKickIconWidth") == focus, flavor .. " focus kick setting gate")
+    assert(menu.SupportsUnitPage("opt_castbar", "general.castbarShowPushback") == true, flavor .. " general castbar setting gate")
     local source = read(options .. "Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua")
     source = source:sub(1, assert(source:find("local POWER_UNITS", 1, true)) - 1)
     local pages = assert(loadstring(source .. "\nreturn UNIT_PAGES"))("Options", ns)

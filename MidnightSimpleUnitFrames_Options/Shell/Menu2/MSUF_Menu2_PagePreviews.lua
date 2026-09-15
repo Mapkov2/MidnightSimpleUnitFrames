@@ -101,7 +101,7 @@ local function ApplyArenaPagePreviewFallback(active, reason)
 end
 local function ArenaPreviewFramesVisible()
     local sawFrame = false
-    for i = 1, 3 do
+    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         local unit = "arena" .. i
         local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
         if frame then

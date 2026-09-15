@@ -94,7 +94,7 @@ local classColors = {
     MAGE = { r = 0.25, g = 0.78, b = 0.92 },
     WARRIOR = { r = 0.78, g = 0.61, b = 0.43 },
 }
-for index = 1, 3 do
+local function CreateArenaFrame(index)
     local frame = {
         MSUFUnitKey = "arena" .. index,
         MSUFSpec = {
@@ -125,7 +125,9 @@ for index = 1, 3 do
     frame.Hide = function(self) self._shown = nil end
     frame.SetAlpha = function() end
     frames["arena" .. index] = frame
+    return frame
 end
+for index = 1, 3 do CreateArenaFrame(index) end
 
 UF.frames = frames
 UF.GetFrame = function(unit) return frames[unit] end
@@ -137,11 +139,11 @@ MSUF.UFText = {
 UF.RefreshVisibilityDrivers = function(key)
     Check(key == "arena", "prep refreshed the wrong unit-frame scope")
     visibilityRefreshes = visibilityRefreshes + 1
-    for index = 1, 3 do
+    for index = 1, 5 do
         local frame = frames["arena" .. index]
-        if registeredLoadConditions.IsEnabled(frame, frame.MSUFSpec) then
+        if frame and registeredLoadConditions.IsEnabled(frame, frame.MSUFSpec) then
             registeredLoadConditions.Apply(frame, frame.MSUFSpec)
-        else
+        elseif frame then
             registeredLoadConditions.Disable(frame)
         end
     end
@@ -173,7 +175,7 @@ _G.Enum = {
 _G.GetNumArenaOpponentSpecs = function() return arenaSpecCount end
 _G.GetArenaOpponentSpec = function(index)
     if index > arenaSpecCount then return 0, 2 end
-    return ({ 62, 71, 259 })[index], 2
+    return ({ 62, 71, 259, 62, 71 })[index], 2
 end
 _G.GetSpecializationInfoByID = function(specID)
     local classToken = specID == 71 and "WARRIOR" or (specID == 259 and "ROGUE" or "MAGE")
@@ -314,5 +316,82 @@ liveUnits = {}
 classicHandlers.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
 Check(_G.MSUF_ArenaPrepVisibilityActive == nil,
     "Classic non-arena world entry incorrectly armed prep visibility")
+
+-- 5-slot clients: TBC and Mists publish MSUF_MAX_ARENA_FRAMES = 5.
+local matchModulePath = "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua"
+local function ResetArenaSlots()
+    liveUnits = {}
+    prepVisibilityReady = false
+    visibilityRefreshes = 0
+    _G.MSUF_ArenaPrepVisibilityActive = nil
+    _G.MSUF_ArenaPrepVisibilityCount = nil
+    for index = 1, 5 do
+        local frame = frames["arena" .. index] or CreateArenaFrame(index)
+        frame._shown = nil
+        frame._visibilityExpression = nil
+        frame._unitWatched = true
+    end
+end
+
+-- Classic 5v5: prep renders arena4/arena5, and a live arena5 on world entry
+-- is an engaged match, so the prep fallback must stand down.
+ResetArenaSlots()
+_G.MSUF_MAX_ARENA_FRAMES = 5
+classicArenaActive = true
+arenaSpecCount = 5
+assert(loadfile(matchModulePath))("MidnightSimpleUnitFrames", MSUF)
+classicHandlers.ARENA_PREP_OPPONENT_SPECIALIZATIONS("ARENA_PREP_OPPONENT_SPECIALIZATIONS")
+Check(_G.MSUF_ArenaPrepVisibilityCount == 5
+        and frames.arena4._shown == true and frames.arena5._shown == true,
+    "Classic 5v5 prep did not render arena4 and arena5")
+liveUnits.arena5 = true
+classicHandlers.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+Check(_G.MSUF_ArenaPrepVisibilityActive == nil and _G.MSUF_ArenaPrepVisibilityCount == nil,
+    "Classic world entry ignored a live arena5 when seeding engaged state")
+
+-- Retail-style match state with five slots.
+ResetArenaSlots()
+_G.C_EventUtils = { IsEventValid = function() return true end }
+_G.Enum = { PvPMatchState = { Waiting = 1, StartUp = 2, Engaged = 3 } }
+_G.C_PvP = {
+    IsMatchConsideredArena = function() return true end,
+    IsMatchActive = function() return false end,
+    IsMatchComplete = function() return false end,
+    GetActiveMatchState = function() return matchState end,
+}
+_G.MSUF_EventBus_Register = function() return true end
+matchState = 2
+arenaSpecCount = 5
+assert(loadfile(matchModulePath))("MidnightSimpleUnitFrames", MSUF)
+Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
+    "5v5 prep sync did not report its visibility/data change")
+Check(visibilityRefreshes == 1 and _G.MSUF_ArenaPrepVisibilityCount == 5,
+    "5v5 prep did not count five opponents")
+for index = 1, 5 do
+    local frame = frames["arena" .. index]
+    Check(frame._shown == true and frame._visibilityExpression ~= nil,
+        "5v5 prep did not securely show arena" .. index)
+end
+Check(registeredLoadConditions.IsEnabled(frames.arena4, frames.arena4.MSUFSpec) == true
+        and registeredLoadConditions.IsEnabled(frames.arena5, frames.arena5.MSUFSpec) == true,
+    "5v5 prep did not enable LoadConditions for arena4 and arena5")
+matchState = 3
+_G.MSUF_ArenaMatch_SyncPrepDisplay()
+Check(_G.MSUF_ArenaPrepVisibilityActive == nil,
+    "5v5 engaged handoff did not restore runtime visibility")
+
+-- A missing client fact falls back to three slots even with five opponent specs.
+ResetArenaSlots()
+_G.MSUF_MAX_ARENA_FRAMES = nil
+matchState = 2
+assert(loadfile(matchModulePath))("MidnightSimpleUnitFrames", MSUF)
+Check(_G.MSUF_ArenaMatch_SyncPrepDisplay() == true,
+    "clamped prep sync did not report its visibility/data change")
+Check(_G.MSUF_ArenaPrepVisibilityCount == 3 and frames.arena3._shown == true
+        and not frames.arena4._shown and not frames.arena5._shown
+        and frames.arena4._visibilityExpression == nil and frames.arena5._visibilityExpression == nil,
+    "missing MSUF_MAX_ARENA_FRAMES did not clamp five opponent specs to three slots")
+Check(registeredLoadConditions.IsEnabled(frames.arena4, frames.arena4.MSUFSpec) == false,
+    "clamped prep enabled LoadConditions for arena4")
 
 print("arena_prep_visibility_smoke: ok")
