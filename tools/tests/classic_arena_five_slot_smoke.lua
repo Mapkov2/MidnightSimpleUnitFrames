@@ -64,10 +64,12 @@ local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 
 -- The arena slot count is read at file load, so the client fact must be
 -- published before every consumer on the five-slot clients.
+local addonPrefix = root:gsub("\\", "/") .. "/MidnightSimpleUnitFrames/"
 for _, flavor in ipairs({ "TBC", "Mists" }) do
     local index = {}
     for i, path in ipairs(manifest.Paths(root, flavor)) do
-        index[path:match("MidnightSimpleUnitFrames/(.*)$")] = i
+        local relative = path:sub(#addonPrefix + 1)
+        index[relative] = i
     end
     local fact = index["Game/Shared/Initialize.lua"]
     Check(fact, flavor .. " TOC does not load Game/Shared/Initialize.lua")
