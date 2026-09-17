@@ -8,12 +8,37 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "93A5B6ED29B535168F59264BAF3421FACE20BEF89801F9629AEE8B6518312152",
-    currentVersion = "6.5-alpha18",
+    sourceSha256 = "EABAC9951706E9C483501710F22C2662C0DBBB6B6672F819E9022F24B5A9C7D5",
+    currentVersion = "6.5-beta2",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-alpha17",
-    rangeLabel = "6.5-alpha17 -> 6.5-alpha18",
+    previousVersion = "6.5-alpha18",
+    rangeLabel = "6.5-alpha18 -> 6.5-beta2",
     entries = {
+        {
+            version = "6.5-beta2",
+            date = "2026-09-18",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "WoW Forever hour-0 support: Mainline family, camelot detection, Interface 16001, no arena, and the Classic Glass menu only on Forever.",
+                        "Detects WoW Forever from the Blizzard_Game Camelot marker and keeps Family and Flavor Mainline.",
+                        "/msuf clientinfo prints the client facts needed for Forever bug reports.",
+                        "Factory profiles inflate deflate(CBOR) before DeserializeCBOR so Forever can create and import profiles.",
+                        "TBC and Mists keep five Arena slots. Forever reports arena as unsupported.",
+                        "The Classic Glass menu skin and \"MSUF (Forever Version)\" title show only on Forever.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Missing imported fonts fall back instead of aborting UI construction.",
+                        "Profile import validates and stages the string before it creates or switches a profile.",
+                        "Era dispel scans keep HARMFUL|RAID.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha18",
             date = "2026-09-13",

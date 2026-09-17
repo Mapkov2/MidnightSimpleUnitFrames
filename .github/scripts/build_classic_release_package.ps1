@@ -37,15 +37,16 @@ function Normalize-ClassicReleaseVersion {
     param([Parameter(Mandatory = $true)][string]$Value)
 
     $candidate = $Value.Trim() -replace '^refs/tags/', ''
-    if ($candidate -notmatch '^classic-v(?<base>(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*)-alpha(?<number>0|[1-9][0-9]*)$') {
-        throw "Classic release version must use 'classic-v<version>-alpha<number>' without leading zeros. Got: $Value"
+    if ($candidate -notmatch '^classic-v(?<base>(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*)-(?<channel>alpha|beta)(?<number>0|[1-9][0-9]*)$') {
+        throw "Classic release version must use 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>' without leading zeros. Got: $Value"
     }
 
     # The authored base is the release identity: 6.05 and 6.5 are different
     # releases, so the components are never int-cast (which would merge them).
     $base = $Matches["base"]
+    $channel = $Matches["channel"]
     $number = [int]$Matches["number"]
-    return "$base-alpha$number"
+    return "$base-$channel$number"
 }
 
 function Normalize-VersionKey {
@@ -56,10 +57,12 @@ function Normalize-VersionKey {
     $candidate = $candidate -replace '^refs/tags/', ''
     $candidate = $candidate -replace '(?i)^classic[\s._-]*', ''
     $candidate = $candidate -replace '^v(?=\d)', ''
-    if ($candidate -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|a)[\s._-]*(?<number>\d+))\s*$') {
+    if ($candidate -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|a)[\s._-]*(?<number>\d+))\s*$') {
         # Keep the authored base so a 6.05 heading can never select the 6.5 section.
         $base = $Matches["base"]
-        return "$base-alpha$([int]$Matches["number"])"
+        $channel = $Matches["channel"].ToLowerInvariant()
+        if ($channel -eq "a") { $channel = "alpha" }
+        return "$base-$channel$([int]$Matches["number"])"
     }
     return $candidate.ToLowerInvariant()
 }

@@ -1,4 +1,4 @@
-name: MSUF Classic CurseForge Alpha
+name: MSUF Classic CurseForge
 run-name: Publish ${{ github.ref_name }} to CurseForge
 
 on:
@@ -30,11 +30,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $tag = $env:CLASSIC_RELEASE_TAG
-          if ($tag -notmatch '^classic-v(?<version>\d+(?:\.\d+)*-alpha(?<number>\d+))$') {
-            throw "Classic CurseForge releases require tag 'classic-v<version>-alpha<number>'. Got: $tag"
+          if ($tag -notmatch '^classic-v(?<base>\d+(?:\.\d+)*)-(?<channel>alpha|beta)(?<number>\d+)$') {
+            throw "Classic CurseForge releases require tag 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>'. Got: $tag"
           }
-          $version = $Matches["version"]
-          $alphaNumber = [int]$Matches["number"]
+          $versionBase = $Matches["base"]
+          $channel = $Matches["channel"]
+          $channelNumber = [int]$Matches["number"]
+          $version = "$versionBase-$channel$channelNumber"
 
           git fetch --no-tags origin "+refs/heads/classic:refs/remotes/origin/classic"
           if ($LASTEXITCODE -ne 0) {
@@ -56,13 +58,20 @@ jobs:
             throw "Refusing Classic release tag '$tag' at $tagCommit; current origin/classic is $classicCommit."
           }
 
-          $base = $version -replace '-alpha\d+$', ''
-          $releaseName = "MSUF_${base}A$alphaNumber"
+          if ($channel -eq "alpha") {
+            $releaseName = "MSUF_${versionBase}A$channelNumber"
+            $releaseType = "alpha"
+          } else {
+            $releaseName = "MSUF_${versionBase} Beta $channelNumber"
+            $releaseType = "beta"
+          }
 
           "CLASSIC_RELEASE_VERSION=$version" >> $env:GITHUB_ENV
           "CLASSIC_RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
+          "CLASSIC_RELEASE_TYPE=$releaseType" >> $env:GITHUB_ENV
           "version=$version" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
+          "release_type=$releaseType" >> $env:GITHUB_OUTPUT
           Write-Host "Classic tag '$tag' is current at origin/classic $classicCommit."
 
       - name: Validate CurseForge publishing configuration
@@ -190,7 +199,7 @@ jobs:
             changelogType = "html"
             displayName = $env:CLASSIC_RELEASE_NAME
             gameVersionNames = $gameVersionNames
-            releaseType = "alpha"
+            releaseType = $env:CLASSIC_RELEASE_TYPE
           } | ConvertTo-Json -Depth 5 -Compress
 
           $headers = @{
@@ -213,18 +222,19 @@ jobs:
           }
 
           "file_id=$fileId" >> $env:GITHUB_OUTPUT
-          Write-Host "CurseForge Classic alpha upload accepted: project $projectId, file $fileId, release '$env:CLASSIC_RELEASE_NAME', versions [$($gameVersionNames -join ', ')]."
+          Write-Host "CurseForge Classic $($env:CLASSIC_RELEASE_TYPE) upload accepted: project $projectId, file $fileId, release '$env:CLASSIC_RELEASE_NAME', versions [$($gameVersionNames -join ', ')]."
 
       - name: Write Classic release summary
         shell: pwsh
         run: |
           @"
-          ## MSUF Classic CurseForge alpha
+          ## MSUF Classic CurseForge $($env:CLASSIC_RELEASE_TYPE)
 
           - Tag: ``$env:CLASSIC_RELEASE_TAG``
           - Version: ``$env:CLASSIC_RELEASE_VERSION``
+          - Display name: ``$env:CLASSIC_RELEASE_NAME``
           - CurseForge project: ``1384660``
           - CurseForge file: ``${{ steps.curseforge.outputs.file_id }}``
           - Game versions: ``${{ steps.curseforge.outputs.game_versions }}``
-          - Release type: ``alpha``
+          - Release type: ``$env:CLASSIC_RELEASE_TYPE``
           "@ >> $env:GITHUB_STEP_SUMMARY

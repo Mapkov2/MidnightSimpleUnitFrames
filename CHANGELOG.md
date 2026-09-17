@@ -1,5 +1,22 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta2 - 2026-09-18
+
+### Changes
+
+- WoW Forever hour-0 support: Mainline family, camelot detection, Interface 16001, no arena, and the Classic Glass menu only on Forever.
+- Detects WoW Forever from the Blizzard_Game Camelot marker and keeps Family and Flavor Mainline.
+- `/msuf clientinfo` prints the client facts needed for Forever bug reports.
+- Factory profiles inflate deflate(CBOR) before DeserializeCBOR so Forever can create and import profiles.
+- TBC and Mists keep five Arena slots. Forever reports arena as unsupported.
+- The Classic Glass menu skin and "MSUF (Forever Version)" title show only on Forever.
+
+### Fixes & Performance
+
+- Missing imported fonts fall back instead of aborting UI construction.
+- Profile import validates and stages the string before it creates or switches a profile.
+- Era dispel scans keep HARMFUL|RAID.
+
 ## 6.5-alpha18 - 2026-09-13
 
 ### Fixes & Performance

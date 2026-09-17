@@ -17,7 +17,7 @@ if ([string]::IsNullOrWhiteSpace($ReleaseVersion)) {
 }
 
 $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace '^v(?=\d)', ''
-if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?alpha\d*(?:[-.]|$)') {
+if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)') {
     Write-Host "Classic 6.5 release-line contract: skipped for $ReleaseVersion"
     return
 }

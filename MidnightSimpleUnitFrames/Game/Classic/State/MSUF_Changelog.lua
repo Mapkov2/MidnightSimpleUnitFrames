@@ -8,12 +8,37 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "93A5B6ED29B535168F59264BAF3421FACE20BEF89801F9629AEE8B6518312152",
-    currentVersion = "6.5-alpha18",
-    historyFromVersion = "6.5-alpha15",
-    previousVersion = "6.5-alpha17",
-    rangeLabel = "6.5-alpha17 -> 6.5-alpha18",
+    sourceSha256 = "EABAC9951706E9C483501710F22C2662C0DBBB6B6672F819E9022F24B5A9C7D5",
+    currentVersion = "6.5-beta2",
+    historyFromVersion = "6.5-alpha16",
+    previousVersion = "6.5-alpha18",
+    rangeLabel = "6.5-alpha18 -> 6.5-beta2",
     entries = {
+        {
+            version = "6.5-beta2",
+            date = "2026-09-18",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "WoW Forever hour-0 support: Mainline family, camelot detection, Interface 16001, no arena, and the Classic Glass menu only on Forever.",
+                        "Detects WoW Forever from the Blizzard_Game Camelot marker and keeps Family and Flavor Mainline.",
+                        "/msuf clientinfo prints the client facts needed for Forever bug reports.",
+                        "Factory profiles inflate deflate(CBOR) before DeserializeCBOR so Forever can create and import profiles.",
+                        "TBC and Mists keep five Arena slots. Forever reports arena as unsupported.",
+                        "The Classic Glass menu skin and \"MSUF (Forever Version)\" title show only on Forever.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Missing imported fonts fall back instead of aborting UI construction.",
+                        "Profile import validates and stages the string before it creates or switches a profile.",
+                        "Era dispel scans keep HARMFUL|RAID.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-alpha18",
             date = "2026-09-13",
@@ -74,23 +99,6 @@ local data = {
                         "With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.",
                         "A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.",
                         "Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-alpha15",
-            date = "2026-09-09",
-            sections = {
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Dispel symbols now render on every Classic client. Clients without the 12.1 debuff atlases fell through to a blank texture and drew nothing; they now fall back to MSUF's own symbol art. A dispel type whose color you overrode is repainted the way it already is on Retail.",
-                        "The Cooldown Manager anchor is resolved from what the client can actually provide. Clients without a Cooldown Manager no longer show the login warning that could never be satisfied, and the anchor switch is hidden instead of offered; your stored preference is kept, so the profile still works on a client that has one.",
-                        "An imported profile that anchors Unit Frames to Essential Cooldowns no longer scatters them on a client without that frame; those frames fall back to the normal global anchor.",
-                        "The Aggro border works on a fresh profile. Bars advertised it as On while the frames still treated it as Off, so it only lit up after toggling the dropdown off and on.",
-                        "The Dispel Border hint no longer asks you to enable Aura sensors for Focus, Boss, or Arena frames on clients that do not have them.",
-                        "Turning a Dispel Symbol off now clears it. It could stay frozen on the frame until the next reload.",
                     },
                 },
             },
