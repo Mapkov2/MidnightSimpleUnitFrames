@@ -28,10 +28,14 @@ local SOURCE_OF_TRUTH = "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"
 local ALLOWED = {
     ["MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"] =
         { 1, "native aura runtime errors are only reported on the Mainline project (Retail code)" },
+    ["MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua"] =
+        { 1, "cooldown manager project fallback when the file loads without MSUF.Client" },
     ["MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua"] =
         { 1, "legacy portrait fallback when the element loads without MSUF.Client" },
     ["MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua"] =
         { 2, "Mainline-only option gate kept from the Retail page" },
+    ["MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua"] =
+        { 2, "reduced Classic filter fallback when the page loads without MSUF.Client" },
     ["MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Classic.lua"] =
         { 2, "reduced Classic filter fallback when the page loads without MSUF.Client" },
     ["MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render_Classic.lua"] =

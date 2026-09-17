@@ -1074,6 +1074,8 @@ builders.RUNTIME = function(env)
     local OnWarlockCastEnd = env.OnWarlockCastEnd
     local OnTipOfTheSpearSpellCast = env.OnTipOfTheSpearSpellCast
     local OnSpellTrackerReset = env.OnSpellTrackerReset
+    --- Only WoW Forever passes it (target-owned combo points); nil elsewhere.
+    local AcceptPowerToken = env.AcceptPowerToken
 
     --- Resolve the visible segment count for the active render mode. This is
     --- intentionally separate from layout so rare max-power changes can be
@@ -1163,7 +1165,9 @@ builders.RUNTIME = function(env)
         if mode ~= CPK.MODE.SEGMENTED and mode ~= CPK.MODE.FRACTIONAL then return end
 
         local expectedToken = CP.powerToken or POWER_TYPE_TOKENS[CP.powerType]
-        if powerToken and expectedToken and powerToken ~= expectedToken then return end
+        if powerToken and expectedToken and powerToken ~= expectedToken then
+            if not (AcceptPowerToken and AcceptPowerToken(CP.powerType, powerToken, expectedToken)) then return end
+        end
 
         RefreshVisibleModeLight(GetResolvedVisibleMax())
     end
@@ -1229,7 +1233,9 @@ builders.RUNTIME = function(env)
         if CP.renderMode == CPK.MODE.STAGGER then return end
 
         local expectedToken = CP.powerToken or POWER_TYPE_TOKENS[CP.powerType]
-        if powerToken and expectedToken and powerToken ~= expectedToken then return end
+        if powerToken and expectedToken and powerToken ~= expectedToken then
+            if not (AcceptPowerToken and AcceptPowerToken(CP.powerType, powerToken, expectedToken)) then return end
+        end
 
         RunActiveUpdate(CP.powerType, CP.currentMax)
     end

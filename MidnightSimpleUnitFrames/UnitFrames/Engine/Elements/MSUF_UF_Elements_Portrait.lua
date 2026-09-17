@@ -4,8 +4,11 @@ MSUF = MSUF or _G.MSUF_NS or {}
 
 -- Era's legacy PlayerFrame does not use the modern HUD portrait atlases.
 -- Do not select them merely because GetAtlasInfo exposes an atlas entry.
-local LEGACY_BLIZZARD_PORTRAIT = (MSUF.Client and MSUF.Client.IsVanilla == true)
-  or (_G.WOW_PROJECT_CLASSIC ~= nil and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_CLASSIC)
+-- The client model decides whenever it exists (WoW Forever runs the Mainline
+-- PlayerFrame whatever project ID it reports); the project comparison only
+-- serves an element loaded without MSUF.Client.
+local LEGACY_BLIZZARD_PORTRAIT = (MSUF.Client ~= nil and MSUF.Client.IsVanilla == true)
+  or (MSUF.Client == nil and _G.WOW_PROJECT_CLASSIC ~= nil and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_CLASSIC)
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF

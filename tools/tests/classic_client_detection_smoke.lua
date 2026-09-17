@@ -71,6 +71,8 @@ local function Load(label, case)
     MSUF_MAX_ARENA_FRAMES = 99
     Enum = case.enum
     C_GameRules = case.gameRules
+    GameEvent = case.gameEvent
+    CLASS_SORT_ORDER = case.classSortOrder
     MSUF = nil
     MSUF_NS = nil
 
@@ -385,6 +387,9 @@ do
             assert(client.Flavor == suffix, label .. ": project placed flavor " .. tostring(client.Flavor))
             local family = fields[columns.IsClassic] == "true" and "Classic" or "Mainline"
             assert(client.Family == family, label .. ": family " .. tostring(client.Family) .. ", expected " .. family)
+            local dispellable = suffix == "Vanilla" and "HARMFUL|RAID" or "HARMFUL|RAID_PLAYER_DISPELLABLE"
+            assert(client.DispellableDebuffFilter == dispellable,
+                label .. ": dispellable debuff filter " .. tostring(client.DispellableDebuffFilter))
             assert(client.IsStandardGameMode == true and client.GameModeRecognized == true,
                 label .. ": a client without C_GameRules must count as the Standard game mode")
             AssertArenaSlots(label, client, slots)
@@ -549,6 +554,52 @@ do
     -- The live mode is read when the report is built; the load-time fact stays.
     rules.GetActiveGameMode = function() return GAME_MODES.WoWHack end
     Contains(table.concat(client.DescribeLines(), "\n"), "Game mode Standard (0) at load, WoWHack (2) now", "r3")
+end
+
+-- (s) WoW Forever: Blizzard_Game's camelot-only GameEvent.RegisterCamelotEvents
+-- marks the client. It runs the Mainline build in the Standard game mode, under
+-- any project ID, unless a Classic X-MSUF-Client tag says otherwise.
+do
+    local camelotEvents = { RegisterCamelotEvents = function() error("the marker must never be called") end }
+    local nineClasses = { "WARRIOR", "PALADIN", "PRIEST", "SHAMAN", "DRUID", "ROGUE", "MAGE", "WARLOCK", "HUNTER" }
+    local forever = Merge(MAINLINE, { interface = 16001, gameEvent = camelotEvents, classSortOrder = nineClasses,
+        gameRules = GameRules(GAME_MODES.Standard), enum = GameModeEnum() })
+
+    local client = Load("s1", forever)
+    assert(client.IsForever == true, "s1: Forever not detected")
+    assert(client.Flavor == "Mainline" and client.Family == "Mainline" and client.IsRetail == true, "s1: Mainline build")
+    assert(client.IsClassic == false and client.ProjectIDRecognized == true, "s1: flags")
+    assert(client.GameModeName == "Standard" and client.GameModeRecognized == true, "s1: game mode")
+    assert(MSUF.Forever == true, "s1: MSUF.Forever alias")
+    AssertNoDiagnostic("s1", client)
+    AssertArenaSlots("s1", client, 0)
+    AssertSupportsUnits("s1", client, { "arena1", "arena3" }, false)
+    AssertSupportsUnits("s1", client, { "player", "target", "focus", "boss1", "party1", "raid40" }, true)
+    assert(client.SupportsGroupKind("mythicraid") == true, "s1: group kinds follow the Mainline build")
+    local text = table.concat(client.DescribeLines(), "\n")
+    for _, fragment in ipairs({ "family Mainline, flavor Mainline, WoW Forever",
+        "Forever marker GameEvent.RegisterCamelotEvents at load true, now true; CLASS_SORT_ORDER 9 classes",
+        "Blizzard_SwingTimer", "Blizzard_PVPUI" }) do
+        Contains(text, fragment, "s1")
+    end
+
+    -- (s2) A Classic project ID on the untagged Mainline TOC still runs the
+    -- Mainline build and names the project once at login.
+    client = Load("s2", Merge(forever, { project = 2 }))
+    assert(client.IsForever == true and client.Flavor == "Mainline" and client.IsVanilla == false, "s2: placement")
+    assert(client.ProjectIDRecognized == false, "s2: a Classic project ID was accepted for Forever")
+    for _, fragment in ipairs({ "unrecognized project ID", "project 2", "using the Mainline TOC build" }) do
+        Contains(client.Diagnostic, fragment, "s2")
+    end
+
+    -- (s3) A Classic TOC tag wins over the marker.
+    client = Load("s3", Merge(forever, { project = 2, interface = 11509, tag = "Vanilla" }))
+    assert(client.IsForever == false and client.Flavor == "Vanilla", "s3: tag lost to the marker")
+
+    -- (s4) Without the marker, the same Standard Mainline client is Midnight.
+    client = Load("s4", Merge(forever, { gameEvent = { RegisterMainlineEvents = function() end } }))
+    assert(client.IsForever == false and client.Flavor == "Mainline" and MSUF.Forever == false, "s4: guessed Forever")
+    Contains(table.concat(client.DescribeLines(), "\n"), "RegisterCamelotEvents at load false, now false", "s4")
 end
 
 print = originalPrint

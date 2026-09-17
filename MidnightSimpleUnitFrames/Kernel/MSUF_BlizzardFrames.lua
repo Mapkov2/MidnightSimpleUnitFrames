@@ -5,6 +5,10 @@ MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.UF = MSUF.UF or {}
 local UF = MSUF.UF
 
+-- WoW Forever runs this Mainline file. The client fact is read once at load;
+-- a harness without MSUF.Client counts as not Forever.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+
 -- Blizzard unitframe ownership bridge.
 -- Hides or restores Blizzard unit/cast frames according to MSUF settings while respecting
 -- combat lockdown. MSUF frame creation lives elsewhere; this file only manages Blizzard frame
@@ -435,6 +439,18 @@ local function DisableBlizzardFrames()
     end
     if hideTarget and hideTargetTarget then
         HandleFrame(_G.TargetFrame, nil, "target")
+        --- WoW Forever excludes every Retail combo point bar for its camelot
+        --- game type, so ComboFrame is Blizzard's only combo point display. It
+        --- is a UIParent child that Blizzard re-anchors to TargetFrame on every
+        --- update (Blizzard_UnitFrame/Camelot/ComboFrameOverrides.lua), so it
+        --- would float where the hidden target frame sits. It follows
+        --- TargetFrame ownership with the same hidden parent and SetParent
+        --- hook; HandleFrame defers Hide/SetParent to regen if the frame ever
+        --- reports protected in combat. Restore is /reload-only, as for
+        --- TargetFrame.
+        if IS_FOREVER then
+            HandleFrame(_G.ComboFrame, nil, "target")
+        end
     end
 
     local hideFocus = ShouldHideBlizzardUnitFrame("focus")

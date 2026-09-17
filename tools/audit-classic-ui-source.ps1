@@ -217,7 +217,9 @@ foreach ($target in $branches) {
 
 # PTR refs are drift sentinels only. They are not packaged as separate clients,
 # but their aura contracts warn us before a live branch changes underneath MSUF.
-foreach ($ref in @("upstream/ptr", "upstream/ptr2", "upstream/classic_ptr", "upstream/classic_era_ptr")) {
+# upstream/forever is WoW Forever: the Mainline build on the 12.1.5 engine.
+$sentinelRefs = @("upstream/ptr", "upstream/ptr2", "upstream/classic_ptr", "upstream/classic_era_ptr", "upstream/forever")
+foreach ($ref in $sentinelRefs) {
     git -C $MirrorPath rev-parse --verify $ref 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { continue }
     $unitAuraAPI = Read-BranchFile $ref "Interface/AddOns/Blizzard_APIDocumentationGenerated/UnitAuraDocumentation.lua"
@@ -232,23 +234,49 @@ foreach ($ref in @("upstream/ptr", "upstream/ptr2", "upstream/classic_ptr", "ups
     Write-Host "Blizzard PTR aura drift contract passed: $ref"
 }
 
+# WoW Forever identity. Game/Shared/Initialize.lua sets Client.IsForever from
+# GameEvent.RegisterCamelotEvents, which Blizzard_Game (LoadFirst, so before any
+# addon) defines only in its camelot-gated file. Blizzard calls "Camelot" a
+# placeholder name, so a rename must fail here, never silently turn Forever off.
+git -C $MirrorPath rev-parse --verify "upstream/forever" 2>$null | Out-Null
+if ($LASTEXITCODE -eq 0) {
+    $foreverGameToc = Read-BranchFile "upstream/forever" "Interface/AddOns/Blizzard_Game/Blizzard_Game.toc"
+    Assert-Contains $foreverGameToc @('## LoadFirst: 1', 'Shared\GameEvent.lua') "upstream/forever Blizzard_Game TOC"
+    if ($foreverGameToc -notmatch '(?m)^\[Game\]\\EventRouting\.lua\s+\[AllowLoadGameType camelot\]\s*$') {
+        throw "upstream/forever: Blizzard_Game no longer loads [Game]\EventRouting.lua for camelot only; re-derive the WoW Forever marker in Game/Shared/Initialize.lua"
+    }
+    $foreverRouting = Read-BranchFile "upstream/forever" "Interface/AddOns/Blizzard_Game/Camelot/EventRouting.lua"
+    Assert-Contains $foreverRouting @('function GameEvent.RegisterCamelotEvents()') "upstream/forever WoW Forever marker"
+    foreach ($ref in @("upstream/live", "upstream/ptr2", "upstream/classic", "upstream/classic_anniversary", "upstream/classic_era")) {
+        git -C $MirrorPath rev-parse --verify $ref 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) { continue }
+        $markerHits = @(git -C $MirrorPath grep -l "RegisterCamelotEvents" $ref -- "Interface/AddOns")
+        if ($markerHits.Count -gt 0) {
+            throw "$ref defines the WoW Forever marker GameEvent.RegisterCamelotEvents; Client.IsForever would turn on outside Forever"
+        }
+    }
+    Write-Host "Blizzard WoW Forever marker contract passed: upstream/forever"
+}
+
 # Game-type tripwire. Every game-type token in Blizzard's TOC tags and every
 # C_GameRules Is* function is pinned for the matrix branches and the PTR
 # sentinels. A new client or game mode (WoW Forever) adds a token or an Is<Mode>
 # function there before addons can rely on it, so a refreshed mirror fails here
 # until Game/Shared/Initialize.lua handles it. Update the pins together with that
 # change; AGENTS.md has the Forever hour-0 runbook.
-$knownGameTypeTokens = @("cata", "classic", "mainline", "mists", "plunderstorm", "standard", "tbc", "vanilla", "wowhack", "wrath")
+# camelot (WoW Forever), wowlabs and IsSDHDToggleEnabled were pinned when
+# upstream/forever 1.60.1.69876 appeared (2026-09-16).
+$knownGameTypeTokens = @("camelot", "cata", "classic", "mainline", "mists", "plunderstorm", "standard", "tbc", "vanilla", "wowhack", "wowlabs", "wrath")
 $knownGameRuleFunctions = @(
     "IsCharacterlessLoginActive", "IsClassAllowedForGameMode", "IsGameModeEnabled", "IsGameRuleActive",
     "IsHardcoreActive", "IsMultiActionBarVisibilityForced", "IsPersonalResourceDisplayEnabled",
-    "IsPlunderstorm", "IsSelfFoundAllowed", "IsStandard", "IsWoWHack"
+    "IsPlunderstorm", "IsSDHDToggleEnabled", "IsSelfFoundAllowed", "IsStandard", "IsWoWHack"
 )
 $tripwireRefs = [Collections.Generic.List[string]]::new()
 foreach ($client in $clientMatrix) {
     if (-not $tripwireRefs.Contains($client.MirrorBranch)) { $tripwireRefs.Add($client.MirrorBranch) }
 }
-foreach ($ref in @("upstream/ptr", "upstream/ptr2", "upstream/classic_ptr", "upstream/classic_era_ptr")) {
+foreach ($ref in $sentinelRefs) {
     if ($tripwireRefs.Contains($ref)) { continue }
     git -C $MirrorPath rev-parse --verify $ref 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) { $tripwireRefs.Add($ref) }

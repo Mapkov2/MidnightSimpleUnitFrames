@@ -85,11 +85,19 @@ local function SetBlizzardPlayerCastbarAllowed(allowed)
     ns.UF.blizzardCastbarOwner = allowed and "Blizzard" or GetBackend("player")
 end
 
+--- WoW Forever defines a second player castbar, GamepadPlayerCastingBarFrame,
+--- that handles cast events only while the Gamepad UI style is active (and
+--- PlayerCastingBarFrame then ignores them). It is owned like the main bar; no
+--- other client defines it, so the lookup is a no-op there.
 local function ForEachBlizzardPlayerCastbar(callback)
     local player = rawget(_G, "PlayerCastingBarFrame")
     local legacyPlayer = rawget(_G, "CastingBarFrame")
+    local gamepadPlayer = rawget(_G, "GamepadPlayerCastingBarFrame")
     if player then callback(player) end
     if legacyPlayer and legacyPlayer ~= player then callback(legacyPlayer) end
+    if gamepadPlayer and gamepadPlayer ~= player and gamepadPlayer ~= legacyPlayer then
+        callback(gamepadPlayer)
+    end
 end
 
 local function HideSuppressedNativeFrame(frame)

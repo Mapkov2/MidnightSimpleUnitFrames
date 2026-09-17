@@ -163,6 +163,9 @@ local function NativeAuraRuntimeExpected()
         and warning.IsLegacyClient() == true then
         return false
     end
+    -- WoW Forever runs the Mainline build whatever project ID it reports.
+    local client = MSUF.Client
+    if type(client) == "table" and client.IsForever == true then return true end
     local projectID, mainlineID = _G.WOW_PROJECT_ID, _G.WOW_PROJECT_MAINLINE
     if projectID ~= nil and mainlineID ~= nil and projectID ~= mainlineID then return false end
     return true

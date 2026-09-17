@@ -373,14 +373,20 @@ do
         if type(payload) ~= "string" then return nil end
         if #payload > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
         local plain = TryBlizzardDecompress(E, payload)
-        local result = TryDeserialize(E, plain or payload)
-        if result then return result end
-        local libPlain = TryLibDeflateDecompress(payload)
-        if libPlain and libPlain ~= plain then
-            result = TryDeserialize(E, libPlain)
+        if type(plain) == "string" then
+            local result = TryDeserialize(E, plain)
             if result then return result end
         end
-        if plain then return TryDeserialize(E, payload) end
+        local libPlain = TryLibDeflateDecompress(payload)
+        if libPlain and libPlain ~= plain then
+            local result = TryDeserialize(E, libPlain)
+            if result then return result end
+        end
+        -- Uncompressed legacy CBOR only. Compressed leftovers are not CBOR;
+        -- Forever raises "unknown cbor value" on them instead of returning nil.
+        if type(plain) ~= "string" then
+            return TryDeserialize(E, payload)
+        end
         return nil
     end
     local function TryBlizzardCompress(E, plain)

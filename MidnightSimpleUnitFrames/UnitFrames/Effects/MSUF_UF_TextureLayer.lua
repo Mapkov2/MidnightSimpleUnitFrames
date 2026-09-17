@@ -1,7 +1,11 @@
 -- Unitframe decorative texture layers (3 slots per frame).
--- Spawns up to three optional SharedMedia textures per unit frame (Blizzard
--- name-bar style decoration). Settings changes and frame applies re-stamp the
--- layers. Conditional visibility/class colors use lazily registered lifecycle
+-- Spawns up to three optional textures per unit frame (Blizzard name-bar style
+-- decoration): a SharedMedia texture, a bundled MSUF texture or a custom file.
+-- Every client (Mainline, Vanilla, TBC, Mists) runs this one runtime. Settings
+-- changes and frame applies re-stamp the layers. A plain texture registers no
+-- event, no per-frame script and no health callback, so it costs nothing in
+-- combat.
+-- Conditional visibility/class colors use lazily registered lifecycle
 -- events; HP gradient colors reuse the owning Health element's existing update
 -- and only while a layer requests them. An unused feature costs no event work.
 -- Each layer is a child frame of the unit frame, so range fade / out-of-combat
@@ -16,6 +20,8 @@ local CreateFrame = CreateFrame
 local CreateColor = _G.CreateColor
 local InCombatLockdown = _G.InCombatLockdown
 local UnitIsUnit = _G.UnitIsUnit
+local UnitHealth = _G.UnitHealth
+local UnitHealthMax = _G.UnitHealthMax
 local UnitHealthPercent = _G.UnitHealthPercent
 local CurveAPI = _G.C_CurveUtil
 local LuaCurveType = _G.Enum and _G.Enum.LuaCurveType
@@ -28,7 +34,8 @@ local tostring = tostring
 local pairs = pairs
 local ipairs = ipairs
 local floor = math.floor
-local issecretvalue = _G.issecretvalue
+local max = math.max
+local issecretvalue = _G.issecretvalue or function() return false end
 
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local EDGE_SOFTNESS_MASK_ROOT = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\texture_layer_edge_softness_"
@@ -50,6 +57,7 @@ local function BuildSlotKeys(prefix)
     prefix = prefix,
     Enabled = prefix .. "Enabled",
     CustomTexturePath = prefix .. "CustomTexturePath",
+    SourceMode = prefix .. "SourceMode",
     Texture = prefix .. "Texture",
     ColorTreatment = prefix .. "ColorTreatment",
     Visibility = prefix .. "Visibility",
@@ -67,6 +75,9 @@ local function BuildSlotKeys(prefix)
     Alpha = prefix .. "Alpha",
     AnchorTarget = prefix .. "AnchorTarget",
     Anchor = prefix .. "Anchor",
+    SizeMode = prefix .. "SizeMode",
+    ResponsiveSize = prefix .. "ResponsiveSize",
+    EdgeAttach = prefix .. "EdgeAttach",
     Width = prefix .. "Width",
     Height = prefix .. "Height",
     OffsetX = prefix .. "OffsetX",
@@ -126,9 +137,15 @@ local function ConfForUnitKey(unitKey)
   return type(conf) == "table" and conf or nil
 end
 
+--- A slot draws exactly one source. SourceMode records the last source the
+--- user picked (PACK = bundled MSUF texture, CUSTOM = file path, SHAREDMEDIA),
+--- so an older custom path never silently overrides a SharedMedia pick.
+--- Profiles without SourceMode keep the original rule: a custom path wins.
 local function ResolveLayerTexture(conf, prefix, keys)
   local custom = conf[keys and keys.CustomTexturePath or (prefix .. "CustomTexturePath")]
-  if type(custom) == "string" and custom ~= "" then return custom end
+  local sourceMode = conf[keys and keys.SourceMode or (prefix .. "SourceMode")]
+  if sourceMode ~= "SHAREDMEDIA" and type(custom) == "string" and custom ~= "" then return custom end
+  if sourceMode == "PACK" or sourceMode == "CUSTOM" then return WHITE8 end
   local key = conf[keys and keys.Texture or (prefix .. "Texture")]
   if type(key) == "string" and key ~= "" then
     local resolve = _G.MSUF_ResolveStatusbarTextureKey
@@ -173,6 +190,69 @@ local function ResolveAnchorTarget(frame, mode)
   end
   return frame
 end
+TextureLayer.ResolveAnchorTarget = ResolveAnchorTarget
+
+local function RegionDimension(region, method, fallback)
+  local fn = region and region[method]
+  local value = type(fn) == "function" and fn(region) or nil
+  if issecretvalue(value) == true or type(value) ~= "number" or value < 1 then return fallback end
+  return value
+end
+
+--- FRAME fits bundled frame art around the anchor target, HEIGHT keeps a square
+--- ornament (medallion) on the target height, MANUAL uses Width/Height.
+--- Profiles without SizeMode are MANUAL unless the legacy ResponsiveSize is set.
+local function ResolveSizeMode(conf, prefix, keys)
+  local mode = conf[keys and keys.SizeMode or (prefix .. "SizeMode")]
+  if mode == "FRAME" or mode == "HEIGHT" or mode == "MANUAL" then return mode end
+  return conf[keys and keys.ResponsiveSize or (prefix .. "ResponsiveSize")] == true and "FRAME" or "MANUAL"
+end
+TextureLayer.ResolveSizeMode = ResolveSizeMode
+
+--- One geometry contract for live frames (scale 1) and the Menu2 preview (its
+--- viewport scale). MSUF frame art leaves an 82% x 30% window for the frame, so
+--- FRAME and HEIGHT grow the texture until that window fits the target. MANUAL
+--- keeps Width 0 = target width and Height 0 = target height. Runs only when a
+--- layer is stamped, never per frame.
+local function ResolveLayerSize(target, frame, conf, prefix, fallbackW, fallbackH, scale, keys)
+  scale = tonumber(scale) or 1
+  if scale <= 0 then scale = 1 end
+  local frameW = RegionDimension(frame, "GetWidth", tonumber(fallbackW) or (100 * scale))
+  local frameH = RegionDimension(frame, "GetHeight", tonumber(fallbackH) or (16 * scale))
+  local targetW = RegionDimension(target, "GetWidth", frameW)
+  local targetH = RegionDimension(target, "GetHeight", frameH)
+  local mode = ResolveSizeMode(conf, prefix, keys)
+  if mode == "FRAME" then
+    return max(72 * scale, (targetW + 20 * scale) / 0.82), max(48 * scale, (targetH + 10 * scale) / 0.30)
+  elseif mode == "HEIGHT" then
+    local size = max(48 * scale, (targetH + 10 * scale) / 0.30)
+    return size, size
+  end
+  local width = tonumber(conf[keys and keys.Width or (prefix .. "Width")]) or 0
+  if width > 0 then width = width * scale else width = targetW end
+  local height = tonumber(conf[keys and keys.Height or (prefix .. "Height")])
+  if height == nil then height = 16 end
+  if height > 0 then height = height * scale else height = targetH end
+  return width, height
+end
+TextureLayer.ResolveLayerSize = ResolveLayerSize
+
+--- FREE uses the anchor as-is. LEFT/RIGHT add half the target width, so a
+--- medallion stays on the frame edge when the frame changes width.
+local function ResolveLayerOffsets(target, frame, conf, prefix, fallbackW, scale, keys)
+  scale = tonumber(scale) or 1
+  if scale <= 0 then scale = 1 end
+  local x = (tonumber(conf[keys and keys.OffsetX or (prefix .. "OffsetX")]) or 0) * scale
+  local y = (tonumber(conf[keys and keys.OffsetY or (prefix .. "OffsetY")]) or 0) * scale
+  local edge = conf[keys and keys.EdgeAttach or (prefix .. "EdgeAttach")]
+  if edge == "LEFT" or edge == "RIGHT" then
+    local targetW = RegionDimension(target, "GetWidth",
+      RegionDimension(frame, "GetWidth", tonumber(fallbackW) or (100 * scale)))
+    if edge == "LEFT" then x = x - targetW * 0.5 else x = x + targetW * 0.5 end
+  end
+  return x, y
+end
+TextureLayer.ResolveLayerOffsets = ResolveLayerOffsets
 
 --- Class color for the unit a frame currently shows. 12.x can hand back
 --- secret class tokens for hostile units; those fall back to the custom color.
@@ -696,6 +776,16 @@ local function HealthThreshold(conf, keys)
   return threshold
 end
 
+--- A cold stamp reads health once, only for a slot with an HP rule. Plain
+--- values (every Classic client, and Mainline outside secret contexts) take the
+--- direct threshold path; secret values keep the curve path below.
+local function ColdHealthValues(unit)
+  if type(unit) ~= "string" or unit == "" or not (UnitHealth and UnitHealthMax) then return nil, nil end
+  local hp, maxHP = UnitHealth(unit), UnitHealthMax(unit)
+  if issecretvalue(hp) == true or issecretvalue(maxHP) == true then return nil, nil end
+  return hp, maxHP
+end
+
 local function PlainHealthPercent(hp, maxHP)
   if issecretvalue(hp) == true or issecretvalue(maxHP) == true then return nil end
   hp, maxHP = tonumber(hp), tonumber(maxHP)
@@ -907,20 +997,11 @@ local function ApplySlot(frame, conf, unitKey, slot)
   local target = ResolveAnchorTarget(frame, anchorMode)
   local point = conf[keys.Anchor]
   if not VALID_POINTS[point] then point = "TOP" end
-  local width = tonumber(conf[keys.Width]) or 0
-  if width <= 0 then
-    width = (target.GetWidth and target:GetWidth()) or (frame.GetWidth and frame:GetWidth()) or 100
-    if issecretvalue(width) == true or not width or width < 1 then width = 100 end
-  end
-  local height = tonumber(conf[keys.Height])
-  if height == nil then height = 16 end
-  if height <= 0 then
-    height = (target.GetHeight and target:GetHeight()) or (frame.GetHeight and frame:GetHeight()) or 16
-    if issecretvalue(height) == true or not height or height < 1 then height = 16 end
-  end
+  local width, height = ResolveLayerSize(target, frame, conf, prefix, 100, 16, 1, keys)
+  local offsetX, offsetY = ResolveLayerOffsets(target, frame, conf, prefix, 100, 1, keys)
   holder:SetSize(width, height)
   holder:ClearAllPoints()
-  holder:SetPoint(point, target, point, tonumber(conf[keys.OffsetX]) or 0, tonumber(conf[keys.OffsetY]) or 0)
+  holder:SetPoint(point, target, point, offsetX, offsetY)
 
   local clipWanted = WantsRoundedClip(conf, prefix, keys)
   local tex = EnsureBaseTexture(holder, clipWanted)
@@ -934,11 +1015,15 @@ local function ApplySlot(frame, conf, unitKey, slot)
   end
 
   local colorMode = conf[keys.ColorMode]
+  local hp, maxHP
+  if colorMode == "HEALTH" or conf[keys.HealthCondition] == "BELOW" or conf[keys.HealthLowAlphaEnabled] == true then
+    hp, maxHP = ColdHealthValues(unitKey)
+  end
   local r, g, b
   if colorMode == "CLASS" then
     r, g, b = ResolveClassRGB(unitKey)
   elseif colorMode == "HEALTH" then
-    r, g, b = ResolveHealthRGB(holder, frame, conf, keys, unitKey)
+    r, g, b = ResolveHealthRGB(holder, frame, conf, keys, unitKey, hp, maxHP)
   end
   if issecretvalue(r) ~= true and not r then
     r = Clamp01(conf[keys.ColorR], 1)
@@ -1009,7 +1094,7 @@ local function ApplySlot(frame, conf, unitKey, slot)
   ApplySoftEdgeMask(holder, featherTextures, conf[keys.EdgeSoftness])
   holder.clipApplied = clipWanted or nil
   holder:Show()
-  ApplyHealthVisibility(holder, conf, keys, unitKey)
+  ApplyHealthVisibility(holder, conf, keys, unitKey, hp, maxHP)
 end
 
 local function ApplyToUnitFrame(frame)

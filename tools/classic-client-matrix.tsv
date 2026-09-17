@@ -1,5 +1,5 @@
 Suffix	Interfaces	ClientToken	ProjectGlobal	GameType	MirrorBranch	CurseForgeVersions	IsClassic
-Mainline	120007, 120100, 120105		WOW_PROJECT_MAINLINE	mainline	upstream/live	12.1.5	false
+Mainline	120007, 120100, 120105, 16001		WOW_PROJECT_MAINLINE	mainline	upstream/live	12.1.5	false
 Vanilla	11509	Vanilla	WOW_PROJECT_CLASSIC	vanilla	upstream/classic_era	1.15.9	true
 Mists	50504	Mists	WOW_PROJECT_MISTS_CLASSIC	mists	upstream/classic	5.5.4	true
 TBC	20506	TBC	WOW_PROJECT_BURNING_CRUSADE_CLASSIC	tbc	upstream/classic_anniversary	2.5.6	true

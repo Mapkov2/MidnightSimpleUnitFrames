@@ -16,6 +16,29 @@ local VTP = M.ValueTextPairs
 local KLR, KSW, WL = M.KeyLabelRows, M.KeySetFromWords, M.WordList
 local NAV_SUBPAGE_LABELS = M.navSubpageLabels or {}
 local UNIT_PAGES = { uf_player = { unit = "player", title = "MSUF Player", label = NAV_SUBPAGE_LABELS.uf_player or "Player" }, uf_target = { unit = "target", title = "MSUF Target", label = NAV_SUBPAGE_LABELS.uf_target or "Target" }, uf_targettarget = { unit = "targettarget", title = "MSUF Target of Target", label = NAV_SUBPAGE_LABELS.uf_targettarget or "Target of Target" }, uf_focustarget = { unit = "focustarget", title = "MSUF Focus Target", label = NAV_SUBPAGE_LABELS.uf_focustarget or "Focus Target" }, uf_focus = { unit = "focus", title = "MSUF Focus", label = NAV_SUBPAGE_LABELS.uf_focus or "Focus" }, uf_pet = { unit = "pet", title = "MSUF Pet", label = NAV_SUBPAGE_LABELS.uf_pet or "Pet" }, uf_boss = { unit = "boss", title = "MSUF Boss Frames", label = NAV_SUBPAGE_LABELS.uf_boss or "Boss" }, uf_arena = { unit = "arena", title = "MSUF Arena Frames", label = NAV_SUBPAGE_LABELS.uf_arena or "Arena" } }
+-- WoW Forever runs this Mainline page without arena units. There the pages,
+-- aura copy partners and copy targets of every unit MSUF.Client.SupportsUnit
+-- rejects are dropped, as the Classic page variant does for its clients.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+    and type(MSUF.Client.SupportsUnit) == "function"
+--- Load-time only. Takes a { value = unit } list and returns the kept rows, or
+--- a table keyed by unit (or holding { unit = ... } pages) and prunes it in place.
+local function DropForeverUnsupportedUnits(units)
+    if not IS_FOREVER then return units end
+    local supportsUnit = MSUF.Client.SupportsUnit
+    if units[1] ~= nil then
+        local kept = {}
+        for i = 1, #units do
+            if supportsUnit(units[i].value) then kept[#kept + 1] = units[i] end
+        end
+        return kept
+    end
+    for key, entry in pairs(units) do
+        if not supportsUnit(type(entry) == "table" and entry.unit or key) then units[key] = nil end
+    end
+    return units
+end
+UNIT_PAGES = DropForeverUnsupportedUnits(UNIT_PAGES)
 local POWER_UNITS = {}
 local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
 for _, page in pairs(UNIT_PAGES) do
@@ -291,7 +314,7 @@ local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBa
 -- unit_copy_coverage_smoke.lua can audit the dynamically-prefixed suffix set.
 local COPY_TEXLAYER_FIELDS = WL [[]]
 for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
-    for _, texBase in ipairs(WL [[Enabled Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY Width Height ColorMode ColorTreatment ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV CropMode EdgeSoftness Visibility RoundedClip]]) do
+    for _, texBase in ipairs(WL [[Enabled SourceMode Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY ResponsiveSize SizeMode EdgeAttach Width Height ColorMode ColorTreatment ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV CropMode EdgeSoftness Visibility RoundedClip]]) do
         COPY_TEXLAYER_FIELDS[#COPY_TEXLAYER_FIELDS + 1] = texP .. texBase
     end
 end
@@ -304,7 +327,7 @@ local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInComb
 --- so it has no semantic equivalent on Player/Target/Focus and must never be cleared
 --- when a normal unit's frame size is copied to Boss.
 local COPY_LAYOUT_FIELDS = WL [[width height]]
-local AURA_COPY_UNITS = KSW("player target focus boss arena")
+local AURA_COPY_UNITS = DropForeverUnsupportedUnits(KSW("player target focus boss arena"))
 local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
@@ -330,7 +353,7 @@ local function NewCopyScopeDefaults()
     end
     return t
 end
-local UNIT_COPY_TARGETS = VTP "player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss Frames|arena=Arena Frames"
+local UNIT_COPY_TARGETS = DropForeverUnsupportedUnits(VTP "player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss Frames|arena=Arena Frames")
 local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss Frames", arena = "Arena Frames" }
 local UNIT_PILL_WIDTHS = { targettarget = 116, focustarget = 104, boss = 92, arena = 92, target = 62, focus = 58, pet = 46 }
 local function DefaultCopyTarget(unit)

@@ -75,28 +75,22 @@ local function MSUF_Defaults_TryDecodeCompactString(str)
     elseif rem == 3 then
         cleaned = cleaned .. "="
     end
-    -- Codec calls consume an encoded blob and are allowed to reject malformed
-    -- data by raising. Factory-default bootstrap must turn that into a clean
-    -- nil result rather than aborting addon initialization.
+    -- MSUF3/4 is deflate(CBOR). Forever's DeserializeCBOR raises
+    -- "attempted to deserialize an unknown cbor value" on the compressed
+    -- bytes (the factory blob starts 0xEC). Blizzard's own readers inflate
+    -- first; never offer the compressed blob to CBOR.
     local blob = E.DecodeBase64(cleaned)
     if type(blob) ~= "string" then return nil end
-    local function TryDeserialize(payload)
-        if type(payload) ~= "string" then return nil end
-        local tbl = E.DeserializeCBOR(payload)
-        return type(tbl) == "table" and tbl or nil
+    local payload = blob
+    if type(E.DecompressString) == "function" then
+        local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
+        local inflated = method ~= nil and E.DecompressString(blob, method) or E.DecompressString(blob)
+        if type(inflated) == "string" and inflated ~= "" then
+            payload = inflated
+        end
     end
-    local tbl = TryDeserialize(blob)
-    if tbl then return tbl end
-    if type(E.DecompressString) ~= "function" then return nil end
-    local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
-    local ok, payload
-    if method ~= nil then
-        ok, payload = true, E.DecompressString(blob, method)
-        if ok then tbl = TryDeserialize(payload); if tbl then return tbl end end
-    end
-    ok, payload = true, E.DecompressString(blob)
-    if ok then return TryDeserialize(payload) end
-    return nil
+    local tbl = E.DeserializeCBOR(payload)
+    return type(tbl) == "table" and tbl or nil
 end
 local function MSUF_Defaults_WipeInPlace(t)
     if not t then  return end
@@ -1520,7 +1514,13 @@ end
 --- buckets created before the UnitFrame factory runs, then normal defaults
 --- and migrations still run afterward to fill fields added after the snapshot.
 local function MSUF_Defaults_CreateFactoryProfile()
-    local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
+    -- Prefer the shared codec once it has loaded: it inflates before CBOR, the
+    -- same order Blizzard uses. The local decoder is only the pre-codec fallback.
+    local decode = _G.MSUF_TryDecodeCompactString
+    if type(decode) ~= "function" then
+        decode = MSUF_Defaults_TryDecodeCompactString
+    end
+    local tbl = decode(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
     if not tbl then  return nil end
     local payload = MSUF_Defaults_GetProfilePayload(tbl)
     if type(payload) ~= "table" then  return nil end

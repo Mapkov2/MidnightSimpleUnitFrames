@@ -6,6 +6,9 @@ MSUF = MSUF or _G.MSUF_NS or {}
 
 local OPTIONS_ADDON = "MidnightSimpleUnitFrames_Options"
 local ExportPublic = MSUF.ExportPublic
+-- WoW Forever, read once from the client model. A harness without MSUF.Client
+-- models a client that is not Forever.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
 local menu = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = menu
@@ -60,14 +63,18 @@ local function EnsureOptionsLoaded(reason)
     --- The normal API reports loaded=false plus a reason. The wrapper can still
     --- be supplied by another module, so protect this optional load boundary
     --- and always clear the re-entry flag.
-    local ok, loaded
-    if type(loader) == "function" then
+    local ok, loaded, loadReason
+    if type(loader) == "function" and not IS_FOREVER then
         ok, loaded = true, loader(OPTIONS_ADDON)
     else
+        --- WoW Forever calls the client loader itself: its second return names
+        --- why the addon did not load (DISABLED, MISSING, INTERFACE_VERSION, ...),
+        --- which the MSUF_EnsureAddonLoaded wrapper drops.
         local api = _G.C_AddOns
-        loader = (api and api.LoadAddOn) or _G.LoadAddOn
-        if type(loader) == "function" then
-            ok, loaded = true, loader(OPTIONS_ADDON)
+        local direct = (api and api.LoadAddOn) or _G.LoadAddOn
+        if type(direct) ~= "function" then direct = loader end
+        if type(direct) == "function" then
+            ok, loaded, loadReason = true, direct(OPTIONS_ADDON)
         else
             ok, loaded = false, "LoadAddOn unavailable"
         end
@@ -75,6 +82,12 @@ local function EnsureOptionsLoaded(reason)
     loading = false
 
     if ok and (loaded or IsAddonLoaded()) and IsReady() then return true end
+    if IS_FOREVER and ok and type(loadReason) == "string" and loadReason ~= "" and not IsAddonLoaded() then
+        -- Blizzard's own localized label for the reason (ADDON_DISABLED, ...).
+        local label = _G["ADDON_" .. loadReason]
+        PrintLoadFailure(type(label) == "string" and label ~= "" and label or loadReason)
+        return false
+    end
     PrintLoadFailure(ok and (MSUF.OptionsLODLoadError or "incomplete load") or loaded)
     return false
 end

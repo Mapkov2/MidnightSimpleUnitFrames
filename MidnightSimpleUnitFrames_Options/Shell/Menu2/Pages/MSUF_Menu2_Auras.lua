@@ -96,8 +96,11 @@ local AnchorLabel = M.AuraSettings.AnchorLabel
 local NormalizeAuraSortMethodForLane = M.AuraSettings.NormalizeAuraSortMethodForLane
 
 
-M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client and MSUF.Client.IsClassic == true
-    or (_G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE)
+-- The client model decides whenever it exists, so a Mainline-family client (WoW
+-- Forever included) keeps every Retail filter whatever project ID it reports.
+-- The project comparison only serves a page loaded without MSUF.Client.
+M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client ~= nil and MSUF.Client.IsClassic == true
+    or MSUF.Client == nil and (_G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE)
 local Tr = M.AuraSettings.Tr
 -- Search-result suffix shared by every aura list status line.
 local MatchSuffix = M.AuraSettings.MatchSuffix

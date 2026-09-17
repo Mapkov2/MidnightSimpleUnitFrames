@@ -4,6 +4,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 MSUF.Auras3RuntimeFactories.Containers = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_max = math.max
@@ -767,6 +768,14 @@ local function HeaderGroupSlotsContainer(root, parentFrame)
     local container = parentFrame and parentFrame.AuraContainer
     if not container or container._msufA3HeaderContainerConsumed == true then return nil end
     if not ValidateNativeAuraContainerContract(container) then return nil end
+    -- The header births this owner in the restricted environment, so it never
+    -- passes CreateNativeAuraContainer's rounding. On WoW Forever give it the
+    -- same root-only pixel rounding on adoption; Retail keeps its behaviour
+    -- until the same change lands there. The helper is a no-op without the API.
+    if IS_FOREVER then
+        local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+        if type(roundLayout) == "function" then roundLayout(container, true) end
+    end
     container._msufA3HeaderContainerConsumed = true
     container._msufA3Root = root
     return container

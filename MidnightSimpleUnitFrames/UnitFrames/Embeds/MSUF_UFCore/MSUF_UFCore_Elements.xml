@@ -25,6 +25,7 @@
   <Script file="..\..\..\Auras3\MSUF_Auras3_DotData.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_DefensiveData.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_GroupHighlightsData.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\MSUF_Auras3_ForeverData.lua"/>
   <Script file="..\..\..\Auras3\AliasData\MSUF_Auras3_AliasData_Common.lua"/>
   <Script file="..\..\..\Auras3\AliasData\MSUF_Auras3_AliasData_enUS.lua"/>
   <Script file="..\..\..\Auras3\AliasData\MSUF_Auras3_AliasData_deDE.lua"/>
@@ -37,6 +38,18 @@
   <Script file="..\..\..\Auras3\AliasData\MSUF_Auras3_AliasData_koKR.lua"/>
   <Script file="..\..\..\Auras3\AliasData\MSUF_Auras3_AliasData_zhCN.lua"/>
   <Script file="..\..\..\Auras3\AliasData\MSUF_Auras3_AliasData_zhTW.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_Common.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_enUS.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_deDE.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_frFR.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_esES.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_esMX.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_itIT.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_ptBR.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_ruRU.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_koKR.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_zhCN.lua"/>
+  <Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_zhTW.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_AuraAliases.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_SpellIndicators_Config.lua"/>
   <Script file="..\..\..\Auras3\MSUF_Auras3_SpellIndicators_Effects.lua"/>

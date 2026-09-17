@@ -28,6 +28,9 @@ A3.ClassicFeatures = Features
 local type, tostring, tonumber, pairs, next, select = type, tostring, tonumber, pairs, next, select
 local math_floor, math_max, math_min = math.floor, math.max, math.min
 local table_sort = table.sort
+-- Debuffs this player can dispel, in the filter this client honours
+-- (Game/Shared/Initialize.lua; Classic Era needs HARMFUL|RAID).
+local DISPELLABLE_DEBUFF_FILTER = MSUF.Client.DispellableDebuffFilter or "HARMFUL|RAID_PLAYER_DISPELLABLE"
 local UnitClass = _G.UnitClass
 local C_Spell = _G.C_Spell
 local GetSpellInfo = _G.GetSpellInfo
@@ -231,8 +234,10 @@ function Features.MatchFilterRequirements(plan, unit, data, matchFilter)
     local base = plan and plan.helpful == false and "HARMFUL" or "HELPFUL"
     if req.raid == true and not matchFilter(unit, auraInstanceID, base .. "|RAID") then return false end
     if req.raidInCombat == true and not matchFilter(unit, auraInstanceID, base .. "|RAID_IN_COMBAT") then return false end
-    if req.raidPlayerDispellable == true
-        and not matchFilter(unit, auraInstanceID, base .. "|RAID_PLAYER_DISPELLABLE") then return false end
+    if req.raidPlayerDispellable == true and not matchFilter(unit, auraInstanceID,
+        base == "HARMFUL" and DISPELLABLE_DEBUFF_FILTER or (base .. "|RAID_PLAYER_DISPELLABLE")) then
+        return false
+    end
     if req.cancelable == true and not matchFilter(unit, auraInstanceID, "HELPFUL|CANCELABLE") then return false end
     if req.notCancelable == true and not matchFilter(unit, auraInstanceID, "HELPFUL|NOT_CANCELABLE") then return false end
     if req.crowdControl == true and not matchFilter(unit, auraInstanceID, "HARMFUL|CROWD_CONTROL") then return false end
@@ -385,7 +390,7 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         raidFilter = filter .. "|RAID",
         raidInCombatFilter = filter .. "|RAID_IN_COMBAT",
         stealableFilter = "HELPFUL|STEALABLE",
-        dispellableFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE",
+        dispellableFilter = DISPELLABLE_DEBUFF_FILTER,
         bossFilter = "HARMFUL|BOSS",
         crowdControlFilter = filter .. "|CROWD_CONTROL",
         externalDefensiveFilter = filter .. "|EXTERNAL_DEFENSIVE",

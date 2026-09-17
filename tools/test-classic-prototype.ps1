@@ -935,10 +935,24 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Units.lua",
     "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
-    "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"
+    "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_deDE.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_enUS.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_esES.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_esMX.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_frFR.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_itIT.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_koKR.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_ptBR.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_ruRU.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_zhCN.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_zhTW.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/Auras/MSUF_Auras3_ForeverData.lua"
 )) {
     if (-not $ownedAddonPaths.Contains($extraPath)) {
         throw "Mainline shared/Arena addition must be declared in Classic ownership: $extraPath"
@@ -1173,72 +1187,6 @@ foreach ($classicSuffix in $classicSuffixes) {
     }
 }
 Write-Host "Classic flavor load coverage: $($mainlineCoveragePaths.Count) Mainline Lua paths x $($classicSuffixes.Count) flavors; $coverageLoadedCount loaded, $coverageReplacedCount replaced, $coverageExcludedCount excluded with reason"
-# Other Classic-only features remain behind the Vanilla/Mists/TBC manifests.
-$textureRuntimePath = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Effects/MSUF_UF_TextureLayer.lua"
-$textureOptionsPath = Join-Path $root "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer_Classic.lua"
-$textureDefaultsPath = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua"
-$textureManifestPath = Join-Path $root "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_AutoCoverage_Manifest_Classic.lua"
-$textureSearchPath = Join-Path $root "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua"
-$textureRuntime = Get-Content -LiteralPath $textureRuntimePath -Raw
-$textureOptions = Get-Content -LiteralPath $textureOptionsPath -Raw
-$textureDefaults = Get-Content -LiteralPath $textureDefaultsPath -Raw
-$textureManifest = Get-Content -LiteralPath $textureManifestPath -Raw
-$textureSearch = Get-Content -LiteralPath $textureSearchPath -Raw
-foreach ($contract in @(
-    'ResolveLayerSize', 'ResolveLayerOffsets', 'ApplyLayerLayout',
-    'ResolveEdgeSoftness', 'ApplySoftEdgeMask', 'SourceMode'
-)) {
-    if ($textureRuntime.IndexOf($contract, [StringComparison]::Ordinal) -lt 0) {
-        throw "Expanded texture runtime contract is missing: $contract"
-    }
-}
-if ($textureRuntime -match '\bfeatherCount\b' -and $textureRuntime -notmatch '(?m)^\s*local\s+featherCount\s*=') {
-    throw "Classic texture runtime reads featherCount without a local declaration"
-}
-if ($textureRuntime -match 'OnUpdate|C_Timer|NewTicker|NewTimer') {
-    throw "Expanded texture runtime must remain apply/event-driven with zero polling"
-}
-foreach ($contract in @(
-    'TEXLAYER_SOURCE_MODES', 'TEXLAYER_SIZE_MODES', 'TEXLAYER_EDGE_ATTACH',
-    'texLayerLinkGeometry', 'texLayerLinkSize', 'Edge softness',
-    'TEXLAYER_LOOK_BASES', 'TEXLAYER_LOOK_MOODS', 'TEXLAYER_MODULAR_LOOKS', 'TEXLAYER_CLASS_LOOKS'
-)) {
-    if ($textureOptions.IndexOf($contract, [StringComparison]::Ordinal) -lt 0) {
-        throw "Expanded texture options contract is missing: $contract"
-    }
-}
-foreach ($defaultContract in @('SourceMode', 'ResponsiveSize', 'SizeMode', 'EdgeAttach', 'EdgeSoftness')) {
-    if ($textureDefaults.IndexOf($defaultContract, [StringComparison]::Ordinal) -lt 0) {
-        throw "Expanded texture default is missing: $defaultContract"
-    }
-}
-foreach ($generatedContract in @('texLayerSourceMode', 'texLayerSizeMode', 'texLayerEdgeAttach', 'texLayerEdgeSoftness')) {
-    if ($textureManifest.IndexOf($generatedContract, [StringComparison]::Ordinal) -lt 0) {
-        throw "Expanded texture generated manifest is missing: $generatedContract"
-    }
-}
-foreach ($searchContract in @('layered_look', 'source_mode', 'edgesoftness')) {
-    if ($textureSearch.IndexOf($searchContract, [StringComparison]::Ordinal) -lt 0) {
-        throw "Expanded texture search index is missing: $searchContract"
-    }
-}
-$assetRoot = Join-Path $root "MidnightSimpleUnitFrames/Media/TextureLayers"
-$textureAssets = @(Get-ChildItem -LiteralPath $assetRoot -Filter "*.png" -File)
-if ($textureAssets.Count -ne 50) {
-    throw "Expanded texture asset inventory changed: expected=50 actual=$($textureAssets.Count)"
-}
-$referencedAssets = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-foreach ($match in [regex]::Matches($textureOptions, 'file\s*=\s*"([^"]+\.png)"')) {
-    [void]$referencedAssets.Add($match.Groups[1].Value)
-}
-if ($referencedAssets.Count -ne 50) {
-    throw "Expanded texture catalog must reference exactly 50 unique assets"
-}
-foreach ($asset in $textureAssets) {
-    if (-not $referencedAssets.Contains($asset.Name)) {
-        throw "Expanded texture asset is not reachable from the catalog: $($asset.Name)"
-    }
-}
 
 $classicAuraPath = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"
 $classicAuraSource = Get-Content -LiteralPath $classicAuraPath -Raw
@@ -1291,16 +1239,16 @@ if ($luac) {
 }
 
 if ($lua) {
-    foreach ($flavor in @($clientSuffixes) + @("FutureVanilla")) {
+    # The Glass menu skin belongs to WoW Forever only: every shipped client keeps
+    # the stock menu, and the "Forever" runs simulate the hour-0 client fact.
+    foreach ($flavor in @($clientSuffixes) + @("FutureVanilla", "Forever")) {
         Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root $flavor
-        if ($LASTEXITCODE -ne 0) { throw "Classic atlas menu smoke failed: $flavor" }
+        if ($LASTEXITCODE -ne 0) { throw "Menu skin smoke failed: $flavor" }
     }
-    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root "Vanilla" "tinted"
-    if ($LASTEXITCODE -ne 0) { throw "Classic atlas custom-tint smoke failed" }
-    foreach ($flavor in $classicSuffixes) {
-        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root $flavor "midnight"
-        if ($LASTEXITCODE -ne 0) { throw "Classic Midnight appearance preset smoke failed: $flavor" }
-    }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root "Forever" "tinted"
+    if ($LASTEXITCODE -ne 0) { throw "Forever menu skin custom-tint smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_menu_atlas_smoke.lua") $root "Forever" "midnight"
+    if ($LASTEXITCODE -ne 0) { throw "Forever Midnight appearance preset smoke failed" }
     $smoke = Join-Path $root "tools/tests/classic_client_bootstrap_smoke.lua"
     foreach ($flavor in @($clientSuffixes) + @("FutureTaggedVanilla", "FutureProjectVanilla", "UnknownUntagged")) {
         Invoke-GateSmoke $lua.Source $auraTestDriver $smoke $flavor ($root -replace '\\', '/')
@@ -1320,6 +1268,31 @@ if ($lua) {
     if ($LASTEXITCODE -ne 0) { throw "Client info command smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_project_id_reads_smoke.lua") ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Project ID read inventory smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_texture_layer_highlight_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Texture layer highlight smoke failed" }
+    # WoW Forever (Mainline build, Client.IsForever) behaviour contracts.
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_combo_frame_hider_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "WoW Forever ComboFrame hider smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/aura_header_container_round_layout_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Aura header container round-layout smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/mainline_classpower_forever_routing_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Mainline ClassPower Forever routing smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_shell_project_gates_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Forever shell project gates smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_castbar_client_data_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Forever castbar client data smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_aura_data_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "WoW Forever aura data smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_group_frames_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Forever group frames smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_arena_zero_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Forever arena-zero Mainline smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_factory_profile_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Forever factory profile CBOR smoke failed" }
+    foreach ($flavor in @($clientSuffixes) + @("Forever")) {
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_spec_profile_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Forever spec profile smoke failed: $flavor" }
+    }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_scheduler_contract_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Scheduler contract regression failed" }
     foreach ($flavor in $clientSuffixes) {

@@ -291,20 +291,7 @@ local function WriteHandleOffsets(handle, x, y, reason)
     local store = HandleStore(box, fields)
     local beforeX, beforeY = ReadHandleOffsets(handle)
     local nextX, nextY = RoundOffset(x), RoundOffset(y)
-    if fields.texLayer and store.texLayerLinkGeometry == true then
-        local deltaX = nextX - (tonumber(store[xKey]) or 0)
-        local deltaY = nextY - (tonumber(store[yKey]) or 0)
-        for slot = 1, 3 do
-            local prefix = slot == 1 and "texLayer" or (slot == 2 and "texLayer2" or "texLayer3")
-            if store[prefix .. "Enabled"] == true then
-                store[prefix .. "OffsetX"] = RoundOffset((tonumber(store[prefix .. "OffsetX"]) or 0) + deltaX)
-                store[prefix .. "OffsetY"] = RoundOffset((tonumber(store[prefix .. "OffsetY"]) or 0) + deltaY)
-            end
-        end
-    else
-        store[xKey] = nextX
-        store[yKey] = nextY
-    end
+    store[xKey], store[yKey] = nextX, nextY
     local directPrefixes = fields.text and Preview.ActiveDirectTextMovePrefixes(handle, store)
     if directPrefixes then
         if reason == "PREVIEW_RESET_OFFSET" and type(M2.SyncDirectTextOffsets) == "function" then

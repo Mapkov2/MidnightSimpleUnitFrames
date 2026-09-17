@@ -1,8 +1,11 @@
--- Classic's default atlas skin. The Classic Options TOCs register this before
--- Menu2 loads; the token owner applies it before any renderer captures colors.
--- Client identity, never a guessed interface number, selects it.
+-- WoW Forever's menu skin (Classic Glass). Every Options TOC registers it before
+-- Menu2 loads so the token owner can apply it before any renderer captures
+-- colors, but only the WoW Forever client applies it (owner decision
+-- 2026-09-16): Classic Era, TBC, Mists and Midnight keep the stock menu.
+-- Client identity (MSUF.Client.IsForever), never a guessed interface number,
+-- selects it.
 local _, MSUF = ...
-if not (MSUF and MSUF.Client and MSUF.Client.IsClassic) then return end
+if not (MSUF and MSUF.Client and MSUF.Client.IsForever == true) then return end
 MSUF.ApplyClassicMenuTheme = function(T)
     -- Appearance presets own materials as well as colors. Resolve before any
     -- renderer captures tokens; switching presets uses the existing reload flow.

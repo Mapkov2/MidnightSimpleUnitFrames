@@ -495,6 +495,14 @@ end
 --- - Combat-safe: if spec changes in combat, we defer the switch.
 --- - Works with existing global profiles (no DB migration needed).
 ---
+--- WoW Forever: every class has a single specialization, and players switch
+--- between Blizzard's two talent groups instead (the Camelot talent frame's
+--- DUAL_SPEC_PRIMARY/DUAL_SPEC_SECONDARY tabs, driven by
+--- C_SpecializationInfo.GetActiveSpecGroup). Blizzard_DeprecatedSpecialization,
+--- the only source of the global GetSpecialization/GetSpecializationInfo, does
+--- not load there. On Forever the specProfileMap key is therefore the active
+--- talent group index (1 primary, 2 secondary); every other client keeps specID.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 local function MSUF_GetCharMeta()
     local _, chars = MSUF_ProfileIO_EnsureProfileRoots()
     local charKey = MSUF_GetCharKey()
@@ -551,6 +559,14 @@ function MSUF_SetSpecProfile(specID, profileName)
     end
  end
 function MSUF_GetPlayerSpecID()
+    if IS_FOREVER then
+        local specInfo = _G.C_SpecializationInfo
+        local getActiveGroup = type(specInfo) == "table" and specInfo.GetActiveSpecGroup or nil
+        if type(getActiveGroup) ~= "function" then  return nil end
+        local group = getActiveGroup()
+        if type(group) ~= "number" or group < 1 then  return nil end
+        return group
+    end
     if type(_G.GetSpecialization) ~= "function" or type(_G.GetSpecializationInfo) ~= "function" then
          return nil
     end
@@ -3336,9 +3352,9 @@ function MSUF_ImportIntoNewProfile(name, str)
         return false, why, "decode"
     end
     local previous = MSUF_ActiveProfile or "Default"
-    MSUF_CreateProfile(name)
+    local created = MSUF_CreateProfile(name)
     profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
-    if type(profiles) ~= "table" or type(profiles[name]) ~= "table" then
+    if created ~= true or type(profiles) ~= "table" or type(profiles[name]) ~= "table" then
         return false, "could not create profile", "create"
     end
     local previousExists = type(profiles[previous]) == "table"

@@ -1,6 +1,9 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
+-- WoW Forever, read once from the client model. A harness without MSUF.Client
+-- models a client that is not Forever.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
 -- Third-party anchor integration.
 -- Tracks ArcUI, Skiron, Coolinator and EllesmereUI stable cooldown anchors after they exist.
@@ -87,19 +90,22 @@ local automaticCooldownProviderId
 local automaticCooldownProviderLabel
 local automaticCooldownProviderResolved = false
 --- Whether this client can host an Essential Cooldown anchor at all.
---- Blizzard ships the Cooldown Manager for the standard game family only
---- (Blizzard_CooldownViewer.toc: AllowLoadGameType standard), yet the shared
---- engine exposes the C_CooldownViewer namespace on every current client,
---- Classic Era, TBC and Mists included. The namespace alone therefore proves
---- nothing on a Classic client: the project gate decides first, and a layout
---- provider cannot establish support there either. Addons cannot be installed
---- mid-session, so the answer is fixed once resolved. Keeping it as a plain
---- upvalue leaves every anchor consumer at a single boolean read and adds no
---- probing to the cold anchor path.
+--- Blizzard ships the Cooldown Manager for Mainline game types only
+--- (Blizzard_CooldownViewer.toc: AllowLoadGameType standard, plus camelot on
+--- WoW Forever), yet the shared engine exposes the C_CooldownViewer namespace
+--- on every current client, Classic Era, TBC and Mists included. The namespace
+--- alone therefore proves nothing on a Classic client: the client family
+--- decides first, and a layout provider cannot establish support there either.
+--- Addons cannot be installed mid-session, so the answer is fixed once
+--- resolved. Keeping it as a plain upvalue leaves every anchor consumer at a
+--- single boolean read and adds no probing to the cold anchor path.
 local function ClientHostsCooldownManager()
+    local client = MSUF.Client
+    if client ~= nil then return client.Family == "Mainline" end
     local projectID = _G.WOW_PROJECT_ID
     local mainlineID = _G.WOW_PROJECT_MAINLINE
-    -- Harnesses without the project constants model the Mainline client.
+    -- Harnesses without the client model or the project constants model the
+    -- Mainline client.
     if projectID == nil or mainlineID == nil then return true end
     return projectID == mainlineID
 end
@@ -786,11 +792,28 @@ local function InstallMissingCooldownAnchorPopup()
     return true
 end
 
+--- WoW Forever characters start at level 1, and Blizzard's Cooldown Manager
+--- asks C_CooldownViewer.IsCooldownViewerAvailable() again on every
+--- PLAYER_LEVEL_CHANGED, so the client itself can report the manager
+--- unavailable for a while. With no layout addon installed this character then
+--- has no anchor it could activate, and the login warning would repeat on every
+--- login for a state no setting fixes. Only Blizzard's own availability answer
+--- (or a missing viewer) is quiet here: a disabled cooldownViewerEnabled option
+--- or a hidden viewer still warns.
+local function ForeverCooldownManagerUnavailable()
+    if not IS_FOREVER or MSUF.GetAutomaticCooldownAnchorProvider() ~= nil then return false end
+    local api = _G.C_CooldownViewer
+    local isAvailable = api and api.IsCooldownViewerAvailable
+    if type(isAvailable) ~= "function" or _G.EssentialCooldownViewer == nil then return true end
+    return isAvailable() ~= true
+end
+
 local function ShowMissingCooldownAnchorWarning()
     if missingAnchorWarningShown then return false end
     local general = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
     if not MSUF.IsCooldownAnchorEnabled(general) then return false end
     if MSUF.GetActiveCooldownAnchorProvider() then return false end
+    if ForeverCooldownManagerUnavailable() then return false end
     missingAnchorWarningShown = true
 
     local text = MissingCooldownAnchorWarningText()

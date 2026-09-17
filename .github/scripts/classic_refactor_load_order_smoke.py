@@ -82,10 +82,8 @@ for client in client_suffixes():
     options = load_order(ROOT / f"MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options_{client}.toc")
     check(len(options) == len(set(options)), client, "duplicate options Lua load")
     menu = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
-    if client != "Mainline":
-        check(options.index(menu + "MSUF_Menu2_Theme_Classic.lua") < options.index(menu + "MSUF_Menu2_Theme_Tokens.lua") < options.index(menu + "MSUF_Menu2_Theme.lua"), client, "atlas must precede theme capture")
-    else:
-        check(menu + "MSUF_Menu2_Theme_Classic.lua" not in options, "Mainline must not load the Classic skin")
+    # Every client loads the Forever menu skin; the file applies it only on WoW Forever.
+    check(options.index(menu + "MSUF_Menu2_Theme_Forever.lua") < options.index(menu + "MSUF_Menu2_Theme_Tokens.lua") < options.index(menu + "MSUF_Menu2_Theme.lua"), client, "the Forever menu skin must precede theme capture")
     check(options.index(menu + "MSUF_Menu2_ColorPicker.lua") < options.index(menu + "MSUF_Menu2_Widgets.lua"),
           client, "Menu2 color picker must load before the widgets")
     if client != "Mainline":

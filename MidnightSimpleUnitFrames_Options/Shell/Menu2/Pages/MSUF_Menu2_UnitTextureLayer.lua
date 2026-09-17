@@ -40,6 +40,7 @@ local TEXLAYER_CARD_Y = -108
 local TEXLAYER_CARD_H = 454
 local TEXT_BACKGROUND_PRESET = {
     Enabled = true,
+    SourceMode = "SHAREDMEDIA",
     Texture = "",
     CustomTexturePath = "",
     FollowFrameAlpha = true,
@@ -49,6 +50,9 @@ local TEXT_BACKGROUND_PRESET = {
     Anchor = "CENTER",
     OffsetX = 0,
     OffsetY = 0,
+    SizeMode = "MANUAL",
+    ResponsiveSize = false,
+    EdgeAttach = "FREE",
     Width = 0,
     Height = 0,
     ColorMode = "CUSTOM",
@@ -80,6 +84,9 @@ local HIGHLIGHT_TEXTURE_PRESET = {
     Anchor = "CENTER",
     OffsetX = 0,
     OffsetY = 0,
+    SizeMode = "MANUAL",
+    ResponsiveSize = false,
+    EdgeAttach = "FREE",
     Width = 0,
     Height = 0,
     GradientEnabled = false,
@@ -95,10 +102,19 @@ local HIGHLIGHT_TEXTURE_PRESET = {
     RoundedClip = false,
 }
 
+-- What a slot saved before source and sizing modes existed reads as.
+local TEXLAYER_LEGACY_VALUES = { SizeMode = "MANUAL", ResponsiveSize = false, EdgeAttach = "FREE" }
+
+-- The highlight glow is a custom file path. The SharedMedia source ignores
+-- custom paths and draws the bar texture instead, so a slot only counts as a
+-- highlight while its source is not SharedMedia.
 local function HighlightTextureConfigured(conf, prefix)
     if type(conf) ~= "table" or type(prefix) ~= "string" then return false end
+    if conf[prefix .. "SourceMode"] == "SHAREDMEDIA" then return false end
     for suffix, value in pairs(HIGHLIGHT_TEXTURE_PRESET) do
-        if conf[prefix .. suffix] ~= value then return false end
+        local current = conf[prefix .. suffix]
+        if current == nil then current = TEXLAYER_LEGACY_VALUES[suffix] end
+        if current ~= value then return false end
     end
     return true
 end
@@ -123,6 +139,12 @@ local function ApplyHighlightTextureConfig(conf, prefix, enabled)
                 changed = true
             end
         end
+        -- The glow replaces the slot's texture, whatever source it used, so
+        -- only the highlight is drawn.
+        if conf[prefix .. "SourceMode"] ~= "CUSTOM" then
+            conf[prefix .. "SourceMode"] = "CUSTOM"
+            changed = true
+        end
         if initializeAppearance then
             local defaults = { Alpha = 0.05, ColorMode = "CUSTOM", ColorR = 1, ColorG = 0.82, ColorB = 0 }
             for suffix, value in pairs(defaults) do
@@ -137,6 +159,7 @@ local function ApplyHighlightTextureConfig(conf, prefix, enabled)
         -- Remove only the highlight recipe. Master enable, opacity,
         -- visibility and color remain independent.
         local replacements = {
+            SourceMode = "SHAREDMEDIA",
             CustomTexturePath = "",
             CropMode = "FULL",
             BlendMode = "BLEND",
@@ -152,6 +175,167 @@ local function ApplyHighlightTextureConfig(conf, prefix, enabled)
     return changed
 end
 M.ApplyTextureLayerHighlightConfig = ApplyHighlightTextureConfig
+M.TextureLayerTextBackgroundPreset = TEXT_BACKGROUND_PRESET
+
+-- Bundled MSUF textures behind the third quick setup button. The catalog lives
+-- in this load-on-demand page: the runtime only ever sees the chosen file path,
+-- so the catalog costs nothing while the options are closed. Frame art leaves
+-- an 82% x 30% window for the unit frame (ResolveLayerSize in the runtime fits
+-- it around the frame); medallions are square and sit on the left frame edge.
+local TEXLAYER_PACK_ROOT = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\TextureLayers\\"
+local TEXLAYER_PACK_GROUPS = {
+    { role = "FRAME", text = "Frames", tooltip = "A complete frame that fits around the unit frame." },
+    { role = "BASE", text = "Minimal frames", tooltip = "A thin frame outline that fits around the unit frame." },
+    { role = "ACCENT", text = "Accents", tooltip = "A light accent. Put a frame in another texture slot to combine them." },
+    { role = "CLASS", text = "Class accents", tooltip = "A light accent. Put a frame in another texture slot to combine them." },
+    { role = "ORNAMENT", text = "Medallions", tooltip = "A round medallion on the left frame edge." },
+}
+local TEXLAYER_PACK = {
+    { value = "MIDNIGHT_RAIL", text = "Midnight Rail", role = "FRAME", file = "msuf_texlayer_midnight_rail.png" },
+    { value = "MIDNIGHT_VECTOR", text = "Midnight Vector", role = "FRAME", file = "msuf_texlayer_midnight_vector.png" },
+    { value = "VOIDGLASS_HORIZON", text = "Voidglass Horizon", role = "FRAME", file = "msuf_texlayer_voidglass_horizon.png" },
+    { value = "TITANWEAVE", text = "Titanweave", role = "FRAME", file = "msuf_texlayer_titanweave.png" },
+    { value = "RUNEBLADE", text = "Runeblade", role = "FRAME", file = "msuf_texlayer_runeblade.png" },
+    { value = "EMBERFORGE", text = "Emberforge", role = "FRAME", file = "msuf_texlayer_emberforge.png" },
+    { value = "FROSTWARD", text = "Frostward", role = "FRAME", file = "msuf_texlayer_frostward.png" },
+    { value = "WILDWOOD_NIGHT", text = "Wildwood Night", role = "FRAME", file = "msuf_texlayer_wildwood_night.png" },
+    { value = "DAWNSTEEL", text = "Dawnsteel", role = "FRAME", file = "msuf_texlayer_dawnsteel.png" },
+    { value = "BLOODSTONE_EDGE", text = "Bloodstone Edge", role = "FRAME", file = "msuf_texlayer_bloodstone_edge.png" },
+    { value = "ASTRAL_CIRCUIT", text = "Astral Circuit", role = "FRAME", file = "msuf_texlayer_astral_circuit.png" },
+    { value = "GRIMTHORN", text = "Grimthorn", role = "FRAME", file = "msuf_texlayer_grimthorn.png" },
+    { value = "NIGHTFORGED", text = "Nightforged", role = "FRAME", file = "msuf_texlayer_nightforged.png" },
+    { value = "OBSIDIAN_VANGUARD", text = "Obsidian Vanguard", role = "FRAME", file = "msuf_texlayer_obsidian_vanguard.png" },
+    { value = "ASTRAL_RUNE", text = "Astral Rune", role = "FRAME", file = "msuf_texlayer_astral_rune.png" },
+    { value = "DRAGONBONE", text = "Dragonbone", role = "FRAME", file = "msuf_texlayer_dragonbone.png" },
+    { value = "VERDANT_THORN", text = "Verdant Thorn", role = "FRAME", file = "msuf_texlayer_verdant_thorn.png" },
+    { value = "MINIMAL_ECLIPSE", text = "Minimal Eclipse", role = "FRAME", file = "msuf_texlayer_minimal_eclipse.png" },
+    { value = "MIN_BASE_HAIRLINE", text = "Hairline", role = "BASE", file = "msuf_texlayer_min_base_hairline.png" },
+    { value = "MIN_BASE_DOUBLE_RAIL", text = "Double Rail", role = "BASE", file = "msuf_texlayer_min_base_double_rail.png" },
+    { value = "MIN_BASE_OPEN_BRACKET", text = "Open Bracket", role = "BASE", file = "msuf_texlayer_min_base_open_bracket.png" },
+    { value = "MIN_BASE_CENTER_NOTCH", text = "Center Notch", role = "BASE", file = "msuf_texlayer_min_base_center_notch.png" },
+    { value = "MIN_BASE_STEPPED_TECH", text = "Stepped Tech", role = "BASE", file = "msuf_texlayer_min_base_stepped_tech.png" },
+    { value = "MIN_BASE_ARCANE_CAPSULE", text = "Arcane Capsule", role = "BASE", file = "msuf_texlayer_min_base_arcane_capsule.png" },
+    { value = "MIN_BASE_SPLIT_HORIZON", text = "Split Horizon", role = "BASE", file = "msuf_texlayer_min_base_split_horizon.png" },
+    { value = "MIN_BASE_ASYM_VECTOR", text = "Asym Vector", role = "BASE", file = "msuf_texlayer_min_base_asym_vector.png" },
+    { value = "MIN_BASE_SHARD_CORNERS", text = "Shard Corners", role = "BASE", file = "msuf_texlayer_min_base_shard_corners.png" },
+    { value = "MIN_BASE_ECLIPSE_ARC", text = "Eclipse Arc", role = "BASE", file = "msuf_texlayer_min_base_eclipse_arc.png" },
+    { value = "MOD_SAFE_CORE", text = "Safe Core", role = "BASE", file = "msuf_texlayer_mod_safe_core.png" },
+    { value = "MIN_OVERLAY_MICRO_DOTS", text = "Micro Dots", role = "ACCENT", file = "msuf_texlayer_min_overlay_micro_dots.png" },
+    { value = "MIN_OVERLAY_RUNE_TICKS", text = "Rune Ticks", role = "ACCENT", file = "msuf_texlayer_min_overlay_rune_ticks.png" },
+    { value = "MIN_OVERLAY_CORNER_GLINT", text = "Corner Glint", role = "ACCENT", file = "msuf_texlayer_min_overlay_corner_glint.png" },
+    { value = "MIN_OVERLAY_CENTER_SIGIL", text = "Center Sigil", role = "ACCENT", file = "msuf_texlayer_min_overlay_center_sigil.png" },
+    { value = "MIN_OVERLAY_ENERGY_SWEEP", text = "Energy Sweep", role = "ACCENT", file = "msuf_texlayer_min_overlay_energy_sweep.png" },
+    { value = "MOD_CREST_TICKS", text = "Crest Ticks", role = "ACCENT", file = "msuf_texlayer_mod_crest_ticks.png" },
+    { value = "MOD_LOWER_RAIL", text = "Lower Data Rail", role = "ACCENT", file = "msuf_texlayer_mod_lower_rail.png" },
+    { value = "CLASS_WARRIOR", text = "Warrior", role = "CLASS", file = "msuf_texlayer_class_warrior.png" },
+    { value = "CLASS_PALADIN", text = "Paladin", role = "CLASS", file = "msuf_texlayer_class_paladin.png" },
+    { value = "CLASS_HUNTER", text = "Hunter", role = "CLASS", file = "msuf_texlayer_class_hunter.png" },
+    { value = "CLASS_ROGUE", text = "Rogue", role = "CLASS", file = "msuf_texlayer_class_rogue.png" },
+    { value = "CLASS_PRIEST", text = "Priest", role = "CLASS", file = "msuf_texlayer_class_priest.png" },
+    { value = "CLASS_DEATHKNIGHT", text = "Death Knight", role = "CLASS", file = "msuf_texlayer_class_deathknight.png" },
+    { value = "CLASS_SHAMAN", text = "Shaman", role = "CLASS", file = "msuf_texlayer_class_shaman.png" },
+    { value = "CLASS_MAGE", text = "Mage", role = "CLASS", file = "msuf_texlayer_class_mage.png" },
+    { value = "CLASS_WARLOCK", text = "Warlock", role = "CLASS", file = "msuf_texlayer_class_warlock.png" },
+    { value = "CLASS_MONK", text = "Monk", role = "CLASS", file = "msuf_texlayer_class_monk.png" },
+    { value = "CLASS_DRUID", text = "Druid", role = "CLASS", file = "msuf_texlayer_class_druid.png" },
+    { value = "CLASS_DEMONHUNTER", text = "Demon Hunter", role = "CLASS", file = "msuf_texlayer_class_demonhunter.png" },
+    { value = "CLASS_EVOKER", text = "Evoker", role = "CLASS", file = "msuf_texlayer_class_evoker.png" },
+    { value = "MOD_PORTRAIT_RING", text = "Portrait Ring", role = "ORNAMENT", file = "msuf_texlayer_mod_portrait_ring.png" },
+}
+local TEXLAYER_PACK_BY_VALUE = {}
+local TEXLAYER_PACK_BY_PATH = {}
+local TEXLAYER_PACK_ITEMS = {}
+for groupIndex = 1, #TEXLAYER_PACK_GROUPS do
+    local group = TEXLAYER_PACK_GROUPS[groupIndex]
+    TEXLAYER_PACK_ITEMS[#TEXLAYER_PACK_ITEMS + 1] = { value = "HEADER_" .. group.role, text = group.text, header = true }
+    for i = 1, #TEXLAYER_PACK do
+        local texture = TEXLAYER_PACK[i]
+        if texture.role == group.role then
+            texture.path = TEXLAYER_PACK_ROOT .. texture.file
+            TEXLAYER_PACK_BY_VALUE[texture.value] = texture
+            TEXLAYER_PACK_BY_PATH[texture.path] = texture
+            TEXLAYER_PACK_ITEMS[#TEXLAYER_PACK_ITEMS + 1] = {
+                value = texture.value,
+                text = texture.text,
+                previewKind = "statusbar",
+                texturePreview = texture.path,
+                tooltip = group.tooltip,
+            }
+        end
+    end
+end
+
+-- A fresh MSUF texture is a plain static layer: no class/HP color, no combat,
+-- target or health rule, so it registers no runtime event at all.
+local TEXLAYER_PACK_STATIC_LOOK = {
+    Alpha = 1,
+    FollowFrameAlpha = true,
+    Strata = "AUTO",
+    Level = 1,
+    ColorMode = "CUSTOM",
+    ColorTreatment = "ORIGINAL",
+    ColorR = 1,
+    ColorG = 1,
+    ColorB = 1,
+    GradientEnabled = false,
+    BlendMode = "BLEND",
+    MirrorH = false,
+    MirrorV = false,
+    CropMode = "FULL",
+    EdgeSoftness = 0,
+    RoundedClip = false,
+    Visibility = "ALWAYS",
+    TargetOnly = false,
+    HealthCondition = "ANY",
+    HealthLowAlphaEnabled = false,
+}
+
+-- Writes one bundled texture into a slot and reports whether anything changed.
+-- The texture fits itself around the frame (FRAME) or stays a square on the
+-- left frame edge (medallion); Width/Height hold the fitted size for when the
+-- user sizes it by hand. Swapping between MSUF textures keeps the slot's look
+-- and rules, and keeps its placement while the kind (frame art vs. medallion)
+-- stays the same. frameW/frameH are the unit's configured size.
+local function ApplyTexturePackConfig(conf, prefix, value, frameW, frameH)
+    local texture = TEXLAYER_PACK_BY_VALUE[value]
+    if type(conf) ~= "table" or type(prefix) ~= "string" or not texture then return false end
+    local previous = conf[prefix .. "SourceMode"] ~= "SHAREDMEDIA" and conf[prefix .. "Enabled"] == true
+        and TEXLAYER_PACK_BY_PATH[tostring(conf[prefix .. "CustomTexturePath"] or "")] or nil
+    local ornament = texture.role == "ORNAMENT"
+    local keepPlacement = previous and ((previous.role == "ORNAMENT") == ornament)
+    local changed = false
+    local function Assign(suffix, nextValue)
+        local key = prefix .. suffix
+        if conf[key] ~= nextValue then
+            conf[key] = nextValue
+            changed = true
+        end
+    end
+    Assign("Enabled", true)
+    Assign("SourceMode", "PACK")
+    Assign("Texture", "")
+    Assign("CustomTexturePath", texture.path)
+    if not keepPlacement then
+        frameW = max(40, tonumber(frameW) or 180)
+        frameH = max(10, tonumber(frameH) or 30)
+        local height = floor(math.min(220, max(48, (frameH + 10) / 0.30)) + 0.5)
+        Assign("AnchorTarget", "FRAME")
+        Assign("Anchor", "CENTER")
+        Assign("OffsetX", 0)
+        Assign("OffsetY", 0)
+        Assign("SizeMode", ornament and "HEIGHT" or "FRAME")
+        Assign("ResponsiveSize", true)
+        Assign("EdgeAttach", ornament and "LEFT" or "FREE")
+        Assign("Width", ornament and height or floor(math.min(600, max(72, (frameW + 20) / 0.82)) + 0.5))
+        Assign("Height", height)
+    end
+    if not previous then
+        for suffix, look in pairs(TEXLAYER_PACK_STATIC_LOOK) do Assign(suffix, look) end
+    end
+    return changed
+end
+M.ApplyTextureLayerPackConfig = ApplyTexturePackConfig
+M.TextureLayerPackItems = TEXLAYER_PACK_ITEMS
 
 local function BuildTextureLayer(ctx, builder, unit)
     local ReadBool = UP.ReadBool
@@ -220,6 +404,39 @@ local function BuildTextureLayer(ctx, builder, unit)
             changed = true
         end
         return FinishPreset(changed, "MSUF2_TEXLAYER_HIGHLIGHT_TEXTURE")
+    end
+    local function CurrentPackValue()
+        local conf = GetConf(unit)
+        if conf[Key("SourceMode")] == "SHAREDMEDIA" then return nil end
+        local texture = TEXLAYER_PACK_BY_PATH[tostring(conf[Key("CustomTexturePath")] or "")]
+        return texture and texture.value or nil
+    end
+    local function ApplyPackTexture(value)
+        if M.BlockCombatAction and M.BlockCombatAction() then return false end
+        local texture = TEXLAYER_PACK_BY_VALUE[value]
+        if not texture then return false end
+        local conf = GetConf(unit)
+        local function Write()
+            return ApplyTexturePackConfig(conf, boundPrefix, value, conf.width, conf.height)
+        end
+        local changed
+        if type(M.RunWithHistory) == "function" then
+            changed = M.RunWithHistory("Texture: " .. texture.text,
+                "unit:texture-layer-texture:" .. tostring(unit) .. ":" .. tostring(boundSlot), Write)
+        else
+            changed = Write()
+        end
+        return FinishPreset(changed == true, "MSUF2_TEXLAYER_MSUF_TEXTURE")
+    end
+    -- MSUF textures fit themselves around the frame. Moving Width or Height
+    -- sizes that slot by hand from then on.
+    local function KeepManualSize()
+        local conf = GetConf(unit)
+        if conf[Key("SizeMode")] == "MANUAL"
+            or (conf[Key("SizeMode")] == nil and conf[Key("ResponsiveSize")] ~= true) then return end
+        SetString(unit, Key("SizeMode"), "MANUAL", "MSUF2_TEXLAYER", { preview = true })
+        SetBool(unit, Key("ResponsiveSize"), false, "MSUF2_TEXLAYER", { preview = true })
+        RefreshLayer()
     end
 
     local sec = builder:CollapsibleSection("texture_layer", "Texture Layer", TEXLAYER_SECTION_H, false)
@@ -338,13 +555,45 @@ local function BuildTextureLayer(ctx, builder, unit)
     highlightPreset:SetScript("OnClick", function()
         SetHighlightTextureEnabled(true)
     end)
+    -- Third quick setup: the bundled MSUF textures, each listed with a preview.
+    local texturePackPreset = T.Button(setupCard, Tr("MSUF textures"), 132, 24)
+    texturePackPreset:SetPoint("TOPLEFT", setupCard, "TOPLEFT", 286, -108)
+    texturePackPreset._msuf2HistoryLabel = "MSUF textures"
+    texturePackPreset._msuf2DropdownPreferredWidth = 320
+    texturePackPreset:SetScript("OnClick", function(self)
+        if type(W.OpenDropdown) ~= "function" then return end
+        W.OpenDropdown(self, TEXLAYER_PACK_ITEMS, CurrentPackValue(), function(value)
+            ApplyPackTexture(value)
+        end)
+    end)
     if W.StyleTopActionButton then
         W.StyleTopActionButton(textBackgroundPreset)
         W.StyleTopActionButton(highlightPreset)
+        W.StyleTopActionButton(texturePackPreset)
+    end
+    local packChevron = texturePackPreset:CreateTexture(nil, "OVERLAY")
+    packChevron:SetTexture(T.media and T.media.dropdownChevron)
+    packChevron:SetSize(12, 12)
+    packChevron:SetPoint("RIGHT", texturePackPreset, "RIGHT", -8, 0)
+    if texturePackPreset._msuf2Label then
+        texturePackPreset._msuf2Label:SetPoint("RIGHT", texturePackPreset, "RIGHT", -22, 0)
+    end
+    if colW < 402 then
+        -- A narrow menu shrinks the three quick setups together so the row
+        -- stays inside the left column.
+        local quickX = 16
+        local quickWidths = { 142, 112, 132 }
+        for i, button in ipairs({ textBackgroundPreset, highlightPreset, texturePackPreset }) do
+            local width = floor(quickWidths[i] * (colW - 16) / 386)
+            button:SetWidth(width)
+            button:SetPoint("TOPLEFT", setupCard, "TOPLEFT", quickX, -108)
+            quickX = quickX + width + 8
+        end
     end
     if UP.RegisterControl then
         UP.RegisterControl(textBackgroundPreset, ctx, "texture_layer.preset.text_background", "Text background", "button", "ephemeral")
         UP.RegisterControl(highlightPreset, ctx, "texture_layer.preset.highlight", "Highlight", "button", "ephemeral")
+        UP.RegisterControl(texturePackPreset, ctx, "texture_layer.preset.msuf_texture", "MSUF textures", "button", "ephemeral")
     end
     Track(BindLayerDropdown(setupCard, "Texture (SharedMedia)", 16, -164, colW - 16,
         function() return M.StatusBarTextureItems("Use bar texture") end, "Texture", ""))
@@ -352,7 +601,11 @@ local function BuildTextureLayer(ctx, builder, unit)
     M.BindTextInput(ctx, customPath,
         function() return tostring(GetConf(unit)[Key("CustomTexturePath")] or "") end,
         function(v)
-            SetString(unit, Key("CustomTexturePath"), v or "", "MSUF2_TEXLAYER", { preview = true })
+            local path = tostring(v or "")
+            -- The typed path is drawn; clearing it returns to the SharedMedia texture.
+            SetString(unit, Key("SourceMode"), path == "" and "SHAREDMEDIA" or (TEXLAYER_PACK_BY_PATH[path] and "PACK" or "CUSTOM"),
+                "MSUF2_TEXLAYER", { preview = true })
+            SetString(unit, Key("CustomTexturePath"), path, "MSUF2_TEXLAYER", { preview = true })
             RefreshLayer()
         end,
         true,
@@ -368,14 +621,15 @@ local function BuildTextureLayer(ctx, builder, unit)
         TEXLAYER_COLOR_TREATMENTS, "ColorTreatment", "ORIGINAL"))
     Track(BindLayerDropdown(setupCard, "Anchor to", colX, -54, colW - 16, TEXLAYER_ANCHOR_TARGETS, "AnchorTarget", "FRAME"))
     Track(BindLayerDropdown(setupCard, "Anchor", colX, -130, colW - 16, TEXLAYER_ANCHORS, "Anchor", "TOP"))
-    Track(BindLayerSlider(setupCard, "Width", colX, -214, colW, 0, 600, 1, "Width", 0))
-    Track(BindLayerSlider(setupCard, "Height (0 = auto)", colX, -298, colW, 0, 120, 1, "Height", 16))
+    Track(BindLayerSlider(setupCard, "Width", colX, -214, colW, 0, 600, 1, "Width", 0, nil, KeepManualSize))
+    Track(BindLayerSlider(setupCard, "Height (0 = auto)", colX, -298, colW, 0, 220, 1, "Height", 16, nil, KeepManualSize))
     Track(BindLayerSlider(setupCard, "Opacity", colX, -382, colW, 0, 1, 0.05, "Alpha", 1, true))
     W.LabelAt(setupCard, "Use the colored Texture handle in Preview for exact placement.", colX, -342,
         colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
     if M.AddTooltip then
         M.AddTooltip(textBackgroundPreset, "Text background", "Creates a simple monochrome texture on the health bar. You can then choose any bar texture and place HP text above it.", { hook = true })
         M.AddTooltip(highlightPreset, "Highlight", "Applies the built-in additive highlight style to this texture slot.", { hook = true })
+        M.AddTooltip(texturePackPreset, "MSUF textures", "Choose one of the bundled MSUF textures for this texture slot. Frames fit around the unit frame on their own.", { hook = true })
         M.AddTooltip(colorMode, "Color mode", "Single color uses this layer's configured tint. HP gradient follows the shared low, mid and high HP colors.", { hook = true })
     end
 

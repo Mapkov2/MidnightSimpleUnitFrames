@@ -47,8 +47,11 @@ local ABBREV_SAMPLES = { 123, 12345, 123456, 1234567, 12345678, 1234567890 }
 local MENU_WRITE_OPTS = { preview = false, applyAll = false, notify = false }
 local MOUSEOVER_WRITE_OPTS = { preview = false, applyAll = false, mouseoverHighlight = true }
 local PREVIEW_FALSE = { preview = false }
-local IS_MAINLINE = _G.WOW_PROJECT_ID == nil or _G.WOW_PROJECT_MAINLINE == nil
-    or _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE
+-- Code family from the client model (WoW Forever is Mainline whatever project ID
+-- it reports); the project comparison only serves a page loaded without MSUF.Client.
+local IS_MAINLINE = MSUF.Client ~= nil and MSUF.Client.Family == "Mainline"
+    or MSUF.Client == nil and (_G.WOW_PROJECT_ID == nil or _G.WOW_PROJECT_MAINLINE == nil
+        or _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE)
 local function NormalizeTooltipMode(mode)
     if mode == "OOC" or mode == "MODIFIER" or mode == "NEVER" then return mode end
     if mode == "OFF" then return "NEVER" end
@@ -370,7 +373,7 @@ local function BuildMisc(ctx)
             OnAccept = function() ReloadUI() end,
         })
         BindMiscDropdown(menuBehavior, "Menu appearance preset",
-            VT("classicGlass", "Classic Glass (Classic default)", "midnight", "Midnight (Retail)",
+            VT("classicGlass", "Classic Glass (default)", "midnight", "Midnight (Retail)",
                 "class", "Class color", "ember", "Ember", "jade", "Jade", "violet", "Violet", "custom", "Custom"),
             250, 14, -388,
             function()

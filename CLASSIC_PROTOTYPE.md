@@ -3,10 +3,10 @@
 This local branch was created from Retail `main` commit `7cf4e711`. Every
 Retail sync commit records the Retail commit it ported in a `Retail-Source:`
 trailer. The current one is `ace807b7`; `git log -1 --grep=Retail-Source`
-shows the latest. The public 6.5 Alpha line combines the complete responsive
-texture-layer design system, 100 editable looks, 50 original assets,
-class-fantasy recipes, modular no-portrait layouts and Edge Softness with the
-current Retail feature and bug-fix set. It follows the same
+shows the latest. The public 6.5 Alpha line combines the Retail Texture Layer
+on every client (Text background, Highlight, and an MSUF textures button for
+the 50 original assets) with the current Retail feature and bug-fix set. It
+follows the same
 multi-client packaging shape used by ElvUI: client-suffixed TOCs plus a real
 `Game/Shared`, `Game/Classic`, `Game/Vanilla`, `Game/TBC`, and `Game/Mists`
 source boundary. Mainline has no `Game` folder of its own; it loads the Retail
@@ -104,7 +104,12 @@ unit lane, and turning Only mine on clears it. Raw Retail filter tokens are
 compiled once into a Classic-safe plan. Vanilla/Mists/TBC scan only with tokens
 their AuraUtil accepts; `IMPORTANT`, `DISPELLABLE`, `BOSS`, `STEALABLE`,
 `!PLAYER`, and related requirements use equivalent AuraData/C_Spell
-predicates. No polling is added.
+predicates. No polling is added. Debuffs the player can dispel (the dispel
+border, overlay and symbols, and the "Dispellable by Group" filter) are
+scanned with `MSUF.Client.DispellableDebuffFilter`: Classic Era uses
+`HARMFUL|RAID`, the filter Blizzard's Era party frames scan for dispellable
+debuffs, because it does not honour `RAID_PLAYER_DISPELLABLE`; TBC and Mists
+use `HARMFUL|RAID_PLAYER_DISPELLABLE`.
 
 Class resources have separate providers per client. Classic loads the shared
 `Game/Classic/ClassPower` core (constants, modes, core and controller) plus
@@ -136,8 +141,10 @@ calculator would be less correct and more expensive.
   Defaults shells (`State/Defaults/MSUF_Defaults_Shell.lua`,
   `State/Defaults/MSUF_Defaults_Bars.lua`,
   `State/Defaults/MSUF_Defaults_Units.lua`),
-  `Auras3/MSUF_Auras3_IconShape.lua`, the Options file
-  `Shell/Menu2/MSUF_Menu2_ColorPicker.lua`, and the four Arena modules
+  `Auras3/MSUF_Auras3_IconShape.lua`, the Options files
+  `Shell/Menu2/MSUF_Menu2_ColorPicker.lua` and
+  `Shell/Menu2/MSUF_Menu2_Theme_Forever.lua` (the WoW Forever menu skin,
+  which applies only when `MSUF.Client.IsForever` is true), and the four Arena modules
   (`Castbars/MSUF_ArenaCastbars.lua`, `Castbars/MSUF_ArenaCastbars_Preview.lua`,
   `Features/Gameplay/MSUF_Feature_ArenaMatch.lua`,
   `Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua`). No other owned file may
@@ -172,6 +179,17 @@ Game modes are not TOC game types: Classic clients run the Standard mode while
 their TOCs use `vanilla`, `tbc` or `mists`, and Plunderstorm ships its own TOC
 suffix. A Mainline client in a game mode MSUF does not recognize keeps full
 Mainline behaviour and prints one login line naming the mode.
+
+WoW Forever is such a split, not a game mode. It runs Blizzard's Mainline code
+on the 12.1.5 engine under its own TOC game type (`camelot` in the 1.60.1
+beta), reads the `_Mainline.toc` files and reports the Standard game mode.
+`Client.IsForever` (alias `MSUF.Forever`) therefore comes from
+`GameEvent.RegisterCamelotEvents`, which the LoadFirst Blizzard_Game addon
+defines only in its camelot-gated file, before any addon loads. On Forever,
+`Family` and `Flavor` stay `Mainline` and `IsRetail` stays true, whatever
+project ID the client reports; a Classic `X-MSUF-Client` tag still wins. Forever
+has no arena UI, so arena units are unsupported there (0 arena slots).
+Forever-only behaviour keys on `Client.IsForever`, read once at file load.
 `Client.IsGameRuleActive(ruleKey)` reads Blizzard's game rules, such as
 `EditModeDisabled`, and returns nil when a client has no such rule.
 `/msuf clientinfo` prints every fact above plus the state of the Blizzard addons
@@ -373,9 +391,10 @@ These run without the driver:
 - `tools/tests/classic_classpower_runtime_smoke.lua` and
   `tools/tests/classic_classpower_enabled_smoke.lua`: the root, then a Classic
   suffix.
-- `tools/tests/classic_menu_atlas_smoke.lua`: the root, then a matrix suffix or
-  `FutureVanilla`, then optionally `tinted` (the gate runs it for Vanilla) or
-  `midnight` (for each Classic suffix).
+- `tools/tests/classic_menu_atlas_smoke.lua`: the root, then a matrix suffix,
+  `FutureVanilla` or `Forever` (a simulated WoW Forever client), then
+  optionally `tinted` or `midnight` (the gate runs both for `Forever`). Every
+  shipped client must keep the stock menu; only `Forever` gets Classic Glass.
 
 The health, text and castbar-tint parity smokes also accept a pre-refactor
 source root as a second argument. That mode asserts strictly less Lua work than
@@ -432,9 +451,14 @@ for each supported client.
 
 ## Adding a game mode or a Mainline-family client
 
-A new game mode inside the Mainline family, such as WoW Forever, is added only
-with values its client has shipped. Nothing is prepared under a guessed project
-ID, interface number, TOC suffix or `Enum.GameMode` key. Once a build exists:
+A new game mode or client inside the Mainline family is added only with values
+its client has shipped. Nothing is prepared under a guessed project ID,
+interface number, TOC suffix or `Enum.GameMode` key. WoW Forever went through
+these steps on 2026-09-16 from Blizzard's `forever` source branch (1.60.1.69876)
+and the `wow_classic_beta` CDN build: interface 16001 in the Mainline row, the
+Blizzard_Game marker in step 4, the `camelot` and `wowlabs` tokens and
+`IsSDHDToggleEnabled` pinned in step 5, and a marker contract in the audit that
+fails if Blizzard renames the placeholder name "Camelot". Once a build exists:
 
 1. Run `/msuf clientinfo` on it and record the project ID, interface number,
    build, game mode key and number, the `C_GameRules` `Is*` functions, the game
@@ -448,17 +472,18 @@ ID, interface number, TOC suffix or `Enum.GameMode` key. Once a build exists:
    `tools/test-classic-prototype.ps1` first needs a second Mainline-family client
    in its single-Mainline check, the Retail TOC name mapping, the Mainline load
    graph and the Retail parity targets.
-4. Add the shipped `Enum.GameMode` key to the recognized game modes in
-   `Game/Shared/Initialize.lua`, derive the mode's flag (such as
-   `Client.IsForever`) from `Client.GameModeName`, and extend
-   `tools/tests/classic_client_detection_smoke.lua` and
+4. Identify the client in `Game/Shared/Initialize.lua`. A new `Enum.GameMode`
+   key goes into the recognized game modes. A client that reports an existing
+   mode (WoW Forever reports Standard) needs a marker instead: a global that
+   only a LoadFirst or FrameXML Blizzard file gated to its TOC game type
+   defines. Extend `tools/tests/classic_client_detection_smoke.lua` and
    `tools/tests/classic_client_bootstrap_smoke.lua`.
 5. Refresh the Blizzard UI source mirror. When the new client's TOC tokens or
    `C_GameRules` functions appear, the audit tripwire names them; pin them in
    `tools/audit-classic-ui-source.ps1` once the client model handles them.
 6. Check the Blizzard addons gated by game type. `Blizzard_CooldownViewer` loads
-   only for `standard` today, so the cooldown anchor in
-   `Integrations/MSUF_Integration_ThirdPartyAnchors.lua` needs a game-mode check
-   if the new mode lacks it.
+   for `standard, camelot` on the Forever branch, so the cooldown anchor in
+   `Integrations/MSUF_Integration_ThirdPartyAnchors.lua` works there; a new
+   client that lacks it needs a check.
 7. Confirm the CurseForge game version names exist before a release lists the
    new client.

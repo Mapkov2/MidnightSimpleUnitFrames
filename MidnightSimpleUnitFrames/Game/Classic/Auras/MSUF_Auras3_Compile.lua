@@ -26,6 +26,9 @@ local C_CurveUtil = _G.C_CurveUtil
 local CreateColor = _G.CreateColor
 local Enum = _G.Enum
 local IsSecret = _G.issecretvalue or function() return false end
+-- Debuffs this player can dispel, in the filter this client honours
+-- (Game/Shared/Initialize.lua; Classic Era needs HARMFUL|RAID).
+local DISPELLABLE_DEBUFF_FILTER = MSUF.Client.DispellableDebuffFilter or "HARMFUL|RAID_PLAYER_DISPELLABLE"
 
 local BOSS_UNITS = {
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
@@ -407,7 +410,7 @@ local function DirectVisualFilterForTrigger(trigger)
     if trigger == "PLAYER_CAST" then
         return "HARMFUL|PLAYER"
     elseif trigger == "BY_ME" then
-        return "HARMFUL|RAID_PLAYER_DISPELLABLE"
+        return DISPELLABLE_DEBUFF_FILTER
     elseif trigger == "DISPEL_TYPE" then
         return "HARMFUL|RAID"
     end
@@ -1085,7 +1088,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         raidFilter = baseFilter .. "|RAID",
         raidInCombatFilter = baseFilter .. "|RAID_IN_COMBAT",
         stealableFilter = "HELPFUL|STEALABLE",
-        dispellableFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE",
+        dispellableFilter = DISPELLABLE_DEBUFF_FILTER,
         bossFilter = spec.filter .. "|BOSS",
         max = renderEnabled and roundedMax or 0,
         weaponEnchants = kind == "buff" and runtimeUnit == "player"
@@ -1325,7 +1328,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         raidFilter = filter .. "|RAID",
         raidInCombatFilter = filter .. "|RAID_IN_COMBAT",
         stealableFilter = "HELPFUL|STEALABLE",
-        dispellableFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE",
+        dispellableFilter = DISPELLABLE_DEBUFF_FILTER,
         bossFilter = "HARMFUL|BOSS",
         max = renderEnabled and roundedMax or 0,
         size = size,

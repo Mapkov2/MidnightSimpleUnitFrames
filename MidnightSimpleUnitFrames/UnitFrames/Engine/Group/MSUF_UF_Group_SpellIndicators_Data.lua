@@ -669,4 +669,135 @@ function SI.GetAuraIcon(specKey, auraName)
   return 136243 -- question mark
 end
 
+--- WoW Forever loads this Mainline file, but its game data is Classic Era with
+--- ranks: nine classes, one specialization each (ChrSpecialization 1482-1491,
+--- OrderIndex 0) and no global GetSpecialization (Blizzard_DeprecatedSpecialization
+--- is classic/standard only). The Retail spec map and spell IDs above cannot
+--- resolve there, so Forever swaps in class-wide sets keyed like Game/Vanilla
+--- (index 0, "Classic<Class>"). The native includeSpellIDs filter matches exact
+--- aura IDs, so every trainer rank is listed.
+--- Evidence, wago.tools DB2 build 1.60.1.69876: every ID below carries its aura's
+--- name in SpellName, an APPLY_AURA SpellEffect and a SkillLineAbility row on the
+--- class line (Druid Restoration 573, Priest Discipline 613 / Holy 56, Paladin
+--- Protection 267, Shaman Restoration 374). Era's Healing Way buff (29203) does
+--- not exist there (29206 is a caster-only passive without a trigger), so Shaman
+--- keeps Ancestral Fortitude 16177 (triggered by Ancestral Healing 16176).
+--- EXTERNAL_DEFENSIVE classification and icon file IDs cannot be verified for this
+--- data: no aura depends on either, and icons come from C_Spell.GetSpellTexture.
+local IS_FOREVER = ns.Client ~= nil and ns.Client.IsForever == true
+if IS_FOREVER then
+  local allSpecs = SI.SpecInfo[SI.ALL_SPECS_KEY]
+  SI.SpecMap = {}
+  SI.SpecInfo = { [SI.ALL_SPECS_KEY] = allSpecs }
+  local function ForeverClass(classToken, display, specID, builtIn)
+    local specKey = "Classic" .. display
+    SI.SpecMap[classToken .. "_0"] = specKey
+    SI.SpecInfo[specKey] = {
+      display = display,
+      class = classToken,
+      specID = specID,
+      customOnly = builtIn ~= true or nil,
+    }
+  end
+  -- Blizzard_FrameXMLBase Camelot CLASS_SORT_ORDER; spec IDs from ChrSpecialization.
+  ForeverClass("WARRIOR", "Warrior", 1491)
+  ForeverClass("PALADIN", "Paladin", 1486, true)
+  ForeverClass("PRIEST", "Priest", 1487, true)
+  ForeverClass("SHAMAN", "Shaman", 1489, true)
+  ForeverClass("DRUID", "Druid", 1484, true)
+  ForeverClass("ROGUE", "Rogue", 1488)
+  ForeverClass("MAGE", "Mage", 1482)
+  ForeverClass("WARLOCK", "Warlock", 1490)
+  ForeverClass("HUNTER", "Hunter", 1485)
+
+  SI.SpellIDs = {
+    ClassicDruid = { Rejuvenation = 774, Regrowth = 8936 },
+    ClassicShaman = { AncestralFortitude = 16177 },
+    ClassicPriest = { PowerWordShield = 17, Renew = 139, PowerInfusion = 10060 },
+    ClassicPaladin = { BlessingOfProtection = 1022, BlessingOfSacrifice = 6940, BlessingOfFreedom = 1044 },
+  }
+
+  local function Ranks(list)
+    local out = {}
+    for i = 1, #list, 2 do
+      local auraName, ids = list[i], list[i + 1]
+      for j = 1, #ids do out[ids[j]] = auraName end
+    end
+    return out
+  end
+  SI.AltSpellIDs = {
+    ClassicDruid = Ranks({
+      "Rejuvenation", { 1058, 1430, 2090, 2091, 3627, 8910, 9839, 9840, 9841, 25299 },
+      "Regrowth", { 8938, 8939, 8940, 8941, 9750, 9856, 9857, 9858 },
+    }),
+    ClassicPriest = Ranks({
+      "PowerWordShield", { 592, 600, 3747, 6065, 6066, 10898, 10899, 10900, 10901 },
+      "Renew", { 6074, 6075, 6076, 6077, 6078, 10927, 10928, 10929, 25315 },
+    }),
+    ClassicPaladin = Ranks({
+      "BlessingOfProtection", { 5599, 10278 },
+      "BlessingOfSacrifice", { 20729 },
+    }),
+  }
+  SI.AuraSpellIDAliases = {}
+  SI.CustomAuraAliases = SI.AuraSpellIDAliases
+  SI.SelfOnlySpellIDs = {}
+  SI.LinkedAuraRules = {}
+  SI.SecretSpellIDs = {}
+  SI.ExternalDefensiveAuras = {}
+  SI.SecretAuraInfo = {}
+  SI.IconTextures = {}
+
+  SI.TrackableAuras = {
+    ClassicDruid = {
+      Aura("Rejuvenation", 0.51, 0.78, 0.52),
+      Aura("Regrowth", 0.31, 0.76, 0.97),
+    },
+    ClassicShaman = {
+      Aura("AncestralFortitude", 0.20, 0.20, 1.00),
+    },
+    ClassicPriest = {
+      Aura("PowerWordShield", 1.00, 0.84, 0.28),
+      Aura("Renew", 0.56, 0.93, 0.56),
+      Aura("PowerInfusion", 0.94, 0.82, 0.31),
+    },
+    ClassicPaladin = {
+      Aura("BlessingOfProtection", 0.94, 0.82, 0.31),
+      Aura("BlessingOfSacrifice", 0.94, 0.50, 0.50),
+      Aura("BlessingOfFreedom", 0.47, 0.77, 1.00),
+    },
+  }
+
+  SI.SpecDefaults = {
+    ClassicDruid = {
+      Rejuvenation = Placed("icon", "TOPLEFT", 1, -1, 22),
+      Regrowth = Placed("icon", "TOPRIGHT", -1, -1, 22),
+    },
+    ClassicShaman = {
+      AncestralFortitude = Placed("icon", "TOPRIGHT", -1, -1, 22),
+    },
+    ClassicPriest = {
+      PowerWordShield = Placed("icon", "TOPRIGHT", -1, -1, 22),
+      Renew = Placed("icon", "TOPLEFT", 1, -1, 22),
+      PowerInfusion = Frame("glow", 0.94, 0.82, 0.31, 1, 1),
+    },
+    ClassicPaladin = {
+      BlessingOfProtection = Frame("border", 0.94, 0.82, 0.31, 1, 1),
+      BlessingOfSacrifice = Frame("border", 0.94, 0.50, 0.50, 1, 2),
+      BlessingOfFreedom = Frame("border", 0.47, 0.77, 1.00, 1, 3),
+    },
+  }
+
+  local foreverClassToken, foreverSpecKey
+  function SI.GetPlayerSpec()
+    local _, classToken = UnitClass("player")
+    if not classToken then return nil end
+    if classToken ~= foreverClassToken then
+      foreverClassToken = classToken
+      foreverSpecKey = SI.SpecMap[classToken .. "_0"]
+    end
+    return foreverSpecKey
+  end
+end
+
 ExportPublic("MSUF_GF_SpellIndicators", SI)

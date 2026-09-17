@@ -4,10 +4,12 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
 local DEFAULT_MARKER_COUNT = 5
 local MAX_CUSTOM_MARKER_COUNT = 10
-local MAX_AUTO_TICK_COUNT = 12
+-- Hellfire, the longest WoW Forever channel below, ticks 15 times.
+local MAX_AUTO_TICK_COUNT = IS_FOREVER and 15 or 12
 
 -- Fixed tick counts keep their number of ticks under haste; interval entries
 -- gain ticks when the channel duration grows. Unknown channels deliberately
@@ -46,6 +48,59 @@ local CHANNEL_TICK_DATA = {
     -- Racial
     [291944] = { ticks = 6 }, -- Regeneratin'
 }
+
+-- WoW Forever runs Classic Era spell data with one spell ID per rank. Only five
+-- IDs above exist there, and all five tick differently (Mind Flay 3 times,
+-- Health Funnel 10), so Forever uses its own table keyed by every rank. Counts
+-- are SpellDuration / EffectAuraPeriod of the channel's periodic effect in the
+-- client DB of build 1.60.1.69876, identical to Era where the ID exists.
+-- Evocation (a regeneration buff) and Tame Beast (a single pulse) keep the
+-- default layout.
+if IS_FOREVER then
+    CHANNEL_TICK_DATA = {}
+    local FOREVER_CHANNEL_TICKS = {
+        [3] = {
+            5143,                                        -- Arcane Missiles (rank 1)
+            15407, 17311, 17312, 17313, 17314, 18807,    -- Mind Flay
+            401417, 412510,                              -- Regeneration, Mass Regeneration
+        },
+        [4] = {
+            5144,                                        -- Arcane Missiles (rank 2)
+            5740, 6219, 11677, 11678,                    -- Rain of Fire
+        },
+        [5] = {
+            5145, 8416, 8417, 10211, 10212, 25345,       -- Arcane Missiles (ranks 3-8)
+            689, 699, 709, 7651, 11699, 11700,           -- Drain Life
+            5138, 6226, 11703, 11704,                    -- Drain Mana
+            1120, 8288, 8289, 11675,                     -- Drain Soul
+            136, 3111, 3661, 3662, 13542, 13543, 13544,  -- Mend Pet
+            740, 8918, 9862, 9863,                       -- Tranquility
+            1260270,                                     -- Rapid Regeneration
+        },
+        [6] = {
+            10797, 19296, 19299, 19302, 19303, 19304, 19305, -- Starshards
+            1510, 14294, 14295,                          -- Volley
+            413259,                                      -- Mind Sear
+            1316697,                                     -- Wrack
+        },
+        [8] = {
+            10, 6141, 8427, 10185, 10186, 10187,         -- Blizzard
+        },
+        [10] = {
+            755, 3698, 3699, 3700, 11693, 11694, 11695,  -- Health Funnel
+            16914, 17401, 17402,                         -- Hurricane
+        },
+        [15] = {
+            1949, 11683, 11684,                          -- Hellfire
+        },
+    }
+    for ticks, spellIDs in pairs(FOREVER_CHANNEL_TICKS) do
+        local tickData = { ticks = ticks }
+        for index = 1, #spellIDs do
+            CHANNEL_TICK_DATA[spellIDs[index]] = tickData
+        end
+    end
+end
 
 local issecretvalue = _G.issecretvalue
 local IsPlayerSpell = _G.IsPlayerSpell

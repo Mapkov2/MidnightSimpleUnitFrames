@@ -70,7 +70,21 @@ local function ProfileValues(includeNone)
     for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i] } end
     return values
 end
+-- WoW Forever binds profiles to Blizzard's two talent groups, keyed 1 and 2 by
+-- State/MSUF_Profiles.lua, because every class has a single specialization there.
+-- The rows reuse Blizzard's own Camelot talent-frame tab labels. Without them, or
+-- without the group API, the page keeps its empty state.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 local function GetSpecMeta()
+    if IS_FOREVER then
+        local primary, secondary = _G.DUAL_SPEC_PRIMARY, _G.DUAL_SPEC_SECONDARY
+        local specInfo = _G.C_SpecializationInfo
+        if type(primary) ~= "string" or primary == "" or type(secondary) ~= "string" or secondary == ""
+            or type(specInfo) ~= "table" or type(specInfo.GetActiveSpecGroup) ~= "function" then
+            return {}
+        end
+        return { { id = 1, name = primary }, { id = 2, name = secondary } }
+    end
     local n = type(_G.GetNumSpecializations) == "function" and _G.GetNumSpecializations() or 0
     local out = {}
     for i = 1, n do

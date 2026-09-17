@@ -16,6 +16,14 @@ local GetCurrentKeyBoardFocus = GetCurrentKeyBoardFocus
 local tonumber = tonumber
 local GetSpecialization = GetSpecialization
 local GetSpecializationInfo = GetSpecializationInfo
+-- WoW Forever does not load Blizzard_DeprecatedSpecialization, which defines the two
+-- globals above. Its Camelot character frame calls the C_SpecializationInfo pair
+-- instead, so Forever reads the same pair. Every other client keeps the globals.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+if IS_FOREVER and type(C_SpecializationInfo) == "table" then
+    GetSpecialization = C_SpecializationInfo.GetSpecialization
+    GetSpecializationInfo = C_SpecializationInfo.GetSpecializationInfo
+end
 
 local function MSUF_Gameplay_GetPlayerSpecID()
     -- Spec lookup can be nil during early login/reload. Callers use the cached helper when

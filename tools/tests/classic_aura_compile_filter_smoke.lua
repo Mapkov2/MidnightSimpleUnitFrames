@@ -67,8 +67,17 @@ function World.Matches(record, filter)
         elseif token == "PLAYER" then
             if record.fromPlayer ~= true then return false end
         elseif token == "RAID" then
-            if not (record.harmful and record.dispel) then return false end
+            if World.era then
+                -- Classic Era: HARMFUL|RAID returns the debuffs this player can cure.
+                if not (record.harmful and record.dispel and World.removable[record.dispel]) then
+                    return false
+                end
+            elseif not (record.harmful and record.dispel) then
+                return false
+            end
         elseif token == "RAID_PLAYER_DISPELLABLE" then
+            -- Classic Era does not honour this token: its scans come back empty.
+            if World.era then return false end
             if not (record.harmful and record.dispel and World.removable[record.dispel]) then
                 return false
             end
@@ -188,10 +197,10 @@ end
 --- Load the real Classic aura chain into a fresh namespace. The shared Auras3
 --- core is replaced by the two helpers the runtime needs from it; neither
 --- takes part in filtering.
-local function Boot(withFeatures)
+local function Boot(withFeatures, client)
     local element
     local namespace = {
-        Client = { IsClassic = true },
+        Client = client or { IsClassic = true },
         MSUF_Auras3 = {},
         UF = {
             elements = {},
@@ -741,6 +750,66 @@ do
         ExpectBorder(frame, class.removable.Curse == true, curse.id, label)
         ExpectNoUnknownFilters(label)
     end
+end
+
+-- 8. Classic Era: the dispellable filter follows MSUF.Client -----------------
+-- Era keeps the original meaning of HARMFUL|RAID (debuffs this player can cure)
+-- and does not honour RAID_PLAYER_DISPELLABLE, so a BY_ME border, overlay or
+-- symbol compiled to the newer token stayed dark there for every class.
+do
+    local eraA3, eraElement = Boot(true, {
+        IsClassic = true, IsVanilla = true, DispellableDebuffFilter = "HARMFUL|RAID",
+    })
+    World.era = true
+    Check(eraA3._ClassicCompile.DirectVisualFilterForTrigger("BY_ME") == "HARMFUL|RAID",
+        "Era BY_ME does not query HARMFUL|RAID")
+
+    -- A stored "Dispellable by Group" debuff token matches through the Era filter.
+    local plan = eraA3.ClassicFeatures.CompileRawFilter("HARMFUL|RAID_PLAYER_DISPELLABLE", false)
+    local asked = {}
+    eraA3.ClassicFeatures.MatchFilterRequirements(plan, "party1", { auraInstanceID = 1 }, function(_, _, filter)
+        asked[#asked + 1] = filter
+        return true
+    end)
+    Check(#asked == 1 and asked[1] == "HARMFUL|RAID",
+        "Era Dispellable by Group token queried " .. tostring(asked[1]) .. " instead of HARMFUL|RAID")
+
+    local untypedForeign = World.Aura({ harmful = true, source = "party2" })
+    local curse = World.Aura({ harmful = true, source = "party2", dispel = "Curse" })
+    local magic = World.Aura({ harmful = true, source = "party2", dispel = "Magic" })
+    local records = { untypedForeign, curse, magic }
+    for _, class in ipairs(CLASSES) do
+        World.removable = class.removable
+        local expected = class.removable.Curse and curse or (class.removable.Magic and magic) or nil
+
+        World.Set("party1", records)
+        local groupLabel = "Era group party1 for " .. class.name
+        local group = EnableFrame(eraElement, NewFrame("party1", {
+            scope = "group",
+            border = { dispel = true, dispelTrigger = "BY_ME" },
+            auras = { enabled = true, showBuffs = false, showDebuffs = true, maxDebuffs = 6, debuffFilter = "HARMFUL" },
+        }))
+        local cfg = Check(group._msufA3GroupConfig, groupLabel .. ": group aura config missing")
+        Check(cfg.lanes.debuff.dispellableFilter == "HARMFUL|RAID",
+            groupLabel .. ": debuff lane uses " .. tostring(cfg.lanes.debuff.dispellableFilter))
+        ExpectBorder(group, expected ~= nil, expected and expected.id, groupLabel)
+        ExpectNoUnknownFilters(groupLabel)
+
+        World.Set("target", records)
+        local directLabel = "Era direct BY_ME for " .. class.name
+        SetTargetDB({ icons = false })
+        local direct = NewFrame("target", { border = { dispel = true, dispelTrigger = "BY_ME" } })
+        Check(eraA3.ResolveUnitFrameConfig("target", direct.MSUFSpec).visualDirect == true,
+            directLabel .. ": an icon-less border did not compile to a direct visual query")
+        EnableFrame(eraElement, direct)
+        ExpectBorder(direct, expected ~= nil, expected and expected.id, directLabel)
+        for i = 1, #World.indexFilters do
+            Check(World.indexFilters[i] == "HARMFUL|RAID",
+                directLabel .. ": queried " .. tostring(World.indexFilters[i]) .. ", expected HARMFUL|RAID")
+        end
+        ExpectNoUnknownFilters(directLabel)
+    end
+    World.era = nil
 end
 
 print("classic_aura_compile_filter_smoke: ok")

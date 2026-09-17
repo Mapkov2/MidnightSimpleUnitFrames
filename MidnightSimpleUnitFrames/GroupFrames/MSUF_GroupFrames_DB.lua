@@ -8,6 +8,8 @@ MSUF = MSUF or (_G.MSUF_NS) or {}
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
 local ExportPublic = MSUF.ExportPublic
+-- WoW Forever client fact, read once. Harnesses without MSUF.Client are not Forever.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
 --==========================================================================--
 -- GroupFrames API surface (MSUF.GF / _G.MSUF_*)
@@ -997,13 +999,30 @@ function GF.GetUnitGroupRole(unit)
     return GF.NormalizeGroupRole(role)
 end
 
-function GF.ShouldShowPowerBarForRole(kind, role, conf)
+--- WoW Forever sets group roles only by hand (Camelot unit popup; the Dungeon
+--- Finder role check is excluded there) and its ChrSpecialization rows all
+--- carry Role 2 (DAMAGER), so an unassigned member may well be a healer. A
+--- secret role keeps the DAMAGER fallback. Always false off Forever.
+local function IsForeverUnassignedRole(unit)
+    if not (IS_FOREVER and unit and _GF_UnitGroupRolesAssigned) then return false end
+    local role = _GF_UnitGroupRolesAssigned(unit)
+    if _GF_issecretvalue and _GF_issecretvalue(role) == true then return false end
+    return role ~= "TANK" and role ~= "HEALER" and role ~= "DAMAGER"
+end
+
+--- `unit` is optional. On Forever an unassigned member shows its power bar
+--- whenever the scope shows power for any role, instead of being filed as DPS.
+function GF.ShouldShowPowerBarForRole(kind, role, conf, unit)
     conf = conf or GF.GetConf(kind)
     if not conf then return false end
     if conf.powerBarEnabled == false then return false end
     local raw = tonumber(conf.powerHeight) or (IsRaidLikeKind(kind) and 4 or 6)
     if raw <= 0 then return false end
 
+    if IsForeverUnassignedRole(unit) then
+        return conf.powerShowTank ~= false or conf.powerShowHealer ~= false
+            or conf.powerShowDamager ~= false
+    end
     role = GF.NormalizeGroupRole(role)
     if role == "TANK" then
         return conf.powerShowTank ~= false
@@ -1014,12 +1033,12 @@ function GF.ShouldShowPowerBarForRole(kind, role, conf)
 end
 
 function GF.ShouldShowPowerBarForUnit(kind, unit, conf)
-    return GF.ShouldShowPowerBarForRole(kind, GF.GetUnitGroupRole(unit), conf)
+    return GF.ShouldShowPowerBarForRole(kind, GF.GetUnitGroupRole(unit), conf, unit)
 end
 
 function GF.GetEffectivePowerHeight(kind, unit, role, conf)
     conf = conf or GF.GetConf(kind)
-    if not GF.ShouldShowPowerBarForRole(kind, role or GF.GetUnitGroupRole(unit), conf) then
+    if not GF.ShouldShowPowerBarForRole(kind, role or GF.GetUnitGroupRole(unit), conf, unit) then
         return 0
     end
     return (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (tonumber(conf and conf.powerHeight) or 0)
@@ -1519,7 +1538,11 @@ end
 
 --- Detect situation from instance difficulty
 function GF.DetectRaidSituation()
-    local _, _, difficultyID = GetInstanceInfo()
+    local _, instanceType, difficultyID = GetInstanceInfo()
+    --- WoW Forever raids use Classic 10/20/40-player difficulties (Mainline
+    --- DifficultyUtil RaidClassic10Normal/RaidClassic20Normal/Raid40). The
+    --- 1.60.1 Difficulty table has no Mythic raid row, so every raid is "normal".
+    if IS_FOREVER and instanceType == "raid" then return "normal" end
     if not difficultyID or difficultyID == 0 then return "openworld" end
     --- Mythic Raid = 16, Mythic+ = 8, Mythic Dungeon = 23
     if difficultyID == 16 or difficultyID == 8 or difficultyID == 23 then

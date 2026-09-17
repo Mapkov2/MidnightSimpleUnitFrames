@@ -20,6 +20,23 @@ if not (API and API.RegisterElement) then return end
 local systemEnum = _G.Enum and _G.Enum.EditModeSystem
 if type(systemEnum) ~= "table" then return end
 
+--- WoW Forever anchors the protected MainActionBar stack to MicroMenuContainer
+--- (its Camelot EditModePresetLayoutConstants), so any Micro Menu move, layout
+--- or field write from MSUF would reach secure action bar layout. The Micro
+--- Menu stays entirely Blizzard-owned there: no element, no frame access and
+--- no profile snapshot entry.
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+
+--- Blizzard refuses to enter its Edit Mode while the EditModeDisabled game rule
+--- is on (EditModeManagerFrameMixin:CanEnterEditMode). MSUF follows the same
+--- rule for its Blizzard elements, profile applies and every manager open. A
+--- client without the rule or the API answers nil, which counts as allowed.
+local function EditModeRuleBlocked()
+    local client = MSUF.Client
+    return type(client) == "table" and type(client.IsGameRuleActive) == "function"
+        and client.IsGameRuleActive("EditModeDisabled") == true
+end
+
 local OWNER, SETTING = "MSUF.Blizzard", "blizzardEditModeIntegration"
 local LAYOUT_NAME = "MSUF"
 local registered = {}
@@ -106,7 +123,10 @@ end
 --- Systems for the new layout: Blizzard's preset manager first, and as a
 --- fallback the Edit Mode manager's own combined layout list (presets are
 --- prepended there). Always deep-copied so the saved layout never aliases
---- live manager tables.
+--- live manager tables. The second return is the preset's interfaceStyle:
+--- clients with a Gamepad preset tag presets with it and only enable user
+--- layouts whose style matches, so the copy keeps it like Blizzard's own copy
+--- does. Presets without the field return nil and the new layout stays as is.
 local function PresetSystems(info)
     local index = tonumber(info.activeLayout) or 1
     local manager = _G.EditModePresetLayoutManager
@@ -114,14 +134,14 @@ local function PresetSystems(info)
         and manager:GetCopyOfPresetLayouts() or nil
     local preset = type(copies) == "table" and copies[index] or nil
     if type(preset) == "table" and type(preset.systems) == "table" then
-        return CopyTable(preset.systems, 0)
+        return CopyTable(preset.systems, 0), preset.interfaceStyle
     end
     local em = _G.EditModeManagerFrame
     local combined = type(em) == "table" and type(em.layoutInfo) == "table"
         and type(em.layoutInfo.layouts) == "table" and em.layoutInfo.layouts or nil
     local activePreset = combined and combined[index] or nil
     if type(activePreset) == "table" and type(activePreset.systems) == "table" then
-        return CopyTable(activePreset.systems, 0)
+        return CopyTable(activePreset.systems, 0), activePreset.interfaceStyle
     end
     return nil
 end
@@ -157,7 +177,7 @@ local function EnsureEditableLayout(name)
             return true, "activated_existing"
         end
     end
-    local systems = PresetSystems(info)
+    local systems, interfaceStyle = PresetSystems(info)
     if not systems then return false, "no_preset_source" end
     local enumTypes = _G.Enum.EditModeLayoutType or {}
     local counts = {}
@@ -175,6 +195,7 @@ local function EnsureEditableLayout(name)
     end
     info.layouts[#info.layouts + 1] = {
         layoutName = name, layoutType = layoutType, systems = systems,
+        interfaceStyle = interfaceStyle,
     }
     api.SaveLayouts(info)
     api.SetActiveLayout(presets + #info.layouts)
@@ -289,7 +310,10 @@ local FRAME_NAMES = {
 --- ObjectiveTrackerFrame is intentionally absent. Its dirty layout reaches
 --- combat-secret aura APIs, so it must remain entirely Blizzard-owned.
 
+--- Every mover, anchor and settings write resolves its frame here, so the
+--- Forever Micro Menu gate holds for any path that reaches a system id.
 local function SystemFrame(systemId)
+    if IS_FOREVER and systemId == systemEnum.MicroMenu then return nil end
     local manager = _G.EditModeManagerFrame
     local frames = type(manager) == "table" and manager.registeredSystemFrames or nil
     if type(frames) == "table" then
@@ -439,7 +463,9 @@ local function ApplyVisual(systemId, entry)
             if size ~= nil and type(micro.SetNormalScale) == "function" then
                 micro:SetNormalScale((size * 5 + 70) / 100)
             end
-            local eye = map[setting.EyeSize or 3]
+            --- WoW Forever renamed the setting to DeprecatedEyeSize; the queue
+            --- eye is its own Group Finder system there.
+            local eye = setting.EyeSize ~= nil and map[setting.EyeSize] or nil
             if eye ~= nil and type(micro.SetQueueStatusScale) == "function" then
                 micro:SetQueueStatusScale((eye * 5 + 50) / 100)
             end
@@ -523,6 +549,7 @@ local SNAPSHOT_KEYS = {
     [systemEnum.Bags or -5] = "bags",
     [systemEnum.DamageMeter or -7] = "damagemeter",
 }
+if IS_FOREVER then SNAPSHOT_KEYS[systemEnum.MicroMenu or -3] = nil end
 
 --- Every committed anchor + raw settings row also lands in the MSUF profile
 --- (general.blizzardEditModeSnapshot), so a profile export carries the
@@ -552,6 +579,11 @@ local function StoreSnapshot(systemId, entry)
         relativePoint = type(anchor.relativePoint) == "string" and anchor.relativePoint or nil,
         x = tonumber(anchor.offsetX) or 0, y = tonumber(anchor.offsetY) or 0,
         settings = settings,
+        --- WoW Forever's HUD defaults differ from Midnight's (bags anchor to
+        --- the Micro Menu, chat sits higher), so its entries carry a stamp and
+        --- ApplyProfileSnapshot only applies entries from the same kind of
+        --- client. Nil everywhere else, so existing entries keep their shape.
+        forever = IS_FOREVER or nil,
     }
 end
 
@@ -669,7 +701,7 @@ local snapshotRetry
 --- Edit Mode dialog first. In combat this arms a one-shot
 --- PLAYER_REGEN_ENABLED retry (no recurring cost).
 local function ApplyProfileSnapshot()
-    if not Enabled() then return false end
+    if not Enabled() or EditModeRuleBlocked() then return false end
     local general = General()
     local snapshot = general and general.blizzardEditModeSnapshot
     if type(snapshot) ~= "table" or not next(snapshot) then return false end
@@ -691,7 +723,8 @@ local function ApplyProfileSnapshot()
     local applied = {}
     for systemId, key in pairs(SNAPSHOT_KEYS) do
         local state = snapshot[key]
-        if type(state) == "table" and type(state.point) == "string" then
+        if type(state) == "table" and type(state.point) == "string"
+            and (state.forever == true) == IS_FOREVER then
             for i = 1, #layout.systems do
                 local entry = layout.systems[i]
                 if type(entry) == "table" and entry.system == systemId
@@ -736,7 +769,7 @@ end
 
 local function OpenSettings()
     local manager = _G.EditModeManagerFrame
-    if InCombat() or not manager then return false end
+    if InCombat() or not manager or EditModeRuleBlocked() then return false end
     if type(_G.ShowUIPanel) == "function" then
         --- Blizzard's own manager can switch the active layout while the MSUF
         --- session stays open. The cached info predates that switch, so keeping
@@ -818,7 +851,8 @@ local function Element(systemId, elementId, label, order, controls, settingIds)
         id = elementId, label = label, group = "Blizzard", order = order,
         getFrame = function() return SystemFrame(systemId) end,
         isEnabled = function()
-            return active and Enabled() and Blizzard() ~= nil and SystemFrame(systemId) ~= nil
+            return active and Enabled() and not EditModeRuleBlocked()
+                and Blizzard() ~= nil and SystemFrame(systemId) ~= nil
         end,
         captureState = function() return Capture(systemId, settingIds) end,
         restoreState = function(state) return Restore(systemId, state) end,
@@ -853,13 +887,14 @@ local function SessionChanged(enabled)
         --- the user never has to discover why Blizzard elements refuse to
         --- move.
         InvalidateLayoutCache()
-        if Enabled() and Blizzard() and not InCombat() and not ActiveLayout() then
+        if Enabled() and Blizzard() and not InCombat() and not EditModeRuleBlocked()
+            and not ActiveLayout() then
             OpenLayoutDialog()
         end
     end
     local container = SystemFrame(systemEnum.HudTooltip)
     if not container then return end
-    if enabled and TooltipIsBlizzardControlled() then
+    if enabled and TooltipIsBlizzardControlled() and not EditModeRuleBlocked() then
         if container.IsShown and not container:IsShown() and container.Show then
             tooltipContainerShown = true
             container:Show()
@@ -908,20 +943,33 @@ local function Activate()
             CompositeSetting(systemEnum.ChatFrame, "height", "HUD_EDIT_MODE_SETTING_CHAT_FRAME_HEIGHT",
                 "Height", 120, 800, chatHeightHundreds, chatHeightTens),
         }, { chatWidthHundreds, chatWidthTens, chatHeightHundreds, chatHeightTens }))
-    local microEye = microSetting.EyeSize or 3
-    local microOrientation = microSetting.Orientation or 0
-    local microOrder = microSetting.Order or 1
-    Add(Element(systemEnum.MicroMenu, "micromenu",
-        BlizzardLabel("HUD_EDIT_MODE_MICRO_MENU_LABEL", "Micro Menu"), 862, {
+    if not IS_FOREVER then
+        local microOrientation = microSetting.Orientation or 0
+        local microOrder = microSetting.Order or 1
+        local microControls = {
             SteppedSetting(systemEnum.MicroMenu, "size", "HUD_EDIT_MODE_SETTING_MICRO_MENU_SIZE",
                 "Size", 70, 200, 5, microSize),
-            SteppedSetting(systemEnum.MicroMenu, "eyesize", "HUD_EDIT_MODE_SETTING_MICRO_MENU_EYE_SIZE",
-                "Eye Size", 50, 150, 5, microEye),
-            ToggleSetting(systemEnum.MicroMenu, "vertical",
-                "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORIENTATION_VERTICAL", "Vertical", microOrientation),
-            ToggleSetting(systemEnum.MicroMenu, "reverse",
-                "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORDER_REVERSE", "Reverse", microOrder),
-        }, { microSize, microEye, microOrientation, microOrder }))
+        }
+        local microSettingIds = { microSize }
+        --- Eye Size only while the client still has the setting: WoW Forever
+        --- renamed it DeprecatedEyeSize and sizes the queue eye through its own
+        --- Group Finder system, and later Midnight builds may follow.
+        local microEye = microSetting.EyeSize
+        if microEye ~= nil then
+            microControls[#microControls + 1] = SteppedSetting(systemEnum.MicroMenu, "eyesize",
+                "HUD_EDIT_MODE_SETTING_MICRO_MENU_EYE_SIZE", "Eye Size", 50, 150, 5, microEye)
+            microSettingIds[#microSettingIds + 1] = microEye
+        end
+        microControls[#microControls + 1] = ToggleSetting(systemEnum.MicroMenu, "vertical",
+            "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORIENTATION_VERTICAL", "Vertical", microOrientation)
+        microControls[#microControls + 1] = ToggleSetting(systemEnum.MicroMenu, "reverse",
+            "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORDER_REVERSE", "Reverse", microOrder)
+        microSettingIds[#microSettingIds + 1] = microOrientation
+        microSettingIds[#microSettingIds + 1] = microOrder
+        Add(Element(systemEnum.MicroMenu, "micromenu",
+            BlizzardLabel("HUD_EDIT_MODE_MICRO_MENU_LABEL", "Micro Menu"), 862,
+            microControls, microSettingIds))
+    end
     if systemEnum.HudTooltip then
         local tooltipElement = Element(systemEnum.HudTooltip, "tooltip",
             BlizzardLabel("HUD_EDIT_MODE_HUD_TOOLTIP_LABEL", "Tooltip"), 863, nil, nil)

@@ -63,6 +63,8 @@ for _, key in ipairs({
     "showGCDBar", "showGCDBarTime", "showGCDBarSpell",
     "empowerColorStages", "empowerStageBlink", "empowerStageBlinkTime",
     "tooltipShowAuraSpellIDs", "tooltipShowAuraCasterNames",
+    -- The appearance preset belongs to the WoW Forever menu skin.
+    "menuAppearancePreset",
 }) do
     assert(not search:find("\tgeneral." .. key .. "\t", 1, true),
         "Classic search index lists a setting with no Classic control: general." .. key)

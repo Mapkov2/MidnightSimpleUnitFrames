@@ -26,7 +26,7 @@ local function SetTitle(key)
     local frame = M.frame
     if not frame then return end
     local spec = M.pages[key]
-    local title = (MSUF.Client and MSUF.Client.IsClassic) and "MSUF (Forever Version)"
+    local title = (MSUF.Client and MSUF.Client.IsForever == true) and "MSUF (Forever Version)"
         or (spec and spec.title) or "MSUF"
     if frame._msuf2TitleKey ~= title then
         frame._msuf2TitleKey = title

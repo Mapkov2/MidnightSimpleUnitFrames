@@ -1,6 +1,9 @@
 local root = assert(arg[1])
 local menu = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/"
-for _, suffix in ipairs({ "", "_Classic" }) do
+-- Every client loads the one unified page; the retired Classic copy must stay gone.
+assert(io.open(menu .. "Pages/MSUF_Menu2_UnitTextureLayer_Classic.lua", "rb") == nil,
+    "retired Classic Texture Layer page is back")
+do
     local ns = { MSUF2 = {}, ExportPublic = function(name, value) _G[name] = value end }
     assert(loadfile(menu .. "MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", ns)
     local M = ns.MSUF2
@@ -12,7 +15,7 @@ for _, suffix in ipairs({ "", "_Classic" }) do
         UP[name] = function() return {} end
     end
     assert(UP.Call == nil, "removed wrapper must not exist in fixture")
-    assert(loadfile(menu .. "Pages/MSUF_Menu2_UnitTextureLayer" .. suffix .. ".lua"))("MidnightSimpleUnitFrames_Options", ns)
+    assert(loadfile(menu .. "Pages/MSUF_Menu2_UnitTextureLayer.lua"))("MidnightSimpleUnitFrames_Options", ns)
     assert(section and section.id == "texture_layer", "Texture Layer section was not registered")
     -- Stop exactly where real UI construction starts. The regression returned
     -- silently before this boundary solely because the unused UP.Call was absent.
@@ -28,4 +31,4 @@ for _, suffix in ipairs({ "", "_Classic" }) do
     assert(not ok and tostring(err):find("Texture Layer requires the UnitPage settings API", 1, true),
         "missing required settings API must fail visibly")
 end
-print("PASS Texture Layer: Mainline/Classic build without removed wrapper; missing required API stays visible")
+print("PASS Texture Layer: unified page builds without removed wrapper; missing required API stays visible")

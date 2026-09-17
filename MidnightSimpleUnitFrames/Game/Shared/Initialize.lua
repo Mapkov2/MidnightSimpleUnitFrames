@@ -39,6 +39,22 @@ local projectIsTBC = tbcID ~= nil and projectID == tbcID
 local isVanilla = projectIsVanilla or tocFlavor == "vanilla"
 local isMists = projectIsMists or tocFlavor == "mists"
 local isTBC = projectIsTBC or tocFlavor == "tbc"
+local projectIsMainline = isRetail
+
+-- WoW Forever runs Blizzard's Mainline code under its own TOC game type
+-- (camelot in the 1.60.1 beta). It reads the _Mainline.toc files and reports
+-- the Standard game mode, so neither tells it apart from Midnight. Blizzard_Game
+-- is a LoadFirst Blizzard addon whose camelot-only file defines
+-- GameEvent.RegisterCamelotEvents, so that function exists before any addon
+-- loads, and only on Forever. An untagged (Mainline) TOC with the marker places
+-- the Mainline build whatever project ID the client reports; a Classic
+-- X-MSUF-Client tag always wins.
+local gameEvent = _G.GameEvent
+local hasCamelotMarker = type(gameEvent) == "table" and type(gameEvent.RegisterCamelotEvents) == "function"
+local isForever = hasCamelotMarker and (tocFlavor == nil or tocFlavor == "")
+if isForever then
+    isRetail, isVanilla, isMists, isTBC = true, false, false, false
+end
 
 local interfaceNumber
 if type(_G.GetBuildInfo) == "function" then
@@ -58,11 +74,18 @@ Client.IsMists = isMists
 Client.IsTBC = isTBC
 Client.IsClassic = isVanilla or isMists or isTBC
 Client.SupportsPetHappiness = isVanilla or isTBC
+-- The aura filter that returns the debuffs this player can dispel. Classic Era
+-- keeps the original meaning of HARMFUL|RAID, the filter Blizzard's own "show
+-- dispellable debuffs" party frames scan there, and does not honour
+-- RAID_PLAYER_DISPELLABLE (dispel visuals stayed dark on Era only, in-game
+-- report 2026-09-16). TBC, Mists and Mainline use RAID_PLAYER_DISPELLABLE.
+Client.DispellableDebuffFilter = isVanilla and "HARMFUL|RAID" or "HARMFUL|RAID_PLAYER_DISPELLABLE"
 Client.SupportsEllesmereEditMode = isRetail
 Client.SupportsBlizzardEditMode = type(_G.Enum) == "table" and type(_G.Enum.EditModeSystem) == "table"
 Client.IsSupported = isRetail or isVanilla or isMists or isTBC
 Client.TOCFlavor = tocFlavor
-Client.ProjectIDRecognized = isRetail or projectIsVanilla or projectIsMists or projectIsTBC
+Client.ProjectIDRecognized = projectIsMainline
+    or (not isForever and (projectIsVanilla or projectIsMists or projectIsTBC))
 -- Capability fact only. Never define a global issecretvalue fallback here:
 -- other addons probe that global to detect the secret-value API.
 Client.HasSecretValueAPI = type(_G.issecretvalue) == "function"
@@ -105,10 +128,9 @@ Client.GameModeName = gameModeName
 -- client counts as Standard, which every client ran before game modes existed.
 Client.IsStandardGameMode = gameMode == nil or standardGameMode == nil or gameMode == standardGameMode
 Client.GameModeRecognized = Client.IsStandardGameMode or KNOWN_GAME_MODES[gameModeName] == true
--- Placeholder until WoW Forever ships. At hour 0 this becomes a comparison of
--- Client.GameModeName with the key the Forever client reports. Never invent a
+-- WoW Forever, from the Blizzard_Game marker above. Never key it on a guessed
 -- Forever project ID, interface number, TOC suffix or Enum.GameMode key.
-Client.IsForever = false
+Client.IsForever = isForever
 
 local unsupportedEvents = Client.UnsupportedEvents or {}
 Client.UnsupportedEvents = unsupportedEvents
@@ -156,6 +178,9 @@ if flavorUnsupportedUnits then
         unsupportedUnits[flavorUnsupportedUnits[i]] = true
     end
 end
+-- WoW Forever ships no arena UI: Blizzard excludes Blizzard_PVPUI and
+-- CompactArenaFrame for its camelot game type. Focus and boss units stay.
+if isForever then unsupportedUnits.arena = true end
 
 -- Arena opponent slots are a client fact, published as Client.MaxArenaOpponents
 -- and _G.MSUF_MAX_ARENA_FRAMES: 3 on Mainline, whatever MAX_ARENA_ENEMIES says
@@ -214,7 +239,7 @@ local MODE_PREDICATES = { "IsStandard", "IsPlunderstorm", "IsWoWHack" }
 local REPORTED_GAME_RULES = { "EditModeDisabled", "PlayerFrameDisabled", "TargetFrameDisabled",
     "UnitFramePvPContextualDisabled" }
 local REPORTED_ADDONS = { "Blizzard_AuraContainer", "Blizzard_CooldownViewer", "Blizzard_EditMode",
-    "Blizzard_CompactRaidFrames", "Blizzard_ArenaUI" }
+    "Blizzard_CompactRaidFrames", "Blizzard_ArenaUI", "Blizzard_PVPUI", "Blizzard_SwingTimer" }
 
 local function JoinOr(list, empty)
     return #list > 0 and table.concat(list, " ") or empty
@@ -253,7 +278,13 @@ function Client.DescribeLines()
         .. tostring(version) .. " (" .. tostring(build) .. "), interface " .. tostring(interfaceNumber)
     lines[#lines + 1] = "TOC X-MSUF-Client " .. ((tocFlavor ~= nil and tocFlavor ~= "") and tocFlavor or "none")
         .. "; family " .. Client.Family .. ", flavor " .. Client.Flavor
+        .. (Client.IsForever and ", WoW Forever" or "")
         .. (Client.IsSupported and "" or " (not supported)")
+    local liveEvent = _G.GameEvent
+    local classOrder = _G.CLASS_SORT_ORDER
+    lines[#lines + 1] = "Forever marker GameEvent.RegisterCamelotEvents at load " .. tostring(hasCamelotMarker)
+        .. ", now " .. tostring(type(liveEvent) == "table" and type(liveEvent.RegisterCamelotEvents) == "function")
+        .. "; CLASS_SORT_ORDER " .. (type(classOrder) == "table" and (#classOrder .. " classes") or "missing")
 
     local gameRules = _G.C_GameRules
     local liveMode
@@ -316,6 +347,7 @@ MSUF.Era = Client.IsEra
 MSUF.Mists = Client.IsMists
 MSUF.TBC = Client.IsTBC
 MSUF.Classic = Client.IsClassic
+MSUF.Forever = Client.IsForever
 
 MSUF.Compat = MSUF.Compat or {}
 MSUF.Compat.Client = Client

@@ -962,23 +962,24 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     end
     local point = conf[prefix .. "Anchor"]
     if not TEXLAYER_PREVIEW_POINTS[point] then point = "TOP" end
+    -- The runtime owns size and edge offsets (sizing modes, frame-edge
+    -- attachment), so the preview uses the same geometry as live frames.
+    local previewScale = scaleFn(1000) / 1000
+    local width, height, offsetX, offsetY
+    if textureRuntime and type(textureRuntime.ResolveLayerSize) == "function"
+        and type(textureRuntime.ResolveLayerOffsets) == "function" then
+        width, height = textureRuntime.ResolveLayerSize(target, mock, conf, prefix, sw, scaleFn(16), previewScale)
+        offsetX, offsetY = textureRuntime.ResolveLayerOffsets(target, mock, conf, prefix, sw, previewScale)
+    else
+        offsetX = scaleFn(tonumber(conf[prefix .. "OffsetX"]) or 0)
+        offsetY = scaleFn(tonumber(conf[prefix .. "OffsetY"]) or 0)
+        width = tonumber(conf[prefix .. "Width"]) or 0
+        width = width > 0 and scaleFn(width) or ((target.GetWidth and target:GetWidth()) or sw)
+        height = tonumber(conf[prefix .. "Height"]) or 16
+        height = height > 0 and scaleFn(height) or ((target.GetHeight and target:GetHeight()) or scaleFn(16))
+    end
     holder:ClearAllPoints()
-    holder:SetPoint(point, target, point, scaleFn(tonumber(conf[prefix .. "OffsetX"]) or 0), scaleFn(tonumber(conf[prefix .. "OffsetY"]) or 0))
-    local width = tonumber(conf[prefix .. "Width"]) or 0
-    if width > 0 then
-        width = scaleFn(width)
-    else
-        width = (target.GetWidth and target:GetWidth()) or sw
-        if not width or width < 1 then width = sw end
-    end
-    local rawHeight = tonumber(conf[prefix .. "Height"])
-    if rawHeight == nil then rawHeight = 16 end
-    local height
-    if rawHeight <= 0 then
-        height = (target.GetHeight and target:GetHeight()) or (mock.GetHeight and mock:GetHeight()) or scaleFn(16)
-    else
-        height = scaleFn(rawHeight)
-    end
+    holder:SetPoint(point, target, point, offsetX, offsetY)
     holder:SetSize(math.max(1, width), math.max(1, height))
     local clipWanted = conf[prefix .. "RoundedClip"] == true
         and _G.MSUF_RoundedUF_Active == true

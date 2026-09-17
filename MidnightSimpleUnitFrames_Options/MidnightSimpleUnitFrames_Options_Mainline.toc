@@ -1,4 +1,4 @@
-## Interface: 120007, 120100, 120105
+## Interface: 120007, 120100, 120105, 16001
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options
 ## Notes: Load-on-demand configuration UI for Midnight Simple Unit Frames.
 ## Author: Mapko
@@ -11,6 +11,7 @@
 
 State\MSUF_ChangelogFull.lua
 MSUF_OptionsLOD_Bootstrap.lua
+Shell\Menu2\MSUF_Menu2_Theme_Forever.lua
 Shell\Menu2\MSUF_Menu2.xml
 Shell\Menu2\Search\MSUF_Menu2_Search.xml
 Shell\Menu2\MSUF_Menu2_AfterSearch.xml

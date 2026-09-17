@@ -145,6 +145,17 @@ local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
     return false
 end
 local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "all" }
+-- WoW Forever runs this Mainline page without arena units, so its Copy To
+-- popup offers no target the client cannot produce (MSUF.Client.SupportsUnit).
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+if IS_FOREVER and type(M.SupportsFrameScope) == "function" then
+    local kept = {}
+    for i = 1, #UF_COPY_TARGET_ORDER do
+        local target = UF_COPY_TARGET_ORDER[i]
+        if target == "all" or M.SupportsFrameScope(target) then kept[#kept + 1] = target end
+    end
+    UF_COPY_TARGET_ORDER = kept
+end
 local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, arena = 50, pet = 38, all = 38 }
 local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", boss = "Boss", arena = "Arena", all = "All" }
 local UNIT_TAB_ORDER = { "player", "target", "boss", "arena", "focus", "pet", "targettarget", "focustarget" }

@@ -26,6 +26,7 @@ ns = ns or _G.MSUF_NS or {}
 local _G = _G
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
+local IS_FOREVER = ns.Client ~= nil and ns.Client.IsForever == true
 
 --- The classic "Global Cooldown" dummy spell: querying its cooldown yields the
 --- player's current GCD window.
@@ -47,6 +48,18 @@ end
 local function IsGCDBarEnabled()
     local g = GeneralDB()
     return g ~= nil and g.showGCDBar == true
+end
+
+--- WoW Forever runs Classic Era spell data, and its client DB (build
+--- 1.60.1.69876) has no row for the dummy spell. GetSpellCooldown then answers
+--- nil, every instant would be skip-cached and the bar could never show, so
+--- Forever arms the bar only while the client knows the spell. Every other
+--- client keeps the unconditional path.
+local function GCDBarSupported()
+    if not IS_FOREVER then return true end
+    local spellAPI = _G.C_Spell
+    local doesSpellExist = spellAPI and spellAPI.DoesSpellExist
+    return type(doesSpellExist) == "function" and doesSpellExist(GCD_SPELL_ID) == true
 end
 
 -- ============================================================
@@ -277,7 +290,7 @@ local driver = CreateFrame("Frame", "MSUF_GCDBarDriver")
 local succeededRegistered = false
 
 local function SyncRegistration()
-    local want = IsGCDBarEnabled()
+    local want = IsGCDBarEnabled() and GCDBarSupported()
     if want == succeededRegistered then return end
     succeededRegistered = want
     if want then
@@ -355,6 +368,7 @@ driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 local ExportPublic = ns.ExportPublic
 
 ExportPublic("MSUF_IsGCDBarEnabled", IsGCDBarEnabled)
+ExportPublic("MSUF_GCDBar_IsSupported", GCDBarSupported)
 ExportPublic("MSUF_GCDBar_SyncRegistration", SyncRegistration)
 
 ExportPublic("MSUF_SetGCDBarEnabled", function(enabled)

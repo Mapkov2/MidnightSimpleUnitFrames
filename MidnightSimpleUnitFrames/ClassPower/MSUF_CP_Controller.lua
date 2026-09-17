@@ -85,6 +85,60 @@ local TIP = CPConst.TIP or {}
 local PT = CPConst.PT or {}
 local POWER_TYPE_TOKENS = CPConst.POWER_TYPE_TOKENS or {}
 
+--- WoW Forever runs this Mainline controller, but Blizzard loads none of the
+--- Retail class resource bars there (Blizzard_UnitFrame.toc excludes the Paladin,
+--- Shard, Arcane Charges, Rogue/Druid combo point, Rune, Essence, Insanity,
+--- Harmony and Stagger bars for camelot). Its only class resource display is the
+--- target-owned ComboFrame: GetComboPoints(unit, "target"), refreshed on
+--- PLAYER_TARGET_CHANGED. Forever therefore routes like the Classic Era provider
+--- (Game/Vanilla/ClassPower.lua): combo points for Rogues and Cat Form Druids,
+--- nothing for any other class, and no Retail specialization index is read.
+--- nil on every other client, so their routing and events stay unchanged.
+local ForeverCP
+if MSUF.Client ~= nil and MSUF.Client.IsForever == true then
+    local NativeUnitPower = UnitPower
+    local GetComboPoints = GetComboPoints
+    local GetShapeshiftFormID = GetShapeshiftFormID
+    local supportsEvent = MSUF.Client.SupportsEvent
+    ForeverCP = {
+        --- Combo points can move to a new target without a target swap.
+        comboTargetEvent = type(supportsEvent) == "function" and supportsEvent("COMBO_TARGET_CHANGED") == true,
+        Client = {
+            NeedsTargetChanged = function(powerType) return powerType == PT.ComboPoints end,
+        },
+    }
+
+    function ForeverCP.UnitPower(unit, powerType, unmodified)
+        if powerType == PT.ComboPoints and type(GetComboPoints) == "function" then
+            return GetComboPoints("player", "target")
+        end
+        return NativeUnitPower(unit, powerType, unmodified)
+    end
+
+    function ForeverCP.GetClassPowerType()
+        if PLAYER_CLASS == "ROGUE" then
+            return PT.ComboPoints, CPK.MODE.SEGMENTED, false
+        end
+        if PLAYER_CLASS == "DRUID" then
+            local primaryPower = UnitPowerType("player")
+            if NotSecret(primaryPower) then
+                if primaryPower == PT.Energy then return PT.ComboPoints, CPK.MODE.SEGMENTED, false end
+            elseif GetShapeshiftFormID and GetShapeshiftFormID() == 1 then
+                --- DRUID_CAT_FORM is 1 on Forever (Blizzard_FrameXMLBase Constants.lua).
+                return PT.ComboPoints, CPK.MODE.SEGMENTED, false
+            end
+        end
+        return nil, CPK.MODE.NONE, false
+    end
+
+    --- Target-owned combo point changes can arrive with the Energy token.
+    function ForeverCP.AcceptPowerToken(powerType, powerToken, expectedToken)
+        if powerType ~= PT.ComboPoints then return powerToken == expectedToken end
+        return powerToken == "COMBO_POINTS"
+            or ((PLAYER_CLASS == "ROGUE" or PLAYER_CLASS == "DRUID") and powerToken == "ENERGY")
+    end
+end
+
 --- Cached split registries (load-time only; avoids repeated global table lookups
 --- and keeps the post-split core wiring easier to follow).
 
@@ -143,6 +197,8 @@ local CPConfig = CP_CallBuilder(CPCoreBuilders.CONTROLLER_CONFIG, {
     GetSpec = GetSpec,
     NotSecret = NotSecret,
     NeedsAltManaBar = function() return NeedsAltManaBar() end,
+    GetClassPowerType = ForeverCP and ForeverCP.GetClassPowerType or nil,
+    Client = ForeverCP and ForeverCP.Client or nil,
 })
 local _cpDB = CPConfig._cpDB
 local CP_GetModeEventProfile = CPConfig.GetModeEventProfile
@@ -715,7 +771,7 @@ do
         CPK = CPK,
         PT = PT,
         PLAYER_CLASS = PLAYER_CLASS,
-        UnitPower = UnitPower,
+        UnitPower = ForeverCP and ForeverCP.UnitPower or UnitPower,
         UnitPartialPower = UnitPartialPower,
         UnitPowerDisplayMod = UnitPowerDisplayMod,
         C_UnitAuras = C_UnitAuras,
@@ -1684,6 +1740,7 @@ do
             OnWarlockCastEnd = OnWarlockCastEnd,
             OnTipOfTheSpearSpellCast = OnTipOfTheSpearSpellCast,
             OnSpellTrackerReset = OnSpellTrackerReset,
+            AcceptPowerToken = ForeverCP and ForeverCP.AcceptPowerToken or nil,
         })
     if runtime then
         OnPowerUpdate = runtime.OnPowerUpdate
@@ -1748,6 +1805,18 @@ local function CP_SetEventBound(frame, event, want, unit)
     end
 end
 
+--- WoW Forever: target-owned combo points refresh when the target changes.
+--- Never bound on other clients.
+if ForeverCP then
+    function ForeverCP.SetTargetEventsBound(want)
+        want = want == true
+        CP_SetEventBound(eventFrame, "PLAYER_TARGET_CHANGED", want)
+        if ForeverCP.comboTargetEvent then
+            CP_SetEventBound(eventFrame, "COMBO_TARGET_CHANGED", want)
+        end
+    end
+end
+
 --- The CP.CDMWidth* sync helpers are installed by the CONTROLLER_SURFACE builder
 --- above; only their event (un)binding stays here next to the event frame.
 function CP.CDMWidthSetEvents()
@@ -1775,6 +1844,8 @@ local function CP_ShouldUseFrequentPowerEvents()
     return mode == CPK.MODE.CONTINUOUS
         or mode == CPK.MODE.FRACTIONAL
         or (mode == CPK.MODE.SEGMENTED and CP.powerType == PT.Essence)
+        --- Forever combo points follow Blizzard's ComboFrame (UNIT_POWER_FREQUENT).
+        or (ForeverCP ~= nil and mode == CPK.MODE.SEGMENTED and CP.powerType == PT.ComboPoints)
 end
 
 CP_ShouldUseLiteBindings = function()
@@ -1813,6 +1884,7 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", false)
         CP_SetEventBound(eventFrame, "PLAYER_DEAD", false)
         CP_SetEventBound(eventFrame, "PLAYER_ALIVE", false)
+        if ForeverCP then ForeverCP.SetTargetEventsBound(false) end
         CP.CDMWidthSetEvents()
         return
     end
@@ -1838,6 +1910,7 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", true)
         CP_SetEventBound(eventFrame, "PLAYER_DEAD", true)
         CP_SetEventBound(eventFrame, "PLAYER_ALIVE", true)
+        if ForeverCP then ForeverCP.SetTargetEventsBound(CP.visible and CP.powerType == PT.ComboPoints) end
         CP.CDMWidthSetEvents()
         return
     end
@@ -1886,6 +1959,7 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantRegen)
     CP_SetEventBound(eventFrame, "PLAYER_DEAD", wantDeadAlive)
     CP_SetEventBound(eventFrame, "PLAYER_ALIVE", wantDeadAlive)
+    if ForeverCP then ForeverCP.SetTargetEventsBound(CP.visible and profile.targetChanged == true) end
     CP.CDMWidthSetEvents()
 end
 
@@ -2095,6 +2169,15 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
     or event == "UPDATE_SHAPESHIFT_FORM"
     then
         CP_HandleRareStructuralEvent(true)
+        return
+    end
+
+    --- WoW Forever only (never registered elsewhere): target-owned combo points
+    --- change with the target, or move to a new one, without a power event.
+    if event == "PLAYER_TARGET_CHANGED" or event == "COMBO_TARGET_CHANGED" then
+        if CP.visible and CP.powerType == PT.ComboPoints then
+            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+        end
         return
     end
 

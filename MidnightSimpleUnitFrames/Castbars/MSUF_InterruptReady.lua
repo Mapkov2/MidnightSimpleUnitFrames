@@ -9,6 +9,7 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
 local SpellAPI = _G.C_Spell
 local TimerAPI = _G.C_Timer
@@ -39,9 +40,15 @@ local SECONDARY_INTERRUPT_SPELLS = { PALADIN = 31935, WARRIOR = 386071 }
 --- (Rebuke, Wind Shear, Counter Shot, Skull Bash on Vanilla/TBC), so each
 --- era gets its own table. A class without an era interrupt has no entry and
 --- therefore no indicator instead of a permanently "ready" unknown spell.
+--- WoW Forever is a Mainline client with Classic Era spell data (build
+--- 1.60.1.69876): none of the Retail interrupt IDs exist there, Paladins and
+--- Hunters have no interrupt, so it takes the Vanilla table. Each of its IDs
+--- exists on Forever in the same skill line or talent as on Era, and
+--- the ranks of Kick, Pummel, Earth Shock and Spell Lock share one cooldown
+--- category.
 do
     local client = MSUF and MSUF.Client
-    if client and (client.IsVanilla == true or client.IsTBC == true) then
+    if client and (client.IsVanilla == true or client.IsTBC == true or IS_FOREVER) then
         INTERRUPT_SPELLS = {
             DRUID = { DEFAULT = 16979 },   -- Feral Charge (interrupts and locks the school)
             HUNTER = client.IsTBC == true and { DEFAULT = 34490 } or {}, -- Silencing Shot (TBC Marksmanship)

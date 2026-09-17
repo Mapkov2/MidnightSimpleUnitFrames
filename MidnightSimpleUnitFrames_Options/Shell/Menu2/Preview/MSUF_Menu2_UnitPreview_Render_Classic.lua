@@ -1271,11 +1271,31 @@ local function PreviewTextureLayerConfigured(conf)
     end
     return false
 end
+local function TextureLayerPreviewData(conf, unitKey, data)
+    if type(conf) ~= "table" or type(data) ~= "table" then return data end
+    local slots = MenuState.unitTexLayerSlot
+    local slot = slots and tonumber(slots[unitKey]) or 1
+    if not slot or slot < 1 or slot > #TEXLAYER_PREVIEW_PREFIXES then slot = 1 end
+    local prefix = TEXLAYER_PREVIEW_PREFIXES[slot]
+    if conf[prefix .. "Enabled"] ~= true
+        or (conf[prefix .. "HealthCondition"] ~= "BELOW"
+            and conf[prefix .. "HealthLowAlphaEnabled"] ~= true) then
+        return data
+    end
+    local threshold = tonumber(conf[prefix .. "HealthThreshold"]) or 0.35
+    if threshold < 0.01 then threshold = 0.01 elseif threshold > 1 then threshold = 1 end
+    local previewHP = math.max(0.01, threshold * 0.5)
+    local copy = {}
+    for key, value in pairs(data) do copy[key] = value end
+    copy.hp = previewHP
+    if tonumber(copy.hpMax) then copy.hpCur = math.floor((copy.hpMax * previewHP) + 0.5) end
+    return copy
+end
 --- Decorative texture layers as their own preview layer (3 slots). Geometry is
 --- scaled for the viewport, while visibility, strata, parent-alpha behavior and
 --- texture resolution are delegated to the same runtime helpers used by live
 --- frames. Kept out of Preview.Refresh, which sits at the 200-local limit.
-local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scaleFn, sw, baseLevel, setTexture, placeHandle, classR, classG, classB)
+local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scaleFn, sw, baseLevel, setTexture, placeHandle, classR, classG, classB, healthR, healthG, healthB, healthPct)
     local prefix = TEXLAYER_PREVIEW_PREFIXES[slot]
     local holder = mock and mock.texLayers and mock.texLayers[slot]
     if not holder then return end
@@ -1283,31 +1303,18 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     local textureRuntime = MSUF and MSUF.TextureLayer
     local runtimeVisible = conf and (not (textureRuntime and type(textureRuntime.LayerVisible) == "function")
         or textureRuntime.LayerVisible(conf, prefix) == true)
-    if not (wanted and conf and conf[prefix .. "Enabled"] == true and runtimeVisible) then
+    local threshold = tonumber(conf and conf[prefix .. "HealthThreshold"]) or 0.35
+    if threshold < 0.01 then threshold = 0.01 elseif threshold > 1 then threshold = 1 end
+    local healthVisible = not conf or conf[prefix .. "HealthCondition"] ~= "BELOW"
+        or (tonumber(healthPct) or 1) < threshold
+    if not (wanted and conf and conf[prefix .. "Enabled"] == true and runtimeVisible and healthVisible) then
+        if textureRuntime and type(textureRuntime.ApplySoftEdgeMask) == "function" then
+            textureRuntime.ApplySoftEdgeMask(holder, {}, 0)
+        end
         holder:Hide()
         if handle then handle:Hide() end
         return
     end
-    -- Core loads before the Options addon. Use its complete cold-path contract
-    -- for frame state, anchor/size/offset geometry and visual styling so the
-    -- preview cannot drift from live behavior when a new field is added.
-    if textureRuntime
-        and type(textureRuntime.ApplyLayerFrameState) == "function"
-        and type(textureRuntime.ApplyLayerLayout) == "function"
-        and type(textureRuntime.ApplyLayerVisual) == "function"
-    then
-        textureRuntime.ApplyLayerFrameState(mock, holder, conf, prefix)
-        local _, width, height = textureRuntime.ApplyLayerLayout(
-            holder, mock, conf, prefix, sw, scaleFn(16), scaleFn(1))
-        textureRuntime.ApplyLayerVisual(mock, holder, conf, prefix, nil, classR, classG, classB)
-        holder:Show()
-        if handle then
-            handle:SetSize(math.max(18, width + 8), math.max(18, height + 8))
-            if placeHandle then placeHandle(handle, holder) end
-        end
-        return
-    end
-    -- Compatibility fallback for an unexpectedly partial core load.
     if textureRuntime and type(textureRuntime.ApplyLayerStrata) == "function" then
         textureRuntime.ApplyLayerStrata(mock, holder, conf[prefix .. "Strata"])
     end
@@ -1333,28 +1340,24 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     end
     local point = conf[prefix .. "Anchor"]
     if not TEXLAYER_PREVIEW_POINTS[point] then point = "TOP" end
-    local offsetX, offsetY
-    if textureRuntime and type(textureRuntime.ResolveLayerOffsets) == "function" then
-        offsetX, offsetY = textureRuntime.ResolveLayerOffsets(target, mock, conf, prefix, sw, scaleFn(16), scaleFn(1))
+    -- The runtime owns size and edge offsets (sizing modes, frame-edge
+    -- attachment), so the preview uses the same geometry as live frames.
+    local previewScale = scaleFn(1000) / 1000
+    local width, height, offsetX, offsetY
+    if textureRuntime and type(textureRuntime.ResolveLayerSize) == "function"
+        and type(textureRuntime.ResolveLayerOffsets) == "function" then
+        width, height = textureRuntime.ResolveLayerSize(target, mock, conf, prefix, sw, scaleFn(16), previewScale)
+        offsetX, offsetY = textureRuntime.ResolveLayerOffsets(target, mock, conf, prefix, sw, previewScale)
     else
         offsetX = scaleFn(tonumber(conf[prefix .. "OffsetX"]) or 0)
         offsetY = scaleFn(tonumber(conf[prefix .. "OffsetY"]) or 0)
+        width = tonumber(conf[prefix .. "Width"]) or 0
+        width = width > 0 and scaleFn(width) or ((target.GetWidth and target:GetWidth()) or sw)
+        height = tonumber(conf[prefix .. "Height"]) or 16
+        height = height > 0 and scaleFn(height) or ((target.GetHeight and target:GetHeight()) or scaleFn(16))
     end
     holder:ClearAllPoints()
     holder:SetPoint(point, target, point, offsetX, offsetY)
-    local width, height
-    if textureRuntime and type(textureRuntime.ResolveLayerSize) == "function" then
-        width, height = textureRuntime.ResolveLayerSize(target, mock, conf, prefix, sw, scaleFn(16), scaleFn(1))
-    else
-        width = tonumber(conf[prefix .. "Width"]) or 0
-        if width > 0 then
-            width = scaleFn(width)
-        else
-            width = (target.GetWidth and target:GetWidth()) or sw
-            if not width or width < 1 then width = sw end
-        end
-        height = scaleFn(tonumber(conf[prefix .. "Height"]) or 16)
-    end
     holder:SetSize(math.max(1, width), math.max(1, height))
     local clipWanted = conf[prefix .. "RoundedClip"] == true
         and _G.MSUF_RoundedUF_Active == true
@@ -1402,6 +1405,13 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     local b = tonumber(conf[prefix .. "ColorB"]) or 1
     if conf[prefix .. "ColorMode"] == "CLASS" and classR then
         r, g, b = classR, classG or 1, classB or 1
+    elseif conf[prefix .. "ColorMode"] == "HEALTH" and healthR then
+        local aboveMode = conf[prefix .. "HealthAboveMode"]
+        if (tonumber(healthPct) or 1) < threshold or (aboveMode ~= "CLASS" and aboveMode ~= "CUSTOM") then
+            r, g, b = healthR, healthG or 1, healthB or 1
+        elseif aboveMode == "CLASS" and classR then
+            r, g, b = classR, classG or 1, classB or 1
+        end
     end
     local CreateColor = _G.CreateColor
     if tex.SetGradient and CreateColor then
@@ -1414,6 +1424,7 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
         _G.MSUF_RoundedUF_OnDispelOverlayChanged(mock, tex)
         tex._msufTextureLayerRoundedClip = true
     end
+    local featherTextures = { tex }
     -- Bars-style multi-direction gradient: one overlay per active edge, exactly
     -- mirroring UnitFrames/Effects/MSUF_UF_TextureLayer.lua.
     local gradientOn = conf[prefix .. "GradientEnabled"] == true
@@ -1458,11 +1469,20 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
             elseif overlay.SetVertexColor then
                 overlay:SetVertexColor(r2, g2, b2, 0.5)
             end
+            featherTextures[#featherTextures + 1] = overlay
             overlay:Show()
         end
     end
+    if textureRuntime and type(textureRuntime.ApplySoftEdgeMask) == "function" then
+        textureRuntime.ApplySoftEdgeMask(holder, featherTextures, conf[prefix .. "EdgeSoftness"])
+    end
     local alpha = tonumber(conf[prefix .. "Alpha"]) or 1
     if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+    if conf[prefix .. "HealthLowAlphaEnabled"] == true
+        and (tonumber(healthPct) or 1) < threshold then
+        alpha = tonumber(conf[prefix .. "HealthLowAlpha"]) or 1
+        if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+    end
     holder:SetAlpha(alpha)
     holder:Show()
     if handle then
@@ -1471,9 +1491,14 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     end
 end
 
-local function RenderTextureLayerPreview(box, mock, conf, wanted, scaleFn, sw, baseLevel, setTexture, placeHandle, classR, classG, classB)
+local function RenderTextureLayerPreview(box, mock, conf, wanted, scaleFn, sw, baseLevel, setTexture, placeHandle, renderState, data, health)
+    local classR, classG, classB = renderState.ClassColor(data.class)
+    local gradientColor = renderState.GradientPreviewColor
+        or (Preview.Model and Preview.Model.GradientPreviewColor) or UNIT_RENDER_FALLBACKS.HealthColor
+    local healthR, healthG, healthB = gradientColor(data.hp, health)
     for slot = 1, #TEXLAYER_PREVIEW_PREFIXES do
-        RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scaleFn, sw, baseLevel, setTexture, placeHandle, classR, classG, classB)
+        RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scaleFn, sw, baseLevel, setTexture, placeHandle,
+            classR, classG, classB, healthR, healthG, healthB, data.hp)
     end
 end
 
@@ -1676,6 +1701,7 @@ function Preview.Refresh(box, reason)
         powerFrac = animPower
         data = CopyPreviewAnimationData(box, data, animHp, powerFrac)
     end
+    data = TextureLayerPreviewData(conf, key, data)
     local cpH = classPowerOn and (tonumber(bars.classPowerHeight) or 4) or 0
     local displayPowerToken = box._playerManaSourcePreviewActive and "MANA" or data.powerToken
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
@@ -3060,7 +3086,8 @@ function Preview.Refresh(box, reason)
     end
     -- Health, power and portrait targets now have their final preview geometry.
     -- Texture layers stamp after them just like Factory.Apply does live.
-    RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle, R.ClassColor(data.class))
+    RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle,
+        R, data, runtimeSpec and runtimeSpec.health)
     if castPreviewVisible then
         mock.cast:Show()
         -- The live castbar is not a child of the scaled unit frame. Preserve

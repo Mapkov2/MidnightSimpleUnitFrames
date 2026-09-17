@@ -69,6 +69,11 @@ assert(namespace.Client.IsTBC == (expect == "TBC"), "wrong TBC flag")
 assert(namespace.Client.IsRetail == (expect == "Mainline"), "wrong Retail flag")
 assert(namespace.Client.Family == (expect == "Mainline" and "Mainline" or spec.classic and "Classic" or "Unknown"),
     "wrong code family: " .. tostring(namespace.Client.Family))
+-- Classic Era scans dispellable debuffs with HARMFUL|RAID; every other client
+-- with RAID_PLAYER_DISPELLABLE.
+assert(namespace.Client.DispellableDebuffFilter
+        == (expect == "Vanilla" and "HARMFUL|RAID" or "HARMFUL|RAID_PLAYER_DISPELLABLE"),
+    "wrong dispellable debuff filter: " .. tostring(namespace.Client.DispellableDebuffFilter))
 -- The harness defines no C_GameRules, like every client before game modes: Standard.
 assert(namespace.Client.IsStandardGameMode == true and namespace.Client.GameModeRecognized == true,
     "a client without C_GameRules must count as the Standard game mode")
@@ -176,5 +181,31 @@ assert(WarningIsLegacy({ IsClassic = false }, 120001) == true,
     "only Client.IsSupported == false may silence the warning")
 assert(WarningIsLegacy({ IsClassic = false, IsSupported = false }, 11600) == false,
     "an unrecognized client got the old Retail client warning")
+
+-- The Mainline TOC loads the Retail warning. WoW Forever reports a 1.x
+-- interface number but runs the 12.1 aura runtime, so it never warns, and
+-- neither does any client with Blizzard_AuraContainer loaded.
+if expect == "Mainline" then
+    local mainlineWarningChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Features/Versioning/MSUF_ClientVersionWarning.lua"))
+    local function MainlineWarningIsLegacy(client, interface, auraContainerLoaded)
+        local savedAddOns = C_AddOns
+        C_AddOns = { IsAddOnLoaded = function(name) return auraContainerLoaded == true and name == "Blizzard_AuraContainer" end }
+        GetBuildInfo = function() return "test", "test", "test", interface end
+        local wired = 0
+        local warningNamespace = { Client = client, ExportPublic = function() end,
+            MSUF_EventBus = { Register = function() wired = wired + 1 end } }
+        mainlineWarningChunk(addonName, warningNamespace)
+        C_AddOns, GetBuildInfo = savedAddOns, detectedGetBuildInfo
+        local legacy = warningNamespace.ClientVersionWarning.IsLegacyClient()
+        assert(wired == (legacy and 1 or 0), "Mainline old-client warning wiring does not match its classification")
+        return legacy
+    end
+    assert(MainlineWarningIsLegacy({ IsForever = false }, 120001, false) == true, "Mainline 12.0 stopped warning")
+    assert(MainlineWarningIsLegacy(nil, 120001, false) == true, "Mainline without a client table stopped warning")
+    assert(MainlineWarningIsLegacy({ IsForever = false }, MIN_INTERFACE, false) == false, "Mainline 12.1 warned")
+    assert(MainlineWarningIsLegacy({ IsForever = true }, 16001, false) == false, "WoW Forever got the 12.1 warning")
+    assert(MainlineWarningIsLegacy({ IsForever = false }, 16001, true) == false,
+        "a client with Blizzard_AuraContainer loaded got the 12.1 warning")
+end
 
 print("client bootstrap smoke passed: " .. flavor)

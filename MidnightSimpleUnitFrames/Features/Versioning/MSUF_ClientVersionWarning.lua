@@ -43,8 +43,19 @@ do
 end
 
 --- Only a positively detected pre-12.1 build warns. An unreadable build stays
---- silent so odd environments never get a popup they cannot act on.
-local isLegacyClient = (interfaceNumber ~= nil) and (interfaceNumber < MIN_INTERFACE) or false
+--- silent so odd environments never get a popup they cannot act on. WoW Forever
+--- reports a 1.x interface number but runs the 12.1.5 aura runtime, so neither
+--- a Forever client nor a client with Blizzard_AuraContainer loaded warns.
+local hasNativeAuraRuntime
+do
+    local client = MSUF.Client
+    local addOns = _G.C_AddOns
+    local isAddOnLoaded = type(addOns) == "table" and addOns.IsAddOnLoaded or nil
+    hasNativeAuraRuntime = (type(client) == "table" and client.IsForever == true)
+        or (type(isAddOnLoaded) == "function" and isAddOnLoaded("Blizzard_AuraContainer") == true)
+end
+local isLegacyClient = (interfaceNumber ~= nil) and (interfaceNumber < MIN_INTERFACE)
+    and not hasNativeAuraRuntime or false
 
 local function ClientInterfaceNumber()
     return interfaceNumber

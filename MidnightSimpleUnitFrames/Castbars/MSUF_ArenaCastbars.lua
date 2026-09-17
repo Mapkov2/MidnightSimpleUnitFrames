@@ -17,6 +17,8 @@ end
 -- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
 -- 0..5 and fall back to 3 when the client initializer did not run.
 local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
+-- WoW Forever runs this Mainline file without arena units (MSUF.Client.SupportsUnit).
+local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
     and type(_G.C_EventUtils.IsEventValid) == "function"
     and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
@@ -645,6 +647,14 @@ local function SetArenaCastbarsEnabled(enabled)
 end
 
 local function ApplyArenaCastbarsEnabled()
+    -- Every castbar settings refresh lands here. Without arena units on Forever
+    -- the pool is never built, and the profile keeps its arena castbar backend
+    -- instead of being rewritten to HIDE, so a profile taken back to Midnight
+    -- still shows its arena castbars.
+    if IS_FOREVER and not (MSUF.Client.SupportsUnit and MSUF.Client.SupportsUnit("arena")) then
+        if _G.MSUF_ArenaCastbars_SyncLifecycle then _G.MSUF_ArenaCastbars_SyncLifecycle(false) end
+        return
+    end
     local enabled = ArenaCastbarsEnabled()
     SetArenaCastbarsEnabled(enabled)
     if _G.MSUF_ArenaCastbars_SyncLifecycle then _G.MSUF_ArenaCastbars_SyncLifecycle(enabled) end
