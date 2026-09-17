@@ -194,6 +194,8 @@ jobs:
             throw "tools/classic-client-matrix.tsv must give every client at least one CurseForge game version and no blank names. Got: [$($gameVersionNames -join ', ')]"
           }
           "game_versions=$($gameVersionNames -join ', ')" >> $env:GITHUB_OUTPUT
+          $gameVersionNames = [string[]]$gameVersionNames
+          Write-Host "CurseForge upload $($env:CLASSIC_RELEASE_NAME) type=$($env:CLASSIC_RELEASE_TYPE) zip=$($zip.Name) bytes=$($zip.Length) versions=[$($gameVersionNames -join ', ')]"
           $metadata = [ordered]@{
             changelog = $changelog
             changelogType = "html"
@@ -208,13 +210,19 @@ jobs:
           }
           $form = @{
             metadata = $metadata
-            file = $zip
+            file = Get-Item -LiteralPath $zip.FullName
           }
-          $result = Invoke-RestMethod `
-            -Method Post `
-            -Uri "https://wow.curseforge.com/api/projects/$projectId/upload-file" `
-            -Headers $headers `
-            -Form $form
+          try {
+            $result = Invoke-RestMethod `
+              -Method Post `
+              -Uri "https://wow.curseforge.com/api/projects/$projectId/upload-file" `
+              -Headers $headers `
+              -Form $form
+          } catch {
+            $detail = $_.ErrorDetails.Message
+            if ([string]::IsNullOrWhiteSpace($detail)) { $detail = [string]$_ }
+            throw "CurseForge upload failed for '$($env:CLASSIC_RELEASE_NAME)' ($($env:CLASSIC_RELEASE_TYPE), versions [$($gameVersionNames -join ', ')]): $detail"
+          }
 
           $fileId = if ($result -and $result.id) { [string]$result.id } else { "" }
           if ([string]::IsNullOrWhiteSpace($fileId)) {
