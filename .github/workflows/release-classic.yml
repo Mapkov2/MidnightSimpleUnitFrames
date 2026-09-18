@@ -16,6 +16,7 @@ jobs:
     env:
       CLASSIC_RELEASE_TAG: ${{ github.ref_name }}
       CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
+      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
 
     steps:
       - name: Check out Classic release tag
@@ -180,19 +181,18 @@ jobs:
             throw "Classic CurseForge HTML changelog is empty."
           }
 
-          # CurseForge lists the Retail client first, then Classic clients from the oldest game generation up.
-          $versionClients = @($clientMatrix | Sort-Object -Property @(
-            @{ Expression = { $_.IsClassic -ceq "true" } },
-            @{ Expression = { @(([string]$_.Interfaces -split ',') | ForEach-Object { [int]$_.Trim() } | Sort-Object)[0] } }
-          ))
-          $gameVersionNames = @(
-            foreach ($client in $versionClients) {
-              foreach ($versionName in ([string]$client.CurseForgeVersions -split ',')) { $versionName.Trim() }
-            }
-          )
-          if ($gameVersionNames.Count -eq 0 -or @($gameVersionNames | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
-            throw "tools/classic-client-matrix.tsv must give every client at least one CurseForge game version and no blank names. Got: [$($gameVersionNames -join ', ')]"
+          # The matrix names the game versions; "1.6*" follows the newest WoW Forever
+          # patch CurseForge lists. Without the list, exact names upload unchanged.
+          $availableNames = @()
+          try {
+            $versionResponse = Invoke-RestMethod -Method Get -Uri "https://wow.curseforge.com/api/game/versions" `
+              -Headers @{ "X-Api-Token" = $env:CF_API_KEY; Accept = "application/json" }
+            $availableNames = @(foreach ($entry in $versionResponse) { [string]$entry.name })
+          } catch {
+            Write-Host "::warning::Could not read the CurseForge game version list: $_"
           }
+          $gameVersionNames = @(& "./.github/scripts/resolve_release_game_versions.ps1" `
+            -ClientMatrixPath "tools/classic-client-matrix.tsv" -AvailableNames $availableNames)
           "game_versions=$($gameVersionNames -join ', ')" >> $env:GITHUB_OUTPUT
           $gameVersionNames = [string[]]$gameVersionNames
           Write-Host "CurseForge upload $($env:CLASSIC_RELEASE_NAME) type=$($env:CLASSIC_RELEASE_TYPE) zip=$($zip.Name) bytes=$($zip.Length) versions=[$($gameVersionNames -join ', ')]"
@@ -232,6 +232,75 @@ jobs:
           "file_id=$fileId" >> $env:GITHUB_OUTPUT
           Write-Host "CurseForge Classic $($env:CLASSIC_RELEASE_TYPE) upload accepted: project $projectId, file $fileId, release '$env:CLASSIC_RELEASE_NAME', versions [$($gameVersionNames -join ', ')]."
 
+      # Wago takes the same zip. Each game version goes to the Wago flavor whose
+      # public patch list names it, so WoW Forever, Midnight and the Classic
+      # clients are all set by the upload. Skipped without the WAGO_API_TOKEN secret.
+      - name: Upload Classic release to Wago
+        id: wago
+        if: env.WAGO_API_TOKEN != ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $tocContent = Get-Content -LiteralPath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc" -Raw
+          $idMatches = [regex]::Matches($tocContent, "(?m)^##\s+X-Wago-ID:\s*(.+?)\s*$")
+          if ($idMatches.Count -ne 1) {
+            throw "Expected exactly one X-Wago-ID field in the core Mainline TOC; found $($idMatches.Count)."
+          }
+          $projectId = $idMatches[0].Groups[1].Value.Trim()
+
+          $zips = @(Get-ChildItem -LiteralPath "dist" -Filter "*.zip" -File)
+          if ($zips.Count -ne 1) {
+            throw "Expected exactly one validated Classic release zip; found $($zips.Count)."
+          }
+          $zip = $zips[0]
+          $changelogPath = "dist/RELEASE_NOTES_CLASSIC.md"
+          if (-not (Test-Path -LiteralPath $changelogPath -PathType Leaf)) {
+            throw "Classic release notes are missing: $changelogPath"
+          }
+
+          $gameData = Invoke-RestMethod -Method Get -Uri "https://addons.wago.io/api/data/game"
+          $flavors = @($gameData.patches.PSObject.Properties)
+          $availableNames = @(foreach ($flavor in $flavors) { foreach ($patch in $flavor.Value) { [string]$patch } })
+          $gameVersionNames = @(& "./.github/scripts/resolve_release_game_versions.ps1" `
+            -ClientMatrixPath "tools/classic-client-matrix.tsv" -AvailableNames $availableNames)
+
+          $metadata = [ordered]@{
+            label = $env:CLASSIC_RELEASE_NAME
+            stability = $env:CLASSIC_RELEASE_TYPE
+            changelog = Get-Content -LiteralPath $changelogPath -Raw
+          }
+          $assigned = @()
+          foreach ($flavor in $flavors) {
+            $patches = @($gameVersionNames | Where-Object { @($flavor.Value) -ccontains $_ })
+            if ($patches.Count -gt 0) {
+              $metadata["supported_$($flavor.Name)_patches"] = [string[]]$patches
+              $assigned += "$($flavor.Name)=$($patches -join '/')"
+            }
+          }
+          if ($assigned.Count -eq 0) {
+            throw "Wago lists none of [$($gameVersionNames -join ', ')]."
+          }
+          if ($gameData.stability_values -cnotcontains $metadata.stability) {
+            throw "Wago does not accept stability '$($metadata.stability)'."
+          }
+
+          $form = @{
+            metadata = ($metadata | ConvertTo-Json -Depth 5 -Compress)
+            file = Get-Item -LiteralPath $zip.FullName
+          }
+          try {
+            Invoke-RestMethod -Method Post -Uri "https://addons.wago.io/api/projects/$projectId/version" `
+              -Headers @{ Authorization = "Bearer $env:WAGO_API_TOKEN"; Accept = "application/json" } `
+              -Form $form | Out-Null
+          } catch {
+            $detail = $_.ErrorDetails.Message
+            if ([string]::IsNullOrWhiteSpace($detail)) { $detail = [string]$_ }
+            throw "Wago upload failed for '$($env:CLASSIC_RELEASE_NAME)' ($($assigned -join ', ')): $detail"
+          }
+          "patches=$($assigned -join ', ')" >> $env:GITHUB_OUTPUT
+          Write-Host "Wago upload accepted: project $projectId, '$env:CLASSIC_RELEASE_NAME' ($($metadata.stability)), patches [$($assigned -join ', ')]."
+
       - name: Write Classic release summary
         shell: pwsh
         run: |
@@ -244,5 +313,6 @@ jobs:
           - CurseForge project: ``1384660``
           - CurseForge file: ``${{ steps.curseforge.outputs.file_id }}``
           - Game versions: ``${{ steps.curseforge.outputs.game_versions }}``
+          - Wago patches: ``${{ steps.wago.outputs.patches || 'not uploaded' }}``
           - Release type: ``$env:CLASSIC_RELEASE_TYPE``
           "@ >> $env:GITHUB_STEP_SUMMARY
