@@ -1291,6 +1291,8 @@ if ($lua) {
     if ($LASTEXITCODE -ne 0) { throw "Forever factory profile CBOR smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_profile_import_persist_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Forever profile persist smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_savedvariables_bind_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Forever SavedVariables bind smoke failed" }
     foreach ($flavor in @($clientSuffixes) + @("Forever")) {
         Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_spec_profile_smoke.lua") $root $flavor
         if ($LASTEXITCODE -ne 0) { throw "Forever spec profile smoke failed: $flavor" }

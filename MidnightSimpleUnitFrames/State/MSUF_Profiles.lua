@@ -264,6 +264,10 @@ local function MSUF_ProfileIO_FlushForeverSavedProfile()
 end
 ExportPublic("MSUF_FlushProfileSavedVariables", MSUF_ProfileIO_FlushForeverSavedProfile)
 function MSUF_InitProfiles()
+    local firstLoad = MSUF.FirstLoad6
+    if firstLoad and firstLoad.savedVariablesBound ~= true and MSUF_ProfileIO_ClientIsForever() then
+        return
+    end
     local previousActive = type(MSUF_ActiveProfile) == "string" and MSUF_ActiveProfile or nil
     local previousDB = type(MSUF_DB) == "table" and MSUF_DB or nil
     local hadEstablishedOwner = previousActive ~= nil and previousActive ~= "" and previousDB ~= nil

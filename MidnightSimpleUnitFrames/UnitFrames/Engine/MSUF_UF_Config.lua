@@ -152,12 +152,21 @@ local NPC_COLOR_DEFAULTS = {
 }
 
 local dbInitialized = false
+local boundDB
+local pendingDB
 
 --- Config can be asked for specs before every module has finished loading.
 --- EnsureDB centralizes that bootstrap without making the hot dispatch layer
 --- know about profile initialization.
 local function EnsureDB()
-  if not dbInitialized or type(_G.MSUF_DB) ~= "table" then
+  local current = rawget(_G, "MSUF_DB")
+  local firstLoad = MSUF.FirstLoad6
+  if firstLoad and firstLoad.savedVariablesBound ~= true and MSUF.Client and MSUF.Client.IsForever == true then
+    if type(current) == "table" then return current end
+    if type(pendingDB) ~= "table" then pendingDB = {} end
+    return pendingDB
+  end
+  if not dbInitialized or type(current) ~= "table" or boundDB ~= current then
     if type(_G.MSUF_InitProfiles) == "function" then
       _G.MSUF_InitProfiles()
     end
@@ -165,11 +174,19 @@ local function EnsureDB()
       _G.MSUF_EnsureDB()
     end
     dbInitialized = true
+    boundDB = _G.MSUF_DB
   end
   if type(_G.MSUF_DB) ~= "table" then
     ExportPublic("MSUF_DB", {})
+    boundDB = _G.MSUF_DB
   end
   return _G.MSUF_DB
+end
+
+function Config.RebindSavedVariables()
+  dbInitialized = false
+  boundDB = nil
+  return EnsureDB()
 end
 
 local function Bool(value, fallback)
