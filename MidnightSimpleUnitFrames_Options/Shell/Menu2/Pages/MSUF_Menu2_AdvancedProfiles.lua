@@ -212,6 +212,9 @@ local function EnsureProfilePopups()
         button1 = _G.RELOAD or M.Tr("Reload"),
         button2 = _G.CANCEL or M.Tr("Not now"),
         OnAccept = function()
+            if type(_G.MSUF_FlushProfileSavedVariables) == "function" then
+                _G.MSUF_FlushProfileSavedVariables()
+            end
             if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
         end,
     })
@@ -223,6 +226,9 @@ local function EnsureProfilePopups()
             if _G.InCombatLockdown and _G.InCombatLockdown() then
                 PrintProfileMessage("|cffffd700", "Can't reload the UI in combat. Leave combat, then type /reload.")
                 return
+            end
+            if type(_G.MSUF_FlushProfileSavedVariables) == "function" then
+                _G.MSUF_FlushProfileSavedVariables()
             end
             if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
         end,
@@ -287,6 +293,9 @@ local function ReloadAfterNewProfileImport(profileName)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         PrintProfileMessage("|cffffd700", M.Format("Imported profile '%s'. Reload after combat with /reload.", tostring(profileName)))
         return
+    end
+    if type(_G.MSUF_FlushProfileSavedVariables) == "function" then
+        _G.MSUF_FlushProfileSavedVariables()
     end
     if type(_G.ReloadUI) == "function" then
         _G.ReloadUI()

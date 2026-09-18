@@ -416,6 +416,9 @@ Commands.Register({
     usage = "/msuf reload",
     help = "Reload the interface, same as /rl.",
     run = function()
+        if type(MSUF_FlushProfileSavedVariables) == "function" then
+            MSUF_FlushProfileSavedVariables()
+        end
         if type(ReloadUI) == "function" then ReloadUI() end
     end,
 })
@@ -741,6 +744,9 @@ end
 if not SlashTokenClaimed("/RL") then
     SLASH_MSUFRELOADUI1 = "/rl"
     SlashCmdList["MSUFRELOADUI"] = function()
+        if type(MSUF_FlushProfileSavedVariables) == "function" then
+            MSUF_FlushProfileSavedVariables()
+        end
         if type(ReloadUI) == "function" then
             ReloadUI()
         end

@@ -134,6 +134,21 @@ end
 if type(globalDB.global) ~= "table" then
     globalDB.global = {}
 end
+do
+    local slots = {}
+    if type(rawGlobalDB) == "table" and type(rawGlobalDB.profiles) == "table" then
+        for name, profile in pairs(rawGlobalDB.profiles) do
+            if type(profile) == "table" then
+                slots[name] = profile
+            end
+        end
+    end
+    MSUF.SavedVariableRoots = {
+        db = type(rawProfileDB) == "table" and rawProfileDB or nil,
+        global = type(rawGlobalDB) == "table" and rawGlobalDB or nil,
+        profileSlots = slots,
+    }
+end
 
 -- Schema 600 is the profile contract for every MSUF 6.x release. Archive old
 -- or unversioned profiles before Defaults/Profiles can normalize them.
@@ -147,7 +162,11 @@ local function EnsurePre6Archive()
 end
 if type(globalDB.profiles) == "table" then
     for name, profile in pairs(globalDB.profiles) do
-        if not ProfilePolicy.AcceptsProfile(profile) then
+        -- An empty table is a SavedVariables alias leftover, not a pre-6 profile.
+        -- Archiving it also retired the active-profile binding on Forever.
+        if type(profile) == "table" and next(profile) == nil then
+            -- keep the named slot
+        elseif not ProfilePolicy.AcceptsProfile(profile) then
             local archive = EnsurePre6Archive()
             if archive[name] == nil then archive[name] = profile end
             globalDB.profiles[name] = nil
@@ -157,7 +176,7 @@ if type(globalDB.profiles) == "table" then
         end
     end
 end
-if rawProfileDB ~= nil and not ProfilePolicy.AcceptsProfile(rawProfileDB) then
+if type(rawProfileDB) == "table" and next(rawProfileDB) ~= nil and not ProfilePolicy.AcceptsProfile(rawProfileDB) then
     local archive = EnsurePre6Archive()
     if archive.__standalone == nil then archive.__standalone = rawProfileDB end
     _G.MSUF_DB = nil
