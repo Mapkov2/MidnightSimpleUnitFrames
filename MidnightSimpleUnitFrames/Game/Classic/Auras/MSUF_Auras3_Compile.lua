@@ -1118,7 +1118,10 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         naturalOrder = naturalOrder,
         visibleOnlyScan = visibleOnlyScan == true,
         cappedFilterScan = cappedFilterScan == true,
-        reorderOnUpdate = sortOrder ~= 0 or sortReverse == true,
+        -- A refresh can move an aura only in the time-keyed modes (2 duration,
+        -- 3 expiration, 4 expiration only). Every other key is fixed for the
+        -- aura's lifetime; an ownership flip is caught by the update path.
+        reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4,
         ownHighlight = ownHighlight == true,
         ownR = ownR,
         ownG = ownG,
@@ -1357,7 +1360,8 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         naturalOrder = naturalOrder,
         visibleOnlyScan = visibleOnlyScan == true,
         cappedFilterScan = cappedFilterScan == true,
-        reorderOnUpdate = sortOrder ~= 0 or sortReverse == true,
+        -- Time-keyed modes only, as in CompileLane.
+        reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4,
         clickThrough = source.clickThrough == true,
         showTooltip = source[kind .. "ShowTooltip"] ~= false and source.showTooltip ~= false,
         showCooldownSwipe = renderEnabled == true and showCooldownSwipe == true,

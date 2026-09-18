@@ -5909,6 +5909,9 @@ L["Character names (all frames)"] = "캐릭터 이름 (모든 프레임)"
 L["Full name"] = "전체 이름"
 L["First name"] = "이름"
 L["Surname"] = "성"
+-- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
+L["Pet Happiness"] = "소환수 만족도"
+L["Pet Happiness (Vanilla/TBC)"] = "소환수 만족도 (Vanilla/TBC)"
 L["Color by level difficulty"] = "레벨 난이도에 따라 색상 지정"
 L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "내 레벨보다 훨씬 높으면 빨간색, 같은 레벨이면 흰색, 사소하면 회색입니다. 끄면 상태 텍스트 색상을 사용합니다."
 L["Level Difficulty Colors"] = "레벨 난이도 색상"
@@ -5919,6 +5922,9 @@ L["Your level"] = "내 레벨"
 L["Below your level"] = "내 레벨보다 낮음"
 L["Trivial"] = "사소함"
 L["Level Text"] = "레벨 텍스트"
+L["Tagged by others"] = "다른 플레이어가 선점함"
+L["Gray out mobs tagged by others"] = "다른 플레이어가 선점한 몹을 회색으로 표시"
+L["A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame."] = "다른 플레이어가 먼저 공격한 몹은 전리품과 경험치를 주지 않습니다. 기본 대상 프레임처럼 생명력 바와 이름이 회색으로 바뀝니다."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

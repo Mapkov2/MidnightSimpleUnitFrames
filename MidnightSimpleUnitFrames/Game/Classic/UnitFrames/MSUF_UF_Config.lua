@@ -160,6 +160,8 @@ local NPC_COLOR_DEFAULTS = {
   npcCaster = { 0, 0.45, 0.74 },
   npcMelee = { 0.99, 0.99, 0.99 },
   npcRegular = { 0.70, 0.56, 0.33 },
+  -- A mob another player tagged first: no loot or experience for you.
+  tapped = { 0.50, 0.50, 0.50 },
 }
 
 local dbInitialized = false
@@ -235,8 +237,13 @@ local function CopyConfigColor(src)
   return { r = r, g = g, b = b, a = a or 1 }
 end
 
-local function ApplyNpcTypeFlags(dst, general, colorKey)
+local function ApplyNpcTypeFlags(dst, general, colorKey, unitKey)
   dst.npcColorMode = general.npcColorMode == "type" and "type" or "reaction"
+  -- Tagged-mob graying exists only where the client has tagging; Midnight never
+  -- compiles it. The player and pet frames can never show a tagged mob.
+  dst.tapDeniedGray = unitKey ~= "player" and unitKey ~= "pet"
+    and MSUF.Client ~= nil and MSUF.Client.SupportsTapDenied == true
+    and general.tapDeniedGray ~= false
   dst[colorKey] = general[colorKey] ~= false
   dst.npcTypeTarget = general.npcTypeTarget ~= false
   dst.npcTypeFocus = general.npcTypeFocus ~= false
@@ -1594,6 +1601,14 @@ local function CompileUnitStatus(out, conf, general, key)
     CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
   end
 
+  -- Level difficulty coloring defaults on, but a profile that already picked a
+  -- level text color keeps that color until the toggle is set explicitly.
+  local level = status.level
+  if level then
+    level.difficultyColor = StatusBool(conf, general, "levelIndicatorDifficultyColor", level.colorR == nil)
+    level.difficultyColors = level.difficultyColor and Shared.ResolveLevelDifficultyColors(general) or nil
+  end
+
   local statusTextStates = {}
   for i = 1, #UNIT_STATUS_TEXT_STATE_DEFS do
     statusTextStates[i] = CompileUnitStatusTextState(status, conf, general, UNIT_STATUS_TEXT_STATE_DEFS[i], statusTextSize)
@@ -1813,7 +1828,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   local customR, customG, customB
   text.nameClassColor, text.nameNpcColor, text.nameNpcClassColor, customR, customG, customB =
     ResolveNameColorFlags(general, conf)
-  ApplyNpcTypeFlags(text, general, "npcTypeColorText")
+  ApplyNpcTypeFlags(text, general, "npcTypeColorText", unit)
   local nameCustomColor
   if customR then
     -- ResolveUnit wipes the spec table before every compile, which nils out.text
@@ -1886,7 +1901,7 @@ local function CompileUnitHealth(out, db, conf, general, bars)
   health.gradientHighG = Number(general.healthGradientHighG, 1)
   health.gradientHighB = Number(general.healthGradientHighB, 0)
   health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
-  ApplyNpcTypeFlags(health, general, "npcTypeColorBar")
+  ApplyNpcTypeFlags(health, general, "npcTypeColorBar", out.key)
   -- Boss frames keep reaction coloring (hostile red / friendly green). The
   -- optional NPC class-color override only applies to non-boss NPC frames.
   health.npcClassColorBar = general.npcClassColorBar == true and out.key ~= "boss"

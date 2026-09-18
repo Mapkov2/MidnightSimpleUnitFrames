@@ -4,12 +4,16 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+-- WoW Forever and Classic Era run Classic Era spell data: one spell ID per rank
+-- and Era tick counts. TBC and Mists keep the Retail table below until their
+-- spell data has been verified.
+local HAS_ERA_SPELL_DATA = MSUF.Client ~= nil
+    and (MSUF.Client.IsForever == true or MSUF.Client.IsVanilla == true)
 
 local DEFAULT_MARKER_COUNT = 5
 local MAX_CUSTOM_MARKER_COUNT = 10
--- Hellfire, the longest WoW Forever channel below, ticks 15 times.
-local MAX_AUTO_TICK_COUNT = IS_FOREVER and 15 or 12
+-- Hellfire, the longest Classic Era channel below, ticks 15 times.
+local MAX_AUTO_TICK_COUNT = HAS_ERA_SPELL_DATA and 15 or 12
 
 -- Fixed tick counts keep their number of ticks under haste; interval entries
 -- gain ticks when the channel duration grows. Unknown channels deliberately
@@ -49,16 +53,17 @@ local CHANNEL_TICK_DATA = {
     [291944] = { ticks = 6 }, -- Regeneratin'
 }
 
--- WoW Forever runs Classic Era spell data with one spell ID per rank. Only five
--- IDs above exist there, and all five tick differently (Mind Flay 3 times,
--- Health Funnel 10), so Forever uses its own table keyed by every rank. Counts
+-- Classic Era spell data has one spell ID per rank. Only five IDs above exist
+-- there, and all five tick differently (Mind Flay 3 times, Health Funnel 10),
+-- so WoW Forever and Classic Era use their own table keyed by every rank. Counts
 -- are SpellDuration / EffectAuraPeriod of the channel's periodic effect in the
--- client DB of build 1.60.1.69876, identical to Era where the ID exists.
--- Evocation (a regeneration buff) and Tame Beast (a single pulse) keep the
--- default layout.
-if IS_FOREVER then
+-- client DB of WoW Forever build 1.60.1.69876, identical to Era where the ID
+-- exists; an ID that only one of the two clients knows is never the active
+-- spell on the other. Evocation (a regeneration buff) and Tame Beast (a single
+-- pulse) keep the default layout.
+if HAS_ERA_SPELL_DATA then
     CHANNEL_TICK_DATA = {}
-    local FOREVER_CHANNEL_TICKS = {
+    local ERA_CHANNEL_TICKS = {
         [3] = {
             5143,                                        -- Arcane Missiles (rank 1)
             15407, 17311, 17312, 17313, 17314, 18807,    -- Mind Flay
@@ -94,7 +99,7 @@ if IS_FOREVER then
             1949, 11683, 11684,                          -- Hellfire
         },
     }
-    for ticks, spellIDs in pairs(FOREVER_CHANNEL_TICKS) do
+    for ticks, spellIDs in pairs(ERA_CHANNEL_TICKS) do
         local tickData = { ticks = ticks }
         for index = 1, #spellIDs do
             CHANNEL_TICK_DATA[spellIDs[index]] = tickData

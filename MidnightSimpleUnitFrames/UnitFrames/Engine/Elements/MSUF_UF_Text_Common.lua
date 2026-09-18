@@ -81,6 +81,7 @@ local ExternalFrameWidth = C.ExternalFrameWidth
 local ClassColorForToken = C.ClassColorForToken
 local ClassColor = C.ClassColor
 local UnitNPCKind = C.UnitNPCKind
+local UnitTapDenied = C.UnitTapDenied
 local NPCColor = C.NPCColor
 local GradientColor = C.GradientColor
 local HealthColor = C.HealthColor
@@ -402,14 +403,16 @@ local function SetNameTextColor(frame, r, g, b, a)
 end
 
 local function PlainUnitIsPlayer(frame, unit)
+  -- A secret unit token is never compared: the check comes before anything
+  -- that looks at the token, the arena test below included.
+  if issecretvalue(unit) == true then
+    return nil
+  end
   -- Arena tokens are player-only even while their identity APIs return secret
   -- values. This is the same native-pass-through contract used by the shared
   -- GroupFrames color path; no opponent identity is inspected in Lua.
   if IsArenaOpponentUnit(unit) then
     return true
-  end
-  if issecretvalue(unit) == true then
-    return nil
   end
   local unitState = FreshUnitState and FreshUnitState(frame, unit)
   if unitState and unitState.isPlayerKnown == true then
@@ -471,6 +474,13 @@ end
 local function NameTextColor(frame, unit)
   local spec = frame and frame.MSUFSpec
   local text = spec and spec.text or {}
+  -- A mob tagged by someone else reads gray in every name color mode, the same
+  -- way the bar does; it outranks class, NPC and custom name colors.
+  if text.tapDeniedGray == true and UnitTapDenied and UnitTapDenied(frame, unit) then
+    local r, g, b = NPCColor("tapped")
+    local fallback = spec and spec.textColor
+    return r, g, b, fallback and fallback.a or 1
+  end
   local override = text.nameColor
   local npcTypeColor = TextWantsNPCTypeColor(text)
   if type(override) == "table" and not npcTypeColor then

@@ -420,7 +420,19 @@ function Controller:GetCurrent()
     return PendingRelease()
 end
 
+-- Mirrors the client gate in MSUF_FirstLoad.lua: a client that loses its
+-- SavedVariables between sessions (the WoW Forever beta) re-arms this release
+-- tour on every login, so it stays retired there unless `/msuf firstload`
+-- re-armed it on purpose for this session.
+local function ClientShowsOnboarding()
+    local client = MSUF.Client
+    return type(client) ~= "table" or client.SupportsOnboardingScenes ~= false
+end
+
 function Controller:ShouldShow()
+    if not ClientShowsOnboarding() and self.debugForcedThisSession ~= true then
+        return false
+    end
     return PendingRelease() ~= nil
 end
 
@@ -506,6 +518,7 @@ end
 
 function Controller:ResetCurrent()
     SyncLiveState()
+    self.debugForcedThisSession = true
     local releaseKey = DATA.currentRelease
     state.initialized = true
     state.releases[releaseKey] = NewRecord("pending")

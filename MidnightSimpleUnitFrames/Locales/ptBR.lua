@@ -5894,6 +5894,9 @@ L["Character names (all frames)"] = "Nomes de personagem (todos os quadros)"
 L["Full name"] = "Nome completo"
 L["First name"] = "Nome"
 L["Surname"] = "Sobrenome"
+-- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
+L["Pet Happiness"] = "Felicidade do ajudante"
+L["Pet Happiness (Vanilla/TBC)"] = "Felicidade do ajudante (Vanilla/TBC)"
 L["Color by level difficulty"] = "Colorir pela dificuldade do nível"
 L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "Vermelho muito acima do seu nível, branco no seu nível, cinza quando trivial. Desative para usar a cor do texto de status."
 L["Level Difficulty Colors"] = "Cores de dificuldade de nível"
@@ -5904,6 +5907,9 @@ L["Your level"] = "Seu nível"
 L["Below your level"] = "Abaixo do seu nível"
 L["Trivial"] = "Trivial"
 L["Level Text"] = "Texto de nível"
+L["Tagged by others"] = "Marcado por outros"
+L["Gray out mobs tagged by others"] = "Deixar cinza os inimigos marcados por outros"
+L["A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame."] = "Um inimigo que outro jogador atingiu primeiro não dá saque nem experiência. A barra de vida e o nome ficam cinza, como no quadro de alvo padrão."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)

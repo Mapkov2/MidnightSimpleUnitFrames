@@ -260,6 +260,11 @@ local function UpdateArenaCastbarAnchorBase(frame)
         end
     end
 
+    -- Position/profile/unitframe refresh owners all converge here. Once this
+    -- pass validated the live provider and size for the current visual
+    -- revision, the next spellcast does not need to repeat the same native
+    -- geometry reads merely because the bar became active.
+    frame._msufArenaAnchorValidationRev = tonumber(_G.MSUF__castbarStyleGlobalRev) or 1
     return changed, sizeChanged
 end
 
@@ -271,27 +276,36 @@ local function UpdateArenaCastbarAnchor(frame, forceLayout)
     return changed
 end
 
+local function ClearArenaCastbarFontString(fontString, clear)
+    if not fontString then return end
+    if type(clear) == "function" then clear(fontString) end
+    fontString._msufCastbarFontKey = nil
+    fontString._msufCastbarFontEpoch = nil
+    fontString._msufCastbarFontReady = nil
+end
+
+--- No table per call: the three regions are fixed, and a nil region inside a
+--- table constructor would also end the `#` walk early.
 local function ClearArenaCastbarFontAttempt(frame)
+    if not frame then return end
     local clear = _G.MSUF_ClearFontStringApplyCaches
-    local regions = { frame and frame.castText, frame and frame.timeText, frame and frame.castTargetText }
-    for index = 1, #regions do
-        local fontString = regions[index]
-        if fontString then
-            if type(clear) == "function" then clear(fontString) end
-            fontString._msufCastbarFontKey = nil
-            fontString._msufCastbarFontEpoch = nil
-            fontString._msufCastbarFontReady = nil
-        end
-    end
+    ClearArenaCastbarFontString(frame.castText, clear)
+    ClearArenaCastbarFontString(frame.timeText, clear)
+    ClearArenaCastbarFontString(frame.castTargetText, clear)
 end
 
 --- Validate arena-only geometry and detail-font generation right before a cast
---- becomes visible; comparison-only in the common case.
+--- becomes visible; comparison-only in the common case. The anchor pass runs
+--- only when the visual revision moved since UpdateArenaCastbarAnchorBase last
+--- validated this bar.
 local function PrepareArenaCastbarForCast(frame)
     if not frame then return false end
-    local _, sizeChanged = UpdateArenaCastbarAnchorBase(frame)
     local fontEpoch = tonumber(_G.MSUF_FontApplyEpoch) or 0
     local visualRevision = tonumber(_G.MSUF__castbarStyleGlobalRev) or 1
+    local sizeChanged = false
+    if frame._msufArenaAnchorValidationRev ~= visualRevision then
+        _, sizeChanged = UpdateArenaCastbarAnchorBase(frame)
+    end
     local layoutStale = frame._msufCastbarDetailLayoutUnit ~= "arena"
         or frame._msufCastbarDetailLayoutFontEpoch ~= fontEpoch
         or frame._msufCastbarDetailLayoutVisualRev ~= visualRevision
@@ -665,41 +679,56 @@ ExportPublic("MSUF_ApplyArenaCastbarsEnabled", ApplyArenaCastbarsEnabled)
 ExportPublic("MSUF_ArenaCastbar_Stop", StopArenaCastbar)
 
 local arenaLifecycleFrame
+
+local function UnregisterArenaLifecycleBus()
+    if type(_G.MSUF_EventBus_Unregister) ~= "function" then return end
+    _G.MSUF_EventBus_Unregister("PLAYER_LOGIN", "MSUF_ARENA_CASTBARS_LOGIN")
+    _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_ARENA_CASTBARS_WORLD")
+    _G.MSUF_EventBus_Unregister("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_CASTBARS_OPPONENT")
+    _G.MSUF_EventBus_Unregister("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_CASTBARS_PREP")
+    if HAS_PVP_MATCH_STATE_CHANGED then
+        _G.MSUF_EventBus_Unregister("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_CASTBARS_MATCH")
+    end
+end
+
+--- Private driver frame for the whole pool. It owns the lifecycle when no
+--- shared bus exists, and it is also the recovery path when the bus refuses a
+--- subscription: a half-wired pool would silently miss opponent or match-state
+--- updates instead of failing where it can be seen.
+local function RegisterArenaLifecycleFrame()
+    arenaLifecycleFrame = arenaLifecycleFrame or CreateFrame("Frame")
+    arenaLifecycleFrame:SetScript("OnEvent", function(_, event, ...)
+        HandleArenaPoolLifecycle(event, ...)
+    end)
+    arenaLifecycleFrame:RegisterEvent("PLAYER_LOGIN")
+    arenaLifecycleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    arenaLifecycleFrame:RegisterEvent("ARENA_OPPONENT_UPDATE")
+    arenaLifecycleFrame:RegisterEvent("ARENA_PREP_OPPONENT_SPECIALIZATIONS")
+    if HAS_PVP_MATCH_STATE_CHANGED then arenaLifecycleFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED") end
+end
+
 local function SyncArenaLifecycle(enabled)
     enabled = enabled == true
-    if type(_G.MSUF_EventBus_Unregister) == "function" then
-        _G.MSUF_EventBus_Unregister("PLAYER_LOGIN", "MSUF_ARENA_CASTBARS_LOGIN")
-        _G.MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD", "MSUF_ARENA_CASTBARS_WORLD")
-        _G.MSUF_EventBus_Unregister("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_CASTBARS_OPPONENT")
-        _G.MSUF_EventBus_Unregister("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_CASTBARS_PREP")
-        if HAS_PVP_MATCH_STATE_CHANGED then
-            _G.MSUF_EventBus_Unregister("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_CASTBARS_MATCH")
-        end
-    end
+    UnregisterArenaLifecycleBus()
     if arenaLifecycleFrame then arenaLifecycleFrame:UnregisterAllEvents() end
     if not enabled then
         CancelArenaPoolLifecycle()
         return false
     end
     if type(_G.MSUF_EventBus_Register) == "function" then
-        _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_ARENA_CASTBARS_LOGIN", HandleArenaPoolLifecycle, nil, true)
-        _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_ARENA_CASTBARS_WORLD", HandleArenaPoolLifecycle)
-        _G.MSUF_EventBus_Register("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_CASTBARS_OPPONENT", HandleArenaPoolLifecycle)
-        _G.MSUF_EventBus_Register("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_CASTBARS_PREP", HandleArenaPoolLifecycle)
+        -- The bus answers false when it declines a subscription. Every call runs
+        -- before the verdict is read, so one refusal cannot skip the others.
+        local wired = _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_ARENA_CASTBARS_LOGIN", HandleArenaPoolLifecycle, nil, true) ~= false
+        wired = _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_ARENA_CASTBARS_WORLD", HandleArenaPoolLifecycle) ~= false and wired
+        wired = _G.MSUF_EventBus_Register("ARENA_OPPONENT_UPDATE", "MSUF_ARENA_CASTBARS_OPPONENT", HandleArenaPoolLifecycle) ~= false and wired
+        wired = _G.MSUF_EventBus_Register("ARENA_PREP_OPPONENT_SPECIALIZATIONS", "MSUF_ARENA_CASTBARS_PREP", HandleArenaPoolLifecycle) ~= false and wired
         if HAS_PVP_MATCH_STATE_CHANGED then
-            _G.MSUF_EventBus_Register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_CASTBARS_MATCH", HandleArenaPoolLifecycle)
+            wired = _G.MSUF_EventBus_Register("PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_CASTBARS_MATCH", HandleArenaPoolLifecycle) ~= false and wired
         end
-    else
-        arenaLifecycleFrame = arenaLifecycleFrame or CreateFrame("Frame")
-        arenaLifecycleFrame:SetScript("OnEvent", function(_, event, ...)
-            HandleArenaPoolLifecycle(event, ...)
-        end)
-        arenaLifecycleFrame:RegisterEvent("PLAYER_LOGIN")
-        arenaLifecycleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        arenaLifecycleFrame:RegisterEvent("ARENA_OPPONENT_UPDATE")
-        arenaLifecycleFrame:RegisterEvent("ARENA_PREP_OPPONENT_SPECIALIZATIONS")
-        if HAS_PVP_MATCH_STATE_CHANGED then arenaLifecycleFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED") end
+        if wired then return true end
+        UnregisterArenaLifecycleBus()
     end
+    RegisterArenaLifecycleFrame()
     return true
 end
 ExportPublic("MSUF_ArenaCastbars_SyncLifecycle", SyncArenaLifecycle)

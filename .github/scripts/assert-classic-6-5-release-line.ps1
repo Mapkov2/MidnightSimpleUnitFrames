@@ -63,6 +63,9 @@ foreach ($addon in $addons) {
                 $toc -notmatch "(?m)^## X-MSUF-Version-Forever: $([regex]::Escape($normalizedVersion))\s*$") {
                 throw "Classic 6.5 has a stale WoW Forever version (X-MSUF-Version-Forever): $tocPath"
             }
+            if ($toc -notmatch "(?m)^## Version: $([regex]::Escape($normalizedVersion)) \[ExcludeLoadGameType standard\]\s*$") {
+                throw "Classic 6.5 has a stale non-standard game type version: $tocPath"
+            }
             continue
         }
         if ($toc -notmatch "(?m)^## Version: $([regex]::Escape($normalizedVersion))\s*$") {
@@ -112,7 +115,6 @@ try {
 }
 foreach ($relativePath in @(
     "MidnightSimpleUnitFrames/State/MSUF_Changelog.lua",
-    "MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Changelog.lua",
     "MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua"
 )) {
     $payload = [IO.File]::ReadAllText((Join-Path $RepositoryRoot $relativePath))

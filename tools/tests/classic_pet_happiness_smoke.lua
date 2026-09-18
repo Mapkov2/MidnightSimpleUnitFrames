@@ -137,18 +137,27 @@ assert(vanillaManifest:find("MSUF_UF_PetHappiness.lua", 1, true), "Vanilla must 
 assert(tbcManifest:find("MSUF_UF_PetHappiness.lua", 1, true), "TBC must load Happiness runtime")
 assert(not mistsManifest:find("MSUF_UF_PetHappiness.lua", 1, true), "Mists must not load Happiness runtime")
 
-local function WithOptionsFlavor(flavor, callback)
-    local oldCAddOns, oldMetadata = _G.C_AddOns, _G.GetAddOnMetadata
-    _G.C_AddOns = { GetAddOnMetadata = function(addon, field)
-        assert(addon == "MidnightSimpleUnitFrames_Options" and field == "X-MSUF-Client",
-            "Options gate queried the wrong addon metadata")
-        return flavor
+-- The unit preview specs and the search keywords are the Retail-named files on
+-- every client and follow MSUF.Client.SupportsPetHappiness. Each case therefore
+-- builds the real client model from a project ID and an X-MSUF-Client tag.
+local CLASSIC_PROJECT_IDS = { Vanilla = 2, TBC = 5, Mists = 19 }
+local function LoadClient(flavor, tag, projectID)
+    local oldCAddOns, oldMetadata, oldCreateFrame = _G.C_AddOns, _G.GetAddOnMetadata, _G.CreateFrame
+    _G.WOW_PROJECT_MAINLINE, _G.WOW_PROJECT_CLASSIC = 1, 2
+    _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC, _G.WOW_PROJECT_MISTS_CLASSIC = 5, 19
+    _G.WOW_PROJECT_ID = projectID or CLASSIC_PROJECT_IDS[flavor]
+    _G.C_AddOns = { GetAddOnMetadata = function(_, field)
+        return field == "X-MSUF-Client" and (tag or flavor) or nil
     end }
-    _G.GetAddOnMetadata = nil
-    local ok, result = pcall(callback)
-    _G.C_AddOns, _G.GetAddOnMetadata = oldCAddOns, oldMetadata
-    if not ok then error(result, 0) end
-    return result
+    -- No frame factory: a client placed by its tag alone builds a login diagnostic.
+    _G.GetAddOnMetadata, _G.CreateFrame, _G.GameEvent, _G.MSUF, _G.MSUF_NS = nil, nil, nil, nil, nil
+    local clientNamespace = {}
+    local ok, err = pcall(assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Shared/Initialize.lua")),
+        "MidnightSimpleUnitFrames", clientNamespace)
+    _G.C_AddOns, _G.GetAddOnMetadata, _G.CreateFrame = oldCAddOns, oldMetadata, oldCreateFrame
+    _G.MSUF, _G.MSUF_NS = nil, nil
+    if not ok then error(err, 0) end
+    return clientNamespace.Client
 end
 
 local function PipeRows(rows)
@@ -161,69 +170,81 @@ local function PipeRows(rows)
     return out
 end
 
-local function PreviewHappinessAllowed(flavor, unit, client)
-    return WithOptionsFlavor(flavor, function()
-        local main = { Client = client, MSUF2 = { PipeRows = PipeRows } }
-        assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs_Classic.lua"))(
-            "MidnightSimpleUnitFrames_Options", main)
-        for _, spec in ipairs(main.UFPreviewSpecs.StatusPreview or {}) do
-            if spec.id == "statusPetHappiness" then return spec.allowed and spec.allowed(unit) or false end
-        end
-        error("Pet Happiness preview spec missing")
-    end)
+local function HappinessPreviewSpec(client)
+    local main = { Client = client, MSUF2 = { PipeRows = PipeRows } }
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua"))(
+        "MidnightSimpleUnitFrames_Options", main)
+    local rows = main.UFPreviewSpecs.StatusPreview
+    for index, spec in ipairs(rows) do
+        if spec.id == "statusPetHappiness" then return spec, index, #rows, rows[#rows].id end
+    end
+    return nil, nil, #rows, rows[#rows].id
 end
-assert(PreviewHappinessAllowed("Vanilla", "pet") == true,
-    "Vanilla Pet preview must expose Pet Happiness without MSUF.Client")
-assert(PreviewHappinessAllowed("TBC", "pet") == true,
-    "TBC Pet preview must expose Pet Happiness without MSUF.Client")
-assert(PreviewHappinessAllowed("  tbc  ", "pet") == true,
-    "TBC Pet preview must normalize Options TOC metadata")
-assert(PreviewHappinessAllowed("Vanilla", "player") == false,
-    "Pet Happiness preview leaked onto Player")
-assert(PreviewHappinessAllowed("Mists", "pet", { IsVanilla = true }) == false,
-    "Mists Pet preview must override a stale Vanilla client flag")
+-- The third case is placed by its tag alone, so the tag is what gets normalized.
+for _, case in ipairs({ { "Vanilla" }, { "TBC" }, { "TBC", "  tbc  ", 99 } }) do
+    local label = case[1] .. (case[2] and " (tag only)" or "")
+    local client = LoadClient(case[1], case[2], case[3])
+    assert(client.SupportsPetHappiness == true, label .. " client model must support Pet Happiness")
+    local spec, index, count, lastID = HappinessPreviewSpec(client)
+    assert(spec and spec.allowed("pet") == true, label .. " Pet preview must expose Pet Happiness")
+    assert(spec.allowed("player") == false, label .. " Pet Happiness preview leaked onto Player")
+    assert(index == count - 1 and lastID == "stance", label .. " Pet Happiness must sit before the stance row")
+    assert(spec.show == "showPetHappinessIndicator" and spec.size == "petHappinessIndicatorSize"
+        and spec.defaultSize == 24 and spec.defaultAnchor == "RIGHT" and spec.defaultX == -7 and spec.defaultY == -4
+        and spec.defaultLayer == 7 and spec.refresh == "MSUF_RequestPetHappinessIndicatorRefresh",
+        label .. " Pet Happiness preview spec drifted from the runtime defaults")
+end
+do
+    local client = LoadClient("Mists")
+    assert(client.SupportsPetHappiness == false, "Mists client model must not support Pet Happiness")
+    local spec, _, _, lastID = HappinessPreviewSpec(client)
+    assert(spec == nil and lastID == "stance", "Mists Pet preview must not carry a Pet Happiness row")
+end
+
+-- The Classic manifests must load the files the cases above exercise.
+local previewManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Classic.xml")
+local searchManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Classic.xml")
+assert(previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Specs.lua"/>', 1, true),
+    "Classic unit preview manifest must load the shared preview specs")
+assert(searchManifest:find('<Script file="MSUF_Menu2_Search_Keywords.lua"/>', 1, true),
+    "Classic search manifest must load the shared search keywords")
 
 local options = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua")
-local previewSpecs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs_Classic.lua")
+local previewSpecs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua")
 local previewStatus = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status_Classic.lua")
-local searchKeywords = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords_Classic.lua")
+local searchKeywords = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua")
 assert(options:find('StatusControl("statusPetHappiness"', 1, true), "Pet page Happiness selector missing")
 assert(options:find('unit == "pet" and PetHappinessSupported()', 1, true), "Happiness selector is not Pet-only/capability-gated")
-assert(options:find('getMetadata(addonName, "X-MSUF-Client")', 1, true),
-    "Pet page does not use the Options TOC capability")
+assert(options:find("client.SupportsPetHappiness == true", 1, true)
+    and not options:find("GetAddOnMetadata", 1, true) and not options:find("X-MSUF-Client", 1, true),
+    "Pet page must read MSUF.Client.SupportsPetHappiness instead of re-deriving the flavor from TOC metadata")
 assert(options:find("statusPetHappiness", 1, true) and options:find("COPY_STATUSICON_FIELDS", 1, true), "Happiness copy ownership missing")
 assert(previewSpecs:find("statusPetHappiness|showPetHappinessIndicator", 1, true), "Happiness preview spec missing")
 assert(previewStatus:find('spec.id == "statusPetHappiness"', 1, true), "Happiness preview texture path missing")
 assert(searchKeywords:find("PET_HAPPINESS", 1, true), "Pet Happiness search capability gate missing")
 assert(searchKeywords:find("haustier zufriedenheit", 1, true), "German Pet Happiness search aliases missing")
 
-local function LoadPetSearchKeywords(client)
+local function LoadSearchKeywords(client)
     local ns = { Client = client, MSUF2 = {} }
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords_Classic.lua"))(
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua"))(
         "MidnightSimpleUnitFrames_Options", ns)
-    return ns.MSUF2.SearchData.KEYWORDS.uf_pet
+    return ns.MSUF2.SearchData.KEYWORDS
 end
-assert(LoadPetSearchKeywords({ IsVanilla = true }):find("pet happiness", 1, true),
-    "Vanilla search must expose Pet Happiness")
-assert(not LoadPetSearchKeywords({ IsMists = true }):find("pet happiness", 1, true),
-    "Mists search must not expose Pet Happiness")
-
-local function LoadPetSearchFromOptionsFlavor(flavor)
-    return WithOptionsFlavor(flavor, function()
-        local main = { MSUF2 = {} }
-        assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords_Classic.lua"))(
-            "MidnightSimpleUnitFrames_Options", main)
-        return main.MSUF2.SearchData.KEYWORDS.uf_pet
-    end)
+local mistsKeywords = LoadSearchKeywords(LoadClient("Mists"))
+assert(not mistsKeywords.uf_pet:find("happiness", 1, true), "Mists search must not expose Pet Happiness")
+for _, case in ipairs({ { "Vanilla" }, { "TBC" }, { "TBC", "  tbc  ", 99 } }) do
+    local label = case[1] .. (case[2] and " (tag only)" or "")
+    local keywords = LoadSearchKeywords(LoadClient(case[1], case[2], case[3]))
+    assert(keywords.uf_pet:find(" pet happiness ", 1, true), label .. " search must expose Pet Happiness")
+    assert(keywords.uf_pet:sub(1, #mistsKeywords.uf_pet) == mistsKeywords.uf_pet,
+        label .. " Pet Happiness must only append to the pet page keywords")
+    -- Every other page answers the same words on every Classic client; the WoW
+    -- Forever surname words on the Fonts page never reach one.
+    for key, text in pairs(mistsKeywords) do
+        if key ~= "uf_pet" then assert(keywords[key] == text, label .. " search keywords changed for " .. key) end
+    end
+    assert(not keywords.opt_fonts:find("surname", 1, true), label .. " Fonts page gained the WoW Forever name keywords")
 end
-assert(LoadPetSearchFromOptionsFlavor("Vanilla"):find("pet happiness", 1, true),
-    "Vanilla Options TOC gate must expose Pet Happiness search")
-assert(LoadPetSearchFromOptionsFlavor("TBC"):find("pet happiness", 1, true),
-    "TBC Options TOC gate must expose Pet Happiness search")
-assert(LoadPetSearchFromOptionsFlavor("  tbc  "):find("pet happiness", 1, true),
-    "TBC Options TOC search gate must normalize metadata")
-assert(not LoadPetSearchFromOptionsFlavor("Mists"):find("pet happiness", 1, true),
-    "Mists Options TOC gate must hide Pet Happiness search")
 
 local runtimeSource = Read("MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua")
 assert(not runtimeSource:find("OnUpdate", 1, true), "Happiness runtime must not poll")

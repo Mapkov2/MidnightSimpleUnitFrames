@@ -26,6 +26,8 @@ local UnitIsPlayer = UnitIsPlayer
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitIsConnected = UnitIsConnected
 local UnitCanAttack = UnitCanAttack
+local UnitIsTapDenied = UnitIsTapDenied
+local UnitPlayerControlled = UnitPlayerControlled
 local UnitCanAssist = UnitCanAssist
 local UnitReaction = UnitReaction
 local UnitSelectionType = UnitSelectionType
@@ -1046,6 +1048,32 @@ local function BossDisposition(unitState, unit)
   return disposition
 end
 
+--- A mob another player tagged first (Blizzard's TargetFrame CheckFaction
+--- rule: tap denied and not player controlled). One read per dispatch, cached
+--- on the unit state next to the NPC kind; a tag change arrives as
+--- UNIT_FACTION, which already rebuilds that state.
+local function UnitTapDenied(frame, unit, unitState)
+  if unitState == nil and FreshUnitState then
+    unitState = FreshUnitState(frame, unit)
+  end
+  if unitState and unitState._tapDeniedReady == true then
+    return unitState._tapDenied
+  end
+  local denied = false
+  if UnitIsTapDenied and IsUnitToken(unit) then
+    local value = UnitIsTapDenied(unit)
+    if issecretvalue(value) ~= true and (value == true or value == 1) then
+      local controlled = UnitPlayerControlled and UnitPlayerControlled(unit)
+      denied = issecretvalue(controlled) ~= true and controlled ~= true and controlled ~= 1
+    end
+  end
+  if unitState then
+    unitState._tapDeniedReady = true
+    unitState._tapDenied = denied
+  end
+  return denied
+end
+
 local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
   if not IsUnitToken(unit) then
     return nil
@@ -1084,8 +1112,12 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
   end
 
   local kind
+  local tapFlags = forText and text or health
+  if tapFlags.tapDeniedGray == true and UnitTapDenied(frame, unit, unitState) then
+    kind = "tapped"
+  end
   local bossDisposition = key == "boss" and BossDisposition(unitState, unit) or nil
-  if useType and bossDisposition ~= "friendly" and not UnitIsNeutralForNPCType(unit) then
+  if not kind and useType and bossDisposition ~= "friendly" and not UnitIsNeutralForNPCType(unit) then
     kind = UnitNPCClassificationKind(unit)
   end
   if not kind then
@@ -1232,6 +1264,8 @@ local function RefreshUnitState(frame, unit, spec, event)
     state._npcKindType = nil
     state._npcKindReactionReady = nil
     state._npcKindReaction = nil
+    state._tapDeniedReady = nil
+    state._tapDenied = nil
     state._bossDispositionReady = nil
     state._bossDisposition = nil
     state.identityReady = nil
@@ -1279,6 +1313,7 @@ local function NPCColor(kind)
   if kind == "npcCaster" then return 0, 0.45, 0.74 end
   if kind == "npcMelee" then return 0.99, 0.99, 0.99 end
   if kind == "npcRegular" then return 0.70, 0.56, 0.33 end
+  if kind == "tapped" then return 0.50, 0.50, 0.50 end
   return 0.85, 0.10, 0.10
 end
 
@@ -1842,6 +1877,7 @@ MSUF.UFBarTextCommon = {
   DispatchClassColor = DispatchClassColor,
   ClassColor = ClassColor,
   UnitNPCKind = UnitNPCKind,
+  UnitTapDenied = UnitTapDenied,
   NPCColor = NPCColor,
   PrepareHealthGradientCurve = HealthGradientCurve,
   GradientColor = GradientColor,

@@ -491,8 +491,11 @@ local function BuildCastbars(ctx)
         LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 148, build = function(_, secBuilder) return BuildGCDSection(S, secBuilder) end })
     end
     LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 220, build = function(_, secBuilder) return BuildTexturesSection(S, secBuilder) end })
-    -- Empowered casts are a Retail Evoker mechanic; no Classic client has them.
-    if not (MSUF.Client and MSUF.Client.IsClassic == true) then
+    -- Empowered casts are an Evoker mechanic: Midnight only. WoW Forever and the
+    -- Classic clients have no Evoker (MSUF.Client.HasEmpoweredCasts). A harness
+    -- that fakes only IsClassic still hides the section.
+    local client = MSUF.Client
+    if not client or (client.HasEmpoweredCasts ~= false and client.IsClassic ~= true) then
         LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130, build = function(_, secBuilder) return BuildEmpoweredSection(S, secBuilder) end })
     end
     LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154, build = function(_, secBuilder) return BuildNameShorteningSection(S, secBuilder) end })

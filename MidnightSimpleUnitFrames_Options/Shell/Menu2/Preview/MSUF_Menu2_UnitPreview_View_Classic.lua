@@ -1004,6 +1004,22 @@ local function BuildPreview(parent, panel, width, height)
     end
     box.LayoutLayerRail = function(self, railWidth)
         if not PreviewHelpers.FlowLayerChips then return 30 end
+        -- While the rail hangs under the "Layers" button it is a dropdown, not
+        -- the docked strip, so it owns its own width. Callers that re-flow it
+        -- from the preview box -- the render pass does, on every layer-
+        -- availability change such as entering combat view -- would otherwise
+        -- push the chips out past the panel painted behind them.
+        local popover = self._msuf2LayerPopoverWidth
+        if popover and PreviewHelpers.FlowLayerPopover then
+            local boxW = (self.GetWidth and self:GetWidth()) or 0
+            local boxH = (self.GetHeight and self:GetHeight()) or 0
+            return PreviewHelpers.FlowLayerPopover(self.sidebar, self.layerButtons, {
+                width = popover,
+                maxWidth = boxW > 0 and (boxW - 24) or nil,
+                maxHeight = boxH > 0 and (boxH - 44) or nil,
+                rowHeight = 20,
+            })
+        end
         railWidth = tonumber(railWidth) or (self.sidebar and self.sidebar.GetWidth and self.sidebar:GetWidth()) or 0
         local headerWidth = 0
         local header = self._msuf2LayerRailHeader

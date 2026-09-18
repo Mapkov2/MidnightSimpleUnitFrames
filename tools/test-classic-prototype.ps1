@@ -277,7 +277,28 @@ foreach ($target in $targets) {
             throw "$tocName declares X-MSUF-Client '$actualClientToken', expected '$($client.ClientToken)'"
         }
 
-        $versionLine = $content | Where-Object { $_ -match '^## Version:' } | Select-Object -First 1
+        # A Mainline TOC is read by Midnight and by WoW Forever, so it carries two
+        # conditioned Version lines: Retail's for the standard game type and this
+        # release's for every other one. Only the "standard" token is used; it
+        # exists on every client. Classic TOCs carry one plain line.
+        $versionLines = @($content | Where-Object { $_ -match '^## Version:' })
+        if ($client.Suffix -eq "Mainline") {
+            $standardLines = @($versionLines | Where-Object { $_ -match '^## Version:\s*(\S+)\s+\[AllowLoadGameType standard\]\s*$' })
+            $otherLines = @($versionLines | Where-Object { $_ -match '^## Version:\s*(\S+)\s+\[ExcludeLoadGameType standard\]\s*$' })
+            if ($versionLines.Count -ne 2 -or $standardLines.Count -ne 1 -or $otherLines.Count -ne 1) {
+                throw "$tocName needs exactly '## Version: <Retail> [AllowLoadGameType standard]' and '## Version: <release> [ExcludeLoadGameType standard]'"
+            }
+            $versionLine = $standardLines[0] -replace '\s+\[AllowLoadGameType standard\]\s*$', ''
+            $otherVersion = ($otherLines[0] -replace '^## Version:\s*', '' -replace '\s+\[ExcludeLoadGameType standard\]\s*$', '').Trim()
+            if ($otherVersion -cne $expectedVersion) {
+                throw "$tocName declares version '$otherVersion' outside the standard game type, expected VERSION '$expectedVersion'"
+            }
+        } else {
+            if ($versionLines.Count -ne 1 -or $versionLines[0] -match '\[') {
+                throw "$tocName needs exactly one plain Version line"
+            }
+            $versionLine = $versionLines[0]
+        }
         $versions[$client.Suffix] = ($versionLine -replace '^## Version:\s*', '').Trim()
         $expectedClientVersion = $expectedVersion
         if ($client.Suffix -eq "Mainline" -and $retailReferenceRootFull) {
@@ -308,8 +329,13 @@ foreach ($target in $targets) {
                 ForEach-Object {
                     if ($_ -match '^## Interface:') { $interfaceLine } else { $_ }
                 })
-            # X-MSUF-Version-Forever is this repo's own field; Retail has no Forever client.
-            $currentMetadata = @($content | Where-Object { $_ -match '^## ' -and $_ -notmatch '^## X-MSUF-Version-Forever:' })
+            # X-MSUF-Version-Forever and the non-standard Version line are this repo's
+            # own; Retail has no Forever client. The standard Version line compares
+            # without its condition.
+            $currentMetadata = @($content | Where-Object {
+                $_ -match '^## ' -and $_ -notmatch '^## X-MSUF-Version-Forever:' -and
+                $_ -notmatch '^## Version:.*\[ExcludeLoadGameType standard\]\s*$'
+            } | ForEach-Object { $_ -replace '^(## Version:\s*\S+)\s+\[AllowLoadGameType standard\]\s*$', '$1' })
             if ($referenceMetadata.Count -ne $currentMetadata.Count -or
                 @(Compare-Object $referenceMetadata $currentMetadata).Count -ne 0) {
                 throw "$tocName metadata differs from Retail"
@@ -1283,6 +1309,9 @@ if ($lua) {
     if ($LASTEXITCODE -ne 0) { throw "Client info command smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_project_id_reads_smoke.lua") ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Project ID read inventory smoke failed" }
+    # Contracts for the Mainline (Midnight and WoW Forever) defects fixed after the 2026-09-18 review.
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/mainline_quality_contracts_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Mainline quality contracts smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_texture_layer_highlight_smoke.lua") ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Texture layer highlight smoke failed" }
     # WoW Forever (Mainline build, Client.IsForever) behaviour contracts.
@@ -1302,8 +1331,12 @@ if ($lua) {
     if ($LASTEXITCODE -ne 0) { throw "Forever group frames smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_pet_happiness_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Forever pet happiness smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/tap_denied_gray_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Tagged-mob graying smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_character_names_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Forever character names smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_onboarding_scenes_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Forever onboarding scenes smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_arena_zero_smoke.lua") ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Forever arena-zero Mainline smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_factory_profile_smoke.lua") $root
@@ -1365,6 +1398,15 @@ if ($lua) {
     }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/mainline_classpower_ooc_autohide_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Mainline ClassPower OOC auto-hide smoke failed" }
+    # Owned Classic shadows: the controller publishes the Mana source flag and repaints with
+    # the active updater on death/resurrect; a fresh profile gets complete aura lane owners
+    # while a saved profile keeps the owners it has.
+    foreach ($flavor in $classicSuffixes) {
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_classpower_controller_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Classic ClassPower controller contract failed: $flavor" }
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_fresh_profile_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Classic fresh profile smoke failed: $flavor" }
+    }
     $classicCastbarSmoke = Join-Path $root "tools/tests/classic_castbar_engine_smoke.lua"
     Invoke-GateSmoke $lua.Source $auraTestDriver $classicCastbarSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic castbar engine smoke failed" }
@@ -1385,6 +1427,8 @@ if ($lua) {
     $retail1210FallbackSmoke = Join-Path $root ".github/scripts/retail_12_1_0_fallback_smoke.lua"
     Invoke-GateSmoke $lua.Source $auraTestDriver $retail1210FallbackSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Retail 12.1.0 fallback smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/arena_quality_contracts_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Arena quality contracts smoke failed" }
     $roundedHighlightSmoke = Join-Path $root ".github/scripts/rounded_border_highlight_smoke.lua"
     Invoke-GateSmoke $lua.Source $auraTestDriver $roundedHighlightSmoke
     if ($LASTEXITCODE -ne 0) { throw "Rounded border highlight startup smoke failed" }
@@ -1453,6 +1497,9 @@ if ($lua) {
     $classicAuraSmoke = Join-Path $root "tools/tests/classic_aura_backend_smoke.lua"
     Invoke-GateSmoke $lua.Source $auraTestDriver $classicAuraSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic aura backend smoke failed" }
+    $classicAuraUpdatePathSmoke = Join-Path $root "tools/tests/classic_aura_update_path_smoke.lua"
+    Invoke-GateSmoke $lua.Source $auraTestDriver $classicAuraUpdatePathSmoke ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic aura update path smoke failed" }
     $classicDispelSymbolSmoke = Join-Path $root "tools/tests/classic_dispel_symbol_chain_smoke.lua"
     Invoke-GateSmoke $lua.Source $auraTestDriver $classicDispelSymbolSmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic dispel symbol chain smoke failed" }
@@ -1493,6 +1540,8 @@ if ($lua) {
     $classicMenuParitySmoke = Join-Path $root "tools/tests/classic_menu_retail_parity_smoke.lua"
     Invoke-GateSmoke $lua.Source $auraTestDriver $classicMenuParitySmoke ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Classic Menu2 Retail parity smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/classic_unit_menu_runtime_parity_smoke.lua") ($root -replace '\\', '/')
+    if ($LASTEXITCODE -ne 0) { throw "Classic unit menu runtime parity smoke failed" }
     $classicAuraRenderSmoke = Join-Path $root "tools/tests/classic_aura_render_smoke.lua"
     $classicAuraBackend = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"
     $classicAuraFeatures = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"

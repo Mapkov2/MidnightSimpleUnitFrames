@@ -1411,13 +1411,21 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
     local tex = button._msufA3DispelOverlay
     if hasColor then
         tex = tex or EnsureDispelTypeOverlay(button)
-        local shaped = type(A3.ApplyAuraDispelPreview) == "function"
-            and A3.ApplyAuraDispelPreview(tex, button.Icon or button, cfg.size, "BORDER", cfg.iconShape) == true
-        if not shaped then
-            tex:SetTexture(DEBUFF_OVERLAY_TEXTURE)
-            if tex.SetTexCoord then tex:SetTexCoord(0.296875, 0.5703125, 0, 0.515625) end
-            tex:ClearAllPoints()
-            tex:SetAllPoints(button)
+        -- Geometry only, and only when the lane's shape or size changed. Nothing
+        -- here may colour or show the texture: both are cached below, and the
+        -- preview helper's sample colour, written behind that cache, survived
+        -- every later repaint of the same dispel type.
+        local shape, size = cfg.iconShape or "RECTANGLE", cfg.size
+        if tex._msufA3BorderShape ~= shape or tex._msufA3BorderSize ~= size then
+            local shaped = type(A3.ApplyAuraDispelShape) == "function"
+                and A3.ApplyAuraDispelShape(tex, button.Icon or button, size, shape) == true
+            if not shaped then
+                tex:SetTexture(DEBUFF_OVERLAY_TEXTURE)
+                if tex.SetTexCoord then tex:SetTexCoord(0.296875, 0.5703125, 0, 0.515625) end
+                tex:ClearAllPoints()
+                tex:SetAllPoints(button)
+            end
+            tex._msufA3BorderShape, tex._msufA3BorderSize = shape, size
         end
         r, g, b, a = r or 1, g or 1, b or 1, a or 1
         if secret == true or tex._msufA3ColorPlain ~= true
@@ -1584,6 +1592,13 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
             if auraInstanceID ~= nil and lane.all[auraInstanceID] then
                 local oldData = lane.all[auraInstanceID]
                 local oldPlayer = oldData and oldData.isPlayerAura
+                -- Time-keyed sorts re-render only when a sort input moved. Read
+                -- the old values before the fetch, and as plain numbers: the
+                -- comparators rank a secret or missing time as one constant.
+                local oldDuration, oldExpiration
+                if cfg.reorderOnUpdate == true then
+                    oldDuration, oldExpiration = PlainNumber(oldData.duration), PlainNumber(oldData.expirationTime)
+                end
                 local wasActive = lane.active[auraInstanceID] == true
                 local data = ProcessData(lane, unit, GetAuraDataByAuraInstanceID(unit, auraInstanceID))
                 if data then
@@ -1599,7 +1614,10 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
                             ConsiderLaneAuraVisual(lane, unit, data)
                         end
                         if wasActive then
-                            if cfg.reorderOnUpdate == true or oldPlayer ~= data.isPlayerAura then
+                            if oldPlayer ~= data.isPlayerAura
+                                or (cfg.reorderOnUpdate == true
+                                    and (oldDuration ~= PlainNumber(data.duration)
+                                        or oldExpiration ~= PlainNumber(data.expirationTime))) then
                                 needsRender = true
                             else
                                 local index = lane.visibleByID and lane.visibleByID[auraInstanceID]
@@ -1956,14 +1974,16 @@ HideTrailingButtons = function(lane, visibleByID, visible)
     lane.visible = visible
 end
 
+--- Drops only the ids that left lane.all. An aura that is tracked but filtered
+--- out keeps its slot: AddAuraToLane appends an id once, when it enters
+--- lane.all, so an update that makes it visible again could never put it back.
 local function CompactLaneOrder(lane)
     local ordered = lane.ordered
     local all = lane.all
-    local active = lane.active
     local write = 0
     for i = 1, lane.orderedCount or 0 do
         local auraInstanceID = ordered[i]
-        if active[auraInstanceID] and all[auraInstanceID] then
+        if all[auraInstanceID] then
             write = write + 1
             ordered[write] = auraInstanceID
         end
@@ -2397,6 +2417,10 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
         return false
     end
     local preState = frame._msufA3State
+    -- A lane update that raised never reached the end of the lane loop below,
+    -- so its sentinel is still set and the lanes are only partly merged: this
+    -- event owes a full update whatever its payload says.
+    if preState and preState.scanning == true then preState.needFullUpdate = true end
     if EmptyAuraPayload(updateInfo) and forceFull ~= true
         and not (preState and preState.needFullUpdate == true) then
         return false
@@ -2422,14 +2446,17 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
 
     forceFull = forceFull == true or state.config ~= cfg
     local full = forceFull == true or state.needFullUpdate == true or not updateInfo or updateInfo.isFullUpdate == true
-    state.needFullUpdate = false
     if full and not membershipBumped then
         -- CurrentFrameState applied a new config: the lanes rescan fully and
         -- their filters may differ, so no cached set may answer them.
         A3._ClassicAuraTokenSerial[unit] = (A3._ClassicAuraTokenSerial[unit] or 0) + 1
     end
 
+    -- needFullUpdate and the scanning sentinel are cleared only where the lane
+    -- state is known good again: the two lane-less exits here, and the end of
+    -- the lane loop below.
     if cfg.visualDirect == true and not ConfigHasEnabledAuraLane(cfg) then
+        state.scanning, state.needFullUpdate = nil, false
         return UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
     end
 
@@ -2438,6 +2465,7 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
         if not IsSecret(exists) and exists == false then
             for _, lane in pairs(state.lanes or EMPTY_LANES) do ClearLane(lane) end
             ClearFrameAuraVisualState(frame)
+            state.scanning, state.needFullUpdate = nil, false
             return false
         end
     end
@@ -2450,6 +2478,10 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     -- evaluate UnitInRange at most once per event, for the first enabled lane
     -- that uses the native filter. The player is always in range.
     local rangeTrusted
+    -- Dirty until every lane finished. A scan or delta merge that raises leaves
+    -- the sentinel set and keeps a pending needFullUpdate, so the next event
+    -- rescans instead of trusting half-merged lanes and their stale buttons.
+    state.scanning = true
     for i = 1, #order do
         local lane = state.lanes[order[i]]
         local laneCfg = lane and lane.config
@@ -2469,6 +2501,7 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
             if visualDirty then auraVisualDirty = true end
         end
     end
+    state.scanning, state.needFullUpdate = nil, false
 
     local visualChanged = false
     if cfg.visualDirect == true then
@@ -2494,7 +2527,7 @@ local function RenderCachedAuras(frame, combatOnly)
         HideState(frame)
         return false
     end
-    if state.needFullUpdate == true then
+    if state.needFullUpdate == true or state.scanning == true then
         return UpdateAuras(frame, "ForceUpdate", unit, nil, true)
     end
 

@@ -325,17 +325,28 @@ function A3.ApplyIconStylePreview(button, style, size, shape)
     ApplyBorder(button, style, size, shape)
 end
 
-function A3.ApplyAuraDispelPreview(border, icon, size, mode, shape)
+--- Shaped dispel-border geometry only: ring texture, texcoords and anchors.
+--- It never colours or shows the texture. The live per-aura border caches the
+--- colour it last wrote, so a colour painted behind that cache would survive
+--- every later repaint of the same dispel type.
+function A3.ApplyAuraDispelShape(border, icon, size, shape)
     shape = Shape.Normalize(shape)
     if shape == Shape.RECTANGLE then return false end
     local path = A3.AuraShapeBorderPath(shape)
-    if not (border and icon and path and mode ~= nil and mode ~= "OFF") then return false end
+    if not (border and icon and path) then return false end
     local pad = math_max(1, math_floor(((tonumber(size) or 24) / 24) + 0.5))
     border:SetTexture(path)
     if border.SetTexCoord then border:SetTexCoord(0, 1, 0, 1) end
     border:ClearAllPoints()
     border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
     border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+    return true
+end
+
+--- Menu and Edit Mode previews: the shaped geometry plus the sample Magic colour.
+function A3.ApplyAuraDispelPreview(border, icon, size, mode, shape)
+    if mode == nil or mode == "OFF" then return false end
+    if not A3.ApplyAuraDispelShape(border, icon, size, shape) then return false end
     border:SetVertexColor(0.20, 0.60, 1.00, 1)
     border:Show()
     return true
@@ -369,6 +380,10 @@ function V.ApplyButtonLayout(lane, button)
     elseif button.Cooldown then if showCooldown then button.Cooldown:Show() else button.Cooldown:Hide() end end
     if button.Count and button.Count.SetShown then button.Count:SetShown(not barOnly and cfg.showStacks ~= false)
     elseif button.Count then if barOnly or cfg.showStacks == false then button.Count:Hide() else button.Count:Show() end end
+    -- Layout generation stamp: the two inputs this pass was computed from.
+    -- Written last, so a pass that raised is repeated by the next update.
+    button._msufA3LayoutConfig = cfg
+    button._msufA3LayoutCooldownShown = button._msufA3CooldownShown
 end
 
 -- Classic never binds aura LuaDurationObjects: C_UnitAuras.GetAuraDuration has
@@ -573,6 +588,10 @@ local function ApplyFrameEffect(lane, button, data)
     return true
 end
 
+-- Read-only stand-in for a lane without an indicator colour: this runs on
+-- every button update, and Color only reads the table before its defaults.
+local NO_INDICATOR_COLOR = {}
+
 local function ApplyIndicatorVisual(button, cfg)
     -- Unit/group debuff lanes store their compiled dispel-frame visual in
     -- cfg.visual, while custom spell-indicator lanes store a normalized string
@@ -583,7 +602,7 @@ local function ApplyIndicatorVisual(button, cfg)
         and visual ~= "number" and visual ~= "none" then
         visual = "icon"
     end
-    local color = type(cfg.color) == "table" and cfg.color or {}
+    local color = type(cfg.color) == "table" and cfg.color or NO_INDICATOR_COLOR
     local r, g, b, a = Color(color, 0.69, 0.50, 0.88, 1)
     local swatch = button._msufA3ClassicIndicatorSwatch
     if visual == "square" or visual == "bar" then
@@ -665,7 +684,14 @@ end
 function V.UpdateButtonVisual(lane, button, unit, data)
     local cfg = lane and lane.config
     if not (cfg and button) then return end
-    V.ApplyButtonLayout(lane, button)
+    -- The layout depends only on the compiled lane config (a new table for
+    -- every config generation) and on whether UpdateCooldown currently shows
+    -- this button's cooldown. Re-apply it when either moved, so a refreshed
+    -- aura that changed neither writes no layout at all.
+    if button._msufA3LayoutConfig ~= cfg
+        or button._msufA3LayoutCooldownShown ~= button._msufA3CooldownShown then
+        V.ApplyButtonLayout(lane, button)
+    end
     local visual = ApplyIndicatorVisual(button, cfg)
     if visual == "number" and button.Count then
         local applications = tonumber(data and data.applications) or 1

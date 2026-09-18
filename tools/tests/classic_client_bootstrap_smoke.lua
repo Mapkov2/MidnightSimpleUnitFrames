@@ -134,57 +134,52 @@ assert(namespace.Compat.Client == namespace.Client, "client compat bridge was lo
 assert(namespace.Core.BootstrapLoaded == true, "kernel bootstrap did not finish")
 assert(MSUF_MAX_ARENA_FRAMES == spec.arena, "kernel bootstrap changed MSUF_MAX_ARENA_FRAMES")
 
--- A Classic interface is intentionally below 120100 but must not arm the
--- Retail-only old-client popup or create its fallback event frame.
-function CreateFrame()
-    error("client version warning created a frame for " .. flavor)
+-- The old-client warning is a Midnight popup for builds below 12.1. It carries
+-- no Classic guard and every Classic interface is below 120100, so a Classic TOC
+-- must not load it at all (tools/classic-flavor-load-exclusions.tsv has the row).
+local loadedWarnings = {}
+for _, path in ipairs(manifest.Paths(repo, spec.toc)) do
+    if path:find("ClientVersionWarning", 1, true) then loadedWarnings[#loadedWarnings + 1] = path end
 end
-local warningChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Classic/Features/MSUF_ClientVersionWarning.lua"))
-warningChunk(addonName, namespace)
-assert(namespace.ClientVersionWarning.IsLegacyClient() == false, "Classic was classified as legacy Retail")
+if spec.toc == "Mainline" then
+    assert(#loadedWarnings == 1
+        and loadedWarnings[1]:find("/MidnightSimpleUnitFrames/Features/Versioning/MSUF_ClientVersionWarning.lua", 1, true),
+        "the Mainline TOC must load exactly the Retail old-client warning")
+else
+    assert(#loadedWarnings == 0, spec.toc .. " TOC loads the Retail old-client warning: " .. tostring(loadedWarnings[1]))
+end
 
--- Old-client warning matrix. Each case reloads the warning into a private
--- namespace whose EventBus and module registry only count calls, so a legacy
--- classification is observable without a frame (CreateFrame still raises).
--- Only Mainline, or a namespace without a client table, warns below 120100.
--- Classic flavors never warn, and neither does an unrecognized client:
--- Game/Shared/Initialize.lua already prints its diagnostic.
-local detectedGetBuildInfo = GetBuildInfo
-local function WarningIsLegacy(client, interface)
-    local wired = 0
-    local warningNamespace = {
-        Client = client,
-        ExportPublic = function() end,
-        MSUF_EventBus = { Register = function() wired = wired + 1 end },
-        MSUF_RegisterModule = function() wired = wired + 1 end,
-    }
-    if interface == nil then
-        GetBuildInfo = nil
-    else
-        GetBuildInfo = function() return "test", "test", "test", interface end
+-- Auras3 is the only reader of the warning and asks through a nil-safe lookup:
+-- a client that never loads it answers like one whose warning reports a current
+-- build. IsForever is false in this harness, so the project ID decides.
+do
+    local file = assert(io.open(repo .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua", "rb"))
+    local aurasCore = file:read("*a"):gsub("\r\n", "\n")
+    file:close()
+    local body = assert(aurasCore:match("local function NativeAuraRuntimeExpected%(%)(.-)\nend"),
+        "Auras3 no longer decides the native aura runtime expectation in one function")
+    local function NativeAuraRuntimeExpected(warning)
+        return assert(loadstring("local MSUF = ...; return function() " .. body .. "\nend"))(
+            { Client = namespace.Client, ClientVersionWarning = warning })()
     end
-    warningChunk(addonName, warningNamespace)
-    GetBuildInfo = detectedGetBuildInfo
-    local legacy = warningNamespace.ClientVersionWarning.IsLegacyClient()
-    assert(wired == (legacy and 2 or 0), "old-client warning wiring does not match its classification")
-    return legacy
+    local withoutWarning = NativeAuraRuntimeExpected(nil)
+    assert(withoutWarning == (spec.project == WOW_PROJECT_MAINLINE),
+        "native aura runtime expectation without the old-client warning for " .. flavor)
+    assert(NativeAuraRuntimeExpected({ IsLegacyClient = function() return false end }) == withoutWarning,
+        "a missing old-client warning must answer like a current-build warning for " .. flavor)
+    assert(NativeAuraRuntimeExpected({ IsLegacyClient = function() return true end }) == false,
+        "a legacy client must not expect the native aura runtime")
 end
-local MIN_INTERFACE = 120100
-for _, interface in ipairs({ 11600, 50504, 120001, MIN_INTERFACE, spec.interface }) do
-    assert(WarningIsLegacy(namespace.Client, interface) == (expect == "Mainline" and interface < MIN_INTERFACE),
-        "old-client warning classification for " .. flavor .. " at interface " .. interface)
-end
-assert(WarningIsLegacy(nil, 120001) == true, "a namespace without a client table stopped warning below 12.1")
-assert(WarningIsLegacy(nil, MIN_INTERFACE) == false, "a namespace without a client table warned on 12.1")
-assert(WarningIsLegacy(nil, nil) == false, "an unreadable build warned")
-assert(WarningIsLegacy({ IsClassic = false }, 120001) == true,
-    "only Client.IsSupported == false may silence the warning")
-assert(WarningIsLegacy({ IsClassic = false, IsSupported = false }, 11600) == false,
-    "an unrecognized client got the old Retail client warning")
 
 -- The Mainline TOC loads the Retail warning. WoW Forever reports a 1.x
 -- interface number but runs the 12.1 aura runtime, so it never warns, and
--- neither does any client with Blizzard_AuraContainer loaded.
+-- neither does any client with Blizzard_AuraContainer loaded. The EventBus stub
+-- only counts calls, so a legacy classification needs no frame.
+function CreateFrame()
+    error("client version warning created a frame for " .. flavor)
+end
+local detectedGetBuildInfo = GetBuildInfo
+local MIN_INTERFACE = 120100
 if expect == "Mainline" then
     local mainlineWarningChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Features/Versioning/MSUF_ClientVersionWarning.lua"))
     local function MainlineWarningIsLegacy(client, interface, auraContainerLoaded)

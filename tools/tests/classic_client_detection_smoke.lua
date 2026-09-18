@@ -680,6 +680,9 @@ do
     -- A Mainline TOC without the Forever field falls back to its Version.
     client = Load("s5d", Merge(versioned, { foreverVersion = "" }))
     assert(client.AddonVersion == "6.21", "s5d: missing Forever field must fall back to Version")
+    -- A client that hands a TOC condition back as text must not leak it.
+    client = Load("s5f", Merge(versioned, { gameEvent = false, version = "6.21 [AllowLoadGameType standard]" }))
+    assert(client.AddonVersion == "6.21", "s5f: the TOC condition leaked into the version")
     client = Load("s5e", Merge(versioned, { noMetadata = true }))
     assert(client.AddonVersion == nil, "s5e: no metadata API means no version")
 end

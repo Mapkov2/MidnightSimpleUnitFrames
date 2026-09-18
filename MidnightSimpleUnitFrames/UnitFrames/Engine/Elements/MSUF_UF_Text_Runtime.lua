@@ -83,6 +83,9 @@ local POWER_IDENTITY_EVENTS = {
   UNIT_PET = true,
   UNIT_TARGET = true,
   INSTANCE_ENCOUNTER_ENGAGE_UNIT = true,
+  -- Arena slots rebind to another opponent under the same token (every Solo
+  -- Shuffle round); the lifecycle handler forwards the raw event name.
+  ARENA_OPPONENT_UPDATE = true,
   MSUF_DEPENDENT_IDENTITY = true,
   MSUF_UF_ONSHOW = true,
   -- The displayed resource itself changed. A frame with a power bar re-seeds
@@ -1546,6 +1549,11 @@ local function NameNeedsNPCColorEvents(text)
     return false
   end
   if NPCTypeTextColorEnabled and NPCTypeTextColorEnabled(text) then
+    return true
+  end
+  -- A tag change arrives as UNIT_FACTION, so a graying name needs the color
+  -- route even when the name itself is statically colored.
+  if text.tapDeniedGray == true then
     return true
   end
   return type(text.nameColor) ~= "table"

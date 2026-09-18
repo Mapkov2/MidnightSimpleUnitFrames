@@ -858,7 +858,7 @@ end
 --- Arena previews seed a class identity into the synthetic unit state; use it
 --- so class portraits render for opponents that do not exist yet.
 local function ArenaPreviewClassToken(unit, frame)
-  if type(unit) ~= "string" or not unit:match("^arena[1-3]$") then
+  if type(unit) ~= "string" or not unit:match("^arena[1-5]$") then
     return nil
   end
   if frame and frame._msufArenaPreviewForced == true then

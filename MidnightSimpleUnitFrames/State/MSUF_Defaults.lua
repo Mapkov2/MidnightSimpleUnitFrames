@@ -181,6 +181,19 @@ if type(StateHelpers) ~= "table" then
     error("State/MSUF_StateHelpers.lua must load before State/MSUF_Defaults.lua")
 end
 local MSUF_DEFAULTS_SPEC = StateHelpers.DefaultsSpec
+--- Hunter Pet Happiness exists on WoW Forever (Classic Era and TBC load their
+--- own Defaults file, which does the same). Its status keys are normalized like
+--- every other status prefix there; Midnight keeps the shared spec untouched.
+if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
+    local petHappinessSpec = {}
+    for key, value in pairs(StateHelpers.DefaultsSpec) do petHappinessSpec[key] = value end
+    petHappinessSpec.statusPrefixes = {}
+    for i, prefix in ipairs(StateHelpers.DefaultsSpec.statusPrefixes) do
+        petHappinessSpec.statusPrefixes[i] = prefix
+    end
+    petHappinessSpec.statusPrefixes[#petHappinessSpec.statusPrefixes + 1] = "petHappinessIndicator"
+    MSUF_DEFAULTS_SPEC = petHappinessSpec
+end
 local MSUF_Defaults_ToNumber = StateHelpers.ToNumber
 local MSUF_Defaults_CopyIfMissing = StateHelpers.CopyIfMissing
 local MSUF_Defaults_NormalizeNumberField = StateHelpers.NormalizeNumberField

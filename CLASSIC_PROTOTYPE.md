@@ -205,6 +205,10 @@ has no arena UI, so arena units are unsupported there (0 arena slots). It has
 false there and the Mythic Raid scope stays out of the menu. Hunter pet
 happiness exists again (`C_PetInfo.GetPetHappiness` plus `UNIT_HAPPINESS`), so
 `Client.SupportsPetHappiness` is true on Forever, Classic Era and TBC.
+Forever has nine classes and no Evoker, so `Client.HasEmpoweredCasts` is true on
+Midnight only and the Empowered Casts castbar section follows it. A Mainline client
+below interface 100000 without the Forever marker prints one login line (the marker
+was probably renamed); behaviour stays Midnight, detection never keys on the number.
 Forever characters carry a surname (`Client.HasCharacterSurnames`): the Fonts
 page offers Full name, First name or Surname for every unit and group frame
 (`general.characterNameParts`). `Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua`
@@ -222,6 +226,12 @@ Retail's version in the `_Mainline.toc` files and the Classic TOCs carry the
 Mainline TOC names its version in `## X-MSUF-Version-Forever`, which the gate
 and the release-line contract hold equal to `VERSION`. A game mode that shares
 a TOC later gets its own `X-MSUF-Version-<Mode>` field the same way.
+So that Blizzard's AddOn list shows the right number too, each `_Mainline.toc`
+carries two conditioned lines, `## Version: <Retail> [AllowLoadGameType standard]`
+and `## Version: <release> [ExcludeLoadGameType standard]`. Blizzard's own TOCs
+repeat a metadata key with game type conditions the same way, and only the
+`standard` token is used because every client knows it. `Client.AddonVersion`
+cuts off a condition a client hands back as text.
 `Client.IsGameRuleActive(ruleKey)` reads Blizzard's game rules, such as
 `EditModeDisabled`, and returns nil when a client has no such rule.
 `/msuf clientinfo` prints every fact above plus the state of the Blizzard addons

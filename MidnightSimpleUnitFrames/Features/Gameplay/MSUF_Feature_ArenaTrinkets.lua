@@ -6,7 +6,8 @@
 --- Blizzard's authoritative CcRemoverFrame texture without reading it back.
 --- Classic uses the public millisecond values from GetArenaCrowdControlInfo.
 --- Mists additionally has a narrow combat-log fallback for the PvP trinket
---- spell because ARENA_COOLDOWNS_UPDATE is not reliable on that client.
+--- spell because ARENA_COOLDOWNS_UPDATE is not reliable on that client. The
+--- combat log is subscribed only while the player is inside an arena instance.
 ---
 --- All work is event-driven. There is no OnUpdate, ticker, or polling loop.
 
@@ -41,6 +42,7 @@ local requested = {}
 local relaySources = {}
 local mistsFallback = {}
 local RefreshCooldown
+local SyncMistsCombatLog
 
 local function ArenaConf()
     local db = _G.MSUF_DB
@@ -128,8 +130,13 @@ end
 local function PositionHolder(holder, index)
     local frame = ArenaFrame(index)
     if not frame then return false end
-    holder:ClearAllPoints()
-    holder:SetPoint("LEFT", frame, "RIGHT", 4, 0)
+    -- The anchor is relative to the arena frame, so it follows the frame by
+    -- itself; only a different frame object needs a new anchor.
+    if holder._msufTrinketAnchor ~= frame then
+        holder:ClearAllPoints()
+        holder:SetPoint("LEFT", frame, "RIGHT", 4, 0)
+        holder._msufTrinketAnchor = frame
+    end
     return true
 end
 
@@ -289,7 +296,16 @@ end
 -- One request per visible slot segment. Response events refresh delivered data
 -- only; they never request again, avoiding request -> response feedback loops.
 local function SyncTrinketIcons(allowRequest)
-    local active = ArenaEnabled() and ShowTrinketEnabled() and InArenaMatch()
+    local active
+    if IS_MISTS then
+        -- The combat-log fallback follows the arena instance, not the display
+        -- settings, so the instance is read once here for both.
+        local inArena = InArenaMatch()
+        SyncMistsCombatLog(inArena)
+        active = inArena and ArenaEnabled() and ShowTrinketEnabled()
+    else
+        active = ArenaEnabled() and ShowTrinketEnabled() and InArenaMatch()
+    end
     for index = 1, MAX_ARENA do
         local unit = "arena" .. index
         local holder = EnsureHolder(index)
@@ -353,7 +369,9 @@ local function HandleClassicSpellUpdate(unit, spellID, itemID)
 end
 
 local function HandleMistsCombatLog()
-    if not IS_MISTS or not ArenaEnabled() or not ShowTrinketEnabled() or not InArenaMatch() then return end
+    -- SyncMistsCombatLog delivers this event inside arena instances only, so the
+    -- per-event path does not ask the client for the instance type again.
+    if not IS_MISTS or not ArenaEnabled() or not ShowTrinketEnabled() then return end
     local getInfo = _G.CombatLogGetCurrentEventInfo
     if type(getInfo) ~= "function" then return end
     local _, subEvent, _, sourceGUID, _, _, _, _, _, _, _, spellID = getInfo()
@@ -407,6 +425,34 @@ local function HandleEvent(event, arg1, arg2, arg3)
 end
 
 local eventFrame
+local mistsLogWired = false
+local mistsLogLive = false
+
+--- Mists only. The combat-log fallback is subscribed while the player is inside
+--- an arena instance and released when the player leaves, so raids and the open
+--- world never deliver a combat-log event to this module. SyncTrinketIcons calls
+--- this from PLAYER_ENTERING_WORLD and every arena event; the live flag keeps
+--- those repeat calls comparison-only.
+SyncMistsCombatLog = function(wanted)
+    if not mistsLogWired or wanted == mistsLogLive then return end
+    if eventFrame then
+        if wanted then
+            eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+        else
+            eventFrame:UnregisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+        end
+    elseif wanted then
+        local register = _G.MSUF_EventBus_Register
+        if type(register) ~= "function" then return end
+        register("COMBAT_LOG_EVENT_UNFILTERED", "MSUF_ARENA_TRINKET_MISTS_LOG", HandleEvent)
+    else
+        local unregister = _G.MSUF_EventBus_Unregister
+        if type(unregister) ~= "function" then return end
+        unregister("COMBAT_LOG_EVENT_UNFILTERED", "MSUF_ARENA_TRINKET_MISTS_LOG")
+    end
+    mistsLogLive = wanted
+end
+
 local function WireEvents()
     local events = {
         { "ARENA_OPPONENT_UPDATE", "MSUF_ARENA_TRINKET_OPPONENT" },
@@ -416,9 +462,10 @@ local function WireEvents()
     }
     if IS_RETAIL then
         events[#events + 1] = { "PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_TRINKET_MATCH" }
-    elseif IS_MISTS then
-        events[#events + 1] = { "COMBAT_LOG_EVENT_UNFILTERED", "MSUF_ARENA_TRINKET_MISTS_LOG" }
     end
+    -- COMBAT_LOG_EVENT_UNFILTERED is deliberately absent: on Mists
+    -- SyncMistsCombatLog owns that subscription per arena instance.
+    mistsLogWired = IS_MISTS
 
     local register = _G.MSUF_EventBus_Register
     if type(register) == "function" then

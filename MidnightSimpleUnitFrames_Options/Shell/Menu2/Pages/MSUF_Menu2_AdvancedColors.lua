@@ -701,6 +701,7 @@ local function ResetUnitframeColors()
     local db = DB()
     local g = G()
     db.npcColors = nil
+    g.tapDeniedGray = nil
     ClearRGB(g, "petFrameColor")
     g.petFrameUsePlayerClassColor = nil
     g.npcClassColorBar = nil
@@ -1547,6 +1548,42 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
             end
         end,
         Meta("npc.class_color_bar"))
+    -- Tagged mobs (Classic clients and WoW Forever only; Midnight has no
+    -- tagging, so the page stays exactly Retail's there). The color lives in
+    -- the NPC color table as kind "tapped"; GetNPCColor falls back to the enemy
+    -- red for kinds it does not know, so the swatch reads the stored color itself.
+    if MSUF.Client and MSUF.Client.SupportsTapDenied == true then
+        local tappedColor = ColorValueAt(ctx, unit, "Tagged by others", 12, -154,
+            function()
+                local colors = DB().npcColors
+                local stored = type(colors) == "table" and colors.tapped or nil
+                if type(stored) == "table" then return stored.r or 0.5, stored.g or 0.5, stored.b or 0.5 end
+                return 0.5, 0.5, 0.5
+            end,
+            function(r, g, c)
+                if not ApiCall("SetNPCColor", "tapped", r, g, c) then
+                    local db = DB()
+                    db.npcColors = db.npcColors or {}
+                    db.npcColors.tapped = { r = r, g = g, b = c }
+                    ApplyUnitframeColorWithReload()
+                end
+            end,
+            nil, nil, Meta("npc.color.tapped"), { 0.5, 0.5, 0.5 })
+        local tappedToggle = ValueToggleAt(ctx, unit, "Gray out mobs tagged by others", 360, -110,
+            function() return G().tapDeniedGray ~= false end,
+            function(v)
+                G().tapDeniedGray = v and true or false
+                ApplyUnitframeColorWithReload()
+                SetControlEnabled(tappedColor, v and true or false)
+            end,
+            Meta("npc.tap_denied_gray"))
+        if M.AddTooltip then
+            M.AddTooltip(tappedToggle, "Gray out mobs tagged by others",
+                "A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame.", { hook = true })
+        end
+        M.TrackRefresh(ctx, function() SetControlEnabled(tappedColor, G().tapDeniedGray ~= false) end)
+        SetControlEnabled(tappedColor, G().tapDeniedGray ~= false)
+    end
     CH.ButtonAt(unit, "Reset Unitframe Colors", 12, -190, 190,
         ResetUnitframeColors, "unitframe.reset")
     local npcType = b:CollapsibleSection("colors_npc_type", "NPC Type Colors", 330, false)

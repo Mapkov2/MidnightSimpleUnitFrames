@@ -310,9 +310,23 @@ function FirstLoad:IsTerminal()
     return TERMINAL_STATUS[state.status] == true
 end
 
+-- Clients that lose their SavedVariables between sessions (the WoW Forever
+-- beta) start every login as a clean install, so this one-time scene would
+-- never retire there. `/msuf firstload` is the only path that writes a debug
+-- install reason, and it keeps the preview available on those clients.
+local function ClientShowsOnboarding()
+    local client = MSUF.Client
+    return type(client) ~= "table" or client.SupportsOnboardingScenes ~= false
+end
+
 function FirstLoad:ShouldShowDashboard()
     SyncLiveState()
     if self.deferredThisSession then
+        return false
+    end
+    if not ClientShowsOnboarding()
+        and state.installReason ~= "debug_forced_fresh"
+        and state.installReason ~= "debug_forced_upgrade" then
         return false
     end
     -- Successful imports persist an independent receipt so the welcome cannot

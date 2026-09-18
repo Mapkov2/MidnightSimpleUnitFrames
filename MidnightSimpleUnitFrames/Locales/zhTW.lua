@@ -5906,6 +5906,9 @@ L["Character names (all frames)"] = "角色名稱（所有框架）"
 L["Full name"] = "全名"
 L["First name"] = "名字"
 L["Surname"] = "姓氏"
+-- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
+L["Pet Happiness"] = "寵物快樂值"
+L["Pet Happiness (Vanilla/TBC)"] = "寵物快樂值（Vanilla/TBC）"
 L["Color by level difficulty"] = "依等級難度著色"
 L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "遠高於你的等級為紅色，與你同級為白色，無威脅時為灰色。關閉後改用狀態文字顏色。"
 L["Level Difficulty Colors"] = "等級難度顏色"
@@ -5916,6 +5919,9 @@ L["Your level"] = "你的等級"
 L["Below your level"] = "低於你的等級"
 L["Trivial"] = "無威脅"
 L["Level Text"] = "等級文字"
+L["Tagged by others"] = "已被他人標記"
+L["Gray out mobs tagged by others"] = "將他人標記的怪物變灰"
+L["A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame."] = "其他玩家先攻擊的怪物不會給你戰利品和經驗。其生命條和名字會變灰，與預設目標框架一致。"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)

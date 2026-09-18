@@ -423,7 +423,9 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         naturalOrder = sortOrder == 0 and placed.sortReverse ~= true,
         visibleOnlyScan = false,
         cappedFilterScan = false,
-        reorderOnUpdate = sortOrder ~= 0 or placed.sortReverse == true,
+        -- SortMode yields 0, 1, 2, 3 or 5; a refresh can move an aura only in
+        -- the time-keyed modes (2 duration, 3 expiration).
+        reorderOnUpdate = sortOrder == 2 or sortOrder == 3,
         sortReverse = placed.sortReverse == true,
         clickThrough = placed.clickThrough == true,
         showTooltip = placed.showTooltip ~= false,

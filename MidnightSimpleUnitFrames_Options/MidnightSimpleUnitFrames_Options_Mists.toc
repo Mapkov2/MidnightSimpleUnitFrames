@@ -1,9 +1,9 @@
 ## Interface: 50504
-## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options |cffd9b9b9b(Mists)|r
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options |cff9b9b9b(Mists)|r
 ## Notes: Load-on-demand configuration UI for the Mists Classic prototype.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.5-beta3
+## Version: 6.5-beta4
 ## X-MSUF-Client: Mists
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames

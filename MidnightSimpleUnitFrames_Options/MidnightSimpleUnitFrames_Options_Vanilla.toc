@@ -1,9 +1,9 @@
 ## Interface: 11509
-## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options |cffd9b9b9b(Classic Era)|r
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options |cff9b9b9b(Classic Era)|r
 ## Notes: Load-on-demand configuration UI for Classic Era.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.5-beta3
+## Version: 6.5-beta4
 ## X-MSUF-Client: Vanilla
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames

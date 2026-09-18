@@ -40,7 +40,12 @@ assert(status:find("status.selected.text_settings", 1, true),
 assert(not status:find('W.Color(placementCard, "Text color")', 1, true),
     "Classic status menu brought back the duplicate placement text-color swatch")
 
-local specs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs_Classic.lua")
+-- Classic loads the shared preview specs: the client model decides the Pet
+-- Happiness row (classic_pet_happiness_smoke.lua runs it per flavor).
+local previewManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Classic.xml")
+assert(previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Specs.lua"/>', 1, true),
+    "Classic unit preview manifest no longer loads the shared preview specs")
+local specs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua")
 assert(specs:find("statusPetHappiness", 1, true) and specs:find("stance|showStanceIndicator", 1, true),
     "Classic preview specs do not combine Pet Happiness with the current Retail stance preview")
 
@@ -109,7 +114,9 @@ for _, contract in ipairs({
     "if GCDBarSupported() then",
     "GetSpellCooldownDuration",
     "SetTimerDuration",
-    "MSUF.Client.IsClassic == true) then",
+    -- Empowered Casts follows the capability (WoW Forever has no Evoker either);
+    -- a harness that fakes only IsClassic still hides the section.
+    "client.HasEmpoweredCasts ~= false and client.IsClassic ~= true) then",
     'M.SupportsFrameScope("focus") then',
 }) do
     assert(castbars:find(contract, 1, true),

@@ -344,10 +344,20 @@ function MSUF_DeleteProfile(name)
         print("|cffff0000MSUF:|r You cannot delete the 'Default' profile. Use Reset instead.")
         return false, "default profile is protected"
     end
+    --- The survivor every affected character moves to must not depend on
+    --- `pairs()` order: "Default" when it exists, else the alphabetically first
+    --- string-keyed profile, the same rule MSUF_ProfileIO_FallbackProfileTable
+    --- applies to repairs.
     local fallbackName
-    for profileName, tbl in pairs(profiles) do
-        if profileName ~= name and type(tbl) == "table" then
-            fallbackName = fallbackName or profileName
+    if type(profiles["Default"]) == "table" then
+        fallbackName = "Default"
+    else
+        for profileName, tbl in pairs(profiles) do
+            if profileName ~= name and type(profileName) == "string" and profileName ~= ""
+                and type(tbl) == "table"
+                and (fallbackName == nil or profileName < fallbackName) then
+                fallbackName = profileName
+            end
         end
     end
     if not fallbackName then
@@ -797,9 +807,12 @@ end
 
 local function MSUF_ProfileIO_FontPathAvailable(path)
     if type(path) ~= "string" or path == "" then return false end
-    local isLoadable = _G.MSUF_FontPathIsLoadable
-    if type(isLoadable) == "function" then
-        return isLoadable(path, 14, "") == true
+    --- Runtime/MSUF_FontRegistry.lua answers availability from registry
+    --- metadata (MSUF_IsAvailableFontPath); the SetFont probe it replaced,
+    --- MSUF_FontPathIsLoadable, no longer exists.
+    local isAvailable = _G.MSUF_IsAvailableFontPath
+    if type(isAvailable) == "function" then
+        return isAvailable(path) == true
     end
     local isKnown = _G.MSUF_IsKnownFileAsset
     if type(isKnown) == "function" and isKnown(path) == false then return false end

@@ -2,7 +2,8 @@
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Assistant
 ## Notes: Load-on-demand Assistant for Midnight Simple Unit Frames.
 ## Author: Mapko
-## Version: 6.20
+## Version: 6.20 [AllowLoadGameType standard]
+## Version: 6.5-beta4 [ExcludeLoadGameType standard]
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames, MidnightSimpleUnitFrames_Options
 ## LoadOnDemand: 1

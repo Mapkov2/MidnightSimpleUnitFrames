@@ -96,10 +96,15 @@ function Get-RelativePath {
 function Get-TocField {
     param(
         [Parameter(Mandatory = $true)][string]$Content,
-        [Parameter(Mandatory = $true)][string]$Name
+        [Parameter(Mandatory = $true)][string]$Name,
+        [switch]$AllowConditioned
     )
 
     $matches = [regex]::Matches($Content, "(?m)^##\s+$([regex]::Escape($Name)):\s*(.+?)\s*$")
+    # A Mainline TOC carries one Version line per game type condition.
+    if ($AllowConditioned -and $matches.Count -ge 1) {
+        return (@($matches | ForEach-Object { $_.Groups[1].Value.Trim() }) -join ' | ')
+    }
     if ($matches.Count -ne 1) {
         throw "Expected exactly one '$Name' field in TOC content; found $($matches.Count)."
     }
@@ -157,8 +162,78 @@ function Test-ForbiddenArtifactPath {
         return $true
     }
     if ($leaf -match '(?i)\.(?:md|markdown|html?|py|pyc|pyo|ps1|psm1|psd1)$') { return $true }
-    if ($leaf -match '(?i)(?:^|[-_.])(?:test|tests|smoke|spec|perfy|graphify)(?:[-_.]|$)') { return $true }
+    # The name-token rule is for stray tooling files only. It must never decide
+    # the fate of addon payload: "Spec" and "Test" are ordinary WoW vocabulary,
+    # and MSUF_AssistantRegistry_Profiles_Workflow_Spec.lua was silently dropped
+    # from every zip by this rule although both Assistant manifests load it.
+    # Payload with such a name is judged by Assert-StagedLoadGraph instead.
+    if (Test-AddonPayloadLeaf -Leaf $leaf) { return $false }
+    if (Test-ToolingNameToken -Leaf $leaf) { return $true }
     return $false
+}
+
+function Test-AddonPayloadLeaf {
+    param([Parameter(Mandatory = $true)][string]$Leaf)
+    return $Leaf -match '(?i)\.(?:lua|xml|toc|tga|blp|png|jpg|ttf|otf|ogg|mp3|wav)$'
+}
+
+function Test-ToolingNameToken {
+    param([Parameter(Mandatory = $true)][string]$Leaf)
+    return $Leaf -match '(?i)(?:^|[-_.])(?:test|tests|smoke|spec|perfy|graphify)(?:[-_.]|$)'
+}
+
+# Every Lua and XML file a staged TOC reaches must exist in the stage, so a
+# file removed by a staging rule fails the build instead of shipping a broken
+# load graph. A Lua or XML file whose name looks like tooling ships only when
+# the load graph reaches it; otherwise the build stops and asks for a decision.
+function Assert-StagedLoadGraph {
+    param([Parameter(Mandatory = $true)][string]$StageRoot)
+
+    $reached = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $missing = [Collections.Generic.List[string]]::new()
+    $pending = [Collections.Generic.Stack[string]]::new()
+
+    function Add-Reference {
+        param([string]$OwnerPath, [string]$Reference)
+        $entry = ($Reference -replace '\s*\[[^\]]*\]\s*$', '').Trim()
+        if (-not $entry -or $entry -notmatch '(?i)\.(?:lua|xml)$') { return }
+        $ownerDirectory = Split-Path -Parent $OwnerPath
+        $target = [IO.Path]::GetFullPath((Join-Path $ownerDirectory $entry.Replace('\', [IO.Path]::DirectorySeparatorChar).Replace('/', [IO.Path]::DirectorySeparatorChar)))
+        if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+            $missing.Add("$(Get-RelativePath -Root $StageRoot -FullName $OwnerPath) -> $entry")
+            return
+        }
+        if ($reached.Add($target) -and $target -match '(?i)\.xml$') { $pending.Push($target) }
+    }
+
+    $tocs = @(Get-ChildItem -LiteralPath $StageRoot -Filter '*.toc' -File -Recurse)
+    foreach ($toc in $tocs) {
+        foreach ($line in [IO.File]::ReadAllLines($toc.FullName)) {
+            $trimmed = $line.Trim()
+            if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
+            Add-Reference -OwnerPath $toc.FullName -Reference $trimmed
+        }
+    }
+    while ($pending.Count -gt 0) {
+        $xmlPath = $pending.Pop()
+        $content = [IO.File]::ReadAllText($xmlPath)
+        $content = [regex]::Replace($content, '<!--.*?-->', '', [Text.RegularExpressions.RegexOptions]::Singleline)
+        foreach ($match in [regex]::Matches($content, '<(?:Script|Include)\s+[^>]*?file\s*=\s*"([^"]+)"', [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+            Add-Reference -OwnerPath $xmlPath -Reference $match.Groups[1].Value
+        }
+    }
+    if ($missing.Count -gt 0) {
+        throw "Staged package load graph has missing files: $($missing -join '; ')"
+    }
+
+    $unreachedTooling = @(Get-ChildItem -LiteralPath $StageRoot -File -Recurse | Where-Object {
+        $_.Extension -match '(?i)^\.(?:lua|xml)$' -and (Test-ToolingNameToken -Leaf $_.Name) -and
+        -not $reached.Contains([IO.Path]::GetFullPath($_.FullName))
+    } | ForEach-Object { Get-RelativePath -Root $StageRoot -FullName $_.FullName })
+    if ($unreachedTooling.Count -gt 0) {
+        throw "Staged Lua/XML files are named like tooling and no TOC loads them; remove them from the addon tree or load them: $($unreachedTooling -join ', ')"
+    }
+    Write-Host "Staged load graph: $($tocs.Count) TOCs reach $($reached.Count) Lua/XML files; none missing"
 }
 
 function Remove-ForbiddenStageArtifacts {
@@ -362,7 +437,7 @@ foreach ($addon in $addonNames) {
         $path = Join-Path $repoRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
         $content = [IO.File]::ReadAllText($path)
         $null = Get-TocField -Content $content -Name 'Interface'
-        $actualVersion = Get-TocField -Content $content -Name 'Version'
+        $actualVersion = Get-TocField -Content $content -Name 'Version' -AllowConditioned:($flavor -eq 'Mainline')
         if ($classicInterfaces.Contains($flavor)) {
             $actualInterface = Get-TocField -Content $content -Name 'Interface'
             if ((Get-InterfaceSetKey $actualInterface) -cne (Get-InterfaceSetKey $classicInterfaces[$flavor])) {
@@ -433,6 +508,7 @@ try {
     }
 
     Remove-ForbiddenStageArtifacts -StageRoot $stageRoot
+    Assert-StagedLoadGraph -StageRoot $stageRoot
 
     foreach ($addon in $addonNames) {
         foreach ($flavor in $classicFlavors) {
@@ -487,7 +563,7 @@ try {
             foreach ($flavor in $flavors) {
                 $relative = "$addon/${addon}_$flavor.toc"
                 $content = Read-ZipEntryText -Archive $archive -EntryName $relative
-                $actualVersion = Get-TocField -Content $content -Name 'Version'
+                $actualVersion = Get-TocField -Content $content -Name 'Version' -AllowConditioned:($flavor -eq 'Mainline')
                 if ($flavor -eq 'Mainline') {
                     if ($actualVersion -ne $mainlineSourceVersions[$relative]) {
                         throw "Mainline TOC version changed in release zip: $relative ($actualVersion)."

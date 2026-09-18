@@ -540,7 +540,7 @@ local function WidthSourceNeedsReanchor(g, unit)
     local offset = 1
 
     if matchSrc == "unitframe" then
-        local count = (unit == "boss" and 5) or (unit == "arena" and 3) or 1
+        local count = (unit == "boss" and 5) or (unit == "arena" and (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)) or 1
         if state.count ~= count then changed = true end
         state.count = count
         for i = 1, count do
@@ -694,7 +694,7 @@ local function EnsureWidthSourceHooks(g, unit)
 
     if matchSrc == "unitframe" then
         local found = false
-        local count = (unit == "boss" and 5) or (unit == "arena" and 3) or 1
+        local count = (unit == "boss" and 5) or (unit == "arena" and (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)) or 1
         for i = 1, count do
             local sourceUnit = unit
             if unit == "boss" then

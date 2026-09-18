@@ -1,6 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
     <Script file="MSUF_Menu2_Search_Data.lua"/>
-    <Script file="MSUF_Menu2_Search_Keywords_Classic.lua"/>
+    <Script file="MSUF_Menu2_Search_Keywords.lua"/>
     <Script file="MSUF_Menu2_Search_QueryAliases.lua"/>
     <Script file="MSUF_Menu2_Search_FAQ.lua"/>
     <Script file="MSUF_Menu2_Search_FAQ_Catalog_01.lua"/>

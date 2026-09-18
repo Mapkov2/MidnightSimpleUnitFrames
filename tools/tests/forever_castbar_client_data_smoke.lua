@@ -10,8 +10,9 @@
 --   GCD bar:    Forever registers UNIT_SPELLCAST_SUCCEEDED only while the client
 --               knows the dummy spell 61304; every other client registers it
 --               unconditionally, as before.
---   Ticks:      Forever uses per-rank Era tick counts (Mind Flay 3, Hellfire
---               15); Retail keeps its table and the 12-tick cap.
+--   Ticks:      Forever and Classic Era use per-rank Era tick counts (Mind Flay
+--               3, Hellfire 15); Retail, TBC and Mists keep the Retail table and
+--               the 12-tick cap.
 --   Contract:   the client fact is read once at file load in each gated file.
 -- Run with Lua 5.1 and the repo root as arg 1.
 local root = assert(arg[1], "repo root required"):gsub("\\", "/")
@@ -35,6 +36,8 @@ end
 local FOREVER = { IsForever = true, IsRetail = true, IsClassic = false, Family = "Mainline", Flavor = "Mainline" }
 local RETAIL = { IsForever = false, IsRetail = true, IsClassic = false, Family = "Mainline", Flavor = "Mainline" }
 local VANILLA = { IsForever = false, IsRetail = false, IsClassic = true, IsVanilla = true, Family = "Classic", Flavor = "Vanilla" }
+local TBC = { IsForever = false, IsRetail = false, IsClassic = true, IsTBC = true, Family = "Classic", Flavor = "TBC" }
+local MISTS = { IsForever = false, IsRetail = false, IsClassic = true, IsMists = true, Family = "Classic", Flavor = "Mists" }
 
 local function NewFrame(name)
     local frame = { name = name, events = {}, unitEvents = {} }
@@ -266,7 +269,20 @@ for _, case in ipairs({
     { "Retail", RETAIL, 234153, 4 },    -- Drain Life, 5 ticks
     { "Retail", RETAIL, 755, 4 },       -- Health Funnel, 5 ticks
     { "Retail", RETAIL, 1949, 5 },      -- Hellfire: not in the Retail table
-    { "Vanilla", VANILLA, 15407, 5 },
+    -- Classic Era runs the same spell data as Forever: Era table, 15-tick cap.
+    { "Vanilla", VANILLA, 15407, 2 },   -- Mind Flay rank 1, 3 ticks
+    { "Vanilla", VANILLA, 18807, 2 },   -- Mind Flay rank 6
+    { "Vanilla", VANILLA, 5144, 3 },    -- Arcane Missiles rank 2, 4 ticks
+    { "Vanilla", VANILLA, 755, 9 },     -- Health Funnel, 10 ticks
+    { "Vanilla", VANILLA, 11684, 14 },  -- Hellfire rank 3, 15 ticks (above the Retail cap of 12)
+    { "Vanilla", VANILLA, 234153, 5 },  -- Retail Drain Life ID: absent on Era, default layout
+    -- TBC and Mists spell data is unverified: both stay on the Retail table.
+    { "TBC", TBC, 15407, 5 },           -- Mind Flay, 6 ticks
+    { "TBC", TBC, 755, 4 },             -- Health Funnel, 5 ticks
+    { "TBC", TBC, 11684, 5 },           -- Hellfire rank 3: not in the Retail table
+    { "Mists", MISTS, 15407, 5 },
+    { "Mists", MISTS, 755, 4 },
+    { "Mists", MISTS, 11684, 5 },
     { "no MSUF.Client", nil, 12051, 5 }, -- Evocation, 6 ticks
 }) do
     local shown = ShownTickMarkers(case[2], case[3])
@@ -276,12 +292,28 @@ end
 
 -- Source contracts ----------------------------------------------------------------
 do
-    for _, file in ipairs({ INTERRUPT_FILE, TICKS_FILE }) do
-        local text = Read(file)
-        local _, reads = text:gsub("Client%.IsForever", "")
-        Check(reads == 1, "contract: " .. file .. " must read Client.IsForever exactly once, found " .. reads)
-        Check(text:find("\nlocal IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true\n", 1, true),
-            "contract: " .. file .. " must read IS_FOREVER once at file load")
+    local interrupt = Read(INTERRUPT_FILE)
+    local _, interruptReads = interrupt:gsub("Client%.IsForever", "")
+    Check(interruptReads == 1, "contract: " .. INTERRUPT_FILE .. " must read Client.IsForever exactly once, found " .. interruptReads)
+    Check(interrupt:find("\nlocal IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true\n", 1, true),
+        "contract: " .. INTERRUPT_FILE .. " must read IS_FOREVER once at file load")
+    -- The tick table keys on one named fact (the client runs Classic Era spell
+    -- data), read once at file load, not on a second identity alias. TBC and
+    -- Mists must not join it before their spell data is verified.
+    local ticks = Read(TICKS_FILE)
+    local _, foreverReads = ticks:gsub("Client%.IsForever", "")
+    local _, vanillaReads = ticks:gsub("Client%.IsVanilla", "")
+    Check(foreverReads == 1 and vanillaReads == 1,
+        "contract: " .. TICKS_FILE .. " must read Client.IsForever and Client.IsVanilla exactly once each")
+    Check(ticks:find("\nlocal HAS_ERA_SPELL_DATA = MSUF.Client ~= nil\n"
+            .. "    and (MSUF.Client.IsForever == true or MSUF.Client.IsVanilla == true)\n", 1, true),
+        "contract: " .. TICKS_FILE .. " must read HAS_ERA_SPELL_DATA once at file load")
+    Check(ticks:find("\nlocal MAX_AUTO_TICK_COUNT = HAS_ERA_SPELL_DATA and 15 or 12\n", 1, true)
+            and ticks:find("\nif HAS_ERA_SPELL_DATA then\n    CHANNEL_TICK_DATA = {}\n", 1, true),
+        "contract: the Era tick table and its 15-tick cap must key on HAS_ERA_SPELL_DATA")
+    for _, identity in ipairs({ "IS_FOREVER", "IsEra", "IsTBC", "IsMists", "IsClassic" }) do
+        Check(not ticks:find(identity, 1, true),
+            "contract: " .. TICKS_FILE .. " must not branch on " .. identity)
     end
     local gcd = Read(GCD_FILE)
     local _, gcdReads = gcd:gsub("Client%.IsForever", "")

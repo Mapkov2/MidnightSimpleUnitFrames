@@ -49,8 +49,21 @@ local projectIsMainline = isRetail
 -- loads, and only on Forever. An untagged (Mainline) TOC with the marker places
 -- the Mainline build whatever project ID the client reports; a Classic
 -- X-MSUF-Client tag always wins.
+-- Blizzard calls "Camelot" a placeholder name. When the marker is renamed, the
+-- new name goes in front of this list and the old one stays, so both builds
+-- keep working; the audit's marker contract names the break.
+local FOREVER_MARKERS = { "RegisterCamelotEvents" }
 local gameEvent = _G.GameEvent
-local hasCamelotMarker = type(gameEvent) == "table" and type(gameEvent.RegisterCamelotEvents) == "function"
+local foreverMarker
+if type(gameEvent) == "table" then
+    for i = 1, #FOREVER_MARKERS do
+        if type(gameEvent[FOREVER_MARKERS[i]]) == "function" then
+            foreverMarker = FOREVER_MARKERS[i]
+            break
+        end
+    end
+end
+local hasCamelotMarker = foreverMarker ~= nil
 local isForever = hasCamelotMarker and (tocFlavor == nil or tocFlavor == "")
 if isForever then
     isRetail, isVanilla, isMists, isTBC = true, false, false, false
@@ -77,15 +90,31 @@ Client.IsClassic = isVanilla or isMists or isTBC
 -- WoW Forever through C_PetInfo.GetPetHappiness (Blizzard's Forever pet frame
 -- shows it). Cataclysm removed it, so Mists and Midnight have none.
 Client.SupportsPetHappiness = isVanilla or isTBC or isForever
+-- Mob tagging: the first player to hit a mob owns its loot and experience, and
+-- Blizzard grays the target for everyone else (UnitIsTapDenied). Every Classic
+-- client and WoW Forever have it; Midnight needs no MSUF handling.
+Client.SupportsTapDenied = isVanilla or isMists or isTBC or isForever
 -- WoW Forever characters carry a surname next to their first name (Blizzard's
 -- Camelot NameUtil). No other client has one.
 Client.HasCharacterSurnames = isForever
+-- Empowered casts are an Evoker mechanic. WoW Forever has nine classes and no
+-- Evoker, and no Classic client has one, so only Midnight offers the controls.
+Client.HasEmpoweredCasts = isRetail and not isForever
+-- One-time onboarding: the first-start welcome scene and the upgrade highlights.
+-- The WoW Forever beta client does not keep SavedVariables between sessions, a
+-- Blizzard bug that hits every addon. Both lifecycles live in those variables,
+-- so every login reads as a clean install and would greet the player again.
+-- Restore this once Forever persists settings.
+Client.SupportsOnboardingScenes = not isForever
 -- The aura filter that returns the debuffs this player can dispel. Classic Era
 -- keeps the original meaning of HARMFUL|RAID, the filter Blizzard's own "show
 -- dispellable debuffs" party frames scan there, and does not honour
 -- RAID_PLAYER_DISPELLABLE (dispel visuals stayed dark on Era only, in-game
 -- report 2026-09-16). TBC, Mists and Mainline use RAID_PLAYER_DISPELLABLE.
 Client.DispellableDebuffFilter = isVanilla and "HARMFUL|RAID" or "HARMFUL|RAID_PLAYER_DISPELLABLE"
+-- EllesmereUI's Edit Mode runs on both Mainline-family clients, Midnight and
+-- WoW Forever (confirmed in game by the owner, 2026-09-19); no Classic client
+-- has it, so the Mainline family is the right answer here.
 Client.SupportsEllesmereEditMode = isRetail
 Client.SupportsBlizzardEditMode = type(_G.Enum) == "table" and type(_G.Enum.EditModeSystem) == "table"
 Client.IsSupported = isRetail or isVanilla or isMists or isTBC
@@ -143,9 +172,15 @@ Client.IsForever = isForever
 -- cycle. WoW Forever shares the _Mainline.toc files with Midnight and cannot
 -- own that field; its version is the core TOC's "## X-MSUF-Version-Forever".
 -- A game mode that shares a TOC later gets its own X-MSUF-Version-<Mode> field.
+-- The _Mainline.toc Version lines are conditioned on the game type, so the AddOn
+-- list shows the right number too. The Forever field stays the source here, and
+-- a condition a client hands back as text is cut off.
 local addonVersion = isForever and ReadTOCField("X-MSUF-Version-Forever") or nil
 if type(addonVersion) ~= "string" or addonVersion == "" then
     addonVersion = ReadTOCField("Version")
+end
+if type(addonVersion) == "string" then
+    addonVersion = addonVersion:gsub("%s*%[.*$", "")
 end
 Client.AddonVersion = type(addonVersion) == "string" and addonVersion ~= "" and addonVersion or nil
 
@@ -198,6 +233,9 @@ end
 -- WoW Forever ships no arena UI: Blizzard excludes Blizzard_PVPUI and
 -- CompactArenaFrame for its camelot game type. Focus and boss units stay.
 if isForever then unsupportedUnits.arena = true end
+-- An unplaced client gets no arena slots below, so the unit answer must agree:
+-- arena frames without castbars or trinkets would be half a feature.
+if Client.Flavor == "Unknown" then unsupportedUnits.arena = true end
 
 -- Arena opponent slots are a client fact, published as Client.MaxArenaOpponents
 -- and _G.MSUF_MAX_ARENA_FRAMES: 3 on Mainline, whatever MAX_ARENA_ENEMIES says
@@ -303,8 +341,14 @@ function Client.DescribeLines()
         .. "; MSUF " .. tostring(Client.AddonVersion)
     local liveEvent = _G.GameEvent
     local classOrder = _G.CLASS_SORT_ORDER
-    lines[#lines + 1] = "Forever marker GameEvent.RegisterCamelotEvents at load " .. tostring(hasCamelotMarker)
-        .. ", now " .. tostring(type(liveEvent) == "table" and type(liveEvent.RegisterCamelotEvents) == "function")
+    local markerNow = false
+    if type(liveEvent) == "table" then
+        for i = 1, #FOREVER_MARKERS do
+            if type(liveEvent[FOREVER_MARKERS[i]]) == "function" then markerNow = true break end
+        end
+    end
+    lines[#lines + 1] = "Forever marker GameEvent." .. (foreverMarker or FOREVER_MARKERS[1])
+        .. " at load " .. tostring(hasCamelotMarker) .. ", now " .. tostring(markerNow)
         .. "; CLASS_SORT_ORDER " .. (type(classOrder) == "table" and (#classOrder .. " classes") or "missing")
 
     local gameRules = _G.C_GameRules
@@ -418,6 +462,16 @@ do
     elseif not Client.ProjectIDRecognized then
         diagnostic = "MSUF: unrecognized project ID (" .. ClientDetails() .. "); using the "
             .. Client.Flavor .. " TOC build."
+    elseif Client.Family == "Mainline" and not isForever
+        and interfaceNumber ~= nil and interfaceNumber < 100000 then
+        -- Midnight interface numbers start at 120000; WoW Forever reports 16001.
+        -- A Mainline client below that range without the marker is most likely
+        -- Forever after Blizzard renamed the marker. Detection never keys on the
+        -- interface number, so behaviour stays Midnight; the line only makes the
+        -- miss visible from the first login instead of failing silently.
+        diagnostic = "MSUF: Mainline client with interface " .. tostring(interfaceNumber)
+            .. " but without the WoW Forever marker (" .. ClientDetails() .. "); running the Midnight build."
+            .. " Please report /msuf clientinfo."
     elseif Client.Family == "Mainline" and not Client.GameModeRecognized then
         -- A new Mainline game mode keeps full Mainline behaviour; the line only
         -- makes the mode visible in bug reports from its first login.

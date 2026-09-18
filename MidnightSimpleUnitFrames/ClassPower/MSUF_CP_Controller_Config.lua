@@ -118,8 +118,15 @@ builders.CONTROLLER_CONFIG = function(E)
         -- Profiles can be shared across characters. Keep the ClassPower owner cold
         -- when the current class has no Mana pool, while retaining the preference
         -- for the next character that does. The API is absent on older clients.
-        if not _G.UnitHasPowerType then return true end
         local manaType = (_G.Enum and _G.Enum.PowerType and _G.Enum.PowerType.Mana) or 0
+        if not _G.UnitHasPowerType then
+            -- No Classic branch of Blizzard's UI calls UnitHasPowerType, so ask
+            -- the pool instead of assuming one: a class without Mana reports a
+            -- maximum of 0. Those clients have no secret power values.
+            local maxMana = _G.UnitPowerMax and _G.UnitPowerMax("player", manaType)
+            if maxMana == nil or not NotSecret(maxMana) then return true end
+            return maxMana > 0
+        end
         local hasMana = _G.UnitHasPowerType("player", manaType)
         return NotSecret(hasMana) and hasMana == true or false
     end

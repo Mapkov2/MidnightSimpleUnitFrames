@@ -110,5 +110,16 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     local records = {}
     add(records, {})
     assert(#records == #rows, flavor .. " static search leaks unsupported pages")
+    -- Every client loads the shared page keywords, arena page included. The page
+    -- record builder has to drop an unsupported unit page before it reads them:
+    -- compiled on its own, the body past that gate stops at its first file local.
+    local recordBody = assert(s:match("local function AddSearchRecord%(records, seenRecords, pageInfo, label, anchor, kind, extraParts%)(.-)\nend"))
+    local addRecord = assert(loadstring("local M = ...; return function(records, seenRecords, pageInfo, label, anchor, kind, extraParts) "
+        .. recordBody .. " end"))(menu)
+    for _, page in ipairs({ { "uf_arena", arena }, { "uf_boss", boss }, { "uf_player", true } }) do
+        local pageRecords = {}
+        local passedGate = not pcall(addRecord, pageRecords, {}, { key = page[1] }, page[1], nil, "page", {})
+        assert(passedGate == page[2] and #pageRecords == 0, flavor .. " page search record gate for " .. page[1])
+    end
 end
 print("classic_unit_availability_smoke: OK (Era, TBC, Mists, Mainline)")

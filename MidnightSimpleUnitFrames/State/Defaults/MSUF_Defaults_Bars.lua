@@ -122,9 +122,9 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
     end
     if g.showBossCastTime == nil then
         g.showBossCastTime = true
-end
-if g.showArenaCastTime == nil then
-    g.showArenaCastTime = true
+    end
+    if g.showArenaCastTime == nil then
+        g.showArenaCastTime = true
     end
     if g.castbarPlayerTimeFormat == nil then
         g.castbarPlayerTimeFormat = "CURRENT"

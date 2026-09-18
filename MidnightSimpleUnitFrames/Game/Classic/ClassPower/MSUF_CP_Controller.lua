@@ -1456,6 +1456,11 @@ local function FullRefresh()
 
     local playerManaEnabled, playerManaOverride, displayManaChanged =
         Refresh.ResolveDisplayOwnership(cpEnabled, powerType, renderMode)
+    --- Publish before the Power element re-applies: it and AltMana read the
+    --- public flag to decide who renders Mana, and the next refresh compares
+    --- against it, so the re-apply below runs once per change. No Classic
+    --- client has the Aug hand-off that defers this publish on Retail.
+    ExportPublic("MSUF_PlayerPowerManaOverrideActive", playerManaOverride)
     if displayManaChanged then RefreshPlayerPowerBar() end
 
     if cpEnabled and powerType and renderMode ~= CPK.MODE.NONE then
@@ -2037,7 +2042,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
             CP_PlayerHPUpdate(event)
         end
         if CP.visible then
-            CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
+            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
         end
         return
     end

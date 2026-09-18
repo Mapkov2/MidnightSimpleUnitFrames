@@ -4170,6 +4170,9 @@ L["Character names (all frames)"] = "Character names (all frames)"
 L["Full name"] = "Full name"
 L["First name"] = "First name"
 L["Surname"] = "Surname"
+-- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
+L["Pet Happiness"] = "Pet Happiness"
+L["Pet Happiness (Vanilla/TBC)"] = "Pet Happiness (Vanilla/TBC)"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end
