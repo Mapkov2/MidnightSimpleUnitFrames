@@ -123,6 +123,34 @@ for i = 1, #PREVIEW_BACKGROUND_SPECS do
     local spec = PREVIEW_BACKGROUND_SPECS[i]
     PREVIEW_BACKGROUND_BY_KEY[spec.key] = spec
 end
+-- Every scene also ships as BLP, the client's own texture format. The WoW
+-- Forever beta client leaves the PNG scenes black, so it starts from the BLP
+-- files. Every other client keeps the PNG and swaps to the BLP only when
+-- SetTexture reports that the PNG could not be loaded; that is checked once,
+-- on the first use, so the dropdown thumbnails follow the same choice.
+local PREVIEW_BACKGROUND_NATIVE_FIRST = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+for i = 1, #PREVIEW_BACKGROUND_SPECS do
+    local spec = PREVIEW_BACKGROUND_SPECS[i]
+    if spec.texture then
+        local native = spec.texture:gsub("%.png$", ".blp")
+        if PREVIEW_BACKGROUND_NATIVE_FIRST then
+            spec.texture, spec.fallbackTexture = native, spec.texture
+        else
+            spec.fallbackTexture = native
+        end
+    end
+end
+local previewBackgroundTexturesResolved = false
+local function ResolvePreviewBackgroundTextures(region)
+    if previewBackgroundTexturesResolved or not (region and region.SetTexture) then return end
+    previewBackgroundTexturesResolved = true
+    for i = 1, #PREVIEW_BACKGROUND_SPECS do
+        local spec = PREVIEW_BACKGROUND_SPECS[i]
+        if spec.texture and spec.fallbackTexture and region:SetTexture(spec.texture) == false then
+            spec.texture, spec.fallbackTexture = spec.fallbackTexture, nil
+        end
+    end
+end
 local PREVIEW_BACKGROUND_CANVASES = setmetatable({}, { __mode = "k" })
 local PREVIEW_BACKGROUND_BUTTONS = setmetatable({}, { __mode = "k" })
 function CP.ShapeTextures(prefix, axis)
@@ -184,8 +212,9 @@ local function PaintPreviewCanvasBackdrop(frame, color, green, blue, alpha)
 end
 local function UpdatePreviewBackgroundButton(button)
     if not button then return end
-    local spec = PreviewBackgroundSpec()
     local preview = button._msuf2PreviewBackgroundTexture
+    ResolvePreviewBackgroundTextures(preview)
+    local spec = PreviewBackgroundSpec()
     if preview then
         preview:SetTexture(spec.texture or CP.WHITE8)
         local r, g, b, a
@@ -231,6 +260,7 @@ function H.ApplyPreviewBackground(frame, palette, theme)
         end
     end
     local gradient = frame._msuf2PreviewCanvasGradient
+    ResolvePreviewBackgroundTextures(image)
     if spec.texture and image then
         -- The canvas backdrop is intentionally opaque for the original Studio
         -- view. Make it fully transparent for scene textures so it cannot sit

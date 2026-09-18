@@ -1904,7 +1904,7 @@ function Preview.Refresh(box, reason)
     if classPowerOn and PreviewLayerWanted(box, "classPower") then
         local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
         local cx = 2 + (tonumber(bars.classPowerOffsetX) or 0)
-        local cy = h + 4 + (tonumber(bars.classPowerOffsetY) or 0)
+        local cy = h - 2 - cpH + (tonumber(bars.classPowerOffsetY) or 0)
         minX, maxX = min(minX, cx), max(maxX, cx + cpW)
         minY, maxY = min(minY, cy), max(maxY, cy + cpH)
     end
@@ -1917,7 +1917,7 @@ function Preview.Refresh(box, reason)
         if box._runtimeDetachedPowerAnchorClass and classPowerOn then
             local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
             local cx = 2 + (tonumber(bars.classPowerOffsetX) or 0)
-            local cy = h + 4 + (tonumber(bars.classPowerOffsetY) or 0)
+            local cy = h - 2 - cpH + (tonumber(bars.classPowerOffsetY) or 0)
             dLeft = cx + (cpW - dW) * 0.5 + dx
             dBottom = cy - detachedH + dy
         end
@@ -2257,7 +2257,7 @@ function Preview.Refresh(box, reason)
         local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
         mock.classPower:SetSize(S(cpW), max(2, S(cpH)))
         mock.classPower:ClearAllPoints()
-        mock.classPower:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(2 + (tonumber(bars.classPowerOffsetX) or 0)), S(4 + (tonumber(bars.classPowerOffsetY) or 0)))
+        mock.classPower:SetPoint("TOPLEFT", mock, "TOPLEFT", S(2 + (tonumber(bars.classPowerOffsetX) or 0)), S((tonumber(bars.classPowerOffsetY) or 0) - 2))
         local cp = box._msufClassPowerPreviewScratch
         if not cp then cp = {}; box._msufClassPowerPreviewScratch = cp end
         cp.preview = classPowerPreviewSpec

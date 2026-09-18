@@ -224,7 +224,7 @@ local function CollectSessionSnapshot(target)
     ApplySwitch(target, "Analytics_Enabled", true)
 
     if type(GetAddOnMetadata) == "function" then
-        local version = GetAddOnMetadata(ADDON_NAME, "Version")
+        local version = (MSUF.Client and MSUF.Client.AddonVersion) or GetAddOnMetadata(ADDON_NAME, "Version")
         local versionKey = SanitizeMetricPart(version)
         if versionKey ~= "" then
             ApplySwitch(target, "Version_" .. versionKey, true)

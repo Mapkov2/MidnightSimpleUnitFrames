@@ -5963,6 +5963,11 @@ L["Monk"] = "Monaco"
 L["Druid"] = "Druido"
 L["Evoker"] = "Evocatore"
 
+-- WoW Forever character names (Fonts page, Name Shortening).
+L["Character names (all frames)"] = "Nomi dei personaggi (tutti i frame)"
+L["Full name"] = "Nome completo"
+L["First name"] = "Nome"
+L["Surname"] = "Cognome"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

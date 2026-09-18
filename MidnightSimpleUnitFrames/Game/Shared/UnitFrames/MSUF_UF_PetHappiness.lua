@@ -1,16 +1,25 @@
---- Vanilla/TBC Hunter Pet Happiness indicator.
+--- Hunter Pet Happiness indicator for the clients that have it.
 ---
---- Loaded only by the Vanilla and TBC unit-frame manifests. Cataclysm 4.1
---- removed Happiness/Loyalty; Mists and Mainline therefore never parse this
---- file, register its events, or create its texture.
+--- Classic Era and TBC expose the global GetPetHappiness. WoW Forever brought
+--- happiness back on the Mainline engine as C_PetInfo.GetPetHappiness, and
+--- Blizzard's own Forever pet frame shows it. Cataclysm 4.1 removed
+--- Happiness/Loyalty, so Mists and Midnight have none: the Mists manifest never
+--- lists this file, and on Midnight, which shares the Mainline manifest with
+--- Forever, the client gate below returns before anything is registered.
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
+-- Only an explicit "no" stops the file, so a harness without the client model
+-- still gets the element.
+if MSUF.Client and MSUF.Client.SupportsPetHappiness == false then return end
 local UF = MSUF.UF
 if not (UF and type(UF.RegisterElement) == "function") then return end
 
 local CreateFrame = _G.CreateFrame
-local GetPetHappiness = _G.GetPetHappiness
+-- Forever has only the namespaced function, Classic Era and TBC only the global.
+local petInfo = _G.C_PetInfo
+local GetPetHappiness = type(petInfo) == "table" and petInfo.GetPetHappiness or _G.GetPetHappiness
+local IsSecret = _G.issecretvalue
 local HasPetUI = _G.HasPetUI
 local tonumber = tonumber
 local type = type
@@ -18,8 +27,9 @@ local floor = math.floor
 
 local EMPTY_EVENTS = {}
 -- UNIT_PET carries "player" for the player's pet and can use the UF core's
--- exact dependent-unit route. UNIT_HAPPINESS has no unit payload in Classic,
--- so it must remain on the unitless side just like Blizzard's PetFrame.
+-- exact dependent-unit route. UNIT_HAPPINESS has no unit payload in Classic
+-- (Forever sends one), so it stays on the unitless side, which receives it on
+-- every client, just like Blizzard's PetFrame.
 local HAPPINESS_EVENTS = { "UNIT_PET" }
 local HAPPINESS_LIFECYCLE_EVENTS = { "UNIT_HAPPINESS", "PET_UI_UPDATE", "PLAYER_ENTERING_WORLD" }
 local TEXTURE = "Interface\\PetPaperDollFrame\\UI-PetHappiness"
@@ -34,6 +44,26 @@ local Happiness = { UpdateOnApply = true }
 local function Config(frame, spec)
     spec = spec or (frame and frame.MSUFSpec)
     return spec and spec.status and spec.status.petHappiness or nil
+end
+
+-- Only this file shows or hides the icon, so its state is cached on the texture
+-- and a repeated event writes nothing.
+local function HideIcon(tex)
+    if tex._msufHappinessShown ~= false then
+        tex:Hide()
+        tex._msufHappinessShown = false
+    end
+end
+
+local function ShowIcon(tex, happiness, coords)
+    if tex._msufHappiness ~= happiness then
+        tex:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        tex._msufHappiness = happiness
+    end
+    if tex._msufHappinessShown ~= true then
+        tex:Show()
+        tex._msufHappinessShown = true
+    end
 end
 
 local function ClampLayer(value)
@@ -75,7 +105,7 @@ local function EnsureTexture(frame, cfg)
     if not tex then
         tex = holder:CreateTexture(nil, "OVERLAY")
         tex:SetTexture(TEXTURE)
-        tex:Hide()
+        HideIcon(tex)
         frame.petHappinessIndicatorIcon = tex
     elseif tex.GetParent and tex:GetParent() ~= holder and tex.SetParent then
         tex:SetParent(holder)
@@ -105,7 +135,7 @@ function Happiness.Create(frame, spec)
     local tex = cfg and EnsureTexture(frame, cfg) or nil
     if tex then
         Layout(frame, tex, cfg, spec and spec.status)
-        tex:Hide()
+        HideIcon(tex)
     end
 end
 
@@ -132,7 +162,7 @@ function Happiness.Update(frame)
     local status = spec and spec.status
     local cfg = status and status.petHappiness
     if not (tex and cfg and cfg.enabled == true and frame.MSUFUnitKey == "pet") then
-        if tex then tex:Hide() end
+        if tex then HideIcon(tex) end
         return
     end
 
@@ -140,30 +170,32 @@ function Happiness.Update(frame)
     if status.testMode == true then
         happiness = 3
     elseif type(GetPetHappiness) == "function" then
-        if type(HasPetUI) == "function" then
-            local _, isHunterPet = HasPetUI()
-            if isHunterPet == false then
-                tex:Hide()
-                return
-            end
-        end
+        -- Returns nothing without a hunter pet. A secret value cannot be compared.
         local rawHappiness = GetPetHappiness()
+        if IsSecret and IsSecret(rawHappiness) then
+            HideIcon(tex)
+            return
+        end
         happiness = tonumber(rawHappiness)
+        -- Only a hunter pet has happiness (Blizzard's pet frame checks the same);
+        -- without a value there is nothing to ask.
+        if happiness and type(HasPetUI) == "function" then
+            local _, isHunterPet = HasPetUI()
+            if isHunterPet == false then happiness = nil end
+        end
     end
 
     local coords = TEX_COORDS[happiness]
     if not coords then
-        tex:Hide()
+        HideIcon(tex)
         return
     end
-    tex:SetTexture(TEXTURE)
-    tex:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
-    tex:Show()
+    ShowIcon(tex, happiness, coords)
 end
 
 function Happiness.Disable(frame)
     local tex = frame and frame.petHappinessIndicatorIcon
-    if tex then tex:Hide() end
+    if tex then HideIcon(tex) end
 end
 
 UF.RegisterElement("PetHappinessIndicator", Happiness, {

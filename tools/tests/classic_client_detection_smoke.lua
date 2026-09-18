@@ -35,7 +35,10 @@ end
 
 -- Every case starts from the same globals, then loads the file into a fresh
 -- namespace. Calling the compiled chunk again gives it fresh file locals.
+local metadataReads = {}
+
 local function Load(label, case)
+    metadataReads = {}
     WOW_PROJECT_MAINLINE = 1
     WOW_PROJECT_CLASSIC = 2
     WOW_PROJECT_BURNING_CRUSADE_CLASSIC = 5
@@ -48,6 +51,9 @@ local function Load(label, case)
         C_AddOns = {
             GetAddOnMetadata = function(_, key)
                 if key == "X-MSUF-Client" then return case.tag end
+                metadataReads[#metadataReads + 1] = key
+                if key == "Version" then return case.version end
+                if key == "X-MSUF-Version-Forever" then return case.foreverVersion end
                 return nil
             end,
         }
@@ -57,8 +63,14 @@ local function Load(label, case)
     if case.noSecret then
         issecretvalue = nil
     else
-        issecretvalue = function() return false end
+        issecretvalue = case.isSecret or function() return false end
     end
+    C_PetInfo = case.petInfo
+    C_PlayerInfo = case.playerInfo
+    Constants = case.constants
+    UnitName = case.unitName
+    RegionalUniqueNamesEnabled = case.regionalUniqueNames
+    GetPetHappiness = case.getPetHappiness
     frames = {}
     if case.noCreateFrame then
         CreateFrame = nil
@@ -140,6 +152,7 @@ do
     assert(client.IsSupported == true and client.ProjectIDRecognized == true, "a: recognition")
     assert(client.HasSecretValueAPI == true, "a: secret-value API not detected")
     assert(client.IsForever == false, "a: IsForever must stay false")
+    assert(client.SupportsPetHappiness == false, "a: Midnight has no pet happiness")
     assert(client.TOCFlavor == nil, "a: untagged TOC reported a tag")
     AssertNoDiagnostic("a", client)
     AssertSupportsUnits("a", client, { "boss1", "focus", "arena1" }, true)
@@ -520,6 +533,9 @@ do
     for _, fragment in ipairs({ "Project 1 (WOW_PROJECT_MAINLINE)", "interface 120105",
         "TOC X-MSUF-Client none; family Mainline, flavor Mainline", "Game mode ? (nil) at load, ? (nil) now",
         "C_GameRules is missing", "Game rules: none of the reported rules exist",
+        "Pet happiness not supported; C_PetInfo.GetPetHappiness missing, GetPetHappiness missing",
+        "Names: RegionalUniqueNamesEnabled missing, C_PlayerInfo.ShouldDisplaySurname missing, "
+            .. "surname separator missing, realm separator missing, UnitName(player) second return unavailable",
         "Blizzard_AuraContainer unknown", "Login diagnostic: none" }) do
         Contains(text, fragment, "r1")
     end
@@ -575,13 +591,54 @@ do
     AssertArenaSlots("s1", client, 0)
     AssertSupportsUnits("s1", client, { "arena1", "arena3" }, false)
     AssertSupportsUnits("s1", client, { "player", "target", "focus", "boss1", "party1", "raid40" }, true)
-    assert(client.SupportsGroupKind("mythicraid") == true, "s1: group kinds follow the Mainline build")
+    assert(client.SupportsGroupKind("party") == true and client.SupportsGroupKind("raid") == true,
+        "s1: Party and Raid group kinds")
+    assert(client.SupportsGroupKind("mythicraid") == false, "s1: Forever has no Mythic Raid group kind")
+    assert(client.SupportsPetHappiness == true, "s1: Forever has hunter pet happiness")
     local text = table.concat(client.DescribeLines(), "\n")
     for _, fragment in ipairs({ "family Mainline, flavor Mainline, WoW Forever",
         "Forever marker GameEvent.RegisterCamelotEvents at load true, now true; CLASS_SORT_ORDER 9 classes",
-        "Blizzard_SwingTimer", "Blizzard_PVPUI" }) do
+        "Blizzard_SwingTimer", "Blizzard_PVPUI",
+        "Pet happiness supported; C_PetInfo.GetPetHappiness missing, GetPetHappiness missing",
+        "UnitName(player) second return unavailable" }) do
         Contains(text, fragment, "s1")
     end
+
+    -- (s1b) The report names the pet happiness and surname facts without calling the
+    -- happiness API and without printing a name. Test values only: Blizzard does not
+    -- document the separator constants, so none of these strings are Blizzard's.
+    local SECRET = {}
+    local surname = "Zzsurname"
+    local named = Merge(forever, {
+        petInfo = { GetPetHappiness = function() error("the report must not read pet happiness") end },
+        playerInfo = { ShouldDisplaySurname = function() return false end },
+        regionalUniqueNames = function() return true end,
+        constants = { CharacterNameSeparatorConsts = {
+            CHARACTERNAME_SURNAME_SEPARATOR = "^", CHARACTERNAME_REALMNAME_SEPARATOR = "~" } },
+        unitName = function(unit)
+            assert(unit == "player", "s1b: the report may only read the player's own name")
+            return "Tester", surname
+        end,
+        isSecret = function(value) return value == SECRET end,
+    })
+    client = Load("s1b", named)
+    local petInfoKeys, playerInfoKeys = CountKeys(C_PetInfo), CountKeys(C_PlayerInfo)
+    text = table.concat(client.DescribeLines(), "\n")
+    for _, fragment in ipairs({ "Pet happiness supported; C_PetInfo.GetPetHappiness present, GetPetHappiness missing",
+        "Names: RegionalUniqueNamesEnabled true, C_PlayerInfo.ShouldDisplaySurname false, "
+            .. 'surname separator "^", realm separator "~", UnitName(player) second return present' }) do
+        Contains(text, fragment, "s1b")
+    end
+    assert(not text:find(surname, 1, true) and not text:find("Tester", 1, true), "s1b: the report printed a name")
+    assert(CountKeys(C_PetInfo) == petInfoKeys and CountKeys(C_PlayerInfo) == playerInfoKeys,
+        "s1b: DescribeLines wrote into a Blizzard namespace")
+
+    surname = ""
+    Contains(table.concat(client.DescribeLines(), "\n"), "UnitName(player) second return empty", "s1c")
+    surname = nil
+    Contains(table.concat(client.DescribeLines(), "\n"), "UnitName(player) second return nil", "s1d")
+    surname = SECRET
+    Contains(table.concat(client.DescribeLines(), "\n"), "UnitName(player) second return secret", "s1e")
 
     -- (s2) A Classic project ID on the untagged Mainline TOC still runs the
     -- Mainline build and names the project once at login.
@@ -600,6 +657,31 @@ do
     client = Load("s4", Merge(forever, { gameEvent = { RegisterMainlineEvents = function() end } }))
     assert(client.IsForever == false and client.Flavor == "Mainline" and MSUF.Forever == false, "s4: guessed Forever")
     Contains(table.concat(client.DescribeLines(), "\n"), "RegisterCamelotEvents at load false, now false", "s4")
+
+    -- (s5) Client.AddonVersion is read once at load. Forever shares the Mainline
+    -- TOC with Midnight and takes X-MSUF-Version-Forever; every other client takes
+    -- its own TOC's Version and never asks for the Forever field.
+    local versioned = Merge(forever, { version = "6.21", foreverVersion = "6.5-beta3" })
+    client = Load("s5a", versioned)
+    assert(client.AddonVersion == "6.5-beta3", "s5a: Forever must take X-MSUF-Version-Forever")
+    assert(#metadataReads == 1 and metadataReads[1] == "X-MSUF-Version-Forever", "s5a: one metadata read on Forever")
+    Contains(table.concat(client.DescribeLines(), "\n"), "WoW Forever; MSUF 6.5-beta3", "s5a")
+    assert(#metadataReads == 1, "s5a: the report asked the TOC again")
+
+    client = Load("s5b", Merge(versioned, { gameEvent = false }))
+    assert(client.IsForever == false and client.AddonVersion == "6.21", "s5b: Midnight must keep the TOC Version")
+    assert(#metadataReads == 1 and metadataReads[1] == "Version", "s5b: Midnight read the Forever field")
+
+    client = Load("s5c", Merge(versioned, { project = 2, interface = 11509, tag = "Vanilla", version = "6.5-beta3",
+        foreverVersion = "9.9" }))
+    assert(client.AddonVersion == "6.5-beta3", "s5c: a Classic TOC owns its Version")
+    assert(#metadataReads == 1 and metadataReads[1] == "Version", "s5c: a Classic client read the Forever field")
+
+    -- A Mainline TOC without the Forever field falls back to its Version.
+    client = Load("s5d", Merge(versioned, { foreverVersion = "" }))
+    assert(client.AddonVersion == "6.21", "s5d: missing Forever field must fall back to Version")
+    client = Load("s5e", Merge(versioned, { noMetadata = true }))
+    assert(client.AddonVersion == nil, "s5e: no metadata API means no version")
 end
 
 print = originalPrint

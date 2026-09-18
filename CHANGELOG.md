@@ -1,5 +1,25 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta3 - 2026-09-18
+
+### Changes
+
+- New factory default profile on every client. First login, "Reset profile" and "New profile" all start from it.
+- Factory castbars fill left to right. Existing profiles keep their direction.
+- The factory cleanse border detects "Dispellable by group" instead of every debuff with a dispel type.
+- Factory target buffs and debuffs sit on the same line; player and target aura positions follow the new profile.
+- WoW Forever: hunter pet happiness shows on the pet frame.
+- WoW Forever: Fonts page option to show the full character name, the first name or the surname.
+- WoW Forever: group frames offer Party and Raid only.
+- MSUF versions are now per game client. WoW Forever and the Classic clients report 6.5; Midnight keeps its own Retail version. `/msuf clientinfo` prints the running version.
+
+### Fixes & Performance
+
+- First login and "Reset profile" received the code defaults instead of the factory profile. Both start from the factory profile again, including Focus Target.
+- The class resource bar in the Unit Frames preview and the Class Resources preview sits where the live bar sits. It was drawn the bar height plus 6 px too high.
+- WoW Forever: the menu preview backgrounds (Silvermoon and the stone scenes) no longer stay black. Other clients fall back the same way when a scene fails to load.
+- The addon version is read once at load instead of on every version display, version check and analytics pass.
+
 ## 6.5-beta2 - 2026-09-18
 
 ### Changes

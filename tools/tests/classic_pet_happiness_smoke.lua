@@ -46,7 +46,7 @@ local namespace = {
     },
 }
 
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_PetHappiness.lua"))(
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 assert(registeredName == "PetHappinessIndicator" and type(element) == "table", "Happiness element was not registered")
 assert(element.UpdateOnApply == true, "Happiness must seed on apply")
@@ -225,7 +225,7 @@ assert(LoadPetSearchFromOptionsFlavor("  tbc  "):find("pet happiness", 1, true),
 assert(not LoadPetSearchFromOptionsFlavor("Mists"):find("pet happiness", 1, true),
     "Mists Options TOC gate must hide Pet Happiness search")
 
-local runtimeSource = Read("MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_PetHappiness.lua")
+local runtimeSource = Read("MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua")
 assert(not runtimeSource:find("OnUpdate", 1, true), "Happiness runtime must not poll")
 assert(not runtimeSource:find("NewTicker", 1, true), "Happiness runtime must not use a ticker")
 

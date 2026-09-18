@@ -55,6 +55,12 @@ statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResI
 statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget|pvpIndicatorCustomIcon
 stance|showStanceIndicator|stanceIndicatorSize|stanceIndicatorAnchor|stanceIndicatorOffsetX|stanceIndicatorOffsetY|stanceIndicatorLayer|7|12|TOP|0|-2|Stance|0.45,0.70,1.0|Stance text|MSUF_RequestStatusIconsRefreshForCurrent|false|player|
 ]]
+-- Hunter pet happiness exists again on WoW Forever; Midnight has none. Same
+-- position as on the Classic clients: before the stance text row.
+if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then
+    local happiness = StatusRows("statusPetHappiness|showPetHappinessIndicator|petHappinessIndicatorSize|petHappinessIndicatorAnchor|petHappinessIndicatorOffsetX|petHappinessIndicatorOffsetY|petHappinessIndicatorLayer|7|24|RIGHT|-7|-4|:)|0.38,0.82,0.24|Pet Happiness|MSUF_RequestPetHappinessIndicatorRefresh||pet|")
+    table.insert(specs.StatusPreview, #specs.StatusPreview, happiness[1])
+end
 specs.PreviewLayers = LayerRows [[
 guides|Guides|0.42,0.72,1.00|Mover highlights and selected borders.
 nameText|Name|0.30,0.66,1.00

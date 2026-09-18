@@ -181,93 +181,7 @@ end
 local MSUF_ProfileIO_TranslateProfileToCurrent
 local MSUF_ProfileIO_TranslateProfilesToCurrent
 local MSUF_ProfileIO_NotifyAssistantProfileEpochChanged
-local function MSUF_ProfileIO_ClientIsForever()
-    return type(MSUF) == "table" and type(MSUF.Client) == "table" and MSUF.Client.IsForever == true
-end
-local function MSUF_ProfileIO_ReplaceContents(dst, src)
-    if type(dst) ~= "table" or type(src) ~= "table" or dst == src then return dst end
-    for k in pairs(dst) do
-        dst[k] = nil
-    end
-    local copy = CopyTable(src)
-    if type(copy) == "table" then
-        for k, v in pairs(copy) do
-            dst[k] = v
-        end
-    end
-    return dst
-end
-local function MSUF_ProfileIO_AcceptsSchema(db)
-    return type(db) == "table" and tonumber(db._msufProfileSchema) == 600
-end
--- Forever writes MSUF_DB and GlobalDB.profiles[active] as two SavedVariables.
--- Pointing both names at one table stores the second copy empty, so the next
--- login loses the profile. Keep independent tables and copy contents.
-local function MSUF_ProfileIO_BindForeverLiveProfile(slot, previousDB)
-    local source
-    if MSUF_ProfileIO_AcceptsSchema(previousDB) then
-        source = previousDB
-    else
-        source = slot
-    end
-    if type(slot) == "table" and type(source) == "table" and slot ~= source then
-        MSUF_ProfileIO_ReplaceContents(slot, source)
-    end
-    if type(previousDB) == "table" and previousDB ~= slot then
-        if type(source) == "table" and previousDB ~= source then
-            MSUF_ProfileIO_ReplaceContents(previousDB, source)
-        end
-        MSUF_DB = previousDB
-    elseif type(slot) == "table" then
-        MSUF_DB = CopyTable(slot)
-    else
-        MSUF_DB = {}
-    end
-    if MSUF_DB == slot and type(slot) == "table" then
-        MSUF_DB = CopyTable(slot)
-    end
-end
-local function MSUF_ProfileIO_FlushForeverSavedProfile()
-    if not MSUF_ProfileIO_ClientIsForever() then return false end
-    local live = _G.MSUF_DB
-    if type(live) ~= "table" then return false end
-    local roots = MSUF.SavedVariableRoots
-    local gdb = _G.MSUF_GlobalDB
-    if type(roots) == "table" and type(roots.global) == "table" then
-        gdb = roots.global
-        _G.MSUF_GlobalDB = gdb
-        MSUF_GlobalDB = gdb
-    end
-    local active = _G.MSUF_ActiveProfile
-    if type(gdb) == "table" and type(gdb.profiles) == "table" and type(active) == "string" then
-        local origSlot = type(roots) == "table" and type(roots.profileSlots) == "table" and roots.profileSlots[active]
-        local slot = (type(origSlot) == "table" and origSlot) or gdb.profiles[active]
-        if type(slot) == "table" and slot ~= live then
-            MSUF_ProfileIO_ReplaceContents(slot, live)
-            gdb.profiles[active] = slot
-        else
-            local copy = CopyTable(live)
-            gdb.profiles[active] = copy
-            if type(roots) == "table" then
-                if type(roots.profileSlots) ~= "table" then roots.profileSlots = {} end
-                roots.profileSlots[active] = copy
-            end
-        end
-    end
-    local origDB = type(roots) == "table" and roots.db or nil
-    if type(origDB) == "table" and origDB ~= live then
-        MSUF_ProfileIO_ReplaceContents(origDB, live)
-        _G.MSUF_DB = origDB
-        MSUF_DB = origDB
-    end
-    return true
-end
-ExportPublic("MSUF_FlushProfileSavedVariables", MSUF_ProfileIO_FlushForeverSavedProfile)
 function MSUF_InitProfiles()
-    local firstLoad = MSUF.FirstLoad6
-    if firstLoad and firstLoad.savedVariablesBound ~= true and MSUF_ProfileIO_ClientIsForever() then
-        return
-    end
     local previousActive = type(MSUF_ActiveProfile) == "string" and MSUF_ActiveProfile or nil
     local previousDB = type(MSUF_DB) == "table" and MSUF_DB or nil
     local hadEstablishedOwner = previousActive ~= nil and previousActive ~= "" and previousDB ~= nil
@@ -302,11 +216,7 @@ function MSUF_InitProfiles()
     end
     char.activeProfile = active
     MSUF_ActiveProfile = active
-    if MSUF_ProfileIO_ClientIsForever() then
-        MSUF_ProfileIO_BindForeverLiveProfile(profiles[active], previousDB)
-    else
-        MSUF_DB = profiles[active]
-    end
+    MSUF_DB = profiles[active]
     _G.MSUF_GF_InvalidateConfCache()
     --- After DB swap: seed missing defaults so per-unit conf tables exist.
     --- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
@@ -388,14 +298,7 @@ function MSUF_SwitchProfile(name)
     end
     char.activeProfile = name
     MSUF_ActiveProfile = name
-    if MSUF_ProfileIO_ClientIsForever() and type(MSUF_DB) == "table" and MSUF_DB ~= profiles[name] then
-        MSUF_ProfileIO_ReplaceContents(MSUF_DB, profiles[name])
-    else
-        MSUF_DB = profiles[name]
-    end
-    if MSUF_ProfileIO_ClientIsForever() then
-        MSUF_ProfileIO_FlushForeverSavedProfile()
-    end
+    MSUF_DB = profiles[name]
     _G.MSUF_GF_InvalidateConfCache()
     --- Invalidate cached config references (UFCore caches per-frame config table refs).
     do
@@ -784,15 +687,6 @@ local function MSUF_DeepCopy(v, seen, depth)
         out[MSUF_DeepCopy(k, seen, depth)] = MSUF_DeepCopy(vv, seen, depth)
     end
      return out
-end
-do
-    if type(_G.CreateFrame) == "function" then
-        local logoutFrame = _G.CreateFrame("Frame")
-        logoutFrame:RegisterEvent("PLAYER_LOGOUT")
-        logoutFrame:SetScript("OnEvent", function()
-            MSUF_ProfileIO_FlushForeverSavedProfile()
-        end)
-    end
 end
 
 MSUF.ProfileIOValidateImportValue = function(root)
@@ -3250,15 +3144,10 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         for k, v in pairs(payload) do
             MSUF_DB[k] = v
         end
-        if MSUF_ProfileIO_ClientIsForever() then
-            MSUF_ProfileIO_FlushForeverSavedProfile()
-        elseif type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
+        if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
             MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
         end
         MSUF_ProfileIO_RunEnsureDB(true)
-        if MSUF_ProfileIO_ClientIsForever() then
-            MSUF_ProfileIO_FlushForeverSavedProfile()
-        end
         MSUF.ProfileIOCompleteFirstLoadImport()
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
         MSUF_ProfileIO_PostImportApply_Auras("all", payload)
@@ -3392,15 +3281,11 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
             MSUF_DB[kk] = MSUF_DeepCopy(vv)
         end
     end
-    if MSUF_ProfileIO_ClientIsForever() then
-        MSUF_ProfileIO_FlushForeverSavedProfile()
-    elseif type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
+    --- Ensure the active profile table in GlobalDB points to MSUF_DB.
+    if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
     MSUF_ProfileIO_RunEnsureDB(true)
-    if MSUF_ProfileIO_ClientIsForever() then
-        MSUF_ProfileIO_FlushForeverSavedProfile()
-    end
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_PostImportApply_Auras(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(plan.snapshotKind, payload)
@@ -3554,15 +3439,8 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         for k, v in pairs(newTable) do
             target[k] = v
         end
-        if MSUF_ProfileIO_ClientIsForever() then
-            MSUF_ProfileIO_FlushForeverSavedProfile()
-        else
-            MSUF_GlobalDB.profiles[profileKey] = target
-        end
+        MSUF_GlobalDB.profiles[profileKey] = target
         MSUF_ProfileIO_RunEnsureDB(true)
-        if MSUF_ProfileIO_ClientIsForever() then
-            MSUF_ProfileIO_FlushForeverSavedProfile()
-        end
         MSUF.ProfileIOCompleteFirstLoadImport()
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
         MSUF_ProfileIO_PostImportApply_Auras("all", target)

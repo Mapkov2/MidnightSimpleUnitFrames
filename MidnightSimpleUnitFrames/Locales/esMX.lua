@@ -5964,6 +5964,11 @@ L["Monk"] = "Monje"
 L["Druid"] = "Druida"
 L["Evoker"] = "Evocador"
 
+-- WoW Forever character names (Fonts page, Name Shortening).
+L["Character names (all frames)"] = "Nombres de personaje (todos los marcos)"
+L["Full name"] = "Nombre completo"
+L["First name"] = "Nombre"
+L["Surname"] = "Apellido"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

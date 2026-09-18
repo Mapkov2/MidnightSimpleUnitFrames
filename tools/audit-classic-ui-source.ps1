@@ -256,6 +256,24 @@ if ($LASTEXITCODE -eq 0) {
         }
     }
     Write-Host "Blizzard WoW Forever marker contract passed: upstream/forever"
+
+    # WoW Forever pet happiness. Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua reads
+    # C_PetInfo.GetPetHappiness on Forever, checks HasPetUI like Blizzard's indicator,
+    # listens to the same events and draws the same texture cells. A renamed API,
+    # event or texture must fail here, never silently hide the icon.
+    $foreverHappiness = Read-BranchFile "upstream/forever" "Interface/AddOns/Blizzard_FrameXML/PetHappiness.lua"
+    Assert-Contains $foreverHappiness @(
+        'self:RegisterEvent("UNIT_HAPPINESS");',
+        'self:RegisterEvent("UNIT_PET");',
+        'happiness, damagePercentage, loyaltyRate = C_PetInfo.GetPetHappiness();',
+        'local hasPetUI, isHunterPet = HasPetUI();',
+        'self.texture:SetTexCoord(0.375, 0.5625, 0, 0.359375);',
+        'self.texture:SetTexCoord(0.1875, 0.375, 0, 0.359375);',
+        'self.texture:SetTexCoord(0, 0.1875, 0, 0.359375);'
+    ) "upstream/forever Pet Happiness"
+    $foreverHappinessXML = Read-BranchFile "upstream/forever" "Interface/AddOns/Blizzard_FrameXML/PetHappiness.xml"
+    Assert-Contains $foreverHappinessXML @('Interface\PetPaperDollFrame\UI-PetHappiness') "upstream/forever Pet Happiness texture"
+    Write-Host "Blizzard WoW Forever Pet Happiness contract passed: upstream/forever"
 }
 
 # Game-type tripwire. Every game-type token in Blizzard's TOC tags and every

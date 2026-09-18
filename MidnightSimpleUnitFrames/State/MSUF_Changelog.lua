@@ -8,12 +8,40 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "EABAC9951706E9C483501710F22C2662C0DBBB6B6672F819E9022F24B5A9C7D5",
-    currentVersion = "6.5-beta2",
-    historyFromVersion = "6.5-alpha16",
-    previousVersion = "6.5-alpha18",
-    rangeLabel = "6.5-alpha18 -> 6.5-beta2",
+    sourceSha256 = "F3CAFE784ADCC07531E81C3CA93F1796797D1C866DFDAF27727B845ECDCE1ACF",
+    currentVersion = "6.5-beta3",
+    historyFromVersion = "6.5-alpha17",
+    previousVersion = "6.5-beta2",
+    rangeLabel = "6.5-beta2 -> 6.5-beta3",
     entries = {
+        {
+            version = "6.5-beta3",
+            date = "2026-09-18",
+            sections = {
+                {
+                    title = "Changes",
+                    bullets = {
+                        "New factory default profile on every client. First login, \"Reset profile\" and \"New profile\" all start from it.",
+                        "Factory castbars fill left to right. Existing profiles keep their direction.",
+                        "The factory cleanse border detects \"Dispellable by group\" instead of every debuff with a dispel type.",
+                        "Factory target buffs and debuffs sit on the same line; player and target aura positions follow the new profile.",
+                        "WoW Forever: hunter pet happiness shows on the pet frame.",
+                        "WoW Forever: Fonts page option to show the full character name, the first name or the surname.",
+                        "WoW Forever: group frames offer Party and Raid only.",
+                        "MSUF versions are now per game client. WoW Forever and the Classic clients report 6.5; Midnight keeps its own Retail version. /msuf clientinfo prints the running version.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "First login and \"Reset profile\" received the code defaults instead of the factory profile. Both start from the factory profile again, including Focus Target.",
+                        "The class resource bar in the Unit Frames preview and the Class Resources preview sits where the live bar sits. It was drawn the bar height plus 6 px too high.",
+                        "WoW Forever: the menu preview backgrounds (Silvermoon and the stone scenes) no longer stay black. Other clients fall back the same way when a scene fails to load.",
+                        "The addon version is read once at load instead of on every version display, version check and analytics pass.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta2",
             date = "2026-09-18",
@@ -74,31 +102,6 @@ local data = {
                         "With Rounded Frames on, health backgrounds no longer change opacity at random during instanced combat. The missing-health optimisation stacked a second native mask on the texture the rounded surface already masks; rounded frames keep the value-driven fill and every other frame keeps the cheaper mask.",
                         "The preview's Layers dropdown stays inside its panel and inside the preview. Entering combat view re-flowed its chips across the full preview width behind a narrow panel; the dropdown now owns its width and widens only as far as it needs to stay off the bottom edge.",
                         "The Assistant switches a fade feature on when you set its fade value. \"Set name fade in to 0.25\" used to write the number while Name Text Mouseover stayed off, so nothing visibly changed; the owner now switches on in the same transaction, on every unit frame, and undo reverts both.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-alpha16",
-            date = "2026-09-10",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Every settings section now carries its on/off switch, a one-line summary and a \"...\" menu on its header, so a feature can be turned on or off without expanding it and a single section can be reset or copied on its own.",
-                        "Options menus read brighter: taller section headers with an accent border when open or hovered, a higher floor for the smallest fonts, and a clearly visible active page in the navigation.",
-                        "Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.",
-                        "Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.",
-                        "Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "The interrupt-ready indicator counts every interrupt you actually have instead of a single spell, while each client keeps its own era-correct interrupt list.",
-                        "With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured.",
-                        "A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt.",
-                        "Zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.",
                     },
                 },
             },

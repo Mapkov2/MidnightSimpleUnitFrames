@@ -33,6 +33,7 @@ local PREVIEW_THANKS_KEY = "|cff40ff40Thanks for testing!|r Report bugs on Disco
 local Tr = MSUF.Translate
 
 local function AddonVersion()
+    if MSUF.Client and MSUF.Client.AddonVersion then return MSUF.Client.AddonVersion end
     local getMeta = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
     if type(getMeta) ~= "function" then return nil end
     local version = getMeta(addonName or "MidnightSimpleUnitFrames", "Version")

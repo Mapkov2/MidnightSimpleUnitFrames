@@ -56,7 +56,15 @@ foreach ($addon in $addons) {
             (Get-InterfaceSetKey -Value $interfaceFields[0].Groups[1].Value) -cne (Get-InterfaceSetKey -Value $client.Interfaces)) {
             throw "Classic 6.5 has the wrong $flavor interface set (expected $($client.Interfaces)): $tocPath"
         }
-        if ($client.IsClassic -cne "true") { continue }
+        if ($client.IsClassic -cne "true") {
+            # Mainline keeps Retail's "## Version"; WoW Forever reads the same TOC and
+            # takes this release's version from the core TOC's Forever field.
+            if ($addon -ceq "MidnightSimpleUnitFrames" -and
+                $toc -notmatch "(?m)^## X-MSUF-Version-Forever: $([regex]::Escape($normalizedVersion))\s*$") {
+                throw "Classic 6.5 has a stale WoW Forever version (X-MSUF-Version-Forever): $tocPath"
+            }
+            continue
+        }
         if ($toc -notmatch "(?m)^## Version: $([regex]::Escape($normalizedVersion))\s*$") {
             throw "Classic 6.5 has a stale $flavor version: $tocPath"
         }

@@ -15,6 +15,8 @@
 --   * GroupFrames/MSUF_GroupFrames_DB.lua shows an unassigned member's power bar
 --     whenever the scope shows power for any role, and files every raid instance
 --     under the "normal" raid layout.
+--   * Game/Shared/Initialize.lua supports the Party and Raid group kinds only:
+--     the Mythic Raid scope is hidden in the menu and never routed at runtime.
 -- Retail (no Client, or IsForever false) keeps the Retail spec map, data, power
 -- role filter and raid situations unchanged.
 local root = assert(arg[1], "repository root argument missing")
@@ -310,6 +312,55 @@ do
         Check(Situation(retail, "raid", 14) == "normal", label .. ": Retail normal raid situation changed")
         Check(Situation(retail, "none", 0) == "openworld", label .. ": Retail open world situation changed")
     end
+end
+
+---------------------------------------------------------------------------
+-- Group kinds: WoW Forever has Party and Raid only, no Mythic Raid scope
+---------------------------------------------------------------------------
+-- Mythic Raid is Midnight's fixed 20-player difficulty (16). Forever has
+-- 5-player groups and raids, so the real client fact must hide the scope in the
+-- menu and keep the runtime on the Raid layout, exactly like the Classic clients.
+do
+    local function LoadClient(isForever)
+        _G.WOW_PROJECT_MAINLINE, _G.WOW_PROJECT_ID = 1, 1
+        _G.C_AddOns = { GetAddOnMetadata = function() return nil end }
+        _G.GetBuildInfo = function() return "test", "test", "test", isForever and 16001 or 120105 end
+        _G.GameEvent = isForever and { RegisterCamelotEvents = function() end } or nil
+        _G.MSUF, _G.MSUF_NS = nil, nil
+        local namespace = {}
+        assert(loadfile(core .. "Game/Shared/Initialize.lua"))("MidnightSimpleUnitFrames", namespace)
+        assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua"))(
+            "MidnightSimpleUnitFrames_Options", {})
+        return namespace.Client, namespace.MSUF2
+    end
+
+    for _, isForever in ipairs({ true, false }) do
+        local label = isForever and "Forever" or "Midnight"
+        local client, menu = LoadClient(isForever)
+        Check(client.IsForever == isForever and client.IsRetail == true, label .. ": client placement")
+        Check(client.SupportsGroupKind("party") == true and client.SupportsGroupKind("raid") == true,
+            label .. ": Party and Raid must always be supported")
+        Check(client.SupportsGroupKind("mythicraid") == not isForever, label .. ": Mythic Raid group kind")
+        Check(menu.SupportsFrameScope("gf_mythicraid") == not isForever, label .. ": Mythic Raid menu scope")
+        Check(menu.SupportsFrameScope("gf_party") == true and menu.SupportsFrameScope("gf_raid") == true,
+            label .. ": Party and Raid menu scopes")
+        Check(menu.SupportsUnitPage("gf_layout", "gf_mythicraid.enabled") == not isForever,
+            label .. ": Mythic Raid settings in search and pages")
+        local scopes = menu.FilterSupportedUnitValues({ { value = "party" }, { value = "raid" }, { value = "mythicraid" } })
+        Check(#scopes == (isForever and 2 or 3), label .. ": group scope selector shows " .. #scopes .. " scopes")
+        Check(menu.NormalizeGroupScope("mythicraid") == (isForever and "raid" or "mythicraid"),
+            label .. ": a stored Mythic Raid scope must fall back to Raid")
+
+        -- Even a difficulty-16 raid routes to the Raid layout on Forever.
+        _G.IsInGroup = function() return true end
+        _G.IsInRaid = function() return true end
+        _G.GetRaidDifficultyID = function() return 16 end
+        local gf = LoadGroupDB(client)
+        Check(gf.IsMythicRaidContext() == not isForever, label .. ": Mythic Raid runtime context")
+        Check(gf.GetLiveRaidKind() == (isForever and "raid" or "mythicraid"), label .. ": live raid kind")
+        _G.IsInGroup, _G.IsInRaid, _G.GetRaidDifficultyID = nil, nil, nil
+    end
+    _G.GameEvent = nil
 end
 
 print("forever_group_frames_smoke: ok")

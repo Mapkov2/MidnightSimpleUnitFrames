@@ -1259,8 +1259,8 @@ function Dashboard.BuildSupportCard(state)
     local supportDesc = W.Text(support, "If MSUF helps your UI, support links are one click away.", 16, -42, supportTextW, T.colors.muted)
     if supportDesc.SetWordWrap then supportDesc:SetWordWrap(true) end
     if supportDesc.SetNonSpaceWrap then supportDesc:SetNonSpaceWrap(true) end
-    local aboutVer
-    if _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function" then aboutVer = _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version") end
+    local aboutVer = MSUF.Client and MSUF.Client.AddonVersion
+    if not aboutVer and _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function" then aboutVer = _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version") end
     local aboutText = M.Tr("by Mapko with the help from R41z0r, Lead QA: Aur0r4")
     if type(aboutVer) == "string" and aboutVer ~= "" then
         local displayVersion = aboutVer:match("^%d") and ("v" .. aboutVer) or aboutVer

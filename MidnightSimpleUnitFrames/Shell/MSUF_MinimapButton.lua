@@ -81,7 +81,7 @@ local function BuildTooltip(tt, owner, opts)
     tt:AddLine("Midnight Simple Unit Frames", 1, 1, 1)
 
     --- Version
-    local version = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
+    local version = (MSUF.Client and MSUF.Client.AddonVersion) or _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
         and _G.C_AddOns.GetAddOnMetadata(addonName, "Version")
     if type(version) == "string" and version ~= "" then
         local displayVersion = opts.versionLabel and (Tr("Version:") .. " " .. version) or (version:match("^%d") and ("v" .. version) or version)

@@ -39,6 +39,7 @@ local min = math.min
 local IsEditModeActive
 local RebuildActivePageForResize
 local function GetAddonVersion()
+    if MSUF.Client and MSUF.Client.AddonVersion then return MSUF.Client.AddonVersion end
     local getMeta = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
     if type(getMeta) == "function" then return getMeta(addonName or "MidnightSimpleUnitFrames", "Version") end
     if type(_G.GetAddOnMetadata) == "function" then return _G.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version") end

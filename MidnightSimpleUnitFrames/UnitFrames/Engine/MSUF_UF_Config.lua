@@ -152,21 +152,12 @@ local NPC_COLOR_DEFAULTS = {
 }
 
 local dbInitialized = false
-local boundDB
-local pendingDB
 
 --- Config can be asked for specs before every module has finished loading.
 --- EnsureDB centralizes that bootstrap without making the hot dispatch layer
 --- know about profile initialization.
 local function EnsureDB()
-  local current = rawget(_G, "MSUF_DB")
-  local firstLoad = MSUF.FirstLoad6
-  if firstLoad and firstLoad.savedVariablesBound ~= true and MSUF.Client and MSUF.Client.IsForever == true then
-    if type(current) == "table" then return current end
-    if type(pendingDB) ~= "table" then pendingDB = {} end
-    return pendingDB
-  end
-  if not dbInitialized or type(current) ~= "table" or boundDB ~= current then
+  if not dbInitialized or type(_G.MSUF_DB) ~= "table" then
     if type(_G.MSUF_InitProfiles) == "function" then
       _G.MSUF_InitProfiles()
     end
@@ -174,19 +165,11 @@ local function EnsureDB()
       _G.MSUF_EnsureDB()
     end
     dbInitialized = true
-    boundDB = _G.MSUF_DB
   end
   if type(_G.MSUF_DB) ~= "table" then
     ExportPublic("MSUF_DB", {})
-    boundDB = _G.MSUF_DB
   end
   return _G.MSUF_DB
-end
-
-function Config.RebindSavedVariables()
-  dbInitialized = false
-  boundDB = nil
-  return EnsureDB()
 end
 
 local function Bool(value, fallback)
@@ -945,6 +928,8 @@ local function StatusAllowed(key, id)
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
   elseif id == "elite" then
     return key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "boss"
+  elseif id == "petHappiness" then
+    return key == "pet"
   end
   return true
 end
@@ -1017,6 +1002,12 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
   PrefixedStatusDef("stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", 0, -2, 7),
 }
+-- Hunter pet happiness exists on WoW Forever only on this build. Midnight gets no
+-- entry at all, so its unit specs compile exactly as before.
+if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
+  UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
+    PrefixedStatusDef("petHappiness", "showPetHappinessIndicator", true, "petHappinessIndicator", 24, "RIGHT", -7, -4, 7)
+end
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {
   { "statusDeadText", "statusDeadTextEnabled", "showDead", true, "statusText" },

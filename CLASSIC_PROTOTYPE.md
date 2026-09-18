@@ -137,19 +137,31 @@ calculator would be less correct and more expensive.
   original order. Its only additional Lua loads are exactly the Classic-owned
   files listed in `$mainlineOwnedLuaExtras` in
   `tools/test-classic-prototype.ps1`, each loaded once:
-  `Game/Shared/Initialize.lua`, `State/MSUF_AuraDefaults.lua`, the three
+  `Game/Shared/Initialize.lua`,
+  `Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua` (hunter pet happiness,
+  which applies only when `MSUF.Client.SupportsPetHappiness` is true, so on
+  WoW Forever), `Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua` (the
+  first name or surname option, only when `MSUF.Client.HasCharacterSurnames`
+  is true), `State/MSUF_AuraDefaults.lua`, the three
   Defaults shells (`State/Defaults/MSUF_Defaults_Shell.lua`,
   `State/Defaults/MSUF_Defaults_Bars.lua`,
   `State/Defaults/MSUF_Defaults_Units.lua`),
   `Auras3/MSUF_Auras3_IconShape.lua`, the Options files
   `Shell/Menu2/MSUF_Menu2_ColorPicker.lua` and
   `Shell/Menu2/MSUF_Menu2_Theme_Forever.lua` (the WoW Forever menu skin,
-  which applies only when `MSUF.Client.IsForever` is true), and the four Arena modules
+  which applies only when `MSUF.Client.IsForever` is true), the WoW Forever aura
+  data (`Game/Forever/Auras/MSUF_Auras3_ForeverData.lua` and the thirteen
+  `Game/Forever/Auras/AliasData` files, which return at once on every other
+  client), and the four Arena modules
   (`Castbars/MSUF_ArenaCastbars.lua`, `Castbars/MSUF_ArenaCastbars_Preview.lua`,
   `Features/Gameplay/MSUF_Feature_ArenaMatch.lua`,
   `Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua`). No other owned file may
   enter Mainline, and it never parses `Game/Classic`, `Game/Vanilla`,
-  `Game/Mists`, or `Game/TBC`.
+  `Game/Mists`, or `Game/TBC`. A module that Classic clients and Mainline both
+  need therefore lives in `Game/Shared`, as the pet happiness module does:
+  Vanilla and TBC load it from their own manifests, Mainline from
+  `MSUF_UFCore_Elements.xml`, and
+  `tools/classic-flavor-load-exclusions.tsv` keeps it out of Mists.
 - Vanilla, Mists, and TBC load their own aura datasets, group indicator datasets,
   ClassPower providers, Blizzard-frame ownership, and compatibility adapters.
 - Compatibility code never assigns to Blizzard `C_*` namespace tables. This is
@@ -188,13 +200,35 @@ beta), reads the `_Mainline.toc` files and reports the Standard game mode.
 defines only in its camelot-gated file, before any addon loads. On Forever,
 `Family` and `Flavor` stay `Mainline` and `IsRetail` stays true, whatever
 project ID the client reports; a Classic `X-MSUF-Client` tag still wins. Forever
-has no arena UI, so arena units are unsupported there (0 arena slots).
+has no arena UI, so arena units are unsupported there (0 arena slots). It has
+5-player groups and raids only, so `Client.SupportsGroupKind("mythicraid")` is
+false there and the Mythic Raid scope stays out of the menu. Hunter pet
+happiness exists again (`C_PetInfo.GetPetHappiness` plus `UNIT_HAPPINESS`), so
+`Client.SupportsPetHappiness` is true on Forever, Classic Era and TBC.
+Forever characters carry a surname (`Client.HasCharacterSurnames`): the Fonts
+page offers Full name, First name or Surname for every unit and group frame
+(`general.characterNameParts`). `Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua`
+applies it through the unit text module's display-name resolver, calls the
+nickname integration's resolver first, reads the separator from Blizzard's
+`Constants.CharacterNameSeparatorConsts`, and never searches or compares a
+secret name.
 Forever-only behaviour keys on `Client.IsForever`, read once at file load.
+`Client.AddonVersion` is the MSUF version of the running client, also read once
+at file load; every version display, the version check and the analytics read
+that field instead of asking the TOC again. Each client TOC owns its
+`## Version`, so clients can follow their own patch cycle: Midnight keeps
+Retail's version in the `_Mainline.toc` files and the Classic TOCs carry the
+`VERSION` file's release. WoW Forever shares the Mainline TOCs, so the core
+Mainline TOC names its version in `## X-MSUF-Version-Forever`, which the gate
+and the release-line contract hold equal to `VERSION`. A game mode that shares
+a TOC later gets its own `X-MSUF-Version-<Mode>` field the same way.
 `Client.IsGameRuleActive(ruleKey)` reads Blizzard's game rules, such as
 `EditModeDisabled`, and returns nil when a client has no such rule.
 `/msuf clientinfo` prints every fact above plus the state of the Blizzard addons
-MSUF integrates with, so the first bug report from a new client carries what is
-needed to support it.
+MSUF integrates with, which pet happiness API exists, and the character name
+facts (regional unique names, the surname setting, the name separators and
+whether `UnitName` returns a second value; never a name), so the first bug
+report from a new client carries what is needed to support it.
 
 Two checks keep the model honest. `tools/tests/classic_project_id_reads_smoke.lua`
 limits raw `WOW_PROJECT_ID` reads in Classic-owned and override files to a

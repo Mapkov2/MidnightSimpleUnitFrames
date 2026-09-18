@@ -54,6 +54,8 @@ local function Meta(path, classification, exact)
     end
     if path == "font.family" then
         resolved.settingKey = resolved.settingKey or "general.fontKey"
+    elseif path == "name_shortening.character_name_parts" then
+        resolved.settingKey = resolved.settingKey or "general.characterNameParts"
     elseif path == "scope.overrides.reset" then
         resolved.actionKey = resolved.actionKey or "reset_all_scoped_global_font_overrides"
     elseif (classification or "setting") == "setting" then
@@ -70,6 +72,26 @@ local function Meta(path, classification, exact)
         end
     end
     return ControlMeta("opt_fonts", "global", path, classification, resolved)
+end
+-- WoW Forever characters carry a surname. One choice covers every unit and group
+-- frame; a client without surnames gets no control and no extra section height.
+local CharacterNameParts
+if MSUF.Client ~= nil and MSUF.Client.HasCharacterSurnames == true then
+    CharacterNameParts = {
+        rowHeight = 48,
+        values = VT("FULL", "Full name", "FIRST", "First name", "SURNAME", "Surname"),
+        Get = function()
+            local mode = G().characterNameParts
+            if mode == "FIRST" or mode == "SURNAME" then return mode end
+            return "FULL"
+        end,
+        Set = function(value)
+            -- The full name is the default and stores nothing.
+            G().characterNameParts = (value == "FIRST" or value == "SURNAME") and value or nil
+            local names = MSUF.CharacterNames
+            if names and type(names.Refresh) == "function" then names.Refresh() end
+        end,
+    }
 end
 local function RGB(r, g, b, a)
     return { r or 1, g or 1, b or 1, a or 1 }
@@ -629,6 +651,11 @@ local function BuildFonts(ctx)
             Meta("name_shortening.max_length", "setting", { step = 1, roundStep = true }))
         controls.noEllipsis = W.Toggle(parent, "No Ellipsis (truncate without ..)")
         M.BindBoolWidget(ctx, controls.noEllipsis, getNoEllipsis, setNoEllipsis, Meta("name_shortening.no_ellipsis"))
+        if CharacterNameParts then
+            controls.nameParts = W.Segment(parent, "Character names (all frames)", CharacterNameParts.values, 430)
+            M.BindSegment(ctx, controls.nameParts, CharacterNameParts.Get, CharacterNameParts.Set,
+                Meta("name_shortening.character_name_parts"))
+        end
         local scopeNoticeY = (parent._msuf2CursorY or noticeFallbackY or -194) - 8
         controls.scopeNotice = W.Text(parent, "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted)
         if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
@@ -664,7 +691,8 @@ local function BuildFonts(ctx)
     M.TrackRefresh(ctx, RefreshScopedFontControls)
     local nameScope = CurrentFontScope()
     if IsGFScope(nameScope) then
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 288, true)
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
+            288 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
         names._msuf2CursorY = -40
         local shorten, side, chars, noEllipsis
         local function RefreshGFNameShorteningUI()
@@ -734,7 +762,8 @@ local function BuildFonts(ctx)
         end
         M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
     else
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 294, true)
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
+            294 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
         local shorten, side, chars, noEllipsis, scopeNotice, nameShorteningControls
         local function CanEditNameShortening()
             return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())

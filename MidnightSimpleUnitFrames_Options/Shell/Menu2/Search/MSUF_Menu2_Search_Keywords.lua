@@ -9,6 +9,17 @@ M.SearchData = Data
 
 local UF_CORE = "frame basics enable disable hide show width height scale size health power portrait text castbar auras buffs debuffs custom aura filters blacklist whitelist spell id range fade range check distance check out of range transparency alpha preview anchoring anchor global anchor custom anchor copy to edit mode move drag position x offset y offset color name hp power hide percent sign hide percent symbol percent sign prozentzeichen"
 local UF_STATUS = "status icons status indicators indicator selected indicator level level indicator level text show level"
+-- Hunter pet happiness exists on WoW Forever. Midnight has none, so its pet page
+-- keywords stay unchanged.
+local PET_HAPPINESS = ""
+if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
+    PET_HAPPINESS = " pet happiness pet mood hunter pet happy content unhappy happiness icon pet loyalty pet damage 125 100 75 haustier zufriedenheit tierzufriedenheit gluecklich zufrieden ungluecklich"
+end
+-- WoW Forever characters carry a surname; the Fonts page has the option.
+local CHARACTER_NAMES = ""
+if MSUF.Client and MSUF.Client.HasCharacterSurnames == true then
+    CHARACTER_NAMES = " character names surname surnames last name family name first name forename hide surname hide first name full name nachname vorname nachnamen ausblenden"
+end
 local function UnitKeywords(subject, statusSubject, extra)
     return "unit frame unitframe " .. subject .. " " .. UF_CORE .. " " .. UF_STATUS .. " " .. statusSubject .. " level anchor level position level layer" .. (extra or "")
 end
@@ -23,14 +34,14 @@ Data.KEYWORDS = {
     uf_focus = UnitKeywords("focus", "focus", " focus kick interrupt"),
     uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade range check distance check out of range transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power " .. UF_STATUS .. " boss level anchor level position level layer",
     uf_arena = "unit frame unitframe arena frames arenaframe arenaframes frame basics enable disable hide show width height scale size health power portrait text castbar arena range fade range check distance check out of range transparency alpha auras buffs debuffs custom aura filters blacklist whitelist spell id preview anchoring anchor arena layout copy to edit mode move drag position x offset y offset color name hp power " .. UF_STATUS .. " arena opponent enemy pvp",
-    uf_pet = UnitKeywords("pet", "pet"),
+    uf_pet = UnitKeywords("pet", "pet", PET_HAPPINESS),
     gf_layout = "group frames groupframes party raid mythic raid layout health text resource power bar name hp text font size text slot delimiter hide percent sign hide percent symbol show power tank healer damage smooth fill range fade range check distance check out of range offline alpha growth direction sorting role order frame scaling scale transparency opacity anchoring anchor position move drag preview show hide player solo enable disable disabled turn off off hide group frames turn off group frames disable group frames hide group frames turn off raid frames disable raid frames hide raid frames raid frames off turn off party frames disable party frames hide party frames party frames off ausschalten deaktivieren ausblenden width height spacing columns rows sorting role group number visibility",
     gf_bars = "group frames groupframes party raid dispel overlay overlay style overlay priority health bar tint any debuff dispel type debuff stripe stripe edge stripe height stripe opacity effects",
     gf_auras = "group frames groupframes party raid auras buffs debuffs filters blacklist whitelist hidden aura spell id spell indicators tracked spells placed spell icons anchor position x offset y offset icon size max buffs max debuffs spacing layer growth per row hots healer buffs raid debuffs boss debuffs custom spells slots preview frame highlight",
     gf_indicators = "group frames groupframes party raid indicators status icons corner indicators group number focus glow border dispel aggro threat role icon marker raid marker ready check leader assist dead ghost offline afk dnd",
     gf_priority = "group frames groupframes party raid priority frames priority group frames party priority frames priority party frames priority raid frames extra party frames extra raid frames dungeon priority frames duplicate frames pinned players pinned party members pin player tanks automatic tanks tank frames hover hotkey keybind important players healer externals stable strip slots placement attach group mover edit mode",
     opt_bars = "global style bars textures texture gradient gradient direction hp power absorb display heal prediction incoming heals highlight priority prio display overlay highlight borders outline border aggro purge boss target dispel overlay unitframe unit frame debuff tint any debuff dispellable rounded round corners rounded texture rounded frames rounded frame texture rounded unit frames rounded group frames rounded power bars rounded mouseover highlights mouseover bar colors background tint backdrop bg dark mode shared texture opacity alpha health texture power texture frame outline abgerundet abrundung runde kanten ecken abrunden einschalten ausschalten",
-    opt_fonts = "global style fonts font family size outline shadow color text readability name hp power health spell cooldown bigger smaller text size name shortening realm names truncate font color",
+    opt_fonts = "global style fonts font family size outline shadow color text readability name hp power health spell cooldown bigger smaller text size name shortening realm names truncate font color" .. CHARACTER_NAMES,
     auras3_buffs = "buff buffs aura style styling basics text stack stacks cooldown timer cooldown text stack count font size group frame buff settings",
     auras3_debuffs = "debuff debuffs aura style styling basics text stack stacks cooldown timer cooldown text stack count font size group frame debuff settings",
     auras3_styling = "aura style global aura appearance live preview tracked auras dummy preview buffs debuffs player defensives dots on target icon shape border shadow zoom",

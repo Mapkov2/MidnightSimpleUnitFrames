@@ -21,13 +21,13 @@ local vanillaID = _G.WOW_PROJECT_CLASSIC
 local mistsID = _G.WOW_PROJECT_MISTS_CLASSIC
 local tbcID = _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC
 
-local function ReadTOCFlavor()
+local function ReadTOCField(field)
     local getMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
     if type(getMetadata) ~= "function" then return nil end
-    return getMetadata(addonName, "X-MSUF-Client")
+    return getMetadata(addonName, field)
 end
 
-local tocFlavor = ReadTOCFlavor()
+local tocFlavor = ReadTOCField("X-MSUF-Client")
 tocFlavor = type(tocFlavor) == "string"
     and tocFlavor:lower():gsub("^%s+", ""):gsub("%s+$", "") or nil
 local isRetail = mainlineID ~= nil and projectID == mainlineID
@@ -73,7 +73,13 @@ Client.IsEra = isVanilla
 Client.IsMists = isMists
 Client.IsTBC = isTBC
 Client.IsClassic = isVanilla or isMists or isTBC
-Client.SupportsPetHappiness = isVanilla or isTBC
+-- Hunter pet happiness: Classic Era and TBC through the global GetPetHappiness,
+-- WoW Forever through C_PetInfo.GetPetHappiness (Blizzard's Forever pet frame
+-- shows it). Cataclysm removed it, so Mists and Midnight have none.
+Client.SupportsPetHappiness = isVanilla or isTBC or isForever
+-- WoW Forever characters carry a surname next to their first name (Blizzard's
+-- Camelot NameUtil). No other client has one.
+Client.HasCharacterSurnames = isForever
 -- The aura filter that returns the debuffs this player can dispel. Classic Era
 -- keeps the original meaning of HARMFUL|RAID, the filter Blizzard's own "show
 -- dispellable debuffs" party frames scan there, and does not honour
@@ -131,6 +137,17 @@ Client.GameModeRecognized = Client.IsStandardGameMode or KNOWN_GAME_MODES[gameMo
 -- WoW Forever, from the Blizzard_Game marker above. Never key it on a guessed
 -- Forever project ID, interface number, TOC suffix or Enum.GameMode key.
 Client.IsForever = isForever
+
+-- The MSUF version of this client, read once here so nothing asks the TOC again.
+-- Every client TOC owns its "## Version", so clients can follow their own patch
+-- cycle. WoW Forever shares the _Mainline.toc files with Midnight and cannot
+-- own that field; its version is the core TOC's "## X-MSUF-Version-Forever".
+-- A game mode that shares a TOC later gets its own X-MSUF-Version-<Mode> field.
+local addonVersion = isForever and ReadTOCField("X-MSUF-Version-Forever") or nil
+if type(addonVersion) ~= "string" or addonVersion == "" then
+    addonVersion = ReadTOCField("Version")
+end
+Client.AddonVersion = type(addonVersion) == "string" and addonVersion ~= "" and addonVersion or nil
 
 local unsupportedEvents = Client.UnsupportedEvents or {}
 Client.UnsupportedEvents = unsupportedEvents
@@ -210,8 +227,11 @@ function Client.SupportsUnit(unit)
     return unsupportedUnits[base] ~= true
 end
 
+-- The Mythic Raid scope belongs to Midnight's fixed 20-player Mythic difficulty.
+-- The Classic clients have no such difficulty, and WoW Forever has only
+-- 5-player groups and raids, so they keep Party and Raid.
 function Client.SupportsGroupKind(kind)
-    return kind ~= "mythicraid" or Client.IsRetail == true
+    return kind ~= "mythicraid" or (Client.IsRetail == true and not isForever)
 end
 
 -- Game rules are Blizzard's switches for what a game mode allows, such as
@@ -280,6 +300,7 @@ function Client.DescribeLines()
         .. "; family " .. Client.Family .. ", flavor " .. Client.Flavor
         .. (Client.IsForever and ", WoW Forever" or "")
         .. (Client.IsSupported and "" or " (not supported)")
+        .. "; MSUF " .. tostring(Client.AddonVersion)
     local liveEvent = _G.GameEvent
     local classOrder = _G.CLASS_SORT_ORDER
     lines[#lines + 1] = "Forever marker GameEvent.RegisterCamelotEvents at load " .. tostring(hasCamelotMarker)
@@ -329,6 +350,36 @@ function Client.DescribeLines()
     lines[#lines + 1] = "issecretvalue " .. (Client.HasSecretValueAPI and "present" or "missing")
         .. "; arena slots " .. tostring(Client.MaxArenaOpponents)
         .. "; unsupported units: " .. JoinOr(units, "none")
+
+    -- WoW Forever has its own pet happiness API and character surnames. The report
+    -- names what exists and never prints a name. Both functions take no arguments.
+    local petInfo, playerInfo, constants = _G.C_PetInfo, _G.C_PlayerInfo, _G.Constants
+    local function Presence(value) return type(value) == "function" and "present" or "missing" end
+    local function Flag(fn) return type(fn) == "function" and tostring(fn() == true) or "missing" end
+    local function Quoted(value) return value ~= nil and ('"' .. tostring(value) .. '"') or "missing" end
+    lines[#lines + 1] = "Pet happiness " .. (Client.SupportsPetHappiness and "supported" or "not supported")
+        .. "; C_PetInfo.GetPetHappiness " .. Presence(type(petInfo) == "table" and petInfo.GetPetHappiness)
+        .. ", GetPetHappiness " .. Presence(_G.GetPetHappiness)
+    local secondName = "unavailable"
+    if type(_G.UnitName) == "function" then
+        local _, second = _G.UnitName("player")
+        local isSecret = _G.issecretvalue
+        if type(isSecret) == "function" and isSecret(second) then
+            secondName = "secret"
+        elseif second == nil then
+            secondName = "nil"
+        else
+            secondName = second == "" and "empty" or "present"
+        end
+    end
+    local separators = type(constants) == "table" and constants.CharacterNameSeparatorConsts
+    if type(separators) ~= "table" then separators = nil end
+    lines[#lines + 1] = "Names: RegionalUniqueNamesEnabled " .. Flag(_G.RegionalUniqueNamesEnabled)
+        .. ", C_PlayerInfo.ShouldDisplaySurname "
+        .. Flag(type(playerInfo) == "table" and playerInfo.ShouldDisplaySurname)
+        .. ", surname separator " .. Quoted(separators and separators.CHARACTERNAME_SURNAME_SEPARATOR)
+        .. ", realm separator " .. Quoted(separators and separators.CHARACTERNAME_REALMNAME_SEPARATOR)
+        .. ", UnitName(player) second return " .. secondName
 
     local addOnStates = {}
     for i = 1, #REPORTED_ADDONS do

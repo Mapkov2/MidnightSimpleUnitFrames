@@ -1157,10 +1157,11 @@ local function RenderClassPower(preview, bars, player, spec)
     local w = ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72,
         spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
     local x = 2 + (tonumber(bars.classPowerOffsetX) or 0)
-    local y = 4 + (tonumber(bars.classPowerOffsetY) or 0)
+    -- Same anchor as the live container (ClassPower Layout.Position).
+    local y = (tonumber(bars.classPowerOffsetY) or 0) - 2
     frame:SetSize(w, h)
     frame:ClearAllPoints()
-    frame:SetPoint("BOTTOMLEFT", preview.playerRef, "TOPLEFT", x, y)
+    frame:SetPoint("TOPLEFT", preview.playerRef, "TOPLEFT", x, y)
     frame:Show()
     local shape = (spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
         and "BAR" or NormalizeClassShape(bars.classPowerShape)

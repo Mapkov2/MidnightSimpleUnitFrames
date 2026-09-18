@@ -5904,6 +5904,11 @@ L["Monk"] = "수도사"
 L["Druid"] = "드루이드"
 L["Evoker"] = "기원사"
 
+-- WoW Forever character names (Fonts page, Name Shortening).
+L["Character names (all frames)"] = "캐릭터 이름 (모든 프레임)"
+L["Full name"] = "전체 이름"
+L["First name"] = "이름"
+L["Surname"] = "성"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

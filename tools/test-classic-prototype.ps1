@@ -291,12 +291,25 @@ foreach ($target in $targets) {
         if (($client.IsClassic -ceq "true" -or $retailReferenceRootFull) -and $versions[$client.Suffix] -ne $expectedClientVersion) {
             throw "$tocName has version '$($versions[$client.Suffix])', expected '$expectedClientVersion'"
         }
+        # WoW Forever shares the Mainline TOCs but follows the Classic release line:
+        # the core TOC names its version in X-MSUF-Version-Forever (Client.AddonVersion).
+        $foreverVersionLines = @($content | Where-Object { $_ -match '^## X-MSUF-Version-Forever:' })
+        $expectsForeverVersion = $client.Suffix -eq "Mainline" -and $target.Base -ceq "MidnightSimpleUnitFrames"
+        if ($expectsForeverVersion) {
+            $foreverVersion = if ($foreverVersionLines.Count -eq 1) { ($foreverVersionLines[0] -replace '^## X-MSUF-Version-Forever:\s*', '').Trim() } else { "" }
+            if ($foreverVersion -cne $expectedVersion) {
+                throw "$tocName declares X-MSUF-Version-Forever '$foreverVersion', expected VERSION '$expectedVersion'"
+            }
+        } elseif ($foreverVersionLines.Count -ne 0) {
+            throw "$tocName must not declare X-MSUF-Version-Forever; only the core Mainline TOC does"
+        }
         if ($client.Suffix -eq "Mainline" -and $retailReferenceRootFull) {
             $referenceMetadata = @(Get-Content -LiteralPath $referenceToc | Where-Object { $_ -match '^## ' } |
                 ForEach-Object {
                     if ($_ -match '^## Interface:') { $interfaceLine } else { $_ }
                 })
-            $currentMetadata = @($content | Where-Object { $_ -match '^## ' })
+            # X-MSUF-Version-Forever is this repo's own field; Retail has no Forever client.
+            $currentMetadata = @($content | Where-Object { $_ -match '^## ' -and $_ -notmatch '^## X-MSUF-Version-Forever:' })
             if ($referenceMetadata.Count -ne $currentMetadata.Count -or
                 @(Compare-Object $referenceMetadata $currentMetadata).Count -ne 0) {
                 throw "$tocName metadata differs from Retail"
@@ -929,6 +942,8 @@ $retailParityTargets = @(
 $mainlineOwnedLuaExtras = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua",
+    "MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua",
     "MidnightSimpleUnitFrames/State/MSUF_AuraDefaults.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Bars.lua",
@@ -1285,14 +1300,22 @@ if ($lua) {
     if ($LASTEXITCODE -ne 0) { throw "WoW Forever aura data smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_group_frames_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Forever group frames smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_pet_happiness_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Forever pet happiness smoke failed" }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_character_names_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Forever character names smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_arena_zero_smoke.lua") ($root -replace '\\', '/')
     if ($LASTEXITCODE -ne 0) { throw "Forever arena-zero Mainline smoke failed" }
     Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_factory_profile_smoke.lua") $root
     if ($LASTEXITCODE -ne 0) { throw "Forever factory profile CBOR smoke failed" }
-    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_profile_import_persist_smoke.lua") $root
-    if ($LASTEXITCODE -ne 0) { throw "Forever profile persist smoke failed" }
-    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_savedvariables_bind_smoke.lua") $root
-    if ($LASTEXITCODE -ne 0) { throw "Forever SavedVariables bind smoke failed" }
+    # One embedded export is the factory profile of every client; first login, reset and
+    # new profile must all start from it.
+    foreach ($flavor in $clientSuffixes) {
+        Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/factory_default_profile_smoke.lua") $root $flavor
+        if ($LASTEXITCODE -ne 0) { throw "Factory default profile smoke failed: $flavor" }
+    }
+    Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/preview_background_scene_smoke.lua") $root
+    if ($LASTEXITCODE -ne 0) { throw "Preview background scene smoke failed" }
     foreach ($flavor in @($clientSuffixes) + @("Forever")) {
         Invoke-GateSmoke $lua.Source (Join-Path $root "tools/tests/forever_spec_profile_smoke.lua") $root $flavor
         if ($LASTEXITCODE -ne 0) { throw "Forever spec profile smoke failed: $flavor" }

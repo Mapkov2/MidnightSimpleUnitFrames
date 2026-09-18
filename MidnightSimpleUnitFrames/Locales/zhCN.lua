@@ -6104,6 +6104,11 @@ L["Monk"] = "武僧"
 L["Druid"] = "德鲁伊"
 L["Evoker"] = "唤魔师"
 
+-- WoW Forever character names (Fonts page, Name Shortening).
+L["Character names (all frames)"] = "角色名称（所有框体）"
+L["Full name"] = "全名"
+L["First name"] = "名字"
+L["Surname"] = "姓氏"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

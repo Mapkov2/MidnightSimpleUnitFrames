@@ -76,12 +76,13 @@ local TERMINAL_STATUS = {
     dismissed = true,
 }
 
--- Retail injects SavedVariables before the first addon Lua file runs. Forever
--- currently does not always do that on cold start even though logout still
--- writes. Capture roots only from the live globals, and never create empty
--- SavedVariable tables before those globals exist.
-local rawProfileDB, rawGlobalDB, hadSavedState, installEvidence, globalDB, state
-local appliedDB, appliedGlobal
+-- SavedVariables are available before the first addon Lua file runs. Capture
+-- their untouched shape before Defaults/Profiles create or migrate anything.
+-- MSUF 5.71 and older use the same MSUF_DB/MSUF_GlobalDB names as 6.0, so this
+-- is the authoritative upgrade/profile signal.
+local rawProfileDB = rawget(_G, "MSUF_DB")
+local rawGlobalDB = rawget(_G, "MSUF_GlobalDB")
+local hadSavedState = rawProfileDB ~= nil or rawGlobalDB ~= nil
 
 local function TableHasEntries(value)
     return type(value) == "table" and next(value) ~= nil
@@ -92,21 +93,6 @@ local function FirstProfile(profiles)
     for _, profile in pairs(profiles) do
         if type(profile) == "table" then return profile end
     end
-end
-
-local function Now()
-    return type(time) == "function" and time() or 0
-end
-
-local function AddonVersion()
-    local api = _G.C_AddOns
-    local value
-    if type(api) == "table" and type(api.GetAddOnMetadata) == "function" then
-        value = api.GetAddOnMetadata(addonName, "Version")
-    elseif type(_G.GetAddOnMetadata) == "function" then
-        value = _G.GetAddOnMetadata(addonName, "Version")
-    end
-    return tostring(value or "6.0")
 end
 
 local function DetectInstallEvidence()
@@ -138,51 +124,15 @@ local function DetectInstallEvidence()
     }
 end
 
-local FirstLoad = MSUF.FirstLoad6 or {}
-MSUF.FirstLoad6 = FirstLoad
-FirstLoad.savedVariablesBound = false
-FirstLoad.deferredThisSession = false
+local installEvidence = DetectInstallEvidence()
 
-local function SavedVariablesPresent()
-    local db = rawget(_G, "MSUF_DB")
-    local gdb = rawget(_G, "MSUF_GlobalDB")
-    if type(db) == "table" then return true end
-    if type(gdb) == "table" then return true end
-    return false
-end
-
-local function ApplySavedVariableBootstrap()
-    local liveDB = rawget(_G, "MSUF_DB")
-    local liveGlobal = rawget(_G, "MSUF_GlobalDB")
-    if FirstLoad.savedVariablesBound and appliedDB == liveDB and appliedGlobal == liveGlobal then
-        return false
-    end
-    rawProfileDB = liveDB
-    rawGlobalDB = liveGlobal
-    hadSavedState = rawProfileDB ~= nil or rawGlobalDB ~= nil
-    installEvidence = DetectInstallEvidence()
-    globalDB = rawget(_G, "MSUF_GlobalDB")
-    if type(globalDB) ~= "table" then
+local globalDB = rawget(_G, "MSUF_GlobalDB")
+if type(globalDB) ~= "table" then
     globalDB = {}
     _G.MSUF_GlobalDB = globalDB
 end
 if type(globalDB.global) ~= "table" then
     globalDB.global = {}
-end
-do
-    local slots = {}
-    if type(rawGlobalDB) == "table" and type(rawGlobalDB.profiles) == "table" then
-        for name, profile in pairs(rawGlobalDB.profiles) do
-            if type(profile) == "table" then
-                slots[name] = profile
-            end
-        end
-    end
-    MSUF.SavedVariableRoots = {
-        db = type(rawProfileDB) == "table" and rawProfileDB or nil,
-        global = type(rawGlobalDB) == "table" and rawGlobalDB or nil,
-        profileSlots = slots,
-    }
 end
 
 -- Schema 600 is the profile contract for every MSUF 6.x release. Archive old
@@ -197,11 +147,7 @@ local function EnsurePre6Archive()
 end
 if type(globalDB.profiles) == "table" then
     for name, profile in pairs(globalDB.profiles) do
-        -- An empty table is a SavedVariables alias leftover, not a pre-6 profile.
-        -- Archiving it also retired the active-profile binding on Forever.
-        if type(profile) == "table" and next(profile) == nil then
-            -- keep the named slot
-        elseif not ProfilePolicy.AcceptsProfile(profile) then
+        if not ProfilePolicy.AcceptsProfile(profile) then
             local archive = EnsurePre6Archive()
             if archive[name] == nil then archive[name] = profile end
             globalDB.profiles[name] = nil
@@ -211,7 +157,7 @@ if type(globalDB.profiles) == "table" then
         end
     end
 end
-if type(rawProfileDB) == "table" and next(rawProfileDB) ~= nil and not ProfilePolicy.AcceptsProfile(rawProfileDB) then
+if rawProfileDB ~= nil and not ProfilePolicy.AcceptsProfile(rawProfileDB) then
     local archive = EnsurePre6Archive()
     if archive.__standalone == nil then archive.__standalone = rawProfileDB end
     _G.MSUF_DB = nil
@@ -236,7 +182,23 @@ if retiredNames then
 end
 ProfilePolicy.ArchivedThisLoad = archivedCount
 
-state = globalDB.global.firstLoad6
+local function Now()
+    return type(time) == "function" and time() or 0
+end
+
+local function AddonVersion()
+    if MSUF.Client and MSUF.Client.AddonVersion then return MSUF.Client.AddonVersion end
+    local api = _G.C_AddOns
+    local value
+    if type(api) == "table" and type(api.GetAddOnMetadata) == "function" then
+        value = api.GetAddOnMetadata(addonName, "Version")
+    elseif type(_G.GetAddOnMetadata) == "function" then
+        value = _G.GetAddOnMetadata(addonName, "Version")
+    end
+    return tostring(value or "6.0")
+end
+
+local state = globalDB.global.firstLoad6
 if type(state) ~= "table" or state.revision ~= REVISION then
     state = {
         schema = 1,
@@ -287,20 +249,20 @@ else
         state.detectedProfileSchema = installEvidence.profileSchema
     end
 end
-    appliedDB = liveDB
-    appliedGlobal = liveGlobal
-    FirstLoad.savedVariablesBound = true
-    return true
-end
+
+local FirstLoad = MSUF.FirstLoad6 or {}
+MSUF.FirstLoad6 = FirstLoad
+
+-- Session-only guard on top of the persisted status. It keeps the scene hidden
+-- for the rest of this session even if the persisted status is restored to
+-- "pending" (for example by an Assistant undo of a first-load action).
+FirstLoad.deferredThisSession = false
 
 -- Some profile/bootstrap paths can repair or replace the SavedVariables root
 -- after this early module has loaded. Always follow the currently exported
 -- root before reading or mutating onboarding state, otherwise the menu can
 -- render a stale `pending` table even though the saved state is completed.
 local function SyncLiveState()
-    if not FirstLoad.savedVariablesBound then
-        return state
-    end
     local liveDB = rawget(_G, "MSUF_GlobalDB")
     if type(liveDB) ~= "table" then
         _G.MSUF_GlobalDB = globalDB
@@ -476,57 +438,4 @@ function FirstLoad:Reset(installKind)
     globalDB.global.firstLoad6ProfileImported = nil
     self.deferredThisSession = false
     return true
-end
-
-FirstLoad.ApplySavedVariableBootstrap = ApplySavedVariableBootstrap
-
-local function NotifyRuntimeSavedVariablesBound()
-    if type(_G.MSUF_InitProfiles) == "function" then
-        _G.MSUF_InitProfiles()
-    end
-    local uf = MSUF.UF
-    local cfg = uf and uf.Config
-    if type(cfg) == "table" and type(cfg.RebindSavedVariables) == "function" then
-        cfg.RebindSavedVariables()
-    end
-    local runtime = MSUF.ProfileRuntime
-    if type(runtime) == "table" and type(runtime.Apply) == "function" then
-        runtime.Apply("SAVED_VARIABLES_BOUND", true)
-    end
-end
-
-local function BindSavedVariables()
-    if ApplySavedVariableBootstrap() then
-        NotifyRuntimeSavedVariablesBound()
-    end
-end
-
-if SavedVariablesPresent() or type(_G.CreateFrame) ~= "function" then
-    ApplySavedVariableBootstrap()
-else
-    local frame = _G.CreateFrame("Frame")
-    frame:RegisterEvent("ADDON_LOADED")
-    frame:SetScript("OnEvent", function(self, event, name)
-        if event == "ADDON_LOADED" then
-            if name ~= addonName then return end
-            self:UnregisterEvent("ADDON_LOADED")
-            if SavedVariablesPresent() then
-                BindSavedVariables()
-                return
-            end
-            if MSUF.Client and MSUF.Client.IsForever == true then
-                self:RegisterEvent("PLAYER_LOGIN")
-                return
-            end
-            BindSavedVariables()
-            return
-        end
-        if event == "PLAYER_LOGIN" then
-            self:UnregisterAllEvents()
-            if not SavedVariablesPresent() then
-                print("|cffffd700MSUF:|r SavedVariables did not load. If your profile is missing, type /reload before you log out.")
-            end
-            BindSavedVariables()
-        end
-    end)
 end

@@ -5,7 +5,8 @@
 -- Importing over an existing Forever profile works because that path inflates
 -- before DeserializeCBOR. Creating a new profile (including import-into-new)
 -- first seeds the factory compact string. The factory blob is deflate(CBOR)
--- and starts 0xEC after base64; Forever's DeserializeCBOR raises
+-- (its first byte is a Deflate block header, which changes with every new
+-- factory export); Forever's DeserializeCBOR raises
 -- "attempted to deserialize an unknown cbor value" on those compressed bytes
 -- instead of returning nil. This smoke stubs that Forever decoder and requires
 -- MSUF_CreateFactoryDefaultProfile to inflate first, matching Blizzard's own
@@ -58,11 +59,12 @@ end
 local FOREVER_CBOR_ERROR = "attempted to deserialize an unknown cbor value"
 local INFLATED_CBOR = "INFLATED-CBOR"
 local cborCalls, inflateCalls = 0, 0
+local compressedFactoryBlob -- the embedded factory string after Base64, set once the defaults loaded
 C_EncodingUtil = {
     SerializeCBOR = function() return INFLATED_CBOR end,
     DeserializeCBOR = function(blob)
         cborCalls = cborCalls + 1
-        if type(blob) ~= "string" or blob == "" or blob:byte(1) == 0xEC then
+        if type(blob) ~= "string" or blob == "" or blob == compressedFactoryBlob then
             error(FOREVER_CBOR_ERROR, 2)
         end
         if blob ~= INFLATED_CBOR then error(FOREVER_CBOR_ERROR, 2) end
@@ -71,7 +73,7 @@ C_EncodingUtil = {
     DecompressString = function(blob, method)
         inflateCalls = inflateCalls + 1
         assert(method == Enum.CompressionMethod.Deflate, "factory decode did not request Deflate")
-        if type(blob) == "string" and blob:byte(1) == 0xEC then return INFLATED_CBOR end
+        if type(blob) == "string" and blob == compressedFactoryBlob then return INFLATED_CBOR end
         return nil
     end,
     EncodeBase64 = function() return "Zg==" end,
@@ -114,8 +116,12 @@ local compact = _G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
 Check(type(compact) == "string" and compact:match("^MSUF3:"), "factory compact string is missing")
 local b64 = compact:match("^MSUF3:%s*(.-)%s*$")
 local raw = DecodeBase64(b64)
-Check(type(raw) == "string" and raw:byte(1) == 0xEC,
-    "factory compact no longer starts with deflate byte 0xEC; update this Forever contract")
+-- A raw Deflate stream opens with BFINAL (bit 0) and BTYPE (bits 1-2); a profile of this
+-- size is always a dynamic-Huffman block (BTYPE 2). Plain CBOR would start with a map
+-- head (0xA0-0xBF), which has BTYPE 0 or 3 with these bits.
+Check(type(raw) == "string" and #raw > 1000 and math.floor(raw:byte(1) / 2) % 4 == 2,
+    "the factory compact string is no longer a Deflate stream; Forever would raise on it")
+compressedFactoryBlob = raw
 
 local raised
 local okRaise, errRaise = pcall(C_EncodingUtil.DeserializeCBOR, raw)

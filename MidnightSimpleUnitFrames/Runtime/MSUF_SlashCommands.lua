@@ -317,6 +317,7 @@ local function CommandsInCombat()
 end
 
 local function CommandsAddonVersion()
+    if MSUF.Client and MSUF.Client.AddonVersion then return MSUF.Client.AddonVersion end
     local getMeta = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
     if type(getMeta) == "function" then
         local version = getMeta(addonName or "MidnightSimpleUnitFrames", "Version")
@@ -416,9 +417,6 @@ Commands.Register({
     usage = "/msuf reload",
     help = "Reload the interface, same as /rl.",
     run = function()
-        if type(MSUF_FlushProfileSavedVariables) == "function" then
-            MSUF_FlushProfileSavedVariables()
-        end
         if type(ReloadUI) == "function" then ReloadUI() end
     end,
 })
@@ -744,9 +742,6 @@ end
 if not SlashTokenClaimed("/RL") then
     SLASH_MSUFRELOADUI1 = "/rl"
     SlashCmdList["MSUFRELOADUI"] = function()
-        if type(MSUF_FlushProfileSavedVariables) == "function" then
-            MSUF_FlushProfileSavedVariables()
-        end
         if type(ReloadUI) == "function" then
             ReloadUI()
         end

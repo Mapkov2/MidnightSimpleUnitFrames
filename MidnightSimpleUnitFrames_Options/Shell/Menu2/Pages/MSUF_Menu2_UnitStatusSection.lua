@@ -400,6 +400,10 @@ function StatusSection.PrepareIconResolvers(state, unit)
         if value == "statusResting" then return { { "resting", "resting", "restedStateIndicatorSymbol" } } end
         if value == "statusIncomingRes" then return { { "incomingRes", "resurrect", "incomingResIndicatorSymbol" } } end
         if value == "statusPvp" then return { { "pvp", "Alliance" }, { "pvp", "Horde" }, { "pvp", "FFA" } } end
+        -- Unhappy (75% damage), Content (100%) and Happy (125%).
+        if value == "statusPetHappiness" then
+            return { { "petHappiness", 1 }, { "petHappiness", 2 }, { "petHappiness", 3 } }
+        end
         return nil
     end
     local function IsRoleStatusSpec(spec)
@@ -499,6 +503,10 @@ function StatusSection.PrepareIconResolvers(state, unit)
         if entry[1] == "resting" then return "Interface\\CharacterFrame\\UI-StateIcon", 0, 0.5, 0, 0.5 end
         if entry[1] == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
         if entry[1] == "pvp" then return entry[2] == "Horde" and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
+        if entry[1] == "petHappiness" then
+            local left = ({ 0.375, 0.1875, 0 })[tonumber(entry[2]) or 3] or 0
+            return "Interface\\PetPaperDollFrame\\UI-PetHappiness", left, left + 0.1875, 0, 0.359375
+        end
         return nil
     end
     state.CurrentStatusSymbolValues, state.StatusPreviewEntries, state.IsRoleStatusSpec, state.StatusIconStyleLabel, state.SpecificIconLabel =

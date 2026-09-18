@@ -70,7 +70,7 @@ local IsEnabled
 --- Core
 local function ReadMyVersion()
     if myVersionStr then return end
-    local ver = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version")
+    local ver = (MSUF.Client and MSUF.Client.AddonVersion) or C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version")
     if type(ver) == "string" and ver ~= "" then
         local number, normalized, parts = VersionToNumber(ver)
         myVersionStr   = normalized or ver

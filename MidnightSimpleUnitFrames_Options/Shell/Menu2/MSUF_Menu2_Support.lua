@@ -1393,7 +1393,7 @@ local function ShowCopyLink(title, url)
 end
 ExportPublic("MSUF_ShowCopyLink", ShowCopyLink)
 do
-    local version = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
+    local version = (MSUF.Client and MSUF.Client.AddonVersion) or _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
         and _G.C_AddOns.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version")
     local isAlpha = type(version) == "string" and version:lower():find("alpha", 1, true) ~= nil
     if isAlpha then

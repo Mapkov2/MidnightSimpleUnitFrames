@@ -159,6 +159,12 @@ local STATUS_CONTROLS = {
     StatusControl("stance", "Stance", "showStanceIndicator", false, "stanceIndicatorSize", 12, "stanceIndicatorAnchor", "TOP", STATUS_LEVEL_ANCHORS, "stanceIndicatorOffsetX", 0, "stanceIndicatorOffsetY", -2, "stanceIndicatorLayer", 7, "MSUF_RequestStatusIconsRefreshForCurrent", { allowed = function(unit) return unit == "player" end, statusRuntime = true, textIndicator = true, colorPrefix = "stanceIndicator" }),
     StatusControl("statusPvp", "PvP Flag (War Mode/PvP)", "showPvpIndicator", true, "pvpIndicatorSize", 18, "pvpIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "pvpIndicatorOffsetX", 0, "pvpIndicatorOffsetY", 0, "pvpIndicatorLayer", 7, "MSUF_RequestStatusPvpIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "pvpIndicatorCustomIcon" }),
 }
+-- Hunter pet happiness exists again on WoW Forever (and on Classic Era and TBC,
+-- which use their own unit page). Midnight has none, so the control is only
+-- added where the client supports it.
+if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then
+    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetHappiness", "Pet Happiness", "showPetHappinessIndicator", true, "petHappinessIndicatorSize", 24, "petHappinessIndicatorAnchor", "RIGHT", STATUS_CORNER_ANCHORS, "petHappinessIndicatorOffsetX", -7, "petHappinessIndicatorOffsetY", -4, "petHappinessIndicatorLayer", 7, "MSUF_RequestPetHappinessIndicatorRefresh", { allowed = function(unit) return unit == "pet" end, statusRuntime = true })
+end
 -- LEFT/CENTER/RIGHT were legacy 5.77 tokens for the top row. Profiles migrate
 -- those values to TOPLEFT/TOP/TOPRIGHT; FRAME* keeps the new middle row
 -- unambiguous even when an old profile is imported later.
@@ -283,7 +289,7 @@ for _, slot in ipairs(WL [[Name HealthLeft HealthCenter HealthRight PowerLeft Po
     end
 end
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
-local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp stance", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled", "show iconStyle customIcon x y anchor size layer symbol")
+local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness stance", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled", "show iconStyle customIcon x y anchor size layer symbol")
 --- Most fields below "healthColorMode" are the per-unit Bars override scope (gated by
 --- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). UnitFrame Dispel Overlay/Symbol
 --- are the deliberate exception: they are copied with Frame settings but stay owned by
