@@ -420,7 +420,7 @@ local GROUP_MENU_DOMAIN_REPAIR = {
         "roleIconAnchor", "leaderIconAnchor", "assistIconAnchor", "raidMarkerAnchor",
         "readyCheckAnchor", "summonAnchor", "resurrectAnchor", "pvpIconAnchor", "phaseAnchor",
         "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "statusAFKTimerTextAnchor", "statusDNDTextAnchor",
-        "groupNumberAnchor", "dispelSymbolAnchor",
+        "groupNumberAnchor", "levelTextAnchor", "dispelSymbolAnchor",
     },
     auraDefaults = {
         buff = { anchor = "BOTTOMRIGHT", cooldownAnchor = "CENTER", stackAnchor = "BOTTOMRIGHT" },

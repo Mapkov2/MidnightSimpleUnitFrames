@@ -417,8 +417,17 @@ end
 
 local AddEvent = Shared.AddEvent
 
-local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextFlags, statusTextPlayerFlags, incomingRes, pvp)
+local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextFlags, statusTextPlayerFlags, incomingRes, pvp, level, levelColored)
   local events, unitlessEvents
+  if level then
+    events = AddEvent(events, "UNIT_LEVEL")
+  end
+  -- A graded level color is relative to the player, so it also follows the
+  -- player's own level-up. Both events are rare; neither fires in steady state.
+  if levelColored then
+    unitlessEvents = AddEvent(unitlessEvents, "PLAYER_LEVEL_UP")
+    unitlessEvents = AddEvent(unitlessEvents, "PLAYER_LEVEL_CHANGED")
+  end
   if phase then
     events = AddEvent(events, "UNIT_PHASE")
     events = AddEvent(events, "UNIT_OTHER_PARTY_CHANGED")
@@ -485,6 +494,7 @@ local GROUP_STATUS_REGIONS = {
   statusAFKTimer = { "statusAFKTimerTextSize", 10, "statusAFKTimerTextAnchor", "CENTER", "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY", -10, "statusAFKTimerTextLayer", 7 },
   statusDND = { "statusDNDTextSize", 14, "statusDNDTextAnchor", "CENTER", "statusDNDOffsetX", 0, "statusDNDOffsetY", 0, "statusDNDTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
+  level = { "levelTextSize", 10, "levelTextAnchor", "BOTTOMLEFT", "levelTextX", 2, "levelTextY", 2, "levelTextLayer", 7 },
 }
 
 local function StatusRegionDef(conf, enabled, key)
@@ -508,13 +518,17 @@ local function CompileStatus(kind, conf)
   local statusFlagTextEnabled = statusDeadGhostTextEnabled or statusPlayerFlagTextEnabled
   local statusTextEnabled = statusConnectionTextEnabled or statusFlagTextEnabled
   local raidGroupEnabled = conf.showGroupNumber == true
+  local levelEnabled = conf.levelText == true
+  local levelColored = levelEnabled and conf.levelTextDifficultyColor ~= false
   local runtimeEvents, runtimeUnitlessEvents = CompileStatusRuntimeEvents(
     leaderEnabled, assistEnabled, readyCheckEnabled, summonEnabled, phaseEnabled,
-    raidMarkerEnabled, raidGroupEnabled, statusFlagTextEnabled, statusPlayerFlagTextEnabled, incomingResEnabled, pvpEnabled
+    raidMarkerEnabled, raidGroupEnabled, statusFlagTextEnabled, statusPlayerFlagTextEnabled, incomingResEnabled, pvpEnabled,
+    levelEnabled, levelColored
   )
   local runtimeEnabled = roleEnabled or leaderEnabled or assistEnabled
     or readyCheckEnabled or summonEnabled or phaseEnabled
     or raidMarkerEnabled or raidGroupEnabled or statusTextEnabled or incomingResEnabled or pvpEnabled
+    or levelEnabled
 
   local role = StatusRegionDef(conf, roleEnabled, "role")
   role.style = conf.roleIconStyle
@@ -540,6 +554,10 @@ local function CompileStatus(kind, conf)
   statusText.afkTimer = StatusRegionDef(conf, conf.statusAFKTimerText == true, "statusAFKTimer")
   local raidGroup = StatusRegionDef(conf, raidGroupEnabled, "raidGroup")
   raidGroup.style = conf.groupNumberStyle or "PAREN"
+  local level = StatusRegionDef(conf, levelEnabled, "level")
+  level.difficultyColor = levelColored
+  level.difficultyColors = levelColored
+    and Shared.ResolveLevelDifficultyColors(_G.MSUF_DB and _G.MSUF_DB.general) or nil
   --- Every icon carries its own style now, so the non-role indicators stop falling back to the
   --- retired scope-wide default. The value may carry the "@MIDNIGHT" suffix; the DB resolvers
   --- split it, so it is forwarded untouched.
@@ -565,7 +583,7 @@ local function CompileStatus(kind, conf)
   return {
     enabled = roleEnabled or raidMarkerEnabled or leaderEnabled or assistEnabled
       or readyCheckEnabled or summonEnabled or incomingResEnabled
-      or pvpEnabled or phaseEnabled or statusTextEnabled or raidGroupEnabled,
+      or pvpEnabled or phaseEnabled or statusTextEnabled or raidGroupEnabled or levelEnabled,
     group = true,
     groupRuntimeEnabled = runtimeEnabled,
     groupRuntimeEvents = runtimeEvents,
@@ -576,6 +594,7 @@ local function CompileStatus(kind, conf)
     runtimePhase = phaseEnabled,
     runtimeRaidMarker = raidMarkerEnabled,
     runtimeRaidGroup = raidGroupEnabled,
+    runtimeLevel = levelEnabled,
     runtimeStatusText = statusTextEnabled,
     runtimeIncomingRes = incomingResEnabled,
     runtimePVP = pvpEnabled,
@@ -594,6 +613,7 @@ local function CompileStatus(kind, conf)
     phase = phase,
     statusText = statusText,
     raidGroup = raidGroup,
+    level = level,
   }
 end
 
@@ -1830,6 +1850,8 @@ local function RefreshFontDomain(kind, base, conf)
   -- value without invalidating/recompiling the full group spec on slider drag.
   local raidGroup = base.status and base.status.raidGroup
   if raidGroup then raidGroup.size = Num(conf.groupNumberSize, 10) end
+  local levelText = base.status and base.status.level
+  if levelText then levelText.size = Num(conf.levelTextSize, 10) end
   BumpSpecDomain(base, "_msufTextLayoutRevision")
   BumpSpecDomain(base, "_msufTextColorRevision")
 end
@@ -1878,6 +1900,12 @@ local function RefreshColorDomain(kind, base, conf)
   end
   local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
   base.textColor = ReplaceTableContents(base.textColor, { r = tr or 1, g = tg or 1, b = tb or 1, a = textAlpha })
+  -- The level difficulty palette is a Colors-page setting, so it has to follow
+  -- the in-place color refresh instead of waiting for a full recompile.
+  local levelText = base.status and base.status.level
+  if levelText and levelText.difficultyColor == true then
+    levelText.difficultyColors = Shared.ResolveLevelDifficultyColors(general)
+  end
   local text = base.text or {}
   base.text = text
   local oldHealthColorByHealth = text.healthColorByHealth == true

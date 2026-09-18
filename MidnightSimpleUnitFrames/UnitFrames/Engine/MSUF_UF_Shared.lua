@@ -101,6 +101,42 @@ function Shared.AddEvent(list, event)
   return list
 end
 
+--- Level difficulty colors. One flat RGB table shared by every unit and group
+--- level text: tier 1 impossible ("??" and 5+ above), 2 very difficult,
+--- 3 standard (also every non-attackable unit), 4 easy, 5 trivial. The keys are
+--- global on purpose - the bands mean the same thing on every frame - and an
+--- unset triple keeps the built-in default, so nothing has to be seeded.
+Shared.LEVEL_DIFFICULTY_TIERS = {
+  { "levelColorImpossible", 1.00, 0.10, 0.10 },
+  { "levelColorVeryDifficult", 1.00, 0.50, 0.25 },
+  { "levelColorStandard", 1.00, 1.00, 1.00 },
+  { "levelColorEasy", 0.25, 0.75, 0.25 },
+  { "levelColorTrivial", 0.50, 0.50, 0.50 },
+}
+
+local levelDifficultyColors = {}
+
+function Shared.ResolveLevelDifficultyColors(general)
+  local tiers = Shared.LEVEL_DIFFICULTY_TIERS
+  for i = 1, #tiers do
+    local tier = tiers[i]
+    local prefix = tier[1]
+    local r = general and tonumber(general[prefix .. "R"])
+    local g = general and tonumber(general[prefix .. "G"])
+    local b = general and tonumber(general[prefix .. "B"])
+    local base = (i - 1) * 3
+    if r and g and b then
+      levelDifficultyColors[base + 1] = Clamp01(r, tier[2])
+      levelDifficultyColors[base + 2] = Clamp01(g, tier[3])
+      levelDifficultyColors[base + 3] = Clamp01(b, tier[4])
+    else
+      levelDifficultyColors[base + 1], levelDifficultyColors[base + 2], levelDifficultyColors[base + 3] =
+        tier[2], tier[3], tier[4]
+    end
+  end
+  return levelDifficultyColors
+end
+
 --- Frame alpha lane. `alpha` is the table to fill: unit specs reuse the table
 --- from the previous compile, group specs pass a fresh one. externalOoc marks
 --- the group lane - group frames compose the out-of-combat fade in

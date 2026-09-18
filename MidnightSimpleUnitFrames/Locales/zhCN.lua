@@ -6070,6 +6070,16 @@ L["When enabled, Blizzard handles countdown numbers natively in C++.\nDisables t
 L["When enabled, aura cooldown text uses Safe / Warning / Urgent colors based on remaining time.\nWhen disabled, aura cooldown text always uses the Safe color."] = "启用后，光环冷却文字会根据剩余时间使用安全 / 警告 / 紧急颜色。\n关闭后，始终使用安全颜色。"
 L["When unchecked, this unit inherits Shared settings for text modes, absorb display, and spacers."] = "未勾选时，该单位将继承文字模式、吸收显示和间隔的共享设置。"
 L["hp text"] = "生命文字"
+L["Color by level difficulty"] = "按等级难度着色"
+L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "远高于你的等级为红色，与你同级为白色，无威胁时为灰色。关闭后改用状态文本颜色。"
+L["Level Difficulty Colors"] = "等级难度颜色"
+L["Shared by every unit and group frame that colors its level by difficulty."] = "所有按难度为等级着色的单位框体和团队框体共用。"
+L["Far above / ??"] = "远高于 / ??"
+L["Above your level"] = "高于你的等级"
+L["Your level"] = "你的等级"
+L["Below your level"] = "低于你的等级"
+L["Trivial"] = "无威胁"
+L["Level Text"] = "等级文本"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)

@@ -109,6 +109,7 @@ local FALLBACK_GROUP_STATUS_SPECS = {
     { text = "AFK Text", enabled = "statusAFKText", layer = "statusAFKTextLayer", defaultLayer = 7 },
     { text = "AFK Timer", enabled = "statusAFKTimerText", layer = "statusAFKTimerTextLayer", defaultLayer = 7 },
     { text = "DND Text", enabled = "statusDNDText", layer = "statusDNDTextLayer", defaultLayer = 7 },
+    { text = "Level Text", enabled = "levelText", layer = "levelTextLayer", defaultLayer = 7 },
 }
 
 local function DB()

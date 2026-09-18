@@ -303,7 +303,7 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             txt:SetText(Status.IsIdentityText(spec) and Status.IdentityPreviewText(spec, data)
                 or STATUS_TEXT_STATE_IDS[spec.id]
                 or statusPreviewText or Status.StatusTextPreviewText(runtimeCfg or g) or "")
-            txt:SetTextColor(Status.TextIndicatorColor(spec, conf, g))
+            txt:SetTextColor(Status.TextIndicatorColor(spec, conf, g, data))
             txt:Show()
         end
     else
@@ -315,7 +315,37 @@ end
 --- spec's size key ("levelIndicatorSize" -> "levelIndicator") so this cannot
 --- drift from the engine's PrefixedStatusDef naming. No stored triple means the
 --- indicator is still following the frame font color.
-function Status.TextIndicatorColor(spec, conf, g)
+--- Level Text graded by difficulty resolves its band exactly like the engine:
+--- a live unit goes through the runtime tier resolver, the stylized mocks use
+--- their scripted level gap so the palette is visible without a target.
+function Status.LevelDifficultyColor(conf, g, data)
+    local customR = conf and conf.levelIndicatorColorR
+    if customR == nil then customR = g and g.levelIndicatorColorR end
+    local enabled = conf and conf.levelIndicatorDifficultyColor
+    if enabled == nil then enabled = g and g.levelIndicatorDifficultyColor end
+    if enabled == nil then enabled = customR == nil end
+    local shared = MSUF.UF and MSUF.UF.Shared
+    if enabled ~= true or not (shared and shared.ResolveLevelDifficultyColors) then return nil end
+    local levelText = data and data.level
+    local level = tonumber(levelText)
+    local tier = 3
+    if levelText == "??" then
+        tier = 1
+    elseif data and data.live == true then
+        local runtime = MSUF.UFStatusRuntime
+        if level and runtime and runtime.LevelDifficultyTier then tier = runtime.LevelDifficultyTier(data.liveUnit, level) end
+    elseif level and data and data.isPlayer ~= true and data.reactionKind ~= "friendly" then
+        tier = level >= 85 and 1 or (level >= 82 and 2 or 3)
+    end
+    local colors = shared.ResolveLevelDifficultyColors(g)
+    local base = (tier - 1) * 3
+    return colors[base + 1], colors[base + 2], colors[base + 3]
+end
+function Status.TextIndicatorColor(spec, conf, g, data)
+    if spec and spec.id == "level" then
+        local r, green, b = Status.LevelDifficultyColor(conf, g, data)
+        if r then return r, green, b end
+    end
     local sizeKey = spec and spec.size
     local prefix = type(sizeKey) == "string" and sizeKey:match("^(.*)Size$") or nil
     if prefix then

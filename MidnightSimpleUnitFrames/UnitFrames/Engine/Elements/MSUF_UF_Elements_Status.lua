@@ -407,10 +407,23 @@ end
 local function ApplyTextColor(region, spec, cfg)
   local c = spec and spec.textColor
   local r, g, b, a = c and c.r or 1, c and c.g or 1, c and c.b or 1, c and c.a or 1
-  local cr = cfg and cfg.colorR
-  if cr then
-    local cg, cb = cfg.colorG, cfg.colorB
-    if cg and cb then r, g, b = cr, cg, cb end
+  if cfg and cfg.difficultyColor == true then
+    -- A difficulty-colored level text is graded per unit by
+    -- Runtime.ApplyLevelDifficultyColor; a static write here would fight it on
+    -- every layout pass. The layout pass only repaints the band that unit pass
+    -- last resolved, so a palette edit applies live without re-reading the
+    -- unit. Both writers share the _msufStatusR/G/B/A cache.
+    local tier, colors = region and region._msufLevelTier, cfg.difficultyColors
+    if not (tier and colors) then return end
+    local base = (tier - 1) * 3
+    r, g, b = colors[base + 1], colors[base + 2], colors[base + 3]
+  else
+    if region and region._msufLevelTier then region._msufLevelTier = nil end
+    local cr = cfg and cfg.colorR
+    if cr then
+      local cg, cb = cfg.colorG, cfg.colorB
+      if cg and cb then r, g, b = cr, cg, cb end
+    end
   end
   if region and region.SetTextColor
     and (region._msufStatusR ~= r or region._msufStatusG ~= g or region._msufStatusB ~= b or region._msufStatusA ~= a) then
@@ -1382,6 +1395,74 @@ end
 
 local IDENTITY_TEXT_FIELDS = { "levelText", "raceText", "classStatusText" }
 
+--- Level difficulty tier, mirroring TargetFrameMixin:CheckLevel. Returns an
+--- index into Shared.LEVEL_DIFFICULTY_TIERS. Hung on Runtime rather than kept
+--- as locals: this chunk sits at Lua 5.1's 200-local ceiling.
+function Runtime.BuildLevelTierMap()
+  local map = {}
+  local difficulty = _G.Enum and _G.Enum.RelativeContentDifficulty
+  if difficulty then
+    if difficulty.Impossible ~= nil then map[difficulty.Impossible] = 1 end
+    if difficulty.Difficult ~= nil then map[difficulty.Difficult] = 2 end
+    if difficulty.Fair ~= nil then map[difficulty.Fair] = 3 end
+    if difficulty.Easy ~= nil then map[difficulty.Easy] = 4 end
+    if difficulty.Trivial ~= nil then map[difficulty.Trivial] = 5 end
+  end
+  Runtime.levelTierByDifficulty = map
+  return map
+end
+
+function Runtime.LevelDifficultyTier(unit, level)
+  -- "??" is always the top band, attackable or not.
+  if level == -1 then return 1 end
+  -- Blizzard only grades what the player can attack; everything else keeps the
+  -- standard color.
+  local canAttack = _G.UnitCanAttack
+  if not (canAttack and BoolTrue(canAttack("player", unit))) then return 3 end
+  local playerInfo = _G.C_PlayerInfo
+  local getDifficulty = playerInfo and playerInfo.GetContentDifficultyCreatureForPlayer
+  if getDifficulty then
+    -- Server-side grading: correct under level scaling and Timewalking, where
+    -- a raw level gap is not.
+    local difficulty = getDifficulty(unit)
+    if issecretvalue(difficulty) ~= true then
+      local tier = (Runtime.levelTierByDifficulty or Runtime.BuildLevelTierMap())[difficulty]
+      if tier then return tier end
+    end
+    return 3
+  end
+  -- Clients without that API (Classic flavors) use GetRelativeDifficultyColor's
+  -- level-gap bands.
+  local readPlayerLevel = _G.UnitEffectiveLevel or UnitLevel
+  local playerLevel = readPlayerLevel and SafeNumber(readPlayerLevel("player"))
+  if not (level and playerLevel) then return 3 end
+  local diff = level - playerLevel
+  if diff >= 5 then return 1 end
+  if diff >= 3 then return 2 end
+  if diff >= -2 then return 3 end
+  local greenRange = _G.GetQuestGreenRange and SafeNumber(_G.GetQuestGreenRange()) or 8
+  if -diff <= greenRange then return 4 end
+  return 5
+end
+
+--- `tier` pins the band for previews, which have no real unit to grade.
+function Runtime.ApplyLevelDifficultyColor(region, frame, unit, level, cfg, tier)
+  local colors = cfg.difficultyColors
+  if not (region and colors and region.SetTextColor) then return end
+  tier = tier or Runtime.LevelDifficultyTier(unit, level)
+  region._msufLevelTier = tier
+  local base = (tier - 1) * 3
+  local r, g, b = colors[base + 1], colors[base + 2], colors[base + 3]
+  -- Alpha stays with the frame's shared font text alpha, as in ApplyTextColor.
+  local spec = frame.MSUFSpec
+  local c = spec and spec.textColor
+  local a = c and c.a or 1
+  if region._msufStatusR ~= r or region._msufStatusG ~= g or region._msufStatusB ~= b or region._msufStatusA ~= a then
+    region:SetTextColor(r, g, b, a)
+    region._msufStatusR, region._msufStatusG, region._msufStatusB, region._msufStatusA = r, g, b, a
+  end
+end
+
 function Runtime.UpdateIdentityTexts(frame, status)
   local levelCfg = status and status.level
   local raceCfg = status and status.race
@@ -1407,6 +1488,9 @@ function Runtime.UpdateIdentityTexts(frame, status)
     local level = SafeNumber(UnitLevel(unit))
     if level then
       levelText, levelPresent = level == -1 and "??" or tostring(level), true
+      if levelCfg.difficultyColor == true then
+        Runtime.ApplyLevelDifficultyColor(frame.levelText, frame, unit, level, levelCfg)
+      end
     end
   end
 
@@ -2000,6 +2084,8 @@ Runtime.RAID_MARKER_EVENTS = { "RAID_TARGET_UPDATE" }
 Runtime.LEADER_EVENTS = { "GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED" }
 Runtime.LEVEL_EVENTS = { "UNIT_LEVEL" }
 Runtime.LEVEL_UNITLESS_EVENTS = { "PLAYER_LEVEL_UP", "PLAYER_LEVEL_CHANGED" }
+Runtime.LEVEL_COLOR_EVENTS = { "UNIT_LEVEL", "UNIT_FACTION" }
+Runtime.IDENTITY_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION" }
 Runtime.IDENTITY_NAME_EVENTS = { "UNIT_NAME_UPDATE" }
 Runtime.IDENTITY_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_LEVEL" }
 Runtime.RAID_GROUP_EVENTS = { "GROUP_ROSTER_UPDATE" }
@@ -2042,17 +2128,27 @@ function Runtime.IdentityTextEvents(spec)
   local needsLevel = status.level and status.level.enabled == true
   local needsName = (status.race and status.race.enabled == true)
     or (status.classText and status.classText.enabled == true)
-  if needsLevel and needsName then return Runtime.IDENTITY_EVENTS end
+  -- Difficulty coloring also depends on attackability, which flips on
+  -- UNIT_FACTION (duels, mind control, faction-change NPCs).
+  local colored = needsLevel and status.level.difficultyColor == true
+  if needsLevel and needsName then return colored and Runtime.IDENTITY_COLOR_EVENTS or Runtime.IDENTITY_EVENTS end
   if needsName then return Runtime.IDENTITY_NAME_EVENTS end
-  return needsLevel and Runtime.LEVEL_EVENTS or EMPTY_EVENTS
+  if needsLevel then return colored and Runtime.LEVEL_COLOR_EVENTS or Runtime.LEVEL_EVENTS end
+  return EMPTY_EVENTS
 end
 
 function Runtime.IdentityTextUnitlessEvents(spec, frame)
-  if not (frame and frame.MSUFUnitKey == "player" and StatusEnabled(spec, "identityText")) then
+  if not (frame and StatusEnabled(spec, "identityText")) then
     return EMPTY_EVENTS
   end
-  local status = spec.status
-  return (status.level and status.level.enabled == true) and Runtime.LEVEL_UNITLESS_EVENTS or EMPTY_EVENTS
+  local level = spec.status.level
+  if not (level and level.enabled == true) then return EMPTY_EVENTS end
+  -- The player frame prints its own level; every other frame only needs the
+  -- player's level-up when its color is graded against it.
+  if frame.MSUFUnitKey == "player" or level.difficultyColor == true then
+    return Runtime.LEVEL_UNITLESS_EVENTS
+  end
+  return EMPTY_EVENTS
 end
 
 function Runtime.StatusTextEvents(spec, frame)

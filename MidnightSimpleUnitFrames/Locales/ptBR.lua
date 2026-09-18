@@ -5855,6 +5855,16 @@ L["|cff9aa0a6No overrides active.|r"] = "|cff9aa0a6Nenhuma substituição ativa.
 L["|cffff0000MSUF:|r No active profile selected to reset."] = "|cffff0000MSUF:|r Nenhum perfil ativo selecionado para redefinir."
 L["|cffff8800No melee range spell selected — Crosshair will not work.|r"] = "|cffff8800Nenhuma magia de alcance corpo a corpo selecionada — a mira não funcionará.|r"
 L["|cffffffffOverrides:|r "] = "|cffffffffSubstituições:|r "
+L["Color by level difficulty"] = "Colorir pela dificuldade do nível"
+L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "Vermelho muito acima do seu nível, branco no seu nível, cinza quando trivial. Desative para usar a cor do texto de status."
+L["Level Difficulty Colors"] = "Cores de dificuldade de nível"
+L["Shared by every unit and group frame that colors its level by difficulty."] = "Compartilhado por todos os quadros de unidade e de grupo que colorem o nível pela dificuldade."
+L["Far above / ??"] = "Muito acima / ??"
+L["Above your level"] = "Acima do seu nível"
+L["Your level"] = "Seu nível"
+L["Below your level"] = "Abaixo do seu nível"
+L["Trivial"] = "Trivial"
+L["Level Text"] = "Texto de nível"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)

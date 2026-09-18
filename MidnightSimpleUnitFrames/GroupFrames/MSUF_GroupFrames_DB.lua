@@ -474,6 +474,14 @@ local PARTY_DEFAULTS = {
     groupNumberX          = -2,
     groupNumberY          = 2,
     groupNumberLayer      = 7,
+    --- Level text (difficulty-colored like the unit-frame level indicator)
+    levelText                = false,
+    levelTextDifficultyColor = true,
+    levelTextSize            = 10,
+    levelTextAnchor          = "BOTTOMLEFT",
+    levelTextX               = 2,
+    levelTextY               = 2,
+    levelTextLayer           = 7,
     --- Reverse fill
     reverseFill           = false,
     --- Smooth fill

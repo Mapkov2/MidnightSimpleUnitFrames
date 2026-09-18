@@ -5955,6 +5955,16 @@ L["for pixel-accurate text that matches the bar."] = "pour un texte au pixel pr�
 L["hp text"] = "texte de santé"
 L["|cff888888Not available for Boss frames|r"] = "|cff888888Non disponible pour les cadres de boss|r"
 L["|cffffffffOverrides:|r "] = "|cffffffffDérogations :|r "
+L["Color by level difficulty"] = "Colorer selon la difficulté du niveau"
+L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "Rouge bien au-dessus de votre niveau, blanc à votre niveau, gris si trivial. Désactivez pour utiliser la couleur du texte d'état."
+L["Level Difficulty Colors"] = "Couleurs de difficulté de niveau"
+L["Shared by every unit and group frame that colors its level by difficulty."] = "Partagé par tous les cadres d'unité et de groupe qui colorent leur niveau selon la difficulté."
+L["Far above / ??"] = "Bien au-dessus / ??"
+L["Above your level"] = "Au-dessus de votre niveau"
+L["Your level"] = "Votre niveau"
+L["Below your level"] = "En dessous de votre niveau"
+L["Trivial"] = "Trivial"
+L["Level Text"] = "Texte de niveau"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)

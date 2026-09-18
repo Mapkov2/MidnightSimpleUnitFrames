@@ -44,6 +44,9 @@ local STATUS_EVENT_KIND = {
   UNIT_FACTION = 9,
   PLAYER_ROLES_ASSIGNED = 10,
   ROLE_CHANGED_INFORM = 10,
+  UNIT_LEVEL = 11,
+  PLAYER_LEVEL_UP = 11,
+  PLAYER_LEVEL_CHANGED = 11,
 }
 
 local statusRuntime = MSUF.UFStatusRuntime or {}
@@ -57,6 +60,7 @@ local UpdateStatusText = statusRuntime.UpdateStatusText
 local UpdateRaidGroup = statusRuntime.UpdateRaidGroup
 local UpdateRole = statusRuntime.UpdateRole
 local UpdatePVP = statusRuntime.UpdatePVP
+local UpdateLevel = statusRuntime.UpdateIdentityTexts
 local EMPTY_EVENTS = {}
 
 --- Status runtime may load before or after this file depending on addon order.
@@ -74,6 +78,7 @@ local function BindStatusRuntime()
   UpdateRaidGroup = UpdateRaidGroup or statusRuntime.UpdateRaidGroup
   UpdateRole = UpdateRole or statusRuntime.UpdateRole
   UpdatePVP = UpdatePVP or statusRuntime.UpdatePVP
+  UpdateLevel = UpdateLevel or statusRuntime.UpdateIdentityTexts
   return statusRuntime ~= nil
 end
 
@@ -94,6 +99,7 @@ local function StatusRuntimeReady(status)
   if status.runtimeRaidGroup == true and not UpdateRaidGroup then return false end
   if status.runtimeStatusText == true and not UpdateStatusText then return false end
   if status.runtimePVP == true and not UpdatePVP then return false end
+  if status.runtimeLevel == true and not UpdateLevel then return false end
   return true
 end
 
@@ -172,6 +178,10 @@ local function RunRole(frame, status)
   UpdateRole(frame, status)
 end
 
+local function RunLevel(frame, status)
+  UpdateLevel(frame, status)
+end
+
 local function RunPhase(frame, status)
   UpdatePhase(frame, status)
 end
@@ -210,6 +220,9 @@ local function RunStatusApply(frame, status, event)
   end
   if status.role and status.role.enabled == true then
     UpdateRole(frame, status)
+  end
+  if status.runtimeLevel == true then
+    UpdateLevel(frame, status)
   end
 end
 
@@ -258,6 +271,9 @@ local function CompileStatusDispatch(status)
   end
   if status.role and status.role.enabled == true then
     dispatch[10] = RunRole
+  end
+  if status.runtimeLevel == true then
+    dispatch[11] = RunLevel
   end
   dispatch.apply = RunStatusApply
   status.runtimeDispatch = dispatch

@@ -5870,6 +5870,16 @@ L["|cff9aa0a6No overrides active.|r"] = "|cff9aa0a6활성화된 개별 설정이
 L["|cffff0000MSUF:|r No active profile selected to reset."] = "|cffff0000MSUF:|r 초기화할 활성 프로필이 선택되지 않았습니다."
 L["|cffff8800No melee range spell selected — Crosshair will not work.|r"] = "|cffff8800근접 사거리 판정 주문이 선택되지 않았습니다 — 조준선이 작동하지 않습니다.|r"
 L["|cffffffffOverrides:|r "] = "|cffffffff개별 설정:|r "
+L["Color by level difficulty"] = "레벨 난이도에 따라 색상 지정"
+L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "내 레벨보다 훨씬 높으면 빨간색, 같은 레벨이면 흰색, 사소하면 회색입니다. 끄면 상태 텍스트 색상을 사용합니다."
+L["Level Difficulty Colors"] = "레벨 난이도 색상"
+L["Shared by every unit and group frame that colors its level by difficulty."] = "레벨을 난이도로 색칠하는 모든 유닛 및 그룹 프레임에 공통으로 적용됩니다."
+L["Far above / ??"] = "훨씬 높음 / ??"
+L["Above your level"] = "내 레벨보다 높음"
+L["Your level"] = "내 레벨"
+L["Below your level"] = "내 레벨보다 낮음"
+L["Trivial"] = "사소함"
+L["Level Text"] = "레벨 텍스트"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

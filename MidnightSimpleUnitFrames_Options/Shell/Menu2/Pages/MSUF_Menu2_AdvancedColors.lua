@@ -984,6 +984,15 @@ end
 -- indicator value IS the DB key prefix, which keeps this list and the engine's
 -- PrefixedStatusDef naming in one piece. Parked on M rather than a file local:
 -- this chunk is at Lua 5.1's 200-local ceiling and one more breaks the page.
+M._levelDifficultyColor = {
+    -- key prefix, label, default RGB, semantic path. Order and defaults mirror
+    -- Shared.LEVEL_DIFFICULTY_TIERS in MSUF_UF_Shared.lua.
+    { "levelColorImpossible", "Far above / ??", 1.00, 0.10, 0.10, "level_difficulty.impossible" },
+    { "levelColorVeryDifficult", "Above your level", 1.00, 0.50, 0.25, "level_difficulty.very_difficult" },
+    { "levelColorStandard", "Your level", 1.00, 1.00, 1.00, "level_difficulty.standard" },
+    { "levelColorEasy", "Below your level", 0.25, 0.75, 0.25, "level_difficulty.easy" },
+    { "levelColorTrivial", "Trivial", 0.50, 0.50, 0.50, "level_difficulty.trivial" },
+}
 M._statusTextColor = {
     units = ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|boss=Boss Frames",
     indicators = ValueTextPairs "levelIndicator=Level Text|raceIndicator=Race Text|classTextIndicator=Class Text|raidGroupName=Raid Group|statusText=Dead / Offline Text|statusGhostText=Ghost Text|statusAFKText=AFK Text|statusDNDText=DND Text",
@@ -1130,7 +1139,7 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
     -- carries a swatch of its own. Frame and indicator are picked one at a time so
     -- the eight indicators across seven frames stay a single swatch. An indicator
     -- with no stored color shows the font color it currently inherits.
-    local statusText = b:CollapsibleSection("colors_status_text", "Status Text Colors", 250, false)
+    local statusText = b:CollapsibleSection("colors_status_text", "Status Text Colors", 410, false)
     local statusTextW = statusText._msuf2Width or ctx.width or 720
     local function StatusTextUnit()
         local value = tostring(M._colorsStatusTextUnit or "player")
@@ -1188,6 +1197,24 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         conf[prefix .. "ColorR"], conf[prefix .. "ColorG"], conf[prefix .. "ColorB"] = nil, nil, nil
         ApplyStatusTextColors()
     end, "status_text.color.reset")
+    -- Level difficulty palette. Global on purpose: the bands mean the same on
+    -- every unit and group frame, and each frame only decides whether to use
+    -- them (Status icons > Level Text > Color by level difficulty). Rows come
+    -- from M._levelDifficultyColor; this chunk rides the 200-local ceiling.
+    -- No reset button: right-click on a swatch already restores its default.
+    LabelAt(statusText, "Level Difficulty Colors", 12, -240, statusTextW - 28, "GameFontNormal", T.colors.accent)
+    LabelAt(statusText, "Shared by every unit and group frame that colors its level by difficulty.",
+        12, -260, statusTextW - 28, "GameFontHighlightSmall", T.colors.muted)
+    for i = 1, #M._levelDifficultyColor do
+        local row = M._levelDifficultyColor[i]
+        ColorValueAt(ctx, statusText, row[2], 12 + ((i - 1) % 2) * 330, -290 - floor((i - 1) / 2) * 36,
+            function() return GeneralRGB(row[1], row[3], row[4], row[5]) end,
+            function(r, g, bcol)
+                SetGeneralRGB(row[1], r, g, bcol)
+                ApplyColors()
+            end,
+            nil, nil, Meta(row[6]), { row[3], row[4], row[5] })
+    end
     end
     if part == "font" then return end
     local tokens = GetClassTokens()

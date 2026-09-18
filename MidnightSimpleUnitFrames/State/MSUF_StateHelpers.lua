@@ -310,6 +310,10 @@ local DEFAULTS_GROUP_STATUS_NUMERIC_KEYS = {
     statusDNDOffsetX = { -500, 500 }, statusDNDOffsetY = { -500, 500 },
     groupNumberX = { -500, 500 }, groupNumberY = { -500, 500 },
     groupNumberLayer = { 0, 30 },
+    levelTextSize = { 1, 256 },
+    levelTextX = { -500, 500 },
+    levelTextY = { -500, 500 },
+    levelTextLayer = { 0, 30 },
 }
 local PROFILEIO_GROUP_STATUS_NUMERIC_KEYS = {
     roleIconSize = { 1, 256 },
@@ -352,6 +356,10 @@ local PROFILEIO_GROUP_STATUS_NUMERIC_KEYS = {
     groupNumberX = { -500, 500 },
     groupNumberY = { -500, 500 },
     groupNumberLayer = { 0, 30 },
+    levelTextSize = { 1, 256 },
+    levelTextX = { -500, 500 },
+    levelTextY = { -500, 500 },
+    levelTextLayer = { 0, 30 },
 }
 
 local DEFAULTS_AURA_NUMERIC_KEYS = {
