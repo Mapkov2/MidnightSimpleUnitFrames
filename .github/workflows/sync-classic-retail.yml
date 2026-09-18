@@ -1,17 +1,10 @@
 name: Sync Retail into Classic
 run-name: Sync Retail ${{ github.sha }} into classic
 
+# Manual only. The daily schedule and the push trigger are off while 6.5 is in
+# production on the classic branch; a sync is started by hand when it is wanted.
 on:
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/scripts/Sync-ClassicRetail.ps1"
-      - ".github/scripts/Sync-ClassicRetail.Ownership.Tests.ps1"
-      - ".github/workflows/sync-classic-retail.yml"
 
 permissions:
   contents: write
