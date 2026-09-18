@@ -36,6 +36,7 @@ local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
 -- the Placement card and 16px below its final 24px slider row.
 local STATUS_SECTION_HEIGHT = 582
 local STATUS_PLACEMENT_CARD_HEIGHT = 242
+local STATUS_TEXT_COLOR_REFERENCES = { "status.text.current" }
 local IDENTITY_RESTRICTION_WARNING_COLOR = { 1.00, 0.64, 0.18, 1 }
 local IDENTITY_RESTRICTION_WARNING = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues
@@ -363,6 +364,31 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     local identityRestrictionWarning = W.Text(selectedCard, IDENTITY_RESTRICTION_WARNING,
         16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR)
     if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end
+    -- Level Text only. Mirrors the compile default in MSUF_UF_Config: on, unless
+    -- this frame already carries its own level text color.
+    local function LevelDifficultyColorEnabled()
+        local conf, g = GetConf(unit), GetGeneral()
+        local customR = conf and conf.levelIndicatorColorR
+        if customR == nil then customR = g and g.levelIndicatorColorR end
+        return ReadStatusBool(unit, "levelIndicatorDifficultyColor", customR == nil)
+    end
+    state.LevelDifficultyColorEnabled = LevelDifficultyColorEnabled
+    local levelDifficultyColor = W.ToggleAt(selectedCard, "Color by level difficulty", 16, -106, selectedControlW)
+    M.BindBoolWidget(ctx, levelDifficultyColor, LevelDifficultyColorEnabled,
+        function(value)
+            SetBool(unit, "levelIndicatorDifficultyColor", value, "MSUF2_STATUS_LEVEL_DIFFICULTY_COLOR", { preview = true })
+            RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+        end)
+    RegisterStatusSearch(levelDifficultyColor, "Level Difficulty Colors", {
+        "level color", "level colors", "level difficulty", "difficulty color", "level color curve",
+        "color level by difficulty", "red level", "gray level", "grey level", "skull level color",
+    }, nil, "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.",
+        "status.level.difficulty_color", nil, { settingKey = tostring(unit) .. ".levelIndicatorDifficultyColor" })
+    if M.AddTooltip then
+        M.AddTooltip(levelDifficultyColor, "Color by level difficulty",
+            "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
+    end
+    state.levelDifficultyColor = levelDifficultyColor
     state.selector, state.previewLabel, state.midnight, state.enabled, state.AttachStatusExactTarget, state.identityRestrictionWarning =
         selector, previewLabel, midnight, enabled, AttachStatusExactTarget, identityRestrictionWarning
 end
@@ -546,7 +572,18 @@ function StatusSection.BuildIconStyleControls(state, ctx, unit)
                 colorTitle = "Status text color",
                 -- Resolves to the selected indicator's own color, falling back to
                 -- the frame font color while that indicator has none.
-                colorReferences = { "status.text.current" },
+                -- A difficulty-graded Level Text ignores its own static color, so
+                -- the picker lists the five global level bands it is painted with
+                -- instead of a color the frame is not currently using.
+                colorReferences = function()
+                    local spec = CurrentStatusSpec(unit)
+                    if spec and spec.value == "level" and state.LevelDifficultyColorEnabled()
+                        and M._levelDifficultyColorReferences then
+                        return M._levelDifficultyColorReferences
+                    end
+                    return STATUS_TEXT_COLOR_REFERENCES
+                end,
+                maxColorTargets = 5,
                 colorContext = function()
                     local spec = CurrentStatusSpec(unit)
                     return {
@@ -664,6 +701,7 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
                 if spec.iconStyle then conf[spec.iconStyle] = nil end
                 if spec.customIcon then conf[spec.customIcon] = nil end
             end
+            if spec.value == "level" then conf.levelIndicatorDifficultyColor = nil end
             if spec.colorPrefix then
                 conf[spec.colorPrefix .. "ColorR"] = nil
                 conf[spec.colorPrefix .. "ColorG"] = nil
@@ -785,6 +823,7 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     local selector, previewLabel, midnight = state.selector, state.previewLabel, state.midnight
     local identityRestrictionWarning, symbol, iconPack, customIcon = state.identityRestrictionWarning, state.symbol, state.iconPack, state.customIcon
     local selectedTextShortcut = state.selectedTextShortcut
+    local levelDifficultyColor = state.levelDifficultyColor
     local raidGroupStyle, size, anchor, layer, reset, test = state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset, state.test
     local current, all, iconPreviewLabel, advanced = state.current, state.all, state.iconPreviewLabel, state.advanced
     local ReadStatusEnabled, SetDropdownTitle, StatusIconStyleLabel = state.ReadStatusEnabled, state.SetDropdownTitle, state.StatusIconStyleLabel
@@ -855,6 +894,8 @@ function StatusSection.BindRefreshState(state, ctx, unit)
         ShowControl(customIcon, hasCustomIcon)
         ShowControl(selectedTextShortcut, isTextIndicator)
         ShowControl(identityRestrictionWarning, isIdentityText and isEnabled)
+        ShowControl(levelDifficultyColor, spec and spec.value == "level")
+        SetControlEnabled(levelDifficultyColor, spec and spec.value == "level" and isEnabled)
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
         ShowControls(true, size, anchor, layer, advanced.layer)

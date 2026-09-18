@@ -850,6 +850,19 @@ local function RegisterCastContextFactories()
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)
+    -- Level difficulty palette. Global bands shared by every unit and group
+    -- level text, so the ::: on a Level Text card edits the same five colors as
+    -- Colors > Status Text Colors. Rows and defaults come from the Colors page
+    -- table so the two surfaces cannot drift.
+    local levelReferences = {}
+    for i = 1, #(M._levelDifficultyColor or {}) do
+        local row = M._levelDifficultyColor[i]
+        FixedContextFactory(row[6], function()
+            return ContextGeneral(row[6], row[2], row[1], row[3], row[4], row[5], ApplyColors)
+        end)
+        levelReferences[i] = row[6]
+    end
+    M._levelDifficultyColorReferences = levelReferences
 end
 local function RegisterAuraContextFactories()
     local function AuraTableFactory(id, label, key, dr, dg, db)

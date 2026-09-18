@@ -6109,6 +6109,17 @@ L["Character names (all frames)"] = "角色名称（所有框体）"
 L["Full name"] = "全名"
 L["First name"] = "名字"
 L["Surname"] = "姓氏"
+L["Color by level difficulty"] = "按等级难度着色"
+L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "远高于你的等级为红色，与你同级为白色，无威胁时为灰色。关闭后改用状态文本颜色。"
+L["Level Difficulty Colors"] = "等级难度颜色"
+L["Shared by every unit and group frame that colors its level by difficulty."] = "所有按难度为等级着色的单位框体和团队框体共用。"
+L["Far above / ??"] = "远高于 / ??"
+L["Above your level"] = "高于你的等级"
+L["Your level"] = "你的等级"
+L["Below your level"] = "低于你的等级"
+L["Trivial"] = "无威胁"
+L["Level Text"] = "等级文本"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

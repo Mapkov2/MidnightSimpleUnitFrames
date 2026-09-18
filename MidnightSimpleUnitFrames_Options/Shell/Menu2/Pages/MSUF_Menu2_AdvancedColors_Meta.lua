@@ -162,6 +162,11 @@ local COLOR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["bar.power_loss_color"] = {
         "general.powerLossColorR", "general.powerLossColorG", "general.powerLossColorB",
     },
+    ["level_difficulty.impossible"] = PrefixedSettingKeys("general.levelColorImpossible", "R G B"),
+    ["level_difficulty.very_difficult"] = PrefixedSettingKeys("general.levelColorVeryDifficult", "R G B"),
+    ["level_difficulty.standard"] = PrefixedSettingKeys("general.levelColorStandard", "R G B"),
+    ["level_difficulty.easy"] = PrefixedSettingKeys("general.levelColorEasy", "R G B"),
+    ["level_difficulty.trivial"] = PrefixedSettingKeys("general.levelColorTrivial", "R G B"),
     ["power.editor.color"] = PrefixedSettingKeys("general.powerColorOverrides.",
         "MANA RAGE ENERGY FOCUS RUNIC_POWER INSANITY FURY PAIN ESSENCE LUNAR_POWER MAELSTROM"),
     ["class_power.editor.foreground_color"] = PrefixedSettingKeys("general.classPowerColorOverrides.",
@@ -222,6 +227,9 @@ local function ColorReviewedDisposition(path)
     end
     if path == "prediction.heal_color" then
         return "dynamic", "This RGB swatch writes the three persisted heal-prediction color channels as one visible color."
+    end
+    if path:match("^level_difficulty%.[a-z_]+$") then
+        return "dynamic", "This swatch routes one visible color to the three persisted RGB channels for one level difficulty band."
     end
     if path == "bar.health_loss_color" or path == "bar.power_loss_color" then
         return "dynamic", "This swatch routes one visible color to the three persisted RGB channels for one recent-loss effect."

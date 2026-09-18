@@ -581,7 +581,9 @@ local function TextColorPickerOptions(options, targets)
         historySource = options and options.historySource or "menu:text-quick:color",
         scopeTag = Resolve(activeSettings and activeSettings.colorScopeTag,
             Resolve(options and options.scopeTag, nil)),
-        maxTargets = 4,
+        -- Four is the curated bound; a text whose subject genuinely is a list
+        -- (the five level difficulty bands) states its own through the settings.
+        maxTargets = tonumber(Resolve(activeSettings and activeSettings.maxColorTargets, nil)) or 4,
     }
 end
 

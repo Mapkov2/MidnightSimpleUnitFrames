@@ -566,6 +566,14 @@ local function ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
   if frame.levelText then
     frame.levelText:SetText("??")
     SetShown(frame.levelText, true)
+    -- The preview boss is a "??" unit, so it takes the top difficulty band.
+    local status = frame.MSUFSpec and frame.MSUFSpec.status
+    local levelCfg = status and status.level
+    local statusRuntime = MSUF and MSUF.UFStatusRuntime
+    if levelCfg and levelCfg.difficultyColor == true
+      and statusRuntime and statusRuntime.ApplyLevelDifficultyColor then
+      statusRuntime.ApplyLevelDifficultyColor(frame.levelText, frame, nil, nil, levelCfg, 1)
+    end
   end
 
   local text = MSUF and MSUF.UFText

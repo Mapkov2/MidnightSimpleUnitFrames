@@ -1016,6 +1016,7 @@ local function StatusSpecIsText(spec)
     local value = spec and spec.value
     return value == "statusText" or value == "statusGhostText"
         or value == "statusAFKText" or value == "statusAFKTimer" or value == "statusDNDText"
+        or value == "levelText"
 end
 --- Sample subgroup label, formatted by the live raid-group formatter so the
 --- preview cannot drift from what the frame actually prints.
@@ -1034,6 +1035,10 @@ local function StatusText(spec, runtimeCfg, conf)
     if value == "statusAFKText" then return "AFK" end
     if value == "statusAFKTimer" then return "5m" end
     if value == "statusDNDText" then return "DND" end
+    if value == "levelText" then
+        local level = _G.UnitLevel and tonumber(_G.UnitLevel("player")) or nil
+        return tostring(level and level > 0 and level or 80)
+    end
     if value == "showGroupNumber" then
         return PreviewRaidGroupText((runtimeCfg and runtimeCfg.style)
             or (conf and spec.style and conf[spec.style]) or "PAREN")
@@ -1056,6 +1061,7 @@ local function StatusLabel(spec)
     if value == "statusAFKText" then return "AFK Text" end
     if value == "statusAFKTimer" then return "AFK Timer" end
     if value == "statusDNDText" then return "DND Text" end
+    if value == "levelText" then return "Level Text" end
     if value == "showGroupNumber" then return "Group #" end
     return (spec and spec.text) or "Status"
 end

@@ -1514,6 +1514,14 @@ local function CompileUnitStatus(out, conf, general, key)
     CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
   end
 
+  -- Level difficulty coloring defaults on, but a profile that already picked a
+  -- level text color keeps that color until the toggle is set explicitly.
+  local level = status.level
+  if level then
+    level.difficultyColor = StatusBool(conf, general, "levelIndicatorDifficultyColor", level.colorR == nil)
+    level.difficultyColors = level.difficultyColor and Shared.ResolveLevelDifficultyColors(general) or nil
+  end
+
   local statusTextStates = {}
   for i = 1, #UNIT_STATUS_TEXT_STATE_DEFS do
     statusTextStates[i] = CompileUnitStatusTextState(status, conf, general, UNIT_STATUS_TEXT_STATE_DEFS[i], statusTextSize)

@@ -1108,6 +1108,7 @@ local function HidePreviewStatus(frame)
   SetShown(frame.pvpIcon or frame.pvpIndicatorIcon, false)
   SetShown(frame.phaseIcon, false)
   SetShown(frame.raidGroupNameText, false)
+  SetShown(frame.levelText, false)
   SetShown(frame.combatStateIndicatorIcon, false)
   SetShown(frame.statusIndicatorText, false)
   SetShown(frame.statusAFKTimerText, false)
@@ -1167,6 +1168,20 @@ local function ApplyPreviewStatus(frame, kind, index, role)
     frame.raidGroupNameText:Show()
   else
     SetShown(frame.raidGroupNameText, false)
+  end
+  --- Preview members are friendly, so a graded level text sits in the standard
+  --- band - the same color a real party member gets.
+  local levelCfg = frame.MSUFSpec and frame.MSUFSpec.status and frame.MSUFSpec.status.level
+  if frame.levelText and levelCfg and levelCfg.enabled == true then
+    local playerLevel = _G.UnitLevel and tonumber(_G.UnitLevel("player")) or nil
+    frame.levelText:SetText(tostring(playerLevel and playerLevel > 0 and playerLevel or 80))
+    local statusRuntime = MSUF.UFStatusRuntime
+    if levelCfg.difficultyColor == true and statusRuntime and statusRuntime.ApplyLevelDifficultyColor then
+      statusRuntime.ApplyLevelDifficultyColor(frame.levelText, frame, nil, nil, levelCfg, 3)
+    end
+    frame.levelText:Show()
+  else
+    SetShown(frame.levelText, false)
   end
   SetShown(frame.combatStateIndicatorIcon, false)
   SetShown(frame.statusIndicatorText, false)
@@ -1313,6 +1328,7 @@ local function ClearPreviewData(frame)
   SetShown(frame.pvpIcon or frame.pvpIndicatorIcon, false)
   SetShown(frame.phaseIcon, false)
   SetShown(frame.raidGroupNameText, false)
+  SetShown(frame.levelText, false)
   SetShown(frame.statusIndicatorText, false)
   SetShown(frame.statusAFKTimerText, false)
   if GF.HideSpellIndicators then GF.HideSpellIndicators(frame) end

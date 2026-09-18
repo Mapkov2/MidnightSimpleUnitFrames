@@ -417,6 +417,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         local value = spec and spec.value
         return value == "statusText" or value == "statusGhostText"
             or value == "statusAFKText" or value == "statusAFKTimer" or value == "statusDNDText"
+            or value == "levelText"
     end
     --- The scope-wide style card is gone: it only ever changed role/leader/assist art while
     --- sitting above a per-indicator selector, which read as if it applied to the selection.
@@ -435,6 +436,17 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
                 kind = "status",
                 subtitle = "Font style and color are synchronized with the Fonts menu for this group scope.",
                 colorTitle = "Group status text color",
+                -- A difficulty-graded Level Text is painted with the five global
+                -- level bands, so the picker lists those; nil keeps the group
+                -- font color target every other status text uses.
+                colorReferences = function()
+                    local spec = CurrentGFStatusSpec()
+                    if spec and spec.value == "levelText" and Bool(CurrentScope(), "levelTextDifficultyColor", true) then
+                        return M._levelDifficultyColorReferences
+                    end
+                    return nil
+                end,
+                maxColorTargets = 5,
                 capabilities = { baseline = false },
             },
         })
@@ -666,6 +678,12 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
             RefreshGFPreview()
             if RefreshStatusIconState then RefreshStatusIconState() end
         end)
+    --- Level Text only: the same difficulty grading as the unit-frame level indicator.
+    local levelDifficultyColor = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Color by level difficulty", 16, -106, siconLeftW - 32), "levelTextDifficultyColor", true, "visual")
+    if M.AddTooltip then
+        M.AddTooltip(levelDifficultyColor, "Color by level difficulty",
+            "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
+    end
 
     --- Role filter group: only visible when Role Icon indicator is selected
     local roleFilterGroup = CreateFrame("Frame", nil, selectedCard)
@@ -724,6 +742,9 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         for i = 1, #STATUS_ICON_RESET_FIELDS do
             local key = spec[STATUS_ICON_RESET_FIELDS[i]]
             if key then conf[key] = gf and gf.GetDefault and gf.GetDefault(kind, key) or nil end
+        end
+        if spec.value == "levelText" then
+            conf.levelTextDifficultyColor = gf and gf.GetDefault and gf.GetDefault(kind, "levelTextDifficultyColor") or nil
         end
         QueueGF(kind, "visual")
         RefreshStatusIconMenu()
@@ -857,6 +878,13 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         end
         SetOptionEnabled(iconPack, hasIconPack and enabled)
         SetOptionEnabled(customIcon, hasCustomIcon and enabled)
+        local isLevelText = spec.value == "levelText"
+        if W.SetControlShown then
+            W.SetControlShown(levelDifficultyColor, isLevelText)
+        else
+            levelDifficultyColor:SetShown(isLevelText)
+        end
+        SetOptionEnabled(levelDifficultyColor, isLevelText and enabled)
         local isRoleIcon = spec.value == "roleIcon"
         roleFilterGroup:SetShown(isRoleIcon)
         if isRoleIcon then SetOptionsEnabled(roleFilterControls, enabled) end

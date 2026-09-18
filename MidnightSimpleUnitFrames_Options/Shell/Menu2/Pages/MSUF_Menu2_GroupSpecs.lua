@@ -103,6 +103,7 @@ statusGhostText|Ghost Text|statusGhostText|0|statusGhostTextSize|statusGhostText
 statusAFKText|AFK Text|statusAFKText|0|statusAFKTextSize|statusAFKTextAnchor|statusAFKOffsetX|statusAFKOffsetY|statusAFKTextLayer|14|CENTER|7|0
 statusAFKTimer|AFK Timer|statusAFKTimerText|0|statusAFKTimerTextSize|statusAFKTimerTextAnchor|statusAFKTimerOffsetX|statusAFKTimerOffsetY|statusAFKTimerTextLayer|10|CENTER|7|0
 statusDNDText|DND Text|statusDNDText|0|statusDNDTextSize|statusDNDTextAnchor|statusDNDOffsetX|statusDNDOffsetY|statusDNDTextLayer|14|CENTER|7|0
+levelText|Level Text|levelText|0|levelTextSize|levelTextAnchor|levelTextX|levelTextY|levelTextLayer|10|BOTTOMLEFT|7|0
 ]],
     PLACED_INDICATOR_TYPES = VTP "none=None|icon=Icon|square=Square|bar=Bar|number=Number",
     FRAME_EFFECT_TYPES = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Color",

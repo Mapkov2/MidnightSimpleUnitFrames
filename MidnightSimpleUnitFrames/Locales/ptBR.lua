@@ -5894,6 +5894,17 @@ L["Character names (all frames)"] = "Nomes de personagem (todos os quadros)"
 L["Full name"] = "Nome completo"
 L["First name"] = "Nome"
 L["Surname"] = "Sobrenome"
+L["Color by level difficulty"] = "Colorir pela dificuldade do nível"
+L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "Vermelho muito acima do seu nível, branco no seu nível, cinza quando trivial. Desative para usar a cor do texto de status."
+L["Level Difficulty Colors"] = "Cores de dificuldade de nível"
+L["Shared by every unit and group frame that colors its level by difficulty."] = "Compartilhado por todos os quadros de unidade e de grupo que colorem o nível pela dificuldade."
+L["Far above / ??"] = "Muito acima / ??"
+L["Above your level"] = "Acima do seu nível"
+L["Your level"] = "Seu nível"
+L["Below your level"] = "Abaixo do seu nível"
+L["Trivial"] = "Trivial"
+L["Level Text"] = "Texto de nível"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end
