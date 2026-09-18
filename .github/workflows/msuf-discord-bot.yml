@@ -6,6 +6,10 @@ on:
       - "msuf-discord-bot/**"
       - ".github/workflows/msuf-discord-bot.yml"
   push:
+    # Path filters are not evaluated for tag pushes, so without a branch filter
+    # every release tag started this workflow.
+    branches:
+      - "**"
     paths:
       - "msuf-discord-bot/**"
       - ".github/workflows/msuf-discord-bot.yml"
@@ -26,7 +30,25 @@ permissions:
   contents: read
 
 jobs:
+  # The bot source lives in its own repository. Every job is skipped when this
+  # checkout carries no msuf-discord-bot folder.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.bot.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: bot
+        run: |
+          if [ -f msuf-discord-bot/package-lock.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
   verify:
+    needs: detect
+    if: needs.detect.outputs.present == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
