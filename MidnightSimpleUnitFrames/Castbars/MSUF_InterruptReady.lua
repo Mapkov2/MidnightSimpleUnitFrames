@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_InterruptReady.lua
 --- Optional interrupt-readiness indicator for target, focus, and boss castbars.
 ---
@@ -612,8 +613,8 @@ local function EnsureBox(frame)
         return box
     end
 
-    box = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
-    box.fill = box:CreateTexture(nil, "OVERLAY")
+    box = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
+    box.fill = PixelLayoutRegion(box:CreateTexture(nil, "OVERLAY"))
     box.fill:SetAllPoints()
     box.fill:SetTexture("Interface\\Buttons\\WHITE8x8")
     box:Hide()
@@ -1103,7 +1104,7 @@ local function EnsureCooldownWakeFrame(slot)
         return slot.wakeFrame
     end
 
-    local frame = _G.CreateFrame("Cooldown", nil, eventFrame or _G.UIParent)
+    local frame = PixelLayoutRegion(_G.CreateFrame("Cooldown", nil, eventFrame or _G.UIParent))
     if not (frame and frame.SetCooldownFromDurationObject and frame.SetScript) then
         cooldownWakeUnsupported = true
         return nil
@@ -1390,7 +1391,7 @@ UpdateCooldownEventRegistration = function()
     end
 end
 
-eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
+eventFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_InterruptReady_EventFrame"))
 eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
         local previousGeneration = spellSetGeneration

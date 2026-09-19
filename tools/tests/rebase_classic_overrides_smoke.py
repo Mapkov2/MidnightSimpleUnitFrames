@@ -3,10 +3,11 @@
 
 Builds a tiny Retail repository (three commits) and a tiny Classic repository
 in a temporary directory and drives the real command line against them. It
-needs git and Python 3 only and touches nothing outside its temporary
-directory. It is not a gate smoke and the Classic gate does not run it:
+needs git and Python 3 only, no Retail checkout and no network, and touches
+nothing outside its temporary directory. The Classic gate runs it in full and
+self-contained mode (its row in tools/classic-gate-smokes.tsv); by hand:
 
-    python tools/tests/rebase_classic_overrides_selftest.py
+    python tools/tests/rebase_classic_overrides_smoke.py
 
 Exit code 0 when every check passes. Pass --keep to keep the temporary
 repositories for a look around.

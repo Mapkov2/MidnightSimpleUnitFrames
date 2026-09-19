@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -154,7 +155,7 @@ local function WrapMultilineProfileInput(editBox, card, x, y, width, height)
     local host = T.Panel(card, nil, { shadow[1], shadow[2], shadow[3], 0.96 }, T.colors.borderSoft)
     host:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
     host:SetSize(width, height)
-    local scroll = CreateFrame("ScrollFrame", nil, host)
+    local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, host))
     scroll:SetPoint("TOPLEFT", host, "TOPLEFT", 8, -8)
     scroll:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -26, 8)
     StyleProfileInput(editBox, max(160, width - 34), height - 16, true)
@@ -367,7 +368,7 @@ function ProfilesPage.Prepare(ctx)
         return true
     end
     local function StatusPill(parent, width)
-        local pill = CreateFrame("Frame", nil, parent)
+        local pill = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
         pill:SetSize(width, 22)
         local fill, edge = T.CreateSuperellipseLayers(pill, "_msuf2ProfileStatusPill", 1, "ARTWORK", "OVERLAY")
         pill._msuf2Fill, pill._msuf2Edge = fill, edge
@@ -443,7 +444,7 @@ function ProfilesPage.Hero(state)
     b.y = b.y - heroH - 10
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(b.y) + 28) end
 
-    local accent = hero:CreateTexture(nil, "OVERLAY")
+    local accent = PixelLayoutRegion(hero:CreateTexture(nil, "OVERLAY"))
     accent:SetPoint("TOPLEFT", hero, "TOPLEFT", 0, -2)
     accent:SetPoint("BOTTOMLEFT", hero, "BOTTOMLEFT", 0, 2)
     accent:SetWidth(4)
@@ -542,7 +543,7 @@ function ProfilesPage.ManagementLayout(state)
         { dangerColor[1], dangerColor[2], dangerColor[3], 0.70 })
     dangerPanel:SetPoint("TOPLEFT", current, "TOPLEFT", dangerX, dangerY)
     dangerPanel:SetSize(dangerW, dangerH)
-    local dangerAccent = dangerPanel:CreateTexture(nil, "OVERLAY")
+    local dangerAccent = PixelLayoutRegion(dangerPanel:CreateTexture(nil, "OVERLAY"))
     dangerAccent:SetPoint("TOPLEFT", dangerPanel, "TOPLEFT", 0, -2)
     dangerAccent:SetPoint("BOTTOMLEFT", dangerPanel, "BOTTOMLEFT", 0, 2)
     dangerAccent:SetWidth(4)

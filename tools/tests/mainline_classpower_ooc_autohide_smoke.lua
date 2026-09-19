@@ -1,5 +1,5 @@
 -- Mainline ClassPower out-of-combat auto-hide.
--- Loads the real Retail-path ClassPower stack that only the Mainline TOC loads,
+-- Loads the real Retail-path ClassPower stack in Mainline TOC order,
 -- runs module.Enable against a stub player frame and drives combat events
 -- through the controller's own OnEvent script.
 -- PLAYER_REGEN_DISABLED is delivered before InCombatLockdown() turns true, so
@@ -46,16 +46,22 @@ local function ReadFile(path)
     return (text:gsub("\r\n", "\n"))
 end
 
--- The Retail controller must stay Mainline-only; the Classic flavors load their shadow.
+-- Every client runs this Retail-named controller. The Classic flavors also load
+-- their provider adapter before it; Mainline never does.
 do
     local base = repo .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_"
     local retailLine = "\nClassPower\\MSUF_CP_Controller.lua\n"
-    assert(ReadFile(base .. "Mainline.toc"):find(retailLine, 1, true), "Mainline TOC lost the Retail ClassPower controller")
+    local routingLine = "\nGame\\Classic\\ClassPower\\MSUF_CP_ClassicRouting.lua\n"
+    local mainline = ReadFile(base .. "Mainline.toc")
+    assert(mainline:find(retailLine, 1, true), "Mainline TOC lost the Retail ClassPower controller")
+    assert(not mainline:find(routingLine, 1, true), "Mainline TOC loads the Classic ClassPower routing")
     for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
         local toc = ReadFile(base .. flavor .. ".toc")
-        assert(not toc:find(retailLine, 1, true), flavor .. " TOC loads the Retail ClassPower controller")
-        assert(toc:find("\nGame\\Classic\\ClassPower\\MSUF_CP_Controller.lua\n", 1, true),
-            flavor .. " TOC lost the Classic ClassPower controller")
+        local controllerAt = toc:find(retailLine, 1, true)
+        local routingAt = toc:find(routingLine, 1, true)
+        assert(controllerAt, flavor .. " TOC lost the ClassPower controller")
+        assert(routingAt and routingAt < controllerAt,
+            flavor .. " TOC must load the Classic ClassPower routing before the controller")
     end
 end
 

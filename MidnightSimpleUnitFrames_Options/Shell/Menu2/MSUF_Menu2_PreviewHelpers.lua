@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
@@ -76,7 +77,7 @@ function H.ApplyRoundedMediaSlice(region, strength)
         region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
     end
 end
-local PREVIEW_BACKGROUND_DEFAULT = "studio"
+local PREVIEW_BACKGROUND_DEFAULT = (MSUF.Client and MSUF.Client.IsRetail == true) and "silvermoon" or "studio"
 local PREVIEW_BACKGROUND_ASPECT = 2
 local PREVIEW_BACKGROUND_CLEAR = { 0, 0, 0, 0 }
 local PREVIEW_BACKGROUND_CUSTOM_DEFAULT = { 0.08, 0.12, 0.18, 1 }
@@ -252,7 +253,7 @@ function H.ApplyPreviewBackground(frame, palette, theme)
     local spec = PreviewBackgroundSpec()
     local image = frame._msuf2PreviewCanvasImage
     if not image and frame.CreateTexture then
-        image = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
+        image = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND", nil, -8))
         image:SetAllPoints(frame)
         frame._msuf2PreviewCanvasImage = image
         if frame.HookScript then
@@ -375,7 +376,7 @@ function H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
         UpdatePreviewBackgroundButton(existing)
         return existing
     end
-    local button = CreateFrame("Button", nil, zoomBar, "BackdropTemplate")
+    local button = PixelLayoutRegion(CreateFrame("Button", nil, zoomBar, "BackdropTemplate"))
     button:SetSize(46, 20)
     zoomBar._msuf2PreviewBackgroundButton = button
     button._msuf2DropdownPreferredWidth = 260
@@ -384,15 +385,15 @@ function H.EnsurePreviewBackgroundButton(box, zoomBar, opts)
     -- place animation/role controls immediately to the left of the zoom bar.
     button:SetPoint("TOPRIGHT", zoomBar, "BOTTOMRIGHT", 0, -4)
     if button.SetBackdrop then
-        button:SetBackdrop({ bgFile = CP.WHITE8, edgeFile = CP.WHITE8, edgeSize = 1 })
+        PixelLayoutRegion(button, "SetBackdrop", { bgFile = CP.WHITE8, edgeFile = CP.WHITE8, edgeSize = 1 })
         button:SetBackdropColor(0.010, 0.018, 0.030, 0.96)
         button:SetBackdropBorderColor(0.18, 0.28, 0.42, 0.92)
     end
-    local preview = button:CreateTexture(nil, "ARTWORK")
+    local preview = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK"))
     preview:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
     preview:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -12, 2)
     button._msuf2PreviewBackgroundTexture = preview
-    local arrow = button:CreateTexture(nil, "OVERLAY")
+    local arrow = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
     arrow:SetPoint("RIGHT", button, "RIGHT", -3, 0)
     arrow:SetSize(8, 8)
     arrow:SetTexture("Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\msuf_dropdown_chevron_down.tga")
@@ -904,21 +905,21 @@ function H.ShowPreviewHandleContext(handle, opts)
         if M2 and type(M2.CreateMenuPopupPanel) == "function" then
             popup = M2.CreateMenuPopupPanel(UIParent, { name = "MSUF2PreviewHandleContextMenu", glass = "popup" })
         else
-            popup = CreateFrame("Frame", "MSUF2PreviewHandleContextMenu", UIParent, "BackdropTemplate")
-            popup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            popup = PixelLayoutRegion(CreateFrame("Frame", "MSUF2PreviewHandleContextMenu", UIParent, "BackdropTemplate"))
+            PixelLayoutRegion(popup, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
             popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
             popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
         end
         popup:SetSize(176, 76)
         popup:SetFrameStrata("FULLSCREEN_DIALOG")
         popup:EnableMouse(true)
-        local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -8)
         title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
         title:SetJustifyH("LEFT")
         popup._title = title
         local function MakeButton(label, y)
-            local btn = W and W.TopButton and W.TopButton(popup, tr(label), 152, 24) or (T and T.Button and T.Button(popup, tr(label), 152, 24)) or CreateFrame("Button", nil, popup, "BackdropTemplate")
+            local btn = W and W.TopButton and W.TopButton(popup, tr(label), 152, 24) or (T and T.Button and T.Button(popup, tr(label), 152, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
             btn:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, y)
             if not btn.GetText then btn:SetText(tr(label)) end
             return btn
@@ -992,7 +993,7 @@ local function CreatePreviewSettingsIcon(button)
     local parts = {}
     for i = 1, #SETTINGS_ICON_RECTS do
         local r = SETTINGS_ICON_RECTS[i]
-        local tex = button:CreateTexture(nil, "ARTWORK", nil, 6)
+        local tex = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK", nil, 6))
         tex:SetTexture("Interface\\Buttons\\WHITE8X8")
         tex:SetSize(r[1], r[2])
         tex:SetPoint(r[3], button, r[3], r[4], r[5])
@@ -1020,7 +1021,7 @@ function H.EnsurePreviewHandleGear(handle, opts)
     local gear = handle._msuf2SettingsGear
     if not gear then
         local template = T and T.Template and T.Template() or "BackdropTemplate"
-        gear = CreateFrame("Button", nil, handle, template)
+        gear = PixelLayoutRegion(CreateFrame("Button", nil, handle, template))
         gear:SetSize(18, 18)
         gear:SetPoint("BOTTOMLEFT", handle, "TOPRIGHT", -8, -8)
         if gear.SetHitRectInsets then gear:SetHitRectInsets(-2, -2, -2, -2) end
@@ -1028,7 +1029,7 @@ function H.EnsurePreviewHandleGear(handle, opts)
             local fill, edge = T.CreateSuperellipseLayers(gear, "_msuf2PreviewGear", 2, "BACKGROUND", "BORDER")
             gear._fill, gear._edge = fill, edge
         elseif gear.SetBackdrop then
-            gear:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            PixelLayoutRegion(gear, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
         end
         CreatePreviewSettingsIcon(gear)
         local bg, br = { 0.010, 0.022, 0.040, 0.96 }, { 0.160, 0.560, 0.720, 0.92 }
@@ -1085,7 +1086,7 @@ local function CreateZoomLockIcon(button)
     if not (button and button.CreateTexture) or button._msuf2ZoomLockParts then return end
     local parts = {}
     for name, r in pairs(LOCK_ICON_RECTS) do
-        local tex = button:CreateTexture(nil, "ARTWORK", nil, 6)
+        local tex = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK", nil, 6))
         tex:SetTexture("Interface\\Buttons\\WHITE8X8")
         tex:SetSize(r[1], r[2])
         tex:SetPoint("CENTER", button, "CENTER", r[3], r[4])
@@ -1117,7 +1118,7 @@ function H.EnsureZoomLockButton(box, zoomBar, opts)
     local T = opts.T or (M and M.Theme)
     local btn = box.zoomLockButton
     if not btn then
-        btn = CreateFrame("Button", nil, zoomBar, (T and T.Template and T.Template()) or "BackdropTemplate")
+        btn = PixelLayoutRegion(CreateFrame("Button", nil, zoomBar, (T and T.Template and T.Template()) or "BackdropTemplate"))
         btn:SetSize(20, opts.buttonHeight or 20)
         CreateZoomLockIcon(btn)
         if H.StylePreviewPillButton then H.StylePreviewPillButton(btn, T, {}) end
@@ -1237,40 +1238,40 @@ end
 local function CreatePreviewMoveCue()
     if H._previewMoveCue then return H._previewMoveCue end
     if type(CreateFrame) ~= "function" or not UIParent then return nil end
-    local cue = CreateFrame("Frame", "MSUF2PreviewMoveCue", UIParent, "BackdropTemplate")
+    local cue = PixelLayoutRegion(CreateFrame("Frame", "MSUF2PreviewMoveCue", UIParent, "BackdropTemplate"))
     cue:SetSize(252, 64)
     cue:SetFrameStrata("TOOLTIP")
     if cue.SetToplevel then cue:SetToplevel(true) end
     if cue.SetClampedToScreen then cue:SetClampedToScreen(true) end
     cue:EnableMouse(false)
     if cue.SetBackdrop then
-        cue:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        PixelLayoutRegion(cue, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
         cue:SetBackdropColor(0.012, 0.020, 0.040, 0.96)
         cue:SetBackdropBorderColor(0.18, 0.64, 0.88, 0.96)
     end
 
-    local motion = CreateFrame("Frame", nil, cue)
+    local motion = PixelLayoutRegion(CreateFrame("Frame", nil, cue))
     motion:SetSize(72, 46)
     motion:SetPoint("LEFT", cue, "LEFT", 10, 0)
-    local mouse = CreateFrame("Frame", nil, motion, "BackdropTemplate")
+    local mouse = PixelLayoutRegion(CreateFrame("Frame", nil, motion, "BackdropTemplate"))
     mouse:SetSize(24, 34)
     mouse:SetPoint("LEFT", motion, "LEFT", 1, 0)
     if mouse.SetBackdrop then
-        mouse:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        PixelLayoutRegion(mouse, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
         mouse:SetBackdropColor(0.08, 0.12, 0.18, 0.98)
         mouse:SetBackdropBorderColor(0.72, 0.86, 0.98, 1)
     end
-    local split = mouse:CreateTexture(nil, "ARTWORK")
+    local split = PixelLayoutRegion(mouse:CreateTexture(nil, "ARTWORK"))
     split:SetColorTexture(0.72, 0.86, 0.98, 0.82)
     split:SetPoint("TOP", mouse, "TOP", 0, -10)
     split:SetPoint("LEFT", mouse, "LEFT", 2, 0)
     split:SetPoint("RIGHT", mouse, "RIGHT", -2, 0)
     split:SetHeight(1)
-    local wheel = mouse:CreateTexture(nil, "ARTWORK")
+    local wheel = PixelLayoutRegion(mouse:CreateTexture(nil, "ARTWORK"))
     wheel:SetColorTexture(0.18, 0.64, 0.88, 1)
     wheel:SetSize(2, 6)
     wheel:SetPoint("TOP", mouse, "TOP", 0, -3)
-    local cursor = motion:CreateTexture(nil, "OVERLAY", nil, 2)
+    local cursor = PixelLayoutRegion(motion:CreateTexture(nil, "OVERLAY", nil, 2))
     if cursor.SetAtlas then
         cursor:SetAtlas(PREVIEW_DRAG_CUE_ATLAS, true)
     else
@@ -1279,25 +1280,25 @@ local function CreatePreviewMoveCue()
     end
     cursor:SetPoint("CENTER", mouse, "BOTTOMRIGHT", 5, 2)
 
-    local label = cue:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local label = PixelLayoutRegion(cue:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
     label:SetPoint("LEFT", cue, "LEFT", 90, 0)
     label:SetPoint("RIGHT", cue, "RIGHT", -88, 0)
     label:SetJustifyH("LEFT")
     label:SetTextColor(0.82, 0.94, 1, 1)
 
-    local keys = CreateFrame("Frame", nil, cue)
+    local keys = PixelLayoutRegion(CreateFrame("Frame", nil, cue))
     keys:SetSize(70, 50)
     keys:SetPoint("RIGHT", cue, "RIGHT", -8, 0)
     local function ArrowKey(atlas, x, y)
-        local key = CreateFrame("Frame", nil, keys, "BackdropTemplate")
+        local key = PixelLayoutRegion(CreateFrame("Frame", nil, keys, "BackdropTemplate"))
         key:SetSize(20, 20)
         key:SetPoint("BOTTOMLEFT", keys, "BOTTOMLEFT", x, y)
         if key.SetBackdrop then
-            key:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            PixelLayoutRegion(key, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
             key:SetBackdropColor(0.06, 0.10, 0.16, 0.98)
             key:SetBackdropBorderColor(0.46, 0.66, 0.82, 0.95)
         end
-        local arrow = key:CreateTexture(nil, "ARTWORK")
+        local arrow = PixelLayoutRegion(key:CreateTexture(nil, "ARTWORK"))
         arrow:SetPoint("CENTER")
         arrow:SetSize(12, 12)
         if arrow.SetAtlas then arrow:SetAtlas(atlas, false) end
@@ -1412,21 +1413,21 @@ function H.ShowPreviewControlsHelp(anchor, opts)
         if M2 and type(M2.CreateMenuPopupPanel) == "function" then
             popup = M2.CreateMenuPopupPanel(UIParent, { name = "MSUF2PreviewControlsHelp", glass = "popup" })
         else
-            popup = CreateFrame("Frame", "MSUF2PreviewControlsHelp", UIParent, "BackdropTemplate")
-            popup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            popup = PixelLayoutRegion(CreateFrame("Frame", "MSUF2PreviewControlsHelp", UIParent, "BackdropTemplate"))
+            PixelLayoutRegion(popup, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
             popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
             popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
         end
         popup:SetSize(328, 188)
         popup:SetFrameStrata("FULLSCREEN_DIALOG")
         popup:EnableMouse(true)
-        popup._title = T and T.Font and T.Font(popup, "GameFontNormalSmall", "", (T.colors and T.colors.accent) or { 0.78, 0.92, 1, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        popup._title = T and T.Font and T.Font(popup, "GameFontNormalSmall", "", (T.colors and T.colors.accent) or { 0.78, 0.92, 1, 1 }) or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
         popup._title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -12)
         popup._title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
         popup._title:SetJustifyH("LEFT")
         popup._lines = {}
         for i = 1, 6 do
-            local fs = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            local fs = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
             fs:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -32 - ((i - 1) * 20))
             fs:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
             fs:SetJustifyH("LEFT")
@@ -1435,7 +1436,7 @@ function H.ShowPreviewControlsHelp(anchor, opts)
             if fs.SetMaxLines then fs:SetMaxLines(1) end
             popup._lines[i] = fs
         end
-        local close = W and W.TopButton and W.TopButton(popup, tr("Got it"), 84, 24) or (T and T.Button and T.Button(popup, tr("Got it"), 84, 24)) or CreateFrame("Button", nil, popup, "BackdropTemplate")
+        local close = W and W.TopButton and W.TopButton(popup, tr("Got it"), 84, 24) or (T and T.Button and T.Button(popup, tr("Got it"), 84, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
         close:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -12, 12)
         if not close.GetText then close:SetText(tr("Got it")) end
         close:SetScript("OnClick", function(self)
@@ -1500,26 +1501,26 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
     local hint = box._msuf2PreviewControlsHint
     if not hint then
         local template = T and T.Template and T.Template() or "BackdropTemplate"
-        hint = CreateFrame("Frame", nil, parent, template)
+        hint = PixelLayoutRegion(CreateFrame("Frame", nil, parent, template))
         hint:SetSize(288, 48)
         hint:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 8, 8)
         if hint.SetFrameLevel and parent.GetFrameLevel then hint:SetFrameLevel((parent:GetFrameLevel() or 0) + 90) end
         if hint.SetBackdrop then
-            hint:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            PixelLayoutRegion(hint, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
             hint:SetBackdropColor(0.012, 0.020, 0.040, 0.94)
             hint:SetBackdropBorderColor(0.10, 0.32, 0.54, 0.92)
         end
         hint:EnableMouse(true)
-        local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 }) or hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 }) or PixelLayoutRegion(hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         text:SetPoint("TOPLEFT", hint, "TOPLEFT", 12, -8)
         text:SetPoint("RIGHT", hint, "RIGHT", -60, 0)
         text:SetJustifyH("LEFT")
         text:SetWordWrap(true)
         hint._text = text
-        local close = CreateFrame("Button", nil, hint, "BackdropTemplate")
+        local close = PixelLayoutRegion(CreateFrame("Button", nil, hint, "BackdropTemplate"))
         close:SetSize(44, 24)
         close:SetPoint("RIGHT", hint, "RIGHT", -8, 0)
-        close.fs = close.fs or close:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        close.fs = close.fs or PixelLayoutRegion(close:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         close.fs:SetPoint("CENTER")
         close.fs:SetText(tr("OK"))
         if T and T.StyleFontString then T.StyleFontString(close.fs, (T.colors and T.colors.text) or { 1, 1, 1, 1 }, 0) end
@@ -1871,7 +1872,7 @@ function H.InstallZoomPan(ZoomPan, opts)
     function ZoomPan.CreateButton(parent, text, width, tooltip, onClick)
         local T = deps.T
         local template = (opts.themeButton and T and T.Template and T.Template()) or (opts.buttonTemplate or "BackdropTemplate")
-        local btn = CreateFrame("Button", nil, parent, template)
+        local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, template))
         local tex = deps[opts.buttonTextureKey or "TEX_W8"] or white
         btn:SetSize(width or 24, opts.buttonHeight or 20)
         if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
@@ -1881,7 +1882,7 @@ function H.InstallZoomPan(ZoomPan, opts)
             btn._msuf2PreviewZoomFill = fill
             btn._msuf2PreviewZoomEdge = edge
         elseif btn.SetBackdrop then
-            btn:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
+            PixelLayoutRegion(btn, "SetBackdrop", { bgFile = tex, edgeFile = tex, edgeSize = 1 })
             btn:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
             btn:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
         end
@@ -1889,7 +1890,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         if opts.themeButton and T and T.Font then
             btn[fontField] = T.Font(btn, "GameFontDisableSmall", text, { 0.78, 0.84, 0.96, 1 })
         elseif not opts.themeButton then
-            btn[fontField] = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            btn[fontField] = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
             btn[fontField]:SetText(text)
             btn[fontField]:SetTextColor(0.78, 0.84, 0.96, 1)
             if T and T.StyleFontString then T.StyleFontString(btn[fontField], { 0.78, 0.84, 0.96, 1 }, 0) end
@@ -1989,10 +1990,10 @@ function H.BuildZoomBar(box, surface, opts)
     local buttonH = tonumber(opts.buttonHeight) or 20
     local createButton = opts.CreateZoomButton
     local prefix = opts.fieldPrefix or ""
-    local zoomBar = CreateFrame("Frame", nil, surface, template)
+    local zoomBar = PixelLayoutRegion(CreateFrame("Frame", nil, surface, template))
     zoomBar:SetSize(opts.width or (opts.lockButton and 226 or 200), opts.height or 24)
     zoomBar:SetPoint("TOPRIGHT", surface, "TOPRIGHT", -8, -8)
-    zoomBar:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
+    PixelLayoutRegion(zoomBar, "SetBackdrop", { bgFile = tex, edgeFile = tex, edgeSize = 1 })
     if opts.flatChrome ~= false and (opts.T or opts.flatChrome == true) then
         zoomBar:SetBackdropColor(0, 0, 0, 0)
         zoomBar:SetBackdropBorderColor(0, 0, 0, 0)
@@ -2039,7 +2040,7 @@ function H.BuildZoomBar(box, surface, opts)
     if opts.themeReadout and T and T.Font then
         readout = T.Font(zoomBar, "GameFontDisableSmall", "", { 0.72, 0.78, 0.90, 1 })
     else
-        readout = zoomBar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        readout = PixelLayoutRegion(zoomBar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         readout:SetTextColor(0.72, 0.78, 0.90, 1)
         if T and T.StyleFontString then T.StyleFontString(readout, { 0.72, 0.78, 0.90, 1 }, 0) end
     end
@@ -2368,7 +2369,7 @@ function H.ApplyPreviewChrome(frame, role, theme, fallback)
     elseif role == "canvas" and frame.CreateTexture then
         local gradient = frame._msuf2PreviewCanvasGradient
         if not gradient then
-            gradient = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
+            gradient = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND", nil, -7))
             gradient:SetAllPoints(frame)
             gradient:SetTexture("Interface\\Buttons\\WHITE8X8")
             frame._msuf2PreviewCanvasGradient = gradient
@@ -2482,7 +2483,7 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     local tr = opts.Tr or F.Identity
     local theme = opts.T or (M and M.Theme)
     local chip = opts.layout == "chip"
-    local btn = CreateFrame("Button", nil, parent)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     local h = opts.height or 20
     if not chip then
         btn:SetSize((sideW or 80) - 12, h)
@@ -2490,10 +2491,10 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     end
     btn:EnableMouse(true)
     btn.key, btn.color, btn.tooltip = def.key, def.color, def.tooltip
-    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+    btn.bg = PixelLayoutRegion(btn:CreateTexture(nil, "BACKGROUND"))
     btn.bg:SetAllPoints()
-    btn.bar = btn:CreateTexture(nil, "ARTWORK")
-    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.bar = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
+    btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     if not chip then
         btn.bar:SetSize(3, h - 5)
         btn.bar:SetPoint("LEFT", btn, "LEFT", 3, 0)
@@ -2504,7 +2505,7 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn.fs:SetText(tr(def.label))
     if theme and theme.ApplyMenuFont then theme.ApplyMenuFont(btn.fs, 0) end
     if chip then LayoutLayerChip(btn, h) end
-    btn.off = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.off = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     btn.off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
     btn.off:SetText(opts.offText or "OFF")
     btn.off:SetJustifyH("RIGHT")
@@ -2663,14 +2664,14 @@ function H.EnsureTextFocusFrame(box, parent)
     if not (box and parent) then return nil end
     local f = box._msufMenuTextFocusFrame
     if not f then
-        f = CreateFrame("Frame", nil, parent)
+        f = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
         f:EnableMouse(false)
-        f.fill = f:CreateTexture(nil, "BACKGROUND")
+        f.fill = PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND"))
         f.fill:SetAllPoints()
         f.lines = {}
         for i = 1, #TEXT_FOCUS_SIDES do
             local side = TEXT_FOCUS_SIDES[i]
-            local line = f:CreateTexture(nil, "OVERLAY")
+            local line = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
             line:SetPoint(EDGE_ANCHORS[side][1])
             line:SetPoint(EDGE_ANCHORS[side][2])
             f.lines[side] = line
@@ -2815,6 +2816,7 @@ function H.ApplyTextFocus(box, parent, mock, opts)
 end
 function H.SnapOff(region)
     if region and region.SetSnapToPixelGrid then
+        PixelLayoutRegion(region, true)
         region:SetSnapToPixelGrid(false)
         if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
     end
@@ -2904,7 +2906,7 @@ function H.LayoutEdgeLines(frame, edge, opts)
     for i = 1, #keys do
         local key = keys[i]
         if not lines[key] then
-            lines[key] = frame:CreateTexture(nil, opts.layer or "OVERLAY")
+            lines[key] = PixelLayoutRegion(frame:CreateTexture(nil, opts.layer or "OVERLAY"))
             snap(lines[key])
         end
         lines[key]:SetTexture(texture)
@@ -2931,12 +2933,12 @@ function H.EnsureRoundedVisuals(mock, opts)
     local edgeKey = opts.edgeKey or "roundedEdge"
     local snap = opts.snapOff or H.SnapOff
     if not mock[bgKey] then
-        mock[bgKey] = mock:CreateTexture(nil, opts.bgLayer or "BACKGROUND", nil, opts.bgSubLevel)
+        mock[bgKey] = PixelLayoutRegion(mock:CreateTexture(nil, opts.bgLayer or "BACKGROUND", nil, opts.bgSubLevel))
         mock[bgKey]:SetTexture(opts.whiteTexture or "Interface\\Buttons\\WHITE8X8")
         snap(mock[bgKey])
     end
     if not mock[edgeKey] then
-        mock[edgeKey] = mock:CreateTexture(nil, opts.edgeLayer or "OVERLAY", nil, opts.edgeSubLevel)
+        mock[edgeKey] = PixelLayoutRegion(mock:CreateTexture(nil, opts.edgeLayer or "OVERLAY", nil, opts.edgeSubLevel))
         snap(mock[edgeKey])
     end
     if mock[edgeKey]._msufPreviewRoundedEdgeTexture ~= opts.edgeTexture then
@@ -3003,7 +3005,7 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
     for i = 1, count do
         local edge = (i == 1) and mock[edgeKey] or mock[stackKey][i]
         if not edge then
-            edge = mock:CreateTexture(nil, opts.edgeLayer or "OVERLAY", nil, opts.edgeSubLevel)
+            edge = PixelLayoutRegion(mock:CreateTexture(nil, opts.edgeLayer or "OVERLAY", nil, opts.edgeSubLevel))
             snap(edge)
             mock[stackKey][i] = edge
         end

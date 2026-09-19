@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: ButtonVisuals.
 -- One-time icon, text and duration-bar setup plus desired geometry. Native AuraButtons become restricted after initializeFrame; later changes use owner recreation.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
@@ -102,7 +103,7 @@ local function ApplyIconStyleShadow(button, style, size, shape)
             return
         end
         if not shapedShadow then
-            shapedShadow = button:CreateTexture(nil, "BACKGROUND", nil, -7)
+            shapedShadow = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND", nil, -7))
             button._msufA3ShapedStyleShadow = shapedShadow
         end
         if not SetAuraShapeTexture(shapedShadow, shape, false) then shapedShadow:Hide(); return end
@@ -166,7 +167,7 @@ local function ApplyIconStyleBorder(button, style, size, shape)
         for i = 1, count do
             local border = shapedBorders[i]
             if not border then
-                border = button:CreateTexture(nil, inner and "ARTWORK" or "BORDER", nil, inner and 7 or -1)
+                border = PixelLayoutRegion(button:CreateTexture(nil, inner and "ARTWORK" or "BORDER", nil, inner and 7 or -1))
                 shapedBorders[i] = border
             elseif border.SetDrawLayer then
                 border:SetDrawLayer(inner and "ARTWORK" or "BORDER", inner and 7 or -1)
@@ -217,7 +218,7 @@ local function ApplyIconStyleBorder(button, style, size, shape)
     end
     if pieces then MSUF.BorderStyles.Hide(pieces) end
     if not flat then
-        flat = button:CreateTexture(nil, "BORDER", nil, -1)
+        flat = PixelLayoutRegion(button:CreateTexture(nil, "BORDER", nil, -1))
         flat:SetTexture("Interface\\Buttons\\WHITE8X8")
         button._msufA3StyleBorder = flat
     end
@@ -324,7 +325,7 @@ local function EnsureAuraTextOverlay(button, lane)
     local overlay = button._msufA3TextOverlay
     if not overlay or (overlay.GetParent and overlay:GetParent() ~= visualOwner) then
         if overlay then overlay:Hide() end
-        overlay = CreateFrame("Frame", nil, visualOwner)
+        overlay = PixelLayoutRegion(CreateFrame("Frame", nil, visualOwner))
         overlay._msufA3TextOverlay = true
         if overlay.EnableMouse then overlay:EnableMouse(false) end
         button._msufA3TextOverlay = overlay
@@ -529,7 +530,7 @@ function PrepareStage.ResolveVisualOwner(button, lane)
     if lane.kind == "spellIndicator" and lane.frameEffect and lane.visual ~= "none" then
         visualOwner = button._msufA3SpellIndicatorVisualHost
         if not visualOwner then
-            visualOwner = CreateFrame("Frame", nil, button)
+            visualOwner = PixelLayoutRegion(CreateFrame("Frame", nil, button))
             visualOwner:EnableMouse(false)
             button._msufA3SpellIndicatorVisualHost = visualOwner
         end
@@ -566,7 +567,7 @@ function PrepareStage.PrepareIcon(button, lane, index, visualOwner)
             -- The portrait itself is ARTWORK sublevel 0. Use the same sublevel
             -- contract as the proven cast-icon overlay; normal aura lanes keep
             -- their existing layer order.
-            icon = visualOwner:CreateTexture(nil, "ARTWORK", nil, lane.portraitOverlay == true and 1 or 0)
+            icon = PixelLayoutRegion(visualOwner:CreateTexture(nil, "ARTWORK", nil, lane.portraitOverlay == true and 1 or 0))
             button.Icon = icon
         elseif lane.portraitOverlay == true and icon.SetDrawLayer then
             icon:SetDrawLayer("ARTWORK", 1)
@@ -599,7 +600,7 @@ function PrepareStage.PrepareCooldownSwipe(button, lane, visualOwner, barOnly)
         local cooldownAnchor, cooldownLevel = A3._AuraCooldownAnchorAndLevel(button, lane)
         local cooldown = button._msufA3Cooldown
         if not cooldown then
-            local cd = CreateFrame("Cooldown", nil, visualOwner, "CooldownFrameTemplate")
+            local cd = PixelLayoutRegion(CreateFrame("Cooldown", nil, visualOwner, "CooldownFrameTemplate"))
             if type(cd.SetDrawSwipe) == "function" then cd:SetDrawSwipe(true) end
             if type(cd.SetSwipeColor) == "function" then cd:SetSwipeColor(0, 0, 0, 0.58) end
             if type(cd.SetHideCountdownNumbers) == "function" then cd:SetHideCountdownNumbers(true) end
@@ -640,7 +641,7 @@ function PrepareStage.PrepareDurationBar(button, lane, visualOwner, spellIndicat
     if lane.showDurationBar == true then
         local bar = button._msufA3DurationBar
         if not bar then
-            bar = CreateFrame("StatusBar", nil, visualOwner)
+            bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, visualOwner))
             bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
             bar:SetMinMaxValues(0, 1)
             bar:SetValue(0)
@@ -693,7 +694,7 @@ function PrepareStage.PrepareCooldownText(button, lane, textOverlay)
     if lane.showCooldownText == true then
         local duration = button.Text or button.DurationText
         if not duration then
-            duration = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            duration = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
             button.Text = duration
         elseif duration.GetParent and duration:GetParent() ~= textOverlay then
             -- PTR 7 seals configured display elements with
@@ -701,7 +702,7 @@ function PrepareStage.PrepareCooldownText(button, lane, textOverlay)
             -- initializeFrame and kill the lane. Retire the stray element and
             -- rebuild on the overlay instead.
             duration:Hide()
-            duration = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            duration = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
             button.Text = duration
         end
         duration:Hide()
@@ -747,12 +748,12 @@ function PrepareStage.PrepareStackText(button, lane, textOverlay)
     if lane.showStacks == true then
         local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
         if not count then
-            count = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            count = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
             button._msufA3ApplicationCount = count
         elseif count.GetParent and count:GetParent() ~= textOverlay then
             -- Same ChangeParent seal as the duration text above.
             count:Hide()
-            count = textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            count = PixelLayoutRegion(textOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
             button._msufA3ApplicationCount = count
         end
         button.Count = count
@@ -777,7 +778,7 @@ function PrepareStage.PrepareAuraBorder(button, lane, visualOwner, barOnly, icon
     if lane.showAuraBorder == true and not barOnly then
         local border = button._msufA3AuraBorder or button.AuraBorder or button.Border
         if not border then
-            border = visualOwner:CreateTexture(nil, "OVERLAY")
+            border = PixelLayoutRegion(visualOwner:CreateTexture(nil, "OVERLAY"))
         end
         local shapedDispel = iconShape ~= Shape.RECTANGLE and A3.AuraShapeBorderPath(iconShape) or nil
         LayoutAuraBorder(visualOwner, border, lane, shapedDispel == nil)
@@ -803,7 +804,7 @@ function PrepareStage.PrepareStealableMarker(button, lane, visualOwner, barOnly)
     if lane.showStealableMarker == true and not barOnly then
         local marker = button._msufA3StealableMarker
         if not marker then
-            marker = visualOwner:CreateTexture(nil, "OVERLAY", nil, 5)
+            marker = PixelLayoutRegion(visualOwner:CreateTexture(nil, "OVERLAY", nil, 5))
             button._msufA3StealableMarker = marker
         end
         marker:ClearAllPoints()
@@ -824,7 +825,7 @@ function PrepareStage.PrepareAuraSymbol(button, lane, visualOwner, barOnly, aura
     if lane.showAuraSymbol == true and auraBorderBound == true and not barOnly then
         local symbol = button._msufA3AuraSymbol or button.AuraSymbol or button.Symbol
         if not symbol then
-            symbol = visualOwner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            symbol = PixelLayoutRegion(visualOwner:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
         end
         button._msufA3AuraSymbol = symbol
         button.Symbol = symbol
@@ -873,6 +874,7 @@ function PrepareStage.BindPandemicAndTooltip(button, lane)
 end
 
 local function PrepareAuraButton(button, lane, index)
+    PixelLayoutRegion(button)
     PrepareStage.BindLaneIdentity(button, lane, index)
     local visualOwner = PrepareStage.ResolveVisualOwner(button, lane)
     local barOnly, spellIndicatorBar, icon = PrepareStage.PrepareIcon(button, lane, index, visualOwner)

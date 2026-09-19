@@ -109,7 +109,7 @@ end
 
 -- The complete published surface. A new fact has to be added here on purpose,
 -- and a fact that was removed as dead cannot come back unnoticed.
-local FUNCTION_KEYS = { "SupportsEvent", "SupportsUnit", "SupportsGroupKind", "IsGameRuleActive",
+local FUNCTION_KEYS = { "SupportsEvent", "SupportsUnit", "SupportsGroupKind", "SupportsClassResource", "SupportsClassResourceSetting", "IsGameRuleActive",
     "DescribeLines" }
 local TABLE_KEYS = { "UnsupportedEvents", "UnsupportedUnits" }
 local REMOVED_FIELDS = { "ProjectID", "IsEra" }

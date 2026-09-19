@@ -988,6 +988,112 @@ do
         return true
     end
 
+    -- Opt individual layout regions in on Midnight/Forever only. Preserve the
+    -- requested anchors, offsets and sizes: the engine rounds the rendered
+    -- layout again on scale changes, without rewriting any profile coordinates.
+    -- Never recurse into masks, rounded art or status-bar fill textures.
+    local mainlinePixelLayout = MSUF.Client and MSUF.Client.IsRetail == true
+    function Util.EnablePixelPerfectLayout(region)
+        if not mainlinePixelLayout or not region or region._msufPixelLayoutExcluded then return false end
+        if region._msufPixelLayoutEnabled == true then return true end
+        if not MSUF_SetRoundLayoutToNearestPixel(region, true) then return false end
+        region._msufPixelLayoutEnabled = true
+        return true
+    end
+
+    -- Creation boundary for MSUF-owned UI only. A logical owner (drag/anchor
+    -- proxy) keeps its geometry; its separately created visible children round.
+    -- No Blizzard globals, widget methods or profile values are replaced.
+    -- Templates may create their own regions, so visit those once at creation.
+    local VisitPixelLayout
+    local function PixelLayoutChildren(owner, ...)
+        local isStatusBar = owner.GetObjectType and owner:GetObjectType() == "StatusBar"
+        local fill = isStatusBar and owner.GetStatusBarTexture and owner:GetStatusBarTexture()
+        for i = 1, select("#", ...) do
+            local child = select(i, ...)
+            if child and child ~= fill then VisitPixelLayout(child, false) end
+        end
+    end
+    VisitPixelLayout = function(region, preserveLogicalGeometry)
+        if not mainlinePixelLayout or not region then return region end
+        -- Completed owners/art never need another native type/combat query or
+        -- template walk. Only a new region or an explicit policy change does.
+        if region._msufPixelLayoutTemplateVisited then
+            if preserveLogicalGeometry then
+                if region._msufPixelLayoutExcluded and not region._msufPixelLayoutEnabled then return region end
+            elseif region._msufPixelLayoutEnabled or region._msufPixelLayoutExcluded then
+                return region
+            end
+        end
+        region._msufPixelLayoutOwned = true
+        if preserveLogicalGeometry then
+            region._msufPixelLayoutExcluded = true
+            if region._msufPixelLayoutEnabled then
+                if MSUF_SetRoundLayoutToNearestPixel(region, false) then
+                    region._msufPixelLayoutEnabled = nil
+                end
+            end
+        elseif not (region.GetObjectType and region:GetObjectType() == "MaskTexture") then
+            Util.EnablePixelPerfectLayout(region)
+        end
+        -- A protected template skipped in combat may be retried by the next
+        -- normal configuration pass. Never mark its unfinished children done.
+        if InCombatLockdown and InCombatLockdown()
+            and region.IsProtected and region:IsProtected() then return region end
+        if not region._msufPixelLayoutTemplateVisited then
+            region._msufPixelLayoutTemplateVisited = true
+            if region.GetRegions then PixelLayoutChildren(region, region:GetRegions()) end
+            if region.GetChildren then PixelLayoutChildren(region, region:GetChildren()) end
+        end
+        return region
+    end
+    -- BackdropTemplateMixin (12.1.5/Forever Backdrop.lua) owns exactly these
+    -- nine regions. Revisit those, never unrelated children another addon may
+    -- have attached since our frame was created.
+    local backdropRegions = { "TopLeftCorner", "TopRightCorner", "BottomLeftCorner",
+        "BottomRightCorner", "TopEdge", "BottomEdge", "LeftEdge", "RightEdge", "Center" }
+    local setterRegionGetter = {
+        SetNormalTexture = "GetNormalTexture", SetPushedTexture = "GetPushedTexture",
+        SetHighlightTexture = "GetHighlightTexture", SetDisabledTexture = "GetDisabledTexture",
+        SetThumbTexture = "GetThumbTexture",
+    }
+    local function PixelLayoutAfterSetter(region, method, ...)
+        if mainlinePixelLayout and region._msufPixelLayoutOwned then
+            if method == "SetBackdrop" then
+                -- 12.1.5/Forever ApplyBackdrop creates all nine pieces once;
+                -- ClearBackdrop only clears their textures, never the objects.
+                -- Do not finish a partial/blocked setup: a later apply can retry.
+                local complete = true
+                for i = 1, #backdropRegions do
+                    local piece = region[backdropRegions[i]]
+                    if not piece or (not piece._msufPixelLayoutExcluded
+                        and not Util.EnablePixelPerfectLayout(piece)) then complete = false end
+                end
+                if complete then region._msufPixelLayoutBackdropReady = true end
+            else
+                local getter = setterRegionGetter[method]
+                if getter and region[getter] then
+                    local texture = region[getter](region)
+                    if texture and not texture._msufPixelLayoutEnabled and not texture._msufPixelLayoutExcluded then
+                        Util.EnablePixelPerfectLayout(texture)
+                    end
+                end
+            end
+        end
+        return ...
+    end
+    local function PixelLayoutRegion(region, policy, ...)
+        if type(policy) == "string" then
+            if not mainlinePixelLayout or not region._msufPixelLayoutOwned
+                or (policy == "SetBackdrop" and (region._msufPixelLayoutBackdropReady or ... == nil)) then
+                return region[policy](region, ...)
+            end
+            return PixelLayoutAfterSetter(region, policy, region[policy](region, ...))
+        end
+        return VisitPixelLayout(region, policy == true)
+    end
+    ExportPublic("MSUF_PixelLayoutRegion", PixelLayoutRegion)
+
     local function MSUF_Snap(frame, v)
         if type(v) ~= "number" then
             return v

@@ -9,6 +9,7 @@ tokenclients	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	TagOnly{f
 -	lua	tools/tests/classic_client_detection_smoke.lua	{root/}	Client detection smoke failed
 -	lua	tools/tests/client_info_command_smoke.lua	{root/}	Client info command smoke failed
 -	lua	tools/tests/classic_project_id_reads_smoke.lua	{root/}	Project ID read inventory smoke failed
+-	lua	tools/tests/assistant_caster_names_family_smoke.lua	{root}	Assistant caster names family smoke failed
 -	lua	tools/tests/mainline_quality_contracts_smoke.lua	{root/}	Mainline quality contracts smoke failed
 -	lua	tools/tests/classic_texture_layer_highlight_smoke.lua	{root/}	Texture layer highlight smoke failed
 -	lua	tools/tests/forever_combo_frame_hider_smoke.lua	{root}	WoW Forever ComboFrame hider smoke failed
@@ -20,12 +21,15 @@ tokenclients	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	TagOnly{f
 -	lua	tools/tests/forever_group_frames_smoke.lua	{root}	Forever group frames smoke failed
 -	lua	tools/tests/forever_group_header_snippet_smoke.lua	{root}	Forever group header snippet workaround smoke failed
 -	python	.github/scripts/menu2_search_index_hash_smoke.py		Menu2 search index source-hash contract failed
+-	python	tools/tests/rebase_classic_overrides_smoke.py		Override rebase tool self-test failed
+-	python	tools/tests/resolve_classic_retail_source_smoke.py	{root}	Retail source resolver smoke failed
 -	lua	tools/tests/forever_pet_happiness_smoke.lua	{root}	Forever pet happiness smoke failed
 -	lua	tools/tests/tap_denied_gray_smoke.lua	{root}	Tagged-mob graying smoke failed
 -	lua	tools/tests/threat_text_smoke.lua	{root}	Threat text smoke failed
 -	lua	tools/tests/forever_character_names_smoke.lua	{root}	Forever character names smoke failed
 -	lua	tools/tests/forever_onboarding_scenes_smoke.lua	{root}	Forever onboarding scenes smoke failed
 -	lua	tools/tests/forever_arena_zero_smoke.lua	{root/}	Forever arena-zero Mainline smoke failed
+-	lua	tools/tests/arena_castbar_backend_keep_smoke.lua	{root}	Arena castbar backend keep smoke failed
 -	lua	tools/tests/section_copy_targets_smoke.lua	{root}	Section copy targets smoke failed
 -	lua	tools/tests/forever_factory_profile_smoke.lua	{root}	Forever factory profile CBOR smoke failed
 clients	lua	tools/tests/factory_default_profile_smoke.lua	{root} {flavor}	Factory default profile smoke failed: {flavor}
@@ -50,6 +54,7 @@ classics	lua	tools/tests/classic_classpower_enabled_smoke.lua	{root} {flavor}	Cl
 -	lua	tools/tests/mainline_classpower_ooc_autohide_smoke.lua	{root}	Mainline ClassPower OOC auto-hide smoke failed
 -	lua	tools/tests/classpower_target_combo_trace_smoke.lua	{root/}	ClassPower target-combo behaviour trace smoke failed
 classics	lua	tools/tests/classic_classpower_controller_smoke.lua	{root} {flavor}	Classic ClassPower controller contract failed: {flavor}
+-	lua	tools/tests/classpower_classic_hunks_smoke.lua	{root}	ClassPower Classic hunks smoke failed
 classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic fresh profile smoke failed: {flavor}
 -	lua+driver	tools/tests/classic_castbar_engine_smoke.lua	{root/}	Classic castbar engine smoke failed
 -	lua+driver	tools/tests/classic_transition_regression_smoke.lua	{root}	Classic transition regression failed
@@ -92,12 +97,15 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	tools/tests/classic_aura_update_path_smoke.lua	{root/}	Classic aura update path smoke failed
 -	lua+driver	tools/tests/classic_dispel_symbol_chain_smoke.lua	{root/}	Classic dispel symbol chain smoke failed
 -	lua+driver	tools/tests/classic_aura_menu_filters_smoke.lua	{root/}	Classic Aura menu filter smoke failed
+clients+Forever	lua	tools/tests/classic_aura_page_client_gates_smoke.lua	{root} {flavor}	Classic aura page client gates smoke failed: {flavor}
 -	lua+driver	tools/tests/classic_aura_features_smoke.lua	{root/}	Classic aura feature compiler smoke failed
 -	lua+driver	tools/tests/classic_aura_compile_filter_smoke.lua	{root/}	Classic aura compile filter smoke failed
 -	lua+driver	tools/tests/classic_aura_lane_agreement_smoke.lua	{root/}	Classic aura lane agreement smoke failed
+classics	lua+driver	tools/tests/classic_aura_faction_smoke.lua	{root/} {flavor}	Classic aura faction smoke failed: {flavor}
 -	lua+driver	tools/tests/classic_aura_alias_catalog_smoke.lua	{root/}	Classic aura alias catalog smoke failed
 -	lua+driver	tools/tests/classic_group_indicator_data_smoke.lua	{root/}	Classic group indicator data smoke failed
 -	lua+driver	tools/tests/classic_raid_manager_mode_smoke.lua	{root/}	Classic Raid Manager mode smoke failed
+clients+Forever	lua	tools/tests/uf_engine_client_gates_smoke.lua	{root/} {flavor}	Unit-frame engine client gates smoke failed: {flavor}
 -	lua+driver	tools/tests/classic_pet_happiness_smoke.lua	{root/}	Classic Pet Happiness smoke failed
 -	lua	tools/tests/classic_range_fade_smoke.lua	{root/}	Classic range fade smoke failed
 clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	Optional integration contract failed: {flavor}
@@ -105,5 +113,16 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua+driver	tools/tests/arena_editmode_exit_restore_smoke.lua	{root/}	Arena Edit Mode exit restore smoke failed
 -	lua+driver	tools/tests/classic_menu_retail_parity_smoke.lua	{root/}	Classic Menu2 Retail parity smoke failed
 classics	lua	tools/tests/classic_unit_preview_parity_smoke.lua	{root/} {flavor}	Classic unit preview parity smoke failed: {flavor}
+-	lua	tools/tests/mainline_unit_preview_boss_target_smoke.lua	{root/} Mainline	Mainline unit preview boss target smoke failed: Mainline
+-	lua	tools/tests/mainline_unit_preview_boss_target_smoke.lua	{root/} Forever	Mainline unit preview boss target smoke failed: Forever
+-	lua	tools/tests/mainline_unit_preview_classic_hunks_smoke.lua	{root/} Mainline	Mainline unit preview Classic hunks smoke failed: Mainline
+-	lua	tools/tests/mainline_unit_preview_classic_hunks_smoke.lua	{root/} Forever	Mainline unit preview Classic hunks smoke failed: Forever
+classics	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{root/} {flavor}	Classic unit preview texture layer order smoke failed: {flavor}
 -	lua	tools/tests/classic_unit_menu_runtime_parity_smoke.lua	{root/}	Classic unit menu runtime parity smoke failed
+-	lua	tools/tests/classic_unit_page_client_hunks_smoke.lua	{root/}	Classic unit page client hunks smoke failed
+clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {flavor}	Unit status threat controls smoke failed: {flavor}
 -	lua+driver	tools/tests/classic_aura_render_smoke.lua	{root/} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua} {p/:MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua}	Classic aura live-render smoke failed
+-	lua	tools/tests/startup_locale_manifest_smoke.lua	{root/}	Startup client-language manifest parity failed
+-	lua	tools/tests/classpower_client_resource_gates_smoke.lua	{root/}	Class resource client gates failed
+-	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
+-	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed

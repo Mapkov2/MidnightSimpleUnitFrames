@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -343,7 +344,7 @@ end
 
 function Health.Create(frame, spec)
   if frame.hpBar then return end
-  local backgroundBar = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
+  local backgroundBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame))
   backgroundBar:SetAllPoints(frame)
   backgroundBar:SetMinMaxValues(0, 100)
   backgroundBar:SetValue(100)
@@ -362,7 +363,7 @@ function Health.Create(frame, spec)
   frame.healthBg = bg
 
   local trail = CreateLossTrail and CreateLossTrail(frame, (spec and spec.texture) or WHITE, 100) or nil
-  local bar = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
+  local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame))
   bar:SetMinMaxValues(0, 100)
   bar:SetValue(100)
   bar:SetStatusBarTexture((spec and spec.texture) or WHITE)

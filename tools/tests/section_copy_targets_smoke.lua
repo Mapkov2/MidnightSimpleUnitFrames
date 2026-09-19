@@ -202,10 +202,10 @@ local unitSource = table.concat({
 local CLIENTS = {
     { name = "Midnight", project = 1, pages = "MSUF_Menu2_Unit.lua", absent = {} },
     { name = "Forever", project = 1, forever = true, pages = "MSUF_Menu2_Unit.lua", absent = { arena = true } },
-    { name = "Vanilla", project = 2, tag = "Vanilla", pages = "MSUF_Menu2_Unit_Classic.lua",
+    { name = "Vanilla", project = 2, tag = "Vanilla", pages = "MSUF_Menu2_Unit.lua",
         absent = { focus = true, focustarget = true, boss = true, arena = true } },
-    { name = "TBC", project = 5, tag = "TBC", pages = "MSUF_Menu2_Unit_Classic.lua", absent = { boss = true } },
-    { name = "Mists", project = 19, tag = "Mists", pages = "MSUF_Menu2_Unit_Classic.lua", absent = {} },
+    { name = "TBC", project = 5, tag = "TBC", pages = "MSUF_Menu2_Unit.lua", absent = { boss = true } },
+    { name = "Mists", project = 19, tag = "Mists", pages = "MSUF_Menu2_Unit.lua", absent = {} },
 }
 local ALL_UNITS = { "player", "target", "boss", "arena", "focus", "pet", "targettarget", "focustarget" }
 local db = { pet = { enabled = false }, focus = { enabled = false } }

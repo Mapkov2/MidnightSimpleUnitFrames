@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 dashboard: builds dashboard panels, summaries, and launcher actions.
 -- UI construction stays here; profile/runtime mutations route through shared Menu2 or Assistant helpers.
 local addonName, MSUF = ...
@@ -360,7 +361,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     local contentW = max(120, cardWidth or 420)
     local scrollW = max(80, contentW - 60)
     local function RawFont(parentFrame, template, text, color, bump, role)
-        local fs = parentFrame:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
+        local fs = PixelLayoutRegion(parentFrame:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall"))
         if T.StyleFontString then
             T.StyleFontString(fs, color or T.colors.muted, bump or 0, role)
         elseif color and fs.SetTextColor then
@@ -369,11 +370,11 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         fs:SetText(tostring(text or ""))
         return fs
     end
-    local header = CreateFrame("Button", nil, parent)
+    local header = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     header:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, top)
     header:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, top)
     header:SetHeight(headerH)
-    local arrow = header:CreateTexture(nil, "OVERLAY")
+    local arrow = PixelLayoutRegion(header:CreateTexture(nil, "OVERLAY"))
     arrow:SetSize(10, 10)
     arrow:SetPoint("LEFT", header, "LEFT", 16, 0)
     arrow:SetTexture(T.media.collapseArrow)
@@ -394,10 +395,10 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         if arrow.SetVertexColor then arrow:SetVertexColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.55) end
         return
     end
-    local scroll = CreateFrame("ScrollFrame", nil, parent)
+    local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, parent))
     scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, top - headerH - 12)
     scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -36, opts.bottom or 72)
-    local child = CreateFrame("Frame", nil, scroll)
+    local child = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
     child:SetSize(scrollW, 1)
     scroll:SetScrollChild(child)
     local y = 0
@@ -434,12 +435,12 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         end
         dotColor = dotColor or T.colors.accent
         textColor = textColor or bodyColor
-        local dot = child:CreateTexture(nil, "ARTWORK")
+        local dot = PixelLayoutRegion(child:CreateTexture(nil, "ARTWORK"))
         dot:SetSize(5, 5)
         dot:SetPoint("TOPLEFT", child, "TOPLEFT", 9, y - 6)
         dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.95)
         if isHighlight and link then
-            local button = CreateFrame("Button", nil, child)
+            local button = PixelLayoutRegion(CreateFrame("Button", nil, child))
             button:SetPoint("TOPLEFT", child, "TOPLEFT", 22, y)
             local linkWidth = max(40, scrollW - 32)
             button:SetWidth(linkWidth)
@@ -468,7 +469,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         return AddText(text, "GameFontHighlightSmall", textColor, 22, 9, true, "body")
     end
     local function AddRule()
-        local rule = child:CreateTexture(nil, "ARTWORK")
+        local rule = PixelLayoutRegion(child:CreateTexture(nil, "ARTWORK"))
         rule:SetPoint("TOPLEFT", child, "TOPLEFT", 0, y)
         rule:SetPoint("TOPRIGHT", child, "TOPRIGHT", -4, y)
         rule:SetHeight(1)
@@ -623,20 +624,20 @@ function Dashboard.PrepareSurfaceHelpers(state, root)
         if not (card and card.CreateTexture) or card._msuf2DashboardHeroGradient then return end
         card._msuf2DashboardHeroGradient = true
         local c = T.colors
-        local wash = card:CreateTexture(nil, "BACKGROUND", nil, 1)
+        local wash = PixelLayoutRegion(card:CreateTexture(nil, "BACKGROUND", nil, 1))
         wash:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         wash:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
         SetDashboardGradient(wash, "HORIZONTAL",
             { c.coreShadow[1], c.coreShadow[2], c.coreShadow[3], 0.00 },
             { c.coreRaised[1], c.coreRaised[2], c.coreRaised[3], 0.12 })
-        local top = card:CreateTexture(nil, "BACKGROUND", nil, 2)
+        local top = PixelLayoutRegion(card:CreateTexture(nil, "BACKGROUND", nil, 2))
         top:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         top:SetPoint("TOPRIGHT", card, "TOPRIGHT", -2, -2)
         top:SetHeight(max(54, min(96, floor((h or 190) * 0.42))))
         SetDashboardGradient(top, "VERTICAL",
             { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.055 },
             { c.coreShadow[1], c.coreShadow[2], c.coreShadow[3], 0.00 })
-        local focus = card:CreateTexture(nil, "BACKGROUND", nil, 3)
+        local focus = PixelLayoutRegion(card:CreateTexture(nil, "BACKGROUND", nil, 3))
         focus:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         focus:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
         SetDashboardGradient(focus, "HORIZONTAL",
@@ -866,7 +867,7 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
         { actionKey = "copy_wago_profiles_link",
           keywords = { "Browse Wago profiles", "Wago profile imports" },
           help = "Opens a copyable link to the MSUF profile imports on Wago." })
-    local wagoIcon = wago:CreateTexture(nil, "ARTWORK", nil, 3)
+    local wagoIcon = PixelLayoutRegion(wago:CreateTexture(nil, "ARTWORK", nil, 3))
     wagoIcon:SetTexture(iconDir .. "Wago.png")
     wagoIcon:SetSize(22, 22)
     wagoIcon:SetPoint("LEFT", wago, "LEFT", 8, 0)
@@ -900,11 +901,11 @@ function Dashboard.BuildAssistantHero(state, mainTop)
 end
 function Dashboard.PrepareDisclosure(state)
     local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills, semanticPath)
-        local head = CreateFrame("Button", nil, parent)
+        local head = PixelLayoutRegion(CreateFrame("Button", nil, parent))
         head:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
         head:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
         head:SetHeight(44)
-        local arrow = head:CreateTexture(nil, "OVERLAY")
+        local arrow = PixelLayoutRegion(head:CreateTexture(nil, "OVERLAY"))
         arrow:SetTexture(T.media.collapseArrow)
         arrow:SetSize(10, 10)
         arrow:SetPoint("LEFT", head, "LEFT", 16, 0)
@@ -1291,7 +1292,7 @@ function Dashboard.BuildSupportCard(state)
         { key = "kofi", texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
         { key = "github", texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
     }
-    local iconRow = CreateFrame("Frame", nil, support)
+    local iconRow = PixelLayoutRegion(CreateFrame("Frame", nil, support))
     iconRow:SetSize(168, 24)
     if supportCompact then
         iconRow:SetPoint("BOTTOMLEFT", support, "BOTTOMLEFT", 16, 12)
@@ -1301,12 +1302,12 @@ function Dashboard.BuildSupportCard(state)
     local previous
     for i = 1, #supportLinks do
         local data = supportLinks[i]
-        local btn = CreateFrame("Button", nil, iconRow)
+        local btn = PixelLayoutRegion(CreateFrame("Button", nil, iconRow))
         btn:SetSize(24, 24)
-        local tex = btn:CreateTexture(nil, "ARTWORK")
+        local tex = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
         tex:SetAllPoints()
         tex:SetTexture(iconDir .. data.texture)
-        local hover = btn:CreateTexture(nil, "HIGHLIGHT")
+        local hover = PixelLayoutRegion(btn:CreateTexture(nil, "HIGHLIGHT"))
         hover:SetAllPoints()
         hover:SetColorTexture(1, 1, 1, 0.10)
         btn:SetScript("OnClick", function()

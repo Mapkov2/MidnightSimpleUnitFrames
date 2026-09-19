@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -36,7 +37,7 @@ function Controller:EnsureProxy(externalKey)
     local proxy = self.proxyFrames[externalKey]
     if proxy then return proxy end
     if not (_G.CreateFrame and _G.UIParent) then return nil end
-    proxy = _G.CreateFrame("Frame", nil, _G.UIParent)
+    proxy = PixelLayoutRegion(_G.CreateFrame("Frame", nil, _G.UIParent), true)
     proxy[self:Field("ExternalKey")] = externalKey
     proxy._msufExternalController = self
     proxy:SetSize(1, 1)
@@ -456,7 +457,7 @@ function Controller:SyncSupplementalRegions(binding, mover)
     for i = 1, count do
         local region = regions[i]
         if not region then
-            region = _G.CreateFrame("Button", nil, self.spec.GetRoot() or _G.UIParent)
+            region = PixelLayoutRegion(_G.CreateFrame("Button", nil, self.spec.GetRoot() or _G.UIParent), true)
             region:RegisterForDrag("LeftButton")
             if region.RegisterForClicks then region:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
             region:EnableMouse(true)

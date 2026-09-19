@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Rounded surface renderer for MSUF-owned castbars and their previews.
 ---
 --- This module owns no events and no OnUpdate. The existing rounded-frame
@@ -44,6 +45,7 @@ local function SnapOff(region)
     if type(fn) == "function" then
         fn(region)
     elseif region and region.SetSnapToPixelGrid then
+        PixelLayoutRegion(region, true)
         region:SetSnapToPixelGrid(false)
         if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
     end
@@ -100,7 +102,7 @@ local function EnsureOutlineHost(frame)
     local host = frame._msufRoundedCastbarOutlineHost
     if not host then
         if not (CreateFrame and CanCreate(host)) then return nil end
-        host = CreateFrame("Frame", nil, frame)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
         host:EnableMouse(false)
         frame._msufRoundedCastbarOutlineHost = host
     end
@@ -147,7 +149,7 @@ local function RenderRoundedOutline(frame, _, thickness, red, green, blue, alpha
                 HideRoundedOutline(frame)
                 return false
             end
-            edge = host:CreateTexture(nil, "OVERLAY", nil, 6)
+            edge = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6), true)
             SnapOff(edge)
             stack[index] = edge
         end

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_CastbarStyle.lua
 --- Shared castbar outline, time text layout, boss text layout, and fill-direction
 --- helpers.
@@ -154,7 +155,7 @@ local function EnsureOutlineHost(frame)
         host = nil
     end
     if not host then
-        host = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, frame, "BackdropTemplate"))
         host:EnableMouse(false)
         frame._msufOutlineHost = host
     end
@@ -254,7 +255,7 @@ function Style:ApplyCastbarOutline(frame, force)
 
     local backdropChanged = force or frame._msufOutlineT ~= thickness or frame._msufOutlineEdge ~= edge
     if backdropChanged then
-        host:SetBackdrop(BackdropForEdge(edge))
+        PixelLayoutRegion(host, "SetBackdrop", BackdropForEdge(edge))
         host:SetBackdropColor(0, 0, 0, 0)
         frame._msufOutlineT = thickness
         frame._msufOutlineEdge = edge

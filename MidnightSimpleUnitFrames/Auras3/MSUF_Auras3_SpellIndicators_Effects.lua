@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/SpellIndicator_Effects: frame/icon effects, output gates and retirement of owned effect surfaces.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
@@ -49,7 +50,7 @@ local function EnsureEffectRoot(button, parentFrame)
         -- visibility is inherited. The AuraSlot itself sits at the universal
         -- base; this child's absolute level therefore remains independent from
         -- the separately levelled icon host. Menu previews use a neutral owner.
-        root = CreateFrame("Frame", nil, button)
+        root = PixelLayoutRegion(CreateFrame("Frame", nil, button))
         root:EnableMouse(false)
         root:SetAllPoints(target)
         button._msufA3SpellIndicatorEffectRoot = root
@@ -62,7 +63,7 @@ local function EnsureTint(button, parentFrame)
     if not root then return nil end
     local tint = button._msufA3SpellIndicatorHealthTint
     if not tint then
-        tint = root:CreateTexture(nil, "OVERLAY")
+        tint = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
         tint:SetTexture("Interface\\Buttons\\WHITE8X8")
         button._msufA3SpellIndicatorHealthTint = tint
     end
@@ -76,7 +77,7 @@ local function EnsureEdges(button, parentFrame)
     if not edges then
         edges = {}
         for i = 1, 4 do
-            local tex = root:CreateTexture(nil, "OVERLAY")
+            local tex = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
             tex:SetTexture("Interface\\Buttons\\WHITE8X8")
             edges[i] = tex
         end
@@ -96,12 +97,12 @@ local function EnsureAnimatedGlow(owner)
     local data = owner._msufA3AnimatedGlow
     if data then return data end
 
-    local halo = owner:CreateTexture(nil, "OVERLAY", nil, 6)
+    local halo = PixelLayoutRegion(owner:CreateTexture(nil, "OVERLAY", nil, 6))
     halo:SetTexture(ICON_ALERT_TEXTURE)
     halo:SetTexCoord(0.0078125, 0.5078125, 0.27734375, 0.52734375)
     halo:SetBlendMode("ADD")
 
-    local ants = owner:CreateTexture(nil, "OVERLAY", nil, 7)
+    local ants = PixelLayoutRegion(owner:CreateTexture(nil, "OVERLAY", nil, 7))
     ants:SetTexture(ICON_ALERT_ANTS_TEXTURE)
     ants:SetBlendMode("ADD")
     local animation = ants:CreateAnimationGroup()
@@ -177,7 +178,7 @@ local function EnsureFrameGlow(owner)
     if data then return data end
     local pieces = {}
     for i = 1, 8 do
-        local tex = owner:CreateTexture(nil, "OVERLAY", nil, 6)
+        local tex = PixelLayoutRegion(owner:CreateTexture(nil, "OVERLAY", nil, 6))
         tex:SetTexture(FRAME_GLOW_TEXTURE)
         pieces[i] = tex
     end
@@ -290,7 +291,7 @@ local function RegisterNameOverlay(button, parentFrame, root)
     if not (button and source and root) then return nil end
     local overlay = button._msufA3SpellIndicatorNameOverlay
     if not overlay then
-        overlay = root:CreateFontString(nil, "OVERLAY")
+        overlay = PixelLayoutRegion(root:CreateFontString(nil, "OVERLAY"))
         button._msufA3SpellIndicatorNameOverlay = overlay
     end
     if overlay._msufA3NameSource ~= source then
@@ -474,7 +475,7 @@ end
 local function EnsureReminderCastButton(store, parentFrame, slot)
     local button = store[slot.slotKey]
     if not button then
-        button = CreateFrame("Button", nil, parentFrame, "SecureActionButtonTemplate")
+        button = PixelLayoutRegion(CreateFrame("Button", nil, parentFrame, "SecureActionButtonTemplate"))
         -- Both edges, exactly like Blizzard's action buttons: the secure
         -- handler itself decides which one fires from ActionButtonUseKeyDown,
         -- so registering only one would drop the click for half the users.
@@ -862,7 +863,7 @@ local function ApplyButtonIconEffect(button, slot, parentFrame)
     local visualOwner = button._msufA3SpellIndicatorVisualHost or button
     local root = button._msufA3SpellIndicatorIconEffectRoot
     if not root then
-        root = CreateFrame("Frame", nil, visualOwner)
+        root = PixelLayoutRegion(CreateFrame("Frame", nil, visualOwner))
         root:EnableMouse(false)
         button._msufA3SpellIndicatorIconEffectRoot = root
     end

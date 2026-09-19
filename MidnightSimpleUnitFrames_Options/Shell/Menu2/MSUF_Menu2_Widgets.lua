@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_Widgets.lua
 --- Shared Menu2 widget factory.
 ---
@@ -54,14 +55,14 @@ local function CreateAccordionRoundedRegions(header, layer, subLevel)
         SetAlpha = AccordionRegionsSetAlpha,
         SetColorTexture = AccordionRegionsSetColorTexture,
     }
-    local middle = header:CreateTexture(nil, layer, nil, subLevel)
+    local middle = PixelLayoutRegion(header:CreateTexture(nil, layer, nil, subLevel))
     middle:SetTexture(WHITE8)
     middle:SetPoint("TOPLEFT", header, "TOPLEFT", radius, 0)
     middle:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -radius, 0)
     regions.middle = middle
     regions[#regions + 1] = middle
     local function Side(pointA, pointB, sideKey)
-        local tex = header:CreateTexture(nil, layer, nil, subLevel)
+        local tex = PixelLayoutRegion(header:CreateTexture(nil, layer, nil, subLevel))
         tex:SetTexture(WHITE8)
         tex:SetPoint(pointA, header, pointA, 0, pointA:find("^TOP") and -radius or radius)
         tex:SetPoint(pointB, header, pointB, 0, pointB:find("^TOP") and -radius or radius)
@@ -72,7 +73,7 @@ local function CreateAccordionRoundedRegions(header, layer, subLevel)
     Side("TOPLEFT", "BOTTOMLEFT", "left")
     Side("TOPRIGHT", "BOTTOMRIGHT", "right")
     local function Corner(point, u1, u2, v1, v2, sideKey)
-        local tex = header:CreateTexture(nil, layer, nil, subLevel)
+        local tex = PixelLayoutRegion(header:CreateTexture(nil, layer, nil, subLevel))
         tex:SetTexture(ACCORDION_OPEN_CORNER, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         tex:SetTexCoord(u1, u2, v1, v2)
         tex:SetSize(radius, radius)
@@ -125,7 +126,7 @@ W.CreateAccordionOpenHighlight = CreateAccordionOpenHighlight
 function W.CreateAccordionBorder(header)
     local edges = {}
     for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-        local edge = header:CreateTexture(nil, "BORDER")
+        local edge = PixelLayoutRegion(header:CreateTexture(nil, "BORDER"))
         if side == "TOP" or side == "BOTTOM" then
             edge:SetHeight(1)
             edge:SetPoint(side .. "LEFT", header, side .. "LEFT", 4, 0)
@@ -350,7 +351,7 @@ local function FlashCollapsibleHeader(entry)
     local header = entry and entry.header
     if not header then return end
     if not entry._msuf2FocusFlash then
-        local flash = CreateFrame("Frame", nil, header)
+        local flash = PixelLayoutRegion(CreateFrame("Frame", nil, header))
         flash:SetAllPoints(header)
         flash:EnableMouse(false)
         local c = T.colors.accent or ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 })
@@ -778,7 +779,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
         -- The wrapper must stay visually empty. A full card surface here sits
         -- underneath the header and fills its transparent rounded corners.
-        local outer = CreateFrame("Frame", nil, self.parent)
+        local outer = PixelLayoutRegion(CreateFrame("Frame", nil, self.parent))
         outer._msuf2NoPanelNeon = true
         SetSearchTitle(outer, title)
         RegisterSearchObject(outer, title, "section")
@@ -793,7 +794,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         bodySurface:SetPoint("BOTTOMRIGHT", outer, "BOTTOMRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
         bodySurface:SetShown(open)
         PlaceBackdropFrameBehindControls(bodySurface, outer)
-        local header = CreateFrame("Button", nil, outer)
+        local header = PixelLayoutRegion(CreateFrame("Button", nil, outer))
         SetSearchTitle(header, title)
         header:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, 0)
         header:SetPoint("TOPRIGHT", outer, "TOPRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
@@ -810,7 +811,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
             headerOpenHighlight = CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo)
         end
-        local arrow = header:CreateTexture(nil, "OVERLAY")
+        local arrow = PixelLayoutRegion(header:CreateTexture(nil, "OVERLAY"))
         arrow:SetSize(10, 10)
         arrow:SetPoint("LEFT", header, "LEFT", 12, 0)
         arrow:SetTexture(T.media.collapseArrow)
@@ -822,7 +823,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
         hint:SetJustifyH("RIGHT")
         local contentW = math.min(self.width, M.formContentMaxWidth or 980)
-        local body = CreateFrame("Frame", nil, outer)
+        local body = PixelLayoutRegion(CreateFrame("Frame", nil, outer))
         SetSearchTitle(body, title)
         body:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -headerH)
         body:SetSize(contentW, height or 120)
@@ -1285,7 +1286,7 @@ function W.SettingsRows(ctx, parent, spec)
             if row.id then controls[row.id] = widget end
             list[#list + 1] = widget
             if hasReset then
-                local resetBtn = CreateFrame("Button", nil, parent)
+                local resetBtn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
                 resetBtn:SetSize(18, 18)
                 resetBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + colW - 17, y - (kind == "slider" and 20 or 4))
                 local glyph = T.Font(resetBtn, "GameFontDisableSmall", "\226\134\186", T.colors.muted)
@@ -1378,7 +1379,7 @@ local function StyleTopButton(btn, style)
         if btn._msuf2Label.SetShadowOffset then btn._msuf2Label:SetShadowOffset(1, -1) end
     end
     if s.stripe == true and not btn._msuf2TopStripe then
-        local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
+        local stripe = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 6))
         local c = s.stripeColor or ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 })
         stripe:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
         stripe:SetWidth(s.stripeWidth or 3)
@@ -1501,7 +1502,7 @@ function W.SetCollapsibleBadges(section, specs)
         local spec = specs[i] or {}
         local badge = entry._msuf2Badges[i]
         if not badge then
-            badge = CreateFrame("Frame", nil, header)
+            badge = PixelLayoutRegion(CreateFrame("Frame", nil, header))
             badge:SetSize(54, 20)
             badge:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 2)
             local fill, edge = T.CreateSuperellipseLayers(badge, "_msuf2HeaderBadge", 1, "ARTWORK", "OVERLAY")
@@ -1588,7 +1589,7 @@ local function AddThreeDotShortcutTextures(shortcut, colors)
     local dots = {}
     for i = 1, 3 do
         local color = colors[i] or LAYER_SHORTCUT_DOTS[i]
-        local dot = shortcut:CreateTexture(nil, "ARTWORK", nil, 4)
+        local dot = PixelLayoutRegion(shortcut:CreateTexture(nil, "ARTWORK", nil, 4))
         dot:SetTexture(THREE_DOT_SHORTCUT_TEXTURE)
         dot:SetSize(5, 5)
         dot:SetPoint("CENTER", shortcut, "CENTER", (i - 2) * 7, 0)
@@ -1939,11 +1940,11 @@ function W.SetCollapsibleColorSwatches(ctx, section, specs)
         local control = spec.control or spec[1]
         local swatch = entry._msuf2ColorSwatches[i]
         if not swatch then
-            swatch = CreateFrame("Button", nil, header)
+            swatch = PixelLayoutRegion(CreateFrame("Button", nil, header))
             swatch:SetSize(32, 18)
             swatch:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 3)
             swatch._msuf2Fill, swatch._msuf2Edge = T.CreateSuperellipseLayers(swatch, "_msuf2HeaderColor", 1, "ARTWORK", "OVERLAY")
-            local hover = swatch:CreateTexture(nil, "HIGHLIGHT")
+            local hover = PixelLayoutRegion(swatch:CreateTexture(nil, "HIGHLIGHT"))
             hover:SetAllPoints()
             hover:SetColorTexture(1, 1, 1, 0.10)
             entry._msuf2ColorSwatches[i] = swatch
@@ -2144,12 +2145,13 @@ local function UseControlTexture(tex, texture)
     if not tex then return tex end
     tex:SetTexture(texture)
     tex:SetTexCoord(0, 1, 0, 1)
+    PixelLayoutRegion(tex, true)
     if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
     return tex
 end
 local function ControlTexture(parent, key, layer, subLevel, texture)
-    local tex = UseControlTexture(parent:CreateTexture(nil, layer, nil, subLevel), texture)
+    local tex = UseControlTexture(PixelLayoutRegion(parent:CreateTexture(nil, layer, nil, subLevel)), texture)
     if key then parent[key] = tex end
     return tex
 end
@@ -2168,14 +2170,14 @@ end
 local function ApplyControlCardChrome(card)
     if not (card and card.CreateTexture) or card._msuf2ControlCardChrome then return end
     card._msuf2ControlCardChrome = true
-    local top = card:CreateTexture(nil, "ARTWORK", nil, 4)
+    local top = PixelLayoutRegion(card:CreateTexture(nil, "ARTWORK", nil, 4))
     top:SetTexture("Interface\\Buttons\\WHITE8X8")
     top:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -2)
     top:SetPoint("TOPRIGHT", card, "TOPRIGHT", -8, -2)
     top:SetHeight(1)
     top:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.050)
     card._msuf2CardTopLine = top
-    local depth = card:CreateTexture(nil, "BORDER", nil, 4)
+    local depth = PixelLayoutRegion(card:CreateTexture(nil, "BORDER", nil, 4))
     depth:SetTexture("Interface\\Buttons\\WHITE8X8")
     depth:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 8, 2)
     depth:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -8, 2)
@@ -2372,7 +2374,7 @@ local SWITCH_LABEL_HOOKS = {
     end,
 }
 local function CreateToggle(section, label, x, y, labelWidth)
-    local btn = CreateFrame("CheckButton", nil, section, "UICheckButtonTemplate")
+    local btn = PixelLayoutRegion(CreateFrame("CheckButton", nil, section, "UICheckButtonTemplate"))
     btn._msuf2ControlKind = "toggle"
     btn._msuf2QuietCheckBox = true
     btn:SetPoint("TOPLEFT", x, y)
@@ -2400,7 +2402,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
     hoverFill:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
     hoverFill:SetAlpha(0)
     hoverFill:Show()
-    local rowHover = section:CreateTexture(nil, "BORDER", nil, 1)
+    local rowHover = PixelLayoutRegion(section:CreateTexture(nil, "BORDER", nil, 1))
     rowHover:SetTexture((T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
     if rowHover.SetTexCoord then rowHover:SetTexCoord(0, 1, 0, 1) end
     rowHover:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
@@ -2479,7 +2481,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
         RefreshToggleFeedback(self, self._msuf2ToggleHovered, self._msuf2TogglePressed)
     end
     for script, handler in pairs(TOGGLE_CONTROL_HOOKS) do btn:HookScript(script, handler) end
-    local labelHit = CreateFrame("Button", nil, section)
+    local labelHit = PixelLayoutRegion(CreateFrame("Button", nil, section))
     labelHit:EnableMouse(true)
     if labelHit.RegisterForClicks then labelHit:RegisterForClicks("LeftButtonUp") end
     labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
@@ -2587,7 +2589,7 @@ function W.PreviewImage(parent, spec, x, y, width)
     well:SetSize(frameWidth, frameHeight)
     if type(T.ApplySurface) == "function" then T.ApplySurface(well, "card") end
     if well.EnableMouse then well:EnableMouse(false) end
-    local image = well:CreateTexture(nil, "ARTWORK", nil, 2)
+    local image = PixelLayoutRegion(well:CreateTexture(nil, "ARTWORK", nil, 2))
     image:SetPoint("TOPLEFT", well, "TOPLEFT", 3, -3)
     image:SetPoint("BOTTOMRIGHT", well, "BOTTOMRIGHT", -3, 3)
     image:SetTexture(spec.texture)
@@ -2611,7 +2613,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     local knobPad = 2
     local switchTrackTexture = (T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
     local switchKnobTexture = (T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
-    local btn = CreateFrame("CheckButton", nil, section)
+    local btn = PixelLayoutRegion(CreateFrame("CheckButton", nil, section))
     btn._msuf2ControlKind = "toggle"
     btn:SetPoint("TOPLEFT", x or 16, y or -40)
     btn:SetSize(switchW, switchH)
@@ -2654,7 +2656,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn.SetChecked = SetSwitchChecked
     for script, handler in pairs(SWITCH_CONTROL_HOOKS) do btn:HookScript(script, handler) end
     if side ~= "HIDDEN" then
-        local labelHit = CreateFrame("Button", nil, section)
+        local labelHit = PixelLayoutRegion(CreateFrame("Button", nil, section))
         labelHit:EnableMouse(true)
         if labelHit.RegisterForClicks then labelHit:RegisterForClicks("LeftButtonUp") end
         labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
@@ -2776,7 +2778,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
     label:SetPoint("LEFT", section, "TOPLEFT", labelX, centerY)
     label:SetWidth(labelW)
     label:SetJustifyH("LEFT")
-    local bar = CreateFrame("Frame", nil, section)
+    local bar = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     SetSearchTitle(bar, opts.label or "Editing:")
     RegisterSearchObject(bar, opts.label or "Editing:", "segment", { values = values })
     bar:SetPoint("TOPLEFT", section, "TOPLEFT", 0, 0)
@@ -3087,7 +3089,7 @@ function W.LabelAt(parent, text, x, y, width, template, color)
     return fs
 end
 function W.DividerAt(parent, y, leftPad, rightPad)
-    local line = parent:CreateTexture(nil, "ARTWORK")
+    local line = PixelLayoutRegion(parent:CreateTexture(nil, "ARTWORK"))
     line:SetPoint("TOPLEFT", parent, "TOPLEFT", leftPad or 12, y or 0)
     line:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -(rightPad or 12), y or 0)
     line:SetHeight(1)
@@ -3336,7 +3338,7 @@ function W.FixedPreviewSection(ctx, builder, spec)
     section._msuf2FixedPreviewHeight = fixedHeight
     section._msuf2FixedPreviewCompactHeight = fixedHeight
 
-    local toolbar = CreateFrame("Frame", nil, section)
+    local toolbar = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     toolbar:SetPoint("TOPLEFT", section, "TOPLEFT", 0, 0)
     toolbar:SetPoint("TOPRIGHT", section, "TOPRIGHT", 0, 0)
     toolbar:SetHeight(32)
@@ -3346,7 +3348,7 @@ function W.FixedPreviewSection(ctx, builder, spec)
         section.title:ClearAllPoints()
         section.title:SetPoint("LEFT", toolbar, "LEFT", 16, 0)
     end
-    local divider = toolbar:CreateTexture(nil, "ARTWORK")
+    local divider = PixelLayoutRegion(toolbar:CreateTexture(nil, "ARTWORK"))
     divider:SetPoint("BOTTOMLEFT", toolbar, "BOTTOMLEFT", 12, 0)
     divider:SetPoint("BOTTOMRIGHT", toolbar, "BOTTOMRIGHT", -12, 0)
     divider:SetHeight(1)
@@ -3995,7 +3997,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     title:SetWidth(width)
     title:SetJustifyH("LEFT")
     sliderSerial = sliderSerial + 1
-    local slider = CreateFrame("Slider", "MSUF2NativeSlider" .. sliderSerial, section)
+    local slider = PixelLayoutRegion(CreateFrame("Slider", "MSUF2NativeSlider" .. sliderSerial, section))
     slider._msuf2Title = title
     slider._msuf2ControlKind = "slider"
     RegisterSearchObject(slider, label, "slider", { anchor = title })
@@ -4022,7 +4024,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         return T.CenterButtonLabel(btn)
     end
     local minus = StepButton("-")
-    local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
+    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, section, "InputBoxTemplate"))
     edit:SetSize(editW, 24)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("CENTER")
@@ -4251,7 +4253,7 @@ function W.Segment(section, label, values, width)
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
-    local holder = CreateFrame("Frame", nil, section)
+    local holder = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     RegisterSearchObject(holder, label, "segment", { anchor = title, values = values })
     holder:SetPoint("TOPLEFT", x, y - 24)
     holder:SetSize(width or 360, 24)
@@ -4339,7 +4341,7 @@ function W.TextInput(section, label, width)
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
-    local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
+    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, section, "InputBoxTemplate"))
     edit._msuf2Title = title
     edit._msuf2ControlKind = "textinput"
     RegisterSearchObject(edit, label, "textinput", { anchor = title })

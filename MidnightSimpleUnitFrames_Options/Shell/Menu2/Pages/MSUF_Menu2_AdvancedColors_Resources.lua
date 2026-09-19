@@ -41,6 +41,13 @@ end
 local COLOR_CP_SLOT_MODES = ValueTextPairs "default=Resource color|ramp=Color ramp|custom=Custom slots"
 local COLOR_CP_SLOT_COUNTS = KeyLabelMap [[COMBO_POINTS=7|HOLY_POWER=5|SOUL_SHARDS=5|CHI=6|ARCANE_CHARGES=4|RUNES=6|ESSENCE=6|SOUL_FRAGMENTS_VENG=6|MAELSTROM=10|WHIRLWIND=4|TIP_OF_THE_SPEAR=3|ICICLES=5]]
 for token, count in pairs(COLOR_CP_SLOT_COUNTS) do COLOR_CP_SLOT_COUNTS[token] = tonumber(count) or 1 end
+if MSUF.Client and (MSUF.Client.IsClassic or MSUF.Client.IsForever) then
+    COLOR_CP_SLOT_COUNTS.COMBO_POINTS = 5
+    if MSUF.Client.IsMists then
+        COLOR_CP_SLOT_COUNTS.CHI, COLOR_CP_SLOT_COUNTS.SOUL_SHARDS = 5, 4
+        COLOR_CP_SLOT_COUNTS.SHADOW_ORBS, COLOR_CP_SLOT_COUNTS.BURNING_EMBERS = 3, 4
+    end
+end
 COLOR_DATA.CP_SLOT_TOKENS = COLOR_CP_SLOT_TOKENS
 COLOR_DATA.CP_SLOT_MODES = COLOR_CP_SLOT_MODES
 local function PowerDefaultRGB(token)
@@ -202,6 +209,9 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
     end, "power.editor.reset")
     local classPower = b:CollapsibleSection("colors_class_power", "Class Power Colors", 430, false)
     M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
+    if MSUF.Client and MSUF.Client.SupportsClassResource and not MSUF.Client.SupportsClassResource(M.colorsCPToken) then
+        M.colorsCPToken = "COMBO_POINTS"
+    end
     local cpColor, cpBg, slotMode, slotReset, fullToggle, fullColor, fullReset
     local slotControls = {}
     local visibleSlotCount, slotControlsAvailable

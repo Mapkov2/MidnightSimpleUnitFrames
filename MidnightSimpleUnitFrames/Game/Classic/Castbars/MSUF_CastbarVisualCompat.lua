@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Classic-only castbar geometry compatibility.
 ---
 --- Keep the canonical Castbars/ files byte-identical with Retail. Classic uses
@@ -59,7 +60,7 @@ end
 local function EnsureClassicSpark(frame, statusBar)
     local spark = frame.spark
     if not spark and statusBar and type(statusBar.CreateTexture) == "function" then
-        spark = statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+        spark = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY", nil, 6))
         frame.spark = spark
     end
     if not spark then return nil end

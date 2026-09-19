@@ -863,6 +863,58 @@ local function RegisterPVPContextEvent(frame, event)
   frame:RegisterEvent(event)
 end
 
+--- Classic flavors (Vanilla, TBC, Mists) compile through this file too. Their few
+--- differences are gated on this fact, read once at load; Mainline never enters them.
+local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+
+--- Classic clients have no War Mode: the context follows the player's own PvP flag
+--- (UnitIsPVP, free-for-all, the flag timer), which also flips mid-combat, so the
+--- Classic driver recompiles in combat too. Claiming the driver slot here skips the
+--- Mainline driver below.
+if IS_CLASSIC_FAMILY then
+  local UnitIsPVP, UnitIsPVPFreeForAll, IsPVPTimerRunning = _G.UnitIsPVP, _G.UnitIsPVPFreeForAll, _G.IsPVPTimerRunning
+  ComputePVPIndicatorContextActive = function()
+    local instanceType = CurrentInstanceType()
+    if instanceType == "pvp" or instanceType == "arena" then
+      return true
+    elseif instanceType == "party" or instanceType == "raid" then
+      return false
+    end
+    local cpvp = _G.C_PvP
+    if cpvp and (APIBool(cpvp.IsWarModeActive) or APIBool(cpvp.IsWarModeDesired)) then
+      return true
+    end
+    return APIBool(UnitIsPVPFreeForAll, "player")
+      or APIBool(UnitIsPVP, "player")
+      or APIBool(IsPVPTimerRunning)
+  end
+  if not UF.pvpIndicatorContextDriver then
+    local pvpDriver = CreateFrame("Frame")
+    pvpDriver:SetScript("OnEvent", function(_, event, unit)
+      if unit and unit ~= "player" then
+        return
+      end
+      UF.RefreshPVPIndicatorContext("MSUF_PVP_CONTEXT_" .. tostring(event), event == "PLAYER_ENTERING_WORLD")
+    end)
+    local supportsEvent = MSUF.Client.SupportsEvent
+    local function RegisterClassicPVPContextEvent(event, unit)
+      if type(supportsEvent) == "function" and not supportsEvent(event) then return end
+      if unit then
+        pvpDriver:RegisterUnitEvent(event, unit)
+      else
+        pvpDriver:RegisterEvent(event)
+      end
+    end
+    RegisterClassicPVPContextEvent("PLAYER_ENTERING_WORLD")
+    RegisterClassicPVPContextEvent("ZONE_CHANGED_NEW_AREA")
+    RegisterClassicPVPContextEvent("PVP_TIMER_UPDATE")
+    RegisterClassicPVPContextEvent("PLAYER_FLAGS_CHANGED")
+    RegisterClassicPVPContextEvent("WAR_MODE_STATUS_UPDATE")
+    RegisterClassicPVPContextEvent("UNIT_FACTION", "player")
+    UF.pvpIndicatorContextDriver = pvpDriver
+  end
+end
+
 if not UF.pvpIndicatorContextDriver then
   local pvpDriver = CreateFrame("Frame")
   pvpDriver:SetScript("OnEvent", function(_, event, arg1)
@@ -1011,15 +1063,15 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
   PrefixedStatusDef("stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", 0, -2, 7),
 }
--- Hunter pet happiness exists on WoW Forever only on this build. Midnight gets no
--- entry at all, so its unit specs compile exactly as before.
+-- Hunter pet happiness exists on WoW Forever, Classic Era and TBC, which all
+-- compile here. Midnight and Mists get no entry at all.
 if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
   UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
     PrefixedStatusDef("petHappiness", "showPetHappinessIndicator", true, "petHappinessIndicator", 24, "RIGHT", -7, -4, 7)
 end
--- The threat percentage text exists on WoW Forever only on this build (see
+-- The threat percentage text exists on WoW Forever, Classic Era and TBC (see
 -- Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua). Default on, in the bottom-left
--- corner that no other status element uses; Midnight gets no entry.
+-- corner that no other status element uses; Midnight and Mists get no entry.
 if MSUF.Client and MSUF.Client.SupportsThreatText == true then
   UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
     PrefixedStatusDef("threat", "showThreatIndicator", true, "threatIndicator", 11, "BOTTOMLEFT", 6, 2, 7)
@@ -1203,7 +1255,8 @@ local function ClassPowerFallbackWidth(out, bars)
       return custom
     end
   end
-  return max(1, Number(out and out.width, 275) - 4)
+  local inset = widthMode == "player" and 0 or 4
+  return max(1, Number(out and out.width, 275) - inset)
 end
 
 local function CooldownWidthFrameName(mode)
@@ -1627,6 +1680,11 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   out.unit = unit
   out.key = key
   out.enabled = conf.enabled ~= false
+  -- Classic: units the running client cannot produce (Era focus/boss/arena, TBC
+  -- boss) compile disabled so no frame, castbar or preview is ever built for them.
+  if IS_CLASSIC_FAMILY and out.enabled and not MSUF.Client.SupportsUnit(key) then
+    out.enabled = false
+  end
   out.width = Number(conf.width or conf.frameWidth, def.width)
   out.height = Number(conf.height or conf.frameHeight, def.height)
   local cooldownViewerAnchor

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/MSUF_Auras3_SpellIndicators.lua
 --- Group-frame spell indicators on WoW 12.1 CustomAuraContainer aura slots.
 local addonName, MSUF = ...
@@ -83,7 +84,7 @@ local function ApplyVisual(button, slot)
     -- Display-as-Bar has no icon surface. Avoid allocating one after the native
     -- duration StatusBar has already been installed in initializeFrame.
     if not icon and slot.visual ~= "bar" then
-        icon = button:CreateTexture(nil, "ARTWORK")
+        icon = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK"))
         button.Icon = icon
     end
     if slot.hiddenVisual == true then
@@ -113,7 +114,7 @@ local function ApplyVisual(button, slot)
         icon:SetAlpha(0)
         local swatch = button._msufA3SpellIndicatorSwatch
         if not swatch then
-            swatch = visualOwner:CreateTexture(nil, "OVERLAY")
+            swatch = PixelLayoutRegion(visualOwner:CreateTexture(nil, "OVERLAY"))
             button._msufA3SpellIndicatorSwatch = swatch
         end
         swatch:SetTexture("Interface\\Buttons\\WHITE8X8")

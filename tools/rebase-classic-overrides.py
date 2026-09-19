@@ -36,7 +36,7 @@ Exit code: 0 nothing is left to do by hand, 2 conflicts or generated files
 remain, 1 usage, manifest or git error. Shadow results count only with
 --write-shadows. The last output line is the commit trailer to use.
 
-Self-test: python tools/tests/rebase_classic_overrides_selftest.py
+Self-test: python tools/tests/rebase_classic_overrides_smoke.py (the Classic gate runs it)
 """
 from __future__ import annotations
 

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -571,7 +572,7 @@ local function BuildTextureLayer(ctx, builder, unit)
         W.StyleTopActionButton(highlightPreset)
         W.StyleTopActionButton(texturePackPreset)
     end
-    local packChevron = texturePackPreset:CreateTexture(nil, "OVERLAY")
+    local packChevron = PixelLayoutRegion(texturePackPreset:CreateTexture(nil, "OVERLAY"))
     packChevron:SetTexture(T.media and T.media.dropdownChevron)
     packChevron:SetSize(12, 12)
     packChevron:SetPoint("RIGHT", texturePackPreset, "RIGHT", -8, 0)
@@ -667,7 +668,7 @@ local function BuildTextureLayer(ctx, builder, unit)
     pad = T.Panel(advancedCard, nil, (T.colors and T.colors.panel2) or { 0.014, 0.038, 0.072, 0.55 }, T.colors and T.colors.borderSoft)
     pad:SetPoint("TOPLEFT", advancedCard, "TOPLEFT", colX, -110)
     pad:SetSize(padW, padH)
-    local padCenter = pad:CreateTexture(nil, "ARTWORK")
+    local padCenter = PixelLayoutRegion(pad:CreateTexture(nil, "ARTWORK"))
     padCenter:SetPoint("CENTER", pad, "CENTER", 0, 0)
     padCenter:SetSize(10, 10)
     local padCenterColor = (T.colors and T.colors.coreRim) or { 0.043, 0.096, 0.150 }

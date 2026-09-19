@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_FocusKickIcon.lua
 ---
 --- Visual widget for the focus-kick replacement cast display. The StateDriver
@@ -293,29 +294,29 @@ end
 local function EnsureIconFrame()
     if iconFrame then return iconFrame end
 
-    iconFrame = CreateFrame("Frame", "MSUF_FocusKickIcon", ParentFrame, "BackdropTemplate")
+    iconFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_FocusKickIcon", ParentFrame, "BackdropTemplate"))
     iconFrame:SetFrameStrata("HIGH")
     iconFrame:SetFrameLevel(50)
     iconFrame:Hide()
     iconFrame:HookScript("OnHide", DetachTimeDriver)
 
-    iconFrame.bg = iconFrame:CreateTexture(nil, "BACKGROUND")
+    iconFrame.bg = PixelLayoutRegion(iconFrame:CreateTexture(nil, "BACKGROUND"))
     iconFrame.bg:SetAllPoints()
     iconFrame.bg:SetColorTexture(0, 0, 0, 0.9)
 
-    iconFrame.icon = iconFrame:CreateTexture(nil, "ARTWORK")
+    iconFrame.icon = PixelLayoutRegion(iconFrame:CreateTexture(nil, "ARTWORK"))
     iconFrame.icon:SetPoint("TOPLEFT", 1, -1)
     iconFrame.icon:SetPoint("BOTTOMRIGHT", -1, 1)
     iconFrame.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
     iconFrame.edges = {}
     for index = 1, 4 do
-        local edge = iconFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+        local edge = PixelLayoutRegion(iconFrame:CreateTexture(nil, "OVERLAY", nil, 7))
         edge:SetTexture("Interface\\Buttons\\WHITE8x8")
         iconFrame.edges[index] = edge
     end
 
-    iconFrame.timeText = iconFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    iconFrame.timeText = PixelLayoutRegion(iconFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
     iconFrame.timeText:SetPoint("BOTTOM", iconFrame, "BOTTOM", 0, 2)
     iconFrame.timeText:SetJustifyH("CENTER")
     iconFrame.timeText:SetText("")
@@ -429,7 +430,7 @@ end
 local function EnsurePreviewFrame()
     if previewFrame then return previewFrame end
 
-    previewFrame = CreateFrame("Frame", "MSUF_FocusKickPreviewFrame", ParentFrame, "BackdropTemplate")
+    previewFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_FocusKickPreviewFrame", ParentFrame, "BackdropTemplate"))
     previewFrame:SetFrameStrata("HIGH")
     previewFrame:SetFrameLevel(70)
     previewFrame:SetMovable(true)
@@ -438,16 +439,16 @@ local function EnsurePreviewFrame()
     if previewFrame.SetPropagateKeyboardInput then previewFrame:SetPropagateKeyboardInput(true) end
 
     previewFrame:RegisterForDrag("LeftButton")
-    previewFrame.icon = previewFrame:CreateTexture(nil, "ARTWORK")
+    previewFrame.icon = PixelLayoutRegion(previewFrame:CreateTexture(nil, "ARTWORK"))
     previewFrame.icon:SetAllPoints()
 
-    previewFrame._selBorder = previewFrame:CreateTexture(nil, "OVERLAY")
+    previewFrame._selBorder = PixelLayoutRegion(previewFrame:CreateTexture(nil, "OVERLAY"))
     previewFrame._selBorder:SetPoint("TOPLEFT", previewFrame, "TOPLEFT", -3, 3)
     previewFrame._selBorder:SetPoint("BOTTOMRIGHT", previewFrame, "BOTTOMRIGHT", 3, -3)
     previewFrame._selBorder:SetColorTexture(0.27, 0.53, 0.80, 0.45)
     previewFrame._selBorder:Hide()
 
-    previewFrame.timeText = previewFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    previewFrame.timeText = PixelLayoutRegion(previewFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
     previewFrame.timeText:SetPoint("BOTTOM", previewFrame, "BOTTOM", 0, 2)
     previewFrame.timeText:SetJustifyH("CENTER")
     previewFrame.timeText:SetText("5.0")

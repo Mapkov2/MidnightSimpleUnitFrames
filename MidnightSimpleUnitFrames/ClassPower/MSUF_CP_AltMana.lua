@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MSUF_CP_AltMana.lua
 --- Alt Mana class-power builder. Loaded before the controller so the controller
 --- can bind the builder without carrying AltMana implementation details inline.
@@ -74,7 +75,7 @@ builders.ALT_MANA = function(E)
     local function AM_Create(playerFrame)
         if AM.container then return end
 
-        local c = CreateFrame("Frame", "MSUF_AltManaContainer", playerFrame._msufHealthVisualRoot or playerFrame)
+        local c = PixelLayoutRegion(CreateFrame("Frame", "MSUF_AltManaContainer", playerFrame._msufHealthVisualRoot or playerFrame))
         local layers = MSUF.UF and MSUF.UF.Layers
         local layer = _cpDB.bars and _cpDB.bars.classPowerFrameLevelOffset
         c:SetFrameLevel(layers and layers.ElementLevel and layers.ElementLevel(layer, 5, 0)
@@ -82,22 +83,22 @@ builders.ALT_MANA = function(E)
         c:Hide()
         AM.container = c
 
-        local bg = c:CreateTexture(nil, "BACKGROUND")
+        local bg = PixelLayoutRegion(c:CreateTexture(nil, "BACKGROUND"))
         bg:SetTexture("Interface\\Buttons\\WHITE8x8")
         bg:SetAllPoints(c)
         bg:SetVertexColor(0, 0, 0, 0.4)
         AM.bgTex = bg
 
-        local border = CreateFrame("Frame", nil, c, "BackdropTemplate")
+        local border = PixelLayoutRegion(CreateFrame("Frame", nil, c, "BackdropTemplate"))
         border:SetPoint("TOPLEFT", c, "TOPLEFT", -1, 1)
         border:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 1, -1)
-        border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        PixelLayoutRegion(border, "SetBackdrop", { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
         border:SetBackdropColor(0, 0, 0, 0)
         border:SetBackdropBorderColor(0, 0, 0, 1)
         border:SetFrameLevel(c:GetFrameLevel() + 1)
         AM._border = border
 
-        local bar = CreateFrame("StatusBar", nil, c)
+        local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, c))
         bar:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
         bar:SetPoint("BOTTOMRIGHT", c, "BOTTOMRIGHT", 0, 0)
         bar:SetStatusBarTexture(GetBarTexture and GetBarTexture() or "Interface\\Buttons\\WHITE8x8")

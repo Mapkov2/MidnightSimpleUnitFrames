@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Group preview render/composition.
 ---
 --- Native creates the preview host and interaction handles; this module owns
@@ -139,7 +140,7 @@ local function SetRoundedSpellPreview(root, target, shown, thickness, r, g, b, a
         return false
     end
     if not host then
-        host = CreateFrame("Frame", nil, root)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, root))
         host:EnableMouse(false)
         root._msufSpellRoundedHost = host
     end
@@ -202,7 +203,7 @@ local function PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
         local key = GROUP_BLOCK_BORDER_EDGES[i]
         local edge = edges[key]
         if not edge then
-            edge = mock:CreateTexture(nil, "OVERLAY")
+            edge = PixelLayoutRegion(mock:CreateTexture(nil, "OVERLAY"))
             edges[key] = edge
         end
         edge:SetColorTexture(r, g, b, a)
@@ -285,7 +286,7 @@ local function EnsureGroupPreviewPortrait(mock, handle)
         return holder
     end
     if not mock then return nil end
-    holder = holder or handle or CreateFrame("Frame", nil, mock)
+    holder = holder or handle or PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     if holder ~= handle then
         DisableGroupPreviewPortraitMouse(holder)
     else
@@ -295,10 +296,10 @@ local function EnsureGroupPreviewPortrait(mock, handle)
         if holder.SetMouseClickEnabled then holder:SetMouseClickEnabled(true) end
         if holder.SetMouseMotionEnabled then holder:SetMouseMotionEnabled(true) end
     end
-    holder.bg = holder:CreateTexture(nil, "BACKGROUND", nil, -1)
+    holder.bg = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND", nil, -1))
     holder.bg:SetAllPoints(holder)
     holder.bg:SetTexture("Interface\\Buttons\\WHITE8x8")
-    holder.tex = holder:CreateTexture(nil, "ARTWORK")
+    holder.tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
     holder.tex:SetAllPoints(holder)
     if holder.CreateMaskTexture and holder.tex.AddMaskTexture then
         holder.mask = holder:CreateMaskTexture()
@@ -306,12 +307,12 @@ local function EnsureGroupPreviewPortrait(mock, handle)
         holder.tex:AddMaskTexture(holder.mask)
         holder.bg:AddMaskTexture(holder.mask)
     end
-    holder.border = CreateFrame("Frame", nil, holder)
+    holder.border = PixelLayoutRegion(CreateFrame("Frame", nil, holder))
     DisableGroupPreviewPortraitMouse(holder.border)
     holder.border:SetAllPoints(holder)
     holder.edges = {}
     for i = 1, 4 do
-        local edge = holder.border:CreateTexture(nil, "OVERLAY")
+        local edge = PixelLayoutRegion(holder.border:CreateTexture(nil, "OVERLAY"))
         edge:SetTexture("Interface\\Buttons\\WHITE8x8")
         edge:Hide()
         holder.edges[i] = edge
@@ -350,7 +351,7 @@ local function LayoutGroupPreviewPortraitBorder(holder, portrait, previewScale, 
     if cfg.art == "RELIEF" then
         local art = holder.artBorder
         if not art then
-            art = holder.border:CreateTexture(nil, "OVERLAY", nil, 2)
+            art = PixelLayoutRegion(holder.border:CreateTexture(nil, "OVERLAY", nil, 2))
             holder.artBorder = art
         end
         local width = tonumber(holder._msufPreviewWidth) or tonumber(holder:GetWidth()) or 36
@@ -380,7 +381,7 @@ local function LayoutGroupPreviewPortraitBorder(holder, portrait, previewScale, 
     if GROUP_PORTRAIT_SHAPED[shape] then
         local ring = holder.ring
         if not ring then
-            ring = holder:CreateTexture(nil, "BACKGROUND", nil, -2)
+            ring = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND", nil, -2))
             ring:SetTexture("Interface\\Buttons\\WHITE8x8")
             if holder.CreateMaskTexture and ring.AddMaskTexture then
                 holder.ringMask = holder:CreateMaskTexture()
@@ -485,9 +486,9 @@ local function PaintGroupPreviewDispelOverlay(scene)
         return
     end
     if not host then
-        host = CreateFrame("Frame", nil, mock)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
         host:EnableMouse(false)
-        host.Region = host:CreateTexture(nil, "OVERLAY")
+        host.Region = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"))
         host.Region:SetTexture("Interface\\Buttons\\WHITE8X8")
         mock._msufGFPreviewDispelOverlayHost = host
         mock._msufGFPreviewDispelOverlayRegion = host.Region
@@ -1789,7 +1790,7 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
                     handle._auraStyleOwners = handle._auraStyleOwners or {}
                     styleOwner = handle._auraStyleOwners[i]
                     if not styleOwner then
-                        styleOwner = CreateFrame("Frame", nil, handle)
+                        styleOwner = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
                         styleOwner:EnableMouse(false)
                         if styleOwner.SetMouseMotionEnabled then styleOwner:SetMouseMotionEnabled(false) end
                         handle._auraStyleOwners[i] = styleOwner
@@ -1942,7 +1943,7 @@ function Render.Install(box, ctx, deps)
     local spellHandle = deps.spellHandle
     local selectedSpellEffectOwner = box._msufGFSelectedSpellEffectOwner
     if not selectedSpellEffectOwner then
-        selectedSpellEffectOwner = CreateFrame("Frame", nil, mock)
+        selectedSpellEffectOwner = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
         selectedSpellEffectOwner:EnableMouse(false)
         selectedSpellEffectOwner:SetAllPoints(mock)
         box._msufGFSelectedSpellEffectOwner = selectedSpellEffectOwner
@@ -2232,11 +2233,11 @@ function Stage.BindSpellPreviewGlow(st, env)
             local glow = root and root._msufSpellPreviewGlow
             if glow then return glow end
             glow = {}
-            glow.halo = root:CreateTexture(nil, "OVERLAY", nil, 6)
+            glow.halo = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY", nil, 6))
             glow.halo:SetTexture([[Interface\SpellActivationOverlay\IconAlert]])
             glow.halo:SetTexCoord(0.0078125, 0.5078125, 0.27734375, 0.52734375)
             glow.halo:SetBlendMode("ADD")
-            glow.ants = root:CreateTexture(nil, "OVERLAY", nil, 7)
+            glow.ants = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY", nil, 7))
             glow.ants:SetTexture([[Interface\SpellActivationOverlay\IconAlertAnts]])
             glow.ants:SetBlendMode("ADD")
             glow.animation = glow.ants:CreateAnimationGroup()
@@ -2280,7 +2281,7 @@ function Stage.BindSpellPreviewGlow(st, env)
         local function EnsureSpellEffectPreview(handle)
             local root = handle and handle._msufSpellPreviewEffectRoot
             if root then return root end
-            root = CreateFrame("Frame", nil, handle)
+            root = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
             root:EnableMouse(false)
             root:SetAllPoints(SpellPreviewHealthBar())
             handle._msufSpellPreviewEffectRoot = root
@@ -2290,7 +2291,7 @@ function Stage.BindSpellPreviewGlow(st, env)
             if not handle then return nil end
             local owner = handle._msufSpellPreviewRuntimeOwner
             if not owner then
-                owner = CreateFrame("Frame", nil, mock)
+                owner = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
                 owner:EnableMouse(false)
                 handle._msufSpellPreviewRuntimeOwner = owner
             elseif owner.GetParent and owner:GetParent() ~= mock and owner.SetParent then
@@ -2318,7 +2319,7 @@ function Stage.BindSpellPreviewGlow(st, env)
             if root._msufSpellPreviewEdges then return root._msufSpellPreviewEdges end
             local edges = {}
             for i = 1, 4 do
-                edges[i] = root:CreateTexture(nil, "OVERLAY")
+                edges[i] = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
                 edges[i]:SetTexture(WHITE8X8)
                 edges[i]:Hide()
             end
@@ -2339,7 +2340,7 @@ function Stage.BindSpellPreviewGlow(st, env)
             if not source then return end
             local overlay = root._msufSpellPreviewName
             if not overlay then
-                overlay = root:CreateFontString(nil, "OVERLAY")
+                overlay = PixelLayoutRegion(root:CreateFontString(nil, "OVERLAY"))
                 root._msufSpellPreviewName = overlay
             end
             local path, size, flags = source:GetFont()
@@ -2468,7 +2469,7 @@ function Stage.BindSpellEffectPreview(st, env)
             if kind == "healthtint" then
                 local tint = root._msufSpellPreviewTint
                 if not tint then
-                    tint = root:CreateTexture(nil, "OVERLAY")
+                    tint = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
                     tint:SetTexture(WHITE8X8)
                     root._msufSpellPreviewTint = tint
                 end
@@ -2577,7 +2578,7 @@ function Stage.LayoutMockFrame(st, env)
         mock:ClearAllPoints()
         mock:SetPoint("TOPLEFT", self._stage, "TOPLEFT", startX + (tonumber(self._zoomPanX) or 0), startY + (tonumber(self._zoomPanY) or 0))
         mock:SetSize(mockW, mockH)
-        mock:SetBackdrop({ bgFile = WHITE8X8 })
+        PixelLayoutRegion(mock, "SetBackdrop", { bgFile = WHITE8X8 })
         local bgAlpha = conf.hpBgAlpha or 0.85
         if runtimeSpec and runtimeSpec.backgroundAlpha ~= nil then bgAlpha = runtimeSpec.backgroundAlpha end
         mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09,
@@ -3346,7 +3347,7 @@ function Stage.BindSpellHandleHelpers(st, env)
             end
             local root = handle._msufSpellPreviewIconEffectRoot
             if not root then
-                root = CreateFrame("Frame", nil, handle)
+                root = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
                 root:EnableMouse(false)
                 handle._msufSpellPreviewIconEffectRoot = root
             end

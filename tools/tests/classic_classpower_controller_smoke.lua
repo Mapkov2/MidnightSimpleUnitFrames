@@ -168,8 +168,10 @@ local function Start(spec)
     t.module = module
     t.FullRefresh = Upvalue(module.Enable, "FullRefresh")
     t.CP = Upvalue(t.FullRefresh, "CP")
-    t.AM = Upvalue(Upvalue(t.FullRefresh, "Refresh").ApplyAltMana, "AM")
-    t.eventFrame = Upvalue(Upvalue(t.FullRefresh, "CP_RefreshEventBindings"), "eventFrame")
+    -- The texture-hook wrapper replaces FullRefresh; the stages live on the original.
+    local refresh = t.CP._origFullRefresh or t.FullRefresh
+    t.AM = Upvalue(Upvalue(refresh, "Refresh").ApplyAltMana, "AM")
+    t.eventFrame = Upvalue(Upvalue(refresh, "CP_RefreshEventBindings"), "eventFrame")
     t.onEvent = assert(t.eventFrame.scripts.OnEvent, "controller OnEvent script missing")
     assert(_G[MANA_FLAG] == nil, "the flag must start unpublished, or the case below proves nothing")
     if module.IsEnabled() then module.Enable() end

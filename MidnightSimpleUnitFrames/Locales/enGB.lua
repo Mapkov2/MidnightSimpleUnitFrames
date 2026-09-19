@@ -4103,6 +4103,16 @@ L["High threat"] = "High threat"
 L["Shared %s Preview"] = "Shared %s Preview"
 L["Shared Player Defensives Preview"] = "Shared Player Defensives Preview"
 L["Shared Dots on Target Preview"] = "Shared Dots on Target Preview"
+-- Client-specific class resource labels.
+L["Druid - Eclipse"] = "Druid - Eclipse"
+L["Monk - Chi"] = "Monk - Chi"
+L["Priest - Shadow Orbs"] = "Priest - Shadow Orbs"
+L["Warlock - Burning Embers"] = "Warlock - Burning Embers"
+L["Warlock - Demonic Fury"] = "Warlock - Demonic Fury"
+L["Shadow Orbs"] = "Shadow Orbs"
+L["Burning Embers"] = "Burning Embers"
+L["Demonic Fury"] = "Demonic Fury"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu-native MSUF 6.0 guided setup.
 ---
 --- The guide walks native pages control by control. Every normal tour step owns
@@ -763,13 +764,13 @@ local function RefreshEditModeOpenCue(show)
     end
     if not cue or cue:GetParent() ~= button then
         if cue then cue:Hide() end
-        cue = CreateFrame("Frame", nil, button)
+        cue = PixelLayoutRegion(CreateFrame("Frame", nil, button))
         cue:SetAllPoints(button)
         cue:EnableMouse(false)
         cue:SetFrameLevel((button:GetFrameLevel() or 1) + 12)
         local color = T.colors.ok or { 0.24, 0.82, 0.46, 1 }
         local function Arrow(point, rotation)
-            local texture = cue:CreateTexture(nil, "OVERLAY", nil, 7)
+            local texture = PixelLayoutRegion(cue:CreateTexture(nil, "OVERLAY", nil, 7))
             local usedAtlas = false
             if texture.SetAtlas then texture:SetAtlas("NPE_ArrowRight", false); usedAtlas = true end
             if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
@@ -1170,7 +1171,7 @@ local function EmphasizeSection(pageKey, current, currentControl)
         end
         local marker = entry._msuf2GuidedArrow
         if selected and not marker and outer and outer.CreateTexture and T and T.media then
-            marker = outer:CreateTexture(nil, "OVERLAY", nil, 7)
+            marker = PixelLayoutRegion(outer:CreateTexture(nil, "OVERLAY", nil, 7))
             local usedAtlas = false
             if marker.SetAtlas then
                 marker:SetAtlas("NPE_ArrowRight", false)
@@ -1416,11 +1417,11 @@ local function EmphasizeControl(stage, section, controls, current)
             marker = nil
         end
         if not marker then
-            marker = CreateFrame("Frame", nil, selectedWidget)
+            marker = PixelLayoutRegion(CreateFrame("Frame", nil, selectedWidget))
             marker._msuf2DualPointer = true
             if type(marker.EnableMouse) == "function" then marker:EnableMouse(false) end
             local function Arrow(rotation)
-                local texture = marker:CreateTexture(nil, "OVERLAY", nil, 7)
+                local texture = PixelLayoutRegion(marker:CreateTexture(nil, "OVERLAY", nil, 7))
                 local usedAtlas = false
                 if type(texture.SetAtlas) == "function" then
                     texture:SetAtlas("NPE_ArrowRight", false)
@@ -1434,7 +1435,7 @@ local function EmphasizeControl(stage, section, controls, current)
             marker._msuf2LeftArrow = Arrow()
             marker._msuf2RightArrow = Arrow(math.pi)
             marker._msuf2Edges = {}
-            for i = 1, 4 do marker._msuf2Edges[i] = marker:CreateTexture(nil, "OVERLAY", nil, 6) end
+            for i = 1, 4 do marker._msuf2Edges[i] = PixelLayoutRegion(marker:CreateTexture(nil, "OVERLAY", nil, 6)) end
             Runtime.controlMarker = marker
         else
             marker:SetParent(selectedWidget)
@@ -2647,7 +2648,7 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     if type(chrome.SetFrameLevel) == "function" then chrome:SetFrameLevel((host:GetFrameLevel() or 1) + 5) end
     chrome.frame, chrome.status, chrome.host, chrome.scroll = frame, status, host, scroll
 
-    local divider = chrome:CreateTexture(nil, "ARTWORK", nil, 3)
+    local divider = PixelLayoutRegion(chrome:CreateTexture(nil, "ARTWORK", nil, 3))
     divider:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 16, 0)
     divider:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -16, 0)
     divider:SetHeight(1)
@@ -2655,7 +2656,7 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
 
     local iconWell = T.Panel(chrome, nil, T.colors.pillBaseSolid or T.colors.panel2, T.colors.pillEdge or T.colors.borderSoft)
     if type(T.ApplySurface) == "function" then T.ApplySurface(iconWell, "card") end
-    local icon = iconWell:CreateTexture(nil, "ARTWORK", nil, 2)
+    local icon = PixelLayoutRegion(iconWell:CreateTexture(nil, "ARTWORK", nil, 2))
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER", iconWell, "CENTER", 0, 0)
     chrome.iconWell, chrome.icon = iconWell, icon
@@ -2666,7 +2667,7 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     chrome.step:SetJustifyH("RIGHT")
     chrome.section = T.Font(chrome, "GameFontDisableSmall", "", T.colors.muted)
     chrome.section:SetJustifyH("LEFT")
-    local cueArrow = chrome:CreateTexture(nil, "OVERLAY", nil, 4)
+    local cueArrow = PixelLayoutRegion(chrome:CreateTexture(nil, "OVERLAY", nil, 4))
     local cueAtlas = false
     if cueArrow.SetAtlas then cueArrow:SetAtlas("NPE_ArrowRight", false); cueAtlas = true end
     if not cueAtlas then cueArrow:SetTexture(T.media.collapseArrow) end
@@ -2678,12 +2679,12 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     if chrome.help.SetWordWrap then chrome.help:SetWordWrap(true) end
     if chrome.help.SetNonSpaceWrap then chrome.help:SetNonSpaceWrap(true) end
 
-    local progress = CreateFrame("Frame", nil, chrome)
-    local progressBg = progress:CreateTexture(nil, "BACKGROUND")
+    local progress = PixelLayoutRegion(CreateFrame("Frame", nil, chrome))
+    local progressBg = PixelLayoutRegion(progress:CreateTexture(nil, "BACKGROUND"))
     progressBg:SetAllPoints()
     local track = T.colors.coreShadow or T.colors.bg
     progressBg:SetColorTexture(track[1], track[2], track[3], 0.92)
-    local progressFill = progress:CreateTexture(nil, "ARTWORK")
+    local progressFill = PixelLayoutRegion(progress:CreateTexture(nil, "ARTWORK"))
     progressFill:SetPoint("TOPLEFT", progress, "TOPLEFT", 1, -1)
     progressFill:SetPoint("BOTTOMLEFT", progress, "BOTTOMLEFT", 1, 1)
     progressFill:SetWidth(1)
@@ -2906,7 +2907,7 @@ local function AddCardIcon(card, T, iconKey)
     local well = T.Panel(card, nil, T.colors.pillBaseSolid or T.colors.panel2, T.colors.pillEdge or T.colors.borderSoft)
     well:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
     well:SetSize(32, 32)
-    local icon = well:CreateTexture(nil, "ARTWORK")
+    local icon = PixelLayoutRegion(well:CreateTexture(nil, "ARTWORK"))
     icon:SetSize(16, 16)
     icon:SetPoint("CENTER")
     local grid = T.navIconGrid and T.navIconGrid[iconKey]

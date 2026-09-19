@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua
 --- Cold-path unitframe preview view.
 ---
@@ -33,6 +34,10 @@ local M2 = MSUF.MSUF2 or _G.MSUF2 or {}
 local PreviewHelpers = M2.PreviewHelpers or {}
 local ViewHandles = MSUF.UFPreviewViewHandles or {}
 local ViewChrome = MSUF.UFPreviewViewChrome or {}
+-- Boss units exist only where the client model says so: every Mainline client
+-- and Mists among the Classic ones. Render draws the boss target marker only
+-- when its handle exists, so a client without boss units never shows one.
+local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Client.SupportsUnit("boss1")
 
 local AssignNamedValues = M2.AssignNamedValues
 local F = M2.Fallbacks or {}
@@ -583,7 +588,7 @@ local function PreviewArrowKeyDown(self, keyName)
 end
 local StartPreviewPan, StopPreviewPan
 local function MakeHandle(preview, key, fields, label, color)
-    local h = CreateFrame("Button", nil, preview.canvas)
+    local h = PixelLayoutRegion(CreateFrame("Button", nil, preview.canvas), true)
     -- Composite elements need a deterministic mouse-hit hierarchy. The broad
     -- container handle stays on the base interaction plane while its smaller
     -- icon/text/time handles sit above it; creation/show order must not decide
@@ -598,10 +603,10 @@ local function MakeHandle(preview, key, fields, label, color)
     if PreviewHelpers.BindPreviewWheel then PreviewHelpers.BindPreviewWheel(h, preview) end
     h:EnableKeyboard(true)
     if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(true) end
-    h.tex = h:CreateTexture(nil, "OVERLAY")
+    h.tex = PixelLayoutRegion(h:CreateTexture(nil, "OVERLAY"))
     h.tex:SetAllPoints()
     h.tex:SetColorTexture(color[1], color[2], color[3], 0)
-    h.edge = h:CreateTexture(nil, "BORDER")
+    h.edge = PixelLayoutRegion(h:CreateTexture(nil, "BORDER"))
     h.edge:SetPoint("TOPLEFT", h, "TOPLEFT", 0, 0)
     h.edge:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 0, 0)
     h.edge:SetColorTexture(color[1], color[2], color[3], 0)
@@ -611,11 +616,11 @@ local function MakeHandle(preview, key, fields, label, color)
     h._previewLayerKey = ViewHandles.UnitPreviewLayerForHandle(key, fields)
     h._preview = preview
     h._color = color
-    h._selBorder = CreateFrame("Frame", nil, h)
+    h._selBorder = PixelLayoutRegion(CreateFrame("Frame", nil, h))
     h._selBorder:SetPoint("TOPLEFT", h, "TOPLEFT", -1, 1)
     h._selBorder:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 1, -1)
     for side, spec in pairs(ViewHandles.HANDLE_BORDER_SPECS) do
-        local line = h._selBorder:CreateTexture(nil, "OVERLAY")
+        local line = PixelLayoutRegion(h._selBorder:CreateTexture(nil, "OVERLAY"))
         line:SetColorTexture(0.30, 0.58, 0.95, 0.70)
         line:SetPoint(spec[1])
         line:SetPoint(spec[2])
@@ -797,7 +802,7 @@ local function BuildPreview(parent, panel, width, height)
     local sideW = 104
     local T = MenuTheme()
     local colors = (T and T.colors) or {}
-    local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    local box = PixelLayoutRegion(CreateFrame("Frame", nil, parent, "BackdropTemplate"))
     box:SetSize(width or 632, height or 228)
     local chrome = PreviewHelpers.ApplyPreviewChrome and PreviewHelpers.ApplyPreviewChrome(box, "outer", T, ApplyPreviewBackdrop)
     if not chrome then
@@ -838,19 +843,19 @@ local function BuildPreview(parent, panel, width, height)
             end
         end
     end
-    local title = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = PixelLayoutRegion(box:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     title:SetText(TR("Unit Frame Preview"))
     if T and T.StyleFontString then T.StyleFontString(title, chrome.title or colors.title or colors.text or { 1, 1, 1, 1 }, 1) end
     box.title = title
-    local hint = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local hint = PixelLayoutRegion(box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     hint:SetText(ViewChrome.DefaultPreviewHint())
     if T and T.StyleFontString then T.StyleFontString(hint, colors.muted or { 0.55, 0.60, 0.70, 0.90 }, 0) end
     box.hint = hint
     -- The canvas is anchored against the selection bar rather than the box, so
     -- whatever the chip rail does not need stays with the preview surface.
-    local canvas = CreateFrame("Frame", nil, box, "BackdropTemplate")
+    local canvas = PixelLayoutRegion(CreateFrame("Frame", nil, box, "BackdropTemplate"))
     canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     canvas._msuf2PreviewCanvasUnderlay = box
@@ -898,7 +903,7 @@ local function BuildPreview(parent, panel, width, height)
     -- canvas keeps the full box width, and the rail only claims the rows it
     -- actually fills. `box.sidebar` stays the field name because the compact
     -- popover and the colour page already address the layer surface by it.
-    local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
+    local sidebar = PixelLayoutRegion(CreateFrame("Frame", nil, box, "BackdropTemplate"))
     sidebar:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 12)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     sidebar:SetHeight(30)
@@ -908,7 +913,7 @@ local function BuildPreview(parent, panel, width, height)
         ApplyPreviewBackdrop(sidebar, colors.coreShadow or colors.panel or { 0.020, 0.039, 0.071, 0.56 }, colors.borderSoft or { 0.086, 0.149, 0.227, 0.32 })
     end
     box.sidebar = sidebar
-    local sHdr = sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local sHdr = PixelLayoutRegion(sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     sHdr:SetPoint("LEFT", sidebar, "LEFT", 10, 0)
     sHdr:SetText(TR("LAYERS"))
     local layerHeaderColor = chrome.layerHeader or colors.muted or { 0.62, 0.70, 0.82, 0.82 }
@@ -1087,11 +1092,11 @@ local function BuildPreview(parent, panel, width, height)
     -- A plain root owns no synthetic Center texture. Only the real health
     -- background media below may cover the unit-frame rectangle; outlines are
     -- drawn by the dedicated four-edge overlay in PreviewCore.
-    local mock = CreateFrame("Frame", nil, canvas)
+    local mock = PixelLayoutRegion(CreateFrame("Frame", nil, canvas), true)
     if mock.SetBackdropColor then mock:SetBackdropColor(0, 0, 0, 0) end
     box.mock = mock
     local function MockTexture(field, layer, texture, color, mode, owner)
-        local tex = (owner or mock):CreateTexture(nil, layer)
+        local tex = PixelLayoutRegion((owner or mock):CreateTexture(nil, layer))
         if mode == "settex" then SetTex(tex, texture or TEX_W8) else tex:SetTexture(texture or TEX_W8) end
         if color then
             if mode == "color" then tex:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
@@ -1101,7 +1106,7 @@ local function BuildPreview(parent, panel, width, height)
         return tex
     end
     local function FillFrame(parentFrame)
-        local frame = CreateFrame("Frame", nil, parentFrame)
+        local frame = PixelLayoutRegion(CreateFrame("Frame", nil, parentFrame))
         frame:SetAllPoints(parentFrame)
         return frame
     end
@@ -1112,17 +1117,17 @@ local function BuildPreview(parent, panel, width, height)
     end
     -- Bounds is guide-line ownership only; it must not create another full-frame
     -- backdrop Center behind the real bar media.
-    mock.bounds = CreateFrame("Frame", nil, mock)
+    mock.bounds = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     mock.bounds:SetFrameLevel((mock:GetFrameLevel() or 0) + 28)
     mock.bounds:SetAllPoints(mock)
-    mock.sizeTag = mock.bounds:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    mock.sizeTag = PixelLayoutRegion(mock.bounds:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     mock.sizeTag:SetPoint("BOTTOM", mock.bounds, "TOP", 0, 2)
     mock.sizeTag:SetTextColor(0.62, 0.84, 0.94, 0.95)
     if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 0.62, 0.84, 0.94, 0.95 }, 0) end
     -- Runtime uses a native inverse StatusBar for secret-safe missing values
     -- and suppresses its exact 0% fill-texture endpoint. Keep the preview on
     -- the same ownership model.
-    mock.healthBackgroundBar = CreateFrame("StatusBar", nil, mock)
+    mock.healthBackgroundBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock.healthBackgroundBar:SetAllPoints(mock)
     mock.healthBackgroundBar:SetMinMaxValues(0, 1)
     mock.healthBackgroundBar:SetValue(1)
@@ -1136,7 +1141,7 @@ local function BuildPreview(parent, panel, width, height)
     mock.hpBG:SetVertexColor(0, 0, 0, 0)
     mock.bg, mock.hpBarBG, mock.healthBg = mock.hpBG, mock.hpBG, mock.hpBG
 
-    mock.healthBar = CreateFrame("StatusBar", nil, mock)
+    mock.healthBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock.healthBar:SetAllPoints(mock)
     mock.healthBar:SetMinMaxValues(0, 1)
     mock.healthBar:SetValue(0.72)
@@ -1159,14 +1164,14 @@ local function BuildPreview(parent, panel, width, height)
     -- RenderTextureLayerPreview).
     mock.texLayers = {}
     for i = 1, 3 do
-        local texLayerHolder = CreateFrame("Frame", nil, mock)
-        texLayerHolder.tex = texLayerHolder:CreateTexture(nil, "ARTWORK")
+        local texLayerHolder = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
+        texLayerHolder.tex = PixelLayoutRegion(texLayerHolder:CreateTexture(nil, "ARTWORK"))
         texLayerHolder.tex:SetAllPoints(texLayerHolder)
         texLayerHolder:Hide()
         mock.texLayers[i] = texLayerHolder
     end
-    mock.classPower = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
-    mock.classPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.classPower = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
+    PixelLayoutRegion(mock.classPower, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock.classPower:SetBackdropColor(0, 0, 0, 0.55)
     mock.classPower:SetBackdropBorderColor(0, 0, 0, 1)
     mock.classPower.segments = {}
@@ -1176,11 +1181,11 @@ local function BuildPreview(parent, panel, width, height)
     mock.classPower.segmentBgs = {}
     mock.classPower.segmentEdges = {}
     mock.classPower.runeTexts = {}
-    mock.classPower.textOwner = CreateFrame("Frame", nil, mock.classPower)
+    mock.classPower.textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, mock.classPower))
     mock.classPower.textOwner:SetAllPoints(mock.classPower)
     if mock.classPower.textOwner.EnableMouse then mock.classPower.textOwner:EnableMouse(false) end
     local function ClassPowerTexture(bucket, index, layer, subLevel, hidden)
-        local tex = mock.classPower:CreateTexture(nil, layer, nil, subLevel)
+        local tex = PixelLayoutRegion(mock.classPower:CreateTexture(nil, layer, nil, subLevel))
         tex:SetTexture(TEX_W8)
         if hidden ~= false then tex:Hide() end
         mock.classPower[bucket][index] = tex
@@ -1204,33 +1209,33 @@ local function BuildPreview(parent, panel, width, height)
     mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", 0, 0)
     mock.classPower.text:SetText("5")
     mock.classPower.text:Hide()
-    mock.detachedPower = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
-    mock.detachedPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.detachedPower = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
+    PixelLayoutRegion(mock.detachedPower, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock.detachedPower:SetBackdropColor(0, 0, 0, 0.82)
     mock.detachedPower:SetBackdropBorderColor(0, 0, 0, 1)
-    mock.detachedPower.bg = mock.detachedPower:CreateTexture(nil, "BACKGROUND")
+    mock.detachedPower.bg = PixelLayoutRegion(mock.detachedPower:CreateTexture(nil, "BACKGROUND"))
     mock.detachedPower.bg:SetAllPoints(mock.detachedPower)
     mock.detachedPower.bg:SetTexture(TEX_W8)
     mock.detachedPower.bg:SetVertexColor(0, 0, 0, 0)
-    mock.detachedPower.fill = mock.detachedPower:CreateTexture(nil, "ARTWORK")
+    mock.detachedPower.fill = PixelLayoutRegion(mock.detachedPower:CreateTexture(nil, "ARTWORK"))
     SetTex(mock.detachedPower.fill, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
     mock.detachedPower.fill:SetPoint("TOPLEFT", mock.detachedPower, "TOPLEFT", 1, -1)
     mock.detachedPower.fill:SetPoint("BOTTOMLEFT", mock.detachedPower, "BOTTOMLEFT", 1, 1)
-    mock.detachedPower.edge = mock.detachedPower:CreateTexture(nil, "OVERLAY")
+    mock.detachedPower.edge = PixelLayoutRegion(mock.detachedPower:CreateTexture(nil, "OVERLAY"))
     mock.detachedPower.edge:SetAllPoints(mock.detachedPower)
     mock.detachedPower.edge:SetTexture(TEX_W8)
     mock.detachedPower.edge:SetVertexColor(0, 0, 0, 1)
     mock.detachedPower.edge:Hide()
-    mock.portrait = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
-    mock.portrait:SetBackdrop({ bgFile = TEX_W8 })
+    mock.portrait = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
+    PixelLayoutRegion(mock.portrait, "SetBackdrop", { bgFile = TEX_W8 })
     mock.portrait:SetBackdropColor(0, 0, 0, 0)
-    mock.portrait.bg = mock.portrait:CreateTexture(nil, "BACKGROUND")
+    mock.portrait.bg = PixelLayoutRegion(mock.portrait:CreateTexture(nil, "BACKGROUND"))
     mock.portrait.bg:SetAllPoints()
     mock.portrait.bg:SetTexture(TEX_W8)
     mock.portrait.bg:Hide()
-    mock.portrait.tex = mock.portrait:CreateTexture(nil, "ARTWORK")
+    mock.portrait.tex = PixelLayoutRegion(mock.portrait:CreateTexture(nil, "ARTWORK"))
     mock.portrait.tex:SetAllPoints()
-    mock.portrait.border = CreateFrame("Frame", nil, mock.portrait)
+    mock.portrait.border = PixelLayoutRegion(CreateFrame("Frame", nil, mock.portrait))
     mock.portrait.border:SetAllPoints()
     mock.portrait.border.edges = {}
     mock.portrait.initial = MakeFS(mock.portrait, "OVERLAY", 22)
@@ -1244,8 +1249,8 @@ local function BuildPreview(parent, panel, width, height)
     MakeTextSet(mock.raidGroupLayer, "raidGroupNameText")
     MakeTextSet(mock.hpLayer, "hpTextLeft", "hpTextCenter", "hpText", "hpTextPct")
     MakeTextSet(mock.powerLayer, "powerTextLeft", "powerTextCenter", "powerText", "powerTextPct")
-    mock.cast = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
-    mock.cast:SetBackdrop({ bgFile = TEX_W8 })
+    mock.cast = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
+    PixelLayoutRegion(mock.cast, "SetBackdrop", { bgFile = TEX_W8 })
     mock.cast:SetBackdropColor(0, 0, 0, 0.92)
     mock.cast:SetBackdropBorderColor(0, 0, 0, 0)
     mock.cast:EnableMouse(false)
@@ -1270,15 +1275,15 @@ local function BuildPreview(parent, panel, width, height)
         end
     end)
     mock.cast:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    mock.cast.fill = mock.cast:CreateTexture(nil, "ARTWORK")
+    mock.cast.fill = PixelLayoutRegion(mock.cast:CreateTexture(nil, "ARTWORK"))
     SetTex(mock.cast.fill, type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture() or TEX_W8)
     mock.cast.fill:SetPoint("TOPLEFT", 1, -1)
     mock.cast.fill:SetPoint("BOTTOMRIGHT", -60, 1)
-    mock.cast.icon = CreateFrame("Frame", nil, mock.cast, "BackdropTemplate")
-    mock.cast.icon:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    mock.cast.icon = PixelLayoutRegion(CreateFrame("Frame", nil, mock.cast, "BackdropTemplate"))
+    PixelLayoutRegion(mock.cast.icon, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock.cast.icon:SetBackdropColor(0.08, 0.12, 0.22, 1)
     mock.cast.icon:SetBackdropBorderColor(0.2, 0.28, 0.40, 1)
-    mock.cast.icon.texture = mock.cast.icon:CreateTexture(nil, "ARTWORK", nil, 7)
+    mock.cast.icon.texture = PixelLayoutRegion(mock.cast.icon:CreateTexture(nil, "ARTWORK", nil, 7))
     mock.cast.icon.texture:SetTexture(136235)
     mock.cast.icon.texture:SetPoint("TOPLEFT", mock.cast.icon, "TOPLEFT", 1, -1)
     mock.cast.icon.texture:SetPoint("BOTTOMRIGHT", mock.cast.icon, "BOTTOMRIGHT", -1, 1)
@@ -1289,7 +1294,7 @@ local function BuildPreview(parent, panel, width, height)
     mock.cast.time:SetPoint("RIGHT", mock.cast, "RIGHT", -6, 0)
     mock.cast.target = MakeFS(mock.cast, "OVERLAY", 10)
     mock.cast.target:SetPoint("TOP", mock.cast, "BOTTOM", 0, -1)
-    mock.cast.sizeTag = mock.cast:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    mock.cast.sizeTag = PixelLayoutRegion(mock.cast:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     mock.cast.sizeTag:SetPoint("BOTTOM", mock.cast, "TOP", 0, 2)
     mock.cast.sizeTag:SetTextColor(0.20, 0.90, 0.85, 0.95)
     if T and T.StyleFontString then T.StyleFontString(mock.cast.sizeTag, { 0.20, 0.90, 0.85, 0.95 }, 0) end
@@ -1299,7 +1304,7 @@ local function BuildPreview(parent, panel, width, height)
         mock.icons[spec.id] = CreateIcon(canvas, spec.color, spec.text)
     end
     box.handles = {}
-    box.dragFrame = CreateFrame("Frame", nil, canvas)
+    box.dragFrame = PixelLayoutRegion(CreateFrame("Frame", nil, canvas), true)
     box.dragFrame:EnableMouse(true)
     if PreviewHelpers.BindPreviewWheel then PreviewHelpers.BindPreviewWheel(box.dragFrame, box) end
     if box.dragFrame.SetFrameLevel then
@@ -1358,10 +1363,12 @@ local function BuildPreview(parent, panel, width, height)
     box.handleCastbarTime = MakeHandle(box, "castbarTime", { suffixX = "TimeOffsetX", suffixY = "TimeOffsetY", bossX = "bossCastTimeOffsetX", bossY = "bossCastTimeOffsetY", bossBaseX = -2, defaultX = -2, defaultY = 0, defaultXFromG = "castbarPlayerTimeOffsetX", defaultYFromG = "castbarPlayerTimeOffsetY", readOffsets = ViewHandles.ReadCastbarSubOffsets, writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar time", { 0.20, 0.90, 0.85 })
     if type(PreviewAuras.CreateHandles) == "function" then PreviewAuras.CreateHandles(box, MakeHandle) end
     box.statusHandles = { raidgroupname = box.handleRaidGroupName }
-    box.handleBossTarget = MakeHandle(box, "bossTarget", {
-        x = "bossTargetIndicatorOffsetX", y = "bossTargetIndicatorOffsetY",
-        defaultX = -28, defaultY = 0, section = "boss_target",
-    }, "Boss target highlight", { 1, .82, 0 })
+    if HAS_BOSS_UNITS then
+        box.handleBossTarget = MakeHandle(box, "bossTarget", {
+            x = "bossTargetIndicatorOffsetX", y = "bossTargetIndicatorOffsetY",
+            defaultX = -28, defaultY = 0, section = "boss_target",
+        }, "Boss target highlight", { 1, .82, 0 })
+    end
     for i = 1, #STATUS_PREVIEW do
         local spec = STATUS_PREVIEW[i]
         box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0, statusRefresh = spec.refresh, section = "status" }, spec.label, spec.color)

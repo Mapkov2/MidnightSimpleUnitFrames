@@ -20,10 +20,27 @@ This directory is the client boundary for MSUF, following ElvUI's layout:
   the Retail tree plus `Shared` and `Forever`, and never loads `Classic`,
   `Vanilla`, `TBC`, or `Mists`.
 
-Client-only code belongs here instead of adding flavor checks to shared event
-or rendering hot paths. Vanilla, TBC, and Mists include implementations from
-`Classic`, but they keep separate loader manifests so their contracts can
-diverge without copying the backend.
+Client-only code that has no Retail counterpart belongs here. A Classic
+difference inside a Retail file is not copied here: the Retail-named file
+carries it as a reviewed override hunk that branches on an `MSUF.Client` fact
+resolved once when the file loads (a file-level upvalue such as
+`IS_CLASSIC_FAMILY`), never on a client check per event, so a shared hot path
+pays one upvalue test at most and Mainline never enters the Classic branch.
+The former whole-file Classic copies of Retail files (owned shadows) were
+collapsed that way; `tools/classic-owned-shadows.tsv` lists the ones that
+remain. Vanilla, TBC, and Mists include implementations from `Classic`, but
+they keep separate loader manifests so their contracts can diverge without
+copying the backend.
+
+Each core TOC places the common aura alias catalog and its client-language
+partition between the unit-frame prefix and aura continuation manifests.
+For Classic these are `Game/<Flavor>/UnitFrames.xml` and `Auras.xml`; Mainline
+uses `MSUF_UFCore_Elements.xml` and `MSUF_UFCore_Auras.xml`. Native TOC
+`AllowLoadTextLocale` conditions skip inactive alias partitions before Lua
+parsing. Menu translations remain independent: all twelve still load for the
+saved menu language. Mainline retains both Retail and Forever catalog entries
+and the existing Forever runtime guards. Gate/package inventories include
+all locale branches, while boot simulations filter by client locale.
 
 `tools/classic-client-matrix.tsv` maps each client to the branch of the local
 Blizzard UI source mirror (`_local_workflows/references/wow-ui-source`) that
@@ -50,3 +67,63 @@ only warranted once its data really diverges. WoW Forever is that case: it
 runs the Mainline build with a Classic Era spell database, so its aura data
 lives in `Forever` while its code stays in the Retail tree. Code branches on
 `MSUF.Client` facts and capabilities, never on client names.
+
+## Forever data validation: 1.60.1.69913
+
+Checked on 2026-09-19: the UI tree and reviewed class/aura table rows are
+unchanged from 69876. Ten current SpellName locale exports reproduce the
+shipped catalog; deDE is retained and verified against 69893 because the
+69913 export is empty. No runtime or catalog payload update is required by
+the available data. The deDE 69913 check remains pending. See
+[the validation notes](../../CLASSIC_PROTOTYPE.md#forever-data-validation-160169913)
+and `.github/forever-client-data-validation.json` for scope and source hashes.
+
+Class-resource UI follows `Client.SupportsClassResource` and
+`Client.SupportsClassResourceSetting`, matching the active `CPClient` provider.
+Era/TBC/Forever offer only Rogue and Cat Form combo-point previews; Mists uses
+its own resources and counts. Search and Class Power colors apply the same
+gates, and older clients do not bind or query charged-combo updates. Unsupported
+profile settings are retained so shared profiles keep their data across clients.
+
+### Pixel layout on Midnight and Forever
+
+`MSUF_PixelLayoutRegion` is the shared creation/configuration boundary for
+MSUF-owned frames, textures, font strings and lines in Core and Options. It uses
+native `SetRoundLayoutToNearestPixel` only on Mainline-family clients with that
+API (12.1.5 and Forever); Era, TBC and Mists retain their requested layout.
+
+The boundary returns the original object and keeps constructor/setter arguments
+and return values intact. Native template children are included on creation and
+after backdrop/button/slider texture setters. Engine-created AuraButtons opt in
+before native initialization restricts them; secure unit buttons also opt in at
+`UF.ApplySpec`. It never replaces Blizzard globals or widget methods, adds no
+polling/OnUpdate/timer, and does not modify profile coordinates or migrate profiles.
+
+Logical movers, drag handles and anchor/measurement proxies opt out of layout
+rounding while their visible children opt in. Existing smooth-art opt-outs remain
+in force. Masks and native interpolated StatusBar fill textures are excluded;
+otherwise a later template refresh could undo the intentional art policy. Native
+rounding follows effective-scale changes without rewriting saved UI coordinates.
+Borrowed Blizzard/third-party frames are not enrolled by skin/configuration calls.
+
+Pixel setup is absent from repeated text/status/icon layout. Existing frame
+structural reapply skips the pixel helper once its template was visited; blocked
+protected owners remain eligible for retry. Backdrop setup finishes only after
+all nine persistent native pieces were initialized (or intentionally excluded).
+Subsequent backdrop setters forward directly without walking pieces or invoking
+pixel APIs; clear-only runtime calls use the native setter directly. Smooth
+rounded art opts out at creation rather than enabling then disabling rounding.
+New/rebuilt regions still need one-time setup, which may occur during combat for
+unprotected objects. This does not claim zero engine rendering cost or a measured
+FPS improvement.
+
+`pixel_layout_profile_smoke.lua` covers five clients, template children, native
+setter semantics, borrowed frames, masks, smooth art and 200 ClassPower layout
+pairs with unchanged requested geometry/settings. It also exercises 15,000 warm
+layout calls with zero pixel-helper calls and 2,500 backdrop clear/reapply calls
+without pixel setup, including blocked-setup retry. `pixel_layout_coverage_smoke.py`
+checks every executable owned constructor against explicit nonvisual exceptions
+in `tools/pixel-layout-exclusions.json`, so new unrounded preview/widget paths fail
+the gate. Lua strings (including secure snippets) are not treated as constructors.
+Reference: Blizzard `upstream/ptr2` and `upstream/forever`, SharedXML `PixelUtil.lua`
+and `Backdrop.lua`. Offline checks do not prove final in-game rendering or taint.

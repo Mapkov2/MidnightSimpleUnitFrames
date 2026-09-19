@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Instance-local runtime kernel for the embedded MSUFUnitFrames framework.
 local addonName, MSUF = ...
 
@@ -2905,6 +2906,9 @@ local DEFAULT_APPLY_MASK = Metadata.defaultApplyMask or true
 
 function UF.ApplySpec(frame, spec, reason, mask)
   if not (frame and spec) then return false end
+  -- Existing owners need no pixel helper call during structural reapply.
+  -- A protected owner skipped in combat remains eligible on the next apply.
+  if not frame._msufPixelLayoutTemplateVisited then PixelLayoutRegion(frame) end
   UF.AttachFrame(frame, { scope = spec.scope or frame._msufCoreScope or "single" })
   mask = mask or DEFAULT_APPLY_MASK
   ApplyElementSelection(frame, mask, spec, nil, true)

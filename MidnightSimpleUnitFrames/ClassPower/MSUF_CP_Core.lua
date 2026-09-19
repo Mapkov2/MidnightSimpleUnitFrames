@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- ClassPower/MSUF_CP_Core.lua
 --- Builder bundle for the ClassPower controller.
 ---
@@ -10,6 +11,9 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+
+--- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
+local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
 
 --- Perf locals: the RUNTIME handlers and the warm font/text refresh below
 --- run per event, so the Lua standard functions they touch are bound once.
@@ -113,7 +117,7 @@ builders.BUILD = function(E)
         local c = CP.container
         if not c then return nil end
 
-        local tf = CreateFrame("Frame", nil, c)
+        local tf = PixelLayoutRegion(CreateFrame("Frame", nil, c))
         tf:SetAllPoints(c)
         local textLevel = CP_ResolveTextLayerLevel(c, _cpDB.bars)
         tf:SetFrameLevel(textLevel)
@@ -130,7 +134,8 @@ builders.BUILD = function(E)
         local tf = CP_EnsureTextFrame()
         if not tf then return nil, false end
 
-        local rfs = tf:CreateFontString(nil, "OVERLAY")
+        local rfs = PixelLayoutRegion(tf:CreateFontString(nil, "OVERLAY"))
+
         rfs:SetPoint("CENTER", bar, "CENTER", 0, 0)
         rfs:SetJustifyH("CENTER")
         if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
@@ -148,7 +153,8 @@ builders.BUILD = function(E)
         local tf = CP_EnsureTextFrame()
         if not tf then return nil, false end
 
-        local fs = tf:CreateFontString(nil, "OVERLAY")
+        local fs = PixelLayoutRegion(tf:CreateFontString(nil, "OVERLAY"))
+
         fs:SetPoint("CENTER", tf, "CENTER", 0, 0)
         fs:SetJustifyH("CENTER")
         if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
@@ -179,7 +185,8 @@ builders.BUILD = function(E)
         end
 
         for i = CP.maxBars + 1, count do
-            local bar = CreateFrame("StatusBar", nil, CP.container)
+            local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, CP.container))
+
             bar:SetStatusBarTexture(fgPath)
             bar._msufCPTexturePath = fgPath
             bar:SetMinMaxValues(0, 1)
@@ -188,7 +195,7 @@ builders.BUILD = function(E)
             bar._msufCPValue = 0
             bar:Hide()
 
-            local bg = bar:CreateTexture(nil, "BACKGROUND")
+            local bg = PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND"))
             bg:SetAllPoints(bar)
             bg:SetTexture(bgPath)
             bg._msufCPTexturePath = bgPath
@@ -201,7 +208,8 @@ builders.BUILD = function(E)
         --- Tick separators (between bars)
         for i = math_max(1, CP.maxBars), count - 1 do
             if not CP.ticks[i] then
-                local tick = CP.container:CreateTexture(nil, "OVERLAY")
+                local tick = PixelLayoutRegion(CP.container:CreateTexture(nil, "OVERLAY"))
+
                 tick:SetTexture("Interface\\Buttons\\WHITE8x8")
                 tick:SetVertexColor(0, 0, 0, 1)
                 tick:Hide()
@@ -217,7 +225,7 @@ builders.BUILD = function(E)
 
         --- Parent to the player frame so ClassPower follows scale, strata, and
         --- secure visibility rules from the owning unit frame.
-        local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame._msufHealthVisualRoot or playerFrame)
+        local c = PixelLayoutRegion(CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame._msufHealthVisualRoot or playerFrame))
         -- Native pixel rounding (12.1.5); the pips anchor against this rect.
         local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
         if type(roundLayout) == "function" then roundLayout(c, true) end
@@ -233,7 +241,7 @@ builders.BUILD = function(E)
         CP.container = c
 
         --- Background
-        local bg = c:CreateTexture(nil, "BACKGROUND")
+        local bg = PixelLayoutRegion(c:CreateTexture(nil, "BACKGROUND"))
         bg:SetTexture("Interface\\Buttons\\WHITE8x8")
         bg:SetAllPoints(c)
         bg:SetVertexColor(0, 0, 0, 0.3)
@@ -408,7 +416,7 @@ builders.LAYOUT = function(E)
             if userW < 30 then
                 userW = playerSpecW
             end
-            userW = userW - 4
+            if widthMode ~= "player" then userW = userW - 4 end
         end
         if type(snap) == "function" then
             userW = snap(CP.container, userW)
@@ -424,6 +432,7 @@ builders.LAYOUT = function(E)
         local playerFrame, h, b = pass.playerFrame, pass.h, pass.b
         local inLockdown, layoutCache, userW, cdmName = pass.inLockdown, pass.layoutCache, pass.userW, pass.cdmName
         local oX = tonumber(b.classPowerOffsetX) or 0
+        local insetX = (b.classPowerWidthMode or "player") == "player" and 0 or 2
         local oY = tonumber(b.classPowerOffsetY) or 0
 
         --- Out of combat the container keeps a live link to the Cooldown
@@ -475,7 +484,7 @@ builders.LAYOUT = function(E)
                     end
                 else
                     CP.container:ClearAllPoints()
-                    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", insetX + oX, -(2 - oY))
                     CP.container._msufDirectCooldownAnchor = nil
                     CP.container._msufHardLockPoint = nil
                     CP.container._msufStableExternalAnchor = nil
@@ -487,7 +496,7 @@ builders.LAYOUT = function(E)
                     CP.container._msufDirectCooldownAnchor = true
                     CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
                 else
-                    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", insetX + oX, -(2 - oY))
                     CP.container._msufDirectCooldownAnchor = nil
                     CP.container._msufHardLockPoint = nil
                 end
@@ -495,7 +504,7 @@ builders.LAYOUT = function(E)
             end
         else
             if not positionFrozen then
-                CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", insetX + oX, -(2 - oY))
                 CP.container._msufDirectCooldownAnchor = nil
                 CP.container._msufHardLockPoint = nil
                 CP.container._msufStableExternalAnchor = nil
@@ -528,7 +537,7 @@ builders.LAYOUT = function(E)
         elseif outlineThick > 0 and CP._msufRoundedOutlineSuppressed ~= true then
             if not CP._outline then
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
-                local ol = CreateFrame("Frame", nil, CP.container, tpl)
+                local ol = PixelLayoutRegion(CreateFrame("Frame", nil, CP.container, tpl))
                 ol:EnableMouse(false)
                 CP._outline = ol
                 CP._outlineEdge = -1
@@ -540,7 +549,7 @@ builders.LAYOUT = function(E)
                 --- Frame level above bars (bars inherit container+1, outline must be higher)
                 CP._outline:SetFrameLevel(CP.container:GetFrameLevel() + 3)
                 if CP._outlineEdge ~= edge then
-                    CP._outline:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edge })
+                    PixelLayoutRegion(CP._outline, "SetBackdrop", { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edge })
                     CP._outline:SetBackdropColor(0, 0, 0, 0)
                     CP._outline:SetBackdropBorderColor(0, 0, 0, 1)
                     CP._outlineEdge = edge
@@ -1074,7 +1083,8 @@ builders.RUNTIME = function(env)
     local OnWarlockCastEnd = env.OnWarlockCastEnd
     local OnTipOfTheSpearSpellCast = env.OnTipOfTheSpearSpellCast
     local OnSpellTrackerReset = env.OnSpellTrackerReset
-    --- Only WoW Forever passes it (target-owned combo points); nil elsewhere.
+    --- WoW Forever and the Classic flavors pass it (target-owned combo points);
+    --- nil on Midnight.
     local AcceptPowerToken = env.AcceptPowerToken
 
     --- Resolve the visible segment count for the active render mode. This is
@@ -1105,6 +1115,8 @@ builders.RUNTIME = function(env)
                 maxP = TIP.MAX_STACKS
             elseif powerType == "ICICLES" then
                 maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
+            elseif IS_CLASSIC and powerType == "MISTS_ARCANE_CHARGES" then
+                maxP = CPConst.MISTS_ARCANE_CHARGES and CPConst.MISTS_ARCANE_CHARGES.MAX_STACKS or 4
             else
                 maxP = 10
             end
@@ -1189,6 +1201,22 @@ builders.RUNTIME = function(env)
         end
     end
 
+    --- Classic only: a form change delivers UPDATE_SHAPESHIFT_FORM and
+    --- UNIT_DISPLAYPOWER together and the display-power path usually rebuilds
+    --- first, so the deferred rebuild re-checks the signature instead of
+    --- rebuilding twice. Mainline defers FullRefresh itself.
+    local DeferredStructuralRefresh = FullRefresh
+    if IS_CLASSIC then
+        DeferredStructuralRefresh = function()
+            local flags, powerType, renderMode = CP_ComputeStructuralSignature()
+            if flags ~= CP.structuralFlags
+                or powerType ~= CP.structuralPowerType
+                or renderMode ~= CP.structuralRenderMode then
+                FullRefresh()
+            end
+        end
+    end
+
     --- Talent/spec/display events can invalidate render mode. Compare the
     --- structural signature first; only fall back to FullRefresh when the shape
     --- of the resource display actually changed.
@@ -1199,7 +1227,7 @@ builders.RUNTIME = function(env)
                 or powerType ~= CP.structuralPowerType
                 or renderMode ~= CP.structuralRenderMode then
                 if useTimer then
-                    C_Timer.After(0.1, FullRefresh)
+                    C_Timer.After(0.1, DeferredStructuralRefresh)
                 else
                     ThrottledFullRefresh()
                 end

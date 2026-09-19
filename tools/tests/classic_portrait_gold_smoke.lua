@@ -315,11 +315,13 @@ fallbackFrame.MSUFSpec.portrait.shape = "SQUARE"
 PortraitFallback.Apply(fallbackFrame, fallbackFrame.MSUFSpec)
 assert(not art.shown, "leaving Blizzard shape must hide fallback")
 
-local ns = { MSUF2 = {} }
+-- Vanilla, TBC and Mists load the Retail-named unit preview render; its Classic
+-- portrait branches read MSUF.Client, so each load below names the client.
+local ns = { MSUF2 = {}, Client = { Family = "Classic", IsClassic = true, IsVanilla = false } }
 ns.MSUF2.PickFallbackTable = function(deps, defaults)
     return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
 end
-assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render_Classic.lua"))("Options", ns)
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
 local preview = {}
 ns.UFPreviewRender.Install(preview, {})
 local render = assert(preview.RefreshDeps._RenderState)
@@ -338,8 +340,8 @@ era.Create(eraFrame)
 era.Apply(eraFrame, eraFrame.MSUFSpec)
 assert(eraFrame.MSUFPortraitHolder.artBorder.shown, "Era default Blizzard shape needs gold art")
 assert(eraFrame.MSUFPortraitHolder.mask.texture:find("circle_mask", 1, true))
-ns = { MSUF2 = ns.MSUF2, Client = { IsVanilla = true } }
-assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render_Classic.lua"))("Options", ns)
+ns = { MSUF2 = ns.MSUF2, Client = { Family = "Classic", IsClassic = true, IsVanilla = true } }
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
 preview = {}
 ns.UFPreviewRender.Install(preview, {})
 render = preview.RefreshDeps._RenderState

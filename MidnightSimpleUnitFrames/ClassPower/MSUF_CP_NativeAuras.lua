@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Native class-resource displays. Blizzard owns aura values and countdowns;
 -- this module only configures their display on structural/settings changes.
 -- Contract: upstream/live Blizzard_CustomAuraButton.lua (12.1): bound regions
@@ -86,8 +87,8 @@ function MSUF.CPBuilders.NativeAuras(E)
         local A3 = _G.MSUF_Auras3
         if not (A3 and A3.CreateClassPowerAuraSensor) then pending = true; return nil end
         if not state then
-            state = { proxy = CreateFrame("Frame", nil, CP.container), ticks = {} }
-            state.chrome = CreateFrame("Frame", nil, state.proxy)
+            state = { proxy = PixelLayoutRegion(CreateFrame("Frame", nil, CP.container)), ticks = {} }
+            state.chrome = PixelLayoutRegion(CreateFrame("Frame", nil, state.proxy))
             state.chrome:SetAllPoints(state.proxy)
             state.proxy:SetAllPoints(CP.container)
             state.proxy:Hide()
@@ -100,11 +101,11 @@ function MSUF.CPBuilders.NativeAuras(E)
                 button:ClearAllPoints()
                 button:SetAllPoints(state.proxy)
                 if button.EnableMouse then button:EnableMouse(false) end
-                state.bar = CreateFrame("StatusBar", nil, button)
+                state.bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, button))
                 state.bar:SetAllPoints(button)
-                state.textOwner = CreateFrame("Frame", nil, button)
+                state.textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, button))
                 state.textOwner:SetAllPoints(button)
-                state.text = state.textOwner:CreateFontString(nil, "OVERLAY")
+                state.text = PixelLayoutRegion(state.textOwner:CreateFontString(nil, "OVERLAY"))
                 Style(state, maximum)
             end)
         if not state.sensor then state.proxy:Hide(); pending = true; return nil end
@@ -141,7 +142,7 @@ function MSUF.CPBuilders.NativeAuras(E)
                 for i = 1, maximum - 1 do
                     local tick = state.ticks[i]
                     if not tick then
-                        tick = state.chrome:CreateTexture(nil, "OVERLAY", nil, 7)
+                        tick = PixelLayoutRegion(state.chrome:CreateTexture(nil, "OVERLAY", nil, 7))
                         tick:SetColorTexture(0, 0, 0, 1)
                         state.ticks[i] = tick
                     end

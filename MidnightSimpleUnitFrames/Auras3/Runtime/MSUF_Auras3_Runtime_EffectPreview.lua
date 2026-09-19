@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: EffectPreview.
 -- Mutable addon-owned Dispel overlay/symbol previews. Preview regions never share the sealed live-native region lifecycle.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
@@ -86,9 +87,9 @@ A3._ApplyDispelOverlayPreview = function(frame)
         -- always lands there. A spec apply that arrives mid-combat re-stamps an
         -- existing host but never parents a fresh frame onto a secure header.
         if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
-        host = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
         host:SetMouseMotionEnabled(false)
-        host.Region = host:CreateTexture(nil, "OVERLAY")
+        host.Region = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"))
         frame[A3._DISPEL_OVERLAY_PREVIEW_FIELD] = host
     end
     if not LayoutDispelSensorButton(host, sensor, frame, 1) then
@@ -273,8 +274,8 @@ function DS.PreviewTile(host, index)
     end
     local tile = tiles[index]
     if not tile then
-        tile = CreateFrame("Frame", nil, host)
-        tile.Texture = tile:CreateTexture(nil, "OVERLAY")
+        tile = PixelLayoutRegion(CreateFrame("Frame", nil, host))
+        tile.Texture = PixelLayoutRegion(tile:CreateTexture(nil, "OVERLAY"))
         tile.Texture:SetAllPoints(tile)
         tiles[index] = tile
     end
@@ -294,7 +295,7 @@ A3._ApplyDispelSymbolPreview = function(frame)
         -- there. A spec apply arriving mid-combat re-stamps an existing host but
         -- never parents a fresh frame onto a secure header.
         if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
-        host = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
         host:SetClampedToScreen(false)
         host:SetMovable(true)
         host:EnableMouse(true)

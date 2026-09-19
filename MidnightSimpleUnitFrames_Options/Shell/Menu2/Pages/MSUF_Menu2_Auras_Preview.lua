@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -37,37 +38,41 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
 }
+-- The Classic aura backends shape only non-rectangular dispel previews (their
+-- A3.ApplyAuraDispelPreview draws nothing for a rectangle), so a Classic
+-- rectangle keeps the atlas border drawn below. Read once: the page sets it.
+local CLASSIC_RECTANGLE_DISPEL_ATLAS = M.CLASSIC_AURA_FILTERS_REDUCED == true
 local function CreateAuraPreviewIcon(parent)
-    local f = CreateFrame("Frame", nil, parent)
+    local f = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     f:SetSize(24, 24)
-    f.bg = f:CreateTexture(nil, "BACKGROUND")
+    f.bg = PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND"))
     f.bg:SetAllPoints()
     f.bg:SetColorTexture(0, 0, 0, 0.85)
-    f.icon = f:CreateTexture(nil, "ARTWORK")
+    f.icon = PixelLayoutRegion(f:CreateTexture(nil, "ARTWORK"))
     f.icon:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -1)
     f.icon:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     if f.icon.SetTexCoord then f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     -- Match the full Unit Preview: the swipe must sort above the icon rather
     -- than sharing its otherwise undefined ARTWORK ordering.
-    f.swipe = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.swipe = PixelLayoutRegion(f:CreateTexture(nil, "ARTWORK", nil, 1))
     f.swipe:SetPoint("TOPLEFT", f, "TOP", 0, -1)
     f.swipe:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     f.swipe:SetTexture(TEX_W8)
     f.swipe:SetVertexColor(0, 0, 0, 0.58)
     f.swipe:Hide()
-    f.durationBar = f:CreateTexture(nil, "OVERLAY")
+    f.durationBar = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
     f.durationBar:SetTexture(TEX_W8)
     local durationR, durationG, durationB = AuraDurationBarColor()
     f.durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
     f.durationBar:Hide()
-    f.dispelBorder = f:CreateTexture(nil, "OVERLAY")
+    f.dispelBorder = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
     f.dispelBorder:Hide()
     f.edge = {}
     if PreviewHelpers.LayoutEdgeLines then PreviewHelpers.LayoutEdgeLines(f, 1, AURA_PREVIEW_EDGE_OPTS) end
-    f.stack = f:CreateFontString(nil, "OVERLAY")
+    f.stack = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY"))
     f.stack:SetFont(FONT, T.FontSize("micro"), "OUTLINE")
     f.stack:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -1)
-    f.timer = f:CreateFontString(nil, "OVERLAY")
+    f.timer = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY"))
     f.timer:SetFont(FONT, T.FontSize("micro"), "OUTLINE")
     f.timer:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 2, 1)
     return f
@@ -454,7 +459,7 @@ local function ApplyPreviewIconStyle(icon, cfg, barOnly)
         else
             if borderPieces then B.Hide(borderPieces) end
             if not border then
-                border = icon:CreateTexture(nil, "BORDER", nil, -1)
+                border = PixelLayoutRegion(icon:CreateTexture(nil, "BORDER", nil, -1))
                 border:SetTexture("Interface\\Buttons\\WHITE8X8")
                 icon.msufStyleBorder = border
             end
@@ -511,7 +516,8 @@ local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText, opts)
         icon.swipe:SetPoint("TOPLEFT", icon, "TOP", 0, -1)
         icon.swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
     end
-    if borderAtlas and type(A3.ApplyAuraDispelPreview) == "function" then
+    if borderAtlas and type(A3.ApplyAuraDispelPreview) == "function"
+        and not (CLASSIC_RECTANGLE_DISPEL_ATLAS and cfg.iconShape == "RECTANGLE") then
         A3.ApplyAuraDispelPreview(icon.dispelBorder, icon, cfg.size, cfg.debuffBorderMode,
             cfg.iconShape, A3.PreviewDispelTypeForIndex(index))
     elseif borderAtlas and icon.dispelBorder.SetAtlas then
@@ -579,7 +585,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         box._msuf2PreviewSurfaceFamily = "aura"
         if PreviewHelpers.ApplyPreviewChrome then PreviewHelpers.ApplyPreviewChrome(box, "canvas", T) end
         if box.SetClipsChildren then box:SetClipsChildren(true) end
-        contentHost = CreateFrame("Frame", nil, box)
+        contentHost = PixelLayoutRegion(CreateFrame("Frame", nil, box))
         contentHost:SetPoint("TOPLEFT", box, "TOPLEFT", innerPad, -headerH)
         contentHost:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -innerPad, footerH)
         if contentHost.SetClipsChildren then contentHost:SetClipsChildren(true) end

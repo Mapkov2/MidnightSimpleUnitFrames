@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: DispelVisuals.
 -- Dispel/Purge sensor art and thickness on square and rounded frames. Build every region and mask before AddDispelTypeTexture transfers native ownership.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
@@ -205,7 +206,7 @@ local function PrepareDispelSensorBorder(button, sensor, parentFrame, owner)
     if not regions then
         regions = {}
         for i = 1, 4 do
-            local edge = button:CreateTexture(nil, "OVERLAY")
+            local edge = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
             edge:SetTexture("Interface\\Buttons\\WHITE8X8")
             regions[i] = edge
         end
@@ -271,7 +272,7 @@ local function PrepareDispelSensorVisual(button, sensor, parentFrame, index, own
         -- MSUF never needs to know which type is up.
         local region = button._msufA3DispelSymbolRegion
         if not region then
-            region = button:CreateTexture(nil, "OVERLAY")
+            region = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
             button._msufA3DispelSymbolRegion = region
         end
         region:ClearAllPoints()
@@ -298,7 +299,7 @@ local function PrepareDispelSensorVisual(button, sensor, parentFrame, index, own
             local slot = slots[i]
             local region = regions[i]
             if not region then
-                region = button:CreateTexture(nil, "OVERLAY")
+                region = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
                 regions[i] = region
             end
             region:ClearAllPoints()
@@ -313,7 +314,7 @@ local function PrepareDispelSensorVisual(button, sensor, parentFrame, index, own
     end
     local region = button._msufA3DispelSensorRegion
     if not region then
-        region = button:CreateTexture(nil, "OVERLAY")
+        region = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
         button._msufA3DispelSensorRegion = region
     end
     local visualTarget = DispelSensorTarget(parentFrame, sensor)
@@ -335,7 +336,7 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index, vis
     if not (button and sensor and parentFrame) then return false end
     ValidateNativeAuraButtonContract(button)
     button._msufA3NativeButton = true
-    local icon = button.Icon or button:CreateTexture(nil, "ARTWORK")
+    local icon = button.Icon or PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK"))
     button.Icon = icon
     icon:ClearAllPoints()
     icon:SetAllPoints(button)
@@ -359,7 +360,7 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index, vis
     button:SetAllPoints(parentFrame)
     for i = 1, #visuals do
         local visual = visuals[i]
-        local host = CreateFrame("Frame", nil, button)
+        local host = PixelLayoutRegion(CreateFrame("Frame", nil, button))
         PrepareDispelSensorVisual(host, visual.sensor, parentFrame, visual.sensorIndex, button)
     end
     return true

@@ -88,7 +88,7 @@ assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))("M
 -- What MSUF_Defaults_CreateFactoryUnitAuras authors per unit: buff x/y, debuff x/y. Retuning
 -- the factory layout means updating these rows with it.
 local AUTHORED = {
-    player = { -2, 46, 2, 46 },
+    player = { -2, 41, 2, 40 },
     target = { -1, 42, 0, 42 },
     focus = { -2, 32, 119, 2 },
 }
@@ -224,7 +224,7 @@ local fresh = CopyTable(profiles.Default)
 -- Buff x/y and debuff x/y the sparse factory wrote. 6.5-alpha18 to 6.5-beta2 wrote them for
 -- New Profile only; 6.5-beta3 for every fresh profile, with player and target retuned.
 local ALPHA_OFFSETS = { player = { -2, 32, 3, 32 }, target = { -2, 32, 3, 32 } }
--- The factory has since moved the player debuffs to Y 46; saved profiles keep what 6.5-beta3 wrote.
+-- Later factory layouts do not change the offsets saved by 6.5-beta3.
 local BETA3_OFFSETS = { player = { -2, 46, 2, 49 } }
 local function SavedOffsets(build, unit)
     return build == "alpha" and ALPHA_OFFSETS[unit] or BETA3_OFFSETS[unit] or AUTHORED[unit]

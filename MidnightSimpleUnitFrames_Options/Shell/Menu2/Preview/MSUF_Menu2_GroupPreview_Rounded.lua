@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Group preview rounded-frame and outline helpers.
 ---
 --- This isolates the mask/outline subsystem from the native group preview
@@ -54,7 +55,7 @@ local function LayoutOutline(mock, edge)
     end
     local frame = mock._outlineFrame
     if not frame then
-        frame = CreateFrame("Frame", nil, mock)
+        frame = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
         frame:EnableMouse(false)
         mock._outlineFrame = frame
     end
@@ -168,11 +169,11 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
     end
     if not host then
         if type(_G.CreateFrame) ~= "function" then return end
-        host = CreateFrame("Frame", nil, mock)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
         if host.EnableMouse then host:EnableMouse(false) end
         host.edges = {}
         for i = 1, 4 do
-            local line = host:CreateTexture(nil, "OVERLAY", nil, 6)
+            local line = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
             line:SetTexture(WHITE8X8)
             host.edges[i] = line
         end

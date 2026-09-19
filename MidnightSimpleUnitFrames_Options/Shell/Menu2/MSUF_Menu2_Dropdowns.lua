@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -171,7 +172,7 @@ local function EnsureDropdownSmoothScrollDriver()
     if not dropdownFrame then return nil end
     local driver = dropdownFrame._msuf2SmoothScrollDriver
     if driver then return driver end
-    driver = CreateFrame("Frame", nil, dropdownFrame)
+    driver = PixelLayoutRegion(CreateFrame("Frame", nil, dropdownFrame))
     driver:Hide()
     driver:SetScript("OnUpdate", DropdownSmoothScrollOnUpdate)
     dropdownFrame._msuf2SmoothScrollDriver = driver
@@ -367,7 +368,7 @@ W.CloseDropdown = CloseDropdown
 local function EnsureDropdownFrame()
     if dropdownFrame then return dropdownFrame end
     local parent = _G.UIParent
-    dropdownFrame = CreateFrame("Frame", "MSUF2NativeDropdownList", parent, T.Template and T.Template() or nil)
+    dropdownFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF2NativeDropdownList", parent, T.Template and T.Template() or nil))
     dropdownFrame:SetFrameStrata("TOOLTIP")
     if dropdownFrame.SetFrameLevel then dropdownFrame:SetFrameLevel((M.MENU_POPUP_FRAME_LEVEL or 120) + 20) end
     dropdownFrame:SetToplevel(true)
@@ -380,14 +381,14 @@ local function EnsureDropdownFrame()
         if T.ApplyGlass then T.ApplyGlass(dropdownFrame, "popup") end
     end
     dropdownFrame:Hide()
-    dropdownScroll = CreateFrame("ScrollFrame", "MSUF2NativeDropdownScroll", dropdownFrame)
+    dropdownScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", "MSUF2NativeDropdownScroll", dropdownFrame))
     dropdownScroll:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 2, -2)
     dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -20, 2)
     dropdownScroll:EnableMouseWheel(true)
     dropdownScroll:SetScript("OnMouseWheel", function(_, delta) DropdownWheel(delta) end)
-    dropdownChild = CreateFrame("Frame", nil, dropdownScroll)
+    dropdownChild = PixelLayoutRegion(CreateFrame("Frame", nil, dropdownScroll))
     dropdownScroll:SetScrollChild(dropdownChild)
-    dropdownSlider = CreateFrame("Slider", nil, dropdownFrame)
+    dropdownSlider = PixelLayoutRegion(CreateFrame("Slider", nil, dropdownFrame))
     dropdownSlider:SetOrientation("VERTICAL")
     dropdownSlider:SetWidth(DROPDOWN_SCROLLBAR_W)
     dropdownSlider:SetMinMaxValues(0, 1)
@@ -396,19 +397,19 @@ local function EnsureDropdownFrame()
     if dropdownSlider.EnableMouse then dropdownSlider:EnableMouse(true) end
     dropdownSlider:SetPoint("TOPRIGHT", dropdownFrame, "TOPRIGHT", -8, -8)
     dropdownSlider:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -8, 8)
-    local track = PixelBarTexture(dropdownSlider:CreateTexture(nil, "BACKGROUND"))
+    local track = PixelBarTexture(PixelLayoutRegion(dropdownSlider:CreateTexture(nil, "BACKGROUND")))
     track:SetPoint("TOP", dropdownSlider, "TOP", 0, 0)
     track:SetPoint("BOTTOM", dropdownSlider, "BOTTOM", 0, 0)
     track:SetWidth(2)
     dropdownSlider._msuf2Track = track
-    local trackEdge = PixelBarTexture(dropdownSlider:CreateTexture(nil, "BORDER"))
+    local trackEdge = PixelBarTexture(PixelLayoutRegion(dropdownSlider:CreateTexture(nil, "BORDER")))
     trackEdge:SetPoint("TOPLEFT", track, "TOPRIGHT", 1, 0)
     trackEdge:SetPoint("BOTTOMLEFT", track, "BOTTOMRIGHT", 1, 0)
     trackEdge:SetWidth(1)
     dropdownSlider._msuf2TrackEdge = trackEdge
-    local thumb = PixelBarTexture(dropdownSlider:CreateTexture(nil, "OVERLAY"))
+    local thumb = PixelBarTexture(PixelLayoutRegion(dropdownSlider:CreateTexture(nil, "OVERLAY")))
     thumb:SetSize(4, 36)
-    dropdownSlider:SetThumbTexture(thumb)
+    PixelLayoutRegion(dropdownSlider, "SetThumbTexture", thumb)
     dropdownSlider._msuf2Thumb = thumb
     dropdownSlider._msuf2ThumbBase = T.colors.coreRim or { 0.043, 0.096, 0.150 }
     dropdownSlider._msuf2ThumbHover = T.colors.coreRaised or { 0.026, 0.070, 0.110 }
@@ -647,27 +648,27 @@ local function HideDropdownBarPreview(frame)
 end
 local function AddDropdownBarPreviewLane(frame)
     local lane = {}
-    local border = frame:CreateTexture(nil, "ARTWORK")
+    local border = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
     border:SetSize(DROPDOWN_BAR_PREVIEW_W + 2, DROPDOWN_BAR_PREVIEW_H + 2)
     border:SetColorTexture(0, 0, 0, 0.96)
     border:Hide()
     lane.border = border
-    local background = frame:CreateTexture(nil, "ARTWORK")
+    local background = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
     background:SetPoint("CENTER", border, "CENTER", 0, 0)
     background:SetSize(DROPDOWN_BAR_PREVIEW_W, DROPDOWN_BAR_PREVIEW_H)
     background:Hide()
     lane.background = background
-    local health = frame:CreateTexture(nil, "OVERLAY")
+    local health = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
     health:Hide()
     lane.health = health
-    local overlay = frame:CreateTexture(nil, "OVERLAY")
+    local overlay = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
     overlay:Hide()
     lane.overlay = overlay
-    local maxMarker = frame:CreateTexture(nil, "OVERLAY")
+    local maxMarker = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
     maxMarker:SetSize(2, DROPDOWN_BAR_PREVIEW_H + 6)
     maxMarker:Hide()
     lane.maxMarker = maxMarker
-    local edgeGlow = frame:CreateTexture(nil, "OVERLAY", nil, 5)
+    local edgeGlow = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY", nil, 5))
     edgeGlow:SetTexture(DROPDOWN_ABSORB_EDGE_TEXTURE)
     if edgeGlow.SetBlendMode then edgeGlow:SetBlendMode("ADD") end
     edgeGlow:SetWidth(16)
@@ -839,29 +840,29 @@ local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInse
     label:SetPoint("RIGHT", frame, "RIGHT", rightInset or -8, 0)
 end
 local function AddDropdownChoiceAssets(frame, borderLeft, borderAlpha)
-    local swatchBorder = frame:CreateTexture(nil, "ARTWORK")
+    local swatchBorder = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
     swatchBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 12, 0)
     swatchBorder:SetSize(16, 16)
     swatchBorder:SetColorTexture(0, 0, 0, borderAlpha or 0.85)
     swatchBorder:Hide()
     frame._msuf2SwatchBorder = swatchBorder
-    local swatch = frame:CreateTexture(nil, "OVERLAY")
+    local swatch = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
     swatch:SetPoint("CENTER", swatchBorder, "CENTER", 0, 0)
     swatch:SetSize(12, 12)
     swatch:Hide()
     frame._msuf2Swatch = swatch
-    local icon = frame:CreateTexture(nil, "ARTWORK")
+    local icon = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
     icon:SetPoint("LEFT", frame, "LEFT", DROPDOWN_ICON_LEFT, 0)
     icon:SetSize(DROPDOWN_ICON_SIZE, DROPDOWN_ICON_SIZE)
     icon:Hide()
     frame._msuf2Icon = icon
-    local texturePreviewBorder = frame:CreateTexture(nil, "ARTWORK")
+    local texturePreviewBorder = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
     texturePreviewBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 12, 0)
     texturePreviewBorder:SetSize(DROPDOWN_TEXTURE_PREVIEW_W + 2, DROPDOWN_TEXTURE_PREVIEW_H + 2)
     texturePreviewBorder:SetColorTexture(0, 0, 0, borderAlpha or 0.85)
     texturePreviewBorder:Hide()
     frame._msuf2TexturePreviewBorder = texturePreviewBorder
-    local texturePreview = frame:CreateTexture(nil, "OVERLAY")
+    local texturePreview = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
     texturePreview:SetPoint("CENTER", texturePreviewBorder, "CENTER", 0, 0)
     texturePreview:SetSize(DROPDOWN_TEXTURE_PREVIEW_W, DROPDOWN_TEXTURE_PREVIEW_H)
     texturePreview:Hide()
@@ -870,11 +871,11 @@ end
 local function DropdownRow(index)
     local row = dropdownRows[index]
     if row then return row end
-    row = CreateFrame("Button", nil, dropdownChild)
+    row = PixelLayoutRegion(CreateFrame("Button", nil, dropdownChild))
     row:SetHeight(DROPDOWN_ROW_H)
     row:EnableMouse(true)
     row:RegisterForClicks("AnyUp")
-    local hover = row:CreateTexture(nil, "HIGHLIGHT")
+    local hover = PixelLayoutRegion(row:CreateTexture(nil, "HIGHLIGHT"))
     hover:SetAllPoints()
     if T.ApplyTextureGradient then
         T.ApplyTextureGradient(hover, "HORIZONTAL",
@@ -884,7 +885,7 @@ local function DropdownRow(index)
     else
         hover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.18)
     end
-    local selected = row:CreateTexture(nil, "OVERLAY")
+    local selected = PixelLayoutRegion(row:CreateTexture(nil, "OVERLAY"))
     selected:SetPoint("LEFT", row, "LEFT", 2, 0)
     selected:SetSize(2, DROPDOWN_ROW_H - 4)
     selected:SetColorTexture(T.colors.accent2[1], T.colors.accent2[2], T.colors.accent2[3], 0.95)
@@ -1067,7 +1068,7 @@ function W.Dropdown(section, label, values, width)
     btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -28, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
     StoreDropdownDefaultFont(btn._msuf2Label)
-    btn._msuf2Chevron = btn:CreateTexture(nil, "OVERLAY")
+    btn._msuf2Chevron = PixelLayoutRegion(btn:CreateTexture(nil, "OVERLAY"))
     btn._msuf2Chevron:SetTexture(T.media.dropdownChevron)
     btn._msuf2Chevron:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
     btn._msuf2Chevron:SetSize(12, 12)

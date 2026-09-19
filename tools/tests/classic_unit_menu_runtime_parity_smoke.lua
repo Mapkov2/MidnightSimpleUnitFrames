@@ -1,7 +1,7 @@
--- Vanilla, TBC and Mists load Pages/MSUF_Menu2_Unit_Classic.lua and
--- Preview/MSUF_Menu2_UnitPreview_View_Classic.lua in place of the Retail-named
--- files. Both are owned copies that no sync rewrites, so this smoke drives them
--- against the runtime and the shared menu files those flavors load.
+-- Vanilla, TBC and Mists load the Retail-named Pages/MSUF_Menu2_Unit.lua under
+-- the Classic client family, and share Preview/MSUF_Menu2_UnitPreview_View.lua
+-- with Mainline. This smoke drives both against the Classic runtime and the
+-- shared menu files those flavors load.
 local root = assert(arg[1], "repo root missing")
 
 local MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
@@ -22,7 +22,7 @@ local function LoadUnitPage(client)
         MSUF2 = { Widgets = {} },
     }
     assert(loadfile(root .. "/" .. MENU .. "MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", namespace)
-    assert(loadfile(root .. "/" .. MENU .. "Pages/MSUF_Menu2_Unit_Classic.lua"))("MidnightSimpleUnitFrames_Options", namespace)
+    assert(loadfile(root .. "/" .. MENU .. "Pages/MSUF_Menu2_Unit.lua"))("MidnightSimpleUnitFrames_Options", namespace)
     return namespace.MSUF2, assert(namespace.MSUF2.UnitPage, "Classic Unit page did not publish M.UnitPage")
 end
 
@@ -33,7 +33,7 @@ local function WordSet(words)
 end
 
 -- 1. Load conditions: one control per rule the Classic runtime compiles.
-local menu, unitPage = LoadUnitPage({ SupportsPetHappiness = true })
+local menu, unitPage = LoadUnitPage({ Family = "Classic", SupportsPetHappiness = true })
 local EXPECTED_LOAD_CONDITIONS = {
     { "loadCondHideInHousing", "Housing" },
     { "loadCondHideInCombat", "In combat" },
@@ -60,9 +60,12 @@ for index, expected in ipairs(EXPECTED_LOAD_CONDITIONS) do
     menuLoadKeys[row.key] = true
 end
 
-local classicConfig = Read("MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_Config.lua")
+-- Classic flavors compile unit frames through the Retail-named compiler; its alpha
+-- lane lives in the shared helper it calls (Shared.CompileAlpha in MSUF_UF_Shared.lua).
+local classicConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua")
+    .. Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua")
 local runtimeBlock = assert(classicConfig:match("\nlocal LOAD_CONDITION_KEYS = {\n(.-)\n}\n"),
-    "Classic MSUF_UF_Config.lua lost its LOAD_CONDITION_KEYS table")
+    "UnitFrames/Engine/MSUF_UF_Config.lua lost its LOAD_CONDITION_KEYS table")
 -- A compiled rule only works when the element the Classic manifest loads reads it.
 assert(Read("MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UFCore_Elements.xml")
     :find("Engine\\Elements\\MSUF_UF_Elements_LoadConditions.lua", 1, true),
@@ -76,7 +79,7 @@ for field, suffix in runtimeBlock:gmatch('{ "([%w_]+)", "([%w_]+)" }') do
     runtimeLoadCount = runtimeLoadCount + 1
 end
 assert(runtimeLoadCount > 0 and classicConfig:find('conf["loadCond" .. def[2]]', 1, true),
-    "Classic MSUF_UF_Config.lua no longer compiles load conditions from LOAD_CONDITION_KEYS")
+    "UnitFrames/Engine/MSUF_UF_Config.lua no longer compiles load conditions from LOAD_CONDITION_KEYS")
 for key in pairs(runtimeLoadKeys) do
     assert(menuLoadKeys[key], "Classic runtime compiles " .. key .. ", but the Classic Unit page builds no control for it")
 end
@@ -94,7 +97,7 @@ assert(loadFields.loadCondShowWhenInjured and loadFields.loadCondActive,
     "Classic Load Conditions copy and reset skip loadCondShowWhenInjured or loadCondActive")
 
 -- 2. Copy To: every key below has a control on a page the Classic manifests
--- load and is compiled by the Classic MSUF_UF_Config.lua.
+-- load and is compiled by UnitFrames/Engine/MSUF_UF_Config.lua.
 local MOUSEOVER_KEYS = {
     "nameTextMouseover", "hpTextMouseover", "powerTextMouseover",
     "nameTextMouseoverFadeIn", "nameTextMouseoverFadeOut",
@@ -111,7 +114,7 @@ local COPY_CONTRACT = {
 for _, keys in pairs(COPY_CONTRACT) do
     for _, key in ipairs(keys) do
         assert(runtimeLoadKeys[key] or classicConfig:find("conf%." .. key .. "[^%w_]"),
-            "Classic MSUF_UF_Config.lua does not compile " .. key .. "; drop it from the Classic Copy To contract")
+            "UnitFrames/Engine/MSUF_UF_Config.lua does not compile " .. key .. "; drop it from the Classic Copy To contract")
     end
 end
 local SECTION_FOR_SCOPE = { text = "text", portrait = "portrait", load = "load_conditions", transparency = "transparency" }
@@ -160,19 +163,21 @@ local function PetHappinessControl(client)
     for _, spec in ipairs(page.STATUS_CONTROLS) do
         if spec.value == "statusPetHappiness" then found = spec end
     end
-    assert(found and type(found.allowed) == "function", "Classic Unit page lost the Pet Happiness status control")
-    local onPet, onPlayer = found.allowed("pet"), found.allowed("player")
+    -- A client without the capability builds no control at all: not offered anywhere.
+    assert(found == nil or type(found.allowed) == "function", "Pet Happiness status control has no unit gate")
+    local onPet, onPlayer = found ~= nil and found.allowed("pet"), found ~= nil and found.allowed("player")
     _G.C_AddOns, _G.GetAddOnMetadata = oldCAddOns, oldMetadata
     return found, onPet, onPlayer
 end
-local happiness, onPet, onPlayer = PetHappinessControl({ SupportsPetHappiness = true })
+local happiness, onPet, onPlayer = PetHappinessControl({ Family = "Classic", SupportsPetHappiness = true })
+assert(happiness, "Classic Unit page lost the Pet Happiness status control")
 assert(onPet == true and onPlayer == false, "Pet Happiness must be offered on the Pet page only")
 assert(happiness.text == "Pet Happiness", "Pet Happiness control label drifted from the Retail-named page")
 assert(happiness.show == "showPetHappinessIndicator" and happiness.refresh == "MSUF_RequestPetHappinessIndicatorRefresh",
     "Pet Happiness control lost its setting or refresh bridge")
-local _, staleFlavor = PetHappinessControl({ SupportsPetHappiness = false, IsVanilla = true, IsTBC = true })
+local _, staleFlavor = PetHappinessControl({ Family = "Classic", SupportsPetHappiness = false, IsVanilla = true, IsTBC = true })
 assert(staleFlavor == false, "Pet Happiness re-derives the flavor instead of reading MSUF.Client.SupportsPetHappiness")
-local _, flagsOnly = PetHappinessControl({ IsVanilla = true, IsTBC = true })
+local _, flagsOnly = PetHappinessControl({ Family = "Classic", IsVanilla = true, IsTBC = true })
 assert(flagsOnly == false, "Pet Happiness must stay off until Game/Shared/Initialize.lua grants the capability")
 local _, noClient = PetHappinessControl(nil)
 assert(noClient == false, "Pet Happiness must stay off without MSUF.Client")
@@ -182,7 +187,7 @@ assert(clientTagReads == 0, "Classic Unit page still parses the X-MSUF-Client TO
 -- keeps its chips inside the panel when the render pass re-flows it.
 local chrome = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_View_Chrome.lua")
 assert(chrome:find("box._msuf2LayerPopoverWidth = popoverWidth", 1, true),
-    "Unit preview chrome no longer publishes the popover width the Classic view reads")
+    "Unit preview chrome no longer publishes the popover width the unit preview view reads")
 
 local helperSource = Read(MENU .. "MSUF_Menu2_PreviewHelpers.lua")
 local function HelperBody(name)
@@ -193,7 +198,7 @@ end
 local helpers = assert(loadstring("local H = {}\nlocal min = math.min\n" .. HelperBody("FlowLayerChips")
     .. HelperBody("FlowLayerPopover") .. "\nreturn H", "@preview_layer_flow"))()
 
-local view = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_View_Classic.lua")
+local view = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_View.lua")
 local railStart = assert(view:find("\n    box.LayoutLayerRail = function(self, railWidth)\n", 1, true),
     "Classic unit preview lost box.LayoutLayerRail")
 local _, railFinish = assert(view:find("\n    end\n", railStart, true))

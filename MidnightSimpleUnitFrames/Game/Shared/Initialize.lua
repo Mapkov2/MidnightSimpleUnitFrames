@@ -193,6 +193,45 @@ Client.GameModeRecognized = Client.IsStandardGameMode or KNOWN_GAME_MODES[gameMo
 -- Forever project ID, interface number, TOC suffix or Enum.GameMode key.
 Client.IsForever = isForever
 
+-- Class resource modes implemented by this client's provider. Enum.PowerType
+-- alone is not evidence: old clients expose tokens for resources they lack.
+-- Sources: upstream/{classic_era,classic_anniversary,classic,forever}
+-- Blizzard_UnitFrame TOCs and Game/<Flavor>/ClassPower.lua. Mists' provider
+-- owns Chi (all Monk specs), not the separate Blizzard Stagger display.
+local classResources = {}
+local resourceNames
+if isRetail and not isForever then
+    resourceNames = "COMBO_POINTS RUNES HOLY_POWER SOUL_SHARDS CHI ARCANE_CHARGES ESSENCE "
+        .. "CHARGED SOUL_FRAGMENTS SOUL_FRAGMENTS_META SOUL_FRAGMENTS_VENG MAELSTROM MAELSTROM_ABOVE_5 "
+        .. "MAELSTROM_POWER ASTRAL_POWER AP_PREDICTION ECLIPSE_SOLAR ECLIPSE_LUNAR ECLIPSE_CA "
+        .. "STAGGER_GREEN STAGGER_YELLOW STAGGER_RED INSANITY WHIRLWIND TIP_OF_THE_SPEAR "
+        .. "ICICLES EBON_MIGHT IRONFUR SWEEPING_STRIKES NO_CLASS_BAR MANA RESOURCE_TEXT"
+elseif isMists then
+    resourceNames = "COMBO_POINTS RUNES HOLY_POWER SOUL_SHARDS CHI ARCANE_CHARGES MISTS_ARCANE_CHARGES "
+        .. "SHADOW_ORBS BURNING_EMBERS DEMONIC_FURY ECLIPSE_SOLAR ECLIPSE_LUNAR ECLIPSE_CA MANA RESOURCE_TEXT"
+elseif isVanilla or isTBC or isForever then
+    resourceNames = "COMBO_POINTS MANA RESOURCE_TEXT"
+end
+for resource in (resourceNames or ""):gmatch("%S+") do classResources[resource] = true end
+function Client.SupportsClassResource(resource)
+    return classResources[resource] == true
+end
+local classResourceSettings = {
+    ["bars.showChargedComboPoints"] = "CHARGED",
+    ["bars.runeShowTime"] = "RUNES",
+    ["bars.showSweepingStrikes"] = "SWEEPING_STRIKES",
+    ["bars.showEleMaelstrom"] = "MAELSTROM_POWER",
+    ["bars.showEbonMight"] = "EBON_MIGHT",
+    ["bars.showShadowMana"] = "INSANITY",
+    ["bars.showGuardianIronfur"] = "IRONFUR",
+    ["bars.guardianIronfurShowHashLines"] = "IRONFUR",
+}
+function Client.SupportsClassResourceSetting(settingKey)
+    if settingKey == "bars.classPowerAnchorToCooldown" then return Client.HostsCooldownManager == true end
+    local resource = classResourceSettings[settingKey]
+    return resource == nil or Client.SupportsClassResource(resource)
+end
+
 -- The MSUF version of this client, read once here so nothing asks the TOC again.
 -- Every client TOC owns its "## Version", so clients can follow their own patch
 -- cycle. WoW Forever shares the _Mainline.toc files with Midnight and cannot

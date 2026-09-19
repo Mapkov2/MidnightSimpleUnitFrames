@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Runtime/MSUF_BarBackgroundRuntime.lua
 --- Runtime bar background tint/texture handling.
 --- Shared bar-background runtime helpers with stable exported globals.
@@ -82,7 +83,7 @@ do
     local function EnsureLegacyCooldownViewerAnchor()
         local anchor = _G[LEGACY_CDM_ANCHOR]
         if not anchor then
-            anchor = _G.CreateFrame("Frame", LEGACY_CDM_ANCHOR, _G.UIParent)
+            anchor = PixelLayoutRegion(_G.CreateFrame("Frame", LEGACY_CDM_ANCHOR, _G.UIParent))
             _G[LEGACY_CDM_ANCHOR] = anchor
         end
         anchor._msufLegacyCooldownAnchor = true

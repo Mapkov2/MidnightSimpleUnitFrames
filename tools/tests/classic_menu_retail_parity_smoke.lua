@@ -7,9 +7,12 @@ local function Read(relativePath)
     return source
 end
 
-local auras = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Classic.lua")
+-- Classic loads the Retail aura page, its Group and Preview siblings and the
+-- shared Custom workspace (MSUF_Menu2_AfterGroupPreview_Classic.xml).
+local auras = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
+    .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Group.lua")
     .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua")
-    .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AuraPreview_Classic.lua")
+    .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua")
     .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AuraSettings.lua")
     .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AuraControls.lua")
 for _, contract in ipairs({
@@ -29,13 +32,13 @@ local classicAuraVisuals = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSU
 assert(classicAuraVisuals:find("function A3.PreviewDispelTypeForIndex(index)", 1, true),
     "Classic aura visuals no longer publish the dispel preview helper the shared previews call")
 
-local unit = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua")
+local unit = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
 for _, contract in ipairs({ "statusAFKTimer", "statusPetHappiness", "showStanceIndicator" }) do
     assert(unit:find(contract, 1, true),
         "Classic Unit menu lost a Retail/Classic status contract: " .. contract)
 end
 
-local status = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection_Classic.lua")
+local status = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua")
 assert(status:find("identityRestrictionWarning", 1, true),
     "Classic status menu lost the current Retail identity warning")
 -- Retail b2abf551: the ::: text shortcut is the single status text-color entry
@@ -80,26 +83,45 @@ for _, key in ipairs({
         "Classic search index lists a setting with no Classic control: general." .. key)
 end
 
-local aurasPage = (Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Classic.lua"):gsub("\r\n", "\n"))
-assert(not aurasPage:find("BuildGroupFilters", 1, true),
-    "Classic Aura menu kept the unreachable Retail group filter builder")
-assert(not aurasPage:find('"Full-Frame Effect"', 1, true),
+local aurasPage = (Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua"):gsub("\r\n", "\n"))
+local aurasGroupPage = (Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Group.lua"):gsub("\r\n", "\n"))
+local groupAurasPage = (Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupAuras.lua"):gsub("\r\n", "\n"))
+-- The Retail group filter builder stays unreachable: the Group Auras page is the
+-- only caller of the lane workspace and always asks for the compact tools,
+-- which return before BuildGroupFilters.
+local _, workspaceCalls = groupAurasPage:gsub("BuildAuras3GroupLaneWorkspace%(", "")
+assert(workspaceCalls == 1 and groupAurasPage:find(
+    "M.BuildAuras3GroupLaneWorkspace(ctx, auraBuilder, scope, lane, { tool = tool, compact = true })", 1, true),
+    "the Group Auras page no longer builds the lane workspace only in its compact form")
+local compactAt = assert(aurasGroupPage:find("\n[ \t]*if opts and opts%.compact == true then\n"),
+    "the group lane workspace lost its compact dispatch")
+assert(aurasGroupPage:find("\n[ \t]*return\n[ \t]*end\n[ \t]*BuildGroupFilters%(ctx, b, scope, lane, opts%)\n", compactAt),
+    "the compact group lane workspace no longer returns before the Retail group filter builder")
+-- No Classic runtime renders the lane Full-Frame Effect, so the Classic flavors
+-- skip its section and its badge; whole live source lines, so a commented-out,
+-- disabled or inverted guard fails.
+assert(aurasPage:find("\n[ \t]*if M%.CLASSIC_AURA_FILTERS_REDUCED ~= true then BuildUnitStyleFrameEffect%(S%) end\n"),
     "Classic Aura menu exposes the lane Full-Frame Effect section that no Classic runtime renders")
+local _, frameEffectMentions = aurasPage:gsub("BuildUnitStyleFrameEffect%(S%)", "")
+assert(frameEffectMentions == 2 and aurasPage:find("\nlocal function BuildUnitStyleFrameEffect(S)\n", 1, true),
+    "the lane Full-Frame Effect section is built outside its Classic gate")
+assert(aurasPage:find("\n[ \t]*if M%.CLASSIC_AURA_FILTERS_REDUCED ~= true then\n[ \t]*local effectType = tostring%(ReadEffectValue%(\"Type\", \"none\"%)%)\n"),
+    "the lane Full-Frame Effect badge is not gated with its section")
 -- Whole live source lines, so a commented-out, disabled or inverted guard fails.
 -- classic_aura_menu_filters_smoke.lua drives the same setter for behaviour.
 assert(aurasPage:find('\n[ \t]*if value == true and lane == "debuff" then Model%.WriteFilter%(unit, lane, "nonPlayer", false%) end\n'),
     "Classic Only mine no longer clears the mutually exclusive nonPlayer debuff filter")
 local shadowAlphaAt = assert(aurasPage:find('iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)"', 1, true),
     "Classic Aura menu lost the shared icon-style Shadow Alpha slider")
-local gateRefreshAt = assert(aurasPage:find("\n[ \t]*if sharedGlobalsOnly then M%.TrackRefresh%(ctx, function%(%) iconStyleGates%.Apply%(true%) end%) end\n", shadowAlphaAt),
-    "Classic icon-style gates are not refreshed on every shared Appearance page")
-local buffOnlyAt = assert(aurasPage:find('if sharedGlobalsOnly and previewContainer == "buff" then', shadowAlphaAt, true),
+local gateRefreshAt = assert(aurasPage:find("\n[ \t]*if appearanceGlobalsOnly then\n[ \t]*%-%-[^\n]*\n[ \t]*%-%-[^\n]*\n[ \t]*%-%-[^\n]*\n[ \t]*M%.TrackRefresh%(ctx, function%(%) iconStyleGates%.Apply%(true%) end%)\n[ \t]*end\n", shadowAlphaAt),
+    "Classic icon-style gates are not refreshed on every Appearance page")
+local buffOnlyAt = assert(aurasPage:find('if appearanceGlobalsOnly and previewContainer == "buff" then', shadowAlphaAt, true),
     "Classic Aura menu lost the Buff-only Native Aura Flow section")
 assert(gateRefreshAt < buffOnlyAt,
     "Classic icon-style gate refresh must be registered before the Buff-only Native Aura Flow section")
 local _, gateApplyCount = aurasPage:gsub("iconStyleGates%.Apply%(true%)", "")
 assert(gateApplyCount == 1,
-    "Classic icon-style gates must be re-applied from exactly one shared Appearance refresher")
+    "Classic icon-style gates must be re-applied from exactly one Appearance refresher")
 
 -- Pandemic Warning & Style is a native aura-backend feature. The shared Custom
 -- workspace is on every client, so it builds the section behind the backend's
@@ -160,7 +182,7 @@ assert(unit:find("loadCondShowWhenInjured loadCondActive", 1, true),
     "Classic Load Conditions copy and reset skip loadCondShowWhenInjured")
 
 -- Arena preview branches from the Mainline Render, and Retail 7f0aa2c6 guides.
-local render = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render_Classic.lua")
+local render = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua")
 for _, contract in ipairs({
     '(key == "arena" and "Greater Pyroblast")',
     '(key == "arena" and g.showArenaCastTime ~= false)',

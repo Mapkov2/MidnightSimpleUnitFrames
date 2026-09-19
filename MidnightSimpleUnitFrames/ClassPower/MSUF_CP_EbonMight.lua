@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- ClassPower/MSUF_CP_EbonMight.lua
 --- Native 12.1 Ebon Might duration bar and text.
 ---
@@ -223,7 +224,7 @@ builders.EBON_MIGHT = function(E)
                         button:SetFrameLevel((host:GetFrameLevel() or 0) + 1)
                     end
 
-                    local bar = CreateFrame("StatusBar", nil, button)
+                    local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, button))
                     bar:SetAllPoints(button)
                     bar:SetStatusBarTexture(style.texture)
                     bar:SetMinMaxValues(0, 1)
@@ -232,7 +233,7 @@ builders.EBON_MIGHT = function(E)
                     CP.ebonNativeBar = bar
                     button:SetDurationBar(bar, GetDurationBarOptions())
 
-                    local textOwner = CreateFrame("Frame", nil, button)
+                    local textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, button))
                     textOwner:SetAllPoints(button)
                     textOwner:SetFrameLevel(style.textLevel)
                     if textOwner.EnableMouse then textOwner:EnableMouse(false) end
@@ -240,7 +241,7 @@ builders.EBON_MIGHT = function(E)
                     CP.ebonTextFrameLevel = style.textLevel
                     CP.ebonTextLayerRetryPending = nil
 
-                    local duration = textOwner:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                    local duration = PixelLayoutRegion(textOwner:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
                     duration:SetPoint("CENTER", textOwner, "CENTER", style.textOffsetX, style.textOffsetY)
                     duration:SetJustifyH("CENTER")
                     duration:SetJustifyV("MIDDLE")

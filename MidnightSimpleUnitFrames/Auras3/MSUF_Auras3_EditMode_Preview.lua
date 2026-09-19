@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/EditMode_Preview: fake aura groups and their refresh signatures; live aura payloads remain native.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
@@ -146,41 +147,41 @@ local function EnsureIcon(group, index)
     local icon = icons[index]
     if icon then return icon end
 
-    icon = CreateFrame("Frame", nil, group.Body or group, "BackdropTemplate")
-    icon:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+    icon = PixelLayoutRegion(CreateFrame("Frame", nil, group.Body or group, "BackdropTemplate"))
+    PixelLayoutRegion(icon, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1 })
     icon:SetBackdropColor(0, 0, 0, 0)
     icon:SetBackdropBorderColor(0, 0, 0, 0)
 
-    local tex = icon:CreateTexture(nil, "BORDER")
+    local tex = PixelLayoutRegion(icon:CreateTexture(nil, "BORDER"))
     tex:SetAllPoints(icon)
     tex:SetTexCoord(0, 1, 0, 1)
     icon.Icon = tex
 
-    local shade = icon:CreateTexture(nil, "ARTWORK")
+    local shade = PixelLayoutRegion(icon:CreateTexture(nil, "ARTWORK"))
     shade:SetAllPoints(icon)
     shade:SetColorTexture(0, 0, 0, 0)
     icon.Shade = shade
 
     -- Preview-only deterministic swipe. The shared preview animation advances
     -- its width; no native Cooldown state survives an Off -> On transition.
-    local swipe = icon:CreateTexture(nil, "ARTWORK", nil, 1)
+    local swipe = PixelLayoutRegion(icon:CreateTexture(nil, "ARTWORK", nil, 1))
     swipe:SetTexture(W8)
     swipe:SetVertexColor(0, 0, 0, 0.58)
     swipe:Hide()
     icon.Swipe = swipe
 
-    local durationBar = icon:CreateTexture(nil, "OVERLAY")
+    local durationBar = PixelLayoutRegion(icon:CreateTexture(nil, "OVERLAY"))
     durationBar:SetTexture(W8)
     local durationR, durationG, durationB = AuraDurationBarColor()
     durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
     durationBar:Hide()
     icon.DurationBar = durationBar
 
-    local dispelBorder = icon:CreateTexture(nil, "OVERLAY", nil, 2)
+    local dispelBorder = PixelLayoutRegion(icon:CreateTexture(nil, "OVERLAY", nil, 2))
     dispelBorder:Hide()
     icon.DispelBorder = dispelBorder
 
-    local cd = icon:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local cd = PixelLayoutRegion(icon:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
     if cd.SetDrawLayer then
         cd:SetDrawLayer("OVERLAY", FrameLayers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
     end
@@ -189,7 +190,7 @@ local function EnsureIcon(group, index)
     cd:SetText("1m")
     icon.CooldownText = cd
 
-    local count = icon:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local count = PixelLayoutRegion(icon:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
     if count.SetDrawLayer then
         count:SetDrawLayer("OVERLAY", FrameLayers.AURA_STACK_DRAW_SUBLEVEL or 6)
     end
@@ -379,7 +380,7 @@ local function CreateGroup(unit, kind)
 
     local spec = GROUPS[kind]
     local snapName = "AuraPreview:" .. tostring(unit) .. ":" .. tostring(kind)
-    local group = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
+    local group = PixelLayoutRegion(CreateFrame("Button", nil, UIParent, "BackdropTemplate"), true)
     SyncPreviewGroupStrata(group)
     group:SetFrameLevel(900)
     group:SetClampedToScreen(false)
@@ -389,19 +390,19 @@ local function CreateGroup(unit, kind)
     if group.SetMouseMotionEnabled then group:SetMouseMotionEnabled(true) end
     if group.RegisterForClicks then group:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     if group.RegisterForDrag then group:RegisterForDrag("LeftButton") end
-    group:SetBackdrop({ bgFile = W8, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
+    PixelLayoutRegion(group, "SetBackdrop", { bgFile = W8, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
     group:SetBackdropColor(0.02, 0.03, 0.08, 0.28)
     group:SetBackdropBorderColor(spec.color[1], spec.color[2], spec.color[3], 0.72)
 
-    local header = CreateFrame("Frame", nil, group, "BackdropTemplate")
+    local header = PixelLayoutRegion(CreateFrame("Frame", nil, group, "BackdropTemplate"))
     header:SetPoint("TOPLEFT", group, "TOPLEFT", 2, -2)
     header:SetPoint("TOPRIGHT", group, "TOPRIGHT", -2, -2)
     header:SetHeight(HEADER_H)
-    header:SetBackdrop({ bgFile = W8 })
+    PixelLayoutRegion(header, "SetBackdrop", { bgFile = W8 })
     header:SetBackdropColor(spec.color[1], spec.color[2], spec.color[3], spec.color[4])
     group.Header = header
 
-    local label = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local label = PixelLayoutRegion(header:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
     label:SetPoint("LEFT", header, "LEFT", 6, 0)
     label:SetPoint("RIGHT", header, "RIGHT", -6, 0)
     label:SetJustifyH("LEFT")
@@ -409,7 +410,7 @@ local function CreateGroup(unit, kind)
     label:SetText(UnitLabel(unit) .. " " .. GroupLabel(unit, kind, spec))
     group.Label = label
 
-    local body = CreateFrame("Frame", nil, group)
+    local body = PixelLayoutRegion(CreateFrame("Frame", nil, group))
     body:SetPoint("BOTTOMLEFT", group, "BOTTOMLEFT", 0, 0)
     body:SetSize(1, 1)
     group.Body = body
@@ -441,7 +442,7 @@ local function CreateGroup(unit, kind)
         EndAuraGroupDrag(self, "LeftButton", true)
     end)
 
-    local hitbox = CreateFrame("Button", nil, group)
+    local hitbox = PixelLayoutRegion(CreateFrame("Button", nil, group), true)
     hitbox:SetAllPoints(group)
     hitbox:EnableMouse(true)
     if hitbox.SetMouseClickEnabled then hitbox:SetMouseClickEnabled(true) end
@@ -499,7 +500,7 @@ local function ApplyEditModeCustomEffect(group, frame, item)
         return
     end
     if not owner then
-        owner = CreateFrame("Frame", nil, group)
+        owner = PixelLayoutRegion(CreateFrame("Frame", nil, group))
         owner:EnableMouse(false)
         group._msufA3CustomEffectPreview = owner
     end

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Zero-idle bridge for the load-on-demand MSUF Assistant runtime.
 local _, MSUF = ...
 MSUF = _G.MSUF_NS or MSUF or {}
@@ -306,7 +307,7 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     local sendW = cardW < 430 and 62 or 72
     local inputW = math.max(120, cardW - 44 - sendW - 10)
     local inputY = -(cardH - inputBottom - inputH)
-    local input = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local input = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     input:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, inputY)
     input:SetSize(inputW, inputH)
     input:SetAutoFocus(false)
@@ -325,7 +326,7 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
 
     local placeholder = input.Instructions
     if not (placeholder and placeholder.SetText and placeholder.SetPoint) then
-        placeholder = input:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        placeholder = PixelLayoutRegion(input:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     elseif placeholder.ClearAllPoints then
         placeholder:ClearAllPoints()
     end
@@ -343,7 +344,7 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
         if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(send) end
         if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(send) end
     else
-        send = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        send = PixelLayoutRegion(CreateFrame("Button", nil, parent, "UIPanelButtonTemplate"))
         send:SetSize(sendW, inputH)
         send:SetText("Send")
     end

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
@@ -203,7 +204,7 @@ local function CanAltDrag(g, lockKey, clickThroughKey)
 end
 
 local function CreateMovableGameplayFrame(name, width, height)
-    local frame = CreateFrame("Frame", name, UIParent)
+    local frame = PixelLayoutRegion(CreateFrame("Frame", name, UIParent))
     frame:SetSize(width, height)
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -603,7 +604,7 @@ EnsureCombatStateText = function()
         end)
     end
 
-    stateText = stateFrame:CreateFontString("MSUF_CombatStateText", "OVERLAY")
+    stateText = PixelLayoutRegion(stateFrame:CreateFontString("MSUF_CombatStateText", "OVERLAY"))
     stateText:SetPoint("CENTER")
 
     local path, flags, r, gCol, bCol, size, useShadow = GetGameplayFont("state")
@@ -713,17 +714,17 @@ local function EnsureCombatCrosshair()
     InstallCombatCrosshairZoomHooks()
 
     if not crosshairFrame then
-        crosshairFrame = CreateFrame("Frame", "MSUF_CombatCrosshairFrame", UIParent)
+        crosshairFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_CombatCrosshairFrame", UIParent))
         crosshairFrame:SetSize(40, 40)
         AnchorCombatCrosshair()
         crosshairFrame:SetFrameStrata("BACKGROUND")
         crosshairFrame:SetClampedToScreen(true)
         crosshairFrame:EnableMouse(false)
 
-        local horiz = crosshairFrame:CreateTexture(nil, "ARTWORK")
+        local horiz = PixelLayoutRegion(crosshairFrame:CreateTexture(nil, "ARTWORK"))
         horiz:SetPoint("CENTER")
 
-        local vert = crosshairFrame:CreateTexture(nil, "ARTWORK")
+        local vert = PixelLayoutRegion(crosshairFrame:CreateTexture(nil, "ARTWORK"))
         vert:SetPoint("CENTER")
 
         crosshairFrame.horiz = horiz
@@ -732,7 +733,7 @@ local function EnsureCombatCrosshair()
         crosshairFrame:Hide()
 
         if not crosshairEventFrame then
-            crosshairEventFrame = CreateFrame("Frame", "MSUF_CombatCrosshairEventFrame", UIParent)
+            crosshairEventFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_CombatCrosshairEventFrame", UIParent))
             crosshairEventFrame:UnregisterAllEvents()
 
             local function MSUF_CombatCrosshair_OnEvent(_, event, ...)
@@ -919,7 +920,7 @@ local function CreateCombatTimerFrame()
         CommitHistory(self)
     end)
 
-    timerText = combatFrame:CreateFontString(nil, "OVERLAY")
+    timerText = PixelLayoutRegion(combatFrame:CreateFontString(nil, "OVERLAY"))
     timerText:SetPoint("CENTER")
 
     ApplyFontToCounter()

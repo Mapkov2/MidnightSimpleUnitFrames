@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Core.lua
 --- Cold-path shared helpers for the MSUF2 unit frame preview.
 local addonName, addonNS = ...
@@ -35,7 +36,7 @@ function Core.ApplyBackdrop(frame, bg, border, fallback)
     end
     if not (frame and frame.SetBackdrop) then return end
     fallback = fallback or {}
-    frame:SetBackdrop(fallback.backdrop or {
+    PixelLayoutRegion(frame, "SetBackdrop", fallback.backdrop or {
         bgFile = TEX_W8,
         edgeFile = TEX_W8,
         edgeSize = 1,
@@ -154,12 +155,12 @@ local function EnsureFrameBorderOverlay(mock, border)
     if not (mock and mock.CreateTexture) then return nil end
     local overlay = mock._msufPreviewFrameBorder
     if not overlay then
-        overlay = CreateFrame("Frame", nil, mock, "BackdropTemplate")
+        overlay = PixelLayoutRegion(CreateFrame("Frame", nil, mock, "BackdropTemplate"))
         overlay:EnableMouse(false)
         overlay:SetAllPoints(mock)
         overlay._edges = {}
         if overlay.SetBackdrop then
-            overlay:SetBackdrop({ edgeFile = TEX_W8, edgeSize = 1 })
+            PixelLayoutRegion(overlay, "SetBackdrop", { edgeFile = TEX_W8, edgeSize = 1 })
             overlay:SetBackdropBorderColor(0, 0, 0, 0)
         end
         mock._msufPreviewFrameBorder = overlay
@@ -213,7 +214,7 @@ local function ApplyTrueOutlineFrameBorder(mock, overlay, border, thickness)
         and styles.EdgeSize(border.textureKey, thickness) or thickness
     local r, g, b, a = border.r, border.g, border.b, border.a
     if r == nil then r, g, b, a = Core.BaseEdgeColor() end
-    overlay:SetBackdrop({ edgeFile = texture, edgeSize = edgeSize })
+    PixelLayoutRegion(overlay, "SetBackdrop", { edgeFile = texture, edgeSize = edgeSize })
     overlay:SetBackdropBorderColor(r or 0, g or 0, b or 0, a == nil and 1 or a)
     if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(overlay, false, FRAME_BORDER_OPTS) end
     return true
@@ -370,7 +371,7 @@ local function EnsureInlinePowerHost(mock)
     local host = mock and mock._msufPreviewInlinePowerRoundedHost
     if host then return host end
     if not (mock and type(_G.CreateFrame) == "function") then return nil end
-    host = CreateFrame("Frame", nil, mock)
+    host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     if host.EnableMouse then host:EnableMouse(false) end
     if host.SetFrameLevel and mock.GetFrameLevel then host:SetFrameLevel(mock:GetFrameLevel() + 3) end
     mock._msufPreviewInlinePowerRoundedHost = host
@@ -386,11 +387,11 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
     end
     if not host then
         if type(_G.CreateFrame) ~= "function" then return end
-        host = CreateFrame("Frame", nil, mock)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
         if host.EnableMouse then host:EnableMouse(false) end
         host.edges = {}
         for i = 1, 4 do
-            local line = host:CreateTexture(nil, "OVERLAY", nil, 6)
+            local line = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
             line:SetTexture(TEX_W8)
             host.edges[i] = line
         end

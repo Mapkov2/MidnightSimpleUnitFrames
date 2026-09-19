@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Classic-only visual parity for the scan-based Auras3 backend.
 --- Loaded exclusively by Classic-family manifests; Mainline keeps the native
 --- AuraContainer visual implementation and pays no load/runtime cost here.
@@ -244,7 +245,7 @@ local function ApplyShadow(button, style, size, shape)
         HidePieces(pieces)
         if not (style and style.shadowEnabled) then if shapedTexture then shapedTexture:Hide() end; return end
         if not shapedTexture then
-            shapedTexture = button:CreateTexture(nil, "BACKGROUND", nil, -7)
+            shapedTexture = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND", nil, -7))
             button._msufA3ShapedStyleShadow = shapedTexture
         end
         if not SetShapeTexture(shapedTexture, shape, false) then shapedTexture:Hide(); return end
@@ -276,7 +277,7 @@ local function ApplyBorder(button, style, size, shape)
         HidePieces(pieces)
         if not (style and style.borderEnabled) then if shaped then shaped:Hide() end; return end
         if not shaped then
-            shaped = button:CreateTexture(nil, "BORDER", nil, -1)
+            shaped = PixelLayoutRegion(button:CreateTexture(nil, "BORDER", nil, -1))
             button._msufA3ShapedStyleBorder = shaped
         end
         if not SetShapeTexture(shaped, shape, true) then shaped:Hide(); return end
@@ -306,7 +307,7 @@ local function ApplyBorder(button, style, size, shape)
     end
     HidePieces(pieces)
     if not flat then
-        flat = button:CreateTexture(nil, "BORDER", nil, -1)
+        flat = PixelLayoutRegion(button:CreateTexture(nil, "BORDER", nil, -1))
         flat:SetTexture("Interface\\Buttons\\WHITE8X8")
         button._msufA3StyleBorder = flat
     end
@@ -404,7 +405,7 @@ end
 local function DurationBar(button, cfg)
     local bar = button._msufA3DurationBar
     if not bar then
-        bar = CreateFrame("StatusBar", nil, button)
+        bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, button))
         bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(0)
@@ -462,7 +463,7 @@ local function EnsureFrameEffectRoot(button, frame)
         -- absolute element layer can order below or above the Aura button.
         -- Classic AuraData is public, so button updates own visibility directly
         -- and no native secret-backed descendant gate is required here.
-        root = CreateFrame("Frame", nil, frame)
+        root = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
         if root.EnableMouse then root:EnableMouse(false) end
         button._msufA3ClassicFrameEffectRoot = root
     elseif root.GetParent and root:GetParent() ~= frame and root.SetParent then
@@ -478,7 +479,7 @@ local function ApplyFrameEffectEdges(root, target, effect, kind, r, g, b, a)
     if not edges then
         edges = {}
         for i = 1, 4 do
-            edges[i] = root:CreateTexture(nil, "OVERLAY")
+            edges[i] = PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
             edges[i]:SetTexture("Interface\\Buttons\\WHITE8X8")
         end
         root._edges = edges
@@ -563,7 +564,7 @@ local function ApplyFrameEffect(lane, button, data)
     if kind == "healthtint" then
         local fill = FrameEffectHealthFill(frame)
         if not fill then return false end
-        local tint = root._tint or root:CreateTexture(nil, "OVERLAY")
+        local tint = root._tint or PixelLayoutRegion(root:CreateTexture(nil, "OVERLAY"))
         root._tint = tint
         tint:SetTexture("Interface\\Buttons\\WHITE8X8")
         tint:ClearAllPoints(); tint:SetAllPoints(fill)
@@ -572,7 +573,7 @@ local function ApplyFrameEffect(lane, button, data)
     elseif kind == "namecolor" then
         local source = frame and (frame.Name or frame.name or frame.NameText or frame.nameText or frame._nameFS)
         if not source then return false end
-        local overlay = root._name or root:CreateFontString(nil, "OVERLAY")
+        local overlay = root._name or PixelLayoutRegion(root:CreateFontString(nil, "OVERLAY"))
         root._name = overlay
         if source.GetFont and overlay.SetFont then
             local path, size, flags = source:GetFont()
@@ -607,7 +608,7 @@ local function ApplyIndicatorVisual(button, cfg)
     local swatch = button._msufA3ClassicIndicatorSwatch
     if visual == "square" or visual == "bar" then
         if not swatch then
-            swatch = button:CreateTexture(nil, "OVERLAY")
+            swatch = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
             swatch:SetTexture("Interface\\Buttons\\WHITE8X8")
             button._msufA3ClassicIndicatorSwatch = swatch
         end
@@ -624,7 +625,7 @@ local function ApplyIndicatorVisual(button, cfg)
     local glow = button._msufA3ClassicIconGlow
     if showIcon and cfg.iconEffect == "glow" then
         if not glow then
-            glow = button:CreateTexture(nil, "BACKGROUND")
+            glow = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND"))
             glow:SetTexture("Interface\\Buttons\\WHITE8X8")
             button._msufA3ClassicIconGlow = glow
         end
@@ -641,7 +642,7 @@ end
 local function EnsureStealableTexture(button, key, subLevel)
     local texture = button[key]
     if texture then return texture end
-    texture = button:CreateTexture(nil, "OVERLAY", nil, subLevel)
+    texture = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY", nil, subLevel))
     texture:SetTexture(STEALABLE_TEXTURE)
     if texture.SetBlendMode then texture:SetBlendMode("ADD") end
     texture:Hide()
@@ -901,7 +902,7 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
         .. ":" .. tostring(cfg.tintKey or "")
     local host = frame[hostKey]
     if not host then
-        host = CreateFrame("Frame", nil, frame)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
         if preview == true then
             host:SetMovable(true)
             host:EnableMouse(true)
@@ -934,7 +935,7 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
     for i = 1, #selected do
         local tile = host.tiles[i]
         if not tile then
-            tile = host:CreateTexture(nil, "OVERLAY")
+            tile = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"))
             host.tiles[i] = tile
         end
         tile:ClearAllPoints(); tile:SetSize(size, size)
@@ -1006,10 +1007,10 @@ function V.UpdateDispelOverlay(frame, visual, active, r, g, b, a, preview)
         .. tostring(g) .. ":" .. tostring(b) .. ":" .. tostring(target)
     local host = frame[hostKey]
     if not host then
-        host = CreateFrame("Frame", nil, frame)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
         host:SetAllPoints(frame)
         if host.EnableMouse then host:EnableMouse(false) end
-        host.region = host:CreateTexture(nil, "OVERLAY")
+        host.region = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"))
         frame[hostKey] = host
     end
     if frame[signatureKey] == signature and host:IsShown() then return false end

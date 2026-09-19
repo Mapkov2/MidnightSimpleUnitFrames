@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: Appearance.
 -- Icon shapes, dispel assets and color maps shared by live initialization and addon-owned previews. Native regions are styled before handoff.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
@@ -105,13 +106,13 @@ function A3.ApplyPandemicVisual(owner, config, visible)
     if not (owner and type(config) == "table") then return nil end
     local host = owner._msufA3PandemicRegion
     if not host then
-        host = CreateFrame("Frame", nil, owner)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, owner))
         host:EnableMouse(false)
-        host.tint = host:CreateTexture(nil, "ARTWORK", nil, 3)
-        host.shapeBorder = host:CreateTexture(nil, "OVERLAY", nil, 3)
+        host.tint = PixelLayoutRegion(host:CreateTexture(nil, "ARTWORK", nil, 3))
+        host.shapeBorder = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 3))
         host.edges = {}
         for index = 1, 4 do
-            host.edges[index] = host:CreateTexture(nil, "OVERLAY", nil, 3)
+            host.edges[index] = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 3))
             host.edges[index]:SetTexture("Interface\\Buttons\\WHITE8X8")
         end
         owner._msufA3PandemicRegion = host

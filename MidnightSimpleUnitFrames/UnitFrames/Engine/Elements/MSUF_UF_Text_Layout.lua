@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
@@ -243,7 +244,8 @@ local function EnsureDotsFS(frame, key, template, layer)
   if not parent then
     return nil
   end
-  fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
+  fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal"))
+
   fs:SetText("..")
   fs:SetJustifyH("CENTER")
   if fs.SetWordWrap then
@@ -273,7 +275,7 @@ local function EnsureClipFrame(frame, key, layer)
   if not parent then
     return nil
   end
-  clip = CreateFrame("Frame", nil, parent)
+  clip = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
   clip:EnableMouse(false)
   if clip.SetClipsChildren then
     clip:SetClipsChildren(true)
@@ -348,7 +350,7 @@ local function ApproxNameWidth(fs, maxChars)
   maxChars = floor((tonumber(maxChars) or 0) + 0.5)
   if maxChars <= 0 then return 0 end
   if not measureFS then
-    measureFS = UIParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    measureFS = PixelLayoutRegion(UIParent:CreateFontString(nil, "OVERLAY", "GameFontNormal"), true)
     measureFS:Hide()
   end
   if fs and fs.GetFont and measureFS.SetFont then
@@ -731,7 +733,7 @@ end
 local function EnsureTextOverlay(frame, field, layer, fallback)
   local overlay = frame[field]
   if not overlay then
-    overlay = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
+    overlay = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
     overlay:SetAllPoints(frame)
     overlay:EnableMouse(false)
     if overlay.SetClipsChildren then
@@ -767,13 +769,14 @@ local function EnsureFontString(frame, key, template, layer, fallback, layerFiel
     end
   end
   if not fs then
-    fs = overlay:CreateFontString(nil, "OVERLAY", template or "GameFontNormalSmall")
+    fs = PixelLayoutRegion(overlay:CreateFontString(nil, "OVERLAY", template or "GameFontNormalSmall"))
     if fs.SetWordWrap then
       fs:SetWordWrap(false)
     end
     frame[key] = fs
     changed = true
   end
+
   return fs, changed
 end
 

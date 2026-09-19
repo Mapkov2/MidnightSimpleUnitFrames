@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua
 --- Non-combat preview frames for group-frame menu/edit workflows.
 ---
@@ -207,7 +208,7 @@ local function EnsureContainer(kind, parent)
   local desiredParent = parent or UIParent
   local container = GF._previewContainer[kind]
   if not container then
-    container = CreateFrame("Frame", "MSUF_GFPreviewContainer_" .. kind, desiredParent)
+    container = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GFPreviewContainer_" .. kind, desiredParent))
     container:EnableMouse(false)
     GF._previewContainer[kind] = container
   end
@@ -215,7 +216,7 @@ local function EnsureContainer(kind, parent)
 
   local layout = GF._previewLayoutFrame[kind]
   if not layout then
-    layout = CreateFrame("Frame", "MSUF_GFPreviewLayout_" .. kind, container)
+    layout = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GFPreviewLayout_" .. kind, container))
     layout:EnableMouse(false)
     GF._previewLayoutFrame[kind] = layout
   end
@@ -366,10 +367,10 @@ local function EnsureAuraPreview(frame, index, poolKey)
   local visual = pool[index]
   if visual then return visual end
 
-  visual = CreateFrame("Frame", nil, frame)
+  visual = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
   visual:EnableMouse(false)
   if visual.SetMouseMotionEnabled then visual:SetMouseMotionEnabled(false) end
-  visual._texture = visual:CreateTexture(nil, "ARTWORK")
+  visual._texture = PixelLayoutRegion(visual:CreateTexture(nil, "ARTWORK"))
   visual._texture:SetAllPoints(visual)
   pool[index] = visual
   return visual
@@ -378,7 +379,7 @@ end
 local function EnsurePreviewTexture(visual, key, layer, sublevel)
   local texture = visual[key]
   if not texture then
-    texture = visual:CreateTexture(nil, layer, nil, sublevel)
+    texture = PixelLayoutRegion(visual:CreateTexture(nil, layer, nil, sublevel))
     visual[key] = texture
   end
   return texture
@@ -387,7 +388,7 @@ end
 local function EnsurePreviewFontString(visual, key)
   local fontString = visual[key]
   if not fontString then
-    fontString = visual:CreateFontString(nil, "OVERLAY")
+    fontString = PixelLayoutRegion(visual:CreateFontString(nil, "OVERLAY"))
     visual[key] = fontString
   end
   return fontString
@@ -403,7 +404,7 @@ local function EnsureFrameAuraLaneHost(frame, key)
   end
   local host = hosts[key]
   if host then return host end
-  host = CreateFrame("Frame", nil, frame)
+  host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
   host:EnableMouse(false)
   if host.SetMouseMotionEnabled then host:SetMouseMotionEnabled(false) end
   hosts[key] = host
@@ -693,7 +694,7 @@ end
 local function EnsureSpellFrameEffectOwner(visual, frame)
   local owner = visual._frameEffectOwner
   if not owner then
-    owner = CreateFrame("Frame", nil, frame)
+    owner = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     owner:EnableMouse(false)
     if owner.SetMouseMotionEnabled then owner:SetMouseMotionEnabled(false) end
     visual._frameEffectOwner = owner
@@ -1515,7 +1516,7 @@ local function AcquirePreviewFrame(parent)
     free[freeCount] = nil
   else
     GF._previewFrameSerial = GF._previewFrameSerial + 1
-    frame = CreateFrame("Button", "MSUF_GFPreviewButton_" .. GF._previewFrameSerial, parent, "BackdropTemplate")
+    frame = PixelLayoutRegion(CreateFrame("Button", "MSUF_GFPreviewButton_" .. GF._previewFrameSerial, parent, "BackdropTemplate"))
     if frame.EnableMouse then frame:EnableMouse(false) end
   end
 

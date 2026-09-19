@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -1440,7 +1441,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
     if opts.advanceCursor ~= false then section._msuf2CursorY = y - tileH - 40 end
     local label = T.Font(section, "GameFontNormalSmall", M.Tr("Growth Direction"), T.colors.accent)
     label:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
-    local holder = CreateFrame("Frame", nil, section)
+    local holder = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, y - 20)
     holder:SetSize((tileW * 4) + (gap * 3), tileH)
     holder._msuf2Label = label
@@ -1493,7 +1494,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         for i = 1, #positions do
             local cell = btn._cells[i]
             if not cell then
-                cell = btn:CreateTexture(nil, "ARTWORK")
+                cell = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
                 btn._cells[i] = cell
             end
             local pos = positions[i]
@@ -1513,7 +1514,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             btn._cells[i]:Hide()
         end
         if not btn._firstText then
-            btn._firstText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
             if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
             btn._firstText:SetText("1")
             btn._firstText:SetTextColor(0, 0, 0, 1)
@@ -1527,7 +1528,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             btn._firstText:Show()
         end
         if not btn._arrow then
-            btn._arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
             if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
             btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
@@ -1558,17 +1559,17 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
     end
     for i = 1, #GROWTH_TILE_VALUES do
         local info = GROWTH_TILE_VALUES[i]
-        local btn = CreateFrame("Button", nil, holder, T.Template and T.Template() or nil)
+        local btn = PixelLayoutRegion(CreateFrame("Button", nil, holder, T.Template and T.Template() or nil))
         btn:SetSize(tileW, tileH)
         btn:SetPoint("TOPLEFT", holder, "TOPLEFT", (i - 1) * (tileW + gap), 0)
         if btn.SetBackdrop then
-            btn:SetBackdrop({
+            PixelLayoutRegion(btn, "SetBackdrop", {
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
                 edgeSize = 1,
             })
         end
-        local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local text = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
         if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
         text:SetText(info.text)

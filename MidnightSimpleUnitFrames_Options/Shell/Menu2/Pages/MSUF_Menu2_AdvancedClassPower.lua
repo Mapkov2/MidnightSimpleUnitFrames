@@ -267,12 +267,40 @@ local CLASS_POWER_PREVIEW_SPECS = {
     { key = "warrior_whirlwind", label = "Warrior - Whirlwind Stacks", token = "WHIRLWIND", mode = "aura_segmented", segments = 4, value = 2, previewText = "2" },
     { key = "warrior_sweeping", label = "Warrior - Sweeping Strikes", token = "SWEEPING_STRIKES", mode = "aura_segmented", segments = 18, value = 12, previewText = "12" },
 }
+-- Preview the active provider's resources, including its Classic variants.
+if MSUF.Client and MSUF.Client.IsMists then
+    local replacements = {
+        druid_balance = { token = "ECLIPSE_SOLAR", label = "Druid - Eclipse", mode = "continuous", segments = 1, value = 0.65, previewText = "65", enabled = true },
+        mage_arcane = { mode = "aura_segmented" },
+        monk_windwalker = { label = "Monk - Chi", segments = 5, value = 3, previewText = "3" },
+        priest_shadow = { label = "Priest - Shadow Orbs", token = "SHADOW_ORBS", mode = "segmented", segments = 3, value = 2, previewText = "2" },
+        warlock_soul_shards = { segments = 4 },
+        warlock_destruction = { label = "Warlock - Burning Embers", token = "BURNING_EMBERS", segments = 4, value = 2.4, previewText = "2.4" },
+    }
+    for _, spec in ipairs(CLASS_POWER_PREVIEW_SPECS) do
+        for key, value in pairs(replacements[spec.key] or {}) do spec[key] = value end
+    end
+    CLASS_POWER_PREVIEW_SPECS[#CLASS_POWER_PREVIEW_SPECS + 1] = {
+        key = "warlock_demonic_fury", label = "Warlock - Demonic Fury", token = "DEMONIC_FURY",
+        mode = "continuous", segments = 1, value = 0.65, previewText = "650 / 1000",
+    }
+end
+if MSUF.Client and MSUF.Client.SupportsClassResource and not MSUF.Client.SupportsClassResource("CHARGED") then
+    for _, spec in ipairs(CLASS_POWER_PREVIEW_SPECS) do
+        if spec.key == "rogue_combo" then
+            spec.segments, spec.value, spec.previewText, spec.chargedSlots = 5, 3, "3", nil
+        end
+    end
+end
 local CLASS_POWER_PREVIEW_BY_KEY = {}
 local CLASS_POWER_PREVIEW_VALUES = {}
 for i = 1, #CLASS_POWER_PREVIEW_SPECS do
     local spec = CLASS_POWER_PREVIEW_SPECS[i]
-    CLASS_POWER_PREVIEW_BY_KEY[spec.key] = spec
-    CLASS_POWER_PREVIEW_VALUES[i] = { value = spec.key, text = spec.label }
+    if not MSUF.Client or not MSUF.Client.SupportsClassResource
+        or MSUF.Client.SupportsClassResource(spec.token or "NO_CLASS_BAR") then
+        CLASS_POWER_PREVIEW_BY_KEY[spec.key] = spec
+        CLASS_POWER_PREVIEW_VALUES[#CLASS_POWER_PREVIEW_VALUES + 1] = { value = spec.key, text = spec.label }
+    end
 end
 local function NormalizeClassPowerPreviewSpecKey(key) key = tostring(key or "rogue_combo"); return CLASS_POWER_PREVIEW_BY_KEY[key] and key or "rogue_combo" end
 local CLASS_POWER_PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER", mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
@@ -781,6 +809,13 @@ function Page:WithRefresh(apply)
     end
 end
 function Page:Controls(parent, source, apply, prefix, specs)
+    if prefix == "behavior" and MSUF.Client and MSUF.Client.SupportsClassResourceSetting then
+        local supported = {}
+        for _, spec in ipairs(specs) do
+            if MSUF.Client.SupportsClassResourceSetting("bars." .. spec[4]) then supported[#supported + 1] = spec end
+        end
+        specs = supported
+    end
     for i = 1, #specs do specs[i].meta = specs[i].meta or Meta(prefix .. "." .. tostring(specs[i][1])) end
     local controls = BuildTableControlSpecs(self.ctx, parent, source, apply, specs, self.kinds)
     for i = 1, #specs do
@@ -988,10 +1023,14 @@ function Page:BuildClassBehavior()
     local rightX = min(max(380, floor(self.width * .45)), max(320, self.width - 420))
     W.ControlCardBackdrop(section, 14, -38, max(280, rightX - 42), 230)
     W.ControlCardBackdrop(section, rightX - 14, -38, max(280, (section._msuf2Width or self.width) - rightX - 28) + 14, 230)
-    PlaceColumn(section, 14, -38, 32, nil, nil, fields.anchor, fields.charged, fields.text, fields.rune, fields.reverse,
-        fields.sweeping)
-    PlaceColumn(section, rightX, -38, 32, nil, nil, fields.ele, fields.ebon, fields.shadow,
-        fields.ironfur, fields.ironfurHashes, fields.prediction, fields.smooth)
+    local function PlaceSupported(x, keys)
+        local y = -38
+        for key in keys:gmatch("%S+") do
+            if fields[key] then MoveWidget(fields[key], section, x, y); y = y - 32 end
+        end
+    end
+    PlaceSupported(14, "anchor charged text rune reverse sweeping")
+    PlaceSupported(rightX, "ele ebon shadow ironfur ironfurHashes prediction smooth")
     self.ironfurHashes = fields.ironfurHashes
 end
 

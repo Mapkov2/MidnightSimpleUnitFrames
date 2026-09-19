@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu2/MSUF_Menu2_Window_PageEntry.lua
 --- Cold-path page entry construction support: the page context object, the
 --- secondary tab/rail navigation, the placeholder page and the normal/maximized
@@ -97,7 +98,7 @@ end
 local function BuildSecondaryTabs(ctx, key, group)
     if not (ctx and ctx.wrapper and group and group.tabs) then return end
     ctx._msuf2TopInset = 44
-    local bar = CreateFrame("Frame", nil, ctx.wrapper)
+    local bar = PixelLayoutRegion(CreateFrame("Frame", nil, ctx.wrapper))
     bar:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", 12, -12)
     bar:SetSize(ctx.width or 720, 36)
     local x = SECONDARY_NAV_TAB_PAD_X

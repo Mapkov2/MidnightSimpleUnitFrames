@@ -56,7 +56,7 @@ Enum	*	table	Blizzard Enum table; MSUF probes Enum.EditModeSystem to place Blizz
 EssentialCooldownViewer_MSA_Container	*	thirdparty	third-party addon global MSUF probes to detect that addon
 EventRegistry	*	table	Blizzard EventRegistry callback registry
 GetCameraZoom	*	api	Blizzard client API the harness does not model
-GetCollapsingStarCost	Mainline,Forever	api	Blizzard client API the harness does not model
+GetCollapsingStarCost	*	api	Blizzard client API the harness does not model; the shared ClassPower AURA mode builder binds it on every client, and only the Devourer path calls it after a type check
 GetComboPoints	*	api	Blizzard client API the harness does not model; Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua binds it at load on every client and calls it only where the provider routes target-owned combo points
 GetCurrentKeyBoardFocus	*	api	Blizzard client API the harness does not model
 GetCursorPosition	*	api	Blizzard client API the harness does not model
@@ -113,7 +113,6 @@ PowerBarColor	*	table	Blizzard power colour table
 RAID_CLASS_COLORS	*	constant	Blizzard UI constant the harness does not model
 SPEC_DEMONHUNTER_DEVOURER	*	constant	Blizzard UI constant the harness does not model
 SPEC_DEMONHUNTER_VENGEANCE	*	constant	Blizzard UI constant the harness does not model
-SPEC_DRUID_BALANCE	Vanilla,Mists,TBC	constant	Blizzard UI constant the harness does not model
 SPEC_MAGE_ARCANE	*	constant	Blizzard UI constant the harness does not model
 SPEC_MONK_BREWMASTER	*	constant	Blizzard UI constant the harness does not model
 SPEC_MONK_WINDWALKER	*	constant	Blizzard UI constant the harness does not model

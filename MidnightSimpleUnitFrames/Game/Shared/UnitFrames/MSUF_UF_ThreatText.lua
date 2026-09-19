@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Threat percentage text on the target, focus and boss frames, and on the party
 --- and raid frames.
 ---
@@ -196,7 +197,7 @@ end
 local function EnsureHolder(frame, layer)
     local holder = frame.threatIndicatorHolder
     if not holder then
-        holder = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
+        holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
         holder:SetAllPoints(frame)
         if holder.EnableMouse then holder:EnableMouse(false) end
         if holder.SetClipsChildren then holder:SetClipsChildren(false) end
@@ -219,7 +220,7 @@ local function EnsureText(frame, layer)
     local holder = EnsureHolder(frame, layer)
     local fs = frame.threatIndicatorText
     if not fs then
-        fs = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs = PixelLayoutRegion(holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
         fs:Hide()
         fs._msufThreatShown = false
         frame.threatIndicatorText = fs
@@ -234,10 +235,10 @@ local function EnsurePlate(frame)
     local plate = frame.threatIndicatorPlate
     if not plate then
         local holder = frame.threatIndicatorHolder
-        local sample = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local sample = PixelLayoutRegion(holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
         sample:SetText(PLATE_SAMPLE)
         sample:SetAlpha(0)
-        plate = holder:CreateTexture(nil, "ARTWORK")
+        plate = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
         plate:SetColorTexture(0, 0, 0, PLATE_ALPHA)
         plate:SetPoint("TOPLEFT", sample, "TOPLEFT", -PLATE_PAD_X, PLATE_PAD_Y)
         plate:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", PLATE_PAD_X, -PLATE_PAD_Y)

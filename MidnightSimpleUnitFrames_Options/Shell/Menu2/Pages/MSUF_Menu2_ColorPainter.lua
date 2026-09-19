@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -84,7 +85,7 @@ local function ForwardMenuScrollWheel(frame)
 end
 
 local function InstallColorOnlyShield(parent)
-    local shield = CreateFrame("Button", nil, parent)
+    local shield = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     -- Leave the top strip of every preview panel uncovered: that is where the
     -- zoom clusters live, and the shield must never eat their clicks. All
     -- other interactive preview surfaces up there are explicitly disabled.
@@ -144,7 +145,7 @@ local function MakeUnitPreview(parent, ctx, width, unitKey, displayName)
     if type(create) ~= "function" then return nil end
     unitKey = unitKey or "player"
     displayName = displayName or unitKey
-    local panel = CreateFrame("Frame", nil, parent)
+    local panel = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     panel._msufLastApplyKey = unitKey
     panel._msufGetCurrentKey = function() return unitKey end
     panel._msufIsFramesTab = function() return true end
@@ -387,7 +388,7 @@ local function AddClickTarget(host, anchor, onClick, onRightClick, label, priori
         button:SetAllPoints(anchor)
         button:Show()
     else
-        button = CreateFrame("Button", nil, host)
+        button = PixelLayoutRegion(CreateFrame("Button", nil, host))
         button:SetAllPoints(anchor)
         button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     end
@@ -407,7 +408,7 @@ local function AddClickTarget(host, anchor, onClick, onRightClick, label, priori
     end
     if not button._msuf2ClickTargetWired then
         button._msuf2ClickTargetWired = true
-        local hover = button:CreateTexture(nil, "HIGHLIGHT")
+        local hover = PixelLayoutRegion(button:CreateTexture(nil, "HIGHLIGHT"))
         hover:SetAllPoints()
         hover:SetColorTexture(0.18, 0.66, 1, 0.18)
     end
@@ -484,7 +485,7 @@ function PainterBuild.Selector(state)
     local selectorMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(selectorValues, selectorOpts)
     local selectorH = max(54, math.abs((selectorMetrics and selectorMetrics.bottomY) or -39) + 14)
     local selector = (T.Panel and T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft))
-        or CreateFrame("Frame", nil, builder.parent)
+        or PixelLayoutRegion(CreateFrame("Frame", nil, builder.parent))
     if T.ApplySurface then T.ApplySurface(selector, "status") end
     selector:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     selector:SetSize(pageW, selectorH)
@@ -529,7 +530,7 @@ function PainterBuild.PreviewShell(state)
     local innerW = width - 32
 
     local previewW = innerW
-    local host = CreateFrame("Frame", nil, section)
+    local host = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     host:SetPoint("TOPLEFT", section, "TOPLEFT", 16, -38)
     host:SetSize(previewW, 132)
     -- Native preview elements can extend beyond their canvas while zoomed or
@@ -837,12 +838,12 @@ function PainterBuild.Palette(state)
     paletteLabel:SetJustifyH("LEFT")
     local paletteX = 96
     for i = 1, PALETTE_SLOTS do
-        local slot = CreateFrame("Button", nil, paletteSection)
+        local slot = PixelLayoutRegion(CreateFrame("Button", nil, paletteSection))
         slot:SetSize(26, 16)
         slot:SetPoint("TOPLEFT", paletteSection, "TOPLEFT", paletteX + 16 + (i - 1) * 32, -60)
         slot:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         slot._msuf2Fill, slot._msuf2Edge = T.CreateSuperellipseLayers(slot, "_msuf2PaletteSwatch", 1, "ARTWORK", "OVERLAY")
-        local hover = slot:CreateTexture(nil, "HIGHLIGHT")
+        local hover = PixelLayoutRegion(slot:CreateTexture(nil, "HIGHLIGHT"))
         hover:SetAllPoints()
         hover:SetColorTexture(1, 1, 1, 0.10)
         slot:SetScript("OnClick", function(self, mouseButton)
@@ -1019,7 +1020,7 @@ function PainterBuild.ResourcesStrip(state)
             state.resourcesStrip = false
             return nil
         end
-        local strip = CreateFrame("Frame", nil, host)
+        local strip = PixelLayoutRegion(CreateFrame("Frame", nil, host))
         strip:SetPoint("TOPLEFT", host, "TOPLEFT", 24, 0)
         strip:SetPoint("TOPRIGHT", host, "TOPRIGHT", -24, 0)
         strip:SetHeight(132)
@@ -1030,11 +1031,11 @@ function PainterBuild.ResourcesStrip(state)
         end
         local barW = 340
         local function StripButton(y, height, label, sectionId, ownerLabel)
-            local button = CreateFrame("Button", nil, strip)
+            local button = PixelLayoutRegion(CreateFrame("Button", nil, strip))
             button:SetPoint("TOPLEFT", strip, "TOPLEFT", 0, y)
             button:SetSize(barW + 24, height)
             button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-            local hover = button:CreateTexture(nil, "HIGHLIGHT")
+            local hover = PixelLayoutRegion(button:CreateTexture(nil, "HIGHLIGHT"))
             hover:SetAllPoints()
             hover:SetColorTexture(0.18, 0.66, 1, 0.12)
             if M.AddTooltip then
@@ -1057,10 +1058,10 @@ function PainterBuild.ResourcesStrip(state)
 
         local powerRow = StripButton(-2, 50, "Power Bar Colors", "colors_power", "Color")
         local powerLabel = Label(powerRow, "", 12, -4, barW, T.colors.text)
-        local powerBg = powerRow:CreateTexture(nil, "BORDER")
+        local powerBg = PixelLayoutRegion(powerRow:CreateTexture(nil, "BORDER"))
         powerBg:SetPoint("TOPLEFT", powerRow, "TOPLEFT", 12, -24)
         powerBg:SetSize(barW, 18)
-        local powerFill = powerRow:CreateTexture(nil, "ARTWORK")
+        local powerFill = PixelLayoutRegion(powerRow:CreateTexture(nil, "ARTWORK"))
         powerFill:SetPoint("TOPLEFT", powerBg, "TOPLEFT", 1, -1)
         powerFill:SetSize(floor(barW * 0.62), 16)
 
@@ -1068,16 +1069,16 @@ function PainterBuild.ResourcesStrip(state)
         local resourceLabel = Label(resourceRow, "", 12, -4, barW, T.colors.text)
         local slots = {}
         for i = 1, 11 do
-            local pill = resourceRow:CreateTexture(nil, "ARTWORK")
+            local pill = PixelLayoutRegion(resourceRow:CreateTexture(nil, "ARTWORK"))
             pill:SetSize(26, 13)
             pill:SetPoint("TOPLEFT", resourceRow, "TOPLEFT", 12 + (i - 1) * 31, -28)
             pill:Hide()
             slots[i] = pill
         end
-        local resourceBarBg = resourceRow:CreateTexture(nil, "BORDER")
+        local resourceBarBg = PixelLayoutRegion(resourceRow:CreateTexture(nil, "BORDER"))
         resourceBarBg:SetPoint("TOPLEFT", resourceRow, "TOPLEFT", 12, -26)
         resourceBarBg:SetSize(barW, 18)
-        local resourceBarFill = resourceRow:CreateTexture(nil, "ARTWORK")
+        local resourceBarFill = PixelLayoutRegion(resourceRow:CreateTexture(nil, "ARTWORK"))
         resourceBarFill:SetPoint("TOPLEFT", resourceBarBg, "TOPLEFT", 1, -1)
         resourceBarFill:SetSize(floor(barW * 0.62), 16)
 

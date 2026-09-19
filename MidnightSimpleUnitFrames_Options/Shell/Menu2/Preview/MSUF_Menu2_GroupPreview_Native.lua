@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
@@ -61,7 +62,7 @@ local function ScheduleNativePreviewRefresh(box, fn, delay)
     end
 end
 local function LayerFont(parent, text, color)
-    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     fs:SetText((M.Tr and M.Tr(text or "")) or (text or ""))
     SetFSColor(fs, color or LAYER_TEXT_ON)
     if T and T.StyleFontString then T.StyleFontString(fs, color or LAYER_TEXT_ON, 0) end
@@ -321,10 +322,10 @@ local function CreatePreviewAnimationButton(box, registerControl)
     if not box or box._previewAnimationButton then return end
     local parent = box._stage or box
     local template = (T and T.Template and T.Template()) or "BackdropTemplate"
-    local btn = CreateFrame("Button", nil, parent, template)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, template))
     btn:SetSize(74, 22)
-    if btn.SetBackdrop then btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }) end
-    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    if btn.SetBackdrop then PixelLayoutRegion(btn, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }) end
+    btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
     btn.fs:SetJustifyH("CENTER")
     if btn.fs.SetJustifyV then btn.fs:SetJustifyV("MIDDLE") end
@@ -371,10 +372,10 @@ local function CreatePreviewRoleButton(box, registerControl)
     if not box or box._previewRoleButton then return end
     local parent = box._stage or box
     local template = (T and T.Template and T.Template()) or "BackdropTemplate"
-    local btn = CreateFrame("Button", nil, parent, template)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, template))
     btn:SetSize(92, 22)
-    if btn.SetBackdrop then btn:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 }) end
-    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    if btn.SetBackdrop then PixelLayoutRegion(btn, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 }) end
+    btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
     btn.fs:SetJustifyH("CENTER")
     if btn.fs.SetJustifyV then btn.fs:SetJustifyV("MIDDLE") end
@@ -401,7 +402,7 @@ end
 local function ApplyGroupPreviewFlatBackdrop(frame, texture, bg, border)
     if not (frame and frame.SetBackdrop) then return end
     texture = texture or "Interface\\Buttons\\WHITE8X8"
-    frame:SetBackdrop({ bgFile = texture, edgeFile = texture, edgeSize = 1 })
+    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = texture, edgeFile = texture, edgeSize = 1 })
     bg = bg or { 0, 0, 0, 1 }
     frame:SetBackdropColor(bg[1] or 0, bg[2] or 0, bg[3] or 0, bg[4] or 1)
     if border and frame.SetBackdropBorderColor then
@@ -414,7 +415,7 @@ local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
     local colors = (T and T.colors) or {}
     local shade = box._msuf2PinnedHeaderShade
     if not shade and box.CreateTexture then
-        shade = box:CreateTexture(nil, "BORDER", nil, -1)
+        shade = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, -1))
         shade:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
         shade:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1)
         shade:SetHeight(29)
@@ -423,7 +424,7 @@ local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
     end
     local line = box._msuf2PinnedHeaderLine
     if not line and box.CreateTexture then
-        line = box:CreateTexture(nil, "BORDER", nil, 0)
+        line = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, 0))
         line:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -29)
         line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -29)
         line:SetHeight(1)
@@ -1363,7 +1364,7 @@ function NativeBuild.Frame(parent, ctx)
     local H, T, M = R.Helpers, R.T, R.M
     local width = (ctx.width or 720) - 28
     local layerW = 104
-    local box = CreateFrame("Frame", nil, parent, T.Template())
+    local box = PixelLayoutRegion(CreateFrame("Frame", nil, parent, T.Template()))
     local previewControls = {}
     local runtimePageContext = { key = ctx and ctx.key }
     local function RegisterPreviewControl(widget, semanticPath, label, kind, classification, extra)
@@ -1439,7 +1440,7 @@ function NativeBuild.Stage(state)
     local T, M = R.T, R.M
     -- The stage is re-anchored against the selection bar by
     -- ApplyDockedPreviewLayout once the layer rail exists.
-    local stage = CreateFrame("Frame", nil, box, T.Template())
+    local stage = PixelLayoutRegion(CreateFrame("Frame", nil, box, T.Template()))
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     stage:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     stage._msuf2PreviewCanvasUnderlay = box
@@ -1500,8 +1501,8 @@ function NativeBuild.Stage(state)
     R.ZoomWheel = box._zoomWheel or R.ZoomWheel
     CreatePreviewAnimationButton(box, RegisterPreviewControl)
     CreatePreviewRoleButton(box, RegisterPreviewControl)
-    local bounds = CreateFrame("Frame", nil, stage, T.Template())
-    bounds:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+    local bounds = PixelLayoutRegion(CreateFrame("Frame", nil, stage, T.Template()))
+    PixelLayoutRegion(bounds, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
     bounds:SetBackdropColor(0, 0, 0, 0)
     -- Bounds mark a measurement, not a problem; cyan matches the Unit preview.
     bounds:SetBackdropBorderColor(0.25, 0.75, 0.88, 0.92)
@@ -1511,7 +1512,7 @@ end
 function NativeBuild.LayerRail(state)
     local R, box, chrome, layerW, RegisterPreviewControl = state.R, state.box, state.chrome, state.layerW, state.RegisterPreviewControl
     local T, M = R.T, R.M
-    local layers = CreateFrame("Frame", nil, box, T.Template())
+    local layers = PixelLayoutRegion(CreateFrame("Frame", nil, box, T.Template()))
     local layerColors = T.colors or {}
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(layers, "sidebar", T, function(frame, bg, border)
@@ -1725,8 +1726,8 @@ end
 function NativeBuild.Mock(state)
     local R, box, stage, bounds, RegisterPreviewControl = state.R, state.box, state.stage, state.bounds, state.RegisterPreviewControl
     local T, M = R.T, R.M
-    local mock = CreateFrame("Frame", nil, stage, T.Template())
-    mock:SetBackdrop({ bgFile = R.WHITE8X8 })
+    local mock = PixelLayoutRegion(CreateFrame("Frame", nil, stage, T.Template()), true)
+    PixelLayoutRegion(mock, "SetBackdrop", { bgFile = R.WHITE8X8 })
     mock:SetBackdropColor(0.08, 0.08, 0.09, 0.92)
     mock:SetBackdropBorderColor(0.0, 0.0, 0.0, 0)
     mock:EnableMouse(true)
@@ -1762,7 +1763,7 @@ function NativeBuild.Mock(state)
         help = "Pans this exact Group preview canvas by an explicit X/Y delta.",
         command = box._msuf2PanCommand,
     })
-    mock._healthBgBar = CreateFrame("StatusBar", nil, mock)
+    mock._healthBgBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._healthBgBar:SetMinMaxValues(0, 1)
     mock._healthBgBar:SetValue(1)
     mock._healthBgBar:SetStatusBarTexture(R.WHITE8X8)
@@ -1772,47 +1773,47 @@ function NativeBuild.Mock(state)
     end
     mock._healthBg = mock._healthBgBar:GetStatusBarTexture()
     if mock._healthBg.SetDrawLayer then mock._healthBg:SetDrawLayer("BACKGROUND", -7) end
-    mock._health = CreateFrame("StatusBar", nil, mock)
+    mock._health = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._health:SetMinMaxValues(0, 1)
     mock._health:SetValue(0.72)
-    mock._tempMaxHealth = CreateFrame("StatusBar", nil, mock)
+    mock._tempMaxHealth = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._tempMaxHealth:SetMinMaxValues(0, 1)
     mock._tempMaxHealth:SetValue(0.20)
     mock._tempMaxHealth:SetStatusBarTexture(R.WHITE8X8)
     mock._tempMaxHealth:SetStatusBarColor(0.70, 0.10, 0.10, 1)
-    mock._tempMaxHealthBg = mock._tempMaxHealth:CreateTexture(nil, "BACKGROUND")
+    mock._tempMaxHealthBg = PixelLayoutRegion(mock._tempMaxHealth:CreateTexture(nil, "BACKGROUND"))
     mock._tempMaxHealthBg:SetColorTexture(0, 0, 0, 0.65)
     local tempMaxFill = mock._tempMaxHealth.GetStatusBarTexture
         and mock._tempMaxHealth:GetStatusBarTexture()
     mock._tempMaxHealthBg:SetAllPoints(tempMaxFill or mock._tempMaxHealth)
-    mock._healPred = CreateFrame("StatusBar", nil, mock)
+    mock._healPred = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._healPred:SetMinMaxValues(0, 1)
     mock._healPred:SetValue(0.12)
     mock._healPred:SetStatusBarTexture(R.WHITE8X8)
     mock._healPred:SetStatusBarColor(0, 1, 0.4, 0.45)
-    mock._absorb = CreateFrame("StatusBar", nil, mock)
+    mock._absorb = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._absorb:SetMinMaxValues(0, 1)
     mock._absorb:SetValue(1)
     mock._absorb:SetStatusBarTexture(R.WHITE8X8)
     mock._absorb:SetStatusBarColor(0.55, 0.70, 1, 0.55)
-    mock._healAbsorb = CreateFrame("StatusBar", nil, mock._health)
+    mock._healAbsorb = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock._health))
     mock._healAbsorb:SetMinMaxValues(0, 1)
     mock._healAbsorb:SetValue(0.07)
     mock._healAbsorb:SetStatusBarTexture(R.WHITE8X8)
     mock._healAbsorb:SetStatusBarColor(0.70, 0, 0, 1)
     if mock._health.SetClipsChildren then mock._health:SetClipsChildren(true) end
     if mock._healAbsorb.SetFrameLevel and mock._health.GetFrameLevel then mock._healAbsorb:SetFrameLevel((mock._health:GetFrameLevel() or 1) + 3) end
-    mock._power = CreateFrame("StatusBar", nil, mock)
+    mock._power = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._power:SetMinMaxValues(0, 1)
     mock._power:SetValue(1)
     mock._power:SetStatusBarColor(0.13, 0.27, 0.67, 1)
-    mock._powerBg = mock._power:CreateTexture(nil, "BACKGROUND")
+    mock._powerBg = PixelLayoutRegion(mock._power:CreateTexture(nil, "BACKGROUND"))
     mock._powerBg:SetAllPoints()
-    mock._nameTextLayer = CreateFrame("Frame", nil, mock)
+    mock._nameTextLayer = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     mock._nameTextLayer:SetAllPoints(mock)
-    mock._healthTextLayer = CreateFrame("Frame", nil, mock)
+    mock._healthTextLayer = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     mock._healthTextLayer:SetAllPoints(mock)
-    mock._powerTextLayer = CreateFrame("Frame", nil, mock)
+    mock._powerTextLayer = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     mock._powerTextLayer:SetAllPoints(mock)
     mock._nameFS = T.Font(mock._nameTextLayer, "GameFontHighlightSmall", "", T.colors.text)
     mock._hpFS = T.Font(mock._healthTextLayer, "GameFontHighlight", "", T.colors.text)

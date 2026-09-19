@@ -30,7 +30,7 @@ end
 local runtime = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
   .. "\n" .. Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua")
 local visuals = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua")
-local unitConfig = Read("MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_Config.lua")
+local unitConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua")
 local groupConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua")
 
 --- 1. The symbol alone must be enough to start a scan. Without this the feature
@@ -136,7 +136,7 @@ end
 --- 6. Both config sides must still compile the settings the runtime reads.
 Check(unitConfig:find("out.dispelSymbol = symbol", 1, true)
   and unitConfig:find('UnitDispelValue("unitDispelSymbolEnabled", false)', 1, true),
-  "the Classic unit config no longer compiles the dispel symbol")
+  "the unit config compiler no longer compiles the dispel symbol for Classic")
 Check(groupConfig:find("dispelSymbol", 1, true),
   "the group config no longer compiles the dispel symbol")
 Check(runtime:find("local symbol = group and group.dispelSymbol or spec.dispelSymbol", 1, true),

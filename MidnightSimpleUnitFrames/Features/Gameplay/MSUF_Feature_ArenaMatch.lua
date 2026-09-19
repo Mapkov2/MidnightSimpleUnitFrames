@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Features/Gameplay/MSUF_Feature_ArenaMatch.lua
 --- Arena match helpers for the dedicated arena1..N unit frames
 --- (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists):
@@ -312,20 +313,20 @@ local function EnsureStealthOverlay(index)
     local frame = ArenaFrame(index)
     if not frame then return nil end
 
-    overlay = CreateFrame("Frame", "MSUF_ArenaStealthOverlay" .. index, UIParent)
+    overlay = PixelLayoutRegion(CreateFrame("Frame", "MSUF_ArenaStealthOverlay" .. index, UIParent))
     overlay:SetFrameStrata("MEDIUM")
     overlay:Hide()
 
-    overlay.bg = overlay:CreateTexture(nil, "BACKGROUND")
+    overlay.bg = PixelLayoutRegion(overlay:CreateTexture(nil, "BACKGROUND"))
     overlay.bg:SetAllPoints(overlay)
     overlay.bg:SetColorTexture(0, 0, 0, 0.55)
 
-    overlay.icon = overlay:CreateTexture(nil, "ARTWORK")
+    overlay.icon = PixelLayoutRegion(overlay:CreateTexture(nil, "ARTWORK"))
     overlay.icon:SetSize(18, 18)
     overlay.icon:SetPoint("LEFT", overlay, "LEFT", 4, 0)
     overlay.icon:SetTexture("Interface\\ICONS\\Ability_Stealth")
 
-    overlay.text = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    overlay.text = PixelLayoutRegion(overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
     overlay.text:SetPoint("LEFT", overlay.icon, "RIGHT", 6, 0)
     overlay.text:SetText(_G.ARENA_UNIT_STEALTHED or "Stealthed")
 

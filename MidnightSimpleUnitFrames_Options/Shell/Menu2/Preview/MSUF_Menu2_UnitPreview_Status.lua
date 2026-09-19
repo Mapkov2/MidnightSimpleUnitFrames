@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua
 --- Cold-path status icon preview element helpers.
 ---
@@ -188,12 +189,12 @@ function Status.IdentityPreviewText(spec, data)
     return ""
 end
 function Status.CreateIcon(parent, color, text)
-    local f = CreateFrame("Frame", nil, parent)
+    local f = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     f:SetSize(16, 16)
-    f.bg = f:CreateTexture(nil, "BACKGROUND")
+    f.bg = PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND"))
     f.bg:SetAllPoints()
     f.bg:SetColorTexture(0, 0, 0, 0)
-    f.tex = f:CreateTexture(nil, "ARTWORK")
+    f.tex = PixelLayoutRegion(f:CreateTexture(nil, "ARTWORK"))
     f.tex:SetAllPoints()
     f.txt = MakeFS(f, "OVERLAY", 10)
     f.txt:SetPoint("CENTER")

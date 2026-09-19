@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_Castbars_Core.lua
 --- Castbar settings, media resolution, font helpers, visual refresh glue, and
 --- global compatibility exports.
@@ -615,7 +616,7 @@ local function ApplySparkLayout(frame, statusBar, general, height)
     local enabled = general and general.castbarShowSpark == true
     local spark = frame.spark
     if enabled and not spark then
-        spark = statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+        spark = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY", nil, 6))
         spark:SetTexture(4417031)
         spark:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
         spark:SetDesaturated(true)

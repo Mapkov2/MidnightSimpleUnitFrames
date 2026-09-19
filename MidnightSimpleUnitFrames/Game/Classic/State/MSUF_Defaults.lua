@@ -1353,7 +1353,7 @@ local function MSUF_Defaults_CreateFactoryUnitAuras()
         }
     end
 
-    SetScope("player", { buffX = -2, buffY = 46, debuffX = 2, debuffY = 46,
+    SetScope("player", { buffX = -2, buffY = 41, debuffX = 2, debuffY = 40,
         maxBuffs = 3, maxDebuffs = 4 })
     SetScope("target", { buffX = -1, buffY = 42, debuffX = 0, debuffY = 42,
         maxBuffs = 3, maxDebuffs = 4 })

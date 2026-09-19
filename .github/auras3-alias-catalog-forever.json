@@ -7,51 +7,105 @@
   "folded_locales": {},
   "locales": {
     "enUS": {
+      "csv_sha256": "ede393ee7dd2d8a7e9bacbf4f14a32a88ded7f67ba08b33d564e931a352773ab",
+      "rows": 31767,
       "groups": 4345,
-      "alias_ids": 18753
+      "alias_ids": 18753,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=enUS"
     },
     "deDE": {
+      "csv_sha256": "9c4c94b6124afb57707eaf53fb3db7199727734e4fd7ee377ff7a7603a0c5813",
+      "rows": 31767,
       "groups": 4374,
-      "alias_ids": 18904
+      "alias_ids": 18904,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69893",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69893&locale=deDE"
     },
     "frFR": {
+      "csv_sha256": "2330a313c19a5f1ffa37695deda7fc8c539e440addb54add0446d4968d537e5d",
+      "rows": 31767,
       "groups": 4286,
-      "alias_ids": 18567
+      "alias_ids": 18567,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=frFR"
     },
     "esES": {
+      "csv_sha256": "87304136c0530b92c3a617b974508268c5e4dae859384024b8e808a775be2af7",
+      "rows": 31767,
       "groups": 4333,
-      "alias_ids": 18499
+      "alias_ids": 18499,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=esES"
     },
     "esMX": {
+      "csv_sha256": "6bc9df90d383346e07de1ac72717dcc4ed85522aae0d88ccbf79d06e4d6bcb07",
+      "rows": 31767,
       "groups": 4374,
-      "alias_ids": 18709
+      "alias_ids": 18709,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=esMX"
     },
     "itIT": {
+      "csv_sha256": "637a0e4296b25fe15377553917bcfd13b128f921ce6e97dd25dfc51d83bcaa85",
+      "rows": 31767,
       "groups": 2943,
-      "alias_ids": 14100
+      "alias_ids": 14100,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=itIT"
     },
     "ptBR": {
+      "csv_sha256": "27e5bf04f3be516aa84fb06d2d270601eb3a0c2209ef74a8493ffe54fdcdf3a4",
+      "rows": 31767,
       "groups": 4351,
-      "alias_ids": 18837
+      "alias_ids": 18837,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=ptBR"
     },
     "ruRU": {
+      "csv_sha256": "54547787f017eb57f6f90248d5b22c7281b5b5d266c2419f228881989a7fac7d",
+      "rows": 31767,
       "groups": 4306,
-      "alias_ids": 18813
+      "alias_ids": 18813,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=ruRU"
     },
     "koKR": {
+      "csv_sha256": "450c820ed22c22ccd927e525f64bb19e67ff1a6a5a185dbb93b442118ec4f8e5",
+      "rows": 31767,
       "groups": 4388,
-      "alias_ids": 19788
+      "alias_ids": 19788,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=koKR"
     },
     "zhCN": {
+      "csv_sha256": "50375584a9b59a35ef03e9ebebff2970c760d383455cb8121b7ed7847a3107a0",
+      "rows": 31767,
       "groups": 4384,
-      "alias_ids": 18947
+      "alias_ids": 18947,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=zhCN"
     },
     "zhTW": {
+      "csv_sha256": "d435ec6d815014e88c5bb7a73dfd889d14748094dbe56b75a0edc8ab1249bdd1",
+      "rows": 31767,
       "groups": 4346,
-      "alias_ids": 18786
+      "alias_ids": 18786,
+      "max_id": 1320658,
+      "source_build": "1.60.1.69913",
+      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=zhTW"
     }
   },
-  "locales_source": "recovered from the shipped catalog: csv_sha256, rows and max_id live only in the SpellName exports and are restored by the next run with --input",
   "generated": {
     "MSUF_Auras3_AliasData_Common.lua": {
       "bytes": 16455,
@@ -134,5 +188,27 @@
         "zhTW"
       ]
     }
+  },
+  "client_validation": {
+    "build": "1.60.1.69913",
+    "catalog_payload_changed": false,
+    "current_build_locales": [
+      "enUS",
+      "frFR",
+      "esES",
+      "esMX",
+      "itIT",
+      "ptBR",
+      "ruRU",
+      "koKR",
+      "zhCN",
+      "zhTW"
+    ],
+    "retained_locale_sources": {
+      "deDE": "1.60.1.69893"
+    },
+    "pending": [
+      "deDE SpellName export for 1.60.1.69913 returns an empty response; retained groups match the shipped catalog."
+    ]
   }
 }

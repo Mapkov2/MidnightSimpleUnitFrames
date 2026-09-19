@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Popups.lua - popup router and unit frame popup.
 -- Owns popup composition only; protected frame edits route through EditMode apply helpers.
 local addonName, MSUF = ...
@@ -548,10 +549,10 @@ local function Build()
     Quick.MenuButtonAt(pf, "Copy size to...", 366, -250, 174, 36, CopyMenuEntries, CopyMenuSelect, { palette = C })
     pf.detachBtn = Quick.ToggleAt(pf, "Detach power bar", 174, -300, 212, 30, ApplyDetachPower, toggleOpts)
 
-    pf.dpbPanel = CreateFrame("Frame", nil, pf, "BackdropTemplate")
+    pf.dpbPanel = PixelLayoutRegion(CreateFrame("Frame", nil, pf, "BackdropTemplate"))
     pf.dpbPanel:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -340)
     pf.dpbPanel:SetSize(520, 220)
-    pf.dpbPanel:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+    PixelLayoutRegion(pf.dpbPanel, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
     pf.dpbPanel:SetBackdropColor(C.cardBg[1], C.cardBg[2], C.cardBg[3], 0.58)
     pf.dpbPanel:SetBackdropBorderColor(C.cardEdge[1], C.cardEdge[2], C.cardEdge[3], 0.72)
     Menu2Style.Card(pf.dpbPanel)

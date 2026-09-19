@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Indicators.lua
 --- Runtime element for group corner indicators.
 ---
@@ -68,7 +69,7 @@ local function EnsureHolder(frame, key, layer)
   local layerKey = key .. ":" .. ClampLayer(layer, 7)
   local holder = frame.MSUFGFIndicatorHolders[layerKey]
   if not holder then
-    holder = CreateFrame("Frame", nil, frame)
+    holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     holder:SetAllPoints(frame)
     holder:EnableMouse(false)
     frame.MSUFGFIndicatorHolders[layerKey] = holder
@@ -158,7 +159,7 @@ local function EnsureCorner(frame, key, layer)
   local sub = DrawSubLayer(layer, 7)
   if not tex or tex:GetParent() ~= holder then
     if tex then tex:Hide() end
-    tex = holder:CreateTexture(nil, "OVERLAY", nil, sub)
+    tex = PixelLayoutRegion(holder:CreateTexture(nil, "OVERLAY", nil, sub))
     frame.MSUFGFCornerIndicators[key] = tex
   elseif tex._msufGFLayer ~= sub and tex.SetDrawLayer then
     tex:SetDrawLayer("OVERLAY", sub)

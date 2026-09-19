@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu2/MSUF_Menu2_Window.lua
 --- Options window geometry, chrome, visibility and sizing/minimize state.
 ---
@@ -307,7 +308,7 @@ local function AnimateWindowLayout(frame, target, opts)
     end
     local driver = frame._msuf2WindowLayoutDriver
     if not driver then
-        driver = CreateFrame("Frame", nil, _G.UIParent or frame)
+        driver = PixelLayoutRegion(CreateFrame("Frame", nil, _G.UIParent or frame))
         frame._msuf2WindowLayoutDriver = driver
     end
     local state = {
@@ -879,7 +880,7 @@ local function InstallMenuScaleControl(f)
     label:SetWidth(76)
     label:SetJustifyH("LEFT")
 
-    local slider = CreateFrame("Slider", nil, control)
+    local slider = PixelLayoutRegion(CreateFrame("Slider", nil, control))
     slider:SetPoint("LEFT", label, "RIGHT", 6, 0)
     slider:SetPoint("RIGHT", control, "RIGHT", -8, 0)
     slider:SetHeight(20)
@@ -1040,7 +1041,7 @@ local function InstallSupportLinkStrip(f)
         { texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
     }
     local size, gap, idleAlpha = 14, 7, 0.45
-    local strip = CreateFrame("Frame", nil, f)
+    local strip = PixelLayoutRegion(CreateFrame("Frame", nil, f))
     strip:SetSize((#links * size) + ((#links - 1) * gap), size)
     local rail = f.nav
     if rail then
@@ -1052,14 +1053,14 @@ local function InstallSupportLinkStrip(f)
     local previous
     for i = 1, #links do
         local data = links[i]
-        local btn = CreateFrame("Button", nil, strip)
+        local btn = PixelLayoutRegion(CreateFrame("Button", nil, strip))
         btn:SetSize(size, size)
         if previous then
             btn:SetPoint("LEFT", previous, "RIGHT", gap, 0)
         else
             btn:SetPoint("LEFT", strip, "LEFT", 0, 0)
         end
-        local icon = btn:CreateTexture(nil, "ARTWORK")
+        local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
         icon:SetAllPoints()
         icon:SetTexture(iconDir .. data.texture)
         icon:SetAlpha(idleAlpha)
@@ -1081,16 +1082,16 @@ local function InstallWindowInteractions(state)
     local f = state.frame
     local function EnsureResizeProxy()
         if f._msuf2ResizeProxy then return f._msuf2ResizeProxy end
-        local proxy = CreateFrame("Frame", nil, UIParent)
+        local proxy = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent), true)
         ApplyMenuResizeProxyPriority(proxy, f)
         proxy:Hide()
-        local fill = proxy:CreateTexture(nil, "BACKGROUND")
+        local fill = PixelLayoutRegion(proxy:CreateTexture(nil, "BACKGROUND"))
         fill:SetAllPoints()
         fill:SetColorTexture(T.colors.bg[1], T.colors.bg[2], T.colors.bg[3], 0.18)
         proxy.fill = fill
         local accent = T.colors.accent or { 0.22, 0.78, 0.94, 1 }
         local function Edge(pointA, pointB, width, height)
-            local tex = proxy:CreateTexture(nil, "BORDER")
+            local tex = PixelLayoutRegion(proxy:CreateTexture(nil, "BORDER"))
             tex:SetColorTexture(accent[1], accent[2], accent[3], 0.72)
             tex:SetPoint(unpack(pointA))
             tex:SetPoint(unpack(pointB))
@@ -1290,13 +1291,13 @@ local function InstallWindowInteractions(state)
         if self.StopMovingOrSizing then self:StopMovingOrSizing() end
         if FinishResizeProxy then FinishResizeProxy(false) end
     end
-    local grip = CreateFrame("Button", nil, f)
+    local grip = PixelLayoutRegion(CreateFrame("Button", nil, f))
     grip:SetSize(20, 20)
     grip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 3)
     grip:SetFrameLevel(f:GetFrameLevel() + 20)
-    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    PixelLayoutRegion(grip, "SetNormalTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    PixelLayoutRegion(grip, "SetHighlightTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    PixelLayoutRegion(grip, "SetPushedTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     grip:SetScript("OnMouseDown", function(_, button)
         BeginResizeProxy(button)
     end)
@@ -1314,7 +1315,7 @@ end
 
 local function BuildWindowChrome(state)
     local f = state.frame
-    local content = CreateFrame("Frame", nil, f)
+    local content = PixelLayoutRegion(CreateFrame("Frame", nil, f))
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -40)
     content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -16, WINDOW_FOOTER_H)
     f.content = content
@@ -1342,7 +1343,7 @@ local function BuildWindowChrome(state)
     status:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
     status:SetHeight(60)
     local function StatusDivider(edge, inset, alpha)
-        local line = status:CreateTexture(nil, "ARTWORK", nil, 6)
+        local line = PixelLayoutRegion(status:CreateTexture(nil, "ARTWORK", nil, 6))
         line:SetHeight(1)
         line:SetPoint(edge .. "LEFT", status, edge .. "LEFT", inset, 0)
         line:SetPoint(edge .. "RIGHT", status, edge .. "RIGHT", -inset, 0)
@@ -1367,11 +1368,11 @@ local function BuildWindowChrome(state)
     -- divider, up to the text row, and outward to the side. The 2px gap between
     -- the pair is split 1/1 so neither arrow ever steals the other's clicks.
     local function HistoryNavButton(rotation, hitLeft, hitRight, onClick)
-        local btn = CreateFrame("Button", nil, status)
+        local btn = PixelLayoutRegion(CreateFrame("Button", nil, status))
         btn:SetSize(22, 22)
         if btn.SetHitRectInsets then btn:SetHitRectInsets(hitLeft, hitRight, -5, -11) end
         local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2HistNav", 1, "BACKGROUND", "BORDER")
-        local icon = btn:CreateTexture(nil, "ARTWORK")
+        local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
         icon:SetTexture(T.media.dropdownChevron)
         icon:SetSize(18, 18)
         icon:SetPoint("CENTER", 0, 0)
@@ -1534,7 +1535,7 @@ local function BuildWindowToolbar(state)
         local unseen = type(M.HasUnseenChangelog) == "function" and M.HasUnseenChangelog() == true
         local badge = toolbarFeatures._msuf2NewBadge
         if unseen and not badge and type(_G.NewFeatureLabelMixin) == "table" then
-            badge = CreateFrame("Frame", nil, toolbarFeatures, "NewFeatureLabelTemplate")
+            badge = PixelLayoutRegion(CreateFrame("Frame", nil, toolbarFeatures, "NewFeatureLabelTemplate"))
             badge:SetScale(0.8)
             badge:SetFrameLevel(toolbarFeatures:GetFrameLevel() + 5)
             toolbarFeatures._msuf2NewBadge = badge
@@ -1795,7 +1796,7 @@ M.ForwardMenuScrollWheel = ForwardMenuScrollWheel
 local function BuildWindowScrollHost(state)
     local f = state.frame
     local host, status = f.host, f.status
-    local pageHeaderHost = CreateFrame("Frame", nil, host)
+    local pageHeaderHost = PixelLayoutRegion(CreateFrame("Frame", nil, host))
     pageHeaderHost:SetHeight(0)
     pageHeaderHost:Hide()
     -- Structural only: the page panel already owns its rounded glass surface,
@@ -1804,7 +1805,7 @@ local function BuildWindowScrollHost(state)
     -- while the stack overflows a too-short window - see LayoutPageHeaderHost.
     f.pageHeaderHost = pageHeaderHost
     M.pageHeaderHost = pageHeaderHost
-    local scroll = CreateFrame("ScrollFrame", nil, host)
+    local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, host))
     f.scrollFrame = scroll
     M.scrollFrame = scroll
     local activeTopOwner, activeLayoutHost = status, host
@@ -1979,7 +1980,7 @@ local function BuildWindowScrollHost(state)
     end
 
     LayoutPageHeaderHost(status, host)
-    local child = CreateFrame("Frame", nil, scroll)
+    local child = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
     child:SetSize(CONTENT_W - 12, CONTENT_H)
     scroll:SetScrollChild(child)
     M.scrollChild = child

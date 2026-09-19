@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua
 --- Heal/absorb prediction element for unitframes.
 ---
@@ -432,7 +433,7 @@ local function EnsureBar(frame, key, levelOffset)
   if bar then
     return bar
   end
-  bar = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
+  bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame))
   bar:SetMinMaxValues(0, 1)
   bar:SetValue(0)
   bar._msufMax = 1
@@ -496,7 +497,7 @@ local function EnsureOverAbsorbGlow(frame)
   -- consume that value directly: zero draws nothing and every positive absorb
   -- clamps to the complete Blizzard edge texture. This avoids branching on a
   -- protected value and also gives the glow a frame level above the HP bar.
-  holder = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
+  holder = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame))
   if holder.EnableMouse then holder:EnableMouse(false) end
   holder:SetMinMaxValues(0, 1)
   holder:SetValue(0)
@@ -986,7 +987,7 @@ local function EnsureOverflowClip(frame, hpBar, vertical, reverse, alongSize)
   local clip = frame._msufPredictionOverflowClip
   if not clip then
     if not CreateFrame or frame._msufPredictionOverflowUnsupported == true then return nil end
-    local created = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
+    local created = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
     -- Without native clipping the host cannot bound anything, so keep the
     -- previous behaviour (parent straight to the frame) instead of adding an
     -- inert layer, and stop rebuilding a host that can never work.

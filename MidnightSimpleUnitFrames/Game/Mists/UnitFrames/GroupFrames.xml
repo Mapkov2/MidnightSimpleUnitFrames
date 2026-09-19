@@ -11,7 +11,7 @@
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Headers.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Adapter.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Priority.lua"/>
-  <Script file="..\..\Classic\UnitFrames\Group\MSUF_UF_Group_Blizzard.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Blizzard.lua"/>
   <Script file="..\..\..\UnitFrames\Range\MSUF_UF_Group_RangeFade.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Visuals.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Status.lua"/>

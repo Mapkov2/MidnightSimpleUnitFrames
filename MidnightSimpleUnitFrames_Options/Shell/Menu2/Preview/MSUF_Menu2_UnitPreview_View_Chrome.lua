@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View_Chrome.lua
 --- Cold-path unitframe preview chrome.
 ---
@@ -346,16 +347,16 @@ end
 local function CreatePreviewAnimationButton(box)
     if not (box and box.canvas) or box.animateCombatButton then return end
     local T = MenuTheme()
-    local btn = CreateFrame("Button", nil, box.canvas, "BackdropTemplate")
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, box.canvas, "BackdropTemplate"))
     btn:SetSize(74, 22)
-    btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    PixelLayoutRegion(btn, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     if box.zoomBar then
         btn:SetPoint("RIGHT", box.zoomBar, "LEFT", -6, 0)
     else
         btn:SetPoint("TOPRIGHT", box.canvas, "TOPRIGHT", -174, -6)
     end
     if btn.SetFrameLevel and box.canvas.GetFrameLevel then btn:SetFrameLevel((box.canvas:GetFrameLevel() or 0) + 82) end
-    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     btn.fs:SetPoint("CENTER")
     if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or { 1, 1, 1, 1 }, 0) end
     btn._preview = box
@@ -384,7 +385,7 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
     local colors = (T and T.colors) or {}
     local shade = box._msuf2PinnedHeaderShade
     if not shade and box.CreateTexture then
-        shade = box:CreateTexture(nil, "BORDER", nil, -1)
+        shade = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, -1))
         shade:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
         shade:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1)
         shade:SetHeight(29)
@@ -393,7 +394,7 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
     end
     local line = box._msuf2PinnedHeaderLine
     if not line and box.CreateTexture then
-        line = box:CreateTexture(nil, "BORDER", nil, 0)
+        line = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, 0))
         line:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -29)
         line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -29)
         line:SetHeight(1)
@@ -426,7 +427,7 @@ local function EnsureUnitLayersButton(box)
     if T and T.Button then
         btn = T.Button(box, TR("Layers"), 76, 20)
     else
-        btn = CreateFrame("Button", nil, box, "BackdropTemplate")
+        btn = PixelLayoutRegion(CreateFrame("Button", nil, box, "BackdropTemplate"))
         btn:SetSize(76, 20)
     end
     btn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)

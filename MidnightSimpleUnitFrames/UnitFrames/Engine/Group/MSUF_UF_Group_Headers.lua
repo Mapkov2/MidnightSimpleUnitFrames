@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua
 --- Secure party/raid header creation and anchoring.
 ---
@@ -335,7 +336,7 @@ local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
   local anchor = GF.anchors[key]
   local desiredParent = ResolvePetBattleFrameHider()
   if not anchor then
-    anchor = CreateFrame("Frame", AnchorName(key), desiredParent)
+    anchor = PixelLayoutRegion(CreateFrame("Frame", AnchorName(key), desiredParent))
     anchor:EnableMouse(false)
     GF.anchors[key] = anchor
   elseif anchor.GetParent and anchor.SetParent and anchor:GetParent() ~= desiredParent then
@@ -1235,7 +1236,7 @@ local function ApplyGroupBorder(host, conf, enabled)
     local key = BORDER_EDGE_KEYS[i]
     local edge = edges[key]
     if not edge then
-      edge = host:CreateTexture(nil, "OVERLAY")
+      edge = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"))
       edges[key] = edge
     end
     edge:SetColorTexture(r, g, b, a)
@@ -1636,7 +1637,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
   for groupIndex = 1, groupCount do
     local header = headers[groupIndex]
     if not header then
-      header = CreateFrame("Frame", HeaderName("raid"), anchor, "SecureGroupHeaderTemplate")
+      header = PixelLayoutRegion(CreateFrame("Frame", HeaderName("raid"), anchor, "SecureGroupHeaderTemplate"))
       -- 12.1.5 keeps the header rect on whole pixels in native code, which is
       -- what the secure template anchors its managed children against.
       -- SetRoundLayoutToNearestPixel is protected, so it is set here at
@@ -1836,7 +1837,7 @@ function GF.SetupPriorityHeader(kind, nameList, count)
     header = nil
   end
   if not header then
-    header = CreateFrame("Frame", HeaderName("priority"), anchor, "SecureGroupHeaderTemplate")
+    header = PixelLayoutRegion(CreateFrame("Frame", HeaderName("priority"), anchor, "SecureGroupHeaderTemplate"))
     -- 12.1.5 keeps the header rect on whole pixels in native code, which is
     -- what the secure template anchors its managed children against.
     -- SetRoundLayoutToNearestPixel is protected, so it is set here at
@@ -1933,7 +1934,7 @@ function GF.SetupHeader(key, kind)
   end
 
   if not header then
-    header = CreateFrame("Frame", HeaderName(key), anchor, "SecureGroupHeaderTemplate")
+    header = PixelLayoutRegion(CreateFrame("Frame", HeaderName(key), anchor, "SecureGroupHeaderTemplate"))
     -- 12.1.5 keeps the header rect on whole pixels in native code, which is
     -- what the secure template anchors its managed children against.
     -- SetRoundLayoutToNearestPixel is protected, so it is set here at

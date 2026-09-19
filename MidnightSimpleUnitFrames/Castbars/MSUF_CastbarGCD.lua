@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_CastbarGCD.lua - GCD bar (instant casts) on the Player castbar.
 ---
 --- 12.1 rebuild of the 5.x GCD bar. Everything time-driven runs C-side:
@@ -286,7 +287,7 @@ end
 -- ============================================================
 -- Driver: UNIT_SPELLCAST_SUCCEEDED -> GCD bar
 -- ============================================================
-local driver = CreateFrame("Frame", "MSUF_GCDBarDriver")
+local driver = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GCDBarDriver"))
 local succeededRegistered = false
 
 local function SyncRegistration()

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -30,7 +31,7 @@ local function GCDBarSupported()
     if type(spellAPI) == "table" and type(spellAPI.GetSpellCooldownDuration) == "function" then
         local castbar = _G.MSUF_PlayerCastbar
         local bar = castbar and castbar.statusBar
-        if not bar and type(_G.CreateFrame) == "function" then bar = _G.CreateFrame("StatusBar") end
+        if not bar and type(_G.CreateFrame) == "function" then bar = PixelLayoutRegion(_G.CreateFrame("StatusBar")) end
         gcdBarSupported = bar ~= nil and type(bar.SetTimerDuration) == "function"
     end
     return gcdBarSupported

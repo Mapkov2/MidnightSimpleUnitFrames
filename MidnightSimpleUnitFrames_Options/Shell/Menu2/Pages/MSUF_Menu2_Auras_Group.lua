@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -100,6 +101,8 @@ local function CanonicalGroupFilterValue(value, lane)
     if M.CLASSIC_AURA_FILTERS_REDUCED == true then
         local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
         local canonical = GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
+        -- A Non-player token imported from Retail is not Only mine.
+        if canonical == "NonPlayer" then return "ALL" end
         if canonical == "Player" or canonical:sub(-6) == "Player" then return "Player" end
         return "ALL"
     end
@@ -368,10 +371,15 @@ end
 
 local function CreatePresetReaders(lane)
     local function PresetValues() return Model.GroupBlacklistPresetValues(lane) end
+    -- Classic opens on the lane's default preset while the picked one is not in
+    -- this lane's list (the list starts with a category header that has no value).
+    local classicDefault = M.CLASSIC_AURA_FILTERS_REDUCED == true and (lane == "debuff" and "SATED" or "RAID_BUFFS") or nil
     local function CurrentPreset()
         local values = PresetValues()
         local key = M.auraBlacklistPreset
+        if classicDefault then key = key or classicDefault end
         for i = 1, #values do if values[i].value == key then return key end end
+        if classicDefault then return values[1] and values[1].value or classicDefault end
         return values[1] and values[1].value
     end
     local function PresetSpellValues() return Model.GroupBlacklistSpellValues(lane, CurrentPreset()) end
@@ -811,10 +819,10 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local prepared = W.Text(direct, "", 16, directPresetY - 84, w - 80, T.colors.accent)
     local empty = W.Text(direct, lane == "debuff" and "No blacklisted spells. Add one from the presets above."
         or "No blacklisted spells. Add one above or use a preset.", 16, directPresetY - 120, w - 80, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, direct)
+    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, direct))
     listScroll:SetPoint("TOPLEFT", direct, "TOPLEFT", 16, directPresetY - 110)
     listScroll:SetSize(w - 108, 48)
-    local listChild = CreateFrame("Frame", nil, listScroll)
+    local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
     listChild:SetSize(w - 130, 48)
     listScroll:SetScrollChild(listChild)
     M._StyleNestedAuraScrollFrame(listScroll, direct, 28)
@@ -822,11 +830,11 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     local function EnsureRow(index)
         local row = rows[index]
         if row then return row end
-        row = CreateFrame("Button", nil, listChild)
+        row = PixelLayoutRegion(CreateFrame("Button", nil, listChild))
         row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((index - 1) * 24))
         row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((index - 1) * 24))
         row:SetHeight(20)
-        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
         row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
         row.icon:SetSize(17, 17)
         row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
@@ -872,6 +880,55 @@ end
 
 local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
+    if M.CLASSIC_AURA_FILTERS_REDUCED == true then
+        -- The Classic aura backends filter by Only mine and Hide permanent, so a
+        -- group lane gets the same two switches and layout as a UnitFrame lane.
+        local section = b:Section(laneTitle .. " Filters", 118)
+        local w = section._msuf2Width or b.width or 720
+        local inner = w - 48
+        local gap = 12
+        local colW = floor((inner - gap * 3) / 4)
+        local onlyMine = BindSwitch(ctx, section, "Only mine", 24, -42, colW,
+            function()
+                local group = GFReadGroup(scope, lane)
+                return CanonicalGroupFilterValue(group.filterToken or "ALL", lane) == "Player"
+            end,
+            function(value)
+                GFWriteGroupValue(scope, lane, "filterToken", value == true and "Player" or "ALL", "auras")
+            end,
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil, {
+                assistantDisposition = "dynamic",
+                assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
+                assistantSettingKeys = GroupAssistantSettingKeys(scope,
+                    ".auras." .. lane .. ".filterToken"),
+            }))
+        AddTooltip(onlyMine, "Only mine", lane == "debuff"
+            and "Only Debuffs applied by the player."
+            or "Only auras applied by the player.")
+        local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
+            function()
+                return type(Model.ReadGroupBlacklistHidePermanent) == "function"
+                    and Model.ReadGroupBlacklistHidePermanent(scope, lane) == true
+            end,
+            function(value)
+                if type(Model.WriteGroupBlacklistHidePermanent) == "function"
+                    and Model.WriteGroupBlacklistHidePermanent(scope, lane, value) then
+                    QueueGroupScope(scope, "auras")
+                end
+            end,
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil, {
+                assistantDisposition = "dynamic",
+                assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
+                assistantSettingKeys = GroupAssistantBlacklistSettingKeys(scope,
+                    ".auras." .. lane .. ".blacklist.hidePermanent"),
+            }))
+        AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
+        M.TrackRefresh(ctx, function()
+            W.SetControlEnabled(onlyMine, true)
+            W.SetControlEnabled(hidePermanent, true)
+        end)
+        return
+    end
     local values = GroupFilterValues(lane)
     local optionRows = max(1, ceil(#values / 4))
     local sectionHeight = max(150, 104 + optionRows * 32)
@@ -940,6 +997,9 @@ end
 local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local isDebuff = lane == "debuff"
+    -- The Classic aura backends re-apply only the Auras element for a blacklist
+    -- change, the focused path their group filters use as well.
+    local blacklistApplyMode = M.CLASSIC_AURA_FILTERS_REDUCED == true and "auras" or "visual"
     local section = b:Section(laneTitle .. " Blacklist", isDebuff and 502 or 528)
     local groupActionPath = "group-workspace.scope." .. AuraCatalogToken(scope)
         .. ".lane." .. AuraCatalogToken(lane) .. ".blacklist"
@@ -957,7 +1017,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
             local value = input and input.GetText and input:GetText() or inputValue
             local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
             if changed then
-                QueueGroupScope(scope, "visual")
+                QueueGroupScope(scope, blacklistApplyMode)
                 Rebuild(ctx)
             end
             if input and input.SetText then input:SetText("") end
@@ -1002,7 +1062,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local count = Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset())
         if count > 0 then
             M.auraBlacklistSpell = nil
-            QueueGroupScope(scope, "visual")
+            QueueGroupScope(scope, blacklistApplyMode)
             Rebuild(ctx)
         end
         return count > 0
@@ -1024,7 +1084,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local changed = Model.AddGroupBlacklistSpell(scope, lane, CurrentSpell())
         if changed then
             M.auraBlacklistSpell = nil
-            QueueGroupScope(scope, "visual")
+            QueueGroupScope(scope, blacklistApplyMode)
             Rebuild(ctx)
         end
         return changed and true or false
@@ -1052,10 +1112,10 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local emptyText = isDebuff and "No blocked spells. Add one from the presets above."
         or "No blocked spells. Add one above or use a preset."
     local empty = W.Text(section, emptyText, 24, -284 + curatedOffset, inner, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, section)
+    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
     listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + curatedOffset)
     listScroll:SetSize(inner - 20, 150)
-    local listChild = CreateFrame("Frame", nil, listScroll)
+    local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
     listChild:SetSize(inner - 44, 150)
     listScroll:SetScrollChild(listChild)
     M._StyleNestedAuraScrollFrame(listScroll, section, 44)
@@ -1063,12 +1123,12 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local function EnsureRow(i)
         local row = rows[i]
         if row then return row end
-        row = CreateFrame("Frame", nil, listChild)
+        row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
         row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
         row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
         row:SetHeight(40)
         if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
-        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
         row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
         row.icon:SetSize(28, 28)
         row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
@@ -1079,7 +1139,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         row.remove:SetScript("OnClick", function()
             if row._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, row._spellID) then
-                QueueGroupScope(scope, "visual")
+                QueueGroupScope(scope, blacklistApplyMode)
                 Rebuild(ctx)
             end
         end)

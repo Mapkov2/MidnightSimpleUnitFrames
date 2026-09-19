@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
@@ -383,12 +384,12 @@ do
     local function _EnsurePreviewFrame()
         if previewFrame then return previewFrame end
 
-        previewFrame = CreateFrame("Frame", "MSUF_PlayerTotemsPreviewFrame", UIParent)
+        previewFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerTotemsPreviewFrame", UIParent))
         previewFrame:SetFrameStrata("MEDIUM")
         previewFrame:SetFrameLevel(200)
         previewFrame:SetSize(BLIZZ_TOTEM_BASE_SIZE, BLIZZ_TOTEM_BASE_SIZE)
 
-        previewButton = CreateFrame("Button", nil, previewFrame, "TotemButtonTemplate")
+        previewButton = PixelLayoutRegion(CreateFrame("Button", nil, previewFrame, "TotemButtonTemplate"))
         previewButton:SetAllPoints(previewFrame)
         previewButton.layoutIndex = 1
         previewButton.slot = 0
@@ -403,19 +404,19 @@ do
             previewButton.Duration:Hide()
         end
         if not (previewButton.Icon and previewButton.Icon.Texture) then
-            local icon = previewButton:CreateTexture(nil, "ARTWORK")
+            local icon = PixelLayoutRegion(previewButton:CreateTexture(nil, "ARTWORK"))
             icon:SetAllPoints(previewButton)
             icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             previewButton._msufFallbackIcon = icon
         end
 
-        local overlay = CreateFrame("Button", nil, previewFrame)
+        local overlay = PixelLayoutRegion(CreateFrame("Button", nil, previewFrame))
         overlay:SetAllPoints(previewFrame)
         overlay:SetFrameLevel(previewFrame:GetFrameLevel() + 20)
         overlay:EnableMouse(false)
         overlay:Hide()
 
-        local highlight = overlay:CreateTexture(nil, "OVERLAY")
+        local highlight = PixelLayoutRegion(overlay:CreateTexture(nil, "OVERLAY"))
         highlight:SetAllPoints()
         highlight:SetColorTexture(1, 1, 1, 0.08)
         highlight:Hide()
@@ -610,7 +611,7 @@ do
     local function _EnsureEventFrame()
         if eventFrame then return end
 
-        eventFrame = CreateFrame("Frame", "MSUF_PlayerTotemsBlizzardEventFrame", UIParent)
+        eventFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerTotemsBlizzardEventFrame", UIParent))
         eventFrame:SetScript("OnEvent", function(self, event)
             if event == "ADDON_LOADED" and not _G.TotemFrame then
                 return

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MSUF2 support features split out of the legacy standalone slash menu.
 --- Keep this file free of page/UI construction so the old SlashMenu file can be
 --- removed from the TOC without losing shared runtime helpers.
@@ -255,7 +256,7 @@ local function EnsurePreviewBindingOwner(ownerName)
     if not ownerName then return nil end
     local owner = _G[ownerName]
     if not owner then
-        owner = CreateFrame("Frame", ownerName, UIParent)
+        owner = PixelLayoutRegion(CreateFrame("Frame", ownerName, UIParent))
         _G[ownerName] = owner
     end
     if owner.SetScript and owner.__msufPreviewBindingOwner ~= true then
@@ -323,7 +324,7 @@ function M.SetPreviewArrowBindings(box, enabled, spec)
         local btnName = prefix .. dir[1]
         local btn = _G[btnName]
         if not btn then
-            btn = CreateFrame("Button", btnName, owner, "SecureActionButtonTemplate")
+            btn = PixelLayoutRegion(CreateFrame("Button", btnName, owner, "SecureActionButtonTemplate"))
             btn:SetSize(1, 1)
             btn:Hide()
             btn:SetScript("OnClick", function(self)
@@ -1034,11 +1035,11 @@ function M.CreateMenuPopupPanel(parent, opts)
     opts = opts or {}
     local theme = M.Theme or {}
     local colors = theme.colors or {}
-    local panel = CreateFrame("Frame", opts.name, parent, opts.template or (theme.Template and theme.Template() or nil))
+    local panel = PixelLayoutRegion(CreateFrame("Frame", opts.name, parent, opts.template or (theme.Template and theme.Template() or nil)))
     local bg = opts.bg or colors.glassPopup or { 0.014, 0.024, 0.050, 0.985 }
     local border = opts.border or { 0.10, 0.22, 0.44, 0.80 }
     if panel.SetBackdrop then
-        panel:SetBackdrop({
+        PixelLayoutRegion(panel, "SetBackdrop", {
             bgFile = "Interface\\Buttons\\WHITE8x8",
             edgeFile = "Interface\\Buttons\\WHITE8x8",
             edgeSize = 1,
@@ -1047,10 +1048,10 @@ function M.CreateMenuPopupPanel(parent, opts)
         panel:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 0.985)
         panel:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 0.80)
     else
-        local fill = panel:CreateTexture(nil, "BACKGROUND")
+        local fill = PixelLayoutRegion(panel:CreateTexture(nil, "BACKGROUND"))
         fill:SetAllPoints()
         fill:SetColorTexture(bg[1], bg[2], bg[3], bg[4] or 0.985)
-        local edge = panel:CreateTexture(nil, "BORDER")
+        local edge = PixelLayoutRegion(panel:CreateTexture(nil, "BORDER"))
         edge:SetPoint("TOPLEFT")
         edge:SetPoint("TOPRIGHT")
         edge:SetHeight(1)
@@ -1300,7 +1301,7 @@ local function EnsureCopyLinkPopup()
         copyLinkPopup = nil
     end
     copyLinkPopupSerial = copyLinkPopupSerial + 1
-    local frame = _G.CreateFrame("Frame", "MSUF_CopyLinkPopup" .. tostring(copyLinkPopupSerial), _G.UIParent, "BackdropTemplate")
+    local frame = PixelLayoutRegion(_G.CreateFrame("Frame", "MSUF_CopyLinkPopup" .. tostring(copyLinkPopupSerial), _G.UIParent, "BackdropTemplate"))
     frame:SetSize(420, 152)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
@@ -1311,7 +1312,7 @@ local function EnsureCopyLinkPopup()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     if frame.SetBackdrop then
-        frame:SetBackdrop({
+        PixelLayoutRegion(frame, "SetBackdrop", {
             bgFile = "Interface/Tooltips/UI-Tooltip-Background",
             edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
             tile = true,
@@ -1322,17 +1323,17 @@ local function EnsureCopyLinkPopup()
         frame:SetBackdropColor(0, 0, 0, 0.90)
         frame:SetBackdropBorderColor(0.10, 0.10, 0.10, 0.90)
     end
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local title = PixelLayoutRegion(frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"))
     title:SetPoint("TOP", frame, "TOP", 0, -16)
     title:SetText(Tr("Link"))
     if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(title, M.Theme.colors and M.Theme.colors.text or { 1, 1, 1, 1 }, 1) end
     frame._msufTitleFS = title
-    local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local hint = PixelLayoutRegion(frame:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
     hint:SetPoint("TOP", title, "BOTTOM", 0, -8)
     hint:SetText(Tr("Press Ctrl+C to copy:"))
     hint:SetTextColor(0.90, 0.90, 0.90, 1)
     if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(hint, M.Theme.colors and M.Theme.colors.text or { 0.90, 0.90, 0.90, 1 }, 0) end
-    local editBox = _G.CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    local editBox = PixelLayoutRegion(_G.CreateFrame("EditBox", nil, frame, "InputBoxTemplate"))
     editBox:EnableMouse(true)
     editBox:SetAutoFocus(false)
     editBox:SetSize(360, 32)
@@ -1342,7 +1343,7 @@ local function EnsureCopyLinkPopup()
     editBox:SetScript("OnEscapePressed", function() frame:Hide() end)
     editBox:SetScript("OnEnterPressed", function() frame:Hide() end)
     frame._msufEditBox = editBox
-    local ok = _G.CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    local ok = PixelLayoutRegion(_G.CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"))
     ok:EnableMouse(true)
     ok:Enable()
     ok:SetSize(120, 24)

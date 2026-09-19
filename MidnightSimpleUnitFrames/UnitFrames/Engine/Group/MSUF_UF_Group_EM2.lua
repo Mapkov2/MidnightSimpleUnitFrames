@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua
 --- EditMode v2 integration for group frames.
 ---
@@ -253,7 +254,7 @@ local function EnsurePreviewAnchor(kind)
   if not kind then return nil end
   local anchor = _previewAnchors[kind]
   if not anchor then
-    anchor = CreateFrame("Frame", "MSUF_GF_EM2PreviewAnchor_" .. kind, UIParent)
+    anchor = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GF_EM2PreviewAnchor_" .. kind, UIParent))
     anchor:EnableMouse(false)
     anchor._msufIsGroupFrame = true
     anchor._msufGFKind = kind
@@ -414,7 +415,7 @@ end
 
 local function EnsureContainer(kind)
   if _containers[kind] then return _containers[kind] end
-  local f = CreateFrame("Frame", "MSUF_GF_Container_" .. kind, UIParent, "BackdropTemplate")
+  local f = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GF_Container_" .. kind, UIParent, "BackdropTemplate"))
   f:SetSize(120, 40)
   f:SetPoint("CENTER", UIParent, "CENTER", GetDefaultCenter(kind))
   f:SetFrameStrata("FULLSCREEN")
@@ -426,19 +427,19 @@ local function EnsureContainer(kind)
   f._msufIsGroupFrame = true
   f._msufGFKind = kind
 
-  local bg = f:CreateTexture(nil, "BACKGROUND")
+  local bg = PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND"))
   bg:SetAllPoints()
   bg:SetColorTexture(0.03, 0.06, 0.12, 0.28)
   f._msufGFEditBg = bg
 
-  local edge = CreateFrame("Frame", nil, f, "BackdropTemplate")
+  local edge = PixelLayoutRegion(CreateFrame("Frame", nil, f, "BackdropTemplate"))
   edge:SetAllPoints()
-  edge:SetBackdrop({ edgeFile = "Interface/Buttons/WHITE8X8", edgeSize = 1 })
+  PixelLayoutRegion(edge, "SetBackdrop", { edgeFile = "Interface/Buttons/WHITE8X8", edgeSize = 1 })
   edge:SetBackdropBorderColor(0.20, 0.65, 1.00, 0.45)
   edge:SetFrameLevel((f:GetFrameLevel() or 0) + 1)
   f._msufGFEditEdge = edge
 
-  local fs = f:CreateFontString(nil, "OVERLAY")
+  local fs = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY"))
   fs:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", FontSize("caption"), "")
   fs:SetShadowOffset(1, -1)
   fs:SetTextColor(0.68, 0.83, 1.00, 0.88)
@@ -1208,7 +1209,7 @@ local function InstallHUDToggle()
           skipHistory = true,
         })
       else
-        _gfButton = CreateFrame("Button", nil, parent)
+        _gfButton = PixelLayoutRegion(CreateFrame("Button", nil, parent))
         _gfButton:SetSize(72, 36)
       end
       if slot then
@@ -1218,14 +1219,14 @@ local function InstallHUDToggle()
       end
 
       if not _gfButton._msuf2Label and not _gfButton._label then
-        local hl = _gfButton:CreateTexture(nil, "HIGHLIGHT")
+        local hl = PixelLayoutRegion(_gfButton:CreateTexture(nil, "HIGHLIGHT"))
         hl:SetAllPoints()
         hl:SetColorTexture(1, 1, 1, 0.05)
       end
 
       local label = _gfButton._msuf2Label or _gfButton._label
       if not label then
-        label = _gfButton:CreateFontString(nil, "OVERLAY")
+        label = PixelLayoutRegion(_gfButton:CreateFontString(nil, "OVERLAY"))
         label:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", FontSize("body"), "")
         label:SetShadowOffset(1, -1)
         label:SetPoint("CENTER")
@@ -1233,7 +1234,7 @@ local function InstallHUDToggle()
       end
       _gfButton._label = label
 
-      local dot = _gfButton:CreateTexture(nil, "OVERLAY")
+      local dot = PixelLayoutRegion(_gfButton:CreateTexture(nil, "OVERLAY"))
       dot:SetSize(56, 2)
       dot:SetPoint("BOTTOM", _gfButton, "BOTTOM", 0, 2)
       dot:SetColorTexture(0.38, 0.65, 1.00, 0.90)

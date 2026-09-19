@@ -66,23 +66,24 @@ end
 -- 1. Manifest: the data file follows the Retail datasets; the Forever catalog
 -- follows the Retail catalog and precedes the shared resolver.
 do
-    local xml = readFile("MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Elements.xml")
+    local Manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
+    local xml = table.concat(Manifest.Paths(root, "Mainline"), "\n")
     local function at(line)
         local position = xml:find(line, 1, true)
         assert(position, "Mainline elements manifest is missing: " .. line)
         assert(not xml:find(line, position + 1, true), "Mainline elements manifest repeats: " .. line)
         return position
     end
-    local groupHighlightsAt = at([[<Script file="..\..\..\Auras3\MSUF_Auras3_GroupHighlightsData.lua"/>]])
-    local dataAt = at([[<Script file="..\..\..\Game\Forever\Auras\MSUF_Auras3_ForeverData.lua"/>]])
-    local retailCatalogAt = at([[<Script file="..\..\..\Auras3\AliasData\MSUF_Auras3_AliasData_Common.lua"/>]])
-    local retailCatalogEndAt = at([[<Script file="..\..\..\Auras3\AliasData\MSUF_Auras3_AliasData_zhTW.lua"/>]])
-    local resolverAt = at([[<Script file="..\..\..\Auras3\MSUF_Auras3_AuraAliases.lua"/>]])
+    local groupHighlightsAt = at("Auras3/MSUF_Auras3_GroupHighlightsData.lua")
+    local dataAt = at("Game/Forever/Auras/MSUF_Auras3_ForeverData.lua")
+    local retailCatalogAt = at("Auras3/AliasData/MSUF_Auras3_AliasData_Common.lua")
+    local retailCatalogEndAt = at("Auras3/AliasData/MSUF_Auras3_AliasData_zhTW.lua")
+    local resolverAt = at("Auras3/MSUF_Auras3_AuraAliases.lua")
     assert(groupHighlightsAt < dataAt and dataAt < retailCatalogAt,
         "Forever data must load after the Retail curated datasets and before the catalogs")
     local previous = retailCatalogEndAt
     for _, locale in ipairs(LOCALES) do
-        local position = at([[<Script file="..\..\..\Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_]] .. locale .. [[.lua"/>]])
+        local position = at("Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_" .. locale .. ".lua")
         assert(position > previous and position < resolverAt,
             "Forever " .. locale .. " catalog must load after the Retail catalog, in locale order, before the resolver")
         previous = position
@@ -92,7 +93,7 @@ do
         assert(source:find("\nif not (Client ~= nil and Client.IsForever == true) then return end\n", 1, true),
             locale .. " Forever catalog must be gated on the Forever client fact")
     end
-    assert(not xml:find("Game\\Vanilla", 1, true) and not xml:find("Game\\Classic", 1, true),
+    assert(not xml:find("Game/Vanilla", 1, true) and not xml:find("Game/Classic", 1, true),
         "the Mainline elements manifest must not load Classic data")
 end
 

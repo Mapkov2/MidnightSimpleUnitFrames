@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua
 --- Cold-path buff/debuff preview provider for the MSUF2 unit frame preview.
 ---
@@ -1054,9 +1055,9 @@ function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayA
     local overlayHost = mock._msufPreviewDispelOverlayHost
     if overlayOn then
         if not overlayHost then
-            overlayHost = CreateFrame("Frame", nil, mock)
+            overlayHost = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
             overlayHost:EnableMouse(false)
-            overlayHost.Region = overlayHost:CreateTexture(nil, "OVERLAY")
+            overlayHost.Region = PixelLayoutRegion(overlayHost:CreateTexture(nil, "OVERLAY"))
             overlayHost.Region:SetTexture(TEX_W8)
             mock._msufPreviewDispelOverlayHost = overlayHost
             mock._msufPreviewDispelOverlayRegion = overlayHost.Region
@@ -1126,7 +1127,7 @@ function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayA
             return
         end
         if not symbolHost then
-            symbolHost = CreateFrame("Frame", nil, mock)
+            symbolHost = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
             symbolHost:EnableMouse(false)
             mock._msufPreviewDispelSymbolHost = symbolHost
         end
@@ -1146,9 +1147,9 @@ function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayA
         for index = 1, count do
             local holder = holders[index]
             if not holder then
-                holder = CreateFrame("Frame", nil, symbolHost)
+                holder = PixelLayoutRegion(CreateFrame("Frame", nil, symbolHost))
                 holder:EnableMouse(false)
-                holder.Texture = holder:CreateTexture(nil, "OVERLAY")
+                holder.Texture = PixelLayoutRegion(holder:CreateTexture(nil, "OVERLAY"))
                 holder.Texture:SetAllPoints(holder)
                 holders[index] = holder
             end
@@ -1240,7 +1241,7 @@ local function EnsureVisual(box, kind, baseLevel)
     box.auraPreviewVisuals = box.auraPreviewVisuals or {}
     local visual = box.auraPreviewVisuals[kind]
     if not visual then
-        visual = CreateFrame("Frame", nil, box.canvas or box.mock)
+        visual = PixelLayoutRegion(CreateFrame("Frame", nil, box.canvas or box.mock))
         visual._msufAuraVisualKind = kind
         visual._icons = {}
         box.auraPreviewVisuals[kind] = visual
@@ -1255,36 +1256,36 @@ local function CreateIcon(parent)
     -- The visible icon can sit above the canvas-owned mover (notably the
     -- portrait defensive lane). Use a Button so the proxy can preserve the
     -- mover's complete click contract in addition to drag forwarding.
-    local f = CreateFrame("Button", nil, parent)
+    local f = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     f:SetSize(18, 18)
-    f.bg = f:CreateTexture(nil, "BACKGROUND")
+    f.bg = PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND"))
     f.bg:SetAllPoints()
     f.bg:SetTexture(TEX_W8)
     f.bg:SetVertexColor(0.07, 0.07, 0.08, 0.88)
-    f.tex = f:CreateTexture(nil, "ARTWORK")
+    f.tex = PixelLayoutRegion(f:CreateTexture(nil, "ARTWORK"))
     f.tex:SetAllPoints(f)
     if f.tex.SetTexCoord then f.tex:SetTexCoord(0, 1, 0, 1) end
     -- Keep the animated swipe deterministically above the icon artwork.  The
     -- client does not guarantee ordering for two regions on the same draw
     -- layer/sublevel, which could leave this shown region hidden by f.tex.
-    f.swipe = f:CreateTexture(nil, "ARTWORK", nil, 1)
+    f.swipe = PixelLayoutRegion(f:CreateTexture(nil, "ARTWORK", nil, 1))
     f.swipe:SetPoint("TOPLEFT", f, "TOP", 0, 0)
     f.swipe:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
     f.swipe:SetTexture(TEX_W8)
     f.swipe:SetVertexColor(0, 0, 0, 0.58)
     f.swipe:Hide()
-    f.durationBar = f:CreateTexture(nil, "OVERLAY")
+    f.durationBar = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
     f.durationBar:SetTexture(TEX_W8)
     local durationR, durationG, durationB = AuraDurationBarColor()
     f.durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
     f.durationBar:Hide()
-    f.edge = f:CreateTexture(nil, "BORDER")
+    f.edge = PixelLayoutRegion(f:CreateTexture(nil, "BORDER"))
     f.edge:SetAllPoints(f)
     f.edge:SetTexture(TEX_W8)
     f.edge:SetVertexColor(0, 0, 0, 0)
-    f.dispelBorder = f:CreateTexture(nil, "OVERLAY")
+    f.dispelBorder = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
     f.dispelBorder:Hide()
-    f.stealableMarker = f:CreateTexture(nil, "OVERLAY")
+    f.stealableMarker = PixelLayoutRegion(f:CreateTexture(nil, "OVERLAY"))
     f.stealableMarker:Hide()
     f.stack = MakeFS(f, "OVERLAY", Layers.AURA_STACK_DRAW_SUBLEVEL or 6)
     f.timer = MakeFS(f, "OVERLAY", Layers.AURA_COOLDOWN_TEXT_DRAW_SUBLEVEL or 7)
@@ -1374,7 +1375,7 @@ local function LayoutFrameEffectPreview(box, mock, effect, S)
     end
     local owner = box._msufAuraFrameEffectPreviewOwner
     if not owner then
-        owner = CreateFrame("Frame", nil, mock)
+        owner = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
         owner:EnableMouse(false)
         box._msufAuraFrameEffectPreviewOwner = owner
     elseif owner.GetParent and owner:GetParent() ~= mock and owner.SetParent then
@@ -1823,7 +1824,7 @@ local function LayoutDefensivePortrait(box, mock, state, S)
     end
     local visual = box.defensivePortraitPreview
     if not visual then
-        visual = CreateFrame("Frame", nil, mock.portrait)
+        visual = PixelLayoutRegion(CreateFrame("Frame", nil, mock.portrait))
         visual._icons = {}
         box.defensivePortraitPreview = visual
     end

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/MSUF_GameMenu.lua
 --- Adds a lightweight MSUF entry to Blizzard's Escape/Game Menu.
 
@@ -108,7 +109,7 @@ local function SetButtonLabel(button, styleSource)
     end
 
     if not button.MSUFGameMenuIcon and type(button.CreateTexture) == "function" then
-        local icon = button:CreateTexture(nil, "ARTWORK", nil, 1)
+        local icon = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK", nil, 1))
         icon:SetTexture(ICON_PATH)
         icon:SetSize(ICON_SIZE, ICON_SIZE)
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -184,7 +185,7 @@ local function EnsureButton()
     if not (getTemplateInfo and buttonTemplate and getTemplateInfo(buttonTemplate)) then
         buttonTemplate = "UIPanelButtonTemplate"
     end
-    button = CreateFrame("Button", BUTTON_NAME, gameMenu, buttonTemplate)
+    button = PixelLayoutRegion(CreateFrame("Button", BUTTON_NAME, gameMenu, buttonTemplate))
     if not button then return nil end
 
     SetButtonLabel(button)

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -18,6 +19,9 @@ local StopRestingFlipbook = RestingFlipbook.Stop
 local floor = math.floor
 local max = math.max
 local min = math.min
+-- Classic clients name each Pet Happiness preview icon in a tooltip and skip
+-- preview atlases their client does not ship (BuildPreviewCard).
+local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
 local VT = M.ValueTextList
 local STATUS_ANCHORS, DEFAULT_SYMBOLS, StatusIconPackValues, GetConf = UP.STATUS_ANCHORS, UP.DEFAULT_SYMBOLS, UP.StatusIconPackValues, UP.GetConf
 local GetGeneral, UnitTopLabel, ReadBool, SetBool, SetNumber = UP.GetGeneral, UP.UnitTopLabel, UP.ReadBool, UP.SetBool, UP.SetNumber
@@ -518,6 +522,13 @@ function StatusSection.PrepareIconResolvers(state, unit)
         if value == "statusPvp" then return { { "pvp", "Alliance" }, { "pvp", "Horde" }, { "pvp", "FFA" } } end
         -- Unhappy (75% damage), Content (100%) and Happy (125%).
         if value == "statusPetHappiness" then
+            if IS_CLASSIC_FAMILY then
+                return {
+                    { "petHappiness", 1, nil, "Unhappy - 75% damage" },
+                    { "petHappiness", 2, nil, "Content - 100% damage" },
+                    { "petHappiness", 3, nil, "Happy - 125% damage" },
+                }
+            end
             return { { "petHappiness", 1 }, { "petHappiness", 2 }, { "petHappiness", 3 } }
         end
         return nil
@@ -829,20 +840,30 @@ function StatusSection.BuildPreviewCard(state, unit)
         "show all", "all indicators", "preview all", "all status icons",
     }, "status.preview.basic.all")
     local iconPreviewLabel = W.LabelAt(previewCard, "Icon preview", 16, -146, previewControlW, "GameFontNormalSmall", T.colors.accent)
-    local iconPreviewStrip = CreateFrame("Frame", nil, previewCard)
+    local iconPreviewStrip = PixelLayoutRegion(CreateFrame("Frame", nil, previewCard))
     iconPreviewStrip:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -158)
     iconPreviewStrip:SetSize(previewControlW, 24)
     local iconPreviewTextures = {}
     for i = 1, 5 do
-        local holder = CreateFrame("Frame", nil, iconPreviewStrip)
+        local holder = PixelLayoutRegion(CreateFrame("Frame", nil, iconPreviewStrip))
         holder:SetSize(24, 24)
         holder:SetPoint("LEFT", iconPreviewStrip, "LEFT", (i - 1) * 28, 0)
-        holder.bg = holder:CreateTexture(nil, "BACKGROUND")
+        holder.bg = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND"))
         holder.bg:SetAllPoints()
         holder.bg:SetColorTexture(0.020, 0.026, 0.052, 0.70)
-        holder.tex = holder:CreateTexture(nil, "ARTWORK")
+        holder.tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
         holder.tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
         holder.tex:SetSize(22, 22)
+        if IS_CLASSIC_FAMILY then
+            holder:EnableMouse(true)
+            holder:SetScript("OnEnter", function(self)
+                if not (self._msufStatusPreviewLabel and GameTooltip) then return end
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(self._msufStatusPreviewLabel, 1, 1, 1)
+                GameTooltip:Show()
+            end)
+            holder:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        end
         iconPreviewTextures[i] = holder
     end
     local function StopIconPreviewAnimations(resetAtlas)
@@ -860,11 +881,13 @@ function StatusSection.BuildPreviewCard(state, unit)
         iconPreviewStrip:SetAlpha(enabled and 1 or 0.46)
         for i = 1, #iconPreviewTextures do
             local holder = iconPreviewTextures[i]
+            if IS_CLASSIC_FAMILY then holder._msufStatusPreviewLabel = entries[i] and entries[i][4] or nil end
             local path, l, r, t, b, atlas, animated = ResolvePreviewStatusIcon(spec, entries[i])
             if animated == true and ApplyRestingFlipbook and ApplyRestingFlipbook(holder.tex, true) then
                 holder.tex:SetVertexColor(1, 1, 1, 1)
                 holder:Show()
-            elseif type(atlas) == "string" and atlas ~= "" and holder.tex.SetAtlas then
+            elseif type(atlas) == "string" and atlas ~= "" and holder.tex.SetAtlas
+                and (not IS_CLASSIC_FAMILY or (C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas))) then
                 holder.tex:SetAtlas(atlas)
                 holder.tex:SetVertexColor(1, 1, 1, 1)
                 holder:Show()

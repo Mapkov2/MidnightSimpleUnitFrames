@@ -16,15 +16,17 @@ local VTP = M.ValueTextPairs
 local KLR, KSW, WL = M.KeyLabelRows, M.KeySetFromWords, M.WordList
 local NAV_SUBPAGE_LABELS = M.navSubpageLabels or {}
 local UNIT_PAGES = { uf_player = { unit = "player", title = "MSUF Player", label = NAV_SUBPAGE_LABELS.uf_player or "Player" }, uf_target = { unit = "target", title = "MSUF Target", label = NAV_SUBPAGE_LABELS.uf_target or "Target" }, uf_targettarget = { unit = "targettarget", title = "MSUF Target of Target", label = NAV_SUBPAGE_LABELS.uf_targettarget or "Target of Target" }, uf_focustarget = { unit = "focustarget", title = "MSUF Focus Target", label = NAV_SUBPAGE_LABELS.uf_focustarget or "Focus Target" }, uf_focus = { unit = "focus", title = "MSUF Focus", label = NAV_SUBPAGE_LABELS.uf_focus or "Focus" }, uf_pet = { unit = "pet", title = "MSUF Pet", label = NAV_SUBPAGE_LABELS.uf_pet or "Pet" }, uf_boss = { unit = "boss", title = "MSUF Boss Frames", label = NAV_SUBPAGE_LABELS.uf_boss or "Boss" }, uf_arena = { unit = "arena", title = "MSUF Arena Frames", label = NAV_SUBPAGE_LABELS.uf_arena or "Arena" } }
--- WoW Forever runs this Mainline page without arena units. There the pages,
--- aura copy partners and copy targets of every unit MSUF.Client.SupportsUnit
--- rejects are dropped, as the Classic page variant does for its clients.
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+-- WoW Forever runs this Mainline page without arena units, and the Classic
+-- clients lack some units too (Classic Era: focus, boss and arena; TBC: boss).
+-- There the pages, aura copy partners and copy targets of every unit
+-- MSUF.Client.SupportsUnit rejects are dropped. Midnight keeps every unit.
+local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+local DROP_UNSUPPORTED_UNITS = MSUF.Client ~= nil and (MSUF.Client.IsForever == true or IS_CLASSIC_FAMILY)
     and type(MSUF.Client.SupportsUnit) == "function"
 --- Load-time only. Takes a { value = unit } list and returns the kept rows, or
 --- a table keyed by unit (or holding { unit = ... } pages) and prunes it in place.
-local function DropForeverUnsupportedUnits(units)
-    if not IS_FOREVER then return units end
+local function DropUnsupportedUnits(units)
+    if not DROP_UNSUPPORTED_UNITS then return units end
     local supportsUnit = MSUF.Client.SupportsUnit
     if units[1] ~= nil then
         local kept = {}
@@ -38,7 +40,7 @@ local function DropForeverUnsupportedUnits(units)
     end
     return units
 end
-UNIT_PAGES = DropForeverUnsupportedUnits(UNIT_PAGES)
+UNIT_PAGES = DropUnsupportedUnits(UNIT_PAGES)
 local POWER_UNITS = {}
 local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
 for _, page in pairs(UNIT_PAGES) do
@@ -159,15 +161,15 @@ local STATUS_CONTROLS = {
     StatusControl("stance", "Stance", "showStanceIndicator", false, "stanceIndicatorSize", 12, "stanceIndicatorAnchor", "TOP", STATUS_LEVEL_ANCHORS, "stanceIndicatorOffsetX", 0, "stanceIndicatorOffsetY", -2, "stanceIndicatorLayer", 7, "MSUF_RequestStatusIconsRefreshForCurrent", { allowed = function(unit) return unit == "player" end, statusRuntime = true, textIndicator = true, colorPrefix = "stanceIndicator" }),
     StatusControl("statusPvp", "PvP Flag (War Mode/PvP)", "showPvpIndicator", true, "pvpIndicatorSize", 18, "pvpIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "pvpIndicatorOffsetX", 0, "pvpIndicatorOffsetY", 0, "pvpIndicatorLayer", 7, "MSUF_RequestStatusPvpIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "pvpIndicatorCustomIcon" }),
 }
--- Hunter pet happiness exists again on WoW Forever (and on Classic Era and TBC,
--- which use their own unit page). Midnight has none, so the control is only
+-- Hunter pet happiness exists again on WoW Forever, Classic Era and TBC, which
+-- all load this page. Midnight and Mists have none, so the control is only
 -- added where the client supports it.
 if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then
     STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetHappiness", "Pet Happiness", "showPetHappinessIndicator", true, "petHappinessIndicatorSize", 24, "petHappinessIndicatorAnchor", "RIGHT", STATUS_CORNER_ANCHORS, "petHappinessIndicatorOffsetX", -7, "petHappinessIndicatorOffsetY", -4, "petHappinessIndicatorLayer", 7, "MSUF_RequestPetHappinessIndicatorRefresh", { allowed = function(unit) return unit == "pet" end, statusRuntime = true })
 end
--- The threat percentage text exists on WoW Forever here (Classic Era and TBC use
--- their own unit page); Midnight has none. statusTextState gives it the status
--- text color shortcut without the name-font size fallback of textIndicator.
+-- The threat percentage text exists on WoW Forever, Classic Era and TBC, which
+-- all load this page; Midnight and Mists have none. statusTextState gives it the
+-- status text color shortcut without the name-font size fallback of textIndicator.
 if MSUF.Client ~= nil and MSUF.Client.SupportsThreatText == true then
     STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusThreat", "Threat %", "showThreatIndicator", true, "threatIndicatorSize", 11, "threatIndicatorAnchor", "BOTTOMLEFT", STATUS_CORNER_ANCHORS, "threatIndicatorOffsetX", 6, "threatIndicatorOffsetY", 2, "threatIndicatorLayer", 7, "MSUF_RequestThreatIndicatorRefresh", { allowed = function(unit) return unit == "target" or unit == "focus" or unit == "boss" end, statusRuntime = true, statusTextState = "THREAT", colorPrefix = "threatIndicator" })
 end
@@ -339,10 +341,15 @@ local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInComb
 --- so it has no semantic equivalent on Player/Target/Focus and must never be cleared
 --- when a normal unit's frame size is copied to Boss.
 local COPY_LAYOUT_FIELDS = WL [[width height]]
-local AURA_COPY_UNITS = DropForeverUnsupportedUnits(KSW("player target focus boss arena"))
+local AURA_COPY_UNITS = DropUnsupportedUnits(KSW("player target focus boss arena"))
 local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
+-- TBC and Mists field five arena opponents, Classic Era none
+-- (MSUF.Client.MaxArenaOpponents, published as MSUF_MAX_ARENA_FRAMES).
+-- Mainline keeps its three arena frames.
+local ARENA_SLOTS = IS_CLASSIC_FAMILY and tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3
+for arenaIndex = 4, ARENA_SLOTS do AURA_ARENA_RUNTIME_UNITS[#AURA_ARENA_RUNTIME_UNITS + 1] = "arena" .. arenaIndex end
 local UF_COPY_CATEGORIES = {
     { key = "basics",       label = "Frame Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
     { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, plus this unit's font overrides: font, outline, shadow, text color and name shortening." },
@@ -365,7 +372,7 @@ local function NewCopyScopeDefaults()
     end
     return t
 end
-local UNIT_COPY_TARGETS = DropForeverUnsupportedUnits(VTP "player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss Frames|arena=Arena Frames")
+local UNIT_COPY_TARGETS = DropUnsupportedUnits(VTP "player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss Frames|arena=Arena Frames")
 local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss Frames", arena = "Arena Frames" }
 local UNIT_PILL_WIDTHS = { targettarget = 116, focustarget = 104, boss = 92, arena = 92, target = 62, focus = 58, pet = 46 }
 local function DefaultCopyTarget(unit)
@@ -990,7 +997,7 @@ local function ClearArenaPagePreviewForCombat()
 end
 local function ArenaPreviewFramesVisible()
     local sawFrame = false
-    for i = 1, 3 do
+    for i = 1, ARENA_SLOTS do
         local unit = "arena" .. i
         local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
         if frame then

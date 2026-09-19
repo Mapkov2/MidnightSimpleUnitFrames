@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- UF bars common element helpers: shared statusbar setup, textures, and geometry utilities.
 -- Keep live unit-event code allocation-light; cold spec/application work belongs in callers.
 local _, MSUF = ...
@@ -364,7 +365,7 @@ end
 
 local function CreateLossTrail(parent, texture, initialValue)
   if not parent then return nil end
-  local trail = CreateFrame("StatusBar", nil, parent._msufHealthVisualRoot or parent)
+  local trail = PixelLayoutRegion(CreateFrame("StatusBar", nil, parent._msufHealthVisualRoot or parent))
   trail:SetMinMaxValues(0, 100)
   trail:SetValue(initialValue or 0)
   trail:SetStatusBarTexture(texture or WHITE)
@@ -730,7 +731,7 @@ local function EnsureGradientTexture(textureOwner, grads, direction)
   if not (textureOwner and textureOwner.CreateTexture) then
     return nil
   end
-  tex = textureOwner:CreateTexture(nil, "OVERLAY", nil, 0)
+  tex = PixelLayoutRegion(textureOwner:CreateTexture(nil, "OVERLAY", nil, 0))
   tex:SetTexture(WHITE)
   tex:SetBlendMode("BLEND")
   grads[direction] = tex

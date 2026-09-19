@@ -125,8 +125,19 @@ function Get-MsufTocEntries {
         .SYNOPSIS
         The load entries of a TOC: every non-empty line that is not a comment.
     #>
-    param([Parameter(Mandatory = $true)][string]$Path)
-    return @(Get-Content -LiteralPath $Path | Where-Object { $_ -and $_ -notmatch '^\s*#' })
+    param([Parameter(Mandatory = $true)][string]$Path, [string]$TextLocale = "")
+    # An unspecified locale inventories the union, for packaging and parity.
+    foreach ($line in (Get-Content -LiteralPath $Path)) {
+        $entry = $line.Trim()
+        if (-not $entry -or $entry.StartsWith('#')) { continue }
+        if ($entry -match '\s+\[AllowLoadTextLocale\s+([A-Za-z, ]+)\]$') {
+            $allowed = @($Matches[1] -split ',' | ForEach-Object { $_.Trim() })
+            if ($TextLocale -and $TextLocale -notin $allowed) { continue }
+            $entry = $entry -replace '\s+\[AllowLoadTextLocale\s+[A-Za-z, ]+\]$', ''
+        }
+        if ($entry.Contains('[')) { throw "Unsupported TOC load condition: $entry" }
+        $entry
+    }
 }
 
 function Get-MsufLoadGraph {
@@ -152,7 +163,8 @@ function Get-MsufLoadGraph {
         [Parameter(Mandatory = $true)][string]$Path,
         [ValidateSet('Skip', 'Repeat')][string]$Duplicates = 'Skip',
         [switch]$RequireFiles,
-        [Collections.Generic.HashSet[string]]$VisitedXml = $null
+        [Collections.Generic.HashSet[string]]$VisitedXml = $null,
+        [string]$TextLocale = ""
     )
 
     $luaPaths = [Collections.Generic.List[string]]::new()
@@ -201,7 +213,7 @@ function Get-MsufLoadGraph {
     $entryFull = [IO.Path]::GetFullPath($Path)
     if ([IO.Path]::GetExtension($entryFull) -ieq ".toc") {
         $parent = Split-Path -Parent $entryFull
-        foreach ($entry in (Get-MsufTocEntries -Path $entryFull)) {
+        foreach ($entry in (Get-MsufTocEntries -Path $entryFull -TextLocale $TextLocale)) {
             Add-MsufLoadGraphEntry -Current (Join-Path $parent $entry.Trim())
         }
     } else {

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -531,7 +532,7 @@ local function EnsurePortrait(frame)
     return holder, frame.portrait
   end
 
-  holder = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
+  holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
   holder._msufUnitFrameOwner = frame
   holder:EnableMouse(false)
   frame.MSUFPortraitHolder = holder
@@ -545,14 +546,14 @@ local function EnsurePortrait(frame)
     end)
   end
 
-  local bg = holder:CreateTexture(nil, "BACKGROUND")
+  local bg = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND"))
   bg:SetTexture(WHITE)
   bg:SetAllPoints(holder)
   bg:Hide()
   holder.bg = bg
   frame.MSUFPortraitBG = bg
 
-  local tex = holder:CreateTexture(nil, "ARTWORK")
+  local tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
   tex:SetAllPoints(holder)
   frame.portrait = tex
   frame.Portrait = tex
@@ -565,7 +566,7 @@ local function EnsurePortrait(frame)
     holder.mask = mask
   end
 
-  local border = CreateFrame("Frame", nil, holder)
+  local border = PixelLayoutRegion(CreateFrame("Frame", nil, holder))
   border:EnableMouse(false)
   border:SetAllPoints(holder)
   holder.border = border
@@ -573,7 +574,7 @@ local function EnsurePortrait(frame)
 
   local edges = {}
   for i = 1, 4 do
-    local edge = border:CreateTexture(nil, "OVERLAY")
+    local edge = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY"))
     edge:SetTexture(WHITE)
     edge:Hide()
     edges[i] = edge
@@ -609,7 +610,7 @@ local function ApplyPortraitClickTarget(frame, p)
     return
   end
   if not button then
-    button = CreateFrame("Button", nil, frame, "SecureUnitButtonTemplate")
+    button = PixelLayoutRegion(CreateFrame("Button", nil, frame, "SecureUnitButtonTemplate"))
     button._msufUnitFrameOwner = frame
     button:SetAttribute("useparent*", true)
     button:SetAttribute("useparent-unit", true)
@@ -643,7 +644,7 @@ local function EnsureCastPortraitIcon(frame)
   if not holder then
     return nil
   end
-  texture = holder:CreateTexture(nil, "ARTWORK", nil, 1)
+  texture = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK", nil, 1))
   texture:SetAllPoints(holder)
   if holder.mask and texture.AddMaskTexture then
     texture:AddMaskTexture(holder.mask)
@@ -1123,7 +1124,7 @@ local function EnsurePortraitRing(holder)
   if not holder.CreateTexture then
     return nil
   end
-  ring = holder:CreateTexture(nil, "BACKGROUND", nil, -2)
+  ring = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND", nil, -2))
   ring:SetTexture(WHITE)
   ring._msufTexture = WHITE
   if holder.CreateMaskTexture and ring.AddMaskTexture then
@@ -1175,7 +1176,7 @@ local function EnsurePortraitArtBorder(holder)
   if not (border and border.CreateTexture) then
     return nil
   end
-  art = border:CreateTexture(nil, "OVERLAY", nil, 2)
+  art = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 2))
   holder.artBorder = art
   return art
 end
@@ -1307,8 +1308,8 @@ local function EnsureBlizzardPortraitRing(holder)
   if not (border and border.CreateTexture) then
     return nil
   end
-  ring = border:CreateTexture(nil, "OVERLAY", nil, 2)
-  local mirror = border:CreateTexture(nil, "OVERLAY", nil, 2)
+  ring = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 2))
+  local mirror = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 2))
   if border.CreateMaskTexture and ring.AddMaskTexture then
     local mask = border:CreateMaskTexture()
     SetTextureCached(mask, PORTRAIT_MASKS.CIRCLE)
@@ -1330,7 +1331,7 @@ local function EnsureBlizzardPortraitCorner(holder)
   if not (border and border.CreateTexture) then
     return nil
   end
-  corner = border:CreateTexture(nil, "OVERLAY", nil, 3)
+  corner = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 3))
   holder.blizzCorner = corner
   return corner
 end

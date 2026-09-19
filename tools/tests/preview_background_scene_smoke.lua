@@ -133,4 +133,35 @@ do
     Check(image.shown == false, "the Studio background must hide the scene image")
 end
 
+-- The real state owner and preview helper agree on the default. Existing
+-- deliberate choices survive menu reopen and do not become a profile migration.
+local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
+    local world = World.New(root, flavor):Boot()
+    local failure = world:FirstFailure()
+    Check(not failure, flavor .. ": boot failed: " .. tostring(failure and failure.message))
+    local env, M = world.env, world.core.MSUF2
+    local expected = (flavor == "Mainline" or flavor == "Forever") and "silvermoon" or "studio"
+    M.previewBackground = nil
+    Check(M.PreviewHelpers.GetPreviewBackground() == expected, flavor .. ": wrong helper fallback")
+    env.MSUF_GlobalDB = {}
+    local state = M.EnsurePersistentMenuState()
+    Check(state.previewBackground == expected and M.previewBackground == expected,
+        flavor .. ": wrong fresh menu default")
+    if expected == "silvermoon" then
+        local canvas, image = Canvas(false)
+        M.PreviewHelpers.ApplyPreviewBackground(canvas, PALETTE, nil)
+        Check(image.shown == true and image.texture:find("silvermoon", 1, true),
+            flavor .. ": default scene must actually render an image")
+    end
+    for _, selected in ipairs({ "silvermoon", "studio", "bright_stone", "city_scene", "dark_stone", "custom" }) do
+        state.previewBackground = selected
+        M.previewBackground = nil
+        M._persistentMenuStateLoaded = nil
+        M.EnsurePersistentMenuState()
+        Check(M.previewBackground == selected, flavor .. ": saved choice overwritten: " .. selected)
+        Check(M.PreviewHelpers.GetPreviewBackground() == selected, flavor .. ": wrong scene after reopen")
+    end
+end
+
 print("preview_background_scene_smoke: ok")

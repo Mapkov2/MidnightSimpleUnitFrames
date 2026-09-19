@@ -19,7 +19,7 @@ local repo = assert(arg[1], "repository root is required"):gsub("\\", "/"):gsub(
 WOW_PROJECT_MAINLINE = 1
 WOW_PROJECT_ID = WOW_PROJECT_MAINLINE
 C_AddOns = { GetAddOnMetadata = function() return nil end }
-function GetBuildInfo() return "1.60.1", "69876", "Sep 17 2026", 16001 end
+function GetBuildInfo() return "1.60.1", "69913", "Sep 17 2026", 16001 end
 issecretvalue = function() return false end
 Enum = {
     CompressionMethod = { Deflate = 0 },

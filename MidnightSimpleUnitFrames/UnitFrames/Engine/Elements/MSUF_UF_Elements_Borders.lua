@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- UF border element: applies border, outline, and dispel visuals from compiled specs.
 -- Live updates must avoid secret payload comparisons and keep expensive scans outside hotpaths.
 local _, MSUF = ...
@@ -132,7 +133,7 @@ local BORDER_LEVEL_OVER_NATIVE_DISPEL = Layers.FRAME_BORDER_OVER_NATIVE_DISPEL_O
 local function EnsureBorderOverlay(parent)
   local overlay = parent.MSUFBorderOverlay
   if not overlay then
-    overlay = CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent)
+    overlay = PixelLayoutRegion(CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent))
     overlay:SetAllPoints(parent)
     overlay:EnableMouse(false)
     parent.MSUFBorderOverlay = overlay
@@ -194,7 +195,7 @@ local function EnsureEdge(parent, key)
   if edge then
     return edge
   end
-  edge = overlay:CreateTexture(nil, "OVERLAY")
+  edge = PixelLayoutRegion(overlay:CreateTexture(nil, "OVERLAY"))
   edge:SetColorTexture(0, 0, 0, 1)
   -- A rebuilt edge starts as a plain color texture; drop the applied-texture
   -- cache so the next SetBorder pass restores the configured outline texture.

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- GroupFrames/MSUF_GroupFrames_DB.lua - group-frame defaults, DB normalization, and config access
 --- Phase 12: 3-slot health text, name color, name max chars, power per-role,
 --- smooth fill toggle, hideInClientScene, target/aggro upgrades
@@ -2474,7 +2475,7 @@ local function TextureProbeRaw(path)
     if not _textureProbe then
         _textureProbeHost = CreateFrame("Frame")
         if _textureProbeHost.Hide then _textureProbeHost:Hide() end
-        _textureProbe = _textureProbeHost:CreateTexture(nil, "ARTWORK")
+        _textureProbe = PixelLayoutRegion(_textureProbeHost:CreateTexture(nil, "ARTWORK"), true)
     end
     if not (_textureProbe and _textureProbe.SetTexture) then return false end
     _textureProbe:SetTexture(nil)

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
@@ -502,7 +503,7 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
     -- inset below it so the card boundary cannot clip the power-bar edge.
     local card = W.ControlCard(parent, "Preview", nil, x, y, width, ROUNDED_PREVIEW_CARD_HEIGHT)
     if not card then return end
-    local sample, sampleW, sampleH, powerH = CreateFrame("Frame", nil, card), min(440, max(280, width - 44)), 46, 8
+    local sample, sampleW, sampleH, powerH = PixelLayoutRegion(CreateFrame("Frame", nil, card)), min(440, max(280, width - 44)), 46, 8
     sample:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -40)
     sample:SetSize(sampleW, sampleH)
     card._msuf2RoundedPreviewSample = sample
@@ -553,7 +554,7 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
     end
     for i = 1, #regions do
         local spec = regions[i]
-        local tex = sample:CreateTexture(nil, spec[2], nil, spec[3])
+        local tex = PixelLayoutRegion(sample:CreateTexture(nil, spec[2], nil, spec[3]))
         spec[5](tex)
         tex:SetColorTexture(unpack(spec[4]))
         if helpers.SnapOff then helpers.SnapOff(tex) end
@@ -574,7 +575,7 @@ local function CreateRoundedTexturePreview(parent, x, y, width)
         if label.SetShadowOffset then label:SetShadowOffset(1, -1) end
     end
     for i = 1, 2 do
-        local edge = sample:CreateTexture(nil, "OVERLAY", nil, 6)
+        local edge = PixelLayoutRegion(sample:CreateTexture(nil, "OVERLAY", nil, 6))
         edge:SetPoint("TOPLEFT", sample, "TOPLEFT", -i, i)
         edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", i, -i)
         edge:SetVertexColor(0, 0, 0, 1)
@@ -1008,7 +1009,7 @@ local function BuildTextureSection(ctx, b)
         local pad = T.Panel(textures, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, T.colors.borderSoft)
         pad:SetPoint("TOPLEFT", textures, "TOPLEFT", padX, y)
         pad:SetSize(padW, padH)
-        local center = pad:CreateTexture(nil, "ARTWORK")
+        local center = PixelLayoutRegion(pad:CreateTexture(nil, "ARTWORK"))
         center:SetPoint("CENTER", pad, "CENTER", 0, 0)
         center:SetSize(10, 10)
         local centerColor = T.colors.coreRim or { 0.043, 0.096, 0.150 }

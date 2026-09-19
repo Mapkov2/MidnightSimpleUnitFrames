@@ -1,5 +1,6 @@
 """Resolve each real client manifest and enforce the split runtime providers."""
 import csv
+import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -39,6 +40,9 @@ def load_order(toc):
         else:
             children = [line.strip() for line in path.read_text(encoding="utf-8-sig").splitlines()
                         if line.strip() and not line.lstrip().startswith("#")]
+            # Parity is the union across clients, not the machine's locale.
+            children = [re.sub(r"\s+\[AllowLoadTextLocale\s+[A-Za-z, ]+\]$", "", child)
+                        for child in children]
         for child in children:
             visit(path.parent / child.replace("\\", "/"))
         active.remove(path)
@@ -75,15 +79,22 @@ for client in client_suffixes():
               client, "Classic aura preview must load before the Classic aura backend")
         check(order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_Compile.lua") < order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"),
               client, "Classic aura compiler must load before the Classic aura backend")
-    controller = "ClassPower/MSUF_CP_Controller.lua" if client == "Mainline" else "Game/Classic/ClassPower/MSUF_CP_Controller.lua"
+    controller = "ClassPower/MSUF_CP_Controller.lua"
     # Target-owned combo points: the constants build the module's power ids, the
     # shared module builds the provider parts, the provider publishes
     # MSUF.CPClient and the controller reads it at load.
-    constants = "ClassPower/MSUF_CP_Constants.lua" if client == "Mainline" else "Game/Classic/ClassPower/MSUF_CP_Constants.lua"
+    constants = "ClassPower/MSUF_CP_Constants.lua"
     combo = "Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua"
     cpProvider = "Game/Forever/ClassPower.lua" if client == "Mainline" else f"Game/{client}/ClassPower.lua"
     check(order.index(prefix + constants) < order.index(prefix + combo) < order.index(prefix + cpProvider) < order.index(prefix + controller),
           client, "ClassPower constants, the shared target-combo module and", cpProvider, "must load before", controller)
+    # Classic flavors adapt their provider to the controller's seam in between.
+    routing = prefix + "Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua"
+    if client == "Mainline":
+        check(routing not in order, client, "Mainline must not load the Classic ClassPower routing")
+    else:
+        check(order.index(prefix + cpProvider) < order.index(routing) < order.index(prefix + controller),
+              client, "the Classic ClassPower routing must load between", cpProvider, "and", controller)
     for part in ("Config", "Colors", "Surface"):
         check(order.index(prefix + f"ClassPower/MSUF_CP_Controller_{part}.lua") < order.index(prefix + controller),
               client, f"ClassPower/MSUF_CP_Controller_{part}.lua must load before", controller)
@@ -94,17 +105,20 @@ for client in client_suffixes():
     check(options.index(menu + "MSUF_Menu2_Theme_Forever.lua") < options.index(menu + "MSUF_Menu2_Theme_Tokens.lua") < options.index(menu + "MSUF_Menu2_Theme.lua"), client, "the Forever menu skin must precede theme capture")
     check(options.index(menu + "MSUF_Menu2_ColorPicker.lua") < options.index(menu + "MSUF_Menu2_Widgets.lua"),
           client, "Menu2 color picker must load before the widgets")
-    if client != "Mainline":
-        for helper in ("AuraPreview",):
-            check(options.index(menu + "Pages/MSUF_Menu2_" + helper + "_Classic.lua") < options.index(menu + "Pages/MSUF_Menu2_Auras_Classic.lua"),
-                  client, helper + "_Classic must load before the Classic aura page")
     suffix = "" if client == "Mainline" else "_Classic"
+    # Every client loads the Retail aura page and its Group and Preview siblings:
+    # the siblings read M.AurasPage, and the preview reads M.AuraGroupSettings.
     workspace = menu + "Pages/MSUF_Menu2_Auras_CustomWorkspace.lua"
     check(options.count(workspace) == 1, client, "shared Custom workspace must load exactly once")
-    check(options.index(menu + "Pages/MSUF_Menu2_Auras" + suffix + ".lua") < options.index(workspace),
-          client, "the aura page must load before the shared Custom workspace")
+    auraPage = menu + "Pages/MSUF_Menu2_Auras.lua"
+    auraGroup = menu + "Pages/MSUF_Menu2_Auras_Group.lua"
+    auraPreview = menu + "Pages/MSUF_Menu2_Auras_Preview.lua"
+    for page in (auraPage, auraGroup, auraPreview):
+        check(options.count(page) == 1, client, page, "must load exactly once")
+    check(options.index(auraPage) < options.index(auraGroup) < options.index(auraPreview) < options.index(workspace),
+          client, "the aura page, its Group and Preview siblings and the shared Custom workspace must load in that order")
     for helper in ("AuraSettings", "AuraControls"):
-        check(options.index(menu + f"Pages/MSUF_Menu2_{helper}.lua") < options.index(menu + f"Pages/MSUF_Menu2_Auras{suffix}.lua"),
+        check(options.index(menu + f"Pages/MSUF_Menu2_{helper}.lua") < options.index(auraPage),
               client, helper, "must load before the aura page")
     for provider, consumer in (
         ("Pages/MSUF_Menu2_Group_SpellModel.lua", "Pages/MSUF_Menu2_GroupAuras.lua"),
@@ -117,7 +131,7 @@ for client in client_suffixes():
     for part in ("Group", "Resources", "Context"):
         check(menu + f"Pages/MSUF_Menu2_AdvancedColors_{part}.lua" in options, client, f"AdvancedColors_{part} is not loaded")
     for helper in ("Handles", "Chrome"):
-        check(options.index(menu + f"Preview/MSUF_Menu2_UnitPreview_View_{helper}.lua") < options.index(menu + f"Preview/MSUF_Menu2_UnitPreview_View{suffix}.lua"),
+        check(options.index(menu + f"Preview/MSUF_Menu2_UnitPreview_View_{helper}.lua") < options.index(menu + "Preview/MSUF_Menu2_UnitPreview_View.lua"),
               client, f"UnitPreview_View_{helper} must load before the unit preview view")
     check(order[-1] == prefix + "Kernel/MSUF_RuntimeContracts.lua", client, "Kernel/MSUF_RuntimeContracts.lua must load last")
     print(f"PASS {client}: split state, unit catalogue, group migrations and final runtime contracts")

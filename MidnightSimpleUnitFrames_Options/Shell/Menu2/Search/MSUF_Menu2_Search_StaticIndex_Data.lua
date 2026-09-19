@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "14E400D13FA9E7406D40CF61A9016E76A02941F934C10BBBC57E7612F2FFEE01"
-Search.StaticIndexRecordCount = 3205
+Search.StaticIndexSourceSha256 = "0258F13A28BF72A3B78E06BD20B47E66F2AE61F57C93361E910C31B3C4BADC12"
+Search.StaticIndexRecordCount = 3204
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -50,7 +50,6 @@ auras3_styling	Shadow Size	slider			Appearance > Icon Style	shadow size	idauras
 auras3_styling	Show Weapon Enchants on Player	toggle			Appearance > Native Flow	show weapon enchants on player	idauras3_stylingmenu2%2Eauras3_styling%2Eauras%2Estyle%2Eappearance%2Enative-flow%2Eweapon-enchants				show weapon enchants on player appearance native flow auras style appearance native flow weapon enchants auras3 styling toggle
 classpower	Above Class Resource	dropdown	bars.playerHPBarAnchor		Hp > Layout	above class resource	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Elayout%2Eanchor	classpower_player_hp			above class resource hp layout classpower advanced player hp layout anchor classpower dropdown bars playerhpbaranchor
 classpower	Anchor to Class Resource	toggle	player.detachedPowerBarAnchorToClassPower		Power > Layout	anchor to class resource	idclasspowermenu2%2Eclasspower%2Eadvanced%2Edetached%2Epower%2Elayout%2Eanchor	classpower_detached_power			anchor to class resource power layout classpower advanced detached power layout anchor classpower toggle player detachedpowerbaranchortoclasspower
-classpower	Anchor to Essential Cooldown	toggle	bars.classPowerAnchorToCooldown		Advanced > Behavior	anchor to essential cooldown	idclasspowermenu2%2Eclasspower%2Eadvanced%2Ebehavior%2Eanchor	classpower_behavior			anchor to essential cooldown advanced behavior classpower advanced behavior anchor classpower toggle bars classpoweranchortocooldown
 classpower	Automatic (resource default)	dropdown	bars.classPowerTextMode		Style > Text	automatic resource default	idclasspowermenu2%2Eclasspower%2Eadvanced%2Estyle%2Etext%2Emode	classpower_visuals			automatic resource default style text classpower advanced style text mode classpower dropdown bars classpowertextmode
 classpower	BG opacity	slider	bars.classPowerBgAlpha		Style > Opacity	bg opacity	idclasspowermenu2%2Eclasspower%2Eadvanced%2Estyle%2Eopacity%2Ebg	classpower_visuals			bg opacity style opacity classpower advanced style opacity bg classpower slider bars classpowerbgalpha
 classpower	BG opacity	slider	bars.playerHPBarBgAlpha		Textures > Bg	bg opacity	idclasspowermenu2%2Eclasspower%2Eadvanced%2Eplayer%2Ehp%2Etextures%2Ebg%2Ealpha	classpower_player_hp			bg opacity textures bg classpower advanced player hp textures bg alpha classpower slider bars playerhpbarbgalpha

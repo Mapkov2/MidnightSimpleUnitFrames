@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Runtime/MSUF_UnitTooltips.lua
 --- Unit info tooltips: the MSUF player-info frame, GameTooltip anchoring and
 --- ownership tracking, tooltip visibility modes (hover-inert combat fast path),
@@ -27,14 +28,14 @@ local function MSUF_GetPlayerInfoFrame()
     if MSUF_PlayerInfoFrame then
          return MSUF_PlayerInfoFrame
     end
-    local f = CreateFrame("Frame", "MSUF_PlayerInfoFrame", UIParent, "BackdropTemplate")
+    local f = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerInfoFrame", UIParent, "BackdropTemplate"))
     f:SetSize(260, 90)
     f:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -16, 180)
     f:SetFrameStrata("TOOLTIP")
     f:SetClampedToScreen(true)
     f:EnableMouse(false)
     if f.SetBackdrop then
-        f:SetBackdrop({
+        PixelLayoutRegion(f, "SetBackdrop", {
             bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
             tile = true, tileSize = 16, edgeSize = 16,
@@ -42,21 +43,21 @@ local function MSUF_GetPlayerInfoFrame()
         })
         f:SetBackdropColor(0, 0, 0, 0.9)
     end
-    local nameFS = f:CreateFontString(nil, "OVERLAY", "GameTooltipHeaderText")
+    local nameFS = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY", "GameTooltipHeaderText"))
     nameFS:SetPoint("TOPLEFT", 8, -8)
     nameFS:SetJustifyH("LEFT")
     nameFS:SetText("")
     nameFS:SetTextColor(1, 1, 1) --- Wei wie normaler Tooltip-Text
-    local line2FS = f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    local line2FS = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall"))
     line2FS:SetPoint("TOPLEFT", nameFS, "BOTTOMLEFT", 0, -2)
     line2FS:SetJustifyH("LEFT")
-    local line3FS = f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    local line3FS = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall"))
     line3FS:SetPoint("TOPLEFT", line2FS, "BOTTOMLEFT", 0, -2)
     line3FS:SetJustifyH("LEFT")
-    local line4FS = f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    local line4FS = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall"))
     line4FS:SetPoint("TOPLEFT", line3FS, "BOTTOMLEFT", 0, -2)
     line4FS:SetJustifyH("LEFT")
-    local line5FS = f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall")
+    local line5FS = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY", "GameTooltipTextSmall"))
     line5FS:SetPoint("TOPLEFT", line4FS, "BOTTOMLEFT", 0, -2)
     line5FS:SetJustifyH("LEFT")
     line5FS:SetTextColor(0.8, 0.8, 0.8) --- leicht ausgegraut wie Location-Zeile
@@ -813,15 +814,15 @@ do
                 skipHistory = true,
             })
         else
-            b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+            b = PixelLayoutRegion(CreateFrame("Button", nil, parent, "BackdropTemplate"))
             b:SetSize(w or 190, 30)
-            b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+            PixelLayoutRegion(b, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1 })
             b:SetBackdropColor(0.050, 0.062, 0.105, 0.88)
             b:SetBackdropBorderColor(0.10, 0.20, 0.42, 0.72)
-            local hl = b:CreateTexture(nil, "HIGHLIGHT")
+            local hl = PixelLayoutRegion(b:CreateTexture(nil, "HIGHLIGHT"))
             hl:SetAllPoints()
             hl:SetColorTexture(0.20, 0.40, 0.80, 0.10)
-            local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local fs = PixelLayoutRegion(b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
             fs:SetPoint("CENTER")
             fs:SetText(Tr(text))
             fs:SetTextColor(0.86, 0.92, 1.00, 0.95)
@@ -843,9 +844,9 @@ do
         elseif UI and UI.CloseButton then
             b = UI.CloseButton(parent, MSUF_Tooltip_HideMiniPopup)
         else
-            b = CreateFrame("Button", nil, parent)
+            b = PixelLayoutRegion(CreateFrame("Button", nil, parent))
             b:SetSize(24, 24)
-            local x = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local x = PixelLayoutRegion(b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
             x:SetPoint("CENTER", 0, 0)
             x:SetText("x")
             x:SetTextColor(0.55, 0.62, 0.78, 0.85)
@@ -859,7 +860,7 @@ do
 
     local function MSUF_Tooltip_ApplyPopupShell(frame)
         local S, UI = MSUF_Tooltip_Menu2Style()
-        frame:SetBackdrop({
+        PixelLayoutRegion(frame, "SetBackdrop", {
             bgFile = W8,
             edgeFile = W8,
             edgeSize = 1,
@@ -875,7 +876,7 @@ do
     end
 
     local function MSUF_Tooltip_PopupTitle(parent, text, size, color)
-        local fs = parent:CreateFontString(nil, "OVERLAY", size and "GameFontNormal" or "GameFontNormalSmall")
+        local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", size and "GameFontNormal" or "GameFontNormalSmall"))
         size = tonumber(size) or 12
         if size <= 0 then size = 12 end
         if size < 6 then size = 6 elseif size > 128 then size = 128 end
@@ -891,7 +892,7 @@ do
     local function MSUF_Tooltip_EnsureMiniPopup()
         if tooltipMiniPopup then return tooltipMiniPopup end
 
-        local p = CreateFrame("Frame", "MSUF_TooltipMiniSettingsPopup", UIParent, "BackdropTemplate")
+        local p = PixelLayoutRegion(CreateFrame("Frame", "MSUF_TooltipMiniSettingsPopup", UIParent, "BackdropTemplate"))
         p:SetSize(440, 176)
         p:SetFrameStrata("TOOLTIP")
         p:SetFrameLevel(940)
@@ -969,19 +970,19 @@ do
             return tooltipDragHandle
         end
 
-        local dh = CreateFrame("Frame", "MSUF_TooltipDragHandle", parent)
+        local dh = PixelLayoutRegion(CreateFrame("Frame", "MSUF_TooltipDragHandle", parent))
         dh:SetAllPoints(parent)
         dh:EnableMouse(true)
         dh:RegisterForDrag("LeftButton")
         dh:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 10)
 
         --- Subtle visual overlay so the user knows it's draggable
-        local bg = dh:CreateTexture(nil, "OVERLAY")
+        local bg = PixelLayoutRegion(dh:CreateTexture(nil, "OVERLAY"))
         bg:SetAllPoints()
         bg:SetColorTexture(0.2, 0.6, 1.0, 0.12)
         dh._bg = bg
 
-        local label = dh:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local label = PixelLayoutRegion(dh:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
         label:SetPoint("TOP", dh, "TOP", 0, -2)
         label:SetText(Tr("Drag or arrow keys to reposition"))
         label:SetTextColor(0.4, 0.8, 1.0, 0.9)

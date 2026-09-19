@@ -47,6 +47,7 @@ local function Read(path)
 end
 
 -- Lua paths in load order for one TOC, following XML <Script>/<Include> files.
+local Manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 local function LoadGraph(toc)
     local ordered, seen = {}, {}
     local function visit(path)
@@ -61,8 +62,8 @@ local function LoadGraph(toc)
             for child in source:gmatch('<[%w:]+%s+file="([^"]+)"') do visit(directory .. "/" .. child) end
         else
             for line in source:gmatch("[^\n]+") do
-                line = line:match("^%s*(.-)%s*$")
-                if line ~= "" and line:sub(1, 1) ~= "#" then visit(directory .. "/" .. line) end
+                local reference = Manifest.TocReference(line, "enUS")
+                if reference then visit(directory .. "/" .. reference) end
             end
         end
     end

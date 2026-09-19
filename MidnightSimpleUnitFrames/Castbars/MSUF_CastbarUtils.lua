@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_CastbarUtils.lua
 --- Utility exports for castbar colors, preview sync, interrupt tinting,
 --- shake/glow feedback, reverse fill, and spell-name shortening.
@@ -855,7 +856,7 @@ local function PrepareRuler(sourceFS)
     if not measureFS then
         local parent = _G.UIParent
         if not (parent and parent.CreateFontString) then return nil end
-        measureFS = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        measureFS = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", "GameFontNormal"), true)
         if not measureFS then return nil end
         measureFS:Hide()
         if measureFS.SetWordWrap then measureFS:SetWordWrap(false) end

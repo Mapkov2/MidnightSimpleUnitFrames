@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- ============================================================================
 --- MSUF_Widgets.lua
 --- Minimal widget helpers for Midnight Simple Unit Frames.
@@ -199,7 +200,7 @@ function UI.ApplyGradient(frame, material, opts)
     local bg = UI.Color(bgKey, UI.colors[bgKey])
     local tex = frame._msufUIGradient
     if not tex then
-        tex = frame:CreateTexture(nil, opts.layer or "BACKGROUND", nil, opts.subLevel or 1)
+        tex = PixelLayoutRegion(frame:CreateTexture(nil, opts.layer or "BACKGROUND", nil, opts.subLevel or 1))
         frame._msufUIGradient = tex
     end
     tex:ClearAllPoints()
@@ -215,7 +216,7 @@ end
 local function SetBackdrop(frame, bg, edge)
     if not frame then return frame end
     if frame.SetBackdrop then
-        frame:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+        PixelLayoutRegion(frame, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
         bg = bg or UI.Color("card", UI.colors.card)
         edge = edge or UI.Color("borderSoft", UI.colors.borderSoft)
         frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
@@ -237,7 +238,7 @@ end
 function UI.Font(parent, template, text, color, role)
     local theme = UI.GetMenu2Theme()
     if theme and theme.Font then return theme.Font(parent, template or "GameFontHighlight", text or "", color or UI.Color("text", UI.colors.text), role) end
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight"))
     local _, inheritedSize = fs.GetFont and fs:GetFont()
     if role then
         UI.ApplyFontRole(fs, role)
@@ -310,15 +311,15 @@ function UI.Button(parent, text, width, height, opts)
         return btn
     end
 
-    btn = CreateFrame("Button", nil, parent, _G.BackdropTemplateMixin and "BackdropTemplate" or nil)
+    btn = PixelLayoutRegion(CreateFrame("Button", nil, parent, _G.BackdropTemplateMixin and "BackdropTemplate" or nil))
     btn:SetSize(width or 120, height or 24)
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
-    local fill = btn:CreateTexture(nil, "BACKGROUND")
+    local fill = PixelLayoutRegion(btn:CreateTexture(nil, "BACKGROUND"))
     fill:SetAllPoints()
-    local edge = CreateFrame("Frame", nil, btn, _G.BackdropTemplateMixin and "BackdropTemplate" or nil)
+    local edge = PixelLayoutRegion(CreateFrame("Frame", nil, btn, _G.BackdropTemplateMixin and "BackdropTemplate" or nil))
     edge:SetAllPoints()
     edge:SetFrameLevel(max(0, (btn.GetFrameLevel and btn:GetFrameLevel() or 1) - 1))
-    if edge.SetBackdrop then edge:SetBackdrop({ edgeFile = W8, edgeSize = 1 }) end
+    if edge.SetBackdrop then PixelLayoutRegion(edge, "SetBackdrop", { edgeFile = W8, edgeSize = 1 }) end
     btn._msufUIFill = fill
     btn._msufUIEdge = edge
     btn._label = UI.Font(btn, "GameFontHighlightSmall", text or "", UI.Color("text", UI.colors.text))

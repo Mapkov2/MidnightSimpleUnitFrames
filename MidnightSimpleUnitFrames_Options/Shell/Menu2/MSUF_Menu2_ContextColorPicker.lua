@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -122,10 +123,10 @@ local function RaisePickerInfo(panel)
     button:SetFrameLevel(level + 1)
 end
 local function AddFlatButtonIcon(button, kind)
-    local icon = CreateFrame("Frame", nil, button)
+    local icon = PixelLayoutRegion(CreateFrame("Frame", nil, button))
     icon:SetSize(12, 12); icon:SetPoint("LEFT", 5, 0)
     local function Line(x, y, width, height)
-        local line = icon:CreateTexture(nil, "ARTWORK")
+        local line = PixelLayoutRegion(icon:CreateTexture(nil, "ARTWORK"))
         line:SetPoint("TOPLEFT", icon, "TOPLEFT", x, -y); line:SetSize(width, height)
         line:SetColorTexture(T.colors.muted[1], T.colors.muted[2], T.colors.muted[3], 0.94)
     end
@@ -146,7 +147,7 @@ local function AddFlatButtonIcon(button, kind)
     button._msuf2FlatIcon = icon
 end
 local function BrightSurface(frame, r, g, b, a)
-    local wash = frame:CreateTexture(nil, "BORDER", nil, -8)
+    local wash = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, -8))
     wash:SetPoint("TOPLEFT", frame, "TOPLEFT", 5, -5)
     wash:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -5, 5)
     wash:SetColorTexture(r, g, b, a or 0.94)
@@ -195,7 +196,7 @@ local function CreateTrueColorParts(frame, key, inset, layer, subLevel)
     local canMask = frame.CreateMaskTexture ~= nil
     for i = 1, #TRUE_COLOR_KEYS do
         local partKey = TRUE_COLOR_KEYS[i]
-        local texture = frame:CreateTexture(nil, layer, nil, subLevel or 0)
+        local texture = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel or 0))
         texture:SetColorTexture(1, 1, 1, 1)
         parts[partKey] = texture
         if canMask and partKey ~= "M" then
@@ -220,7 +221,7 @@ local function CreateTrueColorPill(frame, key, inset)
 end
 W.CreateTrueColorPill = CreateTrueColorPill
 local function Input(parent, width, numeric)
-    local edit = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     edit:SetSize(width, 22)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("CENTER")
@@ -239,11 +240,11 @@ local function Input(parent, width, numeric)
             edit:SetText(value)
             if type(edit._commit) == "function" then edit:_commit() end
         end
-        local up = CreateFrame("Button", nil, edit)
+        local up = PixelLayoutRegion(CreateFrame("Button", nil, edit))
         up:SetSize(10, 10); up:SetPoint("TOPRIGHT", -2, -1)
         local upText = Font(up, "GameFontDisableSmall", "^", T.colors.dim); upText:SetPoint("CENTER", 0, -1)
         up:SetScript("OnClick", function() Step(1) end)
-        local down = CreateFrame("Button", nil, edit)
+        local down = PixelLayoutRegion(CreateFrame("Button", nil, edit))
         down:SetSize(10, 10); down:SetPoint("BOTTOMRIGHT", -2, 1)
         local downText = Font(down, "GameFontDisableSmall", "v", T.colors.dim); downText:SetPoint("CENTER", 0, 1)
         down:SetScript("OnClick", function() Step(-1) end)
@@ -252,7 +253,7 @@ local function Input(parent, width, numeric)
     return edit
 end
 local function ColorChip(parent, width, height)
-    local chip = CreateFrame("Frame", nil, parent)
+    local chip = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     chip:SetSize(width, height)
     local fill, edge = CreateTrueColorPill(chip, "_msuf2ColorChip", 1)
     if fill then
@@ -260,7 +261,7 @@ local function ColorChip(parent, width, height)
         edge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.88)
         function chip:SetColorTexture(r, g, b, a) fill:SetColorTexture(r, g, b, a or 1) end
     else
-        fill = chip:CreateTexture(nil, "ARTWORK")
+        fill = PixelLayoutRegion(chip:CreateTexture(nil, "ARTWORK"))
         fill:SetAllPoints(); fill:SetColorTexture(1, 1, 1, 1)
         function chip:SetColorTexture(r, g, b, a) fill:SetColorTexture(r, g, b, a or 1) end
     end
@@ -273,13 +274,13 @@ local function ColorChip(parent, width, height)
     return chip
 end
 local function ColorField(parent, width, height)
-    local field = CreateFrame("Frame", nil, parent)
+    local field = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     field:SetSize(width, height)
     local fill, edge = T.CreateSuperellipseLayers and T.CreateSuperellipseLayers(field, "_msuf2PickerField", 2, "ARTWORK", "BORDER")
     if not (fill and edge) then
-        edge = field:CreateTexture(nil, "BORDER")
+        edge = PixelLayoutRegion(field:CreateTexture(nil, "BORDER"))
         edge:SetAllPoints(); edge:SetColorTexture(1, 1, 1, 1)
-        fill = field:CreateTexture(nil, "ARTWORK")
+        fill = PixelLayoutRegion(field:CreateTexture(nil, "ARTWORK"))
         fill:SetPoint("TOPLEFT", 1, -1); fill:SetPoint("BOTTOMRIGHT", -1, 1)
         fill:SetColorTexture(1, 1, 1, 1)
     end
@@ -308,9 +309,9 @@ local function RefreshSwatchVisual(button, hover)
     edge:SetColorTexture(color[1], color[2], color[3], selected and 1 or (hover and 0.94 or 0.76))
 end
 local function CreateCircularSwatchParts(button)
-    local edge = button:CreateTexture(nil, "BACKGROUND")
+    local edge = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND"))
     edge:SetAllPoints(); edge:SetColorTexture(1, 1, 1, 1)
-    local fill = button:CreateTexture(nil, "ARTWORK")
+    local fill = PixelLayoutRegion(button:CreateTexture(nil, "ARTWORK"))
     fill:SetPoint("TOPLEFT", 2, -2); fill:SetPoint("BOTTOMRIGHT", -2, 2)
     fill:SetColorTexture(1, 1, 1, 1)
     if button.CreateMaskTexture then
@@ -324,7 +325,7 @@ local function CreateCircularSwatchParts(button)
     return fill, edge
 end
 local function Swatch(parent, size, onClick)
-    local button = CreateFrame("Button", nil, parent)
+    local button = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     button:SetSize(size, size)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     local fill, edge = CreateCircularSwatchParts(button)
@@ -341,7 +342,7 @@ local function Swatch(parent, size, onClick)
 end
 
 local function OpacityDisplay(parent, width)
-    local frame = CreateFrame("Slider", nil, parent)
+    local frame = PixelLayoutRegion(CreateFrame("Slider", nil, parent))
     frame:SetSize(width, 20)
     -- Bare CreateFrame sliders start mouse-disabled, so the thumb cannot be
     -- dragged until mouse input is enabled explicitly (same as W.Slider).
@@ -359,16 +360,16 @@ local function OpacityDisplay(parent, width)
     local checkerHeight = ((atlasInfo and tonumber(atlasInfo.height)) or 32) * checkerScale
     checkerWidth = max(1, checkerWidth)
     local checkerCount = max(1, math.ceil(innerWidth / checkerWidth) + 1)
-    local checkerHost = CreateFrame("Frame", nil, frame)
+    local checkerHost = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     checkerHost:SetPoint("TOPLEFT", 1, -1); checkerHost:SetSize(innerWidth, innerHeight)
     if checkerHost.SetClipsChildren then checkerHost:SetClipsChildren(true) end
     for i = 1, checkerCount do
-        local checker = checkerHost:CreateTexture(nil, "BACKGROUND")
+        local checker = PixelLayoutRegion(checkerHost:CreateTexture(nil, "BACKGROUND"))
         checker:SetAtlas("colorpicker-checkerboard", true)
         checker:SetSize(checkerWidth, checkerHeight)
         checker:SetPoint("LEFT", checkerHost, "LEFT", (i - 1) * checkerWidth, 0)
     end
-    local shade = frame:CreateTexture(nil, "ARTWORK")
+    local shade = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
     shade:SetPoint("TOPLEFT", 1, -1); shade:SetPoint("BOTTOMRIGHT", -1, 1)
     shade:SetColorTexture(1, 1, 1, 1)
     if shade.SetGradient and _G.CreateColor then
@@ -376,10 +377,10 @@ local function OpacityDisplay(parent, width)
     else
         shade:SetColorTexture(0.02, 0.04, 0.07, 0.56)
     end
-    local thumb = frame:CreateTexture(nil, "OVERLAY")
+    local thumb = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
     thumb:SetSize(6, 24)
     thumb:SetColorTexture(T.colors.text[1], T.colors.text[2], T.colors.text[3], 1)
-    frame:SetThumbTexture(thumb)
+    PixelLayoutRegion(frame, "SetThumbTexture", thumb)
     frame:SetValue(1)
     frame.checkerHost, frame.shade, frame.thumb = checkerHost, shade, thumb
     return frame
@@ -444,7 +445,7 @@ function Picker.BuildTitleBar(panel)
         end
     end
 
-    local drag = CreateFrame("Button", nil, panel)
+    local drag = PixelLayoutRegion(CreateFrame("Button", nil, panel), true)
     drag:SetPoint("TOPLEFT", 1, -1); drag:SetPoint("TOPRIGHT", -1, -1); drag:SetHeight(44)
     drag:RegisterForDrag("LeftButton"); drag:RegisterForClicks("LeftButtonUp")
     drag:SetScript("OnDragStart", function() panel:SetContextListShown(false); panel:StartMoving() end)
@@ -492,12 +493,12 @@ function Picker.BuildTargetSelector(panel)
     selector:SetPoint("TOPLEFT", PICKER_PAD, -46)
     local editingLabel = Font(selector, "GameFontHighlightSmall", "Editing", T.colors.text)
     editingLabel:SetPoint("LEFT", 12, 0)
-    local separator = selector:CreateTexture(nil, "ARTWORK")
+    local separator = PixelLayoutRegion(selector:CreateTexture(nil, "ARTWORK"))
     separator:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.72)
     separator:SetPoint("TOPLEFT", 58, -7); separator:SetPoint("BOTTOMLEFT", 58, 7); separator:SetWidth(1)
     local selectorColor = ColorChip(selector, 14, 14); selectorColor:SetPoint("LEFT", 68, 0)
     local selectorLabel = selector._msuf2Label; selectorLabel:ClearAllPoints(); selectorLabel:SetPoint("LEFT", selectorColor, "RIGHT", 10, 0); selectorLabel:SetPoint("RIGHT", -28, 0); selectorLabel:SetJustifyH("LEFT")
-    local selectorArrow = selector:CreateTexture(nil, "OVERLAY")
+    local selectorArrow = PixelLayoutRegion(selector:CreateTexture(nil, "OVERLAY"))
     selectorArrow:SetTexture(T.media.dropdownChevron)
     selectorArrow:SetPoint("RIGHT", selector, "RIGHT", -10, 0); selectorArrow:SetSize(12, 12)
     selectorArrow:SetVertexColor(T.colors.muted[1], T.colors.muted[2], T.colors.muted[3], 0.95)
@@ -529,25 +530,25 @@ function Picker.BuildWheelCard(panel)
     -- Use Blizzard's native ColorSelect engine. This is the same wheel/value
     -- interaction as ColorPickerFrame, embedded in the MSUF surface so the
     -- target selector, live preview and palettes remain one compact workflow.
-    local colorSelect = CreateFrame("ColorSelect", nil, wheelCard)
+    local colorSelect = PixelLayoutRegion(CreateFrame("ColorSelect", nil, wheelCard))
     -- Blizzard declares its own ColorSelect with enableMouse="true"; the native
     -- wheel/value dragging is frame mouse input, so without this the wheel and
     -- the brightness bar render correctly but never respond to clicks.
     colorSelect:EnableMouse(true)
     colorSelect:SetPoint("TOPLEFT", 80, -27); colorSelect:SetSize(150, 112)
-    local wheel = colorSelect:CreateTexture(nil, "ARTWORK")
+    local wheel = PixelLayoutRegion(colorSelect:CreateTexture(nil, "ARTWORK"))
     wheel:SetPoint("TOPLEFT", 0, -4); wheel:SetSize(102, 102)
     colorSelect:SetColorWheelTexture(wheel)
     colorSelect:SetColorWheelThumbTexture("Interface\\Buttons\\UI-ColorPicker-Buttons")
     local wheelThumb = colorSelect:GetColorWheelThumbTexture()
     wheelThumb:SetSize(10, 10); wheelThumb:SetTexCoord(0, 0.15625, 0, 0.625)
-    local value = colorSelect:CreateTexture(nil, "ARTWORK")
+    local value = PixelLayoutRegion(colorSelect:CreateTexture(nil, "ARTWORK"))
     value:SetPoint("LEFT", wheel, "RIGHT", 10, 0); value:SetSize(25, 102)
     colorSelect:SetColorValueTexture(value)
     colorSelect:SetColorValueThumbTexture("Interface\\Buttons\\UI-ColorPicker-Buttons")
     local valueThumb = colorSelect:GetColorValueThumbTexture()
     valueThumb:SetSize(35, 11); valueThumb:SetTexCoord(0.25, 1.0, 0, 0.875); valueThumb:SetAlpha(0.001)
-    local valueHandle = CreateFrame("Frame", nil, colorSelect, "BackdropTemplate")
+    local valueHandle = PixelLayoutRegion(CreateFrame("Frame", nil, colorSelect, "BackdropTemplate"))
     valueHandle:SetSize(31, 6); valueHandle:SetPoint("CENTER", valueThumb, "CENTER", 0, 0)
     if T.ApplyBackdrop then T.ApplyBackdrop(valueHandle, T.colors.coreShadow, T.colors.text) end
     local valueUp = Font(colorSelect, "GameFontHighlightSmall", "^", T.colors.dim)
@@ -1102,7 +1103,7 @@ function Picker.Ensure()
     local parent = _G.UIParent or M.frame
     if not parent then return nil end
 
-    local blocker = CreateFrame("Button", nil, parent)
+    local blocker = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     blocker:SetAllPoints(parent); blocker:EnableMouse(true)
     blocker:SetScript("OnClick", function() if picker then picker:Finish(true) end end); blocker:Hide()
 

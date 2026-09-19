@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_LayerOverview.lua
 --- Cold-path, addon-wide overview for the unified numeric MSUF layer scale.
 --- Providers only read SavedVariables when the overview is requested; there are
@@ -1054,7 +1055,7 @@ local function Font(parent, template, text, color, role)
     if T.Font then
         fs = T.Font(parent, template, text or "", color, role)
     else
-        fs = parent:CreateFontString(nil, "OVERLAY", template)
+        fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template))
         fs:SetText(text or "")
         SetFontColor(fs, color)
     end
@@ -1157,15 +1158,15 @@ local function AcquireVisualRow(popup, index)
     popup._rows = popup._rows or {}
     local row = popup._rows[index]
     if row then return row end
-    row = CreateFrame("Frame", nil, popup._scrollChild)
+    row = PixelLayoutRegion(CreateFrame("Frame", nil, popup._scrollChild))
     row:SetHeight(22)
-    local bg = row:CreateTexture(nil, "BACKGROUND")
+    local bg = PixelLayoutRegion(row:CreateTexture(nil, "BACKGROUND"))
     bg:SetAllPoints()
     bg:SetColorTexture(0.04, 0.09, 0.16, 0.24)
     row._bg = bg
     row._value = Font(row, "GameFontHighlightSmall", "", Color("success", { 0.30, 1.00, 0.62, 1 }), "control")
     row._value:SetJustifyH("CENTER")
-    local edit = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, row, "InputBoxTemplate"))
     edit:SetSize(38, 18)
     edit:SetAutoFocus(false)
     edit:SetNumeric(true)
@@ -1190,13 +1191,13 @@ local function AcquireVisualRow(popup, index)
     row._editTag = Font(row, "GameFontDisableSmall", Tr("EDIT"), Color("success", { 0.30, 1.00, 0.62, 1 }), "caption")
     row._editTag:SetJustifyH("LEFT")
 
-    local strataEdit = CreateFrame("Button", nil, row)
+    local strataEdit = PixelLayoutRegion(CreateFrame("Button", nil, row))
     strataEdit:SetHeight(18)
     strataEdit:EnableMouse(true)
-    local strataEdge = strataEdit:CreateTexture(nil, "BACKGROUND")
+    local strataEdge = PixelLayoutRegion(strataEdit:CreateTexture(nil, "BACKGROUND"))
     strataEdge:SetAllPoints()
     strataEdge:SetColorTexture(0.18, 0.58, 0.92, 0.78)
-    local strataBg = strataEdit:CreateTexture(nil, "BACKGROUND", nil, 1)
+    local strataBg = PixelLayoutRegion(strataEdit:CreateTexture(nil, "BACKGROUND", nil, 1))
     strataBg:SetPoint("TOPLEFT", strataEdit, "TOPLEFT", 1, -1)
     strataBg:SetPoint("BOTTOMRIGHT", strataEdit, "BOTTOMRIGHT", -1, 1)
     strataBg:SetColorTexture(0.025, 0.070, 0.125, 0.98)
@@ -1489,9 +1490,9 @@ local function CreatePopup()
     if type(M.CreateMenuPopupPanel) == "function" then
         popup = M.CreateMenuPopupPanel(UIParent, { name = "MSUF2LayerOverview", glass = "popup" })
     else
-        popup = CreateFrame("Frame", "MSUF2LayerOverview", UIParent, _G.BackdropTemplateMixin and "BackdropTemplate" or nil)
+        popup = PixelLayoutRegion(CreateFrame("Frame", "MSUF2LayerOverview", UIParent, _G.BackdropTemplateMixin and "BackdropTemplate" or nil))
         if popup.SetBackdrop then
-            popup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            PixelLayoutRegion(popup, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
             popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
             popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
         end
@@ -1510,7 +1511,7 @@ local function CreatePopup()
     popup._title:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -12)
     popup._title:SetJustifyH("LEFT")
 
-    local search = CreateFrame("EditBox", nil, popup, "InputBoxTemplate")
+    local search = PixelLayoutRegion(CreateFrame("EditBox", nil, popup, "InputBoxTemplate"))
     search:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -46, -10)
     search:SetSize(156, 20)
     search:SetAutoFocus(false)
@@ -1519,7 +1520,7 @@ local function CreatePopup()
     if T.SkinEditBox then T.SkinEditBox(search) end
     local placeholder = search.Instructions
     if not (placeholder and placeholder.SetText and placeholder.SetPoint) then
-        placeholder = search:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        placeholder = PixelLayoutRegion(search:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     elseif placeholder.ClearAllPoints then
         placeholder:ClearAllPoints()
     end
@@ -1536,7 +1537,7 @@ local function CreatePopup()
     popup._count:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -35)
     popup._count:SetPoint("RIGHT", popup, "RIGHT", -14, 0)
     popup._count:SetJustifyH("LEFT")
-    local hintBG = popup:CreateTexture(nil, "BACKGROUND")
+    local hintBG = PixelLayoutRegion(popup:CreateTexture(nil, "BACKGROUND"))
     hintBG:SetPoint("TOPLEFT", popup, "TOPLEFT", 10, -52)
     hintBG:SetPoint("BOTTOMRIGHT", popup, "TOPRIGHT", -10, -86)
     hintBG:SetColorTexture(0.025, 0.22, 0.16, 0.46)
@@ -1546,16 +1547,16 @@ local function CreatePopup()
     popup._hint:SetPoint("RIGHT", popup, "RIGHT", -14, 0)
     popup._hint:SetJustifyH("LEFT")
 
-    local close = T.CloseButton and T.CloseButton(popup) or CreateFrame("Button", nil, popup, "UIPanelCloseButton")
+    local close = T.CloseButton and T.CloseButton(popup) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "UIPanelCloseButton"))
     close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -8, -8)
     close._msuf2SkipHistoryCheckpoint = true
     close:SetScript("OnClick", function() popup:Hide() end)
     popup._close = close
 
-    local scroll = CreateFrame("ScrollFrame", nil, popup)
+    local scroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, popup))
     scroll:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -92)
     scroll:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -34, 14)
-    local content = CreateFrame("Frame", nil, scroll)
+    local content = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
     popup._contentWidth = 492
     content:SetSize(popup._contentWidth, 1)
     scroll:SetScrollChild(content)
@@ -1588,13 +1589,13 @@ local function CreatePopup()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown({ immediate = true }) end
     end)
 
-    local grip = CreateFrame("Button", nil, popup)
+    local grip = PixelLayoutRegion(CreateFrame("Button", nil, popup))
     grip:SetSize(20, 20)
     grip:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -3, 3)
     grip:SetFrameLevel(popup:GetFrameLevel() + 20)
-    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    PixelLayoutRegion(grip, "SetNormalTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    PixelLayoutRegion(grip, "SetHighlightTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    PixelLayoutRegion(grip, "SetPushedTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     grip:SetScript("OnMouseDown", function(_, button)
         if button == "LeftButton" then popup:StartSizing("BOTTOMRIGHT") end
     end)

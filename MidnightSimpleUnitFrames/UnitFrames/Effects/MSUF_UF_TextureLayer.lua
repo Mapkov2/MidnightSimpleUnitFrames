@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Unitframe decorative texture layers (3 slots per frame).
 -- Spawns up to three optional textures per unit frame (Blizzard name-bar style
 -- decoration): a SharedMedia texture, a bundled MSUF texture or a custom file.
@@ -533,7 +534,7 @@ local function WantsRoundedClip(conf, prefix, keys)
 end
 
 local function NewLayerTexture(holder, sublevel)
-  local tex = holder:CreateTexture(nil, "ARTWORK", nil, sublevel or 0)
+  local tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK", nil, sublevel or 0))
   tex:SetAllPoints(holder)
   return tex
 end
@@ -969,7 +970,7 @@ local function ApplySlot(frame, conf, unitKey, slot)
       holders = {}
       frame._msufTexLayers = holders
     end
-    holder = CreateFrame("Frame", nil, visualParent)
+    holder = PixelLayoutRegion(CreateFrame("Frame", nil, visualParent))
     holder:EnableMouse(false)
     holders[slot] = holder
   end

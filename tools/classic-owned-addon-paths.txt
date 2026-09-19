@@ -12,16 +12,11 @@ MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua
 MidnightSimpleUnitFrames/Game/Classic/BlizzardFrames.lua
 MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua
-MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Constants.lua
-MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Controller.lua
-MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Core.lua
-MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Modes.lua
+MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua
 MidnightSimpleUnitFrames/Game/Classic/Initialize.lua
 MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua
-MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_Blizzard.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_SpellIndicators_Data_Base.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UFCore_Elements.xml
-MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_Config.lua
 MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua
 MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_deDE.lua
 MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_enUS.lua
@@ -37,6 +32,7 @@ MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_zhTW
 MidnightSimpleUnitFrames/Game/Forever/Auras/MSUF_Auras3_ForeverData.lua
 MidnightSimpleUnitFrames/Game/Forever/ClassPower.lua
 MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua
+MidnightSimpleUnitFrames/Game/Mists/Auras.xml
 MidnightSimpleUnitFrames/Game/Mists/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua
 MidnightSimpleUnitFrames/Game/Mists/Auras/AliasData/MSUF_Auras3_AliasData_deDE.lua
 MidnightSimpleUnitFrames/Game/Mists/Auras/AliasData/MSUF_Auras3_AliasData_enUS.lua
@@ -59,6 +55,7 @@ MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua
 MidnightSimpleUnitFrames/Game/Shared/Initialize.lua
 MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua
 MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua
+MidnightSimpleUnitFrames/Game/TBC/Auras.xml
 MidnightSimpleUnitFrames/Game/TBC/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua
 MidnightSimpleUnitFrames/Game/TBC/Auras/AliasData/MSUF_Auras3_AliasData_deDE.lua
 MidnightSimpleUnitFrames/Game/TBC/Auras/AliasData/MSUF_Auras3_AliasData_enUS.lua
@@ -76,6 +73,7 @@ MidnightSimpleUnitFrames/Game/TBC/ClassPower.lua
 MidnightSimpleUnitFrames/Game/TBC/UnitFrames.xml
 MidnightSimpleUnitFrames/Game/TBC/UnitFrames/Group/MSUF_UF_Group_SpellIndicators_Data.lua
 MidnightSimpleUnitFrames/Game/TBC/UnitFrames/GroupFrames.xml
+MidnightSimpleUnitFrames/Game/Vanilla/Auras.xml
 MidnightSimpleUnitFrames/Game/Vanilla/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua
 MidnightSimpleUnitFrames/Game/Vanilla/Auras/AliasData/MSUF_Auras3_AliasData_deDE.lua
 MidnightSimpleUnitFrames/Game/Vanilla/Auras/AliasData/MSUF_Auras3_AliasData_enUS.lua
@@ -217,6 +215,7 @@ MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Bars.lua
 MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua
 MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Units.lua
 MidnightSimpleUnitFrames/State/MSUF_AuraDefaults.lua
+MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Auras.xml
 MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema_Data_Classic.lua
 MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_AutoCoverage_Manifest_Classic.lua
 MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Unitframes_StatusData_Classic.lua
@@ -237,13 +236,6 @@ MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_AfterUnitPreview_Classic
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ThemeSkin.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua
-MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AuraPreview_Classic.lua
-MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Classic.lua
-MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection_Classic.lua
-MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Classic.xml
-MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render_Classic.lua
-MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status_Classic.lua
-MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View_Classic.lua
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Classic.xml
 MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua

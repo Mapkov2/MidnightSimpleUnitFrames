@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MSUF_EditMode_PopupScale.lua - shared bottom-right scale grip for EM2 popups
 -- Handles popup resize UI only; persisted geometry writes stay in EditMode popup owners.
 
@@ -151,17 +152,17 @@ end
 
 local function EnsureScaleProxy(frame)
     if frame._msufEM2ScaleProxy then return frame._msufEM2ScaleProxy end
-    local proxy = CreateFrame("Frame", nil, UIParent)
+    local proxy = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent), true)
     ApplyProxyPriority(proxy, frame)
     proxy:Hide()
 
-    local fill = proxy:CreateTexture(nil, "BACKGROUND")
+    local fill = PixelLayoutRegion(proxy:CreateTexture(nil, "BACKGROUND"))
     fill:SetAllPoints()
     fill:SetColorTexture(0.02, 0.06, 0.09, 0.18)
     proxy.fill = fill
 
     local function Edge(pointA, pointB, width, height)
-        local tex = proxy:CreateTexture(nil, "BORDER")
+        local tex = PixelLayoutRegion(proxy:CreateTexture(nil, "BORDER"))
         tex:SetColorTexture(0.00, 0.72, 1.00, 0.72)
         tex:SetPoint(unpack(pointA))
         tex:SetPoint(unpack(pointB))
@@ -174,7 +175,7 @@ local function EnsureScaleProxy(frame)
     Edge({ "TOPLEFT", proxy, "TOPLEFT", 0, 0 }, { "BOTTOMLEFT", proxy, "BOTTOMLEFT", 0, 0 }, 2, nil)
     Edge({ "TOPRIGHT", proxy, "TOPRIGHT", 0, 0 }, { "BOTTOMRIGHT", proxy, "BOTTOMRIGHT", 0, 0 }, 2, nil)
 
-    local label = proxy:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local label = PixelLayoutRegion(proxy:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
     if ui and ui.ApplyFontSize then ui.ApplyFontSize(label, "caption") end
     label:SetPoint("BOTTOMRIGHT", proxy, "TOPRIGHT", 0, 4)
@@ -236,14 +237,14 @@ function EM2.AttachPopupScaleGrip(frame)
     frame._msufEM2BaseH = frame.GetHeight and frame:GetHeight() or 292
     frame:SetScale(ReadScale())
 
-    local grip = CreateFrame("Button", nil, frame)
+    local grip = PixelLayoutRegion(CreateFrame("Button", nil, frame))
     grip:SetSize(18, 18)
     grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, 3)
     if frame.GetFrameLevel and grip.SetFrameLevel then grip:SetFrameLevel((frame:GetFrameLevel() or 0) + 30) end
     if grip.RegisterForClicks then grip:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp") end
-    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    PixelLayoutRegion(grip, "SetNormalTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    PixelLayoutRegion(grip, "SetHighlightTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    PixelLayoutRegion(grip, "SetPushedTexture", "Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
 
     local finish
     local function update()

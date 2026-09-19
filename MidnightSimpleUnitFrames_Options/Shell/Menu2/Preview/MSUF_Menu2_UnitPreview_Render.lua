@@ -1,9 +1,18 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Unit preview render/composition.
 ---
 --- The view file builds frames and wires controls; this module owns the hot
 --- refresh path that composes the live preview visuals.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
+-- Vanilla, TBC and Mists load this file too; their differences are client
+-- facts read once here. A harness without MSUF.Client renders as Mainline.
+-- Classic stamps texture layers after the portrait and draws a gold ring where
+-- the stock portrait atlas is missing; Era's legacy PlayerFrame has no modern
+-- HUD portrait atlases at all; boss pieces need boss units (SupportsUnit).
+local PREVIEW_CLASSIC = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+local LEGACY_BLIZZARD_PORTRAIT = PREVIEW_CLASSIC and MSUF.Client.IsVanilla == true
+local PREVIEW_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Client.SupportsUnit("boss1") == true
 local Render = MSUF.UFPreviewRender or {}
 MSUF.UFPreviewRender = Render
 local MenuState = MSUF.MSUF2 or _G.MSUF2 or {}
@@ -231,16 +240,16 @@ local function EnsurePreviewSecondaryClassTimer(mock, whiteTexture)
     if not classPower then return nil end
     local frame = classPower._msufSecondaryTimer
     if frame then return frame end
-    frame = CreateFrame("Frame", nil, classPower)
-    frame.bg = frame:CreateTexture(nil, "BACKGROUND")
+    frame = PixelLayoutRegion(CreateFrame("Frame", nil, classPower))
+    frame.bg = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND"))
     frame.bg:SetAllPoints(frame)
     frame.bg:SetTexture(whiteTexture)
-    frame.fill = frame:CreateTexture(nil, "ARTWORK")
+    frame.fill = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
     frame.fill:SetTexture(whiteTexture)
-    frame.textOwner = CreateFrame("Frame", nil, frame)
+    frame.textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     frame.textOwner:SetAllPoints(frame)
     if frame.textOwner.EnableMouse then frame.textOwner:EnableMouse(false) end
-    frame.text = frame.textOwner:CreateFontString(nil, "OVERLAY")
+    frame.text = PixelLayoutRegion(frame.textOwner:CreateFontString(nil, "OVERLAY"))
     frame.text:SetJustifyH("CENTER")
     if frame.text.SetJustifyV then frame.text:SetJustifyV("MIDDLE") end
     frame:Hide()
@@ -403,7 +412,7 @@ local function HideCastbarPreviewIconBorder(icon)
             if border[key] then border[key]:Hide() end
         end
     end
-    if icon and icon.SetBackdrop then icon:SetBackdrop(nil) end
+    if icon and icon.SetBackdrop then PixelLayoutRegion(icon, "SetBackdrop", nil) end
     if icon then
         icon._msufCastbarPreviewBorderEdge = nil
         icon._msufCastbarPreviewBorderR = nil
@@ -439,7 +448,7 @@ local function ApplyCastbarPreviewIconBorder(icon, style, thickness, g)
         r, green, b, a = g.castbarBorderR or 0, g.castbarBorderG or 0, g.castbarBorderB or 0, g.castbarBorderA or 1
     end
     if icon._msufCastbarPreviewBorderEdge ~= thickness then
-        icon:SetBackdrop({
+        PixelLayoutRegion(icon, "SetBackdrop", {
             bgFile = "Interface\\Buttons\\WHITE8X8",
             edgeFile = "Interface\\Buttons\\WHITE8X8",
             edgeSize = thickness,
@@ -579,7 +588,7 @@ local function EnsureCastbarPreviewRoundedSurface(cast)
     local surface = cast and cast._msufCastbarRoundedSurface
     if surface then return surface end
     if not (cast and type(_G.CreateFrame) == "function") then return nil end
-    surface = CreateFrame("Frame", nil, cast)
+    surface = PixelLayoutRegion(CreateFrame("Frame", nil, cast))
     if surface.EnableMouse then surface:EnableMouse(false) end
     cast._msufCastbarRoundedSurface = surface
     return surface
@@ -613,7 +622,7 @@ local function ApplyCastbarPreviewRounded(cast, g, edgeSize, bgR, bgG, bgB, bgA)
     local surface = LayoutCastbarPreviewSurface(cast)
     local bg = cast._msufCastbarRoundedBg
     if not bg then
-        bg = cast:CreateTexture(nil, "BACKGROUND")
+        bg = PixelLayoutRegion(cast:CreateTexture(nil, "BACKGROUND"))
         if PreviewHelpers.SnapOff then PreviewHelpers.SnapOff(bg) end
         cast._msufCastbarRoundedBg = bg
     end
@@ -987,7 +996,7 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     local tex = holder.tex
     if tex and tex._msufTextureLayerRoundedClip == true and not clipWanted then
         tex:Hide()
-        tex = holder:CreateTexture(nil, "ARTWORK", nil, 0)
+        tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK", nil, 0))
         tex:SetAllPoints(holder)
         holder.tex = tex
     end
@@ -1073,7 +1082,7 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
                 overlay = nil
             end
             if not overlay then
-                overlay = holder:CreateTexture(nil, "ARTWORK", nil, 1)
+                overlay = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK", nil, 1))
                 overlay:SetAllPoints(holder)
                 overlay:SetTexture("Interface\\Buttons\\WHITE8x8")
                 if overlay.SetBlendMode then overlay:SetBlendMode("BLEND") end
@@ -1562,7 +1571,7 @@ function Stage.MeasureTextFootprint(st, Preview)
         end
     end
     do
-        local border = key == "boss" and runtimeSpec and runtimeSpec.border
+        local border = key == "boss" and PREVIEW_BOSS_UNITS and runtimeSpec and runtimeSpec.border
         if MSUF.BossTargetIndicator and MSUF.BossTargetIndicator.HasMarker(border) then
             local size = border.bossTargetSize or 24
             minX, maxX, minY, maxY = ExpandRuntimeAnchorRect(minX, maxX, minY, maxY,
@@ -1964,8 +1973,10 @@ function Stage.RenderHealth(st)
             runtimeSpec and runtimeSpec.health and runtimeSpec.health.barGradient,
             "_msufPreviewHealthGradients")
     end
-    RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle,
-        R, data, runtimeSpec and runtimeSpec.health)
+    if not PREVIEW_CLASSIC then
+        RenderTextureLayerPreview(box, mock, conf, PreviewLayerWanted(box, "texLayer"), S, sw, baseLevel, SetTex, PlaceHandle,
+            R, data, runtimeSpec and runtimeSpec.health)
+    end
     st.hb, st.hg, st.hr, st.powerEnabled, st.powerH, st.powerOn = hb, hg, hr, powerEnabled, powerH, powerOn
 end
 
@@ -2277,7 +2288,7 @@ function Stage.RenderClassPower(st)
                 for i = 1, fragments - 1 do
                     local notch = notches[i]
                     if not notch then
-                        notch = mock.classPower:CreateTexture(nil, "OVERLAY", nil, 6)
+                        notch = PixelLayoutRegion(mock.classPower:CreateTexture(nil, "OVERLAY", nil, 6))
                         notch:SetTexture(TEX_W8)
                         notches[i] = notch
                     end
@@ -2409,7 +2420,7 @@ function Stage.RenderDetachedPower(st)
         local powerShapeInfo = PREVIEW_POWER_SHAPES[box._runtimeDetachedPowerShape or "BAR"]
         box._runtimeDetachedRoundedPower = powerShapeInfo == nil and true or nil
         if mock.detachedPower.SetBackdropColor then
-            if mock.detachedPower.SetBackdrop then mock.detachedPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = max(1, box._previewPowerOutline) }) end
+            if mock.detachedPower.SetBackdrop then PixelLayoutRegion(mock.detachedPower, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = max(1, box._previewPowerOutline) }) end
             mock.detachedPower:SetBackdropColor(0, 0, 0, 0)
             mock.detachedPower:SetBackdropBorderColor(0, 0, 0, (not powerShapeInfo and box._runtimePowerOutline > 0) and 1 or 0)
         end
@@ -2506,7 +2517,7 @@ function Stage.RenderFrameChrome(st)
     local runtimeSpec, scale = st.runtimeSpec, st.scale
     do
     local previewBorder = runtimeSpec and runtimeSpec.border
-    local bossBorder = key == "boss" and MSUF.BossTargetIndicator
+    local bossBorder = key == "boss" and PREVIEW_BOSS_UNITS and MSUF.BossTargetIndicator
         and MSUF.BossTargetIndicator.HasBorder(previewBorder)
     mock._msufPreviewBossBorder = bossBorder and previewBorder or nil
     if bossBorder then
@@ -3021,14 +3032,14 @@ function Stage.RenderCastbar(st)
         local castEdge = castOutline > 0 and max(1, S(castOutline)) or 0
         if mock.cast._msufCastbarBackdropEdge ~= castEdge then
             if castEdge > 0 then
-                mock.cast:SetBackdrop({
+                PixelLayoutRegion(mock.cast, "SetBackdrop", {
                     bgFile = "Interface\\Buttons\\WHITE8X8",
                     edgeFile = "Interface\\Buttons\\WHITE8X8",
                     edgeSize = castEdge,
                     insets = { left = 0, right = 0, top = 0, bottom = 0 },
                 })
             else
-                mock.cast:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+                PixelLayoutRegion(mock.cast, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8" })
             end
             mock.cast._msufCastbarBackdropEdge = castEdge
         end
@@ -3538,7 +3549,7 @@ function Render.Install(Preview, deps)
         if portrait._msufPreviewShapeMaskKey ~= key then
             portrait._msufPreviewShapeMaskKey = key
             local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
-            if wantAtlas and GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.maskAtlas) then
+            if wantAtlas and not LEGACY_BLIZZARD_PORTRAIT and GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.maskAtlas) then
                 mask:SetAtlas(PREVIEW_BLIZZ.maskAtlas)
             else
                 mask:SetTexture(wantAtlas and PREVIEW_BLIZZ.circleMask or file, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
@@ -3558,7 +3569,7 @@ function Render.Install(Preview, deps)
         end
         if not ring then
             if not (portrait.CreateTexture and portrait.CreateMaskTexture) then return false end
-            ring = portrait:CreateTexture(nil, "BACKGROUND", nil, -2)
+            ring = PixelLayoutRegion(portrait:CreateTexture(nil, "BACKGROUND", nil, -2))
             ring:SetTexture("Interface\\Buttons\\WHITE8x8")
             local mask = portrait:CreateMaskTexture()
             ring:AddMaskTexture(mask)
@@ -3586,6 +3597,7 @@ function Render.Install(Preview, deps)
     end
     local function LayoutPreviewBlizzardPortrait(portrait, active, pw, ph)
         local ring = portrait._msufPreviewBlizzRing
+        if PREVIEW_CLASSIC and portrait._msufPreviewBlizzFallback then portrait._msufPreviewBlizzFallback:Hide() end
         if not active then
             if ring then ring:Hide() end
             if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
@@ -3593,9 +3605,25 @@ function Render.Install(Preview, deps)
             return
         end
         local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
-        local info = GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.frameAtlas)
+        local info = not LEGACY_BLIZZARD_PORTRAIT and GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.frameAtlas)
         local file = info and (info.file or info.filename)
         if not file then
+            if PREVIEW_CLASSIC then
+                local fallback = portrait._msufPreviewBlizzFallback
+                if not fallback and portrait.CreateTexture then
+                    fallback = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2))
+                    fallback:SetTexture("Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_circle.tga")
+                    fallback:SetVertexColor(1, 0.82, 0.3, 1)
+                    portrait._msufPreviewBlizzFallback = fallback
+                end
+                if fallback then
+                    local ix, iy = PreviewPortraitRingInflation(portrait, 2)
+                    fallback:ClearAllPoints()
+                    fallback:SetPoint("TOPLEFT", portrait, "TOPLEFT", -ix, iy)
+                    fallback:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", ix, -iy)
+                    fallback:Show()
+                end
+            end
             if ring then ring:Hide() end
             if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
             if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end
@@ -3603,8 +3631,8 @@ function Render.Install(Preview, deps)
         end
         if not ring then
             if not portrait.CreateTexture then return end
-            ring = portrait:CreateTexture(nil, "OVERLAY", nil, 2)
-            local mirror = portrait:CreateTexture(nil, "OVERLAY", nil, 2)
+            ring = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2))
+            local mirror = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2))
             if portrait.CreateMaskTexture and ring.AddMaskTexture then
                 local clip = portrait:CreateMaskTexture()
                 clip:SetTexture(PREVIEW_BLIZZ.circleMask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
@@ -3652,7 +3680,7 @@ function Render.Install(Preview, deps)
         if mirror then mirror:Show() end
         local corner = portrait._msufPreviewBlizzCorner
         if not corner and GetAtlasInfo(PREVIEW_BLIZZ.cornerAtlas) then
-            corner = portrait:CreateTexture(nil, "OVERLAY", nil, 3)
+            corner = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 3))
             corner:SetAtlas(PREVIEW_BLIZZ.cornerAtlas)
             portrait._msufPreviewBlizzCorner = corner
         end
@@ -3671,7 +3699,7 @@ function Render.Install(Preview, deps)
         local art = portrait._msufPreviewArtBorder
         if not art then
             if not portrait.CreateTexture then return false end
-            art = portrait:CreateTexture(nil, "OVERLAY", nil, 2)
+            art = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2))
             portrait._msufPreviewArtBorder = art
         end
         local shape = PREVIEW_RING_SHAPES[portrait._msufPreviewBorderShape or "SQUARE"] or "square"
@@ -3779,6 +3807,12 @@ function Preview.Refresh(box, reason)
     Stage.RenderTextContent(st)
     Stage.LayoutTextSlots(st)
     Stage.RenderPortrait(st)
+    if PREVIEW_CLASSIC then
+        -- Health, power and portrait targets now have their final preview
+        -- geometry; texture layers stamp after them, as Factory.Apply does live.
+        RenderTextureLayerPreview(box, st.mock, st.conf, PreviewLayerWanted(box, "texLayer"), st.S, st.sw, st.baseLevel,
+            st.SetTex, st.PlaceHandle, R, st.data, st.runtimeSpec and st.runtimeSpec.health)
+    end
     Stage.RenderCastbar(st)
     Stage.RenderAurasAndStatus(st, Preview)
     Stage.FinalizeLayersAndHandles(st)

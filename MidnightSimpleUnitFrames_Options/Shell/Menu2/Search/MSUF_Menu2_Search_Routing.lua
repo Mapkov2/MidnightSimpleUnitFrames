@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua
 --- Search target routing, accordion state, and anchor scrolling.
 ---
@@ -315,17 +316,17 @@ local function HighlightSearchAnchor(wrapper, region, fixedRoot)
     local offset = math.max(0, ownerTop - regionTop)
     local highlight = owner._msuf2SearchHighlight
     if not highlight then
-        highlight = CreateFrame("Frame", nil, owner)
+        highlight = PixelLayoutRegion(CreateFrame("Frame", nil, owner))
         highlight:SetFrameLevel((owner.GetFrameLevel and owner:GetFrameLevel() or 1) + 40)
-        local fill = highlight:CreateTexture(nil, "BACKGROUND")
+        local fill = PixelLayoutRegion(highlight:CreateTexture(nil, "BACKGROUND"))
         fill:SetAllPoints()
         fill:SetColorTexture(0.20, 0.58, 1.00, 0.16)
-        local top = highlight:CreateTexture(nil, "ARTWORK")
+        local top = PixelLayoutRegion(highlight:CreateTexture(nil, "ARTWORK"))
         top:SetHeight(1)
         top:SetPoint("TOPLEFT")
         top:SetPoint("TOPRIGHT")
         top:SetColorTexture(0.38, 0.78, 1.00, 0.65)
-        local bottom = highlight:CreateTexture(nil, "ARTWORK")
+        local bottom = PixelLayoutRegion(highlight:CreateTexture(nil, "ARTWORK"))
         bottom:SetHeight(1)
         bottom:SetPoint("BOTTOMLEFT")
         bottom:SetPoint("BOTTOMRIGHT")

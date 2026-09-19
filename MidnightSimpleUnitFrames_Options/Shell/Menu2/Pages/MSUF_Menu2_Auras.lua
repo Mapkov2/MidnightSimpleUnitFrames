@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.AddonName)
@@ -659,8 +660,12 @@ local function BuildUnitStyleFrameBasics(S)
                     end
                 end,
                 "AURAS3_STEALABLE_MARKER_STYLE")
-            AddTooltip(stealableEnabled, "Native stealable marker",
-                "Uses Blizzard's 12.1 AuraButton stealable filter. It adds no MSUF aura scan, ticker, or OnUpdate.")
+            -- The Classic aura backends mark stealable buffs from their own scan,
+            -- so the native AuraButton note is not true there.
+            if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
+                AddTooltip(stealableEnabled, "Native stealable marker",
+                    "Uses Blizzard's 12.1 AuraButton stealable filter. It adds no MSUF aura scan, ticker, or OnUpdate.")
+            end
             M.TrackRefresh(ctx, function()
                 W.SetControlEnabled(stealableStyleControl, ReadScopeBool("showStealable", false))
             end)
@@ -1137,11 +1142,13 @@ local function TrackUnitStyleBadges(S)
 
             refreshDurationBarSummary()
 
-            local effectType = tostring(ReadEffectValue("Type", "none"))
-            W.SetCollapsibleBadges(frameEffect, {{
-                text = ChoiceLabel(CUSTOM_FRAME_EFFECTS, effectType, effectType),
-                kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
-            }})
+            if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
+                local effectType = tostring(ReadEffectValue("Type", "none"))
+                W.SetCollapsibleBadges(frameEffect, {{
+                    text = ChoiceLabel(CUSTOM_FRAME_EFFECTS, effectType, effectType),
+                    kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
+                }})
+            end
 
         end
     end)
@@ -1256,7 +1263,9 @@ local function BuildUnitStyle(ctx, b, scope, options)
     BuildUnitStyleStack(S)
     BuildUnitStyleCooldown(S)
     BuildUnitStyleDurationBar(S)
-    BuildUnitStyleFrameEffect(S)
+    -- No Classic aura backend renders a lane Full-Frame Effect; its badge is
+    -- skipped under the same gate in TrackUnitStyleBadges.
+    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then BuildUnitStyleFrameEffect(S) end
     TrackUnitStyleBadges(S)
 end
 
@@ -1516,6 +1525,10 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 if value == true and Model.LaneFiltersEnabled(unit, lane) ~= true then
                     Model.SetLaneFiltersEnabled(unit, lane, true)
                 end
+                -- Only mine and Non-player auras are mutually exclusive. Classic has no
+                -- Non-player control, so clear a nonPlayer flag imported from Retail
+                -- instead of combining both filters into an always-empty Debuff lane.
+                if value == true and lane == "debuff" then Model.WriteFilter(unit, lane, "nonPlayer", false) end
                 Model.WriteFilter(unit, lane, "onlyMine", value == true)
                 ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_onlyMine", true)
             end,
@@ -1661,7 +1674,7 @@ local function EnsureAuraCombatScanner()
     -- The scanner overlay is a shared singleton parked on M.
     local s = M._auraCombatScanner
     if not s then
-        s = CreateFrame("Frame", nil, _G.UIParent)
+        s = PixelLayoutRegion(CreateFrame("Frame", nil, _G.UIParent))
         M._auraCombatScanner = s
         s:SetSize(372, 100)
         s:SetPoint("TOP", _G.UIParent, "TOP", 0, -160)
@@ -1684,7 +1697,7 @@ local function EnsureAuraCombatScanner()
         s.hint:Hide()
         s.icons = {}
         for i = 1, 12 do
-            local tex = s:CreateTexture(nil, "ARTWORK")
+            local tex = PixelLayoutRegion(s:CreateTexture(nil, "ARTWORK"))
             tex:SetSize(20, 20)
             tex:SetPoint("BOTTOMLEFT", s, "BOTTOMLEFT", 12 + (i - 1) * 24, 10)
             tex:Hide()
@@ -2188,10 +2201,10 @@ local function BuildUnitBlacklistPresetsAndList(B)
         or (isDebuff and "No blocked spells. Add one from the allowed presets above."
         or "No blocked spells. Add one above or use a preset.")
     local empty = W.Text(section, emptyText, 24, -284 + listOffset, inner, T.colors.muted)
-    local listScroll = CreateFrame("ScrollFrame", nil, section)
+    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
     listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + listOffset)
     listScroll:SetSize(inner - 20, 150)
-    local listChild = CreateFrame("Frame", nil, listScroll)
+    local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
     listChild:SetSize(inner - 44, 150)
     listScroll:SetScrollChild(listChild)
     M._StyleNestedAuraScrollFrame(listScroll, section, 44)
@@ -2199,12 +2212,12 @@ local function BuildUnitBlacklistPresetsAndList(B)
     local function EnsureRow(i)
         local row = rows[i]
         if row then return row end
-        row = CreateFrame("Frame", nil, listChild)
+        row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
         row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
         row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
         row:SetHeight(40)
         if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
-        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
         row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
         row.icon:SetSize(28, 28)
         row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)

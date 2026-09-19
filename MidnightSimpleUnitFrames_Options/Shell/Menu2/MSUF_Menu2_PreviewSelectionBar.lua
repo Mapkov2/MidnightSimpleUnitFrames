@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/Menu2/MSUF_Menu2_PreviewSelectionBar.lua
 --- Cold-path selection chrome shared by the Unit and Group frame previews.
 ---
@@ -61,7 +62,7 @@ local function ApplyBackdrop(box, frame, bg, border)
     local fn = deps and deps.ApplyBackdrop
     if type(fn) == "function" then return fn(frame, bg, border) end
     if not (frame and frame.SetBackdrop) then return end
-    frame:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
     frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
 end
@@ -259,23 +260,23 @@ end
 local function BuildAxis(box, bar, axis, caption, anchor, gap)
     local T = Theme(box)
     local colors = (T and T.colors) or {}
-    local controls = CreateFrame("Frame", nil, bar)
+    local controls = PixelLayoutRegion(CreateFrame("Frame", nil, bar))
     controls:SetSize(98, 18)
     controls:SetPoint("LEFT", anchor, "RIGHT", gap, 0)
 
-    local attention = controls:CreateTexture(nil, "BACKGROUND")
+    local attention = PixelLayoutRegion(controls:CreateTexture(nil, "BACKGROUND"))
     attention:SetAllPoints(controls)
     attention:SetColorTexture(0.18, 0.70, 1.00, 0.32)
     attention:SetAlpha(0)
     attention:Hide()
 
     local function StepButton(delta, glyph)
-        local btn = CreateFrame("Button", nil, controls, "BackdropTemplate")
+        local btn = PixelLayoutRegion(CreateFrame("Button", nil, controls, "BackdropTemplate"))
         btn:SetSize(18, 18)
-        btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+        PixelLayoutRegion(btn, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
         btn:SetBackdropColor(0.030, 0.070, 0.115, 0.94)
         btn:SetBackdropBorderColor(0.086, 0.149, 0.227, 0.85)
-        btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
         btn.fs:SetText(glyph)
         btn:SetScript("OnClick", function() StepAxis(box, axis, delta) end)
@@ -284,15 +285,15 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
 
     local minus = StepButton(-1, "-")
     minus:SetPoint("LEFT", controls, "LEFT", 0, 0)
-    local titleHolder = CreateFrame("Frame", nil, controls)
+    local titleHolder = PixelLayoutRegion(CreateFrame("Frame", nil, controls))
     titleHolder:SetPoint("LEFT", minus, "RIGHT", 4, 0)
     titleHolder:SetSize(8, 18)
-    local title = titleHolder:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local title = PixelLayoutRegion(titleHolder:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     title:SetAllPoints(titleHolder)
     title:SetJustifyH("CENTER")
     title:SetText(caption)
     if T and T.StyleFontString then T.StyleFontString(title, colors.muted or { 0.62, 0.70, 0.82, 1 }, 0) end
-    local edit = CreateFrame("EditBox", nil, controls, "InputBoxTemplate")
+    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, controls, "InputBoxTemplate"))
     edit:SetPoint("LEFT", titleHolder, "RIGHT", 3, 0)
     edit:SetSize(44, 18)
     edit:SetAutoFocus(false)
@@ -400,14 +401,14 @@ function SB.Create(box, deps)
     if box._msuf2SelectionBar then return box._msuf2SelectionBar end
     local T = Theme(box)
     local colors = (T and T.colors) or {}
-    local bar = CreateFrame("Frame", nil, box, "BackdropTemplate")
+    local bar = PixelLayoutRegion(CreateFrame("Frame", nil, box, "BackdropTemplate"))
     bar:SetHeight(24)
     Chrome(box, bar, "sidebar")
-    local swatch = bar:CreateTexture(nil, "ARTWORK")
+    local swatch = PixelLayoutRegion(bar:CreateTexture(nil, "ARTWORK"))
     swatch:SetSize(8, 8)
     swatch:SetPoint("LEFT", bar, "LEFT", 10, 0)
     bar.swatch = swatch
-    local label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local label = PixelLayoutRegion(bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
     label:SetPoint("LEFT", swatch, "RIGHT", 7, 0)
     label:SetJustifyH("LEFT")
     label:SetWidth(132)
@@ -420,7 +421,7 @@ function SB.Create(box, deps)
     bar.axisX, bar.axisY = stepX, stepY
 
     local openBtn = (T and T.Button and T.Button(bar, Tr(box, "Open settings"), 110, 18))
-        or CreateFrame("Button", nil, bar, "BackdropTemplate")
+        or PixelLayoutRegion(CreateFrame("Button", nil, bar, "BackdropTemplate"))
     if T and T.CenterButtonLabel then T.CenterButtonLabel(openBtn) end
     openBtn:SetPoint("RIGHT", bar, "RIGHT", -8, 0)
     openBtn:SetScript("OnClick", function()
@@ -428,7 +429,7 @@ function SB.Create(box, deps)
         if handle then Call(box, "OpenSettings", box, handle, "selectionbar") end
     end)
     local resetBtn = (T and T.Button and T.Button(bar, Tr(box, "Reset"), 60, 18))
-        or CreateFrame("Button", nil, bar, "BackdropTemplate")
+        or PixelLayoutRegion(CreateFrame("Button", nil, bar, "BackdropTemplate"))
     if T and T.CenterButtonLabel then T.CenterButtonLabel(resetBtn) end
     resetBtn:SetPoint("RIGHT", openBtn, "LEFT", -6, 0)
     resetBtn:SetScript("OnClick", function()
@@ -527,7 +528,7 @@ local function EnsurePickerPopup(box, picker)
     if type(M.CreateMenuPopupPanel) == "function" then
         popup = M.CreateMenuPopupPanel(UIParent, { name = nil, glass = "popup" })
     else
-        popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        popup = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent, "BackdropTemplate"))
         ApplyBackdrop(box, popup, { 0.014, 0.024, 0.050, 0.985 }, { 0.10, 0.22, 0.44, 0.80 })
     end
     popup:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -543,16 +544,16 @@ local function PickerRow(box, popup, index)
     local row = popup._rows[index]
     if row then return row end
     local T = Theme(box)
-    row = CreateFrame("Button", nil, popup)
+    row = PixelLayoutRegion(CreateFrame("Button", nil, popup))
     row:SetSize(190, 18)
     row:SetPoint("TOPLEFT", popup, "TOPLEFT", 6, -(6 + (index - 1) * 18))
-    row.bg = row:CreateTexture(nil, "BACKGROUND")
+    row.bg = PixelLayoutRegion(row:CreateTexture(nil, "BACKGROUND"))
     row.bg:SetAllPoints()
     row.bg:SetColorTexture(0, 0, 0, 0)
-    row.dot = row:CreateTexture(nil, "ARTWORK")
+    row.dot = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
     row.dot:SetSize(7, 7)
     row.dot:SetPoint("LEFT", row, "LEFT", 7, 0)
-    row.fs = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    row.fs = PixelLayoutRegion(row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     row.fs:SetPoint("LEFT", row.dot, "RIGHT", 7, 0)
     row.fs:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     row.fs:SetJustifyH("LEFT")
@@ -592,20 +593,20 @@ function SB.CreatePicker(box, parent)
     if not (box and parent) then return nil end
     if box._msuf2ElementPicker then return box._msuf2ElementPicker end
     local T = Theme(box)
-    local picker = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    local picker = PixelLayoutRegion(CreateFrame("Button", nil, parent, "BackdropTemplate"))
     picker:SetSize(158, 20)
-    picker:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    PixelLayoutRegion(picker, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     if picker.SetFrameLevel and parent.GetFrameLevel then
         picker:SetFrameLevel((parent:GetFrameLevel() or 0) + 82)
     end
-    picker.dot = picker:CreateTexture(nil, "ARTWORK")
+    picker.dot = PixelLayoutRegion(picker:CreateTexture(nil, "ARTWORK"))
     picker.dot:SetSize(7, 7)
     picker.dot:SetPoint("LEFT", picker, "LEFT", 7, 0)
-    picker.fs = picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    picker.fs = PixelLayoutRegion(picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     picker.fs:SetPoint("LEFT", picker.dot, "RIGHT", 7, 0)
     picker.fs:SetPoint("RIGHT", picker, "RIGHT", -16, 0)
     picker.fs:SetJustifyH("LEFT")
-    picker.caret = picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    picker.caret = PixelLayoutRegion(picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     picker.caret:SetPoint("RIGHT", picker, "RIGHT", -6, 0)
     picker.caret:SetText("v")
     local helpers = M.PreviewHelpers or {}

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua
 --- Group-only visual runtime elements.
 ---
@@ -242,7 +243,7 @@ local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size,
     local key = EDGE_KEYS[i]
     local edge = edges[key]
     if not edge then
-      edge = frame:CreateTexture(nil, "OVERLAY", nil, layer)
+      edge = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY", nil, layer))
       edges[key] = edge
     end
     LayoutTargetEdge(frame, edge, key, size)
@@ -382,7 +383,7 @@ local function EnsureAuraTexture(frame, key)
   local tex = frame and frame[key]
   if tex then return tex end
   if not frame then return nil end
-  tex = frame:CreateTexture(nil, "OVERLAY", nil, 5)
+  tex = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY", nil, 5))
   tex:SetColorTexture(1, 1, 1, 1)
   tex:Hide()
   frame[key] = tex

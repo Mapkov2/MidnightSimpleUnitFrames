@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_CastbarFrames.lua
 --- Frame construction helpers for real castbars and menu/edit previews.
 ---
@@ -45,7 +46,7 @@ local function CastbarBackgroundColor()
 end
 
 local function CreateSpark(statusBar, height)
-    local spark = statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+    local spark = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY", nil, 6))
     spark:SetTexture(4417031)
     spark:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
     spark:SetDesaturated(true)
@@ -69,7 +70,7 @@ end
 
 local function CreateText(parent, justifyH, point, relativeTo, offsetX)
     local fontPath, fontSize, fontFlags = GameFontHighlight:GetFont()
-    local text = parent:CreateFontString(nil, "OVERLAY")
+    local text = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY"))
 
     text:SetFont(fontPath, fontSize, fontFlags)
     text:SetJustifyH(justifyH)
@@ -91,11 +92,11 @@ function G.MSUF_BuildCastbarFrameElements(frame)
         frame:SetWidth(250)
     end
 
-    frame.background = frame:CreateTexture(nil, "BACKGROUND")
+    frame.background = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND"))
     frame.background:SetAllPoints(frame)
     frame.background:SetColorTexture(0, 0, 0, 0)
 
-    local statusBar = CreateFrame("StatusBar", nil, frame)
+    local statusBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame))
     if type(roundLayout) == "function" then roundLayout(statusBar, true) end
     statusBar:SetPoint("LEFT", frame, "LEFT", barHeight + 1, 0)
     statusBar:SetSize(frame:GetWidth() - barHeight - 1, frame:GetHeight())
@@ -120,20 +121,20 @@ function G.MSUF_BuildCastbarFrameElements(frame)
 
     frame.statusBar = statusBar
 
-    frame.icon = statusBar:CreateTexture(nil, "OVERLAY", nil, 7)
+    frame.icon = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY", nil, 7))
     frame.icon:SetSize(barHeight, barHeight)
     frame.icon:SetPoint("LEFT", frame, "LEFT", 0, 0)
 
-    frame.backgroundBar = statusBar:CreateTexture(nil, "BACKGROUND")
+    frame.backgroundBar = PixelLayoutRegion(statusBar:CreateTexture(nil, "BACKGROUND"))
     frame.backgroundBar:SetAllPoints(statusBar)
     frame.backgroundBar:SetTexture(CastbarBackgroundTexture())
     frame.backgroundBar:SetVertexColor(CastbarBackgroundColor())
 
-    frame.castText = statusBar:CreateFontString(nil, "OVERLAY")
+    frame.castText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
     frame.castText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     frame.castText:SetPoint("LEFT", statusBar, "LEFT", 2, 0)
 
-    frame.timeText = statusBar:CreateFontString(nil, "OVERLAY")
+    frame.timeText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
     frame.timeText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
     frame.timeText:SetPoint("RIGHT", statusBar, "RIGHT", -2, 0)
     frame.timeText:SetText("")
@@ -141,7 +142,7 @@ function G.MSUF_BuildCastbarFrameElements(frame)
     if frame.unit == "target" or frame.unit == "focus"
         or tostring(frame.unit or ""):match("^boss%d+$")
         or tostring(frame.unit or ""):match("^arena%d+$") then
-        frame.castTargetText = statusBar:CreateFontString(nil, "OVERLAY")
+        frame.castTargetText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
         frame.CastTargetNameText = frame.castTargetText
         frame.castTargetText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
         frame.castTargetText:SetJustifyH("RIGHT")
@@ -169,18 +170,18 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     local height = tonumber(options.height) or 18
     local statusBarHeight = tonumber(options.statusBarHeight) or height
 
-    local frame = CreateFrame("Frame", name, parent, options.template or "BackdropTemplate")
+    local frame = PixelLayoutRegion(CreateFrame("Frame", name, parent, options.template or "BackdropTemplate"))
     frame.unit = unit
     frame._msufIsPreview = true
     frame:SetClampedToScreen(true)
     frame:SetFrameStrata(options.strata or "DIALOG")
     frame:SetSize(width, height)
 
-    frame._msufFrameBG = frame:CreateTexture(nil, "BACKGROUND")
+    frame._msufFrameBG = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND"))
     frame._msufFrameBG:SetAllPoints(frame)
     frame._msufFrameBG:SetColorTexture(0, 0, 0, 0)
 
-    local statusBar = CreateFrame("StatusBar", nil, frame)
+    local statusBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame))
     if frame.GetFrameLevel and statusBar.SetFrameLevel then
         statusBar:SetFrameLevel(frame:GetFrameLevel() + 1)
     end
@@ -197,7 +198,7 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     statusBar:SetValue(tonumber(options.initialValue) or 0)
     frame.statusBar = statusBar
 
-    frame.backgroundBar = statusBar:CreateTexture(nil, "BACKGROUND")
+    frame.backgroundBar = PixelLayoutRegion(statusBar:CreateTexture(nil, "BACKGROUND"))
     frame.backgroundBar:SetAllPoints(statusBar)
     frame.backgroundBar:SetTexture("Interface\\Buttons\\WHITE8X8")
     frame.backgroundBar:SetVertexColor(CastbarBackgroundColor())
@@ -209,7 +210,7 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     end
 
     if unit == "player" then
-        frame.latencyBar = statusBar:CreateTexture(nil, "OVERLAY")
+        frame.latencyBar = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY"))
         frame.latencyBar:SetColorTexture(1, 0, 0, 0.25)
         frame.latencyBar:SetPoint("TOPRIGHT", statusBar, "TOPRIGHT")
         frame.latencyBar:SetPoint("BOTTOMRIGHT", statusBar, "BOTTOMRIGHT")
@@ -220,13 +221,13 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     if options.showIcon ~= false then
         local iconSize = tonumber(options.iconSize) or height
 
-        frame.icon = frame:CreateTexture(nil, "OVERLAY", nil, 7)
+        frame.icon = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY", nil, 7))
         frame.icon:SetSize(iconSize, iconSize)
         frame.icon:SetPoint("LEFT", frame, "LEFT", 0, 0)
         frame.icon:SetTexture(options.iconTexture or 136235)
     end
 
-    local textOverlay = CreateFrame("Frame", nil, frame)
+    local textOverlay = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     textOverlay:SetAllPoints(statusBar)
     if textOverlay.SetFrameLevel and statusBar.GetFrameLevel then
         textOverlay:SetFrameLevel(statusBar:GetFrameLevel() + 10)
@@ -252,7 +253,7 @@ function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     end
 
     if unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then
-        frame.castTargetText = statusBar:CreateFontString(nil, "OVERLAY")
+        frame.castTargetText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
         frame.CastTargetNameText = frame.castTargetText
         frame.castTargetText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
         frame.castTargetText:SetText("")

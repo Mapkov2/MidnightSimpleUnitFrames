@@ -12,8 +12,9 @@ end
 function UnitPowerDisplayMod() return 100 end
 
 local addonName = "MidnightSimpleUnitFrames"
-local namespace = { ExportPublic = function(name, value) _G[name] = value end }
-assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Constants.lua"))(addonName, namespace)
+-- A Classic client, so the shared constants carry the Classic power ids and modes.
+local namespace = { ExportPublic = function(name, value) _G[name] = value end, Client = { IsClassic = true } }
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Constants.lua"))(addonName, namespace)
 -- Every provider is built from the shared target-combo module.
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua"))(addonName, namespace)
 local K = assert(MSUF_CP_CONST)

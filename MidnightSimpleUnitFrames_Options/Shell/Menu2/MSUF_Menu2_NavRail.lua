@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu2 navigation rail builder.
 ---
 --- Builds the left rail search field, collapsible page groups, and undo/redo
@@ -59,7 +60,7 @@ local function NavPillVisualWidth(parent)
     if parent and parent.CreateFontString then
         local probe = parent._msuf2NavPillWidthProbe
         if not probe then
-            probe = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            probe = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight"), true)
             probe:Hide()
             parent._msuf2NavPillWidthProbe = probe
         end
@@ -224,7 +225,7 @@ local function HistoryTooltipText(kind)
     return text
 end
 local function CreateHistoryControls(parent)
-    local row = CreateFrame("Frame", nil, parent)
+    local row = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     local rowW = NavItemWidth(0)
     row:SetSize(rowW, 60)
     local buttonGap = 8
@@ -239,7 +240,7 @@ local function CreateHistoryControls(parent)
             btn._msuf2Label:SetText(M.Tr(label))
             T.StyleFontString(btn._msuf2Label, T.colors.text, NAV_TEXT_BUMP)
         end
-        local icon = btn:CreateTexture(nil, "ARTWORK", nil, 5)
+        local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 5))
         icon:SetTexture(texture)
         icon:SetSize(16, 16)
         icon:SetPoint("LEFT", btn, "LEFT", 8, 0)
@@ -309,7 +310,7 @@ local function CreateHistoryControls(parent)
     redoSummary:SetSize(buttonW - 6, 13)
     redoSummary:SetJustifyH("LEFT")
     if redoSummary.SetWordWrap then redoSummary:SetWordWrap(false) end
-    local feedbackIcon = row:CreateTexture(nil, "ARTWORK", nil, 5)
+    local feedbackIcon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK", nil, 5))
     feedbackIcon:SetTexture(T.media.checkTickMedium)
     feedbackIcon:SetSize(9, 9)
     feedbackIcon:SetPoint("TOPLEFT", row, "TOPLEFT", 3, -44)
@@ -418,7 +419,7 @@ local function BuildNavRail(parent)
     M.navTitles = {}
     M.navGroupForKey = {}
     M.navHeaderState = M.navHeaderState or {}
-    local brandIconFrame = CreateFrame("Frame", nil, parent)
+    local brandIconFrame = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     brandIconFrame:SetSize(24, 24)
     brandIconFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -8)
     brandIconFrame:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 1) + 1)
@@ -435,7 +436,7 @@ local function BuildNavRail(parent)
             edge:SetVertexColor(rim[1], rim[2], rim[3], 0.14)
         end
     end
-    local brandIcon = brandIconFrame:CreateTexture(nil, "ARTWORK", nil, 1)
+    local brandIcon = PixelLayoutRegion(brandIconFrame:CreateTexture(nil, "ARTWORK", nil, 1))
     brandIcon:SetSize(20, 20)
     brandIcon:SetPoint("CENTER", brandIconFrame, "CENTER", 0, 0)
     brandIcon:SetTexture((T.media and T.media.logo) or "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\MSUF_MinimapIcon.tga")
@@ -457,7 +458,7 @@ local function BuildNavRail(parent)
     parent._msuf2BrandIconFrame = brandIconFrame
     parent._msuf2BrandIcon = brandIcon
     parent._msuf2BrandTitle = brand
-    local search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local search = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     search:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -40)
     search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -40)
     search:SetHeight(20)
@@ -478,7 +479,7 @@ local function BuildNavRail(parent)
     end
     local placeholder = search.Instructions
     if not (placeholder and placeholder.SetText and placeholder.SetPoint) then
-        placeholder = search:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        placeholder = PixelLayoutRegion(search:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     elseif placeholder.ClearAllPoints then
         placeholder:ClearAllPoints()
     end
@@ -558,7 +559,7 @@ local function BuildNavRail(parent)
         foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 12, 12)
         foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -12, 12)
         foot:SetJustifyH("LEFT")
-        local close = CreateFrame("Button", nil, intro)
+        local close = PixelLayoutRegion(CreateFrame("Button", nil, intro))
         close:SetSize(20, 20)
         close:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -4, -4)
         local closeText = T.Font(close, "GameFontDisableSmall", "x", T.colors.dim)
@@ -661,7 +662,7 @@ local function BuildNavRail(parent)
         BumpSearchInputSerial()
         RunSearchInputQuery("", true)
     end)
-    local clear = CreateFrame("Button", nil, parent)
+    local clear = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     clear:SetSize(16, 16)
     clear:SetFrameLevel(search:GetFrameLevel() + 1)
     clear:SetPoint("RIGHT", search, "RIGHT", -3, 0)
@@ -696,10 +697,10 @@ local function BuildNavRail(parent)
     parent:HookScript("OnHide", function()
         if searchPalette then searchPalette:Hide() end
     end)
-    local listScroll = CreateFrame("ScrollFrame", nil, parent)
+    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, parent))
     listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -68)
     listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -NAV_SCROLL_GUTTER, 8)
-    local list = CreateFrame("Frame", nil, listScroll)
+    local list = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
     list:SetSize(NAV_W - NAV_SCROLL_GUTTER, 1)
     listScroll:SetScrollChild(list)
     parent._msuf2NavListScroll = listScroll
@@ -736,7 +737,7 @@ local function BuildNavRail(parent)
             btn._msuf2Label:SetPoint("LEFT", 24, 0)
             btn._msuf2Label:SetPoint("RIGHT", -8, 0)
             btn._msuf2Label:SetJustifyH("LEFT")
-            local arrow = btn:CreateTexture(nil, "OVERLAY")
+            local arrow = PixelLayoutRegion(btn:CreateTexture(nil, "OVERLAY"))
             arrow:SetSize(10, 10)
             arrow:SetPoint("LEFT", btn, "LEFT", 5, 0)
             arrow:SetTexture(T.media.collapseArrow)

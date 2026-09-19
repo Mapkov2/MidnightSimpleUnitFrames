@@ -6,8 +6,8 @@
 -- owner gets the same root-only rounding through the real Kernel helper. This
 -- smoke proves that, that a client without SetRoundLayoutToNearestPixel adopts
 -- it unchanged, that a protected owner in combat is left alone, that only the
--- primary GroupSlots root adopts the header container, and that Retail (and a
--- harness without MSUF.Client) keeps adopting it without rounding.
+-- primary GroupSlots root adopts the header container, and that Midnight gets
+-- the same rounding while a harness without MSUF.Client remains unchanged.
 -- Run with Lua 5.1 and the repo root as arg 1.
 local root = assert(arg[1], "repo root required"):gsub("\\", "/")
 
@@ -79,7 +79,12 @@ local function LoadContainers(client)
     -- The factory attaches sensor helpers to the shared Appearance DS table.
     rawset(dependencies.Appearance, "DS", {})
 
-    local MSUF = { Client = client }
+    local MSUF = { Client = client, Util = {} }
+    local helper = assert(loadstring("local MSUF, Util, MSUF_SetRoundLayoutToNearestPixel = ...\n"
+        .. "local mainlinePixelLayout = MSUF.Client and MSUF.Client.IsRetail == true\n"
+        .. Slice.Function(util, "function Util.EnablePixelPerfectLayout", UTIL)
+        .. "\nreturn Util.EnablePixelPerfectLayout", "pixel-layout opt-in"))
+    helper(MSUF, MSUF.Util, _G.MSUF_SetRoundLayoutToNearestPixel)
     local A3 = { SpellIndicators = AutoTable() }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Containers.lua"))(
         "MidnightSimpleUnitFrames", MSUF)
@@ -152,9 +157,8 @@ do
     inCombat = false
 end
 
--- Retail (12.1.5 API present) and a harness without MSUF.Client keep the old
--- behaviour: the header owner is adopted without rounding, and containers MSUF
--- creates itself are still rounded by the creation path.
+-- Midnight gets the same adoption rounding as Forever. A harness without
+-- MSUF.Client retains its layout; fresh containers keep creation-time rounding.
 for _, case in ipairs({
     { label = "Retail", client = { Family = "Mainline", IsRetail = true, IsForever = false } },
     { label = "no-Client", client = nil },
@@ -166,7 +170,7 @@ for _, case in ipairs({
         case.label .. " GroupSlots did not adopt the header container")
     Check(headerContainer._msufA3HeaderContainerConsumed == true,
         case.label .. " header container was not marked consumed")
-    Check(#headerContainer.rounding == 0, case.label .. " header container was rounded on adoption")
+    Check(#headerContainer.rounding == (case.client and 1 or 0), case.label .. " wrong header rounding on adoption")
     local replacement = Adopt(Containers, unitButton)
     Check(replacement == created[1] and #replacement.rounding == 1,
         case.label .. " replacement container lost its creation-time rounding")

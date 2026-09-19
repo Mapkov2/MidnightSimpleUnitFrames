@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -661,7 +662,7 @@ local function EnsureSkironAnchorProxy(source, isActiveProxy)
     ObserveSkironSource(source)
 
     if not proxy then
-        proxy = CreateFrame("Frame", "MSUF_SkironCooldownAnchor", UIParent)
+        proxy = PixelLayoutRegion(CreateFrame("Frame", "MSUF_SkironCooldownAnchor", UIParent), true)
         proxy._msufStableAnchorProxy = true
         proxy._msufExternalAnchorCacheKey = "SkironCooldownManager"
         if proxy.EnableMouse then proxy:EnableMouse(false) end

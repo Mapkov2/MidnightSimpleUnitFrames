@@ -66,7 +66,7 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     assert(menu.SupportsUnitPage("opt_castbar", "general.enableFocusKickIcon") == focus, flavor .. " focus kick toggle gate")
     assert(menu.SupportsUnitPage("opt_castbar", "general.focusKickIconWidth") == focus, flavor .. " focus kick setting gate")
     assert(menu.SupportsUnitPage("opt_castbar", "general.castbarShowPushback") == true, flavor .. " general castbar setting gate")
-    local source = read(options .. "Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua")
+    local source = read(options .. "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
     source = source:sub(1, assert(source:find("local POWER_UNITS", 1, true)) - 1)
     local pages = assert(loadstring(source .. "\nreturn UNIT_PAGES"))("Options", ns)
     assert((pages.uf_boss ~= nil) == boss, flavor .. " boss page registered")

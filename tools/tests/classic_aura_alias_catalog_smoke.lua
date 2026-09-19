@@ -52,17 +52,18 @@ local CASES = {
 }
 
 local ownership = readFile("tools/classic-owned-addon-paths.txt")
+local Manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 
 for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
     local case = CASES[flavor]
-    local manifest = readFile("MidnightSimpleUnitFrames/Game/" .. flavor .. "/UnitFrames.xml")
+    local manifest = table.concat(Manifest.Paths(root, flavor), "\n")
     local previousAt = assert(manifest:find("MSUF_Auras3_DataShared.lua", 1, true),
         flavor .. " manifest must load the shared Classic data helpers")
-    local resolverAt = assert(manifest:find([[<Script file="..\..\Auras3\MSUF_Auras3_AuraAliases.lua"/>]], 1, true),
+    local resolverAt = assert(manifest:find("Auras3/MSUF_Auras3_AuraAliases.lua", 1, true),
         flavor .. " manifest must load the shared alias resolver")
     for _, locale in ipairs(LOCALES) do
         local rel = "MidnightSimpleUnitFrames/Game/" .. flavor .. "/Auras/AliasData/MSUF_Auras3_AliasData_" .. locale .. ".lua"
-        local line = [[<Script file="Auras\AliasData\MSUF_Auras3_AliasData_]] .. locale .. [[.lua"/>]]
+        local line = "Game/" .. flavor .. "/Auras/AliasData/MSUF_Auras3_AliasData_" .. locale .. ".lua"
         local at = assert(manifest:find(line, 1, true), flavor .. " manifest must load " .. locale .. " alias data")
         assert(at > previousAt and at < resolverAt,
             flavor .. " alias data " .. locale .. " must load after DataShared and before the resolver")

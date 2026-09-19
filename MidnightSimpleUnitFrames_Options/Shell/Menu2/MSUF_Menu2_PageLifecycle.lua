@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Owns page construction, cache disposal and deferred visibility/preview work.
 --- Window owns geometry; live metrics are read only when a page is built.
 local _, MSUF = ...
@@ -259,7 +260,7 @@ local function BuildPageEntry(key, hidden)
     end
     if cached then return cached end
     if not registryCleared then ClearSearchRegistryPage(key) end
-    local wrapper = CreateFrame("Frame", nil, M.scrollChild)
+    local wrapper = PixelLayoutRegion(CreateFrame("Frame", nil, M.scrollChild))
     wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
     wrapper:SetSize(CONTENT_W - 12, CONTENT_H)
     -- Building is always passive. SelectPage commits the entry, activates its

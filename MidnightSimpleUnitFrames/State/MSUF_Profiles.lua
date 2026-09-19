@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- State/MSUF_Profiles.lua
 --- Profile storage, import/export, and active-profile state.
 ---
@@ -862,7 +863,7 @@ local function MSUF_ProfileIO_TextureProbeRaw(path)
     if not MSUF_ProfileIO_TextureProbe then
         MSUF_ProfileIO_TextureProbeHost = _G.CreateFrame("Frame")
         if MSUF_ProfileIO_TextureProbeHost.Hide then MSUF_ProfileIO_TextureProbeHost:Hide() end
-        MSUF_ProfileIO_TextureProbe = MSUF_ProfileIO_TextureProbeHost:CreateTexture(nil, "ARTWORK")
+        MSUF_ProfileIO_TextureProbe = PixelLayoutRegion(MSUF_ProfileIO_TextureProbeHost:CreateTexture(nil, "ARTWORK"), true)
     end
     local probe = MSUF_ProfileIO_TextureProbe
     if not (probe and type(probe.SetTexture) == "function") then return nil end

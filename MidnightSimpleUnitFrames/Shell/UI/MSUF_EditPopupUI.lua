@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/UI/MSUF_EditPopupUI.lua - shared Edit Mode popup UI helpers.
 --- Defines popup styling and the quick popup controls used by Edit Mode.
 local function InstallEditPopupUI(addonName, MSUF)
@@ -61,7 +62,7 @@ local function Space(role, fallback)
 end
 
 local function FS(parent, role, color)
-    local fs = parent:CreateFontString(nil, "OVERLAY")
+    local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY"))
     local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
     if ui and ui.ApplyFontRole then
         ui.ApplyFontRole(fs, role or "body", FONT, "")
@@ -148,12 +149,12 @@ function Menu2Style.Button(parent, text, width, height, onClick, opts)
             active = opts.active,
         }))
     end
-    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    local b = PixelLayoutRegion(CreateFrame("Button", nil, parent, "BackdropTemplate"))
     b:SetSize(width or 68, height or 24)
-    b:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
+    PixelLayoutRegion(b, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1 })
     b:SetBackdropColor(C.btnBg[1], C.btnBg[2], C.btnBg[3], 0.88)
     b:SetBackdropBorderColor(C.btnEdge[1], C.btnEdge[2], C.btnEdge[3], 0.82)
-    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    local hl = PixelLayoutRegion(b:CreateTexture(nil, "HIGHLIGHT"))
     hl:SetAllPoints()
     hl:SetColorTexture(C.btnHover[1], C.btnHover[2], C.btnHover[3], 0.18)
     local fs = FS(b, "caption", C.white)
@@ -324,7 +325,7 @@ function Quick.AttachHoverWash(btn, opts)
     local key = opts.key or "_msufEM2QuickHoverWash"
     if btn[key] then return btn end
     local c = Quick.RefreshPalette()
-    local hl = btn:CreateTexture(nil, "HIGHLIGHT", nil, 2)
+    local hl = PixelLayoutRegion(btn:CreateTexture(nil, "HIGHLIGHT", nil, 2))
     hl:SetAllPoints()
     hl:SetColorTexture(c.btnHover[1], c.btnHover[2], c.btnHover[3], opts.alpha or 0.10)
     if hl.SetBlendMode then hl:SetBlendMode("ADD") end
@@ -349,9 +350,9 @@ function Quick.Button(parent, text, w, h, onClick, opts)
         b = Menu2Style.Button(parent, Tr(text), w or 68, h or 32, onClick, opts)
         if Menu2Style.SetButtonText then Menu2Style.SetButtonText(b, text) end
     else
-        b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+        b = PixelLayoutRegion(CreateFrame("Button", nil, parent, "BackdropTemplate"))
         b:SetSize(w or 68, h or 32)
-        b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+        PixelLayoutRegion(b, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1 })
         b:SetBackdropColor(c.btnBg[1], c.btnBg[2], c.btnBg[3], c.btnBg[4])
         b:SetBackdropBorderColor(c.btnEdge[1], c.btnEdge[2], c.btnEdge[3], c.btnEdge[4])
         b._label = FS(b, "caption", c.white)
@@ -368,7 +369,7 @@ function Quick.AttachIcon(btn, texturePath, size)
     if not (btn and btn.CreateTexture and texturePath) then return nil end
     local label = btn._msuf2Label or btn._label
     if label and label.Hide then label:Hide() end
-    local icon = btn:CreateTexture(nil, "ARTWORK", nil, 5)
+    local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 5))
     icon:SetTexture(texturePath)
     icon:SetSize(size or 17, size or 17)
     icon:SetPoint("CENTER", btn, "CENTER", 0, 0)
@@ -416,7 +417,7 @@ end
 
 function Quick.Box(parent, width, opts)
     local c = Quick.RefreshPalette()
-    local b = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+    local b = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "BackdropTemplate"))
     b:SetSize(width or 52, (opts and opts.boxHeight) or 24)
     b:SetAutoFocus(false)
     b:SetNumeric(false)
@@ -431,7 +432,7 @@ function Quick.Box(parent, width, opts)
     SetReadableSize(b, (opts and opts.valueFontSize) or 15)
     b:SetTextColor(c.white[1], c.white[2], c.white[3], c.white[4] or 1)
     if b.SetBackdrop then
-        b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+        PixelLayoutRegion(b, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1 })
         b:SetBackdropColor(c.inputBg[1], c.inputBg[2], c.inputBg[3], c.inputBg[4] or 0.90)
         b:SetBackdropBorderColor(c.inputEdge[1], c.inputEdge[2], c.inputEdge[3], c.inputEdge[4] or 0.70)
     end
@@ -467,7 +468,7 @@ end
 
 function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2, opts)
     local c = Quick.RefreshPalette()
-    local row = CreateFrame("Frame", nil, parent)
+    local row = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     row:SetSize((opts and opts.rowWidth) or 488, 32)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", (opts and opts.x) or 20, y)
 
@@ -499,7 +500,7 @@ end
 
 function Quick.SingleValue(owner, parent, y, label, key, cb, opts)
     local c = Quick.RefreshPalette()
-    local row = CreateFrame("Frame", nil, parent)
+    local row = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     row:SetSize((opts and opts.rowWidth) or 488, 32)
     row:SetPoint("TOPLEFT", parent, "TOPLEFT", (opts and opts.x) or 20, y)
 
@@ -522,10 +523,10 @@ end
 function Quick.ValueCard(owner, parent, x, y, width, title, rows, opts)
     opts = opts or {}
     local c = Quick.RefreshPalette()
-    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    local card = PixelLayoutRegion(CreateFrame("Frame", nil, parent, "BackdropTemplate"))
     card:SetSize(width, opts.height or 132)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    card:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    PixelLayoutRegion(card, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     card:SetBackdropColor(c.cardBg[1], c.cardBg[2], c.cardBg[3], c.cardBg[4] or 0.64)
     card:SetBackdropBorderColor(c.cardEdge[1], c.cardEdge[2], c.cardEdge[3], c.cardEdge[4] or 0.72)
     if Menu2Style.Card then Menu2Style.Card(card) end
@@ -537,7 +538,7 @@ function Quick.ValueCard(owner, parent, x, y, width, title, rows, opts)
 
     for i = 1, #(rows or {}) do
         local spec = rows[i]
-        local row = CreateFrame("Frame", nil, card)
+        local row = PixelLayoutRegion(CreateFrame("Frame", nil, card))
         row:SetSize(width - 24, opts.controlHeight or 32)
         row:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -(38 + (i - 1) * 42))
 
@@ -565,14 +566,14 @@ end
 function Quick.AddLiveStatus(pf, text)
     if not (pf and pf._titleFS) then return nil end
     local c = Quick.RefreshPalette()
-    local status = CreateFrame("Frame", nil, pf, "BackdropTemplate")
+    local status = PixelLayoutRegion(CreateFrame("Frame", nil, pf, "BackdropTemplate"))
     status:SetSize(150, 22)
     status:SetPoint("LEFT", pf._titleFS, "RIGHT", 14, 0)
-    status:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    PixelLayoutRegion(status, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     status:SetBackdropColor(c.cardBg[1], c.cardBg[2], c.cardBg[3], 0.72)
     status:SetBackdropBorderColor(c.cardEdge[1], c.cardEdge[2], c.cardEdge[3], 0.58)
     if Menu2Style.Card then Menu2Style.Card(status) end
-    local dot = status:CreateTexture(nil, "ARTWORK")
+    local dot = PixelLayoutRegion(status:CreateTexture(nil, "ARTWORK"))
     dot:SetTexture(MEDIA .. "msuf_switch_knob.tga")
     dot:SetVertexColor(0.30, 1.00, 0.62, 1.00)
     dot:SetSize(8, 8)
@@ -630,12 +631,12 @@ end
 function Quick.CreateShell(name, opts)
     opts = opts or {}
     local c = Quick.RefreshPalette()
-    local pf = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
+    local pf = PixelLayoutRegion(CreateFrame("Frame", name, UIParent, "BackdropTemplate"))
     pf:SetSize(opts.width or 440, opts.height or 244)
     pf:SetPoint("CENTER", UIParent, "CENTER", opts.x or 250, opts.y or 0)
     pf:SetFrameStrata(opts.strata or "FULLSCREEN_DIALOG")
     pf:SetFrameLevel(opts.frameLevel or 900)
-    pf:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    PixelLayoutRegion(pf, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     pf:SetBackdropColor(c.panelBg[1], c.panelBg[2], c.panelBg[3], 0.96)
     pf:SetBackdropBorderColor(c.panelEdge[1], c.panelEdge[2], c.panelEdge[3], 0.95)
     if Menu2Style.Shell then Menu2Style.Shell(pf) end
@@ -717,12 +718,12 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
     opts = opts or {}
     local btn = Quick.ButtonAt(parent, text, x, y, w, h or 32, nil, opts.buttonOpts)
     local c = opts.palette or Quick.RefreshPalette()
-    local menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    local menu = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent, "BackdropTemplate"))
     menu:SetFrameStrata(opts.strata or "TOOLTIP")
     menu:SetFrameLevel(opts.frameLevel or 960)
     menu:SetClampedToScreen(true)
     menu:EnableMouse(true)
-    menu:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+    PixelLayoutRegion(menu, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1 })
     menu:SetBackdropColor(c.panelBg[1], c.panelBg[2], c.panelBg[3], 0.98)
     menu:SetBackdropBorderColor(c.panelEdge[1], c.panelEdge[2], c.panelEdge[3], 0.95)
     if Menu2Style.Shell then Menu2Style.Shell(menu) end
@@ -750,10 +751,10 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
         menu._items = menu._items or {}
         local item = menu._items[index]
         if item then return item end
-        item = CreateFrame("Button", nil, menu)
+        item = PixelLayoutRegion(CreateFrame("Button", nil, menu))
         item:SetSize(w - 4, itemH)
         item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (index - 1) * itemH))
-        item._bg = item:CreateTexture(nil, "BACKGROUND")
+        item._bg = PixelLayoutRegion(item:CreateTexture(nil, "BACKGROUND"))
         item._bg:SetAllPoints()
         item._label = FS(item, "caption", c.white)
         item._label:SetPoint("LEFT", 8, 0)
@@ -844,7 +845,7 @@ function Quick.AddFooterControls(pf, opts)
     local btnOpts = opts.buttonOpts or { hoverWash = true, hoverKey = "_msufEM2FooterHoverWash" }
     local y = opts.y or -206
 
-    local divider = pf:CreateTexture(nil, "ARTWORK")
+    local divider = PixelLayoutRegion(pf:CreateTexture(nil, "ARTWORK"))
     divider:SetColorTexture(0.18, 0.34, 0.56, 0.34)
     divider:SetHeight(1)
     divider:SetWidth(math.max(1, (pf:GetWidth() or 440) - 40))

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MidnightSimpleUnitFrames_MinimapButton.lua
 --- Minimal, robust minimap icon implementation (LibDataBroker + LibDBIcon, with safe fallback).
 
@@ -193,16 +194,16 @@ local function EnsureInitialized()
 
     --- Fallback: simple minimap-attached button
     if not fallbackBtn and _G.Minimap and type(_G.CreateFrame) == "function" then
-        local b = CreateFrame("Button", "MSUF_MinimapButton", _G.Minimap)
+        local b = PixelLayoutRegion(CreateFrame("Button", "MSUF_MinimapButton", _G.Minimap))
         b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         b:SetSize(32, 32)
         b:SetFrameStrata("MEDIUM")
         b:SetFrameLevel(8)
 
-        b:SetNormalTexture("Interface/Minimap/UI-Minimap-Background")
-        b:SetHighlightTexture("Interface/Minimap/UI-Minimap-ZoomButton-Highlight")
+        PixelLayoutRegion(b, "SetNormalTexture", "Interface/Minimap/UI-Minimap-Background")
+        PixelLayoutRegion(b, "SetHighlightTexture", "Interface/Minimap/UI-Minimap-ZoomButton-Highlight")
 
-        local icon = b:CreateTexture(nil, "ARTWORK")
+        local icon = PixelLayoutRegion(b:CreateTexture(nil, "ARTWORK"))
         icon:SetPoint("CENTER")
         icon:SetSize(18, 18)
         icon:SetTexture(ICON_PATH)

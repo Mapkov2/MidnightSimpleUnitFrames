@@ -32,17 +32,18 @@ local CLEARED_GLOBALS = {
 -- Same order as tools/tests/classic_classpower_runtime_smoke.lua and the TOCs.
 local LOAD_ORDER = {
     "Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua",
-    "Game/Classic/ClassPower/MSUF_CP_Constants.lua",
+    "ClassPower/MSUF_CP_Constants.lua",
     "Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua",
     "Game/" .. flavor .. "/ClassPower.lua",
-    "Game/Classic/ClassPower/MSUF_CP_Modes.lua",
-    "Game/Classic/ClassPower/MSUF_CP_Core.lua",
+    "Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua",
+    "ClassPower/MSUF_CP_Modes.lua",
+    "ClassPower/MSUF_CP_Core.lua",
     "ClassPower/MSUF_CP_AltMana.lua",
     "ClassPower/MSUF_CP_PlayerHP.lua",
     "ClassPower/MSUF_CP_Controller_Config.lua",
     "ClassPower/MSUF_CP_Controller_Colors.lua",
     "ClassPower/MSUF_CP_Controller_Surface.lua",
-    "Game/Classic/ClassPower/MSUF_CP_Controller.lua",
+    "ClassPower/MSUF_CP_Controller.lua",
 }
 
 local function Upvalue(fn, wanted)
@@ -198,7 +199,9 @@ local function Start(spec)
     t.module = module
     t.FullRefresh = Upvalue(module.Enable, "FullRefresh")
     t.CP = Upvalue(t.FullRefresh, "CP")
-    t.eventFrame = Upvalue(Upvalue(t.FullRefresh, "CP_RefreshEventBindings"), "eventFrame")
+    -- The texture-hook wrapper replaces FullRefresh; the bindings live on the original.
+    local refresh = t.CP._origFullRefresh or t.FullRefresh
+    t.eventFrame = Upvalue(Upvalue(refresh, "CP_RefreshEventBindings"), "eventFrame")
     t.onEvent = assert(t.eventFrame.scripts.OnEvent, "controller OnEvent script missing")
     module.Enable()
     return t

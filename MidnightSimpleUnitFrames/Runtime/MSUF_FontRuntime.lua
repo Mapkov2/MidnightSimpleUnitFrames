@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Runtime/MSUF_FontRuntime.lua
 --- Runtime font refresh and deferred castbar/font apply wrappers.
 --- Shared font application runtime helpers with stable exported globals.
@@ -184,7 +185,7 @@ local function _ConfiguredFontReady(path)
     if type(path) ~= "string" or path == "" then return false end
     if not _measureFS then
         if not _G.UIParent then return true end
-        _measureFS = _G.UIParent:CreateFontString(nil, "BACKGROUND")
+        _measureFS = PixelLayoutRegion(_G.UIParent:CreateFontString(nil, "BACKGROUND"), true)
         _measureFS:Hide()
     end
     if not _MSUF_SetFontCheckedFn(_measureFS, path, 14, "") then return false end

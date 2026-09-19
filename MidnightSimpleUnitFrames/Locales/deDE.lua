@@ -6304,6 +6304,16 @@ L["Shared %s Preview"] = "Gemeinsame Vorschau: %s"
 L["Shared Player Defensives Preview"] = "Gemeinsame Vorschau: Defensive Stärkungen"
 L["Shared Dots on Target Preview"] = "Gemeinsame Vorschau: DoTs auf dem Ziel"
 
+-- Client-specific class resource labels.
+L["Druid - Eclipse"] = "Druide - Finsternis"
+L["Monk - Chi"] = "M?nch - Chi"
+L["Priest - Shadow Orbs"] = "Priester - Schattenkugeln"
+L["Warlock - Burning Embers"] = "Hexenmeister - Instabile Funken"
+L["Warlock - Demonic Fury"] = "Hexenmeister - D?monischer Furor"
+L["Shadow Orbs"] = "Schattenkugeln"
+L["Burning Embers"] = "Instabile Funken"
+L["Demonic Fury"] = "D?monischer Furor"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

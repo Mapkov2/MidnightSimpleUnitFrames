@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -156,14 +157,14 @@ end
         return false
     end
     local function PreviewTexture(parent, layer, r, g, b, a, texture, subLevel)
-        local tex = parent:CreateTexture(nil, layer, nil, subLevel)
+        local tex = PixelLayoutRegion(parent:CreateTexture(nil, layer, nil, subLevel))
         tex:SetTexture(texture or WHITE8)
         if r then tex:SetVertexColor(r, g, b, a or 1) end
         return tex
     end
     local function PreviewButtonGroup(parent, point, relPoint, x, y, specs, buttonW, gap, onClick, semanticPath)
         local buttons = {}
-        local holder = CreateFrame("Frame", nil, parent)
+        local holder = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
         holder:SetSize((#specs * buttonW) + ((#specs - 1) * gap), 24)
         local anchorX = x + (point:find("LEFT", 1, true) and 8 or -4)
         holder:SetPoint(point, parent, relPoint, anchorX, y - 5)
@@ -316,7 +317,7 @@ local function PreviewSetRowOffset(self, x)
         if thickness < 0 then thickness = 0 end
         if thickness > 12 then thickness = 12 end
         if thickness <= 0 then
-            holder:SetBackdrop(nil)
+            PixelLayoutRegion(holder, "SetBackdrop", nil)
             holder:Hide()
             frame._outlinePreviewT = 0
             frame._outlinePreviewEdge = 0
@@ -335,7 +336,7 @@ local function PreviewSetRowOffset(self, x)
             a = 1
         end
         if frame._outlinePreviewT ~= thickness or frame._outlinePreviewEdge ~= edgeSize then
-            holder:SetBackdrop({
+            PixelLayoutRegion(holder, "SetBackdrop", {
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
                 edgeSize = edgeSize,
@@ -365,7 +366,7 @@ local function PreviewSetRowOffset(self, x)
         local style = prefix and tostring((gdb and gdb[prefix .. "IconBorderStyle"]) or "NONE"):upper() or "NONE"
         thickness = max(0, min(8, floor((thickness or 0) + 0.5)))
         if thickness <= 0 or style == "NONE" or not iconFrame:IsShown() then
-            holder:SetBackdrop(nil)
+            PixelLayoutRegion(holder, "SetBackdrop", nil)
             holder:Hide()
             frame._iconOutlinePreviewKey = nil
             frame._iconOutlinePreviewColorKey = nil
@@ -374,7 +375,7 @@ local function PreviewSetRowOffset(self, x)
         local edgeSize = max(1, floor((thickness * (scale or 1)) + 0.5))
         local key = tostring(edgeSize)
         if frame._iconOutlinePreviewKey ~= key then
-            holder:SetBackdrop({
+            PixelLayoutRegion(holder, "SetBackdrop", {
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
                 edgeSize = edgeSize,
@@ -764,7 +765,7 @@ local function PreviewRefresh(self)
         end
 end
 local function BuildPreviewCastRow(box, preview, barW, mainX)
-    local castRow = CreateFrame("Frame", nil, box)
+    local castRow = PixelLayoutRegion(CreateFrame("Frame", nil, box))
     castRow:SetSize(barW, 46)
     castRow:SetPoint("TOPLEFT", box, "TOPLEFT", mainX, -8)
     preview.castRow = castRow
@@ -780,8 +781,8 @@ local function BuildPreviewCastRow(box, preview, barW, mainX)
     iconTexture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     preview.iconTexture = iconTexture
     preview.icon = icon
-    if icon.SetBackdrop then icon:SetBackdrop(nil) end
-    local iconOutlineFrame = CreateFrame("Frame", nil, icon, "BackdropTemplate")
+    if icon.SetBackdrop then PixelLayoutRegion(icon, "SetBackdrop", nil) end
+    local iconOutlineFrame = PixelLayoutRegion(CreateFrame("Frame", nil, icon, "BackdropTemplate"))
     iconOutlineFrame:SetAllPoints(icon)
     if iconOutlineFrame.SetFrameLevel and icon.GetFrameLevel then iconOutlineFrame:SetFrameLevel((icon:GetFrameLevel() or 1) + 6) end
     iconOutlineFrame:Hide()
@@ -789,13 +790,13 @@ local function BuildPreviewCastRow(box, preview, barW, mainX)
     local castbar = T.Panel(castRow, nil, { 0.018, 0.020, 0.030, 0.98 }, T.colors.borderSoft)
     castbar:SetSize(max(180, barW), 20)
     castbar:SetPoint("CENTER", castRow, "CENTER", 0, 0)
-    if castbar.SetBackdrop then castbar:SetBackdrop(nil) end
+    if castbar.SetBackdrop then PixelLayoutRegion(castbar, "SetBackdrop", nil) end
     preview.bar = castbar
-    local textLayer = CreateFrame("Frame", nil, castbar)
+    local textLayer = PixelLayoutRegion(CreateFrame("Frame", nil, castbar))
     textLayer:SetAllPoints(castbar)
     if textLayer.SetFrameLevel and castbar.GetFrameLevel then textLayer:SetFrameLevel((castbar:GetFrameLevel() or 1) + 8) end
     preview.textLayer = textLayer
-    local statusAnchor = CreateFrame("Frame", nil, textLayer)
+    local statusAnchor = PixelLayoutRegion(CreateFrame("Frame", nil, textLayer))
     statusAnchor:EnableMouse(false)
     preview.statusBar = statusAnchor
     local spell = T.Font(textLayer, "GameFontHighlightSmall", "", T.colors.text)
@@ -868,7 +869,7 @@ local function BuildPreviewCastRow(box, preview, barW, mainX)
         tick.MSUF_baseAlpha = 0.85
         preview.stageTicks[i] = tick
     end
-    local outlineFrame = CreateFrame("Frame", nil, castbar, "BackdropTemplate")
+    local outlineFrame = PixelLayoutRegion(CreateFrame("Frame", nil, castbar, "BackdropTemplate"))
     outlineFrame:SetAllPoints(castbar)
     if outlineFrame.SetFrameLevel and castbar.GetFrameLevel then outlineFrame:SetFrameLevel((castbar:GetFrameLevel() or 1) + 6) end
     outlineFrame:Hide()

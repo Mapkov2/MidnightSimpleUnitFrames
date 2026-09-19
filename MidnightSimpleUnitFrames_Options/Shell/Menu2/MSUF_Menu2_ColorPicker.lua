@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- InstallColorPicker: isolated ownership, bound once during addon initialization.
 local _, MSUF = ...
 local M = MSUF.MSUF2
@@ -76,7 +77,7 @@ local function PickerPlusApply(r, g, b)
     if colorPickerPlus and colorPickerPlus.Refresh then colorPickerPlus:Refresh() end
 end
 local function PickerPlusInput(parent, width, numeric)
-    local edit = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     edit:SetSize(width, 22)
     edit:SetAutoFocus(false)
     edit:SetJustifyH("CENTER")
@@ -94,14 +95,14 @@ local function PickerPlusInput(parent, width, numeric)
     return edit
 end
 local function PickerPlusSwatch(parent, size, onClick)
-    local btn = CreateFrame("Button", nil, parent)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     btn:SetSize(size, size)
     btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    local edge = btn:CreateTexture(nil, "BACKGROUND")
+    local edge = PixelLayoutRegion(btn:CreateTexture(nil, "BACKGROUND"))
     edge:SetPoint("TOPLEFT", -1, 1)
     edge:SetPoint("BOTTOMRIGHT", 1, -1)
     edge:SetColorTexture(0.32, 0.42, 0.58, 0.9)
-    local fill = btn:CreateTexture(nil, "ARTWORK")
+    local fill = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
     fill:SetPoint("TOPLEFT", 1, -1)
     fill:SetPoint("BOTTOMRIGHT", -1, 1)
     fill:SetColorTexture(1, 1, 1, 1)
@@ -113,7 +114,7 @@ local function EnsureColorPickerPlus()
     if colorPickerPlus or not _G.ColorPickerFrame then return colorPickerPlus end
     local picker = _G.ColorPickerFrame
     local panel = (T and T.Panel and T.Panel(picker, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft))
-        or CreateFrame("Frame", nil, picker, "BackdropTemplate")
+        or PixelLayoutRegion(CreateFrame("Frame", nil, picker, "BackdropTemplate"))
     colorPickerPlus = panel
     panel:SetSize(344, 482)
     panel:SetPoint("TOPLEFT", picker, "TOPRIGHT", 8, 0)
@@ -130,10 +131,10 @@ local function EnsureColorPickerPlus()
     target:SetJustifyH("LEFT")
     panel._msuf2Target = target
 
-    local original = panel:CreateTexture(nil, "ARTWORK")
+    local original = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK"))
     original:SetPoint("TOPLEFT", 16, -62)
     original:SetSize(151, 34)
-    local current = panel:CreateTexture(nil, "ARTWORK")
+    local current = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK"))
     current:SetPoint("TOPRIGHT", -16, -62)
     current:SetSize(151, 34)
     panel._msuf2Original, panel._msuf2Current = original, current
@@ -387,7 +388,7 @@ function W.Color(section, label)
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(230)
-    local btn = CreateFrame("Button", nil, section)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, section))
     btn._msuf2Title = title
     btn._msuf2ColorLabel = label
     btn._msuf2ControlKind = "color"

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Movers.lua - Edit Mode mover registration and dragging
 
 --- MSUF_EM2_Movers.lua
@@ -75,13 +76,13 @@ end
 local function EnsureGuidedPlacementCue(mover)
     local cue = mover and mover._msufGuidedPlacementCue
     if cue then return cue end
-    cue = CreateFrame("Frame", nil, mover)
+    cue = PixelLayoutRegion(CreateFrame("Frame", nil, mover))
     cue:SetAllPoints(mover)
     cue:EnableMouse(false)
     cue:SetFrameLevel((mover:GetFrameLevel() or 1) + 20)
 
     local function CreateArrow(point, relativePoint, x)
-        local arrow = cue:CreateTexture(nil, "OVERLAY", nil, 7)
+        local arrow = PixelLayoutRegion(cue:CreateTexture(nil, "OVERLAY", nil, 7))
         local usedAtlas = false
         -- Classic Era / TBC clients do not ship the NPE atlas; SetAtlas on an
         -- unknown name raises, so probe the atlas before using it.
@@ -100,7 +101,7 @@ local function EnsureGuidedPlacementCue(mover)
     cue._leftArrow = CreateArrow("RIGHT", "LEFT", -10)
     cue._rightArrow = CreateArrow("LEFT", "RIGHT", 10)
     if cue._rightArrow.SetRotation then cue._rightArrow:SetRotation(math.pi) end
-    cue._label = cue:CreateFontString(nil, "OVERLAY")
+    cue._label = PixelLayoutRegion(cue:CreateFontString(nil, "OVERLAY"))
     cue._label:SetFont(FONT, FontSize("caption"), "OUTLINE")
     cue._label:SetPoint("BOTTOM", mover, "TOP", 0, 18)
     cue._label:SetText(Tr("Drag this frame once"))
@@ -211,7 +212,7 @@ local function SyncSupplementalMoverRegions(mover, cfg)
     for index = 1, count do
         local region = regions[index]
         if not region then
-            region = CreateFrame("Button", nil, moverParent)
+            region = PixelLayoutRegion(CreateFrame("Button", nil, moverParent), true)
             region:SetFrameStrata(mover:GetFrameStrata())
             region:SetFrameLevel(mover:GetFrameLevel())
             region:RegisterForDrag("LeftButton")
@@ -295,7 +296,7 @@ end
 local function CreateMover(key, cfg)
     local th = T()
 
-    local mover = CreateFrame("Button", nil, moverParent)
+    local mover = PixelLayoutRegion(CreateFrame("Button", nil, moverParent), true)
     mover:SetSize(100, 30)
     mover:SetFrameStrata("FULLSCREEN")
     mover:SetFrameLevel(cfg.popupType == "castbar" and 340 or 300)
@@ -304,22 +305,22 @@ local function CreateMover(key, cfg)
     mover:EnableMouse(true); mover:SetClampedToScreen(true)
     mover._barKey = key
 
-    local bg = mover:CreateTexture(nil, "BACKGROUND")
+    local bg = PixelLayoutRegion(mover:CreateTexture(nil, "BACKGROUND"))
     bg:SetAllPoints(); bg:SetColorTexture(th.bgR, th.bgG, th.bgB, 0.55)
     mover._bg = bg
 
-    local brd = CreateFrame("Frame", nil, mover, "BackdropTemplate")
+    local brd = PixelLayoutRegion(CreateFrame("Frame", nil, mover, "BackdropTemplate"))
     brd:SetAllPoints(); brd:SetFrameLevel(max(0, mover:GetFrameLevel() - 1))
-    brd:SetBackdrop({ edgeFile = W8, edgeSize = 1 })
+    PixelLayoutRegion(brd, "SetBackdrop", { edgeFile = W8, edgeSize = 1 })
     brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.60)
     mover._brd = brd
 
-    local label = mover:CreateFontString(nil, "OVERLAY")
+    local label = PixelLayoutRegion(mover:CreateFontString(nil, "OVERLAY"))
     label:SetFont(FONT, FontSize("caption"), "OUTLINE"); label:SetPoint("CENTER")
     label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(MoverLabelText(key, cfg))
     mover._label = label
 
-    local coordFS = mover:CreateFontString(nil, "OVERLAY")
+    local coordFS = PixelLayoutRegion(mover:CreateFontString(nil, "OVERLAY"))
     coordFS:SetFont(FONT, FontSize("micro"), "OUTLINE"); coordFS:SetPoint("TOP", mover, "BOTTOM", 0, -2)
     coordFS:SetTextColor(th.titleR, th.titleG, th.titleB, 0.90); coordFS:Hide()
     mover._coordFS = coordFS
@@ -503,7 +504,7 @@ end
 
 function Movers.Show()
     if not moverParent then
-        moverParent = CreateFrame("Frame", "MSUF_EM2_MoverParent", UIParent)
+        moverParent = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_MoverParent", UIParent), true)
         moverParent:SetAllPoints(UIParent); moverParent:SetFrameStrata("FULLSCREEN")
     end
     moverParent:Show()
@@ -897,7 +898,7 @@ local function MSUF_MakeBlizzardOptionsMovable()
     frame.MSUF_Movable = true
     if frame.SetMovable then frame:SetMovable(true) end
     if frame.SetClampedToScreen then frame:SetClampedToScreen(true) end
-    local drag = CreateFrame("Frame", "MSUF_SettingsPanelDragHandle", frame)
+    local drag = PixelLayoutRegion(CreateFrame("Frame", "MSUF_SettingsPanelDragHandle", frame), true)
     drag:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -4)
     drag:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -60, -4)
     drag:SetHeight(22)

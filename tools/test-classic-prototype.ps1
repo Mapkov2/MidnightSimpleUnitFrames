@@ -350,7 +350,13 @@ if (-not [string]::IsNullOrWhiteSpace($Only)) {
     $skippedSteps.Add("Smoke inventory and $($smokePlanTotal - $smokePlan.Count) smoke invocations (-Only '$Only')")
 }
 
-Invoke-GateSmoke -Plan @($smokePlan | Where-Object { $_.Runner -ceq "python" })
+# Python smokes need no Lua. With lua present they run in the smoke phase
+# below, in one pool with the Lua smokes, so the slow git-driven ones (the
+# override-rebase and Retail source resolver smokes) overlap with it instead of
+# adding a wait of their own. Without lua that phase never runs, so they run here.
+if (-not $lua) {
+    Invoke-GateSmoke -Plan @($smokePlan | Where-Object { $_.Runner -ceq "python" })
+}
 & python (Join-Path $root ".github/quality/error_paths.py")
 if ($LASTEXITCODE -ne 0) { throw "Classic error visibility contract failed" }
 
@@ -505,7 +511,7 @@ foreach ($target in $targets) {
             }
         }
 
-        foreach ($entry in ($content | Where-Object { $_ -and $_ -notmatch '^\s*#' })) {
+        foreach ($entry in (Get-MsufTocEntries -Path $tocPath)) {
             $entryPath = [IO.Path]::GetFullPath((Join-Path $folder $entry.Trim()))
             if (-not (Test-Path -LiteralPath $entryPath -PathType Leaf)) {
                 throw "Missing TOC entry: $tocPath -> $entry"
@@ -584,7 +590,7 @@ foreach ($client in $clientMatrix) {
     }
 }
 
-$groupOwnershipRelative = "MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_Blizzard.lua"
+$groupOwnershipRelative = "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"
 $groupOwnershipSource = Get-Content -LiteralPath (Join-Path $root $groupOwnershipRelative) -Raw
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative `
     -Pattern 'HardHideFrame\(_G\.PartyFrame\)' -Requirement "hide the PartyFrame owner"
@@ -646,12 +652,16 @@ $classicAuraManifestContracts = @(
 foreach ($flavor in $classicSuffixes) {
     $classicManifestRelative = "MidnightSimpleUnitFrames/Game/$flavor/UnitFrames.xml"
     $classicManifestPath = Join-Path $gameRoot "$flavor/UnitFrames.xml"
-    $classicElements = Get-Content -LiteralPath $classicManifestPath -Raw
+    $classicAurasPath = Join-Path $gameRoot "$flavor/Auras.xml"
+    $classicElements = (Get-Content -LiteralPath $classicManifestPath -Raw) +
+        (Get-Content -LiteralPath $classicAurasPath -Raw)
     foreach ($contract in $classicAuraManifestContracts) {
         Assert-GateSourceContract -Source $classicElements -RelativePath $classicManifestRelative `
             -Pattern $contract.Pattern -Requirement $contract.Requirement -Forbidden:($contract.ContainsKey("Forbidden"))
     }
-    $classicLoadOrder = @((Get-MsufLoadGraph -Path $classicManifestPath -Duplicates Repeat).LuaPaths)
+    # Walk the TOC so prefix, locale catalogs and aura continuation are checked together.
+    $classicTocPath = Join-Path $root "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_$flavor.toc"
+    $classicLoadOrder = @((Get-MsufLoadGraph -Path $classicTocPath -Duplicates Repeat).LuaPaths)
     foreach ($forbiddenPath in $forbiddenRetailAuraPaths) {
         if ([Array]::IndexOf($classicLoadOrder, $forbiddenPath) -ge 0) {
             throw "$classicManifestRelative transitively loads Retail aura runtime: $forbiddenPath"
@@ -1524,10 +1534,11 @@ if ($luac) {
 
 if ($lua) {
     # tools/classic-gate-smokes.tsv is the list; the plan above expanded it
-    # over the client matrix. Invoke-GateSmoke records every smoke file it is
-    # about to start, so the inventory check below still sees each one.
+    # over the client matrix. Its python rows run here too (see the error-path
+    # check above). Invoke-GateSmoke records every smoke file it is about to
+    # start, so the inventory check below still sees each one.
     $luaSmokeStopwatch = [Diagnostics.Stopwatch]::StartNew()
-    Invoke-GateSmoke -Plan @($smokePlan | Where-Object { $_.Runner -cne "python" })
+    Invoke-GateSmoke -Plan @($smokePlan)
     $luaSmokeStopwatch.Stop()
     if (-not $ListSmokes) {
         $invariant = [Globalization.CultureInfo]::InvariantCulture

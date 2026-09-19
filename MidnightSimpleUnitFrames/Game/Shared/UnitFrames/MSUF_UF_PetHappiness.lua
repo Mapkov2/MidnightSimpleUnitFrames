@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Hunter Pet Happiness indicator for the clients that have it.
 ---
 --- Classic Era and TBC expose the global GetPetHappiness. WoW Forever brought
@@ -77,7 +78,7 @@ local function EnsureHolder(frame, layer)
     if not (frame and CreateFrame) then return nil end
     local holder = frame.petHappinessIndicatorHolder
     if not holder then
-        holder = CreateFrame("Frame", nil, frame)
+        holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
         holder:SetAllPoints(frame)
         if holder.EnableMouse then holder:EnableMouse(false) end
         if holder.SetClipsChildren then holder:SetClipsChildren(false) end
@@ -103,7 +104,7 @@ local function EnsureTexture(frame, cfg)
     if not holder then return nil end
     local tex = frame.petHappinessIndicatorIcon
     if not tex then
-        tex = holder:CreateTexture(nil, "OVERLAY")
+        tex = PixelLayoutRegion(holder:CreateTexture(nil, "OVERLAY"))
         tex:SetTexture(TEXTURE)
         HideIcon(tex)
         frame.petHappinessIndicatorIcon = tex

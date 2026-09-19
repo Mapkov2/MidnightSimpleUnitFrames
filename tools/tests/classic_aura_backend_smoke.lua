@@ -521,7 +521,7 @@ do
     local sharedMenuPath = "..\\..\\Auras3\\MSUF_Auras3_Menu_Model.lua"
     local compatPath = "..\\Classic\\Auras\\MSUF_Auras3_Menu_Compat.lua"
     for _, flavor in ipairs({ "Vanilla", "Mists", "TBC" }) do
-        local xml = Read(root .. "/MidnightSimpleUnitFrames/Game/" .. flavor .. "/UnitFrames.xml")
+        local xml = Read(root .. "/MidnightSimpleUnitFrames/Game/" .. flavor .. "/Auras.xml")
         local sharedAt = assert(xml:find(sharedMenuPath, 1, true),
             flavor .. " shared menu load missing")
         local compatAt = assert(xml:find(compatPath, 1, true),
@@ -530,7 +530,7 @@ do
             flavor .. " Classic menu compat loads before the shared model")
     end
     local retailXml = Read(root
-        .. "/MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Elements.xml")
+        .. "/MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Auras.xml")
     assert(not retailXml:find("MSUF_Auras3_Menu_Compat.lua", 1, true),
         "Retail load graph entered the Classic Aura menu compatibility")
 end

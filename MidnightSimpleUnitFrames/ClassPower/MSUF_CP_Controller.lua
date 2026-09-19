@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- ClassPower/MSUF_CP_Controller.lua - class resource controller
 --- Features:
 --- 1. ClassPower (segmented): Combo Points, Holy Power, Soul Shards (incl.
@@ -85,12 +86,21 @@ local TIP = CPConst.TIP or {}
 local PT = CPConst.PT or {}
 local POWER_TYPE_TOKENS = CPConst.POWER_TYPE_TOKENS or {}
 
---- WoW Forever runs this Mainline controller, and its target-owned combo points
---- arrive through the same MSUF.CPClient provider seam every Classic client
---- uses: Game/Forever/ClassPower.lua publishes it, built from the shared
---- Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua module. nil on every other
---- Mainline client, so their routing and events stay unchanged.
-local ForeverCP = MSUF.CPClient
+--- Target-owned combo points reach this controller through one provider seam.
+--- WoW Forever's Game/Forever/ClassPower.lua publishes it as MSUF.CPClient,
+--- built from the shared Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua module.
+--- The Classic flavors (MSUF.Client.IsClassic, read once) load this controller
+--- too: their flavor provider arrives adapted by
+--- Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua and also owns the combo
+--- point and display-modifier reads of every mode runner. nil on Midnight, so
+--- its routing and events stay unchanged.
+local ClientCP = MSUF.CPClient
+local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
+if IS_CLASSIC then
+    ClientCP = assert(MSUF.CPClassicRouting, "Classic ClassPower routing must load first")
+    UnitPower = ClientCP.UnitPower or UnitPower
+    UnitPowerDisplayMod = ClientCP.UnitPowerDisplayMod or UnitPowerDisplayMod
+end
 
 --- Cached split registries (load-time only; avoids repeated global table lookups
 --- and keeps the post-split core wiring easier to follow).
@@ -150,8 +160,8 @@ local CPConfig = CP_CallBuilder(CPCoreBuilders.CONTROLLER_CONFIG, {
     GetSpec = GetSpec,
     NotSecret = NotSecret,
     NeedsAltManaBar = function() return NeedsAltManaBar() end,
-    GetClassPowerType = ForeverCP and ForeverCP.GetClassPowerType or nil,
-    Client = ForeverCP and ForeverCP.Client or nil,
+    GetClassPowerType = ClientCP and ClientCP.GetClassPowerType or nil,
+    Client = ClientCP and ClientCP.Client or nil,
 })
 local _cpDB = CPConfig._cpDB
 local CP_GetModeEventProfile = CPConfig.GetModeEventProfile
@@ -170,7 +180,12 @@ local CPColors = CP_CallBuilder(CPCoreBuilders.CONTROLLER_COLORS, {
 local _chargedMap = {}
 local _chargedAny = false
 
+local supportsCharged = not (MSUF.Client and MSUF.Client.SupportsClassResource)
+    or MSUF.Client.SupportsClassResource("CHARGED")
+local supportsRunes = not (MSUF.Client and MSUF.Client.SupportsClassResource)
+    or MSUF.Client.SupportsClassResource("RUNES")
 local function RefreshChargedPoints()
+    if not supportsCharged then return end
     for index in pairs(_chargedMap) do
         _chargedMap[index] = nil
     end
@@ -538,6 +553,26 @@ CPAuras.AddSpell(CPK.SPELL.DARK_HEART)
 for spellID in pairs(CPConst.ECLIPSE_AURAS or {}) do
     CPAuras.AddSpell(spellID)
 end
+--- Classic: Mists Arcane Charges is the only aura resource a Classic provider
+--- routes, so it is the whole watched set there, and its incremental and
+--- fallback aura updates are answered before the Retail resources are asked.
+if IS_CLASSIC then
+    CPAuras.watched = {}
+    CPAuras.AddSpell(CPK.SPELL.MISTS_ARCANE_CHARGE)
+    local RetailActiveSpellKind, RetailRefreshActive = CPAuras.ActiveSpellKind, CPAuras.RefreshActive
+    function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
+        if powerType == "MISTS_ARCANE_CHARGES" then
+            return CPAuras.NormalizeID(spellID) == CPK.SPELL.MISTS_ARCANE_CHARGE and "stacks" or nil
+        end
+        return RetailActiveSpellKind(powerType, renderMode, spellID)
+    end
+    function CPAuras.RefreshActive(powerType, renderMode)
+        if powerType == "MISTS_ARCANE_CHARGES" then
+            return CPAuras.RefreshSpell(CPK.SPELL.MISTS_ARCANE_CHARGE, "stacks") == true
+        end
+        return RetailRefreshActive(powerType, renderMode)
+    end
+end
 
 ExportPublic("MSUF_CP_GetTrackedPlayerAura", CPAuras.Get)
 
@@ -724,7 +759,7 @@ do
         CPK = CPK,
         PT = PT,
         PLAYER_CLASS = PLAYER_CLASS,
-        UnitPower = ForeverCP and ForeverCP.UnitPower or UnitPower,
+        UnitPower = ClientCP and ClientCP.UnitPower or UnitPower,
         UnitPartialPower = UnitPartialPower,
         UnitPowerDisplayMod = UnitPowerDisplayMod,
         C_UnitAuras = C_UnitAuras,
@@ -769,6 +804,7 @@ do
     commonEnv.UnitPowerMax = UnitPowerMax
     local continuous = CP_CallBuilder(CPModeBuilders.CONTINUOUS, commonEnv)
     if continuous and type(continuous.Update) == "function" then CP_UpdateValues_Continuous = continuous.Update end
+    if IS_CLASSIC then CP.UpdateSignedContinuous = continuous and continuous.UpdateSigned end
 
     commonEnv.UnitStagger = UnitStagger
     commonEnv.UnitHealthMax = UnitHealthMax
@@ -843,6 +879,13 @@ CP.ebonNative = CP_CallBuilder(CPCoreBuilders.EBON_MIGHT, {
     GetStyle = CPSurface.GetEbonStyle,
     GetTextLevel = CP.GetEbonTextLevel,
 })
+--- Classic: no Classic client has Evokers and no Classic TOC loads the Ebon
+--- Might module that installs these hooks; the Aug lifecycle and the font and
+--- visual refreshes call them unguarded.
+if IS_CLASSIC and CP.SetEbonSensorActive == nil then
+    CP.SetEbonSensorActive = function() return false end
+    CP.ApplyEbonTextStyle = CP_Noop
+end
 --- MSUF_ClassPower_MountEbonMight (the Power element's mount callback) is
 --- exported by the CONTROLLER_SURFACE builder next to the host resolver.
 
@@ -883,7 +926,7 @@ local function CP_StartCentralTick(tickFn)
     if not _cpTickActive then
         _cpTickElapsed = 0
         if not _cpTickFrame then
-            _cpTickFrame = CreateFrame("Frame", nil, UIParent)
+            _cpTickFrame = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent))
         end
         _cpTickFrame:SetScript("OnUpdate", CP_CentralTickOnUpdate)
         _cpTickFrame:Show()
@@ -1069,6 +1112,10 @@ local MODE_UPDATE_FN = {
     [CPK.MODE.STAGGER]        = CP_UpdateValues_Stagger,
     [CPK.MODE.IRONFUR]        = CP.ironfur and CP.ironfur.Update or nil,
 }
+if IS_CLASSIC then
+    --- Mists Balance: signed Eclipse power (Game/Mists/ClassPower.lua).
+    MODE_UPDATE_FN[CPK.MODE.SIGNED_CONTINUOUS] = CP.UpdateSignedContinuous
+end
 
 CP_RunActiveUpdate = function(powerType, maxP)
     local updateFn = CP.updateFn
@@ -1322,6 +1369,8 @@ function Refresh.ResolveMaxPower(powerType, renderMode)
         maxP = 1
     elseif renderMode == CPK.MODE.CONTINUOUS then
         maxP = 1  --- Ele Maelstrom: single continuous bar
+    elseif IS_CLASSIC and renderMode == CPK.MODE.SIGNED_CONTINUOUS then
+        maxP = 1  --- Mists Balance: one signed Eclipse bar
     elseif renderMode == CPK.MODE.STAGGER then
         maxP = 1  --- Brewmaster Monk: single stagger bar (max = UnitHealthMax inside update fn)
     elseif renderMode == CPK.MODE.TIMER_BAR then
@@ -1345,6 +1394,8 @@ function Refresh.ResolveMaxPower(powerType, renderMode)
             CP.spExpires = nil
         elseif powerType == "ICICLES" then
             maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
+        elseif IS_CLASSIC and powerType == "MISTS_ARCANE_CHARGES" then
+            maxP = CPConst.MISTS_ARCANE_CHARGES.MAX_STACKS
         else
             maxP = 10
         end
@@ -1592,6 +1643,12 @@ local function FullRefresh()
         CP_PlayerHPRefresh(playerFrame)
     end
 
+    --- Classic: Game/Classic/BlizzardFrames.lua hides the client's own class
+    --- resource frames while this bar is shown.
+    if IS_CLASSIC and MSUF.Compat and type(MSUF.Compat.SetBlizzardClassResourcesSuppressed) == "function" then
+        MSUF.Compat.SetBlizzardClassResourcesSuppressed(CP.visible == true)
+    end
+
     CP.structuralFlags, CP.structuralPowerType, CP.structuralRenderMode = CPConfig.ComputeStructuralSignature()
     CP_RefreshEventBindings()
     local anyFeatureEnabled = CPConfig.AnyFeatureEnabled(playerManaEnabled)
@@ -1639,6 +1696,47 @@ CP_SetStructuralEventsBound = function(active)
         eventFrame:UnregisterEvent("PLAYER_TALENT_UPDATE")
         eventFrame:UnregisterEvent("TRAIT_CONFIG_UPDATED")
         eventFrame:UnregisterEvent("UPDATE_SHAPESHIFT_FORM")
+    end
+end
+
+--- Classic: an event the client's MSUF.Client.SupportsEvent rejects is never
+--- registered or unregistered, the provider may add structural events (Mists
+--- Warlock SPELLS_CHANGED for the shard spell gate), and the flag is set last
+--- so a registration that throws does not block the next attempt.
+if IS_CLASSIC then
+    local function SetSupportedEvent(event, active, unit)
+        local client = MSUF.Client
+        if client and type(client.SupportsEvent) == "function" and not client.SupportsEvent(event) then
+            return
+        end
+        if not active then
+            eventFrame:UnregisterEvent(event)
+        elseif unit then
+            eventFrame:RegisterUnitEvent(event, unit)
+        else
+            eventFrame:RegisterEvent(event)
+        end
+    end
+
+    CP_SetStructuralEventsBound = function(active)
+        active = active and true or false
+        if _cpStructuralEventsBound == active then return end
+        SetSupportedEvent("PLAYER_ENTERING_WORLD", active)
+        SetSupportedEvent("UNIT_ENTERED_VEHICLE", active, "player")
+        SetSupportedEvent("UNIT_EXITED_VEHICLE", active, "player")
+        SetSupportedEvent("PLAYER_SPECIALIZATION_CHANGED", active)
+        SetSupportedEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", active)
+        SetSupportedEvent("PLAYER_TALENT_UPDATE", active)
+        SetSupportedEvent("TRAIT_CONFIG_UPDATED", active)
+        SetSupportedEvent("UPDATE_SHAPESHIFT_FORM", active)
+        local provider = MSUF.CPClient
+        local extras = provider and provider.StructuralEvents
+        if type(extras) == "table" then
+            for i = 1, #extras do
+                SetSupportedEvent(extras[i], active)
+            end
+        end
+        _cpStructuralEventsBound = active
     end
 end
 
@@ -1693,7 +1791,7 @@ do
             OnWarlockCastEnd = OnWarlockCastEnd,
             OnTipOfTheSpearSpellCast = OnTipOfTheSpearSpellCast,
             OnSpellTrackerReset = OnSpellTrackerReset,
-            AcceptPowerToken = ForeverCP and ForeverCP.AcceptPowerToken or nil,
+            AcceptPowerToken = ClientCP and ClientCP.AcceptPowerToken or nil,
         })
     if runtime then
         OnPowerUpdate = runtime.OnPowerUpdate
@@ -1758,13 +1856,51 @@ local function CP_SetEventBound(frame, event, want, unit)
     end
 end
 
---- WoW Forever: target-owned combo points refresh when the target changes.
---- Never bound on other clients.
-if ForeverCP then
-    function ForeverCP.SetTargetEventsBound(want)
+--- Classic: an event the client's MSUF.Client.SupportsEvent rejects is recorded
+--- as unbound and never touched, a never-bound event is not unregistered, and
+--- vehicle combo points (Mists) add the vehicle unit to UNIT_POWER_FREQUENT,
+--- the way Blizzard's ComboFrame listens. The unit key is a constant string.
+if IS_CLASSIC then
+    CP_SetEventBound = function(frame, event, want, unit)
+        local client = MSUF.Client
+        if client and type(client.SupportsEvent) == "function" and not client.SupportsEvent(event) then
+            _cpBoundEvents[event] = false
+            _cpBoundUnits[event] = nil
+            return
+        end
+        local unitKey = unit
+        if unit == "player" and event == "UNIT_POWER_FREQUENT"
+            and CP.isVehicle == true and CP.powerType == PT.ComboPoints then
+            unitKey = "player+vehicle"
+        end
+        if _cpBoundEvents[event] == want and _cpBoundUnits[event] == unitKey then return end
+        if _cpBoundEvents[event] ~= nil then
+            frame:UnregisterEvent(event)
+        end
+        if want then
+            if unitKey == "player+vehicle" then
+                frame:RegisterUnitEvent(event, unit, "vehicle")
+            elseif unit then
+                frame:RegisterUnitEvent(event, unit)
+            else
+                frame:RegisterEvent(event)
+            end
+            _cpBoundEvents[event] = true
+            _cpBoundUnits[event] = unitKey
+        else
+            _cpBoundEvents[event] = false
+            _cpBoundUnits[event] = nil
+        end
+    end
+end
+
+--- WoW Forever and the Classic flavors: target-owned combo points refresh when
+--- the target changes. Never bound on Midnight.
+if ClientCP then
+    function ClientCP.SetTargetEventsBound(want)
         want = want == true
         CP_SetEventBound(eventFrame, "PLAYER_TARGET_CHANGED", want)
-        if ForeverCP.comboTargetEvent then
+        if ClientCP.comboTargetEvent then
             CP_SetEventBound(eventFrame, "COMBO_TARGET_CHANGED", want)
         end
     end
@@ -1794,11 +1930,20 @@ local function CP_ShouldUseFrequentPowerEvents()
     if AM.visible then return true end
     if not CP.visible then return false end
     local mode = CP.renderMode
+    if IS_CLASSIC then
+        --- The Classic provider decides per resource first (Mists keeps Holy
+        --- Power on UNIT_POWER_UPDATE; its Eclipse is the frequent one).
+        local provider = MSUF.CPClient
+        if provider and type(provider.UseFrequentPower) == "function" then
+            local choice = provider.UseFrequentPower(CP.powerType, mode, PLAYER_CLASS)
+            if choice ~= nil then return choice == true end
+        end
+    end
     return mode == CPK.MODE.CONTINUOUS
         or mode == CPK.MODE.FRACTIONAL
         or (mode == CPK.MODE.SEGMENTED and CP.powerType == PT.Essence)
-        --- Forever combo points follow Blizzard's ComboFrame (UNIT_POWER_FREQUENT).
-        or (ForeverCP ~= nil and mode == CPK.MODE.SEGMENTED and CP.powerType == PT.ComboPoints)
+        --- Target-owned combo points follow Blizzard's ComboFrame (UNIT_POWER_FREQUENT).
+        or (ClientCP ~= nil and mode == CPK.MODE.SEGMENTED and CP.powerType == PT.ComboPoints)
 end
 
 CP_ShouldUseLiteBindings = function()
@@ -1837,7 +1982,7 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", false)
         CP_SetEventBound(eventFrame, "PLAYER_DEAD", false)
         CP_SetEventBound(eventFrame, "PLAYER_ALIVE", false)
-        if ForeverCP then ForeverCP.SetTargetEventsBound(false) end
+        if ClientCP then ClientCP.SetTargetEventsBound(false) end
         CP.CDMWidthSetEvents()
         return
     end
@@ -1847,9 +1992,9 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", true, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", true, "player")
         CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", true, "player")
+        CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", supportsCharged, "player")
         CP_SetEventBound(eventFrame, "UNIT_AURA", true, "player")
-        CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", true)
+        CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", supportsRunes)
         CP_SetEventBound(eventFrame, "UNIT_HEALTH", true, "player")
         local wantMaxHealth = PHP.visible or (CP.visible and CP.renderMode == CPK.MODE.STAGGER)
         CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
@@ -1863,7 +2008,7 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", true)
         CP_SetEventBound(eventFrame, "PLAYER_DEAD", true)
         CP_SetEventBound(eventFrame, "PLAYER_ALIVE", true)
-        if ForeverCP then ForeverCP.SetTargetEventsBound(CP.visible and CP.powerType == PT.ComboPoints) end
+        if ClientCP then ClientCP.SetTargetEventsBound(CP.visible and CP.powerType == PT.ComboPoints) end
         CP.CDMWidthSetEvents()
         return
     end
@@ -1912,7 +2057,7 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantRegen)
     CP_SetEventBound(eventFrame, "PLAYER_DEAD", wantDeadAlive)
     CP_SetEventBound(eventFrame, "PLAYER_ALIVE", wantDeadAlive)
-    if ForeverCP then ForeverCP.SetTargetEventsBound(CP.visible and profile.targetChanged == true) end
+    if ClientCP then ClientCP.SetTargetEventsBound(CP.visible and profile.targetChanged == true) end
     CP.CDMWidthSetEvents()
 end
 
@@ -1949,6 +2094,9 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         if arg1 == "player" then
             OnPowerUpdate(arg2)
             OnManaUpdate(arg2)
+        elseif IS_CLASSIC and arg1 == "vehicle" then
+            --- Registered for the vehicle unit only while vehicle combo points show.
+            OnPowerUpdate(arg2)
         end
         return
     end
@@ -2125,8 +2273,9 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         return
     end
 
-    --- WoW Forever only (never registered elsewhere): target-owned combo points
-    --- change with the target, or move to a new one, without a power event.
+    --- WoW Forever and the Classic flavors (never registered on Midnight):
+    --- target-owned combo points change with the target, or move to a new one,
+    --- without a power event.
     if event == "PLAYER_TARGET_CHANGED" or event == "COMBO_TARGET_CHANGED" then
         if CP.visible and CP.powerType == PT.ComboPoints then
             CP_RunActiveUpdate(CP.powerType, CP.currentMax)
@@ -2174,6 +2323,19 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
                 CPConfig.RefreshConfig()
                 if CP_RefreshEventBindings then CP_RefreshEventBindings() end
             end
+        end
+        return
+    end
+
+    --- Classic provider structural extra (Mists Warlock): rebuild only when a
+    --- learned or lost spell really changes the route, e.g. the Affliction
+    --- shard gate. Every Mainline event returns above.
+    if IS_CLASSIC and event == "SPELLS_CHANGED" then
+        local flags, powerType, renderMode = CPConfig.ComputeStructuralSignature()
+        if flags ~= CP.structuralFlags
+            or powerType ~= CP.structuralPowerType
+            or renderMode ~= CP.structuralRenderMode then
+            ThrottledFullRefresh()
         end
         return
     end
@@ -2535,6 +2697,9 @@ do
             end,
             Shutdown = function()
                 CPColors.ResetTokens()
+                if IS_CLASSIC and MSUF.Compat and type(MSUF.Compat.SetBlizzardClassResourcesSuppressed) == "function" then
+                    MSUF.Compat.SetBlizzardClassResourcesSuppressed(false)
+                end
             end,
         })
     end

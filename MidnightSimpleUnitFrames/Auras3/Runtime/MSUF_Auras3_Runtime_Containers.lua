@@ -1,10 +1,10 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: Containers.
 -- Native groups/slots, creation and geometry repair. Blizzard owns incremental aura tracking; unchanged descriptors reuse native owners.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 MSUF.Auras3RuntimeFactories.Containers = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_max = math.max
@@ -88,7 +88,7 @@ end
 
 local function CreateNativeAuraContainer(root, parentOverride)
     ApplyAuraTooltipStyle()
-    local container = CreateFrame("AuraContainer", nil, parentOverride or root, "CustomAuraContainerTemplate")
+    local container = PixelLayoutRegion(CreateFrame("AuraContainer", nil, parentOverride or root, "CustomAuraContainerTemplate"))
     if not container then
         A3.nativeAuraRuntimeAvailable = false
         A3._RecordNativeAuraRuntimeError("CustomAuraContainerTemplate is unavailable")
@@ -706,7 +706,7 @@ local function CreateManagedGroupSlots(container, groupSlots, parentFrame)
     local flowLane = groupSlots.flowLane
     if flowLane then
         local root = container._msufA3Root or container:GetParent()
-        local host = CreateFrame("Frame", nil, root)
+        local host = PixelLayoutRegion(CreateFrame("Frame", nil, root))
         if not host then return nil end
         container._msufA3LayoutHost = host
     end
@@ -769,13 +769,11 @@ local function HeaderGroupSlotsContainer(root, parentFrame)
     if not container or container._msufA3HeaderContainerConsumed == true then return nil end
     if not ValidateNativeAuraContainerContract(container) then return nil end
     -- The header births this owner in the restricted environment, so it never
-    -- passes CreateNativeAuraContainer's rounding. On WoW Forever give it the
-    -- same root-only pixel rounding on adoption; Retail keeps its behaviour
-    -- until the same change lands there. The helper is a no-op without the API.
-    if IS_FOREVER then
-        local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-        if type(roundLayout) == "function" then roundLayout(container, true) end
-    end
+    -- passes CreateNativeAuraContainer's rounding. Give adopted owners the
+    -- same root-only rounding on Midnight and Forever. No child masks or
+    -- profile geometry are changed; clients without the API keep their layout.
+    local roundLayout = MSUF.Util and MSUF.Util.EnablePixelPerfectLayout
+    if roundLayout then roundLayout(container) end
     container._msufA3HeaderContainerConsumed = true
     container._msufA3Root = root
     return container

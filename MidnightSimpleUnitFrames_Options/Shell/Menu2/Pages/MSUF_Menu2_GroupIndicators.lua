@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -703,7 +704,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     end
 
     --- Role filter group: only visible when Role Icon indicator is selected
-    local roleFilterGroup = CreateFrame("Frame", nil, selectedCard)
+    local roleFilterGroup = PixelLayoutRegion(CreateFrame("Frame", nil, selectedCard))
     roleFilterGroup:SetPoint("TOPLEFT", selectedCard, "TOPLEFT", 0, -216)
     local roleFilterW = max(180, siconLeftW - 32)
     roleFilterGroup:SetSize(roleFilterW, 60)
@@ -777,18 +778,18 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     statusReset:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -86)
     statusReset:SetSize(min(160, previewInnerW), 24)
     local iconPreviewLabel = W.LabelAt(previewCard, "Icon preview", 16, -120, previewInnerW, "GameFontNormalSmall", T.colors.accent)
-    local iconPreviewStrip = CreateFrame("Frame", nil, previewCard)
+    local iconPreviewStrip = PixelLayoutRegion(CreateFrame("Frame", nil, previewCard))
     iconPreviewStrip:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -132)
     iconPreviewStrip:SetSize(previewInnerW, 24)
     local iconPreviewTextures = {}
     for i = 1, 5 do
-        local holder = CreateFrame("Frame", nil, iconPreviewStrip)
+        local holder = PixelLayoutRegion(CreateFrame("Frame", nil, iconPreviewStrip))
         holder:SetSize(24, 24)
         holder:SetPoint("LEFT", iconPreviewStrip, "LEFT", (i - 1) * 28, 0)
-        holder.bg = holder:CreateTexture(nil, "BACKGROUND")
+        holder.bg = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND"))
         holder.bg:SetAllPoints()
         holder.bg:SetColorTexture(0.020, 0.026, 0.052, 0.70)
-        holder.tex = holder:CreateTexture(nil, "ARTWORK")
+        holder.tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
         holder.tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
         holder.tex:SetSize(22, 22)
         iconPreviewTextures[i] = holder
@@ -1191,7 +1192,7 @@ local SpellTileGrid = {}
 SpellTileGrid.__index = SpellTileGrid
 local SpellTileDragOnUpdate
 function SpellTileGrid.New(ctx, parent, x, y, width, refreshPage)
-    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, parent, "BackdropTemplate"))
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     frame:SetSize(width, 150)
     frame._tiles = {}
@@ -1370,24 +1371,24 @@ end
 function SpellTileGrid:EnsureTile(index)
     local tile = self.frame._tiles[index]
     if tile then return tile end
-    tile = CreateFrame("Button", nil, self.frame, "BackdropTemplate")
+    tile = PixelLayoutRegion(CreateFrame("Button", nil, self.frame, "BackdropTemplate"))
     tile:SetSize(self.tileSize, self.tileSize)
     tile:SetMovable(true)
     tile:EnableMouse(true)
     tile:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    tile:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    PixelLayoutRegion(tile, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
     tile:SetBackdropColor(0.035, 0.040, 0.070, 0.96)
-    tile.icon = tile:CreateTexture(nil, "ARTWORK")
+    tile.icon = PixelLayoutRegion(tile:CreateTexture(nil, "ARTWORK"))
     tile.icon:SetSize(36, 36)
     tile.icon:SetPoint("TOP", tile, "TOP", 0, -3)
     tile.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    local addMark = CreateFrame("Frame", nil, tile)
+    local addMark = PixelLayoutRegion(CreateFrame("Frame", nil, tile))
     addMark:SetSize(20, 20)
     addMark:SetPoint("CENTER", tile.icon, "CENTER")
-    addMark.horizontal = addMark:CreateTexture(nil, "OVERLAY")
+    addMark.horizontal = PixelLayoutRegion(addMark:CreateTexture(nil, "OVERLAY"))
     addMark.horizontal:SetSize(16, 3)
     addMark.horizontal:SetPoint("CENTER")
-    addMark.vertical = addMark:CreateTexture(nil, "OVERLAY")
+    addMark.vertical = PixelLayoutRegion(addMark:CreateTexture(nil, "OVERLAY"))
     addMark.vertical:SetSize(3, 16)
     addMark.vertical:SetPoint("CENTER")
     function addMark:SetText() end
@@ -1398,7 +1399,7 @@ function SpellTileGrid:EnsureTile(index)
     tile.addText = addMark
     tile.addText:SetTextColor(0.70, 0.90, 1, 1)
     tile.addText:Hide()
-    tile.label = tile:CreateFontString(nil, "OVERLAY")
+    tile.label = PixelLayoutRegion(tile:CreateFontString(nil, "OVERLAY"))
     tile.label:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
     tile.label:SetPoint("BOTTOM", tile, "BOTTOM", 0, 2)
     tile.label:SetWidth(self.tileSize - 4)

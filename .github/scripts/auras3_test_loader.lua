@@ -24,7 +24,7 @@ do
 end
 local originalLoadfile, originalOpen = loadfile, io.open
 local sourceRoot
-local xmlRelative = "MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Elements.xml"
+local xmlRelative = "MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Auras.xml"
 local families = {
     ["MSUF_Auras3_UnitFrames.lua"] = "MSUF_Auras3_Runtime_",
     ["MSUF_Auras3_SpellIndicators.lua"] = "MSUF_Auras3_SpellIndicators_",
@@ -103,6 +103,10 @@ function Loader.Group(path)
     if root == nil then return nil end
     local xmlPath = root .. xmlRelative
     local xmlFile = originalOpen(xmlPath, "rb")
+    if not xmlFile then
+        xmlPath = xmlPath:gsub("MSUF_UFCore_Auras%.xml$", "MSUF_UFCore_Elements.xml")
+        xmlFile = originalOpen(xmlPath, "rb")
+    end
     if not xmlFile then return nil end -- Frozen pre-refactor source is standalone.
     local xml = xmlFile:read("*a")
     xmlFile:close()
@@ -299,9 +303,6 @@ local function PrepareDirectContracts(source, namespace)
     end
     if Uses("M.InstallColorPicker({") then
         assert(originalLoadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua"))("MidnightSimpleUnitFrames", namespace)
-    end
-    if Uses("M.InstallClassicAuraPreview({") then
-        assert(originalLoadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AuraPreview_Classic.lua"))("MidnightSimpleUnitFrames", namespace)
     end
     if Uses("A3.NormalizeProfileDB") and not namespace.MSUF_MaterializeUnitAuraLaneOwners then
         assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_StateHelpers.lua")))("MSUF", namespace)
@@ -526,7 +527,30 @@ function Loader.LoadAliasCatalog(root, namespace)
     namespace.MSUF_Auras3 = namespace.MSUF_Auras3 or {}
     namespace.MSUF_Auras3.AuraSpellIDAliases = namespace.MSUF_Auras3.AuraSpellIDAliases or {}
     _G.GetLocale = _G.GetLocale or function() return "enUS" end
+    local tocPath = root .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc"
+    local tocFile = originalOpen(tocPath, "rb")
+    if tocFile then
+        local toc = tocFile:read("*a"); tocFile:close()
+        for line in toc:gmatch("[^\r\n]+") do
+            if line:find("MSUF_Auras3_AliasData_", 1, true) and not line:match("^%s*#") then
+                local allowed = line:match("%[AllowLoadTextLocale%s+([^%]]+)%]")
+                local selected = not allowed
+                if allowed then
+                    for locale in allowed:gmatch("%a+") do
+                        if locale == _G.GetLocale() then selected = true end
+                    end
+                end
+                if selected then
+                    local relative = assert(line:match("^%s*(%S+%.lua)"))
+                    assert(originalLoadfile(Normalize(root .. "/MidnightSimpleUnitFrames/" .. relative)))("MidnightSimpleUnitFrames", namespace)
+                end
+            end
+        end
+    end
     local xmlPath = root .. "/" .. xmlRelative
+    local probe = originalOpen(xmlPath, "rb")
+    if probe then probe:close()
+    else xmlPath = xmlPath:gsub("MSUF_UFCore_Auras%.xml$", "MSUF_UFCore_Elements.xml") end
     local xml = Read(xmlPath)
     local directory = xmlPath:match("^(.*)/")
     for relative in xml:gmatch('<Script%s+file="([^"]+)"%s*/>') do

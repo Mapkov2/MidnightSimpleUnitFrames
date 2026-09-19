@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 one-time MSUF 6.0 dashboard scene.
 --
 -- This module owns presentation and navigation only. Install classification and
@@ -134,7 +135,7 @@ local SetTextLayout = M.Widgets.SetTextLayout
 
 local function CreateBackdropButton(parent, T, width, height, border, onClick)
     local template = _G.BackdropTemplateMixin and "BackdropTemplate" or nil
-    local button = CreateFrame("Button", nil, parent, template)
+    local button = PixelLayoutRegion(CreateFrame("Button", nil, parent, template))
     button:SetSize(width, height)
     button:RegisterForClicks("LeftButtonUp")
     local bg = T.colors.coreShadow or T.colors.bg
@@ -148,7 +149,7 @@ local function CreateBackdropButton(parent, T, width, height, border, onClick)
         T.ApplyBackdrop(button, bg, edge)
     end
 
-    local highlight = button:CreateTexture(nil, "HIGHLIGHT", nil, 2)
+    local highlight = PixelLayoutRegion(button:CreateTexture(nil, "HIGHLIGHT", nil, 2))
     highlight:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
     highlight:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
     highlight:SetColorTexture(T.colors.coreBlue[1], T.colors.coreBlue[2], T.colors.coreBlue[3], 0.065)
@@ -175,7 +176,7 @@ local function CreateIconWell(parent, T, navKey, size, x, y)
     well:SetSize(size, size)
     well:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     if type(T.ApplySurface) == "function" then T.ApplySurface(well, "card") end
-    local icon = well:CreateTexture(nil, "ARTWORK", nil, 2)
+    local icon = PixelLayoutRegion(well:CreateTexture(nil, "ARTWORK", nil, 2))
     icon:SetSize(floor(size * 0.48), floor(size * 0.48))
     icon:SetPoint("CENTER", well, "CENTER", 0, 0)
     local grid = T.navIconGrid and T.navIconGrid[navKey]
@@ -197,7 +198,7 @@ local function CreateWelcomeMark(parent, T, size, top)
     mark:SetPoint("TOP", parent, "TOP", 0, top)
     if type(T.ApplySurface) == "function" then T.ApplySurface(mark, "card") end
     if type(T.ApplyNeonEdge) == "function" then T.ApplyNeonEdge(mark, "ambient", { variant = "card" }) end
-    local logo = mark:CreateTexture(nil, "ARTWORK", nil, 3)
+    local logo = PixelLayoutRegion(mark:CreateTexture(nil, "ARTWORK", nil, 3))
     logo:SetSize(floor(size * 0.68), floor(size * 0.68))
     logo:SetPoint("CENTER", mark, "CENTER", 0, 0)
     logo:SetTexture(T.media and T.media.logo or "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\MSUF_MinimapIcon.tga")
@@ -208,7 +209,7 @@ end
 
 local function CreateVersionRow(parent, T, text, contentWidth, top)
     local rowWidth = min(contentWidth, text:find("UPGRADED", 1, true) and 240 or 210)
-    local row = CreateFrame("Frame", nil, parent)
+    local row = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     row:SetSize(rowWidth, 20)
     row:SetPoint("TOP", parent, "TOP", 0, top)
     local label = T.Font(row, "GameFontDisableSmall", Tr(text), T.colors.coreHot or T.colors.accent)
@@ -241,7 +242,7 @@ local function CreateProtectionPanel(parent, T, contentWidth, top, compact, inst
     local itemWidth = compact and contentWidth or floor(contentWidth / 3)
     for i = 1, #specs do
         local spec = specs[i]
-        local item = CreateFrame("Frame", nil, panel)
+        local item = PixelLayoutRegion(CreateFrame("Frame", nil, panel))
         item:SetSize(itemWidth, itemHeight)
         if compact then
             item:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -((i - 1) * itemHeight))
@@ -257,7 +258,7 @@ local function CreateProtectionPanel(parent, T, contentWidth, top, compact, inst
         value:SetPoint("RIGHT", item, "RIGHT", -12, 0)
         value:SetJustifyH("LEFT")
         if i > 1 then
-            local divider = panel:CreateTexture(nil, "ARTWORK", nil, 2)
+            local divider = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK", nil, 2))
             divider:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.76)
             if compact then
                 divider:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -((i - 1) * itemHeight))
@@ -494,11 +495,11 @@ function M.BuildFirstLoadDashboardScene(ctx)
     local sceneWidth = max(288, width - sceneX)
     local contentWidth = min(720, max(280, sceneWidth - 40))
     local compact = contentWidth < 660
-    local scene = CreateFrame("Frame", nil, ctx.wrapper)
+    local scene = PixelLayoutRegion(CreateFrame("Frame", nil, ctx.wrapper))
     scene:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", sceneX, sceneTop)
     scene:SetWidth(sceneWidth)
 
-    local wash = scene:CreateTexture(nil, "BACKGROUND", nil, 0)
+    local wash = PixelLayoutRegion(scene:CreateTexture(nil, "BACKGROUND", nil, 0))
     wash:SetPoint("TOPLEFT", scene, "TOPLEFT", 0, 0)
     wash:SetPoint("TOPRIGHT", scene, "TOPRIGHT", 0, 0)
     wash:SetHeight(compact and 290 or 340)

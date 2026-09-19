@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Menu2 window control buttons.
 ---
 --- The main shell uses one authored segmented-control texture and a separate
@@ -54,6 +55,7 @@ end
 
 local function PrepareAtlasTexture(texture, path)
     texture:SetTexture(path)
+    PixelLayoutRegion(texture, true)
     if texture.SetSnapToPixelGrid then texture:SetSnapToPixelGrid(false) end
     if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
 end
@@ -164,12 +166,12 @@ local function SetWindowControlIcon(btn, kind)
     btn._msuf2ControlKind = kind
     if not btn._msuf2ControlIcon then
         local path = T and T.media and T.media.windowControlIcons
-        local shadow = btn:CreateTexture(nil, "ARTWORK", nil, 0)
+        local shadow = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 0))
         shadow:SetSize(12, 12)
         shadow:SetPoint("CENTER", btn, "CENTER", 0.75, -0.75)
         PrepareAtlasTexture(shadow, path)
         btn._msuf2ControlIconShadow = shadow
-        local icon = btn:CreateTexture(nil, "ARTWORK", nil, 1)
+        local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 1))
         icon:SetSize(12, 12)
         icon:SetPoint("CENTER", btn, "CENTER", 0, 0)
         PrepareAtlasTexture(icon, path)
@@ -182,11 +184,11 @@ end
 
 local function CreateWindowControlGroup(parent, segmentCount)
     segmentCount = max(1, tonumber(segmentCount) or 3)
-    local group = CreateFrame("Frame", nil, parent)
+    local group = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     group:SetSize(SEGMENT_WIDTH * segmentCount, CONTROL_HEIGHT)
     group._msuf2WindowControlGroup = true
     group._msuf2ControlSegmentCount = segmentCount
-    local base = group:CreateTexture(nil, "BACKGROUND", nil, 0)
+    local base = PixelLayoutRegion(group:CreateTexture(nil, "BACKGROUND", nil, 0))
     base:SetPoint("TOPLEFT", group, "TOPLEFT", -3, -1)
     base:SetPoint("BOTTOMRIGHT", group, "BOTTOMRIGHT", 3, 1)
     PrepareAtlasTexture(base, T.media.windowControls)
@@ -195,7 +197,7 @@ local function CreateWindowControlGroup(parent, segmentCount)
         and T.MenuAccentSurfacesTinted()
     TintAtlasTexture(base, ColorOr("coreSurface", { 0.035, 0.067, 0.114, 1 }), tintSurfaces)
     group._msuf2ControlGroupBase = base
-    local hover = group:CreateTexture(nil, "BORDER", nil, 1)
+    local hover = PixelLayoutRegion(group:CreateTexture(nil, "BORDER", nil, 1))
     hover:SetPoint("TOPLEFT", group, "TOPLEFT", -3, -1)
     hover:SetPoint("BOTTOMRIGHT", group, "BOTTOMRIGHT", 3, 1)
     PrepareAtlasTexture(hover, T.media.windowControls)
@@ -205,7 +207,7 @@ local function CreateWindowControlGroup(parent, segmentCount)
 end
 
 local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText, segmentIndex)
-    local btn = CreateFrame("Button", nil, parent)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     local grouped = parent and parent._msuf2WindowControlGroup
     btn:SetSize(grouped and SEGMENT_WIDTH or CONTROL_HEIGHT, CONTROL_HEIGHT)
     if btn.RegisterForClicks then btn:RegisterForClicks("AnyUp") end

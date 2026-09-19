@@ -98,7 +98,9 @@ local SOURCE_OF_TRUTH = "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"
 -- says why the model cannot answer, not just that the code predates it.
 local ALLOWED = {}
 
-local command = 'git -C "' .. repo .. '" ls-files -- MidnightSimpleUnitFrames MidnightSimpleUnitFrames_Options'
+-- All three addons: the Assistant decides by client family too, so its reviewed
+-- overrides answer to the same rule as the menu they mirror.
+local command = 'git -C "' .. repo .. '" ls-files -- MidnightSimpleUnitFrames MidnightSimpleUnitFrames_Options MidnightSimpleUnitFrames_Assistant'
 local pipe = assert(io.popen(command, "r"), "cannot enumerate tracked addon files")
 local scanned, failures, seen = 0, {}, {}
 for path in pipe:lines() do

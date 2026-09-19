@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- ClassPower/MSUF_CP_PlayerHP.lua
 --- Optional second Player HP bar owned by Class Resources.
 --- Loaded before the controller; exposes a small builder so the controller does
@@ -540,16 +541,16 @@ builders.PLAYER_HP = function(E)
         if PHP.frame then return true end
         if not playerFrame then return false end
 
-        local f = CreateFrame("Frame", "MSUF_ClassPowerPlayerHealthBar", playerFrame._msufHealthVisualRoot or playerFrame)
+        local f = PixelLayoutRegion(CreateFrame("Frame", "MSUF_ClassPowerPlayerHealthBar", playerFrame._msufHealthVisualRoot or playerFrame))
         f:Hide()
         PHP.frame = f
 
-        local bg = f:CreateTexture(nil, "BACKGROUND", nil, -1)
+        local bg = PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND", nil, -1))
         bg:SetAllPoints(f)
         bg:SetColorTexture(0, 0, 0, 0.35)
         PHP.bg = bg
 
-        local bar = CreateFrame("StatusBar", nil, f)
+        local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, f))
         bar:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
         bar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
         bar:SetMinMaxValues(0, 1)
@@ -557,21 +558,21 @@ builders.PLAYER_HP = function(E)
         bar:SetStatusBarTexture(ResolveTexture(nil))
         PHP.bar = bar
 
-        local tf = CreateFrame("Frame", nil, f)
+        local tf = PixelLayoutRegion(CreateFrame("Frame", nil, f))
         tf:SetAllPoints(f)
         PHP.textFrame = tf
 
-        local left = tf:CreateFontString(nil, "OVERLAY")
+        local left = PixelLayoutRegion(tf:CreateFontString(nil, "OVERLAY"))
         left:SetJustifyH("LEFT")
         if left.SetJustifyV then left:SetJustifyV("MIDDLE") end
         PHP.left = left
 
-        local center = tf:CreateFontString(nil, "OVERLAY")
+        local center = PixelLayoutRegion(tf:CreateFontString(nil, "OVERLAY"))
         center:SetJustifyH("CENTER")
         if center.SetJustifyV then center:SetJustifyV("MIDDLE") end
         PHP.center = center
 
-        local right = tf:CreateFontString(nil, "OVERLAY")
+        local right = PixelLayoutRegion(tf:CreateFontString(nil, "OVERLAY"))
         right:SetJustifyH("RIGHT")
         if right.SetJustifyV then right:SetJustifyV("MIDDLE") end
         PHP.right = right
@@ -583,7 +584,7 @@ builders.PLAYER_HP = function(E)
     local function EnsureShapeEdge()
         if PHP.shapeEdge then return PHP.shapeEdge end
         if not PHP.bar then return nil end
-        local edge = PHP.bar:CreateTexture(nil, "OVERLAY", nil, 7)
+        local edge = PixelLayoutRegion(PHP.bar:CreateTexture(nil, "OVERLAY", nil, 7))
         edge:SetVertexColor(0, 0, 0, 1)
         edge:Hide()
         PHP.shapeEdge = edge
@@ -606,7 +607,7 @@ builders.PLAYER_HP = function(E)
         local parent = PHP.frame.GetParent and PHP.frame:GetParent()
         if not parent then return nil end
         if not PHP.borderHost then
-            PHP.borderHost = CreateFrame("Frame", nil, parent)
+            PHP.borderHost = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
             PHP.borderHost:EnableMouse(false)
         elseif PHP.borderHost.GetParent and PHP.borderHost:GetParent() ~= parent then
             PHP.borderHost:SetParent(parent)
@@ -616,7 +617,7 @@ builders.PLAYER_HP = function(E)
         if PHP.borderEdges and PHP.borderEdges._host == PHP.borderHost then return PHP.borderEdges, PHP.borderHost end
         local edges = {}
         for i = 1, 4 do
-            local edge = PHP.borderHost:CreateTexture(nil, "OVERLAY", nil, 6)
+            local edge = PixelLayoutRegion(PHP.borderHost:CreateTexture(nil, "OVERLAY", nil, 6))
             edge:SetColorTexture(0, 0, 0, 1)
             edge:Hide()
             edges[i] = edge

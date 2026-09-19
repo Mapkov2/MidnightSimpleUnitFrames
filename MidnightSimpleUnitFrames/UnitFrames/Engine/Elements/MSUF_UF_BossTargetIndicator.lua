@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 local Indicator = {}
 MSUF.BossTargetIndicator = Indicator
@@ -58,7 +59,7 @@ end
 local function Draw(marker, shape, size, direction, cfg)
   for i = 1, #shape / 4 do
     local line = marker.lines[i]
-    if not line then line = marker:CreateLine(nil, "OVERLAY"); marker.lines[i] = line end
+    if not line then line = PixelLayoutRegion(marker:CreateLine(nil, "OVERLAY")); marker.lines[i] = line end
     local at = (i - 1) * 4
     local x1, y1 = Rotate(shape[at + 1], shape[at + 2], direction)
     local x2, y2 = Rotate(shape[at + 3], shape[at + 4], direction)
@@ -127,7 +128,7 @@ function Indicator.Apply(frame, cfg, scale)
     return nil
   end
   if not marker then
-    marker = CreateFrame("Frame", nil, frame)
+    marker = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     marker:EnableMouse(false)
     marker.lines = {}
     frame._msufBossTargetIndicator = marker
@@ -166,7 +167,7 @@ function Indicator.Apply(frame, cfg, scale)
     local mirror = marker.mirror
     if not mirror then
       -- Parent visibility handles target changes for both ends in one native call.
-      mirror = CreateFrame("Frame", nil, marker)
+      mirror = PixelLayoutRegion(CreateFrame("Frame", nil, marker))
       mirror:EnableMouse(false)
       mirror.lines = {}
       marker.mirror = mirror

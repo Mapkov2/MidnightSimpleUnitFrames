@@ -836,7 +836,7 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 3. Config compile: Mainline (Forever, Midnight) and the Classic shadow
+-- 3. Config compile: Mainline (Forever, Midnight) and the Classic clients
 ---------------------------------------------------------------------------
 local function CompileStatus(configRelative, namespace, db)
     namespace.ExportPublic = function(name, value) _G[name] = value; return value end
@@ -912,12 +912,14 @@ do
 end
 
 do
+    -- Classic Era, TBC and Mists compile through the same Retail-named config as
+    -- WoW Forever: the entry exists only where SupportsThreatText is true.
     for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
         local _, namespace = LoadClassicClient(flavor)
-        local config = CompileStatus("Game/Classic/UnitFrames/MSUF_UF_Config.lua", namespace)
+        local config = CompileStatus("UnitFrames/Engine/MSUF_UF_Config.lua", namespace)
         local entry = config.GetSpec("target").status.threat
         if flavor == "Mists" then
-            Check(type(entry) == "table" and entry.enabled == false, "Mists: the Classic config enabled the threat text")
+            Check(entry == nil, "Mists: the unit config compiled a threat entry")
         else
             CheckDefaultEntry(entry, flavor .. " target")
             Check(entry.colorCurve == true, flavor .. ": Color by threat must default on")
@@ -989,7 +991,7 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 4. Menu: the status control on both unit pages, Copy To, the preview row
+-- 4. Menu: the status control on the unit page, Copy To, the preview row
 ---------------------------------------------------------------------------
 local function LoadUnitPage(pageFile, client)
     local namespace = {
@@ -1030,16 +1032,17 @@ end
 do
     CheckControl(LoadUnitPage("MSUF_Menu2_Unit.lua", LoadMainlineClient(true)), "Forever")
     Check(LoadUnitPage("MSUF_Menu2_Unit.lua", LoadMainlineClient(false)) == nil, "Midnight: the unit page gained the control")
-    CheckControl(LoadUnitPage("MSUF_Menu2_Unit_Classic.lua", { SupportsThreatText = true }), "Classic")
-    local mists = LoadUnitPage("MSUF_Menu2_Unit_Classic.lua", { SupportsThreatText = false })
-    Check(mists and mists.allowed("target") == false, "Mists: the Classic unit page offered the threat text")
-    local noClient = LoadUnitPage("MSUF_Menu2_Unit_Classic.lua", nil)
-    Check(noClient and noClient.allowed("target") == false, "without MSUF.Client the threat text must stay off")
+    -- The Classic clients load the same page, so the fact alone decides there too.
+    CheckControl(LoadUnitPage("MSUF_Menu2_Unit.lua", (LoadClassicClient("Vanilla"))), "Classic Era")
+    CheckControl(LoadUnitPage("MSUF_Menu2_Unit.lua", (LoadClassicClient("TBC"))), "TBC")
+    Check(LoadUnitPage("MSUF_Menu2_Unit.lua", (LoadClassicClient("Mists"))) == nil, "Mists: the unit page offered the threat text")
+    Check(LoadUnitPage("MSUF_Menu2_Unit.lua", nil) == nil, "without MSUF.Client the threat text must stay off")
 
     -- Copy To (status scope) carries placement, visibility, color, Color by threat and Background.
-    for _, pageFile in ipairs({ "MSUF_Menu2_Unit.lua", "MSUF_Menu2_Unit_Classic.lua" }) do
-        local _, page, menu = LoadUnitPage(pageFile, pageFile == "MSUF_Menu2_Unit.lua" and LoadMainlineClient(true)
-            or { SupportsThreatText = true })
+    for _, case in ipairs({ { "Forever", (LoadMainlineClient(true)) }, { "Classic Era", (LoadClassicClient("Vanilla")) },
+        { "TBC", (LoadClassicClient("TBC")) } }) do
+        local pageFile = case[1]
+        local _, page, menu = LoadUnitPage("MSUF_Menu2_Unit.lua", case[2])
         local source = { showThreatIndicator = false, threatIndicatorSize = 13, threatIndicatorAnchor = "TOP",
             threatIndicatorOffsetX = 1, threatIndicatorOffsetY = -1, threatIndicatorLayer = 9,
             threatIndicatorColorR = 0.1, threatIndicatorColorG = 0.2, threatIndicatorColorB = 0.3,
@@ -1097,21 +1100,34 @@ do
     Check(PreviewRows(LoadMainlineClient(false)) == nil, "Midnight: the preview specs gained a threat row")
     Check(PreviewRows(LoadClassicClient("Mists")) == nil, "Mists: the preview specs gained a threat row")
 
-    for _, suffix in ipairs({ "", "_Classic" }) do
-        local status = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status" .. suffix .. ".lua")
+    -- Every client loads these Retail-named files: the Classic menu manifests name
+    -- them too (the Classic copies were collapsed into them).
+    local MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
+    for manifest, script in pairs({
+        ["Preview/MSUF_Menu2_UnitPreview_Classic.xml"] = { "MSUF_Menu2_UnitPreview_Status.lua", "MSUF_Menu2_UnitPreview_Render.lua" },
+        ["MSUF_Menu2_AfterUnitPreview_Classic.xml"] = { "Pages\\MSUF_Menu2_UnitStatusSection.lua" },
+        ["MSUF_Menu2_AfterSearch_Classic.xml"] = { "Pages\\MSUF_Menu2_Unit.lua" },
+    }) do
+        local xml = Read(MENU .. manifest)
+        for _, file in ipairs(script) do
+            Check(xml:find('<Script file="' .. file .. '"/>', 1, true), manifest .. " does not load " .. file)
+        end
+    end
+    do
+        local status = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_Status.lua")
         Check(status:find('\n    statusThreat = "85%",\n}', 1, true),
-            "UnitPreview_Status" .. suffix .. ": the threat row must render as status text with the 85% sample")
-        local render = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render" .. suffix .. ".lua")
+            "UnitPreview_Status: the threat row must render as status text with the 85% sample")
+        local render = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_Render.lua")
         Check(render:find('statusPetHappiness = "petHappiness", statusThreat = "threat",', 1, true),
-            "UnitPreview_Render" .. suffix .. ": the preview must read the compiled threat entry")
+            "UnitPreview_Render: the preview must read the compiled threat entry")
         Check(render:find('                textW = R.PreviewStatus.ThreatPlate and R.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW\n',
             1, true),
-            "UnitPreview_Render" .. suffix .. ": the Threat % preview no longer lays out on its plate")
-        local section = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection" .. suffix .. ".lua")
+            "UnitPreview_Render: the Threat % preview no longer lays out on its plate")
+        local section = Read(MENU .. "Pages/MSUF_Menu2_UnitStatusSection.lua")
         Check(section:find('\n    local threat = FindStatusSpec(unit, "statusThreat")\n'
             .. '    if threat and threat.value == "statusThreat" and type(M.RegisterVirtualRuntimeControl) == "function" then\n'
             .. '        local meta = ControlMeta(ctx, "status.indicator.threat", "setting")\n', 1, true),
-            "UnitStatusSection" .. suffix .. ": the threat search control must exist only where the status spec does")
+            "UnitStatusSection: the threat search control must exist only where the status spec does")
         -- Color by threat: built only where the Threat % control exists, same default
         -- as the compile, ::: lists the three curve colors while it is on, and
         -- Reset selected returns it to that default.
@@ -1138,25 +1154,36 @@ do
             'yellow at half, pink at 100% when you have aggro.',
         }) do
             Check(section:find(contract, 1, true),
-                "UnitStatusSection" .. suffix .. ": Color by threat lost a contract: " .. contract:gsub("\n", " "):sub(1, 90))
+                "UnitStatusSection: Color by threat lost a contract: " .. contract:gsub("\n", " "):sub(1, 90))
         end
-        Check(not section:find("red at 100%", 1, true), "UnitStatusSection" .. suffix .. ": the curve help still says red")
+        Check(not section:find("red at 100%", 1, true), "UnitStatusSection: the curve help still says red")
     end
 
     -- Preview: the sample shows its curve color, with the compile's default rule.
-    local function LoadPreviewStatus(suffix)
-        local addon = { UFPreview = { Model = { MakeFS = function() end, FontColor = function() return 1, 1, 1 end } } }
-        assert(loadfile(options .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status" .. suffix .. ".lua"))(
+    local function LoadPreviewStatus(client)
+        local addon = { Client = client,
+            UFPreview = { Model = { MakeFS = function() end, FontColor = function() return 1, 1, 1 end } } }
+        assert(loadfile(options .. "Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua"))(
             "MidnightSimpleUnitFrames_Options", addon)
         return addon.UFPreviewStatus
     end
-    local namespace = {
-        Client = LoadMainlineClient(true),
-        UF = { Layers = {}, Shared = {}, RegisterElement = function() end, RefreshElements = function() return true end },
-    }
-    assert(loadfile(core .. MODULE))("MidnightSimpleUnitFrames", namespace)
+    local function ThreatNamespace(client)
+        local ns = {
+            Client = client,
+            UF = { Layers = {}, Shared = {}, RegisterElement = function() end, RefreshElements = function() return true end },
+        }
+        assert(loadfile(core .. MODULE))("MidnightSimpleUnitFrames", ns)
+        return ns
+    end
+    local namespace = ThreatNamespace((LoadMainlineClient(true)))
+    local previewCases = { { "Forever", namespace }, { "Classic Era", ThreatNamespace((LoadClassicClient("Vanilla"))) },
+        { "TBC", ThreatNamespace((LoadClassicClient("TBC"))) } }
+    -- Mists loads the preview file too, but no threat module: its sample keeps the text color.
+    local mistsNS = ThreatNamespace((LoadClassicClient("Mists")))
+    Check(mistsNS.UFThreatText == nil, "Mists: the threat module published itself")
     local oldNS = _G.MSUF_NS
-    _G.MSUF_NS = namespace
+    _G.MSUF_NS = mistsNS
+    Check(LoadPreviewStatus(mistsNS.Client).ThreatCurveColor({}, {}) == nil, "Mists: the preview drew a threat curve color without the module")
     local function PreviewIcon(text)
         local bg = { points = {} }
         function bg:ClearAllPoints() self.points = {}; self.allPoints = nil end
@@ -1169,36 +1196,40 @@ do
         function txt:GetStringWidth() return #self.text * 5 end
         return { bg = bg, txt = txt }
     end
-    for _, suffix in ipairs({ "", "_Classic" }) do
-        local preview = LoadPreviewStatus(suffix)
+    -- Every client loads the same Retail-named preview file; the curve comes from
+    -- that client's own core module.
+    for _, case in ipairs(previewCases) do
+        local label = "UnitPreview_Status (" .. case[1] .. ")"
+        _G.MSUF_NS = case[2]
+        local preview = LoadPreviewStatus(case[2].Client)
         local spec = { id = "statusThreat", size = "threatIndicatorSize" }
         local r, g, b = preview.TextIndicatorColor(spec, {}, {}, {})
-        local er, eg, eb = namespace.UFThreatText.CurveColorAt({}, 85)
-        Check(r == er and g == eg and b == eb, "UnitPreview_Status" .. suffix .. ": the sample must show its 85% curve color")
+        local er, eg, eb = case[2].UFThreatText.CurveColorAt({}, 85)
+        Check(r == er and g == eg and b == eb, label .. ": the sample must show its 85% curve color")
         r, g, b = preview.TextIndicatorColor(spec, { threatIndicatorColorR = 0, threatIndicatorColorG = 0.5,
             threatIndicatorColorB = 1 }, {}, {})
-        Check(r == 0 and g == 0.5 and b == 1, "UnitPreview_Status" .. suffix .. ": a frame's own threat color must win while the curve is unset")
+        Check(r == 0 and g == 0.5 and b == 1, label .. ": a frame's own threat color must win while the curve is unset")
         r = preview.TextIndicatorColor(spec, { threatIndicatorColorCurve = true, threatIndicatorColorR = 0,
             threatIndicatorColorG = 0.5, threatIndicatorColorB = 1 }, {}, {})
-        Check(r == er, "UnitPreview_Status" .. suffix .. ": an explicit Color by threat must win in the preview")
+        Check(r == er, label .. ": an explicit Color by threat must win in the preview")
         -- The plate: on unless turned off, as wide as "100%", padded around the icon.
         Check(preview.ThreatBackgroundEnabled({}, {}) == true
             and preview.ThreatBackgroundEnabled({ threatIndicatorBackground = false }, {}) == false
             and preview.ThreatBackgroundEnabled({}, { threatIndicatorBackground = false }) == false
             and preview.ThreatBackgroundEnabled({ threatIndicatorBackground = true }, { threatIndicatorBackground = false }) == true,
-            "UnitPreview_Status" .. suffix .. ": the plate default drifted from the compile")
+            label .. ": the plate default drifted from the compile")
         local icon = PreviewIcon("85%")
         local bg = icon.bg
         Check(preview.ThreatPlate(icon, spec, {}, {}, 4, 2) == 20 and icon.txt.text == "85%",
-            "UnitPreview_Status" .. suffix .. ": the plate must measure 100% and keep the 85% sample")
+            label .. ": the plate must measure 100% and keep the 85% sample")
         Check(#bg.points == 2 and bg.points[1][1] == "TOPLEFT" and bg.points[1][2] == icon and bg.points[1][4] == -4
             and bg.points[1][5] == 2 and bg.points[2][1] == "BOTTOMRIGHT" and bg.points[2][2] == icon
             and bg.points[2][4] == 4 and bg.points[2][5] == -2 and bg.colorTexture[1] == 0 and bg.colorTexture[4] == 0.75,
-            "UnitPreview_Status" .. suffix .. ": the preview plate must be the runtime's dark plate")
+            label .. ": the preview plate must be the runtime's dark plate")
         Check(preview.ThreatPlate(icon, spec, { threatIndicatorBackground = false }, {}, 4, 2) == nil and bg.allPoints
-            and bg.colorTexture[4] == 0, "UnitPreview_Status" .. suffix .. ": Background off must clear the preview plate")
+            and bg.colorTexture[4] == 0, label .. ": Background off must clear the preview plate")
         Check(preview.ThreatPlate(PreviewIcon("80"), { id = "level" }, {}, {}, 4, 2) == nil,
-            "UnitPreview_Status" .. suffix .. ": only Threat % gets a plate")
+            label .. ": only Threat % gets a plate")
     end
     _G.MSUF_NS = oldNS
 

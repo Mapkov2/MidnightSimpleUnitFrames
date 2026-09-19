@@ -5937,6 +5937,16 @@ L["Shared %s Preview"] = "共用%s預覽"
 L["Shared Player Defensives Preview"] = "共用防禦增益預覽"
 L["Shared Dots on Target Preview"] = "共用目標 DoT 預覽"
 
+-- Client-specific class resource labels.
+L["Druid - Eclipse"] = "??? - ????"
+L["Monk - Chi"] = "?? - ??"
+L["Priest - Shadow Orbs"] = "?? - ????"
+L["Warlock - Burning Embers"] = "?? - ????"
+L["Warlock - Demonic Fury"] = "?? - ????"
+L["Shadow Orbs"] = "????"
+L["Burning Embers"] = "????"
+L["Demonic Fury"] = "????"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

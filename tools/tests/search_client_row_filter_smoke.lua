@@ -83,7 +83,7 @@ Check(clientReads == 1, "MSUF_Menu2_Search_IndexQuery.lua must read MSUF.Client 
 ---------------------------------------------------------------------------
 -- 2. The Pet page registers the control the row names, where the spec exists
 ---------------------------------------------------------------------------
-for _, file in ipairs({ "MSUF_Menu2_UnitStatusSection.lua", "MSUF_Menu2_UnitStatusSection_Classic.lua" }) do
+for _, file in ipairs({ "MSUF_Menu2_UnitStatusSection.lua" }) do
     local source = Read(PAGES .. file)
     Check(source:find('\n    local happiness = FindStatusSpec(unit, "statusPetHappiness")\n'
         .. '    if happiness and happiness.value == "statusPetHappiness" and type(M.RegisterVirtualRuntimeControl) == "function" then\n'

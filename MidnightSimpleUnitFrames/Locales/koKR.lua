@@ -5940,6 +5940,16 @@ L["Shared %s Preview"] = "공유 %s 미리보기"
 L["Shared Player Defensives Preview"] = "공유 방어 버프 미리보기"
 L["Shared Dots on Target Preview"] = "공유 대상 DoT 미리보기"
 
+-- Client-specific class resource labels.
+L["Druid - Eclipse"] = "???? - ??? ??"
+L["Monk - Chi"] = "??? - ?"
+L["Priest - Shadow Orbs"] = "?? - ??? ??"
+L["Warlock - Burning Embers"] = "???? - ???? ??"
+L["Warlock - Demonic Fury"] = "???? - ??? ??"
+L["Shadow Orbs"] = "??? ??"
+L["Burning Embers"] = "???? ??"
+L["Demonic Fury"] = "??? ??"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

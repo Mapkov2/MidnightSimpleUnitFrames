@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -162,6 +163,7 @@ local function SetColor(tex, c)
 end
 local function SmoothTexture(tex)
     if not tex then return end
+    PixelLayoutRegion(tex, true)
     if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 end
@@ -524,15 +526,15 @@ local function CreateSuperellipseParts(frame, layer, subLevel)
     -- The pill/superellipse skin is three textures, not a nine-slice frame. This keeps
     -- allocation cheap for dense option rows while still allowing gradient fills.
     subLevel = subLevel or 0
-    local left = frame:CreateTexture(nil, layer, nil, subLevel)
+    local left = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel))
     left:SetTexture(T.media.superellipse)
     left:SetTexCoord(0.00, 0.25, 0, 1)
     SmoothTexture(left)
-    local middle = frame:CreateTexture(nil, layer, nil, subLevel)
+    local middle = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel))
     middle:SetTexture(T.media.superellipse)
     middle:SetTexCoord(0.25, 0.75, 0, 1)
     SmoothTexture(middle)
-    local right = frame:CreateTexture(nil, layer, nil, subLevel)
+    local right = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel))
     right:SetTexture(T.media.superellipse)
     right:SetTexCoord(0.75, 1.00, 0, 1)
     SmoothTexture(right)
@@ -614,7 +616,7 @@ function T.ApplyBackdrop(frame, bg, border)
     if MenuSkin and MenuSkin.Surface(frame, "panel", T.ApplyBackdrop, bg, border, 1) then return frame end
     if frame.SetBackdrop then
         if frame._msuf2BackdropInfoApplied ~= BACKDROP_INFO then
-            frame:SetBackdrop(BACKDROP_INFO)
+            PixelLayoutRegion(frame, "SetBackdrop", BACKDROP_INFO)
             frame._msuf2BackdropInfoApplied = BACKDROP_INFO
         end
         local b = bg or T.colors.panel
@@ -639,7 +641,7 @@ function T.ApplyBackdrop(frame, bg, border)
         end
     else
         if not frame._msuf2Bg then
-            local tex = frame:CreateTexture(nil, "BACKGROUND")
+            local tex = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND"))
             tex:SetAllPoints()
             frame._msuf2Bg = tex
         end
@@ -660,7 +662,7 @@ local function ApplyFocusVeilLayer(frame, spec)
     if not (frame and frame.CreateTexture and type(spec) == "table" and type(spec.key) == "string") then return end
     local tex = frame[spec.key]
     if not tex then
-        tex = frame:CreateTexture(nil, spec.layer or "BORDER", nil, spec.subLevel or 0)
+        tex = PixelLayoutRegion(frame:CreateTexture(nil, spec.layer or "BORDER", nil, spec.subLevel or 0))
         frame[spec.key] = tex
     end
     tex:ClearAllPoints()
@@ -878,7 +880,7 @@ local function FocusVeilRoot(owner, opts)
 end
 local function EnsureFocusVeilFrame()
     if M._focusVeilFrame then return M._focusVeilFrame end
-    local overlay = CreateFrame("Frame", "MSUF2FocusVeil", _G.UIParent)
+    local overlay = PixelLayoutRegion(CreateFrame("Frame", "MSUF2FocusVeil", _G.UIParent))
     overlay:SetFrameStrata("TOOLTIP")
     overlay:SetToplevel(false)
     overlay:EnableMouse(false)
@@ -968,7 +970,7 @@ local function GlassTexture(frame, key, layer, subLevel)
     if not (frame and frame.CreateTexture) then return nil end
     local tex = frame[key]
     if not tex then
-        tex = frame:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+        tex = PixelLayoutRegion(frame:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0))
         frame[key] = tex
     end
     return tex
@@ -1062,7 +1064,7 @@ local function EnsurePanelAsset(frame)
     local art = {}
     for i = 1, #PANEL_SLICES do
         local spec = PANEL_SLICES[i]
-        local tex = frame:CreateTexture(nil, "BACKGROUND", nil, 7)
+        local tex = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND", nil, 7))
         tex:SetTexCoord(spec[2], spec[3], spec[4], spec[5])
         if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
         tex:Hide()
@@ -1156,26 +1158,26 @@ end
 local function EnsurePanelAssetDepth(frame)
     if not (frame and frame.CreateTexture) then return nil end
     if frame._msuf2PanelAssetDepth then return frame._msuf2PanelAssetDepth end
-    local top = frame:CreateTexture(nil, "BORDER", nil, -8)
+    local top = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, -8))
     top:SetPoint("TOPLEFT", frame, "TOPLEFT", 7, -5)
     top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -7, -5)
     if top.SetBlendMode then top:SetBlendMode("ADD") end
-    local bottom = frame:CreateTexture(nil, "BORDER", nil, -8)
+    local bottom = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, -8))
     bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 6, 5)
     bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -6, 5)
-    local leftGlint = frame:CreateTexture(nil, "ARTWORK", nil, 1)
+    local leftGlint = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 1))
     leftGlint:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -4)
     leftGlint:SetHeight(2)
     leftGlint:SetTexture((T.media and T.media.gradH) or WHITE8)
     if leftGlint.SetTexCoord then leftGlint:SetTexCoord(0, 1, 0, 1) end
     if leftGlint.SetBlendMode then leftGlint:SetBlendMode("ADD") end
-    local rightGlint = frame:CreateTexture(nil, "ARTWORK", nil, 1)
+    local rightGlint = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 1))
     rightGlint:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -4)
     rightGlint:SetHeight(2)
     rightGlint:SetTexture((T.media and T.media.gradHRev) or WHITE8)
     if rightGlint.SetTexCoord then rightGlint:SetTexCoord(0, 1, 0, 1) end
     if rightGlint.SetBlendMode then rightGlint:SetBlendMode("ADD") end
-    local cornerGlow = frame:CreateTexture(nil, "ARTWORK", nil, 0)
+    local cornerGlow = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 0))
     cornerGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -4)
     cornerGlow:SetSize(76, 18)
     cornerGlow:SetTexture(T.media.bgSmooth or WHITE8)
@@ -1341,7 +1343,7 @@ function T.PlayNeonFlash(frame, kind, opts)
     local color = NeonColor(kind, opts)
     local flash = frame._msuf2NeonFlash
     if not flash then
-        flash = frame:CreateTexture(nil, "OVERLAY", nil, 6)
+        flash = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY", nil, 6))
         flash:SetTexture((T.media and T.media.superellipse) or WHITE8)
         flash:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
         flash:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
@@ -1448,7 +1450,7 @@ function T.ApplyPlasticDepth(frame, variant)
     local bottomH = strong and 22 or 16
     local top = frame._msuf2PlasticTop
     if not top then
-        top = frame:CreateTexture(nil, "ARTWORK", nil, -2)
+        top = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, -2))
         frame._msuf2PlasticTop = top
         SmoothTexture(top)
     end
@@ -1465,7 +1467,7 @@ function T.ApplyPlasticDepth(frame, variant)
     top:Show()
     local bottom = frame._msuf2PlasticBottom
     if not bottom then
-        bottom = frame:CreateTexture(nil, "BORDER", nil, 5)
+        bottom = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, 5))
         frame._msuf2PlasticBottom = bottom
         SmoothTexture(bottom)
     end
@@ -1480,7 +1482,7 @@ function T.ApplyPlasticDepth(frame, variant)
     bottom:Show()
     local lip = frame._msuf2PlasticLip
     if not lip then
-        lip = frame:CreateTexture(nil, "ARTWORK", nil, 4)
+        lip = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, 4))
         frame._msuf2PlasticLip = lip
         lip:SetTexture(WHITE8)
     end
@@ -1514,7 +1516,7 @@ function T.ApplyGradient(frame, token, opts)
     local key = opts.key or spec.key or "_msuf2MaterialGradient"
     local tex = frame[key]
     if not tex then
-        tex = frame:CreateTexture(nil, opts.layer or spec.layer or "BACKGROUND", nil, opts.subLevel or spec.subLevel or 1)
+        tex = PixelLayoutRegion(frame:CreateTexture(nil, opts.layer or spec.layer or "BACKGROUND", nil, opts.subLevel or spec.subLevel or 1))
         frame[key] = tex
         SmoothTexture(tex)
     end
@@ -1586,7 +1588,7 @@ function T.ApplyCollapseVisual(chevron, hint, open)
     end
 end
 local function CreateAtmosphereTexture(parent, layer, subLevel, texture, color, inset, texCoord)
-    local tex = parent:CreateTexture(nil, layer, nil, subLevel)
+    local tex = PixelLayoutRegion(parent:CreateTexture(nil, layer, nil, subLevel))
     tex:SetTexture(texture)
     inset = tonumber(inset) or 0
     tex:SetPoint("TOPLEFT", parent, "TOPLEFT", inset, -inset)
@@ -1605,7 +1607,7 @@ function T.ApplyMenuAtmosphere(frame, host, nav)
     CreateAtmosphereTexture(host, "BACKGROUND", 1, T.media.bgSmooth, { 0.08, 0.11, 0.20, 0.065 })
     CreateAtmosphereTexture(host, "BACKGROUND", 2, T.media.bgSmooth, { 0.04, 0.05, 0.12, 0.085 }, nil, { 0, 0, 1, 0, 0, 1, 1, 1 })
     CreateAtmosphereTexture(host, "BACKGROUND", 3, T.media.bgCharcoal, { 0.08, 0.08, 0.14, 0.055 })
-    local logo = host:CreateTexture(nil, "BORDER", nil, 0)
+    local logo = PixelLayoutRegion(host:CreateTexture(nil, "BORDER", nil, 0))
     logo:SetTexture(T.media.logo)
     logo:SetSize(120, 120)
     logo:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -12, 12)
@@ -1654,7 +1656,7 @@ local function AddNavGlyphPath(holder, parts, points)
     if not (holder and holder.CreateLine and type(points) == "table") then return end
     for i = 2, #points do
         local from, to = points[i - 1], points[i]
-        local line = holder:CreateLine(nil, "ARTWORK", nil, 3)
+        local line = PixelLayoutRegion(holder:CreateLine(nil, "ARTWORK", nil, 3))
         line:SetThickness(1.25)
         line:SetStartPoint("CENTER", holder, from[1], from[2])
         line:SetEndPoint("CENTER", holder, to[1], to[2])
@@ -1665,14 +1667,14 @@ end
 local function CreateProceduralNavIcon(btn, navKey)
     local paths, text = NAV_GLYPH_PATHS[navKey], NAV_GLYPH_TEXT[navKey]
     if not (paths or text) then return nil end
-    local holder = CreateFrame("Frame", nil, btn)
+    local holder = PixelLayoutRegion(CreateFrame("Frame", nil, btn))
     holder:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
     holder._msuf2GlyphParts = {}
     if paths then
         for i = 1, #paths do AddNavGlyphPath(holder, holder._msuf2GlyphParts, paths[i]) end
     end
     if text then
-        local label = holder:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        local label = PixelLayoutRegion(holder:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall"))
         local font, _, flags = label:GetFont()
         label:SetFont(font, T.FontSize("micro"), flags or "")
         label:SetPoint("CENTER", holder, "CENTER", 0, -0.5)
@@ -1681,7 +1683,7 @@ local function CreateProceduralNavIcon(btn, navKey)
         holder._msuf2GlyphParts[#holder._msuf2GlyphParts + 1] = { region = label, kind = "font" }
     end
     if navKey == "gameplay" then
-        local dot = holder:CreateTexture(nil, "ARTWORK", nil, 4)
+        local dot = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK", nil, 4))
         dot:SetSize(1.75, 1.75)
         dot:SetPoint("CENTER", holder, "CENTER", -2, 2)
         dot:SetColorTexture(1, 1, 1, 1)
@@ -1736,7 +1738,7 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     if not icon then
         icon = CreateProceduralNavIcon(btn, navKey)
         if not icon then
-            icon = btn:CreateTexture(nil, "ARTWORK", nil, 3)
+            icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 3))
             icon:SetTexture(T.media.navIcons)
         end
         icon:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
@@ -1751,7 +1753,7 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     if icon.SetTexCoord then icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8) end
     btn._msuf2NavIconColor = color
     if not btn._msuf2NavStripe then
-        local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
+        local stripe = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 6))
         stripe:SetTexture("Interface\\Buttons\\WHITE8X8")
         stripe:SetWidth(3)
         stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -4)
@@ -1803,7 +1805,7 @@ local function SetSliderTextureColor(texture, r, g, b, a)
     SetTextureColorCached(texture, r, g, b, a)
 end
 local function SliderTexture(slider, key, layer, subLevel, height)
-    local tex = slider:CreateTexture(nil, layer, nil, subLevel)
+    local tex = PixelLayoutRegion(slider:CreateTexture(nil, layer, nil, subLevel))
     tex:SetHeight(height)
     slider[key] = tex
     return tex
@@ -1853,7 +1855,7 @@ function T.StyleSlider(slider)
     slider.__msufPeelSliderSkinned = true
     slider._msuf2SliderStyled = true
     if slider.SetOrientation then slider:SetOrientation("HORIZONTAL") end
-    if slider.SetThumbTexture and slider.GetThumbTexture and not slider:GetThumbTexture() then slider:SetThumbTexture(T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8") end
+    if slider.SetThumbTexture and slider.GetThumbTexture and not slider:GetThumbTexture() then PixelLayoutRegion(slider, "SetThumbTexture", T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8") end
     HideNativeSliderParts(slider)
     if not slider._msufTrack and slider.CreateTexture then
         local track = SliderTexture(slider, "_msufTrack", "BACKGROUND", 1, 8)
@@ -1874,7 +1876,7 @@ function T.StyleSlider(slider)
         glow:SetPoint("RIGHT", fill, "RIGHT", 0, 0)
     end
     if not slider._msuf2Thumb and slider.CreateTexture then
-        local thumb = slider:CreateTexture(nil, "OVERLAY", nil, 4)
+        local thumb = PixelLayoutRegion(slider:CreateTexture(nil, "OVERLAY", nil, 4))
         slider._msuf2Thumb = thumb
     end
     slider._msuf2UpdateThumb = UpdateSliderThumb
@@ -2033,7 +2035,7 @@ function T.StyleCheckmark(checkButton)
     HideQuietCheckboxNative()
 end
 function T.Panel(parent, name, bg, border)
-    local f = CreateFrame("Frame", name, parent, Template())
+    local f = PixelLayoutRegion(CreateFrame("Frame", name, parent, Template()))
     T.ApplyBackdrop(f, bg or T.colors.panel, border or T.colors.borderSoft)
     if T.ApplyGradient then T.ApplyGradient(f, DynamicGradientFromColor(bg or T.colors.panel), { key = "_msuf2MaterialGradient" }) end
     return f
@@ -2065,14 +2067,14 @@ function T.SkinEditBox(editBox)
     local rim = T.colors.borderSoft or T.colors.coreRim or { 0.070, 0.260, 0.390 }
     T.ApplyBackdrop(editBox, { shadow[1], shadow[2], shadow[3], 0.760 }, { rim[1], rim[2], rim[3], 0.56 })
     if editBox.CreateTexture then
-        local bg = editBox:CreateTexture(nil, "BACKGROUND", nil, -6)
+        local bg = PixelLayoutRegion(editBox:CreateTexture(nil, "BACKGROUND", nil, -6))
         bg:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
         bg:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
         editBox._msuf2EditBg = bg
         local edges = {}
         for i = 1, #EDIT_BOX_EDGE_SPECS do
             local spec = EDIT_BOX_EDGE_SPECS[i]
-            local edge = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
+            local edge = PixelLayoutRegion(editBox:CreateTexture(nil, "OVERLAY", nil, 1))
             edge:SetPoint(spec[1], editBox, spec[1], 0, 0)
             edge:SetPoint(spec[2], editBox, spec[2], 0, 0)
             edge[spec[3]](edge, spec[4])
@@ -2137,7 +2139,7 @@ function T.SkinEditBox(editBox)
 end
 local function FontSetText(self, value) return self._msuf2RawSetText(self, Tr(value or "")) end
 function T.Font(parent, template, text, color, role)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight"))
     fs._msuf2FontRole = role
     fs._msuf2RawSetText = fs.SetText
     fs.SetText = FontSetText
@@ -2152,14 +2154,14 @@ function T.StyleFeatureLink(button, label)
     if not (button and label and button.CreateTexture) then return nil end
     local base = T.colors.accent2 or T.colors.warning or { 0.95, 0.72, 0.18, 1 }
     local hot = { 1.00, 0.84, 0.30, 1 }
-    local fill = button:CreateTexture(nil, "BACKGROUND")
+    local fill = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND"))
     fill:SetPoint("TOPLEFT", button, "TOPLEFT", -5, 3)
     fill:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 5, -3)
     fill:SetColorTexture(base[1], base[2], base[3], 0.09)
 
     local edges = {}
     for index = 1, 4 do
-        local edge = button:CreateTexture(nil, "OVERLAY", nil, 7)
+        local edge = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY", nil, 7))
         edge:SetColorTexture(base[1], base[2], base[3], 0.96)
         edges[index] = edge
     end
@@ -2255,22 +2257,22 @@ end
 local function EnsureNavPillArt(btn)
     if not (btn and btn.CreateTexture) then return nil end
     if btn._msuf2NavPillArt then return btn._msuf2NavPillArt end
-    local tex = btn:CreateTexture(nil, "BORDER", nil, 7)
+    local tex = PixelLayoutRegion(btn:CreateTexture(nil, "BORDER", nil, 7))
     if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
     if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
     ConfigureNavPillSlice(tex)
     tex:Hide()
-    local glow = btn:CreateTexture(nil, "ARTWORK", nil, 1)
+    local glow = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 1))
     if glow.SetTexCoord then glow:SetTexCoord(0, 1, 0, 1) end
     if glow.SetBlendMode then glow:SetBlendMode("ADD") end
     ConfigureNavPillSlice(glow)
     glow:Hide()
-    local hoverWash = btn:CreateTexture(nil, "ARTWORK", nil, 0)
+    local hoverWash = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 0))
     if hoverWash.SetTexCoord then hoverWash:SetTexCoord(0, 1, 0, 1) end
     if hoverWash.SetBlendMode then hoverWash:SetBlendMode("ADD") end
     ConfigureNavPillSlice(hoverWash)
     hoverWash:Hide()
-    local sheen = btn:CreateTexture(nil, "ARTWORK", nil, 2)
+    local sheen = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 2))
     if sheen.SetTexCoord then sheen:SetTexCoord(0, 1, 0, 1) end
     if sheen.SetBlendMode then sheen:SetBlendMode("ADD") end
     ConfigureNavPillSlice(sheen)
@@ -2710,7 +2712,7 @@ local function ButtonHistoryCheckpoint(self)
     checkpoint(label, self._msuf2HistorySource or ("button:" .. tostring(self)))
 end
 function T.Button(parent, text, width, height, opts)
-    local btn = CreateFrame("Button", nil, parent)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     btn:SetSize(width or 120, height or 24)
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
     local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Btn", 2, "BACKGROUND", "BORDER")
@@ -2830,12 +2832,12 @@ local function SetupCloseButtonLine(line, parent)
     line:SetPoint("CENTER", parent, "CENTER", 0, 0)
 end
 function T.CloseButton(parent)
-    local btn = CreateFrame("Button", nil, parent)
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
     btn:SetSize(24, 24)
     local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Close", 2, "BACKGROUND", "BORDER")
     btn._msuf2CloseFill = fill
     btn._msuf2CloseEdge = edge
-    local lineA, lineB = btn:CreateTexture(nil, "ARTWORK"), btn:CreateTexture(nil, "ARTWORK")
+    local lineA, lineB = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK")), PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
     SetupCloseButtonLine(lineA, btn)
     SetupCloseButtonLine(lineB, btn)
     if lineA.SetRotation and lineB.SetRotation then
@@ -2884,14 +2886,14 @@ function T.StyleScrollFrame(scroll, anchor)
     if not scroll or scroll._msuf2ScrollStyled then return scroll and scroll._msuf2ScrollBar end
     scroll._msuf2ScrollStyled = true
     local parent = anchor or (scroll.GetParent and scroll:GetParent()) or scroll
-    local bar = CreateFrame("Frame", nil, parent)
+    local bar = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     -- Keep a generous mouse target while the visible rail stays compact.
     bar:SetWidth(14)
     bar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 5, -8)
     bar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 5, 8)
     if bar.EnableMouse then bar:EnableMouse(true) end
     if bar.SetFrameLevel and scroll.GetFrameLevel then bar:SetFrameLevel(scroll:GetFrameLevel() + 8) end
-    local track = PixelBarTexture(bar:CreateTexture(nil, "BACKGROUND"))
+    local track = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND")))
     track:SetPoint("TOP", bar, "TOP", 0, 0)
     track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
     track:SetWidth(2)
@@ -2900,7 +2902,7 @@ function T.StyleScrollFrame(scroll, anchor)
         { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], 0.82 },
         true)
     bar._msuf2Track = track
-    local trackEdge = PixelBarTexture(bar:CreateTexture(nil, "BORDER"))
+    local trackEdge = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "BORDER")))
     trackEdge:SetPoint("TOPLEFT", track, "TOPRIGHT", 1, 0)
     trackEdge:SetPoint("BOTTOMLEFT", track, "BOTTOMRIGHT", 1, 0)
     trackEdge:SetWidth(1)
@@ -2908,7 +2910,7 @@ function T.StyleScrollFrame(scroll, anchor)
     bar._msuf2TrackEdge = trackEdge
     local thumbBase = T.colors.coreRim
     local thumbHover = T.colors.coreRaised
-    local thumb = PixelBarTexture(bar:CreateTexture(nil, "OVERLAY"))
+    local thumb = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY")))
     thumb:SetSize(5, 42)
     ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 }, { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
     bar._msuf2Thumb = thumb
@@ -2995,7 +2997,7 @@ function T.StyleScrollFrame(scroll, anchor)
     local function EnsureSmoothScrollDriver()
         local driver = scroll._msuf2SmoothScrollDriver
         if driver then return driver end
-        driver = CreateFrame("Frame", nil, scroll)
+        driver = PixelLayoutRegion(CreateFrame("Frame", nil, scroll))
         driver:Hide()
         driver:SetScript("OnUpdate", SmoothScrollOnUpdate)
         scroll._msuf2SmoothScrollDriver = driver

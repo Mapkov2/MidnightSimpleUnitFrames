@@ -26,6 +26,8 @@ local PlayerVehicleHasComboPoints = PlayerVehicleHasComboPoints
 local GetShapeshiftFormID = GetShapeshiftFormID
 local C_SpellBook = C_SpellBook
 local CP_MODE_EVENT_PROFILE = _G.MSUF_CP_MODE_EVENT_PROFILE or {}
+local supportsCharged = not (MSUF.Client and MSUF.Client.SupportsClassResource)
+    or MSUF.Client.SupportsClassResource("CHARGED")
 
 --- CONTROLLER_CONFIG is built once at controller load. E carries the values the
 --- controller resolves itself (constants, player class, spec API, secret guard)
@@ -388,7 +390,7 @@ builders.CONTROLLER_CONFIG = function(E)
             aura = (base.aura == true) or (isAuraPower == true),
             rune = base.rune == true,
             health = base.health == true,
-            pointCharge = base.pointCharge == true,
+            pointCharge = base.pointCharge == true and supportsCharged,
             warlockPred = (base.warlockPred == true) and PLAYER_CLASS == "WARLOCK",
             spellSucceeded = false,
             deadAlive = false,

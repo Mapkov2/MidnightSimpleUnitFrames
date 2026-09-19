@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -293,24 +294,24 @@ function Shared.SetSectionHeaderStatus(sec, opts)
     if entry._msuf2UXSummary and entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
 end
 function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey)
-    local notice = CreateFrame("Frame", nil, sec)
+    local notice = PixelLayoutRegion(CreateFrame("Frame", nil, sec))
     notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 16, topY)
     notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, topY)
     notice:SetHeight(24)
     gateKey = gateKey or "_msuf2UnitFrameGateAlwaysEnabled"
     notice[gateKey] = true
-    local bg = notice:CreateTexture(nil, "BACKGROUND")
+    local bg = PixelLayoutRegion(notice:CreateTexture(nil, "BACKGROUND"))
     bg:SetAllPoints()
     local coreShadow = (T.colors and T.colors.coreShadow) or { 0.006, 0.016, 0.032 }
     local coreSurface = (T.colors and T.colors.coreSurface) or { 0.014, 0.038, 0.072 }
     local coreBlue = (T.colors and T.colors.coreBlue) or { 0.095, 0.360, 0.560 }
     bg:SetColorTexture(coreShadow[1], coreShadow[2], coreShadow[3], 0.30)
-    local top = notice:CreateTexture(nil, "BORDER")
+    local top = PixelLayoutRegion(notice:CreateTexture(nil, "BORDER"))
     top:SetPoint("TOPLEFT", notice, "TOPLEFT", 0, 0)
     top:SetPoint("TOPRIGHT", notice, "TOPRIGHT", 0, 0)
     top:SetHeight(1)
     top:SetColorTexture(coreBlue[1], coreBlue[2], coreBlue[3], 0.42)
-    local bottom = notice:CreateTexture(nil, "BORDER")
+    local bottom = PixelLayoutRegion(notice:CreateTexture(nil, "BORDER"))
     bottom:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 0, 0)
     bottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
     bottom:SetHeight(1)
@@ -539,7 +540,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
     return api
 end
 function Shared.MakeTabFrame(parent, key, topOffset, width, store)
-    local frame = CreateFrame("Frame", nil, parent)
+    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, topOffset or -118)
     frame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 12)
     frame._msuf2Width = width
@@ -690,7 +691,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     local x, y, width = opts.x or 14, opts.y or -104, opts.width or 200
     local label = T.Font(parent, "GameFontHighlightSmall", M.Tr(opts.label or "Custom Anchor Frame"), opts.labelColor or { 0.62, 0.74, 0.96, 1 })
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); label:SetJustifyH("LEFT")
-    local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local box = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24); box:SetSize(width, 24); box:SetAutoFocus(false)
     box:SetMaxLetters(opts.maxLetters or 100); box:SetJustifyH("LEFT")
     box._msuf2Title, box._msuf2ControlKind = label, "textinput"
@@ -739,7 +740,7 @@ function Shared.MakeDragSortRows(parent, defs, opts)
     defs = defs or {}
     local rowW, rowH, rowGap = opts.width or 220, opts.rowHeight or 22, opts.gap or 4
     local rowCount = opts.maxRows or #defs
-    local holder = CreateFrame("Frame", nil, parent)
+    local holder = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     holder:SetPoint("TOPLEFT", parent, "TOPLEFT", opts.x or 0, opts.y or 0)
     holder:SetSize(rowW, rowCount * (rowH + rowGap))
     holder.rows, holder._enabled, holder._activeCount = {}, true, rowCount
@@ -826,18 +827,18 @@ function Shared.MakeDragSortRows(parent, defs, opts)
     end
     for i = 1, rowCount do
         local def = defs[i] or {}
-        local frame = CreateFrame("Frame", nil, holder, T.Template and T.Template() or nil)
+        local frame = PixelLayoutRegion(CreateFrame("Frame", nil, holder, T.Template and T.Template() or nil))
         frame:SetSize(rowW, rowH)
         frame:SetMovable(true)
         frame:EnableMouse(true)
         frame:RegisterForDrag("LeftButton")
         if frame.SetBackdrop then
             local bg, border = opts.bg or { 0.055, 0.060, 0.075, 0.88 }, opts.border or { 0.210, 0.230, 0.300, 0.78 }
-            frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            PixelLayoutRegion(frame, "SetBackdrop", { bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
             frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
             frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
         end
-        local stripe = frame:CreateTexture(nil, "ARTWORK")
+        local stripe = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
         stripe:SetPoint("LEFT", frame, "LEFT", 2, 0)
         stripe:SetSize(4, rowH - 2)
         stripe:SetColorTexture(def.r or 0.30, def.g or 0.55, def.b or 0.85, 1)

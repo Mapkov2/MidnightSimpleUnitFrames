@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -234,7 +235,7 @@ local function EnsurePowerBorder(bar)
   if not parent then return nil end
   local host = bar.MSUFPowerBorderHost
   if not host then
-    host = CreateFrame("Frame", nil, parent)
+    host = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     if host.EnableMouse then host:EnableMouse(false) end
     bar.MSUFPowerBorderHost = host
   elseif host.GetParent and host:GetParent() ~= parent then
@@ -244,7 +245,7 @@ local function EnsurePowerBorder(bar)
   if edges and edges._host == host then return edges, host end
   edges = {}
   for i = 1, 4 do
-    local edge = host:CreateTexture(nil, "OVERLAY", nil, 6)
+    local edge = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
     edge:SetColorTexture(0, 0, 0, 1)
     edges[i] = edge
   end
@@ -457,7 +458,7 @@ local function ApplyShapeMedia(frame, power, texture)
     end
     local edge = bar._msufDetachedShapeEdge
     if not edge then
-      edge = bar:CreateTexture(nil, "OVERLAY", nil, 1)
+      edge = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY", nil, 1))
       bar._msufDetachedShapeEdge = edge
     end
     if edge._msufPowerShapeAnchor ~= bar then
@@ -710,7 +711,7 @@ function Power.Create(frame, spec)
   local snapshotCount = frame.MSUFUnitKey == "player" and 12 or 1
   local createTrail = CreateLossTrailPool or CreateLossTrail
   local trail = createTrail and createTrail(frame, (spec and spec.texture) or WHITE, 0, snapshotCount) or nil
-  local bar = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
+  local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame))
   bar:SetMinMaxValues(0, 100)
   bar:SetValue(0)
   bar:SetStatusBarTexture((spec and spec.texture) or WHITE)
@@ -736,7 +737,7 @@ function Power.Create(frame, spec)
 
   -- Keep the background below the sibling loss trail. Anchoring still follows
   -- the StatusBar for embedded and detached geometry.
-  local bg = (frame._msufHealthVisualRoot or frame):CreateTexture(nil, "BACKGROUND", nil, -1)
+  local bg = PixelLayoutRegion((frame._msufHealthVisualRoot or frame):CreateTexture(nil, "BACKGROUND", nil, -1))
   bg:SetAllPoints(bar)
   bg:SetColorTexture(0, 0, 0, spec and spec.backgroundAlpha or 0.72)
   frame.powerBarBG = bg

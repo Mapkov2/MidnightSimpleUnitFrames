@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_Castbars.lua
 ---
 --- Player castbar creation, backend application, castbar manager, and timer text
@@ -200,7 +201,7 @@ local function InitializeExistingPlayerCast()
 end
 
 local function CreatePlayerCastbarFrame()
-    local frame = CreateFrame("Frame", "MSUF_PlayerCastBar", UIParent)
+    local frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PlayerCastBar", UIParent))
     -- Native pixel rounding for the castbar rect (12.1.5). Root only: the
     -- rounded-corner art below deliberately runs with pixel snapping off.
     local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
@@ -209,17 +210,17 @@ local function CreatePlayerCastbarFrame()
     frame.unit = "player"
     frame:SetSize(200, 18)
 
-    local background = frame:CreateTexture(nil, "BACKGROUND")
+    local background = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND"))
     background:SetAllPoints(frame)
     background:SetColorTexture(0, 0, 0, 0)
     frame.background = background
 
-    local icon = frame:CreateTexture(nil, "OVERLAY", nil, 7)
+    local icon = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY", nil, 7))
     icon:SetSize(18, 18)
     icon:SetPoint("LEFT", frame, "LEFT", 0, 0)
     frame.icon = icon
 
-    local statusBar = CreateFrame("StatusBar", nil, frame)
+    local statusBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame))
     local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
     if type(roundLayout) == "function" then roundLayout(statusBar, true) end
     statusBar:SetPoint("LEFT", icon, "RIGHT", 0, 0)
@@ -235,7 +236,7 @@ local function CreatePlayerCastbarFrame()
     statusBar:GetStatusBarTexture():SetHorizTile(false)
     frame.statusBar = statusBar
 
-    local backgroundBar = frame:CreateTexture(nil, "ARTWORK")
+    local backgroundBar = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
     backgroundBar:SetPoint("TOPLEFT", statusBar, "TOPLEFT", 0, 0)
     backgroundBar:SetPoint("BOTTOMRIGHT", statusBar, "BOTTOMRIGHT", 0, 0)
 
@@ -254,7 +255,7 @@ local function CreatePlayerCastbarFrame()
     frame.backgroundBar = backgroundBar
 
     local fontPath, fontSize, fontFlags = GameFontHighlight:GetFont()
-    local castText = statusBar:CreateFontString(nil, "OVERLAY")
+    local castText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
     castText:SetFont(fontPath, fontSize, fontFlags)
     castText:SetPoint("LEFT", statusBar, "LEFT", 2, 0)
     frame.castText = castText
@@ -263,14 +264,14 @@ local function CreatePlayerCastbarFrame()
     local timeOffsetX = general.castbarPlayerTimeOffsetX or -2
     local timeOffsetY = general.castbarPlayerTimeOffsetY or 0
 
-    local timeText = statusBar:CreateFontString(nil, "OVERLAY")
+    local timeText = PixelLayoutRegion(statusBar:CreateFontString(nil, "OVERLAY"))
     timeText:SetFont(fontPath, fontSize, fontFlags)
     timeText:SetPoint("RIGHT", statusBar, "RIGHT", timeOffsetX, timeOffsetY)
     timeText:SetJustifyH("RIGHT")
     timeText:SetText("")
     frame.timeText = timeText
 
-    local latencyBar = statusBar:CreateTexture(nil, "OVERLAY")
+    local latencyBar = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY"))
     latencyBar:SetColorTexture(1, 0, 0, 0.25)
     latencyBar:SetPoint("TOPRIGHT", statusBar, "TOPRIGHT", 0, 0)
     latencyBar:SetPoint("BOTTOMRIGHT", statusBar, "BOTTOMRIGHT", 0, 0)
@@ -301,7 +302,7 @@ local function CreatePlayerCastbarFrame()
     for index = 1, 4 do
         local tick = frame.empowerStageTicks[index]
         if not tick then
-            tick = statusBar:CreateTexture(nil, "OVERLAY")
+            tick = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY"))
             tick:SetColorTexture(1, 1, 1, 0.8)
             frame.empowerStageTicks[index] = tick
         end

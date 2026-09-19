@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -377,7 +378,7 @@ local function BuildPreview(ctx, builder, unit)
         end
         if not PreviewHostShown() then return nil end
         if not panel then
-            panel = CreateFrame("Frame", nil, sec)
+            panel = PixelLayoutRegion(CreateFrame("Frame", nil, sec))
         elseif panel.SetParent then
             panel:SetParent(sec)
         end
@@ -1427,7 +1428,7 @@ local BOSS_LAYOUT_TILE_VALUES = {
 local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
     if not parent then return nil end
     tileW, tileH, gap = tileW or 64, tileH or 70, gap or 8
-    local control = CreateFrame("Frame", nil, parent)
+    local control = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     control:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 16, y or -44)
     control:SetSize((tileW * #BOSS_LAYOUT_TILE_VALUES) + (gap * (#BOSS_LAYOUT_TILE_VALUES - 1)), tileH + 20)
     control._msuf2ControlKind = "segment"
@@ -1464,7 +1465,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
         for i = 1, count do
             local tex = btn._frames[i]
             if not tex then
-                tex = btn:CreateTexture(nil, "ARTWORK")
+                tex = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK"))
                 btn._frames[i] = tex
             end
             local orderIndex = i - 1
@@ -1487,7 +1488,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
             tex:Show()
         end
         if not btn._firstText then
-            btn._firstText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
             if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
             btn._firstText:SetText("1")
             btn._firstText:SetTextColor(0, 0, 0, 1)
@@ -1500,7 +1501,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
         btn._firstText:Show()
 
         if not btn._arrow then
-            btn._arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
             if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
             btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
@@ -1533,18 +1534,18 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
 
     for i = 1, #BOSS_LAYOUT_TILE_VALUES do
         local info = BOSS_LAYOUT_TILE_VALUES[i]
-        local btn = CreateFrame("Button", nil, control, T.Template and T.Template() or nil)
+        local btn = PixelLayoutRegion(CreateFrame("Button", nil, control, T.Template and T.Template() or nil))
         btn:SetSize(tileW, tileH)
         btn:SetPoint("TOPLEFT", control, "TOPLEFT", (i - 1) * (tileW + gap), -20)
         btn._msuf2Value = info.value
         if btn.SetBackdrop then
-            btn:SetBackdrop({
+            PixelLayoutRegion(btn, "SetBackdrop", {
                 bgFile = "Interface\\Buttons\\WHITE8X8",
                 edgeFile = "Interface\\Buttons\\WHITE8X8",
                 edgeSize = 1,
             })
         end
-        local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local text = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
         if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
         text:SetText(M.Tr(info.text or ""))

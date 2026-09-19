@@ -46,9 +46,9 @@ Check(initialize:find("Client.SupportsTapDenied = isVanilla or isMists or isTBC 
     "every Classic client and Forever must carry the fact")
 
 ---------------------------------------------------------------------------
--- Compiled flag: both Config copies (Mainline and the Classic shadow)
+-- Compiled flag: the one Config compiler every client loads
 ---------------------------------------------------------------------------
-for _, relative in ipairs({ "UnitFrames/Engine/MSUF_UF_Config.lua", "Game/Classic/UnitFrames/MSUF_UF_Config.lua" }) do
+for _, relative in ipairs({ "UnitFrames/Engine/MSUF_UF_Config.lua" }) do
     local config = Read(core .. relative)
     Check(config:find("tapped = { 0.50, 0.50, 0.50 },", 1, true), relative .. ": tapped default color missing")
     Check(config:find("MSUF.Client.SupportsTapDenied == true", 1, true), relative .. ": flag is not gated on the client fact")

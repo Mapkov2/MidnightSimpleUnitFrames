@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 unit preview model: creates fake preview data and model state for unit pages.
 -- Preview-only state must not leak into live unit frames or profile runtime paths.
 local addonName, addonNS = ...
@@ -480,7 +481,7 @@ local function RefreshAllControls(list)
     end
 end
 local function Label(parent, text, anchor, x, y, width)
-    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
     local rel = (anchor and anchor ~= parent) and "BOTTOMLEFT" or "TOPLEFT"
     fs:SetPoint("TOPLEFT", anchor or parent, rel, x or 12, y or -8)
     fs:SetText(TR(text or ""))
@@ -499,7 +500,7 @@ local function SetOptionWidth(widget, width)
 end
 local function AddOptionDivider(parent, anchor, y, width)
     if not parent or not anchor then return nil end
-    local line = parent:CreateTexture(nil, "ARTWORK")
+    local line = PixelLayoutRegion(parent:CreateTexture(nil, "ARTWORK"))
     line:SetHeight(1)
     line:SetColorTexture(0.20, 0.32, 0.45, 0.32)
     line:SetPoint("TOPLEFT", anchor, "TOPLEFT", -2, y or 0)
@@ -573,7 +574,7 @@ local function SetWidgetEnabled(w, enabled)
     if type(w._msufToggleUpdate) == "function" then w._msufToggleUpdate() end
 end
 local function AddPlainCheck(parent, name, label, x, y)
-    local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
+    local cb = PixelLayoutRegion(CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate"))
     cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 12, y or -8)
     if cb.Text then cb.Text:SetText(TR(label or "")) end
     if MSUF.UI and MSUF.UI.StyleCheckmark then MSUF.UI.StyleCheckmark(cb) end
@@ -962,7 +963,7 @@ local function LayoutUnitPreviewOverlay(tex, hpBG, hpFill, mode, frac, hpReverse
     tex:Show()
 end
 local function MakeFS(parent, layer, size)
-    local fs = parent:CreateFontString(nil, layer or "OVERLAY")
+    local fs = PixelLayoutRegion(parent:CreateFontString(nil, layer or "OVERLAY"))
     fs:SetFont(FONT, size or 12, "OUTLINE")
     fs:SetShadowOffset(1, -1)
     return fs

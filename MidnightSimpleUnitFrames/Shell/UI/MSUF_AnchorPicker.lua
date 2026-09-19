@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/UI/MSUF_AnchorPicker.lua - shared anchor picker singleton.
 --- Used by Edit Mode and Menu2 anchor controls. Callers set
 --- _G.MSUF_AnchorPicker._onPick = function(frameName) ... end before showing.
@@ -146,7 +147,7 @@ end
 local function EnsureAnchorPicker()
     if _G.MSUF_AnchorPicker then return _G.MSUF_AnchorPicker end
 
-    local ov = CreateFrame("Frame", "MSUF_AnchorPickerOverlay", UIParent, "BackdropTemplate")
+    local ov = PixelLayoutRegion(CreateFrame("Frame", "MSUF_AnchorPickerOverlay", UIParent, "BackdropTemplate"))
     ExportPublic("MSUF_AnchorPicker", ov)
     ov:SetAllPoints(UIParent)
     ov:SetFrameStrata("FULLSCREEN_DIALOG"); ov:SetFrameLevel(100)
@@ -163,12 +164,12 @@ local function EnsureAnchorPicker()
     local danger = ThemeColor("danger", { 1, 0.3, 0.3, 1 })
     local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
-    local bg = ov:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.12)
+    local bg = PixelLayoutRegion(ov:CreateTexture(nil, "BACKGROUND")); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.12)
 
-    local topPanel = CreateFrame("Frame", nil, ov, "BackdropTemplate")
+    local topPanel = PixelLayoutRegion(CreateFrame("Frame", nil, ov, "BackdropTemplate"))
     topPanel:SetPoint("TOP", ov, "TOP", 0, -92)
     topPanel:SetSize(760, 60)
-    topPanel:SetBackdrop({
+    PixelLayoutRegion(topPanel, "SetBackdrop", {
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
@@ -178,7 +179,7 @@ local function EnsureAnchorPicker()
     topPanel:SetBackdropBorderColor(panelEdge[1], panelEdge[2], panelEdge[3], 0.75)
     ov._topPanel = topPanel
 
-    local info = topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    local info = PixelLayoutRegion(topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge"))
     info:SetPoint("TOP", topPanel, "TOP", 0, -8)
     info:SetJustifyH("CENTER")
     ApplyFontRole(info, "section", font, "OUTLINE")
@@ -187,7 +188,7 @@ local function EnsureAnchorPicker()
     info:SetShadowOffset(1, -1)
     ov._info = info
 
-    local sub = topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local sub = PixelLayoutRegion(topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
     sub:SetPoint("TOP", info, "BOTTOM", 0, -8)
     sub:SetJustifyH("CENTER")
     sub:SetWidth(720)
@@ -197,20 +198,20 @@ local function EnsureAnchorPicker()
     sub:SetShadowOffset(1, -1)
     ov._sub = sub
 
-    local hover = ov:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local hover = PixelLayoutRegion(ov:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
     ApplyFontRole(hover, "body", font, "")
     hover:SetPoint("BOTTOMLEFT", ov, "BOTTOMLEFT", 24, 24)
     hover:SetTextColor(muted[1], muted[2], muted[3], muted[4] or 1)
     ov._hover = hover
 
-    local ctrl = ov:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local ctrl = PixelLayoutRegion(ov:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"))
     ApplyFontRole(ctrl, "heading", font, "")
     ctrl:SetPoint("BOTTOM", ov, "BOTTOM", 0, 56)
     ctrl:SetJustifyH("CENTER")
     ov._ctrlHint = ctrl
 
-    local hl = CreateFrame("Frame", "MSUF_AnchorPickerHighlight", ov, "BackdropTemplate")
-    hl:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12 })
+    local hl = PixelLayoutRegion(CreateFrame("Frame", "MSUF_AnchorPickerHighlight", ov, "BackdropTemplate"))
+    PixelLayoutRegion(hl, "SetBackdrop", { edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12 })
     hl:SetBackdropBorderColor(ok[1], ok[2], ok[3], 0.95)
     hl:Hide()
     ov._highlight = hl

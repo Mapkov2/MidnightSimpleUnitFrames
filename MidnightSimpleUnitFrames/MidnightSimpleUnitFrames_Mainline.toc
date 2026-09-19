@@ -141,6 +141,32 @@ Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml
+# Select client-language aura aliases before Lua parsing; menu language is independent.
+Auras3\AliasData\MSUF_Auras3_AliasData_Common.lua
+Auras3\AliasData\MSUF_Auras3_AliasData_enUS.lua [AllowLoadTextLocale enUS, enGB]
+Auras3\AliasData\MSUF_Auras3_AliasData_deDE.lua [AllowLoadTextLocale deDE]
+Auras3\AliasData\MSUF_Auras3_AliasData_frFR.lua [AllowLoadTextLocale frFR]
+Auras3\AliasData\MSUF_Auras3_AliasData_esES.lua [AllowLoadTextLocale esES]
+Auras3\AliasData\MSUF_Auras3_AliasData_esMX.lua [AllowLoadTextLocale esMX]
+Auras3\AliasData\MSUF_Auras3_AliasData_itIT.lua [AllowLoadTextLocale itIT]
+Auras3\AliasData\MSUF_Auras3_AliasData_ptBR.lua [AllowLoadTextLocale ptBR, ptPT]
+Auras3\AliasData\MSUF_Auras3_AliasData_ruRU.lua [AllowLoadTextLocale ruRU]
+Auras3\AliasData\MSUF_Auras3_AliasData_koKR.lua [AllowLoadTextLocale koKR]
+Auras3\AliasData\MSUF_Auras3_AliasData_zhCN.lua [AllowLoadTextLocale zhCN]
+Auras3\AliasData\MSUF_Auras3_AliasData_zhTW.lua [AllowLoadTextLocale zhTW]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_Common.lua
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_enUS.lua [AllowLoadTextLocale enUS, enGB]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_deDE.lua [AllowLoadTextLocale deDE]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_frFR.lua [AllowLoadTextLocale frFR]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_esES.lua [AllowLoadTextLocale esES]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_esMX.lua [AllowLoadTextLocale esMX]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_itIT.lua [AllowLoadTextLocale itIT]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_ptBR.lua [AllowLoadTextLocale ptBR, ptPT]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_ruRU.lua [AllowLoadTextLocale ruRU]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_koKR.lua [AllowLoadTextLocale koKR]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_zhCN.lua [AllowLoadTextLocale zhCN]
+Game\Forever\Auras\AliasData\MSUF_Auras3_AliasData_zhTW.lua [AllowLoadTextLocale zhTW]
+UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Auras.xml
 Integrations\MSUF_Integration_NicknameProviders.lua
 Integrations\MSUF_Integration_NSRTNicknames.lua
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua

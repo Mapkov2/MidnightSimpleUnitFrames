@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
@@ -258,6 +259,7 @@ end
 
 local function SE_SnapOff(tex)
   if tex and tex.SetSnapToPixelGrid then
+    PixelLayoutRegion(tex, true)
     tex:SetSnapToPixelGrid(false)
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
   end
@@ -589,7 +591,7 @@ local function EnsureRoundedHoverContainer(owner, parent, key)
   local container = owner[key]
   if not container then
     if not (CreateFrame and CanCreateRoundedRegion(container)) then return nil end
-    container = CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent)
+    container = PixelLayoutRegion(CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent))
     container:SetAllPoints(parent)
     if container.EnableMouse then container:EnableMouse(false) end
     container:Hide()
@@ -634,7 +636,7 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
     local edge = (i == 1) and baseEdge or stack[i]
     if not edge then
       if not CanCreateRoundedRegion(edge) then return false end
-      edge = (parent._msufHealthVisualRoot or parent):CreateTexture(nil, layer, nil, subLevel or 0)
+      edge = PixelLayoutRegion((parent._msufHealthVisualRoot or parent):CreateTexture(nil, layer, nil, subLevel or 0), true)
       SE_SnapOff(edge)
       stack[i] = edge
     end
@@ -674,7 +676,7 @@ local function EnsureClassPowerRoundedOutline(CP)
   local host = CP._msufRCPOutlineHost
   if not host then
     if not (CreateFrame and CanCreateRoundedRegion(host)) then return nil, nil end
-    host = CreateFrame("Frame", nil, container)
+    host = PixelLayoutRegion(CreateFrame("Frame", nil, container))
     host:SetAllPoints(container)
     if host.EnableMouse then host:EnableMouse(false) end
     CP._msufRCPOutlineHost = host
@@ -688,7 +690,7 @@ local function EnsureClassPowerRoundedOutline(CP)
   local edge = CP._msufRCPOutlineEdge
   if not edge then
     if not CanCreateRoundedRegion(edge) then return host, nil end
-    edge = host:CreateTexture(nil, "OVERLAY", nil, 0)
+    edge = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 0), true)
     SE_SnapOff(edge)
     CP._msufRCPOutlineEdge = edge
   end
@@ -868,7 +870,7 @@ local function ApplyAltManaRounded(AM, masterEnabled)
   local edge = AM._msufRAMOutlineEdge
   if bgApplied and fillApplied and border then
     if not edge and CanCreateRoundedRegion(edge) then
-      edge = border:CreateTexture(nil, "OVERLAY", nil, 0)
+      edge = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 0), true)
       SE_SnapOff(edge)
       AM._msufRAMOutlineEdge = edge
     end
@@ -924,7 +926,7 @@ local function ApplyUnitRoundedEdge(f, enabled, active, activeThickness)
   local thickness = ResolveUnitEdgeThickness(f, active, activeThickness)
   if not edge then
     if not CanCreateRoundedRegion(edge) then return end
-    edge = (f._msufHealthVisualRoot or f):CreateTexture(nil, "BACKGROUND", nil, -7)
+    edge = PixelLayoutRegion((f._msufHealthVisualRoot or f):CreateTexture(nil, "BACKGROUND", nil, -7), true)
     SE_SnapOff(edge)
     f._msufRUF_Edge = edge
   end
@@ -993,7 +995,7 @@ local function ApplyUnitRoundedHoverEdge(f, enabled)
   if not container then return nil end
   if not edge then
     if not CanCreateRoundedRegion(edge) then return nil end
-    edge = container:CreateTexture(nil, "OVERLAY", nil, 7)
+    edge = PixelLayoutRegion(container:CreateTexture(nil, "OVERLAY", nil, 7), true)
     SE_SnapOff(edge)
     f._msufRUF_HoverEdge = edge
   end
@@ -1082,7 +1084,7 @@ local function ApplyEmbeddedPowerSeparator(f, bar, thickness)
   local separator = f._msufRUF_EmbeddedPowerSeparator
   if not separator then
     if not CanCreateRoundedRegion(separator) then return false end
-    separator = bar:CreateTexture(nil, "OVERLAY", nil, 6)
+    separator = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY", nil, 6), true)
     SE_SnapOff(separator)
     f._msufRUF_EmbeddedPowerSeparator = separator
   end
@@ -1149,7 +1151,7 @@ local function ApplyPowerRoundedEdge(f, enabled)
   HideEmbeddedPowerSeparator(f)
   if not edge then
     if not CanCreateRoundedRegion(edge) then return nil end
-    edge = bar:CreateTexture(nil, "OVERLAY", nil, 6)
+    edge = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY", nil, 6), true)
     SE_SnapOff(edge)
     f._msufRUF_DetachedPowerEdge = edge
   end
@@ -1227,7 +1229,7 @@ ApplyGroupRoundedEdge = function(f, enabled)
   local active = f._msufGFHighlightBorder and f._msufGFHighlightBorder._msufHLActivePrio
   if not edge then
     if not CanCreateRoundedRegion(edge) then return end
-    edge = (parent._msufHealthVisualRoot or parent):CreateTexture(nil, "BACKGROUND", nil, -8)
+    edge = PixelLayoutRegion((parent._msufHealthVisualRoot or parent):CreateTexture(nil, "BACKGROUND", nil, -8), true)
     SE_SnapOff(edge)
     f._msufRGF_Edge = edge
   end
@@ -1303,7 +1305,7 @@ local function ApplyGroupRoundedIndicator(f, kind, enabled, shown, thickness, r,
   local parent = f.barGroup or f
   if not edge then
     if not CanCreateRoundedRegion(edge) then return false end
-    edge = (parent._msufHealthVisualRoot or parent):CreateTexture(nil, "OVERLAY", nil, kind == "target" and 7 or 6)
+    edge = PixelLayoutRegion((parent._msufHealthVisualRoot or parent):CreateTexture(nil, "OVERLAY", nil, kind == "target" and 7 or 6), true)
     SE_SnapOff(edge)
     f[edgeKey] = edge
   end
@@ -1384,7 +1386,7 @@ local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
   local anchor = host._msufRGFBlockBorderAnchor
   if not anchor then
     if not (CreateFrame and CanCreateRoundedRegion(anchor)) then return false end
-    anchor = CreateFrame("Frame", nil, host)
+    anchor = PixelLayoutRegion(CreateFrame("Frame", nil, host))
     if anchor.EnableMouse then anchor:EnableMouse(false) end
     host._msufRGFBlockBorderAnchor = anchor
   end
@@ -1396,7 +1398,7 @@ local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
   local edge = host._msufRGFBlockBorderEdge
   if not edge then
     if not CanCreateRoundedRegion(edge) then return false end
-    edge = host:CreateTexture(nil, "OVERLAY")
+    edge = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY"), true)
     SE_SnapOff(edge)
     host._msufRGFBlockBorderEdge = edge
   end
@@ -1461,7 +1463,7 @@ local function ApplySpellIndicatorRoundedEdge(button, frame, target, shown, thic
   local edge = button._msufRUFSpellIndicatorEdge
   if not edge then
     if not CanCreateRoundedRegion(edge) then return false end
-    edge = (root._msufHealthVisualRoot or root):CreateTexture(nil, "OVERLAY")
+    edge = PixelLayoutRegion((root._msufHealthVisualRoot or root):CreateTexture(nil, "OVERLAY"), true)
     SE_SnapOff(edge)
     button._msufRUFSpellIndicatorEdge = edge
   end
@@ -1575,7 +1577,7 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
       SetModernBorderEdgesSuppressed(f, false)
       return false
     end
-    edge = (parent._msufHealthVisualRoot or parent):CreateTexture(nil, layer, nil, subLevel)
+    edge = PixelLayoutRegion((parent._msufHealthVisualRoot or parent):CreateTexture(nil, layer, nil, subLevel), true)
     SE_SnapOff(edge)
     f[edgeKey] = edge
   end
@@ -1629,7 +1631,7 @@ local function ApplyGroupRoundedHoverEdge(f, enabled)
   if not container then return nil end
   if not edge then
     if not CanCreateRoundedRegion(edge) then return nil end
-    edge = container:CreateTexture(nil, "OVERLAY", nil, 7)
+    edge = PixelLayoutRegion(container:CreateTexture(nil, "OVERLAY", nil, 7), true)
     SE_SnapOff(edge)
     f._msufRGF_HoverEdge = edge
   end
@@ -1717,7 +1719,7 @@ local function EnsureGroupBackground(f)
   local bg = f._msufRGF_Background
   if not bg then
     if not CanCreateRoundedRegion(bg) then return nil end
-    bg = f.barGroup:CreateTexture(nil, "BACKGROUND", nil, -8)
+    bg = PixelLayoutRegion(f.barGroup:CreateTexture(nil, "BACKGROUND", nil, -8), true)
     bg:SetTexture(WHITE8)
     bg:SetAllPoints(f.barGroup)
     SE_SnapOff(bg)
@@ -1840,7 +1842,7 @@ local function PrepareFrozenDispelBorder(f, owner, thickness)
   local anchor = FrameIsGroup(f) and (f.barGroup or f) or f
   local regions = {}
   for i = 1, ClampEdgeSize(thickness, 1, MAX_HIGHLIGHT_BORDER_THICKNESS) do
-    local edge = (owner._msufHealthVisualRoot or owner):CreateTexture(nil, "OVERLAY")
+    local edge = PixelLayoutRegion((owner._msufHealthVisualRoot or owner):CreateTexture(nil, "OVERLAY"), true)
     SE_SnapOff(edge)
     SetRoundedEdgeTexture(edge, roundedEdgePath)
     LayoutRoundedEdge(edge, anchor, i, i)

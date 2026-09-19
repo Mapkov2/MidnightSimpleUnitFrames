@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -203,7 +204,7 @@ local function EnsureLayerFrame(frame, layer)
   end
   local holder = layers[layer]
   if not holder then
-    holder = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame)
+    holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
     holder:SetAllPoints(frame)
     holder:EnableMouse(false)
     if holder.SetClipsChildren then
@@ -523,6 +524,7 @@ local function LayoutRegion(region, frame, spec, cfg, isText, fontRole)
   if not (region and cfg) then
     return
   end
+
   if not isText then
     local size = tonumber(cfg.size) or 16
     if region._msufStatusSize ~= size then
@@ -575,7 +577,7 @@ local function EnsureTexture(frame, field, layer)
   if tex then
     return tex
   end
-  tex = (holder or frame):CreateTexture(nil, "OVERLAY")
+  tex = PixelLayoutRegion((holder or frame):CreateTexture(nil, "OVERLAY"))
   tex:SetTexture(WHITE)
   tex:Hide()
   frame[field] = tex
@@ -588,7 +590,7 @@ local function EnsureText(frame, field, layer)
   if fs then
     return fs
   end
-  fs = (holder or frame):CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  fs = PixelLayoutRegion((holder or frame):CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
   fs:Hide()
   frame[field] = fs
   return fs

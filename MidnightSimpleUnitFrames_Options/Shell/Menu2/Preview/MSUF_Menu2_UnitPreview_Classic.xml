@@ -3,13 +3,13 @@
     <Script file="MSUF_Menu2_UnitPreview_Specs.lua"/>
     <Script file="MSUF_Menu2_UnitPreview_Core.lua"/>
     <Script file="MSUF_Menu2_UnitPreview_Castbar.lua"/>
-    <Script file="MSUF_Menu2_UnitPreview_Status_Classic.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Status.lua"/>
     <Script file="MSUF_Menu2_UnitPreview_Auras.lua"/>
     <Script file="MSUF_Menu2_UnitPreview_Runtime.lua"/>
     <Script file="MSUF_Menu2_UnitPreview_ZoomPan.lua"/>
-    <Script file="MSUF_Menu2_UnitPreview_Render_Classic.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Render.lua"/>
     <Script file="MSUF_Menu2_UnitPreview_View_Handles.lua"/>
     <Script file="MSUF_Menu2_UnitPreview_View_Chrome.lua"/>
-    <Script file="MSUF_Menu2_UnitPreview_View_Classic.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_View.lua"/>
     <Script file="MSUF_Menu2_UnitPreview_API.lua"/>
 </Ui>

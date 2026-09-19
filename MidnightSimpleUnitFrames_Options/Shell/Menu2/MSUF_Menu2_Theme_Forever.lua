@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- WoW Forever's menu skin (Classic Glass). Every Options TOC registers it before
 -- Menu2 loads so the token owner can apply it before any renderer captures
 -- colors, but only the WoW Forever client applies it (owner decision
@@ -127,7 +128,7 @@ MSUF.ApplyClassicMenuTheme = function(T)
         end
         local tex = frame._msuf2AtlasDecoration
         if not tex then
-            tex = frame:CreateTexture(nil, "BORDER", nil, -7)
+            tex = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, -7))
             frame._msuf2AtlasDecoration = tex
         end
         tex:ClearAllPoints()

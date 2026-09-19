@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Interactive, non-destructive release highlights for existing profiles.
 -- Lifecycle and release data live in State/MSUF_UpgradeHighlights.lua.
 local _, MSUF = ...
@@ -214,7 +215,7 @@ local function CreateIconWell(parent, T, navKey, size, x, y)
     well:SetSize(size, size)
     well:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     if type(T.ApplySurface) == "function" then T.ApplySurface(well, "card") end
-    local icon = well:CreateTexture(nil, "ARTWORK", nil, 2)
+    local icon = PixelLayoutRegion(well:CreateTexture(nil, "ARTWORK", nil, 2))
     icon:SetSize(floor(size * 0.52), floor(size * 0.52))
     icon:SetPoint("CENTER", well, "CENTER", 0, 0)
     local grid = T.navIconGrid and T.navIconGrid[navKey]
@@ -235,11 +236,11 @@ local function CreateScene(ctx, T)
     local sceneX, sceneTop = 12, -12
     local sceneWidth = max(288, width - sceneX)
     local contentWidth = min(720, max(280, sceneWidth - 40))
-    local scene = CreateFrame("Frame", nil, ctx.wrapper)
+    local scene = PixelLayoutRegion(CreateFrame("Frame", nil, ctx.wrapper))
     scene:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", sceneX, sceneTop)
     scene:SetWidth(sceneWidth)
 
-    local wash = scene:CreateTexture(nil, "BACKGROUND", nil, 0)
+    local wash = PixelLayoutRegion(scene:CreateTexture(nil, "BACKGROUND", nil, 0))
     wash:SetPoint("TOPLEFT", scene, "TOPLEFT", 0, 0)
     wash:SetPoint("TOPRIGHT", scene, "TOPRIGHT", 0, 0)
     wash:SetHeight(260)
@@ -354,7 +355,7 @@ local function Progress(scene, T, count, current, contentWidth, top)
     for i = 1, count do
         local active = i <= current
         local color = active and (T.colors.coreHot or T.colors.accent) or (T.colors.borderSoft or T.colors.dim)
-        local segment = scene:CreateTexture(nil, "ARTWORK", nil, 2)
+        local segment = PixelLayoutRegion(scene:CreateTexture(nil, "ARTWORK", nil, 2))
         segment:SetPoint("TOPLEFT", scene, "TOPLEFT", x + ((i - 1) * (segmentWidth + gap)), top)
         segment:SetSize(segmentWidth, 3)
         segment:SetColorTexture(color[1], color[2], color[3], active and 0.92 or 0.34)
@@ -376,19 +377,19 @@ local function BuildLayerDummyPreview(card, T, x, width)
     label:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
 
     local trackWidth = max(56, half - 58)
-    local track = panel:CreateTexture(nil, "ARTWORK", nil, 1)
+    local track = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK", nil, 1))
     track:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -40)
     track:SetSize(trackWidth, 4)
     local trackColor = T.colors.borderSoft
     track:SetColorTexture(trackColor[1], trackColor[2], trackColor[3], 0.9)
 
     local fillWidth = floor(trackWidth * 0.4)
-    local fill = panel:CreateTexture(nil, "ARTWORK", nil, 2)
+    local fill = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK", nil, 2))
     fill:SetPoint("TOPLEFT", track, "TOPLEFT", 0, 0)
     fill:SetSize(fillWidth, 4)
     fill:SetColorTexture(accent[1], accent[2], accent[3], 0.95)
 
-    local knob = panel:CreateTexture(nil, "ARTWORK", nil, 3)
+    local knob = PixelLayoutRegion(panel:CreateTexture(nil, "ARTWORK", nil, 3))
     knob:SetSize(10, 14)
     knob:SetPoint("CENTER", track, "LEFT", fillWidth, 0)
     knob:SetColorTexture(accent[1], accent[2], accent[3], 1)

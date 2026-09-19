@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Focus.lua - shared Edit Mode focus, hover, and Menu2 state.
 --- Owns visual focus/highlight bookkeeping between edit-mode movers, quick popups, and Menu2.
 --- It should not save positions directly; drag/commit code owns persistent layout writes.
@@ -276,17 +277,17 @@ end
 
 local function EnsureHoverFrame()
     if hoverFrame then return hoverFrame end
-    hoverFrame = CreateFrame("Frame", "MSUF_EM2_HoverPreviewRing", UIParent, "BackdropTemplate")
+    hoverFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HoverPreviewRing", UIParent, "BackdropTemplate"))
     hoverFrame:SetFrameStrata("FULLSCREEN")
     hoverFrame:SetFrameLevel(512)
     hoverFrame:EnableMouse(false)
-    hoverFrame:SetBackdrop({ edgeFile = W8, edgeSize = 1 })
+    PixelLayoutRegion(hoverFrame, "SetBackdrop", { edgeFile = W8, edgeSize = 1 })
     local accent = ThemeColor("accent", { 0.18, 0.72, 0.90, 1 })
     hoverFrame:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.50)
     hoverFrame:SetAlpha(0)
     hoverFrame:Hide()
 
-    hoverFrame.fill = hoverFrame:CreateTexture(nil, "BACKGROUND")
+    hoverFrame.fill = PixelLayoutRegion(hoverFrame:CreateTexture(nil, "BACKGROUND"))
     hoverFrame.fill:SetPoint("TOPLEFT", 1, -1)
     hoverFrame.fill:SetPoint("BOTTOMRIGHT", -1, 1)
     hoverFrame.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.040)

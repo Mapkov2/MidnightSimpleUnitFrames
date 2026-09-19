@@ -24,7 +24,7 @@ local MENU_STATE_SCALAR_DEFAULTS = {
     auraStyleGFLane = "debuff",
     auraStyleContainer = "debuff",
     auraAppearanceContainer = "debuff",
-    previewBackground = "studio",
+    previewBackground = (MSUF.Client and MSUF.Client.IsRetail == true) and "silvermoon" or "studio",
     previewBackgroundCustomR = 0.08,
     previewBackgroundCustomG = 0.12,
     previewBackgroundCustomB = 0.18,

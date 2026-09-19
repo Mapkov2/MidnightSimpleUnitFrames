@@ -26,7 +26,7 @@ local function Space(role, fallback)
 end
 
 local hudFrame, row2Frame
-local DockUI = {}
+local DockUI = { PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end }
 local ApplyDockLayout, RefreshPositionPopup, SetDockExpanded, ScheduleDockAutoHide, StopDockDrag
 local previewBtn, previewAnimBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
 local previewAddonSlot
@@ -111,7 +111,7 @@ local function ApplyHUDMaterial(frame, material)
 end
 
 local function MakeFS(p, fontRole, r, g, b, a)
-    local fs = p:CreateFontString(nil, "OVERLAY")
+    local fs = DockUI.PixelLayoutRegion(p:CreateFontString(nil, "OVERLAY"))
     local ui = SharedUI()
     if ui and ui.ApplyFontRole then
         ui.ApplyFontRole(fs, fontRole or "body", FONT, "")
@@ -610,11 +610,11 @@ local function MakeBtn(parent, text, w, h, fontRole, onClick)
         align = "CENTER",
         skipHistory = true,
         onClick = onClick,
-    }) or CreateFrame("Button", nil, parent)
+    }) or DockUI.PixelLayoutRegion(CreateFrame("Button", nil, parent))
     btn:SetSize(w, h)
     local label = btn._msuf2Label or btn._label
     if not label then
-        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        local hl = DockUI.PixelLayoutRegion(btn:CreateTexture(nil, "HIGHLIGHT"))
         hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
         label = MakeFS(btn, fontRole or "body", TH.textR, TH.textG, TH.textB, 0.92)
         label:SetPoint("CENTER"); label:SetText(HelpText(text))
@@ -626,7 +626,7 @@ local function MakeBtn(parent, text, w, h, fontRole, onClick)
         ui.ApplyFontRole(label, fontRole or "body", FONT, "")
     end
     btn._label = label
-    local dot = btn:CreateTexture(nil, "OVERLAY")
+    local dot = DockUI.PixelLayoutRegion(btn:CreateTexture(nil, "OVERLAY"))
     dot:SetSize(w - 8, 2); dot:SetPoint("BOTTOM", btn, "BOTTOM", 0, 2)
     dot:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.90); dot:Hide()
     btn._dot = dot
@@ -639,7 +639,7 @@ local function AttachHistoryIcon(btn, texturePath)
     if not btn then return end
     if btn._label then btn._label:Hide() end
     if btn._dot then btn._dot:Hide() end
-    local icon = btn:CreateTexture(nil, "ARTWORK", nil, 5)
+    local icon = DockUI.PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 5))
     icon:SetTexture(texturePath)
     icon:SetSize(17, 17)
     icon:SetPoint("CENTER", btn, "CENTER", 0, 0)
@@ -657,9 +657,9 @@ local function RowItemsWidth(items, gap, sepW)
 end
 
 local function MakeCluster(parent, label, height, showLabel)
-    local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    local f = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, parent, "BackdropTemplate"))
     f:SetSize(1, height or CLUSTER_H)
-    f:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
+    DockUI.PixelLayoutRegion(f, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1,
                     insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     f:SetBackdropColor(TH.r2Bg[1], TH.r2Bg[2], TH.r2Bg[3], 0.38)
     f:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.34)
@@ -711,16 +711,16 @@ local function AddRowButton(row, parent, text, width, height, fontRole, onClick,
 end
 
 local function AddAdjustWidget(row, parent, width, height, withStateBg, onMouseWheel, onMouseUp, tip)
-    local f = CreateFrame("Frame", nil, parent)
+    local f = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     f:SetSize(width, height); f:EnableMouse(true); f:EnableMouseWheel(true)
     if withStateBg then
-        local stateBg = f:CreateTexture(nil, "BACKGROUND")
+        local stateBg = DockUI.PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND"))
         stateBg:SetAllPoints(); stateBg:SetColorTexture(0, 0, 0, 0)
         f._stateBg = stateBg
     end
     local fs = MakeFS(f, "caption", TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
     fs:SetPoint("CENTER")
-    local hl = f:CreateTexture(nil, "HIGHLIGHT")
+    local hl = DockUI.PixelLayoutRegion(f:CreateTexture(nil, "HIGHLIGHT"))
     hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.04)
     if onMouseUp then f:SetScript("OnMouseUp", onMouseUp) end
     if onMouseWheel then f:SetScript("OnMouseWheel", onMouseWheel) end
@@ -917,12 +917,12 @@ end
 --- on screen at once and share all chrome.
 local function EnsureFramePicker()
     if DockUI.framePicker then return DockUI.framePicker end
-    local picker = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    local picker = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, UIParent, "BackdropTemplate"))
     picker:SetFrameStrata("TOOLTIP")
     picker:SetFrameLevel(1300)
     picker:SetClampedToScreen(true)
     picker:EnableMouse(true)
-    picker:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
+    DockUI.PixelLayoutRegion(picker, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1,
                          insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     picker:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], 0.98)
     picker:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.90)
@@ -952,9 +952,9 @@ local function BuildFramePickerRows(picker)
         local data = rows[i]
         local item = widgets[i]
         if not item then
-            item = CreateFrame("Button", nil, picker)
+            item = DockUI.PixelLayoutRegion(CreateFrame("Button", nil, picker))
             item:SetSize(PICKER_WIDTH - 6, PICKER_ROW_H)
-            item._bg = item:CreateTexture(nil, "BACKGROUND")
+            item._bg = DockUI.PixelLayoutRegion(item:CreateTexture(nil, "BACKGROUND"))
             item._bg:SetAllPoints()
             item._fs = MakeFS(item, "caption", TH.textR, TH.textG, TH.textB, 0.94)
             --- Both edges anchored plus no wrapping: a long localized label is
@@ -963,7 +963,7 @@ local function BuildFramePickerRows(picker)
             item._fs:SetPoint("RIGHT", item, "RIGHT", -8, 0)
             item._fs:SetJustifyH("LEFT")
             item._fs:SetWordWrap(false)
-            local hl = item:CreateTexture(nil, "HIGHLIGHT")
+            local hl = DockUI.PixelLayoutRegion(item:CreateTexture(nil, "HIGHLIGHT"))
             hl:SetAllPoints()
             hl:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.18)
             item:SetScript("OnClick", function(self)
@@ -1434,13 +1434,13 @@ local function CreateDockSwitch(parent, labelText, y, stateKey)
     local label = MakeFS(parent, "caption", TH.textR, TH.textG, TH.textB, 0.92)
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", 18, y)
     label:SetText(HelpText(labelText))
-    local row = CreateFrame("Button", nil, parent)
+    local row = DockUI.PixelLayoutRegion(CreateFrame("Button", nil, parent))
     row:SetSize(40, 20)
     row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -18, y + 3)
     row:RegisterForClicks("LeftButtonUp")
-    local track = row:CreateTexture(nil, "BACKGROUND")
+    local track = DockUI.PixelLayoutRegion(row:CreateTexture(nil, "BACKGROUND"))
     track:SetAllPoints()
-    local knob = row:CreateTexture(nil, "ARTWORK")
+    local knob = DockUI.PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
     knob:SetSize(14, 14)
     row._track, row._knob = track, knob
     row:SetScript("OnClick", function()
@@ -1472,12 +1472,12 @@ end
 
 local function EnsurePositionPopup()
     if DockUI.positionPopup then return DockUI.positionPopup end
-    local popup = CreateFrame("Frame", "MSUF_EM2_HUD_PositionPopup", UIParent, "BackdropTemplate")
+    local popup = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HUD_PositionPopup", UIParent, "BackdropTemplate"))
     popup:SetSize(356, 326)
     popup:SetFrameStrata("TOOLTIP")
     popup:SetFrameLevel(1300)
     popup:SetClampedToScreen(true)
-    popup:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+    DockUI.PixelLayoutRegion(popup, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
     popup:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], 0.985)
     popup:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.62)
     ApplyHUDMaterial(popup, "popup")
@@ -1489,13 +1489,13 @@ local function EnsurePositionPopup()
     heading:SetPoint("TOPLEFT", popup, "TOPLEFT", 18, -15)
     heading:SetText(HelpText("Toolbar position"))
 
-    local monitor = CreateFrame("Frame", nil, popup, "BackdropTemplate")
+    local monitor = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, popup, "BackdropTemplate"))
     monitor:SetSize(170, 96)
     monitor:SetPoint("TOPLEFT", popup, "TOPLEFT", 18, -46)
-    monitor:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
+    DockUI.PixelLayoutRegion(monitor, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
     monitor:SetBackdropColor(0.025, 0.055, 0.090, 0.96)
     monitor:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.85)
-    local screen = monitor:CreateTexture(nil, "BACKGROUND", nil, 1)
+    local screen = DockUI.PixelLayoutRegion(monitor:CreateTexture(nil, "BACKGROUND", nil, 1))
     screen:SetPoint("TOPLEFT", monitor, "TOPLEFT", 10, -10)
     screen:SetPoint("BOTTOMRIGHT", monitor, "BOTTOMRIGHT", -10, 10)
     screen:SetColorTexture(0.07, 0.12, 0.18, 0.96)
@@ -1505,7 +1505,7 @@ local function EnsurePositionPopup()
         LEFT = { "LEFT", monitor, "LEFT", 6, 0 }, RIGHT = { "RIGHT", monitor, "RIGHT", -6, 0 },
     }
     for dock, point in pairs(dotAnchors) do
-        local dot = monitor:CreateTexture(nil, "OVERLAY")
+        local dot = DockUI.PixelLayoutRegion(monitor:CreateTexture(nil, "OVERLAY"))
         dot:SetSize(10, 10)
         dot:SetPoint(unpack(point))
         dot:SetColorTexture(0.45, 0.53, 0.64, 0.92)
@@ -1528,7 +1528,7 @@ local function EnsurePositionPopup()
         AttachDockHover(button)
     end
 
-    local divider = popup:CreateTexture(nil, "ARTWORK")
+    local divider = DockUI.PixelLayoutRegion(popup:CreateTexture(nil, "ARTWORK"))
     divider:SetHeight(1)
     divider:SetPoint("TOPLEFT", popup, "TOPLEFT", 18, -158)
     divider:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -18, -158)
@@ -1882,10 +1882,10 @@ local function EnsureHUD()
 
     --- Compact MSUF command dock.  The existing actions remain unchanged;
     --- only their chrome and cold-path layout are owned here.
-    hudFrame = CreateFrame("Frame", "MSUF_EM2_HUD", UIParent, "BackdropTemplate")
+    hudFrame = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HUD", UIParent, "BackdropTemplate"))
     hudFrame:SetFrameStrata("TOOLTIP"); hudFrame:SetFrameLevel(1200)
     hudFrame:SetSize(DockUI.horizontalWidth, DOCK_HORIZONTAL_H)
-    hudFrame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
+    DockUI.PixelLayoutRegion(hudFrame, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
     hudFrame:SetBackdropColor(unpack(TH.r1Bg))
     hudFrame:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.48)
     ApplyHUDMaterial(hudFrame, "status")
@@ -1908,7 +1908,7 @@ local function EnsureHUD()
         DockUI.introSlide = slide
     end
 
-    DockUI.grip = CreateFrame("Button", nil, hudFrame)
+    DockUI.grip = DockUI.PixelLayoutRegion(CreateFrame("Button", nil, hudFrame))
     DockUI.grip:RegisterForDrag("LeftButton")
     DockUI.grip:SetScript("OnDragStart", function()
         if DockUI.positionPopup then DockUI.positionPopup:Hide() end
@@ -1922,15 +1922,15 @@ local function EnsureHUD()
     end)
     for row = 0, 2 do
         for col = 0, 1 do
-            local dot = DockUI.grip:CreateTexture(nil, "ARTWORK")
+            local dot = DockUI.PixelLayoutRegion(DockUI.grip:CreateTexture(nil, "ARTWORK"))
             dot:SetSize(2, 2)
             dot:SetPoint("CENTER", DockUI.grip, "CENTER", (col - 0.5) * 6, (row - 1) * 6)
             dot:SetColorTexture(TH.mutedR, TH.mutedG, TH.mutedB, 0.86)
         end
     end
 
-    DockUI.logo = CreateFrame("Frame", nil, hudFrame)
-    local logoTexture = DockUI.logo:CreateTexture(nil, "ARTWORK")
+    DockUI.logo = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, hudFrame))
+    local logoTexture = DockUI.PixelLayoutRegion(DockUI.logo:CreateTexture(nil, "ARTWORK"))
     logoTexture:SetAllPoints(DockUI.logo)
     logoTexture:SetTexture(MEDIA .. "MSUF_EditModeIcon.png")
     if logoTexture.SetSnapToPixelGrid then
@@ -1956,19 +1956,19 @@ local function EnsureHUD()
     SetTip(DockUI.contextBtn, "Pick the frame or group to edit, including ones hidden behind another frame.")
 
     --- Guided help remains available, but no longer dominates the toolbar.
-    helpBtn = CreateFrame("Button", nil, hudFrame, "BackdropTemplate")
+    helpBtn = DockUI.PixelLayoutRegion(CreateFrame("Button", nil, hudFrame, "BackdropTemplate"))
     helpBtn:SetSize(BTN_H, BTN_H)
-    helpBtn:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
+    DockUI.PixelLayoutRegion(helpBtn, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1,
                           insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     helpBtn:SetBackdropColor(TH.onR * 0.20, TH.onG * 0.20, TH.onB * 0.20, 0.85)
     helpBtn:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.60)
     do
-        local glow = helpBtn:CreateTexture(nil, "BACKGROUND", nil, -1)
+        local glow = DockUI.PixelLayoutRegion(helpBtn:CreateTexture(nil, "BACKGROUND", nil, -1))
         glow:SetPoint("TOPLEFT", -3, 3); glow:SetPoint("BOTTOMRIGHT", 3, -3)
         glow:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.08)
         helpBtn._glow = glow
 
-        local hl = helpBtn:CreateTexture(nil, "HIGHLIGHT")
+        local hl = DockUI.PixelLayoutRegion(helpBtn:CreateTexture(nil, "HIGHLIGHT"))
         hl:SetAllPoints(); hl:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.12)
 
         local lbl = MakeFS(helpBtn, "body", TH.onR, TH.onG, TH.onB, 1)
@@ -2011,11 +2011,11 @@ local function EnsureHUD()
         if not EM2.State or not EM2.State.CancelAll then return end
         local cf = _G["MSUF_EM2_CancelConfirm"]
         if cf then cf:Show(); return end
-        cf = CreateFrame("Frame", "MSUF_EM2_CancelConfirm", UIParent, "BackdropTemplate")
+        cf = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_CancelConfirm", UIParent, "BackdropTemplate"))
         cf:SetSize(320, 120)
         cf:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
         cf:SetFrameStrata("TOOLTIP"); cf:SetFrameLevel(1400)
-        cf:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+        DockUI.PixelLayoutRegion(cf, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
         cf:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], TH.r1Bg[4] or 0.97)
         cf:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.90)
         ApplyHUDMaterial(cf, "popup")
@@ -2031,7 +2031,7 @@ local function EnsureHUD()
                 skipHistory = true,
                 variant = role == "danger" and "danger" or nil,
                 onClick = onClick,
-            }) or CreateFrame("Button", nil, cf, "BackdropTemplate")
+            }) or DockUI.PixelLayoutRegion(CreateFrame("Button", nil, cf, "BackdropTemplate"))
             b:SetSize(112, 32)
             b:SetPoint("BOTTOM", cf, "BOTTOM", xOff, 16)
             if ui and ui.ApplyButtonRole then ui.ApplyButtonRole(b, role or "normal") end
@@ -2041,10 +2041,10 @@ local function EnsureHUD()
                 ui.ApplyFontRole(sharedLabel, "body", DockUI.baseFont, "")
             end
             if not (ui and ui.Button) then
-                b:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
+                DockUI.PixelLayoutRegion(b, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1 })
                 b:SetBackdropColor(TH.r2Bg[1], TH.r2Bg[2], TH.r2Bg[3], TH.r2Bg[4] or 0.90)
                 b:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.65)
-                local hl = b:CreateTexture(nil, "HIGHLIGHT")
+                local hl = DockUI.PixelLayoutRegion(b:CreateTexture(nil, "HIGHLIGHT"))
                 hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.06)
                 local fs = MakeFS(b, "body", TH.textR, TH.textG, TH.textB, 1)
                 fs:SetPoint("CENTER"); fs:SetText(HelpText(text))
@@ -2070,7 +2070,7 @@ local function EnsureHUD()
     SetTip(cancelAllBtn, "Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened.")
 
     --- Center controls: grouped by task so the HUD scans as Preview | Layout | Tools.
-    DockUI.primaryContainer = CreateFrame("Frame", nil, hudFrame)
+    DockUI.primaryContainer = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, hudFrame))
     DockUI.primaryContainer:SetSize(1, CLUSTER_H)
     DockUI.row1 = {}
 
@@ -2082,7 +2082,7 @@ local function EnsureHUD()
         HUD.SetStatus(HelpText(_G.MSUF_UnitPreviewActive and "EM_PREVIEW_ON" or "EM_PREVIEW_OFF"), "info")
     end, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
 
-    previewAddonSlot = CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", previewCluster)
+    previewAddonSlot = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", previewCluster))
     previewAddonSlot:SetSize(72, CLUSTER_BTN_H)
     previewItems[#previewItems+1] = previewAddonSlot
 
@@ -2220,20 +2220,20 @@ local function EnsureHUD()
     LayoutClusterRow(DockUI.primaryContainer, DockUI.row1)
 
     --- Compact contextual status capsule.  History lives in the main dock.
-    row2Frame = CreateFrame("Frame", "MSUF_EM2_HUD_Row2", hudFrame, "BackdropTemplate")
+    row2Frame = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HUD_Row2", hudFrame, "BackdropTemplate"))
     row2Frame:SetSize(800, DockUI.inspectorH)
-    row2Frame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
+    DockUI.PixelLayoutRegion(row2Frame, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
     row2Frame:SetBackdropColor(unpack(TH.r2Bg))
     row2Frame:SetBackdropBorderColor(unpack(TH.edge))
     ApplyHUDMaterial(row2Frame, "status")
     row2Frame:EnableMouse(true)
 
-    DockUI.inspectorSelection = CreateFrame("Button", nil, row2Frame)
+    DockUI.inspectorSelection = DockUI.PixelLayoutRegion(CreateFrame("Button", nil, row2Frame))
     DockUI.inspectorSelection:SetSize(DockUI.inspectorLabelW, BTN_H)
-    local selectionBg = DockUI.inspectorSelection:CreateTexture(nil, "BACKGROUND")
+    local selectionBg = DockUI.PixelLayoutRegion(DockUI.inspectorSelection:CreateTexture(nil, "BACKGROUND"))
     selectionBg:SetAllPoints()
     selectionBg:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.055)
-    local selectionHL = DockUI.inspectorSelection:CreateTexture(nil, "HIGHLIGHT")
+    local selectionHL = DockUI.PixelLayoutRegion(DockUI.inspectorSelection:CreateTexture(nil, "HIGHLIGHT"))
     selectionHL:SetAllPoints()
     selectionHL:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.10)
     DockUI.inspectorSelection:SetScript("OnClick", function() HUD.ToggleMenuPicker() end)
@@ -2252,9 +2252,9 @@ local function EnsureHUD()
     DockUI.inspectorMetrics = {}
     DockUI.inspectorMetricFS = {}
     for i, prefix in ipairs({ "X", "Y", "W", "H" }) do
-        local cell = CreateFrame("Frame", nil, row2Frame)
+        local cell = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, row2Frame))
         cell:SetSize(DockUI.inspectorMetricW, BTN_H)
-        local divider = cell:CreateTexture(nil, "BORDER")
+        local divider = DockUI.PixelLayoutRegion(cell:CreateTexture(nil, "BORDER"))
         divider:SetSize(1, BTN_H - 8)
         divider:SetPoint("LEFT", cell, "LEFT", 0, 0)
         divider:SetColorTexture(TH.edge[1], TH.edge[2], TH.edge[3], 0.70)
@@ -2276,7 +2276,7 @@ local function EnsureHUD()
     hintFS:SetJustifyH("RIGHT")
     hintFS:SetText("")
 
-    DockUI.historyContainer = CreateFrame("Frame", nil, hudFrame)
+    DockUI.historyContainer = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, hudFrame))
     DockUI.historyContainer:SetSize(1, BTN_H2)
     DockUI.row2 = {}
 
@@ -2319,7 +2319,7 @@ local function EnsureHUD()
         AttachDockHover(cluster)
         for _, item in ipairs(cluster._dockItems or {}) do AttachDockHover(item) end
     end
-    DockUI.layoutEvents = CreateFrame("Frame", "MSUF_EM2_HUD_LayoutEvents")
+    DockUI.layoutEvents = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HUD_LayoutEvents"))
     DockUI.layoutEvents:SetScript("OnEvent", function()
         if hudFrame and hudFrame:IsShown() and not (InCombatLockdown and InCombatLockdown()) then
             ApplyDockLayout()

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -197,6 +198,18 @@ local COLOR_NPC_ROWS = ColorRows "friendly|Friendly NPC Color|0|1|0;neutral|Neut
 local COLOR_NPC_TYPE_ROWS = ColorRows "npcBoss|Boss|0.74|0.11|0;npcMiniboss|Miniboss / Lieutenant|0.56|0|0.74;npcCaster|Caster|0|0.45|0.74;npcMelee|Melee|0.99|0.99|0.99;npcRegular|Regular|0.70|0.56|0.33"
 local COLOR_POWER_TOKENS = ValueTextPairs [[MANA=Mana|RAGE=Rage|ENERGY=Energy|FOCUS=Focus|RUNIC_POWER=Runic Power|INSANITY=Insanity|FURY=Fury|PAIN=Pain|ESSENCE=Essence|LUNAR_POWER=Astral Power|MAELSTROM=Maelstrom]]
 local COLOR_CP_TOKENS = ValueTextPairs [[COMBO_POINTS=Combo Points|HOLY_POWER=Holy Power|SOUL_SHARDS=Soul Shards|CHI=Chi|ARCANE_CHARGES=Arcane Charges|RUNES=Runes|ESSENCE=Essence|MANA=Alternative Mana|CHARGED=Empowered / Charged|SOUL_FRAGMENTS=Soul Fragments|SOUL_FRAGMENTS_META=Soul Fragments (Void Meta)|MAELSTROM=Maelstrom Weapon|MAELSTROM_ABOVE_5=Maelstrom Weapon 5+|ASTRAL_POWER=Astral Power|AP_PREDICTION=Astral Prediction|ECLIPSE_SOLAR=Eclipse Solar|ECLIPSE_LUNAR=Eclipse Lunar|ECLIPSE_CA=Celestial Alignment|STAGGER_GREEN=Stagger Light|STAGGER_YELLOW=Stagger Moderate|STAGGER_RED=Stagger Heavy|SOUL_FRAGMENTS_VENG=Soul Fragments (Vengeance)|INSANITY=Insanity|MAELSTROM_POWER=Maelstrom Power|WHIRLWIND=Whirlwind|TIP_OF_THE_SPEAR=Tip of the Spear|ICICLES=Icicles|EBON_MIGHT=Ebon Might|RESOURCE_TEXT=Resource Text]]
+if MSUF.Client and MSUF.Client.SupportsClassResource then
+    if MSUF.Client.IsMists then
+        for _, item in ipairs(ValueTextPairs "SHADOW_ORBS=Shadow Orbs|BURNING_EMBERS=Burning Embers|DEMONIC_FURY=Demonic Fury") do
+            COLOR_CP_TOKENS[#COLOR_CP_TOKENS + 1] = item
+        end
+    end
+    local supported = {}
+    for _, item in ipairs(COLOR_CP_TOKENS) do
+        if MSUF.Client.SupportsClassResource(item.value) then supported[#supported + 1] = item end
+    end
+    COLOR_CP_TOKENS = supported
+end
 local COLOR_DATA = {
     CLASS_LABELS = COLOR_CLASS_LABELS,
     NPC_ROWS = COLOR_NPC_ROWS,
@@ -1400,7 +1413,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     previewTrack:SetPoint("TOPLEFT", previewPanel, "TOPLEFT", 12, -28)
     previewTrack:SetPoint("TOPRIGHT", previewPanel, "TOPRIGHT", -12, -28)
     previewTrack:SetHeight(22)
-    local previewBackgroundBar = CreateFrame("StatusBar", nil, previewTrack)
+    local previewBackgroundBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, previewTrack))
     previewBackgroundBar:SetPoint("TOPLEFT", previewTrack, "TOPLEFT", 1, -1)
     previewBackgroundBar:SetPoint("BOTTOMRIGHT", previewTrack, "BOTTOMRIGHT", -1, 1)
     previewBackgroundBar:SetMinMaxValues(0, 1)
@@ -1412,7 +1425,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     end
     local previewBackground = previewBackgroundBar:GetStatusBarTexture()
     if previewBackground.SetDrawLayer then previewBackground:SetDrawLayer("BACKGROUND", -7) end
-    local previewBar = CreateFrame("StatusBar", nil, previewTrack)
+    local previewBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, previewTrack))
     previewBar:SetPoint("TOPLEFT", previewTrack, "TOPLEFT", 1, -1)
     previewBar:SetPoint("BOTTOMRIGHT", previewTrack, "BOTTOMRIGHT", -1, 1)
     previewBar:SetMinMaxValues(0, 1)
@@ -2085,7 +2098,7 @@ local function BuildColors(ctx)
     BuildColorPainter(ctx, b)
 
     if not b._collapsibleStartY then b._collapsibleStartY = b.y end
-    local host = CreateFrame("Frame", nil, b.parent)
+    local host = PixelLayoutRegion(CreateFrame("Frame", nil, b.parent))
     host:SetSize(b.width, 1)
     host:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
     local hostEntry = { kind = "section", frame = host, height = 1, gap = 12 }
@@ -2095,7 +2108,7 @@ local function BuildColors(ctx)
     local categories = {}
     for i = 1, #COLOR_CATEGORY_ORDER do
         local categoryKey = COLOR_CATEGORY_ORDER[i]
-        local container = CreateFrame("Frame", nil, host)
+        local container = PixelLayoutRegion(CreateFrame("Frame", nil, host))
         container:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
         container:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
         container:SetHeight(1)

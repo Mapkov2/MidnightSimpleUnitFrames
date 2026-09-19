@@ -10,7 +10,21 @@ local function normalize(path)
     end
     return prefix .. table.concat(parts, "/")
 end
-function Manifest.Paths(repo, flavor)
+-- Nil locale inventories every branch; a locale models the client selection.
+function Manifest.TocReference(line, locale)
+    line = line:match("^%s*(.-)%s*$")
+    if line == "" or line:sub(1, 1) == "#" then return end
+    local allowed = line:match("%s+%[AllowLoadTextLocale%s+([^%]]+)%]$")
+    if allowed then
+        local selected = locale == nil
+        for name in allowed:gmatch("%a+") do if name == locale then selected = true end end
+        if not selected then return end
+        line = line:gsub("%s+%[AllowLoadTextLocale%s+[^%]]+%]$", "")
+    end
+    assert(not line:find("[", 1, true), "unsupported TOC directive: " .. line)
+    return line
+end
+function Manifest.Paths(repo, flavor, locale)
     local ordered, seen, active = {}, {}, {}
     local function visit(path)
         path = normalize(path)
@@ -29,8 +43,8 @@ function Manifest.Paths(repo, flavor)
             for child in source:gmatch('<[%w:]+%s+file="([^"]+)"') do visit(directory .. "/" .. child) end
         else
             for line in source:gmatch("[^\r\n]+") do
-                line = line:match("^%s*(.-)%s*$")
-                if line ~= "" and line:sub(1, 1) ~= "#" then visit(directory .. "/" .. line) end
+                local reference = Manifest.TocReference(line, locale)
+                if reference then visit(directory .. "/" .. reference) end
             end
         end
         active[path] = nil

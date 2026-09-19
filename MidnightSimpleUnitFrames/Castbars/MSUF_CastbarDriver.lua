@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_CastbarDriver.lua
 --- Target/focus castbar driver.
 ---
@@ -1270,7 +1271,7 @@ end
 --- CreateCastBar build stage 1: the driver frame plus the identity fields the
 --- other castbar modules key on (_msufCastbarDriver, _msufBarKey).
 local function CreateDriverFrame(frameName, unit)
-    local frame = CreateFrame("Frame", frameName, UIParent)
+    local frame = PixelLayoutRegion(CreateFrame("Frame", frameName, UIParent))
     frame:SetClampedToScreen(true)
     frame.unit = unit
     frame._msufCastbarDriver = true

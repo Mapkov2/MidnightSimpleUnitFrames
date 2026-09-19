@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Layout.lua - Edit Mode layout, snap, and anchor helpers
 
 --- MSUF_EM2_Grid.lua
@@ -214,7 +215,7 @@ local function SetCenterGridShown(shown)
 end
 
 local function CreateCenterLine(vertical, thickness, subLevel)
-    local tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, subLevel)
+    local tex = PixelLayoutRegion(gridFrame:CreateTexture(nil, "BACKGROUND", nil, subLevel))
     if vertical then
         tex:SetWidth(thickness); tex:SetPoint("TOP", UIParent, "TOP", 0, 0); tex:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
     else
@@ -224,7 +225,7 @@ local function CreateCenterLine(vertical, thickness, subLevel)
 end
 
 local function CreateCenterPip(vertical, thickness, length, subLevel)
-    local tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, subLevel)
+    local tex = PixelLayoutRegion(gridFrame:CreateTexture(nil, "BACKGROUND", nil, subLevel))
     if vertical then
         tex:SetWidth(thickness); tex:SetHeight(length)
     else
@@ -237,7 +238,7 @@ end
 local function EnsureGridFrame()
     if gridFrame then return gridFrame end
 
-    gridFrame = CreateFrame("Frame", "MSUF_EM2_Grid", UIParent)
+    gridFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_Grid", UIParent))
     gridFrame:SetFrameStrata("LOW")
     gridFrame:SetFrameLevel(0)
     gridFrame:SetAllPoints(UIParent)
@@ -247,7 +248,7 @@ local function EnsureGridFrame()
     end)
 
     --- Background overlay
-    bgTex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -8)
+    bgTex = PixelLayoutRegion(gridFrame:CreateTexture(nil, "BACKGROUND", nil, -8))
     bgTex:SetAllPoints()
     local th = T()
     bgTex:SetColorTexture(th.bgR, th.bgG, th.bgB, GetBgAlpha())
@@ -275,7 +276,7 @@ end
 local function GetLine(idx)
     local tex = lines[idx]
     if not tex then
-        tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
+        tex = PixelLayoutRegion(gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5))
         lines[idx] = tex
     end
     return tex
@@ -284,7 +285,7 @@ end
 local function GetLineShadow(idx)
     local tex = lineShadows[idx]
     if not tex then
-        tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
+        tex = PixelLayoutRegion(gridFrame:CreateTexture(nil, "BACKGROUND", nil, -6))
         lineShadows[idx] = tex
     end
     return tex
@@ -474,14 +475,14 @@ local guideFadeFrame
 
 local function GetGuide()
     if not guideParent then
-        guideParent = CreateFrame("Frame", "MSUF_EM2_SnapGuides", UIParent)
+        guideParent = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_SnapGuides", UIParent))
         guideParent:SetAllPoints(UIParent)
         guideParent:SetFrameStrata("FULLSCREEN")
         guideParent:SetFrameLevel(500)
     end
     local g = table.remove(guidePool)
     if not g then
-        g = guideParent:CreateTexture(nil, "OVERLAY")
+        g = PixelLayoutRegion(guideParent:CreateTexture(nil, "OVERLAY"))
     end
     local th = T()
     g:SetColorTexture(th.titleR, th.titleG, th.titleB, 0.72)
@@ -497,7 +498,7 @@ local function StartGuideFade()
         guideFadeFrame:Show()
         return
     end
-    guideFadeFrame = CreateFrame("Frame", "MSUF_EM2_SnapGuideFade", UIParent)
+    guideFadeFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_SnapGuideFade", UIParent))
     guideFadeFrame:SetScript("OnUpdate", function(self, elapsed)
         local alive = false
         for i = #fadingGuides, 1, -1 do
@@ -1196,7 +1197,7 @@ end
 
 function Nudge.Enable()
     if not owner then
-        owner = CreateFrame("Frame", "MSUF_EM2_NudgeOwner", UIParent)
+        owner = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_NudgeOwner", UIParent))
         owner:Hide()
         owner.__msufPendingClear = false
         owner:SetScript("OnEvent", function(self, event)
@@ -1210,7 +1211,7 @@ function Nudge.Enable()
         for i = 1, #NUDGE_DIRS do
             local dir = NUDGE_DIRS[i]
             local btnName = "MSUF_EM2_Nudge" .. dir[1]
-            local btn = CreateFrame("Button", btnName, UIParent, "SecureActionButtonTemplate")
+            local btn = PixelLayoutRegion(CreateFrame("Button", btnName, UIParent, "SecureActionButtonTemplate"))
             btn._msufDx, btn._msufDy = dir[2], dir[3]
             btn:SetSize(1, 1)
             btn:Hide()
@@ -2303,7 +2304,7 @@ end
 function Ticker.Start()
     if activeDrag then SetActiveDragFlags(activeDrag, false) end
     if not tickerFrame then
-        tickerFrame = CreateFrame("Frame", "MSUF_EM2_TickerFrame", UIParent)
+        tickerFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_TickerFrame", UIParent))
         tickerFrame:Hide()
     end
     tickerActive = true

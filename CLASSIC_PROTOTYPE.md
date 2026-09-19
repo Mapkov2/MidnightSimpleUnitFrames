@@ -39,7 +39,7 @@ Classic-only Blizzard frame suppression such as the target-anchored
 
 Auras use a client-selected backend. Mainline loads the Retail Auras3 runtime
 unchanged, including its native 12.1 `Blizzard_AuraContainer` path. The
-Vanilla, TBC, and Mists manifests (`Game/<Flavor>/UnitFrames.xml`) load
+Vanilla, TBC, and Mists manifests (`Game/<Flavor>/Auras.xml`) load
 `Game/Classic/Auras/MSUF_Auras3_Compile.lua` immediately before
 `Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua`. The compile file owns lane
 config compilation: lane specs, filters, blacklist hashes, dispel visuals and
@@ -54,9 +54,25 @@ Every Classic flavor ships a generated SpellName alias catalog under
 5.5.4.68806; regenerate with
 `.github/scripts/generate_classic_aura_alias_catalog.py` from wago.tools
 `SpellName` CSV exports of the flavor build, one `<locale>/SpellName.csv` per
-locale). The flavor manifests load the catalog right after
-`Game/Classic/Auras/MSUF_Auras3_DataShared.lua` and then the shared Retail resolver
-`Auras3/MSUF_Auras3_AuraAliases.lua`. `A3.AddAuraSpellIDAndAliases` resolves
+locale). Each core TOC loads its `UnitFrames.xml` prefix through
+`Game/Classic/Auras/MSUF_Auras3_DataShared.lua`, then the common catalog and
+only the client-language partition, followed by `Game/<Flavor>/Auras.xml`
+and its shared Retail resolver `Auras3/MSUF_Auras3_AuraAliases.lua`. Native
+`AllowLoadTextLocale` TOC conditions exclude inactive partitions before Lua
+parsing. Mainline uses the same boundary between `MSUF_UFCore_Elements.xml`
+and `MSUF_UFCore_Auras.xml` for both its Retail and Forever catalogs; the
+existing Forever runtime guards remain in place. `enGB` shares `enUS`,
+`ptPT` shares `ptBR`, and Classic `itIT` retains its existing `enUS` fallback.
+All twelve menu translations still load because saved menu language is
+independent of client language. Gates and packages inventory the union of
+all locale branches; boot simulations select their actual client locale.
+`tools/tests/startup_locale_manifest_smoke.lua` checks all five clients across
+fourteen locale cases against the all-language catalogs and compiled aliases.
+The native condition is used in Blizzard's `upstream/live` and
+`upstream/forever` `Blizzard_FullscreenBrowser.toc`; the trailing form is also
+used by [BigWigs Classic](https://github.com/BigWigsMods/BigWigs_Classic/blob/master/BigWigs_Classic_Vanilla.toc).
+
+`A3.AddAuraSpellIDAndAliases` resolves
 every ID it expands against that catalog, so curated DoT/defensive lists, group
 spell indicators and user whitelists match all same-name IDs: spell ranks on
 Vanilla/TBC and cast-versus-aura ID drift on Mists, the way WeakAuras matches
@@ -66,10 +82,16 @@ build headers and representative expansions per flavor.
 
 `Game/Shared/Initialize.lua` also exposes `MSUF.Client.SupportsUnit(unit)`:
 Classic Era has no focus, boss or arena units and TBC has no boss units. The
-Classic unit config compiles those units disabled, the Classic Unit page drops
-them from its unit pills and copy targets, and the Classic-era interrupt-ready
-tables in `Castbars/MSUF_InterruptReady.lua` only name spells that exist on
-each client. Blizzard's LoadOnDemand `Blizzard_ArenaUI` frames are suppressed
+unit config compiler compiles those units disabled on Classic clients (a hunk of
+the `UnitFrames/Engine/MSUF_UF_Config.lua` override gated on
+`MSUF.Client.Family`), the Unit page (the Retail-named
+`Pages/MSUF_Menu2_Unit.lua`, which every client loads) drops them from its unit
+pills and copy targets there, and the Classic-era interrupt-ready tables in
+`Castbars/MSUF_InterruptReady.lua` only name spells that exist on each client.
+Where arena units are unsupported (Classic Era, WoW Forever), a castbar settings
+refresh keeps the profile's arena castbar backend as stored instead of rewriting
+it to hidden, so the profile keeps its arena castbars on a client with arenas;
+`tools/tests/arena_castbar_backend_keep_smoke.lua` pins this. Blizzard's LoadOnDemand `Blizzard_ArenaUI` frames are suppressed
 by a flavor pass in `Game/Classic/BlizzardFrames.lua`, which the Kernel runs
 through `MSUF.BlizzardFrameSuppressionPasses`. When MSUF owns arena frames, the
 pass hides the `ArenaEnemyFrames`/`ArenaPrepFrames` containers and exactly the
@@ -100,8 +122,16 @@ keeps every other Retail filter setting off and the Classic Aura page builds no
 controls for them; the settings stay untouched in SavedVariables so a profile
 can move between clients without losing them. The one carry-over is a
 Non-player debuff flag imported from a Retail profile: it still applies to that
-unit lane, and turning Only mine on clears it. Raw Retail filter tokens are
-compiled once into a Classic-safe plan. Vanilla/Mists/TBC scan only with tokens
+unit lane, and turning Only mine on clears it. Every client loads the Retail
+aura page (`Shell/Menu2/Pages/MSUF_Menu2_Auras.lua` with its `_Group` and
+`_Preview` siblings); its Classic differences (these two filters, a Non-player
+group token read as All, no lane Full-Frame Effect, no native stealable-marker
+note, the atlas dispel border on a rectangular preview icon, the Auras-only
+apply of a group blacklist change, the group blacklist Preset opening on the
+lane's default set) key on the page's `M.CLASSIC_AURA_FILTERS_REDUCED`, and
+`tools/tests/classic_aura_page_client_gates_smoke.lua` pins both sides. Raw
+Retail filter tokens are compiled once into a Classic-safe plan.
+Vanilla/Mists/TBC scan only with tokens
 their AuraUtil accepts; `IMPORTANT`, `DISPELLABLE`, `BOSS`, `STEALABLE`,
 `!PLAYER`, and related requirements use equivalent AuraData/C_Spell
 predicates. No polling is added. Debuffs the player can dispel (the dispel
@@ -111,9 +141,15 @@ scanned with `MSUF.Client.DispellableDebuffFilter`: Classic Era uses
 debuffs, because it does not honour `RAID_PLAYER_DISPELLABLE`; TBC and Mists
 use `HARMFUL|RAID_PLAYER_DISPELLABLE`.
 
-Class resources have separate providers per client. Classic loads the shared
-`Game/Classic/ClassPower` core (constants, modes, core and controller) plus
-`Game/<Flavor>/ClassPower.lua`. Mists maps
+Class resources have separate providers per client. Every client runs the
+Retail-named ClassPower core (`ClassPower/MSUF_CP_Constants.lua`,
+`MSUF_CP_Modes.lua`, `MSUF_CP_Core.lua` and `MSUF_CP_Controller.lua`, all
+reviewed overrides). Its Classic behaviour sits in small hunks gated on
+`MSUF.Client.IsClassic`, read once per file, so Mainline runs exactly the
+Retail statements. The Classic TOCs add `Game/<Flavor>/ClassPower.lua` and
+`Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua`, which adapts the flavor
+provider's `Resolve(env)` contract to the provider seam the controller reads at
+load; WoW Forever's provider fills that seam directly. Mists maps
 the era-specific resources, including target-owned combo points, Shadow Orbs,
 Chi, Arcane Charge aura 36032, Demonic Fury, Burning Embers, and signed
 Eclipse power. TBC deliberately exposes only the era-valid target-owned
@@ -256,8 +292,8 @@ whether `UnitName` returns a second value; never a name), so the first bug
 report from a new client carries what is needed to support it.
 
 Two checks keep the model honest. `tools/tests/classic_project_id_reads_smoke.lua`
-limits raw `WOW_PROJECT_ID` reads in Classic-owned and override files to a
-reviewed allowlist. `tools/audit-classic-ui-source.ps1` pins every TOC
+limits raw `WOW_PROJECT_ID` reads in Classic-owned and override files of all
+three addons (core, Options and Assistant) to a reviewed allowlist. `tools/audit-classic-ui-source.ps1` pins every TOC
 game-type token and every `C_GameRules` `Is*` function on the mirror branches,
 so a refreshed mirror that brings a new client or game mode fails the full gate
 until the client model handles it.
@@ -321,9 +357,18 @@ ownership decision and reviewed rebase; it is never resolved automatically.
 
 ### Owned shadows
 
-Some `O` files are whole-file Classic copies of a Retail file; for example
-`Game/Classic/ClassPower/MSUF_CP_Core.lua` shadows `ClassPower/MSUF_CP_Core.lua`.
-`tools/classic-owned-shadows.tsv` records each one as a sorted
+A shadow is an `O` file that is a whole-file Classic copy of a Retail file; a
+Retail sync never touches it, so Retail fixes silently stop reaching Classic.
+Do not add one. A Classic difference in a Retail file belongs in that file as
+a reviewed `P` override whose Classic hunks branch on `MSUF.Client` facts read
+once when the file loads (for example `IS_CLASSIC_FAMILY` in
+`UnitFrames/Engine/MSUF_UF_Config.lua`): every Retail sync then rebases them,
+and Mainline never enters them. Classic-only code without a Retail
+counterpart stays an ordinary owned file (for example
+`Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua`). The earlier shadows were
+collapsed this way; the ones that remain, such as
+`Game/Classic/State/MSUF_Defaults.lua` for `State/MSUF_Defaults.lua`, stay
+recorded in `tools/classic-owned-shadows.tsv`, each one as a sorted
 `owned-path<TAB>Retail-path<TAB>Retail-base-blob` row. Every owned path must be
 declared in `O`, its Retail counterpart must not be, and a malformed manifest
 fails the gate. Drift is reported by the gate, not enforced: a run with a
@@ -388,19 +433,49 @@ mirrored:
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-classic-prototype.ps1 -RetailReferenceRoot <clean Retail checkout>
 ```
 
-`-SelfContained` is the subset CI runs (`.github/workflows/release-classic.yml`):
-syntax, load order, error paths, ownership manifests, flavor load coverage and
-the Lua smokes, without Retail parity, override-base or shadow-drift checks and
-without the Blizzard UI source audit. It never replaces the full gate.
-`-AllowMissingTools` lets a
+No tracked file records that Retail commit: the `Retail-Source:` trailer goes
+stale as soon as a later rebase commit moves an override.
+`.github/scripts/resolve_classic_retail_source.py` derives it. It walks a Retail
+revision's history newest first and prints the newest commit whose addon tree
+matches this tree under the gate's rules: an override matches on its recorded
+base blob, every other mapped path on its blob, the three TOCs through the
+`_Mainline.toc` mapping, and the addon inventory must equal mapped Retail plus
+the owned paths. No Retail path may collide with an owned path, compared
+without case and folder by folder, and the Retail tree may hold only the three
+TOCs and regular, non-executable files. When nothing matches it exits 2 and
+names the nearest commit with its mismatching paths:
+
+```powershell
+python .github/scripts/resolve_classic_retail_source.py --retail <Retail clone> --retail-rev <Retail main>
+```
+
+`-SelfContained` is the subset that needs neither a Retail checkout nor the
+mirror: syntax, load order, error paths, ownership manifests, flavor load
+coverage and the smokes, without Retail parity, override-base or shadow-drift
+checks and without the Blizzard UI source audit. It never replaces the full
+gate. `-AllowMissingTools` lets a
 structure-only run continue without `luac`, `lua` or the UI source mirror; each
 step it skips is printed as a `SKIPPED:` line, so a partial run never reads as
 a full pass.
 
+CI runs both. `.github/workflows/classic-gate.yml` has two jobs for every push
+and pull request to `classic` that touches the addon folders, `tools/` or
+`.github/` (a push that changes only `VERSION` or a document runs neither):
+`classic-gate` runs `-SelfContained`, and
+`classic-full-gate` makes a blob-less clone of Retail `main` of this repository,
+checks out the commit the resolver names, clones `Gethe/wow-ui-source` (depth
+1, every branch, no working tree) into `_local_workflows/references/wow-ui-source`
+and runs the full gate with the source audit. The audit reads Blizzard's live
+branches, so the full job can turn red without any change here; the
+self-contained job reads nothing but the commit. `release-classic.yml` runs only
+`-SelfContained` before upload.
+
 Requirements:
 
 - Lua 5.1 `lua` and `luac` first on `PATH`; the gate checks both versions.
-- A real Python 3 as `python`; the load-order and error-path checks run first.
+- A real Python 3 as `python`. The error-path check runs early; the python
+  smokes share the smoke pool with the Lua smokes (without `lua` they run on
+  their own, just before the error-path check).
 - The Blizzard UI source mirror at `_local_workflows/references/wow-ui-source`
   for the source audit.
 
@@ -424,6 +499,8 @@ take the repository root, except:
   `Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua`,
   `Game/Classic/Auras/MSUF_Auras3_Features.lua`, `Auras3/MSUF_Auras3_Core.lua`
   and `Game/Classic/Auras/MSUF_Auras3_Visuals.lua`.
+- `tools/tests/classic_aura_faction_smoke.lua`: the root, then a Classic
+  suffix.
 - `.github/scripts/rounded_border_highlight_smoke.lua`: no argument, or
   `--startup-disabled`.
 - No argument: `.github/scripts/rounded_forbidden_mask_owner_smoke.lua`,
@@ -435,6 +512,11 @@ take the repository root, except:
 These run without the driver:
 
 - `.github/scripts/classic_refactor_load_order_smoke.py`: `python`, no argument.
+- `tools/tests/rebase_classic_overrides_smoke.py`, the self-test of
+  `tools/rebase-classic-overrides.py`: `python`, no argument.
+- `tools/tests/resolve_classic_retail_source_smoke.py`: `python`, the root.
+  Both build throwaway git repositories in the system temp directory; they need
+  `git` on `PATH`, no Retail checkout and no network.
 - `tools/tests/classic_client_detection_smoke.lua`: the root. Never run it
   through the driver: the driver stubs `issecretvalue`, which hides the missing
   secret-value API case this smoke pins.
@@ -480,7 +562,7 @@ unreleased client. Checklist:
    an `X-MSUF-Client` line with the matrix token; the core TOC loads
    `Game/Shared/Initialize.lua` and its flavor manifests.
 3. Add `Game/<Flavor>` with its manifests and data, following an existing
-   flavor: `UnitFrames.xml`, `UnitFrames/GroupFrames.xml`, `ClassPower.lua`,
+   flavor: `UnitFrames.xml`, `Auras.xml`, `UnitFrames/GroupFrames.xml`, `ClassPower.lua`,
    the aura data under `Auras` (including the generated `AliasData` catalog)
    and the group indicator data under `UnitFrames/Group`.
 4. In `Game/Shared/Initialize.lua`, recognise the flavor by its project global
@@ -546,3 +628,91 @@ fails if Blizzard renames the placeholder name "Camelot". Once a build exists:
    client that lacks it needs a check.
 7. Confirm the CurseForge game version names exist before a release lists the
    new client.
+
+## Forever data validation: 1.60.1.69913
+
+The 2026-09-19 refresh checked the current `wow_classic_beta` build against
+1.60.1.69876. The `upstream/forever` UI tree differs only in `version.txt`, so
+client detection, native aura handling, names, class resources, pet happiness,
+threat text and menu integration require no new runtime branches. The enUS
+SpellName, SkillLine, SkillLineAbility, ChrSpecialization and SpellEffect rows
+are unchanged (SkillLineAbility's export column names are now decoded).
+All ten available 69913 SpellName locales reproduce the shipped alias groups.
+The provider returns an empty deDE export for 69913; deDE was checked against
+69893 and remains identical to the shipped partition. Its 69913 data check is
+still pending. No empty export is installed and no source build is relabelled.
+The catalog keeps its original content version because its payload is unchanged.
+Export hashes and per-locale source builds are recorded in
+`.github/auras3-alias-catalog-forever.json`; the complete table/UI comparison is
+in `.github/forever-client-data-validation.json`. This is source and offline
+validation, not an in-game or server-hotfix certification.
+
+## Class resource availability
+
+`Client.SupportsClassResource(token)` describes the resources implemented by
+the active MSUF provider; `SupportsClassResourceSetting(settingKey)` gates
+resource-specific behavior controls and cold search results. The preview and
+Class Power color menus use the same model. Saved profile keys are preserved.
+
+- Vanilla, TBC and Forever: Rogue and Cat Form combo points, five uncharged pips.
+- Mists: combo points, runes, Holy Power, Chi, Arcane Charges, Shadow Orbs,
+  Soul Shards, Burning Embers, Demonic Fury and Eclipse. Previews use the Mists
+  counts and resource names. The provider implements Monk Chi; it does not
+  implement a separate Stagger bar or Frost Icicles, so those Retail previews
+  are not advertised.
+- Midnight: its existing resource previews and behavior remain available.
+
+Charged-combo event profiles and API reads are disabled on the Classic and
+Forever clients even if the client exposes the Retail API name. Cooldown
+anchoring independently follows `HostsCooldownManager` (including Forever).
+The source contracts come from `upstream/classic_era`,
+`upstream/classic_anniversary` and `upstream/classic`
+`Interface/AddOns/Blizzard_UnitFrame/Blizzard_UnitFrame_Classic.toc`, and
+`upstream/forever` `Interface/AddOns/Blizzard_UnitFrame/Blizzard_UnitFrame.toc`
+with its camelot exclusions, checked against `Game/<Flavor>/ClassPower.lua`.
+`tools/tests/classpower_client_resource_gates_smoke.lua` boots all five
+clients, checks the actual preview and color catalogs, exercises the behavior
+builder and charged API refresh, and verifies cold search results.
+
+### Pixel layout on Midnight and Forever
+
+`MSUF_PixelLayoutRegion` is the shared creation/configuration boundary for
+MSUF-owned frames, textures, font strings and lines in Core and Options. It uses
+native `SetRoundLayoutToNearestPixel` only on Mainline-family clients with that
+API (12.1.5 and Forever); Era, TBC and Mists retain their requested layout.
+
+The boundary returns the original object and keeps constructor/setter arguments
+and return values intact. Native template children are included on creation and
+after backdrop/button/slider texture setters. Engine-created AuraButtons opt in
+before native initialization restricts them; secure unit buttons also opt in at
+`UF.ApplySpec`. It never replaces Blizzard globals or widget methods, adds no
+polling/OnUpdate/timer, and does not modify profile coordinates or migrate profiles.
+
+Logical movers, drag handles and anchor/measurement proxies opt out of layout
+rounding while their visible children opt in. Existing smooth-art opt-outs remain
+in force. Masks and native interpolated StatusBar fill textures are excluded;
+otherwise a later template refresh could undo the intentional art policy. Native
+rounding follows effective-scale changes without rewriting saved UI coordinates.
+Borrowed Blizzard/third-party frames are not enrolled by skin/configuration calls.
+
+Pixel setup is absent from repeated text/status/icon layout. Existing frame
+structural reapply skips the pixel helper once its template was visited; blocked
+protected owners remain eligible for retry. Backdrop setup finishes only after
+all nine persistent native pieces were initialized (or intentionally excluded).
+Subsequent backdrop setters forward directly without walking pieces or invoking
+pixel APIs; clear-only runtime calls use the native setter directly. Smooth
+rounded art opts out at creation rather than enabling then disabling rounding.
+New/rebuilt regions still need one-time setup, which may occur during combat for
+unprotected objects. This does not claim zero engine rendering cost or a measured
+FPS improvement.
+
+`pixel_layout_profile_smoke.lua` covers five clients, template children, native
+setter semantics, borrowed frames, masks, smooth art and 200 ClassPower layout
+pairs with unchanged requested geometry/settings. It also exercises 15,000 warm
+layout calls with zero pixel-helper calls and 2,500 backdrop clear/reapply calls
+without pixel setup, including blocked-setup retry. `pixel_layout_coverage_smoke.py`
+checks every executable owned constructor against explicit nonvisual exceptions
+in `tools/pixel-layout-exclusions.json`, so new unrounded preview/widget paths fail
+the gate. Lua strings (including secure snippets) are not treated as constructors.
+Reference: Blizzard `upstream/ptr2` and `upstream/forever`, SharedXML `PixelUtil.lua`
+and `Backdrop.lua`. Offline checks do not prove final in-game rendering or taint.

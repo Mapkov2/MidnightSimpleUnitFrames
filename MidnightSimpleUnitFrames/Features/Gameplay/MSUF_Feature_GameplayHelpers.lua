@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 MSUF = MSUF or {}
 
@@ -230,7 +231,7 @@ local function MSUF_Gameplay_SetupArrowNudge(frame, nudgeFn, canNudgeFn)
 
     MSUF_Gameplay_EnableKeyboardNudge(frame)
 
-    local border = frame:CreateTexture(nil, "OVERLAY")
+    local border = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
     border:SetPoint("TOPLEFT", frame, "TOPLEFT", -3, 3)
     border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 3, -3)
     border:SetColorTexture(0.27, 0.53, 0.80, 0.40)

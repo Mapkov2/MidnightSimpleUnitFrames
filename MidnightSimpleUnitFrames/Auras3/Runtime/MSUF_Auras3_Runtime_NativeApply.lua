@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Auras3 runtime: NativeApply.
 -- Container retirement/reuse and configuration application. Keep ownership changes atomic and preserve native handoff, geometry and protected-click retirement contracts.
 -- The factory runs once at addon load; dependency bindings are local upvalues on live paths.
@@ -133,8 +134,8 @@ A3._CreateNativeLane = function(root, lane, parentFrame)
     -- layout can remain completely unwrapped without shifting right/bottom
     -- anchored lanes as aura counts change.
     parentFrame = ResolveLaneParentFrame(parentFrame, lane)
-    local host = CreateFrame("Frame", nil,
-        lane and lane.portraitOverlay == true and (parentFrame._msufHealthVisualRoot or parentFrame) or root)
+    local host = PixelLayoutRegion(CreateFrame("Frame", nil,
+        lane and lane.portraitOverlay == true and (parentFrame._msufHealthVisualRoot or parentFrame) or root))
     if not host then return nil end
     -- Birth-order levels: the host receives its final strata/level BEFORE the
     -- container (and later its batch-created AuraButtons) are born as its

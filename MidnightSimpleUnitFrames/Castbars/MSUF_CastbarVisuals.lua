@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_CastbarVisuals.lua
 --- Profile-driven detail layout for castbar icons, spell text, time text, and
 --- per-unit font/icon overrides.
@@ -338,7 +339,7 @@ end
 
 local function EnsureIconHost(frame)
     if frame._msufDetailIconHost then return frame._msufDetailIconHost end
-    local host = CreateFrame("Frame", nil, frame)
+    local host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     host:EnableMouse(false)
     frame._msufDetailIconHost = host
     return host
@@ -380,7 +381,7 @@ local function EnsureIconBorder(frame, iconHost)
         border = nil
     end
     if not border then
-        border = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        border = PixelLayoutRegion(CreateFrame("Frame", nil, frame, "BackdropTemplate"))
         border:EnableMouse(false)
         frame._msufDetailIconBorder = border
     end
@@ -428,7 +429,7 @@ local function ApplyIconBorder(frame, host, g, prefix)
     end
     local border = EnsureIconBorder(frame, host)
     local edge = IconBorderEdge(host, thickness)
-    border:SetBackdrop(IconBorderBackdrop(edge))
+    PixelLayoutRegion(border, "SetBackdrop", IconBorderBackdrop(edge))
     border:SetBackdropColor(0, 0, 0, 0)
     border:SetBackdropBorderColor(r, green, b, a)
     border:Show()

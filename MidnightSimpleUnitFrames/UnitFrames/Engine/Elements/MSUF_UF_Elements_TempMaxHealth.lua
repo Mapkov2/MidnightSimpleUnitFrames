@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -92,13 +93,13 @@ function TempMaxHealth.Create(frame, spec)
   local hpBar = frame.hpBar or frame.Health
   if not hpBar then return end
 
-  local bar = CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame)
+  local bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, frame._msufHealthVisualRoot or frame))
   bar:SetMinMaxValues(0, 1)
   bar:SetValue(0)
   bar:SetStatusBarTexture(WHITE)
   if bar.EnableMouse then bar:EnableMouse(false) end
 
-  local bg = bar:CreateTexture(nil, "BACKGROUND")
+  local bg = PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND"))
   bg:SetColorTexture(0, 0, 0, 0.65)
   bg:SetAllPoints(bar:GetStatusBarTexture())
   bar._msufTempMaxBackground = bg

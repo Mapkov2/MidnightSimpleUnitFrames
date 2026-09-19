@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_CastbarEmpower.lua
 --- Empower castbar support.
 ---
@@ -179,7 +180,7 @@ local function EnsureEmpowerTicks(frame, count)
     for index = 1, count do
         local tick = frame.empowerTicks[index]
         if not tick then
-            tick = frame.statusBar:CreateTexture(nil, "OVERLAY")
+            tick = PixelLayoutRegion(frame.statusBar:CreateTexture(nil, "OVERLAY"))
             tick:SetTexture("Interface/Buttons/WHITE8x8")
             tick:SetVertexColor(1, 1, 1, TICK_BASE_ALPHA)
             tick:SetWidth(TICK_BASE_WIDTH)
@@ -192,7 +193,7 @@ local function EnsureEmpowerTicks(frame, count)
         tick:Show()
 
         if not tick.MSUF_flash then
-            local flash = frame.statusBar:CreateTexture(nil, "OVERLAY")
+            local flash = PixelLayoutRegion(frame.statusBar:CreateTexture(nil, "OVERLAY"))
             flash:SetTexture("Interface/Buttons/WHITE8x8")
             flash:SetBlendMode("ADD")
             flash:SetVertexColor(1.0, 0.10, 0.10, 0.0)
@@ -240,7 +241,7 @@ local function EnsureEmpowerStageSegments(frame, count)
     for index = 1, count do
         local segment = frame.empowerSegments[index]
         if not segment then
-            segment = frame.statusBar:CreateTexture(nil, "ARTWORK")
+            segment = PixelLayoutRegion(frame.statusBar:CreateTexture(nil, "ARTWORK"))
             segment:SetColorTexture(1, 1, 1, 0.18)
             segment:SetBlendMode("ADD")
             frame.empowerSegments[index] = segment

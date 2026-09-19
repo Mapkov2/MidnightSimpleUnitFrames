@@ -206,18 +206,56 @@ local previewManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Previ
 local searchManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Classic.xml")
 assert(previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Specs.lua"/>', 1, true),
     "Classic unit preview manifest must load the shared preview specs")
+assert(previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Status.lua"/>', 1, true),
+    "Classic unit preview manifest must load the shared status preview")
 assert(searchManifest:find('<Script file="MSUF_Menu2_Search_Keywords.lua"/>', 1, true),
     "Classic search manifest must load the shared search keywords")
 
-local options = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua")
+local options = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
 local previewSpecs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua")
-local previewStatus = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status_Classic.lua")
+local previewStatus = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua")
 local searchKeywords = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Keywords.lua")
 assert(options:find('StatusControl("statusPetHappiness"', 1, true), "Pet page Happiness selector missing")
-assert(options:find('unit == "pet" and PetHappinessSupported()', 1, true), "Happiness selector is not Pet-only/capability-gated")
-assert(options:find("client.SupportsPetHappiness == true", 1, true)
+assert(options:find('allowed = function(unit) return unit == "pet" end, statusRuntime = true', 1, true),
+    "Happiness selector is not Pet-only")
+assert(options:find("if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then", 1, true)
     and not options:find("GetAddOnMetadata", 1, true) and not options:find("X-MSUF-Client", 1, true),
     "Pet page must read MSUF.Client.SupportsPetHappiness instead of re-deriving the flavor from TOC metadata")
+
+-- Every client loads the Retail-named Unit page. Under the real client model it
+-- offers the selector on the Pet page only, and Status Icons Copy To carries the
+-- Happiness keys, exactly where the client supports Pet Happiness.
+local function LoadUnitPage(client)
+    local ns = { Client = client, ExportPublic = function() end, Translate = function(text) return text end,
+        MSUF2 = { Widgets = {} } }
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"))(
+        "MidnightSimpleUnitFrames_Options", ns)
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"))(
+        "MidnightSimpleUnitFrames_Options", ns)
+    return ns.MSUF2, ns.MSUF2.UnitPage
+end
+for _, case in ipairs({ { "Vanilla", true }, { "TBC", true }, { "Mists", false } }) do
+    local menu, page = LoadUnitPage(LoadClient(case[1]))
+    local selector
+    for _, spec in ipairs(page.STATUS_CONTROLS) do
+        if spec.value == "statusPetHappiness" then selector = spec end
+    end
+    if case[2] then
+        assert(selector and selector.allowed("pet") == true and selector.allowed("player") == false,
+            case[1] .. " Pet page must offer Pet Happiness on the Pet page only")
+    else
+        assert(selector == nil, case[1] .. " Unit page must not build a Pet Happiness selector")
+    end
+    local db = { general = {}, pet = { showPetHappinessIndicator = false, petHappinessIndicatorSize = 31 }, target = {} }
+    menu.EnsureDB = function() return db end
+    menu.RequestUnitApply = function() end
+    local refreshStatus = _G.MSUF_RefreshStatusIndicators
+    _G.MSUF_RefreshStatusIndicators = function() end
+    assert(page.CopyUnitSettings("pet", "target", { status = true }) == true, case[1] .. " Status Icons copy refused")
+    _G.MSUF_RefreshStatusIndicators = refreshStatus
+    assert((db.target.petHappinessIndicatorSize == 31) == case[2] and (db.target.showPetHappinessIndicator == false) == case[2],
+        case[1] .. " Status Icons Copy To must carry the Pet Happiness keys exactly where the client supports it")
+end
 assert(options:find("statusPetHappiness", 1, true) and options:find("COPY_STATUSICON_FIELDS", 1, true), "Happiness copy ownership missing")
 assert(previewSpecs:find("statusPetHappiness|showPetHappinessIndicator", 1, true), "Happiness preview spec missing")
 assert(previewStatus:find('spec.id == "statusPetHappiness"', 1, true), "Happiness preview texture path missing")

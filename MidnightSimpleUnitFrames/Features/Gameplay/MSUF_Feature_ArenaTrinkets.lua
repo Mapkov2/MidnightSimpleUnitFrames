@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua
 --- Enemy arena trinket display shared by Retail and supported Classic clients.
 ---
@@ -109,17 +110,17 @@ local function EnsureHolder(index)
     local holder = holders[index]
     if holder then return holder end
 
-    holder = CreateFrame("Frame", "MSUF_ArenaTrinket" .. index, UIParent)
+    holder = PixelLayoutRegion(CreateFrame("Frame", "MSUF_ArenaTrinket" .. index, UIParent))
     holder:SetSize(20, 20)
     holder:SetFrameStrata("MEDIUM")
     holder:Hide()
 
-    holder.icon = holder:CreateTexture(nil, "ARTWORK")
+    holder.icon = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
     holder.icon:SetAllPoints(holder)
     holder.icon:SetTexture(FALLBACK_TEXTURE)
     holder.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    holder.cooldown = CreateFrame("Cooldown", nil, holder, "CooldownFrameTemplate")
+    holder.cooldown = PixelLayoutRegion(CreateFrame("Cooldown", nil, holder, "CooldownFrameTemplate"))
     holder.cooldown:SetAllPoints(holder)
     holder.cooldown:SetDrawEdge(false)
 

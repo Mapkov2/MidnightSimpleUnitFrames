@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/EditMode_Drag: drag capture, throttled layout writes and reversible native mouse forwarding.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
@@ -216,7 +217,7 @@ end
 
 local function EnsureAuraPendingDragFrame()
     if pendingAuraDragFrame then return pendingAuraDragFrame end
-    pendingAuraDragFrame = CreateFrame("Frame", nil, UIParent)
+    pendingAuraDragFrame = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent), true)
     pendingAuraDragFrame:Hide()
     return pendingAuraDragFrame
 end
@@ -232,7 +233,7 @@ end
 
 local function EnsureAuraDragCaptureFrame()
     if auraDragCaptureFrame then return auraDragCaptureFrame end
-    auraDragCaptureFrame = CreateFrame("Button", nil, UIParent)
+    auraDragCaptureFrame = PixelLayoutRegion(CreateFrame("Button", nil, UIParent), true)
     auraDragCaptureFrame:SetAllPoints(UIParent)
     auraDragCaptureFrame:SetFrameStrata("TOOLTIP")
     auraDragCaptureFrame:SetFrameLevel(1500)

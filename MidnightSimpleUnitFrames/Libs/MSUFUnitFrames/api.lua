@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, ns = ...
 
 local Framework = ns and ns.MSUFUnitFrames
@@ -239,9 +240,9 @@ function Framework:Spawn(unit, overrideName)
   name = name or UniqueName(
     Framework.framePrefix .. "_" .. styleName:gsub("[^%w_]", "") .. UnitNamePart(unit))
 
-  local frame = CreateFrame(
+  local frame = PixelLayoutRegion(CreateFrame(
     "Button", name, FrameParent(),
-    "SecureUnitButtonTemplate, PingableUnitFrameTemplate")
+    "SecureUnitButtonTemplate, PingableUnitFrameTemplate"))
   -- Native pixel rounding for the button rect (12.1.5). Protected function, so
   -- it is set at creation and out of combat; not recursive by design.
   local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
@@ -286,7 +287,7 @@ function Framework:SpawnHeader(overrideName, template, ...)
 
   local name = overrideName or UniqueName(
     Framework.framePrefix .. "_" .. Private.activeStyle:gsub("[^%w_]", "") .. "Header")
-  local header = CreateFrame("Frame", name, FrameParent(), template or "SecureGroupHeaderTemplate")
+  local header = PixelLayoutRegion(CreateFrame("Frame", name, FrameParent(), template or "SecureGroupHeaderTemplate"))
   local styleName = Private.activeStyle
 
   header.MSUFUnitFramesStyleChild = function(_, childName)

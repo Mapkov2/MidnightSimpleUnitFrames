@@ -1312,6 +1312,16 @@ local function StaticRowsWithoutClientSupport()
             staticRowsWithoutClientSupport[identity] = true
         end
     end
+    local supportsSetting = client and client.SupportsClassResourceSetting
+    if type(supportsSetting) == "function" then
+        local records = Search.StaticIndex.GetRecords()
+        for i = 1, #records do
+            local rec = records[i]
+            if not supportsSetting(rec.exactTarget and rec.exactTarget.settingKey) then
+                staticRowsWithoutClientSupport[rec.searchIdentity] = true
+            end
+        end
+    end
     return staticRowsWithoutClientSupport
 end
 

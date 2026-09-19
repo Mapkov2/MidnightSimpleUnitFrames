@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Logo.lua - MSUF logo wake intro with one ring draw.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -95,7 +96,7 @@ end
 local function EnsureIntroFrame()
     if frame then return frame end
 
-    frame = CreateFrame("Frame", "MSUF_EM2_LogoIntro", UIParent)
+    frame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_LogoIntro", UIParent))
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(860)
     frame:SetAllPoints(UIParent)
@@ -103,20 +104,20 @@ local function EnsureIntroFrame()
     frame:SetAlpha(0)
     frame:Hide()
 
-    overlay = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
+    overlay = PixelLayoutRegion(frame:CreateTexture(nil, "BACKGROUND", nil, -8))
     overlay:SetTexture(W8)
     overlay:SetAllPoints(UIParent)
     overlay:SetColorTexture(0.00, 0.00, 0.00, 0.07)
     overlay:SetAlpha(0)
 
-    logoHost = CreateFrame("Frame", nil, frame)
+    logoHost = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     logoHost:SetSize(LOGO_SIZE, LOGO_SIZE)
     logoHost:SetPoint("CENTER", UIParent, "CENTER", 0, 18)
     logoHost:EnableMouse(false)
     logoHost:SetAlpha(0)
     logoHost:SetScale(1)
 
-    logo = logoHost:CreateTexture(nil, "ARTWORK", nil, 0)
+    logo = PixelLayoutRegion(logoHost:CreateTexture(nil, "ARTWORK", nil, 0))
     logo:SetTexture(LOGO_TEXTURE)
     logo:SetAllPoints(logoHost)
     logo:SetAlpha(1)
@@ -125,7 +126,7 @@ local function EnsureIntroFrame()
         logo:SetTexelSnappingBias(0)
     end
 
-    logoGlow = logoHost:CreateTexture(nil, "ARTWORK", nil, 1)
+    logoGlow = PixelLayoutRegion(logoHost:CreateTexture(nil, "ARTWORK", nil, 1))
     logoGlow:SetTexture(LOGO_TEXTURE)
     logoGlow:SetAllPoints(logoHost)
     logoGlow:SetBlendMode("ADD")
@@ -136,12 +137,12 @@ local function EnsureIntroFrame()
         logoGlow:SetTexelSnappingBias(0)
     end
 
-    ringHost = CreateFrame("Frame", nil, logoHost)
+    ringHost = PixelLayoutRegion(CreateFrame("Frame", nil, logoHost))
     ringHost:SetAllPoints(logoHost)
     ringHost:EnableMouse(false)
 
     for i = 1, RING_SEGMENTS do
-        local tex = ringHost:CreateTexture(nil, "OVERLAY", nil, 1)
+        local tex = PixelLayoutRegion(ringHost:CreateTexture(nil, "OVERLAY", nil, 1))
         tex:SetTexture(W8)
         tex:SetSize(RING_SEGMENT_W, RING_SEGMENT_H)
         tex:SetColorTexture(0.44, 0.86, 1.00, 1)
@@ -163,14 +164,14 @@ local function EnsureIntroFrame()
         ringSegments[i] = tex
     end
 
-    headGlow = ringHost:CreateTexture(nil, "OVERLAY", nil, 2)
+    headGlow = PixelLayoutRegion(ringHost:CreateTexture(nil, "OVERLAY", nil, 2))
     headGlow:SetTexture(W8)
     headGlow:SetSize(16, 5)
     headGlow:SetColorTexture(0.28, 0.76, 1.00, 1)
     headGlow:SetBlendMode("ADD")
     headGlow:SetAlpha(0)
 
-    headLine = ringHost:CreateTexture(nil, "OVERLAY", nil, 3)
+    headLine = PixelLayoutRegion(ringHost:CreateTexture(nil, "OVERLAY", nil, 3))
     headLine:SetTexture(W8)
     headLine:SetSize(11, 3)
     headLine:SetColorTexture(0.90, 0.98, 1.00, 1)

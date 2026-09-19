@@ -1,4 +1,5 @@
--- Native loadfile: exercise the real Classic controller and every loaded builder.
+-- Native loadfile: exercise the real controller every Classic TOC loads (the
+-- Retail-named ClassPower files with their Classic hunks) and every loaded builder.
 local repo = assert(arg[1], "repo root required")
 local flavor = arg[2] or "Mists"
 local Stubs = assert(loadfile(repo .. "/.github/scripts/msuf_test_stubs.lua"))()
@@ -24,17 +25,18 @@ local module
 function MSUF_RegisterModule(name, callbacks) assert(name == "ClassPower"); module = callbacks end
 local function load(path) assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MSUF", ns) end
 load("Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua")
-load("Game/Classic/ClassPower/MSUF_CP_Constants.lua")
+load("ClassPower/MSUF_CP_Constants.lua")
 load("Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua")
 load("Game/" .. flavor .. "/ClassPower.lua")
-load("Game/Classic/ClassPower/MSUF_CP_Modes.lua")
-load("Game/Classic/ClassPower/MSUF_CP_Core.lua")
+load("Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua")
+load("ClassPower/MSUF_CP_Modes.lua")
+load("ClassPower/MSUF_CP_Core.lua")
 load("ClassPower/MSUF_CP_AltMana.lua")
 load("ClassPower/MSUF_CP_PlayerHP.lua")
 load("ClassPower/MSUF_CP_Controller_Config.lua")
 load("ClassPower/MSUF_CP_Controller_Colors.lua")
 load("ClassPower/MSUF_CP_Controller_Surface.lua")
-load("Game/Classic/ClassPower/MSUF_CP_Controller.lua")
+load("ClassPower/MSUF_CP_Controller.lua")
 assert(module, "controller did not register")
 local function upvalue(fn, wanted)
     for i = 1, 100 do
@@ -45,6 +47,8 @@ local function upvalue(fn, wanted)
     error("Missing test seam: " .. wanted)
 end
 local refresh = upvalue(module.Enable, "FullRefresh")
+-- The texture-hook wrapper replaces FullRefresh; the stages live on the original.
+refresh = upvalue(refresh, "CP")._origFullRefresh or refresh
 local stages = upvalue(refresh, "Refresh")
 local config = upvalue(refresh, "CPConfig")
 local K = MSUF_CP_CONST
@@ -67,7 +71,7 @@ local marker = {}
 local build = MSUF_CP_CORE_BUILDERS.CONTROLLER_CONFIG
 MSUF_CP_CORE_BUILDERS.CONTROLLER_CONFIG = function() error(marker) end
 _G.__MSUF_ClassPower_Loaded = nil
-local ok, failure = pcall(load, "Game/Classic/ClassPower/MSUF_CP_Controller.lua")
+local ok, failure = pcall(load, "ClassPower/MSUF_CP_Controller.lua")
 assert(not ok and failure == marker, "controller concealed a real builder error")
 MSUF_CP_CORE_BUILDERS.CONTROLLER_CONFIG = build
-print("PASS " .. flavor .. " real ClassPower load, refresh, fonts and teardown without Ebon no-ops")
+print("PASS " .. flavor .. " real ClassPower load, refresh, fonts and teardown without the Retail Ebon builder")

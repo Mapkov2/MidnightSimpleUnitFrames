@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Castbars/MSUF_CastbarAnchors.lua
 --
 -- Pure castbar layout logic: positioning (ClearAllPoints/SetPoint), sizing
@@ -938,7 +939,7 @@ function MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
             icon:Show()
             local host = bar._msufPCIconHost
             if not host then
-                host = CreateFrame("Frame", nil, bar)
+                host = PixelLayoutRegion(CreateFrame("Frame", nil, bar))
                 host:EnableMouse(false)
                 bar._msufPCIconHost = host
             end

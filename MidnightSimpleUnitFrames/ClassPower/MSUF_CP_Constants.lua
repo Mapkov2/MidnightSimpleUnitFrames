@@ -223,3 +223,30 @@ ExportPublic("MSUF_CP_MODE_EVENT_PROFILE", {
     [MODE.STAGGER]        = { power = false, maxPower = false, aura = true,  rune = false, health = true,  pointCharge = false, warlockPred = false },
     [MODE.IRONFUR]        = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
 })
+
+--- Classic flavors (MSUF.Client.IsClassic: Vanilla, TBC and Mists) load this
+--- file as well. Their providers (Game/<Flavor>/ClassPower.lua) route the Mists
+--- resources below and the Classic-only signed render mode; Mainline never
+--- sees these keys.
+if (MSUF.Client and MSUF.Client.IsClassic) == true then
+    --- 11 is NATIVE_AURA. Mode ids key the hot-path dispatch tables, so a
+    --- Classic-only mode takes the next free number instead of shadowing one.
+    MODE.SIGNED_CONTINUOUS = 12
+    CPK.SPELL.MISTS_ARCANE_CHARGE = 36032
+    K.MISTS_ARCANE_CHARGES = {
+        AURA_ID = CPK.SPELL.MISTS_ARCANE_CHARGE,
+        MAX_STACKS = 4,
+    }
+    local PT = K.PT
+    PT.BurningEmbers = (E and E.BurningEmbers) or 14
+    PT.DemonicFury   = (E and E.DemonicFury) or 15
+    PT.Balance       = (E and E.Balance) or 26
+    PT.ShadowOrbs    = (E and E.ShadowOrbs) or 28
+    local tokens = K.POWER_TYPE_TOKENS
+    tokens[PT.BurningEmbers] = "BURNING_EMBERS"
+    tokens[PT.DemonicFury]   = "DEMONIC_FURY"
+    tokens[PT.Balance]       = "BALANCE"
+    tokens[PT.ShadowOrbs]    = "SHADOW_ORBS"
+    tokens.MISTS_ARCANE_CHARGES = "ARCANE_CHARGES"
+    _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SIGNED_CONTINUOUS] = { power = true, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false }
+end

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 full changelog page with direct links from release highlights to the
 -- owning Menu2 controls. Full history is bundled only with the LoD Options
 -- addon; core keeps its compact changelog payload for Assistant knowledge.
@@ -91,7 +92,7 @@ local function BuildFullChangelog(ctx)
     end
 
     local function AddLinkedText(text, link, x, availableWidth, gap)
-        local button = CreateFrame("Button", nil, root)
+        local button = PixelLayoutRegion(CreateFrame("Button", nil, root))
         button:SetPoint("TOPLEFT", root, "TOPLEFT", x or 18, y)
         local linkWidth = max(80, availableWidth or contentWidth)
         button:SetWidth(linkWidth)
@@ -185,7 +186,7 @@ local function BuildFullChangelog(ctx)
                             34, contentWidth - 32, 8, "section")
                         for bulletIndex = 1, #section.bullets do
                             local text, link = BulletParts(section.bullets[bulletIndex])
-                            local dot = root:CreateTexture(nil, "ARTWORK")
+                            local dot = PixelLayoutRegion(root:CreateTexture(nil, "ARTWORK"))
                             dot:SetSize(5, 5)
                             dot:SetPoint("TOPLEFT", root, "TOPLEFT", 44, y - 6)
                             local dotColor = isHighlights and T.colors.accent2 or T.colors.accent

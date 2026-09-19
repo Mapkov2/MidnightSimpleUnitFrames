@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua
 --- On-demand combat-state animation for edit-mode and menu preview frames.
 
@@ -1123,7 +1124,7 @@ end
 
 local function EnsureDriver()
   if driver then return driver end
-  driver = CreateFrame("Frame", "MSUF_PreviewAnimationDriver")
+  driver = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PreviewAnimationDriver"))
   driver:Hide()
   driver:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_REGEN_DISABLED" then

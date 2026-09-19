@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MSUF_CP_BalanceDruid.lua
 --- Balance Druid Astral Power prediction and eclipse coloring runtime.
 --- Kept out of the controller because it owns its own events and class gate.
@@ -367,7 +368,7 @@ local function _updateOverlay()
         return
     end
     if not _predTex then
-        local tex = bar:CreateTexture(nil, "ARTWORK", nil, 1)
+        local tex = PixelLayoutRegion(bar:CreateTexture(nil, "ARTWORK", nil, 1))
         tex:SetVertexColor(1, 1, 1, CPK.BAL.PRED_ALPHA)
         tex:SetHeight(1)
         tex:Hide()

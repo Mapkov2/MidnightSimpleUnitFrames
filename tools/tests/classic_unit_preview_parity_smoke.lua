@@ -1,9 +1,10 @@
 -- classic_unit_preview_parity_smoke.lua <repoRoot> <flavor>
 --
--- Vanilla, TBC and Mists load Preview/MSUF_Menu2_UnitPreview_Render_Classic.lua
--- and ..._View_Classic.lua in place of the Retail-named unit preview. Those
--- owned copies once lacked features whose controls and runtime every Classic
--- flavor has, so a setting changed and the preview did not follow.
+-- Vanilla, TBC and Mists load the Retail-named Preview/MSUF_Menu2_UnitPreview_Render.lua
+-- and ..._View.lua, whose Classic differences are gated on MSUF.Client facts read
+-- once at load. The owned copies they replaced once lacked features whose
+-- controls and runtime every Classic flavor has, so a setting changed and the
+-- preview did not follow.
 --
 -- This smoke boots the flavor's whole shipped core and Options graph through
 -- tools/tests/client_world.lua, builds the real unit preview and drives its
@@ -12,8 +13,16 @@
 --   * the Class Resource text layer (bars.classPowerTextLayer);
 --   * the boss target marker, its drag handle, footprint and border highlight,
 --     only where MSUF.Client.SupportsUnit("boss1") says boss units exist;
+--   * the shared ..._Status.lua: the Pet Happiness icon where the client has
+--     pet happiness, together with the Pet page control, the unit compile and
+--     the runtime element that read the same settings, and the Level Text
+--     difficulty colour and its settings, which the Status > Level toggle and
+--     the unit compile read the same way;
+--   * the Threat % text where MSUF.Client.SupportsThreatText is true: the Unit
+--     page control, the runtime module, the unit compile and the preview row
+--     with its dark plate (Background) and the plate's width;
 --   * unchanged Classic behaviour: the Era legacy Blizzard portrait fallback,
---     the layer popover branch, and no Devourer notch pool.
+--     the layer popover branch, and no Devourer notch drawn.
 --
 -- Plain Lua 5.1 with the repo root and a Classic flavor as arguments.
 
@@ -30,19 +39,20 @@ local function Check(condition, message)
 end
 
 local world = World.New(root, flavor)
-Check(world.client.isClassic == true, "is not a Classic flavor; this smoke covers the Classic preview copies")
+Check(world.client.isClassic == true, "is not a Classic flavor; this smoke covers the Classic unit preview")
 world:Boot()
 local failure = world:FirstFailure()
 Check(failure == nil, "load failed in " .. tostring(failure and failure.file) .. ": " .. tostring(failure and failure.message))
 
--- The flavor must load the owned copies, never the Retail-named files.
+-- The flavor must load the Retail-named render and view, never the retired
+-- Classic copies of either.
 local PREVIEW = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/"
 local loaded = {}
 for _, path in ipairs(world.loaded) do loaded[path] = true end
-Check(loaded[PREVIEW .. "MSUF_Menu2_UnitPreview_Render_Classic.lua"] and loaded[PREVIEW .. "MSUF_Menu2_UnitPreview_View_Classic.lua"],
-    "does not load the Classic unit preview copies")
-Check(not loaded[PREVIEW .. "MSUF_Menu2_UnitPreview_Render.lua"] and not loaded[PREVIEW .. "MSUF_Menu2_UnitPreview_View.lua"],
-    "loads a Retail-named unit preview file")
+Check(loaded[PREVIEW .. "MSUF_Menu2_UnitPreview_Render.lua"] and loaded[PREVIEW .. "MSUF_Menu2_UnitPreview_View.lua"],
+    "does not load the unit preview render and view")
+Check(not loaded[PREVIEW .. "MSUF_Menu2_UnitPreview_Render_Classic.lua"] and not loaded[PREVIEW .. "MSUF_Menu2_UnitPreview_View_Classic.lua"],
+    "loads a retired Classic unit preview render or view copy")
 
 -- Widget calls the preview makes that the shared stubs do not model. Added
 -- after the boot, so the load itself runs on the same surface client_boot_smoke uses.
@@ -76,8 +86,11 @@ env.MSUF_EnsureDB(true)
 local Preview = MSUF.UFPreview
 Check(type(Preview) == "table" and type(Preview._BuildPreview) == "function", "no unit preview builder")
 local refreshSource = debug.getinfo(Preview.Refresh, "S").source
-Check(refreshSource:find("MSUF_Menu2_UnitPreview_Render_Classic.lua", 1, true) ~= nil,
-    "Preview.Refresh does not come from the Classic render: " .. refreshSource)
+Check(refreshSource:find("MSUF_Menu2_UnitPreview_Render.lua", 1, true) ~= nil,
+    "Preview.Refresh does not come from the unit preview render: " .. refreshSource)
+local buildSource = debug.getinfo(Preview._BuildPreview, "S").source
+Check(buildSource:find("MSUF_Menu2_UnitPreview_View.lua", 1, true) ~= nil,
+    "the unit preview builder does not come from the shared view: " .. buildSource)
 
 local parent = env.CreateFrame("Frame", nil, env.UIParent)
 parent:SetSize(900, 400)
@@ -103,7 +116,7 @@ local function Refresh(key)
 end
 Refresh("player")
 local R = Preview.RefreshDeps and Preview.RefreshDeps._RenderState
-Check(type(R) == "table", "the Classic render installed no render state")
+Check(type(R) == "table", "the unit preview render installed no render state")
 
 local function Shown(region) return region ~= nil and region:IsShown() == true end
 
@@ -237,7 +250,257 @@ else
     R.RuntimeSpecForPreviewKey = compiled
 end
 
--- 4. Unchanged Classic behaviour --------------------------------------------
+-- 4. Status preview ---------------------------------------------------------
+-- The flavor loads the Retail-named ..._Status.lua, an override row, so a
+-- Retail rebase lands in it: its Pet Happiness hunk and the Level Text
+-- difficulty colour are pinned by what the preview draws.
+local UnitPage = world.options.MSUF2 and world.options.MSUF2.UnitPage
+Check(type(UnitPage) == "table" and type(UnitPage.ReadStatusBool) == "function", "the Unit page publishes no status reader")
+local function StatusControl(value)
+    for _, spec in ipairs(UnitPage.STATUS_CONTROLS or {}) do
+        if spec.value == value then return spec end
+    end
+    return nil
+end
+Preview.SetStatusPreviewMode("all")
+local pet = DB().pet
+pet.showPetHappinessIndicator = true
+Refresh("pet")
+local happiness = mock.icons and mock.icons.statusPetHappiness
+if MSUF.Client.SupportsPetHappiness == true then
+    Check(Shown(happiness) and Shown(happiness.tex), "Pet Happiness is on but the Pet preview draws no happiness icon")
+    Check(happiness.tex.texture == "Interface\\PetPaperDollFrame\\UI-PetHappiness",
+        "the Pet Happiness preview does not use the stock happiness texture: " .. tostring(happiness.tex.texture))
+    local coords = happiness.tex.texCoord or {}
+    Check(coords[1] == 0 and coords[2] == 0.1875 and coords[3] == 0 and coords[4] == 0.359375,
+        "the Pet Happiness preview does not show the Happy state: " .. table.concat(coords, ","))
+else
+    Check(not Shown(happiness), "a client without pet happiness previews the happiness icon")
+end
+pet.showPetHappinessIndicator = nil
+
+-- The preview reads the settings, not the compile, so it cannot see the live
+-- side. The Pet page control, the unit compile of the Retail-named
+-- UnitFrames/Engine/MSUF_UF_Config.lua (an override row every Retail sync
+-- rebases) and the runtime element, which reads only spec.status.petHappiness,
+-- must agree: a rebase that drops the entry on Classic would keep the control
+-- and the preview and leave the live pet frame blank.
+local happinessControl = StatusControl("statusPetHappiness")
+local happinessModule = loaded["MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua"] == true
+local happinessElement = MSUF.UF.elements and MSUF.UF.elements.PetHappinessIndicator
+local petFrame = { MSUFUnitKey = "pet" }
+local function CompiledHappiness(key)
+    MSUF.UF.Config.Refresh()
+    local spec = MSUF.UF.Config.GetSpec(key)
+    return spec and spec.status and spec.status.petHappiness, spec
+end
+local function Placement(show, size, anchor, x, y, layer)
+    return string.format("%s %s %s %s %s layer %s", tostring(show), tostring(size), tostring(anchor), tostring(x), tostring(y), tostring(layer))
+end
+local function EntryPlacement(entry)
+    return entry and Placement(entry.enabled, entry.size, entry.anchor, entry.x, entry.y, entry.layer) or "no entry"
+end
+if MSUF.Client.SupportsPetHappiness == true then
+    local control = happinessControl
+    Check(control and control.allowed("pet") and not control.allowed("player") and not control.allowed("target"),
+        "the Unit page does not offer Pet Happiness on the Pet page only")
+    Check(happinessModule and type(happinessElement) == "table" and type(happinessElement.IsEnabled) == "function",
+        "the Pet Happiness runtime element is not loaded")
+    local DEFAULT = Placement(true, 24, "RIGHT", -7, -4, 7)
+    Check(Placement(control.defaultShow, control.defaultSize, control.defaultAnchor, control.defaultX, control.defaultY,
+        control.defaultLayer) == DEFAULT, "the Pet page control no longer defaults to " .. DEFAULT)
+    -- A fresh profile, as the Defaults seed it.
+    local entry, spec = CompiledHappiness("pet")
+    Check(EntryPlacement(entry) == DEFAULT, "the unit compile has no default-on Pet Happiness entry at " .. DEFAULT
+        .. " (" .. EntryPlacement(entry) .. ")")
+    Check(happinessElement.IsEnabled(petFrame, spec) == true, "the Pet Happiness element does not run on the default compile")
+    local targetEntry = CompiledHappiness("target")
+    Check(targetEntry == nil or targetEntry.enabled == false, "the unit compile enables Pet Happiness on the Target frame")
+    -- Nothing stored at all: the compile's own fallbacks must be what the page
+    -- shows. Size is left out: an unset size falls back to the status text size
+    -- on every client, Midnight and Forever included, and the Defaults seed
+    -- petHappinessIndicatorSize wherever the client has pet happiness.
+    local keys = { control.show, control.size, control.anchor, control.x, control.y, control.layer }
+    local saved = {}
+    for index, key in ipairs(keys) do
+        saved[index] = { pet[key], g[key] }
+        pet[key], g[key] = nil, nil
+    end
+    entry = CompiledHappiness("pet")
+    local unset = entry and Placement(entry.enabled, "-", entry.anchor, entry.x, entry.y, entry.layer) or "no entry"
+    local pageUnset = Placement(control.defaultShow, "-", control.defaultAnchor, control.defaultX, control.defaultY, control.defaultLayer)
+    Check(unset == pageUnset, "an unset Pet Happiness compiles to " .. unset .. " while the Pet page shows " .. pageUnset)
+    -- The keys the page control writes are the keys the compile reads.
+    pet[control.show], pet[control.size], pet[control.anchor] = false, 30, "LEFT"
+    pet[control.x], pet[control.y], pet[control.layer] = 5, 6, 9
+    entry, spec = CompiledHappiness("pet")
+    Check(EntryPlacement(entry) == Placement(false, 30, "LEFT", 5, 6, 9),
+        "the Pet page's Pet Happiness settings do not reach the unit compile: " .. EntryPlacement(entry))
+    Check(not happinessElement.IsEnabled(petFrame, spec), "the Pet Happiness element still runs with Pet Happiness off")
+    for index, key in ipairs(keys) do
+        pet[key], g[key] = saved[index][1], saved[index][2]
+    end
+else
+    Check(happinessControl == nil, "the Unit page offers Pet Happiness on a client without it")
+    Check(not happinessModule and happinessElement == nil, "a client without pet happiness loads its runtime")
+    Check(CompiledHappiness("pet") == nil, "the unit compile has a Pet Happiness entry on a client without it")
+end
+
+-- Level Text: levelIndicatorDifficultyColor is the key the Status > Level
+-- toggle writes. Per frame first, then general; unset means on unless the
+-- frame carries its own level text colour. A distinct palette per tier, so
+-- the difficulty colour can never pass for the font or the custom colour.
+local TIER_KEYS = { "levelColorImpossible", "levelColorVeryDifficult", "levelColorStandard", "levelColorEasy", "levelColorTrivial" }
+for index, prefix in ipairs(TIER_KEYS) do
+    g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"] = index / 10, 0.05, 1 - index / 10
+end
+local fontR, fontG, fontB = Preview.Model.FontColor()
+local target = DB().target
+target.showLevelIndicator = true
+local function LevelColor()
+    Refresh("target")
+    local level = mock.icons and mock.icons.level
+    Check(Shown(level) and level.txt ~= nil, "the Target preview shows no level text")
+    local color = level.txt.textColor or {}
+    return color[1], color[2], color[3]
+end
+local function IsTier(r, green, b)
+    for index = 1, #TIER_KEYS do
+        if r == index / 10 and green == 0.05 and b == 1 - index / 10 then return true end
+    end
+    return false
+end
+local function IsFont(r, green, b) return r == fontR and green == fontG and b == fontB end
+local function Custom(r, green, b)
+    target.levelIndicatorColorR, target.levelIndicatorColorG, target.levelIndicatorColorB = r, green, b
+end
+-- The Status > Level toggle (the status section's own reader, run against the
+-- Unit page's helpers) and the unit compile must agree with what the preview
+-- draws at every step: one key, one default rule, one palette (ledger B52).
+local sectionFile = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitStatusSection.lua", "rb"))
+local sectionSource = sectionFile:read("*a"):gsub("\r\n", "\n")
+sectionFile:close()
+Check(sectionSource:find('SetBool(unit, "levelIndicatorDifficultyColor", value, "MSUF2_STATUS_LEVEL_DIFFICULTY_COLOR"', 1, true),
+    "the Status > Level toggle no longer writes levelIndicatorDifficultyColor")
+local readerBody = sectionSource:match("\n    (local function LevelDifficultyColorEnabled%(%)\n.-\n    end)\n")
+Check(readerBody, "the Status > Level toggle lost its reader")
+local MenuLevelToggle = assert(loadstring("local unit, GetConf, GetGeneral, ReadStatusBool = ...\n" .. readerBody
+    .. "\nreturn LevelDifficultyColorEnabled"))("target", UnitPage.GetConf, UnitPage.GetGeneral, UnitPage.ReadStatusBool)
+local function Coherent(label)
+    local previewOn = IsTier(LevelColor())
+    -- The palette is one shared buffer: recompile last so the compile's own read is checked.
+    MSUF.UF.Config.Refresh()
+    local level = MSUF.UF.Config.GetSpec("target").status.level
+    Check(level ~= nil, label .. ": the unit compile has no Level Text entry")
+    Check((level.difficultyColor == true) == previewOn, label .. ": the unit compile says difficulty colour "
+        .. tostring(level.difficultyColor) .. " while the preview " .. (previewOn and "draws it" or "does not"))
+    Check(MenuLevelToggle() == previewOn, label .. ": the Status > Level toggle shows " .. tostring(MenuLevelToggle())
+        .. " while the preview " .. (previewOn and "draws the difficulty colour" or "does not"))
+    if previewOn then
+        local palette = level.difficultyColors or {}
+        for index = 1, #TIER_KEYS do
+            Check(palette[index * 3 - 2] == index / 10 and palette[index * 3 - 1] == 0.05 and palette[index * 3] == 1 - index / 10,
+                label .. ": the unit compile does not take tier " .. index .. " from the Colors page palette")
+        end
+    end
+end
+Check(IsTier(LevelColor()), "Level Text with no stored choice is not coloured by difficulty")
+Coherent("no stored choice")
+target.levelIndicatorDifficultyColor = false
+Check(IsFont(LevelColor()), "Level Text keeps the difficulty colour with the toggle off")
+Coherent("frame toggle off")
+target.levelIndicatorDifficultyColor = true
+Custom(0.2, 0.4, 0.6)
+Check(IsTier(LevelColor()), "the toggle on does not win over a custom level text colour")
+Coherent("frame toggle on over a custom colour")
+target.levelIndicatorDifficultyColor = nil
+local r, green, b = LevelColor()
+Check(r == 0.2 and green == 0.4 and b == 0.6, "a custom level text colour does not turn the difficulty colour off by default")
+Coherent("custom colour, toggle unset")
+Custom(nil, nil, nil)
+g.levelIndicatorDifficultyColor = false
+Check(IsFont(LevelColor()), "the general toggle off does not reach a frame without its own choice")
+Coherent("general toggle off")
+target.levelIndicatorDifficultyColor = true
+Check(IsTier(LevelColor()), "the frame toggle on does not win over the general toggle")
+Coherent("frame toggle on over the general toggle off")
+target.levelIndicatorDifficultyColor = nil
+target.showLevelIndicator = nil
+g.levelIndicatorDifficultyColor = nil
+for _, prefix in ipairs(TIER_KEYS) do
+    g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"] = nil, nil, nil
+end
+
+-- Threat % text: Classic Era and TBC offer it, Mists does not. Every piece
+-- lives in a file all clients share, so the client fact alone decides.
+local supportsThreat = MSUF.Client.SupportsThreatText == true
+local threatControl = StatusControl("statusThreat")
+local threatModule = loaded["MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua"] == true
+local function ThreatText()
+    Refresh("target")
+    return MSUF.UF.Config.GetSpec("target").status.threat, mock.icons and mock.icons.statusThreat
+end
+local compiledThreat, threatRow = ThreatText()
+if supportsThreat then
+    Check(threatControl and threatControl.allowed("target") and threatControl.allowed("focus")
+        and threatControl.allowed("boss") and not threatControl.allowed("player"),
+        "the Unit page does not offer Threat % on the target, focus and boss pages only")
+    Check(threatModule and type(MSUF.UFThreatText) == "table", "the threat text runtime is not loaded")
+    Check(compiledThreat and compiledThreat.enabled == true and compiledThreat.colorCurve == true,
+        "the unit compile has no default-on Threat % entry with Color by threat")
+    Check(threatRow and Shown(threatRow.txt) and threatRow.txt.text == "85%", "the Target preview shows no 85% threat sample")
+    local cr, cg, cb = MSUF.UFThreatText.CurveColorAt(g, 85)
+    local color = threatRow.txt.textColor or {}
+    Check(color[1] == cr and color[2] == cg and color[3] == cb, "the threat sample is not drawn in its 85% curve colour")
+    -- The dark plate (Background, on by default): the render lays the row out
+    -- at the width of "100%" in the sample's font, and the plate pads it evenly.
+    local function RowWidth(text)
+        local shown = threatRow.txt:GetText()
+        threatRow.txt:SetText(text)
+        local width = threatRow.txt:GetStringWidth()
+        threatRow.txt:SetText(shown)
+        return math.max(1, math.floor(width + 0.5))
+    end
+    Check(RowWidth("100%") ~= RowWidth("85%"), "harness: 100% and 85% measure the same width")
+    local plate = threatRow.bg
+    Check(threatRow._msufThreatPlate == true and plate ~= nil, "the Target preview draws the threat sample without its dark plate")
+    local topLeft, bottomRight = plate.points[1], plate.points[2]
+    Check(#plate.points == 2 and topLeft.point == "TOPLEFT" and topLeft.relativeTo == threatRow
+        and bottomRight.point == "BOTTOMRIGHT" and bottomRight.relativeTo == threatRow
+        and topLeft.x < 0 and topLeft.y > 0 and bottomRight.x == -topLeft.x and bottomRight.y == -topLeft.y,
+        "the threat plate is not padded evenly around the sample")
+    local plateColor = plate.colorTexture or {}
+    Check(plateColor[1] == 0 and plateColor[2] == 0 and plateColor[3] == 0 and plateColor[4] == 0.75,
+        "the threat plate is not the runtime's dark plate")
+    Check(threatRow:GetWidth() == RowWidth("100%"), "the threat sample on its plate is not as wide as 100% ("
+        .. tostring(threatRow:GetWidth()) .. ")")
+    target.threatIndicatorBackground = false
+    Refresh("target")
+    Check(threatRow._msufThreatPlate == nil and plate.allPoints ~= nil and (plate.colorTexture or {})[4] == 0,
+        "Background off does not clear the threat plate")
+    Check(threatRow:GetWidth() == RowWidth("85%"), "without its plate the threat sample keeps the width of 100%")
+    target.threatIndicatorBackground = nil
+    Refresh("target")
+    Check(threatRow._msufThreatPlate == true, "Background back on does not bring the threat plate back")
+    target.threatIndicatorColorCurve = false
+    compiledThreat, threatRow = ThreatText()
+    color = threatRow.txt.textColor or {}
+    Check(compiledThreat.colorCurve == false and color[1] == fontR and color[2] == fontG and color[3] == fontB,
+        "Color by threat off does not reach the unit compile and the preview together")
+    target.threatIndicatorColorCurve = nil
+    target.showThreatIndicator = false
+    compiledThreat = ThreatText()
+    Check(compiledThreat.enabled == false, "Threat % off does not reach the unit compile")
+    target.showThreatIndicator = nil
+else
+    Check(threatControl == nil, "the Unit page offers Threat % on a client without it")
+    Check(not threatModule, "a client without the threat text loads its runtime")
+    Check(compiledThreat == nil, "the unit compile has a Threat % entry on a client without it")
+    Check(threatRow == nil, "the preview has a Threat % row on a client without it")
+end
+Preview.SetStatusPreviewMode("current")
+
+-- 5. Unchanged Classic behaviour --------------------------------------------
 -- Era's legacy PlayerFrame has no modern portrait atlases: the preview keeps
 -- its bundled gold ring and circle mask even when the atlas lookup answers.
 player.portraitMode = "LEFT"
@@ -282,6 +545,8 @@ Check(placedChips > 0, "the layer popover placed no chip")
 box._msuf2LayerPopoverWidth = nil
 
 -- Devourer's fragment notches belong to Midnight; no Classic class has them.
-Check(mock.classPower.notches == nil, "the Classic preview builds a Devourer notch pool")
+-- The shared view builds Retail's empty pool; on Classic the render never fills it.
+Check(mock.classPower.notches == nil or next(mock.classPower.notches) == nil,
+    "the Classic preview draws a Devourer notch")
 
 print(string.format("classic_unit_preview_parity_smoke: ok (%s, boss units %s)", flavor, bossUnits and "previewed" or "absent"))

@@ -49,9 +49,9 @@ Check(core:find('AddEventHandler(frame, "ARENA_OPPONENT_UPDATE", ArenaOpponentId
 Check(core:find("QueueDependentIdentity(frame, event)", 1, true),
     "arena opponent updates lost their burst coalescer")
 
--- Classic clients load their own config compiler. Keep its indexed Arena
--- scope in step with the shared core instead of only validating Mainline.
-local classicConfig = Read("MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UF_Config.lua")
+-- Every client compiles through the Retail-named config compiler, whose Arena
+-- scope is a Classic override hunk. Keep it in step with the shared core.
+local classicConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua")
 for _, marker in ipairs({
     "arena = { width = 180, height = 30",
     'arena = "showArenaPowerBar"',
@@ -60,7 +60,7 @@ for _, marker in ipairs({
     'ExportPublic("MSUF_GetArenaLayoutDelta"',
 }) do
     Check(classicConfig:find(marker, 1, true),
-        "Classic config compiler lost its Arena contract: " .. marker)
+        "the unit config compiler lost its Classic Arena contract: " .. marker)
 end
 
 -- 2) State seeding -----------------------------------------------------------
@@ -213,9 +213,9 @@ for _, marker in ipairs({
         "Menu2 does not coordinate the Arena castbar-page preview: " .. marker)
 end
 
--- Vanilla, TBC, and Mists load the Classic Menu2 page variant. It must expose
--- the same Arena page/castbar/aura/preview surface as Mainline.
-local classicUnitMenu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua")
+-- Mainline, TBC, and Mists load the same Unit page. It must expose the Arena
+-- page/castbar/aura/preview surface on every client that has arena units.
+local unitMenu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
 for _, marker in ipairs({
     'uf_arena = { unit = "arena"',
     "arena = {",
@@ -225,8 +225,8 @@ for _, marker in ipairs({
     "local function SetArenaPagePreviewActive(active)",
     "SetArenaPagePreviewActive = SetArenaPagePreviewActive",
 }) do
-    Check(classicUnitMenu:find(marker, 1, true),
-        "Classic Menu2 Arena page contract is incomplete: " .. marker)
+    Check(unitMenu:find(marker, 1, true),
+        "Menu2 Arena page contract is incomplete: " .. marker)
 end
 
 local unitSections = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua")

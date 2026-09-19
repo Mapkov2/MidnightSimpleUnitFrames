@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -91,7 +92,7 @@ local function EnsurePetBattleFrameHider()
   end
   if InCombat() then return nil end
 
-  hider = CreateFrame("Frame", "MSUF_PetBattleFrameHider", UIParent, "SecureHandlerStateTemplate")
+  hider = PixelLayoutRegion(CreateFrame("Frame", "MSUF_PetBattleFrameHider", UIParent, "SecureHandlerStateTemplate"))
   hider:SetAllPoints(UIParent)
   hider:SetFrameStrata("LOW")
   hider._msufOwnedAnchorRoot = true
@@ -323,7 +324,7 @@ local function EnsureUnitExternalAnchorProxy(requestedAnchor, source)
   local key = UnitExternalAnchorProxyKey(requestedAnchor, source)
   local proxy = unitExternalAnchorProxies[key]
   if not proxy then
-    proxy = CreateFrame("Frame", nil, UIParent)
+    proxy = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent), true)
     proxy._msufOwnedAnchorRoot = true
     proxy._msufUnitExternalAnchorProxy = true
     proxy._msufExternalAnchorProxyKey = key
@@ -751,7 +752,7 @@ function UF.GetSecureHeaderUnitButtonTemplate()
 end
 
 function UF.CreateSecureUnitButton(name, parent)
-  local button = CreateFrame("Button", name, parent or ResolvePetBattleFrameHider(), UF.GetSecureUnitButtonTemplate())
+  local button = PixelLayoutRegion(CreateFrame("Button", name, parent or ResolvePetBattleFrameHider(), UF.GetSecureUnitButtonTemplate()))
   -- 12.1.5 rounds layout natively when the region carries the attribute, which
   -- keeps the button rect the children anchor to on whole pixels at any UI
   -- scale. The secure template makes this button protected and

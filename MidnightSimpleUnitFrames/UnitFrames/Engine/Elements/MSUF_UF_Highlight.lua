@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -141,7 +142,7 @@ local function EnsureGradient(hb)
   if not gradient then
     gradient = {}
     for _, direction in ipairs({ "left", "right", "up", "down" }) do
-      gradient[direction] = hb:CreateTexture(nil, "OVERLAY")
+      gradient[direction] = PixelLayoutRegion(hb:CreateTexture(nil, "OVERLAY"))
     end
     gradient.left:SetPoint("TOPLEFT", hb, "TOPLEFT", 0, 0)
     gradient.left:SetPoint("BOTTOMLEFT", hb, "BOTTOMLEFT", 0, 0)
@@ -177,7 +178,7 @@ local function ApplyHighlightVisual(hb)
     EnsureGradient(hb)
   else
     HideGradient(hb)
-    if hb.SetBackdrop then hb:SetBackdrop({ edgeFile = WHITE8, edgeSize = cfgSize }) end
+    if hb.SetBackdrop then PixelLayoutRegion(hb, "SetBackdrop", { edgeFile = WHITE8, edgeSize = cfgSize }) end
     if hb.SetBackdropBorderColor then hb:SetBackdropBorderColor(cfgR, cfgG, cfgB, 1) end
   end
 end
@@ -185,7 +186,7 @@ end
 local function EnsureHighlight(frame)
   local hb = frame._msufHL
   if not hb then
-    hb = CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame, BACKDROP_TEMPLATE)
+    hb = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame, BACKDROP_TEMPLATE))
     hb:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     hb:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
     hb:EnableMouse(false)

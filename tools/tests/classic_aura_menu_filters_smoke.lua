@@ -44,12 +44,17 @@ local groupPage = {
 local widgets = {
     Text = function() return {} end,
     SetControlEnabled = function(control, enabled) control.enabled = enabled end,
+    -- The shared nested builder returns the parent builder when the body is not
+    -- a collapsible entry, which none of these stub sections are.
+    CreateNestedAuraBuilder = function(_, parentBuilder) return parentBuilder end,
 }
 
 local menu
 menu = {
     Widgets = widgets,
     Theme = { colors = { muted = { 1, 1, 1, 1 } } },
+    -- An empty profile: no dispel overlay, symbol or outline is requested.
+    EnsureDB = function() return {} end,
     GroupPage = groupPage,
     ValueTextList = ValueTextList,
     ValueTextPairs = ValueTextPairs,
@@ -125,18 +130,25 @@ WOW_PROJECT_MAINLINE = 1
 WOW_PROJECT_ID = 2
 VT = nil
 
-local auraMenuPath = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Classic.lua"
-local auraMenuFile = assert(io.open(auraMenuPath, "rb"))
-local auraMenuSource = auraMenuFile:read("*a")
-auraMenuFile:close()
-assert(not auraMenuSource:match("%f[%w]VT%s*%("),
-    "Aura menu retains an unresolved global VT call")
+-- Classic loads the Retail aura page and its Group sibling; their Classic
+-- differences are gated on M.CLASSIC_AURA_FILTERS_REDUCED inside them.
+local pagesPath = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/"
+for _, page in ipairs({ "MSUF_Menu2_Auras.lua", "MSUF_Menu2_Auras_Group.lua" }) do
+    local pageFile = assert(io.open(pagesPath .. page, "rb"))
+    local pageSource = pageFile:read("*a")
+    pageFile:close()
+    assert(not pageSource:match("%f[%w]VT%s*%(") or pageSource:match("\nlocal VT[%s,]"),
+        page .. " retains an unresolved global VT call")
+end
 
 for _, helper in ipairs({ "AuraSettings", "AuraControls" }) do
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_" .. helper .. ".lua"))(
+    assert(loadfile(pagesPath .. "MSUF_Menu2_" .. helper .. ".lua"))(
         "MidnightSimpleUnitFrames", namespace)
 end
-assert(loadfile(auraMenuPath))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(pagesPath .. "MSUF_Menu2_Auras.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(menu.CLASSIC_AURA_FILTERS_REDUCED == true,
+    "the aura page did not read the Classic client fact")
+assert(loadfile(pagesPath .. "MSUF_Menu2_Auras_Group.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(type(menu.BuildAuras3GroupLaneWorkspace) == "function",
     "Classic group Aura workspace builder was not exported")
 
@@ -202,12 +214,17 @@ end
 -- Unit workspace filters. Only mine and Non-player auras are mutually exclusive
 -- and Classic has no Non-player control, so enabling Debuff Only mine must clear
 -- a nonPlayer flag imported from Retail. Buff lanes and turning Only mine off
--- must leave nonPlayer untouched.
+-- must leave nonPlayer untouched. Turning Only mine on enables the filters of
+-- that one lane, the per-lane switch the Classic compile reads.
 local unitFilters, unitApplies
 function model.UnitSupported(unit) return unit == "target" end
 function model.UnitEnabled() return true end
-function model.ScopeFiltersEnabled() return unitFilters.enabled == true end
-function model.SetScopeFiltersEnabled(_, enabled) unitFilters.enabled = enabled == true end
+function model.LaneFiltersEnabled(_, lane)
+    return unitFilters[lane == "buff" and "buffs" or "debuffs"].enabled ~= false
+end
+function model.SetLaneFiltersEnabled(_, lane, enabled)
+    unitFilters[lane == "buff" and "buffs" or "debuffs"].enabled = enabled == true
+end
 function model.ReadFilter(_, lane, key, defaultValue)
     local value = unitFilters[lane == "buff" and "buffs" or "debuffs"][key]
     if value == nil then return defaultValue end
@@ -242,7 +259,10 @@ assert(type(menu.BuildAuras3UnitSection) == "function",
 for _, lane in ipairs({ "debuff", "buff" }) do
     local otherLane = lane == "buff" and "debuffs" or "buffs"
     local laneKey = lane == "buff" and "buffs" or "debuffs"
-    unitFilters = { enabled = false, buffs = { nonPlayer = true }, debuffs = { nonPlayer = true } }
+    unitFilters = {
+        buffs = { enabled = false, nonPlayer = true },
+        debuffs = { enabled = false, nonPlayer = true },
+    }
     unitApplies = 0
     controls, sections, refreshers = {}, {}, {}
     menu.unitAuraTabSelection = { target = lane }
@@ -261,7 +281,8 @@ for _, lane in ipairs({ "debuff", "buff" }) do
 
     assert(onlyMine.getValue() == false, lane .. " unit Only mine did not default off")
     onlyMine.setValue(true)
-    assert(unitFilters.enabled == true, lane .. " unit Only mine did not enable the scope filters")
+    assert(unitFilters[laneKey].enabled == true, lane .. " unit Only mine did not enable the lane filters")
+    assert(unitFilters[otherLane].enabled == false, lane .. " unit Only mine enabled the other lane's filters")
     assert(unitFilters[laneKey].onlyMine == true and onlyMine.getValue() == true,
         lane .. " unit Only mine did not write and read back onlyMine")
     if lane == "debuff" then

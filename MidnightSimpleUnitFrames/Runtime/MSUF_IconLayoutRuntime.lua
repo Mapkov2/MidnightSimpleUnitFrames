@@ -111,6 +111,7 @@ function MSUF.Icons._layout.ApplyLayer(region, layer, owner)
 end
 
 function MSUF.Icons._layout.Apply(icon, owner, size, point, relPoint, ox, oy)
+
     icon:SetSize(size, size)
     icon:ClearAllPoints()
     icon:SetPoint(point, owner, relPoint, ox, oy)

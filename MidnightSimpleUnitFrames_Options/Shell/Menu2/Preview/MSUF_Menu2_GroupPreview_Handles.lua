@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Group preview handle, drag, and nudge helpers.
 ---
 --- Native owns the preview host. This module owns interactive handles and the
@@ -94,7 +95,7 @@ function Handles.Install(box, deps)
         end
         return ((mock.GetFrameLevel and mock:GetFrameLevel()) or 0) + 140 + (tonumber(extra) or 0)
     end
-    box._dragFrame = CreateFrame("Frame", nil, dragParent)
+    box._dragFrame = PixelLayoutRegion(CreateFrame("Frame", nil, dragParent), true)
     box._dragFrame:SetAllPoints(dragParent)
     box._dragFrame:EnableMouse(true)
     box._dragFrame:EnableMouseWheel(true)
@@ -922,7 +923,7 @@ function Stage.BindHandleFactory(st)
     local SelectHandle, StartHandleDrag, StopHandleDrag, T, Tr, WHITE8X8, ZoomWheel, box = st.SelectHandle, st.StartHandleDrag, st.StopHandleDrag, st.T, st.Tr, st.WHITE8X8, st.ZoomWheel, st.box
     local mock = st.mock
     local function CreatePreviewHandle(key, sectionKey, color, label, width, height, locked, parent)
-        local handle = CreateFrame("Button", nil, parent or mock, T.Template())
+        local handle = PixelLayoutRegion(CreateFrame("Button", nil, parent or mock, T.Template()), true)
         handle:SetSize(width or 32, height or 32)
         -- The colored label is part of the visible affordance. Without this,
         -- clicking its glyphs falls through to a different overlapping handle
@@ -934,7 +935,7 @@ function Stage.BindHandleFactory(st)
         if handle.SetPropagateMouseWheel then handle:SetPropagateMouseWheel(false) end
         if handle.RegisterForClicks then handle:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp") end
         if handle.RegisterForDrag then handle:RegisterForDrag("LeftButton") end
-        handle:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
+        PixelLayoutRegion(handle, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
         handle:SetBackdropColor(color[1] * 0.12, color[2] * 0.12, color[3] * 0.12, 0.42)
         handle:SetBackdropBorderColor(color[1], color[2], color[3], locked and 0.55 or 0.95)
         handle._key = key
@@ -942,14 +943,14 @@ function Stage.BindHandleFactory(st)
         handle._previewLayerKey = GROUP_HANDLE_LAYER_BY_KEY[key] or GROUP_SECTION_LAYER[sectionKey]
         handle._locked = locked and true or false
         handle._color = color
-        local selectFill = handle:CreateTexture(nil, "OVERLAY", nil, 6)
+        local selectFill = PixelLayoutRegion(handle:CreateTexture(nil, "OVERLAY", nil, 6))
         selectFill:SetAllPoints()
         selectFill:SetColorTexture(color[1], color[2], color[3], 0)
         handle._selectFill = selectFill
-        local selectBorder = CreateFrame("Frame", nil, handle, T.Template())
+        local selectBorder = PixelLayoutRegion(CreateFrame("Frame", nil, handle, T.Template()))
         selectBorder:SetPoint("TOPLEFT", handle, "TOPLEFT", -2, 2)
         selectBorder:SetPoint("BOTTOMRIGHT", handle, "BOTTOMRIGHT", 2, -2)
-        selectBorder:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
+        PixelLayoutRegion(selectBorder, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
         selectBorder:SetBackdropColor(0, 0, 0, 0)
         selectBorder:SetBackdropBorderColor(color[1], color[2], color[3], 1)
         selectBorder:Hide()
@@ -1068,7 +1069,7 @@ function Stage.BindHandleFactory(st)
         local function EnsureDetailLayer(key)
             local layer = handle[key]
             if not layer then
-                layer = CreateFrame("Frame", nil, handle)
+                layer = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
                 layer:SetAllPoints(handle)
                 layer:EnableMouse(false)
                 if layer.SetMouseMotionEnabled then layer:SetMouseMotionEnabled(false) end
@@ -1080,18 +1081,18 @@ function Stage.BindHandleFactory(st)
         local swipeLayer = EnsureDetailLayer("_iconSwipeLayer")
         local textLayer = EnsureDetailLayer("_iconTextLayer")
         for i = 1, count do
-            local tex = handle._icons[i] or handle:CreateTexture(nil, "ARTWORK")
+            local tex = handle._icons[i] or PixelLayoutRegion(handle:CreateTexture(nil, "ARTWORK"))
             tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             handle._icons[i] = tex
-            local swipe = handle._iconSwipes[i] or swipeLayer:CreateTexture(nil, "ARTWORK")
+            local swipe = handle._iconSwipes[i] or PixelLayoutRegion(swipeLayer:CreateTexture(nil, "ARTWORK"))
             swipe:SetTexture(WHITE8X8)
             swipe:SetVertexColor(0, 0, 0, 0.58)
             swipe:Hide()
             handle._iconSwipes[i] = swipe
-            local border = handle._iconBorders[i] or handle:CreateTexture(nil, "OVERLAY")
+            local border = handle._iconBorders[i] or PixelLayoutRegion(handle:CreateTexture(nil, "OVERLAY"))
             border:Hide()
             handle._iconBorders[i] = border
-            local stack = handle._iconStacks[i] or textLayer:CreateFontString(nil, "OVERLAY")
+            local stack = handle._iconStacks[i] or PixelLayoutRegion(textLayer:CreateFontString(nil, "OVERLAY"))
             if stack.SetFont and stack._msufGFPreviewFont ~= true then
                 stack:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
                 stack._msufGFPreviewFont = true
@@ -1099,7 +1100,7 @@ function Stage.BindHandleFactory(st)
             if stack.SetDrawLayer then stack:SetDrawLayer("OVERLAY", 6) end
             stack:Hide()
             handle._iconStacks[i] = stack
-            local timer = handle._iconTimers[i] or textLayer:CreateFontString(nil, "OVERLAY")
+            local timer = handle._iconTimers[i] or PixelLayoutRegion(textLayer:CreateFontString(nil, "OVERLAY"))
             if timer.SetFont and timer._msufGFPreviewFont ~= true then
                 timer:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE")
                 timer._msufGFPreviewFont = true
@@ -1107,7 +1108,7 @@ function Stage.BindHandleFactory(st)
             if timer.SetDrawLayer then timer:SetDrawLayer("OVERLAY", 7) end
             timer:Hide()
             handle._iconTimers[i] = timer
-            local durationBar = handle._iconDurationBars[i] or durationLayer:CreateTexture(nil, "OVERLAY")
+            local durationBar = handle._iconDurationBars[i] or PixelLayoutRegion(durationLayer:CreateTexture(nil, "OVERLAY"))
             durationBar:SetTexture(WHITE8X8)
             local durationR, durationG, durationB = AuraDurationBarColor()
             durationBar:SetVertexColor(durationR, durationG, durationB, 0.92)
@@ -1168,7 +1169,7 @@ function Stage.CreateLayerHandles(st)
         local statusHandle = CreatePreviewHandle("status_" .. tostring(spec.value or i), "sicons", { 0.80, 0.67, 0.20 }, StatusLabel(spec), 78, 28, false)
         statusHandle._cfgStatus = true
         statusHandle._statusSpec = spec
-        statusHandle._statusTex = statusHandle:CreateTexture(nil, "ARTWORK")
+        statusHandle._statusTex = PixelLayoutRegion(statusHandle:CreateTexture(nil, "ARTWORK"))
         statusHandle._statusTex:SetPoint("TOPLEFT", statusHandle, "TOPLEFT", 0, 0)
         statusHandle._statusTex:SetPoint("BOTTOMRIGHT", statusHandle, "BOTTOMRIGHT", 0, 0)
         statusHandle._statusTex:Hide()
@@ -1239,11 +1240,11 @@ function Stage.BindSpellDrop(st)
     end
     local function EnsureSpellDropGuide()
         if box._spellDropGuide then return box._spellDropGuide end
-        local guide = CreateFrame("Frame", nil, mock, T.Template())
+        local guide = PixelLayoutRegion(CreateFrame("Frame", nil, mock, T.Template()))
         guide:SetAllPoints(mock)
         guide:EnableMouse(false)
         if guide.SetFrameLevel then guide:SetFrameLevel(InteractionLevel(1)) end
-        guide:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 2 })
+        PixelLayoutRegion(guide, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 2 })
         guide._text = T.Font(guide, "GameFontNormal", Tr("Drop to place spell icon"), { 0.72, 0.90, 1, 1 })
         guide._text:SetPoint("BOTTOM", guide, "TOP", 0, 6)
         guide:Hide()

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- InstallClassicAuraPreview: isolated ownership, bound once during addon initialization.
 local _, MSUF = ...
 MSUF.InstallClassicAuraPreview = function(dependencies)
@@ -149,7 +150,7 @@ function A3.UpdateMenuAuraPreview(host, scope, laneKind, width, height)
         return false, (scope == "party" or scope == "raid") and "no-group-frame" or "not-configured"
     end
     if not preview then
-        preview = CreateFrame("Frame", nil, host)
+        preview = PixelLayoutRegion(CreateFrame("Frame", nil, host))
         preview:SetAllPoints(host)
         host._msufA3ClassicMenuPreviewFrame = preview
         if host.HookScript then

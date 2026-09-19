@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Class Resources preview module.
 --- Menu-only composition for ClassPower, detached Player Power, and the
 --- optional Class Resources Player HP bar. Runtime refresh remains outside the
@@ -426,7 +427,7 @@ local function EnsureOutlineHost(frame)
     if not parent then return nil end
     local host = frame._msufCPPreviewOutlineHost
     if not host then
-        host = CreateFrame("Frame", nil, parent)
+        host = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
         host:EnableMouse(false)
         frame._msufCPPreviewOutlineHost = host
     end
@@ -780,9 +781,9 @@ end
 --- Drag handles are preview controls, not runtime frames. They carry the DB
 --- keys they edit so drag/nudge/history code can stay generic.
 local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, label, color, applyKind, layerKey, interactionPriority)
-    local h = CreateFrame("Button", nil, PreviewParent(preview), "BackdropTemplate")
+    local h = PixelLayoutRegion(CreateFrame("Button", nil, PreviewParent(preview), "BackdropTemplate"))
     h:SetSize(24, 20)
-    h:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
+    PixelLayoutRegion(h, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     -- Class Resource text can live on any absolute element layer. Keep every
     -- mouse catcher above that visual stack, and keep the smaller text handles
     -- deterministically above their broad bar handles.
@@ -937,7 +938,7 @@ local function PlaceTextHandle(handle, parent, regions)
     return false
 end
 local function MakeText(parent, layer, justify, subLevel)
-    local fs = parent:CreateFontString(nil, layer or "OVERLAY", "GameFontHighlightSmall", subLevel)
+    local fs = PixelLayoutRegion(parent:CreateFontString(nil, layer or "OVERLAY", "GameFontHighlightSmall", subLevel))
     fs:SetJustifyH(justify or "CENTER")
     if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
@@ -946,7 +947,7 @@ local function MakeText(parent, layer, justify, subLevel)
     return fs
 end
 local function MakeTexture(parent, layer, subLevel, allPoints, hidden)
-    local tex = parent:CreateTexture(nil, layer, nil, subLevel)
+    local tex = PixelLayoutRegion(parent:CreateTexture(nil, layer, nil, subLevel))
     tex:SetTexture(WHITE8)
     if allPoints then tex:SetAllPoints() end
     if hidden then tex:Hide() end
@@ -954,11 +955,11 @@ local function MakeTexture(parent, layer, subLevel, allPoints, hidden)
 end
 local function EnsureClassPower(preview)
     if preview.classPower then return preview.classPower end
-    local frame = CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate")
-    frame:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
+    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate"))
+    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
-    frame.textOwner = CreateFrame("Frame", nil, frame)
+    frame.textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
     frame.textOwner:SetAllPoints(frame)
     if frame.textOwner.EnableMouse then frame.textOwner:EnableMouse(false) end
     frame.segments, frame.bgs, frame.edges, frame.runeTexts, frame.hashes = {}, {}, {}, {}, {}
@@ -979,8 +980,8 @@ local function EnsureClassPower(preview)
 end
 local function EnsureMeter(preview, name, separateTextOwner)
     if preview[name] then return preview[name] end
-    local frame = CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate")
-    frame:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
+    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate"))
+    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
     frame.bg = MakeTexture(frame, "BACKGROUND", nil, true)
@@ -988,7 +989,7 @@ local function EnsureMeter(preview, name, separateTextOwner)
     frame.edge = MakeTexture(frame, "OVERLAY", 7, true, true)
     local textOwner = frame
     if separateTextOwner then
-        textOwner = CreateFrame("Frame", nil, frame)
+        textOwner = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
         textOwner:SetAllPoints(frame)
         if textOwner.EnableMouse then textOwner:EnableMouse(false) end
         frame.textOwner = textOwner
@@ -1093,7 +1094,7 @@ local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth, nativeB
     elseif widthMode == "custom" then
         width = tonumber(bars.classPowerWidth)
     else
-        width = (tonumber(frameW) or 275) - 4
+        width = (tonumber(frameW) or 275) - (widthMode == "player" and 0 or 4)
     end
     width = tonumber(width) or 275
     if width < 20 then width = 20 elseif width > 800 then width = 800 end
@@ -1156,7 +1157,8 @@ local function RenderClassPower(preview, bars, player, spec)
     -- offsets and anchor.
     local w = ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72,
         spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
-    local x = 2 + (tonumber(bars.classPowerOffsetX) or 0)
+    local insetX = (bars.classPowerWidthMode or "player") == "player" and 0 or 2
+    local x = insetX + (tonumber(bars.classPowerOffsetX) or 0)
     -- Same anchor as the live container (ClassPower Layout.Position).
     local y = (tonumber(bars.classPowerOffsetY) or 0) - 2
     frame:SetSize(w, h)
@@ -1885,16 +1887,16 @@ local function PaintPlayerReference(preview, spec, bars, playerDB)
     player.outline:SetBackdropBorderColor(0.55, 0.62, 0.78, 0.34)
 end
 local function CreatePlayerReference(preview)
-    local player = CreateFrame("Frame", nil, PreviewParent(preview))
-    player.health = player:CreateTexture(nil, "BACKGROUND")
+    local player = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview)))
+    player.health = PixelLayoutRegion(player:CreateTexture(nil, "BACKGROUND"))
     player.health:SetPoint("TOPLEFT", player, "TOPLEFT", 0, 0)
     player.health:SetPoint("BOTTOMRIGHT", player, "BOTTOMRIGHT", 0, 6)
-    player.power = player:CreateTexture(nil, "BACKGROUND")
+    player.power = PixelLayoutRegion(player:CreateTexture(nil, "BACKGROUND"))
     player.power:SetPoint("TOPLEFT", player.health, "BOTTOMLEFT", 0, 0)
     player.power:SetPoint("BOTTOMRIGHT", player, "BOTTOMRIGHT", 0, 0)
-    player.outline = CreateFrame("Frame", nil, player, "BackdropTemplate")
+    player.outline = PixelLayoutRegion(CreateFrame("Frame", nil, player, "BackdropTemplate"))
     player.outline:SetAllPoints()
-    player.outline:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
+    PixelLayoutRegion(player.outline, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     player.outline:SetBackdropColor(0, 0, 0, 0)
     player.name = MakeText(player, "OVERLAY", "LEFT")
     ApplyFont(player.name, 11)
@@ -1907,8 +1909,8 @@ local function EnsureBound(preview, key, label, color)
     preview.bounds = preview.bounds or {}
     local frame = preview.bounds[key]
     if frame then return frame end
-    frame = CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate")
-    frame:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
+    frame = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate"))
+    PixelLayoutRegion(frame, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(color[1], color[2], color[3], 0.90)
     frame:EnableMouse(false)
@@ -2185,7 +2187,7 @@ local function StartAnimationDriver(preview)
     if not (preview and preview._animationEnabled == true) then return end
     if PreviewAnimationInCombat() then return end
     if not preview.animationDriver then
-        preview.animationDriver = CreateFrame("Frame", nil, preview.canvas or preview)
+        preview.animationDriver = PixelLayoutRegion(CreateFrame("Frame", nil, preview.canvas or preview))
         preview.animationDriver._preview = preview
     end
     preview.animationDriver._preview = preview
@@ -2219,15 +2221,15 @@ local function SetAnimationEnabled(preview, enabled)
     return AnimationEnabled(preview) == enabled
 end
 local function CreateAnimateButton(preview)
-    local btn = CreateFrame("Button", nil, preview.canvas, "BackdropTemplate")
+    local btn = PixelLayoutRegion(CreateFrame("Button", nil, preview.canvas, "BackdropTemplate"))
     btn:SetSize(72, 22)
-    btn:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
+    PixelLayoutRegion(btn, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     if preview.zoomBar then
         btn:SetPoint("RIGHT", preview.zoomBar, "LEFT", -6, 0)
     else
         btn:SetPoint("TOPRIGHT", preview.canvas, "TOPRIGHT", -174, -6)
     end
-    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.fs = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     btn.fs:SetPoint("CENTER")
     if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or { 1, 1, 1, 1 }, 0) end
     if Helpers.StylePreviewPillButton then Helpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
@@ -2418,7 +2420,7 @@ function Preview.Create(ctx, builder)
     box.canvas:EnableMouse(true)
     box.canvas:EnableMouseWheel(true)
     if box.canvas.SetPropagateMouseWheel then box.canvas:SetPropagateMouseWheel(false) end
-    box.stage = CreateFrame("Frame", nil, box.canvas)
+    box.stage = PixelLayoutRegion(CreateFrame("Frame", nil, box.canvas))
     box.stage:SetSize(box.canvasW, box.canvasH)
     box.stage:SetPoint("CENTER", box.canvas, "CENTER", 0, 0)
     box.mock = box.stage
@@ -2490,7 +2492,7 @@ function Preview.Create(ctx, builder)
     box.noResource:SetPoint("CENTER", box.canvas, "CENTER", 0, 28)
     box.noResource:Hide()
     CreatePlayerReference(box)
-    box.dragFrame = CreateFrame("Frame", nil, UIParent or box.canvas)
+    box.dragFrame = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent or box.canvas), true)
     box.dragFrame:SetAllPoints(UIParent or box.canvas)
     if box.dragFrame.SetFrameStrata then box.dragFrame:SetFrameStrata("TOOLTIP") end
     box.dragFrame:EnableMouse(true)

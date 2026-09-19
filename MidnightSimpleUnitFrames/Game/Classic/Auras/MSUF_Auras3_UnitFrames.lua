@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Classic aura backend selected before the Retail 12.1 AuraContainer backend.
 --- Classic Era, TBC Classic and MoP Classic expose the C_UnitAuras/AuraUtil scan contract
 --- used here, while Classic does not ship the Retail native aura-container runtime.
@@ -336,24 +337,24 @@ local function ApplyButtonLayout(lane, button, index)
 end
 
 local function CreateAuraButton(lane, index)
-    local button = CreateFrame("Button", nil, lane.frame)
-    local icon = button:CreateTexture(nil, "BORDER")
+    local button = PixelLayoutRegion(CreateFrame("Button", nil, lane.frame))
+    local icon = PixelLayoutRegion(button:CreateTexture(nil, "BORDER"))
     icon:SetAllPoints()
     icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     button.Icon = icon
 
-    local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+    local cooldown = PixelLayoutRegion(CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate"))
     cooldown:SetAllPoints()
     if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
     if cooldown.SetReverse then cooldown:SetReverse(true) end
     button.Cooldown = cooldown
 
-    local textLayer = CreateFrame("Frame", nil, button)
+    local textLayer = PixelLayoutRegion(CreateFrame("Frame", nil, button))
     textLayer:SetAllPoints(button)
     if cooldown.GetFrameLevel and textLayer.SetFrameLevel then
         textLayer:SetFrameLevel(cooldown:GetFrameLevel() + 1)
     end
-    local count = textLayer:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+    local count = PixelLayoutRegion(textLayer:CreateFontString(nil, "OVERLAY", "NumberFontNormal"))
     button.Count = count
 
     button:SetScript("OnEnter", OnAuraEnter)
@@ -501,7 +502,7 @@ local function EnsureLane(root, state, kind, cfg)
         lane.frame._msufA3NativeLaneConfig = lane
         return lane
     end
-    local frame = CreateFrame("Frame", nil, parent)
+    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     lane = {
         kind = kind,
         root = parent,
@@ -533,7 +534,7 @@ local function EnsureState(frame)
     if state then return state end
     local root = frame.Auras
     if not (root and root.SetAllPoints) then
-        root = CreateFrame("Frame", nil, frame)
+        root = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
         root:SetAllPoints(frame)
         frame.Auras = root
     end
@@ -1345,7 +1346,7 @@ end
 local function EnsureOwnHighlight(button)
     local tex = button._msufA3OwnHighlight
     if tex then return tex end
-    tex = button:CreateTexture(nil, "OVERLAY")
+    tex = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
     tex:SetTexture(W8)
     tex:SetAllPoints(button)
     tex:SetBlendMode("ADD")
@@ -1357,7 +1358,7 @@ end
 local function EnsureDispelTypeOverlay(button)
     local tex = button._msufA3DispelOverlay
     if tex then return tex end
-    tex = button:CreateTexture(nil, "OVERLAY")
+    tex = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
     tex:SetTexture(DEBUFF_OVERLAY_TEXTURE)
     tex:SetTexCoord(0.296875, 0.5703125, 0, 0.515625)
     tex:SetAllPoints(button)
@@ -1370,7 +1371,7 @@ A3._EnsureClassicAuraDispelTypeSymbol = function(button)
     local tex = button and button._msufA3DispelTypeSymbol
     if tex then return tex end
     if not button then return nil end
-    tex = button:CreateTexture(nil, "OVERLAY", nil, 6)
+    tex = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY", nil, 6))
     tex:Hide()
     button._msufA3DispelTypeSymbol = tex
     return tex
@@ -2611,6 +2612,69 @@ A3._ClassicGroupRosterAuras = function(frame)
     return ResetAurasForIdentity(frame)
 end
 
+--- UNIT_FACTION for one frame's own unit. Bars > Show on asks UnitCanAssist,
+--- which a duel, a PvP flag or mind control flips with no UNIT_AURA; Retail's
+--- identity owners re-read it on this event (IdentityEvents in Auras3/Runtime).
+--- Only a Friendly or Enemy border subscribes (AurasElement.GetEvents). The
+--- gate is re-applied to the lanes the frame already holds, so nothing is
+--- rescanned unless the lanes owe a full update, as in RenderCachedAuras. The
+--- event names a token, not a member: GROUP_ROSTER_UPDATE rescans a token that
+--- changed hands (A3._ClassicGroupRosterAuras).
+A3._ClassicFactionAuras = function(frame, unit)
+    if not frame then return false end
+    local frameUnit = A3._ClassicBindFrameUnit(frame)
+    if unit ~= nil and unit ~= frameUnit and not IsSecret(unit) then return false end
+    local state, cfg = CurrentFrameState(frame, frameUnit)
+    local visual = cfg and cfg.enabled == true and cfg.visual
+    if not (state and visual and visual.borderShowOn ~= nil) then return false end
+    if state.needFullUpdate == true or state.scanning == true then
+        return UpdateAuras(frame, "ForceUpdate", frameUnit, nil, true)
+    end
+    return UpdateFrameAuraVisualState(frame, state, cfg, frameUnit) == true
+end
+
+--- UNIT_FACTION for the player. A duel or mind control flips the player's own
+--- side of UnitCanAssist("player", partyN) while no event names the member, so
+--- Retail re-checks every group assist-gated owner on this payload
+--- (IdentityEvents in Auras3/Runtime). A group frame registers UNIT_FACTION for
+--- its own unit only, so one shared driver listens for the player while any
+--- group frame holds a Friendly or Enemy border (AurasElement.GetEvents keeps
+--- that set) and re-applies each shown frame's gate once. A hidden group frame
+--- reconciles on its show edge instead (EnsureClassicAuraOnShowRefresh).
+A3._ClassicFactionGroupFrames = A3._ClassicFactionGroupFrames or setmetatable({}, { __mode = "k" })
+
+A3._ClassicFactionPlayerFanOut = function()
+    local any = false
+    for frame in pairs(A3._ClassicFactionGroupFrames) do
+        -- The player's own group frame already hears this event on its unit.
+        if not (frame.IsShown and not frame:IsShown()) and A3._ClassicBindFrameUnit(frame) ~= "player"
+            and A3._ClassicFactionAuras(frame, nil) then
+            any = true
+        end
+    end
+    return any
+end
+
+A3._ClassicTrackFactionGroupFrame = function(frame, wanted)
+    local frames = A3._ClassicFactionGroupFrames
+    if wanted == true then frames[frame] = true else frames[frame] = nil end
+    local driver = A3._classicFactionPlayerDriver
+    if next(frames) ~= nil then
+        if not driver then
+            driver = CreateFrame("Frame")
+            driver:SetScript("OnEvent", A3._ClassicFactionPlayerFanOut)
+            A3._classicFactionPlayerDriver = driver
+        end
+        if driver._msufA3Armed ~= true then
+            driver:RegisterUnitEvent("UNIT_FACTION", "player")
+            driver._msufA3Armed = true
+        end
+    elseif driver and driver._msufA3Armed == true then
+        driver:UnregisterEvent("UNIT_FACTION")
+        driver._msufA3Armed = nil
+    end
+end
+
 local function NeedsCombatAuraEvents(cfg)
     if not (cfg and cfg.enabled and cfg.lanes) then return false end
     for _, lane in pairs(cfg.lanes) do
@@ -2640,6 +2704,7 @@ function A3.DisableFrame(frame)
     if not frame then return true end
     local unit = A3._ClassicBindFrameUnit(frame)
     HideState(frame)
+    if A3._ClassicFactionGroupFrames[frame] then A3._ClassicTrackFactionGroupFrame(frame, false) end
     frame._msufA3GroupConfig = nil
     frame._msufA3GroupSource = nil
     frame._msufA3GroupUnit = nil
@@ -3125,6 +3190,8 @@ local function EnsureClassicAuraOnShowRefresh(frame)
     end)
 end
 
+-- A Friendly or Enemy border follows its unit's faction (A3._ClassicFactionAuras).
+A3._ClassicFactionAuraEvents = A3._ClassicFactionAuraEvents or { "UNIT_AURA", "UNIT_FACTION" }
 -- Group frames follow roster changes (A3._ClassicGroupRosterAuras).
 A3._ClassicGroupAuraEvents = A3._ClassicGroupAuraEvents or { "GROUP_ROSTER_UPDATE" }
 A3._ClassicGroupCombatAuraEvents = A3._ClassicGroupCombatAuraEvents
@@ -3192,6 +3259,23 @@ function AurasElement.IsEnabled(frame)
     end
     local cfg = A3.ResolveUnitFrameConfig(unit, frame.MSUFSpec)
     return cfg and cfg.enabled == true or false
+end
+
+--- Unit events, registered per frame for its own unit. UNIT_FACTION joins only
+--- while Bars > Show on filters the border, so Both never receives it, and only
+--- on a client that has the event.
+function AurasElement.GetEvents(frame)
+    local unit = A3._ClassicBindFrameUnit(frame)
+    local cfg = unit and FrameAuraConfig(frame, unit)
+    local visual = cfg and cfg.enabled == true and cfg.visual
+    local faction = visual and visual.borderShowOn ~= nil or false
+    local client = MSUF.Client
+    if faction and client and type(client.SupportsEvent) == "function" and not client.SupportsEvent("UNIT_FACTION") then
+        faction = false
+    end
+    -- A group frame also hears the player's side (A3._ClassicFactionPlayerFanOut).
+    if IsGroupFrame(frame) then A3._ClassicTrackFactionGroupFrame(frame, faction) end
+    return faction and A3._ClassicFactionAuraEvents or AurasElement.events
 end
 
 function AurasElement.GetUnitlessEvents(frame)
@@ -3281,6 +3365,9 @@ function AurasElement.Update(frame, event, unit, updateInfo)
     end
     if event == "GROUP_ROSTER_UPDATE" then
         return A3._ClassicGroupRosterAuras(frame)
+    end
+    if event == "UNIT_FACTION" then
+        return A3._ClassicFactionAuras(frame, unit)
     end
     if event == "MSUF_UNIT_IDENTITY_AURAS"
         or event == "MSUF_UNIT_IDENTITY_SOFT_AURAS" then

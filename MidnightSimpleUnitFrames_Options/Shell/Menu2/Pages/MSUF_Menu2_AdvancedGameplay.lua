@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -424,7 +425,7 @@ local function BuildGameplay(ctx)
     M.AppendValues(meleeControls, spellInput, classSpellToggle, specSpellToggle)
     local bars = {}
     for i = 1, 4 do
-        bars[i] = preview:CreateTexture(nil, "ARTWORK")
+        bars[i] = PixelLayoutRegion(preview:CreateTexture(nil, "ARTWORK"))
         bars[i]:SetColorTexture(1, 0, 0, 1)
     end
     previewRefresh = function()

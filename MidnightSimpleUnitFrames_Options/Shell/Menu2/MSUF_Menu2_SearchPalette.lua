@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Lazy in-place search suggestions for the Menu2 navigation rail.
 ---
 --- The palette is presentation-only. Query/index ownership stays in Search_IndexQuery,
@@ -191,14 +192,14 @@ local function CreatePaletteController(parent, searchBox)
         self.rows = {}
         for i = 1, MAX_VISIBLE_RESULTS do
             local rowIndex = i
-            local row = CreateFrame("Button", nil, palette)
+            local row = PixelLayoutRegion(CreateFrame("Button", nil, palette))
             row:EnableMouse(true)
             row:RegisterForClicks("LeftButtonUp")
             row:SetFrameLevel(palette:GetFrameLevel() + 2)
             row:SetHeight(ROW_H)
             row:SetPoint("TOPLEFT", palette, "TOPLEFT", PANEL_PAD, -(HEADER_H + (i - 1) * ROW_H))
             row:SetPoint("TOPRIGHT", palette, "TOPRIGHT", -PANEL_PAD, -(HEADER_H + (i - 1) * ROW_H))
-            local rowBg = row:CreateTexture(nil, "BACKGROUND")
+            local rowBg = PixelLayoutRegion(row:CreateTexture(nil, "BACKGROUND"))
             rowBg:SetAllPoints()
             rowBg:SetColorTexture(0, 0, 0, 0)
             row._msuf2PaletteBg = rowBg

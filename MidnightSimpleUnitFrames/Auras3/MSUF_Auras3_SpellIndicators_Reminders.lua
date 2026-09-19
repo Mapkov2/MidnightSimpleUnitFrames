@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Auras3/SpellIndicator_Reminders: missing-aura surfaces and one lazy weapon-enchantment event owner.
 --- Registered at load time; the original entrypoint owns initialization order.
 local addonName, MSUF = ...
@@ -80,7 +81,7 @@ local function SyncEnchantPlaceholderCooldown(frame, slot, duration, enabled)
         return false
     end
     if not cooldown then
-        cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+        cooldown = PixelLayoutRegion(CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate"))
         if not (cooldown and type(cooldown.SetCooldownFromDurationObject) == "function") then
             return false
         end
@@ -253,10 +254,10 @@ local function EnsureMissingFrame(parentFrame, slot)
     parentFrame._msufA3SpellIndicatorMissingFrames = parentFrame._msufA3SpellIndicatorMissingFrames or {}
     local frame = parentFrame._msufA3SpellIndicatorMissingFrames[slot.slotKey]
     if not frame then
-        frame = CreateFrame("Frame", nil, parentFrame._msufHealthVisualRoot or parentFrame)
-        frame._tex = frame:CreateTexture(nil, "OVERLAY")
+        frame = PixelLayoutRegion(CreateFrame("Frame", nil, parentFrame._msufHealthVisualRoot or parentFrame))
+        frame._tex = PixelLayoutRegion(frame:CreateTexture(nil, "OVERLAY"))
         frame._tex:SetAllPoints(frame)
-        frame._label = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        frame._label = PixelLayoutRegion(frame:CreateFontString(nil, "OVERLAY", "GameFontNormal"))
         frame._label:SetPoint("CENTER", frame, "CENTER", 0, 0)
         parentFrame._msufA3SpellIndicatorMissingFrames[slot.slotKey] = frame
     end

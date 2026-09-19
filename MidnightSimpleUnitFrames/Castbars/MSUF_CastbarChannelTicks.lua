@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Player channel tick marker support.
 -- Adds optional spell-aware channel markers to the player castbar using existing DB fields.
 -- This augments castbar visuals only; cast/channel state remains in the shared runtime.
@@ -232,7 +233,7 @@ local function EnsurePlayerChannelTickMarkers(frame, tickCount)
     tickCount = tickCount or DEFAULT_MARKER_COUNT
     for index = 1, tickCount do
         if not markers[index] then
-            local marker = statusBar:CreateTexture(nil, "OVERLAY", nil, 7)
+            local marker = PixelLayoutRegion(statusBar:CreateTexture(nil, "OVERLAY", nil, 7))
             marker:SetColorTexture(1, 1, 1, 1)
 
             if marker.SetAlpha then

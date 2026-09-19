@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Runtime/MSUF_BorderStyles.lua
 --- Shared border-style catalog and the 8-piece edge renderer that draws them.
 ---
@@ -261,7 +262,7 @@ function B.Create(owner, layer, subLayer, texture)
     if not (owner and owner.CreateTexture) then return nil end
     local pieces = {}
     for i = 1, 8 do
-        local tex = owner:CreateTexture(nil, layer or "OVERLAY", nil, subLayer or 0)
+        local tex = PixelLayoutRegion(owner:CreateTexture(nil, layer or "OVERLAY", nil, subLayer or 0))
         if texture then SetPieceTexture(tex, texture, i > 4) end
         pieces[i] = tex
     end

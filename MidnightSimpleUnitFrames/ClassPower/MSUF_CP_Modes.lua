@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- ClassPower/MSUF_CP_Modes.lua - class power render modes
 
 --- MSUF_CP_Mode_Segmented.lua
@@ -10,6 +11,9 @@ local ExportPublic = MSUF.ExportPublic
 
 local modeBuilders = _G.MSUF_CP_MODE_BUILDERS or {}
 ExportPublic("MSUF_CP_MODE_BUILDERS", modeBuilders)
+
+--- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
+local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
 
 --- Perf locals: the stamp helpers and the native-timer plumbing below run per
 --- pip on every power/aura event, and the Essence path runs per
@@ -1294,7 +1298,7 @@ modeBuilders.AURA = function(E)
             for i = 1, count - 1 do
                 local tex = pool[i]
                 if not tex then
-                    tex = bar:CreateTexture(nil, "OVERLAY", nil, 7)
+                    tex = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY", nil, 7))
                     tex:SetTexture("Interface\\Buttons\\WHITE8x8")
                     tex:SetVertexColor(0, 0, 0, 1)
                     pool[i] = tex
@@ -1427,6 +1431,16 @@ modeBuilders.AURA = function(E)
                         else
                             restrictedApplications = true
                         end
+                    end
+                end
+            elseif IS_CLASSIC and powerType == "MISTS_ARCANE_CHARGES" then
+                --- Mists Arcane Charges (aura 36032, Game/Mists/ClassPower.lua).
+                local arcaneChargeID = CPK.SPELL and CPK.SPELL.MISTS_ARCANE_CHARGE
+                if arcaneChargeID then
+                    local info = GetPlayerAura(arcaneChargeID)
+                    if info then
+                        local apps = info.applications
+                        if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
                     end
                 end
             end
@@ -1695,8 +1709,69 @@ modeBuilders.CONTINUOUS = function(E)
         CP_CheckAutoHide(cur, mx)
     end
 
+    --- Classic only: MoP Eclipse power is signed (-max lunar .. +max solar).
+    --- Its own updater keeps the continuous path above unchanged and still
+    --- lets the native StatusBar represent both directions.
+    local UpdateSigned
+    if IS_CLASSIC then
+        UpdateSigned = function(powerType, maxPower)
+            local rawCur = UnitPower("player", powerType)
+            local rawMx = UnitPowerMax("player", powerType)
+            local bar = CP.bars[1]
+            if not bar then return end
+
+            local curSafe = NotSecret(rawCur)
+            local mxSafe = NotSecret(rawMx)
+            local cur = curSafe and (tonumber(rawCur) or 0) or nil
+            local mx = mxSafe and (tonumber(rawMx) or 100) or nil
+            if mx and mx <= 0 then mx = 100 end
+
+            if mx then
+                CP_StampMinMax(bar, -mx, mx)
+            else
+                CP_StampMinMax(bar, -100, 100)
+            end
+
+            local visual = CP_GetVisual(E)
+            local smoothInterp = visual and visual.smoothInterp
+            CP_SetPowerValue(bar, curSafe and cur or rawCur, smoothInterp)
+            CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
+            CP_StampShown(bar, true)
+
+            local visualVersion = visual and visual.version or 0
+            if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
+                CP_StampStatusBarColor(bar, visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1, 1)
+                CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
+                for i = 2, CP.maxBars do
+                    local other = CP.bars[i]
+                    if other then CP_StampShown(other, false) end
+                end
+                for i = 1, #CP.ticks do
+                    if CP.ticks[i] then CP_StampShown(CP.ticks[i], false) end
+                end
+                CP._singleVisualVersion = visualVersion
+                CP._singleVisualMode = CP.renderMode
+            end
+
+            local txt = CP.text
+            if txt then
+                local showText = visual and visual.showText == true
+                if showText and cur and mx then
+                    txt:SetFormattedText("%d / %d", cur, mx)
+                    txt._msufCPText = nil
+                    CP_StampShown(txt, true)
+                else
+                    CP_StampShown(txt, false)
+                end
+            end
+
+            CP_CheckAutoHide(cur and math.abs(cur) or nil, mx)
+        end
+    end
+
     return {
         Update = Update,
+        UpdateSigned = UpdateSigned,
     }
 end
 

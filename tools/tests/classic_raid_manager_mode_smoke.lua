@@ -39,7 +39,10 @@ function manager:HookScript(kind, callback) self.hooks[kind] = callback end
 
 local mouseFoci = {}
 
+-- The Retail-named group ownership file carries the Classic raid manager behaviour
+-- behind MSUF.Client.Family, read once when the file loads.
 _G.MSUF_NS = {
+    Client = { Family = "Classic", IsClassic = true },
     GF = {
         GetConf = function(kind) return configs[kind] end,
         GetLiveRaidKind = function() return "raid" end,
@@ -63,7 +66,7 @@ _G.C_Timer = { After = function(_, callback) callback() end }
 _G.CompactRaidFrameManager = manager
 _G.CompactRaidFrameManagerToggleButton = button
 
-local path = root .. "/MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_Blizzard.lua"
+local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"
 local chunk = assert(loadfile(path))
 chunk("MidnightSimpleUnitFrames", _G.MSUF_NS)
 

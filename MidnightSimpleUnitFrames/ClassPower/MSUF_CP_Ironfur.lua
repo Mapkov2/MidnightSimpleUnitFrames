@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Guardian Druid Ironfur duration tracker.
 --- Each successful Ironfur cast owns one estimated lifetime marker. The
 --- moving display is active-only and never reads restricted aura durations.
@@ -222,7 +223,7 @@ modeBuilders.IRONFUR = function(E)
                 shown = shown + 1
                 local tex = hashes[shown]
                 if not tex then
-                    tex = bar:CreateTexture(nil, "OVERLAY", nil, 7)
+                    tex = PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY", nil, 7), true)
                     tex:SetTexture("Interface\\Buttons\\WHITE8x8")
                     tex:SetVertexColor(1, 1, 1, 0.9)
                     if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end

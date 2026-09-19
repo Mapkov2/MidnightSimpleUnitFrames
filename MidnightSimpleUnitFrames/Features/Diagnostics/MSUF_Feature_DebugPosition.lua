@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MidnightSimpleUnitFrames_DebugPos.lua
 --- Position drift debugger. Toggle: /msufdbgpos
 ---
@@ -148,7 +149,7 @@ local function CreateOverlay()
         StartOverlayUpdates()
         return
     end
-    local f = CreateFrame("Frame", "MSUF_DebugPosOverlay", UIParent)
+    local f = PixelLayoutRegion(CreateFrame("Frame", "MSUF_DebugPosOverlay", UIParent))
     f:SetSize(490, 165)
     f:SetPoint("TOP", UIParent, "TOP", 0, -80)
     f:SetFrameStrata("TOOLTIP")
@@ -157,12 +158,12 @@ local function CreateOverlay()
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
-    local bg = f:CreateTexture(nil, "BACKGROUND")
+    local bg = PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND"))
     bg:SetAllPoints()
     bg:SetColorTexture(0, 0, 0, 0.82)
     local lines = {}
     for i = 1, 9 do
-        local fs = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local fs = PixelLayoutRegion(f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
         fs:SetPoint("TOPLEFT", 6, -4 - (i - 1) * 17)
         fs:SetJustifyH("LEFT")
         fs:SetWidth(478)

@@ -26,8 +26,9 @@
     <Script file="Pages\MSUF_Menu2_AdvancedProfiles.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraSettings.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraControls.lua"/>
-    <Script file="Pages\MSUF_Menu2_AuraPreview_Classic.lua"/>
-    <Script file="Pages\MSUF_Menu2_Auras_Classic.lua"/>
+    <Script file="Pages\MSUF_Menu2_Auras.lua"/>
+    <Script file="Pages\MSUF_Menu2_Auras_Group.lua"/>
+    <Script file="Pages\MSUF_Menu2_Auras_Preview.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras_CustomWorkspace.lua"/>
     <Script file="MSUF_Menu2_GuidedTour.lua"/>
 </Ui>

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -101,7 +102,7 @@ function UF.EnsureHealthVisualRoot(frame, independent)
   local key = independent and "_msufHealthIndependentVisualRoot" or "_msufHealthVisualRoot"
   if frame[key] then return frame[key] end
   if InCombatLockdown and InCombatLockdown() then return nil end
-  local root = CreateFrame("Frame", nil, frame)
+  local root = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
   root:SetAllPoints(frame)
   root:SetFrameLevel(frame:GetFrameLevel())
   root:EnableMouse(false)
