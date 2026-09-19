@@ -3,7 +3,7 @@
 ## Notes: Classic Era client support.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.5-beta4
+## Version: 6.5-beta5
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, MapkoSkin
@@ -172,6 +172,7 @@ Castbars\MSUF_ArenaCastbars_Preview.lua
 Castbars\MSUF_Castbars.lua
 Castbars\MSUF_CastbarGCD.lua
 Game\Classic\ClassPower\MSUF_CP_Constants.lua
+Game\Shared\ClassPower\MSUF_CP_TargetCombo.lua
 Game\Vanilla\ClassPower.lua
 Game\Classic\ClassPower\MSUF_CP_Modes.lua
 Game\Classic\ClassPower\MSUF_CP_Core.lua

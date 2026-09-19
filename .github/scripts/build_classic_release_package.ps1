@@ -8,6 +8,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+Import-Module (Join-Path $PSScriptRoot "ClassicGate.Common.psm1") -Force
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $expectedProjectId = "1384660"
@@ -17,10 +18,7 @@ $addonNames = @(
     "MidnightSimpleUnitFrames_Assistant"
 )
 $clientMatrixPath = Join-Path $repoRoot "tools/classic-client-matrix.tsv"
-if (-not (Test-Path -LiteralPath $clientMatrixPath -PathType Leaf)) {
-    throw "Client matrix is missing: $clientMatrixPath"
-}
-$clientMatrix = @(Import-Csv -LiteralPath $clientMatrixPath -Delimiter "`t")
+$clientMatrix = @(Import-MsufClientMatrix -Path $clientMatrixPath)
 $flavors = @($clientMatrix | ForEach-Object { $_.Suffix })
 $classicFlavors = @($clientMatrix | Where-Object { $_.IsClassic -ceq "true" } | ForEach-Object { $_.Suffix })
 $mainlineFlavors = @($clientMatrix | Where-Object { $_.IsClassic -ceq "false" } | ForEach-Object { $_.Suffix })
@@ -36,17 +34,9 @@ foreach ($client in @($clientMatrix | Where-Object { $_.IsClassic -ceq "true" })
 function Normalize-ClassicReleaseVersion {
     param([Parameter(Mandatory = $true)][string]$Value)
 
-    $candidate = $Value.Trim() -replace '^refs/tags/', ''
-    if ($candidate -notmatch '^classic-v(?<base>(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*)-(?<channel>alpha|beta)(?<number>0|[1-9][0-9]*)$') {
-        throw "Classic release version must use 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>' without leading zeros. Got: $Value"
-    }
-
-    # The authored base is the release identity: 6.05 and 6.5 are different
-    # releases, so the components are never int-cast (which would merge them).
-    $base = $Matches["base"]
-    $channel = $Matches["channel"]
-    $number = [int]$Matches["number"]
-    return "$base-$channel$number"
+    # Channel and version come from the one resolver every Classic publisher
+    # shares, so the packager cannot disagree with the workflow about them.
+    return (& (Join-Path $PSScriptRoot "resolve_classic_release_channel.ps1") -Tag $Value).Version
 }
 
 function Normalize-VersionKey {
@@ -93,33 +83,10 @@ function Get-RelativePath {
     return $FullName.Substring($prefix.Length).Replace('\', '/')
 }
 
-function Get-TocField {
-    param(
-        [Parameter(Mandatory = $true)][string]$Content,
-        [Parameter(Mandatory = $true)][string]$Name,
-        [switch]$AllowConditioned
-    )
-
-    $matches = [regex]::Matches($Content, "(?m)^##\s+$([regex]::Escape($Name)):\s*(.+?)\s*$")
-    # A Mainline TOC carries one Version line per game type condition.
-    if ($AllowConditioned -and $matches.Count -ge 1) {
-        return (@($matches | ForEach-Object { $_.Groups[1].Value.Trim() }) -join ' | ')
-    }
-    if ($matches.Count -ne 1) {
-        throw "Expected exactly one '$Name' field in TOC content; found $($matches.Count)."
-    }
-    return $matches[0].Groups[1].Value.Trim()
-}
-
-function Get-InterfaceSetKey {
-    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value)
-
-    $items = @($Value -split ',' | ForEach-Object { $_.Trim() })
-    foreach ($item in $items) {
-        if ($item -notmatch '^[1-9][0-9]*$') { throw "Malformed interface list: '$Value'" }
-    }
-    return ((@($items | ForEach-Object { [int]$_ }) | Sort-Object -Unique) -join ',')
-}
+# Get-TocField and Get-InterfaceSetKey now live in ClassicGate.Common.psm1,
+# where the gate and the release-line assertion read the same rules.
+Set-Alias -Name Get-TocField -Value Get-MsufTocField
+Set-Alias -Name Get-InterfaceSetKey -Value Get-MsufInterfaceSetKey
 
 function Set-StagedTocVersion {
     param(

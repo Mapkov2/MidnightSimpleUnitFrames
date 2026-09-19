@@ -76,6 +76,14 @@ for client in client_suffixes():
         check(order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_Compile.lua") < order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"),
               client, "Classic aura compiler must load before the Classic aura backend")
     controller = "ClassPower/MSUF_CP_Controller.lua" if client == "Mainline" else "Game/Classic/ClassPower/MSUF_CP_Controller.lua"
+    # Target-owned combo points: the constants build the module's power ids, the
+    # shared module builds the provider parts, the provider publishes
+    # MSUF.CPClient and the controller reads it at load.
+    constants = "ClassPower/MSUF_CP_Constants.lua" if client == "Mainline" else "Game/Classic/ClassPower/MSUF_CP_Constants.lua"
+    combo = "Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua"
+    cpProvider = "Game/Forever/ClassPower.lua" if client == "Mainline" else f"Game/{client}/ClassPower.lua"
+    check(order.index(prefix + constants) < order.index(prefix + combo) < order.index(prefix + cpProvider) < order.index(prefix + controller),
+          client, "ClassPower constants, the shared target-combo module and", cpProvider, "must load before", controller)
     for part in ("Config", "Colors", "Surface"):
         check(order.index(prefix + f"ClassPower/MSUF_CP_Controller_{part}.lua") < order.index(prefix + controller),
               client, f"ClassPower/MSUF_CP_Controller_{part}.lua must load before", controller)

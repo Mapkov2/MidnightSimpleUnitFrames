@@ -488,8 +488,8 @@ Update(player, { updatedAuraInstanceIDs = { middle.auraInstanceID } })
 assert(updater.n == 1 and VisibleIDs(playerBuff) == IDs(late, early, middle),
     "expiration sort: an unchanged secret time re-rendered the lane (" .. updater.n .. " updater calls)")
 
--- Both sort parsers: the unit lane compiler, the group lane compiler (Compile)
--- and the custom container compiler (Features), which maps some names differently.
+-- Every lane compiler: the unit lane and group lane compilers (Compile) and the
+-- custom container compiler (Features), which share one sort parser.
 local function ExpectReorder(actual, expected, label)
     assert(actual == expected, label .. ": reorderOnUpdate is " .. tostring(actual) .. ", expected " .. tostring(expected))
 end

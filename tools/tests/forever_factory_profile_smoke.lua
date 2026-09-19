@@ -11,6 +11,9 @@
 -- instead of returning nil. This smoke stubs that Forever decoder and requires
 -- MSUF_CreateFactoryDefaultProfile to inflate first, matching Blizzard's own
 -- EncodingUtil readers.
+--
+-- The shared snapshot ships every group scope off. The factory profile turns
+-- MSUF party frames on and leaves raid as the snapshot has it.
 local repo = assert(arg[1], "repository root is required"):gsub("\\", "/"):gsub("/$", "")
 
 WOW_PROJECT_MAINLINE = 1
@@ -68,7 +71,11 @@ C_EncodingUtil = {
             error(FOREVER_CBOR_ERROR, 2)
         end
         if blob ~= INFLATED_CBOR then error(FOREVER_CBOR_ERROR, 2) end
-        return { addon = "MSUF", fmt = 2, payload = { general = {} } }
+        return { addon = "MSUF", fmt = 2, payload = {
+            general = {},
+            gf_party = { enabled = false },
+            gf_raid = { enabled = false },
+        } }
     end,
     DecompressString = function(blob, method)
         inflateCalls = inflateCalls + 1
@@ -135,4 +142,8 @@ Check(type(profile) == "table", "factory profile create returned no table")
 Check(inflateCalls >= 1, "factory profile create never inflated before CBOR")
 Check(cborCalls >= 1, "factory profile create never deserialized inflated CBOR")
 Check(profile.general ~= nil, "factory profile create skipped Lua completion")
-print("PASS Forever factory profile: inflate before CBOR, compressed bytes never deserialized")
+Check(type(profile.gf_party) == "table" and profile.gf_party.enabled == true,
+    "the Forever factory profile must turn MSUF party frames on")
+Check(type(profile.gf_raid) == "table" and profile.gf_raid.enabled == false,
+    "the Forever party default must leave raid frames as the snapshot ships them")
+print("PASS Forever factory profile: inflate before CBOR, compressed bytes never deserialized, MSUF party frames on")

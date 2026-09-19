@@ -495,6 +495,7 @@ local GROUP_STATUS_REGIONS = {
   statusDND = { "statusDNDTextSize", 14, "statusDNDTextAnchor", "CENTER", "statusDNDOffsetX", 0, "statusDNDOffsetY", 0, "statusDNDTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
   level = { "levelTextSize", 10, "levelTextAnchor", "BOTTOMLEFT", "levelTextX", 2, "levelTextY", 2, "levelTextLayer", 7 },
+  threat = { "threatTextSize", 9, "threatTextAnchor", "TOP", "threatTextX", 0, "threatTextY", -1, "threatTextLayer", 7 },
 }
 
 local function StatusRegionDef(conf, enabled, key)
@@ -558,6 +559,15 @@ local function CompileStatus(kind, conf)
   level.difficultyColor = levelColored
   level.difficultyColors = levelColored
     and Shared.ResolveLevelDifficultyColors(_G.MSUF_DB and _G.MSUF_DB.general) or nil
+  -- Threat % text: each member's threat on the player's target. Its runtime lives in
+  -- Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua; only the clients offering it
+  -- compile an entry, so Midnight and Mists specs stay as they were.
+  local threat
+  if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+    threat = StatusRegionDef(conf, conf.threatText == true, "threat")
+    threat.colorCurve = conf.threatTextColorCurve ~= false
+    threat.background = conf.threatTextBackground == true
+  end
   --- Every icon carries its own style now, so the non-role indicators stop falling back to the
   --- retired scope-wide default. The value may carry the "@MIDNIGHT" suffix; the DB resolvers
   --- split it, so it is forwarded untouched.
@@ -614,6 +624,7 @@ local function CompileStatus(kind, conf)
     statusText = statusText,
     raidGroup = raidGroup,
     level = level,
+    threat = threat,
   }
 end
 
@@ -1852,6 +1863,8 @@ local function RefreshFontDomain(kind, base, conf)
   if raidGroup then raidGroup.size = Num(conf.groupNumberSize, 10) end
   local levelText = base.status and base.status.level
   if levelText then levelText.size = Num(conf.levelTextSize, 10) end
+  local threatText = base.status and base.status.threat
+  if threatText then threatText.size = Num(conf.threatTextSize, 9) end
   BumpSpecDomain(base, "_msufTextLayoutRevision")
   BumpSpecDomain(base, "_msufTextColorRevision")
 end

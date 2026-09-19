@@ -80,9 +80,10 @@ local function BuildTooltip(tt, owner, opts)
 
     tt:AddLine("Midnight Simple Unit Frames", 1, 1, 1)
 
-    --- Version
-    local version = (MSUF.Client and MSUF.Client.AddonVersion) or _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
-        and _G.C_AddOns.GetAddOnMetadata(addonName, "Version")
+    --- Version, from the one shared accessor in Game/Shared/Initialize.lua: it
+    --- is resolved once from the TOC this client loaded, never asked again.
+    local getVersion = MSUF.GetAddonVersion
+    local version = type(getVersion) == "function" and getVersion() or nil
     if type(version) == "string" and version ~= "" then
         local displayVersion = opts.versionLabel and (Tr("Version:") .. " " .. version) or (version:match("^%d") and ("v" .. version) or version)
         tt:AddLine(displayVersion, 0.6, 0.6, 0.6)

@@ -18,7 +18,7 @@ local PT = {
 }
 local MODE = {
     NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4,
-    CONTINUOUS = 6, SIGNED_CONTINUOUS = 11,
+    CONTINUOUS = 6, SIGNED_CONTINUOUS = 12,
 }
 local AFFLICTION_SPELL = 74434
 local ARCANE_CHARGE = 36032
@@ -33,6 +33,7 @@ local CLEARED_GLOBALS = {
 local LOAD_ORDER = {
     "Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua",
     "Game/Classic/ClassPower/MSUF_CP_Constants.lua",
+    "Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua",
     "Game/" .. flavor .. "/ClassPower.lua",
     "Game/Classic/ClassPower/MSUF_CP_Modes.lua",
     "Game/Classic/ClassPower/MSUF_CP_Core.lua",

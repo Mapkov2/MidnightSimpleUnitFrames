@@ -123,6 +123,15 @@ levelText|Level Text|levelText|0|levelTextSize|levelTextAnchor|levelTextX|levelT
 function Specs.SimpleTextures()
     return M.StatusBarTextureItems("Follow Global Style")
 end
+-- Threat % text: each member's threat on the player's target, Party on and Raid off
+-- by default (GroupFrames_DB). Only the clients offering it list the indicator.
+if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+    local threat = StatusIconSpecs [[
+threatText|Threat %|threatText|0|threatTextSize|threatTextAnchor|threatTextX|threatTextY|threatTextLayer|9|TOP|7|0
+]]
+    threat[1].isText = true
+    Specs.GF_STATUS_ICON_SPECS[#Specs.GF_STATUS_ICON_SPECS + 1] = threat[1]
+end
 Specs.GF_STATUS_ICON_VALUES = {}
 for i = 1, #Specs.GF_STATUS_ICON_SPECS do
     Specs.GF_STATUS_ICON_VALUES[i] = { value = Specs.GF_STATUS_ICON_SPECS[i].value, text = Specs.GF_STATUS_ICON_SPECS[i].text }

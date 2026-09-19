@@ -1,19 +1,18 @@
-local function Read(path)
-    local file = assert(io.open(path, "rb"))
-    local source = file:read("*a")
-    file:close()
-    return source
-end
+-- Each slice below is one function, cut at its own `end`; it used to stop at
+-- the declaration that happened to follow, which is not a boundary.
+local Slice = assert(loadfile(".github/scripts/msuf_source_slice.lua"),
+    "rounded_forbidden_mask_owner_smoke must run with the repository root as the working directory")()
+local Read = Slice.Read
+local ROUNDED = "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"
+local AURAS = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 
-local rounded = Read("MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua")
+local rounded = Read(ROUNDED)
 assert(not rounded:find("_msufRoundedMaskOwners", 1, true),
     "native forbidden regions must not retain a mutable rounded owner registry")
 
-local prepareStart = assert(rounded:find("local function PrepareFrozenDispelOverlayMask", 1, true),
-    "frozen native dispel-mask preparation missing")
-local prepareEnd = assert(rounded:find("local function ApplyDispelOverlayMask", prepareStart, true),
-    "could not find end of frozen native dispel-mask preparation")
-local prepareSource = rounded:sub(prepareStart, prepareEnd - 1)
+-- Reason: the assertions are about how one preparation function configures a
+-- mask before handing the region to Blizzard.
+local prepareSource = Slice.Function(rounded, "local function PrepareFrozenDispelOverlayMask", ROUNDED)
 assert(not prepareSource:find("ClearAllPoints", 1, true),
     "fresh native dispel masks must not perform redundant point clearing")
 assert(not prepareSource:find("MaskedTextures", 1, true),
@@ -44,6 +43,7 @@ local function UpdateRoundedMediaState() calls[#calls + 1] = "media" end
 local function SE_SnapOff(mask) mask:SnapOff() end
 local function ApplyRoundedMediaSlice(mask, path) mask:Slice(path) end
 ]] .. prepareSource .. [[
+
 return PrepareFrozenDispelOverlayMask, calls, anchor
 ]]
 local prepare, calls, anchor = assert(compile(harness))()
@@ -75,7 +75,7 @@ sealed = true
 assert(not pcall(mask.ClearAllPoints),
     "test mask did not model the post-AddDispelTypeTexture forbidden state")
 
-local auras = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
+local auras = Read(AURAS)
 local initializerStart = assert(auras:find("local function PrepareDispelSensorVisual", 1, true))
 local initializerEnd = assert(auras:find("\nreturn {", initializerStart, true))
 local overlayStart = assert(auras:find('if sensor%.visual == "overlay" then%s+region:SetTexture%(', initializerStart))
@@ -96,14 +96,13 @@ assert(auras:find("function A3.RefreshRoundedDispelOverlayMasks()", 1, true),
     "rounded setting changes cannot recreate frozen native dispel masks")
 assert(auras:find("A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1", 1, true),
     "native dispel-mask recreation does not advance the Auras3 visual generation")
-local modulesApplied = assert(rounded:match(
-    'ExportPublic%("MSUF_RoundedUF_OnModulesApplied", function%b()%s*(.-)%s*end%)'
-), "rounded module-apply callback missing")
+-- Reason: the module-apply callback and the settings apply function are one
+-- function each.
+local modulesApplied = Slice.Function(rounded,
+    'ExportPublic("MSUF_RoundedUF_OnModulesApplied", function', ROUNDED)
 assert(modulesApplied:find("RefreshFrozenDispelOverlayMasks()", 1, true),
     "profile/module applies do not recreate frozen native dispel masks")
-local applyRounded = assert(rounded:match(
-    "local function ApplyRoundedUnitframes%b()%s*(.-)%s*end%s*ExportPublic"
-), "rounded settings apply function missing")
+local applyRounded = Slice.Function(rounded, "local function ApplyRoundedUnitframes", ROUNDED)
 assert(applyRounded:find("RefreshFrozenDispelOverlayMasks()", 1, true),
     "direct rounded setting changes do not recreate frozen native dispel masks")
 

@@ -31,15 +31,17 @@ local type, tonumber, rawget, select = type, tonumber, rawget, select
 
 local Tr = MSUF.Translate
 
---- Read exactly once per session, at file load. The build cannot change while
---- the client runs, so nothing below ever queries the API again.
---- Secret-safe: GetBuildInfo returns plain client metadata, never unit data.
+--- The interface number, read exactly once per session by
+--- Game/Shared/Initialize.lua, which every TOC loads first, and published as
+--- Client.Interface. The build cannot change while the client runs, so nothing
+--- here queries GetBuildInfo again. Without the client model there is no
+--- interface number and, as below, an unreadable build never warns.
+--- Secret-safe: this is plain client metadata, never unit data.
 local interfaceNumber
 do
-    local getBuildInfo = _G.GetBuildInfo
-    if type(getBuildInfo) == "function" then
-        interfaceNumber = tonumber((select(4, getBuildInfo())))
-    end
+    local client = MSUF.Client
+    local interface = type(client) == "table" and client.Interface or nil
+    interfaceNumber = type(interface) == "number" and interface or nil
 end
 
 --- Only a positively detected pre-12.1 build warns. An unreadable build stays

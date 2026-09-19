@@ -4,10 +4,13 @@
 --   * the Auras page filter reduction, the Misc page aura tooltip switches and
 --     the legacy Era portrait keep their Mainline answer on a Mainline-family
 --     client under any project ID, and give the old answer on the four shipped
---     clients and in harnesses without MSUF.Client;
---   * the cooldown anchor support probe follows the client family, and the
---     missing-anchor login warning stays quiet on Forever while Blizzard itself
---     reports the Cooldown Manager unavailable (unchanged everywhere else);
+--     clients;
+--   * none of those gates reads WOW_PROJECT_ID at all any more, so their answer
+--     for a harness without MSUF.Client is a fixed constant: the build the file
+--     belongs to, whatever project the environment reports;
+--   * the cooldown anchor support probe follows Client.HostsCooldownManager,
+--     and the missing-anchor login warning stays quiet on Forever while Blizzard
+--     itself reports the Cooldown Manager unavailable (unchanged everywhere else);
 --   * a failed MSUF Options load on Forever names the client's load reason.
 -- Plain Lua 5.1; arg[1] is the repo root.
 local repo = assert(arg[1], "repo root required")
@@ -21,12 +24,15 @@ local function Read(relative)
 end
 
 local PROJECT = { Mainline = 1, Vanilla = 2, TBC = 5, Mists = 19 }
+-- HostsCooldownManager is what Game/Shared/Initialize.lua publishes for these
+-- clients: the Mainline family ships Blizzard_CooldownViewer (standard plus
+-- camelot), no Classic client does.
 local CLIENTS = {
-    Mainline = { Family = "Mainline", Flavor = "Mainline", IsRetail = true, IsClassic = false, IsVanilla = false, IsForever = false },
-    Vanilla = { Family = "Classic", Flavor = "Vanilla", IsRetail = false, IsClassic = true, IsVanilla = true, IsForever = false },
-    TBC = { Family = "Classic", Flavor = "TBC", IsRetail = false, IsClassic = true, IsVanilla = false, IsForever = false },
-    Mists = { Family = "Classic", Flavor = "Mists", IsRetail = false, IsClassic = true, IsVanilla = false, IsForever = false },
-    Forever = { Family = "Mainline", Flavor = "Mainline", IsRetail = true, IsClassic = false, IsVanilla = false, IsForever = true },
+    Mainline = { Family = "Mainline", Flavor = "Mainline", IsRetail = true, IsClassic = false, IsVanilla = false, IsForever = false, HostsCooldownManager = true },
+    Vanilla = { Family = "Classic", Flavor = "Vanilla", IsRetail = false, IsClassic = true, IsVanilla = true, IsForever = false, HostsCooldownManager = false },
+    TBC = { Family = "Classic", Flavor = "TBC", IsRetail = false, IsClassic = true, IsVanilla = false, IsForever = false, HostsCooldownManager = false },
+    Mists = { Family = "Classic", Flavor = "Mists", IsRetail = false, IsClassic = true, IsVanilla = false, IsForever = false, HostsCooldownManager = false },
+    Forever = { Family = "Mainline", Flavor = "Mainline", IsRetail = true, IsClassic = false, IsVanilla = false, IsForever = true, HostsCooldownManager = true },
 }
 
 -- 1. File-scope client gates, evaluated from the shipped statements. -----------
@@ -61,36 +67,42 @@ local LEGACY = {
     portrait = "local LEGACY_BLIZZARD_PORTRAIT = (MSUF.Client and MSUF.Client.IsVanilla == true)\n"
         .. "  or (_G.WOW_PROJECT_CLASSIC ~= nil and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_CLASSIC)",
 }
+-- `harness` is the answer each gate now gives without MSUF.Client: the build the
+-- file belongs to. The Retail-tree files model Mainline; only a Classic-owned
+-- file would model Classic.
 local GATES = {
     {
         key = "reduced", name = "M.CLASSIC_AURA_FILTERS_REDUCED",
         statement = Statement("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua",
             "M.CLASSIC_AURA_FILTERS_REDUCED = ", "\nlocal Tr = "),
-        forever = false,
+        forever = false, harness = false,
     },
     {
         key = "mainline", name = "IS_MAINLINE",
         statement = Statement("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua",
             "local IS_MAINLINE = ", "\nlocal function NormalizeTooltipMode"),
-        forever = true,
+        forever = true, harness = true,
     },
     {
         key = "portrait", name = "LEGACY_BLIZZARD_PORTRAIT",
         statement = Statement("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua",
             "local LEGACY_BLIZZARD_PORTRAIT = ", "\n\nlocal V = "),
-        forever = false,
+        forever = false, harness = false,
     },
 }
 
 for _, gate in ipairs(GATES) do
+    assert(not gate.statement:find("WOW_PROJECT", 1, true),
+        gate.name .. " reads a raw WOW_PROJECT_* global again; route it through MSUF.Client")
     for flavor, projectID in pairs(PROJECT) do
         local expected = Evaluate(LEGACY[gate.key], gate.name, CLIENTS[flavor], projectID)
         assert(Evaluate(gate.statement, gate.name, CLIENTS[flavor], projectID) == expected,
             gate.name .. " changed on the shipped " .. flavor .. " client")
-        assert(Evaluate(gate.statement, gate.name, nil, projectID) == Evaluate(LEGACY[gate.key], gate.name, nil, projectID),
-            gate.name .. " changed for a harness without MSUF.Client under project " .. projectID)
+        -- Without the client model the answer is a constant, never the project.
+        assert(Evaluate(gate.statement, gate.name, nil, projectID) == gate.harness,
+            gate.name .. " follows the project ID for a harness without MSUF.Client: project " .. projectID)
     end
-    assert(Evaluate(gate.statement, gate.name, nil, nil) == Evaluate(LEGACY[gate.key], gate.name, nil, nil),
+    assert(Evaluate(gate.statement, gate.name, nil, nil) == gate.harness,
         gate.name .. " changed for a harness without MSUF.Client or project constants")
     -- Forever under every project ID it could report, including an unknown one.
     for _, projectID in ipairs({ PROJECT.Mainline, PROJECT.Vanilla, PROJECT.TBC, PROJECT.Mists, 99 }) do
@@ -172,9 +184,11 @@ for _, projectID in ipairs({ PROJECT.Mainline, PROJECT.Vanilla, 99 }) do
     assert(Supported(CLIENTS.Forever, projectID) == true,
         "WoW Forever loads Blizzard_CooldownViewer (camelot), yet anchor support failed under project " .. projectID)
 end
+-- Without the client model the file models Mainline and only asks the engine
+-- namespace, whatever project the environment reports.
 assert(Supported(nil, nil) == true, "a harness without MSUF.Client or project constants models Mainline")
-assert(Supported(nil, PROJECT.Mainline) == true, "harness Mainline project fallback changed")
-assert(Supported(nil, PROJECT.Vanilla) == false, "harness Classic project fallback changed")
+assert(Supported(nil, PROJECT.Mainline) == true, "harness Mainline fallback changed")
+assert(Supported(nil, PROJECT.Vanilla) == true, "the anchor probe still reads the raw project ID")
 
 -- Blizzard reports the Cooldown Manager unavailable (for example below its
 -- level), anchoring is on and no layout addon is installed.

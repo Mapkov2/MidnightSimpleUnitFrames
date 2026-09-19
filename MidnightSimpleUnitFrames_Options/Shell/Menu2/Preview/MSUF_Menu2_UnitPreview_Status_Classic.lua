@@ -47,6 +47,8 @@ local STATUS_TEXT_STATE_IDS = {
     -- Value doubles as the preview glyph; the AFK timer shows a sample duration.
     statusAFKTimer = "5m",
     statusDNDText = "DND",
+    -- Threat percentage text (Classic Era, TBC and WoW Forever): a sample value.
+    statusThreat = "85%",
 }
 local function AnchorLikeRuntime(region, anchor, x, y, frame, nameText)
     -- Runtime supports name-relative anchors; preview duplicates that math so the editor shows
@@ -351,9 +353,58 @@ function Status.LevelDifficultyColor(conf, g, data)
     local base = (tier - 1) * 3
     return colors[base + 1], colors[base + 2], colors[base + 3]
 end
+--- A Threat % text colored by threat previews the curve color of its 85% sample.
+--- Same default as the compile in MSUF_UF_Config: on, unless the frame carries
+--- its own threat text color. The curve lives in the core threat module.
+function Status.ThreatCurveColor(conf, g)
+    local customR = conf and conf.threatIndicatorColorR
+    if customR == nil then customR = g and g.threatIndicatorColorR end
+    local enabled = conf and conf.threatIndicatorColorCurve
+    if enabled == nil then enabled = g and g.threatIndicatorColorCurve end
+    if enabled == nil then enabled = customR == nil end
+    local ns = _G.MSUF_NS
+    local threat = ns and ns.UFThreatText
+    if enabled ~= true or not (threat and threat.CurveColorAt) then return nil end
+    return threat.CurveColorAt(g, 85)
+end
+--- The dark plate behind a Threat % text, on unless turned off (the compile
+--- default). Like the runtime plate it is as wide as "100%" in the text's font
+--- and padded around it at the preview scale; the icon's bg texture carries it.
+function Status.ThreatBackgroundEnabled(conf, g)
+    local enabled = conf and conf.threatIndicatorBackground
+    if enabled == nil then enabled = g and g.threatIndicatorBackground end
+    return enabled ~= false
+end
+function Status.ThreatPlate(icon, spec, conf, g, padX, padY)
+    local bg, txt = icon and icon.bg, icon and icon.txt
+    if not (bg and txt) then return nil end
+    if not (spec and spec.id == "statusThreat" and Status.ThreatBackgroundEnabled(conf, g)) then
+        if icon._msufThreatPlate then
+            bg:ClearAllPoints()
+            bg:SetAllPoints()
+            bg:SetColorTexture(0, 0, 0, 0)
+            icon._msufThreatPlate = nil
+        end
+        return nil
+    end
+    local shown = txt:GetText()
+    txt:SetText("100%")
+    local width = txt:GetStringWidth()
+    txt:SetText(shown)
+    bg:ClearAllPoints()
+    bg:SetPoint("TOPLEFT", icon, "TOPLEFT", -padX, padY)
+    bg:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", padX, -padY)
+    bg:SetColorTexture(0, 0, 0, 0.75)
+    icon._msufThreatPlate = true
+    return width
+end
 function Status.TextIndicatorColor(spec, conf, g, data)
     if spec and spec.id == "level" then
         local r, green, b = Status.LevelDifficultyColor(conf, g, data)
+        if r then return r, green, b end
+    end
+    if spec and spec.id == "statusThreat" then
+        local r, green, b = Status.ThreatCurveColor(conf, g)
         if r then return r, green, b end
     end
     local sizeKey = spec and spec.size

@@ -4173,6 +4173,20 @@ L["Surname"] = "Surname"
 -- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
 L["Pet Happiness"] = "Pet Happiness"
 L["Pet Happiness (Vanilla/TBC)"] = "Pet Happiness (Vanilla/TBC)"
+L["Threat %"] = "Threat %"
+L["Color by threat"] = "Color by threat"
+L["Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead."] = "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead."
+L["Threat % Colors"] = "Threat % Colors"
+L["Threat % Background"] = "Threat % Background"
+L["A dark plate behind the number keeps it readable on any bar color, red enemy bars included."] = "A dark plate behind the number keeps it readable on any bar color, red enemy bars included."
+L["Blended from low to high threat on every frame that colors its threat text by threat."] = "Blended from low to high threat on every frame that colors its threat text by threat."
+L["Low threat"] = "Low threat"
+L["Medium threat"] = "Medium threat"
+L["High threat"] = "High threat"
+-- Shared aura preview titles (Aura Style page, shared scope); the first keeps its %s for the lane name.
+L["Shared %s Preview"] = "Shared %s Preview"
+L["Shared Player Defensives Preview"] = "Shared Player Defensives Preview"
+L["Shared Dots on Target Preview"] = "Shared Dots on Target Preview"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

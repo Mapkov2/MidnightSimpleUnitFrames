@@ -1272,6 +1272,49 @@ BuildRegistrySearchRecord = function(entry)
     return rec
 end
 
+--- One static index file serves several clients: Midnight and WoW Forever share one,
+--- Classic Era, TBC and Mists the other, and each keeps every row any of its clients
+--- builds. A row for a control only some of them have is tied here, by its search
+--- identity, to the MSUF.Client capability that decides the control; every other
+--- client drops it. The client is read once, on the first static record pass.
+local STATIC_ROW_CLIENT_CAPABILITY = {
+    -- Unit Frames > Pet > Status: Pet Happiness (MSUF_Menu2_UnitStatusSection*.lua).
+    ["id\031uf_pet\031menu2%2Euf_pet%2Eunit%2Estatus%2Eindicator%2Epet_happiness"] = "SupportsPetHappiness",
+    -- Unit Frames > Target, Focus and Boss > Status: Threat % (same files).
+    ["id\031uf_target\031menu2%2Euf_target%2Eunit%2Estatus%2Eindicator%2Ethreat"] = "SupportsThreatText",
+    ["id\031uf_focus\031menu2%2Euf_focus%2Eunit%2Estatus%2Eindicator%2Ethreat"] = "SupportsThreatText",
+    ["id\031uf_boss\031menu2%2Euf_boss%2Eunit%2Estatus%2Eindicator%2Ethreat"] = "SupportsThreatText",
+    -- Its "Color by threat" toggle on the same pages, and the three threat colors
+    -- on Colors > Status Text Colors (MSUF_Menu2_AdvancedColors.lua).
+    ["id\031uf_target\031menu2%2Euf_target%2Eunit%2Estatus%2Ethreat%2Ecolor_curve"] = "SupportsThreatText",
+    ["id\031uf_focus\031menu2%2Euf_focus%2Eunit%2Estatus%2Ethreat%2Ecolor_curve"] = "SupportsThreatText",
+    ["id\031uf_boss\031menu2%2Euf_boss%2Eunit%2Estatus%2Ethreat%2Ecolor_curve"] = "SupportsThreatText",
+    ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Ethreat%2Ecurve%2Elow"] = "SupportsThreatText",
+    ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Ethreat%2Ecurve%2Emid"] = "SupportsThreatText",
+    ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Ethreat%2Ecurve%2Ehigh"] = "SupportsThreatText",
+    -- Group Frames > Status & Indicators: the group Threat %'s "Color by threat"
+    -- toggle (MSUF_Menu2_GroupIndicators.lua).
+    ["id\031gf_indicators\031menu2%2Egf_indicators%2Egroup%2Efield%2Ethreattextcolorcurve"] = "SupportsThreatText",
+    -- The dark plate behind the number ("Background") on the same unit and group cards.
+    ["id\031uf_target\031menu2%2Euf_target%2Eunit%2Estatus%2Ethreat%2Ebackground"] = "SupportsThreatText",
+    ["id\031uf_focus\031menu2%2Euf_focus%2Eunit%2Estatus%2Ethreat%2Ebackground"] = "SupportsThreatText",
+    ["id\031uf_boss\031menu2%2Euf_boss%2Eunit%2Estatus%2Ethreat%2Ebackground"] = "SupportsThreatText",
+    ["id\031gf_indicators\031menu2%2Egf_indicators%2Egroup%2Efield%2Ethreattextbackground"] = "SupportsThreatText",
+}
+local staticRowsWithoutClientSupport
+
+local function StaticRowsWithoutClientSupport()
+    if staticRowsWithoutClientSupport then return staticRowsWithoutClientSupport end
+    local client = MSUF.Client
+    staticRowsWithoutClientSupport = {}
+    for identity, capability in pairs(STATIC_ROW_CLIENT_CAPABILITY) do
+        if not (type(client) == "table" and client[capability] == true) then
+            staticRowsWithoutClientSupport[identity] = true
+        end
+    end
+    return staticRowsWithoutClientSupport
+end
+
 --- Static inventory for controls whose page has never been built. A live widget
 --- record for the exact same semantic route always wins: it carries the real
 --- anchor and executable command. Equal labels on different controls stay intact.
@@ -1280,10 +1323,12 @@ local function AddStaticIndexSearchRecords(records, covered)
     if not (staticIndex and type(staticIndex.GetRecords) == "function") then return end
     local staticRecords = staticIndex.GetRecords()
     if type(staticRecords) ~= "table" then return end
+    local unsupported = StaticRowsWithoutClientSupport()
     for i = 1, #staticRecords do
         local rec = staticRecords[i]
         local identity = rec.searchIdentity
-        if not covered[identity] and (not M.SupportsUnitPage or M.SupportsUnitPage(rec.key, rec.exactTarget and rec.exactTarget.settingKey)) then
+        if not covered[identity] and not unsupported[identity]
+            and (not M.SupportsUnitPage or M.SupportsUnitPage(rec.key, rec.exactTarget and rec.exactTarget.settingKey)) then
             rec.order = #records + 1
             records[#records + 1] = rec
         end

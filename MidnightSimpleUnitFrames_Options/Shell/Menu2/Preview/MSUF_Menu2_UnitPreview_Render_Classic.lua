@@ -4,8 +4,10 @@
 --- refresh path that composes the live preview visuals.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-local LEGACY_BLIZZARD_PORTRAIT = (MSUF.Client and MSUF.Client.IsVanilla == true)
-    or (_G.WOW_PROJECT_CLASSIC ~= nil and _G.WOW_PROJECT_ID == _G.WOW_PROJECT_CLASSIC)
+-- Era's legacy PlayerFrame has no modern HUD portrait atlases. The client model
+-- owns that answer; TBC and Mists, which also load this preview, keep the modern
+-- atlases, so a harness without MSUF.Client does too. No raw project read here.
+local LEGACY_BLIZZARD_PORTRAIT = MSUF.Client ~= nil and MSUF.Client.IsVanilla == true
 local Render = MSUF.UFPreviewRender or {}
 MSUF.UFPreviewRender = Render
 local MenuState = MSUF.MSUF2 or _G.MSUF2 or {}
@@ -778,7 +780,7 @@ function Render.Install(Preview, deps)
         statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
         statusCombat = "combat", statusResting = "resting",
         statusIncomingRes = "incomingRes", statusPvp = "pvp",
-        statusPetHappiness = "petHappiness",
+        statusPetHappiness = "petHappiness", statusThreat = "threat",
     }
     renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
     local PowerColor = renderState.PowerColor
@@ -811,6 +813,16 @@ function Render.Install(Preview, deps)
         TextForValue = SharedCPPreview.TextForValue,
         ConfiguredTextForValue = SharedCPPreview.ConfiguredTextForValue,
     }
+    --- Class Resource numbers and rune times ride their own 0..30 text layer
+    --- (bars.classPowerTextLayer), resolved like the live ClassPower text owner.
+    --- Kept on the render state so Refresh gains no upvalue.
+    renderState.PreviewClassTextLevel = function(owner, bars)
+        local layer = math.floor((tonumber(bars and bars.classPowerTextLayer) or 5) + 0.5)
+        if layer < 0 then layer = 0 elseif layer > 30 then layer = 30 end
+        if Layers.TextLevel then return Layers.TextLevel(owner, layer, 5) end
+        if Layers.ElementLevel then return Layers.ElementLevel(layer, 5, 8) end
+        return 100 + layer * 32 + 8
+    end
     local fallbackFont = deps.FONT or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     if type(deps.ApplyPreviewFont) ~= "function" then
         deps.ApplyPreviewFont = function(fs, size)
@@ -1887,6 +1899,23 @@ function Preview.Refresh(box, reason)
             end
         end
     end
+    -- The boss target marker sits outside the frame. The View builds its
+    -- handle only where boss units exist (MSUF.Client.SupportsUnit), so the
+    -- handle gates the marker, its footprint and the border highlight here.
+    do
+        local border = key == "boss" and box.handleBossTarget and runtimeSpec and runtimeSpec.border
+        if MSUF.BossTargetIndicator and MSUF.BossTargetIndicator.HasMarker(border) then
+            local size = border.bossTargetSize or 24
+            minX, maxX, minY, maxY = ExpandRuntimeAnchorRect(minX, maxX, minY, maxY,
+                MSUF.BossTargetIndicator.IsPaired(border) and "LEFT" or (border.bossTargetAnchor or "LEFT"),
+                (border.bossTargetX or -28) - (MSUF.BossTargetIndicator.IsPaired(border) and (border.bossTargetLeftExtent or 0) or 0),
+                border.bossTargetY or 0, size, size, w, h)
+            if MSUF.BossTargetIndicator.IsPaired(border) then
+                minX, maxX, minY, maxY = ExpandRuntimeAnchorRect(minX, maxX, minY, maxY,
+                    "RIGHT", -(border.bossTargetX or -28) + (border.bossTargetRightExtent or 0), border.bossTargetY or 0, size, size, w, h)
+            end
+        end
+    end
     if (hasPortrait and PreviewLayerWanted(box, "portrait"))
         or (box._runtimeDefensivePortraitPositionOnly and PreviewLayerWanted(box, "auras")) then
         local poX = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0
@@ -2039,6 +2068,9 @@ function Preview.Refresh(box, reason)
     if mock.healthBar and mock.healthBar.SetFrameLevel then mock.healthBar:SetFrameLevel(baseLevel + 1) end
     local ElementLevel = Layers.ElementLevel
     if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(ElementLevel(bars.classPowerFrameLevelOffset, 5, 0)) end
+    if mock.classPower and mock.classPower.textOwner and mock.classPower.textOwner.SetFrameLevel then
+        mock.classPower.textOwner:SetFrameLevel(R.PreviewClassTextLevel(mock.classPower.textOwner, bars))
+    end
     if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(ElementLevel(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6, 0)) end
     local textBase = 0
     -- Portrait rides the shared 0..30 layer scale from the frame, so layer 0
@@ -2249,6 +2281,14 @@ function Preview.Refresh(box, reason)
         mock.power:SetVertexColor(pr, pg, pb, 1)
     else
         mock.powerBG:Hide(); mock.power:Hide()
+    end
+    -- Power gradient: the same runtime composition the live Power element
+    -- applies (power.barGradient), drawn over the inline preview fill.
+    if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradientToTarget then
+        MSUF.UFBarTextCommon.ApplyBarGradientToTarget(mock, mock, mock.power,
+            powerOn and PreviewLayerWanted(box, "power")
+                and runtimePower and runtimePower.barGradient or nil,
+            "_msufPreviewPowerGradients")
     end
     local fr, fg, fb = R.FontColor()
     local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower, displayPowerToken)
@@ -2620,15 +2660,39 @@ function Preview.Refresh(box, reason)
         mock.detachedPower:Hide()
         box.handleDetachedPower:Hide()
     end
+    -- A detached bar (no power shape) carries the same power gradient live.
+    if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradientToTarget then
+        MSUF.UFBarTextCommon.ApplyBarGradientToTarget(mock, mock.detachedPower, mock.detachedPower.fill,
+            detachedPowerInUnitPreview and PreviewLayerWanted(box, "power")
+                and box._runtimeDetachedRoundedPower == true
+                and runtimePower and runtimePower.barGradient or nil,
+            "_msufPreviewDetachedPowerGradients")
+    end
     if Auras and type(Auras.LayoutDispelLayers) == "function" then
         Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel,
             box._previewDispelOverlayAvailable, box._previewDispelSymbolAvailable, w, h)
     end
-    R.ApplyPreviewRounded(box, key, powerOn, R.PreviewRoundedOutlineThickness(key, conf, scale),
-        box._runtimePowerEmbedded == true, box._previewPowerOutline,
-        box._runtimeDetachedRoundedPower == true, box._previewPowerOutline)
-    if R.ApplyPreviewFrameBorder then
-        R.ApplyPreviewFrameBorder(box, mock._msufPreviewRoundedActive == true and nil or (runtimeSpec and runtimeSpec.border), scale)
+    do
+        -- Border or Border and arrow: the boss frame border shows the boss
+        -- target highlight colour and thickness, as the live Borders element
+        -- draws it on the targeted boss (Boss 1 in the preview).
+        local previewBorder = runtimeSpec and runtimeSpec.border
+        local bossBorder = key == "boss" and box.handleBossTarget and MSUF.BossTargetIndicator
+            and MSUF.BossTargetIndicator.HasBorder(previewBorder)
+        mock._msufPreviewBossBorder = bossBorder and previewBorder or nil
+        if bossBorder then
+            local highlight = box._bossHighlightBorderSpec or {}
+            box._bossHighlightBorderSpec = highlight
+            highlight.enabled, highlight.thickness = true, previewBorder.highlightThickness or 3
+            highlight.r, highlight.g, highlight.b, highlight.a = previewBorder.bossTargetR, previewBorder.bossTargetG, previewBorder.bossTargetB, 1
+            previewBorder = highlight
+        end
+        R.ApplyPreviewRounded(box, key, powerOn, bossBorder and max(1, floor(previewBorder.thickness * scale + .5)) or R.PreviewRoundedOutlineThickness(key, conf, scale),
+            box._runtimePowerEmbedded == true, box._previewPowerOutline,
+            box._runtimeDetachedRoundedPower == true, box._previewPowerOutline)
+        if R.ApplyPreviewFrameBorder then
+            R.ApplyPreviewFrameBorder(box, mock._msufPreviewRoundedActive ~= true and previewBorder or nil, scale)
+        end
     end
     if R.ApplyPreviewBoundsGuide then
         local guideEdge = 1
@@ -3159,6 +3223,20 @@ function Preview.Refresh(box, reason)
         box.handleCastbarTime:Hide()
     end
     if Auras and Auras.Layout then Auras.Layout(box, mock, auraPreviewState, S, baseLevel) end
+    do
+        -- The same marker the live boss button draws, with a drag handle.
+        local bossIndicator = MSUF.BossTargetIndicator
+        if bossIndicator and box.handleBossTarget then
+            local marker = bossIndicator.Apply(mock, key == "boss" and runtimeSpec and runtimeSpec.border or nil, scale)
+            if marker then
+                marker:Show()
+                box.handleBossTarget:SetSize(max(18, marker:GetWidth() + 8), max(18, marker:GetHeight() + 8))
+                PlaceHandle(box.handleBossTarget, marker)
+            else
+                box.handleBossTarget:Hide()
+            end
+        end
+    end
     local statusLayerAvailable = false
     for i = 1, #D.STATUS_PREVIEW do
         local spec = D.STATUS_PREVIEW[i]
@@ -3236,6 +3314,9 @@ function Preview.Refresh(box, reason)
                 end
                 local textW = icon.txt and icon.txt.GetStringWidth and icon.txt:GetStringWidth() or sz
                 local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
+                -- Threat % on its dark plate lays out at the width of "100%", like the runtime.
+                -- (No new local here: this function sits at Lua 5.1's 200-local limit.)
+                textW = R.PreviewStatus.ThreatPlate and R.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW
                 icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
                 R.PositionSameAnchorPreview(icon, anchor, x, y, mock)
             else

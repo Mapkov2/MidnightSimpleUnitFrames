@@ -6276,6 +6276,16 @@ L["Surname"] = "Nachname"
 -- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
 L["Pet Happiness"] = "Begleiterzufriedenheit"
 L["Pet Happiness (Vanilla/TBC)"] = "Begleiterzufriedenheit (Vanilla/TBC)"
+L["Threat %"] = "Bedrohung %"
+L["Color by threat"] = "Nach Bedrohung färben"
+L["Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead."] = "Grün bei wenig Bedrohung, gelb bei der Hälfte, rosa bei 100 %, wenn du die Aggro hast. Ausschalten, um stattdessen die Statustext-Farbe zu verwenden."
+L["Threat % Colors"] = "Farben für Bedrohung %"
+L["Threat % Background"] = "Hintergrund für Bedrohung %"
+L["A dark plate behind the number keeps it readable on any bar color, red enemy bars included."] = "Eine dunkle Plakette hinter der Zahl hält sie auf jeder Balkenfarbe lesbar, auch auf roten Feind-Balken."
+L["Blended from low to high threat on every frame that colors its threat text by threat."] = "Verlauf von wenig bis hoher Bedrohung auf jedem Frame, dessen Bedrohungstext nach Bedrohung gefärbt wird."
+L["Low threat"] = "Wenig Bedrohung"
+L["Medium threat"] = "Mittlere Bedrohung"
+L["High threat"] = "Hohe Bedrohung"
 L["Color by level difficulty"] = "Nach Stufenschwierigkeit färben"
 L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "Rot weit über deiner Stufe, weiß auf deiner Stufe, grau wenn trivial. Ausschalten, um stattdessen die Statustextfarbe zu verwenden."
 L["Level Difficulty Colors"] = "Farben der Stufenschwierigkeit"
@@ -6289,6 +6299,10 @@ L["Level Text"] = "Stufentext"
 L["Tagged by others"] = "Von anderen markiert"
 L["Gray out mobs tagged by others"] = "Von anderen markierte Gegner ausgrauen"
 L["A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame."] = "Ein Gegner, den ein anderer Spieler zuerst getroffen hat, gibt dir weder Beute noch Erfahrung. Seine Lebensleiste und sein Name werden grau, wie beim Standard-Zielfenster."
+-- Shared aura preview titles (Aura Style page, shared scope); the first keeps its %s for the lane name.
+L["Shared %s Preview"] = "Gemeinsame Vorschau: %s"
+L["Shared Player Defensives Preview"] = "Gemeinsame Vorschau: Defensive Stärkungen"
+L["Shared Dots on Target Preview"] = "Gemeinsame Vorschau: DoTs auf dem Ziel"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)

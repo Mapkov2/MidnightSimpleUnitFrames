@@ -21,8 +21,13 @@ for _, contract in ipairs({
     assert(auras:find(contract, 1, true),
         "Classic Aura menu lost the current Retail contract: " .. contract)
 end
-assert(not auras:find("A3.PreviewDispelTypeForIndex", 1, true),
-    "Classic Aura menu calls the Retail-only native dispel preview helper")
+-- The dispel preview helper is not Retail-only. The Classic aura backend
+-- publishes its own, which is what lets the shared unit aura preview
+-- (MSUF_Menu2_UnitPreview_Auras.lua, loaded by the Classic manifest) call it on
+-- every client. classic_aura_render_smoke.lua drives the values it returns.
+local classicAuraVisuals = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua")
+assert(classicAuraVisuals:find("function A3.PreviewDispelTypeForIndex(index)", 1, true),
+    "Classic aura visuals no longer publish the dispel preview helper the shared previews call")
 
 local unit = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit_Classic.lua")
 for _, contract in ipairs({ "statusAFKTimer", "statusPetHappiness", "showStanceIndicator" }) do
@@ -95,6 +100,20 @@ assert(gateRefreshAt < buffOnlyAt,
 local _, gateApplyCount = aurasPage:gsub("iconStyleGates%.Apply%(true%)", "")
 assert(gateApplyCount == 1,
     "Classic icon-style gates must be re-applied from exactly one shared Appearance refresher")
+
+-- Pandemic Warning & Style is a native aura-backend feature. The shared Custom
+-- workspace is on every client, so it builds the section behind the backend's
+-- own capability and Midnight and WoW Forever keep it unchanged.
+local workspace = (Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua"):gsub("\r\n", "\n"))
+assert(workspace:find('\n[ \t]*if isTargetDots and PandemicVisualSupported%(%) then\n'),
+    "Custom workspace builds Pandemic Warning & Style without the aura backend capability gate")
+assert(workspace:find('\n[ \t]*return type%(A3%.ApplyPandemicVisual%) == "function"\n'),
+    "The Pandemic capability no longer asks the aura backend for its applier")
+-- The premise of that gate: no Classic flavor loads the applier.
+local flavorExclusions = Read("tools/classic-flavor-load-exclusions.tsv")
+assert(flavorExclusions:find(
+    "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Appearance.lua\t*\t", 1, true),
+    "The Pandemic applier is no longer excluded from every Classic flavor, so its menu gate needs a rethink")
 
 local function ReadLF(relativePath)
     return (Read(relativePath):gsub("\r\n", "\n"))

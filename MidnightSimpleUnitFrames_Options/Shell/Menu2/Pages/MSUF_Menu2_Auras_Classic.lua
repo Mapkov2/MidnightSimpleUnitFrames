@@ -126,8 +126,9 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
 }
-M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client and MSUF.Client.IsClassic == true
-    or (_G.WOW_PROJECT_ID ~= nil and _G.WOW_PROJECT_ID ~= _G.WOW_PROJECT_MAINLINE)
+-- Only the Classic TOCs load this page, so a harness without MSUF.Client keeps
+-- the Classic answer; the raw project is never asked here.
+M.CLASSIC_AURA_FILTERS_REDUCED = MSUF.Client == nil or MSUF.Client.IsClassic == true
 local GROUP_NATIVE_FILTER_CANONICAL = {
     ALL = "ALL",
     MSUFGROUPHIGHLIGHTSV1 = "MSUF_GROUP_HIGHLIGHTS_V1",

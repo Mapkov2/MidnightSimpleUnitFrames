@@ -64,6 +64,13 @@ local function Read(path)
     return source
 end
 
+-- One slicer for every function body this loader lifts out of a shipped file.
+-- It ends each slice at the function's own `end` and a miss is fatal, naming
+-- the declaration and the file: a renamed function used to drop a contract
+-- here without a word, quietly reducing what the aura suite covers.
+local Slice = assert(originalLoadfile(".github/scripts/msuf_source_slice.lua"),
+    "auras3_test_loader: .github/scripts/msuf_source_slice.lua is missing; run from the repository root")()
+
 -- Ownership/inventory checks need one physical file, not a legacy module group.
 function Loader.ReadSource(path) return Read(SourcePath(path)) end
 
@@ -118,7 +125,7 @@ end
 
 local function SharedSourceFunction(path, name, preamble)
     local source = Read(SourcePath(path))
-    local body = assert(source:match("local function " .. name .. "%b().-\r?\nend"), name)
+    local body = Slice.Function(source, "local function " .. name, path)
     return assert(compileSource((preamble or "") .. body .. "\nreturn " .. name))()
 end
 
@@ -132,12 +139,12 @@ local function PrepareDirectContracts(source, namespace)
     local function Uses(text) return source:find(text, 1, true) ~= nil end
     local function Bind(owner, name, preamble, ...)
         local text = Read(SourcePath(owner))
-        local body = assert(text:match("local function " .. name .. "%b().-\r?\nend"), name)
+        local body = Slice.Function(text, "local function " .. name, owner)
         return assert(compileSource((preamble or "") .. body .. "\nreturn " .. name))(...)
     end
     local function BindPublic(owner, prefix, name, target)
         local source = Read(SourcePath(owner))
-        local body = assert(source:match("function " .. prefix .. "%." .. name .. "%b().-\r?\nend"), name)
+        local body = Slice.Function(source, "function " .. prefix .. "." .. name, owner)
         assert(compileSource("local " .. prefix .. " = ...\n" .. body))(target)
     end
     if Uses("_G.MSUF_EM2.ExternalProviders.Create") then
@@ -161,16 +168,16 @@ local function PrepareDirectContracts(source, namespace)
     end
     if Uses("= MSUF.Translate") and not namespace.Translate then
         local text = Read(SourcePath("MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))
-        local body = assert(text:match("function MSUF.Translate%b().-\r?\nend"))
+        local body = Slice.Function(text, "function MSUF.Translate", "MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua")
         assert(compileSource("local MSUF = ...\nlocal L = MSUF.L or _G.MSUF_L or {}\n" .. body))(namespace)
     end
     if (source:match("= MSUF%.ExportPublic[ \t]*[\r\n]") or source:match("= ns%.ExportPublic[ \t]*[\r\n]")) and not namespace.ExportPublic then
         local text = Read(SourcePath("MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua"))
-        local body = assert(text:match("function MSUF.MSUF_ExportPublic%b().-\r?\nend"))
+        local body = Slice.Function(text, "function MSUF.MSUF_ExportPublic", "MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua")
         namespace.Public, namespace.PublicGlobals = {}, {}
         namespace.Compat = namespace.Compat or {}
         namespace.Compat.LegacyGlobals = namespace.Compat.LegacyGlobals or {}
-        local key = assert(text:match("local function PublicKey%b().-\r?\nend"))
+        local key = Slice.Function(text, "local function PublicKey", "MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua")
         assert(compileSource("local MSUF = ...\n" .. key .. "\n" .. body))(namespace)
         namespace.ExportPublic = namespace.MSUF_ExportPublic
     end
@@ -179,7 +186,7 @@ local function PrepareDirectContracts(source, namespace)
         if not namespace.UF.GetFrame then
             namespace.UF.frames = namespace.UF.frames or {}
             local text = Read(SourcePath("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))
-            local body = assert(text:match("function UF.GetFrame%b().-\r?\nend"))
+            local body = Slice.Function(text, "function UF.GetFrame", "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
             assert(compileSource("local UF = ...\nlocal issecretvalue = _G.issecretvalue or function() return false end\n" .. body))(namespace.UF)
         end
     end
@@ -190,9 +197,9 @@ local function PrepareDirectContracts(source, namespace)
         namespace.MSUF_Auras3 = namespace.MSUF_Auras3 or {}
         if not namespace.MSUF_Auras3.GetDurationBarColor then
             local common = Read(SourcePath("MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua"))
-            local clamp = assert(common:match("local function Clamp01%b().-\r?\n    end"))
+            local clamp = Slice.Function(common, "local function Clamp01", "MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua")
             local text = Read(SourcePath("MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Storage.lua"))
-            local body = assert(text:match("function Model.GetDurationBarColor%b().-\r?\n    end"))
+            local body = Slice.Function(text, "function Model.GetDurationBarColor", "MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Storage.lua")
             assert(compileSource("local Model = ...\n" .. clamp .. "\n" .. body))(namespace.MSUF_Auras3)
         end
     end
@@ -204,7 +211,7 @@ local function PrepareDirectContracts(source, namespace)
         namespace.UF.Layers = namespace.UF.Layers or {}
         if not namespace.UF.Layers.BaseFrameLevel then
             local text = Read(SourcePath("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))
-            local body = assert(text:match("function Layers.BaseFrameLevel%b().-\r?\nend"))
+            local body = Slice.Function(text, "function Layers.BaseFrameLevel", "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")
             assert(compileSource("local Layers = ...\n" .. body))(namespace.UF.Layers)
         end
     end
@@ -213,7 +220,7 @@ local function PrepareDirectContracts(source, namespace)
         local text = Read(SourcePath("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Apply.lua"))
         for _, name in ipairs({ "Text", "Shown", "Texture", "ColorTexture" }) do
             if not namespace.Apply[name] then
-                local body = assert(text:match("function Apply." .. name .. "%b().-\r?\nend"))
+                local body = Slice.Function(text, "function Apply." .. name, "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Apply.lua")
                 assert(compileSource("local Apply = ...\nlocal issecretvalue = _G.issecretvalue or function() return false end\nlocal IsSecret = issecretvalue\n" .. body))(namespace.Apply)
             end
         end
@@ -235,7 +242,7 @@ local function PrepareDirectContracts(source, namespace)
         local text = Read(SourcePath("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua"))
         local parts = { "local UF = ...\nlocal issecretvalue = _G.issecretvalue\n" }
         for _, name in ipairs({ "IsUnitToken", "FreshUnitState", "IdentityDispatchState", "ReadConnectedCached", "ReadDeadCached" }) do
-            parts[#parts + 1] = assert(text:match("local function " .. name .. "%b().-\r?\nend"))
+            parts[#parts + 1] = Slice.Function(text, "local function " .. name, "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
         end
         parts[#parts + 1] = "UF.ReadConnectedCached = UF.ReadConnectedCached or ReadConnectedCached\nUF.ReadDeadCached = UF.ReadDeadCached or ReadDeadCached"
         assert(compileSource(table.concat(parts, "\n")))(namespace.UF)
@@ -257,7 +264,7 @@ local function PrepareDirectContracts(source, namespace)
         local text = Read(SourcePath("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"))
         for _, name in ipairs({ "GetLiveGroupKind", "GetAnchorPoint" }) do
             if not namespace.GF[name] then
-                local body = assert(text:match("function GF." .. name .. "%b().-\r?\nend"))
+                local body = Slice.Function(text, "function GF." .. name, "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua")
                 local points = text:match("local ANCHOR_POINTS = %b{}") or ""
                 assert(compileSource("local GF = ...\n" .. points .. "\n" .. body))(namespace.GF)
             end
@@ -266,7 +273,7 @@ local function PrepareDirectContracts(source, namespace)
     if Uses("_G.MSUF_UF_ScheduleApplyCommit") then
         local owner = "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"
         local text = Read(SourcePath(owner))
-        local commit = assert(text:match("local function ApplyDirtyCommit%b().-\r?\nend"))
+        local commit = Slice.Function(text, "local function ApplyDirtyCommit", owner)
         _G.MSUF_UF_ScheduleApplyCommit = Bind(owner, "ScheduleApplyCommit", "local MSUF = ...\n" .. commit .. "\n", namespace)
     end
     if Uses("_G.MSUF_GetSharedMedia") then
@@ -308,7 +315,7 @@ local function PrepareDirectContracts(source, namespace)
     local M = namespace.MSUF2
     if M and (Uses("M.TranslateText") or Uses("M.Tr")) and not M.Tr then
         local text = Read(SourcePath("MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))
-        local body = assert(text:match("function MSUF.Translate%b().-\r?\nend"))
+        local body = Slice.Function(text, "function MSUF.Translate", "MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua")
         local provider = { L = namespace.L or _G.MSUF_L or {} }
         assert(compileSource("local MSUF = ...\nlocal L = MSUF.L\n" .. body))(provider)
         M.Tr = provider.Translate
@@ -320,24 +327,24 @@ local function PrepareDirectContracts(source, namespace)
         local text = Read(SourcePath("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua"))
         local parts = { "local MSUF = ...\nlocal M = MSUF.MSUF2" }
         for _, name in ipairs({ "ClientLocale", "IsSupportedLocale" }) do
-            parts[#parts + 1] = assert(text:match("local function " .. name .. "%b().-\r?\nend"))
+            parts[#parts + 1] = Slice.Function(text, "local function " .. name, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua")
         end
         for _, name in ipairs({ "GetLocaleSelection", "ResolveLocaleSelection", "ShowLocaleReloadRequired", "ApplyLocaleSelection" }) do
-            parts[#parts + 1] = assert(text:match("function M%." .. name .. "%b().-\r?\nend"))
+            parts[#parts + 1] = Slice.Function(text, "function M." .. name, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua")
         end
         assert(compileSource(table.concat(parts, "\n")))(namespace)
     end
     if M and Uses("M.MarkMenuDataDirty") and not M.MarkMenuDataDirty then
         local text = Read(SourcePath("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window_PageNavigation.lua"))
-        local reader = assert(text:match("local function CurrentMenuDataRevision%b().-\r?\nend"))
-        local writer = assert(text:match("function M.MarkMenuDataDirty%b().-\r?\nend"))
+        local reader = Slice.Function(text, "local function CurrentMenuDataRevision", "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window_PageNavigation.lua")
+        local writer = Slice.Function(text, "function M.MarkMenuDataDirty", "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Window_PageNavigation.lua")
         assert(compileSource("local M = ...\n" .. reader .. "\n" .. writer))(M)
     end
     if M then
         local support = Read(SourcePath("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"))
         for _, name in ipairs({ "Lines", "KeySetFromWords", "FindPageEntry", "PageKeyForWidget" }) do
             if Uses("M." .. name) and not M[name] then
-                local body = assert(support:match("function M." .. name .. "%b().-\r?\nend"), name)
+                local body = Slice.Function(support, "function M." .. name, "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua")
                 assert(compileSource("local M = ...\n" .. body))(M)
             end
         end
@@ -352,17 +359,17 @@ local function PrepareDirectContracts(source, namespace)
             M.ApplyService = M.ApplyService or {}
             if not M.ApplyService.CallGlobal then
                 local text = Read(SourcePath("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua"))
-                local body = assert(text:match("function Apply.CallGlobal%b().-\r?\nend"))
+                local body = Slice.Function(text, "function Apply.CallGlobal", "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ApplyService.lua")
                 M.ApplyService.Invoke = M.ApplyService.Invoke or M.InvokeBoundary or _G.MSUF_InvokeBoundary
                 assert(compileSource("local Apply = ...\n" .. body))(M.ApplyService)
             end
         end
         if Uses("= M.Format") and not M.Format then
             local text = Read(SourcePath("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua"))
-            local body = assert(text:match("M.Format = function%b().-\r?\nend"))
+            local body = Slice.Function(text, "M.Format = function", "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua")
             if not M.Tr then
                 local locale = Read(SourcePath("MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))
-                local tr = assert(locale:match("function MSUF.Translate%b().-\r?\nend"))
+                local tr = Slice.Function(locale, "function MSUF.Translate", "MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua")
                 local provider = { L = namespace.L or _G.MSUF_L or {} }
                 assert(compileSource("local MSUF = ...\nlocal L = MSUF.L\n" .. tr))(provider)
                 M.Tr = provider.Translate
@@ -410,7 +417,7 @@ local function PrepareSharedDependencies(path, namespace)
     if path:match("MSUF_Menu2_State%.lua$") or path:match("MSUF_EditMode_HUD%.lua$") then
         if not _G.MSUF_GetCharKey then
             local source = Read(SourcePath("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))
-            local body = assert(source:match("function MSUF_GetCharKey%b().-\r?\nend"))
+            local body = Slice.Function(source, "function MSUF_GetCharKey", "MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
             local api = "local function UnitName(unit) return _G.UnitName and _G.UnitName(unit) or 'Unknown' end\n"
                 .. "local function GetRealmName() return _G.GetRealmName and _G.GetRealmName() or 'Realm' end\n"
             assert(compileSource(api .. body))()
@@ -424,7 +431,7 @@ local function PrepareSharedDependencies(path, namespace)
     if path:match("MSUF_EditMode_Core%.lua$") or path:match("MSUF_AnchorPicker%.lua$") then
         if not namespace.Translate then
             local source = Read(SourcePath("MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))
-            local body = assert(source:match("function MSUF.Translate%b().-\r?\nend"))
+            local body = Slice.Function(source, "function MSUF.Translate", "MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua")
             assert(compileSource("local MSUF = ...\nlocal L = MSUF.L or _G.MSUF_L or {}\n" .. body))(namespace)
         end
     end
@@ -473,7 +480,7 @@ function Loader.LoadFile(path, ...)
         if not chunk then return nil, message end
         return function(addon, namespace)
             local source = Read("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")
-            local body = assert(source:match("local function RequestGroupGeometryApply%b().-\r?\nend"))
+            local body = Slice.Function(source, "local function RequestGroupGeometryApply", "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")
             _G.MSUF_RequestGroupGeometryApply = assert(compileSource("local MSUF = ...\n" .. body .. "\nreturn RequestGroupGeometryApply"))(namespace)
             return chunk(addon, namespace)
         end
@@ -485,7 +492,7 @@ function Loader.LoadFile(path, ...)
             local M = namespace.MSUF2 or _G.MSUF2
             if M and not M.ProfileSystemNeedsInit then
                 local source = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua")
-                local body = assert(source:match("local function ProfileSystemNeedsInit%b().-\r?\nend"))
+                local body = Slice.Function(source, "local function ProfileSystemNeedsInit", "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings.lua")
                 M.ProfileSystemNeedsInit = assert(compileSource(body .. "\nreturn ProfileSystemNeedsInit"))()
             end
             return chunk(addon, namespace)
@@ -615,8 +622,8 @@ end
 local function InstallSetFontChecked()
     if _G.MSUF_SetFontChecked ~= nil then return end
     local libs = Read(SourcePath("MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua"))
-    local helper = assert(libs:match("local function MSUF_SetFontChecked%b().-\r?\nend"),
-        "MSUF_SetFontChecked definition not found in MSUF_Libs.lua")
+    local helper = Slice.Function(libs, "local function MSUF_SetFontChecked",
+        "MidnightSimpleUnitFrames/Kernel/MSUF_Libs.lua")
     _G.MSUF_SetFontChecked = assert(compileSource(helper .. "\nreturn MSUF_SetFontChecked"))()
 end
 
@@ -676,14 +683,12 @@ function Loader.Install()
         { "Auras3/MSUF_Auras3_Core.lua", "SyncFrameStrata", "MSUF_AuraSyncFrameStrata", "local function AuraStrataIsSecret(value) return _G.issecretvalue and _G.issecretvalue(value) == true or false end\n" },
         { "Kernel/MSUF_Util.lua", "NormalizeFrameStrata", "MSUF_NormalizeFrameStrata", "local function IsSecretValue(value) return _G.issecretvalue and _G.issecretvalue(value) == true or false end\n" },
     }) do
-        local source = Read(SourcePath("MidnightSimpleUnitFrames/" .. rule[1]))
-        local body = source:match("local function " .. rule[2] .. "%b().-\nend")
-        if body then
-            _G[rule[3]] = assert(compileSource((rule[4] or "") .. body .. "\nreturn " .. rule[2]))()
-        end
+        local owner = "MidnightSimpleUnitFrames/" .. rule[1]
+        local body = Slice.Function(Read(SourcePath(owner)), "local function " .. rule[2], owner)
+        _G[rule[3]] = assert(compileSource((rule[4] or "") .. body .. "\nreturn " .. rule[2]))()
     end
     local shared = Read(SourcePath("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))
-    local axis = assert(shared:match("local function ClampBoxAxis%b().-\r?\nend"))
+    local axis = Slice.Function(shared, "local function ClampBoxAxis", "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua")
     _G.MSUF_UF_ClampAnchorOffsetOnScreen = SharedSourceFunction("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua", "ClampAnchorOffsetOnScreen", "local PointFraction = _G.MSUF_UF_PointFraction\n" .. axis .. "\n")
     _G.loadfile = Loader.LoadFile
     io.open = function(path, mode)

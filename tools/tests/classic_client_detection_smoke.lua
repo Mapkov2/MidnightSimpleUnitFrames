@@ -98,7 +98,16 @@ local function Load(label, case)
 
     assert(MSUF == namespace and MSUF_NS == namespace, label .. ": namespace not published")
     local client = assert(namespace.Client, label .. ": Client missing")
-    assert(namespace.Compat.Client == client, label .. ": compat bridge missing")
+    -- MSUF.Client is the single client surface. The short MSUF.Retail/Vanilla/
+    -- Era/Mists/TBC/Classic/Forever aliases and MSUF.Compat.Client had no reader
+    -- in any of the three addons and must not come back.
+    for _, alias in ipairs({ "Retail", "Vanilla", "Era", "Mists", "TBC", "Classic", "Forever" }) do
+        assert(namespace[alias] == nil, label .. ": dead client alias MSUF." .. alias .. " is back")
+    end
+    assert(namespace.Compat == nil or namespace.Compat.Client == nil,
+        label .. ": the dead MSUF.Compat.Client bridge is back")
+    assert(client.ProjectID == nil and client.IsEra == nil,
+        label .. ": a Client field with no reader is back")
     assert(#printed == printedBefore, label .. ": printed during file load")
     assert(C_AddOns == addOns and C_EventUtils == eventUtils and C_GameRules == gameRules,
         label .. ": Blizzard namespace replaced")
@@ -586,7 +595,6 @@ do
     assert(client.Flavor == "Mainline" and client.Family == "Mainline" and client.IsRetail == true, "s1: Mainline build")
     assert(client.IsClassic == false and client.ProjectIDRecognized == true, "s1: flags")
     assert(client.GameModeName == "Standard" and client.GameModeRecognized == true, "s1: game mode")
-    assert(MSUF.Forever == true, "s1: MSUF.Forever alias")
     AssertNoDiagnostic("s1", client)
     AssertArenaSlots("s1", client, 0)
     AssertSupportsUnits("s1", client, { "arena1", "arena3" }, false)
@@ -655,7 +663,7 @@ do
 
     -- (s4) Without the marker, the same Standard Mainline client is Midnight.
     client = Load("s4", Merge(forever, { gameEvent = { RegisterMainlineEvents = function() end } }))
-    assert(client.IsForever == false and client.Flavor == "Mainline" and MSUF.Forever == false, "s4: guessed Forever")
+    assert(client.IsForever == false and client.Flavor == "Mainline", "s4: guessed Forever")
     Contains(table.concat(client.DescribeLines(), "\n"), "RegisterCamelotEvents at load false, now false", "s4")
 
     -- (s5) Client.AddonVersion is read once at load. Forever shares the Mainline

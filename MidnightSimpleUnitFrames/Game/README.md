@@ -5,7 +5,8 @@ This directory is the client boundary for MSUF, following ElvUI's layout:
 
 - `Shared` contains bootstrap code that must behave identically everywhere,
   plus the modules that Classic clients and the Mainline build both load
-  (`Shared/UnitFrames/MSUF_UF_PetHappiness.lua`: Classic Era, TBC and WoW
+  (`Shared/UnitFrames/MSUF_UF_PetHappiness.lua` and
+  `Shared/UnitFrames/MSUF_UF_ThreatText.lua`: Classic Era, TBC and WoW
   Forever). Such a module checks its `MSUF.Client` fact first and returns at
   once where the client has no such feature.
 - `Classic` contains implementations shared by Vanilla, TBC, and Mists.

@@ -417,7 +417,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         local value = spec and spec.value
         return value == "statusText" or value == "statusGhostText"
             or value == "statusAFKText" or value == "statusAFKTimer" or value == "statusDNDText"
-            or value == "levelText"
+            or value == "levelText" or value == "threatText"
     end
     --- The scope-wide style card is gone: it only ever changed role/leader/assist art while
     --- sitting above a per-indicator selector, which read as if it applied to the selection.
@@ -443,6 +443,10 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
                     local spec = CurrentGFStatusSpec()
                     if spec and spec.value == "levelText" and Bool(CurrentScope(), "levelTextDifficultyColor", true) then
                         return M._levelDifficultyColorReferences
+                    end
+                    if spec and spec.value == "threatText" and Bool(CurrentScope(), "threatTextColorCurve", true)
+                        and M._threatCurveColorReferences and #M._threatCurveColorReferences > 0 then
+                        return M._threatCurveColorReferences
                     end
                     return nil
                 end,
@@ -684,6 +688,19 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         M.AddTooltip(levelDifficultyColor, "Color by level difficulty",
             "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
     end
+    --- Threat % only (MSUF.Client.SupportsThreatText): the unit frames' threat color curve
+    --- and the dark plate behind the number (on for Party, off for Raid by default).
+    local threatColorCurve, threatBackground
+    if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+        threatColorCurve = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Color by threat", 16, -106, siconLeftW - 32), "threatTextColorCurve", true, "visual")
+        threatBackground = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Background", 16, -136, siconLeftW - 32), "threatTextBackground", false, "visual")
+        if M.AddTooltip then
+            M.AddTooltip(threatColorCurve, "Color by threat",
+                "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.", { hook = true })
+            M.AddTooltip(threatBackground, "Background",
+                "A dark plate behind the number keeps it readable on any bar color, red enemy bars included.", { hook = true })
+        end
+    end
 
     --- Role filter group: only visible when Role Icon indicator is selected
     local roleFilterGroup = CreateFrame("Frame", nil, selectedCard)
@@ -745,6 +762,10 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         end
         if spec.value == "levelText" then
             conf.levelTextDifficultyColor = gf and gf.GetDefault and gf.GetDefault(kind, "levelTextDifficultyColor") or nil
+        end
+        if spec.value == "threatText" then
+            conf.threatTextColorCurve = gf and gf.GetDefault and gf.GetDefault(kind, "threatTextColorCurve") or nil
+            conf.threatTextBackground = gf and gf.GetDefault and gf.GetDefault(kind, "threatTextBackground")
         end
         QueueGF(kind, "visual")
         RefreshStatusIconMenu()
@@ -885,6 +906,18 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
             levelDifficultyColor:SetShown(isLevelText)
         end
         SetOptionEnabled(levelDifficultyColor, isLevelText and enabled)
+        if threatColorCurve then
+            local isThreatText = spec.value == "threatText"
+            if W.SetControlShown then
+                W.SetControlShown(threatColorCurve, isThreatText)
+                W.SetControlShown(threatBackground, isThreatText)
+            else
+                threatColorCurve:SetShown(isThreatText)
+                threatBackground:SetShown(isThreatText)
+            end
+            SetOptionEnabled(threatColorCurve, isThreatText and enabled)
+            SetOptionEnabled(threatBackground, isThreatText and enabled)
+        end
         local isRoleIcon = spec.value == "roleIcon"
         roleFilterGroup:SetShown(isRoleIcon)
         if isRoleIcon then SetOptionsEnabled(roleFilterControls, enabled) end

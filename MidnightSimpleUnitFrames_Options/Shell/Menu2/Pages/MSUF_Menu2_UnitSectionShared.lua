@@ -26,6 +26,16 @@ function Shared.SectionFieldKeys(spec, conf, defaults)
     return keys
 end
 
+-- opts.targets lists only frames this client can show. A target the page
+-- reports as turned off (opts.targetOff) stays listed, so the player sees why
+-- it cannot be picked: danger tint, "Frame disabled", not selectable.
+local function OffTargetText(text)
+    text = text .. " - " .. M.Tr("Frame disabled")
+    local c = T.colors and T.colors.danger
+    if not c then return text end
+    return ("|cff%02x%02x%02x%s|r"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5), text)
+end
+
 function Shared.AttachSectionUX(ctx, opts)
     if not (ctx and ctx.entry) then return end
     for id, spec in pairs(opts.sections) do
@@ -69,6 +79,7 @@ function Shared.AttachSectionUX(ctx, opts)
                         local allowed = false
                         for _, item in ipairs(opts.targets or {}) do if item.value == target then allowed = true end end
                         if not allowed or spec.noCopy or target == source or (spec.canCopy and not spec.canCopy(source, target)) then return false end
+                        if opts.targetOff and opts.targetOff(target) then return false end
                     end
                     local success = M.RunWithHistory(target and "Copy section" or "Reset section",
                         "section:" .. ctx.key .. ":" .. id, function()
@@ -92,6 +103,21 @@ function Shared.AttachSectionUX(ctx, opts)
                     Close()
                     return success
                 end
+                -- The destination defaults to the first target that is turned on.
+                local function TargetChoices()
+                    local choices, first = {}, nil
+                    for _, item in ipairs(opts.targets or {}) do
+                        if item.value ~= popupSource and (not spec.canCopy or spec.canCopy(popupSource, item.value)) then
+                            if opts.targetOff and opts.targetOff(item.value) then
+                                item = { value = item.value, text = OffTargetText(M.Tr(item.text or tostring(item.value))), translate = false, disabled = true }
+                            elseif first == nil then
+                                first = item.value
+                            end
+                            choices[#choices + 1] = item
+                        end
+                    end
+                    return choices, first
+                end
                 more:SetScript("OnClick", function()
                     if popup and popup:IsShown() then Close(); return end
                     popupSource = opts.scope()
@@ -112,11 +138,7 @@ function Shared.AttachSectionUX(ctx, opts)
                         reset:SetScript("OnClick", function() Change(nil) end)
                         popup._msuf2ResetButton = reset
                         reset:SetShown(spec.fields ~= nil or spec.prefixes ~= nil)
-                        local values = {}
-                        for _, item in ipairs(opts.targets or {}) do
-                            if item.value ~= popupSource and (not spec.canCopy or spec.canCopy(popupSource, item.value)) then values[#values + 1] = item end
-                        end
-                        local destination = values[1] and values[1].value
+                        local values, destination = TargetChoices()
                         local select = W.Dropdown(popup, "Copy to another frame", values, 250)
                         W.MoveWidget(select, popup, 14, -76, 250)
                         select:SetValue(destination)
@@ -130,13 +152,12 @@ function Shared.AttachSectionUX(ctx, opts)
                         copy:SetShown(copyAllowed)
                         if not copyAllowed then popup:SetHeight(82) end
                         popup.RefreshTargets = function()
-                            local choices = {}
-                            for _, item in ipairs(opts.targets or {}) do
-                                if item.value ~= popupSource and (not spec.canCopy or spec.canCopy(popupSource, item.value)) then choices[#choices + 1] = item end
-                            end
-                            destination = choices[1] and choices[1].value
+                            local choices
+                            choices, destination = TargetChoices()
                             select:SetValues(choices)
-                            select:SetValue(destination)
+                            -- With every target off, show the first one as marked and lock Copy.
+                            select:SetValue(destination or (choices[1] and choices[1].value))
+                            W.SetControlEnabled(copy, destination ~= nil)
                         end
                         popup._msuf2ResetSection = function() return Change(nil) end
                         popup._msuf2CopySection = function(target) return Change(target) end

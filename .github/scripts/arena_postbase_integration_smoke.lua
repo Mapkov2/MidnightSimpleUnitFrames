@@ -2,17 +2,20 @@
 -- Focused contracts for Arena integration in shared systems added after the
 -- original Arena feature branch. Run from the repository root with Lua 5.1.
 
+-- Every slice below names the declarations it needs and each one is cut at its
+-- own structural boundary (a function's `end`, a table's `}`). It used to run
+-- from the first declaration to whatever the shipped file declared next, so
+-- renaming or reordering that next declaration broke the smoke for a non-bug.
+local Shared = assert(loadfile(".github/scripts/msuf_source_slice.lua"),
+    "arena_postbase_integration_smoke must run with the repository root as the working directory")()
+local sourceOf = {}
 local function Read(path)
-    local file = assert(io.open(path, "rb"), "missing file: " .. path)
-    local source = file:read("*a")
-    file:close()
-    return (source:gsub("\r\n", "\n"))
+    local source = Shared.Read(path)
+    sourceOf[source] = path
+    return source
 end
-
-local function Slice(source, startMarker, endMarker)
-    local first = assert(source:find(startMarker, 1, true), "missing start marker: " .. startMarker)
-    local last = assert(source:find(endMarker, first + #startMarker, true), "missing end marker: " .. endMarker)
-    return source:sub(first, last - 1)
+local function Slice(source, declarations)
+    return Shared.Declarations(source, declarations, sourceOf[source] or "<unregistered source>")
 end
 
 local function Compile(source, name)
@@ -29,9 +32,12 @@ end
 
 -- Castbar driver ------------------------------------------------------------
 local driver = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarDriver.lua")
-local configHelpers = Slice(driver,
+-- Reason: the unit-key collapse and the cast-target-text gate are the two
+-- functions the assertions call.
+local configHelpers = Slice(driver, {
     "local function CastbarConfigUnitKey",
-    "local function SetCastTargetText")
+    "local function CastTargetTextEnabled",
+})
 local configUnitKey, castTargetTextEnabled = Compile(configHelpers .. [[
 return CastbarConfigUnitKey, CastTargetTextEnabled
 ]], "Arena castbar config harness")()
@@ -52,9 +58,8 @@ _G.MSUF_DB.general.showArenaCastTargetName = false
 assert(castTargetTextEnabled({ unit = "arena2", castTargetText = {} }) == false,
     "Arena cast-target text cannot be disabled")
 
-local interruptLabelSource = Slice(driver,
-    "function _G.MSUF_Castbar_ResolveInterruptLabel",
-    "local function HandleDriverEvent")
+-- Reason: the interrupter-source label is one exported function.
+local interruptLabelSource = Slice(driver, { "function _G.MSUF_Castbar_ResolveInterruptLabel" })
 _G.UnitNameFromGUID = function(guid) return guid == "arena-guid" and "Arena Kicker" or "Boss Kicker" end
 _G.UnitClassFromGUID = nil
 _G.SPELL_INTERRUPTED_BY = "Interrupted by %s"
@@ -66,9 +71,8 @@ assert(_G.MSUF_Castbar_ResolveInterruptLabel("arena-guid", "arena2") == "Interru
     "Arena interrupter-source label ignores its disabled setting")
 _G.MSUF_DB.arena.showInterruptSource = true
 
-local setInterruptedSource = Slice(driver,
-    "function frame:SetInterrupted",
-    "function frame:SetSucceeded")
+-- Reason: the interrupt feedback path is one frame method.
+local setInterruptedSource = Slice(driver, { "function frame:SetInterrupted" })
 local interruptedFrame = Compile([[
 local frame = { unit = "arena3" }
 local function CastbarConfigUnitKey(unit)
@@ -93,9 +97,8 @@ interruptedFrame:SetInterrupted("arena-guid")
 assert(interruptedFrame.hidden == true and interruptedFrame.interrupted == nil,
     "arena.showInterrupt=false does not suppress Arena interrupt feedback")
 
-local refreshAllSource = Slice(driver,
-    "local function RefreshAllCastTargetTextColors",
-    'ExportPublic("MSUF_RefreshAllCastTargetTextColors"')
+-- Reason: the cast-target colour fan-out is one walker function.
+local refreshAllSource = Slice(driver, { "local function RefreshAllCastTargetTextColors" })
 local refreshAllHarness = [[
 local liveVisited, previewVisited = {}, {}
 local function RefreshCastTargetText(frame) liveVisited[#liveVisited + 1] = frame end
@@ -164,15 +167,14 @@ local dispelUnits = assert(globalBars:match("local UNITFRAME_DISPEL_AURA_UNITS =
     "missing UnitFrame Dispel sensor unit declaration")
 -- The scope resolver reads the client-supported subset through a cached
 -- helper, so the harness has to carry that helper too.
-local supportedUnits = Slice(globalBars,
+-- Reason: the cache upvalue, its reader, the scope resolver and the enabler
+-- are exactly what the sensor fan-out needs to run offline.
+local supportedUnits = Slice(globalBars, {
     "local supportedUnitFrameAuraUnits",
-    "local function UnitFrameAuraScopeUnits")
-local scopeUnits = Slice(globalBars,
-    "local function UnitFrameAuraScopeUnits",
-    "local function UnitFrameAuraSensorMissingForScope")
-local ensureSensors = Slice(globalBars,
-    "local function EnsureUnitFrameAuraSensorsForScope",
-    "-- Scope rules are shared by all page sections")
+    "local function SupportedUnitFrameAuraUnits",
+})
+local scopeUnits = Slice(globalBars, { "local function UnitFrameAuraScopeUnits" })
+local ensureSensors = Slice(globalBars, { "local function EnsureUnitFrameAuraSensorsForScope" })
 local exerciseSensors = Compile([[
 local scope, enabled, writes = "arena", {}, {}
 local M = { ShowStatusFeedback = function() end }
@@ -194,15 +196,15 @@ AssertList(exerciseSensors("shared"), { "player", "target", "focus", "boss", "ar
 
 -- Aura Edit Mode popup ------------------------------------------------------
 local auraPopup = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_AuraPopup.lua")
-local auraScopeHelpers = Slice(auraPopup,
+-- Reason: AffectedUnits and ReapplyAuras are the contract; the three scope
+-- predicates above them are the helpers they call.
+local auraScopeHelpers = Slice(auraPopup, {
     "local function IsBoss",
-    "local function UnitLabel")
-local affectedUnitsSource = Slice(auraPopup,
-    "local function AffectedUnits",
-    "--- Aura layout offsets remain anchor-local runtime values")
-local reapplySource = Slice(auraPopup,
-    "local function ReapplyAuras",
-    "local function ReadBox")
+    "local function IsArena",
+    "local function AuraScope",
+})
+local affectedUnitsSource = Slice(auraPopup, { "local function AffectedUnits" })
+local reapplySource = Slice(auraPopup, { "local function ReapplyAuras" })
 local affectedUnits, reapplyAuras, refreshRequests, previewRequests = Compile([[
 local refreshRequests, previewRequests = {}, {}
 local MSUF = { MSUF_Auras3 = {
@@ -255,12 +257,9 @@ _G.MSUF_MAX_ARENA_FRAMES = nil
 -- Generic Unit Preview Arena parity ----------------------------------------
 local unitPreviewAuras = Read(
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua")
-local previewUnitKeySource = Slice(unitPreviewAuras,
-    "function Auras.PreviewUnitKey",
-    "local function PreviewUnit")
-local runtimeUnitSource = Slice(unitPreviewAuras,
-    "local function RuntimeUnit",
-    "local function LiveApplyReason")
+-- Reason: the preview key resolver and the runtime-unit resolver.
+local previewUnitKeySource = Slice(unitPreviewAuras, { "function Auras.PreviewUnitKey" })
+local runtimeUnitSource = Slice(unitPreviewAuras, { "local function RuntimeUnit" })
 local previewUnitKey, runtimeUnit = Compile([[
 local Auras = {}
 local function CanonKey(unit) return unit end
@@ -270,9 +269,11 @@ return Auras.PreviewUnitKey, RuntimeUnit
 assert(previewUnitKey("arena") == "arena", "generic aura preview rejects the Arena scope")
 assert(runtimeUnit("arena") == "arena1", "generic aura preview popup does not resolve arena1")
 
-local refreshRuntimeSource = Slice(unitPreviewAuras,
+-- Reason: RefreshRuntime is the contract; LiveApplyReason is the helper it calls.
+local refreshRuntimeSource = Slice(unitPreviewAuras, {
     "local function LiveApplyReason",
-    "local function RequestPreviewRefresh")
+    "local function RefreshRuntime",
+})
 local refreshRuntime, auraPreviewRefreshes = Compile([[
 local Auras = { PreviewUnitKey = function(unit) return unit end }
 local refreshes = {}
@@ -317,9 +318,14 @@ assert(unitPreviewRender:find('(key == "arena" and g.showArenaCastTime ~= false)
 
 local unitPreviewView = Read(
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View_Handles.lua")
-local castbarSubOffsetSource = Slice(unitPreviewView,
+-- Reason: the sub-offset reader and writer, plus the key and default helpers
+-- they call.
+local castbarSubOffsetSource = Slice(unitPreviewView, {
     "local function CastbarSubOffsetKey",
-    "local function MenuHistoryLabel")
+    "local function CastbarDefaultFromG",
+    "local function ReadCastbarSubOffsets",
+    "local function WriteCastbarSubOffsets",
+})
 local readSubOffsets, writeSubOffsets, subOffsetDB = Compile([[
 local g = { arenaCastTimeOffsetX = 4, arenaCastTimeOffsetY = 5 }
 local function CanonKey(unit) return unit end

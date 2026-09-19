@@ -10,7 +10,10 @@ local A3 = {
 }
 function A3.AddAuraSpellIDAndAliases(out, spellID) out[spellID] = true end
 
-local namespace = { Client = { IsClassic = true }, MSUF_Auras3 = A3 }
+local namespace = {
+    Client = { IsClassic = true }, MSUF_Auras3 = A3,
+    UF = { RegisterElement = function() end }, ExportPublic = function() end,
+}
 _G.MSUF_NS = namespace
 _G.UnitClass = function() return "Rogue", "ROGUE" end
 _G.C_Spell = {
@@ -28,6 +31,11 @@ _G.C_Spell = {
 local path = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
 assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
 local features = assert(A3.ClassicFeatures, "Classic feature compiler did not load")
+-- The container compiler sorts with the lane compiler's parser, which Compile
+-- publishes; the shipped manifests load it right after this file.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua"))(
+    "MidnightSimpleUnitFrames", namespace)
+assert(type(A3._ClassicSortMode) == "function", "Classic compile did not publish the sort parser")
 
 local auras = {
     customContainers = {

@@ -23,6 +23,9 @@ local function ResolvePath(relative)
     error("cannot locate " .. relative)
 end
 
+local Slice = assert(loadfile(".github/scripts/msuf_source_slice.lua"),
+    "aura_group_slot_layer_smoke must run with the repository root as the working directory")()
+
 local function Read(relative)
     local handle = assert(io.open(ResolvePath(relative), "rb"))
     local source = handle:read("*a")
@@ -42,12 +45,16 @@ assert(loadfile(ResolvePath("Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")))(
     "MidnightSimpleUnitFrames", MSUF)
 local Layers = assert(MSUF.UF.Layers)
 
+local RUNTIME = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 local runtimeSource = Read("Auras3/MSUF_Auras3_UnitFrames.lua")
-local initializerStart = assert(runtimeSource:find(
-    "local function BuildGroupLaneSlotOptions", 1, true))
-local initializerEnd = assert(runtimeSource:find(
-    "\nlocal function UpdateGroupLaneSlot", initializerStart, true))
-local initializerSource = runtimeSource:sub(initializerStart, initializerEnd - 1)
+-- Reason: the slot-option builder plus the three functions it calls; each is
+-- cut at its own `end` instead of at whatever is declared next.
+local initializerSource = Slice.Declarations(runtimeSource, {
+    "local function BuildGroupLaneSlotOptions",
+    "local function CreateManagedNativeSlotLane",
+    "local function UpdateAuraGroupEffectiveFilters",
+    "local function UpdateAuraSlotEffectiveFilters",
+}, RUNTIME)
 
 local prepared = {}
 local environment = setmetatable({
@@ -183,8 +190,8 @@ assert(groupPreviewEffectSource:find("runtime.ApplyPreviewFrameEffect", 1, true)
     and not groupPreviewEffectSource:find("layers.AuraEffectLevel", 1, true),
     "Group preview Aura effects do not use the live renderer's target floor")
 
-local updateSource = runtimeSource:sub(initializerEnd,
-    assert(runtimeSource:find("\nlocal function UpdateGroupFlowLane", initializerEnd, true)) - 1)
+-- Reason: the per-button update path is one function.
+local updateSource = Slice.Function(runtimeSource, "local function UpdateGroupLaneSlot", RUNTIME)
 assert(not updateSource:find("SetFrameLevel", 1, true)
     and not updateSource:find("SetFrameStrata", 1, true),
     "sealed Group AuraSlot buttons are mutated by the update path")

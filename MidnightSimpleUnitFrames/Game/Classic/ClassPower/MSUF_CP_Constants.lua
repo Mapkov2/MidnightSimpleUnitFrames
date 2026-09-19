@@ -21,7 +21,10 @@ K.CPK = {
         TIMER_BAR      = 8,
         STAGGER        = 9,
         IRONFUR        = 10,
-        SIGNED_CONTINUOUS = 11,
+        --- 11 is the Retail NATIVE_AURA id (ClassPower/MSUF_CP_Constants.lua).
+        --- Mode ids key the hot-path dispatch tables, so a Classic-only mode
+        --- takes the next free number instead of shadowing a Retail one.
+        SIGNED_CONTINUOUS = 12,
     },
     SPEC = {
         DH_DEVOURER          = _G.SPEC_DEMONHUNTER_DEVOURER or 3,

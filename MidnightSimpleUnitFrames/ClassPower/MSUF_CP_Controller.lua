@@ -85,59 +85,12 @@ local TIP = CPConst.TIP or {}
 local PT = CPConst.PT or {}
 local POWER_TYPE_TOKENS = CPConst.POWER_TYPE_TOKENS or {}
 
---- WoW Forever runs this Mainline controller, but Blizzard loads none of the
---- Retail class resource bars there (Blizzard_UnitFrame.toc excludes the Paladin,
---- Shard, Arcane Charges, Rogue/Druid combo point, Rune, Essence, Insanity,
---- Harmony and Stagger bars for camelot). Its only class resource display is the
---- target-owned ComboFrame: GetComboPoints(unit, "target"), refreshed on
---- PLAYER_TARGET_CHANGED. Forever therefore routes like the Classic Era provider
---- (Game/Vanilla/ClassPower.lua): combo points for Rogues and Cat Form Druids,
---- nothing for any other class, and no Retail specialization index is read.
---- nil on every other client, so their routing and events stay unchanged.
-local ForeverCP
-if MSUF.Client ~= nil and MSUF.Client.IsForever == true then
-    local NativeUnitPower = UnitPower
-    local GetComboPoints = GetComboPoints
-    local GetShapeshiftFormID = GetShapeshiftFormID
-    local supportsEvent = MSUF.Client.SupportsEvent
-    ForeverCP = {
-        --- Combo points can move to a new target without a target swap.
-        comboTargetEvent = type(supportsEvent) == "function" and supportsEvent("COMBO_TARGET_CHANGED") == true,
-        Client = {
-            NeedsTargetChanged = function(powerType) return powerType == PT.ComboPoints end,
-        },
-    }
-
-    function ForeverCP.UnitPower(unit, powerType, unmodified)
-        if powerType == PT.ComboPoints and type(GetComboPoints) == "function" then
-            return GetComboPoints("player", "target")
-        end
-        return NativeUnitPower(unit, powerType, unmodified)
-    end
-
-    function ForeverCP.GetClassPowerType()
-        if PLAYER_CLASS == "ROGUE" then
-            return PT.ComboPoints, CPK.MODE.SEGMENTED, false
-        end
-        if PLAYER_CLASS == "DRUID" then
-            local primaryPower = UnitPowerType("player")
-            if NotSecret(primaryPower) then
-                if primaryPower == PT.Energy then return PT.ComboPoints, CPK.MODE.SEGMENTED, false end
-            elseif GetShapeshiftFormID and GetShapeshiftFormID() == 1 then
-                --- DRUID_CAT_FORM is 1 on Forever (Blizzard_FrameXMLBase Constants.lua).
-                return PT.ComboPoints, CPK.MODE.SEGMENTED, false
-            end
-        end
-        return nil, CPK.MODE.NONE, false
-    end
-
-    --- Target-owned combo point changes can arrive with the Energy token.
-    function ForeverCP.AcceptPowerToken(powerType, powerToken, expectedToken)
-        if powerType ~= PT.ComboPoints then return powerToken == expectedToken end
-        return powerToken == "COMBO_POINTS"
-            or ((PLAYER_CLASS == "ROGUE" or PLAYER_CLASS == "DRUID") and powerToken == "ENERGY")
-    end
-end
+--- WoW Forever runs this Mainline controller, and its target-owned combo points
+--- arrive through the same MSUF.CPClient provider seam every Classic client
+--- uses: Game/Forever/ClassPower.lua publishes it, built from the shared
+--- Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua module. nil on every other
+--- Mainline client, so their routing and events stay unchanged.
+local ForeverCP = MSUF.CPClient
 
 --- Cached split registries (load-time only; avoids repeated global table lookups
 --- and keeps the post-split core wiring easier to follow).

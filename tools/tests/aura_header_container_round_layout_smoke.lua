@@ -22,11 +22,12 @@ local function Read(relative)
     return text
 end
 
--- Use the shipped Kernel helper, not a copy of its rules. The closing "end"
--- is matched at the helper's own indentation, whatever that is.
+-- Use the shipped Kernel helper, not a copy of its rules. Reason: the helper
+-- is one function, cut at its own `end` by the shared slicer.
+local UTIL = "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"
+local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
 local util = Read("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")
-local _, helperBody = util:match("\n([ \t]*)(local function MSUF_SetRoundLayoutToNearestPixel%b().-\n%1end)\n")
-Check(helperBody, "Kernel round-layout helper not found")
+local helperBody = Slice.Function(util, "local function MSUF_SetRoundLayoutToNearestPixel", UTIL)
 local inCombat = false
 _G.InCombatLockdown = function() return inCombat end
 _G.MSUF_SetRoundLayoutToNearestPixel = assert(loadstring(helperBody

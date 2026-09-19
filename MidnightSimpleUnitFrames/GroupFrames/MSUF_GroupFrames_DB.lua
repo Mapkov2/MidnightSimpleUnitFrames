@@ -690,6 +690,28 @@ PARTY_DEFAULTS.portraitBgColorG = 0.05
 PARTY_DEFAULTS.portraitBgColorB = 0.05
 PARTY_DEFAULTS.portraitBgColorA = 0.85
 
+--- Threat percentage text (Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua): each
+--- member's threat on the player's current target. Only the clients offering it
+--- (MSUF.Client.SupportsThreatText) carry the keys, so Midnight and Mists profiles
+--- stay unchanged. Top centre is free of every status icon and of the name. On by
+--- default for Party only; a raid of 20 to 40 numbers is noise (owner decision
+--- 2026-09-19).
+if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+    for _, defaults in ipairs({ PARTY_DEFAULTS, RAID_DEFAULTS, MYTHIC_RAID_DEFAULTS }) do
+        defaults.threatText = false
+        defaults.threatTextColorCurve = true
+        defaults.threatTextBackground = false
+        defaults.threatTextSize = 9
+        defaults.threatTextAnchor = "TOP"
+        defaults.threatTextX = 0
+        defaults.threatTextY = -1
+        defaults.threatTextLayer = 7
+    end
+    PARTY_DEFAULTS.threatText = true
+    -- The dark plate behind the number: Party only by default (owner, 2026-09-19).
+    PARTY_DEFAULTS.threatTextBackground = true
+end
+
 --- Priority Frames are a small secure duplicate strip for important raid
 --- members. Visuals intentionally inherit the active raid/mythic-raid spec;
 --- this table owns only activation, selection policy, and container geometry.

@@ -125,7 +125,7 @@ local atlasInfo = {
 }
 _G.C_Texture = { GetAtlasInfo = function(atlas) return atlasInfo[atlas] end }
 
-local function LoadElement()
+local function LoadElement(client)
     local registered
     local UF = {
         Layers = { PORTRAIT_OFFSET = 6, PORTRAIT_BORDER_OFFSET = 7 },
@@ -134,7 +134,10 @@ local function LoadElement()
             registered = element
         end,
     }
+    -- Game/Shared/Initialize.lua loads before this element on every TOC, so the
+    -- legacy Era portrait gate reads MSUF.Client and never the raw project ID.
     local MSUF = {
+        Client = client,
         UF = UF,
         Secrets = {
             IsNil = function(value) return value == nil end,
@@ -329,7 +332,7 @@ assert(not previewArt.shown, "preview fallback must hide on shape switch")
 -- Era must use bundled art even when the modern atlas name resolves.
 _G.WOW_PROJECT_CLASSIC, _G.WOW_PROJECT_ID = 2, 2
 _G.C_Texture = { GetAtlasInfo = function() error("Era must not query modern HUD portrait atlases") end }
-local era = LoadElement()
+local era = LoadElement({ IsVanilla = true })
 local eraFrame = NewFrame("BLIZZARD")
 era.Create(eraFrame)
 era.Apply(eraFrame, eraFrame.MSUFSpec)

@@ -5920,6 +5920,16 @@ L["Surname"] = "Фамилия"
 -- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
 L["Pet Happiness"] = "Настроение питомца"
 L["Pet Happiness (Vanilla/TBC)"] = "Настроение питомца (Vanilla/TBC)"
+L["Threat %"] = "Угроза %"
+L["Color by threat"] = "Цвет по угрозе"
+L["Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead."] = "Зелёный при низкой угрозе, жёлтый на половине, розовый при 100%, когда агро у вас. Отключите, чтобы использовать цвет текста статуса."
+L["Threat % Colors"] = "Цвета угрозы %"
+L["Threat % Background"] = "Фон угрозы %"
+L["A dark plate behind the number keeps it readable on any bar color, red enemy bars included."] = "Тёмная подложка за числом сохраняет его читаемым на полосе любого цвета, включая красные полосы врагов."
+L["Blended from low to high threat on every frame that colors its threat text by threat."] = "Плавный переход от низкой к высокой угрозе на каждой рамке, где текст угрозы окрашивается по угрозе."
+L["Low threat"] = "Низкая угроза"
+L["Medium threat"] = "Средняя угроза"
+L["High threat"] = "Высокая угроза"
 L["Color by level difficulty"] = "Окрашивать по сложности уровня"
 L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "Красный — намного выше вашего уровня, белый — на вашем уровне, серый — тривиальный. Отключите, чтобы использовать цвет текста статуса."
 L["Level Difficulty Colors"] = "Цвета сложности уровня"
@@ -5933,6 +5943,10 @@ L["Level Text"] = "Текст уровня"
 L["Tagged by others"] = "Отмечен другими"
 L["Gray out mobs tagged by others"] = "Делать серыми врагов, отмеченных другими"
 L["A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame."] = "Враг, которого первым ударил другой игрок, не даёт вам ни добычи, ни опыта. Его полоса здоровья и имя становятся серыми, как в стандартной рамке цели."
+-- Shared aura preview titles (Aura Style page, shared scope); the first keeps its %s for the lane name.
+L["Shared %s Preview"] = "Общий предпросмотр: %s"
+L["Shared Player Defensives Preview"] = "Общий предпросмотр: Защитные баффы"
+L["Shared Dots on Target Preview"] = "Общий предпросмотр: DoT на цели"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)

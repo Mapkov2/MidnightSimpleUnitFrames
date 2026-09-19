@@ -1,17 +1,19 @@
 -- Pins the hand-written Assistant Arena scope and castbar parity contracts.
 -- Run from the repository root: lua .github/scripts/arena_assistant_scope_smoke.lua
 
+-- Every slice below names the declarations it asserts on, and each one is cut
+-- at its own structural boundary (a table's `}`, a function's `end`), not at
+-- whatever the shipped file declares next.
+local Shared = assert(loadfile(".github/scripts/msuf_source_slice.lua"),
+    "arena_assistant_scope_smoke must run with the repository root as the working directory")()
+local sourceOf = {}
 local function Read(path)
-    local handle = assert(io.open(path, "rb"), "missing file: " .. path)
-    local source = handle:read("*a")
-    handle:close()
-    return (source:gsub("\r\n", "\n"))
+    local source = Shared.Read(path)
+    sourceOf[source] = path
+    return source
 end
-
-local function Slice(source, startMarker, endMarker)
-    local first = assert(source:find(startMarker, 1, true), "missing start marker: " .. startMarker)
-    local last = assert(source:find(endMarker, first + #startMarker, true), "missing end marker: " .. endMarker)
-    return source:sub(first, last - 1)
+local function Slice(source, declarations)
+    return Shared.Declarations(source, declarations, sourceOf[source] or "<unregistered source>")
 end
 
 local function Contains(source, needle)
@@ -145,8 +147,11 @@ AssertContains(advancedColorsSource, 'SetControlEnabled(detailTargetColor, Detai
     "Advanced Colors still disabled target-name color for Arena castbars")
 
 local registrySource = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser_Registry.lua")
-local registryScopeBlock = Slice(registrySource,
-    "local POWER_UNIT_ORDER", "local function ParseGlobalFontFamilyShortcut")
+-- Reason: the two unit-order tables the assertions below read.
+local registryScopeBlock = Slice(registrySource, {
+    "local POWER_UNIT_ORDER",
+    "local CASTBAR_INTERRUPT_UNITS",
+})
 AssertContains(registryScopeBlock,
     'local POWER_UNIT_ORDER = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }',
     "power unit order omitted Arena")
@@ -154,13 +159,19 @@ AssertContains(registryScopeBlock,
     'local CASTBAR_INTERRUPT_UNITS = { "player", "target", "focus", "boss", "arena" }',
     "castbar interrupt unit order omitted Arena")
 
-local fontScopeBlock = Slice(registrySource,
-    "local FONT_RENDERING_UNIT_SCOPES", "local FONT_RENDERING_GROUP_SCOPES")
+-- Reason: the font-rendering unit scope map.
+local fontScopeBlock = Slice(registrySource, { "local FONT_RENDERING_UNIT_SCOPES" })
 AssertContains(fontScopeBlock, 'arena = "arena"',
     "font-rendering unit scopes omitted Arena")
 
-local backendBlock = Slice(registrySource,
-    "local CASTBAR_BACKEND_UNITS", "function P.ParseCastbarPositionRegistryShortcut")
+-- Reason: the castbar backend unit order, its enable-key map and the help
+-- text, which live in the backend tables and their reader.
+local backendBlock = Slice(registrySource, {
+    "local CASTBAR_BACKEND_UNITS",
+    "local CASTBAR_BACKEND_ENABLE_KEYS",
+    "local function CastbarBackendUnitsForText",
+    "P.ParseCastbarBackendShortcut = function",
+})
 AssertContains(backendBlock,
     'local CASTBAR_BACKEND_UNITS = { "player", "target", "focus", "boss", "arena" }',
     "castbar backend unit order omitted Arena")
@@ -169,8 +180,8 @@ AssertContains(backendBlock, 'arena = "general.enableArenaCastbar"',
 AssertContains(backendBlock, "Target, Focus, Boss, and Arena cast bars can use MSUF or be hidden.",
     "castbar backend help omitted Arena")
 
-local positionBlock = Slice(registrySource,
-    "function P.ParseCastbarPositionRegistryShortcut", "function P.ParsePowerBarGradientRegistryShortcut")
+-- Reason: the fixed-position shortcut parser is one function.
+local positionBlock = Slice(registrySource, { "function P.ParseCastbarPositionRegistryShortcut" })
 AssertContains(positionBlock, 'arena = "arenaCast"',
     "castbar fixed-position prefix map omitted Arena")
 AssertContains(positionBlock, 'units = { "player", "target", "focus", "boss", "arena" }',

@@ -7,9 +7,12 @@
 --    compile never inherits from auras3.shared: a key the owner lacks falls back to a
 --    built-in default, which moved the buffs and debuffs of a new profile to the wrong
 --    anchors.
--- 2. That holds for NEW profiles only (first login, reset profile, new profile). A profile
---    saved with sparse owners keeps them: moving a user's auras is an owner decision, so no
---    pass of the defaults pipeline may complete or rewrite them.
+-- 2. Profiles saved by 6.5-alpha18 to 6.5-beta3 still carry those sparse owners under a
+--    lane-owner marker that was already set. The defaults pass repairs them once and per
+--    owner: an owner still equal to what the factory saved (a read of the aura menu may
+--    have added its two bookkeeping keys) is completed exactly as a new profile's is; an
+--    owner with any customized key or value, and every complete owner, stays byte-for-byte
+--    as it is, and a profile with nothing to repair is not even stamped.
 -- 3. bars.showArcaneSoul has no reader on any client. A fresh profile no longer carries it;
 --    a saved one keeps what it has.
 local repo = assert(arg[1], "repository root is required"):gsub("\\", "/"):gsub("/$", "")
@@ -85,7 +88,7 @@ assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))("M
 -- What MSUF_Defaults_CreateFactoryUnitAuras authors per unit: buff x/y, debuff x/y. Retuning
 -- the factory layout means updating these rows with it.
 local AUTHORED = {
-    player = { -2, 46, 2, 49 },
+    player = { -2, 46, 2, 46 },
     target = { -1, 42, 0, 42 },
     focus = { -2, 32, 119, 2 },
 }
@@ -178,23 +181,8 @@ Check(MSUF_CreateProfile("Second") == true, "profile creation failed")
 AssertFreshProfile(MSUF_GlobalDB.profiles.Second, "new profile")
 
 ---------------------------------------------------------------------------
--- A saved profile keeps its sparse owners
+-- Saved sparse owners: what 6.5-alpha18 to 6.5-beta3 wrote
 ---------------------------------------------------------------------------
--- The shape earlier builds saved: the authored tables only, already marked as materialized.
-local saved = CopyTable(MSUF_GlobalDB.profiles.Second)
-for _, unit in ipairs(UNITS) do
-    local authored = AUTHORED[unit]
-    local owner = saved.auras3.perUnit[unit]
-    owner.layout = {
-        offsetX = 243, offsetY = 27, iconSize = 28,
-        buffGroupOffsetX = authored[1], buffGroupOffsetY = authored[2],
-        debuffGroupOffsetX = authored[3], debuffGroupOffsetY = authored[4],
-        buffGroupIconSize = 31, debuffGroupIconSize = 32, buffSpacing = 0, debuffSpacing = 0,
-    }
-    owner.layoutShared = { maxBuffs = 3, maxDebuffs = 4, buffPerRow = 4, debuffPerRow = 4 }
-end
-saved.bars.showArcaneSoul = false
-
 local function Serialize(value, out)
     if type(value) ~= "table" then
         out[#out + 1] = type(value) .. ":" .. tostring(value)
@@ -210,48 +198,225 @@ local function Serialize(value, out)
     end
     out[#out + 1] = "}"
 end
-local function Snapshot(db)
+local function Snapshot(value)
     local out = {}
-    for _, unit in ipairs(UNITS) do
-        out[#out + 1] = unit
-        Serialize(db.auras3.perUnit[unit].layout, out)
-        Serialize(db.auras3.perUnit[unit].layoutShared, out)
-    end
-    out[#out + 1] = "marker:" .. tostring(db.auras3._msufA3UnitLaneOwners_v1)
-    out[#out + 1] = "model:" .. tostring(db.auras3.profileModelRevision)
-    out[#out + 1] = "arcaneSoul:" .. tostring(db.bars.showArcaneSoul)
+    Serialize(value, out)
     return table.concat(out)
 end
-local before = Snapshot(saved)
-Check(before:find("buffAnchor", 1, true) == nil, "the saved fixture is not sparse")
 
-local function AssertUntouched(label)
-    Check(decodes == 0, label .. ": a saved profile was seeded from the factory profile")
-    Check(Snapshot(saved) == before, label .. ": a saved profile's lane owners or its showArcaneSoul value changed")
+local profiles = MSUF_GlobalDB.profiles
+local function Login(name)
+    MSUF_GlobalDB.char[MSUF_GetCharKey()].activeProfile = name
+    MSUF_DB, MSUF_ActiveProfile = nil, nil
+    MSUF_InitProfiles()
+    Check(MSUF_DB == profiles[name] and MSUF_ActiveProfile == name, "the login did not bind " .. name)
+    -- The aura core runs the public materializer over the bound profile on every login.
+    MSUF.MSUF_MaterializeUnitAuraLaneOwners(MSUF_DB.auras3)
 end
 
+-- The reset profile once a login has run over it (a login stamps migrations the heavy pass
+-- leaves open): the complete owners a repair has to reach, every other key settled. Another
+-- profile is bound first, since the defaults pass skips the table it repaired last.
+Login("Second")
+Login("Default")
+local fresh = CopyTable(profiles.Default)
+
+-- Buff x/y and debuff x/y the sparse factory wrote. 6.5-alpha18 to 6.5-beta2 wrote them for
+-- New Profile only; 6.5-beta3 for every fresh profile, with player and target retuned.
+local ALPHA_OFFSETS = { player = { -2, 32, 3, 32 }, target = { -2, 32, 3, 32 } }
+-- The factory has since moved the player debuffs to Y 46; saved profiles keep what 6.5-beta3 wrote.
+local BETA3_OFFSETS = { player = { -2, 46, 2, 49 } }
+local function SavedOffsets(build, unit)
+    return build == "alpha" and ALPHA_OFFSETS[unit] or BETA3_OFFSETS[unit] or AUTHORED[unit]
+end
+-- One owner as those builds saved it: the canonical owner with only the authored tables,
+-- under a lane-owner marker that was already set.
+local function SavedOwner(build, unit)
+    local offsets = SavedOffsets(build, unit)
+    local owner = CopyTable(fresh.auras3.perUnit[unit])
+    owner.layout = {
+        offsetX = 243, offsetY = 27, iconSize = 28,
+        buffGroupOffsetX = offsets[1], buffGroupOffsetY = offsets[2],
+        debuffGroupOffsetX = offsets[3], debuffGroupOffsetY = offsets[4],
+        buffGroupIconSize = 31, debuffGroupIconSize = 32, buffSpacing = 0, debuffSpacing = 0,
+    }
+    owner.layoutShared = { maxBuffs = 3, maxDebuffs = 4, buffPerRow = 4, debuffPerRow = 4 }
+    return owner
+end
+-- A repaired owner is the fresh one; the older layout keeps the offsets it authored.
+local function RepairedOwner(build, unit)
+    local offsets = SavedOffsets(build, unit)
+    local owner = CopyTable(fresh.auras3.perUnit[unit])
+    owner.layout.buffGroupOffsetX, owner.layout.buffGroupOffsetY = offsets[1], offsets[2]
+    owner.layout.debuffGroupOffsetX, owner.layout.debuffGroupOffsetY = offsets[3], offsets[4]
+    return owner
+end
+-- What a mere read of the aura menu writes into an owner (Auras3/MenuModel): its EnsureDB
+-- stamps every owner, and a filter read fills the one default the canonical filters lack.
+local function ReadByMenu(owner)
+    owner._msufA3SparseVisualOverrides_v2 = true
+    owner.filters.debuffs.nonPlayer = false
+    return owner
+end
+
+-- The target owner 6.5-beta3 saved, verbatim from running that build's pipeline offline the
+-- way this smoke runs the current one. The repair recognizes a saved owner by this shape, so
+-- a canonical owner that drifts from it would silently leave every saved profile unrepaired.
+local BETA3_TARGET = {
+    overrideLayout = true, overrideSharedLayout = true, overrideStyle = true, overrideFilters = true,
+    layout = {
+        offsetX = 243, offsetY = 27, iconSize = 28,
+        buffGroupOffsetX = -1, buffGroupOffsetY = 42, debuffGroupOffsetX = 0, debuffGroupOffsetY = 42,
+        buffGroupIconSize = 31, debuffGroupIconSize = 32, buffSpacing = 0, debuffSpacing = 0,
+    },
+    layoutShared = { maxBuffs = 3, maxDebuffs = 4, buffPerRow = 4, debuffPerRow = 4 },
+    filters = {
+        enabled = true, hidePermanent = false,
+        buffs = {
+            enabled = true, onlyMine = false, onlyImportant = false, includeDispellable = false,
+            dispellableAny = false, raid = false, raidInCombat = false, includeNameplateOnly = false,
+            cancelable = false, notCancelable = false, externalDefensive = false, bigDefensive = false,
+            exclusive = "none",
+        },
+        debuffs = {
+            enabled = true, onlyMine = false, onlyImportant = false, includeDispellable = false,
+            dispellableAny = false, raid = false, raidInCombat = false, includeNameplateOnly = false,
+            crowdControl = false, exclusive = "none",
+        },
+    },
+}
+Check(Snapshot(SavedOwner("beta3", "target")) == Snapshot(BETA3_TARGET),
+    "the canonical owner drifted from the one 6.5-beta3 saved; saved profiles would no longer match")
+
+local function SavedProfile(build)
+    local db = CopyTable(fresh)
+    for _, unit in ipairs(UNITS) do db.auras3.perUnit[unit] = SavedOwner(build, unit) end
+    return db
+end
+
+-- Each of these alone makes an owner customized.
+local CUSTOMIZE = {
+    { "a changed offset", function(owner) owner.layout.buffGroupOffsetX = owner.layout.buffGroupOffsetX + 5 end },
+    { "the anchor it showed, chosen", function(owner) owner.layout.buffAnchor = "BOTTOMRIGHT" end },
+    { "a changed anchor", function(owner) owner.layout.debuffAnchor = "TOPRIGHT" end },
+    { "an added key", function(owner) owner.layoutShared.showDebuffs = false end },
+    { "a removed key", function(owner) owner.layoutShared.debuffPerRow = nil end },
+    { "a changed filter", function(owner) owner.filters.debuffs.onlyMine = true end },
+    { "a Hide Permanent override", function(owner) owner.overrideBlacklist = true; owner.blacklist = { spells = {} } end },
+}
+
+-- 6.5-beta3: the character logs in with it. Its shared record is inert on Classic and can
+-- hold anything; the repair reads the factory record, never this one, and never writes it.
+profiles.Beta3 = SavedProfile("beta3")
+profiles.Beta3.auras3.shared.buffAnchor = "TOPRIGHT"
+profiles.Beta3.bars.showArcaneSoul = false
+-- 6.5-alpha18 New Profile: three arena owners, from before TBC and Mists had five.
+profiles.Alpha = SavedProfile("alpha")
+for i = 4, arenaSlots do profiles.Alpha.auras3.perUnit["arena" .. i] = nil end
+profiles.Alpha.auras3._msufA3ArenaAuraSlots = nil
+-- The aura menu was opened and nothing was changed.
+profiles.MenuRead = SavedProfile("beta3")
+for _, unit in ipairs(UNITS) do ReadByMenu(profiles.MenuRead.auras3.perUnit[unit]) end
+-- Some owners customized, the others untouched: the decision is per owner.
+profiles.Mixed = SavedProfile("beta3")
+local mixedCustomized = {}
+for i, row in ipairs(CUSTOMIZE) do
+    local unit = UNITS[i + 1]
+    row[2](profiles.Mixed.auras3.perUnit[unit])
+    mixedCustomized[unit] = row[1]
+end
+-- Every owner customized: nothing to repair, so nothing may change, not even a stamp.
+profiles.Custom = SavedProfile("beta3")
+for i, unit in ipairs(UNITS) do
+    CUSTOMIZE[(i - 1) % #CUSTOMIZE + 1][2](profiles.Custom.auras3.perUnit[unit])
+end
+profiles.Custom.bars.showArcaneSoul = false
+-- Complete owners: a profile made since the fix, and a first login before 6.5-beta3, which
+-- never received the factory scope and got the canonical one.
+profiles.Complete = CopyTable(fresh)
+profiles.Canonical = CopyTable(fresh)
+profiles.Canonical.auras3 = MSUF_CreateCanonicalUnitAuras()
+local NAMES = { "Beta3", "Alpha", "MenuRead", "Mixed", "Custom", "Complete", "Canonical" }
+Check(Snapshot(profiles.Beta3.auras3.perUnit):find("buffAnchor", 1, true) == nil, "the saved fixture is not sparse")
+
+local expected = {}
+for _, name in ipairs(NAMES) do expected[name] = CopyTable(profiles[name]) end
+local function ExpectRepaired(name, build, readByMenu, keep)
+    local db = expected[name]
+    for _, unit in ipairs(UNITS) do
+        if db.auras3.perUnit[unit] ~= nil and not (keep and keep[unit]) then
+            local owner = RepairedOwner(build, unit)
+            db.auras3.perUnit[unit] = readByMenu and ReadByMenu(owner) or owner
+        end
+    end
+    db.auras3._msufA3SparseLaneOwnersRepaired_v1 = true
+end
+ExpectRepaired("Beta3", "beta3")
+ExpectRepaired("Alpha", "alpha")
+ExpectRepaired("MenuRead", "beta3", true)
+ExpectRepaired("Mixed", "beta3", false, mixedCustomized)
+
+-- A login must leave every profile exactly as expected. The heavy pass also re-runs
+-- migrations that have nothing to do with auras, so after it only the aura tree is held.
+local function AssertProfiles(label, auraTreeOnly)
+    for _, name in ipairs(NAMES) do
+        local actual, wanted = profiles[name], expected[name]
+        if auraTreeOnly then actual, wanted = { auras3 = actual.auras3 }, { auras3 = wanted.auras3 } end
+        if Snapshot(actual) ~= Snapshot(wanted) then
+            local where = "outside the aura owners"
+            for _, unit in ipairs(UNITS) do
+                if Snapshot(actual.auras3.perUnit[unit]) ~= Snapshot(wanted.auras3.perUnit[unit]) then
+                    where = "the " .. unit .. " owner" .. (mixedCustomized[unit] and name == "Mixed"
+                        and " (customized with " .. mixedCustomized[unit] .. ")" or "")
+                    break
+                end
+            end
+            Check(false, label .. ": profile " .. name .. " differs from its expected state in " .. where)
+        end
+    end
+end
+
+-- The first login repairs every stored profile, active or not, and nothing else.
 decodes = 0
-MSUF_GlobalDB.profiles.Saved = saved
-MSUF_DB, MSUF_ActiveProfile = saved, "Saved"
--- The heavy defaults pass of a login.
+Login("Beta3")
+Check(decodes == 0, "a login seeded a saved profile from the factory profile")
+AssertProfiles("first login")
+
+-- The first time the Alpha profile is bound, the aura core gives TBC and Mists their fourth
+-- and fifth arena owners as copies of arena1, which is repaired by then.
+Login("Alpha")
+if arenaSlots > 3 then
+    for i = 4, arenaSlots do
+        expected.Alpha.auras3.perUnit["arena" .. i] = RepairedOwner("alpha", "arena" .. i)
+    end
+    expected.Alpha.auras3._msufA3ArenaAuraSlots = arenaSlots
+end
+AssertProfiles("arena slots")
+
+-- Once is enough: logins, the heavy pass and the public materializer change nothing more.
+Login("Beta3")
+AssertProfiles("second login")
 MSUF_EnsureDB(true)
-Check(MSUF_DB == saved, "the defaults pass replaced the saved profile table")
-AssertUntouched("defaults pass")
--- The aura core calls the public materializer on every login.
-MSUF.MSUF_MaterializeUnitAuraLaneOwners(saved.auras3)
-AssertUntouched("public materializer")
--- The same pass again with every migration forced to run.
-saved._msufDefaultsRevision = nil
+Check(MSUF_DB == profiles.Beta3, "the defaults pass replaced the saved profile table")
+AssertProfiles("defaults pass", true)
+for _, name in ipairs(NAMES) do MSUF.MSUF_MaterializeUnitAuraLaneOwners(profiles[name].auras3) end
+AssertProfiles("public materializer", true)
+-- Every migration forced to run again, on a repaired and on a customized profile.
+for _, name in ipairs({ "Beta3", "Custom" }) do
+    Login(name)
+    profiles[name]._msufDefaultsRevision = nil
+    MSUF_EnsureDB(true)
+    Check(Snapshot(profiles[name].auras3) == Snapshot(expected[name].auras3)
+        and profiles[name].bars.showArcaneSoul == false,
+        name .. ": the defaults pass with every migration moved an aura owner or showArcaneSoul")
+end
+-- The stamp is what ends it: a repaired profile is never repaired a second time.
+profiles.Beta3.auras3.perUnit.player = SavedOwner("beta3", "player")
+local stamped = Snapshot(profiles.Beta3.auras3)
 MSUF_EnsureDB(true)
-AssertUntouched("defaults pass with every migration")
--- A login with these SavedVariables: the profile init translates every stored profile
--- and runs the defaults pass on the character's active one.
-MSUF_GlobalDB.char[MSUF_GetCharKey()].activeProfile = "Saved"
-MSUF_DB, MSUF_ActiveProfile = nil, nil
-MSUF_InitProfiles()
-Check(MSUF_DB == saved and MSUF_ActiveProfile == "Saved", "the login did not bind the saved profile")
-AssertUntouched("login")
+Check(Snapshot(profiles.Beta3.auras3) == stamped, "a stamped profile was repaired a second time")
 
 print = realPrint
 print("PASS fresh Classic profile (" .. flavor .. "): " .. #UNITS .. " complete aura lane owners on first login, reset and new profile; "
-    .. "a saved profile keeps its owners; showArcaneSoul is no longer seeded")
+    .. "saved sparse owners repaired once and per owner (6.5-beta3, 6.5-alpha18 New Profile, menu read), "
+    .. #CUSTOMIZE .. " kinds of customized owner and complete profiles byte-identical; showArcaneSoul is no longer seeded")

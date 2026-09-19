@@ -3,15 +3,16 @@ local path = root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lu
 local file = assert(io.open(path, "rb"))
 local source = file:read("*a")
 file:close()
+local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
 
 local function Check(condition, message)
     if not condition then error(message, 2) end
 end
 
-local bodyStart = source:find("function A3.ApplyFontsFromGlobal(scope, reason)", 1, true)
-local bodyEnd = bodyStart and source:find("\n--- Narrow ClassPower", bodyStart, true) or nil
-Check(bodyStart ~= nil and bodyEnd ~= nil, "ApplyFontsFromGlobal body not found")
-local body = source:sub(bodyStart, bodyEnd - 1)
+-- Reason: every assertion below is about what the global font fanout does, so
+-- the slice is that one function and nothing else. It used to end at the doc
+-- comment of the next function, which made editing that comment a red smoke.
+local body = Slice.Function(source, "function A3.ApplyFontsFromGlobal", path)
 local executable = body:gsub("%-%-[^\r\n]*", "")
 Check(body:find('_QueueDeferredAuraRuntime%(scope or "shared", reason or "AURAS3_FONT_VISUALS", true%)') ~= nil,
     "global aura font fanout no longer defers visual work during combat")

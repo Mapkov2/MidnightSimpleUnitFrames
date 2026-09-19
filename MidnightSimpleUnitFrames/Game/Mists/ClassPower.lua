@@ -5,31 +5,24 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
+local TargetCombo = assert(MSUF.CPTargetCombo, "shared target-combo module must load first")
 local K = _G.MSUF_CP_CONST or {}
 local CPK = K.CPK or {}
 local MODE = CPK.MODE or {}
 local PT = K.PT or {}
-local NativeUnitPower = _G.UnitPower
 local NativeUnitPowerDisplayMod = _G.UnitPowerDisplayMod
-local GetComboPoints = _G.GetComboPoints
 --- Blizzard Mists ShardBar.lua: MAX_POWER_PER_EMBER = 10 raw power per ember.
 local EMBER_POWER_SCALE = 10
---- Owner of the combo points being shown. Resolve switches it to "vehicle"
---- while the vehicle route is active; every caller still passes "player".
-local comboUnit = "player"
 
 local Provider = {
     Flavor = "Mists",
 }
 
---- MoP combo points are target-owned. Blizzard/oUF use GetComboPoints rather
---- than the modern player UnitPower contract.
-function Provider.UnitPower(unit, powerType, unmodified)
-    if powerType == PT.ComboPoints and type(GetComboPoints) == "function" then
-        return GetComboPoints(comboUnit, "target") or 0
-    end
-    return NativeUnitPower(unit, powerType, unmodified)
-end
+--- MoP combo points are target-owned, like every other client that has them.
+--- SetComboUnit switches the owner to "vehicle" while the vehicle route is
+--- active; every caller still passes "player".
+local SetComboUnit
+Provider.UnitPower, SetComboUnit = TargetCombo.NewPowerReader()
 
 --- Burning Embers use a fixed 10-per-ember scale (Blizzard ShardBar, ElvUI
 --- `cur * 0.1`) instead of trusting the client display modifier.
@@ -44,12 +37,12 @@ end
 function Provider.Resolve(env)
     local class = env.playerClass
     local spec = env.spec
-    comboUnit = "player"
+    SetComboUnit("player")
 
     if env.inVehicle then
         local vehiclePower = type(_G.UnitPowerType) == "function" and _G.UnitPowerType("vehicle") or nil
         if env.vehicleHasCombo or vehiclePower == PT.ComboPoints then
-            comboUnit = "vehicle"
+            SetComboUnit("vehicle")
             return true, PT.ComboPoints, MODE.SEGMENTED, false
         end
         return true, nil, MODE.NONE, false
@@ -105,20 +98,8 @@ function Provider.UseFrequentPower(powerType, mode)
     return nil
 end
 
-function Provider.NeedsTargetChanged(powerType)
-    return powerType == PT.ComboPoints
-end
-
-function Provider.AcceptPowerToken(powerType, powerToken, expectedToken, playerClass)
-    if powerType ~= PT.ComboPoints then return powerToken == expectedToken end
-    return powerToken == "COMBO_POINTS"
-        or ((playerClass == "ROGUE" or playerClass == "DRUID") and powerToken == "ENERGY")
-end
-
-local function RestoreCombo(frame)
-    local update = _G.ComboFrame_UpdateMax or _G.ComboFrame_Update
-    if type(update) == "function" then update(frame) end
-end
+Provider.NeedsTargetChanged = TargetCombo.NeedsTargetChanged
+Provider.AcceptPowerToken = TargetCombo.AcceptPowerToken
 
 local function RestoreShown(frame, method)
     local fn = frame and frame[method]
@@ -126,10 +107,9 @@ local function RestoreShown(frame, method)
 end
 
 local _, playerClass = _G.UnitClass("player")
-if playerClass == "ROGUE" or playerClass == "DRUID" then
-    Provider.BlizzardFrames = {
-        { name = "ComboFrame", restore = RestoreCombo },
-    }
+local comboFrame = TargetCombo.ComboFrameDefinition(playerClass)
+if comboFrame then
+    Provider.BlizzardFrames = { comboFrame }
     if playerClass == "DRUID" then
         Provider.BlizzardFrames[#Provider.BlizzardFrames + 1] = {
             name = "EclipseBarFrame",

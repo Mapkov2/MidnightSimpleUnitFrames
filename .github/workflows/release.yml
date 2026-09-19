@@ -52,6 +52,19 @@ jobs:
           ref: ${{ inputs.tag_name || github.ref_name }}
           fetch-depth: 0
 
+      # This workflow is the Retail release path and belongs to main, where the
+      # unsuffixed MidnightSimpleUnitFrames.toc it reads for version, Wago and
+      # CurseForge ids exists. The Classic tree has suffixed TOCs only, so a
+      # `v*`/`MSUF_*` tag that resolves to a Classic commit would run the Retail
+      # packager against a tree it cannot describe. Fail here with the reason
+      # instead of at an upload step, or worse, publishing the wrong payload.
+      - name: Refuse Retail release tags on the Classic tree
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc")) {
+            throw "Tag '$env:RELEASE_VERSION' resolves to the Classic tree (no unsuffixed MidnightSimpleUnitFrames.toc). Retail releases are tagged on main. Classic releases use a 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>' tag and .github/workflows/release-classic.yml."
+          }
+
       # A bulk `git push --tags` can surface forgotten local beta tags months
       # later. Prerelease tags are publishable only when they point at the
       # current main commit; stale alpha/beta/RC refs fail before any package or

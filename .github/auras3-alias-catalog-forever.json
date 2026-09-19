@@ -1,0 +1,138 @@
+{
+  "flavor": "Forever",
+  "build": "1.60.1.69876",
+  "file_data_id": 1990283,
+  "encoding": "base36-token-groups-v1",
+  "common_groups": 1001,
+  "folded_locales": {},
+  "locales": {
+    "enUS": {
+      "groups": 4345,
+      "alias_ids": 18753
+    },
+    "deDE": {
+      "groups": 4374,
+      "alias_ids": 18904
+    },
+    "frFR": {
+      "groups": 4286,
+      "alias_ids": 18567
+    },
+    "esES": {
+      "groups": 4333,
+      "alias_ids": 18499
+    },
+    "esMX": {
+      "groups": 4374,
+      "alias_ids": 18709
+    },
+    "itIT": {
+      "groups": 2943,
+      "alias_ids": 14100
+    },
+    "ptBR": {
+      "groups": 4351,
+      "alias_ids": 18837
+    },
+    "ruRU": {
+      "groups": 4306,
+      "alias_ids": 18813
+    },
+    "koKR": {
+      "groups": 4388,
+      "alias_ids": 19788
+    },
+    "zhCN": {
+      "groups": 4384,
+      "alias_ids": 18947
+    },
+    "zhTW": {
+      "groups": 4346,
+      "alias_ids": 18786
+    }
+  },
+  "locales_source": "recovered from the shipped catalog: csv_sha256, rows and max_id live only in the SpellName exports and are restored by the next run with --input",
+  "generated": {
+    "MSUF_Auras3_AliasData_Common.lua": {
+      "bytes": 16455,
+      "sha256": "9c25a4cb91d5df20cd2ec4671c84e7f6ebd2b80ad4f1c86086a1bcb6306a36cb"
+    },
+    "MSUF_Auras3_AliasData_enUS.lua": {
+      "bytes": 82595,
+      "sha256": "82613fddefdd0898c682621e0dc95800620d86f2b585146d60124ed622057bd9",
+      "locales": [
+        "enUS"
+      ]
+    },
+    "MSUF_Auras3_AliasData_deDE.lua": {
+      "bytes": 83379,
+      "sha256": "fe8ad4fa44bdb151bb4e31fabd6972c2f1d4936571f0cfe4b168963a81e89b09",
+      "locales": [
+        "deDE"
+      ]
+    },
+    "MSUF_Auras3_AliasData_frFR.lua": {
+      "bytes": 81606,
+      "sha256": "6aac4b00f1208fd15bb67c966b1459a8403be3876db52da4c4402d85c8f68963",
+      "locales": [
+        "frFR"
+      ]
+    },
+    "MSUF_Auras3_AliasData_esES.lua": {
+      "bytes": 81313,
+      "sha256": "cdbaad3cb88f3b18ac5ed9717fff8e9357feb56ee769f03a20664480ebe38f0d",
+      "locales": [
+        "esES"
+      ]
+    },
+    "MSUF_Auras3_AliasData_esMX.lua": {
+      "bytes": 82404,
+      "sha256": "15b9298e8c4a9413bca1412962fdf5fdd65a05c24d674baf255d4aded0054934",
+      "locales": [
+        "esMX"
+      ]
+    },
+    "MSUF_Auras3_AliasData_itIT.lua": {
+      "bytes": 57928,
+      "sha256": "f55d97dbed3747c5344ddef98858b2f440ace4dcdd8b7d2ff86dd5d0bef411da",
+      "locales": [
+        "itIT"
+      ]
+    },
+    "MSUF_Auras3_AliasData_ptBR.lua": {
+      "bytes": 83021,
+      "sha256": "57a1af8323674370c2629276c901c3635e4d3bc3303d09c0173007e59d297125",
+      "locales": [
+        "ptBR"
+      ]
+    },
+    "MSUF_Auras3_AliasData_ruRU.lua": {
+      "bytes": 82856,
+      "sha256": "9fa69901ac1df883f23b60ffa9644d6ab23fba3eec4135aec68e49377ddc1f67",
+      "locales": [
+        "ruRU"
+      ]
+    },
+    "MSUF_Auras3_AliasData_koKR.lua": {
+      "bytes": 87813,
+      "sha256": "2028038d4ae8fb84dd9279ea121d868e301065ff3e3ea4aef14449d68c79b2b6",
+      "locales": [
+        "koKR"
+      ]
+    },
+    "MSUF_Auras3_AliasData_zhCN.lua": {
+      "bytes": 83604,
+      "sha256": "038b5b052d4ff093a751c213a0af03c53a68f4f7cd042db208260083e3ab2313",
+      "locales": [
+        "zhCN"
+      ]
+    },
+    "MSUF_Auras3_AliasData_zhTW.lua": {
+      "bytes": 82761,
+      "sha256": "daf550387f5c563aaaf321083024eb2ba4a4158993d4998a499edbf2e756a140",
+      "locales": [
+        "zhTW"
+      ]
+    }
+  }
+}

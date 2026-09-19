@@ -24,6 +24,9 @@ local function Read(path)
     return (source:gsub("\r\n", "\n"))
 end
 
+local Slice = assert(loadfile(".github/scripts/msuf_source_slice.lua"),
+    "arena_unit_scope_smoke must run with the repository root as the working directory")()
+
 local function Exists(path)
     local handle = io.open(path, "rb")
     if not handle then return false end
@@ -111,15 +114,15 @@ for _, marker in ipairs({
         "MSUF_ArenaCastbars lost its lifecycle contract: " .. marker)
 end
 
-local castbarPagePreview = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua")
-local detailsStart = assert(castbarPagePreview:find("local function ResolvePreviewTestDetails", 1, true),
-    "shared castbar preview detail resolver is missing")
-local detailsStop = assert(castbarPagePreview:find("local function UpdatePreviewTest", detailsStart, true),
-    "shared castbar preview detail resolver boundary is missing")
+local CASTBAR_PREVIEWS = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua"
+local castbarPagePreview = Read(CASTBAR_PREVIEWS)
 local compile = loadstring or load
+-- Reason: the preview detail resolver is one function, cut at its own `end`.
 local detailsChunk, detailsError = compile([[
 local PREVIEW_UNITS = {}
-]] .. castbarPagePreview:sub(detailsStart, detailsStop - 1) .. [[
+]] .. Slice.Declarations(castbarPagePreview, {
+    "local function ResolvePreviewTestDetails",
+}, CASTBAR_PREVIEWS) .. [[
 return ResolvePreviewTestDetails
 ]], "@arena_castbar_preview_details")
 Check(detailsChunk ~= nil, detailsError)
@@ -242,13 +245,15 @@ local searchRouting = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/
 Check(searchRouting:find('uf_arena = "arena",', 1, true),
     "Menu2 search routing cannot prepare deep Arena setting routes")
 
-local aurasRuntime = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua")
-local auraScopeStart = assert(aurasRuntime:find("local function UnitCustomDisplayScope", 1, true),
-    "Auras3 custom-scope normalizer is missing")
-local auraScopeStop = assert(aurasRuntime:find("local function EffectiveUnitCustomDisplays", auraScopeStart, true),
-    "Auras3 custom-scope normalizer boundary is missing")
+local AURAS_RUNTIME = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
+local aurasRuntime = Read(AURAS_RUNTIME)
+-- Reason: the three custom-scope normalizers the chunk returns.
 local auraScopeChunk, auraScopeError = compile(
-    aurasRuntime:sub(auraScopeStart, auraScopeStop - 1) .. [[
+    Slice.Declarations(aurasRuntime, {
+        "local function UnitCustomDisplayScope",
+        "local function UnitCustomContainerScope",
+        "local function UnitSupportsTargetDots",
+    }, AURAS_RUNTIME) .. [[
 return UnitCustomDisplayScope, UnitCustomContainerScope, UnitSupportsTargetDots
 ]], "@arena_auras3_target_dots")
 Check(auraScopeChunk ~= nil, auraScopeError)

@@ -23,6 +23,8 @@ local CLEARED_GLOBALS = {
 local LOAD_ORDER = {
     "Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua",
     "ClassPower/MSUF_CP_Constants.lua",
+    "Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua",
+    "Game/Forever/ClassPower.lua",
     "ClassPower/MSUF_CP_Modes.lua",
     "ClassPower/MSUF_CP_Core.lua",
     "ClassPower/MSUF_CP_AltMana.lua",

@@ -338,16 +338,6 @@ local function Anchor(value, fallback)
     return fallback or "TOPRIGHT"
 end
 
-local function SortMode(value)
-    value = tostring(value or "DEFAULT"):upper():gsub("[%s%-]+", "_")
-    if value == "DEFAULT" or value == "PLAYER" then return 1 end
-    if value == "EXPIRATION" or value == "EXPIRATION_ONLY" then return 3 end
-    if value == "NAME" or value == "NAME_ONLY" then return 5 end
-    if value == "DURATION" or value == "DURATION_ONLY" or value == "BIG_DEFENSIVE" then return 2 end
-    if value == "INSTANCE_ID" then return 0 end
-    return 0
-end
-
 local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, forcePlayer, lanePadding)
     local placed = type(entry.placed) == "table" and entry.placed or {}
     local filters = type(entry.filters) == "table" and entry.filters
@@ -363,7 +353,10 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     local xSign, ySign, vertical = Growth(placed.growth)
     local cols, rows = Grid(maxCount, perRow, vertical)
     lanePadding = Round(Number(placed.stylePadding, lanePadding or 0, 0, 16))
-    local sortOrder = SortMode(placed.sortMethod)
+    -- The Buff/Debuff lane parser (MSUF_Auras3_Compile.lua, loaded before any
+    -- lane compiles) with the same Player & Priority First fallback, so one
+    -- sort name orders a container and a lane alike.
+    local sortOrder = A3._ClassicSortMode(placed.sortMethod, 1)
     if forcePlayer == true and (not activeFilters or activeFilters.onlyMine ~= true) then
         local source = activeFilters or {}
         activeFilters = {}
@@ -423,9 +416,9 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         naturalOrder = sortOrder == 0 and placed.sortReverse ~= true,
         visibleOnlyScan = false,
         cappedFilterScan = false,
-        -- SortMode yields 0, 1, 2, 3 or 5; a refresh can move an aura only in
-        -- the time-keyed modes (2 duration, 3 expiration).
-        reorderOnUpdate = sortOrder == 2 or sortOrder == 3,
+        -- A refresh can move an aura only in the time-keyed modes (2 duration,
+        -- 3 expiration, 4 expiration only), as in CompileLane.
+        reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4,
         sortReverse = placed.sortReverse == true,
         clickThrough = placed.clickThrough == true,
         showTooltip = placed.showTooltip ~= false,
@@ -467,6 +460,9 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         needsPlayerFlag = filterPlan.needsPlayerFlag == true
             or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5,
         needsCombatRefresh = filterPlan.needsCombatRefresh == true,
+        -- Classic has no Pandemic state, so onlyInPandemicWindow is deliberately
+        -- never read: a true saved by Retail (the menu hides that switch here)
+        -- must not suppress the effect. The key stays in the profile for Retail.
         frameEffect = type(entry.frame) == "table" and entry.frame or nil,
         visual = tostring(placed.type or "icon"):lower(),
         iconEffect = tostring(placed.iconEffect or "none"):lower(),
@@ -631,7 +627,10 @@ local function PublicNumber(value)
     return tonumber(value)
 end
 
-function Features.MatchAura(cfg, unit, data, matchFilter)
+--- matchFilter and timedAura are the backend's own predicates (ShouldShowAura in
+--- MSUF_Auras3_UnitFrames.lua), so a custom container decides filter-token
+--- membership and Hide permanent exactly like a Buff/Debuff lane does.
+function Features.MatchAura(cfg, unit, data, matchFilter, timedAura)
     if not (cfg and type(data) == "table") then return false end
     local spellID = PublicNumber(data.spellId)
     local name = not IsSecret(data.name) and data.name or nil
@@ -641,8 +640,8 @@ function Features.MatchAura(cfg, unit, data, matchFilter)
             return false
         end
     end
+    if cfg.hidePermanent == true and timedAura(unit, data) == false then return false end
     local duration = PublicNumber(data.duration) or 0
-    if cfg.hidePermanent == true and duration <= 0 then return false end
     if cfg.maxDuration and cfg.maxDuration > 0 and duration > cfg.maxDuration then return false end
     if cfg.filterRequirements then
         return Features.MatchFilterRequirements(cfg.filterPlan or cfg.filterRequirements, unit, data, matchFilter)

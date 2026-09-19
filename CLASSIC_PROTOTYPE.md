@@ -140,6 +140,8 @@ calculator would be less correct and more expensive.
   `Game/Shared/Initialize.lua`,
   `Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua` (hunter pet happiness,
   which applies only when `MSUF.Client.SupportsPetHappiness` is true, so on
+  WoW Forever), `Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua` (the threat
+  percentage text, only when `MSUF.Client.SupportsThreatText` is true, so on
   WoW Forever), `Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua` (the
   first name or surname option, only when `MSUF.Client.HasCharacterSurnames`
   is true), `State/MSUF_AuraDefaults.lua`, the three
@@ -205,6 +207,19 @@ has no arena UI, so arena units are unsupported there (0 arena slots). It has
 false there and the Mythic Raid scope stays out of the menu. Hunter pet
 happiness exists again (`C_PetInfo.GetPetHappiness` plus `UNIT_HAPPINESS`), so
 `Client.SupportsPetHappiness` is true on Forever, Classic Era and TBC.
+`Client.SupportsThreatText` (same three clients, owner decision 2026-09-19) offers
+the threat percentage text on the target, focus and boss frames: the scaled
+percentage of `UnitDetailedThreatSituation("player", unit)`, default on in the
+bottom-left corner of the frame. Forever makes a boss's values secret
+(`SecretWhenUnitThreatValuesRestricted`); the text then goes through
+`C_StringUtil.TruncateWhenZero` and `WrapString` and is never compared.
+"Color by threat" blends the text from green through yellow to light pink across
+three global colors (Colors > Status Text Colors); pink rather than red, because
+red digits vanish on red enemy bars. A secret value is colored by threat state
+instead, because a color curve cannot evaluate it. A dark plate behind the number
+("Background") keeps it readable on any bar color. The party and raid frames show
+each member's threat on the player's target (Party on, Raid off by default; the
+plate likewise), repainted together by one driver at most every half second.
 Forever has nine classes and no Evoker, so `Client.HasEmpoweredCasts` is true on
 Midnight only and the Empowered Casts castbar section follows it. A Mainline client
 below interface 100000 without the Forever marker prints one login line (the marker

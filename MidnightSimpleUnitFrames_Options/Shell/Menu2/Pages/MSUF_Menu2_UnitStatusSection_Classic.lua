@@ -361,6 +361,52 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
         end
     end
     AttachStatusExactTarget(enabled, "show")
+    -- Pet Happiness exists only where MSUF.Client.SupportsPetHappiness is true, and the
+    -- shared editor above re-targets to it, so it has no widget of its own. A virtual
+    -- control gives it its own row in the static search index, which the search query
+    -- ties to that capability (MSUF_Menu2_Search_IndexQuery.lua).
+    local happiness = FindStatusSpec(unit, "statusPetHappiness")
+    if happiness and happiness.value == "statusPetHappiness" and type(M.RegisterVirtualRuntimeControl) == "function" then
+        local meta = ControlMeta(ctx, "status.indicator.pet_happiness", "setting")
+        meta.kind, meta.label = "toggle", happiness.text
+        meta.assistantDisposition = "dynamic"
+        meta.assistantDispositionReason = "Pet Happiness is shown or hidden through the shared status indicator editor."
+        meta.assistantSettingKeys = { tostring(unit) .. "." .. tostring(happiness.show) }
+        meta.command = {
+            kind = "toggle",
+            get = function() return ReadStatusEnabled(happiness) end,
+            set = function(value)
+                SetBool(unit, happiness.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
+                RefreshStatusRuntime(unit, happiness)
+                if RefreshStatusSectionState then RefreshStatusSectionState() end
+                return true
+            end,
+        }
+        M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
+    end
+    -- The threat percentage text exists only where MSUF.Client.SupportsThreatText is
+    -- true (target, focus and boss pages); like Pet Happiness it gets a virtual
+    -- control for its own static search row, tied to that capability.
+    local threat = FindStatusSpec(unit, "statusThreat")
+    if threat and threat.value == "statusThreat" and type(M.RegisterVirtualRuntimeControl) == "function" then
+        local meta = ControlMeta(ctx, "status.indicator.threat", "setting")
+        meta.kind, meta.label = "toggle", threat.text
+        meta.keywords = { "threat", "threat percent", "aggro", "aggro percent" }
+        meta.assistantDisposition = "dynamic"
+        meta.assistantDispositionReason = "The threat text is shown or hidden through the shared status indicator editor."
+        meta.assistantSettingKeys = { tostring(unit) .. "." .. tostring(threat.show) }
+        meta.command = {
+            kind = "toggle",
+            get = function() return ReadStatusEnabled(threat) end,
+            set = function(value)
+                SetBool(unit, threat.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
+                RefreshStatusRuntime(unit, threat)
+                if RefreshStatusSectionState then RefreshStatusSectionState() end
+                return true
+            end,
+        }
+        M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
+    end
     local identityRestrictionWarning = W.Text(selectedCard, IDENTITY_RESTRICTION_WARNING,
         16, -106, selectedControlW, IDENTITY_RESTRICTION_WARNING_COLOR)
     if identityRestrictionWarning.SetWordWrap then identityRestrictionWarning:SetWordWrap(true) end
@@ -389,6 +435,50 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
             "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
     end
     state.levelDifficultyColor = levelDifficultyColor
+    -- Threat % only, and only where that control exists (the target, focus and
+    -- boss pages of Classic Era, TBC and WoW Forever). Mirrors the compile default
+    -- in MSUF_UF_Config: on, unless this frame already carries its own threat color.
+    local function ThreatColorCurveEnabled()
+        local conf, g = GetConf(unit), GetGeneral()
+        local customR = conf and conf.threatIndicatorColorR
+        if customR == nil then customR = g and g.threatIndicatorColorR end
+        return ReadStatusBool(unit, "threatIndicatorColorCurve", customR == nil)
+    end
+    state.ThreatColorCurveEnabled = ThreatColorCurveEnabled
+    local threatSpec = FindStatusSpec(unit, "statusThreat")
+    if threatSpec and threatSpec.value == "statusThreat" then
+        local threatColorCurve = W.ToggleAt(selectedCard, "Color by threat", 16, -106, selectedControlW)
+        M.BindBoolWidget(ctx, threatColorCurve, ThreatColorCurveEnabled,
+            function(value)
+                SetBool(unit, "threatIndicatorColorCurve", value, "MSUF2_STATUS_THREAT_COLOR_CURVE", { preview = true })
+                RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+            end)
+        RegisterStatusSearch(threatColorCurve, "Threat % Colors", {
+            "threat color", "threat colors", "color by threat", "threat color curve", "aggro color",
+        }, nil, "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.",
+            "status.threat.color_curve", nil, { settingKey = tostring(unit) .. ".threatIndicatorColorCurve" })
+        if M.AddTooltip then
+            M.AddTooltip(threatColorCurve, "Color by threat",
+                "Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead.", { hook = true })
+        end
+        state.threatColorCurve = threatColorCurve
+        -- The dark plate behind the number. Mirrors the compile default: on.
+        local threatBackground = W.ToggleAt(selectedCard, "Background", 16, -136, selectedControlW)
+        M.BindBoolWidget(ctx, threatBackground, function() return ReadStatusBool(unit, "threatIndicatorBackground", true) end,
+            function(value)
+                SetBool(unit, "threatIndicatorBackground", value, "MSUF2_STATUS_THREAT_BACKGROUND", { preview = true })
+                RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+            end)
+        RegisterStatusSearch(threatBackground, "Threat % Background", {
+            "threat background", "threat plate", "threat backdrop", "threat readability",
+        }, nil, "A dark plate behind the number keeps it readable on any bar color, red enemy bars included.",
+            "status.threat.background", nil, { settingKey = tostring(unit) .. ".threatIndicatorBackground" })
+        if M.AddTooltip then
+            M.AddTooltip(threatBackground, "Background",
+                "A dark plate behind the number keeps it readable on any bar color, red enemy bars included.", { hook = true })
+        end
+        state.threatBackground = threatBackground
+    end
     state.selector, state.previewLabel, state.midnight, state.enabled, state.AttachStatusExactTarget, state.identityRestrictionWarning =
         selector, previewLabel, midnight, enabled, AttachStatusExactTarget, identityRestrictionWarning
 end
@@ -589,6 +679,11 @@ function StatusSection.BuildIconStyleControls(state, ctx, unit)
                         and M._levelDifficultyColorReferences then
                         return M._levelDifficultyColorReferences
                     end
+                    if spec and spec.value == "statusThreat" and state.ThreatColorCurveEnabled
+                        and state.ThreatColorCurveEnabled() and M._threatCurveColorReferences
+                        and #M._threatCurveColorReferences > 0 then
+                        return M._threatCurveColorReferences
+                    end
                     return STATUS_TEXT_COLOR_REFERENCES
                 end,
                 maxColorTargets = 5,
@@ -710,6 +805,9 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
                 if spec.customIcon then conf[spec.customIcon] = nil end
             end
             if spec.value == "level" then conf.levelIndicatorDifficultyColor = nil end
+            if spec.value == "statusThreat" then
+                conf.threatIndicatorColorCurve, conf.threatIndicatorBackground = nil, nil
+            end
             if spec.colorPrefix then
                 conf[spec.colorPrefix .. "ColorR"] = nil
                 conf[spec.colorPrefix .. "ColorG"] = nil
@@ -844,6 +942,8 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     local identityRestrictionWarning, symbol, iconPack, customIcon = state.identityRestrictionWarning, state.symbol, state.iconPack, state.customIcon
     local selectedTextShortcut = state.selectedTextShortcut
     local levelDifficultyColor = state.levelDifficultyColor
+    local threatColorCurve = state.threatColorCurve
+    local threatBackground = state.threatBackground
     local raidGroupStyle, size, anchor, layer, reset, test = state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset, state.test
     local current, all, iconPreviewLabel, advanced = state.current, state.all, state.iconPreviewLabel, state.advanced
     local ReadStatusEnabled, SetDropdownTitle, StatusIconStyleLabel = state.ReadStatusEnabled, state.SetDropdownTitle, state.StatusIconStyleLabel
@@ -915,6 +1015,12 @@ function StatusSection.BindRefreshState(state, ctx, unit)
         ShowControl(identityRestrictionWarning, isIdentityText and isEnabled)
         ShowControl(levelDifficultyColor, spec and spec.value == "level")
         SetControlEnabled(levelDifficultyColor, spec and spec.value == "level" and isEnabled)
+        if threatColorCurve then
+            ShowControl(threatColorCurve, spec and spec.value == "statusThreat")
+            SetControlEnabled(threatColorCurve, spec and spec.value == "statusThreat" and isEnabled)
+            ShowControl(threatBackground, spec and spec.value == "statusThreat")
+            SetControlEnabled(threatBackground, spec and spec.value == "statusThreat" and isEnabled)
+        end
         ShowControl(raidGroupStyle, inlineName)
         ShowControl(test, showTestMode)
         ShowControls(true, size, anchor, layer, advanced.layer)

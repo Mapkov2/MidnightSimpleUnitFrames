@@ -14,7 +14,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
 local _G = _G
-local type, rawget, format = type, rawget, string.format
+local type, rawget, format, floor = type, rawget, string.format, math.floor
 
 local ExportPublic = MSUF.ExportPublic
 
@@ -32,11 +32,12 @@ local PREVIEW_THANKS_KEY = "|cff40ff40Thanks for testing!|r Report bugs on Disco
 
 local Tr = MSUF.Translate
 
+--- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+--- the version is resolved once from the TOC this client loaded, so no consumer
+--- asks a TOC again.
 local function AddonVersion()
-    if MSUF.Client and MSUF.Client.AddonVersion then return MSUF.Client.AddonVersion end
-    local getMeta = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
-    if type(getMeta) ~= "function" then return nil end
-    local version = getMeta(addonName or "MidnightSimpleUnitFrames", "Version")
+    local getVersion = MSUF.GetAddonVersion
+    local version = type(getVersion) == "function" and getVersion() or nil
     if type(version) == "string" and version ~= "" then return version end
     return nil
 end
@@ -66,26 +67,30 @@ local function PreviewBuildText()
     return text
 end
 
---- Major.minor of the running client, so the greeting names the current patch
---- instead of a literal that goes stale on the next one. Plain client metadata,
+--- The running build, as Game/Shared/Initialize.lua read it once at load and
+--- published as Client.Interface. Blizzard's interface number is
+--- major * 10000 + minor * 100 + patch, so it carries the same major.minor as
+--- GetBuildInfo's version string (12.1.5 is 120105, WoW Forever's 1.60.1 is
+--- 16001), and nothing here asks the API a second time. Plain client metadata,
 --- never a secret value.
+local function ClientInterface()
+    local client = MSUF.Client
+    local interface = type(client) == "table" and client.Interface or nil
+    return type(interface) == "number" and interface or nil
+end
+
+--- Major.minor of the running client, so the greeting names the current patch
+--- instead of a literal that goes stale on the next one.
 local function ClientPatch()
-    local getBuildInfo = _G.GetBuildInfo
-    if type(getBuildInfo) ~= "function" then return "12.1" end
-    local version = getBuildInfo()
-    if type(version) ~= "string" then return "12.1" end
-    return version:match("^(%d+%.%d+)") or "12.1"
+    local interface = ClientInterface()
+    if interface == nil then return "12.1" end
+    return floor(interface / 10000) .. "." .. (floor(interface / 100) % 100)
 end
 
 local function IsClientAtLeast(requiredMajor, requiredMinor)
-    local getBuildInfo = _G.GetBuildInfo
-    if type(getBuildInfo) ~= "function" then return false end
-    local version = getBuildInfo()
-    if type(version) ~= "string" then return false end
-    local major, minor = version:match("^(%d+)%.(%d+)")
-    major, minor = tonumber(major), tonumber(minor)
-    if not major or not minor then return false end
-    return major > requiredMajor or (major == requiredMajor and minor >= requiredMinor)
+    local interface = ClientInterface()
+    if interface == nil then return false end
+    return interface >= requiredMajor * 10000 + requiredMinor * 100
 end
 
 local function PreviewWarningRequired()

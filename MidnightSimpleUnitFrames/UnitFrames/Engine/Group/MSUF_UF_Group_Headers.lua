@@ -1097,6 +1097,118 @@ self:SetAttribute('ping-receiver', true)
 ]], w, h, _initCfgNonce)
 end
 
+--- FOREVER-SNIPPET-WORKAROUND (temporary, added 2026-09-19 after the 6.5-beta4
+--- report "party frames vanish when I join a party").
+--- WoW Forever cannot compile secure snippets: Blizzard_EnvironmentCleanup
+--- clears loadstring_untainted before RestrictedExecution.lua caches it (its
+--- load-order dependency is conditioned to classic/standard, not camelot), so
+--- the snippet above throws "RestrictedExecution.lua:79: attempt to call a nil
+--- value" for every new button and no party, raid or Priority frame is ever
+--- configured. Blizzard confirmed it as a bug. Forever headers therefore carry
+--- no snippet: the header copies the snippet's attributes onto each new button
+--- itself, and PrepareSnippetFreeChildren creates and sizes the buttons out of
+--- combat.
+--- TO RESTORE THE OLD STATE once Blizzard's fix is live: set this flag to false,
+--- or delete it together with every block tagged FOREVER-SNIPPET-WORKAROUND in
+--- this file, tools/tests/forever_group_header_snippet_smoke.lua and that
+--- smoke's row in tools/classic-gate-smokes.tsv.
+local SECURE_SNIPPETS_BROKEN = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+
+-- FOREVER-SNIPPET-WORKAROUND: what BuildInitialConfigFunction sets, copied by
+-- SecureGroupHeader onto every new button without compiling anything. A name
+-- without a value is copied as nil, which clears it just as the snippet does.
+-- Keep both lists in step.
+local SNIPPET_FREE_ATTRIBUTE_NAMES = "type1,*type1,type2,*type2,*clickbutton2,toggleForVehicle,ping-receiver"
+local SNIPPET_FREE_ATTRIBUTE_VALUES = {
+  ["*type1"] = "target",
+  ["*type2"] = "togglemenu",
+  toggleForVehicle = true,
+  ["ping-receiver"] = true,
+}
+-- Most buttons one header shows: a party, one preserved raid group and the
+-- Priority strip hold five, a flat raid header forty.
+local SNIPPET_FREE_BLOCK_BUTTONS = 5
+local SNIPPET_FREE_RAID_BUTTONS = 40
+
+--- FOREVER-SNIPPET-WORKAROUND: stands in for the initialConfigFunction write.
+local function ApplySnippetFreeAttributes(header, width, height, buttonLimit)
+  local changed = SetAttrIfChanged(header, "_initialAttributeNames", SNIPPET_FREE_ATTRIBUTE_NAMES)
+  for name, value in pairs(SNIPPET_FREE_ATTRIBUTE_VALUES) do
+    changed = SetAttrIfChanged(header, "_initialAttribute-" .. name, value) or changed
+  end
+  header._msufGFButtonWidth, header._msufGFButtonHeight = width, height
+  header._msufGFButtonLimit = buttonLimit
+  return changed
+end
+
+--- FOREVER-SNIPPET-WORKAROUND: the snippet sized every new button inside the
+--- header, even in combat; without it a new button starts at 0x0 and only Lua
+--- can size it, never in combat. So out of combat, create every button this
+--- header can show and size the ones without a unit (the adapter sizes a unit
+--- button when it applies it). A roster change in combat then fills a sized
+--- button the adapter has already scanned. A startingIndex below 1 makes the
+--- header lay out spare slots, which it creates through its own secure path;
+--- clearing it restores the normal layout.
+local function PrepareSnippetFreeChildren(header)
+  if not SECURE_SNIPPETS_BROKEN or InCombat() then return false end
+  if not (header and header.IsVisible and header:IsVisible()) then return false end
+  local width, height = header._msufGFButtonWidth, header._msufGFButtonHeight
+  if not (width and height) then return false end
+  local wanted = (tonumber(header:GetAttribute("unitsPerColumn")) or 1)
+    * (tonumber(header:GetAttribute("maxColumns")) or 1)
+  local limit = header._msufGFButtonLimit or SNIPPET_FREE_BLOCK_BUTTONS
+  if wanted > limit then wanted = limit end
+  local changed = false
+  if wanted >= 1 and not header:GetAttribute("child" .. wanted) then
+    -- Units fill child1..childN in order, so the leading unit buttons count the roster.
+    local assigned = 0
+    while assigned < wanted do
+      local child = header:GetAttribute("child" .. (assigned + 1))
+      if not (child and child:GetAttribute("unit") ~= nil) then break end
+      assigned = assigned + 1
+    end
+    header:SetAttribute("startingIndex", assigned - wanted + 1)
+    header:SetAttribute("startingIndex", nil)
+    changed = true
+  end
+  local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
+  for index = 1, SNIPPET_FREE_RAID_BUTTONS do
+    local child = header:GetAttribute("child" .. index)
+    if not child then break end
+    if child._msufGFSnippetFreeRound ~= true and type(roundLayout) == "function"
+      and roundLayout(child, true) then
+      child._msufGFSnippetFreeRound = true
+    end
+    -- The adapter registers clicks only out of combat, so a spare button that
+    -- gets its unit in combat would take left clicks only.
+    if child._msufGFClicksRegistered ~= true and child.RegisterForClicks then
+      child:RegisterForClicks("AnyUp")
+      child._msufGFClicksRegistered = true
+    end
+    if child:GetAttribute("unit") == nil
+      and (child._msufGFSnippetFreeWidth ~= width or child._msufGFSnippetFreeHeight ~= height) then
+      child:SetSize(width, height)
+      child._msufGFSnippetFreeWidth, child._msufGFSnippetFreeHeight = width, height
+      -- The adapter's size cache no longer describes this button.
+      child._msufGFWidth, child._msufGFHeight = nil, nil
+      changed = true
+    end
+  end
+  -- The header measured itself from child1 while that could still be 0x0.
+  if changed then
+    header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
+  end
+  return changed
+end
+
+--- FOREVER-SNIPPET-WORKAROUND: prepare the buttons whenever the header shows.
+--- The template's own OnShow runs first and creates the shown buttons.
+local function InstallSnippetFreeHeader(header)
+  if not SECURE_SNIPPETS_BROKEN or not header or header._msufGFSnippetFreeHooked == true then return end
+  header._msufGFSnippetFreeHooked = true
+  header:HookScript("OnShow", PrepareSnippetFreeChildren)
+end
+
 --- Draw or hide the group block border on `host`. Live headers pass their
 --- anchor, the preview passes its own container, so both surfaces share one
 --- geometry implementation instead of drifting apart. `enabled` lets a caller
@@ -1443,7 +1555,11 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
       changed = SetAttrIfChanged(header, attribute, key) or changed
     end)
   end
-  if initCfg then
+  if SECURE_SNIPPETS_BROKEN then
+    -- FOREVER-SNIPPET-WORKAROUND: no secure snippet on Forever; see the flag.
+    changed = ApplySnippetFreeAttributes(header, initialWidth, initialHeight,
+      (key == "party" or preservedGroupIndex) and SNIPPET_FREE_BLOCK_BUTTONS or SNIPPET_FREE_RAID_BUTTONS) or changed
+  elseif initCfg then
     header:SetAttribute("initialConfigFunction", initCfg)
     changed = true
   end
@@ -1527,6 +1643,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
       -- creation and never from a refresh path.
       local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
       if type(roundLayout) == "function" then roundLayout(header, true) end
+      InstallSnippetFreeHeader(header) -- FOREVER-SNIPPET-WORKAROUND
       headers[groupIndex] = header
     end
 
@@ -1639,7 +1756,10 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
       changed = SetAttrIfChanged(header, attribute, key) or changed
     end)
   end
-  if sizeChanged or secureInitChanged then
+  if SECURE_SNIPPETS_BROKEN then
+    -- FOREVER-SNIPPET-WORKAROUND: no secure snippet on Forever; see the flag.
+    changed = ApplySnippetFreeAttributes(header, initialWidth, initialHeight, SNIPPET_FREE_BLOCK_BUTTONS) or changed
+  elseif sizeChanged or secureInitChanged then
     header:SetAttribute("initialConfigFunction", BuildInitialConfigFunction(initialWidth, initialHeight))
     changed = true
   end
@@ -1723,6 +1843,7 @@ function GF.SetupPriorityHeader(kind, nameList, count)
     -- creation and never from a refresh path.
     local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
     if type(roundLayout) == "function" then roundLayout(header, true) end
+    InstallSnippetFreeHeader(header) -- FOREVER-SNIPPET-WORKAROUND
     GF.headers.priority = header
     newHeader = true
   end
@@ -1819,6 +1940,7 @@ function GF.SetupHeader(key, kind)
     -- creation and never from a refresh path.
     local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
     if type(roundLayout) == "function" then roundLayout(header, true) end
+    InstallSnippetFreeHeader(header) -- FOREVER-SNIPPET-WORKAROUND
     GF.headers[key] = header
     newHeader = true
   end

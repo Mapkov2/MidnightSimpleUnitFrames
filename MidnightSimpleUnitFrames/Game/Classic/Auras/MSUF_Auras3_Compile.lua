@@ -352,6 +352,10 @@ local function Clamp01(value, defaultValue)
     return value
 end
 
+--- The one sort-name parser for unit, group and custom container lanes
+--- (Features.lua calls it when it compiles a container), so a sort name the
+--- shared menu writes sorts the same way on every lane. Classic has no priority
+--- slots: a Custom Priority container keeps arrival order, like INSTANCE_ID.
 function A3._ClassicSortMode(value, fallback)
     value = tostring(value or ""):upper():gsub("[%s%-]+", "_")
     if value == "DEFAULT" or value == "PLAYER" then return 1 end
@@ -360,7 +364,7 @@ function A3._ClassicSortMode(value, fallback)
     if value == "EXPIRATION_ONLY" then return 4 end
     if value == "NAME" then return 5 end
     if value == "NAME_ONLY" then return 6 end
-    if value == "INSTANCE_ID" then return 0 end
+    if value == "INSTANCE_ID" or value == "CUSTOM_PRIORITY" then return 0 end
     return fallback
 end
 
@@ -899,6 +903,18 @@ local function CompileFrameAuraVisual(spec)
     end
 
     local borderTrigger = NormalizeDispelTrigger(border and border.dispelTrigger, "BY_ME")
+    -- Bars > Show on is Retail's border-only unit filter (CompileDispelSensor in
+    -- Auras3/Runtime/MSUF_Auras3_Runtime_DispelConfig.lua): Friendly shows the
+    -- border only on a unit the player can assist, Enemy only on one it cannot,
+    -- Both adds nothing. A unit frame's cleanse trigger (Dispellable by me or by
+    -- group, both BY_ME here) already needs a friendly unit, so Enemy compiles
+    -- no border there. Overlay, symbol and stripe keep their own policy even
+    -- when they inherit this trigger.
+    local borderShowOn = border and border.dispelShowOn
+    if borderShowOn ~= "FRIENDLY" and borderShowOn ~= "ENEMY" then borderShowOn = nil end
+    if borderShowOn == "ENEMY" and borderTrigger == "BY_ME" and spec.scope ~= "group" then
+        borderEnabled = false
+    end
     local overlayActualTrigger = overlayTrigger == "BORDER" and borderTrigger or overlayTrigger
     local symbolTrigger = NormalizeDispelTrigger(symbol and symbol.trigger, "BORDER")
     if symbolTrigger == "BORDER" then symbolTrigger = borderTrigger end
@@ -939,6 +955,8 @@ local function CompileFrameAuraVisual(spec)
         overlayEnabled = overlayEnabled == true,
         stripeEnabled = stripeEnabled == true,
         borderTrigger = borderTrigger,
+        -- nil for Both: the runtime then never asks UnitCanAssist.
+        borderShowOn = borderEnabled == true and borderShowOn or nil,
         overlayTrigger = overlayActualTrigger,
         directVisualEligible = directVisualEligible == true,
         needsPlayerFlag = borderTrigger == "PLAYER_CAST" or overlayActualTrigger == "PLAYER_CAST",

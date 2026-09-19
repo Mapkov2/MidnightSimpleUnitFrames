@@ -6,6 +6,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+Import-Module (Join-Path $PSScriptRoot "ClassicGate.Common.psm1") -Force
 
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
@@ -17,9 +18,12 @@ if ([string]::IsNullOrWhiteSpace($ReleaseVersion)) {
 }
 
 $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace '^v(?=\d)', ''
+# A line this script does not know verifies nothing, so it fails instead of
+# reporting "skipped": a mistyped version would otherwise pass every TOC,
+# contract and changelog check below without reading a single file. When the
+# Classic release line moves past 6.5, retarget this script deliberately.
 if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)') {
-    Write-Host "Classic 6.5 release-line contract: skipped for $ReleaseVersion"
-    return
+    throw "Classic release-line contract covers 6.5 alpha/beta only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
 }
 
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()
@@ -33,19 +37,10 @@ $addons = @(
     "MidnightSimpleUnitFrames_Assistant"
 )
 $clientMatrixPath = Join-Path $RepositoryRoot "tools/classic-client-matrix.tsv"
-if (-not (Test-Path -LiteralPath $clientMatrixPath -PathType Leaf)) {
-    throw "Client matrix is missing: $clientMatrixPath"
-}
-$clientMatrix = @(Import-Csv -LiteralPath $clientMatrixPath -Delimiter "`t")
-if ($clientMatrix.Count -eq 0) { throw "Client matrix names no clients: $clientMatrixPath" }
-function Get-InterfaceSetKey {
-    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value)
-    $items = @($Value -split ',' | ForEach-Object { $_.Trim() })
-    foreach ($item in $items) {
-        if ($item -notmatch '^[1-9][0-9]*$') { throw "Malformed interface list: '$Value'" }
-    }
-    return ((@($items | ForEach-Object { [int]$_ }) | Sort-Object -Unique) -join ',')
-}
+$clientMatrix = @(Import-MsufClientMatrix -Path $clientMatrixPath `
+    -EmptyMessage "Client matrix names no clients: $clientMatrixPath")
+# Get-InterfaceSetKey now lives in ClassicGate.Common.psm1.
+Set-Alias -Name Get-InterfaceSetKey -Value Get-MsufInterfaceSetKey
 foreach ($addon in $addons) {
     foreach ($client in $clientMatrix) {
         $flavor = $client.Suffix

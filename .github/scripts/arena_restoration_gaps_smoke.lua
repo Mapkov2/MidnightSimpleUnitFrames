@@ -1,16 +1,12 @@
 -- Focused Arena restoration coverage for profile payloads, UI scale, and rounded castbars.
-local function Read(path)
-    local file = assert(io.open(path, "rb"))
-    local source = file:read("*a")
-    file:close()
-    return source
-end
-
-local function Slice(source, startMarker, endMarker)
-    local first = assert(source:find(startMarker, 1, true), "missing start marker: " .. startMarker)
-    local last = assert(source:find(endMarker, first + #startMarker, true), "missing end marker: " .. endMarker)
-    return source:sub(first, last - 1)
-end
+-- Every slice below ends at its own structural boundary (a function's `end`, a
+-- table's `}`), not at a marker naming whatever the shipped file happens to
+-- declare next, and the schema constants are read from the file rather than
+-- re-declared here, so this harness cannot keep asserting against values
+-- production has moved on from.
+local Slice = assert(loadfile(".github/scripts/msuf_source_slice.lua"),
+    "arena_restoration_gaps_smoke must run with the repository root as the working directory")()
+local Read = Slice.Read
 
 local function AssertVisitedExactlyOnce(actual, expected, label)
     local counts = {}
@@ -25,31 +21,26 @@ local function AssertVisitedExactlyOnce(actual, expected, label)
 end
 
 local compile = loadstring or load
-local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
-local payloadKeys = Slice(
-    profiles,
-    "local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS",
-    "local MSUF_PROFILEIO_WAGO_AURA_DROP_KEYS"
-)
-local makePayload = Slice(
-    profiles,
-    "local function MSUF_ProfileIO_MakeWagoPayload",
-    "local function MSUF_ProfileIO_MakeWagoSnapshot"
-)
-local makeSnapshot = Slice(
-    profiles,
-    "local function MSUF_ProfileIO_MakeWagoSnapshot",
-    "local function MSUF_ProfileIO_SelectWagoFullSnapshot"
-)
-local selectSnapshot = Slice(
-    profiles,
-    "local function MSUF_ProfileIO_SelectWagoFullSnapshot",
-    "local function MSUF_CopyGroupFramePayload"
-)
-local profileHarness = [[
-local MSUF_PROFILEIO_WAGO_SCHEMA = 1
-local MSUF_PROFILEIO_WAGO_FULL_KEY = "msuf6"
-local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA = 600
+local PROFILES = "MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
+local profiles = Read(PROFILES)
+-- Reason: the Wago export path is three functions plus the root allowlist that
+-- decides which profile roots survive an export, so the harness compiles those
+-- four declarations and the schema constants they stamp into the payload.
+local payloadKeys = Slice.Table(profiles, "local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS =", PROFILES)
+local makePayload = Slice.Function(profiles, "local function MSUF_ProfileIO_MakeWagoPayload", PROFILES)
+local makeSnapshot = Slice.Function(profiles, "local function MSUF_ProfileIO_MakeWagoSnapshot", PROFILES)
+local selectSnapshot = Slice.Function(profiles, "local function MSUF_ProfileIO_SelectWagoFullSnapshot", PROFILES)
+local constants = table.concat({
+    Slice.Constant(profiles, "local MSUF_PROFILEIO_WAGO_SCHEMA =", PROFILES),
+    Slice.Constant(profiles, "local MSUF_PROFILEIO_WAGO_FULL_KEY =", PROFILES),
+    Slice.Constant(profiles, "local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA =", PROFILES),
+}, "\n")
+-- Deliberate doubles, not slices: MSUF_DeepCopy reads a runtime limits table
+-- off the namespace, and the two Wago normalizers rewrite aura and group data
+-- this harness does not build. The contracts below are about which roots reach
+-- which payload, so a faithful copy and two no-ops are the right stand-ins.
+local profileHarness = constants .. [[
+
 local function MSUF_DeepCopy(value, seen)
     if type(value) ~= "table" then return value end
     seen = seen or {}
@@ -63,7 +54,8 @@ local function MSUF_DeepCopy(value, seen)
 end
 local function MSUF_ProfileIO_NormalizeAurasForWago() end
 local function MSUF_ProfileIO_NormalizeGroupFrameForWago() end
-]] .. payloadKeys .. makePayload .. makeSnapshot .. selectSnapshot .. [[
+]] .. payloadKeys .. "\n" .. makePayload .. "\n" .. makeSnapshot .. "\n" .. selectSnapshot .. [[
+
 return MSUF_ProfileIO_MakeWagoPayload,
     MSUF_ProfileIO_MakeWagoSnapshot,
     MSUF_ProfileIO_SelectWagoFullSnapshot
@@ -105,21 +97,18 @@ local roundtripped = makeWagoSnapshot(selected)
 assert(roundtripped.payload.arena.nested.sentinel == sentinel,
     "re-export after full external selection lost the Arena root")
 
-local scaleRuntime = Read("MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua")
-local scaleGlobals = Slice(
-    scaleRuntime,
-    "local MSUF_SCALE_FRAME_GLOBALS",
-    "local function IsGroupFrameUnitKey"
-)
-local scaleCollector = Slice(
-    scaleRuntime,
-    "local function CollectMsufScaleFrames",
-    "local function GetSavedMsufScale"
-)
+local SCALE_RUNTIME = "MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua"
+local scaleRuntime = Read(SCALE_RUNTIME)
+-- Reason: the collector walks the frame-global name list, so the contract needs
+-- that list and the walker; the two doubles stand in for the core-frame
+-- enumerator and the group-frame gate, neither of which this harness builds.
+local scaleGlobals = Slice.Table(scaleRuntime, "local MSUF_SCALE_FRAME_GLOBALS =", SCALE_RUNTIME)
+local scaleCollector = Slice.Function(scaleRuntime, "local function CollectMsufScaleFrames", SCALE_RUNTIME)
 local scaleHarness = [[
 local function ForEachCoreFrame() return true end
 local function IsGroupFrameScaleEnabled() return true end
-]] .. scaleGlobals .. scaleCollector .. [[
+]] .. scaleGlobals .. "\n" .. scaleCollector .. [[
+
 return CollectMsufScaleFrames
 ]]
 local collectScaleFrames = assert(compile(scaleHarness, "Arena UI scale collector harness"))()
@@ -149,24 +138,20 @@ AssertVisitedExactlyOnce(
     "UI scale collector"
 )
 
-local roundedCastbars = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua")
-local roundedWalker = Slice(
-    roundedCastbars,
-    "local function ForEachCastbar",
-    "local function ApplyAll"
-)
-local roundedApplyAll = Slice(
-    roundedCastbars,
-    "local function ApplyAll",
-    "MSUF.RoundedCastbarsApplyAll = ApplyAll"
-)
+local ROUNDED_CASTBARS = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua"
+local roundedCastbars = Read(ROUNDED_CASTBARS)
+-- Reason: ApplyAll walks every castbar through ForEachCastbar, so the contract
+-- is those two functions; the four doubles record which frames they reach.
+local roundedWalker = Slice.Function(roundedCastbars, "local function ForEachCastbar", ROUNDED_CASTBARS)
+local roundedApplyAll = Slice.Function(roundedCastbars, "local function ApplyAll", ROUNDED_CASTBARS)
 local roundedHarness = [[
 local roundedRuntimeActive = false
 local applied, cleared = {}, {}
 local function SettingEnabled() return true end
 local function ApplyFrame(frame) applied[#applied + 1] = frame end
 local function ClearFrame(frame) cleared[#cleared + 1] = frame end
-]] .. roundedWalker .. roundedApplyAll .. [[
+]] .. roundedWalker .. "\n" .. roundedApplyAll .. [[
+
 return ApplyAll, applied, cleared
 ]]
 local applyAllRoundedCastbars, appliedRounded, clearedRounded =
@@ -215,20 +200,17 @@ for index = 1, 6 do
     _G["MSUF_ArenaCastbarPreview" .. index] = nil
 end
 
-local roundedController = Read("MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua")
-local controllerApplyAll = Slice(
-    roundedController,
-    "local function ApplyAll()",
-    "local function ApplyVisualRefreshUnit"
-)
+local ROUNDED_CONTROLLER = "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"
+local roundedController = Read(ROUNDED_CONTROLLER)
+-- Reason: both assertions are about one function each -- the rounded master
+-- ApplyAll and the exported module-toggle callback -- so each slice is that
+-- function, ending at its own `end`.
+local controllerApplyAll = Slice.Function(roundedController, "local function ApplyAll", ROUNDED_CONTROLLER)
 assert(controllerApplyAll:find("MSUF.RoundedCastbarsApplyAll", 1, true)
     and controllerApplyAll:find("applyRoundedCastbars(enabled)", 1, true),
     "rounded master ApplyAll no longer delegates its module state to castbars")
-local modulesApplied = Slice(
-    roundedController,
-    'ExportPublic("MSUF_RoundedUF_OnModulesApplied"',
-    "if SUPPRESS_NATIVE_OUTLINE then"
-)
+local modulesApplied = Slice.Function(roundedController,
+    'ExportPublic("MSUF_RoundedUF_OnModulesApplied", function', ROUNDED_CONTROLLER)
 assert(modulesApplied:find("ApplyAll()", 1, true),
     "rounded module toggle no longer enters the master ApplyAll path")
 

@@ -857,9 +857,14 @@ local function MSUF_GetAnchorFrame()
     local db = _G.MSUF_DB
     local g = db and db.general or {}
     local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
+    -- The Integrations module answers first; without it the client model does.
+    -- The C_CooldownViewer namespace is never the signal: the shared engine
+    -- exposes it on every client, while only the Mainline family ships
+    -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
     local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
         and isCooldownAnchorEnabled(g) == true
-        or (type(_G.C_CooldownViewer) == "table" and g.anchorToCooldown == true)
+        or (MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
+            and g.anchorToCooldown == true)
     if cooldownAnchorEnabled then
         local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
         local getSize = _G.MSUF_GetUsableCooldownAnchorSize

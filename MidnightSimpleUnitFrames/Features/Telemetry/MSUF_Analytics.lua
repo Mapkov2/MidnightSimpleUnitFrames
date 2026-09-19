@@ -47,7 +47,10 @@ local function EnsureGlobalAnalytics(create)
         ExportPublic("MSUF_GlobalDB", gdb)
     end
 
-
+    -- Read the account table through gdb: a bare `global` here would write the
+    -- Lua global instead, so a later MSUF_GlobalDB replacement (fresh install,
+    -- profile import) would keep the stale table and never re-link gdb.global.
+    local global = gdb.global
     if type(global) ~= "table" then
         if not create then return nil end
         global = {}
@@ -223,12 +226,14 @@ local function CollectSessionSnapshot(target)
     ApplySwitch(target, "Addon_Loaded", true)
     ApplySwitch(target, "Analytics_Enabled", true)
 
-    if type(GetAddOnMetadata) == "function" then
-        local version = (MSUF.Client and MSUF.Client.AddonVersion) or GetAddOnMetadata(ADDON_NAME, "Version")
-        local versionKey = SanitizeMetricPart(version)
-        if versionKey ~= "" then
-            ApplySwitch(target, "Version_" .. versionKey, true)
-        end
+    -- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+    -- the version is resolved once from the TOC this client loaded. An unreadable
+    -- version sanitizes to the empty string and adds no switch, exactly as the
+    -- old GetAddOnMetadata guard around this block did.
+    local getVersion = MSUF.GetAddonVersion
+    local versionKey = SanitizeMetricPart(type(getVersion) == "function" and getVersion() or nil)
+    if versionKey ~= "" then
+        ApplySwitch(target, "Version_" .. versionKey, true)
     end
 
     local unitCount = 0

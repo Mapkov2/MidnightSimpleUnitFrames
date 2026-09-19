@@ -1355,6 +1355,16 @@ local function BuildPreview(parent, panel, width, height)
     box.handleCastbarTime = MakeHandle(box, "castbarTime", { suffixX = "TimeOffsetX", suffixY = "TimeOffsetY", bossX = "bossCastTimeOffsetX", bossY = "bossCastTimeOffsetY", bossBaseX = -2, defaultX = -2, defaultY = 0, defaultXFromG = "castbarPlayerTimeOffsetX", defaultYFromG = "castbarPlayerTimeOffsetY", readOffsets = ViewHandles.ReadCastbarSubOffsets, writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar time", { 0.20, 0.90, 0.85 })
     if type(PreviewAuras.CreateHandles) == "function" then PreviewAuras.CreateHandles(box, MakeHandle) end
     box.statusHandles = { raidgroupname = box.handleRaidGroupName }
+    -- Boss units exist only where the client model says so (Mists among the
+    -- Classic clients). Render draws the boss target marker only when this
+    -- handle exists, so a client without boss units never shows one.
+    local client = MSUF.Client
+    if not (client and client.SupportsUnit) or client.SupportsUnit("boss1") then
+        box.handleBossTarget = MakeHandle(box, "bossTarget", {
+            x = "bossTargetIndicatorOffsetX", y = "bossTargetIndicatorOffsetY",
+            defaultX = -28, defaultY = 0, section = "boss_target",
+        }, "Boss target highlight", { 1, .82, 0 })
+    end
     for i = 1, #STATUS_PREVIEW do
         local spec = STATUS_PREVIEW[i]
         box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0, statusRefresh = spec.refresh, section = "status" }, spec.label, spec.color)

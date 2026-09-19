@@ -1393,8 +1393,11 @@ local function ShowCopyLink(title, url)
 end
 ExportPublic("MSUF_ShowCopyLink", ShowCopyLink)
 do
-    local version = (MSUF.Client and MSUF.Client.AddonVersion) or _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
-        and _G.C_AddOns.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version")
+    -- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+    -- the core resolves it once from the TOC this client loaded, so the Options
+    -- package never reports its own "## Version" here.
+    local getVersion = MSUF.GetAddonVersion
+    local version = type(getVersion) == "function" and getVersion() or nil
     local isAlpha = type(version) == "string" and version:lower():find("alpha", 1, true) ~= nil
     if isAlpha then
         M.InstallStaticPopup("MSUF_ALPHA_DISCORD", {

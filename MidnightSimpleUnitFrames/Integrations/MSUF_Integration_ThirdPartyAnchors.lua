@@ -96,21 +96,25 @@ local automaticCooldownProviderResolved = false
 --- on every current client, Classic Era, TBC and Mists included. The namespace
 --- alone therefore proves nothing on a Classic client: the client family
 --- decides first, and a layout provider cannot establish support there either.
---- Addons cannot be installed mid-session, so the answer is fixed once
---- resolved. Keeping it as a plain upvalue leaves every anchor consumer at a
---- single boolean read and adds no probing to the cold anchor path.
+--- Game/Shared/Initialize.lua resolves exactly that once, as
+--- Client.HostsCooldownManager; addons cannot be installed mid-session, so the
+--- answer is fixed. Keeping it as a plain upvalue leaves every anchor consumer
+--- at a single boolean read and adds no probing to the cold anchor path.
+--- A harness that loads this file without the client model models the Mainline
+--- client, where only the engine namespace is left to ask about.
 local function ClientHostsCooldownManager()
     local client = MSUF.Client
     if client ~= nil then return client.Family == "Mainline" end
-    local projectID = _G.WOW_PROJECT_ID
-    local mainlineID = _G.WOW_PROJECT_MAINLINE
-    -- Harnesses without the client model or the project constants model the
-    -- Mainline client.
-    if projectID == nil or mainlineID == nil then return true end
-    return projectID == mainlineID
+    return true
 end
 local cooldownAnchorClientSupported = ClientHostsCooldownManager()
-local cooldownAnchorSupported = cooldownAnchorClientSupported and type(_G.C_CooldownViewer) == "table"
+--- Client.HostsCooldownManager already carries the family, the owning Blizzard
+--- addon and the engine namespace, so nothing is asked twice here. A harness
+--- without the model keeps the namespace probe for the Mainline client it
+--- stands in for.
+local cooldownAnchorSupported = MSUF.Client ~= nil
+    and MSUF.Client.HostsCooldownManager == true
+    or (MSUF.Client == nil and type(_G.C_CooldownViewer) == "table")
 local InCombat
 local cooldownConsentPromptProviderId
 local cooldownConsentPromptAfterCombat = false

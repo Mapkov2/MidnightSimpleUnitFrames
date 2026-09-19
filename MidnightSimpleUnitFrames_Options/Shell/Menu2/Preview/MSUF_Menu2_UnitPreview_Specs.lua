@@ -55,6 +55,14 @@ statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResI
 statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget|pvpIndicatorCustomIcon
 stance|showStanceIndicator|stanceIndicatorSize|stanceIndicatorAnchor|stanceIndicatorOffsetX|stanceIndicatorOffsetY|stanceIndicatorLayer|7|12|TOP|0|-2|Stance|0.45,0.70,1.0|Stance text|MSUF_RequestStatusIconsRefreshForCurrent|false|player|
 ]]
+-- The threat percentage text exists on Classic Era, TBC and WoW Forever only,
+-- before the stance text row. Its sample glyph comes from the status text table
+-- in the preview status module. Inserted before the Pet Happiness row below, so
+-- that row keeps its place directly in front of the stance row.
+if MSUF.Client ~= nil and MSUF.Client.SupportsThreatText == true then
+    local threat = StatusRows("statusThreat|showThreatIndicator|threatIndicatorSize|threatIndicatorAnchor|threatIndicatorOffsetX|threatIndicatorOffsetY|threatIndicatorLayer|7|11|BOTTOMLEFT|6|2|85%|1.0,0.60,0.20|Threat %|MSUF_RequestThreatIndicatorRefresh||target focus boss|")
+    table.insert(specs.StatusPreview, #specs.StatusPreview, threat[1])
+end
 -- Hunter pet happiness exists again on WoW Forever; Midnight has none. Same
 -- position as on the Classic clients: before the stance text row.
 if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then

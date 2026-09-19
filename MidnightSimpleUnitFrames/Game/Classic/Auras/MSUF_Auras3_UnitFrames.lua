@@ -914,6 +914,10 @@ local function ConsiderLaneAuraVisual(lane, unit, data)
     end
 end
 
+--- The one Hide permanent predicate: Buff/Debuff, group and custom container
+--- lanes all ask it (ShouldShowAura hands it to Features.MatchAura), so one aura
+--- is never permanent in one lane and timed in another. false is permanent,
+--- nil is unreadable and stays visible.
 local function TimedAura(unit, data)
     local duration = PlainNumber(data and data.duration)
     local expirationTime = PlainNumber(data and data.expirationTime)
@@ -994,7 +998,7 @@ local function ShouldShowAura(lane, unit, data)
     if Blacklisted(cfg, data) then return false end
     if cfg.classicFeatureMatch == true and features
         and type(features.MatchAura) == "function" then
-        return features.MatchAura(cfg, unit, data, MatchFilter)
+        return features.MatchAura(cfg, unit, data, MatchFilter, TimedAura)
     end
     if type(cfg.includeSpellIDs) == "table" then
         local spellID = data and data.spellId
@@ -2234,6 +2238,23 @@ ClearFrameAuraVisualState = function(frame)
         or symbolChanged
 end
 
+--- Bars > Show on (visual.borderShowOn, compiled only for Friendly or Enemy):
+--- Friendly keeps the border on a unit the player can assist, Enemy on one it
+--- cannot. An unreadable answer shows nothing, as Retail's identity owners do.
+--- Callers ask only while a border would show, so Both, and a frame without a
+--- matching debuff, never reach UnitCanAssist. It gates the border alone: the
+--- overlay has already copied the border's result when it shares the trigger.
+A3._ClassicDispelBorderShowOnAllows = function(visual, unit)
+    local showOn = visual and visual.borderShowOn
+    if showOn == nil then return true end
+    local unitCanAssist = _G.UnitCanAssist
+    if not (type(unitCanAssist) == "function" and IsUnitToken(unit)) then return false end
+    local canAssist = unitCanAssist("player", unit)
+    if IsSecret(canAssist) or type(canAssist) ~= "boolean" then return false end
+    if showOn == "FRIENDLY" then return canAssist end
+    return not canAssist
+end
+
 local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
     local visual = cfg and cfg.visual
     if not (visual and visual.enabled == true) then
@@ -2262,6 +2283,9 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
                 overlayActive, orr, og, ob, oa, overlaySecret, overlayToken = ResolveDirectDispelTriggerVisual(unit, visual, visual.overlayTrigger)
             end
         end
+        if borderActive == true and visual.borderShowOn ~= nil then
+            borderActive = A3._ClassicDispelBorderShowOnAllows(visual, unit)
+        end
         return SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, false, visual)
             or directSymbolChanged
     end
@@ -2273,8 +2297,13 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
         local anyDebuff = lane._msufA3VisualAnyDebuff == true
         local stripeActive = anyDebuff and visual.stripeEnabled == true
         local symbolChanged = A3._UpdateClassicDispelSymbols(frame, lane, visual, unit)
+        -- The lane cache keeps the unfiltered border; Show on applies per update.
+        local borderActive = anyDebuff and lane._msufA3VisualBorderActive == true
+        if borderActive and visual.borderShowOn ~= nil then
+            borderActive = A3._ClassicDispelBorderShowOnAllows(visual, unit)
+        end
         return SetFrameAuraVisualState(frame,
-            anyDebuff and lane._msufA3VisualBorderActive == true,
+            borderActive,
             lane._msufA3VisualBorderR, lane._msufA3VisualBorderG,
             lane._msufA3VisualBorderB, lane._msufA3VisualBorderA,
             lane._msufA3VisualBorderSecret == true, lane._msufA3VisualBorderToken,
@@ -2298,6 +2327,9 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
         end
     end
     StoreLaneAuraVisualCache(lane, anyDebuff, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken)
+    if borderActive == true and visual.borderShowOn ~= nil then
+        borderActive = A3._ClassicDispelBorderShowOnAllows(visual, unit)
+    end
     local stripeActive = anyDebuff and visual.stripeEnabled == true
     local symbolChanged = A3._UpdateClassicDispelSymbols(frame, lane, visual, unit)
     return SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, stripeActive, visual)
@@ -2451,6 +2483,12 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
         -- their filters may differ, so no cached set may answer them.
         A3._ClassicAuraTokenSerial[unit] = (A3._ClassicAuraTokenSerial[unit] or 0) + 1
     end
+    -- Roster stamp: the member this full refresh describes. A partyN/raidN token
+    -- can change hands with no UNIT_AURA; GROUP_ROSTER_UPDATE compares the stamp
+    -- with the token's current member (A3._ClassicGroupRosterAuras).
+    if full and frame._msufA3GroupRuntime == true then
+        state.rosterGUID = A3._ClassicRosterGUID(unit)
+    end
 
     -- needFullUpdate and the scanning sentinel are cleared only where the lane
     -- state is known good again: the two lane-less exits here, and the end of
@@ -2550,6 +2588,27 @@ end
 local function ResetAurasForIdentity(frame)
     if not frame then return false end
     return UpdateAuras(frame, "ForceUpdate", A3._ClassicBindFrameUnit(frame), nil, true)
+end
+
+--- The member behind a unit token, as a plain string, or nil. Classic has no
+--- secret GUIDs; a secret one would read as unknown on both sides of the check.
+A3._ClassicRosterGUID = function(unit)
+    local unitGUID = _G.UnitGUID
+    local guid = unit ~= nil and type(unitGUID) == "function" and unitGUID(unit) or nil
+    if guid == nil or IsSecret(guid) then return nil end
+    return guid
+end
+
+--- GROUP_ROSTER_UPDATE for one group frame. A header keeps a partyN/raidN token
+--- when the roster moves another member into it, the unchanged attribute runs no
+--- aura follower, and Classic sends no UNIT_AURA for the swap. Blizzard's Classic
+--- raid frames update everything on this event; one UnitGUID read and one
+--- comparison per frame limit the full rescan to slots whose member changed.
+A3._ClassicGroupRosterAuras = function(frame)
+    local state = frame and frame._msufA3State
+    if not (state and frame._msufA3GroupRuntime == true) then return false end
+    if A3._ClassicRosterGUID(A3._ClassicBindFrameUnit(frame)) == state.rosterGUID then return false end
+    return ResetAurasForIdentity(frame)
 end
 
 local function NeedsCombatAuraEvents(cfg)
@@ -3066,6 +3125,10 @@ local function EnsureClassicAuraOnShowRefresh(frame)
     end)
 end
 
+-- Group frames follow roster changes (A3._ClassicGroupRosterAuras).
+A3._ClassicGroupAuraEvents = A3._ClassicGroupAuraEvents or { "GROUP_ROSTER_UPDATE" }
+A3._ClassicGroupCombatAuraEvents = A3._ClassicGroupCombatAuraEvents
+    or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE" }
 A3._ClassicWeaponAuraEvents = A3._ClassicWeaponAuraEvents or { "WEAPON_ENCHANT_CHANGED", "WEAPON_SLOT_CHANGED" }
 A3._ClassicCombatWeaponAuraEvents = A3._ClassicCombatWeaponAuraEvents
     or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "WEAPON_ENCHANT_CHANGED", "WEAPON_SLOT_CHANGED" }
@@ -3135,6 +3198,9 @@ function AurasElement.GetUnitlessEvents(frame)
     local unit = A3._ClassicBindFrameUnit(frame)
     local cfg = unit and FrameAuraConfig(frame, unit)
     local combat = NeedsCombatAuraEvents(cfg)
+    if IsGroupFrame(frame) then
+        return combat and A3._ClassicGroupCombatAuraEvents or A3._ClassicGroupAuraEvents
+    end
     local weapon = unit == "player" and cfg and cfg.lanes and cfg.lanes.buff
         and cfg.lanes.buff.weaponEnchants == true
     local identity = unit and A3._ClassicIdentityAuraEventsByUnit[unit]
@@ -3212,6 +3278,9 @@ function AurasElement.Update(frame, event, unit, updateInfo)
     end
     if event == "WEAPON_ENCHANT_CHANGED" or event == "WEAPON_SLOT_CHANGED" then
         return UpdateAuras(frame, event, A3._ClassicBindFrameUnit(frame), nil, true)
+    end
+    if event == "GROUP_ROSTER_UPDATE" then
+        return A3._ClassicGroupRosterAuras(frame)
     end
     if event == "MSUF_UNIT_IDENTITY_AURAS"
         or event == "MSUF_UNIT_IDENTITY_SOFT_AURAS" then

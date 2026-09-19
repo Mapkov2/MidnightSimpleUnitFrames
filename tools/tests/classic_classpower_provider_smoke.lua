@@ -14,6 +14,8 @@ function UnitPowerDisplayMod() return 100 end
 local addonName = "MidnightSimpleUnitFrames"
 local namespace = { ExportPublic = function(name, value) _G[name] = value end }
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_Constants.lua"))(addonName, namespace)
+-- Every provider is built from the shared target-combo module.
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua"))(addonName, namespace)
 local K = assert(MSUF_CP_CONST)
 local MODE, PT = K.CPK.MODE, K.PT
 
@@ -82,7 +84,8 @@ resolve(mists, "ROGUE", 1, PT.Energy)
 assert(mists.UnitPower("player", PT.ComboPoints) == 3,
     "Mists combo points stayed on the vehicle after the vehicle route ended")
 
-local tbcNamespace = {}
+local tbcNamespace = { ExportPublic = namespace.ExportPublic }
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua"))(addonName, tbcNamespace)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/TBC/ClassPower.lua"))(addonName, tbcNamespace)
 local tbc = assert(tbcNamespace.CPClient)
 assert(tbc.UseFrequentPower(PT.ComboPoints, MODE.SEGMENTED) == true)
@@ -92,7 +95,8 @@ assert(powerType == PT.ComboPoints and mode == MODE.SEGMENTED)
 powerType, mode = resolve(tbc, "PALADIN", nil, PT.Mana)
 assert(powerType == nil and mode == MODE.NONE)
 
-local vanillaNamespace = {}
+local vanillaNamespace = { ExportPublic = namespace.ExportPublic }
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua"))(addonName, vanillaNamespace)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Vanilla/ClassPower.lua"))(addonName, vanillaNamespace)
 local vanilla = assert(vanillaNamespace.CPClient)
 assert(vanilla.Flavor == "Vanilla")

@@ -4,7 +4,7 @@
 ## Author: Mapko
 ## Category: Combat
 ## Version: 6.20 [AllowLoadGameType standard]
-## Version: 6.5-beta4 [ExcludeLoadGameType standard]
+## Version: 6.5-beta5 [ExcludeLoadGameType standard]
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1

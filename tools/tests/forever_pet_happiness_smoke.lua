@@ -317,8 +317,9 @@ do
     Check(spec.allowed("pet") == true and spec.allowed("player") == false, "Forever: pet happiness must be pet-only")
     Check(index == count - 1 and lastID == "stance", "Forever: pet happiness must sit before the stance row")
 
+    -- Forever also carries the threat text row (threat_text_smoke.lua); Midnight has neither.
     local midnightSpec, _, midnightCount = HappinessSpec(false)
-    Check(midnightSpec == nil and midnightCount == count - 1, "Midnight: the preview specs gained a pet happiness row")
+    Check(midnightSpec == nil and midnightCount == count - 2, "Midnight: the preview specs gained a pet happiness row")
 
     local unitPage = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
     Check(unitPage:find('if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then\n'

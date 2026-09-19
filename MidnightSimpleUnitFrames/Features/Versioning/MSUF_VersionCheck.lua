@@ -70,7 +70,10 @@ local IsEnabled
 --- Core
 local function ReadMyVersion()
     if myVersionStr then return end
-    local ver = (MSUF.Client and MSUF.Client.AddonVersion) or C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version")
+    -- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+    -- the version is resolved once from the TOC this client loaded.
+    local getVersion = MSUF.GetAddonVersion
+    local ver = type(getVersion) == "function" and getVersion() or nil
     if type(ver) == "string" and ver ~= "" then
         local number, normalized, parts = VersionToNumber(ver)
         myVersionStr   = normalized or ver

@@ -63,7 +63,6 @@ assert(MSUF == namespace, "client bootstrap did not publish MSUF")
 assert(namespace.Client.Flavor == expect, "wrong flavor")
 assert(namespace.Client.IsClassic == spec.classic, "wrong Classic flag")
 assert(namespace.Client.IsVanilla == (expect == "Vanilla"), "wrong Vanilla flag")
-assert(namespace.Client.IsEra == (expect == "Vanilla"), "wrong Era flag")
 assert(namespace.Client.IsMists == (expect == "Mists"), "wrong Mists flag")
 assert(namespace.Client.IsTBC == (expect == "TBC"), "wrong TBC flag")
 assert(namespace.Client.IsRetail == (expect == "Mainline"), "wrong Retail flag")
@@ -123,14 +122,20 @@ if spec.classic then
     assert(type(namespace.Compat.SpellBook) == "table",
         "Classic local spellbook compatibility adapter missing")
 else
-    assert(namespace.Compat.AddOns == nil and namespace.Compat.Spell == nil and namespace.Compat.SpellBook == nil,
+    -- On Mainline nothing creates MSUF.Compat before the kernel does, so an
+    -- absent table is the expected state here.
+    local compat = namespace.Compat or {}
+    assert(compat.AddOns == nil and compat.Spell == nil and compat.SpellBook == nil,
         "Mainline loaded Classic compatibility adapters")
 end
 
 local bootstrapChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua"))
 bootstrapChunk(addonName, namespace)
 assert(MSUF == namespace and MSUF_NS == namespace, "kernel replaced client namespace")
-assert(namespace.Compat.Client == namespace.Client, "client compat bridge was lost")
+-- MSUF.Client is the single client surface: the kernel must not shadow or
+-- replace it, and the dead MSUF.Compat.Client bridge must not come back.
+assert(namespace.Client ~= nil and namespace.Compat.Client == nil,
+    "the client model was replaced, or the dead Compat.Client bridge is back")
 assert(namespace.Core.BootstrapLoaded == true, "kernel bootstrap did not finish")
 assert(MSUF_MAX_ARENA_FRAMES == spec.arena, "kernel bootstrap changed MSUF_MAX_ARENA_FRAMES")
 
@@ -151,7 +156,7 @@ end
 
 -- Auras3 is the only reader of the warning and asks through a nil-safe lookup:
 -- a client that never loads it answers like one whose warning reports a current
--- build. IsForever is false in this harness, so the project ID decides.
+-- build. The code family decides, never the raw project ID.
 do
     local file = assert(io.open(repo .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua", "rb"))
     local aurasCore = file:read("*a"):gsub("\r\n", "\n")
@@ -182,11 +187,16 @@ local detectedGetBuildInfo = GetBuildInfo
 local MIN_INTERFACE = 120100
 if expect == "Mainline" then
     local mainlineWarningChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Features/Versioning/MSUF_ClientVersionWarning.lua"))
+    -- The interface number comes from Client.Interface, which
+    -- Game/Shared/Initialize.lua reads once; the warning never calls
+    -- GetBuildInfo itself. The stub stays installed so a re-read would show up
+    -- as a wrong classification instead of passing silently.
     local function MainlineWarningIsLegacy(client, interface, auraContainerLoaded)
         local savedAddOns = C_AddOns
         C_AddOns = { IsAddOnLoaded = function(name) return auraContainerLoaded == true and name == "Blizzard_AuraContainer" end }
         GetBuildInfo = function() return "test", "test", "test", interface end
         local wired = 0
+        if client ~= nil then client.Interface = interface end
         local warningNamespace = { Client = client, ExportPublic = function() end,
             MSUF_EventBus = { Register = function() wired = wired + 1 end } }
         mainlineWarningChunk(addonName, warningNamespace)
@@ -196,11 +206,18 @@ if expect == "Mainline" then
         return legacy
     end
     assert(MainlineWarningIsLegacy({ IsForever = false }, 120001, false) == true, "Mainline 12.0 stopped warning")
-    assert(MainlineWarningIsLegacy(nil, 120001, false) == true, "Mainline without a client table stopped warning")
+    -- Without the client model there is no interface number, and this file's
+    -- own rule is that an unreadable build never warns.
+    assert(MainlineWarningIsLegacy(nil, 120001, false) == false,
+        "the warning read a build the client model did not publish")
     assert(MainlineWarningIsLegacy({ IsForever = false }, MIN_INTERFACE, false) == false, "Mainline 12.1 warned")
     assert(MainlineWarningIsLegacy({ IsForever = true }, 16001, false) == false, "WoW Forever got the 12.1 warning")
     assert(MainlineWarningIsLegacy({ IsForever = false }, 16001, true) == false,
         "a client with Blizzard_AuraContainer loaded got the 12.1 warning")
+    -- Mutation guard: the real model's interface must reach the warning.
+    assert(MainlineWarningIsLegacy({ IsForever = false }, namespace.Client.Interface, false)
+        == (namespace.Client.Interface < MIN_INTERFACE),
+        "the warning ignored Client.Interface")
 end
 
 print("client bootstrap smoke passed: " .. flavor)

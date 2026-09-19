@@ -5972,6 +5972,16 @@ L["Surname"] = "Apellido"
 -- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
 L["Pet Happiness"] = "Felicidad de la mascota"
 L["Pet Happiness (Vanilla/TBC)"] = "Felicidad de la mascota (Vanilla/TBC)"
+L["Threat %"] = "Amenaza %"
+L["Color by threat"] = "Colorear según la amenaza"
+L["Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead."] = "Verde con poca amenaza, amarillo a la mitad y rosa al 100 % cuando tienes el aggro. Desactívalo para usar el color del texto de estado."
+L["Threat % Colors"] = "Colores de amenaza %"
+L["Threat % Background"] = "Fondo de amenaza %"
+L["A dark plate behind the number keeps it readable on any bar color, red enemy bars included."] = "Una placa oscura detrás del número lo mantiene legible sobre cualquier color de barra, incluidas las barras rojas de enemigos."
+L["Blended from low to high threat on every frame that colors its threat text by threat."] = "Degradado de amenaza baja a alta en cada marco que colorea su texto de amenaza según la amenaza."
+L["Low threat"] = "Amenaza baja"
+L["Medium threat"] = "Amenaza media"
+L["High threat"] = "Amenaza alta"
 L["Color by level difficulty"] = "Colorear según la dificultad del nivel"
 L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "Rojo muy por encima de tu nivel, blanco a tu nivel, gris cuando es trivial. Desactívalo para usar el color del texto de estado."
 L["Level Difficulty Colors"] = "Colores de dificultad de nivel"
@@ -5985,6 +5995,10 @@ L["Level Text"] = "Texto de nivel"
 L["Tagged by others"] = "Marcado por otros"
 L["Gray out mobs tagged by others"] = "Atenuar en gris los enemigos marcados por otros"
 L["A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame."] = "Un enemigo que otro jugador golpeó primero no te da botín ni experiencia. Su barra de salud y su nombre se vuelven grises, como en el marco de objetivo predeterminado."
+-- Shared aura preview titles (Aura Style page, shared scope); the first keeps its %s for the lane name.
+L["Shared %s Preview"] = "Vista previa compartida: %s"
+L["Shared Player Defensives Preview"] = "Vista previa compartida: Beneficios defensivos"
+L["Shared Dots on Target Preview"] = "Vista previa compartida: DoTs en el objetivo"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)

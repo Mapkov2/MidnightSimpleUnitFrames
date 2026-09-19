@@ -37,6 +37,9 @@ local GF_PREVIEW_ROLE_DEFAULT = Specs.ROLE or "HEALER"
 local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_CLASSES = Specs.SECTION_PAGE or {}, Specs.PAGE_FOCUS or {}, Specs.CLASSES or {}
 local GF_PREVIEW_NAMES, GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS = Specs.NAMES or {}, Specs.ANCHOR_FRAC or {}, Specs.AURA_MOCK_ICON_IDS or {}
 local GF_AURA_GROWTH_TABLE, GF_STATUS_RUNTIME_KEYS = Specs.AURA_GROWTH_TABLE or {}, Specs.STATUS_RUNTIME_KEYS or {}
+-- The threat text's compiled group entry (Classic Era, TBC and WoW Forever only).
+-- Added here rather than in the specs file, which stays a plain Retail copy.
+GF_STATUS_RUNTIME_KEYS.threatText = "threat"
 if not GF_AURA_GROWTH_TABLE.RIGHTDOWN then GF_AURA_GROWTH_TABLE.RIGHTDOWN = { px = 1, py = 0, sx = 0, sy = -1 } end
 local function ShallowCopy(src)
     if type(src) ~= "table" then return nil end
@@ -1035,6 +1038,7 @@ local function StatusText(spec, runtimeCfg, conf)
     if value == "statusAFKText" then return "AFK" end
     if value == "statusAFKTimer" then return "5m" end
     if value == "statusDNDText" then return "DND" end
+    if value == "threatText" then return "85%" end
     if value == "levelText" then
         local level = _G.UnitLevel and tonumber(_G.UnitLevel("player")) or nil
         return tostring(level and level > 0 and level or 80)

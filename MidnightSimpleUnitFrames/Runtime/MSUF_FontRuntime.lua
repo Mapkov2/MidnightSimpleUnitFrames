@@ -41,6 +41,11 @@ end
 local UNITFRAME_FONT_ELEMENTS = {
     "Text", "NameText", "HealthText", "PowerText", "InlineToT", "StatusIndicators",
 }
+-- The threat text (Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua) lays out its
+-- own font, so the clients that offer it refresh it with the other unit texts.
+if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+    UNITFRAME_FONT_ELEMENTS[#UNITFRAME_FONT_ELEMENTS + 1] = "ThreatIndicator"
+end
 
 local function ApplyScopedFontFollowers(scope, skipCastbars, skipClassPower, skipAuras)
     if scope then

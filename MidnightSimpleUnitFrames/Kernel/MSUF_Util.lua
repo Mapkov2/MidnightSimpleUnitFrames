@@ -1230,10 +1230,16 @@ end
 U.GetGeneralDB = GetGeneralDB
 ExportPublic("MSUF_GetGeneralDB", GetGeneralDB)
 
+--- The Integrations module answers first: it also counts a third-party layout
+--- provider. Without it the client model decides. The C_CooldownViewer namespace
+--- is never the signal here: the shared engine exposes it on every client,
+--- Classic Era, TBC and Mists included, while only the Mainline family ships
+--- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
 local function CooldownAnchorSupported()
   local supported = _G.MSUF_IsCooldownAnchorSupported
   if type(supported) == "function" then return supported() == true end
-  return type(_G.C_CooldownViewer) == "table"
+  local client = MSUF.Client
+  return type(client) == "table" and client.HostsCooldownManager == true
 end
 U.CooldownAnchorSupported = CooldownAnchorSupported
 ExportPublic("MSUF_CooldownAnchorSupported", CooldownAnchorSupported)

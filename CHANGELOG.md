@@ -1,5 +1,34 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta5 - 2026-09-19
+
+### Highlights
+
+- **See your aggro as a percentage.** Classic Era, TBC and WoW Forever can show Threat % on supported Target, Focus and Boss frames, with 100% meaning you have aggro. Open the Target's Threat % status to adjust its placement, size, background and threat coloring.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.selected.size","settingKey":"target.threatIndicatorSize","prepareKind":"unitStatus","prepareValue":"statusThreat","query":"threat percent","label":"Target Threat %"} -->
+
+### Changes
+
+- Party and Raid frames can show each member's threat percentage against your current target on Classic Era, TBC and WoW Forever. Party threat text starts enabled; Raid threat text is opt-in.
+- Threat text can follow a configurable low, medium and high threat color curve. Adjust the colors under Appearance > Colors > Status Text Colors or through the Threat % status editor.
+- Updated the shared factory profile, including Slug font rendering, Focus and Target-of-Target placement, Pet transparency and Party threat text. Fresh installs, new profiles and profile resets use the new baseline.
+- Consolidated target-based combo point handling across Classic clients and WoW Forever.
+- Menu search now filters client-specific controls by availability, including Pet Happiness and Threat %.
+- Section Copy To lists only supported frames and marks disabled frames as unavailable destinations.
+
+### Fixes & Performance
+
+- WoW Forever: added a temporary workaround for the client bug that prevented secure group-frame setup and made Party, Raid and Priority frames disappear when joining a group.
+- Classic clients: repaired untouched sparse factory aura layouts from 6.5-alpha18 through beta3 while preserving customized aura owners.
+- Classic clients: the cleanse border now respects the Friendly, Enemy and Both display conditions selected under Bars.
+- Classic clients: Buff/Debuff lanes and custom containers now use the same sorting and Hide permanent rules.
+- Classic clients: group-frame auras refresh when a roster change assigns a different member to the same party or raid slot.
+- Classic clients: hid the unsupported Pandemic-only effect option and corrected client-specific menu search entries.
+- Classic previews now show the power gradient and class-resource text layer correctly; Mists Boss previews also show the boss-target marker.
+- Corrected analytics initialization writing to an unintended global instead of the account-wide settings table.
+- Cooldown Manager anchoring now checks whether the client actually supports the manager before offering or applying the anchor.
+- Strengthened client startup checks, menu-index validation and beta release packaging.
+
 ## 6.5-beta4 - 2026-09-19
 
 ### Highlights

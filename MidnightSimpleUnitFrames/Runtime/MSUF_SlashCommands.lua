@@ -316,13 +316,13 @@ local function CommandsInCombat()
     return (InCombatLockdown and InCombatLockdown()) and true or false
 end
 
+--- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+--- the version is resolved once from the TOC this client loaded, so no consumer
+--- asks a TOC again.
 local function CommandsAddonVersion()
-    if MSUF.Client and MSUF.Client.AddonVersion then return MSUF.Client.AddonVersion end
-    local getMeta = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
-    if type(getMeta) == "function" then
-        local version = getMeta(addonName or "MidnightSimpleUnitFrames", "Version")
-        if type(version) == "string" and version ~= "" then return version end
-    end
+    local getVersion = MSUF.GetAddonVersion
+    local version = type(getVersion) == "function" and getVersion() or nil
+    if type(version) == "string" and version ~= "" then return version end
     return "unknown"
 end
 

@@ -863,6 +863,17 @@ local function RegisterCastContextFactories()
         levelReferences[i] = row[6]
     end
     M._levelDifficultyColorReferences = levelReferences
+    -- Threat % colors: the three global curve colors of Colors > Status Text Colors,
+    -- listed by the ::: on a Threat % card while it colors itself by threat.
+    local threatReferences = {}
+    for i = 1, #(M._threatCurveColor or {}) do
+        local row = M._threatCurveColor[i]
+        FixedContextFactory(row[6], function()
+            return ContextGeneral(row[6], row[2], row[1], row[3], row[4], row[5], M._ApplyThreatCurveColors)
+        end)
+        threatReferences[i] = row[6]
+    end
+    M._threatCurveColorReferences = threatReferences
 end
 local function RegisterAuraContextFactories()
     local function AuraTableFactory(id, label, key, dr, dg, db)

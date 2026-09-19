@@ -56,6 +56,7 @@ local namespace = {}
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"))(addonName, namespace)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Classic/BlizzardFrames.lua"))(addonName, namespace)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Constants.lua"))(addonName, namespace)
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua"))(addonName, namespace)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/TBC/ClassPower.lua"))(addonName, namespace)
 
 local setter = assert(namespace.Compat.SetBlizzardClassResourcesSuppressed)

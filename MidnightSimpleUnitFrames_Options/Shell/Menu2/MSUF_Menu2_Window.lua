@@ -38,12 +38,12 @@ local max = math.max
 local min = math.min
 local IsEditModeActive
 local RebuildActivePageForResize
+--- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+--- the core resolves it once from the TOC this client loaded, so the Options
+--- package never reports its own "## Version" here.
 local function GetAddonVersion()
-    if MSUF.Client and MSUF.Client.AddonVersion then return MSUF.Client.AddonVersion end
-    local getMeta = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
-    if type(getMeta) == "function" then return getMeta(addonName or "MidnightSimpleUnitFrames", "Version") end
-    if type(_G.GetAddOnMetadata) == "function" then return _G.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version") end
-    return nil
+    local getVersion = MSUF.GetAddonVersion
+    return type(getVersion) == "function" and getVersion() or nil
 end
 local function SetCachedText(owner, cacheKey, region, text)
     if owner[cacheKey] == text then return end

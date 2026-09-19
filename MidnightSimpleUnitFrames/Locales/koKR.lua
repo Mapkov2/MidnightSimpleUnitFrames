@@ -5912,6 +5912,16 @@ L["Surname"] = "성"
 -- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
 L["Pet Happiness"] = "소환수 만족도"
 L["Pet Happiness (Vanilla/TBC)"] = "소환수 만족도 (Vanilla/TBC)"
+L["Threat %"] = "위협 %"
+L["Color by threat"] = "위협 수준에 따라 색상 지정"
+L["Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead."] = "위협이 낮으면 녹색, 절반이면 노란색, 어그로를 가진 100%에서는 분홍색입니다. 끄면 상태 텍스트 색상을 사용합니다."
+L["Threat % Colors"] = "위협 % 색상"
+L["Threat % Background"] = "위협 % 배경"
+L["A dark plate behind the number keeps it readable on any bar color, red enemy bars included."] = "숫자 뒤의 어두운 판이 빨간 적 바를 포함한 모든 바 색상에서 숫자를 읽기 쉽게 해 줍니다."
+L["Blended from low to high threat on every frame that colors its threat text by threat."] = "위협 텍스트를 위협 수준에 따라 색칠하는 모든 프레임에서 낮은 위협부터 높은 위협까지 혼합됩니다."
+L["Low threat"] = "낮은 위협"
+L["Medium threat"] = "중간 위협"
+L["High threat"] = "높은 위협"
 L["Color by level difficulty"] = "레벨 난이도에 따라 색상 지정"
 L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "내 레벨보다 훨씬 높으면 빨간색, 같은 레벨이면 흰색, 사소하면 회색입니다. 끄면 상태 텍스트 색상을 사용합니다."
 L["Level Difficulty Colors"] = "레벨 난이도 색상"
@@ -5925,6 +5935,10 @@ L["Level Text"] = "레벨 텍스트"
 L["Tagged by others"] = "다른 플레이어가 선점함"
 L["Gray out mobs tagged by others"] = "다른 플레이어가 선점한 몹을 회색으로 표시"
 L["A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame."] = "다른 플레이어가 먼저 공격한 몹은 전리품과 경험치를 주지 않습니다. 기본 대상 프레임처럼 생명력 바와 이름이 회색으로 바뀝니다."
+-- Shared aura preview titles (Aura Style page, shared scope); the first keeps its %s for the lane name.
+L["Shared %s Preview"] = "공유 %s 미리보기"
+L["Shared Player Defensives Preview"] = "공유 방어 버프 미리보기"
+L["Shared Dots on Target Preview"] = "공유 대상 DoT 미리보기"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

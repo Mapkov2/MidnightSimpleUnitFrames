@@ -1356,9 +1356,14 @@ local function UnitCooldownAnchorName(conf)
     local db = _G.MSUF_DB
     local general = db and db.general
     local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
+    -- The Integrations module answers first; without it the client model does.
+    -- The C_CooldownViewer namespace is never the signal: the shared engine
+    -- exposes it on every client, while only the Mainline family ships
+    -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
     local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
         and isCooldownAnchorEnabled(general) == true
-        or (type(_G.C_CooldownViewer) == "table" and general and general.anchorToCooldown == true)
+        or (MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
+            and general and general.anchorToCooldown == true)
     if cooldownAnchorEnabled then return "EssentialCooldownViewer" end
     local globalAnchor = general and general.anchorName
     if EDIT_COOLDOWN_ANCHORS[globalAnchor] then return globalAnchor end

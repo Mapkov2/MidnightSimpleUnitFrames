@@ -89,11 +89,16 @@ local function AutomaticCooldownProvider()
     if type(getter) ~= "function" then return nil, nil end
     return getter()
 end
+--- The Integrations module answers first; without it the client model does. The
+--- C_CooldownViewer namespace is never the signal: the shared engine exposes it
+--- on every client, while only the Mainline family ships Blizzard's Cooldown
+--- Manager (Client.HostsCooldownManager).
 local function CooldownAnchorEnabled()
     local general = GetGeneral and GetGeneral() or nil
     local getter = _G.MSUF_IsCooldownAnchorEnabled
     if type(getter) == "function" then return getter(general) == true end
-    return type(_G.C_CooldownViewer) == "table" and type(general) == "table" and general.anchorToCooldown == true or false
+    return MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
+        and type(general) == "table" and general.anchorToCooldown == true or false
 end
 --- Hides the anchor switch on clients that can never host a Cooldown Manager.
 local CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
@@ -261,11 +266,14 @@ local function ForEachPageControl(parent, callback)
         ForEachPageControl(child, callback)
     end
 end
+local function UnitFrameEnabled(unit)
+    return ReadBool(unit, "enabled", true)
+        and (unit ~= "focustarget" or ReadBool("focus", "enabled", true))
+end
 local function ApplyUnitFrameEnabledGate(ctx, unit)
     local wrapper = ctx and ctx.wrapper
     if not wrapper then return end
-    local enabled = ReadBool(unit, "enabled", true)
-        and (unit ~= "focustarget" or ReadBool("focus", "enabled", true))
+    local enabled = UnitFrameEnabled(unit)
     local gateKey = "unitFrameEnabled:" .. tostring(unit)
     if ControlGates.ApplySections then
         ControlGates.ApplySections(ctx, gateKey, enabled, {
@@ -591,10 +599,16 @@ local function AttachUnitSectionUX(ctx, unit)
         end },
         anchoring = { fields = "point relativePoint offsetX offsetY anchorFrameName anchorToUnitframe", noCopy = true },
     }
+    -- The same frames as the unit tabs, so a client never offers a frame it cannot show.
     local targets = {}
-    for _, key in ipairs(UNIT_TAB_ORDER) do targets[#targets + 1] = { value = key, text = UnitTopLabel(key) } end
+    for _, key in ipairs(UNIT_TAB_ORDER) do
+        if UNIT_PAGE_FOR_UNIT[key] and (not M.SupportsFrameScope or M.SupportsFrameScope(key)) then
+            targets[#targets + 1] = { value = key, text = UnitTopLabel(key) }
+        end
+    end
     UnitSectionShared.AttachSectionUX(ctx, {
         sections = sections, targets = targets, scope = function() return unit end, conf = GetConf, label = UnitTopLabel,
+        targetOff = function(key) return not UnitFrameEnabled(key) end,
         defaults = function(scope)
             local create = MSUF.MSUF_CreateFactoryDefaultProfile or _G.MSUF_CreateFactoryDefaultProfile
             local defaults = create and create()

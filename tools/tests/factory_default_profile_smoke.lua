@@ -35,13 +35,15 @@ end
 ---------------------------------------------------------------------------
 -- One string for every client
 ---------------------------------------------------------------------------
-local LITERAL = "local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = %[%[(MSUF3:[A-Za-z0-9+/]+=?=?)%]%]"
-local mainline = Check(Read("MidnightSimpleUnitFrames/State/MSUF_Defaults.lua"):match(LITERAL),
-    "the Mainline defaults lost the embedded factory string")
-local classic = Check(Read("MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua"):match(LITERAL),
-    "the Classic defaults lost the embedded factory string")
-Check(mainline == classic, "the Mainline and the Classic clients must ship the same factory profile")
-Check(#mainline > 1000 and (#mainline - #"MSUF3:") % 4 == 0, "the factory string is not complete Base64")
+-- The string lives once, in the shell defaults every client loads before its Defaults file.
+local LITERAL = "MSUF%.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = %[%[(MSUF3:[A-Za-z0-9+/]+=?=?)%]%]"
+local factory = Check(Read("MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua"):match(LITERAL),
+    "the shell defaults lost the shared factory string")
+for _, defaults in ipairs({ "State/MSUF_Defaults.lua", "Game/Classic/State/MSUF_Defaults.lua" }) do
+    Check(not Read("MidnightSimpleUnitFrames/" .. defaults):find("[[MSUF3:", 1, true),
+        defaults .. " must read the shared factory string, not carry its own copy")
+end
+Check(#factory > 1000 and (#factory - #"MSUF3:") % 4 == 0, "the factory string is not complete Base64")
 
 ---------------------------------------------------------------------------
 -- Client and modules
@@ -81,13 +83,13 @@ manifest.LoadSelected(repo, flavor, ns, {
     "State/Defaults/MSUF_Defaults_Units.lua",
     spec.classic and "Game/Classic/State/MSUF_Defaults.lua" or "State/MSUF_Defaults.lua",
 })
-Check(_G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT == mainline, "the loaded defaults publish a different factory string")
+Check(_G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT == factory, "the loaded defaults publish a different factory string")
 
 -- WoW's C_EncodingUtil does not exist here. The shared decoder is replaced by one that
 -- accepts only the embedded string and returns a small snapshot with marker values.
 local decodes = 0
 MSUF_TryDecodeCompactString = function(str)
-    Check(str == mainline, "the factory pipeline decoded something other than the embedded string")
+    Check(str == factory, "the factory pipeline decoded something other than the shared string")
     decodes = decodes + 1
     return {
         addon = "MSUF", fmt = 2, kind = "all", profile = "Default", schema = 1,
@@ -95,9 +97,10 @@ MSUF_TryDecodeCompactString = function(str)
             general = { factoryMarker = "snapshot" },
             player = { width = 321 },
             target = { width = 322 },
+            gf_party = { enabled = false },
         },
         -- The portable payload has no Focus Target; the native section does.
-        msuf6 = { schema = 600, payload = { focustarget = { width = 123 } } },
+        msuf6 = { schema = 600, payload = { focustarget = { width = 123, enabled = true } } },
     }
 end
 ns.ProfileRuntime = { Apply = function() end }
@@ -111,7 +114,10 @@ local function AssertFactory(db, label)
         label .. ": the snapshot values did not reach the profile")
     Check(type(db.focustarget) == "table" and db.focustarget.width == 123,
         label .. ": Focus Target must come from the native section of the snapshot")
+    Check(db.focustarget.enabled == false, label .. ": the factory profile must start with Focus Target off")
     Check(db.general._msufPreviewDragHintExperienced == false, label .. ": a factory profile starts with the drag hint")
+    Check(type(db.gf_party) == "table" and db.gf_party.enabled == true,
+        label .. ": the factory profile must start with MSUF party frames on")
 end
 
 ---------------------------------------------------------------------------

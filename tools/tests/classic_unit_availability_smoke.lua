@@ -106,7 +106,9 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     local search = {StaticIndex={GetRecords=function() return {
         {key="uf_boss",searchIdentity="boss"}, {key="uf_arena",searchIdentity="arena"}, {key="uf_player",searchIdentity="player"}
     } end}}
-    local add = assert(loadstring("local M, Search, InvokeOptional = ...; return function(records, covered) " .. fn .. " end"))(menu, search, pcall)
+    -- The per-row client capability filter is covered by search_client_row_filter_smoke.lua;
+    -- this slice only checks the unit page gate, so no row here is tied to a capability.
+    local add = assert(loadstring("local M, Search, InvokeOptional, StaticRowsWithoutClientSupport = ...; return function(records, covered) " .. fn .. " end"))(menu, search, pcall, function() return {} end)
     local records = {}
     add(records, {})
     assert(#records == #rows, flavor .. " static search leaks unsupported pages")

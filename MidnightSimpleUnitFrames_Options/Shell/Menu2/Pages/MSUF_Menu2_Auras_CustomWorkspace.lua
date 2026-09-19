@@ -878,11 +878,19 @@ local function BuildCustomLayoutTool(C)
     end
 end
 
+-- Pandemic is a native aura-backend feature: the applier below and Blizzard's
+-- AddPandemicRegion button method both arrive with the native 12.1 runtime, so a
+-- backend that publishes no applier can never show the state. Ask the backend for
+-- the capability instead of the client, the same test the aura previews use, so
+-- the section follows whichever backend a flavor loads.
+local function PandemicVisualSupported()
+    return type(A3.ApplyPandemicVisual) == "function"
+end
 local function BuildCustomAppearancePandemic(C, StyleGrid)
     local ctx, b, index, isTargetDots, Apply = C.ctx, C.b, C.index, C.isTargetDots, C.Apply
     local item = C.styleItem
     local pandemic
-    if isTargetDots then
+    if isTargetDots and PandemicVisualSupported() then
         pandemic = b:CollapsibleSection(CustomStyleSectionId(index, "pandemic"), "Pandemic Warning & Style", 248, false)
         local pandemicCol, pandemicX, PandemicNumber = StyleGrid(pandemic)
         local pandemicControls = {}
@@ -1243,7 +1251,9 @@ local function BuildCustomEffectTool(C)
             function() return tonumber(item.frame.priority) or 5 end,
             function(value) item.frame.priority = tonumber(value) or 5; Apply("AURAS3_CUSTOM_EFFECT_PRIORITY") end,
             AuraControlMeta(ctx, "custom-container.effect.priority"))
-        if isTargetDots then
+        -- Same capability test as Pandemic Warning & Style: without the native
+        -- Pandemic applier (every Classic backend) nothing can honour this switch.
+        if isTargetDots and PandemicVisualSupported() then
             local pandemicOnly = BindSwitch(ctx, section, "Only during Pandemic window", 24 + col3 + gap, -150,
                 col3 * 2 + gap, function() return item.frame.onlyInPandemicWindow == true end,
                 function(value)
@@ -1261,7 +1271,7 @@ local function BuildCustomEffectTool(C)
                     text = ChoiceLabel(CUSTOM_FRAME_EFFECTS, effectType, effectType),
                     kind = effectType == "none" and "muted" or "accent", showWhenClosed = true,
                 }}
-                if isTargetDots and item.frame.onlyInPandemicWindow == true then
+                if isTargetDots and PandemicVisualSupported() and item.frame.onlyInPandemicWindow == true then
                     badges[#badges + 1] = { text = "Pandemic only", kind = "info", showWhenClosed = true }
                 end
                 W.SetCollapsibleBadges(section, badges)

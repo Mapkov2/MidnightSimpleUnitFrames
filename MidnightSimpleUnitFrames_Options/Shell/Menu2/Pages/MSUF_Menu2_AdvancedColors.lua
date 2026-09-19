@@ -67,6 +67,13 @@ local function ApplyColors()
     end
     return RequestGeneral("MSUF2_COLORS", { preview = true, applyAll = false, colors = true })
 end
+-- The threat colors live in the threat module's own curve, which only its element
+-- apply re-reads, so a curve edit also re-applies that one element on every frame.
+function M._ApplyThreatCurveColors()
+    ApplyColors()
+    local refresh = _G.MSUF_RequestThreatIndicatorRefresh
+    if type(refresh) == "function" then refresh(nil, "MSUF2_THREAT_CURVE_COLORS") end
+end
 
 function M.RefreshActiveHealthBackgroundInlinePreview()
     if M.activeKey ~= "opt_colors" then return false end
@@ -994,12 +1001,27 @@ M._levelDifficultyColor = {
     { "levelColorEasy", "Below your level", 0.25, 0.75, 0.25, "level_difficulty.easy" },
     { "levelColorTrivial", "Trivial", 0.50, 0.50, 0.50, "level_difficulty.trivial" },
 }
+-- Threat % color curve, low to high threat, in the same row shape. Keys and
+-- defaults mirror CURVE_STOPS in Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua
+-- (threat_text_smoke.lua pins both). Only the clients offering the text list it.
+if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+    M._threatCurveColor = {
+        { "threatColorLow", "Low threat", 0.30, 0.85, 0.30, "threat.curve.low" },
+        { "threatColorMid", "Medium threat", 1.00, 0.82, 0.10, "threat.curve.mid" },
+        { "threatColorHigh", "High threat", 1.00, 0.60, 0.60, "threat.curve.high" },
+    }
+end
 M._statusTextColor = {
     units = (M.FilterSupportedUnitValues or function(values) return values end)(ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|boss=Boss Frames|arena=Arena Frames"),
     indicators = ValueTextPairs "levelIndicator=Level Text|raceIndicator=Race Text|classTextIndicator=Class Text|raidGroupName=Raid Group|statusText=Dead / Offline Text|statusGhostText=Ghost Text|statusAFKText=AFK Text|statusDNDText=DND Text",
     unitKeys = {},
     prefixKeys = {},
 }
+-- The threat text's own color, used while it does not follow the threat colors.
+if M._threatCurveColor then
+    local indicators = M._statusTextColor.indicators
+    indicators[#indicators + 1] = { value = "threatIndicator", text = "Threat %" }
+end
 for i = 1, #M._statusTextColor.units do M._statusTextColor.unitKeys[M._statusTextColor.units[i].value] = true end
 for i = 1, #M._statusTextColor.indicators do M._statusTextColor.prefixKeys[M._statusTextColor.indicators[i].value] = true end
 local FONT_TEXT_MODE_VALUES = {
@@ -1140,7 +1162,7 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
     -- carries a swatch of its own. Frame and indicator are picked one at a time so
     -- the eight indicators across seven frames stay a single swatch. An indicator
     -- with no stored color shows the font color it currently inherits.
-    local statusText = b:CollapsibleSection("colors_status_text", "Status Text Colors", 410, false)
+    local statusText = b:CollapsibleSection("colors_status_text", "Status Text Colors", M._threatCurveColor and 550 or 410, false)
     local statusTextW = statusText._msuf2Width or ctx.width or 720
     local function StatusTextUnit()
         local value = tostring(M._colorsStatusTextUnit or "player")
@@ -1215,6 +1237,24 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
                 ApplyColors()
             end,
             nil, nil, Meta(row[6]), { row[3], row[4], row[5] })
+    end
+    -- Threat % colors. Global like the level bands: every Threat % text that
+    -- colors itself by threat (Status icons > Threat % > Color by threat) blends
+    -- between these three. Only the clients offering the threat text build them.
+    if M._threatCurveColor then
+        LabelAt(statusText, "Threat % Colors", 12, -410, statusTextW - 28, "GameFontNormal", T.colors.accent)
+        LabelAt(statusText, "Blended from low to high threat on every frame that colors its threat text by threat.",
+            12, -430, statusTextW - 28, "GameFontHighlightSmall", T.colors.muted)
+        for i = 1, #M._threatCurveColor do
+            local row = M._threatCurveColor[i]
+            ColorValueAt(ctx, statusText, row[2], 12 + ((i - 1) % 2) * 330, -460 - floor((i - 1) / 2) * 36,
+                function() return GeneralRGB(row[1], row[3], row[4], row[5]) end,
+                function(r, g, bcol)
+                    SetGeneralRGB(row[1], r, g, bcol)
+                    M._ApplyThreatCurveColors()
+                end,
+                nil, nil, Meta(row[6]), { row[3], row[4], row[5] })
+        end
     end
     end
     if part == "font" then return end

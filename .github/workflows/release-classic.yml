@@ -15,12 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLASSIC_RELEASE_TAG: ${{ github.ref_name }}
-      CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
-      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+      # Presence only, never the token: the Wago upload step is the single step
+      # that is handed WAGO_API_TOKEN, and a step `if:` cannot read `secrets`.
+      WAGO_UPLOAD_ENABLED: ${{ secrets.WAGO_API_TOKEN != '' }}
 
     steps:
       - name: Check out Classic release tag
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
@@ -31,13 +32,10 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $tag = $env:CLASSIC_RELEASE_TAG
-          if ($tag -notmatch '^classic-v(?<base>\d+(?:\.\d+)*)-(?<channel>alpha|beta)(?<number>\d+)$') {
-            throw "Classic CurseForge releases require tag 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>'. Got: $tag"
-          }
-          $versionBase = $Matches["base"]
-          $channel = $Matches["channel"]
-          $channelNumber = [int]$Matches["number"]
-          $version = "$versionBase-$channel$channelNumber"
+          # Version, display name and channel come from the shared resolver that
+          # the packager and the metadata correction also use.
+          $release = & "./.github/scripts/resolve_classic_release_channel.ps1" -Tag $tag
+          $version = $release.Version
 
           git fetch --no-tags origin "+refs/heads/classic:refs/remotes/origin/classic"
           if ($LASTEXITCODE -ne 0) {
@@ -59,13 +57,8 @@ jobs:
             throw "Refusing Classic release tag '$tag' at $tagCommit; current origin/classic is $classicCommit."
           }
 
-          if ($channel -eq "alpha") {
-            $releaseName = "MSUF_${versionBase}A$channelNumber"
-            $releaseType = "alpha"
-          } else {
-            $releaseName = "MSUF_${versionBase} Beta $channelNumber"
-            $releaseType = "beta"
-          }
+          $releaseName = $release.DisplayName
+          $releaseType = $release.ReleaseType
 
           "CLASSIC_RELEASE_VERSION=$version" >> $env:GITHUB_ENV
           "CLASSIC_RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
@@ -77,13 +70,15 @@ jobs:
 
       - name: Validate CurseForge publishing configuration
         shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
             throw "Missing CurseForge secret CF_API_KEY (or CURSEFORGE fallback)."
           }
 
       - name: Set up Python for the Classic gate
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -120,9 +115,11 @@ jobs:
             throw "Classic release package build failed."
           }
 
-      - name: Upload Classic alpha to CurseForge
+      - name: Upload Classic release to CurseForge
         id: curseforge
         shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -237,8 +234,10 @@ jobs:
       # clients are all set by the upload. Skipped without the WAGO_API_TOKEN secret.
       - name: Upload Classic release to Wago
         id: wago
-        if: env.WAGO_API_TOKEN != ''
+        if: env.WAGO_UPLOAD_ENABLED == 'true'
         shell: pwsh
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -301,9 +300,19 @@ jobs:
           "patches=$($assigned -join ', ')" >> $env:GITHUB_OUTPUT
           Write-Host "Wago upload accepted: project $projectId, '$env:CLASSIC_RELEASE_NAME' ($($metadata.stability)), patches [$($assigned -join ', ')]."
 
+      # CurseForge and Wago answer with the file id, the accepted game versions
+      # and the assigned patches. They reach the script through env, never
+      # through ${{ }} inside the here-string, so a response can only ever be
+      # summary text and never PowerShell.
       - name: Write Classic release summary
         shell: pwsh
+        env:
+          CF_FILE_ID: ${{ steps.curseforge.outputs.file_id }}
+          CF_GAME_VERSIONS: ${{ steps.curseforge.outputs.game_versions }}
+          WAGO_PATCHES: ${{ steps.wago.outputs.patches }}
         run: |
+          $wagoPatches = $env:WAGO_PATCHES
+          if ([string]::IsNullOrWhiteSpace($wagoPatches)) { $wagoPatches = "not uploaded" }
           @"
           ## MSUF Classic CurseForge $($env:CLASSIC_RELEASE_TYPE)
 
@@ -311,8 +320,8 @@ jobs:
           - Version: ``$env:CLASSIC_RELEASE_VERSION``
           - Display name: ``$env:CLASSIC_RELEASE_NAME``
           - CurseForge project: ``1384660``
-          - CurseForge file: ``${{ steps.curseforge.outputs.file_id }}``
-          - Game versions: ``${{ steps.curseforge.outputs.game_versions }}``
-          - Wago patches: ``${{ steps.wago.outputs.patches || 'not uploaded' }}``
+          - CurseForge file: ``$env:CF_FILE_ID``
+          - Game versions: ``$env:CF_GAME_VERSIONS``
+          - Wago patches: ``$wagoPatches``
           - Release type: ``$env:CLASSIC_RELEASE_TYPE``
           "@ >> $env:GITHUB_STEP_SUMMARY

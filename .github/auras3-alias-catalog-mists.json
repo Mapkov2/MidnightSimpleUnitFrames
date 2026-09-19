@@ -4,6 +4,9 @@
   "file_data_id": 1990283,
   "encoding": "base36-token-groups-v1",
   "common_groups": 5973,
+  "folded_locales": {
+    "itIT": "enUS"
+  },
   "locales": {
     "enUS": {
       "csv_sha256": "9c5b248b98eb90661ba93a8081790eebc462e7f1ec75c4172f5903737eeebb7e",
@@ -89,48 +92,75 @@
       "sha256": "7caf9bf374a04c71d745198b1e1f2bb0496ae1966105a0adc03eda691ceb624c"
     },
     "MSUF_Auras3_AliasData_enUS.lua": {
-      "bytes": 180643,
-      "sha256": "925544b271aebca5cee851ff26ec19205d494ace3038f84f08d7acd87560504a"
+      "bytes": 180669,
+      "sha256": "bd5cdc175610c8081338a00151260a1f87a45965f8a4cd5483268758ffdd1c92",
+      "locales": [
+        "enUS",
+        "itIT"
+      ]
     },
     "MSUF_Auras3_AliasData_deDE.lua": {
       "bytes": 189548,
-      "sha256": "5056c12fda287fcaa15cfb189ce6df9a7353f24e24a3b205fd39f4459fdf585c"
+      "sha256": "5056c12fda287fcaa15cfb189ce6df9a7353f24e24a3b205fd39f4459fdf585c",
+      "locales": [
+        "deDE"
+      ]
     },
     "MSUF_Auras3_AliasData_frFR.lua": {
       "bytes": 184665,
-      "sha256": "b9adb09a25aa2df205a592a4d610bba544ebaa6ed58b33dbd5bf872f1e7eeeeb"
+      "sha256": "b9adb09a25aa2df205a592a4d610bba544ebaa6ed58b33dbd5bf872f1e7eeeeb",
+      "locales": [
+        "frFR"
+      ]
     },
     "MSUF_Auras3_AliasData_esES.lua": {
       "bytes": 185441,
-      "sha256": "b98cf9512806036548dab7c47de6ac49da6dd47762e609fc04e76abe09b95bbd"
+      "sha256": "b98cf9512806036548dab7c47de6ac49da6dd47762e609fc04e76abe09b95bbd",
+      "locales": [
+        "esES"
+      ]
     },
     "MSUF_Auras3_AliasData_esMX.lua": {
       "bytes": 185655,
-      "sha256": "a46eeaaac504eda890fc1238604df2e7060e770108e5e18e6e927bc9d3d9410a"
-    },
-    "MSUF_Auras3_AliasData_itIT.lua": {
-      "bytes": 180643,
-      "sha256": "1ef0d1b329bde86b1ce93385a0edfef243902bf5657bc59fd9501c86a33dfd1d"
+      "sha256": "a46eeaaac504eda890fc1238604df2e7060e770108e5e18e6e927bc9d3d9410a",
+      "locales": [
+        "esMX"
+      ]
     },
     "MSUF_Auras3_AliasData_ptBR.lua": {
       "bytes": 183729,
-      "sha256": "ba5be4748e18262848e3574c742be1cb7ffa597b0274e58d49425eb7186b89df"
+      "sha256": "ba5be4748e18262848e3574c742be1cb7ffa597b0274e58d49425eb7186b89df",
+      "locales": [
+        "ptBR"
+      ]
     },
     "MSUF_Auras3_AliasData_ruRU.lua": {
       "bytes": 187937,
-      "sha256": "ac55f8239af960f70ecd7db3ba8bc197977d2c73e9b1b2cdae14b60af56daaeb"
+      "sha256": "ac55f8239af960f70ecd7db3ba8bc197977d2c73e9b1b2cdae14b60af56daaeb",
+      "locales": [
+        "ruRU"
+      ]
     },
     "MSUF_Auras3_AliasData_koKR.lua": {
       "bytes": 198455,
-      "sha256": "baf08bd1e7c86ce34a3c4a2e8ccd839794b576086c19ac596a795d3ae7e184b4"
+      "sha256": "baf08bd1e7c86ce34a3c4a2e8ccd839794b576086c19ac596a795d3ae7e184b4",
+      "locales": [
+        "koKR"
+      ]
     },
     "MSUF_Auras3_AliasData_zhCN.lua": {
       "bytes": 185651,
-      "sha256": "92d6453f82a29fb087d1c9147f77464aeaaf0a63ee754a4c434222e47cd2410b"
+      "sha256": "92d6453f82a29fb087d1c9147f77464aeaaf0a63ee754a4c434222e47cd2410b",
+      "locales": [
+        "zhCN"
+      ]
     },
     "MSUF_Auras3_AliasData_zhTW.lua": {
       "bytes": 184943,
-      "sha256": "ae46a5f9633534ca19470e41304bd6532101ad312d17a83518c6e6791632e2e8"
+      "sha256": "ae46a5f9633534ca19470e41304bd6532101ad312d17a83518c6e6791632e2e8",
+      "locales": [
+        "zhTW"
+      ]
     }
   }
 }

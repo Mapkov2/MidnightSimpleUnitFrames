@@ -48,10 +48,9 @@ local MENU_WRITE_OPTS = { preview = false, applyAll = false, notify = false }
 local MOUSEOVER_WRITE_OPTS = { preview = false, applyAll = false, mouseoverHighlight = true }
 local PREVIEW_FALSE = { preview = false }
 -- Code family from the client model (WoW Forever is Mainline whatever project ID
--- it reports); the project comparison only serves a page loaded without MSUF.Client.
-local IS_MAINLINE = MSUF.Client ~= nil and MSUF.Client.Family == "Mainline"
-    or MSUF.Client == nil and (_G.WOW_PROJECT_ID == nil or _G.WOW_PROJECT_MAINLINE == nil
-        or _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE)
+-- it reports), so the raw project is never asked here. A harness that loads this
+-- page without MSUF.Client keeps the Mainline answer, the build it belongs to.
+local IS_MAINLINE = MSUF.Client == nil or MSUF.Client.Family == "Mainline"
 local function NormalizeTooltipMode(mode)
     if mode == "OOC" or mode == "MODIFIER" or mode == "NEVER" then return mode end
     if mode == "OFF" then return "NEVER" end

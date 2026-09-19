@@ -147,6 +147,11 @@ local STATUS_CONTROLS = {
     StatusControl("stance", "Stance", "showStanceIndicator", false, "stanceIndicatorSize", 12, "stanceIndicatorAnchor", "TOP", STATUS_LEVEL_ANCHORS, "stanceIndicatorOffsetX", 0, "stanceIndicatorOffsetY", -2, "stanceIndicatorLayer", 7, "MSUF_RequestStatusIconsRefreshForCurrent", { allowed = function(unit) return unit == "player" end, statusRuntime = true, textIndicator = true, colorPrefix = "stanceIndicator" }),
     StatusControl("statusPvp", "PvP Flag (War Mode/PvP)", "showPvpIndicator", true, "pvpIndicatorSize", 18, "pvpIndicatorAnchor", "TOPRIGHT", STATUS_CORNER_ANCHORS, "pvpIndicatorOffsetX", 0, "pvpIndicatorOffsetY", 0, "pvpIndicatorLayer", 7, "MSUF_RequestStatusPvpIndicatorRefresh", { allowed = function(unit) return unit == "player" or unit == "target" or unit == "focus" or unit == "targettarget" or unit == "focustarget" end, statusRuntime = true, iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD", customIcon = "pvpIndicatorCustomIcon" }),
     StatusControl("statusPetHappiness", "Pet Happiness", "showPetHappinessIndicator", true, "petHappinessIndicatorSize", 24, "petHappinessIndicatorAnchor", "RIGHT", STATUS_CORNER_ANCHORS, "petHappinessIndicatorOffsetX", -7, "petHappinessIndicatorOffsetY", -4, "petHappinessIndicatorLayer", 7, "MSUF_RequestPetHappinessIndicatorRefresh", { allowed = function(unit) return unit == "pet" and PetHappinessSupported() end, statusRuntime = true }),
+    -- Threat percentage text: Classic Era and TBC offer it, Mists does not
+    -- (MSUF.Client.SupportsThreatText). statusTextState gives it the status text
+    -- color shortcut without the name-font size fallback of textIndicator
+    -- (compile default 11 px).
+    StatusControl("statusThreat", "Threat %", "showThreatIndicator", true, "threatIndicatorSize", 11, "threatIndicatorAnchor", "BOTTOMLEFT", STATUS_CORNER_ANCHORS, "threatIndicatorOffsetX", 6, "threatIndicatorOffsetY", 2, "threatIndicatorLayer", 7, "MSUF_RequestThreatIndicatorRefresh", { allowed = function(unit) local client = MSUF.Client; return (unit == "target" or unit == "focus" or unit == "boss") and client ~= nil and client.SupportsThreatText == true end, statusRuntime = true, statusTextState = "THREAT", colorPrefix = "threatIndicator" }),
 }
 -- LEFT/CENTER/RIGHT were legacy 5.77 tokens for the top row. Profiles migrate
 -- those values to TOPLEFT/TOP/TOPRIGHT; FRAME* keeps the new middle row
@@ -272,7 +277,7 @@ for _, slot in ipairs(WL [[Name HealthLeft HealthCenter HealthRight PowerLeft Po
     end
 end
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
-local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness stance", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled levelIndicatorDifficultyColor", "show iconStyle customIcon x y anchor size layer symbol")
+local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled levelIndicatorDifficultyColor threatIndicatorColorCurve threatIndicatorBackground", "show iconStyle customIcon x y anchor size layer symbol")
 --- Most fields below "healthColorMode" are the per-unit Bars override scope (gated by
 --- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). UnitFrame Dispel Overlay/Symbol
 --- are the deliberate exception: they are copied with Frame settings but stay owned by
@@ -282,7 +287,7 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill chunkedFill healthColorMode
     hlOverride barTexture barBackgroundTexture barBgTexture
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
-    highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger
+    highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger dispelBorderShowOn
     unitDispelOverlayEnabled unitDispelOverlayStyle unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
     unitDispelSymbolEnabled unitDispelSymbolStyle unitDispelSymbolMode unitDispelSymbolTrigger
     unitDispelSymbolSize unitDispelSymbolSpacing unitDispelSymbolGrowth unitDispelSymbolAnchor

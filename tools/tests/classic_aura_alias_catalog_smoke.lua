@@ -9,7 +9,15 @@
 -- WeakAuras matches auras on Classic.
 local root = assert(arg[1], "repository root argument missing")
 
-local LOCALES = { "Common", "enUS", "deDE", "frFR", "esES", "esMX", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }
+-- One file per locale, except the folded ones below.
+local LOCALES = { "Common", "enUS", "deDE", "frFR", "esES", "esMX", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }
+-- The itIT SpellName export is byte-identical to enUS on every Classic build, so both
+-- locales resolve the same groups. The enUS file's guard accepts itIT and the duplicate
+-- file is gone: 60-190 KB per flavor that used to compile at every login for nothing.
+-- The loader reads AuraAliasCatalog.localized from whichever partition matches
+-- GetLocale(), so an itIT client sees exactly what it saw before.
+local FOLDED = { itIT = "enUS" }
+local SERVED = { enUS = "enUS+itIT" }
 
 local function readFile(rel)
     local handle = assert(io.open(root .. "/" .. rel, "rb"), "missing file: " .. rel)
@@ -60,9 +68,24 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
             flavor .. " alias data " .. locale .. " must load after DataShared and before the resolver")
         assert(ownership:find(rel, 1, true), rel .. " must be declared Classic-owned")
         local source = readFile(rel)
-        assert(source:find("-- SpellName / Classic " .. flavor .. " " .. case.build .. " / " .. locale, 1, true),
-            rel .. " must carry the " .. flavor .. " " .. case.build .. " build header")
+        assert(source:find("-- SpellName / Classic " .. flavor .. " " .. case.build .. " / "
+            .. (SERVED[locale] or locale) .. ";", 1, true),
+            rel .. " must carry the " .. flavor .. " " .. case.build .. " build header for "
+            .. (SERVED[locale] or locale))
         assert(not source:find("Retail", 1, true), rel .. " must not be a Retail catalog")
+    end
+    -- A folded locale ships no file, is claimed by no manifest and is not owned: the
+    -- serving file's guard is the only thing that may mention it.
+    for folded, servedBy in pairs(FOLDED) do
+        local rel = "MidnightSimpleUnitFrames/Game/" .. flavor .. "/Auras/AliasData/MSUF_Auras3_AliasData_" .. folded .. ".lua"
+        assert(not io.open(root .. "/" .. rel, "rb"), rel .. " duplicates " .. servedBy .. " and must not ship")
+        assert(not manifest:find("MSUF_Auras3_AliasData_" .. folded .. ".lua", 1, true),
+            flavor .. " manifest still loads the folded " .. folded .. " alias data")
+        assert(not ownership:find(rel, 1, true), rel .. " must not be declared Classic-owned")
+        local server = readFile("MidnightSimpleUnitFrames/Game/" .. flavor
+            .. "/Auras/AliasData/MSUF_Auras3_AliasData_" .. servedBy .. ".lua")
+        assert(server:find('if locale ~= "' .. servedBy .. '" and locale ~= "' .. folded .. '" then return end', 1, true),
+            flavor .. " " .. servedBy .. " alias data does not serve " .. folded)
     end
     local dotAt = assert(manifest:find("MSUF_Auras3_DotData.lua", 1, true))
     assert(resolverAt < dotAt, flavor .. " resolver must load before the curated datasets")
@@ -83,6 +106,24 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
     assert(A3.AuraAliasCatalog.locale == "enUS", flavor .. " only the active locale may load its partition")
     assert(type(A3.AuraAliasCatalog.common) == "string" and type(A3.AuraAliasCatalog.localized) == "string",
         flavor .. " catalog must provide common and localized blobs")
+    -- The same load under a folded locale must land on the identical payload; that is
+    -- the whole contract that lets its own file go.
+    for folded in pairs(FOLDED) do
+        _G.GetLocale = function() return folded end
+        local other = { MSUF_Auras3 = {} }
+        local function runOther(rel) assert(loadfile(root .. "/" .. rel))("MidnightSimpleUnitFrames", other) end
+        runOther("MidnightSimpleUnitFrames/Game/" .. flavor .. "/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua")
+        for _, locale in ipairs(LOCALES) do
+            if locale ~= "Common" then
+                runOther("MidnightSimpleUnitFrames/Game/" .. flavor .. "/Auras/AliasData/MSUF_Auras3_AliasData_" .. locale .. ".lua")
+            end
+        end
+        local catalog = other.MSUF_Auras3.AuraAliasCatalog
+        assert(catalog.locale == folded, flavor .. " " .. folded .. " must report its own locale")
+        assert(catalog.localized == A3.AuraAliasCatalog.localized,
+            flavor .. " " .. folded .. " must resolve the same payload it had as its own file")
+        _G.GetLocale = function() return "enUS" end
+    end
     run("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_AuraAliases.lua")
     assert(type(A3.CompileCustomAuraAliases) == "function", flavor .. " resolver did not install")
 

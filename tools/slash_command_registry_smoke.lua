@@ -142,6 +142,13 @@ MSUF.ExportPublic = function(name, value)
     _G[name] = value
     return value
 end
+--- Game/Shared/Initialize.lua loads before the Kernel on every TOC, resolves the
+--- version once from the TOC this client loaded and publishes the one accessor
+--- every consumer uses. This stub stands in for it: /msuf version must never ask
+--- a TOC itself, because the Mainline TOC carries one conditioned Version line
+--- per game type and WoW Forever's number lives in X-MSUF-Version-Forever.
+MSUF.Client = { AddonVersion = "6.0-smoke" }
+MSUF.GetAddonVersion = function() return MSUF.Client.AddonVersion end
 
 --- Kernel/MSUF_Require.lua loads immediately after Kernel/MSUF_Boundary.lua in
 --- the TOC and installs MSUF.Require / MSUF.Optional. All three files below

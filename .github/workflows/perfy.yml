@@ -27,12 +27,17 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
+      # Workflow inputs are dispatch text. They reach the scripts through env,
+      # never through ${{ }} inside the script body, where a quote would end the
+      # string and the rest would run as PowerShell.
       - name: Install lua-language-server
         shell: pwsh
+        env:
+          PERFY_LUALS_VERSION: ${{ inputs.lua_language_server_version }}
         run: |
-          $requested = "${{ inputs.lua_language_server_version }}".Trim()
+          $requested = "$env:PERFY_LUALS_VERSION".Trim()
           if ([string]::IsNullOrWhiteSpace($requested)) {
             throw "lua_language_server_version cannot be empty."
           }
@@ -74,17 +79,20 @@ jobs:
       - name: Build Perfy package
         id: perfy
         shell: pwsh
+        env:
+          PERFY_REF: ${{ inputs.perfy_ref }}
+          PERFY_INSTRUMENT_ALL_LUA: ${{ inputs.instrument_all_lua }}
         run: |
-          $instrumentAllLua = [System.Convert]::ToBoolean("${{ inputs.instrument_all_lua }}")
+          $instrumentAllLua = [System.Convert]::ToBoolean("$env:PERFY_INSTRUMENT_ALL_LUA")
           & .github/scripts/Build-PerfyPackage.ps1 `
-            -PerfyRef "${{ inputs.perfy_ref }}" `
+            -PerfyRef "$env:PERFY_REF" `
             -LuaLanguageServer $env:LUALS_BIN `
             -OutputDir "dist/perfy" `
             -WorkDir "dist/perfy-work" `
             -InstrumentAllLua:$instrumentAllLua
 
       - name: Upload Perfy package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MSUF-Perfy-${{ github.run_number }}
           if-no-files-found: error

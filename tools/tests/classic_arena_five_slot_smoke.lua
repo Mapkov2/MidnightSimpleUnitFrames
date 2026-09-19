@@ -16,6 +16,8 @@ local function Check(condition, message)
     if not condition then error(message, 2) end
 end
 
+local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
+
 local function Read(relative)
     local file = assert(io.open(root .. "/" .. relative, "rb"))
     local text = file:read("*a"):gsub("\r\n", "\n")
@@ -354,10 +356,12 @@ Check(requestLoops == 2, "RequestUnitNow arena loops do not follow MSUF_MAX_AREN
 Check(not unitFrames:find('for i = 1, 3 do\n%s*didWork = ApplyRuntimeUnit%("arena"'),
     "a RequestUnitNow arena loop is still fixed at three")
 
-local identityStart = unitFrames:find("A3._ClassicTargetIdentityAuraEvents = A3._ClassicTargetIdentityAuraEvents", 1, true)
-local identityEnd = unitFrames:find("A3._ClassicIdentityAuraEvent = A3._ClassicIdentityAuraEvent or {", 1, true)
-Check(identityStart and identityEnd and identityStart < identityEnd, "identity event table block is unreadable")
-local identityBlock = unitFrames:sub(identityStart, identityEnd - 1)
+-- Reason: this run is plain assignments, not a declaration, so it keeps
+-- explicit markers; the shared slicer makes a miss fatal and names the file.
+local identityBlock = Slice.Block(unitFrames,
+    "A3._ClassicTargetIdentityAuraEvents = A3._ClassicTargetIdentityAuraEvents",
+    "A3._ClassicIdentityAuraEvent = A3._ClassicIdentityAuraEvent or {",
+    "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
 Check(identityBlock:find("for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do", 1, true),
     "identity event loop marker for arena4..N is missing")
 local runIdentity = assert(loadstring("local A3 = ...\n" .. identityBlock))

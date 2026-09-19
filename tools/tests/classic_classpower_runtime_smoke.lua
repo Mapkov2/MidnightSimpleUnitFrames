@@ -25,6 +25,7 @@ function MSUF_RegisterModule(name, callbacks) assert(name == "ClassPower"); modu
 local function load(path) assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MSUF", ns) end
 load("Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua")
 load("Game/Classic/ClassPower/MSUF_CP_Constants.lua")
+load("Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua")
 load("Game/" .. flavor .. "/ClassPower.lua")
 load("Game/Classic/ClassPower/MSUF_CP_Modes.lua")
 load("Game/Classic/ClassPower/MSUF_CP_Core.lua")

@@ -186,16 +186,14 @@ local function Now()
     return type(time) == "function" and time() or 0
 end
 
+--- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+--- the version is resolved once from the TOC this client loaded, so no consumer
+--- asks a TOC again.
 local function AddonVersion()
-    if MSUF.Client and MSUF.Client.AddonVersion then return MSUF.Client.AddonVersion end
-    local api = _G.C_AddOns
-    local value
-    if type(api) == "table" and type(api.GetAddOnMetadata) == "function" then
-        value = api.GetAddOnMetadata(addonName, "Version")
-    elseif type(_G.GetAddOnMetadata) == "function" then
-        value = _G.GetAddOnMetadata(addonName, "Version")
-    end
-    return tostring(value or "6.0")
+    local getVersion = MSUF.GetAddonVersion
+    local version = type(getVersion) == "function" and getVersion() or nil
+    if type(version) == "string" and version ~= "" then return version end
+    return "6.0"
 end
 
 local state = globalDB.global.firstLoad6

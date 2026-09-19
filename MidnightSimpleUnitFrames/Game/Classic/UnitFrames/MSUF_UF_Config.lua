@@ -962,6 +962,11 @@ local function StatusAllowed(key, id)
     local client = MSUF.Client
     return key == "pet" and client and (client.SupportsPetHappiness == true
       or client.SupportsPetHappiness == nil and (client.IsVanilla == true or client.IsTBC == true))
+  elseif id == "threat" then
+    -- Classic Era and TBC offer the threat text, Mists does not (Initialize.lua).
+    local client = MSUF.Client
+    return (key == "target" or key == "focus" or key == "boss")
+      and client ~= nil and client.SupportsThreatText == true
   elseif id == "leader" or id == "assist" or id == "combat" or id == "incomingRes" then
     return key == "player" or key == "target"
   elseif id == "pvp" then
@@ -1049,6 +1054,9 @@ local UNIT_STATUS_ENTRY_DEFS = {
   PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
   PrefixedStatusDef("petHappiness", "showPetHappinessIndicator", true, "petHappinessIndicator", 24, "RIGHT", -7, -4, 7),
   PrefixedStatusDef("stance", "showStanceIndicator", false, "stanceIndicator", 12, "TOP", 0, -2, 7),
+  -- Threat percentage text (Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua):
+  -- default on, in the bottom-left corner that no other status element uses.
+  PrefixedStatusDef("threat", "showThreatIndicator", true, "threatIndicator", 11, "BOTTOMLEFT", 6, 2, 7),
 }
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {
@@ -1437,7 +1445,11 @@ end
 local function CooldownAnchorSupported()
   local supported = _G.MSUF_IsCooldownAnchorSupported
   if type(supported) == "function" then return supported() == true end
-  return type(_G.C_CooldownViewer) == "table"
+  -- The C_CooldownViewer namespace is never the signal: the shared engine
+  -- exposes it on every Classic client too, while only the Mainline family
+  -- ships Blizzard's Cooldown Manager (Client.HostsCooldownManager).
+  local client = MSUF.Client
+  return type(client) == "table" and client.HostsCooldownManager == true
 end
 
 local function IsGlobalCooldownAnchorEnabled(general)
@@ -1597,6 +1609,9 @@ local function CompileUnitStatus(out, conf, general, key)
       fallbackSize = levelSize
     elseif id == "raidGroup" then
       fallbackSize = raidGroupSize
+    elseif id == "threat" then
+      -- The def's own 11 px: the text sits under the 14 px name on 30 px frames.
+      fallbackSize = nil
     end
     CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
   end
@@ -1607,6 +1622,15 @@ local function CompileUnitStatus(out, conf, general, key)
   if level then
     level.difficultyColor = StatusBool(conf, general, "levelIndicatorDifficultyColor", level.colorR == nil)
     level.difficultyColors = level.difficultyColor and Shared.ResolveLevelDifficultyColors(general) or nil
+  end
+  -- The threat color curve follows the same rule: on, unless the frame already
+  -- picked its own threat text color. The palette is global and resolved by the
+  -- threat module (Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua).
+  local threat = status.threat
+  if threat then
+    threat.colorCurve = StatusBool(conf, general, "threatIndicatorColorCurve", threat.colorR == nil)
+    -- A dark plate behind the number keeps it readable on red enemy bars.
+    threat.background = StatusBool(conf, general, "threatIndicatorBackground", true)
   end
 
   local statusTextStates = {}

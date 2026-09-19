@@ -937,6 +937,8 @@ local function StatusAllowed(key, id)
     return key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "boss"
   elseif id == "petHappiness" then
     return key == "pet"
+  elseif id == "threat" then
+    return key == "target" or key == "focus" or key == "boss"
   end
   return true
 end
@@ -1014,6 +1016,13 @@ local UNIT_STATUS_ENTRY_DEFS = {
 if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
   UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
     PrefixedStatusDef("petHappiness", "showPetHappinessIndicator", true, "petHappinessIndicator", 24, "RIGHT", -7, -4, 7)
+end
+-- The threat percentage text exists on WoW Forever only on this build (see
+-- Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua). Default on, in the bottom-left
+-- corner that no other status element uses; Midnight gets no entry.
+if MSUF.Client and MSUF.Client.SupportsThreatText == true then
+  UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
+    PrefixedStatusDef("threat", "showThreatIndicator", true, "threatIndicator", 11, "BOTTOMLEFT", 6, 2, 7)
 end
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {
@@ -1517,6 +1526,9 @@ local function CompileUnitStatus(out, conf, general, key)
       fallbackSize = levelSize
     elseif id == "raidGroup" then
       fallbackSize = raidGroupSize
+    elseif id == "threat" then
+      -- The def's own 11 px: the text sits under the 14 px name on 30 px frames.
+      fallbackSize = nil
     end
     CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
   end
@@ -1527,6 +1539,15 @@ local function CompileUnitStatus(out, conf, general, key)
   if level then
     level.difficultyColor = StatusBool(conf, general, "levelIndicatorDifficultyColor", level.colorR == nil)
     level.difficultyColors = level.difficultyColor and Shared.ResolveLevelDifficultyColors(general) or nil
+  end
+  -- The threat color curve follows the same rule: on, unless the frame already
+  -- picked its own threat text color. The palette is global and resolved by the
+  -- threat module (Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua).
+  local threat = status.threat
+  if threat then
+    threat.colorCurve = StatusBool(conf, general, "threatIndicatorColorCurve", threat.colorR == nil)
+    -- A dark plate behind the number keeps it readable on red enemy bars.
+    threat.background = StatusBool(conf, general, "threatIndicatorBackground", true)
   end
 
   local statusTextStates = {}

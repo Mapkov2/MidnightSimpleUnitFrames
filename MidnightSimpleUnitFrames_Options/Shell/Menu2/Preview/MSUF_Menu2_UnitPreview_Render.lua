@@ -3185,6 +3185,9 @@ function Stage.RenderAurasAndStatus(st, Preview)
                 end
                 local textW = icon.txt and icon.txt.GetStringWidth and icon.txt:GetStringWidth() or sz
                 local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
+                -- Threat % on its dark plate lays out at the width of "100%", like the runtime.
+                -- (No new local here: this function sits at Lua 5.1's 200-local limit.)
+                textW = R.PreviewStatus.ThreatPlate and R.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW
                 icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
                 R.PositionSameAnchorPreview(icon, anchor, x, y, mock)
             else
@@ -3341,7 +3344,7 @@ function Render.Install(Preview, deps)
         statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
         statusCombat = "combat", statusResting = "resting",
         statusIncomingRes = "incomingRes", statusPvp = "pvp",
-        statusPetHappiness = "petHappiness",
+        statusPetHappiness = "petHappiness", statusThreat = "threat",
     }
     renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
     local PowerColor = renderState.PowerColor

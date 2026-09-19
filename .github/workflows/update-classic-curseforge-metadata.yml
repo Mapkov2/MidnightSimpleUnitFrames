@@ -15,11 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLASSIC_METADATA_TAG: ${{ github.ref_name }}
-      CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
 
     steps:
       - name: Check out metadata correction tag
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
@@ -30,12 +29,14 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $tag = $env:CLASSIC_METADATA_TAG
-          if ($tag -notmatch '^classic-cfmeta-(?<file>\d+)-v(?<version>\d+(?:\.\d+)*-alpha(?<number>\d+))(?:-r\d+)?$') {
-            throw "Metadata correction tag must use 'classic-cfmeta-<file>-v<version>-alpha<number>[-r<revision>]'. Got: $tag"
+          if ($tag -notmatch '^classic-cfmeta-(?<file>\d+)-v(?<version>\d+(?:\.\d+)*-(?:alpha|beta)\d+)(?:-r\d+)?$') {
+            throw "Metadata correction tag must use 'classic-cfmeta-<file>-v<version>-alpha<number>' or '...-beta<number>', optionally '-r<revision>'. Got: $tag"
           }
           $fileId = $Matches["file"]
           $version = $Matches["version"]
-          $alphaNumber = [int]$Matches["number"]
+          # Display name and release type come from the shared resolver, so a
+          # correction can never demote a beta file to alpha.
+          $release = & "./.github/scripts/resolve_classic_release_channel.ps1" -Tag $version
 
           git fetch --no-tags origin "+refs/heads/classic:refs/remotes/origin/classic"
           if ($LASTEXITCODE -ne 0) {
@@ -52,17 +53,20 @@ jobs:
             throw "VERSION '$sourceVersion' does not match metadata correction version '$version'."
           }
 
-          $base = $version -replace '-alpha\d+$', ''
-          $displayName = "MSUF_${base}A$alphaNumber"
+          $displayName = $release.DisplayName
           "CF_FILE_ID=$fileId" >> $env:GITHUB_ENV
           "CF_DISPLAY_NAME=$displayName" >> $env:GITHUB_ENV
+          "CF_RELEASE_TYPE=$($release.ReleaseType)" >> $env:GITHUB_ENV
           "file_id=$fileId" >> $env:GITHUB_OUTPUT
           "display_name=$displayName" >> $env:GITHUB_OUTPUT
+          "release_type=$($release.ReleaseType)" >> $env:GITHUB_OUTPUT
           Write-Host "Validated metadata correction for CurseForge file $fileId at origin/classic $classicCommit."
 
       - name: Update existing CurseForge file
         id: curseforge
         shell: pwsh
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
         run: |
           $ErrorActionPreference = "Stop"
           if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
@@ -103,7 +107,7 @@ jobs:
             fileID = [long]$env:CF_FILE_ID
             displayName = $env:CF_DISPLAY_NAME
             gameVersions = $gameVersionIds
-            releaseType = "alpha"
+            releaseType = $env:CF_RELEASE_TYPE
           } | ConvertTo-Json -Depth 4 -Compress
 
           $result = Invoke-RestMethod `
@@ -116,17 +120,23 @@ jobs:
             throw "CurseForge did not confirm metadata correction for file $env:CF_FILE_ID."
           }
           "updated_file_id=$($result.id)" >> $env:GITHUB_OUTPUT
-          Write-Host "CurseForge file $($result.id) now targets [$($gameVersionNames -join ', ')] as '$env:CF_DISPLAY_NAME' / alpha."
+          Write-Host "CurseForge file $($result.id) now targets [$($gameVersionNames -join ', ')] as '$env:CF_DISPLAY_NAME' / $env:CF_RELEASE_TYPE."
 
+      # The corrected file id and the accepted game versions are CurseForge's
+      # answer; they reach the script through env, never through ${{ }} inside
+      # the here-string.
       - name: Write correction summary
         shell: pwsh
+        env:
+          CF_UPDATED_FILE_ID: ${{ steps.curseforge.outputs.updated_file_id }}
+          CF_GAME_VERSIONS: ${{ steps.curseforge.outputs.game_versions }}
         run: |
           @"
           ## CurseForge file metadata corrected
 
-          - File: ``${{ steps.curseforge.outputs.updated_file_id }}``
+          - File: ``$env:CF_UPDATED_FILE_ID``
           - Display name: ``$env:CF_DISPLAY_NAME``
-          - Game versions: ``${{ steps.curseforge.outputs.game_versions }}``
-          - Release type: ``alpha``
+          - Game versions: ``$env:CF_GAME_VERSIONS``
+          - Release type: ``$env:CF_RELEASE_TYPE``
           - No new file was uploaded.
           "@ >> $env:GITHUB_STEP_SUMMARY

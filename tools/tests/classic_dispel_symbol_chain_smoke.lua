@@ -35,9 +35,41 @@ local groupConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_
 
 --- 1. The symbol alone must be enough to start a scan. Without this the feature
 --- silently needs the debuff icon lane to be on as well.
-Check(runtime:find("local needsScan = borderEnabled == true or overlayEnabled == true or stripeEnabled == true or symbolEnabled == true", 1, true),
+--- Both gates below are asserted by evaluating the shipped expression over every
+--- combination of the four visual flags, not by pinning the statement's exact
+--- text: reordering or reformatting the operands is not a bug, changing which
+--- combinations pass is.
+local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
+local COMPILE_OWNER = "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua"
+--- The eligibility gate also consults the border and overlay triggers; pin it
+--- with triggers that do allow a direct visual, so what is left to assert is
+--- that stripe and symbol still disqualify one.
+local FLAGS = "local borderEnabled, overlayEnabled, stripeEnabled, symbolEnabled = ...\n"
+  .. 'local borderTrigger, overlayActualTrigger = "ALWAYS", "ALWAYS"\n'
+  .. "local function TriggerCanUseDirectVisual() return true end\n"
+local function VisualGate(declaration, name)
+  local statement = Slice.Constant(runtime, declaration, COMPILE_OWNER)
+  return assert(loadstring(FLAGS .. statement .. "\nreturn " .. name, "@" .. name))
+end
+local needsScan = VisualGate("local needsScan =", "needsScan")
+local directVisualEligible = VisualGate("local directVisualEligible =", "directVisualEligible")
+for combination = 0, 15 do
+  local border = combination % 2 == 1
+  local overlay = math.floor(combination / 2) % 2 == 1
+  local stripe = math.floor(combination / 4) % 2 == 1
+  local symbol = math.floor(combination / 8) % 2 == 1
+  local label = string.format("border=%s overlay=%s stripe=%s symbol=%s",
+    tostring(border), tostring(overlay), tostring(stripe), tostring(symbol))
+  Check((needsScan(border, overlay, stripe, symbol) == true)
+      == (border or overlay or stripe or symbol),
+    "the compiled aura visual no longer starts a scan for exactly the enabled visuals: " .. label)
+  Check((directVisualEligible(border, overlay, stripe, symbol) == true)
+      == (not stripe and not symbol),
+    "the direct-visual shortcut no longer excludes stripe and symbol: " .. label)
+end
+Check(needsScan(false, false, false, true) == true,
   "the compiled aura visual no longer starts a scan for a symbol-only setup")
-Check(runtime:find("local directVisualEligible = stripeEnabled ~= true and symbolEnabled ~= true", 1, true),
+Check(directVisualEligible(false, false, false, true) ~= true,
   "the direct-visual shortcut no longer excludes the symbol")
 Check(runtime:find("symbol = symbolEnabled and {", 1, true),
   "the compiled aura visual no longer carries the symbol table")

@@ -76,13 +76,13 @@ end
 
 local Client = MSUF.Client or {}
 MSUF.Client = Client
-Client.ProjectID = projectID
+-- The interface number of the running build, read once above. Nothing else may
+-- call GetBuildInfo for it: the value cannot change while the client runs.
 Client.Interface = interfaceNumber
 Client.Flavor = isVanilla and "Vanilla" or isMists and "Mists" or isTBC and "TBC"
     or isRetail and "Mainline" or "Unknown"
 Client.IsRetail = isRetail
 Client.IsVanilla = isVanilla
-Client.IsEra = isVanilla
 Client.IsMists = isMists
 Client.IsTBC = isTBC
 Client.IsClassic = isVanilla or isMists or isTBC
@@ -94,6 +94,10 @@ Client.SupportsPetHappiness = isVanilla or isTBC or isForever
 -- Blizzard grays the target for everyone else (UnitIsTapDenied). Every Classic
 -- client and WoW Forever have it; Midnight needs no MSUF handling.
 Client.SupportsTapDenied = isVanilla or isMists or isTBC or isForever
+-- Threat percentage text on the target, focus and boss frames. Every client has
+-- UnitDetailedThreatSituation; the owner offers the text on Classic Era, TBC and
+-- WoW Forever (2026-09-19), so Mists and Midnight menus stay unchanged.
+Client.SupportsThreatText = isVanilla or isTBC or isForever
 -- WoW Forever characters carry a surname next to their first name (Blizzard's
 -- Camelot NameUtil). No other client has one.
 Client.HasCharacterSurnames = isForever
@@ -127,6 +131,28 @@ Client.HasSecretValueAPI = type(_G.issecretvalue) == "function"
 -- The code family decides which build runs: Mainline loads the Retail tree plus
 -- Game/Shared, Classic adds Game/Classic and its flavor folder.
 Client.Family = Client.Flavor == "Mainline" and "Mainline" or Client.IsClassic and "Classic" or "Unknown"
+
+-- Whether this client can host Blizzard's Cooldown Manager at all, and with it
+-- the Essential Cooldown anchor. The feature belongs to Blizzard_CooldownViewer,
+-- whose TOC allows the Mainline game types only (standard, plus camelot on WoW
+-- Forever); the C_CooldownViewer namespace, by contrast, lives in the shared
+-- engine and exists on Classic Era, TBC and Mists too, so that namespace alone
+-- is not a client signal and must never be used as one. The code family answers
+-- first, the owning Blizzard addon has to be part of this build, and the engine
+-- namespace is the last conjunct so a build without the API still answers no.
+-- The addon state can only say no: a client whose addon API cannot be read keeps
+-- the family answer instead of losing the anchor. Addons cannot be installed
+-- mid-session, so this is a fixed fact, resolved once here rather than probed on
+-- every anchor resolve.
+local function ShipsBlizzardAddOn(name)
+    local addOns = _G.C_AddOns
+    local doesAddOnExist = type(addOns) == "table" and addOns.DoesAddOnExist or nil
+    if type(doesAddOnExist) ~= "function" then return nil end
+    return doesAddOnExist(name) == true
+end
+Client.HostsCooldownManager = Client.Family == "Mainline"
+    and ShipsBlizzardAddOn("Blizzard_CooldownViewer") ~= false
+    and type(_G.C_CooldownViewer) == "table"
 
 -- Game mode, one level below the family. C_GameRules.GetActiveGameMode exists on
 -- every current client and is final before addons load: Blizzard_SharedXML reads
@@ -183,6 +209,16 @@ if type(addonVersion) == "string" then
     addonVersion = addonVersion:gsub("%s*%[.*$", "")
 end
 Client.AddonVersion = type(addonVersion) == "string" and addonVersion ~= "" and addonVersion or nil
+
+--- The one MSUF version accessor, for chat lines, tooltips and bug reports.
+--- Client.AddonVersion above is resolved once, from the TOC this client loaded,
+--- so no other file may ask a TOC again: the Options and Assistant packages
+--- carry their own "## Version" field, and a Mainline TOC carries one
+--- conditioned line per game type. Returns nil when detection did not run;
+--- callers that need a placeholder keep their own.
+function MSUF.GetAddonVersion()
+    return Client.AddonVersion
+end
 
 local unsupportedEvents = Client.UnsupportedEvents or {}
 Client.UnsupportedEvents = unsupportedEvents
@@ -434,18 +470,10 @@ function Client.DescribeLines()
     return lines
 end
 
--- Short aliases match the style used by ElvUI's shared client initializer and
--- make future client splits cheap without introducing per-frame checks.
-MSUF.Retail = Client.IsRetail
-MSUF.Vanilla = Client.IsVanilla
-MSUF.Era = Client.IsEra
-MSUF.Mists = Client.IsMists
-MSUF.TBC = Client.IsTBC
-MSUF.Classic = Client.IsClassic
-MSUF.Forever = Client.IsForever
-
-MSUF.Compat = MSUF.Compat or {}
-MSUF.Compat.Client = Client
+-- MSUF.Client is the single client surface. The short MSUF.Retail/Vanilla/Era/
+-- Mists/TBC/Classic/Forever aliases and the MSUF.Compat.Client bridge that used
+-- to sit here had no reader in any of the three addons and were removed; new
+-- code branches on Client.Is* or, better, on a named capability above.
 
 -- One English chat line for a client the detection above cannot fully place.
 -- Known clients build no text and create no frame. This file loads before the

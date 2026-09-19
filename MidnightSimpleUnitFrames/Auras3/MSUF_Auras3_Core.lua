@@ -163,12 +163,13 @@ local function NativeAuraRuntimeExpected()
         and warning.IsLegacyClient() == true then
         return false
     end
-    -- WoW Forever runs the Mainline build whatever project ID it reports.
+    -- The Mainline family owns the 12.1 aura runtime, and WoW Forever runs the
+    -- Mainline build whatever project ID it reports, so the code family is the
+    -- honest question. A harness that loads this file without the client model
+    -- keeps the Mainline answer, the build this file belongs to.
     local client = MSUF.Client
-    if type(client) == "table" and client.IsForever == true then return true end
-    local projectID, mainlineID = _G.WOW_PROJECT_ID, _G.WOW_PROJECT_MAINLINE
-    if projectID ~= nil and mainlineID ~= nil and projectID ~= mainlineID then return false end
-    return true
+    if type(client) ~= "table" then return true end
+    return client.Family == "Mainline"
 end
 function A3._RecordNativeAuraRuntimeError(message)
     A3.nativeAuraRuntimeError = message

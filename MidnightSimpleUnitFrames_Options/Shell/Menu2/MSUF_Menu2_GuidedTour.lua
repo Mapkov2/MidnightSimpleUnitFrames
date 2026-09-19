@@ -479,7 +479,11 @@ local function CooldownAnchorEnabled()
     end
     local getter = _G.MSUF_IsCooldownAnchorEnabled
     if type(getter) == "function" then return getter(general) == true end
-    return type(_G.C_CooldownViewer) == "table" and type(general) == "table" and general.anchorToCooldown == true or false
+    -- The C_CooldownViewer namespace is never the signal: the shared engine
+    -- exposes it on every client, while only the Mainline family ships
+    -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
+    return MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
+        and type(general) == "table" and general.anchorToCooldown == true or false
 end
 local function CooldownConsentDecision()
     local providerId = AutomaticCooldownProvider()

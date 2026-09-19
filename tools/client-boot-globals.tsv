@@ -1,0 +1,199 @@
+# Globals the offline client-boot harness does not model, read at load by the
+# shipped graph of each flavor. tools/tests/client_boot_smoke.lua diffs the
+# live set against this file: a global that appears here is a reviewed read,
+# a new one fails the smoke, and a row nothing reads any more fails it too.
+#
+# Flavors: * means every flavor the matrix plus WoW Forever covers; otherwise a
+# comma-separated subset. Kind groups the rows: unit, api, namespace, constant,
+# table and secret are Blizzard surfaces the harness answers with a permissive
+# stub; frame is a Blizzard UI frame; thirdparty is an addon MSUF detects;
+# defect marks a read that is a bug in the addon, reported and not fixed here.
+Global	Flavors	Kind	Reason
+AbbreviateLargeNumbers	*	api	Blizzard client API the harness does not model
+AbbreviateNumbers	*	api	Blizzard client API the harness does not model
+ArcUI_Public	*	thirdparty	third-party addon global MSUF probes to detect that addon
+AuraUtil	Vanilla,Mists,TBC	table	Blizzard aura helper table
+BackdropTemplateMixin	*	table	Blizzard backdrop mixin applied to template frames
+BreakUpLargeNumbers	*	api	Blizzard client API the harness does not model
+BuffFrame	*	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
+CLASS_ICON_TCOORDS	*	constant	Blizzard UI constant the harness does not model
+C_ChatInfo	*	namespace	Blizzard C_* namespace the harness does not model
+C_ClassColor	*	namespace	Blizzard C_* namespace the harness does not model
+C_CooldownViewer	Mainline,Forever	namespace	Blizzard C_* namespace the harness does not model
+C_CurveUtil	*	namespace	Blizzard C_* namespace the harness does not model
+C_DurationUtil	*	namespace	Blizzard C_* namespace the harness does not model
+C_EditMode	*	namespace	Blizzard C_* namespace the harness does not model
+C_EncodingUtil	*	namespace	Blizzard C_* namespace the harness does not model
+C_Housing	*	namespace	Blizzard C_* namespace the harness does not model
+C_IncomingSummon	*	namespace	Blizzard C_* namespace the harness does not model
+C_NamePlate	*	namespace	Blizzard C_* namespace the harness does not model
+C_PetInfo	Vanilla,TBC,Forever	namespace	Blizzard C_* namespace the harness does not model
+C_PlayerInteractionManager	*	namespace	Blizzard C_* namespace the harness does not model
+C_PvP	Mainline	namespace	Blizzard C_* namespace the harness does not model
+C_SpecializationInfo	*	namespace	Blizzard C_* namespace the harness does not model
+C_Spell	*	namespace	Blizzard C_* namespace the harness does not model
+C_SpellBook	*	namespace	Blizzard C_* namespace the harness does not model
+C_StringUtil	*	namespace	Blizzard C_* namespace the harness does not model
+C_UIFileAsset	*	namespace	Blizzard C_* namespace the harness does not model
+C_UnitAuras	*	namespace	Blizzard C_* namespace the harness does not model
+CheckInteractDistance	*	api	Blizzard client API the harness does not model
+CompactArenaFrameMember1	Mainline	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
+CompactArenaFrameMember2	Mainline	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
+CompactArenaFrameMember3	Mainline	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
+Constants	*	table	Blizzard Constants table (power and spec ids)
+CoolinatorPrimaryGroupAnchor	*	thirdparty	third-party addon global MSUF probes to detect that addon
+CreateUnitHealPredictionCalculator	*	api	Blizzard client API the harness does not model
+CurveConstants	*	table	Blizzard CurveConstants table
+DAMAGE_TEXT_FONT	*	constant	Blizzard UI constant the harness does not model
+DandersFrames	*	thirdparty	third-party addon global MSUF probes to detect that addon
+DebuffFrame	*	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
+Details	*	thirdparty	third-party addon global MSUF probes to detect that addon
+DisableAddOn	Vanilla,Mists,TBC	api	Blizzard Classic addon-toggle global
+Dominos	*	thirdparty	third-party addon global MSUF probes to detect that addon
+EllesmereUI	*	thirdparty	third-party addon global MSUF probes to detect that addon
+EnableAddOn	Vanilla,Mists,TBC	api	Blizzard Classic addon-toggle global
+Enum	*	table	Blizzard Enum table; MSUF probes Enum.EditModeSystem to place Blizzard Edit Mode
+EssentialCooldownViewer_MSA_Container	*	thirdparty	third-party addon global MSUF probes to detect that addon
+EventRegistry	*	table	Blizzard EventRegistry callback registry
+GetCameraZoom	*	api	Blizzard client API the harness does not model
+GetCollapsingStarCost	Mainline,Forever	api	Blizzard client API the harness does not model
+GetComboPoints	*	api	Blizzard client API the harness does not model; Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua binds it at load on every client and calls it only where the provider routes target-owned combo points
+GetCurrentKeyBoardFocus	*	api	Blizzard client API the harness does not model
+GetCursorPosition	*	api	Blizzard client API the harness does not model
+GetInstanceInfo	*	api	Blizzard client API the harness does not model
+GetInternalFontPathByKey	*	api	Blizzard client API the harness does not model
+GetMaxLevelForExpansionLevel	*	api	Blizzard client API the harness does not model
+GetMaximumExpansionLevel	*	api	Blizzard client API the harness does not model
+GetNetStats	*	api	Blizzard client API the harness does not model
+GetNumArenaOpponentSpecs	*	api	Blizzard client API the harness does not model
+GetNumSubgroupMembers	*	api	Blizzard client API the harness does not model
+GetPhysicalScreenSize	*	api	Blizzard client API the harness does not model
+GetPowerRegenForPowerType	*	api	Blizzard client API the harness does not model
+GetRaidRosterInfo	*	api	Blizzard client API the harness does not model
+GetRaidTargetIndex	*	api	Blizzard client API the harness does not model
+GetReadyCheckStatus	*	api	Blizzard client API the harness does not model
+GetRuneCooldown	*	api	Blizzard client API the harness does not model
+GetShapeshiftForm	*	api	Blizzard client API the harness does not model
+GetShapeshiftFormID	*	api	Blizzard client API the harness does not model
+GetShapeshiftFormInfo	*	api	Blizzard client API the harness does not model
+GetSpecialization	*	api	Blizzard client API the harness does not model
+GetSpecializationInfo	*	api	Blizzard client API the harness does not model
+GetSpellInfo	*	api	Blizzard client API the harness does not model
+GetTimePreciseSec	*	api	Blizzard client API the harness does not model
+GetUnitChargedPowerPoints	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+GetUnitEmpowerStageCount	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+GetUnitSpeed	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+GetUnitTotalModifiedMaxHealthPercent	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+Grid2Layout	*	thirdparty	third-party addon global MSUF probes to detect that addon
+HasPetUI	Vanilla,TBC,Forever	api	Blizzard pet API behind the pet happiness indicator
+INTERRUPTED	*	constant	Blizzard UI constant the harness does not model
+INVSLOT_MAINHAND	Mainline,Forever	constant	Blizzard UI constant the harness does not model
+INVSLOT_OFFHAND	Mainline,Forever	constant	Blizzard UI constant the harness does not model
+IsActiveBattlefieldArena	*	api	Blizzard client API the harness does not model
+IsAltKeyDown	*	api	Blizzard client API the harness does not model
+IsControlKeyDown	*	api	Blizzard client API the harness does not model
+IsInGuild	*	api	Blizzard client API the harness does not model
+IsMouseButtonDown	*	api	Blizzard client API the harness does not model
+IsPVPTimerRunning	Vanilla,Mists,TBC	api	Blizzard client API the harness does not model
+IsPlayerSpell	*	api	Blizzard client API the harness does not model
+IsResting	*	api	Blizzard client API the harness does not model
+IsShiftKeyDown	*	api	Blizzard client API the harness does not model
+IsTargetLoose	*	api	Blizzard client API the harness does not model
+LE_PARTY_CATEGORY_HOME	*	constant	Blizzard UI constant the harness does not model
+LE_PARTY_CATEGORY_INSTANCE	*	constant	Blizzard UI constant the harness does not model
+MAX_BOSS_FRAMES	*	constant	Blizzard UI constant the harness does not model
+MapkoSkin	*	thirdparty	third-party addon global MSUF probes to detect that addon
+MiniAurasApi	Mainline,Forever	thirdparty	third-party addon global MSUF probes to detect that addon
+NSAPI	*	thirdparty	third-party addon global MSUF probes to detect that addon
+NSRT	*	thirdparty	third-party addon global MSUF probes to detect that addon
+PetBattleFrameHider	*	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
+PlaySound	*	api	Blizzard client API the harness does not model
+PlayerVehicleHasComboPoints	*	api	Blizzard client API the harness does not model
+PowerBarColor	*	table	Blizzard power colour table
+RAID_CLASS_COLORS	*	constant	Blizzard UI constant the harness does not model
+SPEC_DEMONHUNTER_DEVOURER	*	constant	Blizzard UI constant the harness does not model
+SPEC_DEMONHUNTER_VENGEANCE	*	constant	Blizzard UI constant the harness does not model
+SPEC_DRUID_BALANCE	Vanilla,Mists,TBC	constant	Blizzard UI constant the harness does not model
+SPEC_MAGE_ARCANE	*	constant	Blizzard UI constant the harness does not model
+SPEC_MONK_BREWMASTER	*	constant	Blizzard UI constant the harness does not model
+SPEC_MONK_WINDWALKER	*	constant	Blizzard UI constant the harness does not model
+SPEC_WARLOCK_DEMONOLOGY	*	constant	Blizzard UI constant the harness does not model
+SPEC_WARLOCK_DESTRUCTION	*	constant	Blizzard UI constant the harness does not model
+STAGGER_RED_TRANSITION	*	constant	Blizzard UI constant the harness does not model
+STAGGER_YELLOW_TRANSITION	*	constant	Blizzard UI constant the harness does not model
+STANDARD_TEXT_FONT	*	constant	Blizzard UI constant the harness does not model
+SecureCmdOptionParse	*	api	Blizzard client API the harness does not model
+SetPortraitTexture	*	api	Blizzard client API the harness does not model
+SetRaidTargetIconTexture	*	api	Blizzard client API the harness does not model
+TextureKitConstants	*	table	Blizzard TextureKitConstants table
+TimerUtil	*	table	Blizzard TimerUtil helpers
+UNIT_NAME_FONT	*	constant	Blizzard UI constant the harness does not model
+UnitCanAssist	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitCanAttack	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitCastingDuration	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitCastingInfo	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitChannelDuration	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitChannelInfo	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitClassification	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitDetailedThreatSituation	Vanilla,TBC,Forever	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitEffectiveLevel	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitFullName	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitGetDetailedHealPrediction	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitGetIncomingHeals	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitGetTotalAbsorbs	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitGetTotalHealAbsorbs	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitGroupRolesAssigned	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHasIncomingResurrection	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHasPowerType	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHasVehicleUI	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHealth	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHealthMax	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHealthMissing	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHealthPercent	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitInRaid	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitInRange	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsAFK	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsBossMob	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsConnected	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsDND	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsDead	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsDeadOrGhost	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsEnemy	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsFriend	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsGhost	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsGroupAssistant	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsGroupLeader	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsLieutenant	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsMercenary	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsPVP	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsPVPFreeForAll	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsPlayer	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsTapDenied	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsUnconscious	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsVisible	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPartialPower	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPhaseReason	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPlayerControlled	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPlayerOrPetInParty	Vanilla,Mists,TBC	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPlayerOrPetInRaid	Vanilla,Mists,TBC	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPower	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPowerDisplayMod	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPowerMax	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPowerPercent	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPowerType	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitRace	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitReaction	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitSelectionColor	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitSelectionType	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitShouldDisplaySpellTargetName	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitSpellTargetClass	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitSpellTargetName	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitStagger	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitThreatSituation	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitWatchRegistered	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnregisterStateDriver	*	api	Blizzard client API the harness does not model
+_ECME_GetBarFrame	*	thirdparty	third-party addon global MSUF probes to detect that addon
+canaccesstable	*	secret	12.x secret-value API the harness does not model
+hasanysecretvalues	*	secret	12.x secret-value API the harness does not model
+hash_SlashCmdList	*	table	Blizzard slash-token hash; MSUF probes it before claiming /rl
+issecure	*	secret	12.x secret-value API the harness does not model

@@ -151,10 +151,15 @@ end
 --- write a preference that no anchor can consume.
 HUD.CooldownAnchorSupported = _G.MSUF_CooldownAnchorSupported
 
+--- The Integrations module answers first; without it the client model does. The
+--- C_CooldownViewer namespace is never the signal: the shared engine exposes it
+--- on every client, while only the Mainline family ships Blizzard's Cooldown
+--- Manager (Client.HostsCooldownManager).
 function HUD.CooldownAnchorEnabled(general)
     local getter = _G.MSUF_IsCooldownAnchorEnabled
     if type(getter) == "function" then return getter(general) == true end
-    return type(_G.C_CooldownViewer) == "table" and general and general.anchorToCooldown == true or false
+    return MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
+        and general and general.anchorToCooldown == true or false
 end
 
 local function SetControlEnabled(btn, enabled)

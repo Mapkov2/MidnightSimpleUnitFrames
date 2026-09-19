@@ -6112,6 +6112,16 @@ L["Surname"] = "姓氏"
 -- Hunter pet happiness (Pet page, Status icons). WoW Forever label, then the Classic Era and TBC label.
 L["Pet Happiness"] = "宠物快乐值"
 L["Pet Happiness (Vanilla/TBC)"] = "宠物快乐值（Vanilla/TBC）"
+L["Threat %"] = "威胁 %"
+L["Color by threat"] = "按威胁着色"
+L["Green at low threat, yellow at half, pink at 100% when you have aggro. Turn off to use the status text color instead."] = "威胁低时为绿色，一半时为黄色，达到 100%（你获得仇恨）时为粉色。关闭后使用状态文字颜色。"
+L["Threat % Colors"] = "威胁 % 颜色"
+L["Threat % Background"] = "威胁 % 背景"
+L["A dark plate behind the number keeps it readable on any bar color, red enemy bars included."] = "数字后方的深色底板让它在任何颜色的血条上都清晰可读，包括红色的敌方血条。"
+L["Blended from low to high threat on every frame that colors its threat text by threat."] = "在每个按威胁为威胁文字着色的框体上，从低威胁到高威胁渐变。"
+L["Low threat"] = "低威胁"
+L["Medium threat"] = "中等威胁"
+L["High threat"] = "高威胁"
 L["Color by level difficulty"] = "按等级难度着色"
 L["Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead."] = "远高于你的等级为红色，与你同级为白色，无威胁时为灰色。关闭后改用状态文本颜色。"
 L["Level Difficulty Colors"] = "等级难度颜色"
@@ -6125,6 +6135,10 @@ L["Level Text"] = "等级文本"
 L["Tagged by others"] = "已被他人标记"
 L["Gray out mobs tagged by others"] = "将他人标记的怪物变灰"
 L["A mob another player hit first gives you no loot or experience. Its health bar and name turn gray, like on the default target frame."] = "其他玩家先攻击的怪物不会给你战利品和经验。其生命条和名字会变灰，与默认目标框体一致。"
+-- Shared aura preview titles (Aura Style page, shared scope); the first keeps its %s for the lane name.
+L["Shared %s Preview"] = "共享%s预览"
+L["Shared Player Defensives Preview"] = "共享防御增益预览"
+L["Shared Dots on Target Preview"] = "共享目标 DoT 预览"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
