@@ -1,0 +1,313 @@
+-- Contract for the BLIZZARD portrait shape: a complete freestanding round rim.
+--
+-- The standalone contour must keep its lower-right extension while the
+-- portrait mask ends under one continuous gold rim. Runtime and preview use
+-- the same assets and bounds; neither depends on the full player-frame atlas.
+_G = _G or _ENV
+
+local function ResolvePath(primary, fallback)
+    local handle = io.open(primary, "r")
+    if handle then
+        handle:close()
+        return primary
+    end
+    return fallback
+end
+
+local commonPath = ResolvePath(
+    "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Visuals_Common.lua",
+    "UnitFrames/Engine/Elements/MSUF_UF_Visuals_Common.lua"
+)
+local portraitPath = ResolvePath(
+    "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua",
+    "UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua"
+)
+
+local function ReadSource(primary, fallback)
+    local path = ResolvePath(primary, fallback)
+    local handle = assert(io.open(path, "rb"), "missing file: " .. tostring(path))
+    local text = handle:read("*a") or ""
+    handle:close()
+    return (text:gsub("\r\n", "\n")), path
+end
+
+local function NewRegion(parent)
+    local region = { parent = parent, shown = true, frameLevel = 1 }
+    function region:GetParent() return self.parent end
+    function region:EnableMouse(value) self.mouseEnabled = value end
+    function region:Show() self.shown = true end
+    function region:Hide() self.shown = false end
+    function region:SetShown(value) self.shown = value == true end
+    function region:IsShown() return self.shown end
+    function region:IsVisible() return self.shown end
+    function region:ClearAllPoints() self.points = {} end
+    function region:SetPoint(...) self.points = self.points or {}; self.points[#self.points + 1] = { ... } end
+    function region:SetAllPoints(value) self.allPoints = value or true end
+    function region:SetSize(width, height) self.width, self.height = width, height end
+    function region:SetWidth(width) self.width = width end
+    function region:SetHeight(height) self.height = height end
+    function region:GetWidth() return self.width or 100 end
+    function region:GetHeight() return self.height or 40 end
+    function region:SetFrameLevel(level) self.frameLevel = level end
+    function region:GetFrameLevel() return self.frameLevel end
+    function region:SetTexture(value) self.texture = value; self.atlas = nil end
+    function region:GetTexture() return self.texture end
+    function region:SetAtlas(value) self.atlas = value; self.texture = nil end
+    function region:SetTexCoord(...) self.texCoord = { ... } end
+    function region:SetRoundLayoutToNearestPixel(value) self.roundLayout = value end
+    function region:SetSnapToPixelGrid(value) self.snapToPixelGrid = value end
+    function region:SetTexelSnappingBias(value) self.texelSnappingBias = value end
+    function region:SetVertexColor(...) self.vertexColor = { ... } end
+    function region:SetAlpha(value) self.alpha = value end
+    function region:GetAlpha() return self.alpha or 1 end
+    function region:CreateTexture(_, layer, _, sublevel)
+        local texture = NewRegion(self)
+        texture.layer, texture.sublevel = layer, sublevel
+        self.textures = self.textures or {}
+        self.textures[#self.textures + 1] = texture
+        return texture
+    end
+    function region:CreateMaskTexture()
+        local mask = NewRegion(self)
+        mask.isMask = true
+        return mask
+    end
+    function region:AddMaskTexture(mask)
+        self.masks = self.masks or {}
+        self.masks[#self.masks + 1] = mask
+    end
+    function region:HookScript(script, callback)
+        self.hooks = self.hooks or {}
+        self.hooks[script] = callback
+    end
+    return region
+end
+
+local function CreateFrame(_, _, parent)
+    return NewRegion(parent)
+end
+
+_G.CreateFrame = CreateFrame
+_G.UnitExists = function() return true end
+_G.UnitIsConnected = function() return true end
+_G.UnitIsVisible = function() return true end
+_G.UnitGUID = function() return "Player-1" end
+_G.UnitClass = function() return "Mage", "MAGE" end
+_G.UnitCastingInfo = function() return nil end
+_G.UnitChannelInfo = function() return nil end
+_G.UnitReaction = function() return 5 end
+_G.InCombatLockdown = function() return false end
+_G.GetTime = function() return 1 end
+_G.issecretvalue = function() return false end
+local portraitCalls, lastPortraitMaskArg = 0, "unset"
+_G.SetPortraitTexture = function(texture, unit, disableMasking)
+    portraitCalls = portraitCalls + 1
+    lastPortraitMaskArg = disableMasking
+    texture:SetTexture("portrait:" .. tostring(unit) .. (disableMasking and ":unmasked" or ""))
+end
+_G.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
+
+-- Stub atlas sheet: the frame atlas element occupies a sub-rect of a larger
+-- texture file, so the crop math has to compose with non-trivial base coords.
+local FRAME_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn"
+local MASK_ATLAS = "UI-HUD-UnitFrame-Player-Portrait-Mask"
+local MASK_FILE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\portrait_blizzard_mask.tga"
+local RING_FILE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_blizzard.tga"
+local CORNER_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"
+local atlasInfo = {
+    [FRAME_ATLAS] = {
+        width = 198, height = 71,
+        leftTexCoord = 0.25, rightTexCoord = 0.5,
+        topTexCoord = 0, bottomTexCoord = 0.75,
+        file = 131234,
+    },
+    [MASK_ATLAS] = { width = 64, height = 64, file = 131235 },
+    [CORNER_ATLAS] = { width = 23, height = 23, file = 131234 },
+}
+_G.C_Texture = { GetAtlasInfo = function(atlas) return atlasInfo[atlas] end }
+
+local function LoadElement(client)
+    local registered
+    local UF = {
+        Layers = { PORTRAIT_OFFSET = 6, PORTRAIT_BORDER_OFFSET = 7 },
+        RegisterElement = function(name, element)
+            assert(name == "Portrait", "unexpected element registration")
+            registered = element
+        end,
+    }
+    -- Game/Shared/Initialize.lua loads before this element on every TOC, so the
+    -- legacy Era portrait gate reads MSUF.Client and never the raw project ID.
+    local MSUF = {
+        Client = client,
+        UF = UF,
+        Secrets = {
+            IsNil = function(value) return value == nil end,
+            NotSecret = function() return true end,
+        },
+    }
+    _G.MSUF_NS = MSUF
+    local commonChunk, commonError = loadfile(commonPath)
+    assert(commonChunk, commonError)
+    commonChunk("MidnightSimpleUnitFrames", MSUF)
+    local portraitChunk, portraitError = loadfile(portraitPath)
+    assert(portraitChunk, portraitError)
+    portraitChunk("MidnightSimpleUnitFrames", MSUF)
+    return assert(registered, "Portrait element was not registered")
+end
+
+local function NewFrame(shape, borderStyle)
+    local frame = NewRegion(nil)
+    frame.MSUFUnitKey = "player"
+    frame.Health = NewRegion(frame)
+    frame.MSUFSpec = {
+        height = 64,
+        portrait = {
+            enabled = true,
+            render = "2D",
+            shape = shape,
+            side = "LEFT",
+            size = 60,
+            texL = 0, texR = 1, texT = 0, texB = 1,
+            border = { style = borderStyle or "NONE", thickness = 2 },
+            bg = { enabled = false },
+        },
+    }
+    return frame
+end
+
+local function Near(actual, expected, label)
+    assert(type(actual) == "number" and math.abs(actual - expected) < 1e-9,
+        label .. ": expected " .. tostring(expected) .. ", got " .. tostring(actual))
+end
+
+local Portrait = LoadElement()
+
+-- 1) Paired assets render the standalone contour with a continuous gold rim.
+local frame = NewFrame("BLIZZARD")
+Portrait.Create(frame)
+Portrait.Apply(frame, frame.MSUFSpec)
+local holder = assert(frame.MSUFPortraitHolder, "portrait holder missing")
+assert(holder.mask and holder.mask.texture == MASK_FILE,
+    "BLIZZARD shape must use the mask paired with its standalone rim")
+-- Blizzard's player frame resolves the portrait with disablePortraitMask
+-- (UnitFrame.lua: SetPortraitTexture(portrait, unit, disablePortraitMask)),
+-- the modern unmasked bust render. The shape must request the same render.
+assert(portraitCalls == 1 and lastPortraitMaskArg == true,
+    "BLIZZARD shape must resolve the portrait with disablePortraitMask")
+
+local ring = assert(holder.blizzRing, "Blizzard ring texture missing")
+assert(ring.shown == true, "Blizzard ring must be shown")
+assert(ring.parent == holder.border, "Blizzard ring must render on the border frame above the art")
+assert(ring.texture == RING_FILE, "Blizzard ring must use the standalone contour art")
+assert(ring.roundLayout == false and ring.snapToPixelGrid == false and ring.texelSnappingBias == 0,
+    "ring must retain fractional atlas geometry instead of snapping through the mask")
+
+Near(ring.texCoord[1], 0, "ring left coord")
+Near(ring.texCoord[2], 1, "ring right coord")
+Near(ring.texCoord[3], 0, "ring top coord")
+Near(ring.texCoord[4], 1, "ring bottom coord")
+assert(holder.blizzRingMirror == nil, "the contour must be one continuous texture")
+assert(holder.blizzRingMask == nil and not ring.masks, "circle clipping would cut away the lower-right corner")
+assert(ring.allPoints == holder and holder.mask.allPoints == holder,
+    "mask and rim must share bounds to prevent portrait bleed or clipping")
+local color = ring.vertexColor
+assert(color and color[1] == 1 and color[2] == 1 and color[3] == 1 and color[4] == 1,
+    "Blizzard ring must stay untinted")
+-- Retired overlays must not paint across the original contour on reused holders.
+holder.blizzRingMirror = NewRegion(holder.border)
+holder.blizzCorner = NewRegion(holder.border)
+Portrait.Apply(frame, frame.MSUFSpec)
+assert(not holder.blizzRingMirror.shown and not holder.blizzCorner.shown, "obsolete overlays must stay hidden")
+
+-- 2) Border settings are inert: a dynamic border colour neither tints the ring
+-- nor re-enables any MSUF border renderer, and the border stays event-free.
+frame.MSUFSpec.portrait.border.style = "CLASS_COLOR"
+Portrait.Apply(frame, frame.MSUFSpec)
+assert(holder.blizzRing.shown == true, "ring must survive border style changes")
+color = holder.blizzRing.vertexColor
+assert(color and color[1] == 1 and color[2] == 1 and color[3] == 1 and color[4] == 1,
+    "border colour must not tint the Blizzard ring")
+if holder.edges then
+    for i = 1, 4 do
+        assert(holder.edges[i].shown ~= true, "edge renderer must stay parked for BLIZZARD shape")
+    end
+end
+assert(Portrait.BorderNeedsUpdate("UNIT_PORTRAIT_UPDATE", frame.MSUFSpec.portrait) == false,
+    "BLIZZARD shape must not request border updates from gameplay events")
+assert(Portrait.BorderNeedsUpdate("MSUF_APPLY", frame.MSUFSpec.portrait) == true,
+    "config applies must still lay the ring out")
+
+-- 3) Leaving the shape hides the Blizzard ring and hands back the MSUF border.
+frame.MSUFSpec.portrait.shape = "CIRCLE"
+frame.MSUFSpec.portrait.border.style = "SOLID"
+Portrait.Apply(frame, frame.MSUFSpec)
+assert(holder.blizzRing.shown == false, "Blizzard ring must hide when the shape changes")
+assert(holder.blizzRingMirror.shown == false, "mirrored ring half must hide when the shape changes")
+assert(holder.blizzCorner.shown == false, "corner embellishment must hide when the shape changes")
+assert(portraitCalls == 2 and lastPortraitMaskArg == nil,
+    "leaving the shape must re-resolve with the legacy masked portrait render")
+assert(holder.mask.texture and tostring(holder.mask.texture):find("circle_mask", 1, true),
+    "CIRCLE shape must restore the file-based mask")
+assert(holder.ring and holder.ring.shown == true, "solid ring renderer must take over for CIRCLE")
+
+-- 4) Preview uses the same bounds even at fractional sizes.
+do
+    local ns = { MSUF2 = {}, Client = { IsRetail = true, IsForever = true } }
+    ns.MSUF2.PickFallbackTable = function(deps, defaults)
+        return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
+    end
+    assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
+    local preview = {}
+    ns.UFPreviewRender.Install(preview, {})
+    local render = preview.RefreshDeps._RenderState
+    local portrait = NewRegion()
+    portrait.tex, portrait.bg = NewRegion(portrait), NewRegion(portrait)
+    render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
+    assert(portrait._msufPreviewShapeMask.texture == MASK_FILE, "preview must use the matching player mask")
+    render.LayoutPreviewBlizzardPortrait(portrait, true, 58, 58)
+    assert(portrait._msufPreviewBlizzCorner == nil, "native branch must not receive a second joint overlay")
+    portrait._msufPreviewBlizzCorner = NewRegion(portrait)
+    for _, size in ipairs({ 36, 58, 73.5 }) do
+        render.LayoutPreviewBlizzardPortrait(portrait, true, size, size)
+        local art = assert(portrait._msufPreviewBlizzRing)
+        assert(art.roundLayout == false and art.snapToPixelGrid == false and art.texelSnappingBias == 0,
+            "native art must retain fractional atlas geometry")
+        assert(not portrait._msufPreviewBlizzCorner.shown, "preview must hide a reused overlay")
+        assert(not portrait._msufPreviewBlizzMirror and not portrait._msufPreviewBlizzClip and not art.masks,
+            "preview must preserve the native branch without mirroring or clipping")
+        Near(art.texCoord[1], 0, "preview contour left")
+        Near(art.texCoord[2], 1, "preview contour right")
+        assert(art.allPoints == portrait and portrait._msufPreviewShapeMask.allPoints == portrait,
+            "preview must anchor the mask and border to identical bounds")
+    end
+end
+_G.C_Texture = nil
+local noAtlas = LoadElement()
+local noAtlasFrame = NewFrame("BLIZZARD")
+noAtlas.Create(noAtlasFrame)
+noAtlas.Apply(noAtlasFrame, noAtlasFrame.MSUFSpec)
+assert(noAtlasFrame.MSUFPortraitHolder.blizzRing.texture == RING_FILE,
+    "standalone art must not depend on client atlas availability")
+-- Actual asset pixels: the corner is filled, its outer tip is rounded, the
+-- other quadrants stay circular, and the mask ends below the opaque stroke.
+do
+    local function AssetAlpha(path)
+        local h = assert(io.open(path, "rb")); local data = h:read("*a"); h:close()
+        assert(data:byte(3) == 2 and data:byte(17) == 32 and data:byte(18) == 40,
+            "expected top-origin 32-bit TGA")
+        local w = data:byte(13) + data:byte(14) * 256
+        local hgt = data:byte(15) + data:byte(16) * 256
+        assert(w == 256 and hgt == 256 and #data == 18 + w * hgt * 4)
+        return function(x, y) return data:byte(18 + (y * w + x) * 4 + 4) end
+    end
+    local mask = AssetAlpha("MidnightSimpleUnitFrames/Media/Masks/portrait_blizzard_mask.tga")
+    local rim = AssetAlpha("MidnightSimpleUnitFrames/Media/Borders/msuf_portrait_ring_blizzard.tga")
+    assert(mask(234, 234) == 255, "portrait must fill its lower-right extension")
+    assert(mask(21, 21) == 0 and mask(234, 21) == 0 and mask(21, 234) == 0,
+        "other three quadrants must remain circular")
+    assert(rim(248, 128) == 255 and rim(128, 248) == 255 and rim(247, 247) == 255,
+        "right and bottom strokes must join around the corner")
+    assert(mask(251, 251) == 0 and rim(251, 251) == 0, "outer tip must be rounded")
+    assert(mask(247, 128) > 0 and rim(247, 128) == 255, "mask antialiasing must end under the opaque rim")
+end
+print("portrait_contour_smoke: OK")
