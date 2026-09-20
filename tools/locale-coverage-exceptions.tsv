@@ -1,0 +1,26 @@
+# Locale key-coverage exceptions, enforced by tools/tests/locale_key_coverage_smoke.lua.
+# Columns: Path (a locale pack, or * for every pack)\tKey (an exact locale key with \\n, \\t and \\\\ escaped, or * for every key)\tReason.
+# A row excuses that pack from defining that key. Every row must excuse a real omission: a row that stops mattering fails the smoke and must be deleted.
+Path	Key	Reason
+MidnightSimpleUnitFrames/Locales/enUS.lua	*	English base pack. MSUF_Localization.lua falls back to the key itself, so this file carries only deliberate special-case wording (see its own file header); an absent key renders as the correct English text.
+MidnightSimpleUnitFrames/Locales/enGB.lua	*	English (UK) base pack. Same identity fallback as enUS.lua: it carries only the entries that differ from the key, chiefly -our spellings.
+*	Selected: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Current: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	HP: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Name: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Power: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Overrides: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Anchor to 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Current profile: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	MSUF Edit  	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	 Buffs	Concatenated raw into a frame label (MSUF_AssistantRegistry_DiagnosticsActions_Navigation.lua:188); never passed to a translate call, so translating the fragment alone would have no effect.
+*	 Debuffs	Concatenated raw into a frame label (MSUF_AssistantRegistry_DiagnosticsActions_Navigation.lua:188); never passed to a translate call, so translating the fragment alone would have no effect.
+*	 Private	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Boss 	Concatenated raw into a frame label (MSUF_Auras3_EditMode_Config.lua:180, MSUF_EditMode_AuraPopup.lua:79); never passed to a translate call, so translating the fragment alone would have no effect.
+*	Expiring: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Missing: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames, _Options or _Assistant. Kept, not deleted, so no dynamic lookup can regress.
+*	Quick Setup applied!\n\nClass Power + Power Bar are detached\nand positioned at screen center.\n\nEssential Cooldowns not detected.\nEnable it for automatic anchoring.\n\nUse Edit Mode for fine-tuning.	Superseded popup wording; MSUF_Menu2_AdvancedClassPower.lua now builds different text (lines 690-725).
+*	Quick Setup applied!\n\nClass Power + Power Bar are now\npositioned above Essential Cooldowns.\n\nUse Edit Mode for fine-tuning.	Superseded popup wording; MSUF_Menu2_AdvancedClassPower.lua now builds different text (lines 690-725).
+*	Quick Setup applied!\n\nPower Bar is positioned above\nEssential Cooldowns.\n\nYour spec has no class resource bar.\nIf you respec, it will appear automatically.\n\nUse Edit Mode for fine-tuning.	Superseded popup wording; MSUF_Menu2_AdvancedClassPower.lua now builds different text (lines 690-725).
+*	Use "Enable filters" in the Auras 2.0 box as the master switch.\n\nInclude toggles are additive (they never hide your normal auras).\nHighlight toggles only change border colors.	Superseded Auras 2.0 filter help; the Auras 3.0 menu no longer emits this text.
+*	Welcome to Class Resources!\n\nWould you like to automatically set up a\ndetached Class Bar positioned above your\nEssential Cooldowns?\n\nThis configures class resources, power bar,\nanchoring and width matching in one click.\n\nYou can always run this later via the\n|cff00ff00Quick Setup: Class Bar|r button below.	Superseded popup wording; MSUF_Menu2_AdvancedClassPower.lua now builds different text (lines 690-725).

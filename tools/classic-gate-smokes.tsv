@@ -1,6 +1,9 @@
 Matrix	Runner	Smoke	Arguments	Label
+clients+Forever	lua	tools/tests/menu_appearance_presets_smoke.lua	{root} {flavor}	Appearance preset dropdown regression: {flavor}
 -	python	.github/scripts/classic_refactor_load_order_smoke.py		Classic refactor load-order contract failed
 clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor}	Menu skin smoke failed: {flavor}
+clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor} classicGlass	Explicit Classic Glass menu preset failed: {flavor}
+clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor} midnight	Explicit Midnight menu preset failed: {flavor}
 -	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} Forever tinted	Forever menu skin custom-tint smoke failed
 -	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} Forever midnight	Forever Midnight appearance preset smoke failed
 clients+FutureTaggedVanilla,FutureProjectVanilla,UnknownUntagged	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	{flavor} {root/}	Client bootstrap smoke failed: {flavor}
@@ -21,6 +24,9 @@ tokenclients	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	TagOnly{f
 -	lua	tools/tests/forever_group_frames_smoke.lua	{root}	Forever group frames smoke failed
 -	lua	tools/tests/forever_group_header_snippet_smoke.lua	{root}	Forever group header snippet workaround smoke failed
 -	python	.github/scripts/menu2_search_index_hash_smoke.py		Menu2 search index source-hash contract failed
+-	python	tools/tests/unresolved_global_reads_smoke.py		Unresolved global read contract failed
+-	lua	tools/tests/nil_global_fix_contracts_smoke.lua	{root}	Nil-global fix contracts smoke failed
+-	python	tools/tests/classic_assistant_control_schema_smoke.py	{root}	Classic Assistant control schema contract failed
 -	python	tools/tests/rebase_classic_overrides_smoke.py		Override rebase tool self-test failed
 -	python	tools/tests/resolve_classic_retail_source_smoke.py	{root}	Retail source resolver smoke failed
 -	lua	tools/tests/forever_pet_happiness_smoke.lua	{root}	Forever pet happiness smoke failed
@@ -46,6 +52,7 @@ clients*codecs	lua+driver	tools/tests/classic_profile_import_transaction_smoke.l
 -	lua	tools/tests/search_client_row_filter_smoke.lua	{root}	Search client row filter smoke failed
 -	lua	tools/tests/classic_font_return_smoke.lua	{root}	Classic font return contract failed
 -	lua	tools/tests/classic_defaults_refactor_smoke.lua	{root}	Classic split defaults contract failed
+clients+Forever	lua	tools/tests/classic_defaults_client_hunks_smoke.lua	{root} {flavor}	Defaults client hunks smoke failed: {flavor}
 -	lua	tools/tests/classic_arena_five_slot_smoke.lua	{root}	Classic arena five-slot contract failed
 -	lua	tools/tests/classic_arena_legacy_hider_smoke.lua	{root}	Classic legacy arena hider smoke failed
 -	lua+driver	tools/tests/classic_classpower_provider_smoke.lua	{root/}	Client ClassPower provider smoke failed
@@ -81,10 +88,10 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	.github/scripts/tests/elite_indicator_classification_smoke.lua	{root/}	Elite indicator classification smoke failed
 -	lua+driver	tools/addon_interop_guard_smoke.lua	{root/}	Retail-shared runtime smoke failed: tools/addon_interop_guard_smoke.lua
 -	lua+driver	tools/slash_command_registry_smoke.lua	{root/}	Retail-shared runtime smoke failed: tools/slash_command_registry_smoke.lua
--	lua+driver	.github/scripts/health_background_sample_parity_smoke.lua	{root/}	Retail-shared runtime smoke failed: .github/scripts/health_background_sample_parity_smoke.lua
--	lua+driver	.github/scripts/health_runtime_equivalence_smoke.lua	{root/}	Retail-shared runtime smoke failed: .github/scripts/health_runtime_equivalence_smoke.lua
--	lua+driver	.github/scripts/text_runtime_value_parity_smoke.lua	{root/}	Retail-shared runtime smoke failed: .github/scripts/text_runtime_value_parity_smoke.lua
--	lua+driver	.github/scripts/castbar_tint_parity_smoke.lua	{root/}	Retail-shared runtime smoke failed: .github/scripts/castbar_tint_parity_smoke.lua
+-	lua+driver	.github/scripts/health_background_sample_parity_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/health_background_sample_parity_smoke.lua
+-	lua+driver	.github/scripts/health_runtime_equivalence_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/health_runtime_equivalence_smoke.lua
+-	lua+driver	.github/scripts/text_runtime_value_parity_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/text_runtime_value_parity_smoke.lua
+-	lua+driver	.github/scripts/castbar_tint_parity_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/castbar_tint_parity_smoke.lua
 -	lua+driver	tools/aura_big_defensive_filter_smoke.lua		v6.04 parity smoke failed: tools/aura_big_defensive_filter_smoke.lua
 -	lua+driver	tools/aura_group_slot_layer_smoke.lua		v6.04 parity smoke failed: tools/aura_group_slot_layer_smoke.lua
 -	lua+driver	tools/group_preview_roster_handoff_smoke.lua		v6.04 parity smoke failed: tools/group_preview_roster_handoff_smoke.lua
@@ -123,6 +130,7 @@ classics	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{roo
 clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {flavor}	Unit status threat controls smoke failed: {flavor}
 -	lua+driver	tools/tests/classic_aura_render_smoke.lua	{root/} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua} {p/:MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua}	Classic aura live-render smoke failed
 -	lua	tools/tests/startup_locale_manifest_smoke.lua	{root/}	Startup client-language manifest parity failed
+-	lua	tools/tests/locale_key_coverage_smoke.lua	{root/}	Locale key coverage smoke failed
 -	lua	tools/tests/classpower_client_resource_gates_smoke.lua	{root/}	Class resource client gates failed
 -	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
 -	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed

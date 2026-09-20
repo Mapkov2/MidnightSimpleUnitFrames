@@ -34,12 +34,12 @@ jobs:
 
     steps:
       - name: Check out the commit under test
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      # The three steps below are the environment and gate steps of
-      # release-classic.yml; keep them in step with that workflow.
+      # The three steps below are the environment and gate steps of the
+      # release workflow; keep them in step with that workflow.
       - name: Set up Python for the Classic gate
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -74,81 +74,7 @@ jobs:
   # the audit pins; catching that is its purpose. The self-contained job reads
   # nothing but the commit, so its result always belongs to the commit alone.
   # Keep the two signals apart: never fold this job into the one above or make
-  # either depend on the other.
+  # either depend on the other. The steps live in the reusable workflow so the
+  # release runs exactly this gate instead of a second copy of it.
   classic-full-gate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    steps:
-      - name: Check out the commit under test
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-
-      # The environment steps of the job above, pinned like release-classic.yml.
-      - name: Set up Python for the Classic gate
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Lua 5.1 for the Classic gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y lua5.1
-          sudo ln -sf "$(command -v lua5.1)" /usr/local/bin/lua
-          sudo ln -sf "$(command -v luac5.1)" /usr/local/bin/luac
-          lua -v
-          luac -v
-
-      # Retail is branch main of this repository. No tracked file records the
-      # main commit this tree mirrors, so the resolver derives it: the newest
-      # main commit whose addon tree matches this one under the gate's own
-      # rules. A blob-less clone holds every commit and tree the resolver reads;
-      # the checkout then fetches the blobs of that one commit.
-      - name: Check out the Retail commit this tree mirrors
-        shell: pwsh
-        env:
-          MSUF_RETAIL_REFERENCE: ${{ runner.temp }}/msuf-classic-retail-ref
-          MSUF_RETAIL_REMOTE: ${{ github.server_url }}/${{ github.repository }}.git
-        run: |
-          git clone --filter=blob:none --no-checkout --single-branch --branch main $env:MSUF_RETAIL_REMOTE $env:MSUF_RETAIL_REFERENCE
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not clone Retail main from $env:MSUF_RETAIL_REMOTE."
-          }
-          $commit = & python ./.github/scripts/resolve_classic_retail_source.py --retail $env:MSUF_RETAIL_REFERENCE --retail-rev origin/main
-          if ($LASTEXITCODE -ne 0) {
-            throw "No commit of Retail main matches this Classic tree; the resolver output above names the nearest one and its mismatching paths."
-          }
-          git -C $env:MSUF_RETAIL_REFERENCE -c advice.detachedHead=false checkout --detach $commit
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not check out Retail $commit."
-          }
-          "Full Classic gate against Retail main $commit" >> $env:GITHUB_STEP_SUMMARY
-
-      # The audit reads Blizzard's branch tips through git only (show, grep,
-      # rev-parse), so a depth-1 clone of every branch needs no working tree.
-      # The tips are listed so a red audit names the branch that moved.
-      - name: Clone the Blizzard UI source mirror
-        shell: pwsh
-        run: |
-          $mirror = "_local_workflows/references/wow-ui-source"
-          git clone --depth 1 --no-single-branch --no-checkout --origin upstream https://github.com/Gethe/wow-ui-source.git $mirror
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not clone the Blizzard UI source mirror."
-          }
-          git -C $mirror for-each-ref "--format=%(refname:short) %(objectname:short) %(committerdate:short)" refs/remotes/upstream
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not list the Blizzard UI source branches."
-          }
-
-      - name: Run the full Classic gate
-        shell: pwsh
-        env:
-          MSUF_RETAIL_REFERENCE: ${{ runner.temp }}/msuf-classic-retail-ref
-        run: |
-          & ./tools/run-classic-gate.ps1 -RetailReferenceRoot $env:MSUF_RETAIL_REFERENCE
-          if ($LASTEXITCODE -ne 0) {
-            throw "Classic full gate failed."
-          }
+    uses: ./.github/workflows/classic-full-gate.yml

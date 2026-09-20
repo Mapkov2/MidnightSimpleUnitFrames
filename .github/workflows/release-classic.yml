@@ -10,14 +10,19 @@ permissions:
   contents: read
 
 jobs:
-  publish-classic:
+  # The cheap checks first: a stale or malformed tag, a missing CurseForge
+  # secret or a red self-contained gate all fail here in about a minute,
+  # before the full gate spends a runner on cloning Retail and the Blizzard
+  # UI source mirror.
+  preflight:
     if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames'
     runs-on: ubuntu-latest
     env:
       CLASSIC_RELEASE_TAG: ${{ github.ref_name }}
-      # Presence only, never the token: the Wago upload step is the single step
-      # that is handed WAGO_API_TOKEN, and a step `if:` cannot read `secrets`.
-      WAGO_UPLOAD_ENABLED: ${{ secrets.WAGO_API_TOKEN != '' }}
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      release_name: ${{ steps.release.outputs.release_name }}
+      release_type: ${{ steps.release.outputs.release_type }}
 
     steps:
       - name: Check out Classic release tag
@@ -60,9 +65,6 @@ jobs:
           $releaseName = $release.DisplayName
           $releaseType = $release.ReleaseType
 
-          "CLASSIC_RELEASE_VERSION=$version" >> $env:GITHUB_ENV
-          "CLASSIC_RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
-          "CLASSIC_RELEASE_TYPE=$releaseType" >> $env:GITHUB_ENV
           "version=$version" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
           "release_type=$releaseType" >> $env:GITHUB_OUTPUT
@@ -93,10 +95,11 @@ jobs:
           lua -v
           luac -v
 
-      # The full gate also needs a clean Retail checkout and the Blizzard UI
-      # source mirror, so it stays a local pre-tag step. -SelfContained runs
-      # every check that needs neither: syntax, load order, error paths,
-      # ownership manifests and the Lua smokes.
+      # The fast pre-check: -SelfContained runs every check that needs
+      # neither a Retail checkout nor the Blizzard UI source mirror, in about
+      # 40 s. It is deliberately blind to Retail-mirror drift, so it gates
+      # only the cheap failures; the classic-full-gate job below covers the
+      # rest before anything is published.
       - name: Run the self-contained Classic gate
         shell: pwsh
         run: |
@@ -104,6 +107,41 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Classic self-contained gate failed."
           }
+
+  # A release runs the same full gate as a push to classic: Retail parity,
+  # override bases, owned-shadow drift and the Blizzard UI source audit,
+  # against a clean checkout of the Retail commit this tree mirrors. The
+  # self-contained subset above cannot see a mirrored Retail file that was
+  # edited without an override row, so it must never be the only gate on a
+  # published build. The steps are the reusable workflow's, not a copy, and
+  # every one of them fails closed - including an unresolvable Retail
+  # reference, which aborts the release instead of gating against a guess.
+  classic-full-gate:
+    needs: preflight
+    uses: ./.github/workflows/classic-full-gate.yml
+    with:
+      ref: ${{ github.ref_name }}
+
+  # Nothing is packaged or uploaded until both gates are green: a skipped or
+  # failed job above skips this one.
+  publish-classic:
+    needs: [preflight, classic-full-gate]
+    runs-on: ubuntu-latest
+    env:
+      CLASSIC_RELEASE_TAG: ${{ github.ref_name }}
+      CLASSIC_RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+      CLASSIC_RELEASE_NAME: ${{ needs.preflight.outputs.release_name }}
+      CLASSIC_RELEASE_TYPE: ${{ needs.preflight.outputs.release_type }}
+      # Presence only, never the token: the Wago upload step is the single step
+      # that is handed WAGO_API_TOKEN, and a step `if:` cannot read `secrets`.
+      WAGO_UPLOAD_ENABLED: ${{ secrets.WAGO_API_TOKEN != '' }}
+
+    steps:
+      - name: Check out Classic release tag
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
 
       - name: Build and validate Classic multi-client package
         shell: pwsh

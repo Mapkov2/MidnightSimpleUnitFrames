@@ -6,7 +6,8 @@ param(
     [switch]$ListSmokes,
     [string]$Only = "",
     [switch]$FailFast,
-    [int]$Jobs = 0
+    [int]$Jobs = 0,
+    [switch]$RequireNoSkippedSteps
 )
 
 $ErrorActionPreference = "Stop"
@@ -221,12 +222,48 @@ if ($SelfContained) {
     }
 }
 
+# The Retail reference is named, never guessed. A sibling auto-detect used to
+# pick up whatever Retail working tree happened to sit next to this clone, so a
+# full run could silently certify against the owner's live, dirty checkout.
+# It is resolved here, ahead of the smoke manifest, because the Retail-shared
+# runtime smokes take it as their baseline through the {retailRoot/} token.
+$retailReferenceRootFull = $null
+if ($SelfContained) {
+    # The combination with -RetailReferenceRoot was already rejected above.
+} elseif ([string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
+    throw @"
+A full Classic gate run needs -RetailReferenceRoot <path to a clean Retail clone>.
+Make one and point the gate at it:
+    git clone --no-hardlinks <Retail remote or local repository> C:\tmp\msuf-classic-ref
+    git -C C:\tmp\msuf-classic-ref checkout <the Retail commit this release syncs from>
+    tools\test-classic-prototype.ps1 -RetailReferenceRoot C:\tmp\msuf-classic-ref
+The checkout must be clean and must be the Git repository root. Use -SelfContained
+for the CI subset, which needs no Retail reference at all.
+"@
+} else {
+    $retailReferenceRootFull = [IO.Path]::GetFullPath($RetailReferenceRoot).TrimEnd('\', '/')
+    $referenceToc = Join-Path $retailReferenceRootFull "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
+    if (-not (Test-Path -LiteralPath $referenceToc -PathType Leaf)) {
+        throw "Retail reference checkout is missing its core TOC: $referenceToc"
+    }
+}
+$retailReferenceLabel = if ($retailReferenceRootFull) {
+    "working tree at $retailReferenceRootFull"
+} else {
+    "no Retail reference (self-contained run)"
+}
+# {retailRoot/} resolves to "-" without a Retail reference. The Retail-shared
+# runtime smokes read that sentinel as "no baseline" and say so on stdout, so a
+# self-contained run never reads as if the comparison had happened.
+$retailReferenceRootForward = if ($retailReferenceRootFull) { $retailReferenceRootFull -replace '\\', '/' } else { "-" }
+
 # tools/classic-gate-smokes.tsv is the smoke list: one row per smoke, expanded
 # over the client matrix by the Matrix column. Consecutive rows that name the
 # same matrix run as one loop, which is how two smokes stay interleaved per
 # flavor. Tokens: {root} the repository root as git prints it, {root/} the same
-# with forward slashes, {flavor} and {clientToken} the matrix row, {codec} the
-# codec axis, {p/:<repo path>} an absolute forward-slash path.
+# with forward slashes, {retailRoot/} the Retail reference root with forward
+# slashes (or "-" when there is none), {flavor} and {clientToken} the matrix
+# row, {codec} the codec axis, {p/:<repo path>} an absolute forward-slash path.
 $smokeManifestRelative = "tools/classic-gate-smokes.tsv"
 $smokeManifestPath = Join-Path $root $smokeManifestRelative
 if (-not (Test-Path -LiteralPath $smokeManifestPath -PathType Leaf)) {
@@ -274,7 +311,8 @@ function Expand-GateSmokeToken {
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text,
         [Parameter(Mandatory = $true)][hashtable]$Context
     )
-    $expanded = $Text.Replace("{root/}", ($root -replace '\\', '/')).Replace("{root}", $root)
+    $expanded = $Text.Replace("{retailRoot/}", $retailReferenceRootForward)
+    $expanded = $expanded.Replace("{root/}", ($root -replace '\\', '/')).Replace("{root}", $root)
     foreach ($key in @($Context.Keys)) { $expanded = $expanded.Replace("{$key}", [string]$Context[$key]) }
     $expanded = [regex]::Replace($expanded, '\{p/:([^}]+)\}', { param($match) (Join-Path $root $match.Groups[1].Value) -replace '\\', '/' })
     if ($expanded -match '\{[A-Za-z][^}]*\}') {
@@ -342,6 +380,14 @@ while ($smokeRowIndex -lt $smokeRows.Count) {
     }
 }
 $smokePlanTotal = $smokePlan.Count
+# The Retail-shared runtime smokes replay the Classic override and its Retail
+# base side by side. Without a Retail reference they still run every
+# self-contained assertion, but the comparison half cannot happen, so it is
+# reported as a skipped step rather than left to a line of smoke output.
+$retailBaselineRows = @($smokeRows | Where-Object { $_.Arguments -clike "*{retailRoot/}*" })
+if ($retailBaselineRows.Count -gt 0 -and -not $retailReferenceRootFull) {
+    $skippedSteps.Add("Retail baseline comparison in $($retailBaselineRows.Count) Retail-shared runtime smokes (no Retail reference)")
+}
 if (-not [string]::IsNullOrWhiteSpace($Only)) {
     # A narrowed run must never read as a pass, so the inventory check below is
     # recorded as skipped instead of silently accepting the smokes that sat out.
@@ -359,35 +405,6 @@ if (-not $lua) {
 }
 & python (Join-Path $root ".github/quality/error_paths.py")
 if ($LASTEXITCODE -ne 0) { throw "Classic error visibility contract failed" }
-
-# The Retail reference is named, never guessed. A sibling auto-detect used to
-# pick up whatever Retail working tree happened to sit next to this clone, so a
-# full run could silently certify against the owner's live, dirty checkout.
-$retailReferenceRootFull = $null
-if ($SelfContained) {
-    # The combination with -RetailReferenceRoot was already rejected above.
-} elseif ([string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
-    throw @"
-A full Classic gate run needs -RetailReferenceRoot <path to a clean Retail clone>.
-Make one and point the gate at it:
-    git clone --no-hardlinks <Retail remote or local repository> C:\tmp\msuf-classic-ref
-    git -C C:\tmp\msuf-classic-ref checkout <the Retail commit this release syncs from>
-    tools\test-classic-prototype.ps1 -RetailReferenceRoot C:\tmp\msuf-classic-ref
-The checkout must be clean and must be the Git repository root. Use -SelfContained
-for the CI subset, which needs no Retail reference at all.
-"@
-} else {
-    $retailReferenceRootFull = [IO.Path]::GetFullPath($RetailReferenceRoot).TrimEnd('\', '/')
-    $referenceToc = Join-Path $retailReferenceRootFull "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
-    if (-not (Test-Path -LiteralPath $referenceToc -PathType Leaf)) {
-        throw "Retail reference checkout is missing its core TOC: $referenceToc"
-    }
-}
-$retailReferenceLabel = if ($retailReferenceRootFull) {
-    "working tree at $retailReferenceRootFull"
-} else {
-    "no Retail reference (self-contained run)"
-}
 
 $targets = @(
     @{ Folder = "MidnightSimpleUnitFrames"; Base = "MidnightSimpleUnitFrames" },
@@ -728,7 +745,9 @@ function Assert-NormalizedAddonPath {
 
 function Assert-OrdinalPathOrder {
     param(
-        [Parameter(Mandatory = $true)][string[]]$Paths,
+        # Empty is allowed: a manifest may legitimately hold no rows, as the
+        # owned-shadow manifest does since the last shadow was collapsed.
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Paths,
         [Parameter(Mandatory = $true)][string]$Label
     )
     $sorted = [string[]]$Paths.Clone()
@@ -842,8 +861,10 @@ Assert-TrackedFile -RelativePath $shadowManifestRelative -Label "Classic owned-s
 $shadowBaseBlobs = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 $shadowRetailPaths = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 $shadowPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+# An empty manifest is the target state: the last shadow, the Classic Defaults
+# file, was collapsed into State/MSUF_Defaults.lua on 2026-09-20. The rules
+# below still run, so a shadow added later is validated the same way.
 $shadowLines = [string[]][IO.File]::ReadAllLines($shadowManifestPath)
-if ($shadowLines.Count -eq 0) { throw "Classic owned-shadow manifest is empty" }
 $shadowPathsInOrder = [Collections.Generic.List[string]]::new()
 foreach ($shadowLine in $shadowLines) {
     $fields = $shadowLine.Split([char]9)
@@ -1617,5 +1638,14 @@ if ($gateSmokeFailures.Count -gt 0) {
     }
     Pop-Location
     throw "Classic gate smokes failed: $($gateSmokeFailures.Count) of $($smokePlan.Count) invocations"
+}
+# A full run in CI has nothing to skip: the Retail reference and the Blizzard
+# mirror are both cloned by the job. -RequireNoSkippedSteps makes that explicit,
+# so a clone that lands in the wrong place cannot leave a green gate that quietly
+# dropped the source audit or the Retail parity comparison. It runs after the
+# smoke report so a broken smoke is still named first.
+if ($RequireNoSkippedSteps -and $skippedSteps.Count -gt 0) {
+    Pop-Location
+    throw "The Classic gate skipped $($skippedSteps.Count) step(s) while -RequireNoSkippedSteps was set: $($skippedSteps -join '; ')"
 }
 Pop-Location

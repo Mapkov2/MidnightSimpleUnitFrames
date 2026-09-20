@@ -1,7 +1,9 @@
 # MSUF client layout
 
 This directory is the client boundary for MSUF, following ElvUI's layout:
-`Game/Shared` plus one folder per Classic client family or flavor.
+`Game/Shared` plus one folder per client family or flavor that needs its own
+source. `Classic`, `Vanilla`, `TBC` and `Mists` belong to the Classic family;
+`Forever` is Mainline-family source and loads in the Mainline build.
 
 - `Shared` contains bootstrap code that must behave identically everywhere,
   plus the modules that Classic clients and the Mainline build both load
@@ -27,8 +29,9 @@ resolved once when the file loads (a file-level upvalue such as
 `IS_CLASSIC_FAMILY`), never on a client check per event, so a shared hot path
 pays one upvalue test at most and Mainline never enters the Classic branch.
 The former whole-file Classic copies of Retail files (owned shadows) were
-collapsed that way; `tools/classic-owned-shadows.tsv` lists the ones that
-remain. Vanilla, TBC, and Mists include implementations from `Classic`, but
+collapsed that way on 2026-09-19, thirteen of fourteen; the one row left in
+`tools/classic-owned-shadows.tsv` is `Classic/State/MSUF_Defaults.lua`. Do not
+add a shadow. Vanilla, TBC, and Mists include implementations from `Classic`, but
 they keep separate loader manifests so their contracts can diverge without
 copying the backend.
 

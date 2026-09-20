@@ -1,0 +1,192 @@
+# Globals the three addons read by bare name that this source tree does not
+# define. tools/tests/unresolved_global_reads_smoke.py compiles every shipped
+# Lua file, reads the GETGLOBAL instructions out of the bytecode and requires
+# each name to be Lua 5.1, defined here, or reviewed below: a new unresolved
+# name fails the gate until someone adds a row, and a row nothing reads any
+# more fails it too.
+#
+# Kind: api, namespace, frame and constant are Blizzard surfaces; luaenv is a
+# Lua library name the client publishes as a global; thirdparty is another
+# addon's global MSUF probes; defect marks a read that is a bug, reported and
+# deliberately not fixed here; vestigial marks a read of a global this tree
+# stopped defining, kept because every read of it is guarded.
+BackdropTemplateMixin	constant	Blizzard UI constant, enum or shared string
+CANCEL	constant	Blizzard UI constant, enum or shared string
+C_AddOns	namespace	Blizzard C_* namespace
+C_ChatInfo	namespace	Blizzard C_* namespace
+C_IncomingSummon	namespace	Blizzard C_* namespace
+C_Secrets	namespace	Blizzard C_* namespace
+C_SpecializationInfo	namespace	Blizzard C_* namespace
+C_Spell	namespace	Blizzard C_* namespace
+C_SpellBook	namespace	Blizzard C_* namespace
+C_StringUtil	namespace	Blizzard C_* namespace
+C_Texture	namespace	Blizzard C_* namespace
+C_Timer	namespace	Blizzard C_* namespace
+C_UnitAuras	namespace	Blizzard C_* namespace
+ClearOverrideBindings	api	Blizzard client API
+ColorPickerFrame	frame	Blizzard UI frame or object MSUF reads
+Constants	constant	Blizzard UI constant, enum or shared string
+CopyTable	api	Blizzard client API
+CreateFrame	api	Blizzard client API
+DEFAULT_CHAT_FRAME	frame	Blizzard UI frame or object MSUF reads
+DELETE	constant	Blizzard UI constant, enum or shared string
+EditModeManagerFrame	frame	Blizzard UI frame or object MSUF reads
+Enum	constant	Blizzard UI constant, enum or shared string
+EnumerateFrames	api	Blizzard client API
+EventRegistry	table	Blizzard EventRegistry callback registry
+GameFontHighlight	constant	Blizzard UI constant, enum or shared string
+GameTooltip	frame	Blizzard UI frame or object MSUF reads
+GetAddOnMetadata	api	Blizzard client API
+GetBindingAction	api	Blizzard client API
+GetCVar	api	Blizzard client API
+GetCVarBool	api	Blizzard client API
+GetCameraZoom	api	Blizzard client API the harness does not model
+GetCollapsingStarCost	api	Blizzard client API the harness does not model; the shared ClassPower AURA mode builder binds it on every client, and only the Devourer path calls it after a type check
+GetCurrentKeyBoardFocus	api	Blizzard client API the harness does not model
+GetCursorPosition	api	Blizzard client API the harness does not model
+GetInstanceInfo	api	Blizzard client API the harness does not model
+GetLocale	api	Blizzard client API
+GetMaxLevelForExpansionLevel	api	Blizzard client API the harness does not model
+GetMaximumExpansionLevel	api	Blizzard client API the harness does not model
+GetMouseFoci	api	Blizzard client API
+GetMouseFocus	api	Blizzard client API
+GetNormalizedRealmName	api	Blizzard client API
+GetNumArenaOpponentSpecs	api	Blizzard client API the harness does not model
+GetNumGroupMembers	api	Blizzard client API
+GetNumSubgroupMembers	api	Blizzard client API the harness does not model
+GetNumTalentTabs	api	Blizzard client API
+GetPhysicalScreenSize	api	Blizzard client API the harness does not model
+GetPowerRegenForPowerType	api	Blizzard client API the harness does not model
+GetRaidDifficultyID	api	Blizzard client API
+GetRaidRosterInfo	api	Blizzard client API the harness does not model
+GetRaidTargetIndex	api	Blizzard client API the harness does not model
+GetReadyCheckStatus	api	Blizzard client API the harness does not model
+GetRealmName	api	Blizzard client API
+GetRuneCooldown	api	Blizzard client API the harness does not model
+GetScreenHeight	api	Blizzard client API
+GetScreenWidth	api	Blizzard client API
+GetShapeshiftForm	api	Blizzard client API the harness does not model
+GetShapeshiftFormID	api	Blizzard client API the harness does not model
+GetShapeshiftFormInfo	api	Blizzard client API the harness does not model
+GetSpecialization	api	Blizzard client API the harness does not model
+GetSpecializationInfo	api	Blizzard client API the harness does not model
+GetSpellInfo	api	Blizzard client API the harness does not model
+GetSpellTexture	api	Blizzard client API
+GetSubZoneText	api	Blizzard client API
+GetTalentTabInfo	api	Blizzard client API
+GetTime	api	Blizzard client API
+GetTimePreciseSec	api	Blizzard client API the harness does not model
+GetUnitChargedPowerPoints	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+GetUnitClassification	api	Blizzard client API
+GetZoneText	api	Blizzard client API
+Global	Kind	Reason
+HideUIPanel	api	Blizzard client API
+InCombatLockdown	api	Blizzard client API
+IsAltKeyDown	api	Blizzard client API the harness does not model
+IsControlKeyDown	api	Blizzard client API the harness does not model
+IsInGroup	api	Blizzard client API
+IsInGuild	api	Blizzard client API the harness does not model
+IsInInstance	api	Blizzard client API
+IsInRaid	api	Blizzard client API
+IsMouseButtonDown	api	Blizzard client API the harness does not model
+IsResting	api	Blizzard client API the harness does not model
+IsShiftKeyDown	api	Blizzard client API the harness does not model
+LE_PARTY_CATEGORY_HOME	constant	Blizzard UI constant, enum or shared string
+LE_PARTY_CATEGORY_INSTANCE	constant	Blizzard UI constant, enum or shared string
+LibStub	thirdparty	LibStub, the embedded library registry every Ace-style library asks for
+MSUF_BeginEditModeTransaction	vestigial	no file defines this global any more; the read is type-guarded, so Edit Mode entry simply starts no undo transaction
+MSUF_EditModeSizing	vestigial	no file defines this global any more; both reads are truth tests, so the castbar preview drag never enters its SIZE mode
+NO	constant	Blizzard UI constant, enum or shared string
+OKAY	constant	Blizzard UI constant, enum or shared string
+PetBattleFrameHider	frame	Blizzard UI frame or object MSUF reads
+PlayerVehicleHasComboPoints	api	Blizzard client API the harness does not model
+PowerBarColor	constant	Blizzard UI constant, enum or shared string
+RAID_CLASS_COLORS	constant	Blizzard UI constant, enum or shared string
+RELOADUI	constant	Blizzard UI constant, enum or shared string
+RegisterStateDriver	api	Blizzard client API
+RegisterUnitWatch	api	Blizzard client API
+ReloadUI	api	Blizzard client API
+STANDARD_TEXT_FONT	constant	Blizzard UI constant, enum or shared string
+SetOverrideBindingClick	api	Blizzard client API
+SetPortraitTexture	api	Blizzard client API the harness does not model
+SetRaidTargetIconTexture	api	Blizzard client API the harness does not model
+ShowUIPanel	api	Blizzard client API
+StaticPopup_Hide	api	Blizzard client API
+StaticPopup_Show	api	Blizzard client API
+StaticPopup_Visible	api	Blizzard client API
+TextureKitConstants	constant	Blizzard UI constant, enum or shared string
+UIErrorsFrame	frame	Blizzard UI frame or object MSUF reads
+UIParent	frame	Blizzard UI frame or object MSUF reads
+UISpecialFrames	constant	Blizzard UI constant, enum or shared string
+UnitAffectingCombat	api	Blizzard client API
+UnitCanAssist	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitCanAttack	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitCastingInfo	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitChannelInfo	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitClass	api	Blizzard client API
+UnitClassification	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitCreatureType	api	Blizzard client API
+UnitEffectiveLevel	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitExists	api	Blizzard client API
+UnitFactionGroup	api	Blizzard client API
+UnitFullName	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitGUID	api	Blizzard client API
+UnitGroupRolesAssigned	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHasIncomingResurrection	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHasPowerType	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHasVehicleUI	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHealth	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHealthMax	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitHealthPercent	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitInRaid	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitInRange	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsAFK	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsBossMob	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsConnected	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsDND	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsDead	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsDeadOrGhost	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsGhost	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsGroupAssistant	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsGroupLeader	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsLieutenant	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsMercenary	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsPVP	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsPVPFreeForAll	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsPlayer	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsTapDenied	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitIsUnit	api	Blizzard client API
+UnitIsVisible	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitLevel	api	Blizzard client API
+UnitName	api	Blizzard client API
+UnitPartialPower	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPhaseReason	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPlayerControlled	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPower	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPowerDisplayMod	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPowerMax	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPowerPercent	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitPowerType	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitRace	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitReaction	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitSelectionColor	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitSelectionType	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitSex	api	Blizzard client API
+UnitStagger	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitThreatSituation	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitWatchRegistered	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnregisterUnitWatch	api	Blizzard client API
+WagoAnalytics	thirdparty	Wago's analytics global, probed by the shipped shim
+WorldFrame	frame	Blizzard UI frame or object MSUF reads
+YES	constant	Blizzard UI constant, enum or shared string
+date	luaenv	WoW's date() global (there is no os table in the client)
+floor	luaenv	math.floor, which WoW also publishes as a global
+geterrorhandler	luaenv	WoW's error-handler accessor, read by an embedded library
+hooksecurefunc	luaenv	WoW's secure post-hook global
+issecretvalue	luaenv	12.x global that reports a secret value
+max	luaenv	math.max, which WoW also publishes as a global
+min	luaenv	math.min, which WoW also publishes as a global
+norm	defect	DEFECT MSUF_AssistantRouter.lua:1089: ExactLabelSingleChange reads norm where its parameter is text, so the scoped-twin swap never runs; enabling it changes which setting an exact-label command writes and no Assistant corpus ships here to validate that
+strmatch	luaenv	string.match, which WoW also publishes as a global
+time	luaenv	WoW's time() global (there is no os table in the client)
+wipe	luaenv	WoW's table-clearing global

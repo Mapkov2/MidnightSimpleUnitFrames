@@ -7,6 +7,7 @@ param(
     [string]$Only = "",
     [switch]$FailFast,
     [int]$Jobs = 0,
+    [switch]$RequireNoSkippedSteps,
     [string]$LuaPath = "",
     [string]$LuacPath = "",
     [string]$PythonPath = ""
@@ -113,6 +114,7 @@ if ($ListSmokes) { $forwarded["ListSmokes"] = $true }
 if (-not [string]::IsNullOrWhiteSpace($Only)) { $forwarded["Only"] = $Only }
 if ($FailFast) { $forwarded["FailFast"] = $true }
 if ($Jobs -gt 0) { $forwarded["Jobs"] = $Jobs }
+if ($RequireNoSkippedSteps) { $forwarded["RequireNoSkippedSteps"] = $true }
 
 # The gate is not written against Set-StrictMode, and a wrapper must not change
 # how it behaves, so strict mode ends here.
