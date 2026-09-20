@@ -558,7 +558,7 @@ function OM.RootDetailBlocked(setting, text)
         "ready check", "group number", "raid marker", "kick", "interrupt", "status", "indicator",
         "leben", "gesundheit", "lebenspunkte", "lebensanzeige", "energie", "ressource", "ressourcen",
     }) do
-        if ContainsAny(text, GeometryPhrases[37]) and not HasPhrase(label, term) then return true end
+        if HasPhrase(text, term) and not HasPhrase(label, term) then return true end
     end
     return false
 end

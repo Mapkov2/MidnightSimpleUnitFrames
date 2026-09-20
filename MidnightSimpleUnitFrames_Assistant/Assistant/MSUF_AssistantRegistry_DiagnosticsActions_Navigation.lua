@@ -295,7 +295,7 @@ Registry:RegisterAction({
         end
         local retiredLabel
         if type(page) == "string" and page ~= "" and type(A.ResolveCanonicalMenuRoute) == "function" then
-            local canonical
+            local canonical, _
             canonical, _, retiredLabel = A.ResolveCanonicalMenuRoute(page, { settingKey = settingKey })
             page = canonical
         end

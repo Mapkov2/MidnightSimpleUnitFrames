@@ -66,7 +66,6 @@ Data.GEOMETRY_PARSER = {
         [34] = { "off", "disable", "disabled", "hide", "aus", "deaktivieren", "no ", "without", "never", "get rid", "keine", "kein" },
         [35] = { "right" },
         [36] = { "on", "enable", "enabled", "show", "left", "an", "aktivieren" },
-        [37] = { term },
         [38] = { "unitframe", "unitframes", "unit frame", "unit frames", "frame", "frames" },
         [39] = { "group", "group frame", "group frames", "party", "raid", "mythic raid", "mythicraid" },
         [40] = { "move", "nudge", "shift", "verschiebe", "offset", "position", "pos", "x", "y" },

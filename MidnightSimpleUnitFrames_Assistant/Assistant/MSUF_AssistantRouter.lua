@@ -10955,6 +10955,8 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
     if settingNoun and (asksLocation or wantsOff or wantsOn) then
         local unit, page = R.IndicatorUnitFromText(norm)
         local groupScope = R.IndicatorGroupScopeFromText(norm)
+        local groupLabel = groupScope == "mythic raid" and "Mythic Raid"
+            or (groupScope == "raid" and "Raid" or (groupScope == "party" and "Party" or nil))
         if settingScope == "group" or (groupScope and not unit) then
             if asksLocation and not (wantsOff or wantsOn) then
                 local reply = A.RouterIndicatorProblemReply(

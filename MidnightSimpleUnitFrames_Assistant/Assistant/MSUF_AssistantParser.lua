@@ -4436,7 +4436,7 @@ end
 local function ParseClassResourceFillFastShortcut(text)
     if not ContainsAny(text, P.RootPhrases[520]) then return nil end
     if ContainsAny(text, P.RootPhrases[521]) and not ContainsAny(text, P.RootPhrases[522]) then
-        local direction = DetectDirection and DetectDirection(text, {}) or nil
+        local direction = P.DetectDirection and P.DetectDirection(text, {}) or nil
         local key
         local fallback = 10
         if ContainsAny(text, P.RootPhrases[523]) then

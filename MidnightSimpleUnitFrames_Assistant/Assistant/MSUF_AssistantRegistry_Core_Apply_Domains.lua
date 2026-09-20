@@ -76,6 +76,7 @@ function A.RegistryCoreBuilders.BuildDomainApplyHelpers(ctx)
     end
 
     local function ApplyCastbar(reason, unit)
+        local ApplyService = CurrentApplyService()
         if ApplyService and type(ApplyService.RequestCastbars) == "function" then
             return ApplyService.RequestCastbars(reason or "MSUF_ASSISTANT_CASTBAR", "assistant", unit)
         end
