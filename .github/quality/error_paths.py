@@ -13,6 +13,20 @@ NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
 LONG = re.compile(r"\[(=*)\[")
 NUMBER = re.compile(r"\d{1,3}")
 
+# Only native input-validation boundaries may reject invalid assets/data.
+# Match the entire statement once per file: no generic dispatcher or alias.
+REJECTION_BOUNDARIES = {
+    "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua": {
+        "local decoded, blob = pcall(E.DecodeBase64, cleaned)",
+        "local ok, tbl = pcall(E.DeserializeCBOR, payload)",
+        "ok, payload = pcall(E.DecompressString, blob, method)",
+        "ok, payload = pcall(E.DecompressString, blob)",
+    },
+    "MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua": {
+        "local ok, accepted = pcall(SetFontChecked, MSUF_FontPathProbe, path, size, flags)",
+    },
+}
+
 
 def tokens(source):
     """Ignore comments; retain names and literal keys, so aliases cannot evade the gate."""
@@ -78,13 +92,18 @@ def main():
     for path in owned_files():
         count += 1
         source = path.read_text(encoding="utf-8-sig")
+        allowed = set(REJECTION_BOUNDARIES.get(path.relative_to(ROOT).as_posix(), ()))
         for token, offset in tokens(source):
             if token in BANNED:
+                statement = source[source.rfind("\n", 0, offset) + 1:source.find("\n", offset)].strip()
+                if token == "pcall" and statement in allowed:
+                    allowed.remove(statement)
+                    continue
                 line = source.count("\n", 0, offset) + 1
                 failures.append(f"{path.relative_to(ROOT).as_posix()}:{line}: {token}")
     if failures:
         raise SystemExit("Forbidden runtime call boundary:\n" + "\n".join(failures))
-    print(f"PASS direct error paths: {count} owned Lua files; no protected-call names or aliases")
+    print(f"PASS direct error paths: {count} owned Lua files; only explicit asset/codec rejection boundaries")
 
 
 if __name__ == "__main__":

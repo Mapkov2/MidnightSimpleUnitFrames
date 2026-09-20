@@ -78,25 +78,25 @@ local function MSUF_Defaults_TryDecodeCompactString(str)
     -- Codec calls consume an encoded blob and are allowed to reject malformed
     -- data by raising. Factory-default bootstrap must turn that into a clean
     -- nil result rather than aborting addon initialization.
-    local blob = E.DecodeBase64(cleaned)
-    if type(blob) ~= "string" then return nil end
+    local decoded, blob = pcall(E.DecodeBase64, cleaned)
+    if not decoded or type(blob) ~= "string" then return nil end
     local function TryDeserialize(payload)
         if type(payload) ~= "string" then return nil end
-        local tbl = E.DeserializeCBOR(payload)
-        return type(tbl) == "table" and tbl or nil
+        local ok, tbl = pcall(E.DeserializeCBOR, payload)
+        return ok and type(tbl) == "table" and tbl or nil
     end
-    local tbl = TryDeserialize(blob)
-    if tbl then return tbl end
-    if type(E.DecompressString) ~= "function" then return nil end
+    -- The shipped factory is base64(deflate(CBOR)). Legacy compact profiles
+    -- may contain raw CBOR, so only try that after decompression is rejected.
+    if type(E.DecompressString) ~= "function" then return TryDeserialize(blob) end
     local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
-    local ok, payload
+    local ok, payload, tbl
     if method ~= nil then
-        ok, payload = true, E.DecompressString(blob, method)
+        ok, payload = pcall(E.DecompressString, blob, method)
         if ok then tbl = TryDeserialize(payload); if tbl then return tbl end end
     end
-    ok, payload = true, E.DecompressString(blob)
-    if ok then return TryDeserialize(payload) end
-    return nil
+    ok, payload = pcall(E.DecompressString, blob)
+    if ok then tbl = TryDeserialize(payload); if tbl then return tbl end end
+    return TryDeserialize(blob)
 end
 local function MSUF_Defaults_WipeInPlace(t)
     if not t then  return end

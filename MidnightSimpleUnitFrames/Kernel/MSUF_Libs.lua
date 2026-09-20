@@ -102,12 +102,10 @@ fs._msufFontScaleAnimationMode = mode
 end
 end
 
---- Native exceptions propagate; explicit API rejection is an error as well.
+--- Native exceptions propagate; an unavailable asset returns false so callers
+--- can use their normal fallback/recovery path.
 local function MSUF_SetFontChecked(fs, path, size, flags)
-    if fs:SetFont(path, size, flags or "") == false then
-        error("MSUF SetFont rejected font: " .. tostring(path), 2)
-    end
-    return true
+    return fs:SetFont(path, size, flags or "") ~= false
 end
 
 local function MSUF_ClearFontStringApplyCaches(fs)
@@ -200,7 +198,8 @@ MSUF.Util.IsKnownFileAsset = MSUF.Util.IsKnownFileAsset or MSUF_IsKnownFileAsset
 
 --- Font pipeline v3: path-first, no visual guessing.
 --- A selected SharedMedia font is stored/resolved as the exact file path and is
---- applied directly. A rejected path surfaces as an error with no replacement font.
+--- retained in SavedVariables. Unavailable assets use the built-in fallback;
+--- actual application errors remain visible.
 do
     local ADDON_FONT_BASE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\"
     local ALIAS_TO_PATH = {
@@ -244,11 +243,9 @@ do
     local function FontAssetAllowed(path)
         path = NormalizeFontPath(path)
         if type(path) ~= "string" or path == "" then return nil end
-        -- An exact LibSharedMedia registration is authoritative metadata for
-        -- this session. Skip transient manifest/probe negatives and let the
-        -- verified SetFont call remain the final openability check.
+        -- Registration describes a path; it does not prove the file exists.
         local registered = MSUF_GetRegisteredLSMFontPath(path)
-        if registered then return registered end
+        path = registered or path
         local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
         if type(isKnown) == "function" and isKnown(path) == false then return nil end
         local isLoadable = _G.MSUF_FontPathIsLoadable
@@ -303,10 +300,7 @@ do
     end
 
     local function ResolveFontPath(path, _, _, fontKey)
-        if path ~= nil and path ~= "" then
-            return assert(FontAssetAllowed(path), "MSUF invalid font asset: " .. tostring(path))
-        end
-        return assert(ResolveFontKeyPath(fontKey), "MSUF unknown font key: " .. tostring(fontKey))
+        return FontAssetAllowed(path) or ResolveFontKeyPath(fontKey) or ALIAS_TO_PATH.FRIZQT
     end
 
     local function ApplyOne(fs, path, size, flags)
@@ -343,16 +337,20 @@ do
             and fs._msufFontRequestSize == size
             and fs._msufFontRequestFlags == flags
             and fs._msufFontRequestEpoch == epoch then
-            return true, requested, "cached"
+            return true, fs._msufFontRequestAppliedPath, "cached"
         end
-        assert(ApplyOne(fs, requested, size, flags), "MSUF font readback mismatch: " .. requested)
+        local applied, source = requested, "requested"
+        if not ApplyOne(fs, requested, size, flags) then
+            applied, source = ALIAS_TO_PATH.FRIZQT, "fallback"
+            if not ApplyOne(fs, applied, size, flags) then return false, applied, source end
+        end
         fs._msufFontRequestPath = requested
         fs._msufFontRequestSize = size
         fs._msufFontRequestFlags = flags
-        fs._msufFontRequestAppliedPath = requested
-        fs._msufFontSource = "requested"
+        fs._msufFontRequestAppliedPath = applied
+        fs._msufFontSource = source
         fs._msufFontRequestEpoch = epoch
-        return true, requested, "requested"
+        return true, applied, source
     end
 
     local function MSUF_NormalizeFontFlags(flags)
@@ -598,6 +596,9 @@ local function SnapshotLSMMediaCounts(LSM)
 end
 
 local function RefreshFontMedia(key, forceApply, registeredPath)
+    if type(_G.MSUF_InvalidateFontPathCache) == "function" then
+        _G.MSUF_InvalidateFontPathCache()
+    end
     if type(_G.MSUF_RebuildFontChoices) == "function" then
         _G.MSUF_RebuildFontChoices()
     end

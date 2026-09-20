@@ -12,7 +12,6 @@ local G = _G
 local type, tostring, ipairs = type, tostring, ipairs
 local table_insert = table.insert
 local string_lower = string.lower
-local IsRegisteredLSMFontPath = G.MSUF_IsRegisteredLSMFontPath
 local SetFontChecked = G.MSUF_SetFontChecked
 local LSM = (MSUF and MSUF.LSM) or G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 
@@ -32,6 +31,7 @@ if LSM and not G.MSUF_LSM_CallbacksRegistered and not G.MSUF_LSM_FontCallbackReg
     G.MSUF_LSM_FontCallbackRegistered = true
     LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
         if mediatype ~= "font" then return end
+        if G.MSUF_InvalidateFontPathCache then G.MSUF_InvalidateFontPathCache() end
         if G.MSUF_RebuildFontChoices then
             G.MSUF_RebuildFontChoices()
         end
@@ -114,8 +114,13 @@ local MSUF_FontPathLoadableCache = {}
 -- Preview refreshes probe the same font paths thousands of times per menu
 -- session. The nested raw-path cache answers repeat probes without the
 -- gsub/lower/concat allocations of the normalized cache key. Results stay
--- stable except that an exact late LSM registration may promote a prior false.
+-- stable until a media registration explicitly invalidates the probe results.
 local MSUF_FontPathLoadableFast = {}
+
+function G.MSUF_InvalidateFontPathCache()
+    MSUF_FontPathLoadableCache = {}
+    MSUF_FontPathLoadableFast = {}
+end
 
 local function MSUF_NormalizeFontPathForProbe(path)
     if type(path) ~= "string" or path == "" then return nil end
@@ -131,10 +136,6 @@ local function MSUF_FontPathIsLoadable(rawPath, size, flags)
         local bySize = byPath and byPath[size]
         local fast = bySize and bySize[flags]
         if fast ~= nil then
-            if fast == false and type(IsRegisteredLSMFontPath) == "function" and IsRegisteredLSMFontPath(rawPath) then
-                bySize[flags] = true
-                return true
-            end
             return fast
         end
     end
@@ -144,10 +145,6 @@ local function MSUF_FontPathIsLoadable(rawPath, size, flags)
     local cacheKey = path:lower() .. "|" .. tostring(size) .. "|" .. tostring(flags)
     local cached = MSUF_FontPathLoadableCache[cacheKey]
     if cached ~= nil then
-        if cached == false and type(IsRegisteredLSMFontPath) == "function" and IsRegisteredLSMFontPath(path) then
-            cached = true
-            MSUF_FontPathLoadableCache[cacheKey] = true
-        end
         local byPath = MSUF_FontPathLoadableFast[rawPath]
         if not byPath then byPath = {}; MSUF_FontPathLoadableFast[rawPath] = byPath end
         local bySize = byPath[size]
@@ -156,26 +153,13 @@ local function MSUF_FontPathIsLoadable(rawPath, size, flags)
         return cached
     end
 
-    -- Exact LSM registration is authoritative metadata. Preserve its path and
-    -- let the real FontString SetFont + GetFont readback be the final check;
-    -- arbitrary/unregistered paths retain the permanent negative probe cache.
-    if type(IsRegisteredLSMFontPath) == "function" and IsRegisteredLSMFontPath(path) then
-        MSUF_FontPathLoadableCache[cacheKey] = true
-        if type(rawPath) == "string" and rawPath ~= "" then
-            local byPath = MSUF_FontPathLoadableFast[rawPath]
-            if not byPath then byPath = {}; MSUF_FontPathLoadableFast[rawPath] = byPath end
-            local bySize = byPath[size]
-            if not bySize then bySize = {}; byPath[size] = bySize end
-            bySize[flags] = true
-        end
-        return true
-    end
-
     if not MSUF_FontPathProbe then
         MSUF_FontPathProbe = G.CreateFont("MSUF_FontPathProbe")
     end
-    -- Native asset errors propagate without populating the result cache.
-    local loadable = SetFontChecked(MSUF_FontPathProbe, path, size, flags)
+    -- Probe imported/external assets in isolation. Real FontString application
+    -- remains direct, so unrelated runtime errors still surface normally.
+    local ok, accepted = pcall(SetFontChecked, MSUF_FontPathProbe, path, size, flags)
+    local loadable = ok and accepted == true
     MSUF_FontPathLoadableCache[cacheKey] = loadable
     if type(rawPath) == "string" and rawPath ~= "" then
         local byPath = MSUF_FontPathLoadableFast[rawPath]
@@ -511,7 +495,7 @@ local function MSUF_GetFontPreviewObject(key)
         obj = G.CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
         MSUF_FontPreviewObjects[key] = obj
     end
-    local path = assert(G.MSUF_ResolveFontKeyPath(key), "MSUF unknown font key: " .. tostring(key))
+    local path = G.MSUF_ResolveFontPath(nil, 14, "", key)
     SetFontChecked(obj, path, 14, "")
     return obj
 end
