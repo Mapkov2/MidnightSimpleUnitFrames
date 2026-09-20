@@ -1767,7 +1767,11 @@ function Stage.ResolveScaleAndLevels(st)
     local textBase = 0
     -- Portrait rides the shared 0..30 layer scale from the frame, so layer 0
     -- previews behind the bars exactly like the live element does.
-    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(ElementLevel(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.levelOffset or conf.portraitLevelOffset, (Layers.HEALTH_OFFSET or 1) + (Layers.PORTRAIT_OFFSET or 6), 0)) end
+    if mock.portrait and mock.portrait.SetFrameLevel then
+        mock.portrait:SetFrameLevel(Layers.PortraitLevel(mock.healthBar or mock,
+            runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.levelOffset or conf.portraitLevelOffset,
+            (Layers.HEALTH_OFFSET or 1) + (Layers.PORTRAIT_OFFSET or 6)))
+    end
     if type(_G.MSUF_GetCastbarFrameLevelOffset) == "function" then
         box._runtimeCastbarLayer = _G.MSUF_GetCastbarFrameLevelOffset(key, g)
     else
@@ -2934,7 +2938,7 @@ function Stage.RenderPortrait(st)
         mock.portrait._msufPreviewBorderDirection = (portraitBorder and portraitBorder.direction)
             or PortraitStyleGet(key, "portraitBorderDirection", "UP")
         mock.portrait._msufPreviewBorderShape = previewShape
-        if mock.portrait._msufPreviewBorderArt == "RELIEF"
+        if (mock.portrait._msufPreviewBorderArt == "RELIEF" or previewShape == "BLIZZARD")
             and box._runtimePortraitPlacement == "OVERLAY"
             and box._runtimePortraitOverlayAlign == "FULL"
         then
@@ -2950,6 +2954,13 @@ function Stage.RenderPortrait(st)
             edgeSoftnessLevel = floor(((tonumber(PortraitStyleGet(key, "portraitEdgeSoftness", 0)) or 0) / 2) + 0.5)
             if edgeSoftnessLevel < 0 then edgeSoftnessLevel = 0 elseif edgeSoftnessLevel > 15 then edgeSoftnessLevel = 15 end
             if previewShape == "BLIZZARD" or bStyle ~= "NONE" then edgeSoftnessLevel = 0 end
+        end
+        local portraitShared = MSUF.UF and MSUF.UF.Shared
+        if portraitShared and portraitShared.LayoutPortraitImage then
+            portraitShared.LayoutPortraitImage(mock.portrait.tex, mock.portrait,
+                renderMode ~= "CLASS" and runtimeSpec and runtimeSpec.portrait or nil,
+                mock.portrait._msufPreviewLayoutWidth or S(box._runtimePortraitW),
+                mock.portrait._msufPreviewLayoutHeight or S(box._runtimePortraitH))
         end
         R.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel)
         R.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",

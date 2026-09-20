@@ -99,6 +99,17 @@ function Layers.ElementLevel(layer, fallback, detail)
     + Layers.ClampDetail(detail)
 end
 
+-- Layer 0 is the portrait's documented behind-health placement. Health bars
+-- use their frame-local level, below the universal foreground scale; reserve
+-- one extra level for the portrait rim so it also stays behind the bar.
+function Layers.PortraitLevel(healthBar, layer, fallback)
+  layer = Layers.ClampLayer(layer, fallback or 7)
+  if layer == 0 and healthBar and healthBar.GetFrameLevel then
+    return max(0, (healthBar:GetFrameLevel() or 0) - 2)
+  end
+  return Layers.ElementLevel(layer, fallback or 7, 0)
+end
+
 --- Full-frame Aura effects must at least clear the surface they are meant to
 --- recolor.  The configured 0..30 Layer still wins whenever it is higher; this
 --- floor only prevents a low/default Layer from being completely overdrawn by

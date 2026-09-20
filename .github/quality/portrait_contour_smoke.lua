@@ -59,7 +59,7 @@ local function NewRegion(parent)
     function region:SetTexelSnappingBias(value) self.texelSnappingBias = value end
     function region:SetVertexColor(...) self.vertexColor = { ... } end
     function region:SetAlpha(value) self.alpha = value end
-    function region:GetAlpha() return self.alpha or 1 end
+    function region:GetAlpha() return self.alpha == nil and 1 or self.alpha end
     function region:CreateTexture(_, layer, _, sublevel)
         local texture = NewRegion(self)
         texture.layer, texture.sublevel = layer, sublevel
@@ -103,6 +103,7 @@ local portraitCalls, lastPortraitMaskArg = 0, "unset"
 _G.SetPortraitTexture = function(texture, unit, disableMasking)
     portraitCalls = portraitCalls + 1
     lastPortraitMaskArg = disableMasking
+    texture:SetTexCoord(0, 1, 0, 1) -- native portrait binding may reset the crop
     texture:SetTexture("portrait:" .. tostring(unit) .. (disableMasking and ":unmasked" or ""))
 end
 _G.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
@@ -127,18 +128,18 @@ local atlasInfo = {
 _G.C_Texture = { GetAtlasInfo = function(atlas) return atlasInfo[atlas] end }
 
 local function LoadElement(client)
-    local registered
+    local registered = {}
     local UF = {
         Layers = { PORTRAIT_OFFSET = 6, PORTRAIT_BORDER_OFFSET = 7 },
         RegisterElement = function(name, element)
-            assert(name == "Portrait", "unexpected element registration")
-            registered = element
+            registered[name] = element
         end,
     }
     -- Game/Shared/Initialize.lua loads before this element on every TOC, so the
     -- legacy Era portrait gate reads MSUF.Client and never the raw project ID.
     local MSUF = {
         Client = client,
+        ExportPublic = function(name, value) _G[name] = value end,
         UF = UF,
         Secrets = {
             IsNil = function(value) return value == nil end,
@@ -146,13 +147,17 @@ local function LoadElement(client)
         },
     }
     _G.MSUF_NS = MSUF
+    assert(loadfile("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("Core", MSUF)
+    assert(loadfile("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("Core", MSUF)
+    assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("Core", MSUF)
     local commonChunk, commonError = loadfile(commonPath)
     assert(commonChunk, commonError)
     commonChunk("MidnightSimpleUnitFrames", MSUF)
     local portraitChunk, portraitError = loadfile(portraitPath)
     assert(portraitChunk, portraitError)
     portraitChunk("MidnightSimpleUnitFrames", MSUF)
-    return assert(registered, "Portrait element was not registered")
+    assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua"))("Core", MSUF)
+    return assert(registered.Portrait, "Portrait element was not registered"), MSUF, registered.Alpha
 end
 
 local function NewFrame(shape, borderStyle)
@@ -252,7 +257,7 @@ assert(holder.ring and holder.ring.shown == true, "solid ring renderer must take
 
 -- 4) Preview uses the same bounds even at fractional sizes.
 do
-    local ns = { MSUF2 = {}, Client = { IsRetail = true, IsForever = true } }
+    local ns = { MSUF2 = { PreviewHelpers = {} }, Client = { IsRetail = true, IsForever = true } }
     ns.MSUF2.PickFallbackTable = function(deps, defaults)
         return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
     end
@@ -310,4 +315,100 @@ do
     assert(mask(251, 251) == 0 and rim(251, 251) == 0, "outer tip must be rounded")
     assert(mask(247, 128) > 0 and rim(247, 128) == 255, "mask antialiasing must end under the opaque rim")
 end
-print("portrait_contour_smoke: OK")
+-- Settings compose on the same holder; native portrait refreshes retain the
+-- configured crop, and panning never moves the contour or its click bounds.
+do
+    local portrait, ns, alpha = LoadElement()
+    local shared, layers = ns.UF.Shared, ns.UF.Layers
+    local test = NewFrame("BLIZZARD")
+    test:SetFrameLevel(20)
+    test.Health:SetFrameLevel(21)
+    test.hpBar = test.Health
+    test.MSUFSpec.alpha = { active = true, hpAlpha = .6, excludeTextPortrait = true }
+    local p = test.MSUFSpec.portrait
+    local function Apply()
+        portrait.Apply(test, test.MSUFSpec)
+        alpha.Apply(test, test.MSUFSpec)
+    end
+    for _, shape in ipairs({ "BLIZZARD", "CIRCLE", "SQUARE", "ROUNDED", "DIAMOND" }) do
+        p.shape = shape
+        for _, opacity in ipairs({ 1, .37, 0, 1 }) do
+            p.alpha = opacity
+            test.MSUFSpec.alpha.excludeTextPortrait = true
+            Apply()
+            Near(test.MSUFPortraitHolder:GetAlpha(), opacity, "own portrait opacity")
+            test.MSUFSpec.alpha.excludeTextPortrait = false
+            Apply()
+            Near(test.MSUFPortraitHolder:GetAlpha(), opacity * .6, "composed opacity")
+            portrait.Apply(test, test.MSUFSpec)
+            Near(test.MSUFPortraitHolder:GetAlpha(), opacity * .6, "portrait-only reapply")
+            alpha.Disable(test)
+            Near(test.MSUFPortraitHolder:GetAlpha(), opacity, "alpha reset retains own opacity")
+        end
+        for _, level in ipairs({ 0, 1, 7, 30, 0 }) do
+            p.levelOffset = level
+            Apply()
+            local h = test.MSUFPortraitHolder
+            if level == 0 then
+                assert(h:GetFrameLevel() < 21 and h.border:GetFrameLevel() < 21,
+                    "layer 0 portrait and rim must be behind health")
+            else Near(h:GetFrameLevel(), layers.ElementLevel(level, 7, 0), "foreground layer") end
+        end
+        for _, zoom in ipairs({ 100, 110, 150, 200 }) do
+            for _, pan in ipairs({ -100, 0, 100 }) do
+                shared.CompilePortraitTexCoords(p, zoom, 60, 60, pan, -pan)
+                Apply()
+                local h, tex = test.MSUFPortraitHolder, test.portrait
+                if shape == "BLIZZARD" and zoom == 100 then
+                    Near(tex._msufImageX, -pan / 100 * .08 * 60, "unzoomed pan X")
+                    Near(tex._msufImageY, pan / 100 * .08 * 60, "unzoomed pan Y")
+                end
+                assert(p.texL >= -1e-12 and p.texR <= 1 + 1e-12
+                    and p.texT >= -1e-12 and p.texB <= 1 + 1e-12, "bounded crop")
+                if pan ~= 0 then
+                    local imageX = (0.5 - p.texL) / (p.texR - p.texL) * 60 + tex._msufImageX
+                    local imageY = -(0.5 - p.texT) / (p.texB - p.texT) * 60 + tex._msufImageY
+                    assert((imageX - 30) * pan < 0 and (imageY + 30) * pan > 0,
+                        "pan direction must stay consistent across zoom")
+                end
+                test._msufPortraitForceRefresh = true
+                local before = portraitCalls
+                portrait.Apply(test, test.MSUFSpec)
+                assert(portraitCalls == before + 1, "forced native refresh")
+                for i, expected in ipairs({ p.texL, p.texR, p.texT, p.texB }) do
+                    Near(tex.texCoord[i], expected, "native refresh preserves crop")
+                end
+                portrait.Apply(test, test.MSUFSpec)
+                assert(portraitCalls == before + 1, "unchanged apply must not resolve native portrait")
+                assert(h.mask.allPoints == h, "mask must stay fixed when the image pans")
+                if shape == "BLIZZARD" then assert(h.blizzRing.allPoints == h, "rim must stay fixed") end
+            end
+        end
+    end
+    p.shape = "BLIZZARD"
+    shared.CompilePortraitTexCoords(p, 100, 60, 60, 100, 100)
+    Apply()
+    assert(test.portrait._msufImageX ~= 0 and test.portrait._msufImageY ~= 0)
+    p.render = "CLASS"
+    Apply()
+    Near(test.portrait._msufImageX, 0, "class render resets pan X")
+    Near(test.portrait._msufImageY, 0, "class render resets pan Y")
+
+    -- Exercise the actual final transparency pass, which previously replaced
+    -- the portrait renderer's alpha with the frame foreground alpha.
+    ns.MSUF2 = { PreviewHelpers = {} }
+    ns.UFPreview = { Model = { Clamp01 = ns.UF.Clamp01 } }
+    assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Core.lua"))("Options", ns)
+    local mock = NewRegion()
+    mock.portrait = NewRegion(mock)
+    local box = { mock = mock }
+    for _, opacity in ipairs({ 0, 37, 100 }) do
+        for _, exclude in ipairs({ false, true }) do
+            ns.UFPreview.ApplyPreviewTransparency(box,
+                { portraitAlpha = opacity, hpBarAlpha = .6, alphaExcludeTextPortrait = exclude },
+                { portrait = { alpha = opacity / 100 }, alpha = { hpAlpha = .6, excludeTextPortrait = exclude } })
+            Near(mock.portrait:GetAlpha(), opacity / 100 * (exclude and 1 or .6), "preview opacity composition")
+        end
+    end
+end
+print("portrait_contour_smoke: OK (contour, opacity, layers, zoom/pan, native refresh, preview)")
