@@ -1734,6 +1734,76 @@ local function MSUF_Defaults_CreateFactoryProfile()
         auraShared.appearanceIconShapes = shapes
         if shapes.playerDefensives == nil then shapes.playerDefensives = "FOLLOW_PORTRAIT" end
     end
+    -- Classic factory policy runs only after the authored unit/group aura
+    -- owners exist. New/reset profiles get it; saved layouts and the legacy
+    -- sparse-owner repair keep their original geometry. Midnight is unchanged.
+    if IS_CLASSIC_FAMILY or (MSUF.Client and MSUF.Client.IsForever) then
+        out.bars.powerBarHeight = 7
+        out.bars.classPowerHeight = 8
+        out.bars.showAltMana = true
+        out.bars.altManaHeight = 6
+        -- Class power ends 11 px below the 40 px player frame. Leave a gap
+        -- before the optional mana bar so druid forms can show both resources.
+        out.bars.altManaOffsetY = -14
+        for _, key in ipairs({ "player", "target", "focus", "pet", "boss", "arena" }) do
+            local conf = out[key]
+            if type(conf) == "table" then
+                conf.powerBarHeight = (key == "player" or key == "target") and 7 or 6
+            end
+        end
+
+        local raid = out.gf_raid
+        raid.width, raid.height, raid.spacing = 110, 44, 4
+        raid.unitsPerColumn, raid.maxColumns = 5, 8
+        raid.preserveRaidGroups = true
+        raid.growth, raid.groupGrowth = "DOWN", "RIGHT"
+        raid.point, raid.relativePoint = "TOPLEFT", nil
+        raid.anchorToFrame = "UIParent"
+        raid.offsetX, raid.offsetY = 24, -160
+        raid.positionMode = "GRID_BOUNDS_V2"
+
+        for _, key in ipairs({ "gf_party", "gf_raid" }) do
+            local conf = out[key]
+            local isRaid = key == "gf_raid"
+            conf.hpFontSize, conf.threatTextSize = 11, 11
+            conf.powerBarEnabled = true
+            conf.powerShowTank, conf.powerShowHealer, conf.powerShowDamager = true, true, true
+            conf.powerHeight = 6
+            -- Reserve the upper line for names/health, the lower line for
+            -- auras, and the top edge of party frames for threat percentage.
+            conf.nameAnchor, conf.nameOffsetX = "LEFT", 12
+            conf.nameOffsetY = isRaid and 8 or 7
+            conf.textLeft, conf.textCenter, conf.textRight = "NONE", "NONE", "PERCENT"
+            conf.hpOffsetX, conf.hpOffsetY = -12, isRaid and 8 or 7
+            local auras = conf.auras
+            local debuff = auras.debuff
+            debuff.max, debuff.perRow, debuff.spacing = 3, 3, 2
+            debuff.dispelBorderMode = "SYMBOL"
+            debuff.y = 8
+            auras.externals.y = 8
+            -- Keep the existing buff highlight beside, rather than over,
+            -- the expanded debuff row. All rows clear the six-pixel mana bar.
+            auras.buff.anchor, auras.buff.growth = "BOTTOMRIGHT", "LEFTUP"
+            auras.buff.x, auras.buff.y = -2, 8
+        end
+
+        for _, unit in ipairs({ "player", "target" }) do
+            local owner = out.auras3.perUnit[unit]
+            local layout, shared = owner.layout, owner.layoutShared
+            layout.buffGroupOffsetX, layout.buffGroupOffsetY = 0, 44
+            layout.debuffGroupOffsetX, layout.debuffGroupOffsetY = 0, 44
+            layout.buffGroupIconSize, layout.debuffGroupIconSize = 26, 26
+            layout.buffSpacing, layout.debuffSpacing = 2, 2
+            shared.maxDebuffs = unit == "target" and 8 or 6
+            shared.debuffPerRow = unit == "target" and 4 or 3
+            shared.debuffGrowthX, shared.debuffGrowthY = "LEFT", "UP"
+            shared.debuffTypeBorderMode = "SYMBOL"
+            shared.useDebuffTypeBorders = true
+            -- DEFAULT already sorts own auras first on Classic. Keep all
+            -- casters eligible so another player's crowd control can appear.
+            shared.debuffSortMethod = "DEFAULT"
+        end
+    end
     out.general = out.general or {}
     out.general._msufFactoryProfileApplied = true
     out._msufFactoryPlayerDefensivesEnabled_v1 = MSUF_FACTORY_DEFAULT_PLAYER_DEFENSIVES_ENABLED

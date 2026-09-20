@@ -2983,6 +2983,14 @@ function Stage.RenderPortrait(st)
         R.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel)
         R.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",
             S(box._runtimePortraitW), S(box._runtimePortraitH))
+        local portraitElement = MSUF.UF and MSUF.UF.elements and MSUF.UF.elements.Portrait
+        if portraitElement and portraitElement.PaintClassification then
+            portraitElement.PaintClassification(mock.portrait,
+                previewShape == "BLIZZARD" and PortraitStyleGet(key, "portraitBlizzardElite", false) == true,
+                data.classification,
+                mock.portrait._msufPreviewLayoutWidth or S(box._runtimePortraitW),
+                mock.portrait._msufPreviewLayoutHeight or S(box._runtimePortraitH), mock.portrait)
+        end
         -- The Blizzard ring shape parks every MSUF border renderer, exactly
         -- like the live element.
         if previewShape == "BLIZZARD" or bStyle == "NONE" then
@@ -3595,6 +3603,7 @@ function Render.Install(Preview, deps)
         local ring = portrait._msufPreviewBlizzRing
         if PREVIEW_CLASSIC and portrait._msufPreviewBlizzFallback then portrait._msufPreviewBlizzFallback:Hide() end
         if not active then
+            if portrait.blizzElite then portrait.blizzElite:Hide(); portrait.blizzElite._msufShown = false end
             if ring then ring:Hide() end
             if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
             if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end

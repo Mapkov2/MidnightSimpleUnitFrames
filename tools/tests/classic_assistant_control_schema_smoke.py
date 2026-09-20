@@ -51,8 +51,9 @@ LEDGER = {
     "records": 3476,
     "columns": 31,
     "schemaOnly": (298, "9022F4DE2CD5FF16DF75619E18FE945022316AC34AA589B6CC6CB284F317D077"),
-    # Appearance preset and background opacity are now offered on Classic too.
-    "indexOnly": (560, "A68DA8265690E81373FDD749773C86185BB73B202C1264FBFAE60591AC4AE880"),
+    # Includes the eight opt-in portrait dragon controls; the standalone
+    # control schema remains unchanged. Menu2 owns their exact search targets.
+    "indexOnly": (568, "D1488AB0C3F93F46999F009E64CADF1A9289F5F20BB62A2F081FED6827BCA9CD"),
 }
 
 

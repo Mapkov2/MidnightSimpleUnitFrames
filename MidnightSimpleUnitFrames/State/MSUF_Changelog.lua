@@ -8,12 +8,66 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "938B3C9993753D79EA39E95B1716895A279BB30ED502DF7A87FCA69364302941",
-    currentVersion = "6.5-beta5",
-    historyFromVersion = "6.5-beta2",
-    previousVersion = "6.5-beta4",
-    rangeLabel = "6.5-beta4 -> 6.5-beta5",
+    sourceSha256 = "DFBE27916A8CB9C7204BD3AAC12EA312D9866F6CADDCB4EC90FBD23031444491",
+    currentVersion = "6.5-beta6",
+    historyFromVersion = "6.5-beta3",
+    previousVersion = "6.5-beta5",
+    rangeLabel = "6.5-beta5 -> 6.5-beta6",
     entries = {
+        {
+            version = "6.5-beta6",
+            date = "2026-09-20",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Blizzard-style portraits can display elite and rare dragons. Enable the new option under Portrait > Border; the menu preview shows the matching decoration.",
+                            link = {
+                                pageKey = "uf_target",
+                                query = "elite and rare dragon",
+                                label = "Elite and rare dragon",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_target.unit.portrait.portraitblizzardelite",
+                                settingKey = "target.portraitBlizzardElite",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "border",
+                            },
+                        },
+                        {
+                            text = "Choose Classic Glass or Midnight as your menu appearance on every supported client. Classic Glass has a refined palette and clearer panels, while existing appearance choices are preserved.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "menu appearance preset",
+                                label = "Menu appearance preset",
+                                sectionId = "misc_menu_behavior",
+                                controlId = "menu2.opt.misc.global.setting.menu.appearance.preset",
+                                settingKey = "general.menuAppearancePreset",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Portrait > Border now offers a temporary Runtime Preview for elite, rare and boss dragons on the live portrait. Closing the section or entering combat restores the real classification.",
+                        "Updated the shared factory profile and the Classic/Forever defaults, including clearer power bars, separated Alternative Mana placement, a compact raid layout, and revised text and aura positions.",
+                        "Class Resources using Player frame width now span the full Player frame.",
+                        "Consolidated shared client handling, defaults, Class Resources and preview behavior across the supported clients.",
+                        "Refreshed Assistant bindings and menu catalog tooling, and expanded client, locale and release validation.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Classic and WoW Forever group members without an assigned role retain their power bar when power is enabled for any role; explicit role filters still apply.",
+                        "Corrected Blizzard-style portrait rim and mask alignment, foreground opacity and layer behavior, and portrait zoom after native refreshes.",
+                        "Fixed Classic aura filtering and faction handling, Class Resource refreshes and previews, font previews, and several default-setting inconsistencies.",
+                        "Reused completed pixel-layout setup to avoid repeated work while keeping deferred combat updates available.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta5",
             date = "2026-09-19",
@@ -158,31 +212,6 @@ local data = {
                         "The class resource bar in the Unit Frames preview and the Class Resources preview sits where the live bar sits. It was drawn the bar height plus 6 px too high.",
                         "WoW Forever: the menu preview backgrounds (Silvermoon and the stone scenes) no longer stay black. Other clients fall back the same way when a scene fails to load.",
                         "The addon version is read once at load instead of on every version display, version check and analytics pass.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta2",
-            date = "2026-09-18",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "WoW Forever hour-0 support: Mainline family, camelot detection, Interface 16001, no arena, and the Classic Glass menu only on Forever.",
-                        "Detects WoW Forever from the Blizzard_Game Camelot marker and keeps Family and Flavor Mainline.",
-                        "/msuf clientinfo prints the client facts needed for Forever bug reports.",
-                        "Factory profiles inflate deflate(CBOR) before DeserializeCBOR so Forever can create and import profiles.",
-                        "TBC and Mists keep five Arena slots. Forever reports arena as unsupported.",
-                        "The Classic Glass menu skin and \"MSUF (Forever Version)\" title show only on Forever.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Missing imported fonts fall back instead of aborting UI construction.",
-                        "Profile import validates and stages the string before it creates or switches a profile.",
-                        "Era dispel scans keep HARMFUL|RAID.",
                     },
                 },
             },

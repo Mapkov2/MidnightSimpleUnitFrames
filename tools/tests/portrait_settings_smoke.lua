@@ -162,7 +162,7 @@ assert(click:GetAttribute("useparent*")==true and click:GetAttribute("useparent-
 conf.portraitClickable=false; apply(); assert(not click:IsShown(),"click target disabled")
 -- Build the actual menu preview and compare its settings to the compiled spec.
 local Methods=world.widgets.Methods
-for _,name in ipairs({"SetStartPoint","SetEndPoint","SetThickness","SetAutoFocus","SetMaxLetters","EnableKeyboard"}) do
+for _,name in ipairs({"SetStartPoint","SetEndPoint","SetThickness","SetAutoFocus","SetMaxLetters","EnableKeyboard","SetValueStep","SetNumeric"}) do
     if not Methods[name] then Methods[name]=function() end end
 end
 local parent=env.CreateFrame("Frame",nil,env.UIParent); parent:SetSize(900,400)
@@ -203,4 +203,127 @@ core.MSUF2.GroupPreviewRender.PaintGroupPreviewPortrait(scene)
 local groupPortrait=assert(groupMock._msufGroupPortrait)
 near(groupPortrait:GetAlpha(),.2,"party preview composed opacity")
 assert(groupPortrait.border:GetFrameLevel()<groupMock._health:GetFrameLevel(),"party preview layer 0")
-print("portrait_settings_smoke: OK ("..flavor..")")
+-- The new opt-in survives the real client compiler, classification events,
+-- target identity changes and the final preview pass on every client flavor.
+assert(conf.portraitBlizzardElite == false, "dragon default must be opt-in")
+conf.portraitMode="LEFT"; conf.portraitRender="2D"; conf.portraitShape="BLIZZARD"
+conf.portraitSizeMode="UNIFORM"; conf.portraitSizeOverride=60
+conf.portraitBlizzardElite=true; conf.portraitCastSpellIcon=false
+frame.MSUFUnitKey="player"
+local classification="elite"
+env.UnitClassification=function() return classification end
+local gold="UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold"
+local silver="ui-hud-unitframe-target-portraiton-boss-rare-silver"
+local winged="UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold-Winged"
+env.C_Texture=env.C_Texture or {}
+env.C_Texture.GetAtlasInfo=function(atlas)
+    if atlas==gold or atlas==silver or atlas==winged then return {width=80,height=90} end
+end
+local compiled=apply()
+assert(compiled.blizzardElite==true,"compiler must retain opt-in")
+local dragon=assert(frame.MSUFPortraitHolder.blizzElite,"live elite dragon")
+assert(dragon.atlas==gold and dragon:IsShown(),"gold elite dragon")
+for _,state in ipairs({"rareelite","rare","worldboss","normal","elite"}) do
+    classification=state
+    local before=resolves
+    portrait.Update(frame,"UNIT_CLASSIFICATION_CHANGED","player")
+    assert(resolves==before,"classification event must not resolve native portrait")
+    local expected=state=="worldboss" and winged or (state=="elite" and gold)
+        or ((state=="rare" or state=="rareelite") and silver)
+    assert(dragon:IsShown()==not not expected,"live classification visibility")
+    if expected then assert(dragon.atlas==expected,"live classification art") end
+    Preview.Refresh(box,"PORTRAIT_DRAGON_SMOKE")
+    local previewDragon=box.mock.portrait.blizzElite
+    if expected then
+        assert(previewDragon and previewDragon:IsShown() and previewDragon.atlas==expected,"preview classification art")
+        assert(previewDragon:GetParent()==box.mock.portrait,"preview dragon must avoid hidden geometric border parent")
+    else assert(not previewDragon or not previewDragon:IsShown(),"normal preview hides dragon") end
+end
+classification="rareelite"
+portrait.Update(frame,"MSUF_UNIT_IDENTITY_VISUAL","player")
+assert(dragon.atlas==silver and dragon:IsShown(),"identity refresh updates decoration")
+conf.portraitBlizzardElite=false
+apply(); Preview.Refresh(box,"PORTRAIT_DRAGON_OFF")
+assert(not dragon:IsShown() and not box.mock.portrait.blizzElite:IsShown(),"toggle clears both renderers")
+conf.portraitBlizzardElite=true; conf.portraitShape="CIRCLE"
+apply(); Preview.Refresh(box,"PORTRAIT_DRAGON_OTHER_SHAPE")
+assert(not dragon:IsShown() and not box.mock.portrait.blizzElite:IsShown(),"other shapes clear decoration")
+-- Runtime preview uses the actual frame registry and clears its sample on stop.
+conf.portraitShape="BLIZZARD"; conf.portraitBlizzardElite=true
+classification="normal"; apply()
+local priorFrameList=UF.frameList
+UF.frameList={frame}
+local beforePreview=resolves
+for _,state in ipairs({"elite","rare","rareelite","worldboss"}) do
+    assert(portrait.SetClassificationPreview("player",state))
+    local expected=state=="elite" and gold or state=="worldboss" and winged or silver
+    assert(dragon:IsShown() and dragon.atlas==expected,"runtime live sample "..state)
+    portrait.Update(frame,"UNIT_CLASSIFICATION_CHANGED","player")
+    assert(dragon:IsShown() and dragon.atlas==expected,"classification event retains runtime sample")
+end
+assert(resolves==beforePreview,"runtime selector does not resolve portrait image")
+local driver
+for _,region in ipairs(world.widgets.frames) do
+    if region.events and region.events.PLAYER_REGEN_DISABLED and region:GetScript("OnEvent") then driver=region end
+end
+assert(driver,"runtime combat driver")
+classification="rareelite"
+driver:GetScript("OnEvent")(driver,"PLAYER_REGEN_DISABLED")
+assert(not portrait.GetClassificationPreview("player") and dragon.atlas==silver,"combat restores actual identity")
+assert(not driver.events.PLAYER_REGEN_DISABLED,"inactive preview has no combat subscription")
+env.InCombatLockdown=function() return true end
+assert(not portrait.SetClassificationPreview("player","elite"),"cannot enable runtime preview in combat")
+env.InCombatLockdown=function() return false end
+portrait.SetClassificationPreview("player","elite")
+portrait.SetClassificationPreview("player","OFF")
+assert(not portrait.GetClassificationPreview("player") and dragon.atlas==silver,"Off restores actual identity")
+portrait.SetClassificationPreview("target","elite")
+assert(dragon.atlas==silver,"another unit scope does not override player")
+portrait.SetClassificationPreview(nil)
+-- Build the actual portrait controls and exercise their ephemeral callbacks.
+function Methods:SetChecked(value) self.checked=value and true or false end
+function Methods:GetChecked() return self.checked end
+function Methods:GetValue() return self.value or 0 end
+local M=core.MSUF2
+M.unitPortraitTabSelection={player="border"}
+local ctx={key="uf_player",width=720,refreshers={}}
+local binding, gateRefresh
+local originalBind=M.BindDropdownWidget
+M.BindDropdownWidget=function(c,widget,get,set,meta)
+    if meta and meta.controlId and meta.controlId:find("classification_preview",1,true) then
+        binding={widget=widget,get=get,set=set,meta=meta}
+    end
+    return originalBind(c,widget,get,set,meta)
+end
+local originalTrack=M.TrackCollapsibleRefresh
+M.TrackCollapsibleRefresh=function(c,section,refresh)
+    gateRefresh=refresh
+    return originalTrack(c,section,refresh)
+end
+local sectionSpec
+for _,spec in ipairs(M.UnitPage._sectionRegistry) do if spec.id=="portrait" then sectionSpec=spec end end
+assert(sectionSpec,"portrait section registry")
+local builder={}
+function builder:CollapsibleSection(_,_,height)
+    local section=env.CreateFrame("Frame",nil,env.UIParent)
+    section:SetSize(720,height); section._msuf2Width=720
+    return section
+end
+sectionSpec.build(ctx,builder,"player")
+M.BindDropdownWidget=originalBind
+M.TrackCollapsibleRefresh=originalTrack
+assert(binding and binding.meta.classification=="ephemeral" and not binding.meta.settingKey,
+    "runtime preview must not write a profile setting")
+binding.set("elite")
+assert(binding.get()=="elite" and dragon.atlas==gold,"menu runtime selection paints real frame")
+binding.widget:GetScript("OnHide")(binding.widget)
+assert(binding.get()=="OFF" and dragon.atlas==silver,"leaving preview control restores real identity")
+binding.set("worldboss")
+conf.portraitBlizzardElite=false; apply(); gateRefresh()
+assert(binding.get()=="OFF" and not dragon:IsShown(),"disabling the feature clears runtime session")
+conf.portraitBlizzardElite=true; apply(); gateRefresh()
+binding.set("rare")
+conf.portraitShape="CIRCLE"; apply(); gateRefresh()
+assert(binding.get()=="OFF" and not dragon:IsShown(),"changing shape clears runtime session")
+UF.frameList=priorFrameList
+print("portrait_settings_smoke: OK ("..flavor..", including elite/rare dragons)")

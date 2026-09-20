@@ -122,6 +122,8 @@ local GUARDS = {
         'if IS_CLASSIC_FAMILY and u[texP .. "SourceMode"] == nil then', 1 },
     { "the texture layer size mode and edge attach",
         'if IS_CLASSIC_FAMILY then\n                if u[texP .. "ResponsiveSize"] == nil then', 1 },
+    { "the Classic and Forever factory layout",
+        "if IS_CLASSIC_FAMILY or (MSUF.Client and MSUF.Client.IsForever) then", 1 },
     { "the sparse factory aura owner repair",
         "if IS_CLASSIC_FAMILY then\n        MSUF_Defaults_RepairSparseFactoryAuraOwnerProfiles()", 1 },
 }
@@ -130,7 +132,7 @@ for _, row in ipairs(GUARDS) do
         "the Defaults file must gate " .. row[1] .. " exactly " .. row[3] .. " time(s): " .. row[2]:gsub("\n.*", " ..."))
 end
 -- Nothing else may branch on the client here: a new hunk needs a row above.
-Check(CountPlain(source, "IS_CLASSIC_FAMILY") == 11,
+Check(CountPlain(source, "IS_CLASSIC_FAMILY") == 12,
     "the Defaults file mentions IS_CLASSIC_FAMILY " .. CountPlain(source, "IS_CLASSIC_FAMILY")
     .. " times; add the new hunk to this smoke's guard list")
 Check(CountPlain(source, "ARENA_AURA_SLOTS") == 4,
@@ -205,6 +207,16 @@ Check(arenaOwners == spec.arenaOwners,
 MSUF_DB, MSUF_GlobalDB, MSUF_ActiveProfile = nil, nil, nil
 MSUF_InitProfiles()
 local db = Check(MSUF_DB, "the first login produced no profile")
+local classicFactory = spec.classic or spec.forever == true
+Check((db.gf_raid.preserveRaidGroups == true) == classicFactory,
+    "the factory raid layout must be Classic/Forever only")
+Check(db.auras3.perUnit.target.layoutShared.maxDebuffs == (classicFactory and 8 or 4),
+    "the target factory aura cap must follow the client")
+if classicFactory then
+    Check(db.gf_raid.maxColumns == 8 and db.bars.classPowerHeight == 8,
+        "Classic/Forever factory must expose forty raid members and readable resources")
+end
+
 
 -- The three seeds below belong to the heavy pass. A fresh install also runs the
 -- fresh-install overrides, which write chunkedFill on every client, so the keys

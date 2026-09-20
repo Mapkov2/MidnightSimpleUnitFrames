@@ -98,6 +98,9 @@ MSUF_TryDecodeCompactString = function(str)
             player = { width = 321 },
             target = { width = 322 },
             gf_party = { enabled = false },
+            gf_raid = { maxColumns = 1, unitsPerColumn = 5, preserveRaidGroups = false,
+                width = 140, height = 55, offsetX = -994, offsetY = 460 },
+            bars = { powerBarHeight = 3, classPowerHeight = 4 },
         },
         -- The portable payload has no Focus Target; the native section does.
         msuf6 = { schema = 600, payload = { focustarget = { width = 123, enabled = true } } },
@@ -118,6 +121,32 @@ local function AssertFactory(db, label)
     Check(db.general._msufPreviewDragHintExperienced == false, label .. ": a factory profile starts with the drag hint")
     Check(type(db.gf_party) == "table" and db.gf_party.enabled == true,
         label .. ": the factory profile must start with MSUF party frames on")
+    if spec.classic then
+        Check(db.gf_raid.maxColumns == 8 and db.gf_raid.unitsPerColumn == 5 and db.gf_raid.preserveRaidGroups,
+            label .. ": Classic raid must fit eight real subgroups")
+        Check(db.gf_raid.width == 110 and db.gf_raid.height == 44 and db.gf_raid.point == "TOPLEFT"
+            and db.gf_raid.offsetX == 24 and db.gf_raid.offsetY == -160 and db.gf_raid.anchorToFrame == "UIParent",
+            label .. ": Classic raid geometry must be anchored inside the screen")
+        Check(db.player.powerBarHeight == 7 and db.target.powerBarHeight == 7
+            and db.bars.classPowerHeight == 8 and db.bars.showAltMana == true,
+            label .. ": Classic resources must be readable")
+        for _, key in ipairs({ "gf_party", "gf_raid" }) do
+            local conf = db[key]
+            Check(conf.hpFontSize == 11 and conf.threatTextSize == 11 and conf.powerShowDamager,
+                label .. ": group status and mana defaults missing")
+            Check(conf.auras.debuff.max == 3 and conf.auras.debuff.perRow == 3
+                and conf.auras.debuff.filterToken == "ALL" and conf.auras.debuff.dispelBorderMode == "SYMBOL",
+                label .. ": group debuffs must keep all casters and identify dispel types")
+        end
+        local target = db.auras3.perUnit.target
+        Check(target.layoutShared.maxDebuffs == 8 and target.layoutShared.debuffGrowthX == "LEFT"
+            and target.layoutShared.debuffGrowthY == "UP" and target.filters.debuffs.onlyMine == false,
+            label .. ": target needs space for own effects and other casters' crowd control")
+    else
+        Check(db.gf_raid.maxColumns == 1 and db.gf_raid.width == 140 and db.gf_raid.offsetX == -994
+            and db.bars.classPowerHeight == 4 and db.bars.powerBarHeight == 3,
+            label .. ": Classic factory policy changed Midnight's snapshot")
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -151,6 +180,35 @@ Check(MSUF_CreateProfile("Second") == true, "profile creation failed")
 Check(decodes == 1, "a new profile decoded the factory string " .. decodes .. " time(s)")
 local second = MSUF_GlobalDB.profiles.Second
 Check(second.general._msufFactoryProfileApplied == true and second.player.width == 321, "a new profile must start from the factory profile")
+AssertFactory(second, "new profile")
+
+-- Exercise the real group normalization and layout metrics, not just raw DB keys.
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"))("MidnightSimpleUnitFrames", ns)
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Migrations.lua"))("MidnightSimpleUnitFrames", ns)
+MSUF_DB = second
+ns.GF.EnsureDB()
+local raid = ns.GF.GetConf("raid")
+Check(ns.GF.GetVisibleLayoutCount("raid", 40, raid) == (spec.classic and 40 or 5),
+    "group runtime lost the factory raid capacity")
+if spec.classic then
+    Check(raid.anchorToFrame == "UIParent" and raid.nameAnchor == "LEFT"
+        and raid.nameOffsetY == raid.hpOffsetY, "group normalization changed the authored anchor or text row")
+    local _, _, width, height = ns.GF.GetGridMetrics("raid", 40, 8)
+    Check(width == 908 and height == 236, "forty-member raid footprint is wrong")
+    Check(raid.offsetX + width < 1280 and -raid.offsetY + height < 720,
+        "raid footprint must fit a 1280x720 logical UI at scale 1")
+end
+
+-- The new baseline is factory-only, even for an older factory-seeded profile.
+second.gf_raid.maxColumns, second.gf_raid.width = 2, 123
+second.player.powerBarHeight, second.bars.classPowerHeight = 3, 4
+second.auras3.perUnit.target.layoutShared.maxDebuffs = 5
+MSUF_EnsureDB(true)
+ns.GF.EnsureDB()
+Check(second.gf_raid.maxColumns == 2 and second.gf_raid.width == 123
+    and second.player.powerBarHeight == 3 and second.bars.classPowerHeight == 4
+    and second.auras3.perUnit.target.layoutShared.maxDebuffs == 5,
+    "normalization overwrote an existing profile with the new factory layout")
 
 ---------------------------------------------------------------------------
 -- A profile with real data is never overwritten

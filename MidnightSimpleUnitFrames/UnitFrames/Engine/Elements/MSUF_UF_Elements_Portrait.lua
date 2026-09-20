@@ -57,6 +57,17 @@ local PORTRAIT_2D_CAST_EVENTS = WithPortraitCastEvents(PORTRAIT_2D_EVENTS)
 local GROUP_PORTRAIT_2D_CAST_EVENTS = WithPortraitCastEvents(GROUP_PORTRAIT_2D_EVENTS)
 local PORTRAIT_2D_PLAYER_CAST_EVENTS = WithPortraitCastEvents(PORTRAIT_2D_PLAYER_EVENTS)
 local PORTRAIT_2D_DEPENDENT_CAST_EVENTS = WithPortraitCastEvents(PORTRAIT_2D_DEPENDENT_EVENTS)
+local PORTRAIT_CLASSIFICATION_EVENTS = {}
+local function WithPortraitClassificationEvent(events)
+  local combined = PORTRAIT_CLASSIFICATION_EVENTS[events]
+  if not combined then
+    combined = {}
+    for i = 1, #events do combined[i] = events[i] end
+    combined[#combined + 1] = "UNIT_CLASSIFICATION_CHANGED"
+    PORTRAIT_CLASSIFICATION_EVENTS[events] = combined
+  end
+  return combined
+end
 local WHITE = V.WHITE or "Interface\\Buttons\\WHITE8x8"
 local BOSS_PREVIEW_PORTRAIT = V.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achievement_Boss_LichKing"
 local BOSS_PREVIEW_CLASS = V.BOSS_PREVIEW_CLASS or "DEATHKNIGHT"
@@ -1387,24 +1398,136 @@ local function ApplyPortraitBackground(holder, p)
   SetShown(bg, true)
 end
 
+-- Blizzard separates its dragon from the base ring. Geometry follows
+-- upstream/live and upstream/forever TargetFrame.xml: the 58px portrait is
+-- TOPRIGHT -26,-19, the dragon -11,-8 (winged boss: 8,-8).
+local CLASSIFICATION_DRAGONS = {
+  elite = { atlas = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold", x = 15 },
+  rareelite = { atlas = "ui-hud-unitframe-target-portraiton-boss-rare-silver", x = 15 },
+  rare = { atlas = "ui-hud-unitframe-target-portraiton-boss-rare-silver", x = 15 },
+  worldboss = { atlas = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold-Winged", x = 34 },
+}
+local CLASSIFICATION_REFRESH_EVENTS = {
+  UNIT_CLASSIFICATION_CHANGED = true, PLAYER_TARGET_CHANGED = true,
+  PLAYER_FOCUS_CHANGED = true, UNIT_TARGET = true, MSUF_FORCE_UPDATE = true,
+  MSUF_UNIT_IDENTITY_VISUAL = true, MSUF_UNIT_IDENTITY_SOFT = true,
+  MSUF_UNIT_IDENTITY_SOFT_VISUAL = true, MSUF_PORTRAIT_ONSHOW = true,
+  UNIT_PORTRAIT_UPDATE = true, UNIT_MODEL_CHANGED = true, UNIT_CONNECTION = true,
+  PORTRAITS_UPDATED = true, PARTY_MEMBER_ENABLE = true, PARTY_MEMBER_DISABLE = true,
+}
+
+function Portrait.PaintClassification(holder, enabled, classification, width, height, renderParent)
+  if not holder then return end
+  local dragon = holder.blizzElite
+  -- Classification may be restricted on Retail; never index a secret value.
+  if issecretvalue and issecretvalue(classification) then classification = nil end
+  local style = enabled and classification and CLASSIFICATION_DRAGONS[classification]
+  if not style then
+    if dragon then SetShown(dragon, false) end
+    return
+  end
+  local atlasInfo = style.info
+  if not atlasInfo then
+    local getInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+    atlasInfo = getInfo and getInfo(style.atlas)
+    if not atlasInfo then
+      if dragon then SetShown(dragon, false) end
+      return
+    end
+    style.info = atlasInfo
+  end
+  if not dragon then
+    local border = renderParent or holder.border or holder
+    dragon = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 3), true)
+    if dragon.SetRoundLayoutToNearestPixel then dragon:SetRoundLayoutToNearestPixel(false) end
+    dragon:SetSnapToPixelGrid(false)
+    dragon:SetTexelSnappingBias(0)
+    holder.blizzElite = dragon
+  end
+  if dragon._msufDragonAtlas ~= style.atlas then
+    dragon:SetAtlas(style.atlas)
+    dragon:SetVertexColor(1, 1, 1, 1)
+    dragon._msufDragonAtlas = style.atlas
+  end
+  width = width or holder._msufLayoutWidth or holder:GetWidth()
+  height = height or holder._msufLayoutHeight or holder:GetHeight()
+  if dragon._msufDragonWidth ~= width or dragon._msufDragonHeight ~= height
+    or dragon._msufDragonLayoutAtlas ~= style.atlas then
+    dragon:ClearAllPoints()
+    dragon:SetPoint("TOPRIGHT", holder, "TOPRIGHT", style.x * width / 58, 11 * height / 58)
+    dragon:SetSize(atlasInfo.width * width / 58, atlasInfo.height * height / 58)
+    dragon._msufDragonWidth, dragon._msufDragonHeight = width, height
+    dragon._msufDragonLayoutAtlas = style.atlas
+  end
+  SetShown(dragon, true)
+end
+
+-- Session-only decoration preview; the saved portrait settings remain authoritative.
+local classificationPreview = {}
+function Portrait.GetClassificationPreview(scope)
+  if classificationPreview.scope == scope then return classificationPreview.classification end
+end
+
+local function UpdatePortraitClassification(frame, p)
+  p = p or (frame.MSUFSpec and frame.MSUFSpec.portrait)
+  local classification
+  local enabled = p and p.enabled == true and p.shape == "BLIZZARD" and p.blizzardElite == true
+  local unit = frame.MSUFUnitKey
+  if enabled and unit then
+    classification = Portrait.GetClassificationPreview(frame.MSUFSpec and frame.MSUFSpec.key or unit)
+    if not classification and BossPreviewActive(unit, frame) then classification = "worldboss" end
+    if not classification and _G.UnitClassification then classification = _G.UnitClassification(unit) end
+  end
+  Portrait.PaintClassification(frame.MSUFPortraitHolder, enabled, classification)
+end
+
+local function StopClassificationPreview()
+  Portrait.SetClassificationPreview(nil)
+end
+
+function Portrait.SetClassificationPreview(scope, classification)
+  local active = type(scope) == "string" and type(classification) == "string"
+    and CLASSIFICATION_DRAGONS[classification] ~= nil
+  if active and _G.InCombatLockdown and _G.InCombatLockdown() then active = false end
+  classificationPreview.scope = active and scope or nil
+  classificationPreview.classification = active and classification or nil
+  local driver = classificationPreview.driver
+  if active and not driver then
+    driver = PixelLayoutRegion(CreateFrame("Frame"))
+    driver:SetScript("OnEvent", StopClassificationPreview)
+    classificationPreview.driver = driver
+  end
+  if driver then
+    if active then driver:RegisterEvent("PLAYER_REGEN_DISABLED")
+    else driver:UnregisterEvent("PLAYER_REGEN_DISABLED") end
+  end
+  -- Repaint both the previous scope and the new one without reapplying layouts
+  -- or resolving portrait images. Hidden unit frames keep their normal visibility.
+  if UF and UF.ForEachFrame then UF.ForEachFrame(UpdatePortraitClassification) end
+  return active
+end
+
 function Portrait.GetEvents(frame, spec)
   local p = spec and spec.portrait
   if p and p.enabled == true then
     local unit = frame and frame.MSUFUnitKey or spec and spec.unit
     local castSpellIcon = p.castSpellIcon == true
+    local events
     if p.render == "CLASS" then
-      return castSpellIcon and PORTRAIT_CLASS_CAST_EVENTS or PORTRAIT_CLASS_EVENTS
+      events = castSpellIcon and PORTRAIT_CLASS_CAST_EVENTS or PORTRAIT_CLASS_EVENTS
+    elseif unit == "player" or (spec and spec.key == "player") then
+      events = castSpellIcon and PORTRAIT_2D_PLAYER_CAST_EVENTS or PORTRAIT_2D_PLAYER_EVENTS
+    elseif unit == "targettarget" or unit == "focustarget" then
+      events = castSpellIcon and PORTRAIT_2D_DEPENDENT_CAST_EVENTS or PORTRAIT_2D_DEPENDENT_EVENTS
+    elseif spec and spec.scope == "group" then
+      events = castSpellIcon and GROUP_PORTRAIT_2D_CAST_EVENTS or GROUP_PORTRAIT_2D_EVENTS
+    else
+      events = castSpellIcon and PORTRAIT_2D_CAST_EVENTS or PORTRAIT_2D_EVENTS
     end
-    if unit == "player" or (spec and spec.key == "player") then
-      return castSpellIcon and PORTRAIT_2D_PLAYER_CAST_EVENTS or PORTRAIT_2D_PLAYER_EVENTS
+    if p.shape == "BLIZZARD" and p.blizzardElite == true then
+      return WithPortraitClassificationEvent(events)
     end
-    if unit == "targettarget" or unit == "focustarget" then
-      return castSpellIcon and PORTRAIT_2D_DEPENDENT_CAST_EVENTS or PORTRAIT_2D_DEPENDENT_EVENTS
-    end
-    if spec and spec.scope == "group" then
-      return castSpellIcon and GROUP_PORTRAIT_2D_CAST_EVENTS or GROUP_PORTRAIT_2D_EVENTS
-    end
-    return castSpellIcon and PORTRAIT_2D_CAST_EVENTS or PORTRAIT_2D_EVENTS
+    return events
   end
   return EMPTY_EVENTS
 end
@@ -1463,6 +1586,7 @@ function Portrait.AcquirePositionAnchor(frame, p)
   if holder.blizzRing then SetShown(holder.blizzRing, false) end
   if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
   if holder.blizzCorner then SetShown(holder.blizzCorner, false) end
+  if holder.blizzElite then SetShown(holder.blizzElite, false) end
   if holder.edges then
     for i = 1, 4 do SetShown(holder.edges[i], false) end
   end
@@ -1508,6 +1632,7 @@ function Portrait.Apply(frame, spec)
   ApplyPortraitMask(holder, p)
   ApplyPortraitBackground(holder, p)
   LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
+  UpdatePortraitClassification(frame, p)
   SetShown(holder, true)
   ApplyPortraitClickTarget(frame, p)
   -- Base portrait and optional cast texture remain normal background regions.
@@ -1555,6 +1680,7 @@ function Portrait.Disable(frame)
   end
   if holder then
     SetShown(holder, false)
+    if holder.blizzElite then SetShown(holder.blizzElite, false) end
     if holder.bg then SetShown(holder.bg, false) end
     if holder.ring then SetShown(holder.ring, false) end
     if holder.artBorder then SetShown(holder.artBorder, false) end
@@ -1615,6 +1741,11 @@ function Portrait.Update(frame, event, unit)
     frame._msufPortraitNeedsVisibleRefresh = true
     return
   end
+
+  if p.blizzardElite == true and CLASSIFICATION_REFRESH_EVENTS[event] then
+    UpdatePortraitClassification(frame, p)
+  end
+  if event == "UNIT_CLASSIFICATION_CHANGED" then return end
 
   local showingCast = p.castSpellIcon == true and UpdateCastPortrait(frame, p, event) or false
   if showingCast then

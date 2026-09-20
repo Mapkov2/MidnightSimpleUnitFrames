@@ -1,5 +1,29 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta6 - 2026-09-20
+
+### Highlights
+
+- **Blizzard-style portraits can display elite and rare dragons.** Enable the new option under Portrait > Border; the menu preview shows the matching decoration.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"portrait","controlId":"menu2.uf_target.unit.portrait.portraitblizzardelite","settingKey":"target.portraitBlizzardElite","prepareKind":"unitPortraitTab","prepareValue":"border","query":"elite and rare dragon","label":"Elite and rare dragon"} -->
+- **Choose Classic Glass or Midnight as your menu appearance on every supported client.** Classic Glass has a refined palette and clearer panels, while existing appearance choices are preserved.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.menu.appearance.preset","settingKey":"general.menuAppearancePreset","prepareKind":"","prepareValue":"","query":"menu appearance preset","label":"Menu appearance preset"} -->
+
+### Changes
+
+- Portrait > Border now offers a temporary Runtime Preview for elite, rare and boss dragons on the live portrait. Closing the section or entering combat restores the real classification.
+- Updated the shared factory profile and the Classic/Forever defaults, including clearer power bars, separated Alternative Mana placement, a compact raid layout, and revised text and aura positions.
+- Class Resources using Player frame width now span the full Player frame.
+- Consolidated shared client handling, defaults, Class Resources and preview behavior across the supported clients.
+- Refreshed Assistant bindings and menu catalog tooling, and expanded client, locale and release validation.
+
+### Fixes & Performance
+
+- Classic and WoW Forever group members without an assigned role retain their power bar when power is enabled for any role; explicit role filters still apply.
+- Corrected Blizzard-style portrait rim and mask alignment, foreground opacity and layer behavior, and portrait zoom after native refreshes.
+- Fixed Classic aura filtering and faction handling, Class Resource refreshes and previews, font previews, and several default-setting inconsistencies.
+- Reused completed pixel-layout setup to avoid repeated work while keeping deferred combat updates available.
+
 ## 6.5-beta5 - 2026-09-19
 
 ### Highlights

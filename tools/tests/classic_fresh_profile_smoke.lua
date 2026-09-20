@@ -142,16 +142,19 @@ local function AssertFreshProfile(db, label)
             and owner.overrideStyle == true and owner.overrideFilters == true,
             label .. ": " .. unit .. " does not own its lanes")
         -- The authored factory values survive; the rest comes from the factory shared record.
-        local authored = AUTHORED[unit]
+        local mainUnit = unit == "player" or unit == "target"
+        local authored = mainUnit and { 0, 44, 0, 44 } or AUTHORED[unit]
         Check(layout.buffGroupOffsetX == authored[1] and layout.buffGroupOffsetY == authored[2]
             and layout.debuffGroupOffsetX == authored[3] and layout.debuffGroupOffsetY == authored[4],
             label .. ": " .. unit .. " lost its authored offsets, got " .. tostring(layout.buffGroupOffsetX) .. "/"
             .. tostring(layout.buffGroupOffsetY) .. " and " .. tostring(layout.debuffGroupOffsetX) .. "/"
             .. tostring(layout.debuffGroupOffsetY))
-        Check(layout.buffGroupIconSize == 31 and layout.debuffGroupIconSize == 32
-            and layout.buffSpacing == 0 and layout.debuffSpacing == 0,
+        Check(layout.buffGroupIconSize == (mainUnit and 26 or 31)
+            and layout.debuffGroupIconSize == (mainUnit and 26 or 32)
+            and layout.buffSpacing == (mainUnit and 2 or 0) and layout.debuffSpacing == (mainUnit and 2 or 0),
             label .. ": " .. unit .. " lost its authored icon size or spacing")
-        Check(shared.maxBuffs == 3 and shared.maxDebuffs == 4 and shared.buffPerRow == 4 and shared.debuffPerRow == 4,
+        Check(shared.maxBuffs == 3 and shared.maxDebuffs == (unit == "target" and 8 or unit == "player" and 6 or 4)
+            and shared.buffPerRow == 4 and shared.debuffPerRow == (unit == "player" and 3 or 4),
             label .. ": " .. unit .. " lost its authored caps")
         -- Keys the authored table leaves out come from the factory shared record, not from
         -- the canonical one and not from a built-in fallback of the aura compile.
@@ -247,6 +250,13 @@ end
 local function RepairedOwner(build, unit)
     local offsets = SavedOffsets(build, unit)
     local owner = CopyTable(fresh.auras3.perUnit[unit])
+    -- Repair the historical owner to its historical appearance. A new factory
+    -- layout must never resize or re-filter these already-saved aura lanes.
+    owner.layout.buffGroupIconSize, owner.layout.debuffGroupIconSize = 31, 32
+    owner.layout.buffSpacing, owner.layout.debuffSpacing = 0, 0
+    owner.layoutShared.maxDebuffs, owner.layoutShared.debuffPerRow = 4, 4
+    owner.layoutShared.debuffGrowthX, owner.layoutShared.debuffGrowthY = "RIGHT", "DOWN"
+    owner.layoutShared.debuffTypeBorderMode, owner.layoutShared.useDebuffTypeBorders = "OFF", false
     owner.layout.buffGroupOffsetX, owner.layout.buffGroupOffsetY = offsets[1], offsets[2]
     owner.layout.debuffGroupOffsetX, owner.layout.debuffGroupOffsetY = offsets[3], offsets[4]
     return owner

@@ -298,6 +298,22 @@ do
     Check(Situation(forever, "none", 0) == "openworld", "Forever: open world must stay openworld")
     Check(Situation(forever, "party", 1) == "normal", "Forever: normal dungeon mapping must not change")
 
+    for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
+        local classic = LoadGroupDB({ IsClassic = true, IsForever = false, Flavor = flavor })
+        byUnit, byHeight = PowerShown(classic, "party1", defaults, "DAMAGER")
+        Check(byUnit and byHeight, flavor .. ": unassigned healer must retain a power bar")
+        byUnit, byHeight = PowerShown(classic, "party1", allOff, nil)
+        Check(not byUnit and not byHeight, flavor .. ": all roles off must stay off")
+        byUnit, byHeight = PowerShown(classic, "party3", defaults, nil)
+        Check(not byUnit and not byHeight, flavor .. ": assigned DPS toggle must remain authoritative")
+        byUnit, byHeight = PowerShown(classic, "party4", defaults, nil)
+        Check(not byUnit and not byHeight, flavor .. ": a secret role must retain the safe fallback")
+        Check(classic.ShouldShowPowerBarForRole("party", "DAMAGER", defaults) == false,
+            flavor .. ": role-only previews must retain their explicit role")
+        Check(classic.ShouldShowPowerBarForRole("party", nil, disabled, "party1") == false,
+            flavor .. ": disabled bars must stay disabled")
+    end
+
     for _, client in ipairs({ false, RETAIL }) do
         local label = client and "IsForever=false" or "no Client"
         local retail = LoadGroupDB(client or nil)

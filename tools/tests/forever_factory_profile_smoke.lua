@@ -146,4 +146,10 @@ Check(type(profile.gf_party) == "table" and profile.gf_party.enabled == true,
     "the Forever factory profile must turn MSUF party frames on")
 Check(type(profile.gf_raid) == "table" and profile.gf_raid.enabled == false,
     "the Forever party default must leave raid frames as the snapshot ships them")
-print("PASS Forever factory profile: inflate before CBOR, compressed bytes never deserialized, MSUF party frames on")
+Check(profile.gf_raid.maxColumns == 8 and profile.gf_raid.preserveRaidGroups == true,
+    "Forever factory raid must support all eight subgroups")
+Check(profile.gf_party.auras.debuff.max == 3 and profile.auras3.perUnit.target.layoutShared.maxDebuffs == 8,
+    "Forever factory aura caps must follow the Classic layout")
+Check(profile.bars.classPowerHeight == 8 and profile.bars.showAltMana == true,
+    "Forever factory must expose readable class resources and alternate mana")
+print("PASS Forever factory profile: inflate before CBOR, compressed bytes never deserialized, Classic factory layout")
