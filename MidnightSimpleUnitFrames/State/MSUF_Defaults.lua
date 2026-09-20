@@ -4667,6 +4667,7 @@ local function MSUF_Defaults_Stage_SeedUnitPortraitDefaults(profileDB, g, legacy
         end
         PortraitDefault("portraitClassStyle", "BLIZZARD")
         if u.portraitClickable == nil then u.portraitClickable = false end
+        if u.portraitBlizzardElite == nil then u.portraitBlizzardElite = false end
         u.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(u.portraitClassStyle)
         local inferredPortraitSizeMode
         if not useLegacyBaseline and u.portraitSizeMode == nil then
