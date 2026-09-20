@@ -76,6 +76,11 @@ local function NewRegion(parent)
         self.masks = self.masks or {}
         self.masks[#self.masks + 1] = mask
     end
+    function region:SetScript(script, callback)
+        self.scripts = self.scripts or {}; self.scripts[script] = callback
+    end
+    function region:RegisterEvent(event) self.events = self.events or {}; self.events[event] = true end
+    function region:UnregisterEvent(event) if self.events then self.events[event] = nil end end
     function region:HookScript(script, callback)
         self.hooks = self.hooks or {}
         self.hooks[script] = callback
@@ -83,8 +88,10 @@ local function NewRegion(parent)
     return region
 end
 
+local lastCreatedFrame
 local function CreateFrame(_, _, parent)
-    return NewRegion(parent)
+    lastCreatedFrame = NewRegion(parent)
+    return lastCreatedFrame
 end
 
 _G.CreateFrame = CreateFrame
@@ -411,4 +418,148 @@ do
         end
     end
 end
-print("portrait_contour_smoke: OK (contour, opacity, layers, zoom/pan, native refresh, preview)")
+-- Dragon overlay uses the same painter for live and preview, with no mask and
+-- no classification reads/event registration while the opt-in is disabled.
+do
+    local gold = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold"
+    local silver = "ui-hud-unitframe-target-portraiton-boss-rare-silver"
+    local winged = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold-Winged"
+    local infos = {
+        [gold] = { width = 80, height = 90 },
+        [silver] = { width = 82, height = 92 },
+        [winged] = { width = 112, height = 100 },
+    }
+    _G.C_Texture = { GetAtlasInfo = function(atlas) return infos[atlas] end }
+    local classification, reads = "elite", 0
+    _G.UnitClassification = function() reads = reads + 1; return classification end
+    local portrait = LoadElement()
+    local frame = NewFrame("BLIZZARD")
+    frame.MSUFUnitKey = "target"
+    local p = frame.MSUFSpec.portrait
+    portrait.Apply(frame, frame.MSUFSpec)
+    local holder = frame.MSUFPortraitHolder
+    assert(not holder.blizzElite and reads == 0, "default must not allocate/query dragon")
+    local function HasClassificationEvent()
+        for _, event in ipairs(portrait.GetEvents(frame, frame.MSUFSpec)) do
+            if event == "UNIT_CLASSIFICATION_CHANGED" then return true end
+        end
+    end
+    assert(not HasClassificationEvent(), "disabled dragon must not register classification event")
+    p.blizzardElite = true
+    portrait.Apply(frame, frame.MSUFSpec)
+    local dragon = assert(holder.blizzElite, "elite dragon missing")
+    assert(HasClassificationEvent(), "classification changes must refresh dragon")
+    assert(dragon.atlas == gold and dragon.shown and not dragon.masks, "unclipped gold dragon")
+    assert(dragon.parent == holder.border and dragon.sublevel > holder.blizzRing.sublevel,
+        "dragon must sit above rim and share portrait opacity/layer")
+    Near(dragon.points[1][4], 15 * 60 / 58, "native dragon X")
+    Near(dragon.points[1][5], 11 * 60 / 58, "native dragon Y")
+    local before = portraitCalls
+    for _, state in ipairs({ "rareelite", "rare", "worldboss", "normal", "minus", "elite" }) do
+        classification = state
+        portrait.Update(frame, "UNIT_CLASSIFICATION_CHANGED", "target")
+        local expected = state == "worldboss" and winged or (state == "elite" and gold)
+            or ((state == "rare" or state == "rareelite") and silver)
+        assert(dragon.shown == not not expected, "classification visibility " .. state)
+        if expected then
+            assert(dragon.atlas == expected, "classification atlas " .. state)
+            Near(dragon.width, infos[expected].width * 60 / 58, "atlas size switch")
+        end
+        assert(portraitCalls == before, "classification event must not re-render portrait")
+    end
+    classification = "normal"
+    portrait.Update(frame, "PLAYER_TARGET_CHANGED", "target")
+    assert(not dragon.shown, "normal target switch must clear dragon")
+    classification = "rareelite"
+    portrait.Update(frame, "MSUF_UNIT_IDENTITY_VISUAL", "target")
+    assert(dragon.shown and dragon.atlas == silver, "identity handoff must refresh dragon")
+    -- Runtime preview paints the registered live frame, independent of its NPC.
+    local runtime, runtimeNS = LoadElement()
+    local focus = NewFrame("BLIZZARD")
+    focus.MSUFUnitKey = "focus"; focus.MSUFSpec.portrait.blizzardElite = true
+    runtime.Apply(focus, focus.MSUFSpec)
+    runtimeNS.UF.ForEachFrame = function(fn) fn(frame); fn(focus) end
+    classification = "normal"
+    runtime.Apply(frame, frame.MSUFSpec); runtime.Apply(focus, focus.MSUFSpec)
+    local beforePreview = portraitCalls
+    for _, state in ipairs({ "elite", "rare", "rareelite", "worldboss" }) do
+        assert(runtime.SetClassificationPreview("target", state))
+        local expected = state == "elite" and gold or state == "worldboss" and winged or silver
+        assert(dragon.shown and dragon.atlas == expected, "live runtime preview " .. state)
+        assert(not focus.MSUFPortraitHolder.blizzElite.shown, "preview scope isolation")
+        runtime.Update(frame, "UNIT_CLASSIFICATION_CHANGED", "target")
+        assert(dragon.shown and dragon.atlas == expected, "real events retain selected preview")
+    end
+    assert(portraitCalls == beforePreview, "preview must not resolve the native portrait")
+    local driver = lastCreatedFrame
+    assert(driver.events.PLAYER_REGEN_DISABLED, "preview subscribes to combat stop")
+    classification = "rareelite"
+    runtime.SetClassificationPreview("focus", "elite")
+    assert(dragon.atlas == silver and dragon.shown, "scope switch restores old frame")
+    assert(focus.MSUFPortraitHolder.blizzElite.atlas == gold, "new scope uses preview")
+    driver.scripts.OnEvent(driver, "PLAYER_REGEN_DISABLED")
+    assert(not runtime.GetClassificationPreview("focus") and not driver.events.PLAYER_REGEN_DISABLED,
+        "combat clears session and listener")
+    assert(focus.MSUFPortraitHolder.blizzElite.atlas == silver, "combat restores real classification")
+    _G.InCombatLockdown = function() return true end
+    assert(not runtime.SetClassificationPreview("target", "elite"), "combat cannot start preview")
+    _G.InCombatLockdown = function() return false end
+    runtime.SetClassificationPreview("target", "elite")
+    p.shape = "CIRCLE"; runtime.Apply(frame, frame.MSUFSpec)
+    assert(not dragon.shown, "runtime preview respects selected shape")
+    p.shape = "BLIZZARD"; p.blizzardElite = false; runtime.Apply(frame, frame.MSUFSpec)
+    assert(not dragon.shown, "runtime preview respects opt-in")
+    p.blizzardElite = true; runtime.Apply(frame, frame.MSUFSpec)
+    runtime.SetClassificationPreview("target", "OFF")
+    assert(dragon.atlas == silver and dragon.shown and not runtime.GetClassificationPreview("target"),
+        "Off restores live classification")
+    -- Existing boss test mode receives boss art even without a real boss token.
+    focus.MSUFUnitKey = "boss1"; focus._msufBossPreviewForced = true
+    _G.UnitExists = function(unit) return unit ~= "boss1" end
+    local bossRuntime = LoadElement()
+    bossRuntime.Apply(focus, focus.MSUFSpec)
+    assert(focus.MSUFPortraitHolder.blizzElite.atlas == winged, "boss test-mode portrait decoration")
+    focus._msufBossPreviewForced = nil
+    bossRuntime.Update(focus, "UNIT_CLASSIFICATION_CHANGED", "boss1")
+    assert(focus.MSUFPortraitHolder.blizzElite.atlas == silver, "boss preview off restores identity")
+    _G.UnitExists = function() return true end
+    local secret = {}
+    _G.issecretvalue = function(v) return v == secret end
+    -- Load another element so its native secret guard binds the fixture.
+    local guarded = LoadElement()
+    classification = secret
+    guarded.Apply(frame, frame.MSUFSpec)
+    assert(not dragon.shown, "restricted classification must hide without indexing")
+    _G.issecretvalue = function() return false end
+    classification = "elite"
+    p.blizzardElite = false
+    before = reads
+    portrait.Apply(frame, frame.MSUFSpec)
+    assert(not dragon.shown and reads == before, "toggle off must clear and stop sampling")
+    p.blizzardElite = true; p.shape = "CIRCLE"
+    portrait.Apply(frame, frame.MSUFSpec)
+    assert(not dragon.shown and not HasClassificationEvent(), "other shapes must not inherit dragon")
+    p.shape = "BLIZZARD"
+    portrait.Apply(frame, frame.MSUFSpec)
+    portrait.AcquirePositionAnchor(frame, p)
+    assert(not dragon.shown, "invisible portrait anchor must clear dragon")
+    portrait.Apply(frame, frame.MSUFSpec)
+    portrait.Disable(frame)
+    assert(not dragon.shown, "portrait disable must clear dragon")
+    local preview = NewRegion()
+    preview.border = NewRegion(preview)
+    portrait.PaintClassification(preview, true, "rareelite", 116, 87, preview)
+    assert(preview.blizzElite.atlas == silver and preview.blizzElite.shown, "preview silver dragon")
+    assert(preview.blizzElite.parent == preview, "preview must avoid hidden geometric border")
+    Near(preview.blizzElite.width, 82 * 2, "preview scaled width")
+    Near(preview.blizzElite.height, 92 * 1.5, "preview scaled height")
+    -- Missing client atlas: no error texture, no stale dragon and retryable.
+    _G.C_Texture.GetAtlasInfo = function() return nil end
+    local unavailable = LoadElement()
+    unavailable.PaintClassification(preview, true, "elite", 60, 60)
+    assert(not preview.blizzElite.shown, "missing atlas must hide stale decoration")
+    _G.C_Texture.GetAtlasInfo = function(atlas) return infos[atlas] end
+    unavailable.PaintClassification(preview, true, "elite", 60, 60)
+    assert(preview.blizzElite.shown, "atlas availability must be retryable")
+end
+print("portrait_contour_smoke: OK (contour, settings, elite/rare dragons, events, preview)")
