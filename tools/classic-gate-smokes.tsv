@@ -1,4 +1,5 @@
 Matrix	Runner	Smoke	Arguments	Label
+clients+Forever	lua	tools/tests/portrait_settings_smoke.lua	{root} {flavor}	Portrait settings regression: {flavor}
 clients+Forever	lua	tools/tests/menu_appearance_presets_smoke.lua	{root} {flavor}	Appearance preset dropdown regression: {flavor}
 -	python	.github/scripts/classic_refactor_load_order_smoke.py		Classic refactor load-order contract failed
 clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor}	Menu skin smoke failed: {flavor}

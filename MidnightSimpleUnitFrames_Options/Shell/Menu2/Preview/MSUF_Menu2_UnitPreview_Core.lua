@@ -698,6 +698,9 @@ local function PreviewAlphaState(conf, runtimeSpec)
     end
     local fg = excludeTextPortrait and 1 or hp
     local prediction = excludePredictionBars and 1 or hp
+    local portraitOpacity = conf and tonumber(conf.portraitAlpha)
+    if portraitOpacity ~= nil then portraitOpacity = portraitOpacity / 100
+    else portraitOpacity = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.alpha end
     return {
         flat = false,
         frame = 1,
@@ -706,7 +709,7 @@ local function PreviewAlphaState(conf, runtimeSpec)
         prediction = prediction,
         power = power,
         text = fg,
-        portrait = fg,
+        portrait = fg * Clamp01(portraitOpacity, 1),
         preserveHPColor = false,
     }
 end

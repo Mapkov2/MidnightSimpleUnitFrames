@@ -672,6 +672,9 @@ local function PaintGroupPreviewPortrait(scene)
         local layers = scene.S.Layers or {}
         local handleLevel = layers.ElementLevel and PreviewElementLevel(scene.mock, layers, level, 7, 0)
             or ((scene.mock:GetFrameLevel() or 1) + level)
+        if level == 0 and layers.PortraitLevel then
+            handleLevel = layers.PortraitLevel(scene.mock._health or scene.mock, 0, 7)
+        end
         if handle then SetPreviewFrameLevel(handle, handleLevel) end
         if holder ~= handle then SetPreviewFrameLevel(holder, handleLevel) end
         SetPreviewFrameLevel(holder.border, (holder:GetFrameLevel() or 1) + 1)
@@ -681,6 +684,10 @@ local function PaintGroupPreviewPortrait(scene)
     end
     local layerAlpha = scene.soloLayer and scene.soloLayer ~= "portrait" and 0.15 or 1
     local configuredPortraitAlpha = tonumber(portrait.alpha) or 1
+    local frameAlpha = scene.runtimeSpec and scene.runtimeSpec.alpha
+    if frameAlpha and frameAlpha.excludeTextPortrait ~= true then
+        configuredPortraitAlpha = configuredPortraitAlpha * (tonumber(frameAlpha.hpAlpha) or 1)
+    end
     if holder == handle then
         -- Keep the Button/selection affordance interactive at full layer alpha;
         -- only the portrait artwork follows the configured portrait opacity.

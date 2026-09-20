@@ -307,13 +307,37 @@ function Shared.CompilePortraitTexCoords(p, zoom, width, height, panX, panY)
   end
   local slackX = (1 - spanX) * 0.5
   local slackY = (1 - spanY) * 0.5
-  local centerX = 0.5 + (Shared.NormalizePortraitPan(panX) / 100) * slackX
-  local centerY = 0.5 - (Shared.NormalizePortraitPan(panY) / 100) * slackY
+  local normalizedPanX = Shared.NormalizePortraitPan(panX) / 100
+  local normalizedPanY = Shared.NormalizePortraitPan(panY) / 100
+  local centerX = 0.5 + normalizedPanX * slackX
+  local centerY = 0.5 - normalizedPanY * slackY
+  -- The unmasked Blizzard bust uses the full image at 100%, leaving no UV
+  -- margin to pan. Move only the image for the missing part of the familiar
+  -- 8% travel; the holder, mask, background, click area and rim stay fixed.
+  -- Keep UVs in 0..1 so moving the image cannot smear edge pixels.
+  p.panOffsetX = p.shape == "BLIZZARD" and -normalizedPanX * math.max(0, 0.08 - slackX) / spanX or 0
+  p.panOffsetY = p.shape == "BLIZZARD" and -normalizedPanY * math.max(0, 0.08 - slackY) / spanY or 0
   p.zoom = zoom
   p.texL = centerX - spanX * 0.5
   p.texR = centerX + spanX * 0.5
   p.texT = centerY - spanY * 0.5
   p.texB = centerY + spanY * 0.5
+end
+
+-- Called only while applying layout, shared by live and menu portraits.
+function Shared.LayoutPortraitImage(texture, holder, p, width, height)
+  if not (texture and holder) then return end
+  local x = (p and p.panOffsetX or 0) * width
+  local y = (p and p.panOffsetY or 0) * height
+  if texture._msufImageX == x and texture._msufImageY == y then return end
+  texture:ClearAllPoints()
+  if x == 0 and y == 0 then
+    texture:SetAllPoints(holder)
+  else
+    texture:SetPoint("TOPLEFT", holder, "TOPLEFT", x, y)
+    texture:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", x, y)
+  end
+  texture._msufImageX, texture._msufImageY = x, y
 end
 
 -- ---------------------------------------------------------------- fonts

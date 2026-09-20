@@ -732,7 +732,8 @@ local function LayoutPortrait(frame, p)
   elseif levelOffset > 30 then
     levelOffset = 30
   end
-  local portraitLevel = Layers.ElementLevel and Layers.ElementLevel(levelOffset, defaultLevel, 0)
+  local portraitLevel = Layers.PortraitLevel and Layers.PortraitLevel(frame.Health or frame.hpBar or frame, levelOffset, defaultLevel)
+    or (Layers.ElementLevel and Layers.ElementLevel(levelOffset, defaultLevel, 0))
     or ((frame:GetFrameLevel() or 1) + levelOffset)
   if portraitLevel < 0 then
     portraitLevel = 0
@@ -751,7 +752,7 @@ local function LayoutPortrait(frame, p)
     holder.border._msufLevel = borderLevel
   end
 
-  local alpha = tonumber(p and p.alpha) or 1
+  local alpha = (tonumber(p and p.alpha) or 1) * (frame._msufPortraitForegroundAlpha or 1)
   if holder._msufHolderAlpha ~= alpha then
     holder:SetAlpha(alpha)
     holder._msufHolderAlpha = alpha
@@ -776,6 +777,10 @@ local function LayoutPortrait(frame, p)
     holder._msufX, holder._msufY, holder._msufAnchor = x, y, anchor
   end
   CachePortraitLayoutExtents(holder, anchor, frame, point, p, width, height, x, y)
+  if UF.Shared and UF.Shared.LayoutPortraitImage then
+    UF.Shared.LayoutPortraitImage(frame.portrait, holder, p and p.render ~= "CLASS" and p or nil,
+      holder._msufLayoutWidth or width, holder._msufLayoutHeight or height)
+  end
 end
 
 local function UnitClassToken(unit)
@@ -907,7 +912,6 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
     return
   end
 
-  SetTexCoordCached(texture, l, r, t, b)
   texture._msufTexture = nil
   texture._msufAtlas = nil
   -- Blizzard's stock frames pass disablePortraitMask (UnitFrame.lua) so the
@@ -922,6 +926,10 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
   -- file -- replaying either paints an empty or stale portrait on revisit.
   -- GetTexture() is not read back at all; on 12.1 it can also be secret.
   SetPortraitTexture(texture, unit, (p and p.shape == "BLIZZARD") or nil)
+  -- The native resolver owns the image binding and may reset its UVs. Restore
+  -- the configured crop afterwards, including forced refreshes with identical UVs.
+  texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
+  SetTexCoordCached(texture, l, r, t, b)
   local selectedValue1
   if not (exists) then selectedValue1 = false end
   texture._msufPortraitGUID = guid or (selectedValue1)

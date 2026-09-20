@@ -283,7 +283,12 @@ local function SetTextLayerAlpha(frame, alpha, force)
 end
 
 local function SetPortraitLayerAlpha(frame, alpha, force)
-  SetAlphaCached(frame and frame.MSUFPortraitHolder, alpha, "_msufAlphaPortraitHolder", force)
+  if frame then frame._msufPortraitForegroundAlpha = alpha end
+  local portrait = frame and (frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait))
+  local opacity = Clamp01(portrait and portrait.alpha, 1)
+  -- Portrait.Apply and range/opacity updates share one cache and compose both
+  -- settings. Excluding text/portraits from bar opacity never cancels their own opacity.
+  SetAlphaCached(frame and frame.MSUFPortraitHolder, alpha * opacity, "_msufHolderAlpha", force)
   SetAlphaCached(frame and frame.portrait, 1, "_msufAlphaPortraitTexture", force)
 end
 
