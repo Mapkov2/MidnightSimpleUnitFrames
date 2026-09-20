@@ -6313,6 +6313,12 @@ L["Warlock - Demonic Fury"] = "Hexenmeister - D?monischer Furor"
 L["Shadow Orbs"] = "Schattenkugeln"
 L["Burning Embers"] = "Instabile Funken"
 L["Demonic Fury"] = "D?monischer Furor"
+L["HP"] = "HP"
+L["OK"] = "OK"
+
+L["Classic Glass"] = "Classic Glass"
+L["Midnight (Retail)"] = "Midnight (Retail)"
+L["Background opacity changes the Classic Glass background only; text stays fully opaque."] = "Die Hintergrund-Deckkraft ändert nur den Classic Glass-Hintergrund; die Schrift bleibt vollständig deckend."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)

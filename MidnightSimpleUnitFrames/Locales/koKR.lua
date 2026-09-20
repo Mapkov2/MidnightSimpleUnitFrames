@@ -5949,6 +5949,11 @@ L["Warlock - Demonic Fury"] = "???? - ??? ??"
 L["Shadow Orbs"] = "??? ??"
 L["Burning Embers"] = "???? ??"
 L["Demonic Fury"] = "??? ??"
+L["OK"] = "확인"
+
+L["Classic Glass"] = "Classic Glass"
+L["Midnight (Retail)"] = "Midnight (Retail)"
+L["Background opacity changes the Classic Glass background only; text stays fully opaque."] = "배경 불투명도는 Classic Glass 배경만 변경하며 텍스트는 완전히 불투명하게 유지됩니다."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

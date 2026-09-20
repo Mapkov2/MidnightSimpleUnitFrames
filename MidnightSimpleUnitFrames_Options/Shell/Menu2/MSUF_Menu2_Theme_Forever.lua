@@ -1,23 +1,26 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
--- WoW Forever's menu skin (Classic Glass). Every Options TOC registers it before
--- Menu2 loads so the token owner can apply it before any renderer captures
--- colors, but only the WoW Forever client applies it (owner decision
--- 2026-09-16): Classic Era, TBC, Mists and Midnight keep the stock menu.
--- Client identity (MSUF.Client.IsForever), never a guessed interface number,
--- selects it.
+-- Classic Glass and Midnight are selectable on every client. Only the fresh
+-- profile default is client-specific: Forever uses Classic Glass, others Midnight.
+-- Register before Menu2 tokens so renderers capture the selected palette.
 local _, MSUF = ...
-if not (MSUF and MSUF.Client and MSUF.Client.IsForever == true) then return end
+if not MSUF then return end
 MSUF.ApplyClassicMenuTheme = function(T)
     -- Appearance presets own materials as well as colors. Resolve before any
     -- renderer captures tokens; switching presets uses the existing reload flow.
+    T.defaultMenuAppearancePreset = MSUF.Client and MSUF.Client.IsForever == true and "classicGlass" or "midnight"
     function T.GetMenuAppearancePreset(g)
-        return type(g) == "table" and g.menuAppearancePreset == "midnight" and "midnight" or "classicGlass"
+        local saved = type(g) == "table" and g.menuAppearancePreset
+        if saved == "classicGlass" or saved == "midnight" then return saved end
+        return T.defaultMenuAppearancePreset
+    end
+    function T.GetMenuBackgroundOpacity(settings)
+        local value = type(settings) == "table" and tonumber(settings.menuBackgroundOpacity) or nil
+        return math.max(80, math.min(100, value or 96))
     end
     -- Bindings (and GetGeneralDB) load after tokens. Read the normalized saved
     -- profile directly at this early point in the Options load order.
     if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
     local g = _G.MSUF_DB and _G.MSUF_DB.general
-    if type(g) == "table" and g.menuAppearancePreset == nil then g.menuAppearancePreset = "classicGlass" end
     T.menuAppearancePreset = T.GetMenuAppearancePreset(g)
     -- The Midnight preset keeps the stock tokens: this return skips the whole
     -- atlas skin below, including T.PrepareMenuAccent and T.ApplyAtlasDecoration.
@@ -27,6 +30,22 @@ MSUF.ApplyClassicMenuTheme = function(T)
     T.controlCapWidth = 4
     T.controlGradientScale = 0.25
     T.staticMaterials = true
+    T.quietSections = true
+    local shells = setmetatable({}, { __mode = "k" })
+    local shellAlpha = T.GetMenuBackgroundOpacity(g) / 100
+    function T.ApplyMenuBackgroundOpacity(frame, variant)
+        if variant ~= "shell" then return end
+        shells[frame] = true
+        local art = frame._msuf2PanelAsset
+        for _, region in pairs(art or {}) do
+            if type(region) == "table" and region.SetAlpha then region:SetAlpha(shellAlpha) end
+        end
+    end
+    function T.RefreshMenuBackgroundOpacity()
+        shellAlpha = T.GetMenuBackgroundOpacity(_G.MSUF_DB and _G.MSUF_DB.general) / 100
+        T.colors.glassShell[4], T.colors.bg[4] = shellAlpha, shellAlpha
+        for frame in pairs(shells) do T.ApplyMenuBackgroundOpacity(frame, "shell") end
+    end
     -- Keep the user's readable menu font; the artwork carries the fantasy theme.
 
     local function Paint(keys, hex, alpha)
@@ -37,34 +56,34 @@ MSUF.ApplyClassicMenuTheme = function(T)
             row[1], row[2], row[3], row[4] = r, g, b, alpha or 1
         end
     end
-    Paint("coreShadow", "09121E")
-    Paint("bg glassShell", "09121E", 0.90)
-    Paint("glassPopup", "0B1725", 0.96)
-    Paint("coreInk", "0E1B2B")
-    Paint("panelNav glassRail", "0E1B2B", 0.34)
-    Paint("coreSurface", "122235")
-    Paint("panel glassHost", "122235", 0.16)
-    Paint("glassStatus", "122235", 0.30)
-    Paint("header", "203B53", 0.30)
-    Paint("coreRaised", "16232E")
-    Paint("panel2", "16232E", 0.36)
-    Paint("coreRim border", "727774", 0.24)
-    Paint("cardBorder borderSoft", "424D55", 0.14)
-    Paint("coreBlue", "26333E")
-    Paint("coreGlow", "3B4D59")
-    Paint("pillActive navPillActive", "26333E", 0.64)
+    Paint("coreShadow", "14181B")
+    Paint("bg glassShell", "14181B", shellAlpha)
+    Paint("glassPopup", "191D20", 0.98)
+    Paint("coreInk", "111517")
+    Paint("panelNav glassRail", "111517", 0.44)
+    Paint("coreSurface", "20272A")
+    Paint("panel glassHost", "20272A", 0.08)
+    Paint("glassStatus", "111517", 0.30)
+    Paint("header", "282D2E", 0.30)
+    Paint("coreRaised", "292F31")
+    Paint("panel2", "292F31", 0.22)
+    Paint("coreRim border", "9F8960", 0.26)
+    Paint("cardBorder borderSoft", "68716F", 0.12)
+    Paint("coreBlue", "363C3C")
+    Paint("coreGlow", "515956")
+    Paint("pillActive navPillActive", "363C3C", 0.64)
     Paint("coreHot accent checkActive pillEdgeHover navPillEdgeHover navPillEdgeActive checkActiveEdge navArrowOpen pillEdgeActive", "D8B66A")
     Paint("text pillText navText", "F4F3EB")
     Paint("title pillTextActive navTextActive navHeaderHover", "F1E3C4")
     Paint("navHeaderText", "C3B48E")
     Paint("muted searchPlaceholder dim navArrowClosed", "D4DCE2")
-    Paint("disabled", "839FAF")
-    Paint("checkInactive navPillBase", "102B43")
+    Paint("disabled", "8F9999")
+    Paint("checkInactive navPillBase", "20272A")
     Paint("checkInactiveEdge", "727774")
     Paint("pillEdge pillEdgeButton navPillEdge", "727774", 0.26)
-    Paint("pillBase navPillBaseSolid", "162C40", 0.34)
-    Paint("pillBaseSolid", "162C40", 0.75)
-    Paint("pillHover navPillHover", "35434D", 0.46)
+    Paint("pillBase navPillBaseSolid", "292F31", 0.44)
+    Paint("pillBaseSolid", "292F31", 0.90)
+    Paint("pillHover navPillHover", "454A47", 0.55)
     Paint("guide", "D8B66A", 0.65)
     Paint("focus", "193C58", 0.80)
     -- Ivory headings and restrained gold accents keep a clear reading hierarchy.
@@ -75,8 +94,8 @@ MSUF.ApplyClassicMenuTheme = function(T)
     -- Keep warning/success/danger semantic colors independent of the art palette.
     -- Saved class/custom accents remain functional with this new source ramp.
     T.accentSourceTones = {
-        { 38 / 255, 51 / 255, 62 / 255 },
-        { 59 / 255, 77 / 255, 89 / 255 },
+        { 54 / 255, 60 / 255, 60 / 255 },
+        { 81 / 255, 89 / 255, 86 / 255 },
         { 216 / 255, 182 / 255, 106 / 255 },
     }
     for _, color in pairs(T.navIconColors) do

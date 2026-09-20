@@ -4197,6 +4197,10 @@ L["Shadow Orbs"] = "Shadow Orbs"
 L["Burning Embers"] = "Burning Embers"
 L["Demonic Fury"] = "Demonic Fury"
 
+L["Classic Glass"] = "Classic Glass"
+L["Midnight (Retail)"] = "Midnight (Retail)"
+L["Background opacity changes the Classic Glass background only; text stays fully opaque."] = "Background opacity changes the Classic Glass background only; text stays fully opaque."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

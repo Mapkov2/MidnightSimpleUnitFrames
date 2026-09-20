@@ -71,17 +71,17 @@ def compass(im, cx, cy, radius, alpha=255):
 def build():
     OUT.mkdir(parents=True, exist_ok=True)
     # Keep the glass, but shield navigation and reading surfaces from scenery.
-    # shell + host + card transmit ~5% of the game scene at their centers.
-    panel("shell", (9, 18, 30, 230), (142, 133, 111, 75), True)
-    panel("rail", (14, 27, 43, 87), (0, 0, 0, 0))
-    panel("host", (18, 34, 53, 41), (0, 0, 0, 0))
-    panel("status", (14, 27, 43, 77), (0, 0, 0, 0))
-    panel("card", (22, 35, 46, 92), (0, 0, 0, 0))
-    panel("popup", (11, 23, 37, 245), (142, 133, 111, 110), True)
+    # The shell is opaque artwork; the surface-only slider supplies its alpha.
+    panel("shell", (20, 24, 27, 255), (159, 137, 96, 110), True)
+    panel("rail", (17, 21, 23, 112), (0, 0, 0, 0))
+    panel("host", (32, 39, 42, 20), (0, 0, 0, 0))
+    panel("status", (17, 21, 23, 77), (0, 0, 0, 0))
+    panel("card", (41, 47, 49, 56), (0, 0, 0, 0))
+    panel("popup", (25, 29, 32, 250), (159, 137, 96, 110), True)
     for state, fill, edge in (
-        ("idle", (14, 27, 43, 65), (97, 106, 110, 50)),
-        ("hover", (53, 67, 77, 117), (164, 150, 116, 85)),
-        ("active", (38, 51, 62, 122), (216, 182, 106, 105)),
+        ("idle", (32, 39, 42, 65), (104, 113, 111, 24)),
+        ("hover", (69, 74, 71, 125), (164, 150, 116, 45)),
+        ("active", (54, 60, 60, 160), (216, 182, 106, 65)),
     ):
         im = canvas(256, 32)
         bevel(im, (1, 1, 254, 30), 4, fill, edge)
@@ -113,15 +113,15 @@ def build():
     im = canvas(128, 128)
     for row in range(4):
         y = row * 32
-        bevel(im, (1, y+3, 95, y+28), 3, (18, 51, 79, 255), (70, 116, 141, 120))
+        bevel(im, (1, y+3, 95, y+28), 3, (30, 35, 37, 255), (137, 125, 101, 80))
         d = ImageDraw.Draw(im)
         for x in (32, 64):
-            d.line((x*SCALE, (y+4)*SCALE, x*SCALE, (y+27)*SCALE), fill=(70, 116, 141, 120), width=SCALE)
+            d.line((x*SCALE, (y+4)*SCALE, x*SCALE, (y+27)*SCALE), fill=(137, 125, 101, 60), width=SCALE)
         if row:
             x = (row-1)*32
             bevel(im, (x+2, y+4, x+30, y+27), 2,
-                  (92, 40, 37, 255) if row == 3 else (32, 95, 131, 255),
-                  (209, 106, 91, 255) if row == 3 else (92, 191, 231, 180))
+                  (92, 40, 37, 255) if row == 3 else (61, 63, 56, 255),
+                  (209, 106, 91, 255) if row == 3 else (216, 182, 106, 140))
     save(im, "window_controls")
     im = canvas(128, 128)
     compass(im, 64, 64, 58)

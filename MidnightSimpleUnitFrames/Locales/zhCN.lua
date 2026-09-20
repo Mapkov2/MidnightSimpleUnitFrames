@@ -6150,6 +6150,10 @@ L["Shadow Orbs"] = "????"
 L["Burning Embers"] = "????"
 L["Demonic Fury"] = "????"
 
+L["Classic Glass"] = "Classic Glass"
+L["Midnight (Retail)"] = "Midnight (Retail)"
+L["Background opacity changes the Classic Glass background only; text stays fully opaque."] = "背景不透明度仅影响 Classic Glass 背景，文字始终完全不透明。"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

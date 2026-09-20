@@ -1,8 +1,6 @@
 -- Exercise shipped client detection and the real Menu2 painters offline.
--- The Classic Glass menu skin belongs to WoW Forever only (owner decision
--- 2026-09-16). Every shipped client (a matrix suffix or FutureVanilla) must keep
--- the stock menu; the "Forever" run stands in for the client fact
--- Game/Shared/Initialize.lua sets once the Forever client ships.
+-- Both skins are selectable everywhere. Fresh profiles default to Classic Glass
+-- on Forever and Midnight elsewhere; explicit selections override that default.
 local root, flavor = assert(arg[1]), assert(arg[2])
 local Stubs = assert(loadfile(root .. "/.github/scripts/msuf_test_stubs.lua"))()
 local env = Stubs.New({ timer = "queue", registerGlobalNames = true })
@@ -17,6 +15,7 @@ IsLoggedIn = function() return true end
 local tinted = arg[3] == "tinted"
 local general = tinted and { menuAccent = "custom", menuAccentColor = "101211", menuAccentTintSurfaces = true, menuClassicAtlasRevision = 2 } or {}
 if arg[3] == "midnight" then general.menuAppearancePreset = "midnight" end
+if arg[3] == "classicGlass" then general.menuAppearancePreset = "classicGlass" end
 MSUF_DB = { general = general }
 local ns = { Translate = function(s) return s end }
 ns.ExportPublic = function(name, value) _G[name] = value end
@@ -38,14 +37,15 @@ local T = ns.MSUF2.Theme
 local originalText, originalAccent = T.colors.text, T.colors.accent
 local danger = { unpack(T.colors.danger) }
 load(prefix .. "MSUF_Menu2_Theme.lua")
-local classic = forever and arg[3] ~= "midnight"
-if forever then
-    assert(general.menuAppearancePreset == (classic and "classicGlass" or "midnight"), "saved appearance preset lost")
-    assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "classicGlass" }) == "classicGlass")
-    assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "midnight" }) == "midnight")
+local classic = arg[3] == "classicGlass" or (forever and arg[3] ~= "midnight")
+assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "classicGlass" }) == "classicGlass")
+assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "midnight" }) == "midnight")
+assert(T.GetMenuAppearancePreset({}) == (forever and "classicGlass" or "midnight"))
+assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "invalid" }) == T.defaultMenuAppearancePreset)
+if arg[3] == "classicGlass" or arg[3] == "midnight" then
+    assert(general.menuAppearancePreset == arg[3], "saved appearance preset lost")
 else
-    assert(T.GetMenuAppearancePreset == nil, "the Forever appearance selector leaked into " .. flavor)
-    assert(general.menuAppearancePreset == nil, "the Forever Glass default was saved on " .. flavor)
+    assert(general.menuAppearancePreset == nil, "client default was persisted as an explicit choice")
 end
 assert((T.classicAtlas == true) == classic, "wrong default client skin for " .. flavor)
 assert(originalText == T.colors.text and originalAccent == T.colors.accent, "captured token identity lost")
@@ -85,6 +85,17 @@ if classic then
     assert(not shell._msuf2Bg:IsShown(), "fallback background blocks transparency")
     assert(not shell._msuf2MaterialGradient:IsShown(), "underpaint blocks transparency")
     assert(shell:GetAlpha() == 1, "whole-frame alpha dims text and controls")
+    assert(shell._msuf2PanelAsset.C:GetAlpha() == 0.96, "wrong default background opacity")
+    general.menuBackgroundOpacity = 84
+    T.RefreshMenuBackgroundOpacity()
+    assert(shell._msuf2PanelAsset.C:GetAlpha() == 0.84, "background slider did not repaint live")
+    assert(shell:GetAlpha() == 1 and body:GetAlpha() == 1, "background slider faded foreground content")
+    T.ApplySurface(shell, "shell")
+    assert(shell._msuf2PanelAsset.C:GetAlpha() == 0.84, "repaint lost the saved background opacity")
+    assert(T.GetMenuBackgroundOpacity({ menuBackgroundOpacity = 200 }) == 100)
+    assert(T.GetMenuBackgroundOpacity({ menuBackgroundOpacity = -1 }) == 80)
+    general.menuBackgroundOpacity = nil
+    T.RefreshMenuBackgroundOpacity()
 end
 local card = CreateFrame("Frame")
 card:SetSize(650, 340)
@@ -147,5 +158,5 @@ T.ApplyMenuAccent()
 assert(T.colors.accent[2] > T.colors.accent[1], "custom accent failed on the new palette")
 assert(T.colors.danger[1] == danger[1], "custom accent recolored danger")
 assert(T.ApplyMenuAccent() == "custom:38b878", "accent is not idempotent")
-print("PASS " .. flavor .. ": " .. (classic and "Forever Glass skin, assets, real panel paint, reusable decoration, control shape"
+print("PASS " .. flavor .. ": " .. (classic and "Classic Glass skin, assets, real panel paint, reusable decoration, control shape"
     or "stock menu, real panel paint") .. ", custom accent")

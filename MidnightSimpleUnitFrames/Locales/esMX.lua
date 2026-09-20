@@ -6009,6 +6009,11 @@ L["Warlock - Demonic Fury"] = "Brujo - Furia demon?aca"
 L["Shadow Orbs"] = "Orbes de las Sombras"
 L["Burning Embers"] = "Ascuas ardientes"
 L["Demonic Fury"] = "Furia demon?aca"
+L["OK"] = "Aceptar"
+
+L["Classic Glass"] = "Classic Glass"
+L["Midnight (Retail)"] = "Midnight (Retail)"
+L["Background opacity changes the Classic Glass background only; text stays fully opaque."] = "La opacidad solo cambia el fondo de Classic Glass; el texto permanece totalmente opaco."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)

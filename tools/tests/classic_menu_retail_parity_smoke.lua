@@ -76,11 +76,14 @@ for _, key in ipairs({
     "showGCDBar", "showGCDBarTime", "showGCDBarSpell",
     "empowerColorStages", "empowerStageBlink", "empowerStageBlinkTime",
     "tooltipShowAuraSpellIDs", "tooltipShowAuraCasterNames",
-    -- The appearance preset belongs to the WoW Forever menu skin.
-    "menuAppearancePreset",
 }) do
     assert(not search:find("\tgeneral." .. key .. "\t", 1, true),
         "Classic search index lists a setting with no Classic control: general." .. key)
+end
+
+for _, key in ipairs({ "menuAppearancePreset", "menuBackgroundOpacity" }) do
+    assert(search:find("\tgeneral." .. key .. "\t", 1, true),
+        "Classic search index is missing a universal menu setting: general." .. key)
 end
 
 local aurasPage = (Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua"):gsub("\r\n", "\n"))
@@ -204,7 +207,7 @@ assert(CountPlain(render, '(key == "arena" and g.showArenaCastTargetName == true
     "Classic unit preview must honor showArenaCastTargetName in the castbar details and the footprint")
 assert(CountPlain(render, 'elseif key == "boss" or key == "arena" then') == 2,
     "Classic unit preview must anchor the Arena castbar below the frame in both the footprint and the render")
-local classicDefaults = Read("MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua")
+local classicDefaults = Read("MidnightSimpleUnitFrames/State/MSUF_Defaults.lua")
 assert(classicDefaults:find("g.unitPreviewGuidesEnabled = false", 1, true)
     and classicDefaults:find("g.classPowerPreviewGuidesEnabled = false", 1, true),
     "Classic factory profile no longer starts the previews with the Guides layer off")

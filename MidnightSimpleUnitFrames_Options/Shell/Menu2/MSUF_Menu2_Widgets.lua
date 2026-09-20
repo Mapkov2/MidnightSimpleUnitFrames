@@ -142,8 +142,13 @@ function W.CreateAccordionBorder(header)
     return function(open, hover)
         local active = open or hover
         local c = active and T.colors.accent or T.colors.borderSoft
-        for _, edge in ipairs(edges) do
-            edge:SetColorTexture(c[1], c[2], c[3], active and 0.75 or 0.55)
+        for i, edge in ipairs(edges) do
+            local alpha = active and 0.75 or 0.55
+            if T.quietSections then
+                -- One quiet baseline; only the active section gets a gold marker.
+                alpha = i == 2 and (hover and 0.30 or 0.16) or (i == 3 and active and 0.65 or 0)
+            end
+            edge:SetColorTexture(c[1], c[2], c[3], alpha)
         end
     end
 end

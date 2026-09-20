@@ -1144,6 +1144,7 @@ local function ApplyPanelAsset(frame, variant)
         HideFrameTexture(frame, "_msuf2Bg")
     end
     frame._msuf2PanelAssetApplied = true
+    if T.ApplyMenuBackgroundOpacity then T.ApplyMenuBackgroundOpacity(frame, variant) end
     return true
 end
 local function HidePanelAsset(frame)

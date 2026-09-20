@@ -183,6 +183,19 @@ for _, flavor in ipairs(flavors) do
             .. "the first static record pass (" .. firstPass[capability] .. " -> " .. count
             .. "); the capability set must be built once per session")
     end
+    -- Appearance is a user preference on every client, independent of defaults.
+    for _, control in ipairs({
+        { "menu2.opt.misc.global.setting.menu.appearance.preset", "Menu appearance preset" },
+        { "menu2.opt.misc.global.setting.menu.background.opacity", "Background opacity" },
+    }) do
+        local identity = ControlIdentity("opt_misc", control[1])
+        Check(IndexRow(blob, identity), flavor .. ": missing universal menu setting " .. control[2])
+        local found = false
+        for _, rec in ipairs(api.SearchPages(control[2])) do
+            if rec.searchIdentity == identity then found = true end
+        end
+        Check(found, flavor .. ": search hides universal menu setting " .. control[2])
+    end
     main.Client = client
 end
 

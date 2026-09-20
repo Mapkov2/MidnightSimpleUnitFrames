@@ -222,7 +222,7 @@ local function BuildMisc(ctx)
         end)
     end
     local hasAppearancePresets = type(T.GetMenuAppearancePreset) == "function"
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", hasAppearancePresets and 466 or 380, true)
+    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", hasAppearancePresets and 508 or 380, true)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)
     local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, menuBehaviorW - 70, T.colors.muted)
@@ -323,7 +323,7 @@ local function BuildMisc(ctx)
         VT("midnight", hasAppearancePresets and "Preset accent (default)" or "Midnight (default)", "class", "Class color",
             "ember", "Ember", "jade", "Jade", "violet", "Violet",
             "custom", "Custom"),
-        250, 14, -244,
+        hasAppearancePresets and menuFontW or 250, hasAppearancePresets and menuFontRightX or 14, -244,
         ReadAccentMode,
         function(value)
             if not IsAccentMode(value) then value = "midnight" end
@@ -346,13 +346,13 @@ local function BuildMisc(ctx)
         Meta("setting.menuAccentColor"))
     if accentSwatch._msuf2Title then
         accentSwatch._msuf2Title:ClearAllPoints()
-        accentSwatch._msuf2Title:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX, -256)
+        accentSwatch._msuf2Title:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX, hasAppearancePresets and -312 or -256)
         accentSwatch._msuf2Title:SetWidth(170)
     end
     accentSwatch:ClearAllPoints()
-    accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, -254)
+    accentSwatch:SetPoint("TOPLEFT", menuBehavior, "TOPLEFT", menuFontRightX + 182, hasAppearancePresets and -310 or -254)
     accentTint = BindMiscToggle(menuBehavior, "Tint menu surfaces", "menuAccentTintSurfaces", false,
-        "MSUF2_MENU_ACCENT_TINT", 14, -292, 320, MENU_WRITE_OPTS, AccentReloadCheck)
+        "MSUF2_MENU_ACCENT_TINT", 14, hasAppearancePresets and -308 or -292, 320, MENU_WRITE_OPTS, AccentReloadCheck)
     -- One string literal, not a concatenation: the locale coverage gate reads
     -- literals, so a split body would demand a key per fragment.
     M.AddTooltip(accentTint, "Tint menu surfaces",
@@ -360,9 +360,9 @@ local function BuildMisc(ctx)
             or "Off (default): the accent colors buttons, tabs and highlights while panels stay midnight. On: panels, borders and the navigation rail are rotated onto the accent hue too. Success, warning and danger colors never change.",
         { hook = true })
     M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
-    local accentHelp = W.Text(menuBehavior, T.classicAtlas
-        and "Classic Glass uses dark translucent panels, ivory headings and soft gold accents. Class color follows this character; the accent applies after a UI reload."
-        or "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, -330, menuBehaviorW - 70, T.colors.muted)
+    local accentHelp = W.Text(menuBehavior, hasAppearancePresets
+        and "Background opacity changes the Classic Glass background only; text stays fully opaque."
+        or "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, hasAppearancePresets and -450 or -330, menuBehaviorW - 70, T.colors.muted)
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     if hasAppearancePresets then
         M.InstallStaticPopup("MSUF2_APPEARANCE_RELOAD_REQUIRED", {
@@ -372,9 +372,10 @@ local function BuildMisc(ctx)
             OnAccept = function() ReloadUI() end,
         })
         BindMiscDropdown(menuBehavior, "Menu appearance preset",
-            VT("classicGlass", "Classic Glass (default)", "midnight", "Midnight (Retail)",
+            VT("classicGlass", T.defaultMenuAppearancePreset == "classicGlass" and "Classic Glass (default)" or "Classic Glass",
+                "midnight", T.defaultMenuAppearancePreset == "midnight" and "Midnight (default)" or "Midnight (Retail)",
                 "class", "Class color", "ember", "Ember", "jade", "Jade", "violet", "Violet", "custom", "Custom"),
-            250, 14, -388,
+            250, 14, -244,
             function()
                 local accent = ReadAccentMode()
                 return accent ~= "midnight" and accent or T.GetMenuAppearancePreset(M.GetGeneralDB())
@@ -385,8 +386,7 @@ local function BuildMisc(ctx)
                     SetG("menuAccent", "midnight", "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
                     SetG("menuAccentTintSurfaces", false, "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
                 elseif IsAccentMode(value) then
-                    -- Original color presets work with either appearance.
-                    -- Preserve the selected materials, tint and custom color.
+                    -- Legacy color presets keep the chosen materials and saved custom color.
                     SetG("menuAccent", value, "MSUF2_MENU_APPEARANCE", MENU_WRITE_OPTS)
                 else
                     return
@@ -395,6 +395,16 @@ local function BuildMisc(ctx)
                 StaticPopup_Show("MSUF2_APPEARANCE_RELOAD_REQUIRED")
             end,
             "setting.menuAppearancePreset")
+        local opacity = W.Slider(menuBehavior, "Background opacity", 80, 100, 1, 250)
+        if opacity.SetValueFormatter then opacity:SetValueFormatter(function(v) return M.Format("%d%%", v) end) end
+        M.BindSlider(ctx, opacity,
+            function() return T.GetMenuBackgroundOpacity(M.GetGeneralDB()) end,
+            function(value)
+                SetG("menuBackgroundOpacity", value, "MSUF2_MENU_BACKGROUND", MENU_WRITE_OPTS)
+                if T.RefreshMenuBackgroundOpacity then T.RefreshMenuBackgroundOpacity() end
+            end, Meta("setting.menuBackgroundOpacity"))
+        W.MoveWidget(opacity, menuBehavior, 14, -372, 250, "LEFT")
+        W.SetControlEnabled(opacity, T.classicAtlas == true)
     end
     local mapkoSkin = b:CollapsibleSection("misc_mapkoskin", "MapkoSkin", 108, true)
     BindMiscToggle(mapkoSkin, "Use MapkoSkin for MSUF menus", "mapkoSkinMenus", true,
