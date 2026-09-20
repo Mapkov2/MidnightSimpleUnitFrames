@@ -15,7 +15,7 @@
 --   * Retail's stamp order: RenderTextureLayerPreview runs once per refresh,
 --     from Stage.RenderHealth, and Preview.Refresh never runs it again after
 --     Stage.RenderPortrait (a call hook records who calls it);
---   * the Blizzard portrait shape: the stock atlas ring and atlas mask while the
+--   * the Blizzard portrait shape: the standalone contour ring and atlas mask while the
 --     atlases exist, and no gold fallback ring when they do not.
 --
 -- Plain Lua 5.1 with the repo root and a Mainline-family flavor (Mainline or
@@ -150,14 +150,15 @@ player.portraitShape = "BLIZZARD"
 Refresh("player")
 local portrait = mock.portrait
 Check(Shown(portrait), "the Player portrait is not previewed")
+Check(not Shown(portrait._msufPreviewBlizzCorner), "the player bar-housing joint overlays the standalone ring")
 local ring, mask = portrait._msufPreviewBlizzRing, portrait._msufPreviewShapeMask
-Check(Shown(ring) and ring.texture == ATLAS_FILE, "the preview lost the stock atlas ring for the Blizzard shape")
-Check(mask and mask.atlas == MASK_ATLAS, "the preview does not mask the Blizzard shape with the stock atlas")
+Check(Shown(ring) and type(ring.texture) == "string" and ring.texture:find("msuf_portrait_ring_blizzard", 1, true), "the preview lost the standalone contour ring for the Blizzard shape")
+Check(mask and type(mask.texture) == "string" and mask.texture:find("portrait_blizzard_mask", 1, true), "the preview does not mask the Blizzard shape with the matching contour asset")
 Check(portrait._msufPreviewBlizzFallback == nil, "the preview builds the Classic gold fallback ring")
--- No atlas: Retail draws no ring at all, never the Classic gold fallback.
+-- No atlas: the standalone contour stays available without a client atlas.
 atlasesPresent = false
 Refresh("player")
-Check(not Shown(portrait._msufPreviewBlizzRing), "the stock atlas ring stays without the atlas")
+Check(Shown(portrait._msufPreviewBlizzRing), "the standalone contour disappears without an atlas")
 Check(portrait._msufPreviewBlizzFallback == nil, "a missing atlas draws the Classic gold fallback ring")
 atlasesPresent = true
 player.portraitMode, player.portraitShape, player.showPowerBar = nil, nil, nil

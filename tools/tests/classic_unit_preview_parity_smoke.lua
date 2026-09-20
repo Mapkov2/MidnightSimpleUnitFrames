@@ -508,6 +508,7 @@ player.portraitShape = "BLIZZARD"
 Refresh("player")
 local portrait = mock.portrait
 Check(Shown(portrait), "the Player portrait is not previewed")
+Check(not Shown(portrait._msufPreviewBlizzCorner), "the player bar-housing joint overlays the standalone ring")
 local ring, fallback = portrait._msufPreviewBlizzRing, portrait._msufPreviewBlizzFallback
 local mask = portrait._msufPreviewShapeMask
 if MSUF.Client.IsVanilla == true then
@@ -516,9 +517,9 @@ if MSUF.Client.IsVanilla == true then
     Check(mask and type(mask.texture) == "string" and mask.texture:find("circle_mask", 1, true),
         "the Era preview does not mask the Blizzard shape with the bundled circle")
 else
-    Check(Shown(ring) and ring.texture == ATLAS_FILE, "the preview lost the stock atlas ring for the Blizzard shape")
+    Check(Shown(ring) and type(ring.texture) == "string" and ring.texture:find("msuf_portrait_ring_blizzard", 1, true), "the preview lost the standalone contour ring for the Blizzard shape")
     Check(not Shown(fallback), "the preview shows the Era fallback ring on a client with the modern atlases")
-    Check(mask and mask.atlas == MASK_ATLAS, "the preview does not mask the Blizzard shape with the stock atlas")
+    Check(mask and type(mask.texture) == "string" and mask.texture:find("portrait_blizzard_mask", 1, true), "the preview does not mask the Blizzard shape with the matching contour asset")
 end
 player.portraitMode = nil
 player.portraitShape = nil

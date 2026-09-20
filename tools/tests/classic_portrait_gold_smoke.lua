@@ -1,12 +1,8 @@
--- Contract for the BLIZZARD portrait shape: the stock player-frame dressing.
+-- Contract for the BLIZZARD portrait shape: a complete freestanding round rim.
 --
--- The shape must render with Blizzard's own assets -- the circular portrait
--- mask atlas plus the gold ring cropped out of the stock player-frame atlas --
--- untinted, with every MSUF border renderer parked. The crop geometry mirrors
--- Blizzard_UnitFrame/Mainline/PlayerFrame.xml (232x100 frame, 60x60 portrait
--- at TOPLEFT 24,-19, atlas centered); those constants are load-bearing, so
--- this smoke recomputes them against a stubbed C_Texture.GetAtlasInfo and
--- fails if either side drifts.
+-- The standalone contour must keep its lower-right extension while the
+-- portrait mask ends under one continuous gold rim. Runtime and preview use
+-- the same assets and bounds; neither depends on the full player-frame atlas.
 _G = _G or _ENV
 
 local function ResolvePath(primary, fallback)
@@ -58,6 +54,9 @@ local function NewRegion(parent)
     function region:GetTexture() return self.texture end
     function region:SetAtlas(value) self.atlas = value; self.texture = nil end
     function region:SetTexCoord(...) self.texCoord = { ... } end
+    function region:SetRoundLayoutToNearestPixel(value) self.roundLayout = value end
+    function region:SetSnapToPixelGrid(value) self.snapToPixelGrid = value end
+    function region:SetTexelSnappingBias(value) self.texelSnappingBias = value end
     function region:SetVertexColor(...) self.vertexColor = { ... } end
     function region:SetAlpha(value) self.alpha = value end
     function region:GetAlpha() return self.alpha or 1 end
@@ -112,6 +111,8 @@ _G.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
 -- texture file, so the crop math has to compose with non-trivial base coords.
 local FRAME_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn"
 local MASK_ATLAS = "UI-HUD-UnitFrame-Player-Portrait-Mask"
+local MASK_FILE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\portrait_blizzard_mask.tga"
+local RING_FILE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_blizzard.tga"
 local CORNER_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"
 local atlasInfo = {
     [FRAME_ATLAS] = {
@@ -181,13 +182,13 @@ end
 
 local Portrait = LoadElement()
 
--- 1) BLIZZARD shape renders Blizzard's mask atlas plus the untinted ring crop.
+-- 1) Paired assets render the standalone contour with a continuous gold rim.
 local frame = NewFrame("BLIZZARD")
 Portrait.Create(frame)
 Portrait.Apply(frame, frame.MSUFSpec)
 local holder = assert(frame.MSUFPortraitHolder, "portrait holder missing")
-assert(holder.mask and holder.mask.atlas == MASK_ATLAS,
-    "BLIZZARD shape must mask the portrait with Blizzard's portrait mask atlas")
+assert(holder.mask and holder.mask.texture == MASK_FILE,
+    "BLIZZARD shape must use the mask paired with its standalone rim")
 -- Blizzard's player frame resolves the portrait with disablePortraitMask
 -- (UnitFrame.lua: SetPortraitTexture(portrait, unit, disablePortraitMask)),
 -- the modern unmasked bust render. The shape must request the same render.
@@ -197,69 +198,26 @@ assert(portraitCalls == 1 and lastPortraitMaskArg == true,
 local ring = assert(holder.blizzRing, "Blizzard ring texture missing")
 assert(ring.shown == true, "Blizzard ring must be shown")
 assert(ring.parent == holder.border, "Blizzard ring must render on the border frame above the art")
-assert(ring.texture == 131234, "Blizzard ring must draw the frame atlas file")
+assert(ring.texture == RING_FILE, "Blizzard ring must use the standalone contour art")
+assert(ring.roundLayout == false and ring.snapToPixelGrid == false and ring.texelSnappingBias == 0,
+    "ring must retain fractional atlas geometry instead of snapping through the mask")
 
--- The shipped ring art opens into the bar housing past one o'clock, so the
--- element draws the clean LEFT half of the fitted ring circle (center 36,
--- 34.25, clip radius 34) twice: straight, then mirrored across the axis.
--- Element fractions compose with the element's own base coords in the sheet.
-local du = 0.5 - 0.25
-local dv = 0.75 - 0
-local cl = 0.25 + (2 / 198) * du
-local cr = 0.25 + (36 / 198) * du
-local ct = 0 + (0.25 / 71) * dv
-local cb = 0 + (68.25 / 71) * dv
-Near(ring.texCoord[1], cl, "ring left coord")
-Near(ring.texCoord[2], cr, "ring right coord")
-Near(ring.texCoord[3], ct, "ring top coord")
-Near(ring.texCoord[4], cb, "ring bottom coord")
-local mirror = assert(holder.blizzRingMirror, "mirrored ring half missing")
-assert(mirror.shown == true, "mirrored ring half must be shown")
-assert(mirror.texture == 131234, "mirrored half must draw the same atlas file")
-Near(mirror.texCoord[1], cr, "mirror left coord (flipped)")
-Near(mirror.texCoord[2], cl, "mirror right coord (flipped)")
-Near(mirror.texCoord[3], ct, "mirror top coord")
-Near(mirror.texCoord[4], cb, "mirror bottom coord")
-
--- Quads anchor through Blizzard's portrait rect (7,4.5 size 60): at a 60px
--- portrait the left half spans -5..29 from the holder's left edge, the
--- mirrored half 29..(width+3), 4.25px above and 3.75px below the rim; the
--- circular clip mask spans both halves.
-assert(ring.points and #ring.points == 2, "ring must anchor with two points")
-Near(ring.points[1][4], -5, "ring TOPLEFT x offset")
-Near(ring.points[1][5], 4.25, "ring TOPLEFT y offset")
-assert(ring.points[2][3] == "BOTTOMLEFT", "left half must end on the mirror axis")
-Near(ring.points[2][4], 29, "ring axis x offset")
-Near(ring.points[2][5], -3.75, "ring BOTTOMRIGHT y offset")
-assert(mirror.points and #mirror.points == 2, "mirror must anchor with two points")
-Near(mirror.points[1][4], 29, "mirror TOPLEFT x offset (axis)")
-Near(mirror.points[2][4], 3, "mirror BOTTOMRIGHT x offset")
-local clip = assert(holder.blizzRingMask, "ring clip mask missing")
-assert(ring.masks and ring.masks[1] == clip, "ring must be clipped by the circle mask")
-assert(mirror.masks and mirror.masks[1] == clip, "mirrored half must share the circle mask")
-assert(type(clip.texture) == "string" and clip.texture:find("circle_mask", 1, true),
-    "ring clip mask must use the circle mask file")
-assert(clip.points and #clip.points == 2, "ring clip mask must anchor with two points")
-Near(clip.points[1][4], -5, "clip TOPLEFT x offset")
-Near(clip.points[2][4], 3, "clip BOTTOMRIGHT x offset")
+Near(ring.texCoord[1], 0, "ring left coord")
+Near(ring.texCoord[2], 1, "ring right coord")
+Near(ring.texCoord[3], 0, "ring top coord")
+Near(ring.texCoord[4], 1, "ring bottom coord")
+assert(holder.blizzRingMirror == nil, "the contour must be one continuous texture")
+assert(holder.blizzRingMask == nil and not ring.masks, "circle clipping would cut away the lower-right corner")
+assert(ring.allPoints == holder and holder.mask.allPoints == holder,
+    "mask and rim must share bounds to prevent portrait bleed or clipping")
 local color = ring.vertexColor
 assert(color and color[1] == 1 and color[2] == 1 and color[3] == 1 and color[4] == 1,
     "Blizzard ring must stay untinted")
-local mcolor = mirror.vertexColor
-assert(mcolor and mcolor[1] == 1 and mcolor[2] == 1 and mcolor[3] == 1 and mcolor[4] == 1,
-    "mirrored half must stay untinted")
-
--- The corner embellishment fills the notch the ring art leaves at its lower
--- right, exactly where PlayerFrame.xml anchors it: portrait-relative 34.5
--- offset, 23px quad at a 60px portrait.
-local corner = assert(holder.blizzCorner, "corner embellishment texture missing")
-assert(corner.shown == true, "corner embellishment must be shown")
-assert(corner.atlas == CORNER_ATLAS, "corner embellishment must draw Blizzard's atlas")
-assert(corner.sublevel == 3, "corner embellishment must draw above the ring")
-Near(corner.points[1][4], 34.5, "corner x offset")
-Near(corner.points[1][5], -34.5, "corner y offset")
-Near(corner.width, 23, "corner width")
-Near(corner.height, 23, "corner height")
+-- Retired overlays must not paint across the original contour on reused holders.
+holder.blizzRingMirror = NewRegion(holder.border)
+holder.blizzCorner = NewRegion(holder.border)
+Portrait.Apply(frame, frame.MSUFSpec)
+assert(not holder.blizzRingMirror.shown and not holder.blizzCorner.shown, "obsolete overlays must stay hidden")
 
 -- 2) Border settings are inert: a dynamic border colour neither tints the ring
 -- nor re-enables any MSUF border renderer, and the border stays event-free.
@@ -292,10 +250,45 @@ assert(holder.mask.texture and tostring(holder.mask.texture):find("circle_mask",
     "CIRCLE shape must restore the file-based mask")
 assert(holder.ring and holder.ring.shown == true, "solid ring renderer must take over for CIRCLE")
 
--- 4) Without atlas data (fresh load, no C_Texture) the shape degrades to the
--- circle mask and a visible gold relief ring without a modern HUD atlas.
+-- 4) Preview uses the same bounds even at fractional sizes.
+do
+    local ns = { MSUF2 = {}, Client = { IsRetail = true, IsForever = true } }
+    ns.MSUF2.PickFallbackTable = function(deps, defaults)
+        return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
+    end
+    assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
+    local preview = {}
+    ns.UFPreviewRender.Install(preview, {})
+    local render = preview.RefreshDeps._RenderState
+    local portrait = NewRegion()
+    portrait.tex, portrait.bg = NewRegion(portrait), NewRegion(portrait)
+    render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
+    assert(portrait._msufPreviewShapeMask.texture == MASK_FILE, "preview must use the matching player mask")
+    render.LayoutPreviewBlizzardPortrait(portrait, true, 58, 58)
+    assert(portrait._msufPreviewBlizzCorner == nil, "native branch must not receive a second joint overlay")
+    portrait._msufPreviewBlizzCorner = NewRegion(portrait)
+    for _, size in ipairs({ 36, 58, 73.5 }) do
+        render.LayoutPreviewBlizzardPortrait(portrait, true, size, size)
+        local art = assert(portrait._msufPreviewBlizzRing)
+        assert(art.roundLayout == false and art.snapToPixelGrid == false and art.texelSnappingBias == 0,
+            "native art must retain fractional atlas geometry")
+        assert(not portrait._msufPreviewBlizzCorner.shown, "preview must hide a reused overlay")
+        assert(not portrait._msufPreviewBlizzMirror and not portrait._msufPreviewBlizzClip and not art.masks,
+            "preview must preserve the native branch without mirroring or clipping")
+        Near(art.texCoord[1], 0, "preview contour left")
+        Near(art.texCoord[2], 1, "preview contour right")
+        assert(art.allPoints == portrait and portrait._msufPreviewShapeMask.allPoints == portrait,
+            "preview must anchor the mask and border to identical bounds")
+    end
+end
 _G.C_Texture = nil
-local PortraitFallback = LoadElement()
+local noAtlas = LoadElement()
+local noAtlasFrame = NewFrame("BLIZZARD")
+noAtlas.Create(noAtlasFrame)
+noAtlas.Apply(noAtlasFrame, noAtlasFrame.MSUFSpec)
+assert(noAtlasFrame.MSUFPortraitHolder.blizzRing.texture == RING_FILE,
+    "standalone art must not depend on client atlas availability")
+local PortraitFallback = LoadElement({ IsVanilla = true })
 local fallbackFrame = NewFrame("BLIZZARD")
 PortraitFallback.Create(fallbackFrame)
 PortraitFallback.Apply(fallbackFrame, fallbackFrame.MSUFSpec)
@@ -317,7 +310,7 @@ assert(not art.shown, "leaving Blizzard shape must hide fallback")
 
 -- Vanilla, TBC and Mists load the Retail-named unit preview render; its Classic
 -- portrait branches read MSUF.Client, so each load below names the client.
-local ns = { MSUF2 = {}, Client = { Family = "Classic", IsClassic = true, IsVanilla = false } }
+local ns = { MSUF2 = {}, Client = { Family = "Classic", IsClassic = true, IsVanilla = true } }
 ns.MSUF2.PickFallbackTable = function(deps, defaults)
     return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
 end
@@ -351,4 +344,26 @@ render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
 render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60)
 assert(portrait._msufPreviewShapeMask.texture:find("circle_mask", 1, true), "Era preview must use the bundled circle mask")
 assert(portrait._msufPreviewBlizzFallback.shown, "Era preview must use gold art even with atlas APIs")
+-- Actual asset pixels: the corner is filled, its outer tip is rounded, the
+-- other quadrants stay circular, and the mask ends below the opaque stroke.
+do
+    local function AssetAlpha(path)
+        local h = assert(io.open(path, "rb")); local data = h:read("*a"); h:close()
+        assert(data:byte(3) == 2 and data:byte(17) == 32 and data:byte(18) == 40,
+            "expected top-origin 32-bit TGA")
+        local w = data:byte(13) + data:byte(14) * 256
+        local hgt = data:byte(15) + data:byte(16) * 256
+        assert(w == 256 and hgt == 256 and #data == 18 + w * hgt * 4)
+        return function(x, y) return data:byte(18 + (y * w + x) * 4 + 4) end
+    end
+    local mask = AssetAlpha("MidnightSimpleUnitFrames/Media/Masks/portrait_blizzard_mask.tga")
+    local rim = AssetAlpha("MidnightSimpleUnitFrames/Media/Borders/msuf_portrait_ring_blizzard.tga")
+    assert(mask(234, 234) == 255, "portrait must fill its lower-right extension")
+    assert(mask(21, 21) == 0 and mask(234, 21) == 0 and mask(21, 234) == 0,
+        "other three quadrants must remain circular")
+    assert(rim(248, 128) == 255 and rim(128, 248) == 255 and rim(247, 247) == 255,
+        "right and bottom strokes must join around the corner")
+    assert(mask(251, 251) == 0 and rim(251, 251) == 0, "outer tip must be rounded")
+    assert(mask(247, 128) > 0 and rim(247, 128) == 255, "mask antialiasing must end under the opaque rim")
+end
 print("classic_portrait_gold_smoke: OK")

@@ -91,6 +91,8 @@ MidnightSimpleUnitFrames/Game/Vanilla/ClassPower.lua
 MidnightSimpleUnitFrames/Game/Vanilla/UnitFrames.xml
 MidnightSimpleUnitFrames/Game/Vanilla/UnitFrames/Group/MSUF_UF_Group_SpellIndicators_Data.lua
 MidnightSimpleUnitFrames/Game/Vanilla/UnitFrames/GroupFrames.xml
+MidnightSimpleUnitFrames/Media/Borders/msuf_portrait_ring_blizzard.tga
+MidnightSimpleUnitFrames/Media/Masks/portrait_blizzard_mask.tga
 MidnightSimpleUnitFrames/Media/Menu2/Classic/bevel.tga
 MidnightSimpleUnitFrames/Media/Menu2/Classic/card.tga
 MidnightSimpleUnitFrames/Media/Menu2/Classic/chart.tga

@@ -3484,25 +3484,14 @@ function Render.Install(Preview, deps)
         LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 },
     }
     local PREVIEW_RING_SHAPES = { SQUARE = "square", CIRCLE = "circle", ROUNDED = "rounded", DIAMOND = "diamond" }
-    -- Mirrors the live element's BLIZZARD dressing: the stock circular mask
-    -- atlas, the clean left half of the gold ring drawn straight plus
-    -- mirrored (the shipped art opens into the bar housing on the right), and
-    -- the corner embellishment -- same measured element fractions as the live
-    -- element (uiunitframe element 198x71, portrait rect 7,4.5 size 60, ring
-    -- circle 36,34.25 clip radius 34). Duplicated here like the relief ring
-    -- above so the preview works before the engine has compiled a spec.
+    -- Same paired contour assets and bounds as the live portrait element.
     local PREVIEW_BLIZZ = {
-        maskAtlas = "UI-HUD-UnitFrame-Player-Portrait-Mask",
-        frameAtlas = "UI-HUD-UnitFrame-Player-PortraitOn",
-        cornerAtlas = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment",
-        u0 = 2 / 198, u1 = 36 / 198, v0 = 0.25 / 71, v1 = 68.25 / 71,
-        left = (2 - 7) / 60, axis = (36 - 7) / 60, right = (70 - 67) / 60,
-        top = (0.25 - 4.5) / 60, bottom = (68.25 - 64.5) / 60,
-        cornerOffset = 34.5 / 60, cornerSize = 23 / 60,
+        mask = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\portrait_blizzard_mask.tga",
+        ring = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_blizzard.tga",
         circleMask = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\circle_mask.tga",
     }
     -- One mask texture per preview portrait covers every masked shape: the
-    -- Blizzard shape sets the stock mask atlas, the geometric shapes set the
+    -- Blizzard shape sets its matching contour, the geometric shapes set the
     -- same mask files the live element uses, SQUARE detaches the mask.
     local PREVIEW_SHAPE_MASKS = {
         CIRCLE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\circle_mask.tga",
@@ -3548,12 +3537,8 @@ function Render.Install(Preview, deps)
         local key = wantAtlas and "BLIZZARD" or file
         if portrait._msufPreviewShapeMaskKey ~= key then
             portrait._msufPreviewShapeMaskKey = key
-            local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
-            if wantAtlas and not LEGACY_BLIZZARD_PORTRAIT and GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.maskAtlas) then
-                mask:SetAtlas(PREVIEW_BLIZZ.maskAtlas)
-            else
-                mask:SetTexture(wantAtlas and PREVIEW_BLIZZ.circleMask or file, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-            end
+            local maskFile = wantAtlas and (LEGACY_BLIZZARD_PORTRAIT and PREVIEW_BLIZZ.circleMask or PREVIEW_BLIZZ.mask) or file
+            mask:SetTexture(maskFile, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         end
     end
     renderState.ApplyPreviewPortraitShapeMask = ApplyPreviewPortraitShapeMask
@@ -3604,10 +3589,7 @@ function Render.Install(Preview, deps)
             if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end
             return
         end
-        local GetAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
-        local info = not LEGACY_BLIZZARD_PORTRAIT and GetAtlasInfo and GetAtlasInfo(PREVIEW_BLIZZ.frameAtlas)
-        local file = info and (info.file or info.filename)
-        if not file then
+        if LEGACY_BLIZZARD_PORTRAIT then
             if PREVIEW_CLASSIC then
                 local fallback = portrait._msufPreviewBlizzFallback
                 if not fallback and portrait.CreateTexture then
@@ -3631,68 +3613,23 @@ function Render.Install(Preview, deps)
         end
         if not ring then
             if not portrait.CreateTexture then return end
-            ring = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2))
-            local mirror = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2))
-            if portrait.CreateMaskTexture and ring.AddMaskTexture then
-                local clip = portrait:CreateMaskTexture()
-                clip:SetTexture(PREVIEW_BLIZZ.circleMask, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-                ring:AddMaskTexture(clip)
-                mirror:AddMaskTexture(clip)
-                portrait._msufPreviewBlizzClip = clip
-            end
+            -- Paired contour assets share the portrait bounds at every size.
+            ring = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2), true)
+            if ring.SetRoundLayoutToNearestPixel then ring:SetRoundLayoutToNearestPixel(false) end
+            ring:SetSnapToPixelGrid(false)
+            ring:SetTexelSnappingBias(0)
             portrait._msufPreviewBlizzRing = ring
-            portrait._msufPreviewBlizzMirror = mirror
         end
-        local mirror = portrait._msufPreviewBlizzMirror
-        local l0 = tonumber(info.leftTexCoord) or 0
-        local t0 = tonumber(info.topTexCoord) or 0
-        local du = (tonumber(info.rightTexCoord) or 1) - l0
-        local dv = (tonumber(info.bottomTexCoord) or 1) - t0
-        local cl = l0 + PREVIEW_BLIZZ.u0 * du
-        local cr = l0 + PREVIEW_BLIZZ.u1 * du
-        local ct = t0 + PREVIEW_BLIZZ.v0 * dv
-        local cb = t0 + PREVIEW_BLIZZ.v1 * dv
-        ring:SetTexture(file)
-        ring:SetTexCoord(cl, cr, ct, cb)
-        if mirror then
-            mirror:SetTexture(file)
-            mirror:SetTexCoord(cr, cl, ct, cb)
-        end
-        local key = pw .. "|" .. ph
-        if portrait._msufPreviewBlizzKey ~= key then
-            portrait._msufPreviewBlizzKey = key
+        ring:SetTexture(PREVIEW_BLIZZ.ring)
+        ring:SetTexCoord(0, 1, 0, 1)
+        if not portrait._msufPreviewBlizzKey then
+            portrait._msufPreviewBlizzKey = true
             ring:ClearAllPoints()
-            ring:SetPoint("TOPLEFT", portrait, "TOPLEFT", PREVIEW_BLIZZ.left * pw, -PREVIEW_BLIZZ.top * ph)
-            ring:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMLEFT", PREVIEW_BLIZZ.axis * pw, -PREVIEW_BLIZZ.bottom * ph)
-            if mirror then
-                mirror:ClearAllPoints()
-                mirror:SetPoint("TOPLEFT", portrait, "TOPLEFT", PREVIEW_BLIZZ.axis * pw, -PREVIEW_BLIZZ.top * ph)
-                mirror:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", PREVIEW_BLIZZ.right * pw, -PREVIEW_BLIZZ.bottom * ph)
-            end
-            local clip = portrait._msufPreviewBlizzClip
-            if clip then
-                clip:ClearAllPoints()
-                clip:SetPoint("TOPLEFT", portrait, "TOPLEFT", PREVIEW_BLIZZ.left * pw, -PREVIEW_BLIZZ.top * ph)
-                clip:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", PREVIEW_BLIZZ.right * pw, -PREVIEW_BLIZZ.bottom * ph)
-            end
+            ring:SetAllPoints(portrait)
         end
         ring:Show()
-        if mirror then mirror:Show() end
-        local corner = portrait._msufPreviewBlizzCorner
-        if not corner and GetAtlasInfo(PREVIEW_BLIZZ.cornerAtlas) then
-            corner = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 3))
-            corner:SetAtlas(PREVIEW_BLIZZ.cornerAtlas)
-            portrait._msufPreviewBlizzCorner = corner
-        end
-        if corner then
-            if portrait._msufPreviewBlizzCornerKey ~= key then
-                portrait._msufPreviewBlizzCornerKey = key
-                corner:ClearAllPoints()
-                corner:SetPoint("TOPLEFT", portrait, "TOPLEFT", PREVIEW_BLIZZ.cornerOffset * pw, -PREVIEW_BLIZZ.cornerOffset * ph)
-                corner:SetSize(PREVIEW_BLIZZ.cornerSize * pw, PREVIEW_BLIZZ.cornerSize * ph)
-            end
-            corner:Show()
-        end
+        if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
+        if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end
     end
     renderState.LayoutPreviewBlizzardPortrait = LayoutPreviewBlizzardPortrait
     local function LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a)
