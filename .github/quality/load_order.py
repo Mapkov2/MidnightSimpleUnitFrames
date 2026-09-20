@@ -16,6 +16,12 @@ def visit(path):
         references = re.findall(r'\bfile\s*=\s*"([^"]+\.(?:lua|xml))"', source, re.I)
     else:
         references = [line.strip() for line in source.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+        # Contract providers must precede consumers on every client. Inventory
+        # all conditional payloads here; startup_locale_manifest_smoke executes
+        # each individual client-language selection and its runtime data.
+        references = list(dict.fromkeys(
+            re.sub(r"^\[AllowLoadTextLocale:\s*[A-Za-z]+\]\s+", "", ref)
+            for ref in references))
     for reference in references:
         visit(path.parent / reference.replace("\\", "/"))
 

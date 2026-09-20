@@ -13,7 +13,7 @@ WoW installation, SavedVariables or network access are required.
 The runner compiles current Core and Options sources, resolves their real
 TOC/XML order, rejects protected-call names/aliases in owned runtime code,
 checks that explicit test services and late core dependencies have real loaded
-export providers, then executes eleven behavior contracts through the versioned
+export providers, then executes the behavior contracts through the versioned
 `.github/scripts/auras3_test_driver.lua` and its loader:
 
 - original callback errors/stacks, argument preservation, once/reentrant dispatch,
@@ -27,7 +27,9 @@ export providers, then executes eleven behavior contracts through the versioned
 - Aura settings/controls without loading or constructing a page;
 - shared render stages with separate per-preview dependencies and unchanged order;
 - media burst coalescing, group refresh masks, combat catch-up and timer fallback;
-- plain/secret text cache transitions and current visible priority-row ownership.
+- plain/secret text cache transitions and current visible priority-row ownership;
+- startup manifest language filtering, exact client-language aura data, unchanged
+  menu-language availability and a 15 MB core Lua source budget for every locale.
 
 Two additional integration tests run directly under native Lua `loadfile`, with
 no legacy loader or MSUF service injection. They load actual Bootstrap, timer,

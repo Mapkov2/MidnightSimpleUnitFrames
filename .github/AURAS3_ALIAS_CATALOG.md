@@ -26,7 +26,9 @@ calls that API or bypasses native identity/secret restrictions.
 
 The generated `AliasData` directory contains IDs only. Groups that are exactly
 equal in all eleven locales share one blob; each locale adds its own groups.
-Only Common plus the active locale's strings survive loading. `enGB` selects
+The main TOC uses native `AllowLoadTextLocale` conditions, so only Common plus
+the active client locale's file are parsed. Conditions use Blizzard's
+`[AllowLoadTextLocale: deDE] path.lua` prefix syntax, with one line per locale. `enGB` selects
 `enUS`; `ptPT` selects `ptBR`. There is no cross-language alias union.
 
 IDs are fixed-width base36 tokens with a unique prefix; newlines delimit groups.
@@ -39,8 +41,13 @@ event handler, timer, aura callback or configuration refresh.
 
 Generated data is larger on disk than the removed resolver. The selected locale
 uses approximately 1.4 MB of raw strings, plus tables for actually used groups.
-All eleven locales occupy about 11.2 MB of Lua source. Startup parsing and first
-configuration are real costs; eliminating event-driven alias work does not mean
+All eleven locales occupy about 11.2 MB on disk, but only about 1.4 MB enters
+the client startup manifest. The pre-aura XML, Common, selected-locale data and
+remaining Elements XML preserve the original script order. Menu localization
+remains independent: the saved profile can select a different UI language.
+Native TOC filtering is used by `Blizzard_FullscreenBrowser.toc` in the local
+`wow-ui-source` `upstream/live` reference (12.1.0.69875, `782825221`).
+Startup parsing and first configuration are real costs; eliminating event-driven alias work does not mean
 all aura rendering or all addon CPU costs disappear.
 
 ## Provenance and update boundary

@@ -1,0 +1,27 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Script file="..\..\Engine\Elements\MSUF_UF_Visuals_Common.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_BarsCommon.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Health.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_TempMaxHealth.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Power.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Portrait.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Prediction.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Status.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_StatusAFKTimer.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_StatusStance.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_BossTargetIndicator.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Borders.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Alpha.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Highlight.lua"/>
+  <Script file="..\..\Range\MSUF_UF_RangeFade.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Text_Common.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Text_Format.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Text_Layout.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Text_Runtime.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_LoadConditions.lua"/>
+  <Script file="..\..\Engine\Elements\MSUF_UF_Elements_Bridges.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_Core.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_DotData.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_DefensiveData.lua"/>
+  <Script file="..\..\..\Auras3\MSUF_Auras3_GroupHighlightsData.lua"/>
+</Ui>

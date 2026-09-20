@@ -131,6 +131,22 @@ Features\Versioning\MSUF_ClientVersionWarning.lua
 Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
+UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements_PreAuras.xml
+# Filter client-language alias data before Lua parsing. Menu language is independent.
+Auras3\AliasData\MSUF_Auras3_AliasData_Common.lua
+[AllowLoadTextLocale: enUS] Auras3\AliasData\MSUF_Auras3_AliasData_enUS.lua
+[AllowLoadTextLocale: enGB] Auras3\AliasData\MSUF_Auras3_AliasData_enUS.lua
+[AllowLoadTextLocale: deDE] Auras3\AliasData\MSUF_Auras3_AliasData_deDE.lua
+[AllowLoadTextLocale: frFR] Auras3\AliasData\MSUF_Auras3_AliasData_frFR.lua
+[AllowLoadTextLocale: esES] Auras3\AliasData\MSUF_Auras3_AliasData_esES.lua
+[AllowLoadTextLocale: esMX] Auras3\AliasData\MSUF_Auras3_AliasData_esMX.lua
+[AllowLoadTextLocale: itIT] Auras3\AliasData\MSUF_Auras3_AliasData_itIT.lua
+[AllowLoadTextLocale: ptBR] Auras3\AliasData\MSUF_Auras3_AliasData_ptBR.lua
+[AllowLoadTextLocale: ptPT] Auras3\AliasData\MSUF_Auras3_AliasData_ptBR.lua
+[AllowLoadTextLocale: ruRU] Auras3\AliasData\MSUF_Auras3_AliasData_ruRU.lua
+[AllowLoadTextLocale: koKR] Auras3\AliasData\MSUF_Auras3_AliasData_koKR.lua
+[AllowLoadTextLocale: zhCN] Auras3\AliasData\MSUF_Auras3_AliasData_zhCN.lua
+[AllowLoadTextLocale: zhTW] Auras3\AliasData\MSUF_Auras3_AliasData_zhTW.lua
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml
 Integrations\MSUF_Integration_NicknameProviders.lua
 Integrations\MSUF_Integration_NSRTNicknames.lua

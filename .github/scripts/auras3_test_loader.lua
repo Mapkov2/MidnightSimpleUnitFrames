@@ -491,13 +491,31 @@ function Loader.LoadFile(path, ...)
     end
 end
 
--- Test environments do not process the enclosing XML. Load the actual alias
--- prerequisites from that XML, including the old resolver in frozen baselines.
+-- Test environments do not process TOC locale conditions. Visit the selected
+-- TOC data before the XML compiler; frozen baselines still own both in XML.
 function Loader.LoadAliasCatalog(root, namespace)
     root = sourceRoot or root
     namespace.MSUF_Auras3 = namespace.MSUF_Auras3 or {}
     namespace.MSUF_Auras3.AuraSpellIDAliases = namespace.MSUF_Auras3.AuraSpellIDAliases or {}
     _G.GetLocale = _G.GetLocale or function() return "enUS" end
+    local locale = _G.GetLocale()
+    local toc = Read(root .. "/MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc")
+    for line in toc:gmatch("[^\r\n]+") do
+        if line:find("MSUF_Auras3_AliasData_", 1, true) and not line:match("^%s*#") then
+            local allowed = line:match("^%s*%[AllowLoadTextLocale:%s*(%a+)%]%s+")
+            local selected = allowed == nil
+            if allowed then
+                for name in allowed:gmatch("%a+") do
+                    if name == locale then selected = true end
+                end
+            end
+            if selected then
+                local payload = line:gsub("^%s*%[AllowLoadTextLocale:%s*%a+%]%s+", "")
+                local relative = assert(payload:match("^%s*(%S+%.lua)"))
+                assert(originalLoadfile(Normalize(root .. "/MidnightSimpleUnitFrames/" .. relative)))("MidnightSimpleUnitFrames", namespace)
+            end
+        end
+    end
     local xmlPath = root .. "/" .. xmlRelative
     local xml = Read(xmlPath)
     local directory = xmlPath:match("^(.*)/")
