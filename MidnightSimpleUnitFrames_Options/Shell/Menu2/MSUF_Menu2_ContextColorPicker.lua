@@ -517,6 +517,16 @@ function Picker.BuildPreviewFields(panel)
     local currentLabel = Font(panel, "GameFontDisableSmall", "Current", T.colors.dim); currentLabel:SetPoint("BOTTOMLEFT", current, "TOPLEFT", 0, 2)
 end
 
+--- Enter handler for a HEX input. The wheel card and the Advanced card each
+--- own one, and both need the panel, so the closure is built here instead of
+--- inside one card builder where the other cannot see it.
+local function HexCommitter(panel)
+    return function(self)
+        local r, g, b = FromHex(self:GetText())
+        if r then panel:Apply(r, g, b) else panel:Refresh() end
+    end
+end
+
 function Picker.BuildWheelCard(panel)
     local wheelCard = T.Panel(panel, nil, T.colors.coreSurface, T.colors.cardBorder or T.colors.borderSoft)
     wheelCard:SetPoint("TOPLEFT", PICKER_PAD, -133); wheelCard:SetSize(SIMPLE_WIDTH - PICKER_PAD * 2, 138)
@@ -573,10 +583,7 @@ function Picker.BuildWheelCard(panel)
     end)
     if M.AddTooltip then M.AddTooltip(opacity, "Opacity", "Adjusts the alpha channel of this color.") end
 
-    local CommitHex = function(self)
-local r, g, b = FromHex(self:GetText())
-        if r then panel:Apply(r, g, b) else panel:Refresh() end
-end
+    local CommitHex = HexCommitter(panel)
 
     local compactHexTitle = Font(wheelCard, "GameFontNormalSmall", "HEX", T.colors.muted)
     local compactHex = Input(wheelCard, 64, false); panel.compactHexTitle, panel.compactHex = compactHexTitle, compactHex
@@ -639,7 +646,7 @@ function Picker.BuildAdvancedCard(panel)
     end
     local hexTitle = Font(advancedCard, "GameFontNormalSmall", "HEX", T.colors.muted); panel.hexTitle = hexTitle
     local hex = Input(advancedCard, 64, false); panel.hex = hex
-    hex._commit = CommitHex
+    hex._commit = HexCommitter(panel)
     local copy = T.Button(advancedCard, Tr("Copy"), 54, 22); panel.copy = copy
     if copy._msuf2Label then
         copy._msuf2Label:ClearAllPoints(); copy._msuf2Label:SetPoint("LEFT", 4, 0); copy._msuf2Label:SetPoint("RIGHT", -4, 0)

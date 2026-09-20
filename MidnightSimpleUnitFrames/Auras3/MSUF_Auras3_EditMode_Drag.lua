@@ -587,7 +587,7 @@ local function SetLaneMouseSuppressed(element, container, suppressed)
             motionEnabled = laneCfg and laneCfg.showTooltip ~= false or false
             cancelablePlayerBuff = laneKind == "buff" and laneCfg and laneCfg.unit == "player"
         end
-        if ok ~= false and button then
+        if button then
             if suppressed then
                 if canForward then WireNativeAuraEditForward(button, container) end
                 SuppressAuraMouse(button, canForward)

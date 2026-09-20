@@ -82,5 +82,6 @@ end
 
 M.ClassPowerPreviewInteraction = {
     Round = Round, Apply = CallApply, Read = ReadHandle, Write = WriteHandle,
+    Store = StoreForHandle,
     OpenSettings = OpenClassPowerHandleSettings,
 }

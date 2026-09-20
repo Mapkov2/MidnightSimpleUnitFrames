@@ -891,10 +891,15 @@ if IS_CLASSIC_FAMILY then
   if not UF.pvpIndicatorContextDriver then
     local pvpDriver = CreateFrame("Frame")
     pvpDriver:SetScript("OnEvent", function(_, event, unit)
-      if unit and unit ~= "player" then
+      -- PLAYER_ENTERING_WORLD's first payload argument is isInitialLogin, a
+      -- boolean, not a unit token. Filtering it like a unit swallowed the one
+      -- forced refresh at the initial login, which is the only pass that seeds
+      -- the PvP context before the first frame apply.
+      local forced = event == "PLAYER_ENTERING_WORLD"
+      if not forced and unit and unit ~= "player" then
         return
       end
-      UF.RefreshPVPIndicatorContext("MSUF_PVP_CONTEXT_" .. tostring(event), event == "PLAYER_ENTERING_WORLD")
+      UF.RefreshPVPIndicatorContext("MSUF_PVP_CONTEXT_" .. tostring(event), forced)
     end)
     local supportsEvent = MSUF.Client.SupportsEvent
     local function RegisterClassicPVPContextEvent(event, unit)

@@ -15,6 +15,9 @@ local tostring = tostring
 local math_floor = math.floor
 local math_abs = math.abs
 
+--- Boss units are a client fact: Classic Era and TBC have none. Read once at
+--- load, never per refresh.
+local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("boss"))
 local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
     MAX_BOSS_FRAMES = 5
@@ -739,6 +742,14 @@ local function SetBossCastbarsEnabled(enabled)
 end
 
 local function ApplyBossCastbarsEnabled()
+    -- Every castbar settings refresh lands here. On a client without boss units
+    -- (Classic Era, TBC) the pool is never built, and the profile keeps its boss
+    -- castbar backend instead of being rewritten to HIDE, so a profile taken to a
+    -- client with boss units still shows its boss castbars.
+    if not HAS_BOSS_UNITS then
+        if _G.MSUF_BossCastbars_SyncLifecycle then _G.MSUF_BossCastbars_SyncLifecycle(false) end
+        return
+    end
     local enabled = BossCastbarsEnabled()
     SetBossCastbarsEnabled(enabled)
     if _G.MSUF_BossCastbars_SyncLifecycle then _G.MSUF_BossCastbars_SyncLifecycle(enabled) end

@@ -991,6 +991,9 @@ end
 --- arena preview globals/entry points exported by the engine.
 local arenaPagePreviewEvents
 local arenaPagePreviewPendingCleanup
+--- The engine's live frame reader, bound the same way every other Menu2
+--- file binds it (PagePreviews, UnitPreview_Castbar, UnitPreview_Runtime).
+local CoreFrame = MSUF.UF.GetFrame
 local function ClearArenaPagePreviewForCombat()
     local clear = _G.MSUF_ClearArenaUnitframePreviewForCombat
     return type(clear) == "function" and clear() == true

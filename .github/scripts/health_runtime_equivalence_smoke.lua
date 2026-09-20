@@ -1,7 +1,15 @@
 -- Compare native writes and consumer handoffs against an optional immutable
 -- pre-refactor source root. The strict opaque value rejects Lua inspection.
+-- The Classic gate passes the Retail reference root here, or "-" when a
+-- self-contained run has none; "parity-only" then asks for equivalence without
+-- the pre-refactor improvement assertions.
 local root = arg and arg[1] or "."
 local baselineRoot = arg and arg[2]
+if baselineRoot == "-" or baselineRoot == "" then baselineRoot = nil end
+local parityOnly = false
+for i = 2, (arg and #arg or 0) do
+  if arg[i] == "parity-only" then parityOnly = true end
+end
 local function Forbidden() error("opaque health inspected") end
 local SECRET = setmetatable({}, { __eq=Forbidden, __lt=Forbidden, __le=Forbidden,
   __add=Forbidden, __sub=Forbidden, __mul=Forbidden, __div=Forbidden,
@@ -139,7 +147,7 @@ if baselineRoot then
   -- This fixture replaces the background painter with a stub. Cross-owner
   -- optimizations use the complete pipeline test for work counts; parity-only
   -- still checks every native call, handoff and legacy behavior below.
-  if not (arg and arg[3] == "parity-only") then
+  if not parityOnly then
     assert(instructions<oldInstructions,"dominant opaque Health path did not remove Lua work")
   end
   print(string.format("Health equivalence: %d updates, native writes/handoffs identical; Health-only opaque instructions %d -> %d (%+.1f%%)",

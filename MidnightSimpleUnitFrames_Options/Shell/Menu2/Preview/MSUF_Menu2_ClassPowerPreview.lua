@@ -534,6 +534,10 @@ local Interaction = M.ClassPowerPreviewInteraction
 local CallApply = Interaction.Apply
 local ReadHandle = Interaction.Read
 local WriteHandle = Interaction.Write
+--- The handle's SavedVariables table. Preview.NudgeHandle asks for it before
+--- it moves anything; it owns no copy of the rule, so bind the one the
+--- interaction file uses for every read and write.
+local StoreForHandle = Interaction.Store
 local OpenClassPowerHandleSettings = Interaction.OpenSettings
 local function RefreshHandleVisuals(preview)
     if not (preview and preview.handles) then return end

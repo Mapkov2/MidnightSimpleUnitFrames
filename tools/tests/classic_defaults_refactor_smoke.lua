@@ -1,5 +1,7 @@
 local repo = assert(arg[1], "repo root required")
-local ns = { Client = { IsClassic = true, IsVanilla = true } }
+-- The facts Game/Shared/Initialize.lua publishes on Classic Era, the flavor
+-- whose TOC this smoke resolves below. The Defaults file branches on them.
+local ns = { Client = { Family = "Classic", IsClassic = true, IsVanilla = true, SupportsPetHappiness = true } }
 ns.ExportPublic = function(name, value) _G[name] = value end
 _G.MSUF_NS = ns
 function GetLocale() return "enUS" end
@@ -14,7 +16,7 @@ local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(repo, "Vanilla", ns, {
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
     "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
-    "Game/Classic/State/MSUF_Defaults.lua",
+    "State/MSUF_Defaults.lua",
 })
 MSUF_DB = { _msufProfileSchema = 600, general = {}, player = { enabled = false },
     pet = { petHappinessIndicatorOffsetX = "19", showPetHappinessIndicator = false },

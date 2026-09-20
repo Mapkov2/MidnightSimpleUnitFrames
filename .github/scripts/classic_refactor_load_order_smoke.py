@@ -70,7 +70,11 @@ for client in client_suffixes():
         ("GroupFrames/MSUF_GroupFrames_DB_Migrations.lua", "UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua"),
     ):
         check(order.index(prefix + provider) < order.index(prefix + consumer), client, provider, "must load before", consumer)
-    defaults = "State/MSUF_Defaults.lua" if client == "Mainline" else "Game/Classic/State/MSUF_Defaults.lua"
+    # One Defaults file for every client since the Classic shadow was collapsed
+    # into it; its Classic hunks are gated on MSUF.Client facts read at load.
+    defaults = "State/MSUF_Defaults.lua"
+    check(prefix + "Game/Classic/State/MSUF_Defaults.lua" not in order, client,
+          "the collapsed Classic Defaults shadow must not come back")
     for provider in ("State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
                      "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua"):
         check(order.index(prefix + provider) < order.index(prefix + defaults), client, provider, "must load before", defaults)

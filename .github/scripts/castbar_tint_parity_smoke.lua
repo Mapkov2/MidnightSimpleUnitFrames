@@ -1,6 +1,14 @@
 -- Compare the complete tint sink/cache contract with an immutable source root.
 -- Native stubs resolve opaque booleans; addon Lua may only forward them.
+-- The Classic gate passes the Retail reference root as the baseline, or "-"
+-- when a self-contained run has none; "parity-only" then asks for equivalence
+-- without the pre-refactor improvement assertions.
 local root, baseline = arg[1] or ".", arg[2]
+if baseline == "-" or baseline == "" then baseline = nil end
+local parityOnly = false
+for i = 2, #arg do
+  if arg[i] == "parity-only" then parityOnly = true end
+end
 local function Forbidden() error("restricted tint value inspected by Lua") end
 local meta = { __eq=Forbidden, __lt=Forbidden, __index=Forbidden, __tostring=Forbidden }
 local YES, NO = setmetatable({}, meta), setmetatable({}, meta)
@@ -123,8 +131,13 @@ for _,scenario in ipairs({{"ready",true},{"unavailable",false},{"opaqueReady",YE
   assert(current.allocations==(Secret(scenario[2]) and 100 or 0),"avoidable result ColorObject allocation")
   if baseline then
     local old=Work(baseline,scenario[2])
-    assert(current.work<old.work and current.probes<=old.probes,"tint path gained Lua work or secret probes")
-    if Secret(scenario[2]) then
+    -- parity-only compares two shipped trees rather than a refactor: equal work
+    -- and an equal selector count are the expected result there.
+    assert((parityOnly and current.work<=old.work or current.work<old.work)
+      and current.probes<=old.probes,"tint path gained Lua work or secret probes")
+    if parityOnly then
+      assert(current.selections==old.selections,"native selector use diverged from the Retail base")
+    elseif Secret(scenario[2]) then
       assert(current.selections==old.selections,"restricted native selector was bypassed")
     else
       assert(current.selections==0 and old.selections==100,"public selector was not removed")
@@ -132,5 +145,8 @@ for _,scenario in ipairs({{"ready",true},{"unavailable",false},{"opaqueReady",YE
     print(string.format("Tint %s /100: Lua instructions %d -> %d; result allocations %d -> %d; secret probes %d -> %d",
       scenario[1],old.work,current.work,old.allocations,current.allocations,old.probes,current.probes))
   end
+end
+if not baseline then
+  print("castbar_tint_parity_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
 end
 print("castbar_tint_parity_smoke: ok ("..cases.." sink/cache/capability cases)")

@@ -1,12 +1,14 @@
 -- arena_castbar_backend_keep_smoke.lua
--- Every castbar settings refresh runs MSUF_ApplyArenaCastbarsEnabled
--- (Castbars/MSUF_ArenaCastbars.lua). Classic Era and WoW Forever load that file
--- without arena units: MSUF.Client.SupportsUnit("arena") is false there. On
--- those clients a refresh must leave the profile's arena castbar backend as it
--- was stored, build no castbar pool and subscribe no arena lifecycle. Classic
--- Era used to rewrite an enabled backend to HIDE, so a Classic Era profile taken
--- to a client with arenas had its arena castbars hidden. TBC, Mists and Midnight
--- still apply the backend, build their pool and wire the lifecycle.
+-- Every castbar settings refresh runs MSUF_ApplyArenaCastbarsEnabled and
+-- MSUF_ApplyBossCastbarsEnabled (Castbars/MSUF_ArenaCastbars.lua,
+-- Castbars/MSUF_BossCastbars.lua). Both files load on clients that have no such
+-- unit: MSUF.Client.SupportsUnit("arena") is false on Classic Era and WoW
+-- Forever, SupportsUnit("boss") is false on Classic Era and TBC. There a refresh
+-- must leave the profile's stored backend as it was, build no castbar pool and
+-- subscribe no lifecycle. Both pools used to rewrite an enabled backend to HIDE,
+-- so a profile made on such a client had its arena or boss castbars hidden once
+-- it reached a client that has those units. Every other client still applies the
+-- backend, builds its pool and wires the lifecycle.
 --
 -- Each client runs in its own client_world sandbox: the real
 -- Game/Shared/Initialize.lua places it from the client matrix (project ID, TOC
@@ -41,12 +43,40 @@ end
 
 local CORE = root .. "/MidnightSimpleUnitFrames/"
 local ADDON = "MidnightSimpleUnitFrames"
-local LIFECYCLE_KEY = "ARENA_OPPONENT_UPDATE/MSUF_ARENA_CASTBARS_OPPONENT"
 
--- Loads the client model, the backend adapter and the arena castbar file into
+-- One pool per unit kind. `keep` names the clients whose SupportsUnit answer is
+-- false; the smoke also asserts that answer instead of trusting this list.
+local POOLS = {
+    {
+        unit = "arena",
+        file = "Castbars/MSUF_ArenaCastbars.lua",
+        apply = "MSUF_ApplyArenaCastbarsEnabled",
+        pool = "MSUF_ArenaCastbars",
+        lifecycle = "ARENA_OPPONENT_UPDATE/MSUF_ARENA_CASTBARS_OPPONENT",
+        backendKey = "arenaCastbarBackend",
+        legacyKey = "enableArenaCastbar",
+        keep = { Vanilla = true, [World.FOREVER] = true },
+        -- The arena pool is exactly as wide as the client's opponent slots.
+        Slots = function(facts) return facts.MaxArenaOpponents end,
+    },
+    {
+        unit = "boss",
+        file = "Castbars/MSUF_BossCastbars.lua",
+        apply = "MSUF_ApplyBossCastbarsEnabled",
+        pool = "MSUF_BossCastbars",
+        lifecycle = "INSTANCE_ENCOUNTER_ENGAGE_UNIT/MSUF_BOSS_CASTBARS_ENGAGE",
+        backendKey = "bossCastbarBackend",
+        legacyKey = "enableBossCastbar",
+        keep = { Vanilla = true, TBC = true },
+        -- MAX_BOSS_FRAMES: five boss units on every client that has them.
+        Slots = function() return 5 end,
+    },
+}
+
+-- Loads the client model, the backend adapter and one pool's castbar file into
 -- one client's sandbox with the given profile, then clears the recorders so a
 -- test sees only what the refresh itself does.
-local function Load(flavor, general)
+local function Load(pool, flavor, general)
     local world = World.New(root, flavor)
     local env = world.env
     local ns = {}
@@ -80,76 +110,80 @@ local function Load(flavor, general)
     env.EnsureDB = function() end
     env.MSUF_DB = { general = general }
 
-    ok, message = world:LoadFile(CORE .. "Castbars/MSUF_ArenaCastbars.lua", ADDON, ns)
-    Check(ok, flavor .. ": Castbars/MSUF_ArenaCastbars.lua failed: " .. tostring(message))
-    Check(type(env.MSUF_ApplyArenaCastbarsEnabled) == "function",
-        flavor .. ": MSUF_ApplyArenaCastbarsEnabled is not exported")
+    ok, message = world:LoadFile(CORE .. pool.file, ADDON, ns)
+    Check(ok, flavor .. ": " .. pool.file .. " failed: " .. tostring(message))
+    Check(type(env[pool.apply]) == "function", flavor .. ": " .. pool.apply .. " is not exported")
     rec.writes, rec.created = {}, 0
     return env, ns.Client, rec
 end
 
--- keep: the client has no arena units and the refresh must not touch the profile.
-local CLIENTS = {
-    { flavor = "Vanilla", keep = true },
-    { flavor = World.FOREVER, keep = true },
-    { flavor = "TBC", keep = false },
-    { flavor = "Mists", keep = false },
-    { flavor = "Mainline", keep = false },
-}
+local CLIENTS = { "Vanilla", "TBC", "Mists", "Mainline", World.FOREVER }
 
+-- Profiles are written per pool from the pool's own keys.
 local PROFILES = {
-    -- The case the fix is about: arena castbars on, as Midnight, TBC and Mists store them.
-    { name = "enabled", general = { arenaCastbarBackend = "MSUF", enableArenaCastbar = true }, backend = "MSUF" },
+    -- The case the fix is about: the castbars are on, as a client with the units stores them.
+    { name = "enabled", backend = "MSUF", stored = "MSUF", legacy = true },
     -- An older profile that stores only the legacy switch: the refresh repairs it
-    -- on a client with arenas and leaves it alone everywhere else.
-    { name = "legacy-only", general = { enableArenaCastbar = true }, backend = "MSUF" },
-    -- Hidden stays hidden, and a client with arenas still applies it.
-    { name = "hidden", general = { arenaCastbarBackend = "HIDE", enableArenaCastbar = false }, backend = "HIDE" },
+    -- on a client with the units and leaves it alone everywhere else.
+    { name = "legacy-only", backend = "MSUF", stored = nil, legacy = true },
+    -- Hidden stays hidden, and a client with the units still applies it.
+    { name = "hidden", backend = "HIDE", stored = "HIDE", legacy = false },
 }
 
 local checked = 0
-for _, client in ipairs(CLIENTS) do
-    for _, profile in ipairs(PROFILES) do
-        local label = client.flavor .. " (" .. profile.name .. " profile)"
-        local general = Copy(profile.general)
-        local env, facts, rec = Load(client.flavor, general)
-        Check(facts.SupportsUnit("arena") == not client.keep and facts.SupportsUnit("arena1") == not client.keep,
-            label .. ": the client model answers arena support differently than this smoke expects")
-        local stored = Copy(general)
+for _, pool in ipairs(POOLS) do
+    for _, flavor in ipairs(CLIENTS) do
+        local keep = pool.keep[flavor] == true
+        for _, profile in ipairs(PROFILES) do
+            local label = pool.unit .. " on " .. flavor .. " (" .. profile.name .. " profile)"
+            local general = {}
+            general[pool.backendKey] = profile.stored
+            general[pool.legacyKey] = profile.legacy
+            local env, facts, rec = Load(pool, flavor, general)
+            Check(facts.SupportsUnit(pool.unit) == not keep
+                and facts.SupportsUnit(pool.unit .. "1") == not keep,
+                label .. ": the client model answers " .. pool.unit
+                    .. " support differently than this smoke expects")
+            local stored = Copy(general)
 
-        -- Two refreshes: the profile must survive every one, not only the first.
-        env.MSUF_ApplyArenaCastbarsEnabled()
-        env.MSUF_ApplyArenaCastbarsEnabled()
-        local pool = rawget(env, "MSUF_ArenaCastbars")
+            -- Two refreshes: the profile must survive every one, not only the first.
+            env[pool.apply]()
+            env[pool.apply]()
+            local built = rawget(env, pool.pool)
 
-        if client.keep then
-            Check(Same(general, stored), label .. ": a castbar refresh rewrote the profile to "
-                .. Describe(general) .. " (stored " .. Describe(stored) .. ")")
-            Check(#rec.writes == 0, label .. ": a castbar refresh wrote the arena backend: "
-                .. table.concat(rec.writes, ", "))
-            Check(pool == nil and rec.created == 0, label .. ": built an arena castbar pool without arena units")
-            Check(rec.bus[LIFECYCLE_KEY] == nil, label .. ": subscribed the arena castbar lifecycle")
-        else
-            Check(#rec.writes == 2 and rec.writes[1] == "arena=" .. profile.backend
-                and rec.writes[2] == rec.writes[1],
-                label .. ": the refresh did not apply the arena backend once per refresh: "
-                    .. table.concat(rec.writes, ", "))
-            Check(general.arenaCastbarBackend == profile.backend
-                and general.enableArenaCastbar == (profile.backend == "MSUF"),
-                label .. ": the applied profile reads " .. Describe(general))
-            if profile.backend == "MSUF" then
-                local slots = facts.MaxArenaOpponents
-                Check(slots >= 3 and type(pool) == "table" and #pool == slots and rec.created == slots,
-                    label .. ": expected a pool of " .. tostring(slots) .. " arena castbars, built "
-                        .. tostring(rec.created))
-                Check(rec.bus[LIFECYCLE_KEY] == true, label .. ": the arena castbar lifecycle is not subscribed")
+            if keep then
+                Check(Same(general, stored), label .. ": a castbar refresh rewrote the profile to "
+                    .. Describe(general) .. " (stored " .. Describe(stored) .. ")")
+                Check(#rec.writes == 0, label .. ": a castbar refresh wrote the " .. pool.unit
+                    .. " backend: " .. table.concat(rec.writes, ", "))
+                Check(built == nil and rec.created == 0,
+                    label .. ": built a castbar pool without " .. pool.unit .. " units")
+                Check(rec.bus[pool.lifecycle] == nil, label .. ": subscribed the castbar lifecycle")
             else
-                Check(pool == nil and rec.created == 0, label .. ": a hidden backend built the arena castbar pool")
-                Check(rec.bus[LIFECYCLE_KEY] == nil, label .. ": a hidden backend subscribed the arena lifecycle")
+                Check(#rec.writes == 2 and rec.writes[1] == pool.unit .. "=" .. profile.backend
+                    and rec.writes[2] == rec.writes[1],
+                    label .. ": the refresh did not apply the backend once per refresh: "
+                        .. table.concat(rec.writes, ", "))
+                Check(general[pool.backendKey] == profile.backend
+                    and general[pool.legacyKey] == (profile.backend == "MSUF"),
+                    label .. ": the applied profile reads " .. Describe(general))
+                if profile.backend == "MSUF" then
+                    local slots = pool.Slots(facts)
+                    Check(slots >= 3 and type(built) == "table" and #built == slots
+                        and rec.created == slots,
+                        label .. ": expected a pool of " .. tostring(slots) .. " castbars, built "
+                            .. tostring(rec.created))
+                    Check(rec.bus[pool.lifecycle] == true, label .. ": the castbar lifecycle is not subscribed")
+                else
+                    Check(built == nil and rec.created == 0,
+                        label .. ": a hidden backend built the castbar pool")
+                    Check(rec.bus[pool.lifecycle] == nil,
+                        label .. ": a hidden backend subscribed the lifecycle")
+                end
             end
+            checked = checked + 1
         end
-        checked = checked + 1
     end
 end
 
-print(string.format("arena castbar backend keep smoke: ok (%d client and profile cases)", checked))
+print(string.format("arena castbar backend keep smoke: ok (%d pool, client and profile cases)", checked))

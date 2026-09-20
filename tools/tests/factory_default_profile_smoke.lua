@@ -39,7 +39,7 @@ end
 local LITERAL = "MSUF%.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = %[%[(MSUF3:[A-Za-z0-9+/]+=?=?)%]%]"
 local factory = Check(Read("MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua"):match(LITERAL),
     "the shell defaults lost the shared factory string")
-for _, defaults in ipairs({ "State/MSUF_Defaults.lua", "Game/Classic/State/MSUF_Defaults.lua" }) do
+for _, defaults in ipairs({ "State/MSUF_Defaults.lua" }) do
     Check(not Read("MidnightSimpleUnitFrames/" .. defaults):find("[[MSUF3:", 1, true),
         defaults .. " must read the shared factory string, not carry its own copy")
 end
@@ -81,7 +81,7 @@ manifest.LoadSelected(repo, flavor, ns, {
     "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua",
-    spec.classic and "Game/Classic/State/MSUF_Defaults.lua" or "State/MSUF_Defaults.lua",
+    "State/MSUF_Defaults.lua",
 })
 Check(_G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT == factory, "the loaded defaults publish a different factory string")
 

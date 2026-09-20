@@ -217,7 +217,7 @@ for path in pipe:lines() do
         local source = ReadSource(path)
         shippedSourceCount = shippedSourceCount + 1
         local _, retiredSettingCount = source:gsub("masqueEnabled", "")
-        if path == "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua" or path == "MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua" then
+        if path == "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua" then
             assert(retiredSettingCount == 2
                     and source:find("scope.masqueEnabled ~= nil", 1, true)
                     and source:find("scope.masqueEnabled = nil", 1, true),

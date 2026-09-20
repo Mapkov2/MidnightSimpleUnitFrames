@@ -1,4 +1,4 @@
--- Fresh Classic profile smoke (Game/Classic/State/MSUF_Defaults.lua).
+-- Fresh Classic profile smoke (the Classic hunks of State/MSUF_Defaults.lua).
 --
 --   lua tools/tests/classic_fresh_profile_smoke.lua <repo root> <Vanilla|TBC|Mists>
 --
@@ -65,7 +65,7 @@ _G.MSUF_NS, _G.MSUF = ns, ns
 manifest.LoadSelected(repo, flavor, ns, {
     "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
-    "State/Defaults/MSUF_Defaults_Units.lua", "Game/Classic/State/MSUF_Defaults.lua",
+    "State/Defaults/MSUF_Defaults_Units.lua", "State/MSUF_Defaults.lua",
 })
 
 -- WoW's C_EncodingUtil does not exist here; the decoder returns a small snapshot.

@@ -14,7 +14,6 @@ MidnightSimpleUnitFrames/Game/Classic/BlizzardFrames.lua
 MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua
 MidnightSimpleUnitFrames/Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua
 MidnightSimpleUnitFrames/Game/Classic/Initialize.lua
-MidnightSimpleUnitFrames/Game/Classic/State/MSUF_Defaults.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/Group/MSUF_UF_Group_SpellIndicators_Data_Base.lua
 MidnightSimpleUnitFrames/Game/Classic/UnitFrames/MSUF_UFCore_Elements.xml
 MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua

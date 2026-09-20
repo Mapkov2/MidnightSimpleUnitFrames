@@ -76,7 +76,7 @@ for _, flavor in ipairs({ "TBC", "Mists" }) do
     local fact = index["Game/Shared/Initialize.lua"]
     Check(fact, flavor .. " TOC does not load Game/Shared/Initialize.lua")
     for _, consumer in ipairs({
-        "Game/Classic/State/MSUF_Defaults.lua",
+        "State/MSUF_Defaults.lua",
         "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
         "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua",
     }) do
@@ -90,7 +90,7 @@ end
 --- (seed), exactly like the published client fact.
 local function LoadDefaults(flavor, slots)
     _G.MSUF_MAX_ARENA_FRAMES = slots
-    local ns = { Client = { IsClassic = true } }
+    local ns = { Client = { Family = "Classic", IsClassic = true } }
     ns.ExportPublic = function(name, value) _G[name] = value end
     _G.MSUF_NS = ns
     _G.MSUF_MaterializeUnitAuraLaneOwners = nil
@@ -101,7 +101,7 @@ local function LoadDefaults(flavor, slots)
     manifest.LoadSelected(root, flavor, ns, {
         "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
         "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
-        "Game/Classic/State/MSUF_Defaults.lua",
+        "State/MSUF_Defaults.lua",
     })
     return assert(_G.MSUF_MaterializeUnitAuraLaneOwners, "Materialize export missing"),
         assert(_G.MSUF_CreateCanonicalUnitAuras, "canonical Unit Aura builder export missing")

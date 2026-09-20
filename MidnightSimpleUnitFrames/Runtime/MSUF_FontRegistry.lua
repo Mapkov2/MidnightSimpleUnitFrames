@@ -466,7 +466,7 @@ local function MSUF_GetFontPreviewObject(key)
         MSUF_FontPreviewObjects[key] = obj
     end
     local path = assert(G.MSUF_ResolveFontKeyPath(key), "MSUF unknown font key: " .. tostring(key))
-    SetFontChecked(obj, path, 14, "")
+    G.MSUF_SetFontChecked(obj, path, 14, "")
     return obj
 end
 MSUF.MSUF_GetFontPreviewObject = MSUF_GetFontPreviewObject

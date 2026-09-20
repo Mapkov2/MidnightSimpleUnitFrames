@@ -1232,6 +1232,17 @@ modeBuilders.AURA = function(E)
     --- Top of the Pip gap slider; the divider budget is shared across it.
     local MAX_PIP_GAP = 8
 
+    --- Resolved once, on the Classic clients only: no Classic game type loads a
+    --- Blizzard call site for either entry point, so the Classic build must not
+    --- assume them and keeps the client decision off the per-pip render path.
+    local ClassicSpellCastCount, ClassicSpellMaxApplications
+    if IS_CLASSIC then
+        local castCount = C_Spell and C_Spell.GetSpellCastCount
+        if type(castCount) == "function" then ClassicSpellCastCount = castCount end
+        local maxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+        if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
+    end
+
     --- Devourer's fragment separators.
     --- Its Soul Fragment maximum is talent-dependent (30/35/50), far above
     --- MAX_CLASS_POWER, so the resource can never own one StatusBar per
@@ -1366,7 +1377,12 @@ modeBuilders.AURA = function(E)
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
         if powerType == "SOUL_FRAGMENTS_VENG" then
-            local rawCur = C_Spell.GetSpellCastCount(CPK.SPELL.SOUL_CLEAVE)
+            local rawCur
+            if not IS_CLASSIC then
+                rawCur = C_Spell.GetSpellCastCount(CPK.SPELL.SOUL_CLEAVE)
+            elseif ClassicSpellCastCount then
+                rawCur = ClassicSpellCastCount(CPK.SPELL.SOUL_CLEAVE)
+            end
             local curSafe = NotSecret(rawCur)
             local rawCurSecret = not curSafe
             if curSafe and rawCur == nil then rawCur = 0 end
@@ -1521,7 +1537,12 @@ modeBuilders.AURA = function(E)
         else
             --- Read Blizzard's live maximum just like its own bar and ElvUI do;
             --- talent setups can expose 40, 50, or another supported maximum.
-            local rawMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.DARK_HEART)
+            local rawMax
+            if not IS_CLASSIC then
+                rawMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.DARK_HEART)
+            elseif ClassicSpellMaxApplications then
+                rawMax = ClassicSpellMaxApplications(CPK.SPELL.DARK_HEART)
+            end
             if NotSecret(rawMax) and rawMax ~= nil then progressMax = tonumber(rawMax) end
             local darkHeart = GetPlayerAura(CPK.SPELL.DARK_HEART)
             if darkHeart then

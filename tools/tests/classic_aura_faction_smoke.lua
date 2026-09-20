@@ -9,9 +9,15 @@
 --     on that UNIT_FACTION alone, with no UNIT_AURA; the cached-lane paths scan
 --     nothing and a steady event allocates nothing
 --   * UNIT_FACTION for another unit changes nothing and asks nothing
---   * UNIT_FACTION for the player re-checks every shown group frame with such a
---     border through one shared registration, as Retail's identity driver does
---     for its group assist-gated owners; it is armed only while one needs it
+--   * UNIT_FACTION for the player re-checks every shown frame with such a border
+--     through one shared registration - the group frames and the direct target,
+--     focus and boss frames alike - because the player's own side of
+--     UnitCanAssist changes for all of them at once. Retail re-checks the owners
+--     of the unit a UNIT_FACTION names through an unfiltered registration, and
+--     Blizzard's own Classic TargetFrame re-runs CheckFaction and UpdateAuras on
+--     a "player" payload. The player's own frame stays out of the set (its own
+--     registration delivers that payload), and the driver is armed only while a
+--     frame needs it
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists), then optionally the
 -- backend, features, compile and visuals paths (mutation runs).
 local root = assert(arg[1], "repository root argument missing")
@@ -106,7 +112,9 @@ end
 local world, assistable, guids = {}, {}, {}
 local api = { slots = 0, index = 0, assist = 0 }
 -- UnitCanAssist questions per unit; the keys exist up front so counting allocates nothing.
-local askedAbout = { party1 = 0, party2 = 0, party4 = 0, target = 0, player = 0, nameplate3 = 0 }
+local askedAbout = {
+    party1 = 0, party2 = 0, party4 = 0, target = 0, focus = 0, boss1 = 0, player = 0, nameplate3 = 0,
+}
 local snapshots = true
 local function Snapshot(aura)
     if not (snapshots and aura) then return aura end
@@ -276,12 +284,23 @@ local party4Spec = {
 }
 local targetSpec = { border = { dispel = true, dispelTrigger = "DISPEL_TYPE", dispelShowOn = "ENEMY" } }
 local playerSpec = { border = { dispel = true, dispelTrigger = "DISPEL_TYPE", dispelShowOn = "FRIENDLY" } }
-for _, unit in ipairs({ "party1", "party4", "target", "player" }) do UnitList(unit)[1] = Magic() end
+-- focus and bossN are direct identity frames. The Classic aura backend manages
+-- them on every Classic flavor (MANAGED_UNITS); whether the client fields such a
+-- frame at all is the unit config compiler's decision, not this element's.
+local focusSpec = { border = { dispel = true, dispelTrigger = "DISPEL_TYPE", dispelShowOn = "FRIENDLY" } }
+local bossSpec = { border = { dispel = true, dispelTrigger = "DISPEL_TYPE", dispelShowOn = "ENEMY" } }
+for _, unit in ipairs({ "party1", "party4", "target", "focus", "boss1", "player" }) do
+    UnitList(unit)[1] = Magic()
+end
 guids.party1, guids.party4, guids.target, guids.player = "Player-A", "Player-D", "Creature-B", "Player-C"
+guids.focus, guids.boss1 = "Player-E", "Creature-F"
 assistable.party1, assistable.party4, assistable.target, assistable.player = true, false, false, true
+assistable.focus, assistable.boss1 = true, false
 local party = NewFrame("party1", partySpec)
 local party4 = NewFrame("party4", party4Spec)
 local target = NewFrame("target", targetSpec)
+local focus = NewFrame("focus", focusSpec)
+local boss = NewFrame("boss1", bossSpec)
 local player = NewFrame("player", playerSpec)
 
 local function LaneCached(frame, cfg)
@@ -324,6 +343,8 @@ end
 RoundTrip("cached-lane group frame Friendly", party, "FRIENDLY", true)
 RoundTrip("direct group frame Enemy", party4, "ENEMY", false)
 RoundTrip("cached-lane unit frame Enemy", target, "ENEMY", true)
+RoundTrip("direct focus frame Friendly", focus, "FRIENDLY", false)
+RoundTrip("direct boss frame Enemy", boss, "ENEMY", false)
 RoundTrip("direct unit frame Friendly", player, "FRIENDLY", false)
 
 -- UNIT_FACTION for another unit ---------------------------------------------------------
@@ -341,9 +362,13 @@ Fire("UNIT_FACTION", "party1")
 assert(not Border(party), "precondition: party1's own UNIT_FACTION did not hide the border")
 
 -- UNIT_FACTION for the player -----------------------------------------------------------
--- A duel or mind control flips the player's side of UnitCanAssist("player", partyN)
--- while no event names the member. The group frames' own registrations only hear
--- their own unit, so one shared registration for the player must re-check them.
+-- A duel or mind control flips the player's own side of UnitCanAssist("player", unit)
+-- while no event names the other unit, and it does so for every unit at once. Each
+-- frame's own registration hears its own unit only, so one shared registration for
+-- the player must re-check them all: the group frames and the direct target, focus
+-- and boss frames alike. Retail refreshes the owners of the unit a UNIT_FACTION
+-- names through an unfiltered registration, and Blizzard's own Classic TargetFrame
+-- re-runs CheckFaction and UpdateAuras when UNIT_FACTION names "player".
 local function PlayerFactionDrivers()
     local found = {}
     for i = 1, #created do
@@ -353,40 +378,66 @@ local function PlayerFactionDrivers()
     return found
 end
 local drivers = PlayerFactionDrivers()
-assert(#drivers == 1, ("a Friendly or Enemy group border needs one shared UNIT_FACTION registration for "
-    .. "the player, so a player-side flip leaves party borders stale; found %d"):format(#drivers))
+assert(#drivers == 1, ("a Friendly or Enemy border needs one shared UNIT_FACTION registration for "
+    .. "the player, so a player-side flip leaves every other border stale; found %d"):format(#drivers))
 local playerDriver = drivers[1]
 local function FirePlayerFaction()
     local onEvent = playerDriver._scripts and playerDriver._scripts.OnEvent
     assert(type(onEvent) == "function", "the player UNIT_FACTION registration has no handler")
     onEvent(playerDriver, "UNIT_FACTION", "player")
 end
-assistable.party1, assistable.party4 = true, false
-Fire("UNIT_FACTION", "party1")
-Fire("UNIT_FACTION", "party4")
-assert(Border(party) and Border(party4), "precondition: the party borders are not shown")
-for _, flip in ipairs({ { false, true, false }, { true, false, true } }) do
-    assistable.party1, assistable.party4 = flip[1], flip[2]
-    local slots, asked1, asked4 = api.slots, askedAbout.party1, askedAbout.party4
-    Fire("UNIT_FACTION", "player")
-    assert(Border(party) == not flip[3] and Border(party4) == not flip[3],
-        "precondition: the frames' own registrations re-checked a party border on the player's event")
-    FirePlayerFaction()
-    assert(Border(party) == flip[3], ("the player's UNIT_FACTION left party1's Friendly border %s"):format(
-        Border(party) and "shown" or "hidden"))
-    assert(Border(party4) == flip[3], ("the player's UNIT_FACTION left party4's Enemy border %s"):format(
-        Border(party4) and "shown" or "hidden"))
-    assert(api.slots == slots, "the player's UNIT_FACTION rescanned a group frame")
-    assert(askedAbout.party1 == asked1 + 1 and askedAbout.party4 == asked4 + 1,
-        ("the player's UNIT_FACTION asked about party1 %d and party4 %d times, once each expected"):format(
-            askedAbout.party1 - asked1, askedAbout.party4 - asked4))
+-- Every frame the shared registration has to reach, and whether its border shows
+-- while the player can assist its unit. The player's own frame is deliberately
+-- absent: its own registration already delivers this payload to it.
+local fanned = {
+    { label = "group frame party1", unit = "party1", frame = party, friendly = true },
+    { label = "group frame party4", unit = "party4", frame = party4, friendly = false },
+    { label = "target frame", unit = "target", frame = target, friendly = false },
+    { label = "focus frame", unit = "focus", frame = focus, friendly = true },
+    { label = "boss frame", unit = "boss1", frame = boss, friendly = false },
+}
+for _, entry in ipairs(fanned) do
+    assistable[entry.unit] = entry.friendly
+    Fire("UNIT_FACTION", entry.unit)
+    assert(Border(entry.frame), "precondition: the " .. entry.label .. " shows no border")
 end
--- A hidden group frame reconciles on its show edge instead of on the event.
-party4._shown = false
-local hiddenAsked = askedAbout.party4
-FirePlayerFaction()
-assert(askedAbout.party4 == hiddenAsked, "the player's UNIT_FACTION re-checked a hidden group frame")
-party4._shown = true
+local asked = {}
+for _, wantShown in ipairs({ false, true }) do
+    local slots = api.slots
+    for i = 1, #fanned do
+        local entry = fanned[i]
+        assistable[entry.unit] = entry.friendly == wantShown
+        asked[i] = askedAbout[entry.unit]
+    end
+    -- The payload the game sends names "player" alone, so no frame's own
+    -- registration can see it.
+    Fire("UNIT_FACTION", "player")
+    for i = 1, #fanned do
+        local entry = fanned[i]
+        assert(Border(entry.frame) == not wantShown, "precondition: the " .. entry.label
+            .. "'s own registration re-checked its border on the player's event")
+    end
+    FirePlayerFaction()
+    for i = 1, #fanned do
+        local entry = fanned[i]
+        assert(Border(entry.frame) == wantShown, ("the player's UNIT_FACTION left the %s's %s border %s")
+            :format(entry.label, entry.friendly and "Friendly" or "Enemy",
+                Border(entry.frame) and "shown" or "hidden"))
+        assert(askedAbout[entry.unit] == asked[i] + 1,
+            ("the player's UNIT_FACTION asked about %s %d times, once expected"):format(
+                entry.unit, askedAbout[entry.unit] - asked[i]))
+    end
+    assert(api.slots == slots, "the player's UNIT_FACTION rescanned a unit")
+end
+-- A hidden frame reconciles on its show edge instead of on the event, group or not.
+for _, entry in ipairs({ fanned[2], fanned[5] }) do
+    entry.frame._shown = false
+    local hiddenAsked = askedAbout[entry.unit]
+    FirePlayerFaction()
+    assert(askedAbout[entry.unit] == hiddenAsked,
+        "the player's UNIT_FACTION re-checked the hidden " .. entry.label)
+    entry.frame._shown = true
+end
 
 -- No allocation per event: steady and flipping, lane-cached and direct -----------------
 snapshots = false
@@ -444,9 +495,19 @@ for _, frame in ipairs({ party, party4 }) do
         .. "%d UnitCanAssist calls, %d scans"):format(unit, api.assist - asked, api.slots + api.index - scans))
 end
 assistable.party1, assistable.party4 = true, false
--- No group frame filters by Show on any more: the player registration is dropped.
+-- The direct frames still filter by Show on, so the shared registration stays.
+assert(playerDriver._unitEvents.UNIT_FACTION == "player",
+    "the player's UNIT_FACTION was dropped while a target, focus or boss border still needs it")
+targetSpec.border.dispelShowOn = "BOTH"
+focusSpec.border.dispelShowOn, bossSpec.border.dispelShowOn = "BOTH", "BOTH"
+for _, frame in ipairs({ target, focus, boss }) do
+    Reapply(frame)
+    assert(not HasEvent(frame._smokeUnitEvents, "UNIT_FACTION"),
+        frame.MSUFUnitKey .. ": Show on Both still subscribes to UNIT_FACTION")
+end
+-- No frame filters by Show on any more: the player registration is dropped.
 assert(playerDriver._unitEvents.UNIT_FACTION == nil,
-    "the player's UNIT_FACTION stays registered with no Friendly or Enemy group border")
+    "the player's UNIT_FACTION stays registered with no Friendly or Enemy border")
 assert(#PlayerFactionDrivers() == 0, "a second player UNIT_FACTION registration exists")
 
 -- A client without UNIT_FACTION ---------------------------------------------------------
@@ -472,9 +533,17 @@ assert(HasEvent(party._smokeUnitEvents, "UNIT_FACTION"), "precondition: Friendly
 assert(playerDriver._unitEvents.UNIT_FACTION == "player" and #PlayerFactionDrivers() == 1,
     "a Friendly group border did not re-arm the one player UNIT_FACTION registration")
 
--- Disabling the last such group frame drops the player registration too.
+-- Disabling the last such frame drops the player registration too, for a group
+-- frame and for a direct one.
 registered.Disable(party)
 assert(playerDriver._unitEvents.UNIT_FACTION == nil,
     "the player's UNIT_FACTION stays registered after the last Friendly or Enemy group frame was disabled")
+targetSpec.border.dispelShowOn = "ENEMY"
+Reapply(target)
+assert(playerDriver._unitEvents.UNIT_FACTION == "player",
+    "an Enemy target border did not arm the one player UNIT_FACTION registration")
+registered.Disable(target)
+assert(playerDriver._unitEvents.UNIT_FACTION == nil,
+    "the player's UNIT_FACTION stays registered after the last such direct frame was disabled")
 
 print("classic aura faction smoke passed: " .. flavor)

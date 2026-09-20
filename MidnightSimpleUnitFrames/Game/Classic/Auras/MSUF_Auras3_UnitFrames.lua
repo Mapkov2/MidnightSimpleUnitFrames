@@ -2619,7 +2619,8 @@ end
 --- gate is re-applied to the lanes the frame already holds, so nothing is
 --- rescanned unless the lanes owe a full update, as in RenderCachedAuras. The
 --- event names a token, not a member: GROUP_ROSTER_UPDATE rescans a token that
---- changed hands (A3._ClassicGroupRosterAuras).
+--- changed hands (A3._ClassicGroupRosterAuras), and the player's own payload
+--- reaches every other such frame through A3._ClassicFactionPlayerFanOut.
 A3._ClassicFactionAuras = function(frame, unit)
     if not frame then return false end
     local frameUnit = A3._ClassicBindFrameUnit(frame)
@@ -2634,19 +2635,30 @@ A3._ClassicFactionAuras = function(frame, unit)
 end
 
 --- UNIT_FACTION for the player. A duel or mind control flips the player's own
---- side of UnitCanAssist("player", partyN) while no event names the member, so
---- Retail re-checks every group assist-gated owner on this payload
---- (IdentityEvents in Auras3/Runtime). A group frame registers UNIT_FACTION for
---- its own unit only, so one shared driver listens for the player while any
---- group frame holds a Friendly or Enemy border (AurasElement.GetEvents keeps
---- that set) and re-applies each shown frame's gate once. A hidden group frame
---- reconciles on its show edge instead (EnsureClassicAuraOnShowRefresh).
-A3._ClassicFactionGroupFrames = A3._ClassicFactionGroupFrames or setmetatable({}, { __mode = "k" })
+--- side of UnitCanAssist("player", unit) while no event names the other unit.
+--- Retail covers only half of that: IdentityEvents in Auras3/Runtime registers
+--- UNIT_FACTION unfiltered, but on a "player" payload it re-checks every group
+--- assist owner and routes its direct owners through the named unit alone, so a
+--- Mainline target, focus, boss or arena dispel border stays stale until some
+--- unrelated refresh. Classic follows Blizzard's own Classic TargetFrame
+--- instead, which re-runs CheckFaction and UpdateAuras whenever UNIT_FACTION
+--- names "player" (Blizzard_UnitFrame/Classic/TargetFrame.lua). That wider fan-
+--- out is deliberate: it is a Classic-over-Mainline asymmetry, not a gap to
+--- close by narrowing this back to group frames. A frame registers UNIT_FACTION
+--- for its own unit only, so one shared driver listens for the player while any
+--- frame - a group frame or a target, focus, boss or arena frame - holds a
+--- Friendly or Enemy border (AurasElement.GetEvents keeps that set) and
+--- re-applies each shown frame's gate once. A frame bound to the player is left
+--- out: it already hears the payload on its own unit, and a unit change
+--- re-derives the set (UF.OnUnitChanged rebuilds a frame's events), so a group
+--- token that becomes or stops being "player" joins or leaves it then. A hidden
+--- frame reconciles on its show edge instead (EnsureClassicAuraOnShowRefresh).
+A3._ClassicFactionPlayerFrames = A3._ClassicFactionPlayerFrames or setmetatable({}, { __mode = "k" })
 
 A3._ClassicFactionPlayerFanOut = function()
     local any = false
-    for frame in pairs(A3._ClassicFactionGroupFrames) do
-        -- The player's own group frame already hears this event on its unit.
+    for frame in pairs(A3._ClassicFactionPlayerFrames) do
+        -- The player's own frame already hears this event on its unit.
         if not (frame.IsShown and not frame:IsShown()) and A3._ClassicBindFrameUnit(frame) ~= "player"
             and A3._ClassicFactionAuras(frame, nil) then
             any = true
@@ -2655,8 +2667,8 @@ A3._ClassicFactionPlayerFanOut = function()
     return any
 end
 
-A3._ClassicTrackFactionGroupFrame = function(frame, wanted)
-    local frames = A3._ClassicFactionGroupFrames
+A3._ClassicTrackFactionPlayerFrame = function(frame, wanted)
+    local frames = A3._ClassicFactionPlayerFrames
     if wanted == true then frames[frame] = true else frames[frame] = nil end
     local driver = A3._classicFactionPlayerDriver
     if next(frames) ~= nil then
@@ -2704,7 +2716,7 @@ function A3.DisableFrame(frame)
     if not frame then return true end
     local unit = A3._ClassicBindFrameUnit(frame)
     HideState(frame)
-    if A3._ClassicFactionGroupFrames[frame] then A3._ClassicTrackFactionGroupFrame(frame, false) end
+    if A3._ClassicFactionPlayerFrames[frame] then A3._ClassicTrackFactionPlayerFrame(frame, false) end
     frame._msufA3GroupConfig = nil
     frame._msufA3GroupSource = nil
     frame._msufA3GroupUnit = nil
@@ -3273,8 +3285,9 @@ function AurasElement.GetEvents(frame)
     if faction and client and type(client.SupportsEvent) == "function" and not client.SupportsEvent("UNIT_FACTION") then
         faction = false
     end
-    -- A group frame also hears the player's side (A3._ClassicFactionPlayerFanOut).
-    if IsGroupFrame(frame) then A3._ClassicTrackFactionGroupFrame(frame, faction) end
+    -- Every such frame but the player's own also hears the player's side, which
+    -- flips the observer half of UnitCanAssist (A3._ClassicFactionPlayerFanOut).
+    A3._ClassicTrackFactionPlayerFrame(frame, faction and unit ~= "player")
     return faction and A3._ClassicFactionAuraEvents or AurasElement.events
 end
 

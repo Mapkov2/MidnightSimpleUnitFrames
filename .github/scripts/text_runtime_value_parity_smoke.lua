@@ -1,9 +1,18 @@
 -- Compare the complete text value pipeline against a supplied source snapshot.
 -- Opaque inputs reject Lua arithmetic/comparisons; native reads, formatter
 -- arguments, sink writes and scalar cache state must all retain their order.
+-- The Classic gate passes the Retail reference root as the baseline, or "-"
+-- when a self-contained run has none; "parity-only" then asks for equivalence
+-- without the pre-refactor improvement assertions. arg[3] stays the optional
+-- measurement TSV unless it names a mode.
 local root = arg and arg[1] or "."
 local baseline = arg and arg[2]
-local output = arg and arg[3] and assert(io.open(arg[3], "wb"))
+if baseline == "-" or baseline == "" then baseline = nil end
+local parityOnly = false
+for i = 2, (arg and #arg or 0) do
+  if arg[i] == "parity-only" then parityOnly = true end
+end
+local output = arg and arg[3] and arg[3] ~= "parity-only" and assert(io.open(arg[3], "wb"))
 local relative = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/"
 local function Forbidden() error("opaque value inspected by Lua") end
 local opaque = setmetatable({}, { __eq = Forbidden, __lt = Forbidden, __le = Forbidden,
@@ -193,7 +202,10 @@ for _, capabilities in ipairs({ {false,true,true}, {false,false,true}, {false,tr
   end
 end
 if baseline then
-  assert(workAfter < workBefore, "pipeline instruction sum did not improve")
+  -- parity-only compares two shipped trees rather than a refactor: an equal
+  -- instruction sum is the expected result, so only a regression may fail.
+  assert(parityOnly and workAfter <= workBefore or workAfter < workBefore,
+    "pipeline instruction sum did not improve")
   -- Specializing fixed formats can remove Lua work while retaining all native
   -- secrecy checks. Additional probes remain a regression.
   assert(probesAfter <= probesBefore, "pipeline secret queries increased")

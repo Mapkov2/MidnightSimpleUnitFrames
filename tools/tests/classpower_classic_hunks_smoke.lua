@@ -5,9 +5,14 @@
 -- so Midnight and WoW Forever must keep executing exactly the Retail statements.
 -- This smoke loads each client's real ClassPower stack in TOC order and pins
 -- both sides of that contract: the Mists power ids, tokens, Arcane Charges data,
--- the signed Eclipse mode with its event profile and updater, the Classic aura
--- watch set and the inert Ebon Might hooks exist on Classic Era, TBC and Mists,
--- and none of them leaks into the Mainline stack.
+-- the signed Eclipse mode with its event profile, updater, visible-max and
+-- frequent-power terms, the Classic aura watch set and the inert Ebon Might
+-- hooks exist on Classic Era, TBC and Mists, and none of them leaks into the
+-- Mainline stack. It also pins the Classic-only C_Spell nets: no Classic game
+-- type loads a Blizzard call site for GetSpellCastCount or
+-- GetSpellMaxCumulativeAuraApplications, so all four call sites (both Maelstrom
+-- Weapon maximums, the Soul Cleave cast count and the Dark Heart maximum) carry
+-- a net on the Classic build while Mainline still calls C_Spell directly.
 --
 -- Usage (cwd = repo root):
 --   lua tools/tests/classpower_classic_hunks_smoke.lua <repoRoot>
@@ -107,6 +112,9 @@ local function Load(client)
     function wipe(tbl) for key in pairs(tbl) do tbl[key] = nil end return tbl end
     canaccesstable = function() return true end
     C_SpellBook = { IsSpellKnown = function() return false end }
+    -- The namespace exists on every client; the entry points this stack
+    -- reaches for do not, which is the case each net below stands in for.
+    C_Spell = {}
     C_UnitAuras = { GetPlayerAuraBySpellID = function() return nil end }
     MSUF_UF_NormalizeClassPowerShape = function(shape) return shape or "BAR" end
     MSUF_UF_NormalizeShapeAlign = function(value) return value or "CENTER" end
@@ -148,12 +156,18 @@ local function Load(client)
     end
     module.Disable()
     module.Shutdown()
+    local shouldUseFrequentPower = Upvalue(
+        Upvalue(refresh, "CP_RefreshEventBindings"), "CP_ShouldUseFrequentPowerEvents")
     return {
         K = assert(_G.MSUF_CP_CONST, "constants missing"),
         profiles = assert(_G.MSUF_CP_MODE_EVENT_PROFILE, "mode event profiles missing"),
         modeBuilders = assert(_G.MSUF_CP_MODE_BUILDERS, "mode builders missing"),
+        featureBuilders = assert(_G.MSUF_CP_FEATURE_BUILDERS, "feature builders missing"),
+        AM = Upvalue(shouldUseFrequentPower, "AM"),
+        ShouldUseFrequentPower = shouldUseFrequentPower,
         CP = CP,
         CPAuras = Upvalue(refresh, "CPAuras"),
+        ResolveMaxPower = Upvalue(refresh, "Refresh").ResolveMaxPower,
         modeUpdate = Upvalue(refresh, "MODE_UPDATE_FN"),
         shown = shown,
         filledAfterEnergy = filled,
@@ -165,8 +179,42 @@ local function Check(where, condition, message)
     if not condition then error(where .. ": " .. message, 2) end
 end
 
+-- A plain-value predicate: these paths never see a secret in this harness.
+local function NotSecret() return true end
+
+-- The RUNTIME feature builder only binds locals from its env and returns them,
+-- so it can be built directly. C_Spell is deliberately empty: that is both the
+-- resolution the Classic build performs once at build time and the guard case.
+local function BuildRuntime(t, CP)
+    return t.featureBuilders.RUNTIME({
+        CP = CP, AM = { visible = false }, _cpDB = {},
+        CPK = t.K.CPK, PT = t.K.PT, TIP = t.K.TIP, CPConst = t.K,
+        POWER_TYPE_TOKENS = t.K.POWER_TYPE_TOKENS,
+        UnitPowerMax = function() return 5 end,
+        NotSecret = NotSecret, C_Spell = {},
+        tonumber = tonumber, math_floor = math.floor,
+    })
+end
+
+-- The aura render mode, on a client whose C_Spell has neither entry point.
+local function BuildAuraMode(t)
+    return t.modeBuilders.AURA({
+        CP = { bars = {}, ticks = {}, maxBars = 0, spStacks = 0 }, _cpDB = {},
+        CPK = t.K.CPK, CPConst = t.K, C_Spell = {}, C_UnitAuras = {},
+        GetTrackedPlayerAura = function() return nil end,
+        NotSecret = NotSecret, GetTime = function() return 100 end,
+        CP_CheckAutoHide = function() end,
+        GetVisual = function() return nil end,
+        GetFilledAlpha = function() return 1 end,
+        GetEmptyAlpha = function() return 0.3 end,
+        ResolveClassPowerBgColor = function() return 0, 0, 0 end,
+        ResolveMWAbove5Color = function() return 1, 1, 1 end,
+    })
+end
+
 local function Run(client)
     local where = client.name
+    local isClassic = client.classic == true
     local t = Load(client)
     local K, CPK = t.K, t.K.CPK
     local signedUpdate = t.modeBuilders.CONTINUOUS({ CP = { bars = {}, ticks = {} }, _cpDB = {} }).UpdateSigned
@@ -176,6 +224,75 @@ local function Run(client)
     local energyFilled = (client.classic or client.forever) and 4 or 2
     Check(where, t.filledAfterEnergy == energyFilled, "after an Energy-token power event " .. t.filledAfterEnergy
         .. " combo points show, expected " .. energyFilled)
+
+    -- Two Classic-only terms the ClassPower collapse must keep. Both are inert
+    -- in the live stack - ResolveMaxPower stamps currentMax 1 for the signed
+    -- mode, and the Mists provider claims PT.Balance before the frequent-power
+    -- fallback chain runs - so only a direct call shows whether they are there.
+    -- SIGNED_CONTINUOUS is 12 on Classic and unused on Mainline, where the same
+    -- render mode id must fall through both terms untouched.
+    local signedMax = BuildRuntime(t, { visible = true, powerType = "MISTS_ARCANE_CHARGES",
+        renderMode = SIGNED_CONTINUOUS, currentMax = 5 }).GetResolvedVisibleMax()
+    Check(where, signedMax == (isClassic and 1 or 5), "render mode " .. SIGNED_CONTINUOUS
+        .. " resolved " .. tostring(signedMax) .. " visible segments, expected "
+        .. (isClassic and "the signed Eclipse bar's 1" or "Mainline's untouched currentMax 5"))
+    t.AM.visible = false
+    t.CP.visible, t.CP.renderMode, t.CP.powerType = true, SIGNED_CONTINUOUS, "MISTS_ARCANE_CHARGES"
+    -- No flavor provider claims this power type, so the fallback chain decides.
+    local frequent = t.ShouldUseFrequentPower()
+    Check(where, frequent == isClassic, "render mode " .. SIGNED_CONTINUOUS .. " asked for "
+        .. (frequent and "UNIT_POWER_FREQUENT" or "UNIT_POWER_UPDATE") .. ", expected "
+        .. (isClassic and "the frequent event a continuous bar needs"
+            or "Mainline's untouched UNIT_POWER_UPDATE"))
+    t.CP.renderMode = CPK.MODE.RUNE_CD
+    Check(where, t.ShouldUseFrequentPower() == false,
+        "a non-continuous render mode asked for UNIT_POWER_FREQUENT, so the term above proves nothing")
+    t.CP.visible = false
+    -- Mainline defines no such render mode, so both terms would sit inert there
+    -- even without their Classic gate - the coincidence this pins against. Lend
+    -- Mainline the mode id for one call each: the gate itself, not the missing
+    -- constant, has to be what keeps Midnight and WoW Forever out.
+    if not isClassic then
+        CPK.MODE.SIGNED_CONTINUOUS = SIGNED_CONTINUOUS
+        local lentMax = BuildRuntime(t, { visible = true, powerType = "MISTS_ARCANE_CHARGES",
+            renderMode = SIGNED_CONTINUOUS, currentMax = 5 }).GetResolvedVisibleMax()
+        t.CP.visible, t.CP.renderMode = true, SIGNED_CONTINUOUS
+        local lentFrequent = t.ShouldUseFrequentPower()
+        t.CP.visible = false
+        CPK.MODE.SIGNED_CONTINUOUS = nil
+        Check(where, lentMax == 5,
+            "the signed visible-max term ran on Mainline, so it is not gated on the Classic clients")
+        Check(where, lentFrequent == false,
+            "the signed frequent-power term ran on Mainline, so it is not gated on the Classic clients")
+    end
+
+    -- Neither C_Spell entry point below has a Blizzard call site that a Classic
+    -- game type loads (Blizzard_CooldownViewer is AllowLoadGameType standard,
+    -- Blizzard_PersonalResourceDisplay is mainline, and DemonHunterSoulFragmentsBar
+    -- is in the Mainline Blizzard_UnitFrame TOC), so the Classic build carries a
+    -- net for both and Mainline must still call C_Spell directly.
+    local aura = BuildAuraMode(t)
+    local nets = {
+        { "the Soul Cleave cast count", function() return aura.UpdateSegmented("SOUL_FRAGMENTS_VENG", 6) end },
+        { "the Dark Heart maximum", aura.UpdateSingle },
+        { "the Maelstrom Weapon visible maximum", BuildRuntime(t, { visible = true,
+            powerType = "MAELSTROM_WEAPON", renderMode = CPK.MODE.AURA_SEGMENTED,
+            currentMax = 3 }).GetResolvedVisibleMax },
+        -- Refresh.ResolveMaxPower runs first on the activation path
+        -- (Refresh.ShowClassPower calls it before any core refresh), so the core
+        -- net above is only ever reached on a client this one survives too.
+        { "the Maelstrom Weapon activation maximum",
+            function() return t.ResolveMaxPower("MAELSTROM_WEAPON", CPK.MODE.AURA_SEGMENTED) end },
+    }
+    for index = 1, #nets do
+        local ok, failure = pcall(nets[index][2])
+        if isClassic then
+            Check(where, ok, nets[index][1] .. " has no net on a client without the C_Spell entry "
+                .. "point: " .. tostring(failure))
+        else
+            Check(where, not ok, nets[index][1] .. " stopped calling C_Spell directly on Mainline")
+        end
+    end
 
     if client.classic then
         Check(where, t.suppressed == "true,false",

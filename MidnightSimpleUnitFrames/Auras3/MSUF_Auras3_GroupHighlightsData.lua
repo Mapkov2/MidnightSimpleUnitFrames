@@ -20,6 +20,10 @@ if type(A3) ~= "table" then
     MSUF.MSUF_Auras3 = A3
 end
 
+--- The one key of the fail-closed hash below. Aura spell IDs are positive
+--- integers, so a negative sentinel can never match a scanned aura while it
+--- still keeps the hash nonempty.
+local NEVER_MATCHED_SPELL_ID = -1
 local DATA_VERSION = "12.1.0.69497-v1"
 local EXPECTED_COUNT = 122
 local DATA_SIGNATURE = "groupHighlights:" .. DATA_VERSION .. ":" .. EXPECTED_COUNT

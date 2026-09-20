@@ -2,6 +2,17 @@ local addonName, addonNS = ...
 local MSUF = (_G.MSUF_NS) or addonNS or {}
 local ExportPublic = MSUF.ExportPublic
 
+--- Client facts, read once when this file loads. Every client loads this file;
+--- the Classic flavors (Vanilla, TBC, Mists) differ from Mainline (Midnight and
+--- WoW Forever) only in the small hunks gated on these two locals. Nothing here
+--- reads WOW_PROJECT_ID: Game/Shared/Initialize.lua owns that.
+local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
+--- Arena Aura owners this client keeps: three on Midnight, five on TBC and
+--- Mists. Classic Era and WoW Forever publish no arena slots at all
+--- (Game/Shared/Initialize.lua), so the floor holds them at the same three
+--- owners Midnight authors and the extra lanes below stay unwritten.
+local ARENA_AURA_SLOTS = math.max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)
+
 --- State/MSUF_Defaults.lua
 ---
 --- Owns schema bootstrap and client-specific migrations for MSUF_DB. Shared
@@ -183,10 +194,12 @@ if type(StateHelpers) ~= "table" then
     error("State/MSUF_StateHelpers.lua must load before State/MSUF_Defaults.lua")
 end
 local MSUF_DEFAULTS_SPEC = StateHelpers.DefaultsSpec
---- Hunter Pet Happiness exists on WoW Forever (Classic Era and TBC load their
---- own Defaults file, which does the same). Its status keys are normalized like
---- every other status prefix there; Midnight keeps the shared spec untouched.
-if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
+--- Hunter Pet Happiness exists on Classic Era, TBC and WoW Forever. Its status
+--- keys are normalized like every other status prefix there; Midnight keeps the
+--- shared spec untouched. Mists carries the prefix as well, as the Classic
+--- Defaults always did: the normalizers ignore a key that is not there, so it is
+--- inert on a client whose seeding below never writes one.
+if MSUF.Client and (MSUF.Client.SupportsPetHappiness == true or IS_CLASSIC_FAMILY) then
     local petHappinessSpec = {}
     for key, value in pairs(StateHelpers.DefaultsSpec) do petHappinessSpec[key] = value end
     petHappinessSpec.statusPrefixes = {}
@@ -769,7 +782,11 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     -- Performance baseline: native interpolation is an
     -- explicit visual option, never an implicit cost on a fresh profile.
     db.bars.smoothPowerBar = false
-    db.bars.chunkedPowerBar = false
+    --- Not adopted on Classic: its fresh profiles have never carried this key,
+    --- and the shared bars stage seeds it to false anyway when it is missing.
+    if not IS_CLASSIC_FAMILY then
+        db.bars.chunkedPowerBar = false
+    end
     db.bars.classPowerSmoothFill = false
     db.bars.altManaSmoothFill = false
     for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }) do
@@ -866,7 +883,11 @@ end
 --- Canonical Unit Aura baseline for the one-time 6.0 Aura reset and for the
 --- no-payload fallback. Factory profiles apply a separate explicit overlay
 --- below so product positioning can evolve without changing hard-cut geometry.
-local MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION = 2
+--- Classic stayed on model revision 1: every profile its builds ever saved
+--- carries that number, and the sparse-owner repair below only recognises a
+--- profile at the revision it is stamped with. Bumping it on Classic would
+--- re-run the legacy aura migrations over settled profiles.
+local MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION = IS_CLASSIC_FAMILY and 1 or 2
 local MSUF_DEFAULTS_GROUP_AURA_PROFILE_MODEL_REVISION = 1
 local MSUF_DEFAULTS_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_Defaults_CreateCanonicalPlayerDefensiveAuraContainer = assert(MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer, "Aura defaults must load before profile defaults")
@@ -880,6 +901,11 @@ local MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS = {
     "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5",
     "arena1", "arena2", "arena3",
 }
+-- TBC and Mists field five arena opponents (Game/Shared/Initialize.lua); every
+-- other client keeps the three above, so this loop does not run there.
+for i = 4, ARENA_AURA_SLOTS do
+    MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS[#MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS + 1] = "arena" .. i
+end
 local MSUF_DEFAULTS_UNIT_AURA_LANES = {
     buff = {
         prefix = "buff",
@@ -965,12 +991,37 @@ local function MSUF_Defaults_WriteAuraOwnedValue(owner, key, value)
     owner[key] = MSUF_Defaults_CopyAuraOwnedValue(value)
 end
 
+-- Profiles saved with three arena Aura owners gain arena4..N as copies of
+-- arena1 once, on clients with more arena slots (TBC and Mists). Existing
+-- owners are never overwritten. Without arena1 the slot marker stays unset,
+-- so a later pass seeds once arena1 exists. Mainline (3 slots) is a no-op.
+local function MSUF_Defaults_SeedExtraArenaAuraOwners(auras)
+    local slots = tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3
+    if slots <= 3 or type(auras) ~= "table" then return false end
+    if (tonumber(auras._msufA3ArenaAuraSlots) or 3) >= slots then return false end
+    local perUnit = auras.perUnit
+    local source = type(perUnit) == "table" and perUnit.arena1 or nil
+    if type(source) ~= "table" then return false end
+    for i = 4, slots do
+        if type(perUnit["arena" .. i]) ~= "table" then
+            perUnit["arena" .. i] = MSUF_Defaults_CopyAuraOwnedValue(source)
+        end
+    end
+    auras._msufA3ArenaAuraSlots = slots
+    return true
+end
+
 local function MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     if type(auras) ~= "table" then return false end
-    if auras._msufA3UnitLaneOwners_v1 == true then return false end
+    if auras._msufA3UnitLaneOwners_v1 == true then
+        return MSUF_Defaults_SeedExtraArenaAuraOwners(auras)
+    end
     auras.shared = type(auras.shared) == "table" and auras.shared or {}
     auras.perUnit = type(auras.perUnit) == "table" and auras.perUnit or {}
     local shared = auras.shared
+    -- Seed before the snapshot too, so a legacy arena1 owner (not the Shared
+    -- fallback) becomes the source of the new arena4..N lanes.
+    MSUF_Defaults_SeedExtraArenaAuraOwners(auras)
 
     for i = 1, #MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS do
         local unit = MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS[i]
@@ -1095,6 +1146,7 @@ local function MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
 
     auras.profileModelRevision = MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION
     auras._msufA3UnitLaneOwners_v1 = true
+    MSUF_Defaults_SeedExtraArenaAuraOwners(auras)
     return true
 end
 ExportPublic("MSUF_MaterializeUnitAuraLaneOwners", MSUF_Defaults_MaterializeUnitAuraLaneOwners)
@@ -1294,9 +1346,9 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
             filters = Filters(),
         }
     end
-    --- Arena per-unit defaults (1-3): debuffs matter most on enemy players,
-    --- keep the compact boss-style lane geometry.
-    for i = 1, 3 do
+    --- Arena per-unit defaults (1-3, 1-5 on TBC and Mists): debuffs matter
+    --- most on enemy players, keep the compact boss-style lane geometry.
+    for i = 1, ARENA_AURA_SLOTS do
         local key = "arena" .. i
         auras.perUnit[key] = {
             overrideLayout = true,
@@ -1377,7 +1429,7 @@ local function MSUF_Defaults_CreateFactoryUnitAuras()
         SetScope("boss" .. i, { buffX = -1, buffY = 28, debuffX = 131, debuffY = -2,
             maxBuffs = 3, maxDebuffs = 4 })
     end
-    for i = 1, 3 do
+    for i = 1, ARENA_AURA_SLOTS do
         SetScope("arena" .. i, { buffX = -1, buffY = 28, debuffX = 131, debuffY = -2,
             maxBuffs = 3, maxDebuffs = 4 })
     end
@@ -1389,6 +1441,91 @@ local function MSUF_Defaults_CreateFactoryUnitAuras()
     auras._msufA3UnitLaneOwners_v1 = nil
     MSUF_Defaults_MaterializeUnitAuraLaneOwners(auras)
     return auras
+end
+
+--- Classic only. 6.5-alpha18 to 6.5-beta3 saved the factory scope above without
+--- its final re-materialize: every authored owner kept only its sparse tables
+--- under a lane-owner marker that was already set, so no pass ever completed it,
+--- and the Classic aura compile, which reads only the owner, anchored buffs
+--- BOTTOMRIGHT and debuffs TOPLEFT. Up to 6.5-beta2 only New Profile wrote
+--- them; 6.5-beta3 also first login and reset, with player and target
+--- retuned. Buff x/y and debuff x/y per unit family, as those builds saved them.
+--- Midnight and WoW Forever never shipped those builds and never call this.
+local MSUF_DEFAULTS_SPARSE_FACTORY_AURA_OFFSETS = {
+    player = { { -2, 32, 3, 32 }, { -2, 46, 2, 49 } },
+    target = { { -2, 32, 3, 32 }, { -1, 42, 0, 42 } },
+    focus = { { -2, 32, 119, 2 } },
+    boss = { { -1, 28, 131, -2 } },
+    arena = { { -1, 28, 131, -2 } },
+}
+
+local function MSUF_Defaults_AuraValuesEqual(a, b)
+    if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+    for key, value in pairs(a) do
+        if not MSUF_Defaults_AuraValuesEqual(value, b[key]) then return false end
+    end
+    for key in pairs(b) do
+        if a[key] == nil then return false end
+    end
+    return true
+end
+
+--- One-shot repair of those saved owners, decided per owner. An owner is
+--- untouched only when it equals, key for key and value for value, what one
+--- of those builds saved for its unit; the only extras allowed are the two a
+--- mere read of the aura menu writes (_msufA3SparseVisualOverrides_v2 = true,
+--- filters.debuffs.nonPlayer = false). An untouched owner is re-materialized in
+--- place against the factory shared record, the pass a new profile runs; every
+--- other owner, the saved shared record and the lane-owner marker stay as they
+--- are. The stamp is written only with a repair, so a profile without an
+--- untouched owner stays byte-for-byte unchanged.
+local function MSUF_Defaults_RepairSparseFactoryAuraOwners(db)
+    local auras = type(db) == "table" and db.auras3 or nil
+    if type(auras) ~= "table" or type(auras.perUnit) ~= "table"
+        or auras._msufA3UnitLaneOwners_v1 ~= true
+        or auras._msufA3SparseLaneOwnersRepaired_v1 == true
+        or auras.profileModelRevision ~= MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION then
+        return false
+    end
+    local canonical, scope
+    for i = 1, #MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS do
+        local unit = MSUF_DEFAULTS_UNIT_AURA_RUNTIME_UNITS[i]
+        local owner = auras.perUnit[unit]
+        local layout = type(owner) == "table" and owner.layout or nil
+        -- Only the sparse factory tables carry these legacy keys, so complete
+        -- owners leave here without allocating anything.
+        if type(layout) == "table" and layout.offsetX == 243 and layout.offsetY == 27 and layout.iconSize == 28 then
+            canonical = canonical or MSUF_Defaults_CreateCanonicalUnitAuras()
+            local variants = MSUF_DEFAULTS_SPARSE_FACTORY_AURA_OFFSETS[unit:match("^%a+")] or {}
+            local readFilters = type(owner.filters) == "table" and owner.filters.debuffs
+            for v = 1, #variants do
+                local offsets = variants[v]
+                local saved = MSUF_Defaults_CopyAuraOwnedValue(canonical.perUnit[unit])
+                saved.layout = {
+                    offsetX = 243, offsetY = 27, iconSize = 28,
+                    buffGroupOffsetX = offsets[1], buffGroupOffsetY = offsets[2],
+                    debuffGroupOffsetX = offsets[3], debuffGroupOffsetY = offsets[4],
+                    buffGroupIconSize = 31, debuffGroupIconSize = 32, buffSpacing = 0, debuffSpacing = 0,
+                }
+                saved.layoutShared = { maxBuffs = 3, maxDebuffs = 4, buffPerRow = 4, debuffPerRow = 4 }
+                if owner._msufA3SparseVisualOverrides_v2 == true then saved._msufA3SparseVisualOverrides_v2 = true end
+                if type(readFilters) == "table" and readFilters.nonPlayer == false then
+                    saved.filters.debuffs.nonPlayer = false
+                end
+                if MSUF_Defaults_AuraValuesEqual(owner, saved) then
+                    scope = scope or { shared = MSUF_Defaults_CreateFactoryUnitAuras().shared, perUnit = {} }
+                    scope.perUnit[unit] = owner
+                    break
+                end
+            end
+        end
+    end
+    if not scope then return false end
+    -- A scratch scope holding only the untouched owners: the pass completes
+    -- them in place and every other table it builds is dropped with it.
+    MSUF_Defaults_MaterializeUnitAuraLaneOwners(scope)
+    auras._msufA3SparseLaneOwnersRepaired_v1 = true
+    return true
 end
 
 --- Canonical Group Aura baseline. This is intentionally authored as native
@@ -2051,6 +2188,24 @@ local function MSUF_Defaults_MigrateGroupTooltipProfiles()
     return changed
 end
 
+--- Classic only, called from the gate in MSUF_EnsureDB. Every stored profile,
+--- not only the active one: the persisted fast path skips the heavy pass for
+--- them, and an owner is repaired or kept by its own shape.
+local function MSUF_Defaults_RepairSparseFactoryAuraOwnerProfiles()
+    local changed = false
+    if not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects
+        and type(MSUF_GlobalDB) == "table"
+        and type(MSUF_GlobalDB.profiles) == "table" then
+        for _, profile in pairs(MSUF_GlobalDB.profiles) do
+            changed = MSUF_Defaults_RepairSparseFactoryAuraOwners(profile) or changed
+        end
+    end
+    if type(MSUF_DB) == "table" then
+        changed = MSUF_Defaults_RepairSparseFactoryAuraOwners(MSUF_DB) or changed
+    end
+    return changed
+end
+
 local function MSUF_ResolveFontShadowMetrics(opacity, distance, legacyStrength, fallbackOpacity, fallbackDistance)
     if legacyStrength ~= nil then
         legacyStrength = tostring(legacyStrength):upper()
@@ -2200,12 +2355,17 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
     if g.powerBarGradientColorR == nil or g.powerBarGradientColorG == nil or g.powerBarGradientColorB == nil then
         g.powerBarGradientColorR, g.powerBarGradientColorG, g.powerBarGradientColorB = 0, 0, 0
     end
-    if g.healthLossColorR == nil then g.healthLossColorR = 1 end
-    if g.healthLossColorG == nil then g.healthLossColorG = 0.55 end
-    if g.healthLossColorB == nil then g.healthLossColorB = 0.08 end
-    if g.powerLossColorR == nil then g.powerLossColorR = 0.70 end
-    if g.powerLossColorG == nil then g.powerLossColorG = 0.90 end
-    if g.powerLossColorB == nil then g.powerLossColorB = 1 end
+    --- Not adopted on Classic: no Classic profile has ever stored these six
+    --- keys, and MSUF_UF_Config falls back to exactly these values, so seeding
+    --- them there would only change what a saved profile carries.
+    if not IS_CLASSIC_FAMILY then
+        if g.healthLossColorR == nil then g.healthLossColorR = 1 end
+        if g.healthLossColorG == nil then g.healthLossColorG = 0.55 end
+        if g.healthLossColorB == nil then g.healthLossColorB = 0.08 end
+        if g.powerLossColorR == nil then g.powerLossColorR = 0.70 end
+        if g.powerLossColorG == nil then g.powerLossColorG = 0.90 end
+        if g.powerLossColorB == nil then g.powerLossColorB = 1 end
+    end
     --- Bars: Aggro highlight overlay (Target/Focus/Boss)
     --- Aggro indicator: re-uses the HP outline border as an orange warning when YOU have aggro (target/focus/boss).
     --- Bars offers "Aggro border" with dropdown default 1 (On), the Assistant
@@ -2728,7 +2888,9 @@ local function MSUF_Defaults_Stage_SeedAuraDefaults(profileDB)
         --- The first local version exposed one combined Blizzard Aura switch.
         --- Split that stored choice once so testers keep the same result while
         --- Buff and Debuff visibility become independently configurable.
-        if a3.shared.hideBlizzardAuraFrames ~= nil then
+        --- Not adopted on Classic: no Classic build ever wrote the combined key,
+        --- and the aura menu model performs the same split where it does appear.
+        if not IS_CLASSIC_FAMILY and a3.shared.hideBlizzardAuraFrames ~= nil then
             if a3.shared.hideBlizzardBuffFrame == nil then
                 a3.shared.hideBlizzardBuffFrame = a3.shared.hideBlizzardAuraFrames == true
             end
@@ -2820,7 +2982,9 @@ local function MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
         if u.smoothFill == nil then
             u.smoothFill = false
         end
-        if u.chunkedFill == nil then
+        --- Not adopted on Classic: its profiles have never stored this key and
+        --- the config compile reads a missing one as off.
+        if not IS_CLASSIC_FAMILY and u.chunkedFill == nil then
             u.chunkedFill = false
         end
         --- Unified alpha: HP fill opacity + power fill opacity + background texture
@@ -2838,12 +3002,29 @@ local function MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
         if u.oocFadeAlpha == nil then u.oocFadeAlpha = 0.5 end
         --- Decorative texture layers (3 slots, Blizzard name-bar style):
         --- SharedMedia texture per slot with own alpha, strata/level, anchor
-        --- target, color/gradient modes, blend, mirroring, combat visibility
-        --- and rounded clipping. Applied purely cold path.
+        --- target, color/gradient modes, blend, mirroring, edge softness,
+        --- combat visibility and rounded clipping. Applied purely cold path.
+        --- The source, size and link keys below exist only on Classic: the
+        --- texture layer runtime resolves a missing one from the older rule,
+        --- so Midnight and WoW Forever profiles keep the key set they have.
+        if IS_CLASSIC_FAMILY then
+            if u.texLayerLinkGeometry == nil then u.texLayerLinkGeometry = false end
+            if u.texLayerLinkSize == nil then u.texLayerLinkSize = false end
+        end
         for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
             if u[texP .. "Enabled"] == nil then u[texP .. "Enabled"] = false end
             if u[texP .. "Texture"] == nil then u[texP .. "Texture"] = "" end
             if u[texP .. "CustomTexturePath"] == nil then u[texP .. "CustomTexturePath"] = "" end
+            if IS_CLASSIC_FAMILY and u[texP .. "SourceMode"] == nil then
+                local sourcePath = tostring(u[texP .. "CustomTexturePath"] or "")
+                if sourcePath:find("^Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\TextureLayers\\") then
+                    u[texP .. "SourceMode"] = "PACK"
+                elseif sourcePath ~= "" then
+                    u[texP .. "SourceMode"] = "CUSTOM"
+                else
+                    u[texP .. "SourceMode"] = "SHAREDMEDIA"
+                end
+            end
             if u[texP .. "Alpha"] == nil then u[texP .. "Alpha"] = 1 end
             if u[texP .. "FollowFrameAlpha"] == nil then u[texP .. "FollowFrameAlpha"] = true end
             if u[texP .. "Strata"] == nil then u[texP .. "Strata"] = "AUTO" end
@@ -2852,6 +3033,13 @@ local function MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
             if u[texP .. "Anchor"] == nil then u[texP .. "Anchor"] = "TOP" end
             if u[texP .. "OffsetX"] == nil then u[texP .. "OffsetX"] = 0 end
             if u[texP .. "OffsetY"] == nil then u[texP .. "OffsetY"] = 0 end
+            if IS_CLASSIC_FAMILY then
+                if u[texP .. "ResponsiveSize"] == nil then u[texP .. "ResponsiveSize"] = false end
+                if u[texP .. "SizeMode"] == nil then
+                    u[texP .. "SizeMode"] = u[texP .. "ResponsiveSize"] == true and "FRAME" or "MANUAL"
+                end
+                if u[texP .. "EdgeAttach"] == nil then u[texP .. "EdgeAttach"] = "FREE" end
+            end
             if u[texP .. "Width"] == nil then u[texP .. "Width"] = 0 end
             if u[texP .. "Height"] == nil then u[texP .. "Height"] = 16 end
             if u[texP .. "ColorMode"] == nil then u[texP .. "ColorMode"] = "CUSTOM" end
@@ -3034,6 +3222,9 @@ local function MSUF_EnsureDB(force, allowPersistedFastPath)
     if force ~= true and MSUF_DB_LastHeavyRun == profile then return profile end
     MSUF_Defaults_MigrateDispelPriorityProfiles()
     MSUF_Defaults_MigrateGroupTooltipProfiles()
+    if IS_CLASSIC_FAMILY then
+        MSUF_Defaults_RepairSparseFactoryAuraOwnerProfiles()
+    end
     MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
     MSUF_DB_LastHeavyRun = profile
     return profile

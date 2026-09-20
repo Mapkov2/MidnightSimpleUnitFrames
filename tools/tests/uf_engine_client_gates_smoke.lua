@@ -142,6 +142,34 @@ if classic then
 else
     Check(refreshes == 0, "the Mainline PvP context driver must never recompile in combat")
 end
+
+-- Entering the world. PLAYER_ENTERING_WORLD carries no unit token: its first
+-- payload argument is isInitialLogin and its second is isReloadingUi, both
+-- booleans. The driver must take its forced refresh on both, and the forced
+-- one at the initial login especially: it is the only pass that seeds the PvP
+-- context before the first frame apply. Reading that boolean as a unit used to
+-- return from the Classic driver at exactly that login.
+for _, login in ipairs({ { true, false, "the initial login" }, { false, true, "a UI reload" },
+    { false, false, "a zone transition" } }) do
+    ResetPvP()
+    Context()
+    refreshes = 0
+    handler(driver, "PLAYER_ENTERING_WORLD", login[1], login[2])
+    Check(refreshes == 1, login[3] .. " (isInitialLogin = " .. tostring(login[1])
+        .. ", isReloadingUi = " .. tostring(login[2])
+        .. ") must force one PvP context refresh, counted " .. refreshes)
+end
+-- Every other event keeps its unit filter: only the player matters.
+if classic then
+    ResetPvP()
+    Context()
+    refreshes = 0
+    pvp.flagged = true
+    handler(driver, "UNIT_FACTION", "party1")
+    Check(refreshes == 0, "another unit's UNIT_FACTION must still be ignored")
+    handler(driver, "UNIT_FACTION", "player")
+    Check(refreshes == 1, "the player's own UNIT_FACTION must still recompile")
+end
 UF.RefreshElements = refreshElements
 ResetPvP()
 Context()

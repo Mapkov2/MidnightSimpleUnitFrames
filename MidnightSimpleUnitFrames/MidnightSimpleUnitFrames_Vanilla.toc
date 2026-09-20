@@ -71,7 +71,7 @@ State\MSUF_AuraDefaults.lua
 State\Defaults\MSUF_Defaults_Shell.lua
 State\Defaults\MSUF_Defaults_Bars.lua
 State\Defaults\MSUF_Defaults_Units.lua
-Game\Classic\State\MSUF_Defaults.lua
+State\MSUF_Defaults.lua
 Runtime\MSUF_NumberFormat.lua
 State\MSUF_ProfileCodec.lua
 State\MSUF_ProfileRuntime.lua

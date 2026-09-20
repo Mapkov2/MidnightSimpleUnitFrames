@@ -1087,6 +1087,15 @@ builders.RUNTIME = function(env)
     --- nil on Midnight.
     local AcceptPowerToken = env.AcceptPowerToken
 
+    --- Resolved once, on the Classic clients only: no Classic game type loads
+    --- a Blizzard call site for this entry point, so the Classic build must not
+    --- assume it and keeps the client decision off the render path.
+    local ClassicSpellMaxApplications
+    if IS_CLASSIC then
+        local maxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+        if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
+    end
+
     --- Resolve the visible segment count for the active render mode. This is
     --- intentionally separate from layout so rare max-power changes can be
     --- handled without a full ClassPower rebuild.
@@ -1100,12 +1109,18 @@ builders.RUNTIME = function(env)
             maxP = 6
         elseif mode == CPK.MODE.AURA_SINGLE then
             maxP = 1
-        elseif mode == CPK.MODE.CONTINUOUS or mode == CPK.MODE.STAGGER or mode == CPK.MODE.TIMER_BAR then
-            maxP = 1
+        elseif mode == CPK.MODE.CONTINUOUS or (IS_CLASSIC and mode == CPK.MODE.SIGNED_CONTINUOUS)
+            or mode == CPK.MODE.STAGGER or mode == CPK.MODE.TIMER_BAR then
+            maxP = 1  --- Mists Balance is one signed Eclipse bar (ResolveMaxPower).
         elseif mode == CPK.MODE.AURA_SEGMENTED then
             if powerType == "MAELSTROM_WEAPON" then
                 maxP = 10
-                local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
+                local spellMax
+                if not IS_CLASSIC then
+                    spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
+                elseif ClassicSpellMaxApplications then
+                    spellMax = ClassicSpellMaxApplications(CPK.SPELL.MAELSTROM_WEAPON)
+                end
                 if NotSecret(spellMax) and type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6

@@ -177,7 +177,8 @@ Contract("capability menus and defaults", function()
         "the Empowered Casts section must follow MSUF.Client.HasEmpoweredCasts (WoW Forever has no Evoker)")
     local defaults = Read(CORE .. "State/MSUF_Defaults.lua")
     assert(defaults:find('petHappinessSpec.statusPrefixes[#petHappinessSpec.statusPrefixes + 1] = "petHappinessIndicator"', 1, true)
-        and defaults:find("MSUF.Client.SupportsPetHappiness == true then\n    local petHappinessSpec", 1, true),
+        and defaults:find("(MSUF.Client.SupportsPetHappiness == true or IS_CLASSIC_FAMILY) then"
+            .. "\n    local petHappinessSpec", 1, true),
         "the Mainline Defaults must normalize the pet-happiness status keys where the client supports them")
 end)
 

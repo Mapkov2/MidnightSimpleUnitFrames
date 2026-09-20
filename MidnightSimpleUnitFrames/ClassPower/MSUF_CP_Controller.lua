@@ -102,6 +102,16 @@ if IS_CLASSIC then
     UnitPowerDisplayMod = ClientCP.UnitPowerDisplayMod or UnitPowerDisplayMod
 end
 
+--- Resolved once, on the Classic clients only: no Classic game type loads a
+--- Blizzard call site for this entry point, so the Classic build must not
+--- assume it and keeps the client decision off the refresh path. Midnight and
+--- WoW Forever keep the direct call below.
+local ClassicSpellMaxApplications
+if IS_CLASSIC then
+    local maxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+    if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
+end
+
 --- Cached split registries (load-time only; avoids repeated global table lookups
 --- and keeps the post-split core wiring easier to follow).
 
@@ -1381,7 +1391,12 @@ function Refresh.ResolveMaxPower(powerType, renderMode)
         if powerType == "MAELSTROM_WEAPON" then
             --- Maelstrom Weapon: max stacks from spell data
             maxP = 10  --- default
-            local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
+            local spellMax
+            if not IS_CLASSIC then
+                spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
+            elseif ClassicSpellMaxApplications then
+                spellMax = ClassicSpellMaxApplications(CPK.SPELL.MAELSTROM_WEAPON)
+            end
             if NotSecret(spellMax) and spellMax ~= nil then
                 local resolvedMax = tonumber(spellMax)
                 if resolvedMax and resolvedMax > 0 then maxP = resolvedMax end
@@ -1940,6 +1955,10 @@ local function CP_ShouldUseFrequentPowerEvents()
         end
     end
     return mode == CPK.MODE.CONTINUOUS
+        --- Mists Balance: the signed Eclipse bar is a continuous resource. The
+        --- Classic provider claims PT.Balance above, so this is the fallback for
+        --- a signed resource the provider does not decide.
+        or (IS_CLASSIC and mode == CPK.MODE.SIGNED_CONTINUOUS)
         or mode == CPK.MODE.FRACTIONAL
         or (mode == CPK.MODE.SEGMENTED and CP.powerType == PT.Essence)
         --- Target-owned combo points follow Blizzard's ComboFrame (UNIT_POWER_FREQUENT).

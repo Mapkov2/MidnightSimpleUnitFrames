@@ -17,6 +17,10 @@ end
 local function LoadUnitPage(client)
     local namespace = {
         Client = client,
+        -- The page binds the engine's frame reader at load, the way every
+        -- other Menu2 file does; in game MSUF.UF is published long before
+        -- the LoadOnDemand Options addon loads this page.
+        UF = { GetFrame = function() return nil end },
         ExportPublic = function() end,
         Translate = function(text) return text end,
         MSUF2 = { Widgets = {} },

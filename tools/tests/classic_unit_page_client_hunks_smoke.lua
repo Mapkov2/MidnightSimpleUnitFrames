@@ -36,6 +36,8 @@ local function Called(object, prefix)
 end
 
 local createdFrames, arenaApplies, atlasQueries = {}, 0, {}
+-- Every unit the page hands to the engine's frame reader (MSUF.UF.GetFrame).
+local coreFrameQueries = {}
 local function LoadClient(case)
     _G.WOW_PROJECT_MAINLINE, _G.WOW_PROJECT_CLASSIC = 1, 2
     _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC, _G.WOW_PROJECT_MISTS_CLASSIC = 5, 19
@@ -65,8 +67,10 @@ local function LoadPages(client)
         if atlas ~= "nameplates-icon-elite-silver" then return { width = 16, height = 16 } end
     end }
     _G.MSUF_ApplyArenaUnitframePreviewState = function() arenaApplies = arenaApplies + 1 end
-    -- No CoreFrame global: the page must not depend on one (see step 2).
+    -- No CoreFrame global exists in game either: the page reads the engine
+    -- through MSUF.UF.GetFrame below, never through a global (see step 2).
     _G.CoreFrame = nil
+    coreFrameQueries = {}
     -- arena4 is hidden: a five-slot client sees an incomplete preview, a three-slot one does not.
     for i = 1, 5 do
         _G["MSUF_arena" .. i] = Recorder()
@@ -75,7 +79,10 @@ local function LoadPages(client)
     _G.MSUF2_ArenaUnitframePreviewActive = nil
     local ns = {
         Client = client,
-        UF = { GetFrame = function() return nil end },
+        UF = { GetFrame = function(unit)
+            coreFrameQueries[#coreFrameQueries + 1] = tostring(unit)
+            return nil
+        end },
         ExportPublic = function() end,
         Translate = function(text) return text end,
         MSUF2 = {
@@ -121,13 +128,12 @@ end
 local HAPPINESS_LABELS = { "Unhappy - 75% damage", "Content - 100% damage", "Happy - 125% damage" }
 -- arenaSlots: the slots ArenaPreviewFramesVisible walks (Unit page ARENA_SLOTS).
 local CLIENTS = {
-    { name = "Vanilla", project = 2, tag = "Vanilla", classic = true, arenaTargets = 0, arenaSlots = 0, arenaResync = true, happiness = true },
-    { name = "TBC", project = 5, tag = "TBC", classic = true, arenaTargets = 5, arenaSlots = 5, arenaResync = true, happiness = true },
-    { name = "Mists", project = 19, tag = "Mists", classic = true, arenaTargets = 5, arenaSlots = 5, arenaResync = true, happiness = false },
-    { name = "Midnight", project = 1, classic = false, arenaTargets = 3, arenaSlots = 3, arenaResync = false, happiness = false },
-    { name = "Forever", project = 1, forever = true, classic = false, arenaTargets = 0, arenaSlots = 3, arenaResync = false, happiness = true },
+    { name = "Vanilla", coreFrameReads = 0, project = 2, tag = "Vanilla", classic = true, arenaTargets = 0, arenaSlots = 0, arenaResync = true, happiness = true },
+    { name = "TBC", coreFrameReads = 4, project = 5, tag = "TBC", classic = true, arenaTargets = 5, arenaSlots = 5, arenaResync = true, happiness = true },
+    { name = "Mists", coreFrameReads = 4, project = 19, tag = "Mists", classic = true, arenaTargets = 5, arenaSlots = 5, arenaResync = true, happiness = false },
+    { name = "Midnight", coreFrameReads = 3, project = 1, classic = false, arenaTargets = 3, arenaSlots = 3, arenaResync = false, happiness = false },
+    { name = "Forever", coreFrameReads = 3, project = 1, forever = true, classic = false, arenaTargets = 0, arenaSlots = 3, arenaResync = false, happiness = true },
 }
-local knownDefectClients = {}
 for _, case in ipairs(CLIENTS) do
     local client = LoadClient(case)
     Check((client.Family == "Classic") == case.classic, case.name .. ": client family")
@@ -144,28 +150,25 @@ for _, case in ipairs(CLIENTS) do
         case.name .. ": Aura Copy To Arena reached " .. reached .. " arena slots, expected " .. case.arenaTargets)
 
     -- 2. The Arena page preview re-syncs when a fielded slot is not shown.
-    -- KNOWN DEFECT, left alone with the owner-deferred arena work: the repeat
-    -- request reaches ArenaPreviewFramesVisible, which calls the global
-    -- CoreFrame that no addon or Blizzard file defines (the other Menu2 files
-    -- bind local CoreFrame = MSUF.UF.GetFrame). Every client that fields an
-    -- arena slot raises there. This pin keeps the defect visible instead of
-    -- stubbing it away; whoever fixes it deletes the pin and the stand-in below.
+    -- The repeat request reaches ArenaPreviewFramesVisible, which asks the
+    -- engine for every arena slot it walks. This page used to call a global
+    -- CoreFrame that nothing defines, so the re-check raised on every client
+    -- with an arena slot; it now binds MSUF.UF.GetFrame like the other Menu2
+    -- files, and that reader must really be the one it asks.
     arenaApplies = 0
     page.SetArenaPagePreviewActive(true)
     local afterActivate = arenaApplies
+    coreFrameQueries = {}
     local repeated, repeatError = pcall(page.SetArenaPagePreviewActive, true)
-    if case.arenaSlots > 0 then
-        Check(not repeated and tostring(repeatError):find("global 'CoreFrame'", 1, true),
-            case.name .. ": the Arena page preview's CoreFrame defect changed (" .. tostring(repeatError)
-                .. "); if it is fixed, drop this known-defect pin and the stand-in")
-        knownDefectClients[#knownDefectClients + 1] = case.name
-        -- Stand-in for the missing local binding, only so the slot count is
-        -- still checked past the defect; MSUF.UF.GetFrame answers nil here too.
-        _G.CoreFrame = function() return nil end
-        page.SetArenaPagePreviewActive(true)
-        _G.CoreFrame = nil
-    else
-        Check(repeated, case.name .. ": the Arena page preview fails without arena slots: " .. tostring(repeatError))
+    Check(repeated, case.name .. ": the Arena page preview re-check raised: " .. tostring(repeatError)
+        .. "; Pages/MSUF_Menu2_Unit.lua must bind CoreFrame = MSUF.UF.GetFrame")
+    Check(#coreFrameQueries == case.coreFrameReads,
+        case.name .. ": the re-check asked the engine for " .. #coreFrameQueries
+            .. " arena slots, expected " .. case.coreFrameReads)
+    for index = 1, #coreFrameQueries do
+        Check(coreFrameQueries[index] == "arena" .. index,
+            case.name .. ": the re-check asked the engine for " .. coreFrameQueries[index]
+                .. " where arena" .. index .. " was due")
     end
     Check((arenaApplies > afterActivate) == case.arenaResync,
         case.name .. ": Arena page preview " .. (case.arenaResync and "must" or "must not")
@@ -212,5 +215,4 @@ for _, case in ipairs(CLIENTS) do
         case.name .. ": GetAtlasInfo must be asked on Classic only, asked " .. #atlasQueries .. " times")
 end
 
-print("classic_unit_page_client_hunks_smoke: ok (" .. #CLIENTS .. " clients; known defect, undefined CoreFrame in the Arena page preview re-check on "
-    .. table.concat(knownDefectClients, ", ") .. ")")
+print("classic_unit_page_client_hunks_smoke: ok (" .. #CLIENTS .. " clients)")
