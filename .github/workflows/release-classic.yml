@@ -23,6 +23,7 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       release_name: ${{ steps.release.outputs.release_name }}
       release_type: ${{ steps.release.outputs.release_type }}
+      publish_wago: ${{ steps.release.outputs.publish_wago }}
 
     steps:
       - name: Check out Classic release tag
@@ -64,6 +65,15 @@ jobs:
 
           $releaseName = $release.DisplayName
           $releaseType = $release.ReleaseType
+
+          $tagMessage = (git for-each-ref --format='%(contents)' "refs/tags/$tag") -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "Could not read Classic release tag metadata." }
+          $targets = [regex]::Matches($tagMessage, '(?m)^publish-target:\s*([^\r\n]+)')
+          $publishTarget = "all"
+          if ($targets.Count -gt 1) { throw "Duplicate publish-target metadata." }
+          if ($targets.Count -eq 1) { $publishTarget = $targets[0].Groups[1].Value.Trim() }
+          if ($publishTarget -cnotin @("all", "curseforge")) { throw "Unsupported publish-target: $publishTarget" }
+          "publish_wago=$($publishTarget -ceq 'all')".ToLowerInvariant() >> $env:GITHUB_OUTPUT
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
@@ -134,7 +144,7 @@ jobs:
       CLASSIC_RELEASE_TYPE: ${{ needs.preflight.outputs.release_type }}
       # Presence only, never the token: the Wago upload step is the single step
       # that is handed WAGO_API_TOKEN, and a step `if:` cannot read `secrets`.
-      WAGO_UPLOAD_ENABLED: ${{ secrets.WAGO_API_TOKEN != '' }}
+      WAGO_UPLOAD_ENABLED: ${{ needs.preflight.outputs.publish_wago == 'true' && secrets.WAGO_API_TOKEN != '' }}
 
     steps:
       - name: Check out Classic release tag
