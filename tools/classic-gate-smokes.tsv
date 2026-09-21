@@ -47,7 +47,7 @@ clients+Forever	lua	tools/tests/forever_spec_profile_smoke.lua	{root} {flavor}	F
 clients	lua	tools/tests/classic_shared_definitions_smoke.lua	{root} {flavor}	Shared aura definitions failed: {flavor}
 -	lua+driver	tools/tests/classic_profile_60_only_smoke.lua	{root/}	Classic 6.0-only profile policy smoke failed
 clients	lua+driver	tools/tests/classic_profile_cross_flavor_smoke.lua	{flavor} {root/}	Cross-flavor profile smoke failed: {flavor}
-clients*codecs	lua+driver	tools/tests/classic_profile_import_transaction_smoke.lua	{flavor} {codec} {root/}	Profile import transaction smoke failed: {flavor} {codec}
+clients+Forever*codecs	lua+driver	tools/tests/classic_profile_import_transaction_smoke.lua	{flavor} {codec} {root/}	Profile import transaction smoke failed: {flavor} {codec}
 -	lua+driver	tools/tests/classic_class_resources_smoke.lua	{root/}	Classic class-resource ownership smoke failed
 -	lua	tools/tests/classic_texture_layer_contract_smoke.lua	{root}	Texture Layer menu contract failed
 -	lua	tools/tests/search_client_row_filter_smoke.lua	{root}	Search client row filter smoke failed

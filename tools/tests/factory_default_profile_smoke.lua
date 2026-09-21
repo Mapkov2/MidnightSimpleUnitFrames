@@ -227,5 +227,60 @@ MSUF_DB, MSUF_ActiveProfile = MSUF_GlobalDB.profiles.Marked, "Marked"
 MSUF_EnsureDB(true)
 Check(decodes == 0 and MSUF_DB.general.someUserSetting == true, "a profile with a user setting counted as fresh")
 
+-- Selected frames must survive the real Defaults/GroupFrames normalization pass.
+do
+    local function Equal(a, b)
+        if type(a) ~= type(b) then return false end
+        if type(a) ~= "table" then return a == b end
+        for k, v in pairs(a) do if not Equal(v, b[k]) then return false end end
+        for k in pairs(b) do if a[k] == nil then return false end end
+        return true
+    end
+    local factoryDecoder = MSUF_TryDecodeCompactString
+    local encoded
+    MSUF_EncodeCompactTable = function(snapshot) encoded = CopyTable(snapshot); return "selected-frames" end
+    MSUF_TryDecodeCompactString = function(text)
+        if text == "selected-frames" then return CopyTable(encoded) end
+        return factoryDecoder(text)
+    end
+    MSUF_DB, MSUF_ActiveProfile = second, "Second"
+    second.target.width = 333
+    second.target.showName = false
+    second.general.castbarTargetWidth = 333
+    second.auras3.perUnit.target.layoutShared.maxDebuffs = 7
+    second.auras3.perUnit.target.layout.debuffGroupIconSize = 27
+    Check(MSUF_ExportSelectionToString("unitselection", { target = true }) == "selected-frames",
+        "real-default selected export failed")
+    MSUF_DB, MSUF_ActiveProfile = MSUF_GlobalDB.profiles.Marked, "Marked"
+    MSUF_EnsureDB(true)
+    ns.GF.EnsureDB()
+    -- Settle the same alpha/default owners as the normal full export path.
+    local targetExport = CopyTable(encoded)
+    MSUF_ExportSelectionToString("unitframe")
+    encoded = targetExport
+    local before = CopyTable(MSUF_DB)
+    Check(MSUF_ImportFromString("selected-frames") == true, "real-default selected import failed")
+    Check(MSUF_DB.target.width == 333 and MSUF_DB.target.showName == false
+        and MSUF_DB.general.castbarTargetWidth == 333, "real defaults lost selected-frame settings")
+    Check(MSUF_DB.auras3.perUnit.target.layoutShared.maxDebuffs == 7
+        and MSUF_DB.auras3.perUnit.target.layout.debuffGroupIconSize == 27,
+        "real defaults reset selected-frame auras")
+    for key, value in pairs(before) do
+        if key ~= "target" and key ~= "general" and key ~= "bars" and key ~= "auras3" then
+            Check(Equal(value, MSUF_DB[key]), "real-default import changed unrelated root: " .. key)
+        end
+    end
+    for key, value in pairs(before.auras3) do
+        if key ~= "showTarget" and key ~= "perUnit" then
+            Check(Equal(value, MSUF_DB.auras3[key]), "real-default import changed shared auras: " .. key)
+        end
+    end
+    for key, value in pairs(before.auras3.perUnit) do
+        if key ~= "target" then
+            Check(Equal(value, MSUF_DB.auras3.perUnit[key]), "real-default import changed another aura scope: " .. key)
+        end
+    end
+end
+
 print = realPrint
 print("PASS factory default profile (" .. flavor .. "): one string, first login, reset and new profile all start from it")

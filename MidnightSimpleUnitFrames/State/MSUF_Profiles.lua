@@ -2763,10 +2763,158 @@ ExportPublic("MSUF_Profiles_SetImportBlizzardEditMode", function(value)
     MSUF_ProfileIO_ImportBlizzardEM = value == true
 end)
 
-local function MSUF_SnapshotForKind(kind)
+-- Selected-frame snapshots have a separate kind so older importers reject them
+-- instead of treating them as the broad Unitframes category (which resets globals).
+-- Only explicitly owned settings cross this boundary; shared appearance stays local.
+local UnitSelection = {
+    units = { player = true, target = true, targettarget = true, focustarget = true,
+        focus = true, pet = true, boss = true, arena = true },
+    auraFlags = { showPlayer = "player", showTarget = "target", showFocus = "focus",
+        showBoss = "boss", showArena = "arena" },
+    barKeys = { showPlayerPowerBar = "player", showTargetPowerBar = "target",
+        showFocusPowerBar = "focus", showBossPowerBar = "boss", showArenaPowerBar = "arena" },
+}
+function UnitSelection.Supported(unit)
+    return UnitSelection.units[unit] == true
+        and (not MSUF.Client or not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(unit))
+end
+function UnitSelection.GeneralOwner(key)
+    if type(key) ~= "string" then return nil end
+    for _, unit in ipairs({ "player", "target", "focus", "boss", "arena" }) do
+        local title = unit:sub(1, 1):upper() .. unit:sub(2)
+        if key:sub(1, #unit + 7) == "castbar" .. title
+            or key:sub(1, #unit + 7) == unit .. "Castbar"
+            or key:sub(1, #unit + 8) == "show" .. title .. "Cast"
+            or key == "enable" .. title .. "Castbar"
+            or ((unit == "boss" or unit == "arena") and key:sub(1, #unit + 4) == unit .. "Cast") then
+            return unit
+        end
+    end
+    if key == "castbarOpositeDirectionTarget" then return "target" end
+    if key == "_msufBossCastbarPhysicalEdgeAnchor_v1" then return "boss" end
+end
+function UnitSelection.AuraOwner(key)
+    if key == "player" or key == "target" or key == "focus" then return key end
+    if type(key) == "string" then
+        if key:match("^boss[1-5]$") then return "boss" end
+        if key:match("^arena[1-5]$") then return "arena" end
+    end
+end
+function UnitSelection.ReplaceTable(parent, key, source)
+    if type(parent[key]) ~= "table" then parent[key] = {} end
+    MSUF_WipeTable(parent[key])
+    for k, v in pairs(source) do parent[key][k] = MSUF_DeepCopy(v) end
+end
+function UnitSelection.Copy(profile, selected)
+    local payload = {}
+    for unit in pairs(UnitSelection.units) do
+        if selected[unit] == true then
+            payload[unit] = MSUF_DeepCopy(profile[unit] or {})
+        end
+    end
+    for _, spec in ipairs({ { "general", UnitSelection.GeneralOwner },
+        { "bars", function(key) return UnitSelection.barKeys[key] end } }) do
+        local out = {}
+        for key, value in pairs(profile[spec[1]] or {}) do
+            local owner = spec[2](key)
+            if owner and selected[owner] then out[key] = MSUF_DeepCopy(value) end
+        end
+        payload[spec[1]] = out
+    end
+    local auras = profile.auras3 or {}
+    local out = { perUnit = {} }
+    for flag, unit in pairs(UnitSelection.auraFlags) do
+        if selected[unit] then
+            out[flag] = auras[flag] == true
+            local count = (unit == "boss" or unit == "arena") and 5 or 1
+            for i = 1, count do
+                local key = count == 1 and unit or unit .. i
+                out.perUnit[key] = MSUF_DeepCopy(auras.perUnit and auras.perUnit[key] or {})
+            end
+        end
+    end
+    if next(out.perUnit) then payload.auras3 = out end
+    return payload
+end
+function UnitSelection.Validate(payload)
+    local selected = {}
+    for key, value in pairs(payload) do
+        if UnitSelection.units[key] then
+            if not UnitSelection.Supported(key) then return nil, "unsupported unitframe: " .. key end
+            if type(value) ~= "table" then return nil, "invalid unitframe: " .. key end
+            selected[key] = true
+        elseif key ~= "general" and key ~= "bars" and key ~= "auras3" then
+            return nil, "unexpected selected-frame setting: " .. tostring(key)
+        elseif type(value) ~= "table" then
+            return nil, "invalid selected-frame settings: " .. key
+        end
+    end
+    if not next(selected) then return nil, "select at least one unitframe" end
+    for _, spec in ipairs({ { "general", UnitSelection.GeneralOwner },
+        { "bars", function(key) return UnitSelection.barKeys[key] end } }) do
+        for key in pairs(payload[spec[1]] or {}) do
+            local owner = spec[2](key)
+            if not owner or not selected[owner] then
+                return nil, "setting outside selected unitframes: " .. tostring(key)
+            end
+        end
+    end
+    for key, value in pairs(payload.auras3 or {}) do
+        if key == "perUnit" and type(value) == "table" then
+            for unit, conf in pairs(value) do
+                local owner = UnitSelection.AuraOwner(unit)
+                if not owner or not selected[owner] or type(conf) ~= "table" then
+                    return nil, "aura settings outside selected unitframes: " .. tostring(unit)
+                end
+            end
+        elseif not UnitSelection.auraFlags[key] or not selected[UnitSelection.auraFlags[key]]
+            or type(value) ~= "boolean" then
+            return nil, "unexpected selected-frame aura setting: " .. tostring(key)
+        end
+    end
+    return selected
+end
+function UnitSelection.Commit(payload, selected, db)
+    for unit in pairs(selected) do UnitSelection.ReplaceTable(db, unit, payload[unit]) end
+    for _, spec in ipairs({ { "general", UnitSelection.GeneralOwner },
+        { "bars", function(key) return UnitSelection.barKeys[key] end } }) do
+        local root = spec[1]
+        if type(db[root]) ~= "table" then db[root] = {} end
+        for key in pairs(db[root]) do
+            local owner = spec[2](key)
+            if owner and selected[owner] then db[root][key] = nil end
+        end
+        for key, value in pairs(payload[root] or {}) do db[root][key] = MSUF_DeepCopy(value) end
+    end
+    if payload.auras3 then
+        if type(db.auras3) ~= "table" then db.auras3 = {} end
+        local auras = db.auras3
+        if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
+        for key, value in pairs(payload.auras3) do
+            if key == "perUnit" then
+                for unit, conf in pairs(value) do UnitSelection.ReplaceTable(auras.perUnit, unit, conf) end
+            else
+                auras[key] = value
+            end
+        end
+    end
+end
+
+local function MSUF_SnapshotForKind(kind, selectedUnits)
     MSUF_ProfileIO_EnsureCompleteProfileDB()
     local payload = {}
-    if kind == "unitframe" then
+    if kind == "unitselection" then
+        if type(selectedUnits) ~= "table" then return nil end
+        local selected = {}
+        for unit, enabled in pairs(selectedUnits) do
+            if enabled == true then
+                if not UnitSelection.Supported(unit) then return nil end
+                selected[unit] = true
+            end
+        end
+        if not next(selected) then return nil end
+        payload = UnitSelection.Copy(MSUF_DB, selected)
+    elseif kind == "unitframe" then
         --- Everything EXCEPT: gameplay, colors, castbars
         for k, v in pairs(MSUF_DB or {}) do
             if k == "general" then
@@ -3091,7 +3239,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
         if kind == "groupframes" then
             kind = "groupframe"
         end
-        if kind ~= "unitframe" and kind ~= "groupframe" and kind ~= "castbar"
+        if kind ~= "unitselection" and kind ~= "unitframe" and kind ~= "groupframe" and kind ~= "castbar"
             and kind ~= "colors" and kind ~= "gameplay" and kind ~= "all" then
             return nil, "unknown kind", "|cffff0000MSUF:|r Import failed: unknown kind"
         end
@@ -3102,6 +3250,30 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     end
     plan.kind = kind
     local payload = plan.payload
+    if kind == "unitselection" then
+        local selectedUnits, selectionError = UnitSelection.Validate(payload)
+        if not selectedUnits then
+            return nil, selectionError, "|cffff0000MSUF:|r Import failed: " .. selectionError .. "."
+        end
+        -- Normalize untrusted frame data, then project it back onto its explicit
+        -- owners. Normalizers may seed shared defaults; those must never travel.
+        -- A selected aura scope is already the current per-unit model. It has no
+        -- global model marker, so never feed it to the full-profile aura resetter.
+        local selectedAuras = payload.auras3
+        payload.auras3 = nil
+        MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
+            source = "unitselection_import", markProfile = false, createGeneral = false,
+        })
+        payload.auras3 = selectedAuras
+        for _, conf in pairs(selectedAuras and selectedAuras.perUnit or {}) do
+            StateHelpers.NormalizeAuraLayoutTable(conf.layout, StateHelpers.ProfileIOSpec)
+            StateHelpers.NormalizeAuraLayoutTable(conf.layoutShared, StateHelpers.ProfileIOSpec)
+        end
+        plan.payload = UnitSelection.Copy(payload, selectedUnits)
+        plan.selectedUnits = selectedUnits
+        MSUF_ProfileIO_CollectProfileMediaWarnings(plan.payload)
+        return plan
+    end
     if mode == "external" then
         MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
             source = "external_import",
@@ -3171,7 +3343,7 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
         return true
     end
-    MSUF_ProfileIO_RunEnsureDB()
+    if kind ~= "unitselection" then MSUF_ProfileIO_RunEnsureDB() end
 
     --- Always keep the profile-table reference stable (important!).
     --- Do not replace MSUF_DB with a new table here. Runtime modules keep
@@ -3179,7 +3351,16 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     if type(MSUF_DB) ~= "table" then
         MSUF_DB = {}
     end
-    if kind == "unitframe" then
+    if kind == "unitselection" then
+        -- Defaults can migrate unrelated categories. Repair a private candidate,
+        -- then commit only the selected owners back to the stable live table.
+        local candidate = MSUF_DeepCopy(MSUF_DB)
+        UnitSelection.Commit(payload, plan.selectedUnits, candidate)
+        _G.MSUF_NormalizeProfileDefaults(candidate, true)
+        MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
+        payload = UnitSelection.Copy(candidate, plan.selectedUnits)
+        UnitSelection.Commit(payload, plan.selectedUnits, MSUF_DB)
+    elseif kind == "unitframe" then
         --- Wipe & replace the same general-key set that Unitframes export.
         MSUF_WipeGeneralSubset(MSUF_IsUnitframeGeneralKey)
         if type(payload.general) == "table" then
@@ -3299,8 +3480,10 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
-    MSUF_ProfileIO_RunEnsureDB(true)
-    MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+    if kind ~= "unitselection" then
+        MSUF_ProfileIO_RunEnsureDB(true)
+        MSUF_ProfileIO_EnsureUnitframeAlphaDB()
+    end
     MSUF_ProfileIO_PostImportApply_Auras(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
@@ -3313,8 +3496,8 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     MSUF.ProfileIOCompleteFirstLoadImport()
      return true
 end
-function MSUF_ExportSelectionToString(kind)
-    local snap = MSUF_SnapshotForKind(kind)
+function MSUF_ExportSelectionToString(kind, selectedUnits)
+    local snap = MSUF_SnapshotForKind(kind, selectedUnits)
     if not snap then return nil end
     local exportSnap, wagoExport = MSUF_ProfileIO_MakeWagoSnapshot(snap)
     if wagoExport then

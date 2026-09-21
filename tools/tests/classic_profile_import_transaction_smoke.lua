@@ -1,7 +1,7 @@
 -- Profile import transaction smoke.
 --
 -- Runs once per client flavor and native codec mode through the aura test driver:
---   lua .github/scripts/auras3_test_driver.lua tools/tests/classic_profile_import_transaction_smoke.lua <Mainline|Vanilla|Mists|TBC> <raise|nil> <repo root>
+--   lua .github/scripts/auras3_test_driver.lua tools/tests/classic_profile_import_transaction_smoke.lua <Mainline|Vanilla|Mists|TBC|Forever> <raise|nil> <repo root>
 --
 -- Every import entry point (MSUF_ImportFromString, MSUF_ImportIntoNewProfile,
 -- MSUF_ImportExternal and the Menu2 profiles page import controls) must decode,
@@ -9,7 +9,7 @@
 -- A rejected string leaves MSUF_GlobalDB byte-identical. The C_EncodingUtil stubs
 -- reject malformed input by returning nil in "nil" mode and by raising in "raise"
 -- mode; a raise may surface as a Lua error, but never after a write.
-local flavor = assert(arg[1], "client flavor required (Mainline|Vanilla|Mists|TBC)")
+local flavor = assert(arg[1], "client flavor required (Mainline|Vanilla|Mists|TBC|Forever)")
 local codecMode = assert(arg[2], "codec mode required (raise|nil)")
 local repo = assert(arg[3], "repository root is required")
 assert(codecMode == "raise" or codecMode == "nil", "unknown codec mode: " .. tostring(codecMode))
@@ -21,12 +21,15 @@ WOW_PROJECT_MISTS_CLASSIC = 19
 
 local specs = {
     Mainline = { project = WOW_PROJECT_MAINLINE, interface = 120105, classic = false },
+    Forever = { project = WOW_PROJECT_MAINLINE, interface = 16001, classic = false },
     Vanilla = { project = WOW_PROJECT_CLASSIC, interface = 11509, tag = "Vanilla", classic = true },
     Mists = { project = WOW_PROJECT_MISTS_CLASSIC, interface = 50504, tag = "Mists", classic = true },
     TBC = { project = WOW_PROJECT_BURNING_CRUSADE_CLASSIC, interface = 20506, tag = "TBC", classic = true },
 }
 local spec = assert(specs[flavor], "unknown flavor: " .. tostring(flavor))
 WOW_PROJECT_ID = spec.project
+if flavor == "Forever" then GameEvent = { RegisterCamelotEvents = function() end } end
+local manifestFlavor = flavor == "Forever" and "Mainline" or flavor
 
 C_AddOns = {
     GetAddOnMetadata = function(_, key)
@@ -221,8 +224,8 @@ local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
 local namespace = {}
 local providers = { "Game/Shared/Initialize.lua" }
 if spec.classic then providers[#providers + 1] = "Game/Classic/Initialize.lua" end
-manifest.LoadSelected(repo, flavor, namespace, providers)
-Check(namespace.Client.Flavor == flavor, "client detection reported " .. tostring(namespace.Client.Flavor))
+manifest.LoadSelected(repo, manifestFlavor, namespace, providers)
+Check(namespace.Client.Flavor == manifestFlavor, "client detection reported " .. tostring(namespace.Client.Flavor))
 
 -- Stub: the Kernel bootstrap owns ExportPublic; this smoke loads no Kernel UI.
 function namespace.ExportPublic(name, value)
@@ -232,7 +235,7 @@ function namespace.ExportPublic(name, value)
     return value
 end
 
-manifest.LoadSelected(repo, flavor, namespace, {
+manifest.LoadSelected(repo, manifestFlavor, namespace, {
     "State/MSUF_FirstLoad.lua",
     "Kernel/MSUF_Require.lua",
     "State/MSUF_StateHelpers.lua",
@@ -241,6 +244,7 @@ manifest.LoadSelected(repo, flavor, namespace, {
 
 -- Stub: State/MSUF_Defaults.lua owns MSUF_EnsureDB and the factory profile.
 function MSUF_EnsureDB() end
+function MSUF_NormalizeProfileDefaults(profile) return profile end
 function MSUF_CreateFactoryDefaultProfile()
     return { _msufProfileSchema = 600, general = { marker = "factory" } }
 end
@@ -299,6 +303,13 @@ local W = Stub({
     Text = function() return Stub() end,
 })
 local M = {
+    ValueTextList = function(...)
+        local out = {}
+        for i = 1, select("#", ...), 2 do
+            out[#out + 1] = { value = select(i, ...), text = select(i + 1, ...) }
+        end
+        return out
+    end,
     Widgets = W,
     Theme = T,
     AdvancedPage = { RegisterControl = Noop, ControlMeta = function() return {} end },
@@ -311,6 +322,7 @@ local M = {
     TrackRefresh = Noop,
     RegisterPage = Noop,
 }
+M.SetMenuStateValue = function(key, value) M[key] = value end
 CreateFrame = function() return Stub() end
 
 local pagePath = repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua"
@@ -318,7 +330,7 @@ local pageSource = MSUF_Auras3TestLoader.ReadSource(pagePath)
 Check(pageSource:find("function ProfilesPage.ImportActions(state)", 1, true) ~= nil,
     "profiles page no longer defines ProfilesPage.ImportActions(state)")
 local pageChunk = assert(loadstring(pageSource .. "\nreturn ProfilesPage", "@" .. pagePath))
-local ProfilesPage = pageChunk("MidnightSimpleUnitFrames_Options", { MSUF2 = M })
+local ProfilesPage = pageChunk("MidnightSimpleUnitFrames_Options", { MSUF2 = M, Client = namespace.Client })
 
 local blobText, nameText = "", "Fresh"
 local importClick, committed
@@ -655,6 +667,145 @@ do
     ok, _, stage = MSUF_ImportIntoNewProfile("Other", fullExport)
     Check(ok == false and stage == "exists", "existing new-profile name was not rejected")
     ExpectUntouched("name guards", before)
+end
+
+-- (5) Frame selections round-trip without changing another frame or shared settings.
+do
+    NewSavedVariables()
+    MSUF_DB.player = { width = 211, offsetX = -120, portraitMode = "3D" }
+    MSUF_DB.target = { width = 233, offsetX = 120, showName = false }
+    MSUF_DB.pet = { width = 155 }
+    MSUF_DB.general.castbarPlayerWidth = 211
+    MSUF_DB.general.castbarTargetWidth = 233
+    MSUF_DB.general.showTargetCastTime = false
+    MSUF_DB.general.castbarFocusWidth = 177
+    MSUF_DB.general.fontKey = "source-font"
+    MSUF_DB.bars = { showTargetPowerBar = false, powerBarHeight = 11 }
+    MSUF_DB.auras3 = { enabled = true, showPlayer = true, showTarget = true,
+        shared = { iconSize = 31 }, perUnit = {
+            player = { layout = { buffGroupIconSize = 23 } },
+            target = { layout = { debuffGroupIconSize = 29 }, filters = { marker = "source-target" } },
+            focus = { layout = { iconSize = 55 } },
+        } }
+    local selected = { player = true, target = true }
+    local text = MSUF_ExportSelectionToString("unitselection", selected)
+    Check(type(text) == "string", "selected frames failed to export")
+    local snapshot = MSUF_TryDecodeCompactString(text)
+    Check(snapshot.kind == "unitselection", "selected frames used a broad import kind")
+    Check(snapshot.payload.player.width == 211 and snapshot.payload.target.width == 233, "selection lost a frame")
+    Check(snapshot.payload.pet == nil and snapshot.payload.gf_party == nil, "selection exported another frame")
+    Check(snapshot.payload.general.fontKey == nil and snapshot.payload.general.castbarFocusWidth == nil,
+        "selection exported shared or foreign settings")
+    Check(snapshot.payload.bars.powerBarHeight == nil and snapshot.payload.auras3.shared == nil
+        and snapshot.payload.auras3.perUnit.focus == nil, "selection exported shared or foreign aura/bar settings")
+    Check(MSUF_ExportSelectionToString("unitselection", {}) == nil, "empty selection exported")
+    Check(MSUF_ExportSelectionToString("unitselection", { typo = true }) == nil, "unknown frame exported")
+
+    NewSavedVariables()
+    MSUF_DB.pet = { width = 91, marker = "keep-pet" }
+    MSUF_DB.focus = { width = 92, marker = "keep-focus" }
+    MSUF_DB.gf_party = { marker = "keep-party" }
+    MSUF_DB.classColors = { marker = "keep-colors" }
+    MSUF_DB.gameplay = { marker = "keep-gameplay" }
+    MSUF_DB.general.fontKey = "local-font"
+    MSUF_DB.general.castbarFocusWidth = 999
+    MSUF_DB.general.castbarTargetStaleOverride = true
+    MSUF_DB.general.showTargetCastTime = true
+    MSUF_DB.bars = { powerBarHeight = 7, showPlayerPowerBar = true, showFocusPowerBar = false }
+    MSUF_DB.auras3 = { enabled = true, showPlayer = false, showTarget = false, showFocus = true,
+        shared = { iconSize = 17 }, perUnit = {
+            target = { stale = true }, focus = { marker = "keep-focus-auras" },
+        } }
+    -- Settle the existing alpha defaults, which every import historically ensures.
+    MSUF_ExportSelectionToString("all")
+    local keep = { pet = Literal(MSUF_DB.pet), focus = Literal(MSUF_DB.focus),
+        party = Literal(MSUF_DB.gf_party), auraFocus = Literal(MSUF_DB.auras3.perUnit.focus),
+        shared = Literal(MSUF_DB.auras3.shared) }
+    local active = MSUF_DB
+    Check(PageImport(text, false) == true, "page could not import selected frames")
+    Check(rawequal(active, MSUF_DB), "selected import replaced active profile")
+    Check(MSUF_DB.player.width == 211 and MSUF_DB.target.width == 233, "selected frames not imported")
+    Check(MSUF_DB.general.castbarTargetWidth == 233 and MSUF_DB.general.showTargetCastTime == false
+        and MSUF_DB.general.castbarTargetStaleOverride == nil, "selected castbar not replaced")
+    Check(MSUF_DB.general.fontKey == "local-font" and MSUF_DB.general.castbarFocusWidth == 999,
+        "selected import changed shared appearance or another castbar")
+    Check(MSUF_DB.bars.powerBarHeight == 7 and MSUF_DB.bars.showFocusPowerBar == false
+        and MSUF_DB.bars.showTargetPowerBar == false, "selected import changed unrelated bar settings")
+    Check(keep.pet == Literal(MSUF_DB.pet) and keep.focus == Literal(MSUF_DB.focus)
+        and keep.party == Literal(MSUF_DB.gf_party), "selected import changed unselected frames")
+    Check(keep.auraFocus == Literal(MSUF_DB.auras3.perUnit.focus)
+        and keep.shared == Literal(MSUF_DB.auras3.shared), "selected import changed unrelated aura settings")
+    Check(MSUF_DB.auras3.showTarget == true and MSUF_DB.auras3.perUnit.target.stale == nil,
+        "selected aura settings were not replaced")
+    Check(MSUF_DB.gameplay.marker == "keep-gameplay" and MSUF_DB.classColors.marker == "keep-colors",
+        "selected import changed another category")
+    local beforeNew = Literal(MSUF_DB)
+    Check(MSUF_ImportIntoNewProfile("Selected copy", text) == true, "new profile rejected selected frames")
+    Check(beforeNew == Literal(MSUF_GlobalDB.profiles.Default), "selected new profile changed original")
+    Check(MSUF_DB.target.width == 233, "new selected profile lost its frame")
+
+    -- Reject out-of-scope payloads before either current or new-profile writes.
+    for _, payload in ipairs({
+        {}, { target = 12 }, { target = {}, general = { fontKey = "bad" } },
+        { target = {}, general = { castbarFocusWidth = 555 } },
+        { target = {}, gf_party = {} }, { target = {}, bars = { powerBarHeight = 22 } },
+        { target = {}, auras3 = { shared = {} } },
+        { target = {}, auras3 = { perUnit = { focus = {} } } },
+        { target = {}, auras3 = { perUnit = "bad" } },
+        { target = {}, auras3 = { showPlayer = true } },
+    }) do
+        local bad = MSUF_EncodeCompactTable({ addon = "MSUF", fmt = 2, schema = 600,
+            kind = "unitselection", payload = payload })
+        local before = Capture()
+        Check(MSUF_ImportFromString(bad) == false, "out-of-scope selection accepted")
+        Check(MSUF_ImportIntoNewProfile("Rejected selection", bad) == false, "bad selection created a profile")
+        ExpectUntouched("rejected unit selection", before)
+    end
+    for _, unit in ipairs({ "focus", "focustarget", "boss", "arena", "pet", "targettarget" }) do
+        local supported = namespace.Client.SupportsUnit(unit)
+        local exported = MSUF_ExportSelectionToString("unitselection", { [unit] = true })
+        Check((type(exported) == "string") == supported, "selection ignored client support for " .. unit)
+        if supported then
+            Check(MSUF_ImportFromString(exported) == true, "supported frame failed import: " .. unit)
+        else
+            local bad = MSUF_EncodeCompactTable({ addon = "MSUF", fmt = 2, schema = 600,
+                kind = "unitselection", payload = { [unit] = {} } })
+            local before = Capture()
+            Check(MSUF_ImportFromString(bad) == false, "unsupported frame imported: " .. unit)
+            ExpectUntouched("unsupported frame", before)
+        end
+    end
+end
+
+-- (6) The live page builds supported checkboxes and forwards their selection.
+do
+    local toggles = {}
+    W.SwitchAt = function(_, label)
+        local toggle = Stub({ checked = false })
+        function toggle:SetChecked(value) self.checked = value end
+        function toggle:GetChecked() return self.checked end
+        function toggle:SetScript(event, handler) self[event] = handler end
+        toggles[label] = toggle
+        return toggle
+    end
+    local pageState = { ctx = {}, contentW = 760, b = {
+        CollapsibleSection = function(_, key) Check(key == "profiles_unit_selection", "wrong selection section"); return Stub() end,
+    } }
+    ProfilesPage.UnitSelection(pageState)
+    Check(toggles.Player and toggles.Player.checked and toggles.Target and not toggles.Target.checked,
+        "selection default did not select Player only")
+    for label, unit in pairs({ Focus = "focus", ["Focus Target"] = "focustarget", ["Boss Frames"] = "boss", ["Arena Frames"] = "arena" }) do
+        Check((toggles[label] ~= nil) == namespace.Client.SupportsUnit(unit), "page ignored client support for " .. unit)
+    end
+    toggles.Target:SetChecked(true)
+    toggles.Target.OnClick(toggles.Target)
+    Check(M.profileExportUnits.player and M.profileExportUnits.target and M.profileExportKind == "unitselection",
+        "checkbox did not choose selected-frame export mode")
+    toggles.Player:SetChecked(false)
+    toggles.Player.OnClick(toggles.Player)
+    local text = MSUF_ExportSelectionToString(M.profileExportKind, M.profileExportUnits)
+    local payload = MSUF_TryDecodeCompactString(text).payload
+    Check(payload.target and not payload.player, "checkbox selection did not reach export")
 end
 
 print = realPrint

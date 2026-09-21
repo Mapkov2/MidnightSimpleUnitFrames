@@ -350,7 +350,17 @@ function ProfilesPage.Prepare(ctx)
             if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Export unavailable"), "danger", 1.8) end
             return false
         end
-        local value = _G.MSUF_ExportSelectionToString(kind or M.profileExportKind or "all")
+        kind = kind or M.profileExportKind or "all"
+        local selected = M.profileExportUnits or { player = true }
+        if kind == "unitselection" then
+            local any = false
+            for _, enabled in pairs(selected) do if enabled == true then any = true end end
+            if not any then
+                if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Select at least one unitframe."), "danger", 1.8) end
+                return false
+            end
+        end
+        local value = _G.MSUF_ExportSelectionToString(kind, selected)
         if type(value) ~= "string" then
             if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Export failed"), "danger", 1.8) end
             return false
@@ -889,11 +899,14 @@ function ProfilesPage.ImportExport(state)
     local exportKindW = min(280, max(180, stringCardW - 40))
     local exportKind = W.Dropdown(stringCard, "Export kind",
         VT("all", "Full profile", "unitframe", "Unitframes", "castbar", "Castbars", "colors", "Colors",
-            "gameplay", "Gameplay", "groupframe", "Group Frames"), exportKindW)
+            "gameplay", "Gameplay", "groupframe", "Group Frames", "unitselection", "Selected unitframes"), exportKindW)
     M.BindDropdownWidget(ctx, exportKind,
         function() return M.profileExportKind or "all" end,
         function(v)
             M.SetMenuStateValue("profileExportKind", v or "all")
+            if v == "unitselection" and state.unitSelectionSection and W.FocusCollapsibleSection then
+                W.FocusCollapsibleSection(state.unitSelectionSection)
+            end
         end,
         ProfilesMeta("export.kind", "ephemeral"))
     local blob = W.TextInput(stringCard, "Profile string", max(220, stringCardW - 40))
@@ -1104,6 +1117,7 @@ function ProfilesPage.ImportActions(state)
     local EXPORT_KIND_LABELS = {
         all = "Full profile",
         unitframe = "Unitframes",
+        unitselection = "Selected unitframes",
         castbar = "Castbars",
         colors = "Colors",
         gameplay = "Gameplay",
@@ -1134,6 +1148,35 @@ function ProfilesPage.ImportActions(state)
         M.TrackRefresh(ctx, RefreshImportMode)
     end
 end
+function ProfilesPage.UnitSelection(state)
+    local ctx, b = state.ctx, state.b
+    local section = b:CollapsibleSection("profiles_unit_selection", "Selected unitframes", 246, false)
+    state.unitSelectionSection = section
+    W.Text(section, "Choose frames for a Selected unitframes export. Imports automatically use the frames included in the string.",
+        20, -44, max(220, state.contentW - 40), T.colors.muted)
+    M.profileExportUnits = M.profileExportUnits or { player = true }
+    local labels = VT("player", "Player", "target", "Target", "targettarget", "Target of Target",
+        "pet", "Pet", "focus", "Focus", "focustarget", "Focus Target", "boss", "Boss Frames", "arena", "Arena Frames")
+    local index = 0
+    for i = 1, #labels do
+        local unit, label = labels[i].value, labels[i].text
+        if not MSUF.Client or not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(unit) then
+            local column = index % 2
+            local row = floor(index / 2)
+            local width = max(140, floor((state.contentW - 60) / 2))
+            local toggle = W.SwitchAt(section, label, 20 + column * (width + 20), -92 - row * 28, width)
+            RegisterControl(toggle, ProfilesMeta("export.unit." .. unit, "ephemeral"), label, "toggle")
+            toggle:SetChecked(M.profileExportUnits[unit] == true)
+            toggle:SetScript("OnClick", function(self)
+                M.profileExportUnits[unit] = self:GetChecked() == true
+                M.SetMenuStateValue("profileExportKind", "unitselection")
+            end)
+            index = index + 1
+        end
+    end
+    W.Text(section, "Includes each frame's own settings, auras and castbar. Shared appearance settings stay unchanged.",
+        20, -214, max(220, state.contentW - 40), T.colors.muted)
+end
 function ProfilesPage.Build(ctx)
     local state = ProfilesPage.Prepare(ctx)
     ProfilesPage.Hero(state)
@@ -1142,6 +1185,7 @@ function ProfilesPage.Build(ctx)
     ProfilesPage.Specializations(state)
     ProfilesPage.ImportExport(state)
     ProfilesPage.ImportActions(state)
+    ProfilesPage.UnitSelection(state)
     ctx:SetContentHeight(math.abs(state.b.y) + 42)
 end
 local function BuildModules(ctx)
