@@ -222,6 +222,10 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
     if StopRestingFlipbook then StopRestingFlipbook(tex, true) end
     if tex then
         tex:Show()
+        if tex.ClearAllPoints and tex.SetAllPoints then
+            tex:ClearAllPoints()
+            tex:SetAllPoints()
+        end
         tex:SetVertexColor(1, 1, 1, 1)
         if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
     end
@@ -244,7 +248,12 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
                 if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
                 return
             end
-            tex:SetTexture(path)
+            local atlas = isAssist and "UI-HUD-UnitFrame-Player-Group-GuideIcon" or "UI-HUD-UnitFrame-Player-Group-LeaderIcon"
+            if tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) then
+                tex:SetAtlas(atlas)
+            else
+                tex:SetTexture(path)
+            end
         end
     elseif spec.id == "elite" then
         local state = ElitePreviewState(key, data)
@@ -262,8 +271,8 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
         elseif tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "combat", "combat") then
             -- Custom texture applied above.
         elseif tex and tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo
-            and C_Texture.GetAtlasInfo("UI-HUD-UnitFrame-Player-PortraitCombatIcon") then
-            tex:SetAtlas("UI-HUD-UnitFrame-Player-PortraitCombatIcon")
+            and C_Texture.GetAtlasInfo("UI-HUD-UnitFrame-Player-CombatIcon") then
+            tex:SetAtlas("UI-HUD-UnitFrame-Player-CombatIcon")
         elseif tex then
             tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
             if tex.SetTexCoord then tex:SetTexCoord(0.5, 1, 0, 0.5) end
@@ -308,7 +317,47 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             if tex.SetTexCoord then tex:SetTexCoord(0, 0.1875, 0, 0.359375) end
         end
     elseif Status.IsTextIndicator(spec) then
-        if tex then tex:Hide() end
+        if tex then
+            local foreverBadge = spec.id == "level" and (((runtimeCfg and runtimeCfg.foreverBadge) == true)
+                or ((conf and conf.levelIndicatorForeverBadge) == true)
+                or ((conf == nil or conf.levelIndicatorForeverBadge == nil) and g and g.levelIndicatorForeverBadge == true))
+            local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
+            local atlasAvailable = MSUF.Client and MSUF.Client.IsForever == true
+                or (getAtlasInfo and getAtlasInfo("UI-HUD-UnitFrame-SmallCircle"))
+            if foreverBadge and tex.SetAtlas then
+                local badgeSize = math.max(28, math.floor((((runtimeCfg and runtimeCfg.size) or 14) * 2.5) + 0.5))
+                if tex.ClearAllPoints and tex.SetPoint then
+                    tex:ClearAllPoints()
+                    tex:SetPoint("CENTER")
+                end
+                if tex.SetSize then tex:SetSize(badgeSize, badgeSize) end
+                local fallbackRing = tex._msufLevelBadgeRing
+                if atlasAvailable then
+                    tex:SetAtlas("UI-HUD-UnitFrame-SmallCircle")
+                    if tex.SetVertexColor then tex:SetVertexColor(1, 1, 1, 1) end
+                    if fallbackRing then fallbackRing:Hide() end
+                else
+                    tex:SetTexture("Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\circle_mask.tga")
+                    if tex.SetVertexColor then tex:SetVertexColor(0.025, 0.025, 0.025, 0.98) end
+                    local parent = tex.GetParent and tex:GetParent()
+                    if not fallbackRing and parent and parent.CreateTexture then
+                        fallbackRing = PixelLayoutRegion(parent:CreateTexture(nil, "OVERLAY", nil, 0))
+                        tex._msufLevelBadgeRing = fallbackRing
+                    end
+                    if fallbackRing then
+                        fallbackRing:ClearAllPoints()
+                        fallbackRing:SetAllPoints(tex)
+                        fallbackRing:SetTexture("Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Borders\\msuf_portrait_ring_circle.tga")
+                        fallbackRing:SetVertexColor(1, 0.82, 0.3, 1)
+                        fallbackRing:Show()
+                    end
+                end
+                tex:Show()
+            else
+                tex:Hide()
+                if tex._msufLevelBadgeRing then tex._msufLevelBadgeRing:Hide() end
+            end
+        end
         if txt then
             txt:SetText(Status.IsIdentityText(spec) and Status.IdentityPreviewText(spec, data)
                 or STATUS_TEXT_STATE_IDS[spec.id]

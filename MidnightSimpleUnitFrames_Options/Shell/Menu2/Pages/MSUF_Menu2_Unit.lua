@@ -297,7 +297,7 @@ for _, slot in ipairs(WL [[Name HealthLeft HealthCenter HealthRight PowerLeft Po
     end
 end
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
-local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled levelIndicatorDifficultyColor threatIndicatorColorCurve threatIndicatorBackground", "show iconStyle customIcon x y anchor size layer symbol")
+local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled levelIndicatorDifficultyColor levelIndicatorForeverBadge threatIndicatorColorCurve threatIndicatorBackground", "show iconStyle customIcon x y anchor size layer symbol")
 --- Most fields below "healthColorMode" are the per-unit Bars override scope (gated by
 --- hlOverride, see MSUF_Menu2_Bindings BARS_SCOPE_KEYS). UnitFrame Dispel Overlay/Symbol
 --- are the deliberate exception: they are copied with Frame settings but stay owned by

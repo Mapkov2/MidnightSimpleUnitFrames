@@ -161,8 +161,11 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local ensureText, layoutText = Load(world,
         "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua",
         "EnsureFontString, LayoutText")
-    local statusLayout, ensureIcon = Load(world,
-        "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua", "LayoutRegion, EnsureTexture")
+    -- Forever exposes the atlas to Texture:SetAtlas even when GetAtlasInfo is
+    -- unavailable; the native badge must not depend on that optional query.
+    world.env.C_Texture = { GetAtlasInfo = function() return nil end }
+    local statusLayout, ensureIcon, statusRuntime = Load(world,
+        "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua", "LayoutRegion, EnsureTexture, Runtime")
     local fs = ensureText(frame, "nameText", "GameFontNormal", 5, 5, "MSUFNameTextLayer")
     assert((fs.pixelEnabled == true) == expected, flavor .. ": text not gated")
     layoutText(fs, "LEFT", "LEFT", -3.375, 2.125, "LEFT", frame)
@@ -175,6 +178,32 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     assert((icon.pixelEnabled == true) == expected, flavor .. ": status icon not gated")
     assert(Equal(cfg, beforeCfg), "status config mutated")
     assert(icon.width == cfg.size and icon.points[1].x == cfg.x and icon.points[1].y == cfg.y)
+    local badgeFrame = env.CreateFrame("Frame", nil, env.UIParent)
+    badgeFrame.MSUFUnitKey = "player"
+    badgeFrame.MSUFSpec = { fontFlags = "OUTLINE", status = { alpha = 1,
+        level = { enabled = true, size = 14, anchor = "BOTTOMLEFT", x = -59, y = -6,
+            layer = 7, foreverBadge = true } } }
+    statusRuntime.ApplyConfiguredRegions(badgeFrame, badgeFrame.MSUFSpec)
+    if flavor == "Forever" then
+        local badge = assert(badgeFrame.levelBackdrop, "Forever level badge was not created")
+        assert(badge.atlas == "UI-HUD-UnitFrame-SmallCircle", "Forever level badge atlas drifted")
+        assert(badge.width == 35 and badge.height == 35, "Forever level badge no longer scales from the text size")
+        assert(badge.points[1].x == -59 and badge.points[1].y == -6, "Forever level badge lost the level anchor")
+        statusRuntime.SetForeverLevelBadgeShown(badgeFrame, true)
+        assert(badge:IsShown(), "Forever level badge did not follow visible level text")
+    else
+        local badge = assert(badgeFrame.levelBackdrop, flavor .. ": fallback level badge was not created")
+        assert(tostring(badge.texture):find("circle_mask", 1, true), flavor .. ": fallback level badge lost its dark circle")
+        local ring = assert(badgeFrame.levelBackdropRing, flavor .. ": fallback level badge lost its gold rim")
+        assert(tostring(ring.texture):find("msuf_portrait_ring_circle", 1, true), flavor .. ": fallback level ring art drifted")
+        statusRuntime.SetForeverLevelBadgeShown(badgeFrame, true)
+        assert(badge:IsShown() and ring:IsShown(), flavor .. ": fallback level badge did not follow visible level text")
+    end
+    badgeFrame.MSUFSpec.status.level.enabled = false
+    statusRuntime.ApplyConfiguredRegions(badgeFrame, badgeFrame.MSUFSpec)
+    assert(not badgeFrame.levelBackdrop:IsShown(), flavor .. ": disabled level retained its badge")
+    assert(not badgeFrame.levelBackdropRing or not badgeFrame.levelBackdropRing:IsShown(),
+        flavor .. ": disabled level retained its fallback ring")
     local legacyIcon = ensureIcon(frame, "testLegacyIcon", 7)
     ns.Icons._layout.Apply(legacyIcon, frame, 15.25, "LEFT", "RIGHT", -2.375, 3.625)
     assert((legacyIcon.pixelEnabled == true) == expected, flavor .. ": legacy icon not gated")

@@ -1600,6 +1600,11 @@ local function CompileUnitStatus(out, conf, general, key)
   if level then
     level.difficultyColor = StatusBool(conf, general, "levelIndicatorDifficultyColor", level.colorR == nil)
     level.difficultyColors = level.difficultyColor and Shared.ResolveLevelDifficultyColors(general) or nil
+    -- WoW Forever's Camelot unitframes center the level over the stock
+    -- UI-HUD-UnitFrame-SmallCircle atlas. Keep it opt-in so every existing
+    -- profile remains plain text, while the same status anchor/size/layer still
+    -- owns both the number and its badge.
+    level.foreverBadge = StatusBool(conf, general, "levelIndicatorForeverBadge", false)
   end
   -- The threat color curve follows the same rule: on, unless the frame already
   -- picked its own threat text color. The palette is global and resolved by the

@@ -439,6 +439,38 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
             "Red far above your level, white at your level, gray when trivial. Turn off to use the status text color instead.", { hook = true })
     end
     state.levelDifficultyColor = levelDifficultyColor
+    local levelForeverBadge = W.ToggleAt(selectedCard, "Round level badge", 16, -136, selectedControlW)
+    M.BindBoolWidget(ctx, levelForeverBadge,
+        function() return ReadStatusBool(unit, "levelIndicatorForeverBadge", false) end,
+        function(value)
+            SetBool(unit, "levelIndicatorForeverBadge", value, "MSUF2_STATUS_LEVEL_FOREVER_BADGE", { preview = true })
+            RefreshStatusRuntime(unit, CurrentStatusSpec(unit))
+        end)
+    RegisterStatusSearch(levelForeverBadge, "Round Level Badge", {
+        "level badge", "level circle", "round level", "camelot level", "level medallion",
+    }, nil, "Centers the level on a dark round medallion with a gold rim on every supported WoW version.",
+        "status.level.forever_badge", nil, { settingKey = tostring(unit) .. ".levelIndicatorForeverBadge" })
+    if M.AddTooltip then
+        M.AddTooltip(levelForeverBadge, "Round level badge",
+            "Centers the level on a dark round medallion with a gold rim on every supported WoW version.", { hook = true })
+    end
+    -- The badge belongs to the Level editor. Exact feature links must select
+    -- that indicator before focusing this otherwise hidden control.
+    levelForeverBadge._msuf2ExactTargetKinds = { unitStatus = true }
+    levelForeverBadge._msuf2ExactTargetContracts = {
+        unitStatus = { level = tostring(unit) .. ".levelIndicatorForeverBadge" },
+    }
+    levelForeverBadge._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+        local levelSpec = FindStatusSpec(unit, "level")
+        if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitStatus"
+            or exactTarget.prepareValue ~= "level" or not levelSpec
+            or exactTarget.settingKey ~= tostring(unit) .. ".levelIndicatorForeverBadge" then return false end
+        return enabled._msuf2PrepareExactSearchTarget(enabled, {
+            prepareKind = "unitStatus", prepareValue = "level",
+            settingKey = tostring(unit) .. "." .. levelSpec.show,
+        })
+    end
+    state.levelForeverBadge = levelForeverBadge
     -- Threat % only, and only where that control exists (the target, focus and
     -- boss pages of Classic Era, TBC and WoW Forever). Mirrors the compile default
     -- in MSUF_UF_Config: on, unless this frame already carries its own threat color.
@@ -622,11 +654,11 @@ function StatusSection.PrepareIconResolvers(state, unit)
             local path, l, r, t, b = resolver(style, entry[1], entry[2], ReadGeneralBool("statusIconsUseMidnightStyle", false))
             if type(path) == "string" and path ~= "" then return path, l, r, t, b end
         end
-        if entry[1] == "leader" then return "Interface\\GroupFrame\\UI-Group-LeaderIcon", 0, 1, 0, 1 end
-        if entry[1] == "assist" then return "Interface\\GroupFrame\\UI-Group-AssistantIcon", 0, 1, 0, 1 end
+        if entry[1] == "leader" then return "Interface\\GroupFrame\\UI-Group-LeaderIcon", 0, 1, 0, 1, "UI-HUD-UnitFrame-Player-Group-LeaderIcon" end
+        if entry[1] == "assist" then return "Interface\\GroupFrame\\UI-Group-AssistantIcon", 0, 1, 0, 1, "UI-HUD-UnitFrame-Player-Group-GuideIcon" end
         if entry[1] == "raidMarker" then return "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 0.75, 1, 0.25, 0.5 end
         if entry[1] == "elite" then return "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", 0, 1, 0, 1 end
-        if entry[1] == "combat" then return "Interface\\CharacterFrame\\UI-StateIcon", 0.5, 1, 0, 0.5 end
+        if entry[1] == "combat" then return "Interface\\CharacterFrame\\UI-StateIcon", 0.5, 1, 0, 0.5, "UI-HUD-UnitFrame-Player-CombatIcon" end
         if entry[1] == "resting" then return "Interface\\CharacterFrame\\UI-StateIcon", 0, 0.5, 0, 0.5 end
         if entry[1] == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
         if entry[1] == "pvp" then return entry[2] == "Horde" and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
@@ -807,7 +839,10 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
                 if spec.iconStyle then conf[spec.iconStyle] = nil end
                 if spec.customIcon then conf[spec.customIcon] = nil end
             end
-            if spec.value == "level" then conf.levelIndicatorDifficultyColor = nil end
+            if spec.value == "level" then
+                conf.levelIndicatorDifficultyColor = nil
+                conf.levelIndicatorForeverBadge = nil
+            end
             if spec.value == "statusThreat" then
                 conf.threatIndicatorColorCurve, conf.threatIndicatorBackground = nil, nil
             end
@@ -945,6 +980,7 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     local identityRestrictionWarning, symbol, iconPack, customIcon = state.identityRestrictionWarning, state.symbol, state.iconPack, state.customIcon
     local selectedTextShortcut = state.selectedTextShortcut
     local levelDifficultyColor = state.levelDifficultyColor
+    local levelForeverBadge = state.levelForeverBadge
     local threatColorCurve = state.threatColorCurve
     local threatBackground = state.threatBackground
     local raidGroupStyle, size, anchor, layer, reset, test = state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset, state.test
@@ -1019,6 +1055,8 @@ function StatusSection.BindRefreshState(state, ctx, unit)
         ShowControl(identityRestrictionWarning, isIdentityText and isEnabled)
         ShowControl(levelDifficultyColor, spec and spec.value == "level")
         SetControlEnabled(levelDifficultyColor, spec and spec.value == "level" and isEnabled)
+        ShowControl(levelForeverBadge, spec and spec.value == "level")
+        SetControlEnabled(levelForeverBadge, spec and spec.value == "level" and isEnabled)
         if threatColorCurve then
             ShowControl(threatColorCurve, spec and spec.value == "statusThreat")
             SetControlEnabled(threatColorCurve, spec and spec.value == "statusThreat" and isEnabled)

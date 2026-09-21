@@ -96,6 +96,9 @@ local ADDON_PATH = "Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFra
 local RAID_MARKER_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local LEADER_TEXTURE = "Interface\\GroupFrame\\UI-Group-LeaderIcon"
 local ASSIST_TEXTURE = "Interface\\GroupFrame\\UI-Group-AssistantIcon"
+local LEADER_ATLAS = "UI-HUD-UnitFrame-Player-Group-LeaderIcon"
+local ASSIST_ATLAS = "UI-HUD-UnitFrame-Player-Group-GuideIcon"
+local COMBAT_ATLAS = "UI-HUD-UnitFrame-Player-CombatIcon"
 local READY_TEXTURES = {
   ready = "Interface\\RaidFrame\\ReadyCheck-Ready",
   notready = "Interface\\RaidFrame\\ReadyCheck-NotReady",
@@ -596,6 +599,102 @@ local function EnsureText(frame, field, layer)
   return fs
 end
 
+--- Lay out the round level medallion behind the existing level text. Forever
+--- and clients that expose its atlas use the native art; older clients use the
+--- bundled circle mask plus gold relief ring so the style remains available.
+--- This is cold configuration work: UNIT_LEVEL only toggles the already-built
+--- texture with the text and never recreates or reanchors it.
+function Runtime.ApplyForeverLevelBadge(frame, spec, cfg)
+  local badge = frame and frame.levelBackdrop
+  if not (frame and cfg and cfg.foreverBadge == true) then
+    SetShown(badge, false)
+    SetShown(frame and frame.levelBackdropRing, false)
+    return nil
+  end
+  local atlas = "UI-HUD-UnitFrame-SmallCircle"
+  local getAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+  local useNativeAtlas = MSUF.Client and MSUF.Client.IsForever == true
+    or (getAtlasInfo and getAtlasInfo(atlas)) ~= nil
+  local holder = AdoptRegion(frame, badge, cfg.layer)
+  if not badge then
+    badge = PixelLayoutRegion((holder or frame):CreateTexture(nil, "OVERLAY", nil, -1))
+    badge:Hide()
+    frame.levelBackdrop = badge
+  end
+  if useNativeAtlas and badge._msufStatusAtlas ~= atlas then
+    badge:SetAtlas(atlas)
+    badge._msufStatusAtlas = atlas
+    badge._msufStatusTexture = nil
+    if badge.SetVertexColor then badge:SetVertexColor(1, 1, 1, 1) end
+  elseif not useNativeAtlas then
+    local texture = "Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\circle_mask.tga"
+    if badge._msufStatusTexture ~= texture then
+      badge:SetTexture(texture)
+      badge._msufStatusTexture = texture
+      badge._msufStatusAtlas = nil
+    end
+    if badge.SetVertexColor then badge:SetVertexColor(0.025, 0.025, 0.025, 0.98) end
+  end
+  local fontSize = tonumber(cfg.size) or 14
+  local size = floor((fontSize * 2.5) + 0.5)
+  if size < 28 then size = 28 end
+  if badge._msufStatusSize ~= size then
+    badge:SetSize(size, size)
+    badge._msufStatusSize = size
+  end
+  -- The number uses the configured status draw sublevel. Keep the medallion
+  -- exactly one step below it inside the same status-layer holder.
+  local sub = ClampLayer(cfg.layer, 7) - 2
+  if sub < 0 then sub = 0 elseif sub > 7 then sub = 7 end
+  if badge.SetDrawLayer and badge._msufStatusLayer ~= sub then
+    badge:SetDrawLayer("OVERLAY", sub)
+    badge._msufStatusLayer = sub
+  end
+  local alpha = spec and spec.status and spec.status.alpha or 1
+  if badge.SetAlpha and badge._msufStatusAlpha ~= alpha then
+    badge:SetAlpha(alpha)
+    badge._msufStatusAlpha = alpha
+  end
+  AnchorRegion(badge, frame, cfg)
+  local ring = frame.levelBackdropRing
+  if useNativeAtlas then
+    SetShown(ring, false)
+  else
+    if not ring then
+      ring = PixelLayoutRegion((holder or frame):CreateTexture(nil, "OVERLAY", nil, 0))
+      ring:Hide()
+      frame.levelBackdropRing = ring
+    end
+    local ringTexture = "Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Borders\\msuf_portrait_ring_circle.tga"
+    if ring._msufStatusTexture ~= ringTexture then
+      ring:SetTexture(ringTexture)
+      ring._msufStatusTexture = ringTexture
+    end
+    if ring.SetVertexColor then ring:SetVertexColor(1, 0.82, 0.3, 1) end
+    if ring._msufStatusSize ~= size then
+      ring:SetSize(size, size)
+      ring._msufStatusSize = size
+    end
+    if ring.SetDrawLayer and ring._msufStatusLayer ~= sub + 1 then
+      ring:SetDrawLayer("OVERLAY", sub + 1)
+      ring._msufStatusLayer = sub + 1
+    end
+    if ring.SetAlpha and ring._msufStatusAlpha ~= alpha then
+      ring:SetAlpha(alpha)
+      ring._msufStatusAlpha = alpha
+    end
+    AnchorRegion(ring, frame, cfg)
+  end
+  return badge
+end
+
+function Runtime.SetForeverLevelBadgeShown(frame, shown)
+  local badge = frame and frame.levelBackdrop
+  SetShown(badge, badge ~= nil and shown == true)
+  local ring = frame and frame.levelBackdropRing
+  SetShown(ring, ring ~= nil and shown == true)
+end
+
 local function SymbolPath(symbol, useMidnight)
   if type(symbol) ~= "string" or symbol == "" or symbol == "DEFAULT" then
     return nil
@@ -630,8 +729,8 @@ local function ApplyStateIconTexture(tex, kind, cfg, status)
     return
   end
   if kind == "combat" then
-    if AtlasAvailable(tex, "UI-HUD-UnitFrame-Player-PortraitCombatIcon") then
-      SetAtlas(tex, "UI-HUD-UnitFrame-Player-PortraitCombatIcon")
+    if AtlasAvailable(tex, COMBAT_ATLAS) then
+      SetAtlas(tex, COMBAT_ATLAS)
     else
       SetTexture(tex, STATE_TEXTURE)
       SetTexCoord(tex, 0.5, 1, 0, 0.5)
@@ -736,8 +835,13 @@ local function ApplyLeaderTexture(tex, cfg, status, assist)
       end
     end
   end
-  SetTexture(tex, assist and ASSIST_TEXTURE or LEADER_TEXTURE)
-  SetTexCoord(tex, 0, 1, 0, 1)
+  local atlas = assist and ASSIST_ATLAS or LEADER_ATLAS
+  if AtlasAvailable(tex, atlas) then
+    SetAtlas(tex, atlas)
+  else
+    SetTexture(tex, assist and ASSIST_TEXTURE or LEADER_TEXTURE)
+    SetTexCoord(tex, 0, 1, 0, 1)
+  end
 end
 
 local function ApplyRoleTexture(tex, cfg, status, role)
@@ -871,6 +975,10 @@ local function HideConfiguredRegion(frame, def)
   else
     HideField(frame, def[2])
   end
+  if def[1] == "level" then
+    HideField(frame, "levelBackdrop")
+    HideField(frame, "levelBackdropRing")
+  end
   if def[9] and frame then
     frame._msufGFSummonActive = false
   end
@@ -903,6 +1011,7 @@ local function ApplyConfiguredRegion(frame, spec, status, def)
   end
   local nameRelative = cfg.anchor == "NAMERIGHT" or cfg.anchor == "NAMELEFT"
   LayoutRegion(region, frame, spec, cfg, text, NAME_FONT_STATUS[key] and nameRelative and "name" or nil)
+  if key == "level" then Runtime.ApplyForeverLevelBadge(frame, spec, cfg) end
 end
 
 local function ApplyConfiguredRegions(frame, spec)
@@ -1395,7 +1504,7 @@ local function ShowIdentityText(region, value, present)
   end
 end
 
-local IDENTITY_TEXT_FIELDS = { "levelText", "raceText", "classStatusText" }
+local IDENTITY_TEXT_FIELDS = { "levelText", "levelBackdrop", "levelBackdropRing", "raceText", "classStatusText" }
 
 --- Level difficulty tier, mirroring TargetFrameMixin:CheckLevel. Returns an
 --- index into Shared.LEVEL_DIFFICULTY_TIERS. Hung on Runtime rather than kept
@@ -1509,6 +1618,7 @@ function Runtime.UpdateIdentityTexts(frame, status)
   end
 
   if showLevel then ShowIdentityText(frame.levelText, levelText, levelPresent) else SetShown(frame.levelText, false) end
+  Runtime.SetForeverLevelBadgeShown(frame, showLevel and levelPresent and levelCfg.foreverBadge == true)
   if showRace then ShowIdentityText(frame.raceText, raceText, racePresent) else SetShown(frame.raceText, false) end
   if showClass then ShowIdentityText(frame.classStatusText, classText, classPresent) else SetShown(frame.classStatusText, false) end
 end
@@ -2310,7 +2420,7 @@ end
 local STATUS_INDICATOR_DEFS = {
   { name = "RaidMarkerIndicator", key = "raidMarker", unitlessEvents = Runtime.RAID_MARKER_EVENTS, update = Runtime.UpdateRaidMarker, hide = "raidTargetIcon", noGroup = true },
   { name = "LeaderIndicator", key = "leader", unitlessEvents = Runtime.LEADER_EVENTS, update = Runtime.UpdateLeaderPair, hide = { "LeaderIndicator", "leaderIcon", "assistIcon" }, noGroup = true },
-  { name = "LevelIndicator", key = "identityText", update = Runtime.UpdateIdentityTexts, hide = { "levelText", "raceText", "classStatusText" }, getEvents = Runtime.IdentityTextEvents, getUnitlessEvents = Runtime.IdentityTextUnitlessEvents },
+  { name = "LevelIndicator", key = "identityText", update = Runtime.UpdateIdentityTexts, hide = { "levelText", "levelBackdrop", "levelBackdropRing", "raceText", "classStatusText" }, getEvents = Runtime.IdentityTextEvents, getUnitlessEvents = Runtime.IdentityTextUnitlessEvents },
   { name = "BossNumberIndicator", key = "bossNumber", update = Runtime.UpdateBossNumber, hide = "bossNumberText", noGroup = true },
   { name = "RaidGroupIndicator", key = "raidGroup", unitlessEvents = Runtime.RAID_GROUP_EVENTS, update = Runtime.UpdateRaidGroup, hide = "raidGroupNameText", noGroup = true },
   { name = "EliteIndicator", key = "elite", events = Runtime.ELITE_EVENTS, update = Runtime.UpdateElite, hide = "eliteIcon" },

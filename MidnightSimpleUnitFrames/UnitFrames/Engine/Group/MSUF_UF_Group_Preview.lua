@@ -1181,8 +1181,15 @@ local function ApplyPreviewStatus(frame, kind, index, role)
       statusRuntime.ApplyLevelDifficultyColor(frame.levelText, frame, nil, nil, levelCfg, 3)
     end
     frame.levelText:Show()
+    if statusRuntime and statusRuntime.SetForeverLevelBadgeShown then
+      statusRuntime.SetForeverLevelBadgeShown(frame, levelCfg.foreverBadge == true)
+    end
   else
     SetShown(frame.levelText, false)
+    local statusRuntime = MSUF.UFStatusRuntime
+    if statusRuntime and statusRuntime.SetForeverLevelBadgeShown then
+      statusRuntime.SetForeverLevelBadgeShown(frame, false)
+    end
   end
   SetShown(frame.combatStateIndicatorIcon, false)
   SetShown(frame.statusIndicatorText, false)
