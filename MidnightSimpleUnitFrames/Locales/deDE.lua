@@ -6326,6 +6326,16 @@ L["Classic Glass"] = "Classic Glass"
 L["Midnight (Retail)"] = "Midnight (Retail)"
 L["Background opacity changes the Classic Glass background only; text stays fully opaque."] = "Die Hintergrund-Deckkraft ändert nur den Classic Glass-Hintergrund; die Schrift bleibt vollständig deckend."
 
+L["Selected unitframes"] = "Ausgewählte Unitframes"
+L["Select at least one unitframe."] = "Wähle mindestens einen Unitframe aus."
+L["Choose frames for a Selected unitframes export. Imports automatically use the frames included in the string."] = "Wähle Frames für den Export „Ausgewählte Unitframes“. Beim Import werden automatisch die im String enthaltenen Frames übernommen."
+L["Includes each frame's own settings, auras and castbar. Shared appearance settings stay unchanged."] = "Enthält die eigenen Einstellungen, Auren und Castbar der Frames. Gemeinsame Darstellungseinstellungen bleiben unverändert."
+
+L["Bottom-right gold connector"] = "Goldene Verbindung unten rechts"
+L["Round level badge"] = "Rundes Level-Abzeichen"
+L["Round Level Badge"] = "Rundes Level-Abzeichen"
+L["Centers the level on a dark round medallion with a gold rim on every supported WoW version."] = "Zeigt das Level mittig auf einem dunklen runden Abzeichen mit Goldrand in allen unterstützten WoW-Versionen."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

@@ -53,7 +53,7 @@ LEDGER = {
     "schemaOnly": (298, "9022F4DE2CD5FF16DF75619E18FE945022316AC34AA589B6CC6CB284F317D077"),
     # Includes the eight opt-in portrait dragon controls; the standalone
     # control schema remains unchanged. Menu2 owns their exact search targets.
-    "indexOnly": (568, "D1488AB0C3F93F46999F009E64CADF1A9289F5F20BB62A2F081FED6827BCA9CD"),
+    "indexOnly": (584, "EE688B5AB962DA3490397F0D6B478D5067709E99DDC8DE5C6D41C45E16AB8F66"),
 }
 
 
