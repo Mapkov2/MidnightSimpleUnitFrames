@@ -8,12 +8,68 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "DFBE27916A8CB9C7204BD3AAC12EA312D9866F6CADDCB4EC90FBD23031444491",
-    currentVersion = "6.5-beta6",
-    historyFromVersion = "6.5-beta3",
-    previousVersion = "6.5-beta5",
-    rangeLabel = "6.5-beta5 -> 6.5-beta6",
+    sourceSha256 = "B0EAF90509C01D2072384D3908334D36CF82153663D18B969F7FEAE6FD1E21A9",
+    currentVersion = "6.5-beta7",
+    historyFromVersion = "6.5-beta4",
+    previousVersion = "6.5-beta6",
+    rangeLabel = "6.5-beta6 -> 6.5-beta7",
     entries = {
+        {
+            version = "6.5-beta7",
+            date = "2026-09-21",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Give the level text a round badge with a gold rim. Enable Round level badge under Status > Level; its position, size and layer follow the existing level controls, with native artwork or a bundled fallback for older clients.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "round level badge",
+                                label = "Round Level Badge",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_player.unit.status.level.forever_badge",
+                                settingKey = "player.levelIndicatorForeverBadge",
+                                prepareKind = "unitStatus",
+                                prepareValue = "level",
+                            },
+                        },
+                        {
+                            text = "Add Blizzard's bottom-right gold connector to a Blizzard-style portrait. The new Portrait > Border option is reflected in the live frame and menu preview.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "bottom-right gold connector",
+                                label = "Bottom-right gold connector",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitblizzardcorner",
+                                settingKey = "player.portraitBlizzardCorner",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "border",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Export and import individual unitframes. Profiles > Import & Export now offers Selected unitframes, with a separate multi-selection for Player, Target, Target of Target, Pet, Focus, Focus Target, Boss and Arena where supported by the client.",
+                        "Selected-frame strings carry each included frame's own settings, aura configuration and castbar. Imports update only those frames in the current profile or a new profile, preserving other frames and shared settings. Settings inherited from a shared appearance continue to use the receiving profile's appearance.",
+                        "Empty selections and imports containing unsupported frames or settings outside their selected frames are rejected. Existing full-profile and category exports retain their previous behavior.",
+                        "Texture-layer profiles can use native Blizzard atlases. Runtime rendering and menu previews preserve the atlas crop and fall back to the ordinary texture source if the atlas is unavailable.",
+                        "Portrait profiles that already use complete Blizzard frame artwork can suppress the duplicate standalone portrait rim while retaining the corner connector.",
+                        "Leader, assistant and combat indicators use the matching native artwork when available, with texture fallbacks on older clients. The status and portrait previews follow the same artwork choices.",
+                        "Section Copy To includes the new portrait connector, standalone-ring choice, level badge and texture-layer atlas settings.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Turning off the level indicator also hides the fallback badge ring; a leftover gold circle no longer remains behind.",
+                        "Selected-frame aura imports avoid full-profile aura resets, and default repair runs on a private copy before committing the selected settings.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta6",
             date = "2026-09-20",
@@ -184,34 +240,6 @@ local data = {
                         "Arena castbars validate their geometry once per style change instead of before every cast.",
                         "A client MSUF cannot identify no longer offers arena frames it has no slots for, and a Mainline client without the WoW Forever marker prints one login line asking for /msuf clientinfo.",
                         "Releases carry the WoW Forever game version on CurseForge by themselves and are also published to Wago.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta3",
-            date = "2026-09-18",
-            sections = {
-                {
-                    title = "Changes",
-                    bullets = {
-                        "New factory default profile on every client. First login, \"Reset profile\" and \"New profile\" all start from it.",
-                        "Factory castbars fill left to right. Existing profiles keep their direction.",
-                        "The factory cleanse border detects \"Dispellable by group\" instead of every debuff with a dispel type.",
-                        "Factory target buffs and debuffs sit on the same line; player and target aura positions follow the new profile.",
-                        "WoW Forever: hunter pet happiness shows on the pet frame.",
-                        "WoW Forever: Fonts page option to show the full character name, the first name or the surname.",
-                        "WoW Forever: group frames offer Party and Raid only.",
-                        "MSUF versions are now per game client. WoW Forever and the Classic clients report 6.5; Midnight keeps its own Retail version. /msuf clientinfo prints the running version.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "First login and \"Reset profile\" received the code defaults instead of the factory profile. Both start from the factory profile again, including Focus Target.",
-                        "The class resource bar in the Unit Frames preview and the Class Resources preview sits where the live bar sits. It was drawn the bar height plus 6 px too high.",
-                        "WoW Forever: the menu preview backgrounds (Silvermoon and the stone scenes) no longer stay black. Other clients fall back the same way when a scene fails to load.",
-                        "The addon version is read once at load instead of on every version display, version check and analytics pass.",
                     },
                 },
             },

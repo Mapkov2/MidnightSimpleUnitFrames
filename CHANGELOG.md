@@ -1,5 +1,29 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta7 - 2026-09-21
+
+### Highlights
+
+- **Give the level text a round badge with a gold rim.** Enable Round level badge under Status > Level; its position, size and layer follow the existing level controls, with native artwork or a bundled fallback for older clients.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"status_icons","controlId":"menu2.uf_player.unit.status.level.forever_badge","settingKey":"player.levelIndicatorForeverBadge","prepareKind":"unitStatus","prepareValue":"level","query":"round level badge","label":"Round Level Badge"} -->
+- **Add Blizzard's bottom-right gold connector to a Blizzard-style portrait.** The new Portrait > Border option is reflected in the live frame and menu preview.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitblizzardcorner","settingKey":"player.portraitBlizzardCorner","prepareKind":"unitPortraitTab","prepareValue":"border","query":"bottom-right gold connector","label":"Bottom-right gold connector"} -->
+
+### Changes
+
+- **Export and import individual unitframes.** Profiles > Import & Export now offers Selected unitframes, with a separate multi-selection for Player, Target, Target of Target, Pet, Focus, Focus Target, Boss and Arena where supported by the client.
+- Selected-frame strings carry each included frame's own settings, aura configuration and castbar. Imports update only those frames in the current profile or a new profile, preserving other frames and shared settings. Settings inherited from a shared appearance continue to use the receiving profile's appearance.
+- Empty selections and imports containing unsupported frames or settings outside their selected frames are rejected. Existing full-profile and category exports retain their previous behavior.
+- Texture-layer profiles can use native Blizzard atlases. Runtime rendering and menu previews preserve the atlas crop and fall back to the ordinary texture source if the atlas is unavailable.
+- Portrait profiles that already use complete Blizzard frame artwork can suppress the duplicate standalone portrait rim while retaining the corner connector.
+- Leader, assistant and combat indicators use the matching native artwork when available, with texture fallbacks on older clients. The status and portrait previews follow the same artwork choices.
+- Section Copy To includes the new portrait connector, standalone-ring choice, level badge and texture-layer atlas settings.
+
+### Fixes
+
+- Turning off the level indicator also hides the fallback badge ring; a leftover gold circle no longer remains behind.
+- Selected-frame aura imports avoid full-profile aura resets, and default repair runs on a private copy before committing the selected settings.
+
 ## 6.5-beta6 - 2026-09-20
 
 ### Highlights
