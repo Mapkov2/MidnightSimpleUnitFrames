@@ -1410,6 +1410,7 @@ local function CompilePortrait(kind, conf, frameHeight)
     castSpellIcon = conf.portraitCastSpellIcon == true,
     clickable = conf.portraitClickable == true,
     shape = shape,
+    blizzardCorner = conf.portraitBlizzardCorner == true,
     size = size,
     sizeMode = sizeMode,
     width = width,

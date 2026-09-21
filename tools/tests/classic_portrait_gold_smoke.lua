@@ -213,11 +213,23 @@ assert(ring.allPoints == holder and holder.mask.allPoints == holder,
 local color = ring.vertexColor
 assert(color and color[1] == 1 and color[2] == 1 and color[3] == 1 and color[4] == 1,
     "Blizzard ring must stay untinted")
--- Retired overlays must not paint across the original contour on reused holders.
+-- The native connector is opt-in and must not paint across the standalone
+-- contour until the Blizzard-frame setting explicitly enables it.
 holder.blizzRingMirror = NewRegion(holder.border)
-holder.blizzCorner = NewRegion(holder.border)
 Portrait.Apply(frame, frame.MSUFSpec)
-assert(not holder.blizzRingMirror.shown and not holder.blizzCorner.shown, "obsolete overlays must stay hidden")
+assert(not holder.blizzRingMirror.shown and holder.blizzCorner == nil, "connector default must stay off")
+frame.MSUFSpec.portrait.blizzardCorner = true
+Portrait.Apply(frame, frame.MSUFSpec)
+local corner = assert(holder.blizzCorner, "corner connector texture missing")
+assert(corner.shown and corner.atlas == CORNER_ATLAS, "connector must use Blizzard's native atlas")
+assert(corner.sublevel == 3, "connector must draw above the standalone rim")
+Near(corner.points[1][4], 34.5, "connector x offset")
+Near(corner.points[1][5], -34.5, "connector y offset")
+Near(corner.width, 23, "connector width")
+Near(corner.height, 23, "connector height")
+frame.MSUFSpec.portrait.blizzardCorner = false
+Portrait.Apply(frame, frame.MSUFSpec)
+assert(not corner.shown, "connector toggle must hide its texture")
 
 -- 2) Border settings are inert: a dynamic border colour neither tints the ring
 -- nor re-enables any MSUF border renderer, and the border stays event-free.
@@ -265,14 +277,18 @@ do
     render.ApplyPreviewPortraitShapeMask(portrait, "BLIZZARD", 0)
     assert(portrait._msufPreviewShapeMask.texture == MASK_FILE, "preview must use the matching player mask")
     render.LayoutPreviewBlizzardPortrait(portrait, true, 58, 58)
-    assert(portrait._msufPreviewBlizzCorner == nil, "native branch must not receive a second joint overlay")
-    portrait._msufPreviewBlizzCorner = NewRegion(portrait)
+    assert(portrait._msufPreviewBlizzCorner == nil, "preview connector default must stay off")
+    render.LayoutPreviewBlizzardPortrait(portrait, true, 60, 60, true)
+    local previewCorner = assert(portrait._msufPreviewBlizzCorner, "preview connector missing")
+    assert(previewCorner.shown and previewCorner.atlas == CORNER_ATLAS, "preview connector atlas drifted")
+    Near(previewCorner.points[1][4], 34.5, "preview connector x offset")
+    Near(previewCorner.points[1][5], -34.5, "preview connector y offset")
     for _, size in ipairs({ 36, 58, 73.5 }) do
         render.LayoutPreviewBlizzardPortrait(portrait, true, size, size)
         local art = assert(portrait._msufPreviewBlizzRing)
         assert(art.roundLayout == false and art.snapToPixelGrid == false and art.texelSnappingBias == 0,
             "native art must retain fractional atlas geometry")
-        assert(not portrait._msufPreviewBlizzCorner.shown, "preview must hide a reused overlay")
+        assert(not portrait._msufPreviewBlizzCorner.shown, "preview connector toggle must hide its texture")
         assert(not portrait._msufPreviewBlizzMirror and not portrait._msufPreviewBlizzClip and not art.masks,
             "preview must preserve the native branch without mirroring or clipping")
         Near(art.texCoord[1], 0, "preview contour left")

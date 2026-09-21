@@ -1509,6 +1509,8 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.clickable = conf.portraitClickable == true
   out.portrait.shape = Shared.NormalizePortraitShape(conf.portraitShape)
   out.portrait.blizzardElite = conf.portraitBlizzardElite == true
+  out.portrait.blizzardCorner = conf.portraitBlizzardCorner == true
+  out.portrait.blizzardStandaloneRing = conf.portraitBlizzardStandaloneRing ~= false
   out.portrait.size = portraitSize
   out.portrait.sizeMode = portraitSizeMode
   out.portrait.x = Number(conf.portraitOffsetX, 0)

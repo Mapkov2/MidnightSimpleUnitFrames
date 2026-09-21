@@ -104,7 +104,7 @@ end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
-local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 548, style = 220 }
+local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 584, style = 220 }
 local PORTRAIT_TAB_HEIGHTS = {
     general = PORTRAIT_CARD_H.main + 116,
     geometry = PORTRAIT_CARD_H.geometry + 116,
@@ -329,8 +329,11 @@ local function BuildPortrait(ctx, builder, unit)
     local eliteDragon = BindPortraitToggle(borderCard, "Elite and rare dragon", 16, -112, leftW - 32, "portraitBlizzardElite", false, "MSUF2_PORTRAIT_BLIZZARD_ELITE", RefreshPortraitControls)
     eliteDragon._msuf2SearchText = "Blizzard portrait ring elite rare rareelite boss gold silver dragon classification"
     BindExactPortraitTabTarget(eliteDragon, "border", tostring(unit) .. ".portraitBlizzardElite")
+    local blizzardCorner = BindPortraitToggle(borderCard, "Bottom-right gold connector", 16, -148, leftW - 32, "portraitBlizzardCorner", false, "MSUF2_PORTRAIT_BLIZZARD_CORNER", RefreshPortraitControls)
+    blizzardCorner._msuf2SearchText = "Blizzard portrait frame gold corner triangle connector embellishment Forever"
+    BindExactPortraitTabTarget(blizzardCorner, "border", tostring(unit) .. ".portraitBlizzardCorner")
     local dragonPreview = W.Dropdown(borderCard, "Runtime Preview", PORTRAIT_PLACEMENT.classificationPreview, 220)
-    W.MoveWidget(dragonPreview, borderCard, 16, -166, min(280, leftW - 32))
+    W.MoveWidget(dragonPreview, borderCard, 16, -202, min(280, leftW - 32))
     local portraitElement = MSUF.UF and MSUF.UF.elements and MSUF.UF.elements.Portrait
     M.BindDropdownWidget(ctx, dragonPreview,
         function() return portraitElement and portraitElement.GetClassificationPreview(unit) or "OFF" end,
@@ -386,16 +389,16 @@ local function BuildPortrait(ctx, builder, unit)
     local portraitAlpha = BindPortraitSlider(placementCard, "Portrait opacity", 16, -328, leftW - 58, 0, 100, 1, "portraitAlpha", 100, "MSUF2_PORTRAIT_ALPHA")
     local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
-    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -220, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
-    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -274, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
+    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -256, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
+    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -310, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
     BindExactPortraitTabTarget(edgeSoftness, "border", tostring(unit) .. ".portraitEdgeSoftness")
     edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
-    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -328, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
+    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -364, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
     borderArt._msuf2SearchText = "Portrait border art flat relief beveled ring blizzard style"
-    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -382, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
+    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -418, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
     borderDirection._msuf2SearchText = "Portrait border direction rotate light up right down left"
-    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -436, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
-    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -504, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
+    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -472, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
+    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -540, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
     -- The Castbar section's Icon tab hosts a second toggle for this same key on
     -- every unit that has a castbar. Re-run the page refreshers so the twin
@@ -450,7 +453,7 @@ local function BuildPortrait(ctx, builder, unit)
                 and PortraitUsesSeparateSize(conf)
         end },
         { controls = { zoom, panX, panY }, on = PortraitIs2D },
-        { controls = eliteDragon, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) end },
+        { controls = { eliteDragon, blizzardCorner }, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) end },
         { controls = dragonPreview, on = function(conf)
             local enabled = PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true
             if not enabled then StopDragonPreview() end

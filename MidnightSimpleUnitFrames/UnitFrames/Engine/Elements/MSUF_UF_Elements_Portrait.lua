@@ -138,6 +138,9 @@ local PORTRAIT_RING_ROTATION = {
 --- upstream/forever Blizzard_UnitFrame/Mainline/PlayerFrame.xml.
 local BLIZZARD_PORTRAIT_MASK = ADDON_PATH .. "\\Media\\Masks\\portrait_blizzard_mask.tga"
 local BLIZZARD_PORTRAIT_RING = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_blizzard.tga"
+local BLIZZARD_PORTRAIT_CORNER_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"
+local BLIZZARD_CORNER_OFFSET = 34.5 / 60
+local BLIZZARD_CORNER_SIZE = 23 / 60
 local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
   UNIT_PORTRAIT_UPDATE = true,
   UNIT_MODEL_CHANGED = true,
@@ -1249,6 +1252,46 @@ local function EnsureBlizzardPortraitRing(holder)
   return ring
 end
 
+local function EnsureBlizzardPortraitCorner(holder)
+  local corner = holder.blizzCorner
+  if corner then return corner end
+  local border = holder.border
+  if not (border and border.CreateTexture) then return nil end
+  corner = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 3), true)
+  if corner.SetRoundLayoutToNearestPixel then corner:SetRoundLayoutToNearestPixel(false) end
+  corner:SetSnapToPixelGrid(false)
+  corner:SetTexelSnappingBias(0)
+  holder.blizzCorner = corner
+  return corner
+end
+
+local function LayoutBlizzardPortraitCorner(holder, p)
+  local corner = holder.blizzCorner
+  if not (p and p.blizzardCorner == true) then
+    SetShown(corner, false)
+    return
+  end
+  local getAtlasInfo = _G.C_Texture and _G.C_Texture.GetAtlasInfo
+  if MSUF.Client and MSUF.Client.IsForever ~= true and not (getAtlasInfo and getAtlasInfo(BLIZZARD_PORTRAIT_CORNER_ATLAS)) then
+    SetShown(corner, false)
+    return
+  end
+  corner = EnsureBlizzardPortraitCorner(holder)
+  if not corner then return end
+  local width = tonumber(holder._msufLayoutWidth) or tonumber(p.width) or tonumber(p.size) or 36
+  local height = tonumber(holder._msufLayoutHeight) or tonumber(p.height) or tonumber(p.size) or 36
+  local key = width .. "|" .. height
+  if holder._msufBlizzCornerKey ~= key then
+    corner:ClearAllPoints()
+    corner:SetPoint("TOPLEFT", holder, "TOPLEFT", BLIZZARD_CORNER_OFFSET * width, -BLIZZARD_CORNER_OFFSET * height)
+    corner:SetSize(BLIZZARD_CORNER_SIZE * width, BLIZZARD_CORNER_SIZE * height)
+    holder._msufBlizzCornerKey = key
+  end
+  SetAtlasCached(corner, BLIZZARD_PORTRAIT_CORNER_ATLAS)
+  SetVertexColorCached(corner, 1, 1, 1, 1)
+  SetShown(corner, true)
+end
+
 --- Mask and rim use identical bounds; the mask edge lies under the gold.
 local function LayoutBlizzardPortraitRing(holder, p)
   if LEGACY_BLIZZARD_PORTRAIT then
@@ -1256,6 +1299,15 @@ local function LayoutBlizzardPortraitRing(holder, p)
   end
   local ring = EnsureBlizzardPortraitRing(holder)
   if not ring then return false end
+  -- A full native Blizzard frame atlas already contains this exact gold rim.
+  -- Profiles that use that atlas keep the native corner embellishment but can
+  -- suppress MSUF's standalone copy so the rim is not drawn twice.
+  if p and p.blizzardStandaloneRing == false then
+    SetShown(ring, false)
+    if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
+    LayoutBlizzardPortraitCorner(holder, p)
+    return true
+  end
   if not holder._msufBlizzRingKey then
     ring:ClearAllPoints()
     ring:SetAllPoints(holder)
@@ -1266,7 +1318,7 @@ local function LayoutBlizzardPortraitRing(holder, p)
   SetVertexColorCached(ring, 1, 1, 1, 1)
   SetShown(ring, true)
   if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
-  if holder.blizzCorner then SetShown(holder.blizzCorner, false) end
+  LayoutBlizzardPortraitCorner(holder, p)
   return true
 end
 

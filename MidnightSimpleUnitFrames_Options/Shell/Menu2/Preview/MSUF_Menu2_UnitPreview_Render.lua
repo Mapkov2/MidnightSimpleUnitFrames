@@ -2990,7 +2990,9 @@ function Stage.RenderPortrait(st)
         end
         R.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel)
         R.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",
-            S(box._runtimePortraitW), S(box._runtimePortraitH))
+            S(box._runtimePortraitW), S(box._runtimePortraitH),
+            PortraitStyleGet(key, "portraitBlizzardCorner", false) == true,
+            not (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.blizzardStandaloneRing == false))
         local portraitElement = MSUF.UF and MSUF.UF.elements and MSUF.UF.elements.Portrait
         if portraitElement and portraitElement.PaintClassification then
             portraitElement.PaintClassification(mock.portrait,
@@ -3607,7 +3609,7 @@ function Render.Install(Preview, deps)
         ring:Show()
         return true
     end
-    local function LayoutPreviewBlizzardPortrait(portrait, active, pw, ph)
+    local function LayoutPreviewBlizzardPortrait(portrait, active, pw, ph, showCorner, showRing)
         local ring = portrait._msufPreviewBlizzRing
         if PREVIEW_CLASSIC and portrait._msufPreviewBlizzFallback then portrait._msufPreviewBlizzFallback:Hide() end
         if not active then
@@ -3639,7 +3641,7 @@ function Render.Install(Preview, deps)
             if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end
             return
         end
-        if not ring then
+        if not ring and showRing ~= false then
             if not portrait.CreateTexture then return end
             -- Paired contour assets share the portrait bounds at every size.
             ring = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 2), true)
@@ -3648,16 +3650,44 @@ function Render.Install(Preview, deps)
             ring:SetTexelSnappingBias(0)
             portrait._msufPreviewBlizzRing = ring
         end
-        ring:SetTexture(PREVIEW_BLIZZ.ring)
-        ring:SetTexCoord(0, 1, 0, 1)
-        if not portrait._msufPreviewBlizzKey then
-            portrait._msufPreviewBlizzKey = true
-            ring:ClearAllPoints()
-            ring:SetAllPoints(portrait)
+        if ring and showRing ~= false then
+            ring:SetTexture(PREVIEW_BLIZZ.ring)
+            ring:SetTexCoord(0, 1, 0, 1)
+            if not portrait._msufPreviewBlizzKey then
+                portrait._msufPreviewBlizzKey = true
+                ring:ClearAllPoints()
+                ring:SetAllPoints(portrait)
+            end
+            ring:Show()
+        elseif ring then
+            ring:Hide()
         end
-        ring:Show()
         if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
-        if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end
+        local corner = portrait._msufPreviewBlizzCorner
+        local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
+        local cornerAvailable = MSUF.Client and MSUF.Client.IsForever == true
+            or (getAtlasInfo and getAtlasInfo("UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"))
+        if showCorner and cornerAvailable then
+            if not corner and portrait.CreateTexture then
+                corner = PixelLayoutRegion(portrait:CreateTexture(nil, "OVERLAY", nil, 3), true)
+                if corner.SetRoundLayoutToNearestPixel then corner:SetRoundLayoutToNearestPixel(false) end
+                corner:SetSnapToPixelGrid(false)
+                corner:SetTexelSnappingBias(0)
+                portrait._msufPreviewBlizzCorner = corner
+            end
+            if corner then
+                local width = tonumber(pw) or portrait:GetWidth() or 36
+                local height = tonumber(ph) or portrait:GetHeight() or 36
+                corner:ClearAllPoints()
+                corner:SetPoint("TOPLEFT", portrait, "TOPLEFT", (34.5 / 60) * width, -(34.5 / 60) * height)
+                corner:SetSize((23 / 60) * width, (23 / 60) * height)
+                corner:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment")
+                corner:SetVertexColor(1, 1, 1, 1)
+                corner:Show()
+            end
+        elseif corner then
+            corner:Hide()
+        end
     end
     renderState.LayoutPreviewBlizzardPortrait = LayoutPreviewBlizzardPortrait
     local function LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a)
