@@ -57,6 +57,7 @@ local function BuildSlotKeys(prefix)
   return {
     prefix = prefix,
     Enabled = prefix .. "Enabled",
+    Atlas = prefix .. "Atlas",
     CustomTexturePath = prefix .. "CustomTexturePath",
     SourceMode = prefix .. "SourceMode",
     Texture = prefix .. "Texture",
@@ -163,6 +164,21 @@ local function ResolveLayerTexture(conf, prefix, keys)
     end
   end
   return WHITE8
+end
+
+--- Blizzard frame art is distributed as atlases rather than standalone files.
+--- Keep it as an explicit source mode so an atlas name can never be mistaken
+--- for a file path by SetTexture. Unsupported atlases fail closed to the
+--- ordinary texture resolver, which keeps imported profiles usable on older
+--- clients without drawing a white missing-texture rectangle.
+local function ResolveLayerAtlas(conf, prefix, keys)
+  if conf[keys and keys.SourceMode or (prefix .. "SourceMode")] ~= "ATLAS" then return nil end
+  local atlas = conf[keys and keys.Atlas or (prefix .. "Atlas")]
+  if type(atlas) ~= "string" or atlas == "" then return nil end
+  local textureAPI = _G.C_Texture
+  local getAtlasInfo = textureAPI and textureAPI.GetAtlasInfo
+  if type(getAtlasInfo) == "function" and getAtlasInfo(atlas) == nil then return nil end
+  return atlas
 end
 
 local function ApplyColorTreatment(tex, conf, prefix, keys)
@@ -694,6 +710,7 @@ local function LayerVisible(conf, prefix, frame, unitKey, keys)
 end
 TextureLayer.LayerVisible = LayerVisible
 TextureLayer.ResolveLayerTexture = ResolveLayerTexture
+TextureLayer.ResolveLayerAtlas = ResolveLayerAtlas
 TextureLayer.ResolveClassRGB = ResolveClassRGB
 
 local function ResolveTexCoords(conf, prefix, keys)
@@ -1006,12 +1023,21 @@ local function ApplySlot(frame, conf, unitKey, slot)
 
   local clipWanted = WantsRoundedClip(conf, prefix, keys)
   local tex = EnsureBaseTexture(holder, clipWanted)
-  tex:SetTexture(ResolveLayerTexture(conf, prefix, keys))
+  local atlas = ResolveLayerAtlas(conf, prefix, keys)
+  if atlas and tex.SetAtlas then
+    tex:SetAtlas(atlas, false)
+    tex._msufTexLayerAtlas = atlas
+  else
+    tex:SetTexture(ResolveLayerTexture(conf, prefix, keys))
+    tex._msufTexLayerAtlas = nil
+  end
   ApplyColorTreatment(tex, conf, prefix, keys)
   if tex.SetBlendMode then
     tex:SetBlendMode(conf[keys.BlendMode] == "ADD" and "ADD" or "BLEND")
   end
-  if tex.SetTexCoord then
+  -- SetAtlas owns atlas-relative UVs. A subsequent full 0..1 SetTexCoord would
+  -- sample the complete backing texture instead of the selected atlas entry.
+  if not atlas and tex.SetTexCoord then
     tex:SetTexCoord(ResolveTexCoords(conf, prefix, keys))
   end
 

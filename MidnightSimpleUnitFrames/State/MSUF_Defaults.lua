@@ -3083,11 +3083,15 @@ local function MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
         end
         for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
             if u[texP .. "Enabled"] == nil then u[texP .. "Enabled"] = false end
+            if u[texP .. "Atlas"] == nil then u[texP .. "Atlas"] = "" end
             if u[texP .. "Texture"] == nil then u[texP .. "Texture"] = "" end
             if u[texP .. "CustomTexturePath"] == nil then u[texP .. "CustomTexturePath"] = "" end
             if IS_CLASSIC_FAMILY and u[texP .. "SourceMode"] == nil then
                 local sourcePath = tostring(u[texP .. "CustomTexturePath"] or "")
-                if sourcePath:find("^Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\TextureLayers\\") then
+                local sourceAtlas = tostring(u[texP .. "Atlas"] or "")
+                if sourceAtlas ~= "" then
+                    u[texP .. "SourceMode"] = "ATLAS"
+                elseif sourcePath:find("^Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\TextureLayers\\") then
                     u[texP .. "SourceMode"] = "PACK"
                 elseif sourcePath ~= "" then
                     u[texP .. "SourceMode"] = "CUSTOM"

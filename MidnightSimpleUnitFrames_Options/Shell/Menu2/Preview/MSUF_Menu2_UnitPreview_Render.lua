@@ -1000,6 +1000,8 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
         tex:SetAllPoints(holder)
         holder.tex = tex
     end
+    local atlas = textureRuntime and type(textureRuntime.ResolveLayerAtlas) == "function"
+        and textureRuntime.ResolveLayerAtlas(conf, prefix) or nil
     local path = textureRuntime and type(textureRuntime.ResolveLayerTexture) == "function"
         and textureRuntime.ResolveLayerTexture(conf, prefix) or conf[prefix .. "CustomTexturePath"]
     if type(path) ~= "string" or path == "" then path = nil end
@@ -1010,7 +1012,13 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     if type(path) ~= "string" or path == "" then
         path = (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or "Interface\\Buttons\\WHITE8x8"
     end
-    setTexture(tex, path)
+    if atlas and tex.SetAtlas then
+        tex:SetAtlas(atlas, false)
+        tex._msufTexLayerAtlas = atlas
+    else
+        setTexture(tex, path)
+        tex._msufTexLayerAtlas = nil
+    end
     if textureRuntime and type(textureRuntime.ApplyColorTreatment) == "function" then
         textureRuntime.ApplyColorTreatment(tex, conf, prefix)
     elseif tex.SetDesaturated then
@@ -1022,7 +1030,7 @@ local function RenderTextureLayerSlotPreview(box, mock, conf, slot, wanted, scal
     -- Crop/mirroring runs after setTexture so the explicit region wins over
     -- the shared SetTex inset. Runtime owns the resolver to keep both views
     -- pixel-identical.
-    if tex.SetTexCoord then
+    if not atlas and tex.SetTexCoord then
         if textureRuntime and type(textureRuntime.ResolveTexCoords) == "function" then
             tex:SetTexCoord(textureRuntime.ResolveTexCoords(conf, prefix))
         else

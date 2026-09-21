@@ -13,6 +13,7 @@ local PACK_PATH = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\TextureLa
 
 MSUF_GetBarTexture = function() return BAR_TEXTURE end
 MSUF_ResolveStatusbarTextureKey = function(key) return "SharedMedia:" .. key end
+C_Texture = { GetAtlasInfo = function(atlas) return atlas == "UI-HUD-UnitFrame-Player-PortraitOn" and {} or nil end }
 CreateFrame = function()
     local frame = {}
     return setmetatable(frame, { __index = function() return function() end end })
@@ -35,6 +36,8 @@ end
 
 local resolve = assert(namespace.TextureLayer and namespace.TextureLayer.ResolveLayerTexture,
     "runtime TextureLayer.ResolveLayerTexture missing")
+local resolveAtlas = assert(namespace.TextureLayer and namespace.TextureLayer.ResolveLayerAtlas,
+    "runtime TextureLayer.ResolveLayerAtlas missing")
 local apply = assert(namespace.MSUF2.ApplyTextureLayerHighlightConfig,
     "Options M.ApplyTextureLayerHighlightConfig missing")
 
@@ -47,6 +50,14 @@ local function Layer(overrides)
     }
     for key, value in pairs(overrides or {}) do conf[key] = value end
     return conf
+end
+
+do
+    local conf = Layer({ texLayerSourceMode = "ATLAS", texLayerAtlas = "UI-HUD-UnitFrame-Player-PortraitOn" })
+    assert(resolveAtlas(conf, "texLayer") == "UI-HUD-UnitFrame-Player-PortraitOn",
+        "native Blizzard atlas source did not resolve")
+    conf.texLayerAtlas = "missing-atlas"
+    assert(resolveAtlas(conf, "texLayer") == nil, "missing atlas did not fail closed")
 end
 
 local function AssertOnlyGlow(label, conf)
@@ -80,6 +91,7 @@ for label, overrides in pairs({
     sharedmedia = { texLayerTexture = "Smooth" },
     pack = { texLayerSourceMode = "PACK", texLayerCustomTexturePath = PACK_PATH },
     custom = { texLayerSourceMode = "CUSTOM", texLayerCustomTexturePath = "Interface\\Custom\\Art" },
+    atlas = { texLayerSourceMode = "ATLAS", texLayerAtlas = "UI-HUD-UnitFrame-Player-PortraitOn" },
 }) do
     local conf = Layer(overrides)
     assert(resolve(conf, "texLayer") ~= GLOW, label .. ": the layer already draws the glow")
