@@ -8,12 +8,69 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "BA748E90022DDA407197B7D39DD7D6FAB5F0C9F077D6A6C2EC30A2E3F37E14B6",
-    currentVersion = "6.20",
-    historyFromVersion = "6.14",
-    previousVersion = "6.151",
-    rangeLabel = "6.151 -> 6.20",
+    sourceSha256 = "3AE356BA01BA6240C4EC056988F0BA9A1BD58BC1D23F9A3FDAF2FC88C4156C4E",
+    currentVersion = "6.21",
+    historyFromVersion = "6.15",
+    previousVersion = "6.20",
+    rangeLabel = "6.20 -> 6.21",
     entries = {
+        {
+            version = "6.21",
+            date = "2026-09-22",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Level text is colored by difficulty, the same way Blizzard colors a target's level. Far above you and \"??\" are red, higher levels are orange, your level stays white, lower levels are green, and trivial levels are gray. Retail grades through the content-difficulty API, so scaled and Timewalking creatures stay correct. Color by level difficulty starts on for Unit Frames unless that frame already has its own level text color. The five colors are shared under Colors > Status Text Colors. Party and Raid frames gain a Level Text indicator, off until you turn it on, with the same coloring.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "color by level difficulty",
+                                label = "Color by level difficulty",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_player.unit.status.level.difficulty_color",
+                                settingKey = "player.levelIndicatorDifficultyColor",
+                            },
+                        },
+                        {
+                            text = "Blizzard-style portraits can show elite, rare, and boss dragons. With the Blizzard portrait shape, Elite and rare dragon draws gold for elite, silver for rare and rare elite, and the winged gold dragon for a boss, using the unit's real classification. It stays off until you enable it. Runtime Preview shows a chosen dragon on that unit's live portrait until the card closes or combat starts, without saving the choice.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "elite and rare dragon",
+                                label = "Elite and rare dragon",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitblizzardelite",
+                                settingKey = "player.portraitBlizzardElite",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "border",
+                            },
+                        },
+                        {
+                            text = "First login and profile reset now receive the current factory profile. A fresh profile and a full reset use the shipped baseline. Profiles you already have stay as they are. The factory fills castbars from left to right, sets the cleanse border to what your group can dispel, and keeps target buffs and debuffs on one line.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The Blizzard portrait shape uses its own ring and mask, so the gold rim sits on the portrait. Zoom, pan, and portrait opacity apply to that shape again. While it is selected, the usual border style and color stay inactive because the stock ring replaces them.",
+                        "Level difficulty colors update on level, faction, and your own level-up. Editing a band repaints the last resolved color without reading the unit again.",
+                        "Startup loads the aura-name catalog for the client locale only.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Opening the menu no longer stops on a menu-font readback error. A hidden label reports no text width until the window is shown, and that was treated as a rejected font. The menu font is accepted from the file, size, and style that stuck. A font the client rejects falls back to the previous face, and building the window continues.",
+                        "A font the client rejects, and a factory profile that cannot be decoded, no longer abort addon startup.",
+                        "The Class Resources preview uses the same anchor as the live bar. It had been drawn one bar height, plus the 6 px gap, above the live bar.",
+                        "The Ellesmere Edit Mode setting stays available when EllesmereUI is not installed. The bridge does nothing until that addon is present.",
+                        "Login reads one locale of aura names instead of all twelve.",
+                    },
+                },
+            },
+        },
         {
             version = "6.20",
             date = "2026-09-11",
@@ -210,48 +267,6 @@ local data = {
                         "Preserved raid groups use one roster snapshot for sorting and layout, preventing the filled and displayed grids from disagreeing when more subgroups are present than the configured column limit.",
                         "Assistant requests for Out of range opacity, Texture Layer opacity, and Portrait opacity update their own controls.",
                         "Reduced repeated work and temporary allocations in health gradients, dynamic backgrounds, protected text, Aura fallback scans, and Range Fade timers while preserving their update behavior.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.14",
-            date = "2026-08-30",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Health-bar backgrounds can now fill the full bar or only missing health. The background can be colored independently with Custom tint, Match health bar, Class color, or Health gradient, with matching Unit Frame, Group Frame, and preview rendering.",
-                            link = {
-                                pageKey = "opt_colors",
-                                query = "background fill missing health only",
-                                label = "Background Fill",
-                                sectionId = "colors_background",
-                                controlId = "menu2.opt.colors.advanced.background.fill.mode",
-                                settingKey = "general.barBgFillMode",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Added Full bar and Missing health only background-fill modes plus independent health-background color sources, while migrating existing profiles without changing their current appearance.",
-                        "The Assistant now routes Aura content and filter requests to the Unit or Group Frame that owns them, exposes the See New Features destination directly, and presents ambiguous controls with readable menu breadcrumbs instead of internal identifiers.",
-                        "Unit Frame tooltips react immediately when their configured modifier key is pressed or released while the frame remains hovered.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Player Castbar interrupt feedback survives the client event order where the cast stops before the interrupted result arrives, without reviving stale casts.",
-                        "State Tint controls appear and disappear immediately when their master toggles change instead of requiring the Colors page to be reopened.",
-                        "Assistant queues, history, undo, pending choices, workflows, and deferred callbacks are now isolated to the profile that created them, preventing stale work from crossing a profile switch or surviving beyond its conversational context.",
-                        "Immediate and deferred Assistant mutations now share the same failure-recovery path so partial work rolls back consistently.",
-                        "General Aura guidance no longer competes with frame-local Aura owners, and question-shaped duration-filter requests retain their safe executable choices.",
-                        "Aura-name fallback updates skip redundant unit-scan setup when no unresolved additions can benefit from it.",
-                        "Opening Unit Frame Power settings no longer errors while building the detached-bar Text on detached bar control.",
                     },
                 },
             },

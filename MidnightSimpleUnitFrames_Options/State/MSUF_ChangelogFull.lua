@@ -8,12 +8,69 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "BA748E90022DDA407197B7D39DD7D6FAB5F0C9F077D6A6C2EC30A2E3F37E14B6",
-    currentVersion = "6.20",
+    sourceSha256 = "3AE356BA01BA6240C4EC056988F0BA9A1BD58BC1D23F9A3FDAF2FC88C4156C4E",
+    currentVersion = "6.21",
     historyFromVersion = "6.02",
-    previousVersion = "6.151",
-    rangeLabel = "6.151 -> 6.20",
+    previousVersion = "6.20",
+    rangeLabel = "6.20 -> 6.21",
     entries = {
+        {
+            version = "6.21",
+            date = "2026-09-22",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Level text is colored by difficulty, the same way Blizzard colors a target's level. Far above you and \"??\" are red, higher levels are orange, your level stays white, lower levels are green, and trivial levels are gray. Retail grades through the content-difficulty API, so scaled and Timewalking creatures stay correct. Color by level difficulty starts on for Unit Frames unless that frame already has its own level text color. The five colors are shared under Colors > Status Text Colors. Party and Raid frames gain a Level Text indicator, off until you turn it on, with the same coloring.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "color by level difficulty",
+                                label = "Color by level difficulty",
+                                sectionId = "status_icons",
+                                controlId = "menu2.uf_player.unit.status.level.difficulty_color",
+                                settingKey = "player.levelIndicatorDifficultyColor",
+                            },
+                        },
+                        {
+                            text = "Blizzard-style portraits can show elite, rare, and boss dragons. With the Blizzard portrait shape, Elite and rare dragon draws gold for elite, silver for rare and rare elite, and the winged gold dragon for a boss, using the unit's real classification. It stays off until you enable it. Runtime Preview shows a chosen dragon on that unit's live portrait until the card closes or combat starts, without saving the choice.",
+                            link = {
+                                pageKey = "uf_player",
+                                query = "elite and rare dragon",
+                                label = "Elite and rare dragon",
+                                sectionId = "portrait",
+                                controlId = "menu2.uf_player.unit.portrait.portraitblizzardelite",
+                                settingKey = "player.portraitBlizzardElite",
+                                prepareKind = "unitPortraitTab",
+                                prepareValue = "border",
+                            },
+                        },
+                        {
+                            text = "First login and profile reset now receive the current factory profile. A fresh profile and a full reset use the shipped baseline. Profiles you already have stay as they are. The factory fills castbars from left to right, sets the cleanse border to what your group can dispel, and keeps target buffs and debuffs on one line.",
+                            linkless = true,
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "The Blizzard portrait shape uses its own ring and mask, so the gold rim sits on the portrait. Zoom, pan, and portrait opacity apply to that shape again. While it is selected, the usual border style and color stay inactive because the stock ring replaces them.",
+                        "Level difficulty colors update on level, faction, and your own level-up. Editing a band repaints the last resolved color without reading the unit again.",
+                        "Startup loads the aura-name catalog for the client locale only.",
+                    },
+                },
+                {
+                    title = "Fixes & Performance",
+                    bullets = {
+                        "Opening the menu no longer stops on a menu-font readback error. A hidden label reports no text width until the window is shown, and that was treated as a rejected font. The menu font is accepted from the file, size, and style that stuck. A font the client rejects falls back to the previous face, and building the window continues.",
+                        "A font the client rejects, and a factory profile that cannot be decoded, no longer abort addon startup.",
+                        "The Class Resources preview uses the same anchor as the live bar. It had been drawn one bar height, plus the 6 px gap, above the live bar.",
+                        "The Ellesmere Edit Mode setting stays available when EllesmereUI is not installed. The bridge does nothing until that addon is present.",
+                        "Login reads one locale of aura names instead of all twelve.",
+                    },
+                },
+            },
+        },
         {
             version = "6.20",
             date = "2026-09-11",
