@@ -254,8 +254,14 @@ local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
   local bar, background = frame.hpBar, frame.healthBackgroundBar
   if not (bar and background) then return end
   local h = frame.MSUFSpec and frame.MSUFSpec.health
+  local orientation = bar._msufOrientation or "HORIZONTAL"
+  local reverse = bar._msufReverseFill == true
+  -- A full reversed StatusBar reports its leading edge on the far side, so a
+  -- clip mask anchored there covers the whole bar and the missing-health color
+  -- shows at 100%. The inverse value bar has no edge to misread.
   local wanted = frame._msufHealthBackgroundFillMissing == true and percentPlan
     and not (h and h.chunked == true)
+    and not reverse
   local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
   local texture = background.GetStatusBarTexture and background:GetStatusBarTexture()
   local supported = fill and texture and background.CreateMaskTexture
@@ -268,7 +274,6 @@ local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
     or (frame._msufRGF_MaskedTextures and frame._msufRGF_MaskedTextures[texture] ~= nil)
     or (frame._msufRUF_MaskedTextures and frame._msufRUF_MaskedTextures[texture] ~= nil)
   local active = wanted and supported and not roundedMasked and true or false
-  local orientation, reverse = bar._msufOrientation or "HORIZONTAL", bar._msufReverseFill == true
   if not resetValue and frame._msufHealthBackgroundMaskActive == active
     and frame._msufHealthBackgroundMaskFill == fill
     and frame._msufHealthBackgroundMaskTexture == texture
@@ -292,16 +297,8 @@ local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
     end
     mask:ClearAllPoints()
     if orientation == "VERTICAL" then
-      if reverse then
-        mask:SetPoint("TOPRIGHT", fill, "BOTTOMRIGHT", 0, 0)
-        mask:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
-      else
-        mask:SetPoint("BOTTOMLEFT", fill, "TOPLEFT", 0, 0)
-        mask:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
-      end
-    elseif reverse then
-      mask:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
-      mask:SetPoint("BOTTOMRIGHT", fill, "BOTTOMLEFT", 0, 0)
+      mask:SetPoint("BOTTOMLEFT", fill, "TOPLEFT", 0, 0)
+      mask:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
     else
       mask:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
       mask:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
@@ -312,8 +309,8 @@ local function SyncHealthBackgroundMask(frame, percentPlan, resetValue)
     background._msufHealthMissingMinMax = 100
     background._msufHealthMissingValue, background._msufHealthMissingUnit = nil, nil
   elseif frame._msufHealthBackgroundMaskActive == true and frame._msufHealthBackgroundFillMissing == true then
-    -- Restore the inverse before an absolute/chunked route starts. Capability
-    -- checks and mask binding stay in this cold layout/route selection path.
+    -- Restore the inverse when the clip mask is retired. Capability checks and
+    -- mask binding stay in this cold layout/route selection path.
     SetHealthBackgroundValue(frame, frame.MSUFUnitKey, nil, nil, false)
   end
   frame._msufHealthBackgroundMaskActive = active

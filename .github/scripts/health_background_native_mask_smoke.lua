@@ -74,7 +74,7 @@ local function Run(sourceRoot)
     SetBarSmoothing=function(bar,enabled,chunked)
       bar._msufSmoothInterp=(enabled or chunked) and 1 or nil
     end}
-  local ns={UF={RegisterElement=function(_,v) health=v end},UFBarTextCommon=C}
+  local ns={ExportPublic=noop,UF={RegisterElement=function(_,v) health=v end},UFBarTextCommon=C}
   assert(loadfile(sourceRoot.."/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua"))("MSUF",ns)
   local function Region()
     local r={points={}}
@@ -164,7 +164,14 @@ local function Run(sourceRoot)
             health.Apply(frame,spec)
             local update=health.SelectUpdate(frame,spec)
             assert(frame.hpBarBG.masks[foreign],"foreign mask lost during apply")
-            if health.SyncBackgroundPlan then assert(frame._msufHealthBackgroundMaskActive,"native mask not selected") end
+            if health.SyncBackgroundPlan then
+              if reverse then
+                assert(not frame._msufHealthBackgroundMaskActive,"reverse fill used the clip mask")
+                assert(frame._msufHealthBackgroundNeedsValue,"reverse fill lost the value-driven background")
+              else
+                assert(frame._msufHealthBackgroundMaskActive,"native mask not selected")
+              end
+            end
             for _,value in ipairs({0,1,37,100,99,21,21,73,0,100}) do
               hp=value
               local nr,nw,nb,nm=reads,writes,maskBinds,maskCreates
@@ -198,18 +205,28 @@ local function Run(sourceRoot)
               spec.health.chunked=false;health.Apply(frame,spec)
               frame._msufTextRuntime={healthSlotCount=1,healthNeedsCurrent=true}
               health.SelectUpdate(frame,spec)
-              assert(frame._msufHealthBackgroundMaskActive==group,"absolute/group plan mismatch")
+              assert(frame._msufHealthBackgroundMaskActive==(group and not reverse),"absolute/group plan mismatch")
               frame._msufTextRuntime=nil;health.SelectUpdate(frame,spec)
               local old=frame.hpBarBG
               frame.healthBackgroundBar.texture=Bar(frame,"replacement").texture
               frame.hpBarBG=frame.healthBackgroundBar.texture
               health.SelectUpdate(frame,spec)
-              assert(not old.masks[frame._msufHealthBackgroundClipMask],"old texture kept native mask")
-              assert(frame.hpBarBG.masks[frame._msufHealthBackgroundClipMask],"replacement unmasked")
+              if reverse then
+                assert(not frame._msufHealthBackgroundMaskActive,"reverse fill attached a clip mask")
+                assert(frame._msufHealthBackgroundNeedsValue,"reverse fill lost the value-driven background")
+              else
+                assert(not old.masks[frame._msufHealthBackgroundClipMask],"old texture kept native mask")
+                assert(frame.hpBarBG.masks[frame._msufHealthBackgroundClipMask],"replacement unmasked")
+              end
               spec.health.backgroundFillMode="full";health.Apply(frame,spec)
               health.SelectUpdate(frame,spec)
               spec.health.backgroundFillMode="missing";health.Apply(frame,spec)
-              assert(frame._msufHealthBackgroundMaskActive,"mask did not reattach after full mode")
+              if reverse then
+                assert(not frame._msufHealthBackgroundMaskActive,"reverse fill reattached the clip mask")
+                assert(frame._msufHealthBackgroundNeedsValue,"reverse fill lost the value-driven background")
+              else
+                assert(frame._msufHealthBackgroundMaskActive,"mask did not reattach after full mode")
+              end
             end
           end
         end
@@ -219,7 +236,9 @@ local function Run(sourceRoot)
   -- Issue #146. The rounded surface masks this exact texture, and two masks on
   -- one texture render the missing-health background wrong in the live renderer
   -- (the model above composes rects and cannot see it). Rounded frames must
-  -- therefore keep the value-driven fill; everyone else keeps the clip mask.
+  -- therefore keep the value-driven fill. Reversed bars do too: a full reversed
+  -- StatusBar reports its leading edge on the far side, so the clip mask would
+  -- cover the whole bar. Every other bar keeps the clip mask.
   local gateChecks=0
   if health.SyncBackgroundPlan then
     hp,opaque=37,false
