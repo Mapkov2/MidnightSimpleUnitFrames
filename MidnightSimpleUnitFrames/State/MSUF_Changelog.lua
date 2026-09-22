@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "8963B5E3823FAFF25D5B7041EA021D7D9F0E82CB6AE7ACA6998010F27B5199F0",
+    sourceSha256 = "4EE2C15342FB5C21E6AC91CF8AC28A1D28722EF04BCA846C02B2E3B8F4A2BE11",
     currentVersion = "6.21",
     historyFromVersion = "6.15",
     previousVersion = "6.20",
@@ -64,6 +64,8 @@ local data = {
                 {
                     title = "Fixes & Performance",
                     bullets = {
+                        "Hide out of combat on Class Resources shows the bar as soon as combat starts. The check used to run before the client reported combat lockdown, so a bar with no later power event, such as Warrior Whirlwind, stayed hidden for the whole fight.",
+                        "Missing-health backgrounds on bars that fill in reverse no longer paint across the full bar at 100% health. A reversed bar reports its leading edge on the far side, so the clip mask covered everything. Those bars use the value-driven background instead.",
                         "Opening the menu no longer stops on a menu-font readback error. A hidden label reports no text width until the window is shown, and that was treated as a rejected font. The menu font is accepted from the file, size, and style that stuck. A font the client rejects falls back to the previous face, and building the window continues.",
                         "A font the client rejects, and a factory profile that cannot be decoded, no longer abort addon startup.",
                         "The Class Resources preview uses the same anchor as the live bar. It had been drawn one bar height, plus the 6 px gap, above the live bar.",

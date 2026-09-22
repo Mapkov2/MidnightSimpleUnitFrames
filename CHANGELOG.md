@@ -19,6 +19,8 @@
 
 ### Fixes & Performance
 
+- **Hide out of combat** on Class Resources shows the bar as soon as combat starts. The check used to run before the client reported combat lockdown, so a bar with no later power event, such as Warrior Whirlwind, stayed hidden for the whole fight.
+- Missing-health backgrounds on bars that fill in reverse no longer paint across the full bar at 100% health. A reversed bar reports its leading edge on the far side, so the clip mask covered everything. Those bars use the value-driven background instead.
 - Opening the menu no longer stops on a menu-font readback error. A hidden label reports no text width until the window is shown, and that was treated as a rejected font. The menu font is accepted from the file, size, and style that stuck. A font the client rejects falls back to the previous face, and building the window continues.
 - A font the client rejects, and a factory profile that cannot be decoded, no longer abort addon startup.
 - The Class Resources preview uses the same anchor as the live bar. It had been drawn one bar height, plus the 6 px gap, above the live bar.
