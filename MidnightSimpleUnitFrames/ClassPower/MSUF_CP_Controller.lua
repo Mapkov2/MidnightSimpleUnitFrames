@@ -49,6 +49,7 @@ local UnitHealthMax = UnitHealthMax
 local UnitHasVehicleUI = UnitHasVehicleUI
 local GetRuneCooldown = GetRuneCooldown
 local InCombatLockdown = InCombatLockdown
+local UnitAffectingCombat = UnitAffectingCombat
 local GetTime = GetTime
 local C_Timer = C_Timer
 local GetPowerRegenForPowerType = GetPowerRegenForPowerType
@@ -638,8 +639,11 @@ local function CP_CheckAutoHide(cur, maxP)
 
     local b = _cpDB.bars or {}
 
-    --- OOC: hide when out of combat
-    if b.classPowerHideOOC and not InCombatLockdown() then
+    --- OOC: hide when out of combat. PLAYER_REGEN_DISABLED is delivered before
+    --- InCombatLockdown() turns true, so the combat-entry re-check also reads
+    --- UnitAffectingCombat("player"). Modes with no later power event, such as
+    --- the Warrior Whirlwind bar, never get a second chance to show.
+    if b.classPowerHideOOC and not (InCombatLockdown() or (UnitAffectingCombat and UnitAffectingCombat("player"))) then
         CP.container:SetAlpha(0)
         return
     end
