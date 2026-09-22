@@ -369,19 +369,13 @@ local function FontPathMatches(expected, actual)
     expected, actual = NormalizeAppliedFontPath(expected), NormalizeAppliedFontPath(actual)
     return expected ~= nil and actual ~= nil and expected == actual
 end
-local function FontHasRenderableText(fs)
-    if not (fs and fs.GetText and fs.GetStringWidth) then return true end
-    local text = fs:GetText()
-    if type(text) ~= "string" or not text:find("%S") then return true end
-    local width = fs:GetStringWidth()
-    return type(width) ~= "number" or width > 0
-end
+-- Path, size, and flags are the readback. String width is not: a FontString
+-- on a hidden window reports 0 until it is shown, and measuring it lays out text.
 local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFlags)
     local actualFont, actualSize, actualFlags = fs:GetFont()
     if not FontPathMatches(expectedFont, actualFont) then return false end
     if type(actualSize) == "number" and math.abs(actualSize - expectedSize) > 0.01 then return false end
-    if tostring(actualFlags or "") ~= tostring(expectedFlags or "") then return false end
-    return FontHasRenderableText(fs)
+    return tostring(actualFlags or "") == tostring(expectedFlags or "")
 end
 local function TryApplyStyledFont(fs, font, size, flags)
     if type(font) ~= "string" or font == "" then return false end
@@ -405,7 +399,12 @@ local function ApplyStyledFont(fs, force)
         return true
     end
     local applied = TryApplyStyledFont(fs, nextFont, nextSize, nextFlags)
-    assert(applied, "MSUF menu font readback mismatch: " .. tostring(nextFont))
+    if not applied and orig.font and orig.font ~= nextFont then
+        applied = TryApplyStyledFont(fs, orig.font, nextSize, nextFlags)
+        if applied then
+            fontKey = tostring(orig.font) .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "")
+        end
+    end
     if applied and fs._msuf2DropdownDefaultFont then
         local appliedFont, appliedSize, appliedFlags = fs:GetFont()
         if appliedFont and appliedSize then
