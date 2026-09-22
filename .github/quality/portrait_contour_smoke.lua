@@ -211,7 +211,7 @@ local ring = assert(holder.blizzRing, "Blizzard ring texture missing")
 assert(ring.shown == true, "Blizzard ring must be shown")
 assert(ring.parent == holder.border, "Blizzard ring must render on the border frame above the art")
 assert(ring.texture == RING_FILE, "Blizzard ring must use the standalone contour art")
-assert(ring.roundLayout == false and ring.snapToPixelGrid == false and ring.texelSnappingBias == 0,
+assert(ring.snapToPixelGrid == false and ring.texelSnappingBias == 0,
     "ring must retain fractional atlas geometry instead of snapping through the mask")
 
 Near(ring.texCoord[1], 0, "ring left coord")
@@ -282,7 +282,7 @@ do
     for _, size in ipairs({ 36, 58, 73.5 }) do
         render.LayoutPreviewBlizzardPortrait(portrait, true, size, size)
         local art = assert(portrait._msufPreviewBlizzRing)
-        assert(art.roundLayout == false and art.snapToPixelGrid == false and art.texelSnappingBias == 0,
+        assert(art.snapToPixelGrid == false and art.texelSnappingBias == 0,
             "native art must retain fractional atlas geometry")
         assert(not portrait._msufPreviewBlizzCorner.shown, "preview must hide a reused overlay")
         assert(not portrait._msufPreviewBlizzMirror and not portrait._msufPreviewBlizzClip and not art.masks,

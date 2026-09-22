@@ -3590,7 +3590,6 @@ function Render.Install(Preview, deps)
             if not portrait.CreateTexture then return end
             -- Paired contour assets share the portrait bounds at every size.
             ring = portrait:CreateTexture(nil, "OVERLAY", nil, 2)
-            if ring.SetRoundLayoutToNearestPixel then ring:SetRoundLayoutToNearestPixel(false) end
             ring:SetSnapToPixelGrid(false)
             ring:SetTexelSnappingBias(0)
             portrait._msufPreviewBlizzRing = ring
