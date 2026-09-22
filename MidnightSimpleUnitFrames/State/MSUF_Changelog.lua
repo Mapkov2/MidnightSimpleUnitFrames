@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "3AE356BA01BA6240C4EC056988F0BA9A1BD58BC1D23F9A3FDAF2FC88C4156C4E",
+    sourceSha256 = "8963B5E3823FAFF25D5B7041EA021D7D9F0E82CB6AE7ACA6998010F27B5199F0",
     currentVersion = "6.21",
     historyFromVersion = "6.15",
     previousVersion = "6.20",
@@ -24,12 +24,14 @@ local data = {
                         {
                             text = "Level text is colored by difficulty, the same way Blizzard colors a target's level. Far above you and \"??\" are red, higher levels are orange, your level stays white, lower levels are green, and trivial levels are gray. Retail grades through the content-difficulty API, so scaled and Timewalking creatures stay correct. Color by level difficulty starts on for Unit Frames unless that frame already has its own level text color. The five colors are shared under Colors > Status Text Colors. Party and Raid frames gain a Level Text indicator, off until you turn it on, with the same coloring.",
                             link = {
-                                pageKey = "uf_player",
-                                query = "color by level difficulty",
-                                label = "Color by level difficulty",
+                                pageKey = "uf_target",
+                                query = "level text",
+                                label = "Level Text",
                                 sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.level.difficulty_color",
-                                settingKey = "player.levelIndicatorDifficultyColor",
+                                controlId = "menu2.uf_target.unit.status.selected.enabled",
+                                settingKey = "target.showLevelIndicator",
+                                prepareKind = "unitStatus",
+                                prepareValue = "level",
                             },
                         },
                         {
