@@ -52,6 +52,7 @@ local function Texture(parent)
     function tex:SetParent(value) self.parent = value end
     function tex:SetTexture(value) self.texture = value; self.writes = self.writes + 1 end
     function tex:SetTexCoord(l, r, t, b) self.coords = { l, r, t, b }; self.writes = self.writes + 1 end
+    function tex:SetAtlas(name) self.atlas = name; self.writes = self.writes + 1 end
     function tex:SetSize(w, h) self.width, self.height = w, h end
     function tex:ClearAllPoints() end
     function tex:SetPoint(...) self.point = { ... } end
@@ -94,10 +95,19 @@ local function PetFrame()
 end
 
 local COORDS = { [1] = 0.375, [2] = 0.1875, [3] = 0 }
+-- Blizzard_FrameXML/PetHappiness.lua on Forever 1.60.1.70009 draws these atlases.
+local ATLASES = { [1] = "UI-PetMad", [2] = "UI-PetNeutral", [3] = "UI-PetHappiness" }
+local function AtlasClient(present)
+    _G.C_Texture = { GetAtlasInfo = function(name)
+        if present and (name == ATLASES[1] or name == ATLASES[2] or name == ATLASES[3]) then return { file = 1 } end
+        return nil
+    end }
+end
 
 do
     -- Forever: only C_PetInfo.GetPetHappiness exists.
     local happiness, hunterPet = 3, true
+    AtlasClient(true)
     _G.GetPetHappiness = nil
     _G.C_PetInfo = { GetPetHappiness = function()
         if happiness == nil then return end
@@ -118,8 +128,8 @@ do
     for state = 1, 3 do
         happiness = state
         element.Update(frame)
-        Check(tex.shown == true and tex.coords[1] == COORDS[state],
-            "Forever: happiness state " .. state .. " read through C_PetInfo drew the wrong icon")
+        Check(tex.shown == true and tex.atlas == ATLASES[state] and tex.coords == nil,
+            "Forever: happiness state " .. state .. " read through C_PetInfo must draw Blizzard's atlas")
     end
     happiness = nil
     element.Update(frame)
@@ -139,16 +149,16 @@ do
     frame = PetFrame()
     element.Create(frame, frame.MSUFSpec)
     tex = frame.petHappinessIndicatorIcon
-    Check(tex.texture == "Interface\\PetPaperDollFrame\\UI-PetHappiness", "the icon texture must be set when it is created")
+    Check(tex.texture == nil, "Forever: an atlas icon needs no texture file when it is created")
     happiness, hunterPet = 2, true
     element.Update(frame)
     local afterFirst = tex.writes
     for _ = 1, 20 do element.Update(frame) end
-    Check(tex.writes == afterFirst and tex.shown == true and tex.coords[1] == COORDS[2],
+    Check(tex.writes == afterFirst and tex.shown == true and tex.atlas == ATLASES[2],
         "an unchanged happiness state must not write to the texture again")
     happiness = 3
     element.Update(frame)
-    Check(tex.writes == afterFirst + 1 and tex.coords[1] == COORDS[3], "a new state must cost exactly one coordinate write")
+    Check(tex.writes == afterFirst + 1 and tex.atlas == ATLASES[3], "a new state must cost exactly one atlas write")
     happiness = nil
     element.Update(frame)
     local afterHide, callsBefore = tex.writes, petUICalls
@@ -167,10 +177,30 @@ do
     Check(element.IsEnabled(playerFrame, playerFrame.MSUFSpec) ~= true, "Forever: the indicator belongs to the pet frame only")
     local lifecycle = element.GetUnitlessEvents(frame, frame.MSUFSpec)
     Check(lifecycle[1] == "UNIT_HAPPINESS", "Forever: UNIT_HAPPINESS must stay on the unitless route")
+
+    -- The menu preview and icon strip draw the same art through one export.
+    local path, left, right, top, bottom, atlas = _G.MSUF_GetPetHappinessIcon(1)
+    Check(path == "Interface\\PetPaperDollFrame\\UI-PetHappiness" and left == COORDS[1] and right == 0.5625
+        and top == 0 and bottom == 0.359375 and atlas == ATLASES[1], "Forever: the menu icon export drifted from the live art")
+    Check(select(6, _G.MSUF_GetPetHappinessIcon(nil)) == ATLASES[3], "Forever: an unknown state must draw the happy icon")
+
+    -- A Forever build without the atlases keeps Blizzard's older texture cells.
+    AtlasClient(false)
+    happiness = 1
+    element = LoadElement(LoadClient(true))
+    frame = PetFrame()
+    element.Create(frame, frame.MSUFSpec)
+    element.Update(frame)
+    tex = frame.petHappinessIndicatorIcon
+    Check(tex.texture == "Interface\\PetPaperDollFrame\\UI-PetHappiness" and tex.coords[1] == COORDS[1] and tex.atlas == nil,
+        "Forever without the atlases must fall back to the texture cells")
+    Check(select(6, _G.MSUF_GetPetHappinessIcon(1)) == nil, "Forever without the atlases must not offer an atlas to the menu")
 end
 
 do
-    -- Classic Era and TBC: only the global exists.
+    -- Classic Era and TBC: only the global exists, and Blizzard's Classic pet
+    -- frame draws the texture cells even where the atlases exist.
+    AtlasClient(true)
     _G.C_PetInfo = nil
     _G.GetPetHappiness = function() return 2, 100, 0 end
     _G.HasPetUI = function() return true, true end
@@ -180,6 +210,8 @@ do
     element.Update(frame)
     Check(frame.petHappinessIndicatorIcon.shown == true and frame.petHappinessIndicatorIcon.coords[1] == COORDS[2],
         "Classic: the global GetPetHappiness is no longer read")
+    Check(frame.petHappinessIndicatorIcon.atlas == nil, "Classic must keep Blizzard's texture cells, not the Forever atlases")
+    Check(select(6, _G.MSUF_GetPetHappinessIcon(2)) == nil, "Classic must not offer an atlas to the menu")
 end
 
 do

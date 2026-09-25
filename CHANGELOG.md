@@ -1,5 +1,30 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta8 - 2026-09-25
+
+### Highlights
+
+- **Choose the new Midnight Dark menu appearance.** It adds a darker palette to the existing menu layouts while keeping Classic Glass and Midnight available on every supported client.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_menu_behavior","controlId":"menu2.opt.misc.global.setting.menu.appearance.preset","settingKey":"general.menuAppearancePreset","prepareKind":"","prepareValue":"","query":"menu appearance preset","label":"Menu appearance preset"} -->
+- **Align Class Resource with the MSUF Suite Essential cooldown row.** When you approve the Suite anchor while class power placement is still at its defaults, the resource bar follows the row and uses its width; you can adjust Width mode under Class Resource.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.width.mode","settingKey":"bars.classPowerWidthMode","prepareKind":"","prepareValue":"","query":"width mode","label":"Width mode"} -->
+
+### Changes
+
+- WoW Forever starts fresh profiles and resets from its own factory layout. Existing saved profiles keep their settings; factory health fills use 80% opacity.
+- Updated for WoW Forever beta build 1.60.1.70009: pet happiness uses Blizzard's three atlases when available, and group frames use secure initialization snippets after Blizzard's load-order repair.
+- Rebuilt the WoW Forever SpellName aura-alias catalog from all eleven 70009 locale exports and revalidated the curated aura IDs.
+- Classic Era, TBC and Mists aura filters match readable aura names when a spell rank or cast ID differs from the aura ID. Their generated alias catalogs are no longer loaded or packaged.
+- MSUF Suite can join full-profile and module export/import, profile lifecycle changes, Undo/Redo history and the Essential cooldown anchor when installed.
+- Added an opt-in all-healers incoming-heal prediction setting. The previous player-only prediction remains the default.
+- Blizzard Micro Menu and Bags settings expose horizontal and vertical orientation where the client provides those controls.
+
+### Fixes
+
+- WoW Forever's Raid Manager remains visible while opened by gamepad and closes with the panel.
+- Missing-health background coloring no longer shows a full reversed health bar at 100% health.
+- Hiding Blizzard's TargetFrame also stops the Forever ComboFrame from updating its hidden display.
+
 ## 6.5-beta7 - 2026-09-21
 
 ### Highlights

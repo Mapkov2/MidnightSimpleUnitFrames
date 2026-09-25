@@ -105,6 +105,7 @@ local function NewWorld(flavor, roster)
         matchState = 0,
         inArena = false,
         prepSpecs = 0,
+        prepDelegateCalls = 0,
         auraRefreshes = 0,
     }
 
@@ -388,6 +389,26 @@ local function NewWorld(flavor, roster)
     end
 
     if flavor == "Mainline" then
+        -- PTR 12.1.5 returns secret spec data. A raw addon read must never
+        -- happen when Blizzard's display delegate is available.
+        _G.GetArenaOpponentSpec = function()
+            error("raw GetArenaOpponentSpec read on Mainline PTR", 2)
+        end
+        _G.UnitFrameUtil = {
+            UpdateArenaOpponentSpecDisplay = function(elements, index)
+                Check(type(elements) == "table" and elements.specNameText and elements.barTexture,
+                    "PTR prep display must supply the name and health fill regions")
+                W.prepDelegateCalls = W.prepDelegateCalls + 1
+                elements.specNameText:SetText("Spec" .. index)
+                elements.barTexture:SetVertexColor(0.2, 0.4, 0.6)
+                -- The actual return may be secret. Returning false here
+                -- ensures the caller does not use it to hide the roster slot.
+                return false
+            end,
+            UpdateArenaOpponentSpecDisplayName = function(nameText, index)
+                nameText:SetText("Spec" .. index)
+            end,
+        }
         _G.C_EventUtils = { IsEventValid = function(event) return event == "PVP_MATCH_STATE_CHANGED" end }
         _G.Enum = { PvPMatchState = { Inactive = 0, Waiting = 1, StartUp = 2, Engaged = 3, PostRound = 4, Complete = 5 } }
         _G.C_PvP = {
@@ -857,6 +878,16 @@ local function PrepScenario(flavor, roster)
         local frame = W.UF.frames["arena" .. index]
         Check(frame:IsShown() == (index <= prepCount),
             context .. ": fresh prep load did not show exactly the opponent slots (arena" .. index .. ")")
+        if flavor == "Mainline" and index <= prepCount then
+            Check(frame.nameText:GetText() == "Spec" .. index,
+                context .. ": PTR delegate did not paint the spec name")
+            Check(frame._msufUnitState.classToken == nil and frame._msufUnitState.identityClassRead ~= true,
+                context .. ": PTR prep cached a synthetic class identity")
+        end
+    end
+    if flavor == "Mainline" then
+        Check(W.prepDelegateCalls >= prepCount,
+            context .. ": PTR prep did not call Blizzard's display delegate")
     end
     for cycle = 1, 2 do
         local step = context .. " cycle " .. cycle

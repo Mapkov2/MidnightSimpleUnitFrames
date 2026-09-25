@@ -34,6 +34,7 @@ C_SpecializationInfo	*	namespace	Blizzard C_* namespace the harness does not mod
 C_Spell	*	namespace	Blizzard C_* namespace the harness does not model
 C_SpellBook	*	namespace	Blizzard C_* namespace the harness does not model
 C_StringUtil	*	namespace	Blizzard C_* namespace the harness does not model
+C_Texture	Vanilla,TBC,Forever	namespace	Blizzard C_* namespace the harness does not model; the shared pet happiness element resolves Blizzard's per-client art (atlases or texture cells) once at load
 C_UIFileAsset	*	namespace	Blizzard C_* namespace the harness does not model
 C_UnitAuras	*	namespace	Blizzard C_* namespace the harness does not model
 CheckInteractDistance	*	api	Blizzard client API the harness does not model

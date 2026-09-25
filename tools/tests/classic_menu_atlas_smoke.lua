@@ -15,6 +15,7 @@ IsLoggedIn = function() return true end
 local tinted = arg[3] == "tinted"
 local general = tinted and { menuAccent = "custom", menuAccentColor = "101211", menuAccentTintSurfaces = true, menuClassicAtlasRevision = 2 } or {}
 if arg[3] == "midnight" then general.menuAppearancePreset = "midnight" end
+if arg[3] == "midnightDark" then general.menuAppearancePreset = "midnightDark" end
 if arg[3] == "classicGlass" then general.menuAppearancePreset = "classicGlass" end
 MSUF_DB = { general = general }
 local ns = { Translate = function(s) return s end }
@@ -37,17 +38,24 @@ local T = ns.MSUF2.Theme
 local originalText, originalAccent = T.colors.text, T.colors.accent
 local danger = { unpack(T.colors.danger) }
 load(prefix .. "MSUF_Menu2_Theme.lua")
-local classic = arg[3] == "classicGlass" or (forever and arg[3] ~= "midnight")
+local classic = arg[3] == "classicGlass" or (forever and arg[3] ~= "midnight" and arg[3] ~= "midnightDark")
+local dark = arg[3] == "midnightDark"
 assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "classicGlass" }) == "classicGlass")
 assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "midnight" }) == "midnight")
+assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "midnightDark" }) == "midnightDark")
 assert(T.GetMenuAppearancePreset({}) == (forever and "classicGlass" or "midnight"))
 assert(T.GetMenuAppearancePreset({ menuAppearancePreset = "invalid" }) == T.defaultMenuAppearancePreset)
-if arg[3] == "classicGlass" or arg[3] == "midnight" then
+if arg[3] == "classicGlass" or arg[3] == "midnight" or dark then
     assert(general.menuAppearancePreset == arg[3], "saved appearance preset lost")
 else
     assert(general.menuAppearancePreset == nil, "client default was persisted as an explicit choice")
 end
 assert((T.classicAtlas == true) == classic, "wrong default client skin for " .. flavor)
+if dark then
+    assert(T.colors.coreSurface[1] == 34 / 255 and T.colors.coreSurface[2] == 36 / 255)
+    assert(T.colors.pillHover[1] == 66 / 255 and T.colors.navPillHover[1] == 66 / 255)
+    assert(T.MenuAccentSurfacesTinted(), "dark panel artwork did not desaturate")
+end
 assert(originalText == T.colors.text and originalAccent == T.colors.accent, "captured token identity lost")
 assert(T.materials.shell.bg == T.colors.glassShell, "material detached from palette")
 for i = 1, 4 do assert(T.colors.danger[i] == danger[i], "danger color changed") end
@@ -66,7 +74,7 @@ local shell = CreateFrame("Frame")
 shell:SetSize(1060, 740)
 local heading = T.Font(shell, "GameFontNormal", "Frame Basics", T.colors.text, "accordion")
 local body = T.Font(shell, "GameFontNormal", "275 x 40 px", T.colors.text, "body")
-local expectedHeading = classic and T.colors.title or T.colors.text
+local expectedHeading = (classic or dark) and T.colors.title or T.colors.text
 local hr, hg, hb = heading:GetTextColor()
 assert(hr == expectedHeading[1] and hg == expectedHeading[2] and hb == expectedHeading[3], "heading lost preset color")
 assert(select(1, body:GetTextColor()) == T.colors.text[1], "heading color leaked into values")

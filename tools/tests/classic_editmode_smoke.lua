@@ -211,7 +211,7 @@ local function ControlIds(element)
     for _, control in ipairs(element and element.extraControls or {}) do ids[#ids + 1] = control.id end
     return table.concat(ids, ",")
 end
-assert(ControlIds(registered.micromenu) == "size,eyesize,vertical,reverse",
+assert(ControlIds(registered.micromenu) == "size,eyesize,horizontal,vertical,reverse",
     "Micro Menu controls changed on a client that still has the Eye Size setting: "
         .. ControlIds(registered.micromenu))
 
@@ -367,7 +367,7 @@ local DEPRECATED_EYE = { Orientation = 0, Order = 1, Size = 2, DeprecatedEyeSize
 -- rescales the queue eye, on any client.
 do
     local ctx = LoadAdapter({ microSetting = DEPRECATED_EYE, snapshot = {} })
-    assert(ControlIds(ctx.registered.micromenu) == "size,vertical,reverse",
+    assert(ControlIds(ctx.registered.micromenu) == "size,horizontal,vertical,reverse",
         "Micro Menu offered Eye Size without the setting: " .. ControlIds(ctx.registered.micromenu))
     local sizeControl = ctx.registered.micromenu.extraControls[1]
     assert(sizeControl.id == "size" and sizeControl.set(100) == true, "Micro Menu size did not commit")

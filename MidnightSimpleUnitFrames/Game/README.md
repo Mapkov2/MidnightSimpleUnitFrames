@@ -35,15 +35,17 @@ add a shadow. Vanilla, TBC, and Mists include implementations from `Classic`, bu
 they keep separate loader manifests so their contracts can diverge without
 copying the backend.
 
-Each core TOC places the common aura alias catalog and its client-language
-partition between the unit-frame prefix and aura continuation manifests.
-For Classic these are `Game/<Flavor>/UnitFrames.xml` and `Auras.xml`; Mainline
-uses `MSUF_UFCore_Elements.xml` and `MSUF_UFCore_Auras.xml`. Native TOC
-`AllowLoadTextLocale` conditions skip inactive alias partitions before Lua
-parsing. Menu translations remain independent: all twelve still load for the
-saved menu language. Mainline retains both Retail and Forever catalog entries
-and the existing Forever runtime guards. Gate/package inventories include
-all locale branches, while boot simulations filter by client locale.
+Vanilla, TBC, and Mists ship no aura alias catalog: their backend reads aura
+payloads and matches ranked and cast-versus-aura IDs by aura name at runtime.
+The Mainline core TOC places the Retail and Forever catalogs (common part plus
+client-language partition) between `MSUF_UFCore_Elements.xml` and
+`MSUF_UFCore_Auras.xml`. Native TOC `AllowLoadTextLocale` conditions skip
+inactive alias partitions before Lua parsing, and `[ExcludeLoadGameType
+camelot]` keeps the Retail catalog off WoW Forever; the Forever files keep
+their runtime guard. Menu translations remain independent: all twelve still
+load for the saved menu language. Gate/package inventories include all locale
+and game-type branches, while boot simulations filter by client locale and
+game type.
 
 `tools/classic-client-matrix.tsv` maps each client to the branch of the local
 Blizzard UI source mirror (`_local_workflows/references/wow-ui-source`) that
@@ -71,14 +73,13 @@ runs the Mainline build with a Classic Era spell database, so its aura data
 lives in `Forever` while its code stays in the Retail tree. Code branches on
 `MSUF.Client` facts and capabilities, never on client names.
 
-## Forever data validation: 1.60.1.69913
+## Forever data validation: 1.60.1.70009
 
-Checked on 2026-09-19: the UI tree and reviewed class/aura table rows are
-unchanged from 69876. Ten current SpellName locale exports reproduce the
-shipped catalog; deDE is retained and verified against 69893 because the
-69913 export is empty. No runtime or catalog payload update is required by
-the available data. The deDE 69913 check remains pending. See
-[the validation notes](../../CLASSIC_PROTOTYPE.md#forever-data-validation-160169913)
+Checked on 2026-09-25: the Forever UI source changed Pet Happiness artwork
+and repaired secure group snippet initialization. All eleven 70009 SpellName
+exports changed their alias groups, and the Forever catalog was regenerated
+from them. The curated aura IDs retain their expected names. See
+[the validation notes](../../CLASSIC_PROTOTYPE.md#forever-data-validation-160170009)
 and `.github/forever-client-data-validation.json` for scope and source hashes.
 
 Class-resource UI follows `Client.SupportsClassResource` and

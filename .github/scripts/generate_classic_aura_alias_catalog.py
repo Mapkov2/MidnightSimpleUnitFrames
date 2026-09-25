@@ -1,22 +1,26 @@
-"""Compile SpellName CSV exports into per-flavor aura alias catalogs.
+"""Compile SpellName CSV exports into the WoW Forever aura alias catalog.
 
-Classic aura payloads carry rank-specific spell IDs (Vanilla, TBC) or a
-different aura ID than the cast (Mists). WoW Forever runs Classic Era spell
-data under a Mainline client. The backend therefore expands every configured,
-curated or indicator spell ID to all IDs that share its exact localized
-SpellName, the same way WeakAuras matches auras by name on Classic.
+WoW Forever runs Classic Era spell data (ranked spells) under a Mainline
+client, so it uses the native AuraContainer runtime, where aura names are not
+readable at runtime. The runtime therefore expands every configured or
+curated spell ID to all IDs that share its exact localized SpellName before
+handing the ID set to Blizzard's candidate filters.
+
+Vanilla, TBC and Mists need no catalog and ship none: their Lua aura backend
+reads aura payloads and matches the aura name whenever the ID misses
+(Game/Classic/Auras ClassicFeatures.NameHash), which covers spell ranks and
+cast-versus-aura ID drift on whatever build the client runs.
 
 Input: one <locale>/SpellName.csv per supported locale exported from the
-flavor's own client build (wago.tools DB2 CSV export of SpellName, FileDataID
+Forever client build (wago.tools DB2 CSV export of SpellName, FileDataID
 1990283). The encoding, loader (MSUF_Auras3_AuraAliases.lua) and file naming
 are identical to Retail's .github/scripts/generate_aura_alias_catalog.py; only
-the row-count sanity floor and the header differ, because these builds ship
+the row-count sanity floor and the header differ, because the build ships
 roughly 30k spell names instead of Retail's 400k+.
 
-Flavors: the three Classic clients load their catalog from their own TOC, so
-they need no guard. WoW Forever shares the Mainline TOCs with Midnight, which
-carries the full Retail catalog, so its files carry an MSUF.Client.IsForever
-guard and return on every other Mainline client.
+Guard: WoW Forever shares the Mainline TOCs with Midnight, which carry the
+Retail catalog behind [ExcludeLoadGameType camelot]. The Forever files still
+carry an MSUF.Client.IsForever guard and return on every other Mainline client.
 
 Locale folding: an export that is byte-identical to enUS (wago.tools answers
 the itIT request with the enUS table on every Classic build) produces the same
@@ -27,7 +31,7 @@ from whichever file matches GetLocale(), so the resolved groups are unchanged.
 
 Usage (run from the Classic repository root):
   python .github/scripts/generate_classic_aura_alias_catalog.py \
-      --flavor Vanilla --build 1.15.9.68940 --input <dir-with-locale-folders>
+      --flavor Forever --build 1.60.1.69876 --input <dir-with-locale-folders>
 
 Reproduction without the exports:
   python .github/scripts/generate_classic_aura_alias_catalog.py --verify Forever
@@ -47,9 +51,8 @@ from collections import defaultdict
 from pathlib import Path
 
 LOCALES = ("enUS", "deDE", "frFR", "esES", "esMX", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW")
-CLASSIC_FLAVORS = ("Vanilla", "TBC", "Mists")
 FOREVER = "Forever"
-FLAVORS = CLASSIC_FLAVORS + (FOREVER,)
+FLAVORS = (FOREVER,)
 DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 WIDTH = 4
 MIN_ROWS = 20_000
@@ -120,7 +123,7 @@ def partition(groups: dict) -> tuple[set, list]:
 
 def render(flavor: str, build: str, common: set, groups: dict, plan: list) -> dict:
     """Every file's exact bytes, keyed by filename. Nothing is written here."""
-    label = f"Classic {flavor}" if flavor in CLASSIC_FLAVORS else flavor
+    label = flavor
     files = {}
     for locale, served in [("Common", ["Common"])] + plan:
         selected = common if locale == "Common" else groups[locale] - common
@@ -134,8 +137,8 @@ def render(flavor: str, build: str, common: set, groups: dict, plan: list) -> di
                   f"-- SpellName / {label} {build} / {'+'.join(served)}; exact-name groups, base36 IDs.\n"
                   "local _, MSUF = ...\n")
         if flavor == FOREVER:
-            # WoW Forever reads the Mainline TOCs, which already carry the full Retail
-            # catalog; without this guard both would load on Midnight.
+            # WoW Forever reads the Mainline TOCs, which also carry the Retail catalog
+            # for every other game type; without this guard both would load on Midnight.
             header += ("local Client = MSUF.Client\n"
                        "if not (Client ~= nil and Client.IsForever == true) then return end\n")
         if locale != "Common":
@@ -211,7 +214,7 @@ def recover(directory: Path, flavor: str) -> tuple[str, set, dict, list]:
     head = HEADER.search(shared)
     if not head:
         raise SystemExit("Common file carries no '-- SpellName / <flavor> <build> / <locale>' header")
-    expected = f"Classic {flavor}" if flavor in CLASSIC_FLAVORS else flavor
+    expected = flavor
     if head["label"] != expected:
         raise SystemExit(f"Common file is a {head['label']} catalog, not {expected}")
     build = head["build"]
@@ -280,7 +283,7 @@ def verify(directory: Path, flavor: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--flavor", choices=FLAVORS, help="required unless --verify is given")
-    parser.add_argument("--build", help="client build, e.g. 1.15.9.68940")
+    parser.add_argument("--build", help="client build, e.g. 1.60.1.69876")
     parser.add_argument("--input", type=Path, help="directory holding <locale>/SpellName.csv")
     parser.add_argument("--verify", choices=FLAVORS + ("all",), default=None,
                         help="re-render the shipped catalog from its own payload and compare byte for byte")

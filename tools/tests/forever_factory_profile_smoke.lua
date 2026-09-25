@@ -12,8 +12,8 @@
 -- MSUF_CreateFactoryDefaultProfile to inflate first, matching Blizzard's own
 -- EncodingUtil readers.
 --
--- The shared snapshot ships every group scope off. The factory profile turns
--- MSUF party frames on and leaves raid as the snapshot has it.
+-- Forever uses the native 6.0 section of its own export. The test keeps the
+-- exported party and raid settings in that section and checks they survive.
 local repo = assert(arg[1], "repository root is required"):gsub("\\", "/"):gsub("/$", "")
 
 WOW_PROJECT_MAINLINE = 1
@@ -71,11 +71,16 @@ C_EncodingUtil = {
             error(FOREVER_CBOR_ERROR, 2)
         end
         if blob ~= INFLATED_CBOR then error(FOREVER_CBOR_ERROR, 2) end
-        return { addon = "MSUF", fmt = 2, payload = {
+        return { addon = "MSUF", fmt = 2, payload = {}, msuf6 = { schema = 600, payload = {
             general = {},
-            gf_party = { enabled = false },
-            gf_raid = { enabled = false },
-        } }
+            player = { hpBarAlpha = 0.8 },
+            target = { hpBarAlpha = 0.8 },
+            gf_party = { enabled = true, hpBarAlpha = 0.8,
+                auras = { debuff = { max = 3 } } },
+            gf_raid = { enabled = true, maxColumns = 8, preserveRaidGroups = true },
+            bars = { classPowerHeight = 8, showAltMana = true },
+            auras3 = { perUnit = { target = { layoutShared = { maxDebuffs = 8 } } } },
+        } } }
     end,
     DecompressString = function(blob, method)
         inflateCalls = inflateCalls + 1
@@ -114,6 +119,7 @@ local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(repo, "Mainline", ns, {
     "State/MSUF_AuraDefaults.lua",
     "State/Defaults/MSUF_Defaults_Shell.lua",
+    "State/Defaults/MSUF_Defaults_ForeverFactory.lua",
     "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua",
     "State/MSUF_Defaults.lua",
@@ -144,12 +150,22 @@ Check(cborCalls >= 1, "factory profile create never deserialized inflated CBOR")
 Check(profile.general ~= nil, "factory profile create skipped Lua completion")
 Check(type(profile.gf_party) == "table" and profile.gf_party.enabled == true,
     "the Forever factory profile must turn MSUF party frames on")
-Check(type(profile.gf_raid) == "table" and profile.gf_raid.enabled == false,
-    "the Forever party default must leave raid frames as the snapshot ships them")
+Check(type(profile.gf_raid) == "table" and profile.gf_raid.enabled == true,
+    "the Forever factory must retain the exported raid-frame setting")
 Check(profile.gf_raid.maxColumns == 8 and profile.gf_raid.preserveRaidGroups == true,
     "Forever factory raid must support all eight subgroups")
 Check(profile.gf_party.auras.debuff.max == 3 and profile.auras3.perUnit.target.layoutShared.maxDebuffs == 8,
     "Forever factory aura caps must follow the Classic layout")
 Check(profile.bars.classPowerHeight == 8 and profile.bars.showAltMana == true,
     "Forever factory must expose readable class resources and alternate mana")
-print("PASS Forever factory profile: inflate before CBOR, compressed bytes never deserialized, Classic factory layout")
+Check(profile.player.hpBarAlpha == 0.8 and profile.target.hpBarAlpha == 0.8
+    and profile.gf_party.hpBarAlpha == 0.8,
+    "Forever factory health fills must use the muted 80% opacity")
+profile.player.hpBarAlpha = 0.9000000357627869
+profile.target.hpBarAlpha = 0.65
+profile.general._msufForeverMutedHealth_v1 = nil
+MSUF_NormalizeProfileDefaults(profile, true)
+Check(profile.player.hpBarAlpha == 0.8 and profile.target.hpBarAlpha == 0.65
+    and profile.general._msufForeverMutedHealth_v1 == true,
+    "Forever migration must update only unchanged 90% factory health fills")
+print("PASS Forever factory profile: inflate before CBOR and retain native export")

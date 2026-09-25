@@ -315,7 +315,7 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     hlPrioEnabled hlPrioOrder
     enableAbsorbBar absorbTextMode absorbAnchorMode absorbBarHeight absorbBarOffsetY absorbBarOpacity
     healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY healAbsorbBarOpacity
-    healPredEnabled healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
+    healPredEnabled healPredAllHealers healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     overAbsorbOverlay fullHealthAbsorbStripe
     enableGradient enablePowerGradient gradientStrength gradientDirection
     gradientDirRight gradientDirLeft gradientDirUp gradientDirDown

@@ -444,6 +444,7 @@ local PARTY_DEFAULTS = {
     --- Party/Raid bar scopes. hlOverride gates local values; otherwise the
     --- shared UnitFrame heal-prediction toggle is the fallback.
     healPredEnabled      = true,
+    healPredAllHealers   = false,
     tempMaxHealthEnabled = false,
     tempMaxHealthTexture = "Solid",
     tempMaxHealthColorR  = 0.70,

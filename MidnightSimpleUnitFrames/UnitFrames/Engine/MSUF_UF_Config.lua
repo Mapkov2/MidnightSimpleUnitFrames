@@ -2068,6 +2068,7 @@ local function CompileUnitPrediction(out, conf, general, key)
   pred.absorb = absorbEnabled ~= false
   local legacyHealEnabled = general.showSelfHealPrediction == true or general.enableHealPrediction == true
   pred.heal = ScopedValue(conf, general, "healPredEnabled", legacyHealEnabled) == true
+  pred.healAllHealers = ScopedValue(conf, general, "healPredAllHealers", false) == true
   pred.healAbsorb = ScopedValue(conf, general, "healAbsorbEnabled", true) ~= false
   pred.healTest = AbsorbTextureTestEnabledForScope(key, "heal")
   pred.absorbTest = AbsorbTextureTestEnabledForScope(key, "absorb")

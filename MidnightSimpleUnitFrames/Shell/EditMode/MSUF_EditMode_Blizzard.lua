@@ -823,6 +823,20 @@ local function ToggleSetting(systemId, controlId, globalName, fallback, settingI
     }
 end
 
+local function OrientationSetting(systemId, controlId, globalName, fallback, settingId, value, defaultValue)
+    return {
+        id = controlId, kind = "toggle", label = BlizzardLabel(globalName, fallback),
+        get = function()
+            local current = ReadSetting(systemId, settingId)
+            return (current ~= nil and current or defaultValue) == value
+        end,
+        set = function(selected)
+            if not selected then return false end
+            return MutateSettings(systemId, { [settingId] = value })
+        end,
+    }
+end
+
 local function CompositeSetting(systemId, controlId, globalName, fallback, minValue, maxValue, hundredsId, tensId)
     return {
         id = controlId, kind = "number", label = BlizzardLabel(globalName, fallback),
@@ -946,6 +960,7 @@ local function Activate()
     if not IS_FOREVER then
         local microOrientation = microSetting.Orientation or 0
         local microOrder = microSetting.Order or 1
+        local microDirections = _G.Enum.MicroMenuOrientation or {}
         local microControls = {
             SteppedSetting(systemEnum.MicroMenu, "size", "HUD_EDIT_MODE_SETTING_MICRO_MENU_SIZE",
                 "Size", 70, 200, 5, microSize),
@@ -960,8 +975,12 @@ local function Activate()
                 "HUD_EDIT_MODE_SETTING_MICRO_MENU_EYE_SIZE", "Eye Size", 50, 150, 5, microEye)
             microSettingIds[#microSettingIds + 1] = microEye
         end
-        microControls[#microControls + 1] = ToggleSetting(systemEnum.MicroMenu, "vertical",
-            "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORIENTATION_VERTICAL", "Vertical", microOrientation)
+        microControls[#microControls + 1] = OrientationSetting(systemEnum.MicroMenu, "horizontal",
+            "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORIENTATION_HORIZONTAL", "Horizontal",
+            microOrientation, microDirections.Horizontal or 0, microDirections.Horizontal or 0)
+        microControls[#microControls + 1] = OrientationSetting(systemEnum.MicroMenu, "vertical",
+            "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORIENTATION_VERTICAL", "Vertical",
+            microOrientation, microDirections.Vertical or 1, microDirections.Horizontal or 0)
         microControls[#microControls + 1] = ToggleSetting(systemEnum.MicroMenu, "reverse",
             "HUD_EDIT_MODE_SETTING_MICRO_MENU_ORDER_REVERSE", "Reverse", microOrder)
         microSettingIds[#microSettingIds + 1] = microOrientation
@@ -989,14 +1008,19 @@ local function Activate()
         local bagsPadding = bagsSetting.BagSlotPadding or 3
         local bagsOrientation = bagsSetting.Orientation or 0
         local bagsDirection = bagsSetting.Direction or 1
+        local bagDirections = _G.Enum.BagsOrientation or {}
         Add(Element(systemEnum.Bags, "bags",
             BlizzardLabel("HUD_EDIT_MODE_BAGS_LABEL", "Bags"), 864, {
                 SteppedSetting(systemEnum.Bags, "size", "HUD_EDIT_MODE_SETTING_BAGS_SIZE",
                     "Size", 75, 200, 5, bagsSize),
                 SteppedSetting(systemEnum.Bags, "padding", "HUD_EDIT_MODE_SETTING_BAGS_BAG_SLOT_PADDING",
                     "Bag Slot Padding", 2, 10, 1, bagsPadding),
-                ToggleSetting(systemEnum.Bags, "vertical",
-                    "HUD_EDIT_MODE_SETTING_BAGS_ORIENTATION_VERTICAL", "Vertical", bagsOrientation),
+                OrientationSetting(systemEnum.Bags, "horizontal",
+                    "HUD_EDIT_MODE_SETTING_BAGS_ORIENTATION_HORIZONTAL", "Horizontal",
+                    bagsOrientation, bagDirections.Horizontal or 0, bagDirections.Horizontal or 0),
+                OrientationSetting(systemEnum.Bags, "vertical",
+                    "HUD_EDIT_MODE_SETTING_BAGS_ORIENTATION_VERTICAL", "Vertical",
+                    bagsOrientation, bagDirections.Vertical or 1, bagDirections.Horizontal or 0),
                 ToggleSetting(systemEnum.Bags, "reversedir",
                     "HUD_EDIT_MODE_SETTING_BAGS_DIRECTION", "Reverse direction", bagsDirection),
             }, { bagsSize, bagsPadding, bagsOrientation, bagsDirection }))

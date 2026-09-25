@@ -151,6 +151,7 @@ local BAR_VALUE_CACHE_FIELDS = { "_msufMaxReady", "_msufMaxPlain", "_msufValuePl
 local PREDICTION_DISABLE_FIELDS = {
   "_msufPredictionNeedsHealth",
   "_msufPredictionHealActive",
+  "_msufPredictionAllHealers",
   "_msufPredictionAbsorbActive",
   "_msufPredictionHealAbsorbActive",
   "_msufPredictionEventPlans",
@@ -376,8 +377,11 @@ end
 -- mode 3 natively, while mode 4 deliberately parents to the frame to overflow.
 -- Keep these reads as direct returns so protected payloads are never inspected
 -- by Lua before StatusBar:SetValue consumes them.
-local function ReadIncomingHeals(unit)
+local function ReadIncomingHeals(frame, unit)
   if not UnitGetIncomingHeals then return nil end
+  if frame._msufPredictionAllHealers == true then
+    return UnitGetIncomingHeals(unit)
+  end
   return UnitGetIncomingHeals(unit, PREDICTION_HEALER_UNIT)
 end
 
@@ -410,7 +414,11 @@ local function ReadMixedFollowAbsorbs(frame, unit)
   if not (calc and UnitGetDetailedHealPrediction) then
     return ReadDamageAbsorbs(frame, unit)
   end
-  UnitGetDetailedHealPrediction(unit, PREDICTION_HEALER_UNIT, calc)
+  if frame._msufPredictionAllHealers == true then
+    UnitGetDetailedHealPrediction(unit, nil, calc)
+  else
+    UnitGetDetailedHealPrediction(unit, PREDICTION_HEALER_UNIT, calc)
+  end
   local getAbsorb = calc.GetDamageAbsorbs or calc.GetTotalDamageAbsorbs
   if getAbsorb then return getAbsorb(calc) end
   return ReadDamageAbsorbs(frame, unit)
@@ -1519,7 +1527,7 @@ local function FlushFlatPrediction(frame, mask)
       maxHP = ReadHealthMax(frame, unit)
     end
     if doHeal then
-      local incoming = ReadIncomingHeals(unit)
+      local incoming = ReadIncomingHeals(frame, unit)
       frame._msufPredictionIncoming = incoming
       ShowValue(frame.incomingHealBar, maxHP, incoming, false)
     end
@@ -1584,6 +1592,7 @@ local function CompilePredictionRuntime(frame, cfg, spec)
   frame._msufPredictionAbsorbReverse = ReverseForMode(absorbMode, hpReverse)
   frame._msufPredictionMask = PredictionMask(cfg)
   frame._msufPredictionHealActive = cfg.heal == true
+  frame._msufPredictionAllHealers = cfg.healAllHealers == true
   frame._msufPredictionAbsorbActive = cfg.absorb == true
   frame._msufPredictionHealAbsorbActive = cfg.healAbsorb == true
   frame._msufPredictionNeedsHealth = NeedsHealthEvent(cfg)
@@ -2275,7 +2284,7 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
     InvalidateHpGeometry(frame.hpBar or frame.Health)
   end
   if refreshHeal then
-    frame._msufPredictionIncoming = ReadIncomingHeals(unit)
+    frame._msufPredictionIncoming = ReadIncomingHeals(frame, unit)
   end
   if refreshAbsorb then
     local readAbsorb = frame._msufPredictionReadAbsorb or ReadDamageAbsorbs

@@ -6,7 +6,15 @@ _G.UnitExists = function() return true end
 _G.UnitIsConnected = function() return true end
 _G.UnitHealth = function() return 50 end
 _G.UnitHealthMax = function() return 100 end
-_G.UnitGetIncomingHeals = function() return 10 end
+local incomingUnit, incomingSource
+_G.UnitGetIncomingHeals = function(unit, source)
+    incomingUnit, incomingSource = unit, source
+    return source == "player" and 10 or 25
+end
+local detailedUnit, detailedSource
+_G.UnitGetDetailedHealPrediction = function(unit, source)
+    detailedUnit, detailedSource = unit, source
+end
 _G.UnitGetTotalAbsorbs = function() return 20 end
 _G.UnitGetTotalHealAbsorbs = function() return 5 end
 _G.issecretvalue = function() return false end
@@ -24,6 +32,30 @@ local namespace = {
 local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"
 assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
 assert(registered, "prediction element did not register")
+
+local function Upvalue(fn, wanted)
+    for index = 1, 100 do
+        local name, value = debug.getupvalue(fn, index)
+        if not name then break end
+        if name == wanted then return value end
+    end
+    error("missing prediction upvalue: " .. wanted)
+end
+
+local compile = Upvalue(registered.Apply, "CompilePredictionRuntime")
+local readIncoming = Upvalue(Upvalue(compile, "FlushFlatPrediction"), "ReadIncomingHeals")
+local readMixed = Upvalue(compile, "ReadMixedFollowAbsorbs")
+local frame = { _msufPredictionAbsorbClampCalc = { GetDamageAbsorbs = function() return 20 end } }
+compile(frame, { enabled = true, heal = true, healAllHealers = false }, {})
+assert(readIncoming(frame, "raid1") == 10 and incomingUnit == "raid1" and incomingSource == "player",
+    "own-heal mode did not filter incoming heals to the player")
+assert(readMixed(frame, "raid1") == 20 and detailedUnit == "raid1" and detailedSource == "player",
+    "own-heal mode did not filter the detailed calculator to the player")
+compile(frame, { enabled = true, heal = true, healAllHealers = true }, {})
+assert(readIncoming(frame, "raid1") == 25 and incomingUnit == "raid1" and incomingSource == nil,
+    "all-healer mode did not read total incoming heals")
+assert(readMixed(frame, "raid1") == 20 and detailedUnit == "raid1" and detailedSource == nil,
+    "all-healer mode did not use total incoming heals for the detailed calculator")
 
 local function EventSet(events)
     local out = {}

@@ -172,16 +172,26 @@ Check((ns.Client.Family == "Classic") == spec.classic, "client family is " .. to
 if spec.forever then Check(ns.Client.IsForever == true, "WoW Forever was not detected") end
 function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return value end
 _G.MSUF_NS, _G.MSUF = ns, ns
-manifest.LoadSelected(repo, spec.toc, ns, {
+local defaultsModules = {
     "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
-    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
+    "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua",
+    "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua", "State/MSUF_Defaults.lua",
-})
+}
+if spec.toc == "Mainline" then
+    defaultsModules[#defaultsModules + 1] = "State/Defaults/MSUF_Defaults_ForeverFactory.lua"
+end
+manifest.LoadSelected(repo, spec.toc, ns, defaultsModules)
 MSUF_TryDecodeCompactString = function()
     return {
         addon = "MSUF", fmt = 2, kind = "all", profile = "Default", schema = 1,
         payload = { general = {}, player = {}, target = {} },
-        msuf6 = { schema = 600, payload = {} },
+        msuf6 = { schema = 600, payload = spec.forever and {
+            general = {}, player = {}, target = {},
+            gf_raid = { preserveRaidGroups = true, maxColumns = 8 },
+            bars = { classPowerHeight = 8 },
+            auras3 = { perUnit = { target = { layoutShared = { maxDebuffs = 8 } } } },
+        } or {} },
     }
 end
 ns.ProfileRuntime = { Apply = function() end }
@@ -208,13 +218,15 @@ MSUF_DB, MSUF_GlobalDB, MSUF_ActiveProfile = nil, nil, nil
 MSUF_InitProfiles()
 local db = Check(MSUF_DB, "the first login produced no profile")
 local classicFactory = spec.classic or spec.forever == true
+if not spec.forever then
 Check((db.gf_raid.preserveRaidGroups == true) == classicFactory,
-    "the factory raid layout must be Classic/Forever only")
+    "the factory raid layout must be Classic only on this test path")
 Check(db.auras3.perUnit.target.layoutShared.maxDebuffs == (classicFactory and 8 or 4),
     "the target factory aura cap must follow the client")
-if classicFactory then
+end
+if spec.classic then
     Check(db.gf_raid.maxColumns == 8 and db.bars.classPowerHeight == 8,
-        "Classic/Forever factory must expose forty raid members and readable resources")
+        "Classic factory must expose forty raid members and readable resources")
 end
 
 

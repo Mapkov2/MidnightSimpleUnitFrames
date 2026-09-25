@@ -3,7 +3,7 @@
 ## Notes: Classic prototype for The Burning Crusade Classic.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.5-beta7
+## Version: 6.5-beta8
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, MapkoSkin
@@ -141,18 +141,6 @@ Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
 Game\TBC\UnitFrames.xml
-# Select client-language aura aliases before Lua parsing; menu language is independent.
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_Common.lua
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_enUS.lua [AllowLoadTextLocale enUS, enGB, itIT]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_deDE.lua [AllowLoadTextLocale deDE]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_frFR.lua [AllowLoadTextLocale frFR]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_esES.lua [AllowLoadTextLocale esES]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_esMX.lua [AllowLoadTextLocale esMX]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_ptBR.lua [AllowLoadTextLocale ptBR, ptPT]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_ruRU.lua [AllowLoadTextLocale ruRU]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_koKR.lua [AllowLoadTextLocale koKR]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_zhCN.lua [AllowLoadTextLocale zhCN]
-Game\TBC\Auras\AliasData\MSUF_Auras3_AliasData_zhTW.lua [AllowLoadTextLocale zhTW]
 Game\TBC\Auras.xml
 Integrations\MSUF_Integration_NicknameProviders.lua
 Integrations\MSUF_Integration_NSRTNicknames.lua

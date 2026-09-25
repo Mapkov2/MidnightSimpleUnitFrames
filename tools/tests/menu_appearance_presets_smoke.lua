@@ -1,4 +1,4 @@
--- Build the real Misc page: all seven appearance choices must survive on every client.
+-- Build the real Misc page: all three materials and five accent choices survive.
 local root, flavor = assert(arg[1]), assert(arg[2])
 local World = assert(loadfile(root .. '/tools/tests/client_world.lua'))()
 local world = World.New(root, flavor):Boot()
@@ -38,15 +38,21 @@ local style = assert(bound['general.menuAppearancePreset'], 'appearance dropdown
 local accent = assert(bound['general.menuAccent'], 'accent dropdown missing')
 local opacity = assert(bound['general.menuBackgroundOpacity'], 'background slider missing')
 local choices = type(style.widget.values) == 'function' and style.widget.values() or style.widget.values
-local expected = {'classicGlass','midnight','class','ember','jade','violet','custom'}
+local expected = {'classicGlass','midnight','midnightDark','class','ember','jade','violet','custom'}
 assert(#choices == #expected, 'appearance dropdown lost its legacy choices')
 for i, value in ipairs(expected) do assert(choices[i].value == value, 'missing preset: ' .. value) end
 local general = M.GetGeneralDB()
 local color = 'cc6633'
 general.menuAccentColor = color
-for _, material in ipairs({'classicGlass', 'midnight'}) do
+local appliedLooks = {}
+world.env.MapkoSkin = { addonName = 'MSUF_Suite_Skin', Theme = {
+    ApplyLook = function(look) appliedLooks[#appliedLooks + 1] = look; return true end,
+} }
+for _, material in ipairs({'classicGlass', 'midnight', 'midnightDark'}) do
     style.set(material)
     assert(style.get() == material and general.menuAppearancePreset == material)
+    assert(appliedLooks[#appliedLooks] == (material == 'classicGlass' and 'foreverGlass' or material),
+        'MSUF menu material did not update the active Blizzard skin look')
     assert(accent.get() == 'midnight' and general.menuAccentTintSurfaces == false)
     for _, value in ipairs({'class','ember','jade','violet','custom'}) do
         style.set(value)
@@ -61,4 +67,4 @@ accent.set('jade')
 assert(style.get() == 'jade', 'separate accent selector does not update appearance selection')
 opacity.set(89)
 assert(opacity.get() == 89 and general.menuBackgroundOpacity == 89)
-print('PASS ' .. flavor .. ': seven visible appearance presets, both materials, custom color preservation, opacity')
+print('PASS ' .. flavor .. ': eight visible appearance choices, three materials, custom color preservation, opacity')

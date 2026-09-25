@@ -695,7 +695,8 @@ local function CP_CheckAutoHide(cur, maxP)
 
     --- OOC: hide when out of combat. PLAYER_REGEN_DISABLED is delivered before
     --- InCombatLockdown() turns true, so the combat-entry re-check also reads
-    --- UnitAffectingCombat("player").
+    --- UnitAffectingCombat("player"). Modes with no later power event, such as
+    --- the Warrior Whirlwind bar, never get a second chance to show.
     if b.classPowerHideOOC and not (InCombatLockdown() or (UnitAffectingCombat and UnitAffectingCombat("player"))) then
         CP.container:SetAlpha(0)
         return

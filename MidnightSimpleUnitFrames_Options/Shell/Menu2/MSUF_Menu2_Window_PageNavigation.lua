@@ -54,6 +54,7 @@ local function UpdateNav(key)
         local active = pageKey == activeNavKey
         if btn.SetActive and btn._msuf2Active ~= active then btn:SetActive(active) end
     end
+    if M.RefreshNavAvailability then M.RefreshNavAvailability() end
     M._msuf2NavActiveKey = activeNavKey
     if labelsDirty and M.navHeaders then
         for _, btn in pairs(M.navHeaders) do

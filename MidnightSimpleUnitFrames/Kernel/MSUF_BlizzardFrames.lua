@@ -440,10 +440,11 @@ local function DisableBlizzardFrames()
     if hideTarget and hideTargetTarget then
         HandleFrame(_G.TargetFrame, nil, "target")
         --- WoW Forever excludes every Retail combo point bar for its camelot
-        --- game type, so ComboFrame is Blizzard's only combo point display. It
-        --- is a UIParent child that Blizzard re-anchors to TargetFrame on every
-        --- update (Blizzard_UnitFrame/Camelot/ComboFrameOverrides.lua), so it
-        --- would float where the hidden target frame sits. It follows
+        --- game type, so ComboFrame is Blizzard's only combo point display.
+        --- Since 1.60.1.70009 it is a TargetFrame child (earlier builds put it
+        --- on UIParent, where it floated at the hidden target frame's spot), so
+        --- hiding TargetFrame hides it too; handling it as well unregisters its
+        --- events, so it stops updating a display nobody sees. It follows
         --- TargetFrame ownership with the same hidden parent and SetParent
         --- hook; HandleFrame defers Hide/SetParent to regen if the frame ever
         --- reports protected in combat. Restore is /reload-only, as for

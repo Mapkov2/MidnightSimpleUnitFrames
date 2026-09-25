@@ -125,7 +125,7 @@ function Skin.Button(button, selected, hover, paint)
         or (button._msuf2Primary or button._msufUIPrimary) and "buttonPrimary"
         or nav and "navigation" or "button"
     if not record.skinned or record.role ~= role or record.nav ~= nav then
-        local ok, reason = client:SkinButton(button, { role = role, activeRole = nav and "navigationActive" or role,
+        local ok, reason = client:SkinButton(button, { role = role, activeRole = nav and "button" or role,
             useControlShape = true, active = selected == true, listItem = nav })
         if not ok or reason ~= "applied" then return false end
         record.skinned, record.role, record.nav, record.selected = true, role, nav, selected == true
@@ -233,6 +233,7 @@ end
 local function Connect()
     if api then return end
     local provider = _G.MapkoSkin
+    if provider and provider.migrationOnly then return end
     local candidate = provider and provider.GetAPI and provider.GetAPI(2, 1)
     if not candidate or type(hooksecurefunc) ~= "function" then return end
     local registered = candidate:RegisterAddon("MidnightSimpleUnitFrames", { integrationVersion = 1 })
@@ -247,7 +248,7 @@ events = CreateFrame("Frame")
 if not api then events:RegisterEvent("ADDON_LOADED") end
 if Skin.pending then events:RegisterEvent("PLAYER_REGEN_ENABLED") end
 events:SetScript("OnEvent", function(_, event, name)
-    if event == "ADDON_LOADED" and name == "MapkoSkin" then
+    if event == "ADDON_LOADED" and (name == "MapkoSkin" or name == "MSUF_Suite_Skin") then
         Connect()
         if api then events:UnregisterEvent("ADDON_LOADED") end
     elseif event == "PLAYER_REGEN_ENABLED" and Skin.pending then Skin.Refresh() end

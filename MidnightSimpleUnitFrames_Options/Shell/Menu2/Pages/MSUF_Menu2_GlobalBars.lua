@@ -100,6 +100,7 @@ local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["absorb.healAbsorbBarTexture"] = { "general.healAbsorbBarTexture" },
     ["absorb.healPredAnchorMode"] = { "general.healPredAnchorMode" },
     ["absorb.heal_prediction.enabled"] = { "general.healPredEnabled", "general.showSelfHealPrediction" },
+    ["absorb.heal_prediction.all_healers"] = { "general.healPredAllHealers" },
     ["absorb.healPredEnabled"] = { "general.healPredEnabled", "general.showSelfHealPrediction" },
     ["absorb.positive.enabled"] = { "general.enableAbsorbBar", "general.absorbTextMode" },
     ["absorb.positive.anchor"] = { "general.absorbAnchorMode" },
@@ -158,6 +159,7 @@ local BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH = {
     ["absorb.healAbsorbBarTexture"] = "healAbsorbBarTexture",
     ["absorb.healPredAnchorMode"] = "healPredAnchorMode",
     ["absorb.heal_prediction.enabled"] = "healPredEnabled",
+    ["absorb.heal_prediction.all_healers"] = "healPredAllHealers",
     ["absorb.healPredEnabled"] = "healPredEnabled",
     ["absorb.positive.enabled"] = "enableAbsorbBar",
     ["absorb.positive.anchor"] = "absorbAnchorMode",
@@ -1423,10 +1425,12 @@ local function BuildAbsorbSection(ctx, b)
     local healOpacity = BindSlider(heal, "Opacity", 0, 1, 0.05, "healPredictionBarOpacity", 0.45,
         "MSUF2_HEALPRED_OPACITY", rightX, -64, rightW, "absorb.heal_prediction.opacity")
     local healTest = BindTest(heal, "heal", rightX, -128, rightW, "absorb.heal_prediction.preview.test")
+    local healAllHealers = BindToggle(heal, "Include healing from others", "healPredAllHealers", false,
+        "MSUF2_HEALPRED_ALL_HEALERS", rightX, -182, rightW, "absorb.heal_prediction.all_healers")
 
     local positiveOptions = { positiveAnchor, positiveHeight, positiveOffset, positiveTexture, positiveOpacity, overAbsorb, fullStripe }
     local negativeOptions = { negativeAnchor, negativeHeight, negativeOffset, negativeTexture, negativeOpacity }
-    local healOptions = { healAnchor, healHeight, healOffset, healTexture, healOpacity }
+    local healOptions = { healAnchor, healHeight, healOffset, healTexture, healOpacity, healAllHealers }
     M.TrackRefresh(ctx, SyncControls(function()
         local scopedActive = ScopedControls()
         SetControlEnabled(positiveEnabled, scopedActive)

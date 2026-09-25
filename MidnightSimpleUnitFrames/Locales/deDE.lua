@@ -5753,6 +5753,7 @@ L["Show Ironfur cast markers"] = "Eisenfell-Zaubermarker anzeigen"
 L["Show Ironfur tracker (Guardian)"] = "Eisenfell-Tracker anzeigen (Wächter)"
 L["Show Sweeping Strikes (Arms)"] = "Weitreichende Stöße anzeigen (Waffen)"
 L["Show heal prediction"] = "Heilungsvorhersage anzeigen"
+L["Include healing from others"] = "Heilung anderer Spieler einbeziehen"
 L["Show negative heal absorbs"] = "Heilungsabsorption anzeigen"
 L["Show only below 100% health"] = "Nur unter 100% Gesundheit anzeigen"
 L["Show positive absorbs"] = "Schadensabsorption anzeigen"
@@ -6336,6 +6337,11 @@ L["Round level badge"] = "Rundes Level-Abzeichen"
 L["Round Level Badge"] = "Rundes Level-Abzeichen"
 L["Centers the level on a dark round medallion with a gold rim on every supported WoW version."] = "Zeigt das Level mittig auf einem dunklen runden Abzeichen mit Goldrand in allen unterstützten WoW-Versionen."
 
+L["MSUF Forever"] = "MSUF Forever"
+L["Midnight Blue"] = "Midnight Blue"
+L["Midnight Dark"] = "Midnight Dark"
+L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Die Hintergrund-Deckkraft ändert nur den MSUF-Forever-Hintergrund; die Schrift bleibt vollständig deckend."
+L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Aus (Standard): Der Akzent färbt Schaltflächen, Tabs und Hervorhebungen; die Flächen behalten den gewählten Look. Ein: Flächen, Rahmen und Navigationsleiste folgen ebenfalls dem Akzent. Erfolgs-, Warn- und Fehlerfarben bleiben erhalten."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

@@ -10,11 +10,16 @@ end
 local locales = { "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT",
     "koKR", "ptBR", "ptPT", "ruRU", "zhCN", "zhTW", "xxXX" }
 local count = 0
+-- WoW Forever shares the Mainline TOC; its game type (camelot) skips the Retail
+-- catalog and keeps its own. Classic flavors ship no catalog at all: their
+-- backend matches ranked and cast-versus-aura IDs by aura name at runtime.
+local GAME_TYPES = { Mainline = "standard", Forever = "camelot" }
+local CATALOGS = { Mainline = 2, Forever = 1, Vanilla = 0, TBC = 0, Mists = 0 }
 for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local suffix = client == "Forever" and "Mainline" or client
     local all = Manifest.Paths(root, suffix)
     for _, locale in ipairs(locales) do
-        local selected = Manifest.Paths(root, suffix, locale)
+        local selected = Manifest.Paths(root, suffix, locale, GAME_TYPES[client])
         local bytes, aliases, menuLocales, index = 0, {}, 0, {}
         for i, path in ipairs(selected) do
             bytes = bytes + #Read(path)
@@ -28,16 +33,22 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         assert(bytes < (suffix == "Mainline" and 16000000 or 14000000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
-        assert(#aliases == perCatalog * (suffix == "Mainline" and 2 or 1),
+        assert(#aliases == perCatalog * CATALOGS[client],
             client .. ": wrong count of selected alias files for " .. locale)
         local base = (root == "." and "" or root .. "/") .. "MidnightSimpleUnitFrames/"
         assert(index[base .. "Game/Shared/Initialize.lua"] < index[base .. "Kernel/MSUF_Bootstrap.lua"],
             "client facts must precede Kernel")
-        local resolver = assert(index[base .. "Auras3/MSUF_Auras3_AuraAliases.lua"])
+        local resolver = index[base .. "Auras3/MSUF_Auras3_AuraAliases.lua"]
+        assert((resolver ~= nil) == (CATALOGS[client] > 0), client .. ": catalog resolver presence is wrong")
         for _, path in ipairs(aliases) do assert(index[path] < resolver, "data loaded after resolver") end
+        if client == "Forever" then
+            for _, path in ipairs(aliases) do
+                assert(path:find("/Game/Forever/Auras/AliasData/", 1, true),
+                    "WoW Forever must not parse the Retail catalog: " .. path)
+            end
+        end
 
         local expected = locale == "enGB" and "enUS" or locale == "ptPT" and "ptBR" or locale
-        if suffix ~= "Mainline" and expected == "itIT" then expected = "enUS" end
         for _, path in ipairs(aliases) do
             local pack = assert(path:match("_AliasData_(%a+)%.lua$"))
             assert(pack == "Common" or pack == expected, client .. ": wrong locale partition")
@@ -56,33 +67,38 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         end
         assert(at == #selected + 1)
 
-        _G.GetLocale = function() return locale end
-        local function Execute(paths)
-            local ns = { Client = { IsForever = client == "Forever" },
-                LOCALE = locale == "deDE" and "enUS" or "deDE", MSUF_Auras3 = { AuraSpellIDAliases = {} } }
-            for _, path in ipairs(paths) do
-                if path:find("/AliasData/", 1, true) or path:find("/MSUF_Auras3_AuraAliases.lua", 1, true) then
-                    assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
+        -- The selection must resolve exactly what executing every branch did:
+        -- on Forever the unconditioned run ends on the Forever catalog too,
+        -- because its files replace the Retail one.
+        if CATALOGS[client] > 0 then
+            _G.GetLocale = function() return locale end
+            local function Execute(paths)
+                local ns = { Client = { IsForever = client == "Forever" },
+                    LOCALE = locale == "deDE" and "enUS" or "deDE", MSUF_Auras3 = { AuraSpellIDAliases = {} } }
+                for _, path in ipairs(paths) do
+                    if path:find("/AliasData/", 1, true) or path:find("/MSUF_Auras3_AuraAliases.lua", 1, true) then
+                        assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
+                    end
                 end
+                return ns.MSUF_Auras3
             end
-            return ns.MSUF_Auras3
-        end
-        local previous, current = Execute(all), Execute(selected)
-        for _, key in ipairs({ "build", "width", "locale", "common", "localized" }) do
-            assert(previous.AuraAliasCatalog[key] == current.AuraAliasCatalog[key],
-                client .. "/" .. locale .. ": catalog changed: " .. key)
-        end
-        -- Cast/aura drift, Classic ranks, cross-language collisions, unknown IDs.
-        local ids = { [774] = true, [17] = true, [1022] = true, [115151] = true,
-            [33763] = true, [185313] = true, [100] = true, [99999999] = true }
-        previous.CompileCustomAuraAliases(ids)
-        current.CompileCustomAuraAliases(ids)
-        for id in pairs(ids) do
-            local before, after = previous.AuraSpellIDAliases[id], current.AuraSpellIDAliases[id]
-            assert((before == nil) == (after == nil), "alias presence changed")
-            if before then
-                assert(#before == #after, "alias count changed")
-                for i = 1, #before do assert(before[i] == after[i], "alias member changed") end
+            local previous, current = Execute(all), Execute(selected)
+            for _, key in ipairs({ "build", "width", "locale", "common", "localized" }) do
+                assert(previous.AuraAliasCatalog[key] == current.AuraAliasCatalog[key],
+                    client .. "/" .. locale .. ": catalog changed: " .. key)
+            end
+            -- Cast/aura drift, ranks, cross-language collisions, unknown IDs.
+            local ids = { [774] = true, [17] = true, [1022] = true, [115151] = true,
+                [33763] = true, [185313] = true, [100] = true, [99999999] = true }
+            previous.CompileCustomAuraAliases(ids)
+            current.CompileCustomAuraAliases(ids)
+            for id in pairs(ids) do
+                local before, after = previous.AuraSpellIDAliases[id], current.AuraSpellIDAliases[id]
+                assert((before == nil) == (after == nil), "alias presence changed")
+                if before then
+                    assert(#before == #after, "alias count changed")
+                    for i = 1, #before do assert(before[i] == after[i], "alias member changed") end
+                end
             end
         end
         count = count + 1

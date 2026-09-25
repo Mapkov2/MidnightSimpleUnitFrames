@@ -657,6 +657,7 @@ local function CompilePrediction(kind, conf, texture)
   local out = {
     enabled = heal == true or absorb == true or healAbsorb == true,
     heal = heal == true,
+    healAllHealers = ScopedValue(conf, general, "healPredAllHealers", false) == true,
     absorb = absorb == true,
     healAbsorb = healAbsorb == true,
     test = test == true,

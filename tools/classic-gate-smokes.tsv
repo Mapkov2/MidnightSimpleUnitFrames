@@ -5,6 +5,7 @@ clients+Forever	lua	tools/tests/menu_appearance_presets_smoke.lua	{root} {flavor
 clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor}	Menu skin smoke failed: {flavor}
 clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor} classicGlass	Explicit Classic Glass menu preset failed: {flavor}
 clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor} midnight	Explicit Midnight menu preset failed: {flavor}
+clients+FutureVanilla,Forever	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} {flavor} midnightDark	Explicit Midnight Dark menu preset failed: {flavor}
 -	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} Forever tinted	Forever menu skin custom-tint smoke failed
 -	lua	tools/tests/classic_menu_atlas_smoke.lua	{root} Forever midnight	Forever Midnight appearance preset smoke failed
 clients+FutureTaggedVanilla,FutureProjectVanilla,UnknownUntagged	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	{flavor} {root/}	Client bootstrap smoke failed: {flavor}
@@ -23,7 +24,8 @@ tokenclients	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	TagOnly{f
 -	lua	tools/tests/forever_castbar_client_data_smoke.lua	{root}	Forever castbar client data smoke failed
 -	lua	tools/tests/forever_aura_data_smoke.lua	{root/}	WoW Forever aura data smoke failed
 -	lua	tools/tests/forever_group_frames_smoke.lua	{root}	Forever group frames smoke failed
--	lua	tools/tests/forever_group_header_snippet_smoke.lua	{root}	Forever group header snippet workaround smoke failed
+-	lua	tools/tests/forever_group_header_snippet_smoke.lua	{root}	Forever group header secure snippet smoke failed
+-	lua	tools/tests/forever_raid_manager_gamepad_smoke.lua	{root}	Forever Raid Manager gamepad smoke failed
 -	python	.github/scripts/menu2_search_index_hash_smoke.py		Menu2 search index source-hash contract failed
 -	python	tools/tests/unresolved_global_reads_smoke.py		Unresolved global read contract failed
 -	lua	tools/tests/nil_global_fix_contracts_smoke.lua	{root}	Nil-global fix contracts smoke failed
@@ -110,7 +112,7 @@ clients+Forever	lua	tools/tests/classic_aura_page_client_gates_smoke.lua	{root} 
 -	lua+driver	tools/tests/classic_aura_compile_filter_smoke.lua	{root/}	Classic aura compile filter smoke failed
 -	lua+driver	tools/tests/classic_aura_lane_agreement_smoke.lua	{root/}	Classic aura lane agreement smoke failed
 classics	lua+driver	tools/tests/classic_aura_faction_smoke.lua	{root/} {flavor}	Classic aura faction smoke failed: {flavor}
--	lua+driver	tools/tests/classic_aura_alias_catalog_smoke.lua	{root/}	Classic aura alias catalog smoke failed
+-	lua+driver	tools/tests/classic_aura_rank_name_match_smoke.lua	{root/}	Classic aura rank name-match smoke failed
 -	lua+driver	tools/tests/classic_group_indicator_data_smoke.lua	{root/}	Classic group indicator data smoke failed
 -	lua+driver	tools/tests/classic_raid_manager_mode_smoke.lua	{root/}	Classic Raid Manager mode smoke failed
 clients+Forever	lua	tools/tests/uf_engine_client_gates_smoke.lua	{root/} {flavor}	Unit-frame engine client gates smoke failed: {flavor}
@@ -135,3 +137,4 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua	tools/tests/classpower_client_resource_gates_smoke.lua	{root/}	Class resource client gates failed
 -	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
 -	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed
+-	lua	tools/tests/suite_cooldown_anchor_smoke.lua	{root/}	MSUF Suite cooldown anchor smoke failed

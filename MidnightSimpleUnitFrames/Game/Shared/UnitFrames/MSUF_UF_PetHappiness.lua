@@ -39,6 +39,15 @@ local TEX_COORDS = {
     [2] = { 0.1875, 0.375, 0, 0.359375 }, -- Content: 100% damage
     [3] = { 0, 0.1875, 0, 0.359375 },     -- Happy: 125% damage
 }
+-- Each client draws Blizzard's own art. The Classic pet frame uses cells of
+-- TEXTURE; the Mainline indicator that reads C_PetInfo (Blizzard_FrameXML/
+-- PetHappiness.lua, Forever 1.60.1.70009 and later) uses these atlases. Resolved
+-- once: a client without the atlases keeps the texture cells.
+local ATLASES = { [1] = "UI-PetMad", [2] = "UI-PetNeutral", [3] = "UI-PetHappiness" }
+local textureInfo = _G.C_Texture
+local USE_ATLAS = type(petInfo) == "table" and type(petInfo.GetPetHappiness) == "function"
+    and type(textureInfo) == "table" and type(textureInfo.GetAtlasInfo) == "function"
+    and textureInfo.GetAtlasInfo(ATLASES[3]) ~= nil
 
 local Happiness = { UpdateOnApply = true }
 
@@ -56,9 +65,14 @@ local function HideIcon(tex)
     end
 end
 
-local function ShowIcon(tex, happiness, coords)
+local function ShowIcon(tex, happiness)
     if tex._msufHappiness ~= happiness then
-        tex:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        if USE_ATLAS then
+            tex:SetAtlas(ATLASES[happiness])
+        else
+            local coords = TEX_COORDS[happiness]
+            tex:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        end
         tex._msufHappiness = happiness
     end
     if tex._msufHappinessShown ~= true then
@@ -105,7 +119,8 @@ local function EnsureTexture(frame, cfg)
     local tex = frame.petHappinessIndicatorIcon
     if not tex then
         tex = PixelLayoutRegion(holder:CreateTexture(nil, "OVERLAY"))
-        tex:SetTexture(TEXTURE)
+        -- An atlas carries its own file; ShowIcon sets it per state.
+        if not USE_ATLAS then tex:SetTexture(TEXTURE) end
         HideIcon(tex)
         frame.petHappinessIndicatorIcon = tex
     elseif tex.GetParent and tex:GetParent() ~= holder and tex.SetParent then
@@ -186,12 +201,12 @@ function Happiness.Update(frame)
         end
     end
 
-    local coords = TEX_COORDS[happiness]
-    if not coords then
+    -- Blizzard knows three states; anything else hides the icon.
+    if not TEX_COORDS[happiness] then
         HideIcon(tex)
         return
     end
-    ShowIcon(tex, happiness, coords)
+    ShowIcon(tex, happiness)
 end
 
 function Happiness.Disable(frame)
@@ -211,4 +226,14 @@ _G.MSUF_RequestPetHappinessIndicatorRefresh = function(unit, reason)
         return UF.RefreshElements(unit or "pet", { "PetHappinessIndicator" }, reason or "MSUF_PET_HAPPINESS")
     end
     return false
+end
+
+--- The art of one state (1 unhappy, 2 content, 3 happy; anything else draws
+--- happy) in the menu's status icon shape: texture, left, right, top, bottom,
+--- atlas. The atlas is set only where this client draws atlases. The unit
+--- preview and the Pet page icon strip read it, so they match the live icon.
+_G.MSUF_GetPetHappinessIcon = function(happiness)
+    if not TEX_COORDS[happiness] then happiness = 3 end
+    local coords = TEX_COORDS[happiness]
+    return TEXTURE, coords[1], coords[2], coords[3], coords[4], USE_ATLAS and ATLASES[happiness] or nil
 end

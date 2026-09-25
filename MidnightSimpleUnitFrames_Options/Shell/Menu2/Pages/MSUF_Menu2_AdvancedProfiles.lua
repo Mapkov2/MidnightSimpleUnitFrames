@@ -64,6 +64,44 @@ local WAGO_PROFILES_URL = "https://wago.io/search/imports/wow/msuf"
 local function Trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
+local function SuiteProfiles()
+    local suite = rawget(_G, "MSUFSuite")
+    return type(suite) == "table" and type(suite.SuiteProfiles) == "table" and suite.SuiteProfiles or nil
+end
+local function SuiteExportAvailable()
+    local profiles = SuiteProfiles()
+    return profiles and type(profiles.Available) == "function" and profiles.Available() == true
+end
+local function ProfileExportValues()
+    local values = {}
+    if SuiteExportAvailable() then
+        local suite = rawget(_G, "MSUFSuite")
+        values[#values + 1] = { value = "suite_all", text = "Full profile (MSUF + Suite)" }
+        local skinReady = suite.Client and suite.Client.AddOnEnabled
+            and suite.Client.AddOnEnabled("MSUF_Suite_Skin") == true
+        values[#values + 1] = { value = "suite_module:skin", text = "Suite module: Skinning",
+            disabled = not skinReady }
+        values[#values + 1] = { value = "all", text = "MSUF only - full profile" }
+        for _, id in ipairs(suite.SuiteOrder or {}) do
+            local spec = suite.SuiteCatalog and suite.SuiteCatalog[id]
+            if spec then values[#values + 1] = { value = "suite_module:" .. id, text = "Suite module: " .. spec.title } end
+        end
+    else
+        values[#values + 1] = { value = "all", text = "Full profile" }
+    end
+    return values
+end
+local function SuiteExport(kind)
+    local profiles = SuiteProfiles()
+    if not profiles then return nil, "MSUF Suite is not available" end
+    if kind == "suite_all" then return profiles.Export() end
+    return profiles.ExportModule(kind:sub(14))
+end
+local function SuiteImportKind(text)
+    if type(text) ~= "string" then return nil end
+    if text:match("^%s*MSUFS[123]:") then return "full" end
+    if text:match("^%s*MSUFM2:") or text:match("^%s*MSKIN1:") then return "module" end
+end
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = "None", text = "None" } end
@@ -346,11 +384,12 @@ function ProfilesPage.Prepare(ctx)
             or false
     end
     local function ExportProfileString(kind)
-        if type(_G.MSUF_ExportSelectionToString) ~= "function" then
+        kind = kind or M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all")
+        local suiteKind = kind == "suite_all" or kind:match("^suite_module:") ~= nil
+        if not suiteKind and type(_G.MSUF_ExportSelectionToString) ~= "function" then
             if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Export unavailable"), "danger", 1.8) end
             return false
         end
-        kind = kind or M.profileExportKind or "all"
         local selected = M.profileExportUnits or { player = true }
         if kind == "unitselection" then
             local any = false
@@ -360,8 +399,11 @@ function ProfilesPage.Prepare(ctx)
                 return false
             end
         end
-        local value = _G.MSUF_ExportSelectionToString(kind, selected)
+        local value, reason
+        if suiteKind then value, reason = SuiteExport(kind)
+        else value = _G.MSUF_ExportSelectionToString(kind, selected) end
         if type(value) ~= "string" then
+            if reason then PrintProfileMessage("|cffff0000", "Export failed: " .. tostring(reason)) end
             if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Export failed"), "danger", 1.8) end
             return false
         end
@@ -495,7 +537,7 @@ function ProfilesPage.Hero(state)
     end
     heroExport:SetScript("OnClick", function()
         local io = state.io
-        if ExportProfileString("all") and io and W.FocusCollapsibleSection then
+        if ExportProfileString(SuiteExportAvailable() and "suite_all" or "all") and io and W.FocusCollapsibleSection then
             W.FocusCollapsibleSection(io, { flash = true })
         end
     end)
@@ -897,11 +939,14 @@ function ProfilesPage.ImportExport(state)
         actionsCardX, actionsCardY, actionsCardW, actionsCardH)
     local ioButtonW = max(140, min(240, floor((actionsCardW - 40 - buttonGap) / 2)))
     local exportKindW = min(280, max(180, stringCardW - 40))
-    local exportKind = W.Dropdown(stringCard, "Export kind",
-        VT("all", "Full profile", "unitframe", "Unitframes", "castbar", "Castbars", "colors", "Colors",
-            "gameplay", "Gameplay", "groupframe", "Group Frames", "unitselection", "Selected unitframes"), exportKindW)
+    local exportValues = ProfileExportValues()
+    for _, item in ipairs(VT("unitframe", "Unitframes", "castbar", "Castbars", "colors", "Colors",
+        "gameplay", "Gameplay", "groupframe", "Group Frames", "unitselection", "Selected unitframes")) do
+        exportValues[#exportValues + 1] = item
+    end
+    local exportKind = W.Dropdown(stringCard, "Export kind", exportValues, exportKindW)
     M.BindDropdownWidget(ctx, exportKind,
-        function() return M.profileExportKind or "all" end,
+        function() return M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all") end,
         function(v)
             M.SetMenuStateValue("profileExportKind", v or "all")
             if v == "unitselection" and state.unitSelectionSection and W.FocusCollapsibleSection then
@@ -927,7 +972,7 @@ function ProfilesPage.ImportExport(state)
     end)
     blob:HookScript("OnEditFocusLost", MirrorImportBuffer)
     local export = ProfileButton(actionsCard, "Export", function()
-        return ExportProfileString(M.profileExportKind or "all")
+        return ExportProfileString(M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all"))
     end, nil, "export.generate", false, nil, nil, nil, ioButtonW)
     if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(heroExport, export) end
     if T.ApplyButtonRole then T.ApplyButtonRole(export, "primary") end
@@ -1001,6 +1046,21 @@ function ProfilesPage.ImportActions(state)
     local function ImportIntoCurrent()
         local text = ImportTextOrFail()
         if not text then return false end
+        local suiteKind = SuiteImportKind(text)
+        if suiteKind == "full" then
+            M.SetMenuStateValue("profileImportCreateNew", true)
+            PrintProfileMessage("|cffffd700", "Full MSUF + Suite imports create a new profile. Enter a name and import again.")
+            RefreshAfterProfileChange(ctx)
+            return false
+        elseif suiteKind == "module" then
+            local suite = SuiteProfiles()
+            if not suite then PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this module."); return false end
+            local ok, reason = suite.ImportModule(text)
+            if not ok then PrintProfileMessage("|cffff0000", "Module import failed: " .. tostring(reason)); return false end
+            ClearProfileHistory()
+            RefreshAfterProfileChange(ctx)
+            return true
+        end
         if type(_G.MSUF_ImportFromString) ~= "function" then
             PrintProfileMessage("|cffff0000", "Import failed: profile import API is not available.")
             return false
@@ -1025,6 +1085,21 @@ function ProfilesPage.ImportActions(state)
         if ProfileExists(name) then
             PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
             return false
+        end
+        local suiteKind = SuiteImportKind(text)
+        if suiteKind then
+            local suite = SuiteProfiles()
+            if not suite then PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this profile."); return false end
+            local ok, reason
+            if suiteKind == "full" then ok, reason = suite.Import(name, text)
+            else ok, reason = suite.ImportModuleIntoNew(name, text) end
+            if not ok then PrintProfileMessage("|cffff0000", "Suite import failed: " .. tostring(reason)); return false end
+            ClearProfileHistory()
+            RefreshAfterProfileChange(ctx)
+            M.profileImportNewName = ""
+            importProfileName:SetText("")
+            ReloadAfterNewProfileImport(name)
+            return true
         end
         if type(_G.MSUF_ImportIntoNewProfile) ~= "function" then
             PrintProfileMessage("|cffff0000", "Import failed: profile API is not available.")
@@ -1115,7 +1190,8 @@ function ProfilesPage.ImportActions(state)
     local importModeHelp = W.Text(actionsCard, "", 20, -336, max(220, actionsCardW - 40), T.colors.muted)
     if importModeHelp and importModeHelp.SetWordWrap then importModeHelp:SetWordWrap(true) end
     local EXPORT_KIND_LABELS = {
-        all = "Full profile",
+        all = SuiteExportAvailable() and "MSUF only" or "Full profile",
+        suite_all = "MSUF + Suite",
         unitframe = "Unitframes",
         unitselection = "Selected unitframes",
         castbar = "Castbars",
@@ -1136,8 +1212,15 @@ function ProfilesPage.ImportActions(state)
                 or "Warning: importing now changes the active profile. Export or copy it first if you need a backup."))
         end
         if W.SetCollapsibleBadges then
+            local exportKindValue = M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all")
+            local exportLabel = EXPORT_KIND_LABELS[exportKindValue]
+            if not exportLabel and exportKindValue:match("^suite_module:") then
+                local suite = rawget(_G, "MSUFSuite")
+                local spec = suite and suite.SuiteCatalog and suite.SuiteCatalog[exportKindValue:sub(14)]
+                exportLabel = spec and spec.title
+            end
             W.SetCollapsibleBadges(io, {
-                { text = EXPORT_KIND_LABELS[M.profileExportKind or "all"] or "Full profile", kind = "info", showWhenClosed = true },
+                { text = exportLabel or "Full profile", kind = "info", showWhenClosed = true },
                 { text = createNew and "Safe import mode" or "Current profile", kind = createNew and "ok" or "muted", showWhenClosed = true },
             })
         end

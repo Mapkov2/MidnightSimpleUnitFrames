@@ -233,6 +233,12 @@ function MSUF_InitProfiles()
         MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_INIT_REBIND", active, MSUF_DB)
     end
  end
+local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
+    local suite = rawget(_G, "MSUFSuite")
+    if type(suite) == "table" and type(suite.OnMSUFProfileLifecycle) == "function" then
+        suite.OnMSUFProfileLifecycle(kind, source, target)
+    end
+end
 function MSUF_CreateProfile(name)
     if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
@@ -255,6 +261,7 @@ function MSUF_CreateProfile(name)
         })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[name])
+    MSUF_ProfileIO_NotifySuiteLifecycle("create", name)
     print("|cff00ff00MSUF:|r Created new profile '"..name.."'.")
     return true
  end
@@ -273,6 +280,10 @@ MSUF_ProfileIO_NotifyAssistantProfileEpochChanged = function(reason, name, db)
         or (type(_G.UnitAffectingCombat) == "function" and _G.UnitAffectingCombat("player") == true)
     then
         return false
+    end
+    local suite = rawget(_G, "MSUFSuite")
+    if type(suite) == "table" and type(suite.OnMSUFProfileChanged) == "function" then
+        suite.OnMSUFProfileChanged(name, reason)
     end
     local assistant = type(MSUF) == "table" and rawget(MSUF, "Assistant") or nil
     local callback = type(assistant) == "table" and rawget(assistant, "OnProfileEpochChanged") or nil
@@ -334,6 +345,7 @@ function MSUF_ResetProfile(name)
         ApplyProfileRuntime("PROFILE_RESET", false)
         MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_RESET", name, MSUF_DB)
     end
+    MSUF_ProfileIO_NotifySuiteLifecycle("reset", name)
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
     return true
  end
@@ -389,6 +401,7 @@ function MSUF_DeleteProfile(name)
     if MSUF_ActiveProfile == name then
         MSUF_SwitchProfile(fallbackName)
     end
+    MSUF_ProfileIO_NotifySuiteLifecycle("delete", name)
     print("|cffffd700MSUF:|r Profile '"..name.."' deleted.")
     return true
  end
@@ -419,6 +432,7 @@ function MSUF_CopyProfile(sourceName, destName)
         })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[destName])
+    MSUF_ProfileIO_NotifySuiteLifecycle("copy", sourceName, destName)
     print("|cff00ff00MSUF:|r Copied '"..sourceName.."' -> '"..destName.."'.")
     return true
 end
@@ -476,6 +490,7 @@ function MSUF_RenameProfile(sourceName, destName)
     if globalMeta.defaultProfileForNewChars == sourceName then
         globalMeta.defaultProfileForNewChars = destName
     end
+    MSUF_ProfileIO_NotifySuiteLifecycle("rename", sourceName, destName)
     if MSUF_ActiveProfile == sourceName then
         MSUF_SwitchProfile(destName)
     end

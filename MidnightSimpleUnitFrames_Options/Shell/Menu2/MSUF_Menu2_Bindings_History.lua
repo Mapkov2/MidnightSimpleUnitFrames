@@ -106,6 +106,42 @@ local function SnapshotProfileRouting()
         specProfileMap = existed and DeepCopy(char.specProfileMap) or nil,
     }
 end
+local historyProviders = {}
+function M.RegisterHistoryProvider(key, capture, restore)
+    if type(key) ~= "string" or key == "" or type(capture) ~= "function" or type(restore) ~= "function" then return false end
+    historyProviders[key] = { capture = capture, restore = restore }
+    if historySessionActive then
+        local value = capture()
+        for _, snapshot in ipairs({ historySessionBaseSnapshot, historySessionSnapshot }) do
+            if type(snapshot) == "table" and snapshot._msuf2HistoryState == true then
+                snapshot.externalProviders = snapshot.externalProviders or {}
+                snapshot.externalProviders[key] = value ~= nil and DeepCopy(value) or nil
+            end
+        end
+    end
+    return true
+end
+function M.UnregisterHistoryProvider(key)
+    historyProviders[key] = nil
+end
+local function SnapshotHistoryProviders()
+    local snapshot = {}
+    for key, provider in pairs(historyProviders) do
+        -- Providers return owned snapshots. Copying them again would duplicate
+        -- the entire Suite and Skinning profile on every MSUF color gesture.
+        local value = provider.capture()
+        if value ~= nil then snapshot[key] = value end
+    end
+    return snapshot
+end
+local function RestoreHistoryProviders(snapshot, reason, source)
+    local values = type(snapshot) == "table" and snapshot.externalProviders
+    if type(values) ~= "table" then return end
+    for key, value in pairs(values) do
+        local provider = historyProviders[key]
+        if provider then provider.restore(DeepCopy(value), reason, source) end
+    end
+end
 local function SnapshotDB()
     -- Spec-profile routing is the only persisted options family outside the
     -- active profile DB. Keep its tiny per-character state in the same history
@@ -120,6 +156,7 @@ local function SnapshotDB()
         profileDB = DeepCopy(M.EnsureDB()),
         profileRouting = SnapshotProfileRouting(),
         externalEditMode = externalState,
+        externalProviders = SnapshotHistoryProviders(),
     }
 end
 local function HistoryProfileDB(snapshot)
@@ -503,6 +540,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
         and type(snapshot.externalEditMode) == "table" then
         externalAPI._RestoreHistorySnapshot(snapshot.externalEditMode, reason or "history")
     end
+    RestoreHistoryProviders(snapshot, reason, source)
     if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
     if ApplyScopedHistoryRestore(reason, source) then
@@ -717,6 +755,7 @@ function M.CancelHistorySurface(surface, restoreState)
         historyRestoring = true
         DeepReplace(M.EnsureDB(), profileDB)
         RestoreProfileRouting(marker.snapshot)
+        RestoreHistoryProviders(marker.snapshot, "MSUF2_HISTORY_CANCEL_SURFACE", surface)
         historyRestoring = false
     end
     local undo, redo = EnsureHistoryStacks()

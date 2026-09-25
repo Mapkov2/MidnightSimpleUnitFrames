@@ -5318,6 +5318,7 @@ L["Show Ironfur tracker (Guardian)"] = "무쇠가죽 추적 표시 (수호)"
 L["Show Sweeping Strikes (Arms)"] = "휩쓸기 표시 (무기)"
 L["Show by health"] = "생명력에 따라 표시"
 L["Show heal prediction"] = "치유 예측 표시"
+L["Include healing from others"] = "다른 플레이어의 치유 포함"
 L["Show negative heal absorbs"] = "치유 흡수량 표시"
 L["Show only below 100% health"] = "체력이 100% 미만인 경우에만 표시"
 L["Show positive absorbs"] = "피해 흡수량 표시"
@@ -5971,6 +5972,11 @@ L["Round level badge"] = "Round level badge"
 L["Round Level Badge"] = "Round Level Badge"
 L["Centers the level on a dark round medallion with a gold rim on every supported WoW version."] = "Centers the level on a dark round medallion with a gold rim on every supported WoW version."
 
+L["MSUF Forever"] = "MSUF Forever"
+L["Midnight Blue"] = "Midnight Blue"
+L["Midnight Dark"] = "Midnight Dark"
+L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Background opacity changes the MSUF Forever background only; text stays fully opaque."
+L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

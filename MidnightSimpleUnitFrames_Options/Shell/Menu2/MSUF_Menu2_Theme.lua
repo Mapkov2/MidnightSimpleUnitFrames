@@ -2475,6 +2475,7 @@ local function ButtonVisual(btn, active, hover)
     if MenuSkin and MenuSkin.Button(btn, active, hover, ButtonVisual) then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
+        if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         return
     end
     local c = T.colors

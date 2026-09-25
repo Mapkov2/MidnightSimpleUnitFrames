@@ -10,8 +10,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "DA73207CEA04CF46A8A6A16752EDCA19D423A27EC377B60B67FA1DCF7B974380"
-Search.StaticIndexRecordCount = 3030
+Search.StaticIndexSourceSha256 = "B81F1984B003D2A10C426E59A1EF449C808F962AD2A27B39F6B159DAB103B4E1"
+Search.StaticIndexRecordCount = 3031
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
 auras3_buffs	Border Style	dropdown			Appearance > Icon Style	border style	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Eborder-style	aura_style_appearance_buff_icon_style			border style appearance icon style auras style appearance icon style border style auras3 buffs dropdown
@@ -632,6 +632,7 @@ opt_bars	Health gradient	toggle			Gradient > Enable	health gradient	idopt_bars
 opt_bars	Health strength	slider			Gradient > Health	health strength	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Egradient%2Ehealth%2Estrength	bars_textures			health strength gradient health opt bars global gradient health strength opt bars slider
 opt_bars	Highlight border thickness	slider			Highlight > Border	highlight border thickness	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Ehighlight%2Eborder%2Ethickness	bars_highlight			highlight border thickness highlight border opt bars global highlight border thickness opt bars slider
 opt_bars	Highlight priority order	dragrow			Priority > Order	highlight priority order	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Ehighlight%2Epriority%2Eorder%2Eorder	bars_highlight			highlight priority order priority order opt bars global highlight priority order order opt bars dragrow
+opt_bars	Include healing from others	toggle			Prediction > All	include healing from others	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Eabsorb%2Eheal%2Eprediction%2Eall%2Ehealers	bars_absorb			include healing from others prediction all opt bars global absorb heal prediction all healers opt bars toggle
 opt_bars	MSUF Lucent	dropdown			Global > Textures	msuf lucent	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Etextures%2Eforeground	bars_textures			msuf lucent global textures opt bars global textures foreground opt bars dropdown
 opt_bars	Maximum Health Loss Color	color			Max > Health	maximum health loss color	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Etemp%2Emax%2Ehealth%2Ecolor	bars_temp_max_health			maximum health loss color max health opt bars global temp max health color opt bars color
 opt_bars	Mouseover highlights	toggle	bars.roundedMouseover		Rounded > Rounded	mouseover highlights	idopt_barsmenu2%2Eopt%2Ebars%2Eglobal%2Erounded%2Erounded%2Emouseover	bars_rounded			mouseover highlights rounded rounded opt bars global rounded rounded mouseover opt bars toggle bars roundedmouseover

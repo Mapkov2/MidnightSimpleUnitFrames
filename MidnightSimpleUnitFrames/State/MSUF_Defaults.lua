@@ -58,9 +58,11 @@ end
 --- future factory payload replacements unless the requested baseline explicitly
 --- calls for defensive tracking to start disabled.
 local MSUF_FACTORY_DEFAULT_PLAYER_DEFENSIVES_ENABLED = true
---- One factory string for every client of this repo: it lives in
---- State/Defaults/MSUF_Defaults_Shell.lua, which the TOCs load before this file.
-local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = MSUF.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
+--- Forever has its own authored factory export. Other clients retain the
+--- shared baseline from State/Defaults/MSUF_Defaults_Shell.lua.
+local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = MSUF.Client and MSUF.Client.IsForever
+    and MSUF.MSUF_FOREVER_FACTORY_DEFAULT_PROFILE_COMPACT
+    or MSUF.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
 
 --- Expose the factory compact string for diagnostics and future tooling.
 if type(MSUF) == "table" then
@@ -593,6 +595,7 @@ local MSUF_DEFAULT_PREDICTION_BAR_VALUES = {
     tempMaxHealthOpacity = 1,
     tempMaxHealthBackgroundOpacity = 0.65,
     healPredEnabled = true,
+    healPredAllHealers = false,
     healPredictionBarHeight = 0,
     healPredictionBarOffsetY = 0,
     healPredictionBarOpacity = 0.45,
@@ -1678,6 +1681,30 @@ end
 --- It is decoded only when MSUF_DB is empty or contains only early bootstrap
 --- buckets created before the UnitFrame factory runs, then normal defaults
 --- and migrations still run afterward to fill fields added after the snapshot.
+local MSUF_FOREVER_HEALTH_UNITS = {
+    "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
+    "gf_party", "gf_raid", "gf_mythicraid",
+}
+
+local function MSUF_Defaults_MuteForeverHealth(profileDB, freshFactory)
+    if not (MSUF.Client and MSUF.Client.IsForever) then return end
+    local g = profileDB.general
+    if type(g) ~= "table" or g._msufForeverMutedHealth_v1 then return end
+    -- Unhalted's health fill starts at 80% opacity. Apply that to the Forever
+    -- factory; on stored factory profiles only replace the old 90% baseline.
+    for i = 1, #MSUF_FOREVER_HEALTH_UNITS do
+        local conf = profileDB[MSUF_FOREVER_HEALTH_UNITS[i]]
+        if type(conf) == "table" then
+            local alpha = tonumber(conf.hpBarAlpha)
+            if freshFactory or (g._msufFactoryProfileApplied == true
+                and alpha and math.abs(alpha - 0.9) < 0.001) then
+                conf.hpBarAlpha = 0.8
+            end
+        end
+    end
+    g._msufForeverMutedHealth_v1 = true
+end
+
 local function MSUF_Defaults_CreateFactoryProfile()
     -- Prefer the shared codec once it has loaded: it inflates before CBOR, the
     -- same order Blizzard uses. The local decoder is only the pre-codec fallback.
@@ -1687,6 +1714,19 @@ local function MSUF_Defaults_CreateFactoryProfile()
     end
     local tbl = decode(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
     if not tbl then  return nil end
+    if MSUF.Client and MSUF.Client.IsForever then
+        if tbl.addon ~= "MSUF" or tonumber(tbl.fmt) ~= 2
+            or type(tbl.msuf6) ~= "table" or tonumber(tbl.msuf6.schema) ~= 600 then
+            return nil
+        end
+        local native = tbl.msuf6.payload
+        if type(native) ~= "table" then return nil end
+        local out = {}
+        MSUF_Defaults_DeepCopy(out, native)
+        out.general = out.general or {}
+        out.general._msufFactoryProfileApplied = true
+        return out
+    end
     local payload = MSUF_Defaults_GetProfilePayload(tbl)
     if type(payload) ~= "table" then  return nil end
 
@@ -1805,6 +1845,7 @@ local function MSUF_Defaults_CreateFactoryProfile()
         end
     end
     out.general = out.general or {}
+    MSUF_Defaults_MuteForeverHealth(out, true)
     out.general._msufFactoryProfileApplied = true
     out._msufFactoryPlayerDefensivesEnabled_v1 = MSUF_FACTORY_DEFAULT_PLAYER_DEFENSIVES_ENABLED
     return out
@@ -1963,7 +2004,7 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- aura alias keys, using the wider StateHelpers.ProfileIOSpec. The two
 --- revisions are bumped independently and are deliberately not merged; keep
 --- both in mind when a key alias changes.
-local MSUF_DEFAULTS_CURRENT_REVISION = 15
+local MSUF_DEFAULTS_CURRENT_REVISION = 16
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 
 local MSUF_DEFAULTS_PLAYER_DEFENSIVE_SHAPE_REVISION = 10
@@ -3220,6 +3261,7 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     MSUF_Defaults_Stage_SeedAuraDefaults(profileDB)
     MSUF_Defaults_Stage_FillUnitDefaults(profileDB, g, legacyPortraitOverrideState)
     MSUF_Defaults_Stage_MigrateUnifiedAlpha(profileDB, g)
+    MSUF_Defaults_MuteForeverHealth(profileDB, false)
     for _, key in ipairs({
         "general",
         "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",

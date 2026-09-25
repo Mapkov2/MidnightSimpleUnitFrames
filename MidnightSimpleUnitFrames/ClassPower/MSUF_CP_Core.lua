@@ -33,6 +33,17 @@ local function CP_IsUsableCooldownAnchorFrame(frame)
     return type(getSize) == "function" and getSize(frame) ~= nil
 end
 
+--- The MSUF Suite stacks its Utility row directly under its Essential row, so
+--- the class resource bar sits on top of that Essential row instead of below
+--- it. Only when the frame being anchored to is the Suite's own; every other
+--- provider keeps the bar under the anchor. Cold layout path only.
+local function CP_CooldownAnchorStacksAbove(anchorFrame)
+    local getProvider = _G.MSUF_GetActiveCooldownAnchorProvider
+    if type(getProvider) ~= "function" then return false end
+    local provider, source = getProvider()
+    return provider == "MSUF_Suite_CooldownManager" and source == anchorFrame
+end
+
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
@@ -472,15 +483,20 @@ builders.LAYOUT = function(E)
                 anchorFrame = ecv
             end
             if anchorFrame then
-                CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
+                --- The lock point is the container edge touching the anchor;
+                --- the hard lock and the screen cache record that same edge,
+                --- so a combat-edge restore keeps the bar where it was.
+                local lockPoint, anchorPoint = "TOP", "BOTTOM"
+                if CP_CooldownAnchorStacksAbove(anchorFrame) then lockPoint, anchorPoint = "BOTTOM", "TOP" end
+                CP.container:SetPoint(lockPoint, anchorFrame, anchorPoint, oX, oY)
                 if CP.container:GetCenter() ~= nil then
                     --- The link stays live; the provider chain resolves to a
                     --- real rect, so the container renders and follows it.
                     CP.container._msufDirectCooldownAnchor = true
-                    CP.container._msufHardLockPoint = "TOP"
+                    CP.container._msufHardLockPoint = lockPoint
                     CP.container._msufStableExternalAnchor = anchorFrame
                     if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
-                        _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", "TOP")
+                        _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", lockPoint)
                     end
                 else
                     CP.container:ClearAllPoints()

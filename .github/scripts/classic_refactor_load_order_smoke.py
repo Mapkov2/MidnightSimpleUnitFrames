@@ -40,8 +40,10 @@ def load_order(toc):
         else:
             children = [line.strip() for line in path.read_text(encoding="utf-8-sig").splitlines()
                         if line.strip() and not line.lstrip().startswith("#")]
-            # Parity is the union across clients, not the machine's locale.
-            children = [re.sub(r"\s+\[AllowLoadTextLocale\s+[A-Za-z, ]+\]$", "", child)
+            # Parity is the union across clients, not the machine's locale or
+            # game type; a line may stack several trailing conditions.
+            children = [re.sub(r"(\s+\[(?:AllowLoadTextLocale|AllowLoadGameType|ExcludeLoadGameType)"
+                               r"\s+[A-Za-z, ]+\])+$", "", child)
                         for child in children]
         for child in children:
             visit(path.parent / child.replace("\\", "/"))

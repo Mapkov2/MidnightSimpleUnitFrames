@@ -51,9 +51,9 @@ LEDGER = {
     "records": 3476,
     "columns": 31,
     "schemaOnly": (298, "9022F4DE2CD5FF16DF75619E18FE945022316AC34AA589B6CC6CB284F317D077"),
-    # Includes the eight opt-in portrait dragon controls; the standalone
-    # control schema remains unchanged. Menu2 owns their exact search targets.
-    "indexOnly": (584, "EE688B5AB962DA3490397F0D6B478D5067709E99DDC8DE5C6D41C45E16AB8F66"),
+    # Includes the eight opt-in portrait dragon controls and the incoming-heal
+    # source toggle; the standalone control schema remains unchanged.
+    "indexOnly": (585, "40F82247578C8DD13D48FBB8661FEF81A89A0FDB801BB384500B88D656881438"),
 }
 
 

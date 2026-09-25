@@ -1,214 +1,170 @@
 {
   "flavor": "Forever",
-  "build": "1.60.1.69876",
+  "build": "1.60.1.70009",
   "file_data_id": 1990283,
   "encoding": "base36-token-groups-v1",
-  "common_groups": 1001,
+  "common_groups": 1009,
   "folded_locales": {},
   "locales": {
     "enUS": {
-      "csv_sha256": "ede393ee7dd2d8a7e9bacbf4f14a32a88ded7f67ba08b33d564e931a352773ab",
-      "rows": 31767,
-      "groups": 4345,
-      "alias_ids": 18753,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=enUS"
+      "csv_sha256": "b9a0d125fd47e02c13790504e2f10c4e67a3e5d5c4a91295bd96514ba36610a6",
+      "rows": 31716,
+      "groups": 4352,
+      "alias_ids": 18757,
+      "max_id": 1322007
     },
     "deDE": {
-      "csv_sha256": "9c4c94b6124afb57707eaf53fb3db7199727734e4fd7ee377ff7a7603a0c5813",
-      "rows": 31767,
-      "groups": 4374,
-      "alias_ids": 18904,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69893",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69893&locale=deDE"
+      "csv_sha256": "4ddd9878dafeb7b33e98df2e8398556e25823ce37aa83be545977587911c4991",
+      "rows": 31716,
+      "groups": 4370,
+      "alias_ids": 18875,
+      "max_id": 1322007
     },
     "frFR": {
-      "csv_sha256": "2330a313c19a5f1ffa37695deda7fc8c539e440addb54add0446d4968d537e5d",
-      "rows": 31767,
-      "groups": 4286,
-      "alias_ids": 18567,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=frFR"
+      "csv_sha256": "1d69951a63e12747bebe63a6bdd2cee375d12238fcabde7b1efd165528670918",
+      "rows": 31716,
+      "groups": 4288,
+      "alias_ids": 18551,
+      "max_id": 1322007
     },
     "esES": {
-      "csv_sha256": "87304136c0530b92c3a617b974508268c5e4dae859384024b8e808a775be2af7",
-      "rows": 31767,
+      "csv_sha256": "ef87f067e836b19771f4f4b05baf62e9a1fe5db729c9af6d625a089780385e86",
+      "rows": 31716,
       "groups": 4333,
-      "alias_ids": 18499,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=esES"
+      "alias_ids": 18479,
+      "max_id": 1322007
     },
     "esMX": {
-      "csv_sha256": "6bc9df90d383346e07de1ac72717dcc4ed85522aae0d88ccbf79d06e4d6bcb07",
-      "rows": 31767,
-      "groups": 4374,
-      "alias_ids": 18709,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=esMX"
+      "csv_sha256": "e94d9eff72d9579ab7ef7b86323d415322b9d933ca1b428c86be4c225c8732ea",
+      "rows": 31716,
+      "groups": 4369,
+      "alias_ids": 18679,
+      "max_id": 1322007
     },
     "itIT": {
-      "csv_sha256": "637a0e4296b25fe15377553917bcfd13b128f921ce6e97dd25dfc51d83bcaa85",
-      "rows": 31767,
-      "groups": 2943,
-      "alias_ids": 14100,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=itIT"
+      "csv_sha256": "6d9464a9b26453f7341877ac9bc51af77e4dc10dbeb8fad071fafc307482e6f2",
+      "rows": 31716,
+      "groups": 2950,
+      "alias_ids": 14071,
+      "max_id": 1322007
     },
     "ptBR": {
-      "csv_sha256": "27e5bf04f3be516aa84fb06d2d270601eb3a0c2209ef74a8493ffe54fdcdf3a4",
-      "rows": 31767,
-      "groups": 4351,
-      "alias_ids": 18837,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=ptBR"
+      "csv_sha256": "7e3d870d0b1aa3776b5737b45f4f1804d87776d061454beacb54c57053a7b756",
+      "rows": 31716,
+      "groups": 4348,
+      "alias_ids": 18810,
+      "max_id": 1322007
     },
     "ruRU": {
-      "csv_sha256": "54547787f017eb57f6f90248d5b22c7281b5b5d266c2419f228881989a7fac7d",
-      "rows": 31767,
+      "csv_sha256": "6d648a0497cdfcb263170356145285b054a1d79f9989e091748abc307cb5bcfd",
+      "rows": 31716,
       "groups": 4306,
-      "alias_ids": 18813,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=ruRU"
+      "alias_ids": 18792,
+      "max_id": 1322007
     },
     "koKR": {
-      "csv_sha256": "450c820ed22c22ccd927e525f64bb19e67ff1a6a5a185dbb93b442118ec4f8e5",
-      "rows": 31767,
-      "groups": 4388,
-      "alias_ids": 19788,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=koKR"
+      "csv_sha256": "eb12c4eaeb795e580908d1c2eceef233aa96813468d631db939a0967546883e7",
+      "rows": 31716,
+      "groups": 4382,
+      "alias_ids": 19750,
+      "max_id": 1322007
     },
     "zhCN": {
-      "csv_sha256": "50375584a9b59a35ef03e9ebebff2970c760d383455cb8121b7ed7847a3107a0",
-      "rows": 31767,
-      "groups": 4384,
-      "alias_ids": 18947,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=zhCN"
+      "csv_sha256": "9ecada7f31e50a5cecd930215cd054b7f4025110c697bc31ac796d3d2ed5e578",
+      "rows": 31716,
+      "groups": 4403,
+      "alias_ids": 19000,
+      "max_id": 1322007
     },
     "zhTW": {
-      "csv_sha256": "d435ec6d815014e88c5bb7a73dfd889d14748094dbe56b75a0edc8ab1249bdd1",
-      "rows": 31767,
-      "groups": 4346,
-      "alias_ids": 18786,
-      "max_id": 1320658,
-      "source_build": "1.60.1.69913",
-      "source_url": "https://wago.tools/db2/SpellName/csv?build=1.60.1.69913&locale=zhTW"
+      "csv_sha256": "61f511ce6af231146d69c9d7385a3ac798a01d13dd7055214dcda4101c35943d",
+      "rows": 31716,
+      "groups": 4363,
+      "alias_ids": 18826,
+      "max_id": 1322007
     }
   },
   "generated": {
     "MSUF_Auras3_AliasData_Common.lua": {
-      "bytes": 16455,
-      "sha256": "9c25a4cb91d5df20cd2ec4671c84e7f6ebd2b80ad4f1c86086a1bcb6306a36cb"
+      "bytes": 16658,
+      "sha256": "2e6b1498f81b636816e92187bd0bbba7ee3093373c51f874aed482c3171d3c2e"
     },
     "MSUF_Auras3_AliasData_enUS.lua": {
-      "bytes": 82595,
-      "sha256": "82613fddefdd0898c682621e0dc95800620d86f2b585146d60124ed622057bd9",
+      "bytes": 82419,
+      "sha256": "33d91e301fed781611ee620d818731487ed4b4dc344f11b4c5333a44187fdb60",
       "locales": [
         "enUS"
       ]
     },
     "MSUF_Auras3_AliasData_deDE.lua": {
-      "bytes": 83379,
-      "sha256": "fe8ad4fa44bdb151bb4e31fabd6972c2f1d4936571f0cfe4b168963a81e89b09",
+      "bytes": 83027,
+      "sha256": "71bf9bfc8b5932f5a896050032161c0e4f5112a4b364c540affd5c91c662ef38",
       "locales": [
         "deDE"
       ]
     },
     "MSUF_Auras3_AliasData_frFR.lua": {
-      "bytes": 81606,
-      "sha256": "6aac4b00f1208fd15bb67c966b1459a8403be3876db52da4c4402d85c8f68963",
+      "bytes": 81325,
+      "sha256": "767fb0f69f86a3196dfb3059d8803daf6e0d6ce2f7513197c88d2422bc334751",
       "locales": [
         "frFR"
       ]
     },
     "MSUF_Auras3_AliasData_esES.lua": {
-      "bytes": 81313,
-      "sha256": "cdbaad3cb88f3b18ac5ed9717fff8e9357feb56ee769f03a20664480ebe38f0d",
+      "bytes": 81010,
+      "sha256": "2448420b61788d4e0f25841bb014d2a3ead92ee62f7ac09698424222f10a15d5",
       "locales": [
         "esES"
       ]
     },
     "MSUF_Auras3_AliasData_esMX.lua": {
-      "bytes": 82404,
-      "sha256": "15b9298e8c4a9413bca1412962fdf5fdd65a05c24d674baf255d4aded0054934",
+      "bytes": 82046,
+      "sha256": "613af3114abd8d8e71ff78f012e2241e66667db2676c66c5d7abe1e3581174aa",
       "locales": [
         "esMX"
       ]
     },
     "MSUF_Auras3_AliasData_itIT.lua": {
-      "bytes": 57928,
-      "sha256": "f55d97dbed3747c5344ddef98858b2f440ace4dcdd8b7d2ff86dd5d0bef411da",
+      "bytes": 57587,
+      "sha256": "09376df6424de4fad943442cad8bfc15ecb97cd877cf6a3b972d08ca8bf8a17b",
       "locales": [
         "itIT"
       ]
     },
     "MSUF_Auras3_AliasData_ptBR.lua": {
-      "bytes": 83021,
-      "sha256": "57a1af8323674370c2629276c901c3635e4d3bc3303d09c0173007e59d297125",
+      "bytes": 82680,
+      "sha256": "d3a19be024f7eac7a26beaf73e29ce5b247e77e5531d78e167f9a9a940f68129",
       "locales": [
         "ptBR"
       ]
     },
     "MSUF_Auras3_AliasData_ruRU.lua": {
-      "bytes": 82856,
-      "sha256": "9fa69901ac1df883f23b60ffa9644d6ab23fba3eec4135aec68e49377ddc1f67",
+      "bytes": 82548,
+      "sha256": "af38a60dd6ec1d67119e41a24f2d3f38a3452d6b234768ffaf843009fc2722e4",
       "locales": [
         "ruRU"
       ]
     },
     "MSUF_Auras3_AliasData_koKR.lua": {
-      "bytes": 87813,
-      "sha256": "2028038d4ae8fb84dd9279ea121d868e301065ff3e3ea4aef14449d68c79b2b6",
+      "bytes": 87414,
+      "sha256": "cb5e7d7a78e055697c2ab5c64f5824fd0d5c41f3d4cbf3622e3638bcff6e5bed",
       "locales": [
         "koKR"
       ]
     },
     "MSUF_Auras3_AliasData_zhCN.lua": {
-      "bytes": 83604,
-      "sha256": "038b5b052d4ff093a751c213a0af03c53a68f4f7cd042db208260083e3ab2313",
+      "bytes": 83685,
+      "sha256": "2a7cfd294c0a5408e7c60cd192b8757d48e6fed4b370f65b086ea2719b0002fb",
       "locales": [
         "zhCN"
       ]
     },
     "MSUF_Auras3_AliasData_zhTW.lua": {
-      "bytes": 82761,
-      "sha256": "daf550387f5c563aaaf321083024eb2ba4a4158993d4998a499edbf2e756a140",
+      "bytes": 82775,
+      "sha256": "3e806e2811bfdf419e04d1d9e8da385e7101dbe5eb7184b0cec2fe1b5653207c",
       "locales": [
         "zhTW"
       ]
     }
-  },
-  "client_validation": {
-    "build": "1.60.1.69913",
-    "catalog_payload_changed": false,
-    "current_build_locales": [
-      "enUS",
-      "frFR",
-      "esES",
-      "esMX",
-      "itIT",
-      "ptBR",
-      "ruRU",
-      "koKR",
-      "zhCN",
-      "zhTW"
-    ],
-    "retained_locale_sources": {
-      "deDE": "1.60.1.69893"
-    },
-    "pending": [
-      "deDE SpellName export for 1.60.1.69913 returns an empty response; retained groups match the shipped catalog."
-    ]
   }
 }

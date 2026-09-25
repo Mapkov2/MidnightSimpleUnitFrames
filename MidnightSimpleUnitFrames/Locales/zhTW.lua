@@ -5358,6 +5358,7 @@ L["Show Ironfur tracker (Guardian)"] = "顯示鐵鬃追蹤（守護者）"
 L["Show Sweeping Strikes (Arms)"] = "顯示橫掃攻擊（武器）"
 L["Show by health"] = "根據生命值顯示"
 L["Show heal prediction"] = "顯示治療預測"
+L["Include healing from others"] = "包含其他玩家的治療"
 L["Show negative heal absorbs"] = "顯示治療吸收量"
 L["Show only below 100% health"] = "僅顯示低於 100% 的生命值"
 L["Show positive absorbs"] = "顯示傷害吸收量"
@@ -5968,6 +5969,11 @@ L["Round level badge"] = "Round level badge"
 L["Round Level Badge"] = "Round Level Badge"
 L["Centers the level on a dark round medallion with a gold rim on every supported WoW version."] = "Centers the level on a dark round medallion with a gold rim on every supported WoW version."
 
+L["MSUF Forever"] = "MSUF Forever"
+L["Midnight Blue"] = "Midnight Blue"
+L["Midnight Dark"] = "Midnight Dark"
+L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Background opacity changes the MSUF Forever background only; text stays fully opaque."
+L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

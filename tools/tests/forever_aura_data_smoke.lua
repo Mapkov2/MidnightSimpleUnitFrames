@@ -5,22 +5,22 @@
 -- Game/Forever/Auras/MSUF_Auras3_ForeverData.lua after the Retail curated
 -- datasets and the generated Forever SpellName catalog after the Retail one.
 -- On WoW Forever they replace the Retail DoT, defensive, Big Defensive and
--- Group Highlights data with IDs that exist in build 1.60.1.69876 and broaden
+-- Group Highlights data with IDs that exist in build 1.60.1.70009 and broaden
 -- every ID to its same-name ranks. On every other client (and in harnesses
 -- without MSUF.Client) both stay inert, so Retail data and behaviour are
 -- byte-for-byte what the Retail files define.
 local root = assert(arg[1], "repository root argument missing")
 
 local LOCALES = { "Common", "enUS", "deDE", "frFR", "esES", "esMX", "itIT", "ptBR", "ruRU", "koKR", "zhCN", "zhTW" }
-local FOREVER_BUILD = "1.60.1.69876"
+local FOREVER_BUILD = "1.60.1.70009"
 local FOREVER_DATA = "MidnightSimpleUnitFrames/Game/Forever/Auras/MSUF_Auras3_ForeverData.lua"
 local FOREVER_CLASSES = {
     WARRIOR = true, PALADIN = true, PRIEST = true, SHAMAN = true, DRUID = true,
     ROGUE = true, MAGE = true, WARLOCK = true, HUNTER = true,
 }
 
--- Every curated Forever ID with its enUS name in SpellName 1.60.1.69876
--- (wago.tools export, sha256 ede393ee7dd2d8a7e9bacbf4f14a32a88ded7f67ba08b33d564e931a352773ab).
+-- Every curated Forever ID with its enUS name in SpellName 1.60.1.70009
+-- (wago.tools export, sha256 b9a0d125fd47e02c13790504e2f10c4e67a3e5d5c4a91295bd96514ba36610a6).
 -- Adding an ID to the Forever data requires checking it against that build.
 local PROVENANCE = {
     [17] = "Power Word: Shield", [133] = "Fireball", [172] = "Corruption", [348] = "Immolate",

@@ -310,11 +310,18 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
         end
     elseif spec.id == "statusPetHappiness" then
-        if tex then
-            tex:SetTexture("Interface\\PetPaperDollFrame\\UI-PetHappiness")
-            -- The full preview uses the Happy state; the compact icon strip on
-            -- the Pet page shows Unhappy, Content and Happy together.
-            if tex.SetTexCoord then tex:SetTexCoord(0, 0.1875, 0, 0.359375) end
+        -- The full preview uses the Happy state; the compact icon strip on the
+        -- Pet page shows Unhappy, Content and Happy together. The runtime
+        -- element owns the per-client art, so both match the live icon.
+        local petHappinessIcon = _G.MSUF_GetPetHappinessIcon
+        if tex and type(petHappinessIcon) == "function" then
+            local path, left, right, top, bottom, atlas = petHappinessIcon(3)
+            if atlas and tex.SetAtlas then
+                tex:SetAtlas(atlas)
+            else
+                tex:SetTexture(path)
+                if tex.SetTexCoord then tex:SetTexCoord(left, right, top, bottom) end
+            end
         end
     elseif Status.IsTextIndicator(spec) then
         if tex then

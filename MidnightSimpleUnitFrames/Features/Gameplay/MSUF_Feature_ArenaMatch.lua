@@ -5,8 +5,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 ---   1. Prep-room opponent display: before the gates open the arena units do
 ---      not exist, so RegisterUnitWatch keeps the frames hidden. During the
 ---      preparation phase this module force-shows the frames (out of combat,
----      so Show() on the protected buttons is legal) and seeds a synthetic
----      class/spec identity from GetArenaOpponentSpec.
+---      so Show() on the protected buttons is legal). The PTR display delegate
+---      paints secret specs; older clients retain the plain spec path.
 ---   2. Stealthed-opponent placeholder: ARENA_OPPONENT_UPDATE "unseen" clears
 ---      the unit, which securely hides the real frame. A separate INSECURE
 ---      overlay (Blizzard's StealthedArenaUnitFrame pattern) marks the slot
@@ -142,6 +142,8 @@ local function OpponentSpecInfo(index)
     local getSpec = _G.GetArenaOpponentSpec
     if type(getSpec) ~= "function" then return nil end
     local specID, gender = getSpec(index)
+    local issecret = _G.issecretvalue
+    if issecret and (issecret(specID) == true or issecret(gender) == true) then return nil end
     if not specID or specID <= 0 then return nil end
     local getInfo = _G.GetSpecializationInfoByID
     if type(getInfo) ~= "function" then return nil end
@@ -202,26 +204,59 @@ local function SetPrepNameClassColor(frame, r, g, b)
     frame._msufNameTextB, frame._msufNameTextA = b, alpha
 end
 
-local function ApplyPrepFrame(frame, index)
-    local specName, _, _, classToken, className = OpponentSpecInfo(index)
-    if not specName then return false end
-
+local function SeedPrepFrameState(frame, classToken, className)
     frame._msufArenaPrepForced = true
     local state = frame._msufUnitState
-    if type(state) == "table" then
-        state.exists = true
-        state.existsKnown = true
-        state.dead = false
-        state.connected = true
-        state.connectedKnown = true
-        state.identityIsPlayerRead = true
-        state.isPlayer = true
-        state.isPlayerKnown = true
-        state.identityClassRead = true
-        state.className = className or classToken
-        state.classToken = classToken
+    if type(state) ~= "table" then return end
+    state.exists = true
+    state.existsKnown = true
+    state.dead = false
+    state.connected = true
+    state.connectedKnown = true
+    state.identityIsPlayerRead = true
+    state.isPlayer = true
+    state.isPlayerKnown = true
+    state.identityClassRead = classToken ~= nil
+    state.className = className or classToken
+    state.classToken = classToken
+end
+
+local function ApplyPrepFrame(frame, index)
+    local util = _G.UnitFrameUtil
+    local updateDisplay = util and util.UpdateArenaOpponentSpecDisplay
+    if type(updateDisplay) == "function" then
+        -- The delegate owns all secret spec/class decisions. Its hasSpec
+        -- return can be secret, so only the plain roster count controls
+        -- visibility and no class identity is cached on the frame.
+        SeedPrepFrameState(frame)
+        frame:Show()
+        if frame.SetAlpha then frame:SetAlpha(1) end
+        local bar = frame.hpBar or frame.Health
+        SetPrepBar(bar, 1, 1, 1)
+        local elements = frame._msufArenaPrepElements
+        if not elements then
+            elements = {}
+            frame._msufArenaPrepElements = elements
+        end
+        elements.specNameText = frame.nameText
+        elements.barTexture = bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+        updateDisplay(elements, index)
+        if frame.nameText then
+            local updateName = util.UpdateArenaOpponentSpecDisplayName
+            if type(updateName) == "function" then
+                updateName(frame.nameText, index)
+            end
+            frame.nameText:Show()
+        end
+        local fallback = frame.MSUFSpec and frame.MSUFSpec.textColor
+        SetPrepNameClassColor(frame, fallback and fallback.r or 1,
+            fallback and fallback.g or 1, fallback and fallback.b or 1)
+        return true
     end
 
+    local specName, _, _, classToken, className = OpponentSpecInfo(index)
+    if not specName then return false end
+    SeedPrepFrameState(frame, classToken, className)
     frame:Show()
     if frame.SetAlpha then frame:SetAlpha(1) end
     if frame.nameText then

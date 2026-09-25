@@ -125,18 +125,24 @@ function Get-MsufTocEntries {
         .SYNOPSIS
         The load entries of a TOC: every non-empty line that is not a comment.
     #>
-    param([Parameter(Mandatory = $true)][string]$Path, [string]$TextLocale = "")
-    # An unspecified locale inventories the union, for packaging and parity.
+    param([Parameter(Mandatory = $true)][string]$Path, [string]$TextLocale = "", [string]$GameType = "")
+    # An unspecified locale or game type inventories the union, for packaging
+    # and parity. A line may stack conditions, e.g.
+    # "file.lua [AllowLoadTextLocale deDE] [ExcludeLoadGameType camelot]".
     foreach ($line in (Get-Content -LiteralPath $Path)) {
         $entry = $line.Trim()
         if (-not $entry -or $entry.StartsWith('#')) { continue }
-        if ($entry -match '\s+\[AllowLoadTextLocale\s+([A-Za-z, ]+)\]$') {
-            $allowed = @($Matches[1] -split ',' | ForEach-Object { $_.Trim() })
-            if ($TextLocale -and $TextLocale -notin $allowed) { continue }
-            $entry = $entry -replace '\s+\[AllowLoadTextLocale\s+[A-Za-z, ]+\]$', ''
+        $selected = $true
+        while ($entry -match '^(?<file>.+?)\s+\[(?<kind>AllowLoadTextLocale|AllowLoadGameType|ExcludeLoadGameType)\s+(?<values>[A-Za-z, ]+)\]$') {
+            $file, $kind = $Matches['file'], $Matches['kind']
+            $values = @($Matches['values'] -split ',' | ForEach-Object { $_.Trim() })
+            if ($kind -eq 'AllowLoadTextLocale' -and $TextLocale -and $TextLocale -notin $values) { $selected = $false }
+            if ($kind -eq 'AllowLoadGameType' -and $GameType -and $GameType -notin $values) { $selected = $false }
+            if ($kind -eq 'ExcludeLoadGameType' -and $GameType -and $GameType -in $values) { $selected = $false }
+            $entry = $file
         }
         if ($entry.Contains('[')) { throw "Unsupported TOC load condition: $entry" }
-        $entry
+        if ($selected) { $entry }
     }
 }
 
@@ -164,7 +170,8 @@ function Get-MsufLoadGraph {
         [ValidateSet('Skip', 'Repeat')][string]$Duplicates = 'Skip',
         [switch]$RequireFiles,
         [Collections.Generic.HashSet[string]]$VisitedXml = $null,
-        [string]$TextLocale = ""
+        [string]$TextLocale = "",
+        [string]$GameType = ""
     )
 
     $luaPaths = [Collections.Generic.List[string]]::new()
@@ -213,7 +220,7 @@ function Get-MsufLoadGraph {
     $entryFull = [IO.Path]::GetFullPath($Path)
     if ([IO.Path]::GetExtension($entryFull) -ieq ".toc") {
         $parent = Split-Path -Parent $entryFull
-        foreach ($entry in (Get-MsufTocEntries -Path $entryFull -TextLocale $TextLocale)) {
+        foreach ($entry in (Get-MsufTocEntries -Path $entryFull -TextLocale $TextLocale -GameType $GameType)) {
             Add-MsufLoadGraphEntry -Current (Join-Path $parent $entry.Trim())
         }
     } else {

@@ -3,7 +3,7 @@
 ## Notes: Load-on-demand Assistant for Midnight Simple Unit Frames.
 ## Author: Mapko
 ## Version: 6.20 [AllowLoadGameType standard]
-## Version: 6.5-beta7 [ExcludeLoadGameType standard]
+## Version: 6.5-beta8 [ExcludeLoadGameType standard]
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames, MidnightSimpleUnitFrames_Options
 ## LoadOnDemand: 1

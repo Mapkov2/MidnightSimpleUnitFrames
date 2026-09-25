@@ -1132,6 +1132,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/Game/Forever/ClassPower.lua",
     "MidnightSimpleUnitFrames/State/MSUF_AuraDefaults.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua",
+    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_ForeverFactory.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Bars.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Units.lua",
     "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua",

@@ -13,8 +13,9 @@
 --- because ranked auras carry rank-specific spell IDs. Every other client
 --- returns at once and keeps the Retail data unchanged.
 ---
---- Provenance: wago.tools DB2 exports for build 1.60.1.69876 (SpellName enUS
---- sha256 ede393ee7dd2d8a7..., SkillLine, SkillLineAbility).
+--- Provenance: selected from wago.tools DB2 exports for 1.60.1.69876 and
+--- revalidated against 1.60.1.70009 (SpellName enUS sha256 b9a0d125fd47e02c...,
+--- SkillLine, SkillLineAbility and SpellEffect).
 ---   TargetDotData, PlayerDefensiveData: the Classic Era datasets
 ---     (Game/Vanilla/Auras) with their Forever names. Dropped because Forever
 ---     no longer has the ID: 12654 Ignite, 12721 Deep Wound, 19386 Wyvern Sting.
@@ -43,7 +44,7 @@ local tonumber = tonumber
 local tostring = tostring
 local type = type
 
-local FOREVER_DATA_BUILD = "Forever-1.60.1.69876"
+local FOREVER_DATA_BUILD = "Forever-1.60.1.70009"
 
 A3.AuraSpellIDAliases = A3.AuraSpellIDAliases or {}
 

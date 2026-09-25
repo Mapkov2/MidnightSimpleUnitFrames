@@ -4036,6 +4036,7 @@ L["Show Ironfur tracker (Guardian)"] = "Show Ironfur tracker (Guardian)"
 L["Show Sweeping Strikes (Arms)"] = "Show Sweeping Strikes (Arms)"
 L["Show by health"] = "Show by health"
 L["Show heal prediction"] = "Show heal prediction"
+L["Include healing from others"] = "Include healing from others"
 L["Show negative heal absorbs"] = "Show negative heal absorbs"
 L["Show only below 100% health"] = "Show only below 100% health"
 L["Show positive absorbs"] = "Show positive absorbs"
@@ -4133,6 +4134,11 @@ L["Round level badge"] = "Round level badge"
 L["Round Level Badge"] = "Round Level Badge"
 L["Centers the level on a dark round medallion with a gold rim on every supported WoW version."] = "Centers the level on a dark round medallion with a gold rim on every supported WoW version."
 
+L["MSUF Forever"] = "MSUF Forever"
+L["Midnight Blue"] = "Midnight Blue"
+L["Midnight Dark"] = "Midnight Dark"
+L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Background opacity changes the MSUF Forever background only; text stays fully opaque."
+L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

@@ -1145,16 +1145,23 @@ function PainterBuild.Category(state)
                 break
             end
         end
-        state.EnsureUnitBoxes()
+        if key ~= "suite" then state.EnsureUnitBoxes() end
+        if key == "suite" and not state.suiteColorNote then
+            local note = PixelLayoutRegion(state.host:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+            note:SetPoint("CENTER", state.host, "CENTER", 0, 0)
+            note:SetText("Suite colors are in the sections below.\nOpen the Minimap preview to position its elements.")
+            state.suiteColorNote = note
+        end
+        if state.suiteColorNote then state.suiteColorNote:SetShown(key == "suite") end
         local castPanel = key == "cast" and EnsureCastBox() or nil
         local strip = key == "resources" and EnsureResourcesStrip(category) or nil
         if key == "group" then EnsureGroupBox() end
         local castBox, resourcesStrip, groupBox = state.castBox, state.resourcesStrip, state.groupBox
-        for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group" and not castPanel and not strip) end
+        for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group" and key ~= "suite" and not castPanel and not strip) end
         if castBox then castBox:SetShown(castPanel and true or false) end
         if resourcesStrip and resourcesStrip ~= false then resourcesStrip:SetShown(strip and true or false) end
         if groupBox then groupBox:SetShown(key == "group") end
-        if key ~= "group" and not strip then
+        if key ~= "group" and key ~= "suite" and not strip then
             local boxes = castPanel and { castPanel } or unitBoxes
             for i = 1, #boxes do
                 local unitBox = boxes[i]
@@ -1175,6 +1182,9 @@ function PainterBuild.Category(state)
                 ReleaseClickTargets(state.clickTargets)
                 state.clickTargets = {}
                 strip.Update()
+            elseif key == "suite" then
+                ReleaseClickTargets(state.clickTargets)
+                state.clickTargets = {}
             else
                 RebuildClickTargets(category, castPanel)
             end

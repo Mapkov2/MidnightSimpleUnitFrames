@@ -160,7 +160,7 @@ function M.SetSearchIntroSeen(seen)
     if seen and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
     return true
 end
-local function CreateNavButton(parent, key, label, indent)
+local function CreateNavButton(parent, key, label, indent, availability)
     local btn = T.Button(parent, M.Tr(label), NavItemWidth(indent), NAV_BUTTON_H)
     if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontHighlight then
         btn._msuf2Label:SetFontObject(_G.GameFontHighlight)
@@ -176,10 +176,20 @@ local function CreateNavButton(parent, key, label, indent)
     btn._msuf2NavIndent = indent or 0
     btn._msuf2NavPillVisualWidth = NavPillVisualWidth(parent)
     btn._msuf2RawLabel = label
+    btn._msuf2NavAvailability = availability
     T.AttachNavIcon(btn, key, (indent or 0) > 0, NavIconsEnabled())
     M.navButtons[key] = btn
     if btn.RefreshVisual then btn.RefreshVisual(btn) end
     return btn
+end
+function M.RefreshNavAvailability()
+    for _, btn in pairs(M.navButtons or {}) do
+        local available = btn._msuf2NavAvailability
+        if type(available) == "function" then
+            local ok = available()
+            btn:SetAlpha(ok and 1 or 0.4)
+        end
+    end
 end
 function M.RefreshNavIconVisibility()
     local buttons = M.navButtons
@@ -765,7 +775,7 @@ local function BuildNavRail(parent)
             created[#created + 1] = { kind = "header", id = id, button = btn }
         elseif item.key then
             local indent = item.group and NAV_ITEM_INDENT or 0
-            local btn = CreateNavButton(list, item.key, item.label, indent)
+            local btn = CreateNavButton(list, item.key, item.label, indent, item.availability)
             if item.group then M.navGroupForKey[item.key] = item.group end
             created[#created + 1] = { kind = "page", group = item.group, button = btn }
             if item.key == "profiles" then created[#created + 1] = { kind = "history", frame = CreateHistoryControls(list) } end
@@ -816,6 +826,7 @@ local function BuildNavRail(parent)
         M.RefreshHistoryControls()
     end
     parent:_msuf2NavReflow()
+    M.RefreshNavAvailability()
 end
 M.BuildNavRail = BuildNavRail
 function M.RefreshAdvancedNavVisibility()

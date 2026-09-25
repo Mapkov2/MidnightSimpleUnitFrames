@@ -663,8 +663,10 @@ function StatusSection.PrepareIconResolvers(state, unit)
         if entry[1] == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
         if entry[1] == "pvp" then return entry[2] == "Horde" and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
         if entry[1] == "petHappiness" then
-            local left = ({ 0.375, 0.1875, 0 })[tonumber(entry[2]) or 3] or 0
-            return "Interface\\PetPaperDollFrame\\UI-PetHappiness", left, left + 0.1875, 0, 0.359375
+            -- The runtime element owns the per-client art (texture cells or atlases).
+            local petHappinessIcon = _G.MSUF_GetPetHappinessIcon
+            if type(petHappinessIcon) == "function" then return petHappinessIcon(tonumber(entry[2])) end
+            return nil
         end
         return nil
     end

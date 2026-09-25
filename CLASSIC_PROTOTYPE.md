@@ -63,36 +63,45 @@ Its lifecycle binds the factory's
 `MSUFUnitKey`/`unitKey` to the legacy backend unit field and resolves tooltip
 aura indices when the AuraInstanceID tooltip APIs do not exist.
 
-Every Classic flavor ships a generated SpellName alias catalog under
-`Game/<Flavor>/Auras/AliasData` (Vanilla 1.15.9.68940, TBC 2.5.6.68941, Mists
-5.5.4.68806; regenerate with
-`.github/scripts/generate_classic_aura_alias_catalog.py` from wago.tools
-`SpellName` CSV exports of the flavor build, one `<locale>/SpellName.csv` per
-locale). Each core TOC loads its `UnitFrames.xml` prefix through
-`Game/Classic/Auras/MSUF_Auras3_DataShared.lua`, then the common catalog and
-only the client-language partition, followed by `Game/<Flavor>/Auras.xml`
-and its shared Retail resolver `Auras3/MSUF_Auras3_AuraAliases.lua`. Native
-`AllowLoadTextLocale` TOC conditions exclude inactive partitions before Lua
-parsing. Mainline uses the same boundary between `MSUF_UFCore_Elements.xml`
-and `MSUF_UFCore_Auras.xml` for both its Retail and Forever catalogs; the
-existing Forever runtime guards remain in place. `enGB` shares `enUS`,
-`ptPT` shares `ptBR`, and Classic `itIT` retains its existing `enUS` fallback.
-All twelve menu translations still load because saved menu language is
-independent of client language. Gates and packages inventory the union of
-all locale branches; boot simulations select their actual client locale.
-`tools/tests/startup_locale_manifest_smoke.lua` checks all five clients across
-fourteen locale cases against the all-language catalogs and compiled aliases.
-The native condition is used in Blizzard's `upstream/live` and
-`upstream/forever` `Blizzard_FullscreenBrowser.toc`; the trailing form is also
-used by [BigWigs Classic](https://github.com/BigWigsMods/BigWigs_Classic/blob/master/BigWigs_Classic_Vanilla.toc).
+Vanilla, TBC and Mists ship no SpellName alias catalog. Their aura payloads
+are readable, so every lane that carries `includeSpellIDs` also carries
+`includeSpellNames` (`ClassicFeatures.NameHash`, resolved through the
+synchronous legacy `GetSpellInfo`), and the backend matches the aura name
+whenever the ID misses (`ShouldShowAura`, `Features.MatchAura`,
+`Features.IsAutoExcluded`). That covers spell ranks on Vanilla/TBC and
+cast-versus-aura ID drift on Mists on whatever build the client runs, the way
+WeakAuras matches auras by name. `A3.AddAuraSpellIDAndAliases` adds only the
+configured ID plus explicit `A3.AuraSpellIDAliases` entries, which are
+reserved for pairs whose names differ. The generated per-flavor catalogs these
+clients shipped earlier could only add IDs sharing the exact same name, so the
+name match already covered everything they did, while they cost 85-280 KB of
+startup parsing per client and had to be regenerated for every client build.
+`tools/tests/classic_aura_rank_name_match_smoke.lua` pins the manifests and
+the name match on the real feature compiler.
 
-`A3.AddAuraSpellIDAndAliases` resolves
-every ID it expands against that catalog, so curated DoT/defensive lists, group
-spell indicators and user whitelists match all same-name IDs: spell ranks on
-Vanilla/TBC and cast-versus-aura ID drift on Mists, the way WeakAuras matches
-auras by name. Unlike Retail, Classic deliberately broadens curated data too.
-`tools/tests/classic_aura_alias_catalog_smoke.lua` pins the manifests, the
-build headers and representative expansions per flavor.
+Mainline and WoW Forever keep their catalogs, because the native
+AuraContainer path cannot read aura names at runtime. The core Mainline TOC
+places them between `MSUF_UFCore_Elements.xml` and `MSUF_UFCore_Auras.xml`
+(the shared resolver `Auras3/MSUF_Auras3_AuraAliases.lua` loads there). Native
+`AllowLoadTextLocale` TOC conditions exclude inactive partitions before Lua
+parsing, and the Retail catalog lines also carry `[ExcludeLoadGameType
+camelot]`, so WoW Forever parses only its own catalog (about 1.4 MB less at
+every login). The Forever files keep their `MSUF.Client.IsForever` runtime
+guard for every other Mainline game type. Blizzard's own Forever TOCs stack
+conditions on one line the same way (`[AllowLoadTextLocale ruRU] [AllowLoad
+glue] [ExcludeLoadGameType camelot]`); a client that ignored the game-type
+condition would simply load both catalogs, as before. Regenerate the Forever
+catalog with `.github/scripts/generate_classic_aura_alias_catalog.py` from
+wago.tools `SpellName` CSV exports, one `<locale>/SpellName.csv` per locale.
+`enGB` shares `enUS` and `ptPT` shares `ptBR`. All twelve menu translations
+still load because saved menu language is independent of client language.
+Gates and packages inventory the union of all locale and game-type branches;
+boot simulations select their actual client locale and, for WoW Forever, the
+camelot game type. `tools/tests/startup_locale_manifest_smoke.lua` checks all
+five clients across fourteen locale cases against the all-branch catalogs and
+compiled aliases. The native locale condition is used in Blizzard's
+`upstream/live` and `upstream/forever` `Blizzard_FullscreenBrowser.toc`; the
+trailing form is also used by [BigWigs Classic](https://github.com/BigWigsMods/BigWigs_Classic/blob/master/BigWigs_Classic_Vanilla.toc).
 
 `Game/Shared/Initialize.lua` also exposes `MSUF.Client.SupportsUnit(unit)`:
 Classic Era has no focus, boss or arena units and TBC has no boss units. The
@@ -711,14 +720,14 @@ unreleased client. Checklist:
    `Game/Shared/Initialize.lua` and its flavor manifests.
 3. Add `Game/<Flavor>` with its manifests and data, following an existing
    flavor: `UnitFrames.xml`, `Auras.xml`, `UnitFrames/GroupFrames.xml`, `ClassPower.lua`,
-   the aura data under `Auras` (including the generated `AliasData` catalog)
-   and the group indicator data under `UnitFrames/Group`.
+   the aura data under `Auras` (no alias catalog: the Classic backend matches
+   ranks by aura name) and the group indicator data under `UnitFrames/Group`.
 4. In `Game/Shared/Initialize.lua`, recognise the flavor by its project global
    and its lowercased `X-MSUF-Client` token, set its `Client` flags, and add an
    `UNSUPPORTED_UNITS_BY_FLAVOR` row for every unit token the client lacks.
 5. Extend the per-flavor spec tables in the smokes that key by flavor, for
    example `tools/tests/classic_client_bootstrap_smoke.lua` and
-   `tools/tests/classic_aura_alias_catalog_smoke.lua`. The gate derives a
+   `tools/tests/classic_aura_rank_name_match_smoke.lua`. The gate derives a
    `TagOnly<Suffix>` bootstrap spec from the new matrix token, and
    `tools/tests/classic_client_detection_smoke.lua` reads the tokens itself.
 6. Make sure the matrix mirror branch exists in
@@ -777,23 +786,26 @@ fails if Blizzard renames the placeholder name "Camelot". Once a build exists:
 7. Confirm the CurseForge game version names exist before a release lists the
    new client.
 
-## Forever data validation: 1.60.1.69913
+## Forever data validation: 1.60.1.70009
 
-The 2026-09-19 refresh checked the current `wow_classic_beta` build against
-1.60.1.69876. The `upstream/forever` UI tree differs only in `version.txt`, so
-client detection, native aura handling, names, class resources, pet happiness,
-threat text and menu integration require no new runtime branches. The enUS
-SpellName, SkillLine, SkillLineAbility, ChrSpecialization and SpellEffect rows
-are unchanged (SkillLineAbility's export column names are now decoded).
-All ten available 69913 SpellName locales reproduce the shipped alias groups.
-The provider returns an empty deDE export for 69913; deDE was checked against
-69893 and remains identical to the shipped partition. Its 69913 data check is
-still pending. No empty export is installed and no source build is relabelled.
-The catalog keeps its original content version because its payload is unchanged.
+The 2026-09-25 refresh checked `upstream/forever` at `bd2470ae` and the
+1.60.1.70009 DB2 exports. Blizzard changed Pet Happiness to three atlases in
+`Interface/AddOns/Blizzard_FrameXML/PetHappiness.lua` and fixed restricted
+snippet initialization through the `Blizzard_EnvironmentCleanup.toc` dependency.
+The Forever indicator now selects those atlases when present, and group headers
+again use their secure initialization snippet. The source audit also pins the
+Forever marker and checks for new game-type tokens.
+
+All eleven 70009 SpellName locales are available and contain 31,716 rows each,
+down from 31,767. Their alias groups changed, so the shipped Forever catalog
+was regenerated from those exact exports. The 55 unique curated aura IDs keep
+their expected enUS names; none of their SpellEffect rows changed by spell ID
+since 69913, and none of the changed SkillLineAbility rows refers to one of
+them. SkillLine and ChrSpecialization exports are byte-identical to 69913.
 Export hashes and per-locale source builds are recorded in
-`.github/auras3-alias-catalog-forever.json`; the complete table/UI comparison is
-in `.github/forever-client-data-validation.json`. This is source and offline
-validation, not an in-game or server-hotfix certification.
+`.github/auras3-alias-catalog-forever.json`; the table and UI source comparison
+is in `.github/forever-client-data-validation.json`. These are offline checks;
+combat, taint, SavedVariables and appearance still need a live beta client.
 
 ## Class resource availability
 

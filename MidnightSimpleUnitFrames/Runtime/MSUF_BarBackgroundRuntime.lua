@@ -173,6 +173,10 @@ ExportPublic("MSUF_IsBlizzardCooldownViewerFrameName", MSUF_IsBlizzardCooldownVi
 
 local function MSUF_GetEffectiveCooldownFrame(frameName)
     if frameName == "EssentialCooldownViewer" then
+        -- First-party: the MSUF Suite's Essential bar wins over every provider.
+        local getSuiteAnchor = _G.MSUF_GetSuiteCooldownAnchor
+        local suiteAnchor = type(getSuiteAnchor) == "function" and getSuiteAnchor() or nil
+        if suiteAnchor then return suiteAnchor end
         local getArcUIAnchor = _G.MSUF_GetArcUICooldownAnchor
         local arcUIAnchor = type(getArcUIAnchor) == "function" and getArcUIAnchor() or nil
         if arcUIAnchor then return arcUIAnchor end

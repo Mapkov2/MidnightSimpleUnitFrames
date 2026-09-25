@@ -1,5 +1,5 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
--- Classic Glass and Midnight are selectable on every client. Only the fresh
+-- All three menu looks are selectable on every client. Only the fresh
 -- profile default is client-specific: Forever uses Classic Glass, others Midnight.
 -- Register before Menu2 tokens so renderers capture the selected palette.
 local _, MSUF = ...
@@ -10,7 +10,7 @@ MSUF.ApplyClassicMenuTheme = function(T)
     T.defaultMenuAppearancePreset = MSUF.Client and MSUF.Client.IsForever == true and "classicGlass" or "midnight"
     function T.GetMenuAppearancePreset(g)
         local saved = type(g) == "table" and g.menuAppearancePreset
-        if saved == "classicGlass" or saved == "midnight" then return saved end
+        if saved == "classicGlass" or saved == "midnight" or saved == "midnightDark" then return saved end
         return T.defaultMenuAppearancePreset
     end
     function T.GetMenuBackgroundOpacity(settings)
@@ -25,6 +25,79 @@ MSUF.ApplyClassicMenuTheme = function(T)
     -- The Midnight preset keeps the stock tokens: this return skips the whole
     -- atlas skin below, including T.PrepareMenuAccent and T.ApplyAtlasDecoration.
     if T.menuAppearancePreset == "midnight" then return end
+    local function Paint(keys, hex, alpha)
+        local r, green, b = tonumber(hex:sub(1, 2), 16) / 255,
+            tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255
+        for key in keys:gmatch("%S+") do
+            local row = assert(T.colors[key], "Unknown menu color: " .. key)
+            row[1], row[2], row[3], row[4] = r, green, b, alpha or 1
+        end
+    end
+    if T.menuAppearancePreset == "midnightDark" then
+        -- Use the existing glass renderer and tint its shared panel artwork.
+        -- Every page, popup, dropdown, button and navigation row reads these
+        -- same tokens, including hover and pressed states.
+        Paint("coreShadow bg glassShell", "151719", 0.92)
+        Paint("coreInk panelNav glassRail", "111315", 0.89)
+        Paint("coreSurface panel glassHost", "222424", 0.87)
+        Paint("coreRaised panel2 glassStatus", "292D31", 0.88)
+        Paint("glassPopup", "1A1C1F", 0.96)
+        Paint("header", "202326", 0.90)
+        Paint("coreRim border", "575B58", 0.78)
+        Paint("cardBorder borderSoft", "414541", 0.68)
+        Paint("coreBlue", "353A37")
+        Paint("coreGlow pillEdgeHover navPillEdgeHover", "777A71", 0.78)
+        Paint("coreHot accent checkActive pillEdgeActive navPillEdgeActive checkActiveEdge navArrowOpen", "B9AB86")
+        Paint("accent2 guide", "B9AB86", 0.72)
+        Paint("text pillText navText", "E9E9E4")
+        Paint("title pillTextActive navTextActive", "F3F0E7")
+        Paint("muted searchPlaceholder navHeaderText navArrowClosed", "B9BDB9")
+        Paint("dim", "A3A8A3")
+        Paint("disabled", "878D88")
+        Paint("checkInactive navPillBase", "202326", 0.88)
+        Paint("checkInactiveEdge pillEdge pillEdgeButton navPillEdge", "555A56", 0.72)
+        Paint("pillBase navPillBaseSolid", "292D31", 0.89)
+        Paint("pillBaseSolid", "292D31", 0.96)
+        Paint("pillHover navPillHover", "424743", 0.91)
+        Paint("pillActive navPillActive", "353A37", 0.94)
+        Paint("navHeaderHover", "D8CEB5")
+        Paint("focus", "292D31", 0.78)
+        T.fontRoleColors = {
+            heading = T.colors.title, hero = T.colors.title, section = T.colors.title,
+            accordion = T.colors.title, card = T.colors.title,
+        }
+        T.accentSourceTones = {
+            { 53 / 255, 58 / 255, 55 / 255 },
+            { 119 / 255, 122 / 255, 113 / 255 },
+            { 185 / 255, 171 / 255, 134 / 255 },
+        }
+        for _, color in pairs(T.navIconColors) do
+            color[1], color[2], color[3] = 185 / 255, 189 / 255, 185 / 255
+        end
+        for _, spec in pairs(T.glassVariants) do
+            spec.tint = { 24 / 255, 26 / 255, 27 / 255, spec.tint[4] }
+            spec.wash = { 41 / 255, 45 / 255, 49 / 255, spec.wash[4] }
+            spec.top = { 185 / 255, 171 / 255, 134 / 255, spec.top[4] }
+            spec.side = { 87 / 255, 91 / 255, 88 / 255, spec.side[4] }
+        end
+        for name, gradient in pairs(T.gradients) do
+            if name ~= "warning" and name ~= "button" then
+                if gradient.from then gradient.from[1], gradient.from[2], gradient.from[3] = 41 / 255, 45 / 255, 49 / 255 end
+                if gradient.to then gradient.to[1], gradient.to[2], gradient.to[3] = 17 / 255, 19 / 255, 21 / 255 end
+            end
+        end
+        for _, veil in pairs(T.focusVeils) do
+            for _, layer in ipairs(veil) do
+                local color = layer.color
+                if color and color[1] > 0 then
+                    color[1], color[2], color[3] = 32 / 255, 35 / 255, 38 / 255
+                end
+            end
+        end
+        T.materials.guide.bg = { 32 / 255, 35 / 255, 38 / 255, 0.28 }
+        T.MenuAccentSurfacesTinted = function() return true end
+        return
+    end
     local root = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Menu2\\Classic\\"
     T.classicAtlas = true
     T.controlCapWidth = 4
@@ -48,14 +121,6 @@ MSUF.ApplyClassicMenuTheme = function(T)
     end
     -- Keep the user's readable menu font; the artwork carries the fantasy theme.
 
-    local function Paint(keys, hex, alpha)
-        local r, g, b = tonumber(hex:sub(1, 2), 16) / 255,
-            tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255
-        for key in keys:gmatch("%S+") do
-            local row = assert(T.colors[key], "Unknown atlas color: " .. key)
-            row[1], row[2], row[3], row[4] = r, g, b, alpha or 1
-        end
-    end
     Paint("coreShadow", "14181B")
     Paint("bg glassShell", "14181B", shellAlpha)
     Paint("glassPopup", "191D20", 0.98)

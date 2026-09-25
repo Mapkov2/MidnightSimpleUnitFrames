@@ -259,21 +259,42 @@ if ($LASTEXITCODE -eq 0) {
 
     # WoW Forever pet happiness. Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua reads
     # C_PetInfo.GetPetHappiness on Forever, checks HasPetUI like Blizzard's indicator,
-    # listens to the same events and draws the same texture cells. A renamed API,
-    # event or texture must fail here, never silently hide the icon.
+    # listens to the same events and draws the same three atlases, one per state
+    # (since 1.60.1.70009; earlier builds drew cells of UI-PetHappiness, which the
+    # module keeps as its fallback). A renamed API, event, state or atlas must fail
+    # here, never silently hide the icon.
     $foreverHappiness = Read-BranchFile "upstream/forever" "Interface/AddOns/Blizzard_FrameXML/PetHappiness.lua"
     Assert-Contains $foreverHappiness @(
         'self:RegisterEvent("UNIT_HAPPINESS");',
         'self:RegisterEvent("UNIT_PET");',
-        'happiness, damagePercentage, loyaltyRate = C_PetInfo.GetPetHappiness();',
-        'local hasPetUI, isHunterPet = HasPetUI();',
-        'self.texture:SetTexCoord(0.375, 0.5625, 0, 0.359375);',
-        'self.texture:SetTexCoord(0.1875, 0.375, 0, 0.359375);',
-        'self.texture:SetTexCoord(0, 0.1875, 0, 0.359375);'
+        'return C_PetInfo.GetPetHappiness();',
+        'local _hasPetUI, isHunterPet = HasPetUI();',
+        'Mad = 1,',
+        'Neutral = 2,',
+        'Happy = 3,',
+        'atlas = "UI-PetMad",',
+        'atlas = "UI-PetNeutral",',
+        'atlas = "UI-PetHappiness",',
+        'self.Texture:SetAtlas(AttitudeData[happiness].atlas);'
     ) "upstream/forever Pet Happiness"
-    $foreverHappinessXML = Read-BranchFile "upstream/forever" "Interface/AddOns/Blizzard_FrameXML/PetHappiness.xml"
-    Assert-Contains $foreverHappinessXML @('Interface\PetPaperDollFrame\UI-PetHappiness') "upstream/forever Pet Happiness texture"
     Write-Host "Blizzard WoW Forever Pet Happiness contract passed: upstream/forever"
+
+    # WoW Forever secure snippets. Group headers configure every button through an
+    # initialConfigFunction, which RestrictedExecution.lua compiles with the
+    # loadstring_untainted it caches when it loads. Blizzard_EnvironmentCleanup
+    # (LoadFirst) clears that global, so it must order the restricted environment
+    # first for every game type, as live does. Builds before 1.60.1.70009 limited
+    # that dependency to classic and standard, no snippet compiled on Forever, and
+    # MSUF carried a snippet-free header path. It is gone, so a regression must fail
+    # here, never silently break party, raid and Priority frames again.
+    $foreverCleanupToc = Read-BranchFile "upstream/forever" "Interface/AddOns/Blizzard_EnvironmentCleanup/Blizzard_EnvironmentCleanup.toc"
+    Assert-Contains $foreverCleanupToc @('## LoadFirst: 1') "upstream/forever Blizzard_EnvironmentCleanup TOC"
+    if ($foreverCleanupToc -notmatch '(?m)^## (OptionalDeps?|Deps?|Dependencies|RequiredDeps): *Blizzard_RestrictedAddOnEnvironment\s*$') {
+        throw "upstream/forever: Blizzard_EnvironmentCleanup no longer orders Blizzard_RestrictedAddOnEnvironment first for every game type; secure snippets (group header initialConfigFunction) would fail again"
+    }
+    $foreverRestricted = Read-BranchFile "upstream/forever" "Interface/AddOns/Blizzard_RestrictedAddOnEnvironment/RestrictedExecution.lua"
+    Assert-Contains $foreverRestricted @('local loadstring_untainted = loadstring_untainted;') "upstream/forever restricted snippet compiler"
+    Write-Host "Blizzard WoW Forever secure snippet contract passed: upstream/forever"
 }
 
 # Game-type tripwire. Every game-type token in Blizzard's TOC tags and every

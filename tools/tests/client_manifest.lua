@@ -10,21 +10,35 @@ local function normalize(path)
     end
     return prefix .. table.concat(parts, "/")
 end
--- Nil locale inventories every branch; a locale models the client selection.
-function Manifest.TocReference(line, locale)
+-- Nil locale / game type inventories every branch; a value models the client
+-- selection. A line may stack conditions ("x.lua [AllowLoadTextLocale deDE]
+-- [ExcludeLoadGameType camelot]"); each is peeled off the end in turn.
+local function Listed(values, name)
+    for value in values:gmatch("%a+") do if value == name then return true end end
+    return false
+end
+function Manifest.TocReference(line, locale, gameType)
     line = line:match("^%s*(.-)%s*$")
     if line == "" or line:sub(1, 1) == "#" then return end
-    local allowed = line:match("%s+%[AllowLoadTextLocale%s+([^%]]+)%]$")
-    if allowed then
-        local selected = locale == nil
-        for name in allowed:gmatch("%a+") do if name == locale then selected = true end end
-        if not selected then return end
-        line = line:gsub("%s+%[AllowLoadTextLocale%s+[^%]]+%]$", "")
+    local selected = true
+    while true do
+        local file, kind, values = line:match("^(.-)%s+%[(%a+)%s+([^%]]+)%]$")
+        if not file then break end
+        if kind == "AllowLoadTextLocale" then
+            if locale ~= nil and not Listed(values, locale) then selected = false end
+        elseif kind == "AllowLoadGameType" then
+            if gameType ~= nil and not Listed(values, gameType) then selected = false end
+        elseif kind == "ExcludeLoadGameType" then
+            if gameType ~= nil and Listed(values, gameType) then selected = false end
+        else
+            error("unsupported TOC directive: " .. line)
+        end
+        line = file
     end
     assert(not line:find("[", 1, true), "unsupported TOC directive: " .. line)
-    return line
+    if selected then return line end
 end
-function Manifest.Paths(repo, flavor, locale)
+function Manifest.Paths(repo, flavor, locale, gameType)
     local ordered, seen, active = {}, {}, {}
     local function visit(path)
         path = normalize(path)
@@ -43,7 +57,7 @@ function Manifest.Paths(repo, flavor, locale)
             for child in source:gmatch('<[%w:]+%s+file="([^"]+)"') do visit(directory .. "/" .. child) end
         else
             for line in source:gmatch("[^\r\n]+") do
-                local reference = Manifest.TocReference(line, locale)
+                local reference = Manifest.TocReference(line, locale, gameType)
                 if reference then visit(directory .. "/" .. reference) end
             end
         end

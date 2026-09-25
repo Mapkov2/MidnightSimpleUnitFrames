@@ -527,6 +527,7 @@ local function MSUF_Defaults_Stage_SeedPredictionDefaults(g)
     if g.healPredEnabled == nil then
         g.healPredEnabled = g.showSelfHealPrediction == true
     end
+    if g.healPredAllHealers == nil then g.healPredAllHealers = false end
     if g.healPredAnchorMode == nil then
         g.healPredAnchorMode = 3
     end

@@ -398,6 +398,45 @@ if IS_CLASSIC_FAMILY then
   end
 end
 
+--- Gamepad UI (WoW Forever 1.60.1.70009+, where Blizzard's manager has
+--- CompactRaidFrameManager_InitializeGamepad): Blizzard's GAMEPAD_MENU_LEFT binding
+--- expands the manager whenever it is shown, and every mode here keeps it shown at
+--- alpha 0. The binding holds its own reference to CompactRaidFrameManager_Expand, so
+--- a function hook would miss it; displayFrame shows exactly while the panel is
+--- expanded. A panel the gamepad opened holds gamepad focus, so it is lit while open,
+--- as in the stock UI, and closing it hands the alpha back to the mode.
+local function RaidManagerGamepadUIActive()
+  local inputUtil = _G.InputUtil
+  return type(inputUtil) == "table" and type(inputUtil.IsGamepadUIEnabled) == "function"
+    and inputUtil.IsGamepadUIEnabled() == true
+end
+
+local function RaidManagerDisplayOnShow()
+  local manager = _G.CompactRaidFrameManager
+  if not manager or raidManagerEffectiveMode == "SHOW" or not RaidManagerGamepadUIActive() then return end
+  manager._msufGamepadLit = true
+  manager:SetAlpha(1)
+end
+
+local function RaidManagerDisplayOnHide()
+  local manager = _G.CompactRaidFrameManager
+  if not (manager and manager._msufGamepadLit) then return end
+  manager._msufGamepadLit = nil
+  if raidManagerEffectiveMode == "SHOW" then return end
+  if raidManagerEffectiveMode == "MOUSEOVER" and MouseIsOverRaidManager(manager) then return end
+  manager:SetAlpha(0)
+end
+
+local raidManagerGamepadHooked = false
+local function EnsureRaidManagerGamepadHooks(manager)
+  if raidManagerGamepadHooked or type(_G.CompactRaidFrameManager_InitializeGamepad) ~= "function" then return end
+  local display = manager.displayFrame
+  if not (display and type(display.HookScript) == "function") or IsForbidden(display) then return end
+  raidManagerGamepadHooked = true
+  display:HookScript("OnShow", RaidManagerDisplayOnShow)
+  display:HookScript("OnHide", RaidManagerDisplayOnHide)
+end
+
 --- The single owner of the tab's visibility. Every mode resolves to a plain
 --- alpha + mouse pair, so switching between them is always fully reversible and never
 --- needs a protected call for the part the user actually sees.
@@ -417,20 +456,24 @@ local function ApplyRaidManagerMode()
     mode = (type(MSUFOwnsLiveGroupFrames) == "function" and MSUFOwnsLiveGroupFrames())
       and "HIDDEN" or "SHOW"
   end
+  raidManagerEffectiveMode = mode
   if IS_CLASSIC_FAMILY then
-    raidManagerEffectiveMode = mode
     if mode == "HIDDEN" then EnsureRaidManagerHooks(manager) end
+  elseif mode ~= "SHOW" then
+    EnsureRaidManagerGamepadHooks(manager)
   end
+  -- An open gamepad panel stays lit until it closes (RaidManagerDisplayOnHide).
+  local gamepadLit = manager._msufGamepadLit == true and mode ~= "SHOW"
 
   if mode == "HIDDEN" then
-    manager:SetAlpha(0)
+    manager:SetAlpha(gamepadLit and 1 or 0)
     ApplyRaidManagerMouse(manager, false)
     return
   end
   ApplyRaidManagerMouse(manager, true)
   if mode == "MOUSEOVER" then
     EnsureRaidManagerHooks(manager)
-    manager:SetAlpha(MouseIsOverRaidManager(manager) and 1 or 0)
+    manager:SetAlpha((gamepadLit or MouseIsOverRaidManager(manager)) and 1 or 0)
     return
   end
   manager:SetAlpha(1)

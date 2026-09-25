@@ -48,7 +48,7 @@ World.Read = Read
 -- Ordered Lua load list for one TOC. A TOC line may name a Lua file or an XML
 -- embed manifest; an XML manifest names further XML files and Lua scripts. The
 -- client loads each file once, in first-mention order.
-function World.Graph(root, tocRelative, locale)
+function World.Graph(root, tocRelative, locale, gameType)
     local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
     local ordered, seen, active = {}, {}, {}
     local function visit(path)
@@ -68,7 +68,7 @@ function World.Graph(root, tocRelative, locale)
             for child in source:gmatch('<[%w:]+%s+file="([^"]+)"') do visit(directory .. "/" .. child) end
         else
             for line in source:gmatch("[^\n]+") do
-                local reference = manifest.TocReference(line, locale)
+                local reference = manifest.TocReference(line, locale, gameType)
                 if reference then visit(directory .. "/" .. reference) end
             end
         end
@@ -320,8 +320,11 @@ end
 -- Core then Options, in TOC order, into one namespace each.
 function Methods:Boot()
     local suffix = self.client.tocSuffix or self.flavor
-    self.corePaths = World.Graph(self.root, World.CoreTOC(suffix), self.env.GetLocale())
-    self.optionsPaths = World.Graph(self.root, World.OptionsTOC(suffix), self.env.GetLocale())
+    -- Only WoW Forever's game type (camelot) is named by a TOC condition; every
+    -- other client loads the union of the game-type branches.
+    local gameType = self.client.isForever and "camelot" or nil
+    self.corePaths = World.Graph(self.root, World.CoreTOC(suffix), self.env.GetLocale(), gameType)
+    self.optionsPaths = World.Graph(self.root, World.OptionsTOC(suffix), self.env.GetLocale(), gameType)
     self:LoadGraph("MidnightSimpleUnitFrames", self.corePaths, self.core)
     self:LoadGraph("MidnightSimpleUnitFrames_Options", self.optionsPaths, self.options)
     return self
