@@ -21,6 +21,7 @@ function Factories.Schema(A3)
     local ARENA_LOOKUP = { arena1=true, arena2=true, arena3=true }
     local UNIT_FLAG = {
         player = "showPlayer",
+        pet = "showPet",
         target = "showTarget",
         focus = "showFocus",
         boss = "showBoss",
@@ -44,6 +45,7 @@ function Factories.Schema(A3)
 
     local PUBLIC_UNITS = {
         { value = "player", text = "Player" },
+        { value = "pet", text = "Pet" },
         { value = "target", text = "Target" },
         { value = "focus", text = "Focus" },
         { value = "boss", text = "Boss" },
@@ -53,6 +55,7 @@ function Factories.Schema(A3)
     local STYLE_SCOPES = {
         { value = "shared", text = "Shared" },
         { value = "player", text = "Player" },
+        { value = "pet", text = "Pet" },
         { value = "target", text = "Target" },
         { value = "focus", text = "Focus" },
         { value = "boss", text = "Boss" },

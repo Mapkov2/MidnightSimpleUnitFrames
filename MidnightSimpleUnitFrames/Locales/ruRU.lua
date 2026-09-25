@@ -3635,6 +3635,7 @@ L["?"] = "?"
 L["Edit Mode"] = "Режим редактирования"
 L["Groups"] = "Группы"
 L["Frames"] = "Рамки"
+L["Interface"] = "Интерфейс"
 L["Position"] = "Положение"
 L["Toolbar position"] = "Положение панели"
 L["Top"] = "Сверху"
@@ -5985,6 +5986,10 @@ L["Midnight Blue"] = "Midnight Blue"
 L["Midnight Dark"] = "Midnight Dark"
 L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Background opacity changes the MSUF Forever background only; text stays fully opaque."
 L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."
+L["Pet"] = "Питомец"
+L["Pet XP Bar"] = "Полоса опыта питомца"
+L["Bar width"] = "Ширина полосы"
+L["Pet XP bar width"] = "Ширина полосы опыта питомца"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

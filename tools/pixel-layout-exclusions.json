@@ -1,5 +1,11 @@
 [
   {
+    "path": "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_EditMode_Drag.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented event driver for deferred aura mouse restoration"
+  },
+  {
     "path": "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators_Reminders.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,

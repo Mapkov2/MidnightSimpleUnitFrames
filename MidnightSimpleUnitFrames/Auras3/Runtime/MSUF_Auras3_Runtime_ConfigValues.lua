@@ -224,7 +224,7 @@ end
 local function UnitAuraIconsEnabled(auras, unit)
     if not (type(auras) == "table" and auras.enabled == true) then return false end
     local flag = UNIT_FLAG[NormalizeRuntimeUnit(unit)]
-    return flag and auras[flag] == true or false
+    return flag and (auras[flag] == true or (flag == "showPet" and auras[flag] == nil)) or false
 end
 
 local function EffectiveUnitTables(auras, unit)

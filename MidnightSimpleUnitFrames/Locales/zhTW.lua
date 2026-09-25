@@ -3640,6 +3640,7 @@ L["?"] = "?"
 L["Edit Mode"] = "編輯模式"
 L["Groups"] = "隊伍"
 L["Frames"] = "框架"
+L["Interface"] = "介面"
 L["Position"] = "位置"
 L["Toolbar position"] = "工具列位置"
 L["Top"] = "上方"
@@ -5974,6 +5975,10 @@ L["Midnight Blue"] = "Midnight Blue"
 L["Midnight Dark"] = "Midnight Dark"
 L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Background opacity changes the MSUF Forever background only; text stays fully opaque."
 L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."
+L["Pet"] = "寵物"
+L["Pet XP Bar"] = "寵物經驗條"
+L["Bar width"] = "條寬度"
+L["Pet XP bar width"] = "寵物經驗條寬度"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

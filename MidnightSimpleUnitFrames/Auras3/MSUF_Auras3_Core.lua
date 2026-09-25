@@ -21,8 +21,8 @@ local function DeepCopy(value, seen)
     return out
 end
 
-local FRAME_LIST_RUNTIME_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
-local FRAME_LIST_SCOPES = { "player", "target", "focus", "boss" }
+local FRAME_LIST_RUNTIME_UNITS = { "player", "pet", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+local FRAME_LIST_SCOPES = { "player", "pet", "target", "focus", "boss" }
 local PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER = "_msufA3PlayerDefensivesCoreDefault_v1"
 local PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER = "_msufFactoryPlayerDefensivesEnabled_v1"
 
@@ -296,7 +296,7 @@ function A3.RequestScope()
 end
 
 local REQUEST_APPLY_SCOPE_KEYS = {
-    player = true, target = true, focus = true, boss = true,
+    player = true, pet = true, target = true, focus = true, boss = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
     group = true, groups = true,

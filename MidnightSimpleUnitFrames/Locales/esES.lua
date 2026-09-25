@@ -3776,6 +3776,7 @@ L["?"] = "?"
 L["Edit Mode"] = "Modo de edición"
 L["Groups"] = "Grupos"
 L["Frames"] = "Marcos"
+L["Interface"] = "Interfaz"
 L["Position"] = "Posición"
 L["Toolbar position"] = "Posición de la barra"
 L["Top"] = "Arriba"
@@ -6037,6 +6038,10 @@ L["Midnight Blue"] = "Midnight Blue"
 L["Midnight Dark"] = "Midnight Dark"
 L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Background opacity changes the MSUF Forever background only; text stays fully opaque."
 L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."
+L["Pet"] = "Mascota"
+L["Pet XP Bar"] = "Barra de EXP de mascota"
+L["Bar width"] = "Ancho de barra"
+L["Pet XP bar width"] = "Ancho de la barra de EXP de mascota"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

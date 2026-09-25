@@ -137,6 +137,20 @@ local frame = { MSUFUnitKey = "target", MSUFSpec = {} }
 assert(frame.unit == nil, "lifecycle smoke precondition failed")
 assert(registered.IsEnabled(frame) == true, "target aura element stayed disabled")
 assert(frame.unit == "target", "Classic aura lifecycle did not bind MSUFUnitKey")
+local petFrame = { MSUFUnitKey = "pet", MSUFSpec = {} }
+assert(registered.IsEnabled(petFrame) == true,
+    "Pet Aura lanes should enable on existing profiles without a showPet flag")
+local petConfig = assert(namespace.MSUF_Auras3.ResolveUnitFrameConfig("pet", petFrame.MSUFSpec))
+assert(petConfig.lanes.buff.enabled == true and petConfig.lanes.debuff.enabled == true,
+    "Pet Buff and Debuff lanes did not compile")
+local petEvents = registered.GetUnitlessEvents(petFrame)
+local petIdentityEvent = false
+for i = 1, #petEvents do
+    if petEvents[i] == "UNIT_PET" then petIdentityEvent = true end
+end
+assert(petIdentityEvent, "Pet Aura lanes must rescan when the pet changes")
+assert(namespace.MSUF_Auras3._LooksLikeApplyScope("pet") == true,
+    "Pet Aura menu changes must request a Pet runtime refresh")
 local buffMetrics = namespace.MSUF_Auras3.BuildAuraLaneMetrics("target", "buff")
 local debuffMetrics = namespace.MSUF_Auras3.BuildAuraLaneMetrics("target", "debuff")
 local customMetrics = namespace.MSUF_Auras3.BuildAuraLaneMetrics("target", "custom1")

@@ -11,7 +11,7 @@ A3.EditModeModules = A3.EditModeModules or {}
 A3.EditModeModules.Config = function()
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor = math.floor
-local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5", "arena1", "arena2", "arena3" }
+local AURA_UNITS = { "player", "pet", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5", "arena1", "arena2", "arena3" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local ARENA_UNITS = { arena1=true, arena2=true, arena3=true }
 -- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on Mainline).
@@ -175,6 +175,7 @@ end
 
 local function UnitLabel(unit)
     if unit == "player" then return "Player" end
+    if unit == "pet" then return "Pet" end
     if unit == "target" then return "Target" end
     if unit == "focus" then return "Focus" end
     if BOSS_UNITS[unit] then return "Boss " .. tostring(unit):match("%d+") end
@@ -207,6 +208,7 @@ end
 local function UnitEnabled(auras, unit)
     if type(auras) ~= "table" or auras.enabled ~= true then return false end
     if unit == "player" then return auras.showPlayer == true end
+    if unit == "pet" then return auras.showPet ~= false end
     if unit == "target" then return auras.showTarget == true end
     if unit == "focus" then return auras.showFocus == true end
     if BOSS_UNITS[unit] then return auras.showBoss == true end

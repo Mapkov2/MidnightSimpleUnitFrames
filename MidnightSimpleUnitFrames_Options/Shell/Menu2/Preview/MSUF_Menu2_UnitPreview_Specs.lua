@@ -69,6 +69,14 @@ if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then
     local happiness = StatusRows("statusPetHappiness|showPetHappinessIndicator|petHappinessIndicatorSize|petHappinessIndicatorAnchor|petHappinessIndicatorOffsetX|petHappinessIndicatorOffsetY|petHappinessIndicatorLayer|7|24|RIGHT|-7|-4|:)|0.38,0.82,0.24|Pet Happiness|MSUF_RequestPetHappinessIndicatorRefresh||pet|")
     table.insert(specs.StatusPreview, #specs.StatusPreview, happiness[1])
 end
+if MSUF.Client ~= nil and MSUF.Client.IsClassic == true then
+    local petXP = StatusRows("statusPetXP|showPetXPBar|petXPBarSize|petXPBarAnchor|petXPBarOffsetX|petXPBarOffsetY|petXPBarLayer|7|8|BOTTOM|0|-5||0.68,0.42,0.95|Pet XP Bar|MSUF_RequestPetXPBarRefresh||pet|")
+    petXP[1].width, petXP[1].defaultWidth = "petXPBarWidth", 80
+    local insertAt = MSUF.Client.SupportsThreatText == true
+        and #specs.StatusPreview - 2 or #specs.StatusPreview
+    table.insert(specs.StatusPreview, insertAt, petXP[1])
+end
+
 specs.PreviewLayers = LayerRows [[
 guides|Guides|0.42,0.72,1.00|Mover highlights and selected borders.
 nameText|Name|0.30,0.66,1.00

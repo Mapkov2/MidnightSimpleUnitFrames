@@ -18,6 +18,7 @@ local GetCursorPosition = _G.GetCursorPosition
 local IsMouseButtonDown = _G.IsMouseButtonDown
 local C_Timer = _G.C_Timer
 local issecretvalue = _G.issecretvalue
+local InCombatLockdown = _G.InCombatLockdown
 -- Native aura buttons are Blizzard-owned; a raised accessor is a normal miss.
 local EM = A3.EditMode
 local ExportPublic = MSUF.ExportPublic
@@ -437,6 +438,15 @@ local function ReadPublicMouseFlag(frame, methodName)
     return value == true
 end
 
+local function CanChangeAuraMouse(frame)
+    if not frame or (frame.IsForbidden and frame:IsForbidden()) then return false end
+    return not (InCombatLockdown and InCombatLockdown())
+end
+
+-- Track only frames whose input MSUF actually changed. A forbidden frame
+-- cannot be restored now, but it must not be mistaken for a completed restore.
+local editedMouseFrames = setmetatable({}, { __mode = "k" })
+
 local function StoreAuraMouseState(frame)
     if not frame or frame._msufA3EditMouseStored == true then return end
     frame._msufA3EditMouseEnabled = ReadPublicMouseFlag(frame, "IsMouseEnabled")
@@ -447,7 +457,7 @@ local function StoreAuraMouseState(frame)
 end
 
 local function SuppressAuraMouse(frame, forwardClicks)
-    if not frame then return end
+    if not CanChangeAuraMouse(frame) then return end
     StoreAuraMouseState(frame)
     local hasClick = type(frame.SetMouseClickEnabled) == "function"
     local hasMotion = type(frame.SetMouseMotionEnabled) == "function"
@@ -460,10 +470,12 @@ local function SuppressAuraMouse(frame, forwardClicks)
         frame:SetPropagateMouseClicks(true)
         frame._msufA3EditPropagateChanged = true
     end
+    editedMouseFrames[frame] = true
 end
 
 local function RestoreAuraMouse(frame, motionEnabled, fallbackClickEnabled)
-    if not frame then return end
+    if not frame then return true end
+    if not CanChangeAuraMouse(frame) then return editedMouseFrames[frame] ~= true end
     local stored = frame._msufA3EditMouseStored == true
     local mouseEnabled = frame._msufA3EditMouseEnabled
     local clickEnabled = frame._msufA3EditClickEnabled
@@ -507,6 +519,8 @@ local function RestoreAuraMouse(frame, motionEnabled, fallbackClickEnabled)
     frame._msufA3EditMotionEnabled = nil
     frame._msufA3EditPropagateClicks = nil
     frame._msufA3EditPropagateChanged = nil
+    editedMouseFrames[frame] = nil
+    return true
 end
 
 local function NativeAuraEditGroup(frame)
@@ -529,7 +543,7 @@ local function ForwardNativeAuraMouse(frame, scriptName, button)
 end
 
 local function WireNativeAuraEditForward(frame, container)
-    if not (frame and frame.HookScript) then return false end
+    if not CanChangeAuraMouse(frame) or not frame.HookScript then return false end
     if frame._msufA3EditDragForwardHooked == true then return true end
     frame._msufA3EditForwardContainer = container or frame
     frame.HookScript(frame, "OnMouseDown", function(self, button)
@@ -543,7 +557,9 @@ local function WireNativeAuraEditForward(frame, container)
 end
 
 local function SetLaneMouseSuppressed(element, container, suppressed)
-    if not container then return end
+    if not container then return true end
+    if container.IsForbidden and container:IsForbidden() then return suppressed == true end
+    local restored = true
     local laneKind = container._msufA3NativeLane
     local forwardKind = laneKind
     if forwardKind == "buffs" then forwardKind = "buff" end
@@ -558,7 +574,7 @@ local function SetLaneMouseSuppressed(element, container, suppressed)
         if canForward then WireNativeAuraEditForward(container, container) end
         SuppressAuraMouse(container, canForward)
     else
-        RestoreAuraMouse(container, nil, false)
+        if not RestoreAuraMouse(container, nil, false) then restored = false end
     end
 
     -- Flow buttons belong to Blizzard's frame provider, not container[index].
@@ -595,28 +611,45 @@ local function SetLaneMouseSuppressed(element, container, suppressed)
                 -- Forbidden buttons can hide their stored input state. Restore
                 -- the sole runtime exception (Player Buff RightButtonUp cancel)
                 -- and keep every other AuraButton click-through.
-                RestoreAuraMouse(button, motionEnabled, cancelablePlayerBuff)
+                if not RestoreAuraMouse(button, motionEnabled, cancelablePlayerBuff) then restored = false end
             end
         end
     end
+    return restored
 end
 
 local RUNTIME_MOUSE_ROOTS = { "Buffs", "Debuffs", "Externals",
     "DispelSensor", "DispelSensorNeutral", "DispelSensorHostile" }
 local function SetRuntimeAuraMouse(element, suppressed)
+    local restored = true
     for i = 1, #RUNTIME_MOUSE_ROOTS do
         local container = element[RUNTIME_MOUSE_ROOTS[i]]
         if i <= 3 or container and container._msufA3GroupSlotsRoot == true then
-            SetLaneMouseSuppressed(element, container, suppressed)
+            if not SetLaneMouseSuppressed(element, container, suppressed) then restored = false end
         end
     end
+    return restored
 end
 
+local pendingMouseRestore = {}
+local QueueAuraMouseRestore
 local function SetRuntimeAuraHidden(unit, hidden)
     local frame = GetFrame(unit)
     local element = frame and frame.Auras
-    if not element or not element.SetAlpha then return end
+    if not element or not element.SetAlpha then
+        pendingMouseRestore[unit] = nil
+        return
+    end
+    if element.IsForbidden and element:IsForbidden() then
+        if not hidden then QueueAuraMouseRestore(unit) end
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        if not hidden and element._msufA3EditModeAlpha ~= nil then QueueAuraMouseRestore(unit) end
+        return
+    end
     if hidden then
+        pendingMouseRestore[unit] = nil
         if element._msufA3EditModeAlpha == nil and element.GetAlpha then
             element._msufA3EditModeAlpha = element:GetAlpha()
         end
@@ -624,9 +657,36 @@ local function SetRuntimeAuraHidden(unit, hidden)
         SetRuntimeAuraMouse(element, true)
     elseif element._msufA3EditModeAlpha ~= nil then
         element:SetAlpha(element._msufA3EditModeAlpha)
-        element._msufA3EditModeAlpha = nil
-        SetRuntimeAuraMouse(element, false)
+        if SetRuntimeAuraMouse(element, false) then
+            element._msufA3EditModeAlpha = nil
+            pendingMouseRestore[unit] = nil
+        else
+            QueueAuraMouseRestore(unit)
+        end
     end
+end
+
+local mouseRestoreFrame
+local function RetryAuraMouseRestore()
+    if InCombatLockdown and InCombatLockdown() then return end
+    for unit in pairs(pendingMouseRestore) do
+        SetRuntimeAuraHidden(unit, false)
+    end
+    if mouseRestoreFrame and not next(pendingMouseRestore) then
+        mouseRestoreFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        mouseRestoreFrame:UnregisterEvent("PLAYER_ALIVE")
+    end
+end
+QueueAuraMouseRestore = function(unit)
+    if pendingMouseRestore[unit] then return end
+    pendingMouseRestore[unit] = true
+    if not mouseRestoreFrame then
+        mouseRestoreFrame = CreateFrame("Frame")
+        mouseRestoreFrame:SetScript("OnEvent", RetryAuraMouseRestore)
+    end
+    mouseRestoreFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    mouseRestoreFrame:RegisterEvent("PLAYER_ALIVE")
+    if C_Timer and C_Timer.After then C_Timer.After(0, RetryAuraMouseRestore) end
 end
 
 

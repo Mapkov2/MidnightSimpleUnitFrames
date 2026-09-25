@@ -388,6 +388,25 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
         }
         M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
     end
+    local petXP = FindStatusSpec(unit, "statusPetXP")
+    if petXP and petXP.value == "statusPetXP" and type(M.RegisterVirtualRuntimeControl) == "function" then
+        local meta = ControlMeta(ctx, "status.indicator.pet_xp", "setting")
+        meta.kind, meta.label = "toggle", petXP.text
+        meta.keywords = { "pet xp", "pet experience", "pet experience bar" }
+        meta.assistantDisposition = "dynamic"
+        meta.assistantSettingKeys = { tostring(unit) .. "." .. tostring(petXP.show) }
+        meta.command = {
+            kind = "toggle",
+            get = function() return ReadStatusEnabled(petXP) end,
+            set = function(value)
+                SetBool(unit, petXP.show, value == true, "MSUF2_STATUS_ENABLED", { preview = true })
+                RefreshStatusRuntime(unit, petXP)
+                if RefreshStatusSectionState then RefreshStatusSectionState() end
+                return true
+            end,
+        }
+        M.RegisterVirtualRuntimeControl(meta, "unit-status-indicator")
+    end
     -- The threat percentage text exists only where MSUF.Client.SupportsThreatText is
     -- true (target, focus and boss pages); like Pet Happiness it gets a virtual
     -- control for its own static search row, tied to that capability.
@@ -809,6 +828,11 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
         if spec and ReadBool(unit, "showName", true) == false then return DisabledNameAnchorValues(values) end
         return values
     end
+    local petXPWidth
+    if IS_CLASSIC_FAMILY and unit == "pet" then
+        petXPWidth = BindStatusPlacementSlider(placementCard, "Bar width", 8, 400, placeRightX, -116, placeRightW, "width", "defaultWidth", 80, "MSUF2_PET_XP_WIDTH", "Pet XP bar width", { "pet xp width", "pet experience width", "pet bar width" })
+        AttachStatusExactTarget(petXPWidth, "width")
+    end
     local anchor = BindStatusSpecDropdown(placementCard, "Anchor", CurrentStatusAnchorValues, 220, placeLeftX, -116, placeLeftW,
         "anchor", function(spec) return (spec and spec.defaultAnchor) or "TOPLEFT" end, "MSUF2_STATUS_ANCHOR", "Status indicator anchor", {
         "level anchor", "level anchoring", "level text anchor", "level text anchoring",
@@ -840,6 +864,7 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
                 if spec.symbol then conf[spec.symbol] = nil end
                 if spec.iconStyle then conf[spec.iconStyle] = nil end
                 if spec.customIcon then conf[spec.customIcon] = nil end
+                if spec.width then conf[spec.width] = nil end
             end
             if spec.value == "level" then
                 conf.levelIndicatorDifficultyColor = nil
@@ -861,7 +886,7 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
     RegisterStatusSearch(reset, "Reset selected status indicator", {
         "reset level", "reset level position", "reset level anchor", "reset indicator position",
     }, nil, nil, "status.selected.reset", "action", selectedStatusContract)
-    state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset = raidGroupStyle, size, anchor, layer, reset
+    state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset, state.petXPWidth = raidGroupStyle, size, anchor, layer, reset, petXPWidth
 end
 function StatusSection.BuildPreviewCard(state, unit)
     local previewCard, previewControlW, BindStatusTestToggle = state.previewCard, state.previewControlW, state.BindStatusTestToggle
@@ -986,12 +1011,13 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     local threatColorCurve = state.threatColorCurve
     local threatBackground = state.threatBackground
     local raidGroupStyle, size, anchor, layer, reset, test = state.raidGroupStyle, state.size, state.anchor, state.layer, state.reset, state.test
+    local petXPWidth = state.petXPWidth
     local current, all, iconPreviewLabel, advanced = state.current, state.all, state.iconPreviewLabel, state.advanced
     local ReadStatusEnabled, SetDropdownTitle, StatusIconStyleLabel = state.ReadStatusEnabled, state.SetDropdownTitle, state.StatusIconStyleLabel
     local SpecificIconLabel, IsRoleStatusSpec = state.SpecificIconLabel, state.IsRoleStatusSpec
     local SetPreviewCurrentVisual, RefreshIconPreviewStrip = state.SetPreviewCurrentVisual, state.RefreshIconPreviewStrip
     local RefreshStatusSectionState = state.RefreshStatusSectionState
-    local statusEnabledControls = { size, anchor, layer, advanced.layer }
+    local statusEnabledControls = { size, anchor, layer, advanced.layer, petXPWidth }
     local function LayoutSelectedControls(hasSymbol, hasIconPack, hasCustomIcon)
         local y = -106
         if hasSymbol then
@@ -1009,6 +1035,7 @@ function StatusSection.BindRefreshState(state, ctx, unit)
     local function LayoutStatusControls(inlineName)
         Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
         Shared.PlaceSlider(placementCard, size, placeLeftX, -54, placeLeftW)
+        if petXPWidth then Shared.PlaceSlider(placementCard, petXPWidth, placeRightX, -116, placeRightW) end
         Shared.PlaceDropdown(placementCard, anchor, placeLeftX, -116, placeLeftW)
         Shared.PlaceSlider(placementCard, layer, placeLeftX, -178, placeLeftW)
         -- The raid-group style dropdown owns the first right row whenever it is
@@ -1066,6 +1093,7 @@ function StatusSection.BindRefreshState(state, ctx, unit)
             SetControlEnabled(threatBackground, spec and spec.value == "statusThreat" and isEnabled)
         end
         ShowControl(raidGroupStyle, inlineName)
+        if petXPWidth then ShowControl(petXPWidth, spec and spec.value == "statusPetXP") end
         ShowControl(test, showTestMode)
         ShowControls(true, size, anchor, layer, advanced.layer)
         ShowControls(not inlineName, previewLabel, current, all, previewCard, advanced.current, advanced.all)

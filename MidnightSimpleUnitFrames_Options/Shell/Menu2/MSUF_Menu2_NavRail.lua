@@ -781,6 +781,12 @@ local function BuildNavRail(parent)
             if item.key == "profiles" then created[#created + 1] = { kind = "history", frame = CreateHistoryControls(list) } end
         end
     end
+    -- A group title without pages stays hidden (Combat and Interface without the Suite).
+    local groupHasPages = {}
+    for i = 1, #created do
+        local item = created[i]
+        if item.kind == "page" and item.group then groupHasPages[item.group] = true end
+    end
     function parent:_msuf2NavReflow()
         M.RefreshNavIconVisibility()
         local y = -4
@@ -791,6 +797,8 @@ local function BuildNavRail(parent)
             if advancedHidden and (item.id == "modules" or item.group == "modules") then
                 if btn then btn:Hide() end
                 if item.frame then item.frame:Hide() end
+            elseif item.kind == "title" and not groupHasPages[item.id] then
+                item.frame:Hide()
             elseif item.kind == "title" then
                 local frame = item.frame
                 frame:Show()

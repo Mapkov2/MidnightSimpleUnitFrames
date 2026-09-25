@@ -30,7 +30,41 @@ ExportPublic("MSUF_CP_CoreUnitFrame", CoreUnitFrame)
 
 local function CP_IsUsableCooldownAnchorFrame(frame)
     local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-    return type(getSize) == "function" and getSize(frame) ~= nil
+    return type(getSize) == "function" and getSize(frame, true) ~= nil
+end
+
+-- Retail anchors the complete resource stack to Essential's top edge. Older
+-- quick setup profiles measured Y from the viewer bottom; convert that stored
+-- distance once so a fresh or existing layout has the same small visible gap.
+local function CP_AboveCooldownGap(frame, container, bars, classHeight)
+    local gap = 4
+    classHeight = tonumber(classHeight) or 4
+    local player = _G.MSUF_DB and _G.MSUF_DB.player
+    if type(player) == "table" and player.showPowerBar ~= false
+        and player.powerBarDetached == true and player.detachedPowerBarAnchorToClassPower == true then
+        local powerHeight = tostring(player.detachedPowerBarShape or ""):upper() == "ORB"
+            and (tonumber(player.detachedPowerOrbSize) or 54)
+            or (tonumber(player.detachedPowerBarHeight) or 6)
+        local powerY = tonumber(player.detachedPowerBarOffsetY) or -4
+        gap = gap + math_max(0, powerHeight - powerY)
+    end
+
+    local offsetY = tonumber(bars.classPowerOffsetY) or 0
+    if bars.classPowerCooldownTopAnchor == true then return gap + math_max(0, offsetY) end
+
+    local getSize = _G.MSUF_GetUsableCooldownAnchorSize
+    local viewerHeight
+    if type(getSize) == "function" then viewerHeight = select(2, getSize(frame, true)) end
+    local viewerScale = frame.GetEffectiveScale and frame:GetEffectiveScale()
+    local classScale = container.GetEffectiveScale and container:GetEffectiveScale()
+    local isSecret = _G.issecretvalue
+    if isSecret and (isSecret(viewerScale) or isSecret(classScale)) then return gap end
+    if type(viewerHeight) ~= "number" or type(viewerScale) ~= "number"
+        or type(classScale) ~= "number" or viewerScale <= 0 or classScale <= 0 then return gap end
+    local extra = math_max(0, offsetY - viewerHeight * viewerScale / classScale - classHeight - gap)
+    bars.classPowerOffsetY = extra
+    bars.classPowerCooldownTopAnchor = true
+    return gap + extra
 end
 
 --- The MSUF Suite stacks its Utility row directly under its Essential row, so
@@ -460,7 +494,8 @@ builders.LAYOUT = function(E)
                 and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
             then
                 CP.container._msufDirectCooldownAnchor = true
-                CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
+                CP.container._msufHardLockPoint = IS_CLASSIC
+                    and (CP.container._msufHardLockPoint or "TOP") or "BOTTOM"
                 CP.container._msufPositionInitialized = true
             end
         end
@@ -487,7 +522,12 @@ builders.LAYOUT = function(E)
                 --- the hard lock and the screen cache record that same edge,
                 --- so a combat-edge restore keeps the bar where it was.
                 local lockPoint, anchorPoint = "TOP", "BOTTOM"
-                if CP_CooldownAnchorStacksAbove(anchorFrame) then lockPoint, anchorPoint = "BOTTOM", "TOP" end
+                if not IS_CLASSIC then
+                    lockPoint, anchorPoint = "BOTTOM", "TOP"
+                    oY = CP_AboveCooldownGap(anchorFrame, CP.container, b, h)
+                elseif CP_CooldownAnchorStacksAbove(anchorFrame) then
+                    lockPoint, anchorPoint = "BOTTOM", "TOP"
+                end
                 CP.container:SetPoint(lockPoint, anchorFrame, anchorPoint, oX, oY)
                 if CP.container:GetCenter() ~= nil then
                     --- The link stays live; the provider chain resolves to a
@@ -510,7 +550,8 @@ builders.LAYOUT = function(E)
                     and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
                 then
                     CP.container._msufDirectCooldownAnchor = true
-                    CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
+                    CP.container._msufHardLockPoint = IS_CLASSIC
+                        and (CP.container._msufHardLockPoint or "TOP") or "BOTTOM"
                 else
                     CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", insetX + oX, -(2 - oY))
                     CP.container._msufDirectCooldownAnchor = nil

@@ -80,7 +80,7 @@ function Factories.Common(Schema)
         unit = tostring(unit or "player")
         if unit == "boss" or BOSS_LOOKUP[unit] then return "boss" end
         if unit == "arena" or ARENA_LOOKUP[unit] then return "arena" end
-        if unit == "target" or unit == "focus" then return unit end
+        if unit == "pet" or unit == "target" or unit == "focus" then return unit end
         return "player"
     end
 

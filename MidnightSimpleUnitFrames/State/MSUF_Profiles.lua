@@ -191,6 +191,11 @@ function MSUF_InitProfiles()
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
     local active = char.activeProfile
+    -- Suite starts after MSUF has bound this character. Preserve whether this
+    -- login began without a choice so Suite can apply its installed profile.
+    if _G.MSUF_ProfileWasUnboundAtLogin == nil then
+        _G.MSUF_ProfileWasUnboundAtLogin = type(active) ~= "string" or active == ""
+    end
     if type(active) ~= "string" or active == "" then
         active = nil
     end
@@ -2778,13 +2783,33 @@ ExportPublic("MSUF_Profiles_SetImportBlizzardEditMode", function(value)
     MSUF_ProfileIO_ImportBlizzardEM = value == true
 end)
 
+-- Add a coordinate reference to export copies only. Older imports without the
+-- explicit mode retain their saved offsets instead of being silently moved.
+local function MSUF_ProfileIO_StampScreenReference(payload)
+    local height = UIParent and UIParent.GetHeight and UIParent:GetHeight()
+    if type(_G.issecretvalue) == "function" and _G.issecretvalue(height) == true then return end
+    if type(height) ~= "number" or height < 400 or height > 10000 then return end
+    local function Stamp(conf)
+        if type(conf) ~= "table" or (conf.offsetX == nil and conf.offsetY == nil
+            and conf.x == nil and conf.y == nil) then return end
+        if conf.screenPositionMode ~= nil and conf.screenPositionMode ~= "relativeHeight" then return end
+        conf.screenPositionHeight = height
+        conf.screenPositionMode = "relativeHeight"
+    end
+    for i = 1, #MSUF_PROFILEIO_UNIT_KEYS do
+        Stamp(payload[MSUF_PROFILEIO_UNIT_KEYS[i]])
+    end
+    for i = 1, 5 do Stamp(payload["boss" .. i]) end
+    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do Stamp(payload[key]) end
+end
+
 -- Selected-frame snapshots have a separate kind so older importers reject them
 -- instead of treating them as the broad Unitframes category (which resets globals).
 -- Only explicitly owned settings cross this boundary; shared appearance stays local.
 local UnitSelection = {
     units = { player = true, target = true, targettarget = true, focustarget = true,
         focus = true, pet = true, boss = true, arena = true },
-    auraFlags = { showPlayer = "player", showTarget = "target", showFocus = "focus",
+    auraFlags = { showPlayer = "player", showPet = "pet", showTarget = "target", showFocus = "focus",
         showBoss = "boss", showArena = "arena" },
     barKeys = { showPlayerPowerBar = "player", showTargetPowerBar = "target",
         showFocusPowerBar = "focus", showBossPowerBar = "boss", showArenaPowerBar = "arena" },
@@ -2809,7 +2834,7 @@ function UnitSelection.GeneralOwner(key)
     if key == "_msufBossCastbarPhysicalEdgeAnchor_v1" then return "boss" end
 end
 function UnitSelection.AuraOwner(key)
-    if key == "player" or key == "target" or key == "focus" then return key end
+    if key == "player" or key == "pet" or key == "target" or key == "focus" then return key end
     if type(key) == "string" then
         if key:match("^boss[1-5]$") then return "boss" end
         if key:match("^arena[1-5]$") then return "arena" end
@@ -2840,7 +2865,7 @@ function UnitSelection.Copy(profile, selected)
     local out = { perUnit = {} }
     for flag, unit in pairs(UnitSelection.auraFlags) do
         if selected[unit] then
-            out[flag] = auras[flag] == true
+            out[flag] = auras[flag] == true or (flag == "showPet" and auras[flag] == nil)
             local count = (unit == "boss" or unit == "arena") and 5 or 1
             for i = 1, count do
                 local key = count == 1 and unit or unit .. i
@@ -2971,6 +2996,10 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
             if type(payload.general) ~= "table" then payload.general = {} end
             payload.general.blizzardEditModeSnapshot = MSUF_DeepCopy(blizzSnapshot)
         end
+    end
+    if kind == "unitselection" or kind == "unitframe" or kind == "groupframe"
+        or kind == "groupframes" or kind == "all" then
+        MSUF_ProfileIO_StampScreenReference(payload)
     end
     return {
         addon   = "MSUF",
@@ -3709,6 +3738,9 @@ function MSUF_ExportExternal(profileKey)
         profile = profileKey,
         payload = MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload),
     }
+    if profileKey == MSUF_ActiveProfile then
+        MSUF_ProfileIO_StampScreenReference(snap.payload)
+    end
     local exportSnap = MSUF_ProfileIO_MakeWagoSnapshot(snap)
     return true, _G.MSUF_EncodeCompactTableMSUF3(exportSnap)
 end

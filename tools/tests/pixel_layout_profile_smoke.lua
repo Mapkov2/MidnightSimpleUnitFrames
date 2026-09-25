@@ -333,4 +333,22 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         end
     end
 end
-print("pixel_layout_profile_smoke: ok (5 clients, 200 ClassPower layout pairs, 15000 warm layout calls without pixel helpers)")
+-- Profile switches restore the selected profile's global scale before its
+-- saved group offsets are reanchored, and restore Blizzard scale when it is off.
+for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
+    local world = World.New(root, flavor):Boot()
+    assert(#world.failures == 0, flavor .. ": client boot failed")
+    local env = world.env
+    local general = assert(env.MSUF_DB and env.MSUF_DB.general)
+    local apply = assert(env.MSUF_ApplyCurrentProfileGlobalUiScale)
+    general.UIScale = { Enabled = true, Scale = 0.6 }
+    general.globalUiScalePreset = "custom"
+    assert(apply() and math.abs(env.UIParent:GetScale() - 0.6) < 0.0001,
+        flavor .. ": old profile UI scale was not restored")
+    assert(apply() and math.abs(env.UIParent:GetScale() - 0.6) < 0.0001,
+        flavor .. ": same-scale profile apply drifted")
+    general.UIScale.Enabled = false
+    assert(apply() and math.abs(env.UIParent:GetScale() - 1) < 0.0001,
+        flavor .. ": scale-off profile did not restore Blizzard scale")
+end
+print("pixel_layout_profile_smoke: ok (5 clients, profile scale switches, 200 ClassPower layout pairs, 15000 warm layout calls without pixel helpers)")

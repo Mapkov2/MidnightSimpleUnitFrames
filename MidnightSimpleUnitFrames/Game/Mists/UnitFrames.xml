@@ -1,4 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
   <Include file="..\Classic\UnitFrames\MSUF_UFCore_Elements.xml"/>
+  <Script file="..\Classic\UnitFrames\MSUF_UF_PetXP.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_DataShared.lua"/>
 </Ui>

@@ -3595,6 +3595,7 @@ L["?"] = "?"
 L["Edit Mode"] = "편집 모드"
 L["Groups"] = "그룹"
 L["Frames"] = "프레임"
+L["Interface"] = "인터페이스"
 L["Position"] = "위치"
 L["Toolbar position"] = "도구 모음 위치"
 L["Top"] = "위"
@@ -5977,6 +5978,10 @@ L["Midnight Blue"] = "Midnight Blue"
 L["Midnight Dark"] = "Midnight Dark"
 L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Background opacity changes the MSUF Forever background only; text stays fully opaque."
 L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."
+L["Pet"] = "소환수"
+L["Pet XP Bar"] = "소환수 경험치 바"
+L["Bar width"] = "바 너비"
+L["Pet XP bar width"] = "소환수 경험치 바 너비"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

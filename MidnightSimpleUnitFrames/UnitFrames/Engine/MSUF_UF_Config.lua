@@ -992,7 +992,7 @@ local function StatusAllowed(key, id)
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
   elseif id == "elite" then
     return key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "boss"
-  elseif id == "petHappiness" then
+  elseif id == "petHappiness" or id == "petXP" then
     return key == "pet"
   elseif id == "threat" then
     return key == "target" or key == "focus" or key == "boss"
@@ -1080,6 +1080,11 @@ end
 if MSUF.Client and MSUF.Client.SupportsThreatText == true then
   UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
     PrefixedStatusDef("threat", "showThreatIndicator", true, "threatIndicator", 11, "BOTTOMLEFT", 6, 2, 7)
+end
+
+if MSUF.Client and MSUF.Client.IsClassic == true then
+  UNIT_STATUS_ENTRY_DEFS[#UNIT_STATUS_ENTRY_DEFS + 1] =
+    PrefixedStatusDef("petXP", "showPetXPBar", true, "petXPBar", 8, "BOTTOM", 0, -5, 7)
 end
 
 local UNIT_STATUS_TEXT_STATE_DEFS = {
@@ -1587,11 +1592,18 @@ local function CompileUnitStatus(out, conf, general, key)
       fallbackSize = levelSize
     elseif id == "raidGroup" then
       fallbackSize = raidGroupSize
+    elseif id == "petXP" then
+      fallbackSize = nil
     elseif id == "threat" then
       -- The def's own 11 px: the text sits under the 14 px name on 30 px frames.
       fallbackSize = nil
     end
     CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
+  end
+  if status.petXP then
+    local width = StatusNumber(conf, general, "petXPBarWidth", 80)
+    if width < 8 then width = 8 elseif width > 400 then width = 400 end
+    status.petXP.width = width
   end
 
   -- Level difficulty coloring defaults on, but a profile that already picked a
@@ -1689,6 +1701,24 @@ local function UnitHealthTextEnabled(conf)
   return enabled ~= false
 end
 
+local function AdaptScreenPosition(conf, anchorFrameName, anchorToUnitframe)
+  -- Only factory and explicitly tagged imports may adapt their positions.
+  -- Existing MSUF profiles keep their saved offsets on scale changes.
+  if type(conf) ~= "table" or conf.screenPositionMode ~= "relativeHeight" or anchorToUnitframe then return end
+  if anchorFrameName and anchorFrameName ~= "" and anchorFrameName ~= "UIParent" then return end
+  local height = UIParent and UIParent.GetHeight and UIParent:GetHeight()
+  if type(height) ~= "number" or height < 400 or height > 10000 then return end
+  local previous = tonumber(conf.screenPositionHeight)
+  if previous and previous >= 400 and previous <= 10000 and math.abs(previous - height) > 0.01 then
+    local factor = height / previous
+    for _, field in ipairs({ "offsetX", "offsetY", "x", "y" }) do
+      if type(conf[field]) == "number" then conf[field] = conf[field] * factor end
+    end
+  end
+  conf.screenPositionHeight = height
+end
+Config.AdaptScreenPosition = AdaptScreenPosition
+
 local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   out.unit = unit
   out.key = key
@@ -1702,6 +1732,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   out.height = Number(conf.height or conf.frameHeight, def.height)
   local cooldownViewerAnchor
   out.anchorFrameName, out.anchorToUnitframe, cooldownViewerAnchor = ResolveAnchorSettings(conf, general)
+  AdaptScreenPosition(conf, out.anchorFrameName, out.anchorToUnitframe)
   -- 5.77 stored Utility/Buff viewer positions as CENTER-to-CENTER offsets.
   -- Only EssentialCooldownViewer owns the specialized edge-anchor rules.
   -- Keep this distinction in the cold config compile so legacy coordinates
@@ -2286,6 +2317,30 @@ function Config.Refresh()
   Config.dirty = nil
   return Config.specs
 end
+
+ExportPublic("MSUF_SetCurrentProfileScreenReferenceHeight", function(height)
+  height = tonumber(height)
+  if ConfigInCombat() or not height or height < 400 or height > 10000 then return false end
+  local db = EnsureDB()
+  for i = 1, #UF.unitOrder do
+    local conf = db[UF.ConfigKeyForUnit(UF.unitOrder[i])]
+    if type(conf) == "table" and (conf.offsetX ~= nil or conf.offsetY ~= nil or conf.x ~= nil or conf.y ~= nil) then
+      conf.screenPositionHeight = height
+      conf.screenPositionMode = "relativeHeight"
+    end
+  end
+  for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
+    local conf = db[key]
+    if type(conf) == "table" and (conf.offsetX ~= nil or conf.offsetY ~= nil) then
+      conf.screenPositionHeight = height
+      conf.screenPositionMode = "relativeHeight"
+    end
+  end
+  Config.Refresh()
+  if UF.spawned and UF.Factory and UF.Factory.ForceReanchor then UF.Factory.ForceReanchor() end
+  if MSUF.GF and MSUF.GF.RefreshHeaderLayout then MSUF.GF.RefreshHeaderLayout() end
+  return true
+end)
 
 local function MSUF_GetBossLayoutDelta(index, conf)
   local db = EnsureDB()

@@ -2508,13 +2508,25 @@ local Module = {
   end,
 }
 
+local function ApplyRoundedUnitframes()
+  forceDisabled = false
+  if IsEnabled() then
+    SetRoundedCallbacksActive(true)
+  else
+    SetRoundedCallbacksActive(false)
+  end
+  ApplyAll()
+  RefreshFrozenDispelOverlayMasks()
+end
+
 do
     local f = CreateFrame("Frame")
     MSUF.__msufRoundedEventFrame = f
     -- The module loads before PLAYER_LOGIN, while the live UF/GF frames are
-    -- finalized during that login pass. Keep one cold startup route so an
-    -- already-enabled profile receives its masks after those frames exist.
-    -- Disabled profiles detach again at ADDON_LOADED and retain no idle event.
+    -- finalized during that login pass. Keep one cold startup route so the
+    -- active character profile receives its masks after those frames exist.
+    -- The active character profile may not be bound at ADDON_LOADED. Always
+    -- check once after login, then detach; disabled profiles retain no idle event.
     f:RegisterEvent("ADDON_LOADED")
     f:SetScript("OnEvent", function(_, event, arg1)
       if event == "ADDON_LOADED" then
@@ -2530,16 +2542,17 @@ do
             -- Login must bind the Borders/Power callbacks as well as export
             -- the global hooks; the module registry is not initialized here.
             SetRoundedCallbacksActive(true)
-            f:RegisterEvent("PLAYER_LOGIN")
           end
+          f:RegisterEvent("PLAYER_LOGIN")
           if f.UnregisterEvent then f:UnregisterEvent("ADDON_LOADED") end
         end
       elseif event == "PLAYER_LOGIN" then
         if f.UnregisterEvent then f:UnregisterEvent("PLAYER_LOGIN") end
-        if IsEnabled() then
-          SetRoundedCallbacksActive(true)
-          _G.C_Timer.After(0, ApplyAll)
-        end
+        _G.C_Timer.After(0, function()
+          if IsEnabled() or MSUF.__msufRoundedUF_Hooked then
+            ApplyRoundedUnitframes()
+          end
+        end)
       elseif event == "PLAYER_REGEN_ENABLED" then
         if MSUF.__msufRoundedPending then
           _G.C_Timer.After(0, ApplyAll)
@@ -2556,16 +2569,6 @@ if not MSUF.__msufRoundedUF_Registered then
   end
 end
 
-local function ApplyRoundedUnitframes()
-  forceDisabled = false
-  if IsEnabled() then
-    SetRoundedCallbacksActive(true)
-  else
-    SetRoundedCallbacksActive(false)
-  end
-  ApplyAll()
-  RefreshFrozenDispelOverlayMasks()
-end
 ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)
 
 ExportPublic("MSUF_ClampRoundedEdgeSize", ClampEdgeSize)

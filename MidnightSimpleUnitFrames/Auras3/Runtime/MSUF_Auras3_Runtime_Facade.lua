@@ -277,6 +277,7 @@ A3._RequestUnitNow = function(unit)
     unit = tostring(unit or "")
     if unit == "" or unit == "*" then
         local didWork = A3._ApplyRuntimeUnit("player")
+        didWork = A3._ApplyRuntimeUnit("pet") or didWork
         didWork = A3._ApplyRuntimeUnit("target") or didWork
         didWork = A3._ApplyRuntimeUnit("focus") or didWork
         for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
@@ -405,7 +406,7 @@ function A3.RefreshRoundedDispelOverlayMasks()
 end
 
 A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
-    player = true, target = true, focus = true, boss = true, arena = true,
+    player = true, pet = true, target = true, focus = true, boss = true, arena = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
     group = true, groups = true,
@@ -476,6 +477,7 @@ function A3.ApplyFontsFromGlobal(scope, reason)
     end
 
     RefreshRuntimeUnit("player")
+    RefreshRuntimeUnit("pet")
     RefreshRuntimeUnit("target")
     RefreshRuntimeUnit("focus")
     for i = 1, 5 do RefreshRuntimeUnit("boss" .. i) end

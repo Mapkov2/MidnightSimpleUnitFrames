@@ -512,7 +512,7 @@ local QUICK_DPB_GAP = 4
 local QUICK_CDM_GAP = 4
 local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_KEYS = {
-    bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerTextMode classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar chunkedPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
+    bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerTextMode classPowerAnchorToCooldown classPowerCooldownTopAnchor classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar chunkedPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
     player = M.WordList [[showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill powerChunkedFill]],
 }
 local quickSetupUndoSnapshot
@@ -543,6 +543,10 @@ end
 local function QuickGetVisibleCDM()
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
         or _G.EssentialCooldownViewer
+    if not (MSUF.Client and MSUF.Client.IsClassic) then
+        local usable = _G.MSUF_GetUsableCooldownAnchorSize
+        return type(usable) == "function" and usable(ecv, true) and ecv or nil
+    end
     if ecv and ecv.IsShown and ecv:IsShown() and ecv.GetHeight and ecv.GetCenter then
         local h = ecv:GetHeight()
         if type(h) == "number" and h > 0 then return ecv end
@@ -556,6 +560,10 @@ local function QuickPlayerFrame()
 end
 local function QuickClassPowerVisible() local frame = _G.MSUF_ClassPowerContainer; return frame and frame.IsShown and frame:IsShown() end
 local function QuickCalcCPAboveCDM(ecv)
+    if not (MSUF.Client and MSUF.Client.IsClassic) then
+        -- Retail anchors to Essential's top edge. No viewer-height offset.
+        return { cpOffsetX = 0, cpOffsetY = 0, anchorCPtoCDM = true }
+    end
     local bars = Bars()
     local player = M.EnsureDB().player or {}
     local cpH = tonumber(bars.classPowerHeight) or QUICK_CP_HEIGHT
@@ -630,6 +638,8 @@ local function QuickApplyPhase1(offsets)
         classPowerSmoothFill = true, altManaSmoothFill = true,
     })
     bars.classPowerAnchorToCooldown = offsets.anchorCPtoCDM and true or false
+    bars.classPowerCooldownTopAnchor = offsets.anchorCPtoCDM
+        and not (MSUF.Client and MSUF.Client.IsClassic) and true or nil
     bars.classPowerOffsetX, bars.classPowerOffsetY = offsets.cpOffsetX, offsets.cpOffsetY
     M.Assign(player, {
         showPowerBar = true,
@@ -710,16 +720,21 @@ local function ExecuteQuickSetup()
     QuickEnsurePopups()
     QuickOffered(true)
     local ecv = QuickGetVisibleCDM()
-    local offsets = ecv and QuickCalcCPAboveCDM(ecv) or QuickCalcScreenCenter()
+    local retail = not (MSUF.Client and MSUF.Client.IsClassic)
+    local supportsCooldown = retail and type(_G.MSUF_IsCooldownAnchorSupported) == "function"
+        and _G.MSUF_IsCooldownAnchorSupported()
+    local offsets = (ecv or supportsCooldown) and QuickCalcCPAboveCDM(ecv) or QuickCalcScreenCenter()
     quickSetupUndoSnapshot = QuickSnapshot()
     QuickApplyPhase1(offsets)
     ApplyClassPower()
     local popupText
     if ecv and not QuickClassPowerVisible() then
-        QuickApplyPhase2NoCP(QuickCalcDPBAboveCDMNoCP(ecv))
-        popupText = "Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power is positioned above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."
+        if not retail then QuickApplyPhase2NoCP(QuickCalcDPBAboveCDMNoCP(ecv)) end
+        popupText = "Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power follows above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."
     elseif ecv then
         popupText = "Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power is detached and\nattached below it.\nUse Edit Mode for fine-tuning."
+    elseif supportsCooldown then
+        popupText = "Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above Essential\nCooldowns when the bar appears.\nUntil then they use the Player\nframe or the saved position."
     else
         popupText = "Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."
     end

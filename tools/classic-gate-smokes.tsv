@@ -104,6 +104,7 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	tools/tests/classic_minimap_click_smoke.lua		Classic unit/portrait regression failed: classic_minimap_click_smoke.lua
 -	lua+driver	tools/tests/classic_prediction_contract_smoke.lua	{root/}	Classic prediction contract smoke failed
 -	lua+driver	tools/tests/classic_aura_backend_smoke.lua	{root/}	Classic aura backend smoke failed
+-	lua+driver	tools/tests/classic_aura_edit_forbidden_mouse_smoke.lua	{root/}	Classic aura edit forbidden mouse smoke failed
 -	lua+driver	tools/tests/classic_aura_update_path_smoke.lua	{root/}	Classic aura update path smoke failed
 -	lua+driver	tools/tests/classic_dispel_symbol_chain_smoke.lua	{root/}	Classic dispel symbol chain smoke failed
 -	lua+driver	tools/tests/classic_aura_menu_filters_smoke.lua	{root/}	Classic Aura menu filter smoke failed
@@ -117,6 +118,7 @@ classics	lua+driver	tools/tests/classic_aura_faction_smoke.lua	{root/} {flavor}	
 -	lua+driver	tools/tests/classic_raid_manager_mode_smoke.lua	{root/}	Classic Raid Manager mode smoke failed
 clients+Forever	lua	tools/tests/uf_engine_client_gates_smoke.lua	{root/} {flavor}	Unit-frame engine client gates smoke failed: {flavor}
 -	lua+driver	tools/tests/classic_pet_happiness_smoke.lua	{root/}	Classic Pet Happiness smoke failed
+-	lua	tools/tests/classic_pet_xp_smoke.lua	{root}	Classic Pet XP smoke failed
 -	lua	tools/tests/classic_range_fade_smoke.lua	{root/}	Classic range fade smoke failed
 clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	Optional integration contract failed: {flavor}
 -	lua+driver	tools/tests/classic_editmode_smoke.lua	{root/}	Classic Edit Mode smoke failed

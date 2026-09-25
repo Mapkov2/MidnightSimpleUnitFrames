@@ -167,6 +167,9 @@ local STATUS_CONTROLS = {
 if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness == true then
     STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetHappiness", "Pet Happiness", "showPetHappinessIndicator", true, "petHappinessIndicatorSize", 24, "petHappinessIndicatorAnchor", "RIGHT", STATUS_CORNER_ANCHORS, "petHappinessIndicatorOffsetX", -7, "petHappinessIndicatorOffsetY", -4, "petHappinessIndicatorLayer", 7, "MSUF_RequestPetHappinessIndicatorRefresh", { allowed = function(unit) return unit == "pet" end, statusRuntime = true })
 end
+if MSUF.Client ~= nil and MSUF.Client.IsClassic == true then
+    STATUS_CONTROLS[#STATUS_CONTROLS + 1] = StatusControl("statusPetXP", "Pet XP Bar", "showPetXPBar", true, "petXPBarSize", 8, "petXPBarAnchor", "BOTTOM", STATUS_CORNER_ANCHORS, "petXPBarOffsetX", 0, "petXPBarOffsetY", -5, "petXPBarLayer", 7, "MSUF_RequestPetXPBarRefresh", { allowed = function(unit) return unit == "pet" end, statusRuntime = true, width = "petXPBarWidth", defaultWidth = 80 })
+end
 -- The threat percentage text exists on WoW Forever, Classic Era and TBC, which
 -- all load this page; Midnight and Mists have none. statusTextState gives it the
 -- status text color shortcut without the name-font size fallback of textIndicator.
@@ -341,8 +344,8 @@ local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInComb
 --- so it has no semantic equivalent on Player/Target/Focus and must never be cleared
 --- when a normal unit's frame size is copied to Boss.
 local COPY_LAYOUT_FIELDS = WL [[width height]]
-local AURA_COPY_UNITS = DropUnsupportedUnits(KSW("player target focus boss arena"))
-local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena" }
+local AURA_COPY_UNITS = DropUnsupportedUnits(KSW("player pet target focus boss arena"))
+local AURA_COPY_FLAGS = { player = "showPlayer", pet = "showPet", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
 -- TBC and Mists field five arena opponents, Classic Era none
@@ -631,6 +634,7 @@ local function EnsureAuras3CopyDB()
     if type(auras) ~= "table" then return nil end
     if auras.enabled == nil then auras.enabled = true end
     if auras.showPlayer == nil then auras.showPlayer = false end
+    if auras.showPet == nil then auras.showPet = true end
     if auras.showTarget == nil then auras.showTarget = true end
     if auras.showFocus == nil then auras.showFocus = true end
     if auras.showBoss == nil then auras.showBoss = true end

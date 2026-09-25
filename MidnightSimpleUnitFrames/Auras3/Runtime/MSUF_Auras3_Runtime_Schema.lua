@@ -18,7 +18,7 @@ local COLD_APPLY_REASONS = {
 }
 
 local MANAGED_UNITS = {
-    player = true, target = true, focus = true,
+    player = true, pet = true, target = true, focus = true,
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
     arena1 = true, arena2 = true, arena3 = true,
 }
@@ -33,7 +33,7 @@ local BOSS_FILTER_SCOPE_OWNER = {
 }
 
 local UNIT_FLAG = {
-    player = "showPlayer",
+    player = "showPlayer", pet = "showPet",
     target = "showTarget",
     focus = "showFocus",
     boss1 = "showBoss",

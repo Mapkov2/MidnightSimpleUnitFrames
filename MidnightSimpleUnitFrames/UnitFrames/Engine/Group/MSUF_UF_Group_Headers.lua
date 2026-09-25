@@ -359,7 +359,15 @@ local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
   -- The Anchor Point owns both sides of a group anchor; resolving it can retire
   -- a legacy relativePoint into the offsets, so read those afterwards.
   local point, relativePoint = ResolveAnchorPoint(key, conf, parent)
+  if parent == UIParent and UF.Config and UF.Config.AdaptScreenPosition then
+    UF.Config.AdaptScreenPosition(conf)
+  end
   local offsetX, offsetY = conf.offsetX or 0, conf.offsetY or 0
+  if parent == UIParent and conf.screenPositionMode == "relativeHeight"
+    and type(_G.MSUF_Snap) == "function" then
+    offsetX = _G.MSUF_Snap(anchor, offsetX)
+    offsetY = _G.MSUF_Snap(anchor, offsetY)
+  end
   if key ~= "priority" then
     local footprintClamped = runtimeClampInsets and GF.ConfigureAnchorFootprintScreenClamp
       and GF.ConfigureAnchorFootprintScreenClamp(anchor,

@@ -188,6 +188,15 @@ function Status.IdentityPreviewText(spec, data)
     end
     return ""
 end
+function Status.LayoutPetXP(icon)
+    if not (icon and icon.tex and icon.bg) then return end
+    icon.bg:SetColorTexture(0.015, 0.018, 0.035, 0.94)
+    icon.tex:ClearAllPoints()
+    icon.tex:SetPoint("TOPLEFT", icon, "TOPLEFT", 1, -1)
+    icon.tex:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 1, 1)
+    icon.tex:SetWidth(math.max(1, math.floor((icon:GetWidth() - 2) * 0.68 + 0.5)))
+end
+
 function Status.CreateIcon(parent, color, text)
     local f = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     f:SetSize(16, 16)
@@ -309,6 +318,8 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             tex:SetTexture((key == "target" or key == "focus") and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance")
             if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
         end
+    elseif spec.id == "statusPetXP" then
+        if tex then tex:SetColorTexture(0.68, 0.42, 0.95, 1) end
     elseif spec.id == "statusPetHappiness" then
         -- The full preview uses the Happy state; the compact icon strip on the
         -- Pet page shows Unhappy, Content and Happy together. The runtime

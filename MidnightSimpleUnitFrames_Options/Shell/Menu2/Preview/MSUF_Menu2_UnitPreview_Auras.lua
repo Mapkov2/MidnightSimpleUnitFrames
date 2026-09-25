@@ -198,7 +198,7 @@ end
 function Auras.PreviewUnitKey(unit)
     if unit == nil then return nil end
     unit = CanonKey(unit)
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit end
+    if unit == "player" or unit == "pet" or unit == "target" or unit == "focus" or unit == "boss" or unit == "arena" then return unit end
     return nil
 end
 local function PreviewUnit(box)

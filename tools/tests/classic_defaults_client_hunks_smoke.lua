@@ -102,6 +102,8 @@ Check(source:find("local ARENA_AURA_SLOTS = math.max(3, tonumber(_G.MSUF_MAX_ARE
 local GUARDS = {
     { "the Pet Happiness status prefix",
         'if MSUF.Client and (MSUF.Client.SupportsPetHappiness == true or IS_CLASSIC_FAMILY) then', 1 },
+    { "the Classic Pet XP status prefix",
+        'if IS_CLASSIC_FAMILY then\n        petHappinessSpec.statusPrefixes[#petHappinessSpec.statusPrefixes + 1] = "petXPBar"', 1 },
     { "the aura profile model revision",
         "local MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION = IS_CLASSIC_FAMILY and 1 or 2", 1 },
     { "the extra arena Aura runtime units",
@@ -124,6 +126,8 @@ local GUARDS = {
         'if IS_CLASSIC_FAMILY then\n                if u[texP .. "ResponsiveSize"] == nil then', 1 },
     { "the Classic and Forever factory layout",
         "if IS_CLASSIC_FAMILY or (MSUF.Client and MSUF.Client.IsForever) then", 1 },
+    { "the Classic Pet XP factory defaults",
+        "if IS_CLASSIC_FAMILY then\n    profileDB.pet = profileDB.pet or {}", 1 },
     { "the sparse factory aura owner repair",
         "if IS_CLASSIC_FAMILY then\n        MSUF_Defaults_RepairSparseFactoryAuraOwnerProfiles()", 1 },
 }
@@ -132,7 +136,7 @@ for _, row in ipairs(GUARDS) do
         "the Defaults file must gate " .. row[1] .. " exactly " .. row[3] .. " time(s): " .. row[2]:gsub("\n.*", " ..."))
 end
 -- Nothing else may branch on the client here: a new hunk needs a row above.
-Check(CountPlain(source, "IS_CLASSIC_FAMILY") == 12,
+Check(CountPlain(source, "IS_CLASSIC_FAMILY") == 14,
     "the Defaults file mentions IS_CLASSIC_FAMILY " .. CountPlain(source, "IS_CLASSIC_FAMILY")
     .. " times; add the new hunk to this smoke's guard list")
 Check(CountPlain(source, "ARENA_AURA_SLOTS") == 4,

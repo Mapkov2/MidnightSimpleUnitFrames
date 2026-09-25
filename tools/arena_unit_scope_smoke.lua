@@ -219,7 +219,7 @@ local unitMenu = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_M
 for _, marker in ipairs({
     'uf_arena = { unit = "arena"',
     "arena = {",
-    'KSW("player target focus boss arena")',
+    'KSW("player pet target focus boss arena")',
     'WL("arena1 arena2 arena3")',
     'if key:match("^arena") then return "arena" end',
     "local function SetArenaPagePreviewActive(active)",

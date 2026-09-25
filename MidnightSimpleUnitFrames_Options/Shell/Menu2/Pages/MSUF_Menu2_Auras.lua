@@ -1362,6 +1362,7 @@ end
 local UNIT_AURA_CHOICE_WIDTH = 92
 local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target", UNIT_AURA_CHOICE_WIDTH)
 M._unitAuraWorkspaceTabsPlayer = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensives", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_WORKSPACE_TABS_PET = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|behavior=Ordering|filters=Filters|blacklist=Blacklist|style=Style", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|whitelist=Whitelist|style=Style", UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|dots=Dots|style=Style", UNIT_AURA_CHOICE_WIDTH)
@@ -2320,10 +2321,12 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         end
     end
     M.unitAuraTabSelection = M.unitAuraTabSelection or {}
-    local workspaceTabs = unit == "player" and M._unitAuraWorkspaceTabsPlayer or UNIT_AURA_WORKSPACE_TABS
+    local workspaceTabs = unit == "player" and M._unitAuraWorkspaceTabsPlayer
+        or (unit == "pet" and UNIT_AURA_WORKSPACE_TABS_PET or UNIT_AURA_WORKSPACE_TABS)
     local function CurrentTab()
         local tab = M.unitAuraTabSelection[unit] or "buff"
         if tab ~= "buff" and tab ~= "debuff" and tab ~= "custom1" and tab ~= "custom2" and tab ~= "custom3" and tab ~= "custom4" then tab = "buff" end
+        if unit == "pet" and tab == "custom4" then tab = "buff" end
         return tab
     end
     local currentTab = CurrentTab()
@@ -2472,17 +2475,17 @@ local function BuildMovedAuraPage(ctx)
     local section = b:Section("Open a Frame", 190)
     local w = section._msuf2Width or b.width or 720
     local pages = {
-        { "Player", "uf_player" }, { "Target", "uf_target" }, { "Focus", "uf_focus" },
+        { "Player", "uf_player" }, { "Pet", "uf_pet" }, { "Target", "uf_target" }, { "Focus", "uf_focus" },
         { "Boss", "uf_boss" }, { "Group Frames", "gf_auras" },
     }
     local x = 24
     for i = 1, #pages do
         local page = pages[i]
-        local button = ActionButton(section, page[1], i == 5 and 132 or 92)
+        local button = ActionButton(section, page[1], i == #pages and 132 or 92)
         button:SetPoint("TOPLEFT", section, "TOPLEFT", x, -60)
         button:SetScript("OnClick", function() if M.SelectPage then M.SelectPage(page[2]) end end)
         RegisterAuraControl(ctx, button, page[1], "button", "moved-page.open." .. AuraCatalogToken(page[2]), "navigation", page[2])
-        x = x + (i == 5 and 144 or 104)
+        x = x + (i == #pages and 144 or 104)
     end
     W.Text(section, "Open the frame and expand Auras. Buffs and Debuffs contain their own layout, filters, blacklists and Style; Custom 1-3, Defensive Buffs and Dots on target expose controls appropriate to their content.", 24, -118, w - 48, T.colors.muted)
     FinishPage(ctx, b)

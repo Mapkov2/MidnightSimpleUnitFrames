@@ -34,7 +34,7 @@ local BOSS_UNITS = {
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
 local MANAGED_UNITS = {
-    player = true, target = true, focus = true,
+    player = true, pet = true, target = true, focus = true,
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
     arena1 = true, arena2 = true, arena3 = true,
 }
@@ -51,7 +51,7 @@ local DISPEL_POINTS = {
 local DISPEL_CURVE_CACHE = {}
 
 local UNIT_FLAG = {
-    player = "showPlayer",
+    player = "showPlayer", pet = "showPet",
     target = "showTarget",
     focus = "showFocus",
     boss1 = "showBoss",
@@ -1526,7 +1526,8 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local flag = UNIT_FLAG[unit]
     local visual = CompileFrameAuraVisual(frameSpec)
     local cfg = { unit = unit, enabled = false, lanes = {}, laneOrder = {}, visual = visual }
-    local auraIconsEnabled = auras.enabled == true and flag and auras[flag] == true
+    local auraIconsEnabled = auras.enabled == true and flag
+        and (auras[flag] == true or (flag == "showPet" and auras[flag] == nil))
     local needDebuffScan = visual and visual.enabled == true
     local layout, sharedLayout, blacklist, filtersRoot = EffectiveTables(auras, unit)
     if auraIconsEnabled or needDebuffScan then

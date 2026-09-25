@@ -69,6 +69,7 @@ GetNetStats	*	api	Blizzard client API the harness does not model
 GetNumArenaOpponentSpecs	*	api	Blizzard client API the harness does not model
 GetNumSubgroupMembers	*	api	Blizzard client API the harness does not model
 GetPhysicalScreenSize	*	api	Blizzard client API the harness does not model
+GetPetExperience	Vanilla,TBC,Mists	api	Blizzard pet experience API used by the Classic Pet XP bar
 GetPowerRegenForPowerType	*	api	Blizzard client API the harness does not model
 GetRaidRosterInfo	*	api	Blizzard client API the harness does not model
 GetRaidTargetIndex	*	api	Blizzard client API the harness does not model

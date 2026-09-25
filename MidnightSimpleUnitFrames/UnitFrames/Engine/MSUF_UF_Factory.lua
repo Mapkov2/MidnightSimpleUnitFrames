@@ -507,6 +507,10 @@ local function ApplyPosition(frame, spec)
     relativePoint = point
   end
 
+  if anchor == UIParent and type(_G.MSUF_Snap) == "function" then
+    x, y = _G.MSUF_Snap(layout, x), _G.MSUF_Snap(layout, y)
+  end
+
   local externalAnchor = not IsMSUFOwnedAnchor(anchor)
   local externalProxy = externalAnchor and EnsureUnitExternalAnchorProxy(requestedAnchor, anchor) or nil
   if externalProxy then anchor = externalProxy end
@@ -2140,6 +2144,10 @@ do
   bossPixelEvents:SetScript("OnEvent", function()
     if type(_G.MSUF_UpdatePixelPerfect) == "function" then
       _G.MSUF_UpdatePixelPerfect()
+    end
+    Factory.ForceReanchor()
+    if MSUF.GF and type(MSUF.GF.RefreshHeaderLayout) == "function" then
+      MSUF.GF.RefreshHeaderLayout()
     end
     RefreshBossPhysicalGeometry()
     if type(UF.RefreshBorders) == "function" then

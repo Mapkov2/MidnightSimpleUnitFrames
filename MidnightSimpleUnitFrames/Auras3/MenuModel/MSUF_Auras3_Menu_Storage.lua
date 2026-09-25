@@ -184,6 +184,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         if type(auras) ~= "table" then return nil, nil end
         if auras.enabled == nil then auras.enabled = true end
         Default(auras, "showPlayer", false)
+        Default(auras, "showPet", true)
         Default(auras, "showTarget", true)
         Default(auras, "showFocus", false)
         Default(auras, "showBoss", true)
@@ -330,7 +331,7 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
 
     function Model.UnitSupported(unit)
         unit = NormalizeUnit(unit)
-        return unit == "player" or unit == "target" or unit == "focus" or unit == "boss"
+        return unit == "player" or unit == "pet" or unit == "target" or unit == "focus" or unit == "boss"
             or unit == "arena"
     end
 

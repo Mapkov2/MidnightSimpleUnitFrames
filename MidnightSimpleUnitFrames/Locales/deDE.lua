@@ -5435,6 +5435,7 @@ L["Dungeons"] = "Dungeons"
 L["Export / Import"] = "Export / Import"
 L["Frame"] = "Rahmen"
 L["Frames"] = "Rahmen"
+L["Interface"] = "Interface"
 L["Highlights"] = "Hervorhebungen"
 L["Import & Export"] = "Import & Export"
 L["Original"] = "Original"
@@ -6342,6 +6343,10 @@ L["Midnight Blue"] = "Midnight Blue"
 L["Midnight Dark"] = "Midnight Dark"
 L["Background opacity changes the MSUF Forever background only; text stays fully opaque."] = "Die Hintergrund-Deckkraft ändert nur den MSUF-Forever-Hintergrund; die Schrift bleibt vollständig deckend."
 L["Off (default): the accent colors buttons, tabs and highlights while panels keep the selected look. On: panels, borders and the navigation rail follow the accent too. Success, warning and danger colors never change."] = "Aus (Standard): Der Akzent färbt Schaltflächen, Tabs und Hervorhebungen; die Flächen behalten den gewählten Look. Ein: Flächen, Rahmen und Navigationsleiste folgen ebenfalls dem Akzent. Erfolgs-, Warn- und Fehlerfarben bleiben erhalten."
+L["Pet"] = "Begleiter"
+L["Pet XP Bar"] = "Begleiter-EP-Leiste"
+L["Bar width"] = "Leistenbreite"
+L["Pet XP bar width"] = "Breite der Begleiter-EP-Leiste"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

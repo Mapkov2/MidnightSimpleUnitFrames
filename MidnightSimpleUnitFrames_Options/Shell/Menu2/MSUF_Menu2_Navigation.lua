@@ -37,22 +37,27 @@ local function NavRows(rows)
     end
     return nav
 end
+-- Groups follow what the player is doing, not which addon ships a page.
+-- Combat and Interface hold MSUF Suite pages only: the Suite adds its rows by
+-- group id and the rail hides a group title that has no pages.
 M.navItems = NavRows [[
 P|home|Dashboard
 T|Frames|frames
 P|uf_player|Unitframes|frames
 P|gf_layout|Party/Raid Frames|frames
-T|Appearance|appearance
-P|opt_bars|Bars|appearance
-P|opt_castbar|Cast Bars|appearance
-P|opt_colors|Colors|appearance
-P|opt_fonts|Fonts|appearance
-P|auras3_styling|Auras|appearance
-P|opt_misc|Miscellaneous|appearance
-T|Features|features
-P|classpower|Class Resources|features
-P|gameplay|Gameplay|features
-P|profiles|Profiles|features
+P|opt_bars|Bars|frames
+P|opt_castbar|Cast Bars|frames
+P|auras3_styling|Auras|frames
+P|classpower|Class Resources|frames
+T|Combat|combat
+T|Interface|interface
+T|Style|style
+P|opt_colors|Colors|style
+P|opt_fonts|Fonts|style
+T|General|general
+P|gameplay|Gameplay|general
+P|opt_misc|Miscellaneous|general
+P|profiles|Profiles|general
 ]]
 M.navPrimaryForKey = {
     home = "home",

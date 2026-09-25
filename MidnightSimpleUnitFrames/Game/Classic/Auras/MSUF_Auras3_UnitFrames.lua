@@ -2901,6 +2901,7 @@ local function RequestUnitNow(unit)
     unit = tostring(unit or "")
     if unit == "" or unit == "*" then
         local didWork = ApplyRuntimeUnit("player")
+        didWork = ApplyRuntimeUnit("pet") or didWork
         didWork = ApplyRuntimeUnit("target") or didWork
         didWork = ApplyRuntimeUnit("focus") or didWork
         for i = 1, 5 do
@@ -2982,7 +2983,7 @@ function A3.RefreshAll()
 end
 
 A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
-    player = true, target = true, focus = true, boss = true, arena = true,
+    player = true, pet = true, target = true, focus = true, boss = true, arena = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
     group = true, groups = true,
@@ -3212,11 +3213,14 @@ A3._ClassicWeaponAuraEvents = A3._ClassicWeaponAuraEvents or { "WEAPON_ENCHANT_C
 A3._ClassicCombatWeaponAuraEvents = A3._ClassicCombatWeaponAuraEvents
     or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "WEAPON_ENCHANT_CHANGED", "WEAPON_SLOT_CHANGED" }
 A3._ClassicTargetIdentityAuraEvents = A3._ClassicTargetIdentityAuraEvents or { "PLAYER_TARGET_CHANGED" }
+A3._ClassicPetIdentityAuraEvents = A3._ClassicPetIdentityAuraEvents or { "UNIT_PET" }
 A3._ClassicFocusIdentityAuraEvents = A3._ClassicFocusIdentityAuraEvents or { "PLAYER_FOCUS_CHANGED" }
 A3._ClassicBossIdentityAuraEvents = A3._ClassicBossIdentityAuraEvents or { "INSTANCE_ENCOUNTER_ENGAGE_UNIT" }
 A3._ClassicArenaIdentityAuraEvents = A3._ClassicArenaIdentityAuraEvents or { "ARENA_OPPONENT_UPDATE" }
 A3._ClassicTargetIdentityCombatAuraEvents = A3._ClassicTargetIdentityCombatAuraEvents
     or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_TARGET_CHANGED" }
+A3._ClassicPetIdentityCombatAuraEvents = A3._ClassicPetIdentityCombatAuraEvents
+    or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "UNIT_PET" }
 A3._ClassicFocusIdentityCombatAuraEvents = A3._ClassicFocusIdentityCombatAuraEvents
     or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_FOCUS_CHANGED" }
 A3._ClassicBossIdentityCombatAuraEvents = A3._ClassicBossIdentityCombatAuraEvents
@@ -3224,6 +3228,7 @@ A3._ClassicBossIdentityCombatAuraEvents = A3._ClassicBossIdentityCombatAuraEvent
 A3._ClassicArenaIdentityCombatAuraEvents = A3._ClassicArenaIdentityCombatAuraEvents
     or { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "ARENA_OPPONENT_UPDATE" }
 A3._ClassicIdentityAuraEventsByUnit = A3._ClassicIdentityAuraEventsByUnit or {
+    pet = A3._ClassicPetIdentityAuraEvents,
     target = A3._ClassicTargetIdentityAuraEvents,
     focus = A3._ClassicFocusIdentityAuraEvents,
     boss1 = A3._ClassicBossIdentityAuraEvents,
@@ -3236,6 +3241,7 @@ A3._ClassicIdentityAuraEventsByUnit = A3._ClassicIdentityAuraEventsByUnit or {
     arena3 = A3._ClassicArenaIdentityAuraEvents,
 }
 A3._ClassicIdentityCombatAuraEventsByUnit = A3._ClassicIdentityCombatAuraEventsByUnit or {
+    pet = A3._ClassicPetIdentityCombatAuraEvents,
     target = A3._ClassicTargetIdentityCombatAuraEvents,
     focus = A3._ClassicFocusIdentityCombatAuraEvents,
     boss1 = A3._ClassicBossIdentityCombatAuraEvents,
@@ -3256,6 +3262,7 @@ for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
     end
 end
 A3._ClassicIdentityAuraEvent = A3._ClassicIdentityAuraEvent or {
+    UNIT_PET = true,
     PLAYER_TARGET_CHANGED = true,
     PLAYER_FOCUS_CHANGED = true,
     INSTANCE_ENCOUNTER_ENGAGE_UNIT = true,

@@ -209,6 +209,9 @@ if MSUF.Client and (MSUF.Client.SupportsPetHappiness == true or IS_CLASSIC_FAMIL
         petHappinessSpec.statusPrefixes[i] = prefix
     end
     petHappinessSpec.statusPrefixes[#petHappinessSpec.statusPrefixes + 1] = "petHappinessIndicator"
+    if IS_CLASSIC_FAMILY then
+        petHappinessSpec.statusPrefixes[#petHappinessSpec.statusPrefixes + 1] = "petXPBar"
+    end
     MSUF_DEFAULTS_SPEC = petHappinessSpec
 end
 local MSUF_Defaults_ToNumber = StateHelpers.ToNumber
@@ -1193,6 +1196,7 @@ local function MSUF_Defaults_CreateCanonicalUnitAuras()
         profileModelRevision = MSUF_DEFAULTS_AURAS3_PROFILE_MODEL_REVISION,
         enabled = true,
         showPlayer = false,
+        showPet = true,
         showTarget = true,
         showFocus = false,
         showBoss = true,
@@ -2914,6 +2918,18 @@ if MSUF.Client and MSUF.Client.SupportsPetHappiness == true then
     if pet.petHappinessIndicatorOffsetX == nil then pet.petHappinessIndicatorOffsetX = -7 end
     if pet.petHappinessIndicatorOffsetY == nil then pet.petHappinessIndicatorOffsetY = -4 end
     if pet.petHappinessIndicatorLayer == nil then pet.petHappinessIndicatorLayer = 7 end
+end
+
+if IS_CLASSIC_FAMILY then
+    profileDB.pet = profileDB.pet or {}
+    local pet = profileDB.pet
+    if pet.showPetXPBar == nil then pet.showPetXPBar = true end
+    if pet.petXPBarWidth == nil then pet.petXPBarWidth = 80 end
+    if pet.petXPBarSize == nil then pet.petXPBarSize = 8 end
+    if pet.petXPBarAnchor == nil then pet.petXPBarAnchor = "BOTTOM" end
+    if pet.petXPBarOffsetX == nil then pet.petXPBarOffsetX = 0 end
+    if pet.petXPBarOffsetY == nil then pet.petXPBarOffsetY = -5 end
+    if pet.petXPBarLayer == nil then pet.petXPBarLayer = 7 end
 end
 
 --- PvP flag defaults (per-unit). Arena opponents are always PvP-flagged, so

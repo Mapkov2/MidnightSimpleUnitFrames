@@ -1564,6 +1564,9 @@ function Stage.MeasureTextFootprint(st, Preview)
                         end
                     end
                     local rw, rh = rawSize, rawSize
+                    if spec.id == "statusPetXP" then
+                        rw = tonumber(statusCfg and statusCfg.width) or tonumber(conf[spec.width]) or tonumber(g[spec.width]) or spec.defaultWidth or 80
+                    end
                     if isIdentityText then
                         local previewText = R.PreviewStatus.IdentityPreviewText and R.PreviewStatus.IdentityPreviewText(spec, data) or spec.text
                         rw, rh = ApproxTextWidth(previewText, rawSize, 2), rawSize + 4
@@ -3182,6 +3185,8 @@ function Stage.RenderAurasAndStatus(st, Preview)
             local sz = S(rawSize)
             if isIdentityText then
                 if sz < 7 then sz = 7 end
+            elseif spec.id == "statusPetXP" then
+                if sz < 3 then sz = 3 end
             elseif sz < 10 then
                 sz = 10
             end
@@ -3231,7 +3236,12 @@ function Stage.RenderAurasAndStatus(st, Preview)
                 icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
                 R.PositionSameAnchorPreview(icon, anchor, x, y, mock)
             else
-                icon:SetSize(sz, sz)
+                if spec.id == "statusPetXP" then
+                    icon:SetSize(S(tonumber(statusCfg and statusCfg.width) or tonumber(conf[spec.width]) or tonumber(g[spec.width]) or spec.defaultWidth or 80), sz)
+                    if R.PreviewStatus.LayoutPetXP then R.PreviewStatus.LayoutPetXP(icon) end
+                else
+                    icon:SetSize(sz, sz)
+                end
                 if icon.txt then
                     ApplyPreviewFont(icon.txt, max(7, floor(sz * 0.52 + 0.5)))
                     icon.txt:ClearAllPoints()
@@ -3385,6 +3395,7 @@ function Render.Install(Preview, deps)
         statusCombat = "combat", statusResting = "resting",
         statusIncomingRes = "incomingRes", statusPvp = "pvp",
         statusPetHappiness = "petHappiness", statusThreat = "threat",
+        statusPetXP = "petXP",
     }
     renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
     local PowerColor = renderState.PowerColor
