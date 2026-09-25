@@ -333,15 +333,21 @@ Check(module ~= nil, 'rounded module was not registered')
 startupFrames[#startupFrames+1] = NewStartupFrame('focus')
 startupFrames[#startupFrames+1] = NewStartupFrame('raid1','raid')
 if disabledStartup then
- Check(not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_LOGIN
+ Check(MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_LOGIN
   and not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_REGEN_ENABLED,
-  'disabled rounded startup armed runtime events')
+  'disabled rounded startup lost its one-shot profile check')
  Check(_G.MSUF_RoundedUF_OnBorderVisualChanged == nil and _G.MSUF_RoundedUF_Active == nil,
   'disabled rounded startup published active callbacks')
  Check(#deferredCallbacks == 0, 'disabled rounded startup queued work')
  for _, f in ipairs(startupFrames) do
   Check(f._msufRoundedBorderEdge == nil, 'disabled rounded startup allocated outline art')
  end
+ MSUF.__msufRoundedEventFrame:Fire('PLAYER_LOGIN')
+ Check(not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_LOGIN,
+  'disabled rounded startup retained its one-shot login event')
+ for i=1,#deferredCallbacks do deferredCallbacks[i]() end
+ Check(_G.MSUF_RoundedUF_Active == nil,
+  'disabled rounded startup activated after its login check')
  _G.MSUF_DB.bars.roundedFramesEnabled = true
  _G.MSUF_ApplyRoundedUnitframes()
 else

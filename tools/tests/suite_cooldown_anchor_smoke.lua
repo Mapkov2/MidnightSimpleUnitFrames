@@ -591,18 +591,19 @@ local function ExpectPoint(t, point, relativeTo, relativePoint, x, y, label)
             tostring(relPoint), tostring(px), tostring(py)))
 end
 
-Case("class power: on the Suite anchor the bar sits on top of the Essential row", function()
+Case("class power: the Mainline bar sits above the Essential row", function()
     local t = StartClassPower(SUITE_ID)
-    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 0, "Suite")
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 4, "Suite")
     assert(t.container.width == t.anchor.width, "class power is not as wide as the Essential row: " .. tostring(t.container.width))
     assert(t.container._msufHardLockPoint == "BOTTOM", "hard lock point " .. tostring(t.container._msufHardLockPoint))
     assert(t.container._msufStableExternalAnchor == t.anchor and t.container._msufDirectCooldownAnchor == true)
     assert(t.cache["classpower:classpower"] and t.cache["classpower:classpower"].point == "BOTTOM",
         "the screen cache recorded a different edge than the live anchor")
-    -- Offsets keep their meaning: +Y moves the bar up, away from the row.
+    -- New top-anchor offsets add to the visible four-pixel gap.
     MSUF_DB.bars.classPowerOffsetX, MSUF_DB.bars.classPowerOffsetY = 3, 5
+    MSUF_DB.bars.classPowerCooldownTopAnchor = true
     Relayout(t)
-    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, 5, "Suite with offsets")
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, 9, "Suite with offsets")
     -- Combat-edge restore from the screen cache keeps the BOTTOM edge.
     t.container._msufPositionInitialized = nil
     t.container._msufHardLockPoint = nil
@@ -616,7 +617,7 @@ Case("class power: on the Suite anchor the bar sits on top of the Essential row"
     -- Out of combat with the Suite's bar hidden, the last screen position is
     -- restored on the same BOTTOM edge.
     Relayout(t)
-    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, 5, "Suite after combat")
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, 9, "Suite after combat")
     t.anchor.shown = false
     t.container._msufHardLockPoint = nil
     Relayout(t)
@@ -625,34 +626,34 @@ Case("class power: on the Suite anchor the bar sits on top of the Essential row"
         "a hidden Suite bar restored the cached position on " .. tostring(t.container._msufHardLockPoint))
     t.anchor.shown = true
     Relayout(t)
-    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, 5, "Suite shown again")
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, 9, "Suite shown again")
     t.module.Disable()
     t.module.Shutdown()
 end)
 
 for _, provider in ipairs({ "Coolinator", "EllesmereUICooldownManager", "ArcUI", "SkironCooldownManager", "Blizzard", false }) do
-    Case("class power: " .. tostring(provider or "no provider") .. " keeps the bar under the anchor", function()
+    Case("class power: " .. tostring(provider or "no provider") .. " keeps the Mainline top anchor", function()
         local t = StartClassPower(provider or nil)
-        ExpectPoint(t, "TOP", t.anchor, "BOTTOM", 0, 0, tostring(provider))
-        assert(t.container._msufHardLockPoint == "TOP")
-        assert(t.cache["classpower:classpower"].point == "TOP", "cache edge changed for " .. tostring(provider))
+        ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 4, tostring(provider))
+        assert(t.container._msufHardLockPoint == "BOTTOM")
+        assert(t.cache["classpower:classpower"].point == "BOTTOM", "cache edge changed for " .. tostring(provider))
         t.module.Disable()
         t.module.Shutdown()
     end)
 end
 
-Case("class power: the Suite id on a different frame keeps the bar under the anchor", function()
+Case("class power: the Mainline top anchor survives provider changes", function()
     local t = StartClassPower(SUITE_ID)
     t.providerSource = t.env:CreateFrame("Frame", nil, UIParent)
     Relayout(t)
-    ExpectPoint(t, "TOP", t.anchor, "BOTTOM", 0, 0, "Suite id, foreign frame")
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 4, "Suite id, foreign frame")
     -- Switching the provider live flips the edge on the next layout.
     t.providerSource = nil
     Relayout(t)
-    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 0, "Suite again")
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 4, "Suite again")
     t.provider = "Coolinator"
     Relayout(t)
-    ExpectPoint(t, "TOP", t.anchor, "BOTTOM", 0, 0, "back to Coolinator")
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 4, "back to Coolinator")
     t.module.Disable()
     t.module.Shutdown()
 end)

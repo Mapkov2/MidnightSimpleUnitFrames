@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "2A74E840A64861D05520BDF0DFEA1433DD1FCD41B1B3D517096E5D72F3AC448F",
-    currentVersion = "6.5-beta8",
+    sourceSha256 = "FF7D2062B7F1F79301C563C0B1EE6C59CF428DB4A7837F15E9026171DF3A79BA",
+    currentVersion = "6.5-beta9",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-beta7",
-    rangeLabel = "6.5-beta7 -> 6.5-beta8",
+    previousVersion = "6.5-beta8",
+    rangeLabel = "6.5-beta8 -> 6.5-beta9",
     entries = {
+        {
+            version = "6.5-beta9",
+            date = "2026-09-25",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Show pet buffs and debuffs on the Pet frame. Configure the pet aura lanes under Pet > Auras.",
+                            link = {
+                                pageKey = "uf_pet",
+                                query = "pet buff visible",
+                                label = "Pet buff visibility",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_pet.auras.unit-workspace.lane.buff.layout.visible",
+                                settingKey = "auras3.pet.buff.visible",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "WoW Forever's supplied factory profile has its own updated unit-frame defaults. Existing saved profiles remain unchanged.",
+                        "The Pet frame includes Classic-specific aura and XP controls. Pet XP appears only when the client supplies pet XP data.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta8",
             date = "2026-09-25",

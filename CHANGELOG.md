@@ -1,5 +1,16 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta9 - 2026-09-25
+
+### Highlights
+
+- **Show pet buffs and debuffs on the Pet frame.** Configure the pet aura lanes under Pet > Auras.
+<!-- msuf-menu-link: {"pageKey":"uf_pet","sectionId":"auras","controlId":"menu2.uf_pet.auras.unit-workspace.lane.buff.layout.visible","settingKey":"auras3.pet.buff.visible","prepareKind":"","prepareValue":"","query":"pet buff visible","label":"Pet buff visibility"} -->
+### Changes
+
+- WoW Forever's supplied factory profile has its own updated unit-frame defaults. Existing saved profiles remain unchanged.
+- The Pet frame includes Classic-specific aura and XP controls. Pet XP appears only when the client supplies pet XP data.
+
 ## 6.5-beta8 - 2026-09-25
 
 ### Highlights

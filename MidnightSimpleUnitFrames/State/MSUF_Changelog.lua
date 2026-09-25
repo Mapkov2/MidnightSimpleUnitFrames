@@ -8,12 +8,41 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "2A74E840A64861D05520BDF0DFEA1433DD1FCD41B1B3D517096E5D72F3AC448F",
-    currentVersion = "6.5-beta8",
-    historyFromVersion = "6.5-beta5",
-    previousVersion = "6.5-beta7",
-    rangeLabel = "6.5-beta7 -> 6.5-beta8",
+    sourceSha256 = "FF7D2062B7F1F79301C563C0B1EE6C59CF428DB4A7837F15E9026171DF3A79BA",
+    currentVersion = "6.5-beta9",
+    historyFromVersion = "6.5-beta6",
+    previousVersion = "6.5-beta8",
+    rangeLabel = "6.5-beta8 -> 6.5-beta9",
     entries = {
+        {
+            version = "6.5-beta9",
+            date = "2026-09-25",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Show pet buffs and debuffs on the Pet frame. Configure the pet aura lanes under Pet > Auras.",
+                            link = {
+                                pageKey = "uf_pet",
+                                query = "pet buff visible",
+                                label = "Pet buff visibility",
+                                sectionId = "auras",
+                                controlId = "menu2.uf_pet.auras.unit-workspace.lane.buff.layout.visible",
+                                settingKey = "auras3.pet.buff.visible",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "WoW Forever's supplied factory profile has its own updated unit-frame defaults. Existing saved profiles remain unchanged.",
+                        "The Pet frame includes Classic-specific aura and XP controls. Pet XP appears only when the client supplies pet XP data.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta8",
             date = "2026-09-25",
@@ -173,56 +202,6 @@ local data = {
                         "Corrected Blizzard-style portrait rim and mask alignment, foreground opacity and layer behavior, and portrait zoom after native refreshes.",
                         "Fixed Classic aura filtering and faction handling, Class Resource refreshes and previews, font previews, and several default-setting inconsistencies.",
                         "Reused completed pixel-layout setup to avoid repeated work while keeping deferred combat updates available.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta5",
-            date = "2026-09-19",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "See your aggro as a percentage. Classic Era, TBC and WoW Forever can show Threat % on supported Target, Focus and Boss frames, with 100% meaning you have aggro. Open the Target's Threat % status to adjust its placement, size, background and threat coloring.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "threat percent",
-                                label = "Target Threat %",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_target.unit.status.selected.size",
-                                settingKey = "target.threatIndicatorSize",
-                                prepareKind = "unitStatus",
-                                prepareValue = "statusThreat",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Party and Raid frames can show each member's threat percentage against your current target on Classic Era, TBC and WoW Forever. Party threat text starts enabled; Raid threat text is opt-in.",
-                        "Threat text can follow a configurable low, medium and high threat color curve. Adjust the colors under Appearance > Colors > Status Text Colors or through the Threat % status editor.",
-                        "Updated the shared factory profile, including Slug font rendering, Focus and Target-of-Target placement, Pet transparency and Party threat text. Fresh installs, new profiles and profile resets use the new baseline.",
-                        "Consolidated target-based combo point handling across Classic clients and WoW Forever.",
-                        "Menu search now filters client-specific controls by availability, including Pet Happiness and Threat %.",
-                        "Section Copy To lists only supported frames and marks disabled frames as unavailable destinations.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "WoW Forever: added a temporary workaround for the client bug that prevented secure group-frame setup and made Party, Raid and Priority frames disappear when joining a group.",
-                        "Classic clients: repaired untouched sparse factory aura layouts from 6.5-alpha18 through beta3 while preserving customized aura owners.",
-                        "Classic clients: the cleanse border now respects the Friendly, Enemy and Both display conditions selected under Bars.",
-                        "Classic clients: Buff/Debuff lanes and custom containers now use the same sorting and Hide permanent rules.",
-                        "Classic clients: group-frame auras refresh when a roster change assigns a different member to the same party or raid slot.",
-                        "Classic clients: hid the unsupported Pandemic-only effect option and corrected client-specific menu search entries.",
-                        "Classic previews now show the power gradient and class-resource text layer correctly; Mists Boss previews also show the boss-target marker.",
-                        "Corrected analytics initialization writing to an unintended global instead of the account-wide settings table.",
-                        "Cooldown Manager anchoring now checks whether the client actually supports the manager before offering or applying the anchor.",
-                        "Strengthened client startup checks, menu-index validation and beta release packaging.",
                     },
                 },
             },
