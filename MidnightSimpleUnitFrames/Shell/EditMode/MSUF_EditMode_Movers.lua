@@ -300,7 +300,7 @@ local function CreateMover(key, cfg)
     local mover = PixelLayoutRegion(CreateFrame("Button", nil, moverParent), true)
     mover:SetSize(100, 30)
     mover:SetFrameStrata("FULLSCREEN")
-    mover:SetFrameLevel(cfg.popupType == "castbar" and 340 or 300)
+    mover:SetFrameLevel(cfg.popupType == "castbar" and 340 or cfg.popupType == "resource" and 330 or 300)
     mover:SetMovable(true); mover:RegisterForDrag("LeftButton")
     if mover.RegisterForClicks then mover:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     mover:EnableMouse(true); mover:SetClampedToScreen(true)
@@ -411,8 +411,8 @@ local function CreateMover(key, cfg)
         if externalHistoryStarted then
             self._msufHistoryDrag = true
         else
-            local historyCategory = cfg.popupType == "castbar" and "castbar" or "unit"
-            local historyKey = cfg.popupType == "castbar" and (cfg.castbarUnit or key:sub(9)) or key
+            local historyCategory = cfg.historyCategory or (cfg.popupType == "castbar" and "castbar" or "unit")
+            local historyKey = cfg.historyKey or (cfg.popupType == "castbar" and (cfg.castbarUnit or key:sub(9)) or key)
             if type(_G.MSUF_EM_UndoBeginChange) == "function" then
                 self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
             elseif _G.MSUF_EM_UndoBeforeChange then
@@ -512,10 +512,12 @@ function Movers.Show()
     local reg = EM2.Registry and EM2.Registry.All()
     if not reg then return end
     for k, c in pairs(reg) do
-        if not movers[k] then CreateMover(k, c) end
-        local m = movers[k]
         local f = c.getFrame and c.getFrame()
-        if f then SyncMoverToFrame(m, f, c); m:Show(); m:UpdateLabelVisibility() else m:Hide() end
+        if not movers[k] and (c.popupType ~= "resource" or f) then CreateMover(k, c) end
+        local m = movers[k]
+        if m then
+            if f then SyncMoverToFrame(m, f, c); m:Show(); m:UpdateLabelVisibility() else m:Hide() end
+        end
     end
     Movers.RefreshGuidedPlacementCue()
 end
@@ -553,15 +555,17 @@ function Movers.SyncAll()
     if not reg then return end
     for k, c in pairs(reg) do
         if c then
-            if not movers[k] then CreateMover(k, c) end
-            local m = movers[k]
             local f = c.getFrame and c.getFrame()
-            if f then
-                SyncMoverToFrame(m, f, c)
-                m:Show()
-                m:UpdateLabelVisibility()
-            elseif m then
-                m:Hide()
+            if not movers[k] and (c.popupType ~= "resource" or f) then CreateMover(k, c) end
+            local m = movers[k]
+            if m then
+                if f then
+                    SyncMoverToFrame(m, f, c)
+                    m:Show()
+                    m:UpdateLabelVisibility()
+                else
+                    m:Hide()
+                end
             end
         end
     end
@@ -738,6 +742,68 @@ local function CastbarEnabled(unit)
     end
 end
 
+local function GetClassResourceFrame()
+    local frame = _G.MSUF_ClassPowerContainer
+    if frame and frame.IsShown and frame:IsShown() and frame._msufAnchorOnly ~= true
+        and frame.GetCenter and frame:GetCenter() then return frame end
+end
+
+local function GetDetachedPowerFrame(unit)
+    local conf = GetConf(unit)
+    if not (conf and conf.powerBarDetached == true) then return nil end
+    local owner = GetUF(unit)
+    local bar = owner and (owner.targetPowerBar or owner.powerBar or owner.Power)
+    if bar and bar._msufDetached == true and bar.IsShown and bar:IsShown()
+        and bar.GetCenter and bar:GetCenter() then return bar end
+end
+
+local function ResourceMoverBounds(frame, above)
+    if not frame then return nil end
+    local l, r, t, b = FrameRectToUI(frame)
+    if not l then return nil end
+    local extra = max(0, 16 - (t - b))
+    if above then t = t + extra else b = b - extra end
+    return l, r, t, b
+end
+
+local function CommitDetachedPowerPosition(unit)
+    if ApplySettingsForKeySafe(unit) then return true end
+    local refresh = _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey
+    return type(refresh) == "function" and refresh(unit, true) or false
+end
+
+local function CommitClassResourcePosition()
+    local refresh = _G.MSUF_ClassPower_RefreshLayout
+    return type(refresh) == "function" and refresh() or false
+end
+
+local function RegisterResourceMovers()
+    Reg.Register({
+        key = "classpower", label = "Class Resources", order = 101,
+        popupType = "resource", resourceKind = "classpower", canNudge = false,
+        historyCategory = "classpower", historyKey = "bars",
+        subframeOffsetXKey = "classPowerOffsetX", subframeOffsetYKey = "classPowerOffsetY",
+        getFrame = GetClassResourceFrame,
+        getMoverBounds = function() return ResourceMoverBounds(GetClassResourceFrame(), true) end,
+        getConf = function() local db = _G.MSUF_DB; return db and db.bars end,
+        commitSubframePosition = CommitClassResourcePosition,
+    })
+    local units = { "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget" }
+    for _, unit in ipairs(units) do
+        Reg.Register({
+            key = "power_" .. unit, label = "Detached power bar", order = 102,
+            popupType = "resource", resourceKind = "power", resourceUnit = unit,
+            canNudge = false, historyCategory = "power", historyKey = unit,
+            subframeOffsetXKey = "detachedPowerBarOffsetX",
+            subframeOffsetYKey = "detachedPowerBarOffsetY",
+            getFrame = function() return GetDetachedPowerFrame(unit) end,
+            getMoverBounds = function() return ResourceMoverBounds(GetDetachedPowerFrame(unit), false) end,
+            getConf = function() return GetConf(unit) end,
+            commitSubframePosition = function() return CommitDetachedPowerPosition(unit) end,
+        })
+    end
+end
+
 local function RegisterCastbarMover(unit, label, order)
     Reg.Register({
         key         = "castbar_" .. unit,
@@ -821,9 +887,10 @@ local function RegisterAll()
     RegisterCastbarMover("boss", "Boss Castbar", 113)
     RegisterCastbarMover("arena", "Arena Castbar", 114)
 
+    RegisterResourceMovers()
+
     --- Future Phase 2 registrations:
     --- Auras3 groups (per-unit)
-    --- Class Power bar
     --- These will register when their respective modules load.
 end
 

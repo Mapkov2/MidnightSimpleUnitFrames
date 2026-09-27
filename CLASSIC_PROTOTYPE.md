@@ -814,6 +814,14 @@ the active MSUF provider; `SupportsClassResourceSetting(settingKey)` gates
 resource-specific behavior controls and cold search results. The preview and
 Class Power color menus use the same model. Saved profile keys are preserved.
 
+MSUF Edit Mode exposes a mover for a visible Class Resource bar and separate
+movers for detached unit Power Bars. Their quick popup edits X/Y, width and
+height. Player Power can remain anchored to Class Resources and follow a
+Combo Point move, while dragging Player Power changes only its own offset.
+The popup's Anchor class and Sync class controls keep those two relationships
+independent. Manual width changes select the matching manual width source.
+No mover is shown for an embedded or unavailable bar.
+
 - Vanilla, TBC and Forever: Rogue and Cat Form combo points, five uncharged pips.
 - Mists: combo points, runes, Holy Power, Chi, Arcane Charges, Shadow Orbs,
   Soul Shards, Burning Embers, Demonic Fury and Eclipse. Previews use the Mists

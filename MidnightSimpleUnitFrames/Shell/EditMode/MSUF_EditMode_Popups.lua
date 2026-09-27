@@ -50,6 +50,7 @@ end
 
 function Popups.CloseAll()
     if EM2.ExternalPopup then EM2.ExternalPopup.Close() end
+    if EM2.ResourcePopup then EM2.ResourcePopup.Close() end
     if EM2.UnitPopup then EM2.UnitPopup.Close() end
     if EM2.CastPopup then EM2.CastPopup.Close() end
     if EM2.AuraPopup then EM2.AuraPopup.Close() end
@@ -87,6 +88,8 @@ function Popups.Open(key, anchorFrame)
             external.Select(key, "mover", anchorFrame)
         end
         if EM2.ExternalPopup then EM2.ExternalPopup.Open(key, anchorFrame) end
+    elseif pType == "resource" then
+        if EM2.ResourcePopup then EM2.ResourcePopup.Open(key) end
     elseif pType == "unit" then
         ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
@@ -144,6 +147,7 @@ end
 
 function Popups.IsAnyOpen()
     return (EM2.ExternalPopup and EM2.ExternalPopup.IsOpen())
+        or (EM2.ResourcePopup and EM2.ResourcePopup.IsOpen())
         or (EM2.UnitPopup and EM2.UnitPopup.IsOpen())
         or (EM2.CastPopup and EM2.CastPopup.IsOpen())
         or (EM2.AuraPopup and EM2.AuraPopup.IsOpen())
@@ -625,6 +629,158 @@ function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end
 function UnitPopup.RefreshHistory() if pf and pf:IsShown() and pf._refreshUndoRedo then pf._refreshUndoRedo() end end
+
+-- Class Resources and detached power have their own saved offsets. Keep their
+-- Edit Mode controls scoped to those settings rather than the Player frame.
+local resourceFrame
+local ResourcePopup = {}
+EM2.ResourcePopup = ResourcePopup
+
+local function ResourceConfig()
+    local cfg = resourceFrame and EM2.Registry and EM2.Registry.Get(resourceFrame.resourceKey)
+    return cfg, cfg and cfg.getConf and cfg.getConf()
+end
+
+local function ResourceValue(value, fallback, low, high)
+    value = tonumber(value)
+    if not value or value ~= value then return fallback end
+    return floor(max(low, min(high, value)) + 0.5)
+end
+
+function ResourcePopup.Sync()
+    if not (resourceFrame and resourceFrame:IsShown()) then return end
+    local cfg, conf = ResourceConfig()
+    if not (cfg and conf) then return end
+    local frame = cfg.getFrame and cfg.getFrame()
+    if not frame then ResourcePopup.Close(); return end
+    resourceFrame._titleFS:SetText(Tr(cfg.resourceKind == "classpower" and "Class Resources" or "Detached power bar"))
+    Quick.SetBoxText(resourceFrame.xBox, conf[cfg.subframeOffsetXKey] or 0)
+    Quick.SetBoxText(resourceFrame.yBox, conf[cfg.subframeOffsetYKey] or (cfg.resourceKind == "power" and -4 or 0))
+    Quick.SetBoxText(resourceFrame.wBox, frame and floor(frame:GetWidth() + 0.5) or 0)
+    Quick.SetBoxText(resourceFrame.hBox, cfg.resourceKind == "classpower"
+        and (conf.classPowerHeight or (frame and floor(frame:GetHeight() + 0.5)) or 4)
+        or (conf.detachedPowerBarHeight or (frame and floor(frame:GetHeight() + 0.5)) or 6))
+    local isPlayerPower = cfg.resourceKind == "power" and cfg.resourceUnit == "player"
+    resourceFrame.syncBtn:SetShown(isPlayerPower)
+    resourceFrame.anchorBtn:SetShown(isPlayerPower)
+    if isPlayerPower then
+        resourceFrame.syncBtn:SetCheckedVisual(conf.detachedPowerBarSyncClassPower ~= false)
+        resourceFrame.anchorBtn:SetCheckedVisual(conf.detachedPowerBarAnchorToClassPower == true)
+    end
+end
+
+local function ApplyResource()
+    if BlockConfigCombatLocked() then return end
+    local cfg, conf = ResourceConfig()
+    if not (cfg and conf) then return end
+    local kind = cfg.resourceKind
+    local xKey, yKey = cfg.subframeOffsetXKey, cfg.subframeOffsetYKey
+    local oldX = tonumber(conf[xKey]) or 0
+    local oldY = tonumber(conf[yKey]) or (kind == "power" and -4 or 0)
+    local x = ResourceValue(resourceFrame.xBox:GetText(), oldX, -3000, 3000)
+    local y = ResourceValue(resourceFrame.yBox:GetText(), oldY, -3000, 3000)
+    local widthKey = kind == "classpower" and "classPowerWidth" or "detachedPowerBarWidth"
+    local heightKey = kind == "classpower" and "classPowerHeight" or "detachedPowerBarHeight"
+    local frame = cfg.getFrame and cfg.getFrame()
+    if not frame then ResourcePopup.Close(); return end
+    local oldWidth = frame and floor(frame:GetWidth() + 0.5) or tonumber(conf[widthKey]) or 0
+    local oldHeight = tonumber(conf[heightKey]) or (kind == "classpower" and 4 or 6)
+    local width = ResourceValue(resourceFrame.wBox:GetText(), oldWidth, kind == "classpower" and 30 or 20, 800)
+    local height = ResourceValue(resourceFrame.hBox:GetText(), oldHeight, 2, kind == "classpower" and 30 or 80)
+    local widthChanged = width ~= oldWidth
+    local sync = kind == "power" and cfg.resourceUnit == "player"
+        and resourceFrame.syncBtn._checked == true or false
+    local anchor = kind == "power" and cfg.resourceUnit == "player"
+        and resourceFrame.anchorBtn._checked == true or false
+    local changed = x ~= oldX or y ~= oldY or height ~= oldHeight or widthChanged
+    if kind == "power" and cfg.resourceUnit == "player" then
+        changed = changed or sync ~= (conf.detachedPowerBarSyncClassPower ~= false)
+            or anchor ~= (conf.detachedPowerBarAnchorToClassPower == true)
+    end
+    if not changed then return end
+    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+        _G.MSUF_EM_UndoBeforeChange(cfg.historyCategory, cfg.historyKey)
+    end
+    conf[xKey], conf[yKey], conf[heightKey] = x, y, height
+    if widthChanged then
+        conf[widthKey] = width
+        if kind == "classpower" then
+            conf.classPowerWidthMode = "custom"
+        else
+            local db = _G.MSUF_DB
+            if db and db.bars then db.bars.detachedPowerBarWidthMode = nil end
+            if cfg.resourceUnit == "player" then sync = false end
+        end
+    end
+    if kind == "power" and cfg.resourceUnit == "player" and not sync
+        and conf.detachedPowerBarSyncClassPower ~= false and not widthChanged then
+        -- Releasing width sync keeps the width currently shown on screen.
+        conf.detachedPowerBarWidth = oldWidth
+    end
+    if kind == "power" and cfg.resourceUnit == "player" then
+        conf.detachedPowerBarSyncClassPower = sync
+        conf.detachedPowerBarAnchorToClassPower = anchor
+    end
+    if kind == "classpower" then
+        local refresh = _G.MSUF_ClassPower_RefreshLayout
+        if type(refresh) == "function" then refresh() end
+        ApplyPowerLayoutForUnitKey("player", true)
+    else
+        if not ApplySettingsForKeySafe(cfg.resourceUnit) then ApplyAllSettingsSafe() end
+        ApplyPowerLayoutForUnitKey(cfg.resourceUnit, true)
+    end
+    ResourcePopup.Sync()
+    SyncMovers()
+    RefreshUFPreview("EM2_RESOURCE_POPUP_APPLY", cfg.resourceUnit or "player")
+end
+
+local function BuildResourcePopup()
+    if resourceFrame then return resourceFrame end
+    resourceFrame = Quick.CreateShell("MSUF_EM2_ResourcePopup", {
+        width = 560, height = 285, title = "Class Resources",
+        liveStatus = true, hoverSource = "resource-popup", blocker = BlockConfigCombatLocked,
+    })
+    Quick.ValuePairAt(resourceFrame, resourceFrame, 20, -64,
+        "X offset", "xBox", ApplyResource, "Y offset", "yBox", ApplyResource)
+    Quick.ValuePairAt(resourceFrame, resourceFrame, 20, -112,
+        "Width", "wBox", ApplyResource, "Height", "hBox", ApplyResource)
+    local toggleOpts = { palette = C, sync = ResourcePopup.Sync }
+    resourceFrame.syncBtn = Quick.ToggleAt(resourceFrame, "Sync class", 20, -165, 155, 30, ApplyResource, toggleOpts)
+    resourceFrame.anchorBtn = Quick.ToggleAt(resourceFrame, "Anchor class", 190, -165, 165, 30, ApplyResource, toggleOpts)
+    if Quick.AddFooterControls then
+        Quick.AddFooterControls(resourceFrame, {
+            anchor = "BOTTOM", bottomGap = 12,
+            onResetPosition = function()
+                if not resourceFrame then return end
+                resourceFrame.xBox:SetText("0")
+                local cfg = ResourceConfig()
+                resourceFrame.yBox:SetText(cfg and cfg.resourceKind == "power" and "-4" or "0")
+                ApplyResource()
+            end,
+        })
+    end
+    if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(resourceFrame) end
+    return resourceFrame
+end
+
+function ResourcePopup.Open(key)
+    if BlockConfigCombatLocked() then return false end
+    local cfg = EM2.Registry and EM2.Registry.Get(key)
+    if not (cfg and cfg.popupType == "resource" and cfg.getFrame and cfg.getFrame()) then return false end
+    local frame = BuildResourcePopup()
+    frame.resourceKey = key
+    frame:Show()
+    ResourcePopup.Sync()
+    return true
+end
+
+function ResourcePopup.Close() if resourceFrame then resourceFrame:Hide() end end
+function ResourcePopup.IsOpen() return resourceFrame and resourceFrame:IsShown() or false end
+function ResourcePopup.RefreshHistory()
+    if resourceFrame and resourceFrame:IsShown() and resourceFrame._refreshUndoRedo then
+        resourceFrame._refreshUndoRedo()
+    end
+end
 local ASSISTANT_UNIT_FIELDS = {
     x = { "xBox" }, y = { "yBox" }, width = { "wBox" }, height = { "hBox" },
     detachedX = { "dpbXBox" }, detachedY = { "dpbYBox" }, detachedWidth = { "dpbWBox" },

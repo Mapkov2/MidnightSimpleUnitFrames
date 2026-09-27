@@ -1568,6 +1568,31 @@ local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
     return true
 end
 
+local function ApplySubframeDragPosition(d, centerX, centerY, uiScale)
+    if not (d and d.bar and d.conf and d.cfg and d.cfg.subframeOffsetXKey) then return false end
+    local scale = d.bar.GetEffectiveScale and d.bar:GetEffectiveScale() or 1
+    if scale <= 0 then scale = 1 end
+    local nextX = (d.subframeStartX or 0) + round(((centerX or d.startCX) - d.startCX) * uiScale / scale)
+    local nextY = (d.subframeStartY or 0) + round(((centerY or d.startCY) - d.startCY) * uiScale / scale)
+    local xKey, yKey = d.cfg.subframeOffsetXKey, d.cfg.subframeOffsetYKey
+    if d.lastSubframeX == nextX and d.lastSubframeY == nextY then return true end
+
+    -- Preserve the live Player or Class Resource anchor. Only the owner's own
+    -- offset changes, so a bound Energy bar follows Combo Points while either
+    -- bar can still be dragged independently.
+    local point, anchor, relativePoint, x, y = d.bar:GetPoint(1)
+    if not point then return false end
+    anchor = anchor or d.bar:GetParent()
+    relativePoint = relativePoint or point
+    if not anchor then return false end
+    local dx = nextX - (d.lastSubframeX or d.subframeStartX or 0)
+    local dy = nextY - (d.lastSubframeY or d.subframeStartY or 0)
+    if not TryApplyFramePoint(d.bar, point, anchor, relativePoint, (x or 0) + dx, (y or 0) + dy) then return false end
+    d.conf[xKey], d.conf[yKey] = nextX, nextY
+    d.lastSubframeX, d.lastSubframeY = nextX, nextY
+    return true
+end
+
 local GROUP_VALID_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
 
 local function ResolveGroupAnchor(conf, owner)
@@ -1630,6 +1655,17 @@ local function SyncUnitPopupDuringDrag(d, elapsed)
     if d.popupSyncAcc >= 0.05 then
         d.popupSyncAcc = 0
         if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
+    end
+end
+
+local function SyncResourcePopupDuringDrag(d, elapsed)
+    if not d then return end
+    d.popupSyncAcc = (d.popupSyncAcc or 0) + (elapsed or 0)
+    if d.popupSyncAcc >= 0.05 then
+        d.popupSyncAcc = 0
+        if EM2.ResourcePopup and EM2.ResourcePopup.IsOpen and EM2.ResourcePopup.IsOpen() then
+            EM2.ResourcePopup.Sync()
+        end
     end
 end
 
@@ -1896,6 +1932,8 @@ local function OnUpdate(self, elapsed)
         local positioned
         if d.externalPublicElement then
             positioned = ApplyPublicExternalDragPosition(d, snapCX, snapCY, "preview")
+        elseif d.isSubframe then
+            positioned = ApplySubframeDragPosition(d, snapCX, snapCY, sc)
         elseif d.isCastbar then
             positioned = ApplyCastbarDragPosition(d, snapCX, snapCY)
         elseif d.isGroupFrame then
@@ -1946,6 +1984,10 @@ local function OnUpdate(self, elapsed)
         if d.externalPublicElement then
             NotifyFocusDuringDrag(d, elapsed)
             return
+        elseif d.isSubframe then
+            SyncResourcePopupDuringDrag(d, elapsed)
+            NotifyFocusDuringDrag(d, elapsed)
+            return
         elseif d.isCastbar then
             SyncCastbarPopupDuringDrag(d, elapsed)
             NotifyFocusDuringDrag(d, elapsed)
@@ -1972,6 +2014,7 @@ local function BuildDrag(mover, key, cfg, start)
     local externalPublicElement = cfg.externalPublicElement == true
     local conf = cfg.getConf and cfg.getConf()
     local isCastbar = (cfg.popupType == "castbar") or (type(key) == "string" and key:sub(1, 8) == "castbar_")
+    local isSubframe = type(cfg.subframeOffsetXKey) == "string" and type(cfg.subframeOffsetYKey) == "string"
     local castbarUnit = cfg.castbarUnit
     if isCastbar and (not castbarUnit or castbarUnit == "") then
         castbarUnit = key:sub(9)
@@ -2114,6 +2157,9 @@ local function BuildDrag(mover, key, cfg, start)
         isArenaLayout = isArenaLayout,
         groupKind    = groupKind,
         isCastbar    = isCastbar,
+        isSubframe   = isSubframe,
+        subframeStartX = isSubframe and (tonumber(conf[cfg.subframeOffsetXKey]) or 0) or nil,
+        subframeStartY = isSubframe and (tonumber(conf[cfg.subframeOffsetYKey]) or (cfg.resourceKind == "power" and -4 or 0)) or nil,
         castbarUnit  = castbarUnit,
         castbarXKey  = castbarXKey,
         castbarYKey  = castbarYKey,
@@ -2144,6 +2190,10 @@ local function BuildDrag(mover, key, cfg, start)
         end
         drag.unitStartX = tonumber(start.offsetX) or drag.unitStartX
         drag.unitStartY = tonumber(start.offsetY) or drag.unitStartY
+        if isSubframe then
+            drag.subframeStartX = tonumber(start.offsetX) or drag.subframeStartX
+            drag.subframeStartY = tonumber(start.offsetY) or drag.subframeStartY
+        end
         drag.castbarStartX = tonumber(start.castbarX) or drag.castbarStartX
         drag.castbarStartY = tonumber(start.castbarY) or drag.castbarStartY
     end
@@ -2177,6 +2227,8 @@ function Ticker.ApplyExternalDrag(drag)
     if centerX == nil or centerY == nil then return false end
     if drag.externalPublicElement then
         return ApplyPublicExternalDragPosition(drag, centerX, centerY, "preview")
+    elseif drag.isSubframe then
+        return ApplySubframeDragPosition(drag, centerX, centerY, UIParent:GetEffectiveScale() or drag.uiScale or 1)
     elseif drag.isCastbar then
         return ApplyCastbarDragPosition(drag, centerX, centerY)
     elseif drag.isGroupFrame then
@@ -2236,6 +2288,15 @@ function Ticker.EndDrag()
         if d.externalPublicElement then
             -- The provider callback already applied and persisted the final
             -- position. It remains the sole owner of its frame and saved data.
+        elseif d.isSubframe then
+            ApplySubframeDragPosition(d, cx, cy, uiScale)
+            if type(d.cfg.commitSubframePosition) == "function" then d.cfg.commitSubframePosition() end
+            C_Timer.After(0.06, function()
+                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+            end)
+            if EM2.ResourcePopup and EM2.ResourcePopup.Sync then EM2.ResourcePopup.Sync() end
+            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
+            RefreshUFPreview("EM2_RESOURCE_DRAG_END", d.cfg.resourceUnit or "player")
         elseif d.isCastbar then
             local centralized = false
             if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then

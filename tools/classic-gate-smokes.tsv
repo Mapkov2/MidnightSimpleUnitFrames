@@ -122,6 +122,7 @@ clients+Forever	lua	tools/tests/uf_engine_client_gates_smoke.lua	{root/} {flavor
 -	lua	tools/tests/classic_range_fade_smoke.lua	{root/}	Classic range fade smoke failed
 clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	Optional integration contract failed: {flavor}
 -	lua+driver	tools/tests/classic_editmode_smoke.lua	{root/}	Classic Edit Mode smoke failed
+-	lua	tools/tests/classic_resource_editmode_smoke.lua	{root/}	Class Resource and detached Power Edit Mode smoke failed
 -	lua+driver	tools/tests/arena_editmode_exit_restore_smoke.lua	{root/}	Arena Edit Mode exit restore smoke failed
 -	lua+driver	tools/tests/classic_menu_retail_parity_smoke.lua	{root/}	Classic Menu2 Retail parity smoke failed
 classics	lua	tools/tests/classic_unit_preview_parity_smoke.lua	{root/} {flavor}	Classic unit preview parity smoke failed: {flavor}

@@ -133,6 +133,11 @@ function Controller:IsSessionReady()
 end
 
 function Controller:ApplyKey(key)
+    local cfg = EM2.Registry and EM2.Registry.Get(key)
+    if cfg and cfg.popupType == "resource" then
+        if type(cfg.commitSubframePosition) == "function" then cfg.commitSubframePosition() end
+        return
+    end
     local util = EM2.Util
     if util and type(util.ApplySettingsForKeySafe) == "function" then
         util.ApplySettingsForKeySafe(key)
@@ -144,6 +149,10 @@ end
 function Controller:StoredFallback(cfg, key)
     local conf = cfg and cfg.getConf and cfg.getConf() or nil
     if type(conf) ~= "table" then return 0, 0 end
+    if cfg.subframeOffsetXKey then
+        return tonumber(conf[cfg.subframeOffsetXKey]) or 0,
+            tonumber(conf[cfg.subframeOffsetYKey]) or (cfg.resourceKind == "power" and -4 or 0)
+    end
     local unit = self:CastbarUnit(cfg, key)
     if unit then
         local fields = CASTBAR_FIELDS[unit]
@@ -182,6 +191,7 @@ end
 
 function Controller:IsElementHidden(key, cfg)
     if not self:IsEnabled() then return true end
+    if cfg.popupType == "resource" and not cfg.getFrame() then return true end
     local castbarUnit = self:CastbarUnit(cfg, key)
     if castbarUnit then return not self:IsCastbarConfigEnabled(castbarUnit) end
     if type(cfg.isEnabled) == "function" and not cfg.isEnabled() then return true end
@@ -223,7 +233,10 @@ function Controller:BuildElement(api, key, cfg)
             self:ApplyKey(key)
             if self:IsSessionReady() then self:SyncProxy(externalKey, cfg, true) end
         end,
-        isHidden = function() return not self.advertiseProxyMovers and self:IsElementHidden(key, cfg) end,
+        isHidden = function()
+            return (cfg.popupType == "resource" or not self.advertiseProxyMovers)
+                and self:IsElementHidden(key, cfg)
+        end,
         onLiveMove = function() self:ApplyMove(self.externalBindings[externalKey]) end,
     }
     return self.spec.MakeElement(api, opts)

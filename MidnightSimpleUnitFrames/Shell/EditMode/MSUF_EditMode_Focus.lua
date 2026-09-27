@@ -344,7 +344,7 @@ function Focus.SetSelection(key, component, slot, opts)
         changedAt = GetTime and GetTime() or 0,
     })
     local cfg = state.key and EM2.Registry and EM2.Registry.Get(state.key) or nil
-    if cfg and cfg.externalPublicElement == true then opts.menu = false end
+    if cfg and (cfg.externalPublicElement == true or cfg.popupType == "resource") then opts.menu = false end
     if opts.menu ~= false then
         ApplyMenuSelection(state.key, state.component, state.slot, {
             source = opts.source,

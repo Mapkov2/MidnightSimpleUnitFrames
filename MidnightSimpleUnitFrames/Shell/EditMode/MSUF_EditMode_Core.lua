@@ -1219,6 +1219,8 @@ local HISTORY_CATEGORY_LABELS = {
     unit = "Unit frame",
     castbar = "Castbar",
     general = "General layout",
+    classpower = "Class Resources",
+    power = "Detached power bar",
     aura = "Aura layout",
     gf = "Group frame",
     external = "External frame",
@@ -1381,6 +1383,10 @@ local function CaptureState(category, key)
         -- example the external anchor picker).  Keep them in the Edit Mode
         -- undo domain without pretending they are castbar changes.
         snap.data = DeepCopy(db.general or {})
+    elseif category == "classpower" then
+        snap.data = DeepCopy(db.bars or {})
+    elseif category == "power" then
+        snap.data = { unit = DeepCopy(db[key] or {}), bars = DeepCopy(db.bars or {}) }
     elseif category == "aura" then
         snap.data = DeepCopy(db.auras3 or {})
     elseif category == "gf" then
@@ -1421,6 +1427,22 @@ local function RestoreState(snap)
         db.general = db.general or {}
         DeepRestore(db.general, snap.data)
         ApplyAllSettingsSafe()
+    elseif snap.category == "classpower" then
+        db.bars = db.bars or {}
+        DeepRestore(db.bars, snap.data)
+        if type(_G.MSUF_ClassPower_RefreshLayout) == "function" then _G.MSUF_ClassPower_RefreshLayout() end
+        if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
+            _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true)
+        end
+    elseif snap.category == "power" then
+        db[snap.key] = db[snap.key] or {}
+        db.bars = db.bars or {}
+        DeepRestore(db[snap.key], snap.data.unit)
+        DeepRestore(db.bars, snap.data.bars)
+        ApplySettingsForKeySafe(snap.key)
+        if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
+            _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(snap.key, true)
+        end
     elseif snap.category == "aura" then
         db.auras3 = db.auras3 or {}
         DeepRestore(db.auras3, snap.data)
@@ -1443,6 +1465,7 @@ local function RestoreState(snap)
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
+    if EM2.ResourcePopup and EM2.ResourcePopup.Sync then EM2.ResourcePopup.Sync() end
     Util.SyncMovers()
 
     PublishCompat("MSUF__UndoRestoring", false)
@@ -1660,6 +1683,7 @@ function Undo.RefreshControls()
     if EM2.UnitPopup and EM2.UnitPopup.RefreshHistory then EM2.UnitPopup.RefreshHistory() end
     if EM2.CastPopup and EM2.CastPopup.RefreshHistory then EM2.CastPopup.RefreshHistory() end
     if EM2.AuraPopup and EM2.AuraPopup.RefreshHistory then EM2.AuraPopup.RefreshHistory() end
+    if EM2.ResourcePopup and EM2.ResourcePopup.RefreshHistory then EM2.ResourcePopup.RefreshHistory() end
     if type(_G.MSUF_EM2_RefreshGFHistoryControls) == "function" then
         _G.MSUF_EM2_RefreshGFHistoryControls()
     end

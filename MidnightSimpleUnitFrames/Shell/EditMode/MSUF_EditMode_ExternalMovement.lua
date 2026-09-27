@@ -56,6 +56,9 @@ function Controller:EnsureProxy(externalKey)
 end
 
 function Controller:HistoryIdentity(binding)
+    if binding and binding.cfg and binding.cfg.historyCategory then
+        return binding.cfg.historyCategory, binding.cfg.historyKey or binding.key
+    end
     local unit = binding and self:CastbarUnit(binding.cfg, binding.key)
     if unit then return "castbar", unit end
     if binding and self:IsGroupConfig(binding.cfg) then
@@ -79,8 +82,8 @@ function Controller:CaptureMoveStart(binding)
     if not frame or type(conf) ~= "table" or centerX == nil or centerY == nil then return nil end
     local start = {
         centerX = centerX, centerY = centerY,
-        offsetX = tonumber(conf.offsetX) or 0,
-        offsetY = tonumber(conf.offsetY) or 0,
+        offsetX = tonumber(conf[binding.cfg.subframeOffsetXKey or "offsetX"]) or 0,
+        offsetY = tonumber(conf[binding.cfg.subframeOffsetYKey or "offsetY"]) or 0,
         bar = self.sourceFrames[binding.externalKey],
     }
     local unit = self:CastbarUnit(binding.cfg, binding.key)
@@ -321,6 +324,17 @@ function Controller:ClearPosition(externalKey, cfg, key)
     local conf = cfg and cfg.getConf and cfg.getConf() or nil
     if type(defaults) ~= "table" or type(conf) ~= "table" then return end
     self:BridgeUndoCall(_G.MSUF_EM_UndoBeforeChange, category, historyKey)
+    if cfg.subframeOffsetXKey then
+        local source = cfg.resourceKind == "classpower" and defaults.bars or defaults[cfg.resourceUnit]
+        source = source or {}
+        conf[cfg.subframeOffsetXKey] = source[cfg.subframeOffsetXKey] or 0
+        conf[cfg.subframeOffsetYKey] = source[cfg.subframeOffsetYKey]
+            or (cfg.resourceKind == "power" and -4 or 0)
+        self.sessionDirty = true
+        self:ApplyKey(key)
+        self:SyncProxy(externalKey, cfg, true)
+        return
+    end
     local unit = self:CastbarUnit(cfg, key)
     if unit then
         local fields = CASTBAR_FIELDS[unit]
@@ -336,7 +350,8 @@ function Controller:ClearPosition(externalKey, cfg, key)
 end
 
 function Controller:OpenNativePopup(key, cfg, parent)
-    if not (self:CastbarUnit(cfg, key) or self:IsGroupConfig(cfg) or self:IsUnitConfig(cfg)) then return false end
+    if not (self:CastbarUnit(cfg, key) or self:IsGroupConfig(cfg) or self:IsUnitConfig(cfg)
+        or cfg.popupType == "resource") then return false end
     local state = EM2.State
     if state and state.SetUnitKey then state.SetUnitKey(key) end
     if EM2.Popups and type(EM2.Popups.Open) == "function" then
