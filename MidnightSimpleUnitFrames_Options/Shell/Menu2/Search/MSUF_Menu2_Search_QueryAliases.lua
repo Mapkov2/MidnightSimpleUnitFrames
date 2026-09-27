@@ -123,6 +123,7 @@ target=target frame|targetframe
 focus=focus frame|focusframe
 focustarget=focus target frame|focus target|ft frame
 pet=pet frame|petframe
+pettarget=pet target frame|pettarget|pet target|pet target position
 fram=frame|unit frame|frames|frame basics
 frame=unit frame|frames|unitframe|frame basics
 frames=unit frames|unitframe|frame basics|edit mode

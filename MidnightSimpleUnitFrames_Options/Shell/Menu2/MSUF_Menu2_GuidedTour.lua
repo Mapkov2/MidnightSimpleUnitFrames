@@ -283,7 +283,7 @@ local STAGES = {
 
 local LEGACY_STAGE_TARGET = {
     uf_focus = "uf_player", uf_pet = "uf_player", uf_target = "unit_copy_open", uf_boss = "unit_copy_open",
-    uf_targettarget = "uf_player", uf_focustarget = "uf_player",
+    uf_targettarget = "uf_player", uf_focustarget = "uf_player", uf_pettarget = "uf_player",
     gf_bars = "gf_layout", gf_indicators = "gf_spell_icons", gf_auras = "gf_spell_icons",
     opt_misc = "power_moves", gameplay = "power_moves", modules = "power_moves", profiles = "power_moves",
     opt_castbar = "opt_bars", opt_colors = "opt_bars", auras3_styling = "power_moves",

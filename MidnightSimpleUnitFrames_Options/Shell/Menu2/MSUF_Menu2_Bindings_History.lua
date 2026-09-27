@@ -330,6 +330,7 @@ local HISTORY_PAGE_RESET_UNITS = {
     uf_focustarget = "focustarget",
     uf_focus = "focus",
     uf_pet = "pet",
+    uf_pettarget = "pettarget",
     uf_boss = "boss",
     uf_arena = "arena",
 }

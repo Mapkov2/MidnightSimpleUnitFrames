@@ -195,7 +195,7 @@ for _, contract in ipairs({
     '((key == "boss" or key == "arena") and 30 or (key == "focus" and 30 or 40))',
     'ReadCastbarSize(key, g, w, (key == "boss" or key == "arena") and 12 or 18)',
     'if (key == "boss" or key == "arena")\n',
-    '(key == "target" or key == "boss" or key == "arena" or key == "focus" or key == "focustarget")',
+    '(key == "target" or key == "boss" or key == "arena" or key == "focus" or key == "focustarget" or key == "pettarget")',
     "box.layerVisibility.guides = g.unitPreviewGuidesEnabled == true",
 }) do
     assert(render:find(contract, 1, true),

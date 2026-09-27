@@ -27,6 +27,7 @@ local UNIT_SCOPES = {
     { key = "focustarget", label = "Focus Target" },
     { key = "focus", label = "Focus" },
     { key = "pet", label = "Pet" },
+    { key = "pettarget", label = "Pet Target" },
     { key = "boss", label = "Boss" },
     { key = "arena", label = "Arena" },
 }
@@ -50,6 +51,7 @@ local BAR_SCOPES = {
     { key = "focustarget", label = "Focus Target" },
     { key = "focus", label = "Focus" },
     { key = "pet", label = "Pet" },
+    { key = "pettarget", label = "Pet Target" },
     { key = "boss", label = "Boss" },
     { key = "arena", label = "Arena" },
     { key = "gf_party", label = "Party" },
@@ -92,8 +94,8 @@ local FALLBACK_UNIT_STATUS_SPECS = {
     { text = "Raid Marker", show = "showRaidMarker", defaultShow = true, layer = "raidMarkerLayer", defaultLayer = 7 },
     { text = "Level", show = "showLevelIndicator", defaultShow = true, layer = "levelIndicatorLayer", defaultLayer = 7 },
     { text = "Boss Number", show = "showBossNumberIndicator", defaultShow = false, layer = "bossNumberIndicatorLayer", defaultLayer = 7, units = "boss" },
-    { text = "Raid Group", show = "showRaidGroupInName", defaultShow = false, layer = "raidGroupNameLayer", legacyLayer = "nameTextLayer", defaultLayer = 5, units = "player target targettarget focustarget focus" },
-    { text = "Elite / Rare", show = "showEliteIcon", defaultShow = true, layer = "eliteIconLayer", defaultLayer = 7, units = "target focus targettarget focustarget boss" },
+    { text = "Raid Group", show = "showRaidGroupInName", defaultShow = false, layer = "raidGroupNameLayer", legacyLayer = "nameTextLayer", defaultLayer = 5, units = "player target targettarget focustarget focus pettarget" },
+    { text = "Elite / Rare", show = "showEliteIcon", defaultShow = true, layer = "eliteIconLayer", defaultLayer = 7, units = "target focus targettarget focustarget pettarget boss" },
     { text = "Dead / Offline Text", show = "statusDeadTextEnabled", defaultShow = true, layer = "statusTextLayer", defaultLayer = 7 },
     { text = "Ghost Text", show = "statusGhostTextEnabled", defaultShow = true, layer = "statusGhostTextLayer", defaultLayer = 7 },
     { text = "AFK Text", show = "statusAFKTextEnabled", defaultShow = false, layer = "statusAFKTextLayer", defaultLayer = 7 },
@@ -102,7 +104,7 @@ local FALLBACK_UNIT_STATUS_SPECS = {
     { text = "Combat", show = "showCombatStateIndicator", defaultShow = true, layer = "combatStateIndicatorLayer", defaultLayer = 7, units = "player target" },
     { text = "Rested", show = "showRestingIndicator", defaultShow = false, layer = "restedStateIndicatorLayer", defaultLayer = 7, units = "player" },
     { text = "Incoming Rez", show = "showIncomingResIndicator", defaultShow = true, layer = "incomingResIndicatorLayer", defaultLayer = 7, units = "player target" },
-    { text = "PvP Flag", show = "showPvpIndicator", defaultShow = true, layer = "pvpIndicatorLayer", defaultLayer = 7, units = "player target focus targettarget focustarget" },
+    { text = "PvP Flag", show = "showPvpIndicator", defaultShow = true, layer = "pvpIndicatorLayer", defaultLayer = 7, units = "player target focus targettarget focustarget pettarget" },
     { text = "Stance", show = "showStanceIndicator", defaultShow = false, layer = "stanceIndicatorLayer", defaultLayer = 7, units = "player" },
 }
 local FALLBACK_GROUP_STATUS_SPECS = {
@@ -1064,7 +1066,7 @@ end
 
 local SCOPE_LABEL = {
     player = "Player", target = "Target", targettarget = "Target of Target",
-    focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss", arena = "Arena",
+    focustarget = "Focus Target", focus = "Focus", pet = "Pet", pettarget = "Pet Target", boss = "Boss", arena = "Arena",
     party = "Party", raid = "Raid", mythicraid = "Mythic Raid",
 }
 local AREA_ORDER = {

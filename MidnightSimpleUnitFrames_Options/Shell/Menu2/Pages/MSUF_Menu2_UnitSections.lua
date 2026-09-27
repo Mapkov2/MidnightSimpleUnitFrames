@@ -150,7 +150,7 @@ local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
     end
     return false
 end
-local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "all" }
+local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "pettarget", "all" }
 -- WoW Forever runs this Mainline page without arena units, so its Copy To
 -- popup offers no target the client cannot produce (MSUF.Client.SupportsUnit).
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
@@ -162,13 +162,13 @@ if IS_FOREVER and type(M.SupportsFrameScope) == "function" then
     end
     UF_COPY_TARGET_ORDER = kept
 end
-local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, arena = 50, pet = 38, all = 38 }
-local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", boss = "Boss", arena = "Arena", all = "All" }
-local UNIT_TAB_ORDER = { "player", "target", "boss", "arena", "focus", "pet", "targettarget", "focustarget" }
-local UNIT_TAB_LABELS = { boss = "Boss Frames", arena = "Arena Frames", targettarget = "Target's Target", focustarget = "Focus Target" }
-local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", arena = "Arena", targettarget = "ToT", focustarget = "FT" }
-local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, arena = 96, focus = 58, pet = 46, targettarget = 108, focustarget = 98 }
-local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, arena = 56, focus = 50, pet = 40, targettarget = 42, focustarget = 36 }
+local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, arena = 50, pet = 38, pettarget = 40, all = 38 }
+local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", pettarget = "PT", boss = "Boss", arena = "Arena", all = "All" }
+local UNIT_TAB_ORDER = { "player", "target", "boss", "arena", "focus", "pet", "pettarget", "targettarget", "focustarget" }
+local UNIT_TAB_LABELS = { boss = "Boss Frames", arena = "Arena Frames", targettarget = "Target's Target", focustarget = "Focus Target", pettarget = "Pet Target" }
+local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", arena = "Arena", targettarget = "ToT", focustarget = "FT", pettarget = "PT" }
+local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, arena = 96, focus = 58, pet = 46, targettarget = 108, focustarget = 98, pettarget = 90 }
+local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, arena = 56, focus = 50, pet = 40, targettarget = 42, focustarget = 36, pettarget = 36 }
 local UNIT_PAGE_FOR_UNIT = {}
 for pageKey, pageInfo in pairs(UNIT_PAGES or {}) do
     if pageInfo and pageInfo.unit then UNIT_PAGE_FOR_UNIT[pageInfo.unit] = pageKey end

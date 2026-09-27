@@ -201,7 +201,7 @@ local function ResolveFocusValue(value)
     if type(value) == "function" then return value() end
     return value
 end
-local UNIT_FOCUS_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss arena"
+local UNIT_FOCUS_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet pettarget boss arena"
 local GROUP_FOCUS_KIND = {
     gf_party = "party",
     gf_raid = "raid",

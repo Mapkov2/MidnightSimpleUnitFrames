@@ -1239,7 +1239,7 @@ function ProfilesPage.UnitSelection(state)
         20, -44, max(220, state.contentW - 40), T.colors.muted)
     M.profileExportUnits = M.profileExportUnits or { player = true }
     local labels = VT("player", "Player", "target", "Target", "targettarget", "Target of Target",
-        "pet", "Pet", "focus", "Focus", "focustarget", "Focus Target", "boss", "Boss Frames", "arena", "Arena Frames")
+        "pet", "Pet", "pettarget", "Pet Target", "focus", "Focus", "focustarget", "Focus Target", "boss", "Boss Frames", "arena", "Arena Frames")
     local index = 0
     for i = 1, #labels do
         local unit, label = labels[i].value, labels[i].text

@@ -508,6 +508,7 @@ player=player frame|player unit|player font|player text|player health|player pow
 target=target frame|target unit|target font|target text|target health|target power|target bar|target bars
 focus=focus frame|focus unit|focus font|focus text|focus health|focus power|focus bar|focus bars
 pet=pet frame|pet unit|pet font|pet text|pet health|pet power|pet bar|pet bars
+pettarget=pet target|pettarget|pet target frame|pet target font|pet target text
 boss=boss frame|boss frames|boss unit|boss units|boss font|boss text|boss health|boss power|boss bar|boss bars
 ]]
 
@@ -684,6 +685,7 @@ local SEARCH_UNIT_BY_PAGE = {
     uf_focustarget = "focustarget",
     uf_focus = "focus",
     uf_pet = "pet",
+    uf_pettarget = "pettarget",
     uf_boss = "boss",
     uf_arena = "arena",
 }

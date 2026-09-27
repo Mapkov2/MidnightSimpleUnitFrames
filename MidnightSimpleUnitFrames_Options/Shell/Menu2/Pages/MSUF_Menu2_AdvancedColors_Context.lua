@@ -620,7 +620,7 @@ local function RegisterUnitContextFactories()
         local target = ContextTarget("portrait.border", "Portrait border",
             function() return GeneralRGB("portraitBorderColor", 1, 1, 1) end,
             function(r, g, b) SetAllPortraitRGB("portraitBorderColor", r, g, b) end)
-    local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" },
+    local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena" },
             { "portraitBorderColorR", "portraitBorderColorG", "portraitBorderColorB" }, ApplyColors)
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
@@ -629,7 +629,7 @@ local function RegisterUnitContextFactories()
         local target = ContextTarget("portrait.background", "Portrait background",
             function() return GeneralRGB("portraitBgColor", 0.05, 0.05, 0.05) end,
             function(r, g, b) SetAllPortraitRGB("portraitBgColor", r, g, b) end)
-    local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" },
+    local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena" },
             { "portraitBgColorR", "portraitBgColorG", "portraitBgColorB" }, ApplyColors)
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
@@ -644,7 +644,7 @@ local function RegisterUnitContextFactories()
             local target = ContextTarget(slotId .. ".color", slotLabel,
                 function() return GeneralRGB(slotPrefix .. "Color", 1, 1, 1) end,
                 function(r, g, b) M._SetAllTextureLayerRGB(slotPrefix .. "Color", r, g, b) end)
-        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" },
+        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena" },
                 { slotPrefix .. "ColorR", slotPrefix .. "ColorG", slotPrefix .. "ColorB" }, M._ApplyTextureLayerColors)
             target.captureState, target.restoreState = state.captureState, state.restoreState
             return target
@@ -653,7 +653,7 @@ local function RegisterUnitContextFactories()
             local target = ContextTarget(slotId .. ".gradient", M.Format("%s gradient end", M.Tr(slotLabel)),
                 function() return GeneralRGB(slotPrefix .. "Gradient2", 0, 0, 0) end,
                 function(r, g, b) M._SetAllTextureLayerRGB(slotPrefix .. "Gradient2", r, g, b) end)
-        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" },
+        local state = ContextDBRowsState({ "general", "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena" },
                 { slotPrefix .. "Gradient2R", slotPrefix .. "Gradient2G", slotPrefix .. "Gradient2B" }, M._ApplyTextureLayerColors)
             target.captureState, target.restoreState = state.captureState, state.restoreState
             return target

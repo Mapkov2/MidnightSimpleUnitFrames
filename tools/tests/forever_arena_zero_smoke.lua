@@ -317,7 +317,7 @@ for _, run in ipairs({ midnight, forever }) do
     local arena = run == midnight
     Check((menu.pages.uf_arena ~= nil) == arena and (unitPage.UNIT_PAGES.uf_arena ~= nil) == arena,
         label[run] .. ": Arena unit page registration")
-    for _, key in ipairs({ "uf_player", "uf_focus", "uf_boss", "uf_focustarget" }) do
+    for _, key in ipairs({ "uf_player", "uf_focus", "uf_boss", "uf_focustarget", "uf_pettarget" }) do
         Check(menu.pages[key] ~= nil and unitPage.UNIT_PAGES[key] ~= nil, label[run] .. ": lost unit page " .. key)
     end
     Check(HasCopyTarget(unitPage.UNIT_COPY_TARGETS, "arena") == arena, label[run] .. ": Arena copy target")
@@ -338,12 +338,12 @@ for _, run in ipairs({ midnight, forever }) do
     local seen = {}
     for i = 1, #order do seen[order[i]] = true end
     Check((seen.arena == true) == (run == midnight), label[run] .. ": Arena Copy To target")
-    Check(seen.boss and seen.focus and seen.all and #order == (run == midnight and 9 or 8),
+    Check(seen.boss and seen.focus and seen.pettarget and seen.all and #order == (run == midnight and 10 or 9),
         label[run] .. ": Copy To targets beyond Arena changed")
 end
 -- A namespace without a client table (Retail smoke harnesses) keeps all targets.
 local plain = assert(loadstring(orderSource, "@UF_COPY_TARGET_ORDER"))({}, forever.core.MSUF2)
-Check(#plain == 9, "Copy To targets changed without a client table")
+Check(#plain == 10, "Copy To targets changed without a client table")
 
 print(string.format("forever_arena_zero_smoke: ok (%d core + %d Options Lua files, %d shared stub failures)",
     #corePaths, #optionsPaths, #forever.failures))

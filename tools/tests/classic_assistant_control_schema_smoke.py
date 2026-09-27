@@ -51,9 +51,9 @@ LEDGER = {
     "records": 3476,
     "columns": 31,
     "schemaOnly": (298, "9022F4DE2CD5FF16DF75619E18FE945022316AC34AA589B6CC6CB284F317D077"),
-    # Includes Pet Aura workspace controls and Pet XP status controls introduced
-    # in the Classic menu; the standalone control schema remains unchanged.
-    "indexOnly": (596, "50D0CCDD4B2ED9627B42C0320D4CE73D9CE603B5085F68F3440E1A97FB3D35CD"),
+    # The Pet Target page adds 148 built controls; the prior 596 non-Pet-Target
+    # ids retain their exact digest. The standalone schema remains unchanged.
+    "indexOnly": (744, "55DDC0AC932B0FDB3709AE7AA6E239DA5ED77D62830551240C8F38D5D678949E"),
 }
 
 
