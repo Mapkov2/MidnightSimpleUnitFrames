@@ -5979,6 +5979,9 @@ L["Pet"] = "寵物"
 L["Pet XP Bar"] = "寵物經驗條"
 L["Bar width"] = "條寬度"
 L["Pet XP bar width"] = "寵物經驗條寬度"
+L["Pet Target"] = "寵物目標"
+L["MSUF Pet Target"] = "MSUF 寵物目標"
+L["Pet Target Name Position"] = "寵物目標名稱位置"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

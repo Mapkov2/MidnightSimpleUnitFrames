@@ -295,7 +295,7 @@ local function MSUF_Defaults_Stage_SeedFontDefaults(profileDB, g)
     end
     MSUF_Defaults_NormalizeFontShadowScope(g, true)
     for _, key in ipairs({
-        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena",
+        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         local scope = profileDB[key]
@@ -490,7 +490,7 @@ local function MSUF_Defaults_Stage_MigrateUnitTextModes(profileDB, g)
     end
 
     g.powerTextMode = _MSUF_MigratePowerMode(g.powerTextMode)
-    for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","boss", "arena"}) do
+    for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","pettarget","boss", "arena"}) do
         local u = profileDB[unitKey]
         if type(u) == "table" then
             u.powerTextMode = _MSUF_MigratePowerMode(u.powerTextMode)
@@ -543,7 +543,7 @@ local function MSUF_Defaults_Stage_MigrateUnitTextModes(profileDB, g)
             hpTextLayer = tonumber(g.hpTextLayer) or tonumber(g.textLayer) or 5,
             powerTextLayer = tonumber(g.powerTextLayer) or 2,
         }
-        for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","boss", "arena"}) do
+        for _, unitKey in ipairs({"player","target","focus","targettarget","focustarget","pet","pettarget","boss", "arena"}) do
             profileDB[unitKey] = profileDB[unitKey] or {}
             local u = profileDB[unitKey]
             if type(u) == "table" then

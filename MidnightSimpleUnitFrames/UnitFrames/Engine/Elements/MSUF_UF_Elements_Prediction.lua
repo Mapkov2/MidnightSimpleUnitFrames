@@ -1655,7 +1655,7 @@ local function PredictionEventsForConfig(cfg, healthAware, unit)
   end
   local plainUnit = issecretvalue(unit) ~= true and unit or nil
   local player = plainUnit == "player"
-  local dependent = plainUnit == "targettarget" or plainUnit == "focustarget"
+  local dependent = plainUnit == "targettarget" or plainUnit == "focustarget" or plainUnit == "pettarget"
   local eventTable
   if healthAware ~= false and NeedsHealthEvent(cfg) then
     eventTable = player and PREDICTION_HEALTH_EVENTS_PLAYER

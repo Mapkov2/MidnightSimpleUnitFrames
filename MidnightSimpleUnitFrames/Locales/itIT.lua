@@ -6041,6 +6041,9 @@ L["Pet"] = "Famiglio"
 L["Pet XP Bar"] = "Barra PE del famiglio"
 L["Bar width"] = "Larghezza barra"
 L["Pet XP bar width"] = "Larghezza della barra PE del famiglio"
+L["Pet Target"] = "Bersaglio del famiglio"
+L["MSUF Pet Target"] = "MSUF Bersaglio del famiglio"
+L["Pet Target Name Position"] = "Posizione del nome del bersaglio del famiglio"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

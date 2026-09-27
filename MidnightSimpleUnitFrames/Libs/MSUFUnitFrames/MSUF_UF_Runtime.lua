@@ -316,9 +316,11 @@ end
 local function RunDependentUnits(parent)
   if parent == "target" then return RunIdentity("targettarget", "MSUF_UNIT_IDENTITY_SOFT") end
   if parent == "focus" then return RunIdentity("focustarget", "MSUF_UNIT_IDENTITY_SOFT") end
+  if parent == "pet" then return RunIdentity("pettarget", "MSUF_UNIT_IDENTITY_SOFT") end
   local a = RunIdentity("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
   local b = RunIdentity("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
-  return a or b
+  local c = RunIdentity("pettarget", "MSUF_UNIT_IDENTITY_SOFT")
+  return a or b or c
 end
 
 function UF.SyncRuntimeDriver()
@@ -336,7 +338,7 @@ local function ConfigTouchesDependentUnits(unit)
   local units = UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
   if not units then return false end
   for i = 1, #units do
-    if units[i] == "targettarget" or units[i] == "focustarget" then return true end
+    if units[i] == "targettarget" or units[i] == "focustarget" or units[i] == "pettarget" then return true end
   end
   return false
 end

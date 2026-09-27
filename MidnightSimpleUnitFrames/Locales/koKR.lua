@@ -5982,6 +5982,9 @@ L["Pet"] = "소환수"
 L["Pet XP Bar"] = "소환수 경험치 바"
 L["Bar width"] = "바 너비"
 L["Pet XP bar width"] = "소환수 경험치 바 너비"
+L["Pet Target"] = "소환수 대상"
+L["MSUF Pet Target"] = "MSUF 소환수 대상"
+L["Pet Target Name Position"] = "소환수 대상 이름 위치"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

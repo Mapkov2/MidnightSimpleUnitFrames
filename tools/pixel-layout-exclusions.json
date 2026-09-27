@@ -362,8 +362,8 @@
   {
     "path": "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua",
     "call": "CreateFrame ( \"Frame\" )",
-    "count": 2,
-    "reason": "Unparented event/dispatch driver"
+    "count": 3,
+    "reason": "Unparented event drivers, including filtered Pet Target UNIT_TARGET"
   },
   {
     "path": "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua",

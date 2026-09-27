@@ -280,6 +280,25 @@ local function MSUF_Defaults_Stage_FillUnitFrameDefaults(profileDB)
     for k, v in pairs(textDefaults) do
         if profileDB.focustarget[k] == nil then profileDB.focustarget[k] = v end
     end
+    fill("pettarget", {
+        enabled = false,
+        width = 180,
+        height = 30,
+        offsetX = -275,
+        offsetY = -290,
+        showName = true,
+        showLevelIndicator = false,
+        showHP = true,
+        showPower = false,
+        showPowerText = false,
+        reverseFillBars = false,
+        verticalFillBars = false,
+        powerBarTexture = "",
+        powerBarBgTexture = "",
+    })
+    for k, v in pairs(textDefaults) do
+        if profileDB.pettarget[k] == nil then profileDB.pettarget[k] = v end
+    end
     fill("pet", {
         width     = 220,
         height    = 30,
@@ -385,7 +404,7 @@ local function MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB)
     if profileDB.boss.rangeFadeCastbar == nil then profileDB.boss.rangeFadeCastbar = false end
     if profileDB.boss.rangeFadeAuras   == nil then profileDB.boss.rangeFadeAuras   = false end
     if profileDB.general.rangeFadeEnabled == nil then profileDB.general.rangeFadeEnabled = true end
-    for _, unitKey in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }) do
+    for _, unitKey in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
         profileDB[unitKey] = profileDB[unitKey] or {}
         if profileDB[unitKey].rangeFadeEnabled == nil then profileDB[unitKey].rangeFadeEnabled = true end
         if profileDB[unitKey].rangeFadeAlpha == nil then profileDB[unitKey].rangeFadeAlpha = 0.4 end
@@ -403,7 +422,7 @@ local function MSUF_Defaults_Stage_SeedUnitPowerBarDefaults(profileDB)
             boss   = "showBossPowerBar",
             arena  = "showArenaPowerBar",
         }
-        for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena"}) do
+        for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena"}) do
             profileDB[unitKey] = profileDB[unitKey] or {}
             local u = profileDB[unitKey]
             local legacyShowKey = showKeys[unitKey]
@@ -477,7 +496,7 @@ local function MSUF_Defaults_Stage_SeedUnitPowerBarDefaults(profileDB)
         if bars._msufDetachedPowerBorderMigrated_v1 ~= true then
             local legacyOutline = tonumber(bars.detachedPowerBarOutline)
             if legacyOutline and legacyOutline > 0 and legacyOutline ~= 1 then
-                for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena"}) do
+                for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena"}) do
                     local u = profileDB[unitKey]
                     local shape = tostring(u.detachedPowerBarShape or "BAR"):upper()
                     if u.powerBarDetached == true and u.powerBarBorderEnabled ~= true
@@ -493,7 +512,7 @@ local function MSUF_Defaults_Stage_SeedUnitPowerBarDefaults(profileDB)
 end
 
 local function MSUF_Defaults_Stage_SeedUnitPortraitDefaults(profileDB, g, legacyPortraitOverrideState)
-    for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena"}) do
+    for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena"}) do
         profileDB[unitKey] = profileDB[unitKey] or {}
         local u = profileDB[unitKey]
         --- Portrait defaults used by the clean UF Portrait element.
@@ -592,7 +611,7 @@ local function MSUF_Defaults_Stage_MigrateUnifiedAlpha(profileDB, g)
             "alphaHPOutOfCombat", "alphaPreserveHPColor", "bgA", "hpTextIgnoreAlpha",
         }
         for _, key in ipairs({
-            "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
+            "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena",
             "gf_party", "gf_raid", "gf_mythicraid",
         }) do
             local conf = profileDB[key]

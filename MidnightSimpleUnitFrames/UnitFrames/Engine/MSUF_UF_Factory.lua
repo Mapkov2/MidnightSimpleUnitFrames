@@ -1432,7 +1432,7 @@ function Factory.EnsureDeferredDriver()
   return true
 end
 
-local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss", "arena" }
+local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena" }
 local LATE_GROUP_ANCHOR_KEYS = { "gf_party", "gf_raid", "gf_mythicraid", "gf_priority" }
 local COOLDOWN_WIDTH_MODES = {
   cooldown = "EssentialCooldownViewer",

@@ -6347,6 +6347,9 @@ L["Pet"] = "Begleiter"
 L["Pet XP Bar"] = "Begleiter-EP-Leiste"
 L["Bar width"] = "Leistenbreite"
 L["Pet XP bar width"] = "Breite der Begleiter-EP-Leiste"
+L["Pet Target"] = "Begleiterziel"
+L["MSUF Pet Target"] = "MSUF Begleiterziel"
+L["Pet Target Name Position"] = "Namensposition des Begleiterziels"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

@@ -169,7 +169,7 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
     if g and g.portraitClassStyle ~= nil then
         g.portraitClassStyle = MSUF_Defaults_NormalizePortraitClassStyleValue(g.portraitClassStyle)
     end
-    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena" }) do
+    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
         local u = db[unitKey]
         if type(u) == "table" and u.portraitRender ~= nil then
             u.portraitRender = MSUF_Defaults_NormalizePortraitRenderValue(u.portraitRender)
@@ -181,7 +181,7 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
 end
 ExportPublic("MSUF_NormalizePortraitRenderDB", MSUF_Defaults_NormalizePortraitRenderDB)
 
-local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena" }
+local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
 local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 --- Field helpers are shared with State/MSUF_Profiles.lua through
 --- MSUF.StateHelpers (State/MSUF_StateHelpers.lua, loaded right before this
@@ -513,6 +513,7 @@ local MSUF_DEFAULT_UNIT_OFFSETS = {
     focus        = { -260, -300 },
     targettarget = { 220, -300 },
     focustarget  = { 260, 180 },
+    pettarget    = { -275, -290 },
     pet          = { -275, -250 },
     boss         = { MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y },
     arena        = { MSUF_DEFAULT_ARENA_OFFSET_X, MSUF_DEFAULT_ARENA_OFFSET_Y },
@@ -635,7 +636,7 @@ local function MSUF_Defaults_ApplyPredictionBarBaseline(db)
     db.general.showSelfHealPrediction = true
 
     for _, key in ipairs({
-        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena",
+        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena",
     }) do
         Apply(db[key])
     end
@@ -726,6 +727,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureUnitAlphaDefaults(db.target)
     EnsureUnitAlphaDefaults(db.focus)
     EnsureUnitAlphaDefaults(db.focustarget)
+    EnsureUnitAlphaDefaults(db.pettarget)
     EnsureUnitAlphaDefaults(db.pet)
     EnsureUnitAlphaDefaults(db.boss)
     EnsureUnitAlphaDefaults(db.targettarget)
@@ -742,6 +744,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     EnsureFreshUnitframeScreenPosition(db.target, 260, 80)
     EnsureFreshUnitframeScreenPosition(db.focus, 260, 135)
     EnsureFreshUnitframeScreenPosition(db.focustarget, 260, 180)
+    EnsureFreshUnitframeScreenPosition(db.pettarget, -275, -290)
     EnsureFreshUnitframeScreenPosition(db.pet, -260, 135)
     EnsureFreshUnitframeScreenPosition(db.targettarget or db.tot, 260, 225)
     EnsureFreshUnitframeScreenPosition(db.boss, MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y)
@@ -795,7 +798,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     end
     db.bars.classPowerSmoothFill = false
     db.bars.altManaSmoothFill = false
-    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }) do
+    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
         if type(db[key]) == "table" then
             db[key].smoothFill = false
             db[key].chunkedFill = false
@@ -1686,7 +1689,7 @@ end
 --- buckets created before the UnitFrame factory runs, then normal defaults
 --- and migrations still run afterward to fill fields added after the snapshot.
 local MSUF_FOREVER_HEALTH_UNITS = {
-    "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
+    "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena",
     "gf_party", "gf_raid", "gf_mythicraid",
 }
 
@@ -2008,7 +2011,7 @@ local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
 --- aura alias keys, using the wider StateHelpers.ProfileIOSpec. The two
 --- revisions are bumped independently and are deliberately not merged; keep
 --- both in mind when a key alias changes.
-local MSUF_DEFAULTS_CURRENT_REVISION = 16
+local MSUF_DEFAULTS_CURRENT_REVISION = 17
 local MSUF_DEFAULTS_NAVIGATION_ICONS_REVISION = 7
 
 local MSUF_DEFAULTS_PLAYER_DEFENSIVE_SHAPE_REVISION = 10
@@ -2028,6 +2031,7 @@ local MSUF_DEFAULTS_ROOT_TABLE_KEYS = {
     "focustarget",
     "focus",
     "pet",
+    "pettarget",
     "boss",
     "arena",
 }
@@ -2246,7 +2250,7 @@ local function MSUF_Defaults_MigrateDispelPriorityProfile(db, force)
         return false
     end
     MSUF_Defaults_MigratePriorityScope(db.general, true)
-    for _, key in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena" }) do
+    for _, key in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
         MSUF_Defaults_MigratePriorityScope(db[key], false)
     end
     for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
@@ -2355,7 +2359,7 @@ end
 
 local function MSUF_Defaults_ClearScopedFontKeys(profileDB)
     for _, key in ipairs({
-        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena",
+        "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         local scope = profileDB and profileDB[key]
@@ -2657,7 +2661,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
         end
     end
     NormalizeStaticOutlineColor(g)
-    for _, key in ipairs({ "player", "target", "focus", "boss", "arena", "pet", "targettarget", "focustarget", "gf_party", "gf_raid", "gf_mythicraid" }) do
+    for _, key in ipairs({ "player", "target", "focus", "boss", "arena", "pet", "pettarget", "targettarget", "focustarget", "gf_party", "gf_raid", "gf_mythicraid" }) do
         NormalizeStaticOutlineColor(profileDB[key])
     end
     if g.barBorderStyle == nil then
@@ -2858,7 +2862,7 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
         g.showRaidMarker = true
     end
     local legacyShowRaidMarker = g.showRaidMarker
-    for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet","boss", "arena"}) do
+    for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet", "pettarget","boss", "arena"}) do
         profileDB[key] = profileDB[key] or {}
         if profileDB[key].showRaidMarker == nil and legacyShowRaidMarker ~= nil then
             profileDB[key].showRaidMarker = legacyShowRaidMarker
@@ -2871,7 +2875,7 @@ local function MSUF_Defaults_Stage_SeedStatusIndicatorDefaults(profileDB, g)
     local legacyRaidMarkerOffsetY = g.raidMarkerOffsetY
     local legacyRaidMarkerAnchor  = g.raidMarkerAnchor
         local legacyRaidMarkerSize    = g.raidMarkerSize
-    for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet","boss", "arena"}) do
+    for _, key in ipairs({"player","target","focus","targettarget","focustarget","pet", "pettarget","boss", "arena"}) do
         profileDB[key] = profileDB[key] or {}
         local conf = profileDB[key]
         if conf.raidMarkerOffsetX == nil and legacyRaidMarkerOffsetX ~= nil then
@@ -3094,7 +3098,7 @@ local MSUF_Defaults_Stage_SeedUnitPowerBarDefaults = sharedUnitsDefaults.MSUF_De
 --- Per-unit enabled/ownership state, fill animation, unified alpha, OOC fade
 --- and the decorative texture layers.
 local function MSUF_Defaults_Stage_SeedUnitStateDefaults(profileDB)
-    for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena"}) do
+    for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena"}) do
         profileDB[unitKey] = profileDB[unitKey] or {}
         local u = profileDB[unitKey]
         if u.enabled == nil then
@@ -3241,7 +3245,7 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     end
     profileDB._msufNativeDispelTriggerMigration = 2
     local legacyPortraitOverrideState = false
-    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena" }) do
+    for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
         local u = profileDB[unitKey]
         if type(u) == "table" and u.portraitDecoOverride ~= nil then
             legacyPortraitOverrideState = true
@@ -3280,14 +3284,14 @@ local function MSUF_EnsureDB_Heavy(profileDB)
     MSUF_Defaults_MuteForeverHealth(profileDB, false)
     for _, key in ipairs({
         "general",
-        "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena",
+        "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena",
         "gf_party", "gf_raid", "gf_mythicraid",
     }) do
         MSUF_Defaults_NormalizeFontField(profileDB[key])
     end
     MSUF_Defaults_ClearScopedFontKeys(profileDB)
     if g._msufUFLocalFontKeyMigration_v407 ~= true then
-        for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }) do
+        for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
             local u = profileDB[key]
             if type(u) == "table" then
                 u.fontKey = nil

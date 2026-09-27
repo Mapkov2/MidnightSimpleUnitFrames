@@ -5967,6 +5967,9 @@ L["Pet"] = "Ajudante"
 L["Pet XP Bar"] = "Barra de EXP do ajudante"
 L["Bar width"] = "Largura da barra"
 L["Pet XP bar width"] = "Largura da barra de EXP do ajudante"
+L["Pet Target"] = "Alvo do ajudante"
+L["MSUF Pet Target"] = "MSUF Alvo do ajudante"
+L["Pet Target Name Position"] = "Posição do nome do alvo do ajudante"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

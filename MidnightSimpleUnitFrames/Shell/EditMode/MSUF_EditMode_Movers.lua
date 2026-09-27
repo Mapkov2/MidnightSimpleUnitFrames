@@ -282,6 +282,7 @@ local UNIT_NAME_POSITION_LABELS = {
     targettarget = "Target of Target Name Position",
     focustarget = "Focus Target Name Position",
     pet = "Pet Name Position",
+    pettarget = "Pet Target Name Position",
 }
 
 local function MoverLabelText(key, cfg)
@@ -765,6 +766,7 @@ local function RegisterAll()
         { key = "targettarget", label = "Target of Target", order = 40 },
         { key = "focustarget",  label = "Focus Target",     order = 45 },
         { key = "pet",          label = "Pet",              order = 50 },
+        { key = "pettarget",    label = "Pet Target",       order = 55 },
     }
 
     for _, u in ipairs(units) do
@@ -1048,7 +1050,7 @@ ExportPublic("MSUF_SetMSUFEditModeFromBlizzard", MSUF_SetMSUFEditModeFromBlizzar
 ExportPublic("MSUF_UnitPreviewActive", false)
 ExportPublic("MSUF_PreviewTestMode", false)
 
-local PREVIEW_UNITS = { "target", "focus", "focustarget", "targettarget", "pet" }
+local PREVIEW_UNITS = { "target", "focus", "focustarget", "targettarget", "pet", "pettarget" }
 local CASTBAR_TEST_FUNCS = {
     "MSUF_SetPlayerCastbarTestMode",
     "MSUF_SetTargetCastbarTestMode",

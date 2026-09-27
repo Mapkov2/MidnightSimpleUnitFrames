@@ -2023,6 +2023,9 @@ local function AddIdentityLifecycleHandlers(frame)
   elseif unit == "focustarget" then
     AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", QueueDependentIdentity, true)
     AddEventHandler(frame, "UNIT_TARGET", QueueDependentIdentity, false)
+  elseif unit == "pettarget" then
+    AddEventHandler(frame, "UNIT_PET", QueueDependentIdentity, true)
+    AddEventHandler(frame, "UNIT_TARGET", QueueDependentIdentity, false)
   elseif IsBossUnit(unit) then
     -- One Blizzard notification fans out to all five Boss frames. Merge repeat
     -- notifications per frame and move the bounded identity fan-out out of the

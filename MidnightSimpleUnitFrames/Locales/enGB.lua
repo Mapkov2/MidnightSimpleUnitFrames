@@ -4143,6 +4143,9 @@ L["Off (default): the accent colors buttons, tabs and highlights while panels ke
 L["Pet XP Bar"] = "Pet XP Bar"
 L["Bar width"] = "Bar width"
 L["Pet XP bar width"] = "Pet XP bar width"
+L["Pet Target"] = "Pet Target"
+L["MSUF Pet Target"] = "MSUF Pet Target"
+L["Pet Target Name Position"] = "Pet Target Name Position"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

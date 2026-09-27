@@ -74,6 +74,7 @@ local DEFAULTS = {
   focus = { width = 180, height = 30, x = -260, y = -300, showName = true, showPower = false },
   targettarget = { width = 180, height = 30, x = 220, y = -300, showName = false, showPower = false },
   focustarget = { width = 180, height = 30, x = 260, y = 180, showName = true, showPower = false },
+  pettarget = { width = 180, height = 30, x = -275, y = -290, showName = true, showPower = false },
   pet = { width = 220, height = 30, x = -275, y = -250, showName = true, showPower = true },
   boss = { width = 180, height = 30, x = 500, y = 180, showName = true, showPower = false },
   arena = { width = 180, height = 30, x = 360, y = -40, showName = true, showPower = true },
@@ -104,6 +105,7 @@ local RANGE_KEYS = {
   targettarget = true,
   focus = true,
   focustarget = true,
+  pettarget = true,
   pet = true,
   boss = true,
   arena = true,
@@ -984,14 +986,14 @@ local function StatusAllowed(key, id)
   if id == "leader" or id == "assist" or id == "combat" or id == "incomingRes" then
     return key == "player" or key == "target"
   elseif id == "pvp" then
-    return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
+    return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "pettarget"
       or key == "arena"
   elseif id == "resting" or id == "stance" then
     return key == "player"
   elseif id == "raidGroup" then
-    return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
+    return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "pettarget" or key == "focus"
   elseif id == "elite" then
-    return key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "boss"
+    return key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "pettarget" or key == "boss"
   elseif id == "petHappiness" or id == "petXP" then
     return key == "pet"
   elseif id == "threat" then

@@ -5990,6 +5990,9 @@ L["Pet"] = "Питомец"
 L["Pet XP Bar"] = "Полоса опыта питомца"
 L["Bar width"] = "Ширина полосы"
 L["Pet XP bar width"] = "Ширина полосы опыта питомца"
+L["Pet Target"] = "Цель питомца"
+L["MSUF Pet Target"] = "MSUF Цель питомца"
+L["Pet Target Name Position"] = "Положение имени цели питомца"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

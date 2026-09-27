@@ -324,7 +324,8 @@ local function NewStartupFrame(unit, kind)
  return f
 end
 local startupFrames = {
- NewStartupFrame('target'), NewStartupFrame('party1','party'),
+ NewStartupFrame('target'), NewStartupFrame('pet'), NewStartupFrame('pettarget'),
+ NewStartupFrame('party1','party'),
 }
 assert(loadfile(arg and arg[2] or 'MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua'))('MidnightSimpleUnitFrames',MSUF)
 MSUF.__msufRoundedEventFrame:Fire('ADDON_LOADED','MidnightSimpleUnitFrames')
@@ -392,7 +393,7 @@ _G.MSUF_SetDispelBorderTestMode(false,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{0,0,0},true) end
 _G.MSUF_SetPurgeBorderTestMode(true,'shared')
 for _, f in ipairs(startupFrames) do
- AssertRounded(f,f._msufGFKind and {0,0,0} or {1,0.85,0},true)
+ AssertRounded(f,(f._msufGFKind or f.unit == "pet") and {0,0,0} or {1,0.85,0},true)
 end
 _G.MSUF_SetPurgeBorderTestMode(false,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{0,0,0},true) end

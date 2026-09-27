@@ -28,7 +28,7 @@ local function GetConfigKeyForUnitSafe(unit)
     if UF and UF.ConfigKeyForUnit then
         return UF.ConfigKeyForUnit(unit)
     end
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "focustarget" or unit == "targettarget" or unit == "pet" then
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "focustarget" or unit == "targettarget" or unit == "pet" or unit == "pettarget" then
         return unit
     end
     if GetBossIndexFromToken(unit) then

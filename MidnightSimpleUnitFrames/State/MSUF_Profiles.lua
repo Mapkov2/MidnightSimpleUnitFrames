@@ -998,7 +998,7 @@ local MSUF_PROFILEIO_UNIT_TEXTURE_WARNING_KEYS = {
 }
 
 local MSUF_PROFILEIO_MEDIA_UNIT_SCOPE_KEYS = {
-    "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss", "arena",
+    "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena",
 }
 
 local MSUF_PROFILEIO_GROUP_TEXTURE_WARNING_KEYS = {
@@ -1108,7 +1108,7 @@ local function MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
     return profile
 end
 
-local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }
+local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
 --- Arena slot ledgers: arena1..3 stay literal on every flavor (pinned by
 --- tools/arena_unit_scope_smoke.lua) and arena4..N follow the client fact
 --- published by Game/Shared/Initialize.lua (5 on TBC/Mists, 3 on Mainline,
@@ -1375,7 +1375,7 @@ local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget",
     "focus", "focustarget",
-    "pet", "boss", "boss1", "boss2", "boss3", "boss4", "boss5",
+    "pet", "pettarget", "boss", "boss1", "boss2", "boss3", "boss4",
     "arena", "arena1", "arena2", "arena3",
     "gf_party", "gf_raid", "gf_mythicraid",
 }
@@ -1386,7 +1386,7 @@ end
 local MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS = {
     "player", "target", "targettarget", "tot", "targetoftarget",
     "focus", "focustarget", "focus_target", "focustargettarget",
-    "pet", "boss", "boss1", "boss2", "boss3", "boss4", "boss5",
+    "pet", "pettarget", "boss", "boss1", "boss2", "boss3", "boss4",
 }
 --- The field helpers, the text/status scope normalizers, the aura layout
 --- normalizer and the split-status migration are shared with
@@ -2256,7 +2256,7 @@ local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     alphaExcludeTextPortrait = false,
     alphaExcludePredictionBars = false,
 }
-local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "arena" }
+local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
 local function MSUF_IsUnitframeAlphaKey(key)
     return (type(key) == "string") and (MSUF_UNITFRAME_ALPHA_KEYS[key] == true)
 end
@@ -2488,6 +2488,7 @@ local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS = {
     npcColors = true,
     party = true,
     pet = true,
+    pettarget = true,
     player = true,
     shortenNames = true,
     target = true,

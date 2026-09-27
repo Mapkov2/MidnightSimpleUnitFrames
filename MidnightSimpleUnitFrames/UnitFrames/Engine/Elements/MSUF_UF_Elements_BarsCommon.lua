@@ -1099,7 +1099,7 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
       if forText then allowed = text.npcTypeFocus ~= false else allowed = health.npcTypeFocus ~= false end
     elseif key == "boss" then
       if forText then allowed = text.npcTypeBoss ~= false else allowed = health.npcTypeBoss ~= false end
-    elseif key == "targettarget" or key == "focustarget" then
+    elseif key == "targettarget" or key == "focustarget" or key == "pettarget" then
       if forText then allowed = text.npcTypeToT ~= false else allowed = health.npcTypeToT ~= false end
     end
     useType = allowed
@@ -1647,7 +1647,7 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
       and state and state.isPlayerKnown and not state.isPlayer then
     local class, secretClass = FriendlyNPCClassToken(state, frame, unit)
     if secretClass == true then
-      if unit == "targettarget" or unit == "focustarget" then
+      if unit == "targettarget" or unit == "focustarget" or unit == "pettarget" then
         return class, nil, nil, SECRET_NATIVE_CLASS_COLOR
       end
       class = nil

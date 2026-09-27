@@ -6042,6 +6042,9 @@ L["Pet"] = "Mascota"
 L["Pet XP Bar"] = "Barra de EXP de mascota"
 L["Bar width"] = "Ancho de barra"
 L["Pet XP bar width"] = "Ancho de la barra de EXP de mascota"
+L["Pet Target"] = "Objetivo de la mascota"
+L["MSUF Pet Target"] = "MSUF Objetivo de la mascota"
+L["Pet Target Name Position"] = "Posición del nombre del objetivo de la mascota"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

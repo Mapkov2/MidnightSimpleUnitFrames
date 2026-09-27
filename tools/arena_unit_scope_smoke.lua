@@ -86,7 +86,7 @@ Check(defaults:find('"arena1", "arena2", "arena3",', 1, true),
 
 -- 3) Profile IO ---------------------------------------------------------------
 local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
-Check(profiles:find('"focus", "pet", "boss", "arena" }', 1, true),
+Check(profiles:find('"focus", "pet", "pettarget", "boss", "arena" }', 1, true),
     "MSUF_PROFILEIO_UNIT_KEYS lost the arena scope")
 Check(profiles:find('lk:find("arenacast", 1, true)', 1, true),
     "MSUF_IsCastbarKey no longer recognizes arenaCast keys")

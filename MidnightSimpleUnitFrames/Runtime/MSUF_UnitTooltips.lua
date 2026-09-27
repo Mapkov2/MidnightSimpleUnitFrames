@@ -516,6 +516,9 @@ local function ShowFocusTargetInfoTooltip()
 local function ShowPetInfoTooltip()
     ShowUnitInfoTooltip("pet", "Pet")
  end
+local function ShowPetTargetInfoTooltip()
+    ShowUnitInfoTooltip("pettarget", "Pet Target")
+ end
 local function HidePlayerInfoTooltip()
     if MSUF_PlayerInfoFrame then
         --- If the Edit Mode tooltip preview is active, restore the preview
@@ -540,6 +543,7 @@ PublishCompat("MSUF_ShowFocusInfoTooltip", ShowFocusInfoTooltip)
 PublishCompat("MSUF_ShowTargetTargetInfoTooltip", ShowTargetTargetInfoTooltip)
 PublishCompat("MSUF_ShowFocusTargetInfoTooltip", ShowFocusTargetInfoTooltip)
 PublishCompat("MSUF_ShowPetInfoTooltip", ShowPetInfoTooltip)
+PublishCompat("MSUF_ShowPetTargetInfoTooltip", ShowPetTargetInfoTooltip)
 PublishCompat("MSUF_HidePlayerInfoTooltip", HidePlayerInfoTooltip)
 Tooltips.GetGeneral = Tooltips.GetGeneral or MSUF_GetTooltipGeneral
 Tooltips.Normalize = Tooltips.Normalize or MSUF_NormalizeTooltipSettings

@@ -10,7 +10,7 @@ local IsArenaOpponentUnit = C.IsArenaOpponentUnit or function(unit)
 end
 
 local function SecretClassColorAllowed(unit)
-  return unit == "target" or unit == "targettarget" or unit == "focustarget"
+  return unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget"
     or IsArenaOpponentUnit(unit)
 end
 
