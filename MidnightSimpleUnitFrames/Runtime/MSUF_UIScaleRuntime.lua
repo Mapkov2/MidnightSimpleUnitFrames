@@ -450,7 +450,17 @@ local function ApplyCurrentProfileGlobalUiScale()
             UpdateGlobalScaleEvents()
         end
     else
-        ResetGlobalUiScale(true)
+        -- Profile switches must restore the scale seen before MSUF first
+        -- overlaid UIParent. UIParent_UpdateScale can choose a new automatic
+        -- pixel scale mid-session, producing a jarring jump until /reload.
+        local baseline = blizzardUiParentScale
+        local current = GetCurrentGlobalUiScale()
+        if baseline and current and abs(current - baseline) > 0.0001 then
+            _G.UIParent:SetScale(baseline)
+            ScheduleUnitframeReanchorAfterScale()
+        end
+        lastGlobalUiParentScale = nil
+        if UpdateGlobalScaleEvents then UpdateGlobalScaleEvents() end
     end
     return true
 end
