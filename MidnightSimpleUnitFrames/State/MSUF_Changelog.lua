@@ -8,12 +8,71 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "FF7D2062B7F1F79301C563C0B1EE6C59CF428DB4A7837F15E9026171DF3A79BA",
-    currentVersion = "6.5-beta9",
-    historyFromVersion = "6.5-beta6",
-    previousVersion = "6.5-beta8",
-    rangeLabel = "6.5-beta8 -> 6.5-beta9",
+    sourceSha256 = "7674502AB183475BEAC1182F9BE9EC6DE08D291C5374EDE9AF5F4A514AB0BC44",
+    currentVersion = "6.5-beta10",
+    historyFromVersion = "6.5-beta7",
+    previousVersion = "6.5-beta9",
+    rangeLabel = "6.5-beta9 -> 6.5-beta10",
     entries = {
+        {
+            version = "6.5-beta10",
+            date = "2026-09-27",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Add a Pet Target frame. Enable it under Pet Target > Basics, then place it in Edit Mode.",
+                            link = {
+                                pageKey = "uf_pettarget",
+                                query = "pet target",
+                                label = "Pet Target",
+                                sectionId = "frame_basics",
+                                controlId = "menu2.uf_pettarget.unit.basics.enabled",
+                                settingKey = "pettarget.enabled",
+                            },
+                        },
+                        {
+                            text = "Move Class Resources in Edit Mode even while their resource is inactive. Combo Points keep an editable position outside Cat Form, and the drag area remains visible in the preview.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "class resource offset x",
+                                label = "Class Resource X offset",
+                                sectionId = "classpower_display",
+                                controlId = "menu2.classpower.advanced.layout.x",
+                                settingKey = "bars.classPowerOffsetX",
+                            },
+                        },
+                        {
+                            text = "Place a detached Power bar together with Class Resources or on its own. Its Edit Mode mover and width, height, and position controls work independently of the Class Resource settings.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "detached power x",
+                                label = "Detached Power X offset",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.x",
+                                settingKey = "player.detachedPowerBarOffsetX",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Pet Target has its own runtime frame, defaults, menu controls, and preview on supported clients.",
+                        "Class Resources and detached Power bars can be moved separately; an Energy bar anchored to Combo Points continues to follow them.",
+                        "The Mainline core and Options addons use the MSUF category in the addon list.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Edit Mode retains movers for temporarily hidden Class Resources and detached Power bars, including an inactive Druid resource.",
+                        "Profile scale and menu dropdown alignment are preserved across UI updates.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta9",
             date = "2026-09-25",
@@ -148,60 +207,6 @@ local data = {
                     bullets = {
                         "Turning off the level indicator also hides the fallback badge ring; a leftover gold circle no longer remains behind.",
                         "Selected-frame aura imports avoid full-profile aura resets, and default repair runs on a private copy before committing the selected settings.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta6",
-            date = "2026-09-20",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Blizzard-style portraits can display elite and rare dragons. Enable the new option under Portrait > Border; the menu preview shows the matching decoration.",
-                            link = {
-                                pageKey = "uf_target",
-                                query = "elite and rare dragon",
-                                label = "Elite and rare dragon",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_target.unit.portrait.portraitblizzardelite",
-                                settingKey = "target.portraitBlizzardElite",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "border",
-                            },
-                        },
-                        {
-                            text = "Choose Classic Glass or Midnight as your menu appearance on every supported client. Classic Glass has a refined palette and clearer panels, while existing appearance choices are preserved.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "menu appearance preset",
-                                label = "Menu appearance preset",
-                                sectionId = "misc_menu_behavior",
-                                controlId = "menu2.opt.misc.global.setting.menu.appearance.preset",
-                                settingKey = "general.menuAppearancePreset",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Portrait > Border now offers a temporary Runtime Preview for elite, rare and boss dragons on the live portrait. Closing the section or entering combat restores the real classification.",
-                        "Updated the shared factory profile and the Classic/Forever defaults, including clearer power bars, separated Alternative Mana placement, a compact raid layout, and revised text and aura positions.",
-                        "Class Resources using Player frame width now span the full Player frame.",
-                        "Consolidated shared client handling, defaults, Class Resources and preview behavior across the supported clients.",
-                        "Refreshed Assistant bindings and menu catalog tooling, and expanded client, locale and release validation.",
-                    },
-                },
-                {
-                    title = "Fixes & Performance",
-                    bullets = {
-                        "Classic and WoW Forever group members without an assigned role retain their power bar when power is enabled for any role; explicit role filters still apply.",
-                        "Corrected Blizzard-style portrait rim and mask alignment, foreground opacity and layer behavior, and portrait zoom after native refreshes.",
-                        "Fixed Classic aura filtering and faction handling, Class Resource refreshes and previews, font previews, and several default-setting inconsistencies.",
-                        "Reused completed pixel-layout setup to avoid repeated work while keeping deferred combat updates available.",
                     },
                 },
             },

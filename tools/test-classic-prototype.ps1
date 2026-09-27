@@ -522,6 +522,17 @@ foreach ($target in $targets) {
                 $_ -match '^## ' -and $_ -notmatch '^## X-MSUF-Version-Forever:' -and
                 $_ -notmatch '^## Version:.*\[ExcludeLoadGameType standard\]\s*$'
             } | ForEach-Object { $_ -replace '^(## Version:\s*\S+)\s+\[AllowLoadGameType standard\]\s*$', '$1' })
+            # These two reviewed TOC overrides group the Classic-built Mainline
+            # core and Options under MSUF while the Retail 6.x source still uses
+            # Combat. Normalize only that exact field; every other metadata line
+            # must continue to match the recorded Retail source.
+            if ($target.Base -cin @('MidnightSimpleUnitFrames', 'MidnightSimpleUnitFrames_Options') -and
+                $referenceMetadata -ccontains '## Category: Combat' -and
+                $currentMetadata -ccontains '## Category: MSUF') {
+                $currentMetadata = @($currentMetadata | ForEach-Object {
+                    if ($_ -ceq '## Category: MSUF') { '## Category: Combat' } else { $_ }
+                })
+            }
             if ($referenceMetadata.Count -ne $currentMetadata.Count -or
                 @(Compare-Object $referenceMetadata $currentMetadata).Count -ne 0) {
                 throw "$tocName metadata differs from Retail"

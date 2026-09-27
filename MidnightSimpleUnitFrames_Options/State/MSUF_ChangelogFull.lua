@@ -8,12 +8,71 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "FF7D2062B7F1F79301C563C0B1EE6C59CF428DB4A7837F15E9026171DF3A79BA",
-    currentVersion = "6.5-beta9",
+    sourceSha256 = "7674502AB183475BEAC1182F9BE9EC6DE08D291C5374EDE9AF5F4A514AB0BC44",
+    currentVersion = "6.5-beta10",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-beta8",
-    rangeLabel = "6.5-beta8 -> 6.5-beta9",
+    previousVersion = "6.5-beta9",
+    rangeLabel = "6.5-beta9 -> 6.5-beta10",
     entries = {
+        {
+            version = "6.5-beta10",
+            date = "2026-09-27",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Add a Pet Target frame. Enable it under Pet Target > Basics, then place it in Edit Mode.",
+                            link = {
+                                pageKey = "uf_pettarget",
+                                query = "pet target",
+                                label = "Pet Target",
+                                sectionId = "frame_basics",
+                                controlId = "menu2.uf_pettarget.unit.basics.enabled",
+                                settingKey = "pettarget.enabled",
+                            },
+                        },
+                        {
+                            text = "Move Class Resources in Edit Mode even while their resource is inactive. Combo Points keep an editable position outside Cat Form, and the drag area remains visible in the preview.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "class resource offset x",
+                                label = "Class Resource X offset",
+                                sectionId = "classpower_display",
+                                controlId = "menu2.classpower.advanced.layout.x",
+                                settingKey = "bars.classPowerOffsetX",
+                            },
+                        },
+                        {
+                            text = "Place a detached Power bar together with Class Resources or on its own. Its Edit Mode mover and width, height, and position controls work independently of the Class Resource settings.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "detached power x",
+                                label = "Detached Power X offset",
+                                sectionId = "classpower_detached_power",
+                                controlId = "menu2.classpower.advanced.detached.power.layout.x",
+                                settingKey = "player.detachedPowerBarOffsetX",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Pet Target has its own runtime frame, defaults, menu controls, and preview on supported clients.",
+                        "Class Resources and detached Power bars can be moved separately; an Energy bar anchored to Combo Points continues to follow them.",
+                        "The Mainline core and Options addons use the MSUF category in the addon list.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Edit Mode retains movers for temporarily hidden Class Resources and detached Power bars, including an inactive Druid resource.",
+                        "Profile scale and menu dropdown alignment are preserved across UI updates.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta9",
             date = "2026-09-25",

@@ -1,5 +1,27 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta10 - 2026-09-27
+
+### Highlights
+
+- **Add a Pet Target frame.** Enable it under Pet Target > Basics, then place it in Edit Mode.
+<!-- msuf-menu-link: {"pageKey":"uf_pettarget","sectionId":"frame_basics","controlId":"menu2.uf_pettarget.unit.basics.enabled","settingKey":"pettarget.enabled","prepareKind":"","prepareValue":"","query":"pet target","label":"Pet Target"} -->
+- **Move Class Resources in Edit Mode even while their resource is inactive.** Combo Points keep an editable position outside Cat Form, and the drag area remains visible in the preview.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.x","settingKey":"bars.classPowerOffsetX","prepareKind":"","prepareValue":"","query":"class resource offset x","label":"Class Resource X offset"} -->
+- **Place a detached Power bar together with Class Resources or on its own.** Its Edit Mode mover and width, height, and position controls work independently of the Class Resource settings.
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.x","settingKey":"player.detachedPowerBarOffsetX","prepareKind":"","prepareValue":"","query":"detached power x","label":"Detached Power X offset"} -->
+
+### Changes
+
+- Pet Target has its own runtime frame, defaults, menu controls, and preview on supported clients.
+- Class Resources and detached Power bars can be moved separately; an Energy bar anchored to Combo Points continues to follow them.
+- The Mainline core and Options addons use the MSUF category in the addon list.
+
+### Fixes
+
+- Edit Mode retains movers for temporarily hidden Class Resources and detached Power bars, including an inactive Druid resource.
+- Profile scale and menu dropdown alignment are preserved across UI updates.
+
 ## 6.5-beta9 - 2026-09-25
 
 ### Highlights
