@@ -2,7 +2,7 @@
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r - Options
 ## Notes: Load-on-demand configuration UI for Midnight Simple Unit Frames.
 ## Author: Mapko
-## Category: Combat
+## Category: MSUF
 ## Version: 6.20 [AllowLoadGameType standard]
 ## Version: 6.5-beta9 [ExcludeLoadGameType standard]
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga

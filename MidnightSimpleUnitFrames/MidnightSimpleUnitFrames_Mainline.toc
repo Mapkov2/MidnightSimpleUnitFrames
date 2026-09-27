@@ -2,7 +2,7 @@
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
-## Category: Combat
+## Category: MSUF
 ## Version: 6.20 [AllowLoadGameType standard]
 ## Version: 6.5-beta9 [ExcludeLoadGameType standard]
 ## X-MSUF-Version-Forever: 6.5-beta9
