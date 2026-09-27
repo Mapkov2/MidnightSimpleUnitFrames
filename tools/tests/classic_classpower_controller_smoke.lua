@@ -29,6 +29,7 @@ local CLEARED_GLOBALS = {
     "MSUF_CP_FEATURE_BUILDERS", "MSUF_ClassPowerContainer", "MSUF_AltManaContainer",
     "MSUF_ClassPowerPlayerHealthBar", "MSUF_player", "MSUF_ScheduleOnce",
     "MSUF_SetRoundLayoutToNearestPixel", "MSUF_RefreshPlayerPowerBar",
+    "MSUF_UnitEditModeActive", "MSUF_ClassPower_EnsureEditModeAnchor",
     MANA_FLAG, "MSUF_EleMaelstromActive", "MSUF_ShadowManaActive", "MSUF_AugEvokerActive",
 }
 
@@ -83,7 +84,9 @@ local function Start(spec)
     }
     local t = { env = env, S = S, powerBarRefreshes = 0 }
 
-    local ns = { Client = { IsClassic = true, SupportsEvent = function(event)
+    local ns = { Client = { IsClassic = true,
+        IsVanilla = flavor == "Vanilla", IsTBC = flavor == "TBC", IsMists = flavor == "Mists",
+        SupportsEvent = function(event)
         return event ~= "UNIT_POWER_POINT_CHARGE" and event ~= "WAR_MODE_STATUS_UPDATE"
     end } }
     local player = env:CreateFrame("Frame", "MSUF_player", UIParent)
@@ -228,6 +231,30 @@ local function With(base, extra)
     for key, value in pairs(extra) do out[key] = value end
     return out
 end
+
+Case("inactive class resource retains an Edit Mode layout anchor", nil, function()
+    local t = Start({ class = "DRUID", spec = 2, primary = PT.Mana, hasMana = true })
+    assert(t.CP.visible == false and t.CP.container == nil, "Druid outside Cat Form started with a resource")
+    assert(_G.MSUF_ClassPower_EnsureEditModeAnchor() == false,
+        "inactive resource anchor was created outside Edit Mode")
+    _G.MSUF_UnitEditModeActive = true
+    assert(_G.MSUF_ClassPower_EnsureEditModeAnchor() == true,
+        "Druid outside Cat Form has no Edit Mode anchor")
+    local frame = assert(t.CP.container, "Edit Mode did not create the resource container")
+    assert(frame._msufAnchorOnly == true and frame:IsShown() == false,
+        "inactive Edit Mode anchor became a visible resource")
+    MSUF_DB.bars.classPowerWidthMode = "custom"
+    MSUF_DB.bars.classPowerWidth = 180
+    MSUF_DB.bars.classPowerHeight = 12
+    assert(_G.MSUF_ClassPower_RefreshLayout() == true,
+        "width/height refresh ignored the inactive Edit Mode anchor")
+    assert(Near(frame:GetWidth(), 180) and Near(frame:GetHeight(), 12),
+        "inactive Edit Mode anchor did not follow the configured size")
+    _G.MSUF_UnitEditModeActive = false
+    t.FullRefresh()
+    assert(frame._msufAnchorOnly == nil, "Edit Mode anchor remained active after exit")
+    return t
+end)
 
 Case("mana source publishes before one re-apply", nil, function()
     local t = Start(With(CAT_DRUID, { source = "MANA" }))

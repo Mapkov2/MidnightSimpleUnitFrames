@@ -185,18 +185,22 @@ builders.CONTROLLER_SURFACE = function(E)
     end
     ExportPublic("MSUF_ClassPower_MountEbonMight", CP_MountEbonMight)
 
-    local function CP_ShouldMaintainHiddenAnchor()
+    local function CP_ShouldMaintainHiddenAnchor(forEditMode)
+        local b = _cpDB.bars or {}
+        if forEditMode == true and _G.MSUF_UnitEditModeActive == true
+            and b.showClassPower ~= false then
+            return true
+        end
         local p = MSUF_DB and MSUF_DB.player
         if not p or p.powerBarDetached ~= true or p.detachedPowerBarAnchorToClassPower ~= true then
             return false
         end
-        local b = _cpDB.bars or {}
         return b.showClassPower ~= false
     end
 
-    local function CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
+    local function CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight, forEditMode)
         if not (playerFrame and CP_Create and CP_EnsureBars and CP_Layout) then return false end
-        if not CP_ShouldMaintainHiddenAnchor() then return false end
+        if not CP_ShouldMaintainHiddenAnchor(forEditMode) then return false end
 
         CP_Create(playerFrame)
 

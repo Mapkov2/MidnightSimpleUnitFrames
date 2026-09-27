@@ -78,6 +78,23 @@ local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
 --- Player class (resolved once, never changes)
 local PLAYER_CLASS = select(2, UnitClass("player"))
 
+-- A Classic resource can be inactive in the current form/spec but still needs
+-- an Edit Mode anchor. Keep the eligibility tied to the resources each flavor
+-- actually implements; a Warrior should not acquire a phantom Combo mover.
+local function CP_CanEditInactiveClassResource()
+    local client = MSUF.Client or {}
+    if client.IsForever or client.IsVanilla or client.IsTBC then
+        return PLAYER_CLASS == "ROGUE" or PLAYER_CLASS == "DRUID"
+    end
+    if client.IsMists then
+        return PLAYER_CLASS == "ROGUE" or PLAYER_CLASS == "DRUID"
+            or PLAYER_CLASS == "DEATHKNIGHT" or PLAYER_CLASS == "PALADIN"
+            or PLAYER_CLASS == "WARLOCK" or PLAYER_CLASS == "MAGE"
+            or PLAYER_CLASS == "MONK" or PLAYER_CLASS == "PRIEST"
+    end
+    return false
+end
+
 --- Phase 1 CP split: shared constants / profiles now live in ClassPower/*.lua
 --- Keeps the core chunk smaller and reduces WoW's top-level local pressure.
 local CPConst = _G.MSUF_CP_CONST or {}
@@ -1533,7 +1550,8 @@ function Refresh.HideClassPower(playerFrame, cpHeight)
     end
     if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
     CP_StopCentralTick()
-    local maintainedAnchor = CPSurface.EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
+    local maintainedAnchor = CPSurface.EnsureHiddenAnchorGeometry(
+        playerFrame, cpHeight, CP_CanEditInactiveClassResource())
     if CP.container then
         if not maintainedAnchor then
             CP.container._msufAnchorOnly = nil
@@ -2441,15 +2459,17 @@ end
 ExportPublic("MSUF_ClassPower_RefreshTextures", CP.RefreshTexturesPublic)
 
 CP.RefreshLayoutCurrent = function()
-    if not (CP.visible and CP_Layout) then
-        return false
-    end
     local playerFrame = GetPlayerFrame()
     if not playerFrame then
         return false
     end
     local b = _cpDB.bars or {}
     local cpHeight = CPConfig.ResolveClassPowerHeight(b)
+    if not CP.visible then
+        return CPSurface.EnsureHiddenAnchorGeometry(
+            playerFrame, cpHeight, CP_CanEditInactiveClassResource())
+    end
+    if not CP_Layout then return false end
     local maxP = tonumber(CP.currentMax) or 0
     if maxP <= 0 then
         return false
@@ -2467,6 +2487,21 @@ end
 ExportPublic("MSUF_ClassPower_RefreshLayout", function()
     CPConfig.RefreshConfig()
     return CP.RefreshLayoutCurrent()
+end)
+
+-- Called only while Edit Mode is building its resource movers. A Druid outside
+-- Cat Form (or a spec with no active resource) has no live container yet.
+ExportPublic("MSUF_ClassPower_EnsureEditModeAnchor", function()
+    if _G.MSUF_UnitEditModeActive ~= true or not CP_CanEditInactiveClassResource()
+        or (InCombatLockdown and InCombatLockdown()) then return false end
+    if CP.visible and CP.container then return true end
+    CPConfig.RefreshConfig()
+    local b = _cpDB.bars or {}
+    if b.showClassPower == false then return false end
+    local playerFrame = GetPlayerFrame()
+    if not playerFrame then return false end
+    return CPSurface.EnsureHiddenAnchorGeometry(
+        playerFrame, CPConfig.ResolveClassPowerHeight(b), true)
 end)
 
 -- Source-size callbacks already run against the live profile table. Avoid the

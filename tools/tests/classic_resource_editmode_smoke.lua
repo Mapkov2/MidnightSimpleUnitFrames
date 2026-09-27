@@ -66,12 +66,55 @@ MSUF_DB.player.powerBarDetached = false
 assert(powerCfg.getFrame() == nil, "embedded Player Power must not expose a detached mover")
 MSUF_DB.player.powerBarDetached = true
 combo.shown = false
-assert(classCfg.getFrame() == nil, "hidden Class Resources must not expose a mover")
+combo._msufAnchorOnly = true
+MSUF_UnitEditModeActive = true
+assert(classCfg.getFrame() == combo, "inactive Class Resources lost their Edit Mode mover")
+energy.shown = false
+assert(powerCfg.getFrame() == energy, "linked detached Power lost its independent mover")
+energy.shown = true
+combo._msufAnchorOnly = nil
 combo.shown = true
 
+MSUF_ClassPowerContainer = nil
+local ensureCalls = 0
+MSUF_ClassPower_EnsureEditModeAnchor = function()
+    ensureCalls = ensureCalls + 1
+    combo._msufAnchorOnly = true
+    combo.shown = false
+    MSUF_ClassPowerContainer = combo
+    return true
+end
+assert(classCfg.getFrame() == combo and ensureCalls == 1,
+    "first Edit Mode entry did not lazily create an inactive resource anchor")
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_Layout.lua"))("MSUF", namespace)
 MSUF_InstallEditLayoutUI("MSUF", namespace)
 local ticker = assert(MSUF_EM2.Ticker)
+energy.shown = false
+local inactivePowerMover = Widget(100, 125, 250, 16, UIParent)
+local inactivePowerDrag = assert(ticker.BeginExternalDrag(inactivePowerMover, "power_player", powerCfg,
+    { bar = powerCfg.getFrame() }))
+inactivePowerMover.left = inactivePowerMover.left + 2
+assert(ticker.ApplyExternalDrag(inactivePowerDrag) == true
+    and MSUF_DB.player.detachedPowerBarOffsetX == 2,
+    "inactive detached Power could not be dragged")
+ticker.EndExternalDrag(inactivePowerDrag, false)
+MSUF_DB.player.detachedPowerBarOffsetX = 0
+energy:SetPoint("TOP", combo, "BOTTOM", 0, -4)
+energy.shown = true
+local inactiveMover = Widget(100, 140, 250, 16, UIParent)
+local inactiveDrag = assert(ticker.BeginExternalDrag(inactiveMover, "classpower", classCfg, { bar = combo }))
+inactiveMover.left = inactiveMover.left + 3
+assert(ticker.ApplyExternalDrag(inactiveDrag) == true
+    and MSUF_DB.bars.classPowerOffsetX == 6,
+    "inactive Class Resources could not be dragged")
+ticker.EndExternalDrag(inactiveDrag, false)
+MSUF_DB.bars.classPowerOffsetX = 3
+combo:SetPoint("TOPLEFT", player, "TOPLEFT", 3, 5)
+combo.shown = true
+combo._msufAnchorOnly = nil
+MSUF_UnitEditModeActive = false
+assert(classCfg.getFrame() == combo, "live Class Resources were lost after Edit Mode")
+
 local mover = Widget(100, 140, 250, 16, UIParent)
 local drag = assert(ticker.BeginExternalDrag(mover, "classpower", classCfg, { bar = combo }))
 mover.left, mover.bottom = mover.left + 20, mover.bottom + 10

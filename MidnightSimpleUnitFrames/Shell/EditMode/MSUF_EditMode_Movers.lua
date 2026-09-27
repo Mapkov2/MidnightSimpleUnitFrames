@@ -353,10 +353,9 @@ local function CreateMover(key, cfg)
     function mover:UpdateLabelVisibility()
         if self._label then self._label:SetText(MoverLabelText(key, cfg)) end
         if _G.MSUF_PreviewTestMode and not (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then
-            if cfg.externalPublicElement then
-                --- External elements (Dominos/Danders/Blizzard) have no MSUF
-                --- preview frame underneath, so the tinted band + label stay
-                --- visible as the "MSUF controls this" marker.
+            if cfg.externalPublicElement or cfg.popupType == "resource" then
+                --- Resources can be only a few pixels tall or use a hidden
+                --- layout anchor. Keep their drag surface visible in preview.
                 self._label:Show()
                 self._bg:SetColorTexture(th.bgR, th.bgG, th.bgB, 0.55)
                 self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.60)
@@ -744,8 +743,17 @@ end
 
 local function GetClassResourceFrame()
     local frame = _G.MSUF_ClassPowerContainer
-    if frame and frame.IsShown and frame:IsShown() and frame._msufAnchorOnly ~= true
-        and frame.GetCenter and frame:GetCenter() then return frame end
+    if _G.MSUF_UnitEditModeActive == true
+        and (not frame or (frame.IsShown and not frame:IsShown()
+            and frame._msufAnchorOnly ~= true)) then
+        local ensure = _G.MSUF_ClassPower_EnsureEditModeAnchor
+        if type(ensure) == "function" then ensure() end
+        frame = _G.MSUF_ClassPowerContainer
+    end
+    if frame and frame.GetCenter and frame:GetCenter()
+        and ((frame.IsShown and frame:IsShown())
+            or (_G.MSUF_UnitEditModeActive == true and frame._msufAnchorOnly == true))
+    then return frame end
 end
 
 local function GetDetachedPowerFrame(unit)
@@ -753,8 +761,9 @@ local function GetDetachedPowerFrame(unit)
     if not (conf and conf.powerBarDetached == true) then return nil end
     local owner = GetUF(unit)
     local bar = owner and (owner.targetPowerBar or owner.powerBar or owner.Power)
-    if bar and bar._msufDetached == true and bar.IsShown and bar:IsShown()
-        and bar.GetCenter and bar:GetCenter() then return bar end
+    if bar and bar._msufDetached == true and bar.GetCenter and bar:GetCenter()
+        and ((bar.IsShown and bar:IsShown()) or _G.MSUF_UnitEditModeActive == true)
+    then return bar end
 end
 
 local function ResourceMoverBounds(frame, above)
