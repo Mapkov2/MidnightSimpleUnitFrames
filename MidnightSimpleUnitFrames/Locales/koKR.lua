@@ -12,6 +12,30 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
 
+-- Frame bar shape controls.
+L["Selects which side and corner of slanted Health and Power bars is cut."] = "Selects which side and corner of slanted Health and Power bars is cut."
+L["Shows the selected cut on a Health and Power bar sample."] = "Shows the selected cut on a Health and Power bar sample."
+L["Slanted"] = "Slanted"
+L["Cut direction"] = "Cut direction"
+L["Slanted bar preview"] = "Slanted bar preview"
+L["Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."] = "Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."
+L["Right edge: lower corner"] = "Right edge: lower corner"
+L["Right edge: upper corner"] = "Right edge: upper corner"
+L["Left edge: lower corner"] = "Left edge: lower corner"
+L["Left edge: upper corner"] = "Left edge: upper corner"
+L["Both edges: lower corners"] = "Both edges: lower corners"
+L["Both edges: upper corners"] = "Both edges: upper corners"
+L["Slanted Bars"] = "사선 막대"
+L["Cuts the right edge of Health and Power bars. Choose frames in Frame Basics or apply this shape everywhere."] = "생명력 및 자원 막대의 오른쪽 끝을 비스듬히 자릅니다. 기본 설정에서 프레임별로 선택하거나 모든 프레임에 적용하세요."
+L["Apply slanted bars to all frames"] = "모든 프레임에 사선 막대 적용"
+L["Use shared style"] = "공유 스타일 사용"
+L["Straight"] = "직선"
+L["Rounded"] = "둥근 모서리"
+L["Slanted right edge"] = "사선 오른쪽 끝"
+L["Frame bar shape"] = "프레임 막대 모양"
+L["Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars."] = "이 프레임의 생명력 및 자원 막대 모양을 선택합니다. 공유 스타일 사용은 외형 > 막대 설정을 따릅니다."
+
+
 L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "BLIZZARD 제한: 인스턴스 전투 중에는 Blizzard가 종족 및 직업 정보를 제한할 수 있습니다. 따라서 종족/직업 텍스트를 사용할 수 없거나 대체 식별자가 표시될 수 있습니다."
 
 -- 마우스오버 강조 설정.

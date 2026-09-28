@@ -9,6 +9,30 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
 
+-- Frame bar shape controls.
+L["Selects which side and corner of slanted Health and Power bars is cut."] = "Selects which side and corner of slanted Health and Power bars is cut."
+L["Shows the selected cut on a Health and Power bar sample."] = "Shows the selected cut on a Health and Power bar sample."
+L["Slanted"] = "Slanted"
+L["Cut direction"] = "Cut direction"
+L["Slanted bar preview"] = "Slanted bar preview"
+L["Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."] = "Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."
+L["Right edge: lower corner"] = "Right edge: lower corner"
+L["Right edge: upper corner"] = "Right edge: upper corner"
+L["Left edge: lower corner"] = "Left edge: lower corner"
+L["Left edge: upper corner"] = "Left edge: upper corner"
+L["Both edges: lower corners"] = "Both edges: lower corners"
+L["Both edges: upper corners"] = "Both edges: upper corners"
+L["Slanted Bars"] = "Slanted Bars"
+L["Cuts the right edge of Health and Power bars. Choose frames in Frame Basics or apply this shape everywhere."] = "Cuts the right edge of Health and Power bars. Choose frames in Frame Basics or apply this shape everywhere."
+L["Apply slanted bars to all frames"] = "Apply slanted bars to all frames"
+L["Use shared style"] = "Use shared style"
+L["Straight"] = "Straight"
+L["Rounded"] = "Rounded"
+L["Slanted right edge"] = "Slanted right edge"
+L["Frame bar shape"] = "Frame bar shape"
+L["Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars."] = "Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars."
+
+
 L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."
 
 -- Mouseover highlight controls.

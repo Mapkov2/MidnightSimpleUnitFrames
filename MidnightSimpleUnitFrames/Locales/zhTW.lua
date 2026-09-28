@@ -12,6 +12,30 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhTW")) or (MSUF.L or {})
 
+-- Frame bar shape controls.
+L["Selects which side and corner of slanted Health and Power bars is cut."] = "Selects which side and corner of slanted Health and Power bars is cut."
+L["Shows the selected cut on a Health and Power bar sample."] = "Shows the selected cut on a Health and Power bar sample."
+L["Slanted"] = "Slanted"
+L["Cut direction"] = "Cut direction"
+L["Slanted bar preview"] = "Slanted bar preview"
+L["Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."] = "Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."
+L["Right edge: lower corner"] = "Right edge: lower corner"
+L["Right edge: upper corner"] = "Right edge: upper corner"
+L["Left edge: lower corner"] = "Left edge: lower corner"
+L["Left edge: upper corner"] = "Left edge: upper corner"
+L["Both edges: lower corners"] = "Both edges: lower corners"
+L["Both edges: upper corners"] = "Both edges: upper corners"
+L["Slanted Bars"] = "斜邊條"
+L["Cuts the right edge of Health and Power bars. Choose frames in Frame Basics or apply this shape everywhere."] = "將生命值與能量條的右邊裁成斜邊。可在基本設定中單獨選擇框架，也可套用至所有框架。"
+L["Apply slanted bars to all frames"] = "將斜邊條套用至所有框架"
+L["Use shared style"] = "使用共用樣式"
+L["Straight"] = "直邊"
+L["Rounded"] = "圓角"
+L["Slanted right edge"] = "右側斜邊"
+L["Frame bar shape"] = "框架條形狀"
+L["Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars."] = "選擇此框架生命值與能量條的形狀。使用共用樣式會遵循外觀 > 狀態條設定。"
+
+
 L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "暴雪限制：在副本戰鬥中，暴雪可能會限制種族與職業資訊。因此，種族／職業文字可能無法使用，或顯示備用識別碼。"
 
 -- 滑鼠游標高亮設定。

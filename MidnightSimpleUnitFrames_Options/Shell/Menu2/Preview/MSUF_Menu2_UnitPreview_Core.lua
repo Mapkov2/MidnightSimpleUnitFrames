@@ -108,13 +108,21 @@ function Core.RoundedOutlineThickness(key, conf, scale)
     end
     return t
 end
-local function PreviewRoundedUnitFramesEnabled()
-    return ReadPreviewBarsBool("roundedFramesEnabled", false)
-        and ReadPreviewBarsBool("roundedUnitFrames", true)
+local function PreviewFrameStyle(key)
+    local conf = UnitDB(key)
+    local explicit = conf and conf.frameBarShape
+    if explicit == "SLANTED" or explicit == "ROUNDED" or explicit == "SQUARE" then return explicit end
+    if ReadPreviewBarsBool("roundedFramesEnabled", false)
+        and ReadPreviewBarsBool("roundedUnitFrames", true) then return "ROUNDED" end
+    return "SQUARE"
 end
-local function PreviewRoundedPowerBarsEnabled()
-    return ReadPreviewBarsBool("roundedFramesEnabled", false)
-        and ReadPreviewBarsBool("roundedPowerBars", true)
+local function PreviewRoundedPowerBarsEnabled(key)
+    local style = PreviewFrameStyle(key)
+    if style == "SQUARE" then return false end
+    if style == "SLANTED" then return true end
+    local conf = UnitDB(key)
+    if conf and conf.frameBarShape == "ROUNDED" then return true end
+    return ReadPreviewBarsBool("roundedPowerBars", true)
 end
 local function PreviewSnapOff(region)
     if PreviewHelpers.SnapOff then PreviewHelpers.SnapOff(region) end
@@ -331,9 +339,9 @@ local INLINE_POWER_ROUNDED_OPTS = {
     snapOff = PreviewSnapOff,
     baseEdgeColor = PreviewPowerEdgeColor,
 }
-local function UpdatePreviewRoundedMedia(mock)
-    if type(PreviewHelpers.ResolveRoundedMedia) == "function" then
-        previewRoundedMask, previewRoundedEdge, previewRoundedStrength = PreviewHelpers.ResolveRoundedMedia()
+local function UpdatePreviewRoundedMedia(mock, style)
+    if type(PreviewHelpers.ResolveFrameBarMedia) == "function" then
+        previewRoundedMask, previewRoundedEdge, previewRoundedStrength = PreviewHelpers.ResolveFrameBarMedia(style)
     end
     mock._msufPreviewRoundedMediaStrength = previewRoundedStrength
     PREVIEW_ROUNDED_OPTS.edgeTexture = previewRoundedEdge
@@ -435,8 +443,9 @@ end
 function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, powerEdgeSize, detachedRounded, detachedEdgeSize)
     if not (box and box.mock) then return end
     local mock = box.mock
-    local rounded = PreviewRoundedUnitFramesEnabled()
-    if rounded then UpdatePreviewRoundedMedia(mock) end
+    local style = PreviewFrameStyle(key)
+    local rounded = style ~= "SQUARE"
+    if rounded then UpdatePreviewRoundedMedia(mock, style) end
     if not rounded or not EnsurePreviewRoundedVisuals(mock) then
         mock._msufPreviewRoundedActive = nil
         mock._msufPreviewRoundedEdgeEnabled = nil
@@ -448,7 +457,7 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         return
     end
     mock._msufPreviewRoundedActive = true
-    local roundedPower = powerOn and PreviewRoundedPowerBarsEnabled()
+    local roundedPower = powerOn and PreviewRoundedPowerBarsEnabled(key)
     local sharedPowerBody = roundedPower and powerEmbedded ~= false
     ApplyPowerBorder(mock, powerOn, powerEdgeSize, sharedPowerBody, roundedPower)
     local healthBgAnchor = mock
@@ -512,7 +521,7 @@ function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, p
         if inlinePowerHost then inlinePowerHost:Hide() end
     end
     local detached = mock.detachedPower
-    local detachedActive = detachedRounded == true and PreviewRoundedPowerBarsEnabled()
+    local detachedActive = detachedRounded == true and PreviewRoundedPowerBarsEnabled(key)
         and detached and (not detached.IsShown or detached:IsShown())
     if detachedActive and PreviewHelpers.EnsureRoundedVisuals
         and PreviewHelpers.EnsureRoundedVisuals(detached, DETACHED_POWER_ROUNDED_OPTS) then

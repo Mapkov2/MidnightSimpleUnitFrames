@@ -207,8 +207,8 @@ local roundedController = Read(ROUNDED_CONTROLLER)
 -- function, ending at its own `end`.
 local controllerApplyAll = Slice.Function(roundedController, "local function ApplyAll", ROUNDED_CONTROLLER)
 assert(controllerApplyAll:find("MSUF.RoundedCastbarsApplyAll", 1, true)
-    and controllerApplyAll:find("applyRoundedCastbars(enabled)", 1, true),
-    "rounded master ApplyAll no longer delegates its module state to castbars")
+    and controllerApplyAll:find('applyRoundedCastbars(enabled and ReadRoundedBool("roundedFramesEnabled", false))', 1, true),
+    "rounded master ApplyAll no longer delegates its own state to castbars")
 local modulesApplied = Slice.Function(roundedController,
     'ExportPublic("MSUF_RoundedUF_OnModulesApplied", function', ROUNDED_CONTROLLER)
 assert(modulesApplied:find("ApplyAll()", 1, true),

@@ -21,13 +21,18 @@ function Rounded.Install(deps)
     local ReadBarsBool = deps.ReadBarsBool
     local Round = deps.Round
     local HealPredAnchorMode = deps.HealPredAnchorMode
-local function RoundedEnabled()
-    return ReadBarsBool("roundedFramesEnabled", false)
-        and ReadBarsBool("roundedGroupFrames", true)
+local function FrameStyle(conf)
+    local explicit = conf and conf.frameBarShape
+    if explicit == "SLANTED" or explicit == "ROUNDED" or explicit == "SQUARE" then return explicit end
+    if ReadBarsBool("roundedFramesEnabled", false)
+        and ReadBarsBool("roundedGroupFrames", true) then return "ROUNDED" end
+    return "SQUARE"
 end
-local function RoundedPowerEnabled()
-    return ReadBarsBool("roundedFramesEnabled", false)
-        and ReadBarsBool("roundedPowerBars", true)
+local function RoundedPowerEnabled(conf)
+    local style = FrameStyle(conf)
+    if style == "SQUARE" then return false end
+    if style == "SLANTED" or (conf and conf.frameBarShape == "ROUNDED") then return true end
+    return ReadBarsBool("roundedPowerBars", true)
 end
 local function SnapOff(region)
     if PreviewHelpers.SnapOff then PreviewHelpers.SnapOff(region) end
@@ -133,9 +138,9 @@ local GF_PREVIEW_POWER_ROUNDED_OPTS = {
         return BaseEdgeColor(mock)
     end,
 }
-local function UpdateRoundedMedia(mock)
-    if type(PreviewHelpers.ResolveRoundedMedia) == "function" then
-        GF_PREVIEW_ROUNDED_MASK, GF_PREVIEW_ROUNDED_EDGE, GF_PREVIEW_ROUNDED_STRENGTH = PreviewHelpers.ResolveRoundedMedia()
+local function UpdateRoundedMedia(mock, style)
+    if type(PreviewHelpers.ResolveFrameBarMedia) == "function" then
+        GF_PREVIEW_ROUNDED_MASK, GF_PREVIEW_ROUNDED_EDGE, GF_PREVIEW_ROUNDED_STRENGTH = PreviewHelpers.ResolveFrameBarMedia(style)
     end
     mock._msufPreviewRoundedMediaStrength = GF_PREVIEW_ROUNDED_STRENGTH
     GF_PREVIEW_ROUNDED_OPTS.edgeTexture = GF_PREVIEW_ROUNDED_EDGE
@@ -226,8 +231,9 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
 end
 local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDetached, powerEdgeSize)
     if not mock then return false end
-    local enabled = RoundedEnabled()
-    if enabled then UpdateRoundedMedia(mock) end
+    local style = FrameStyle(conf)
+    local enabled = style ~= "SQUARE"
+    if enabled then UpdateRoundedMedia(mock, style) end
     if not enabled or not EnsureRoundedVisuals(mock) then
         mock._msufGFRoundedPreviewActive = nil
         ClearRoundedMasks(mock)
@@ -245,7 +251,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     local absorbTex = StatusBarTexture(mock._absorb)
     local healAbsorbTex = StatusBarTexture(mock._healAbsorb)
     local powerTex = StatusBarTexture(mock._power)
-    local roundPower = powerOn and RoundedPowerEnabled()
+    local roundPower = powerOn and RoundedPowerEnabled(conf)
     local sharedBody = roundPower and powerEmbed ~= false and powerDetached ~= true
     ApplyPowerBorder(mock, powerOn, powerEdgeSize, sharedBody, roundPower)
     local healthAnchor = sharedBody and mock or mock._health

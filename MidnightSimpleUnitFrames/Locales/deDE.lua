@@ -5,6 +5,30 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
 
+-- Frame bar shape controls.
+L["Selects which side and corner of slanted Health and Power bars is cut."] = "Wählt aus, an welcher Seite und Ecke schräge Lebens- und Ressourcenleisten abgeschnitten werden."
+L["Shows the selected cut on a Health and Power bar sample."] = "Zeigt die gewählte Schräge an einer Lebens- und Ressourcenleiste."
+L["Slanted"] = "Schräg"
+L["Cut direction"] = "Schnittrichtung"
+L["Slanted bar preview"] = "Vorschau der schrägen Leisten"
+L["Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."] = "Schneidet die Kanten von Lebens- und Ressourcenleisten ab. Wähle Frames unter Frame-Grundlagen einzeln aus oder wende die Form überall an."
+L["Right edge: lower corner"] = "Rechts: untere Ecke"
+L["Right edge: upper corner"] = "Rechts: obere Ecke"
+L["Left edge: lower corner"] = "Links: untere Ecke"
+L["Left edge: upper corner"] = "Links: obere Ecke"
+L["Both edges: lower corners"] = "Beide Seiten: untere Ecken"
+L["Both edges: upper corners"] = "Beide Seiten: obere Ecken"
+L["Slanted Bars"] = "Schräge Leisten"
+L["Cuts the right edge of Health and Power bars. Choose frames in Frame Basics or apply this shape everywhere."] = "Schneidet die rechte Kante von Lebens- und Ressourcenleisten ab. Wähle Frames unter Frame-Grundlagen einzeln aus oder wende die Form überall an."
+L["Apply slanted bars to all frames"] = "Schräge Leisten auf alle Frames anwenden"
+L["Use shared style"] = "Gemeinsamen Stil verwenden"
+L["Straight"] = "Gerade"
+L["Rounded"] = "Abgerundet"
+L["Slanted right edge"] = "Schräge rechte Kante"
+L["Frame bar shape"] = "Leistenform des Frames"
+L["Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars."] = "Wähle die Form der Lebens- und Ressourcenleiste für diesen Frame. Gemeinsamen Stil verwenden folgt Aussehen > Leisten."
+
+
 L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "BLIZZARD-EINSCHRÄNKUNG: Im instanzierten Kampf kann Blizzard Informationen zu Volk und Klasse einschränken. Der Text für Volk/Klasse kann daher fehlen oder auf Ersatzbezeichner zurückfallen."
 
 L["Force Blizzard frame on"] = "Blizzard-Frame erzwingen"

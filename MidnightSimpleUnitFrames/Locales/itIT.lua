@@ -12,6 +12,30 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("itIT")) or (MSUF.L or {})
 
+-- Frame bar shape controls.
+L["Selects which side and corner of slanted Health and Power bars is cut."] = "Selects which side and corner of slanted Health and Power bars is cut."
+L["Shows the selected cut on a Health and Power bar sample."] = "Shows the selected cut on a Health and Power bar sample."
+L["Slanted"] = "Slanted"
+L["Cut direction"] = "Cut direction"
+L["Slanted bar preview"] = "Slanted bar preview"
+L["Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."] = "Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."
+L["Right edge: lower corner"] = "Right edge: lower corner"
+L["Right edge: upper corner"] = "Right edge: upper corner"
+L["Left edge: lower corner"] = "Left edge: lower corner"
+L["Left edge: upper corner"] = "Left edge: upper corner"
+L["Both edges: lower corners"] = "Both edges: lower corners"
+L["Both edges: upper corners"] = "Both edges: upper corners"
+L["Slanted Bars"] = "Barre inclinate"
+L["Cuts the right edge of Health and Power bars. Choose frames in Frame Basics or apply this shape everywhere."] = "Taglia il bordo destro delle barre di salute e risorsa. Scegli i riquadri nelle impostazioni di base o applica questa forma a tutti."
+L["Apply slanted bars to all frames"] = "Applica le barre inclinate a tutti i riquadri"
+L["Use shared style"] = "Usa lo stile condiviso"
+L["Straight"] = "Dritto"
+L["Rounded"] = "Arrotondato"
+L["Slanted right edge"] = "Bordo destro inclinato"
+L["Frame bar shape"] = "Forma delle barre del riquadro"
+L["Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars."] = "Scegli la forma delle barre di salute e risorsa per questo riquadro. Lo stile condiviso segue Aspetto > Barre."
+
+
 L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "LIMITAZIONE DI BLIZZARD: Durante i combattimenti nelle istanze, Blizzard può limitare le informazioni su razza e classe. Il testo Razza/Classe potrebbe quindi non essere disponibile o usare identificatori alternativi."
 
 -- Controlli di evidenziazione al passaggio del mouse.

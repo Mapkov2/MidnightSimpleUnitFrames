@@ -77,6 +77,7 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	.github/scripts/rounded_border_highlight_smoke.lua		Rounded border highlight startup smoke failed
 -	lua+driver	.github/scripts/rounded_border_highlight_smoke.lua	--startup-disabled	Rounded border highlight enable smoke failed
 -	lua+driver	.github/scripts/rounded_forbidden_mask_owner_smoke.lua		Rounded native aura ownership smoke failed
+-	lua+driver	.github/scripts/slanted_bar_shape_smoke.lua		Slanted frame shape scope smoke failed
 -	lua+driver	tools/castbar_refresh_ownership_smoke.lua		Shared castbar refresh ownership smoke failed
 -	lua+driver	tools/aura_font_fanout_smoke.lua	{root/}	Shared aura font fanout smoke failed
 -	lua+driver	tools/arena_unit_scope_smoke.lua		Arena frame regression smoke failed: tools/arena_unit_scope_smoke.lua

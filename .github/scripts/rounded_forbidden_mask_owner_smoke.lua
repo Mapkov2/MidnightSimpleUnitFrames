@@ -4,7 +4,9 @@ local Slice = assert(loadfile(".github/scripts/msuf_source_slice.lua"),
     "rounded_forbidden_mask_owner_smoke must run with the repository root as the working directory")()
 local Read = Slice.Read
 local ROUNDED = "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"
-local AURAS = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
+local DISPEL = "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_DispelVisuals.lua"
+local PREVIEW = "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_EffectPreview.lua"
+local FACADE = "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua"
 
 local rounded = Read(ROUNDED)
 assert(not rounded:find("_msufRoundedMaskOwners", 1, true),
@@ -36,7 +38,9 @@ local function DeferApply() error("unexpected defer") end
 local function FrameIsGroup() return true end
 local function RoundedGroupFramesEnabled() return true end
 local function RoundedUnitFramesEnabled() return true end
+local function RoundedFrameEnabled() return true end
 local function RoundedPowerBarsEnabled() return false end
+local function SurfaceMaskPath() return roundedMaskPath end
 local function PowerIsEmbedded() return false end
 local function CanCreateRoundedRegion() return true end
 local function UpdateRoundedMediaState() calls[#calls + 1] = "media" end
@@ -70,16 +74,18 @@ local region = {
 local frame = { health = anchor }
 assert(prepare(frame, region, owner) == true, "frozen native dispel mask preparation failed")
 assert(table.concat(calls, ",") == "media,create,snap,texture,points,slice,bind",
-    "frozen native dispel mask setup order changed")
+    "frozen native dispel mask setup order changed: " .. table.concat(calls, ","))
 sealed = true
 assert(not pcall(mask.ClearAllPoints),
     "test mask did not model the post-AddDispelTypeTexture forbidden state")
 
-local auras = Read(AURAS)
-local initializerStart = assert(auras:find("local function PrepareDispelSensorVisual", 1, true))
-local initializerEnd = assert(auras:find("\nreturn {", initializerStart, true))
-local overlayStart = assert(auras:find('if sensor%.visual == "overlay" then%s+region:SetTexture%(', initializerStart))
-local overlayBranch = auras:sub(overlayStart, initializerEnd - 1)
+local dispel = Read(DISPEL)
+local preview = Read(PREVIEW)
+local facade = Read(FACADE)
+local initializerStart = assert(dispel:find("local function PrepareDispelSensorVisual", 1, true))
+local initializerEnd = assert(dispel:find("\nreturn {", initializerStart, true))
+local overlayStart = assert(dispel:find('if sensor%.visual == "overlay" then%s+region:SetTexture%(', initializerStart))
+local overlayBranch = dispel:sub(overlayStart, initializerEnd - 1)
 local prepareCall = assert(overlayBranch:find(
     "PrepareRoundedDispelOverlayRegion(parentFrame, region, button)", 1, true),
     "native dispel overlay is not prepared with its explicit owner")
@@ -88,13 +94,13 @@ local blizzardHandoff = assert(overlayBranch:find(
     "native dispel overlay Blizzard handoff missing")
 assert(prepareCall < blizzardHandoff,
     "native dispel overlay is masked after Blizzard makes it forbidden")
-assert(not auras:find("RegisterRoundedDispelOverlayRegion", 1, true),
+assert(not dispel:find("RegisterRoundedDispelOverlayRegion", 1, true),
     "legacy post-handoff native dispel registration remains")
-assert(auras:find("RegisterRoundedDispelOverlayPreviewRegion(frame, region)", 1, true),
+assert(preview:find("RegisterRoundedDispelOverlayPreviewRegion(frame, region)", 1, true),
     "MSUF-owned dispel overlay preview lost its mutable rounded registration")
-assert(auras:find("function A3.RefreshRoundedDispelOverlayMasks()", 1, true),
+assert(facade:find("function A3.RefreshRoundedDispelOverlayMasks()", 1, true),
     "rounded setting changes cannot recreate frozen native dispel masks")
-assert(auras:find("A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1", 1, true),
+assert(facade:find("A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1", 1, true),
     "native dispel-mask recreation does not advance the Auras3 visual generation")
 -- Reason: the module-apply callback and the settings apply function are one
 -- function each.

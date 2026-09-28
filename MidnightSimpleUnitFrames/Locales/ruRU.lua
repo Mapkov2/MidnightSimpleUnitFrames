@@ -12,6 +12,30 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ruRU")) or (MSUF.L or {})
 
+-- Frame bar shape controls.
+L["Selects which side and corner of slanted Health and Power bars is cut."] = "Selects which side and corner of slanted Health and Power bars is cut."
+L["Shows the selected cut on a Health and Power bar sample."] = "Shows the selected cut on a Health and Power bar sample."
+L["Slanted"] = "Slanted"
+L["Cut direction"] = "Cut direction"
+L["Slanted bar preview"] = "Slanted bar preview"
+L["Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."] = "Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere."
+L["Right edge: lower corner"] = "Right edge: lower corner"
+L["Right edge: upper corner"] = "Right edge: upper corner"
+L["Left edge: lower corner"] = "Left edge: lower corner"
+L["Left edge: upper corner"] = "Left edge: upper corner"
+L["Both edges: lower corners"] = "Both edges: lower corners"
+L["Both edges: upper corners"] = "Both edges: upper corners"
+L["Slanted Bars"] = "Скошенные полосы"
+L["Cuts the right edge of Health and Power bars. Choose frames in Frame Basics or apply this shape everywhere."] = "Срезает правый край полос здоровья и ресурса. Выберите рамки в основных настройках или примените форму ко всем."
+L["Apply slanted bars to all frames"] = "Применить скошенные полосы ко всем рамкам"
+L["Use shared style"] = "Использовать общий стиль"
+L["Straight"] = "Прямой"
+L["Rounded"] = "Скругленный"
+L["Slanted right edge"] = "Скошенный правый край"
+L["Frame bar shape"] = "Форма полос рамки"
+L["Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars."] = "Выберите форму полос здоровья и ресурса для этой рамки. Общий стиль задан в разделе Внешний вид > Полосы."
+
+
 L["BLIZZARD LIMITATION: During instanced combat, Blizzard may restrict race and class information. Race/Class Text may therefore be unavailable or use fallback identifiers."] = "ОГРАНИЧЕНИЕ BLIZZARD: Во время боя в инстансе Blizzard может ограничивать сведения о расе и классе. Поэтому текст расы/класса может быть недоступен или использовать резервные идентификаторы."
 
 -- Настройки подсветки при наведении.

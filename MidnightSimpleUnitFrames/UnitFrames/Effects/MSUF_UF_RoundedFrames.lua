@@ -27,6 +27,22 @@ for i = 1, #CLEAN_MASK_PATHS do
   CLEAN_MEDIA_PATHS[CLEAN_EDGE_PATHS[i]] = true
 end
 local MASK_PATH_1X = MASK_ROOT .. "rounded_bar_1x.tga"
+local SLANTED_MASK_PATHS = {
+  RIGHT_DOWN = MASK_ROOT .. "slanted_bar_mask.png",
+  RIGHT_UP = MASK_ROOT .. "slanted_bar_mask_right_up.png",
+  LEFT_DOWN = MASK_ROOT .. "slanted_bar_mask_left_down.png",
+  LEFT_UP = MASK_ROOT .. "slanted_bar_mask_left_up.png",
+  BOTH_DOWN = MASK_ROOT .. "slanted_bar_mask_both_down.png",
+  BOTH_UP = MASK_ROOT .. "slanted_bar_mask_both_up.png",
+}
+local SLANTED_EDGE_PATHS = {
+  RIGHT_DOWN = MASK_ROOT .. "slanted_bar_edge.png",
+  RIGHT_UP = MASK_ROOT .. "slanted_bar_edge_right_up.png",
+  LEFT_DOWN = MASK_ROOT .. "slanted_bar_edge_left_down.png",
+  LEFT_UP = MASK_ROOT .. "slanted_bar_edge_left_up.png",
+  BOTH_DOWN = MASK_ROOT .. "slanted_bar_edge_both_down.png",
+  BOTH_UP = MASK_ROOT .. "slanted_bar_edge_both_up.png",
+}
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 local ROUNDED_MEDIA_SLICE_MARGIN = 9.5
 local DEFAULT_ROUNDED_STRENGTH = 3
@@ -45,7 +61,8 @@ local forceDisabled = false
 local unitMouseoverHotEnabled = false
 local groupMouseoverHotEnabled = false
 local groupIndicatorHotEnabled = false
-local unitRoundedVisualHotEnabled = false
+local UNIT_SHAPE_KEYS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "pettarget", "boss", "arena" }
+local GROUP_SHAPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local roundedGroupBlockHosts = setmetatable({}, { __mode = "k" })
 local roundedMediaStrength = DEFAULT_ROUNDED_STRENGTH
 local roundedMaskPath = CLEAN_MASK_PATHS[DEFAULT_ROUNDED_STRENGTH]
@@ -127,7 +144,18 @@ local function UpdateRoundedMediaState()
 end
 
 local function IsConfiguredEnabled()
-  return ReadRoundedBool("roundedFramesEnabled", false)
+  if ReadRoundedBool("roundedFramesEnabled", false) then return true end
+  local db = _G.MSUF_DB
+  if not db then return false end
+  for _, key in ipairs(UNIT_SHAPE_KEYS) do
+    local conf = db[key]
+    if conf and (conf.frameBarShape == "SLANTED" or conf.frameBarShape == "ROUNDED") then return true end
+  end
+  for _, key in ipairs(GROUP_SHAPE_KEYS) do
+    local conf = db[key]
+    if conf and (conf.frameBarShape == "SLANTED" or conf.frameBarShape == "ROUNDED") then return true end
+  end
+  return false
 end
 
 local function IsEnabled()
@@ -135,15 +163,35 @@ local function IsEnabled()
 end
 
 local function RoundedUnitFramesEnabled()
-  return IsEnabled() and ReadRoundedBool("roundedUnitFrames", true)
+  if not IsEnabled() then return false end
+  if ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedUnitFrames", true) then return true end
+  local db = _G.MSUF_DB
+  for _, key in ipairs(UNIT_SHAPE_KEYS) do
+    local style = db and db[key] and db[key].frameBarShape
+    if style == "SLANTED" or style == "ROUNDED" then return true end
+  end
+  return false
 end
 
 local function RoundedGroupFramesEnabled()
-  return IsEnabled() and ReadRoundedBool("roundedGroupFrames", true)
+  if not IsEnabled() then return false end
+  if ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedGroupFrames", true) then return true end
+  local db = _G.MSUF_DB
+  for _, key in ipairs(GROUP_SHAPE_KEYS) do
+    local style = db and db[key] and db[key].frameBarShape
+    if style == "SLANTED" or style == "ROUNDED" then return true end
+  end
+  return false
 end
 
-local function RoundedPowerBarsEnabled()
-  return IsEnabled() and ReadRoundedBool("roundedPowerBars", true)
+local ResolveFrameStyle
+local function RoundedPowerBarsEnabled(f)
+  if f then
+    local style, explicit = ResolveFrameStyle(f)
+    if explicit and (style == "SLANTED" or style == "ROUNDED") then return true end
+    if style == "SQUARE" then return false end
+  end
+  return IsEnabled() and ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedPowerBars", true)
 end
 
 local function FrameIsGroup(f)
@@ -154,11 +202,47 @@ local function FrameIsGroup(f)
   return f.barGroup ~= nil and f.health ~= nil
 end
 
-local function RoundedFrameEnabled(f)
-  if FrameIsGroup(f) then
-    return RoundedGroupFramesEnabled()
+ResolveFrameStyle = function(f)
+  if not f then return "SQUARE" end
+  if f._msufRUFForcedStyle then return f._msufRUFForcedStyle, true end
+  local db = _G.MSUF_DB
+  local group = FrameIsGroup(f)
+  local spec = f.MSUFSpec
+  local unitKey = spec and spec.key or f.configKey
+  if not group and not unitKey then
+    local UF = MSUF and MSUF.UF
+    unitKey = (UF and UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(f.MSUFUnitKey)) or f.MSUFUnitKey
   end
-  return RoundedUnitFramesEnabled()
+  local groupKind = group and (f._msufGFKind or (spec and spec.groupKind)
+    or (MSUF.GF and MSUF.GF.frames and MSUF.GF.frames[f]))
+  local key = group and ("gf_" .. tostring(groupKind or "party"))
+    or unitKey
+  local conf = db and key and db[key]
+  local explicit = conf and conf.frameBarShape
+  if explicit == "SLANTED" or explicit == "ROUNDED" or explicit == "SQUARE" then return explicit, true end
+  if forceDisabled ~= true and ReadRoundedBool("roundedFramesEnabled", false)
+    and ReadRoundedBool(group and "roundedGroupFrames" or "roundedUnitFrames", true) then
+    return "ROUNDED", false
+  end
+  return "SQUARE"
+end
+
+local function RoundedFrameEnabled(f)
+  return forceDisabled ~= true and ResolveFrameStyle(f) ~= "SQUARE"
+end
+
+local function SlantedDirection()
+  local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+  local direction = bars and bars.slantedBarDirection
+  return SLANTED_MASK_PATHS[direction] and direction or "RIGHT_DOWN"
+end
+
+local function SurfaceMaskPath(f)
+  return f and ResolveFrameStyle(f) == "SLANTED" and SLANTED_MASK_PATHS[SlantedDirection()] or roundedMaskPath
+end
+
+local function SurfaceEdgePath(f)
+  return f and ResolveFrameStyle(f) == "SLANTED" and SLANTED_EDGE_PATHS[SlantedDirection()] or roundedEdgePath
 end
 
 local function MouseoverHighlightEnabled()
@@ -486,7 +570,7 @@ local function ClearAllMasks(f)
 end
 
 local function MaskTexture(f, tex, anchor, maskPath)
-  MaskTextureWith(f, tex, "_msufRUF_Mask", "_msufRUF_MaskedTextures", anchor or (f and (f.bg or f) or nil), maskPath)
+  MaskTextureWith(f, tex, "_msufRUF_Mask", "_msufRUF_MaskedTextures", anchor or (f and (f.bg or f) or nil), maskPath or SurfaceMaskPath(f))
 end
 
 local function ClearGroupMasks(f)
@@ -494,7 +578,7 @@ local function ClearGroupMasks(f)
 end
 
 local function MaskGroupTexture(f, tex, anchor, maskPath)
-  MaskTextureWith(f, tex, "_msufRGF_Mask", "_msufRGF_MaskedTextures", anchor or (f and (f.barGroup or f) or nil), maskPath)
+  MaskTextureWith(f, tex, "_msufRGF_Mask", "_msufRGF_MaskedTextures", anchor or (f and (f.barGroup or f) or nil), maskPath or SurfaceMaskPath(f))
 end
 
 local function ClearMaskForTexture(f, maskedKey, tex)
@@ -628,7 +712,7 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
   end
   stack[1] = baseEdge
   stack._msufCount = count
-  local edgePath = roundedEdgePath
+  local edgePath = SurfaceEdgePath(owner._msufRUFStyleOwner or owner)
 
   -- Edge thickness is rendered as a tiny texture stack. Reuse existing textures
   -- whenever possible; only missing stack entries are gated by combat lockdown.
@@ -966,7 +1050,7 @@ local function SetUnitRoundedEdgeColor(f, active, r, g, b, a, thickness)
 end
 
 local function HandleUnitHighlightChanged(f, hlKey, r, g, b, cfg)
-  if not (f and RoundedUnitFramesEnabled()) then
+  if not (f and RoundedFrameEnabled(f)) then
     if f then f._msufRoundedHighlightGlowAnchor = nil end
     return false
   end
@@ -1010,7 +1094,7 @@ local function ApplyUnitRoundedHoverEdge(f, enabled)
 end
 
 local function HandleUnitMouseover(f, active)
-  if not (f and unitMouseoverHotEnabled) then return false end
+  if not (f and unitMouseoverHotEnabled and RoundedFrameEnabled(f)) then return false end
   local container = f._msufRUF_HoverContainer
   if not container and not IsCombatLocked() then
     ApplyUnitRoundedHoverEdge(f, true)
@@ -1256,7 +1340,7 @@ local function ApplyGroupRoundedIndicator(f, kind, enabled, shown, thickness, r,
   if not f then return false end
   local edgeKey, stackKey, stateKey = GroupIndicatorKeys(kind)
   if not edgeKey then return false end
-  if not groupIndicatorHotEnabled then return false end
+  if not groupIndicatorHotEnabled or not RoundedFrameEnabled(f) then return false end
 
   local state = f[stateKey]
   local secretShown = issecretvalue(shown) == true
@@ -1363,8 +1447,18 @@ end
 
 local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
   if not host then return false end
+  local requested = conf and conf.frameBarShape
+  host._msufRUFForcedStyle = requested == "SLANTED" and "SLANTED"
+    or requested == "ROUNDED" and "ROUNDED"
+    or requested == "SQUARE" and "SQUARE"
+    or (ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedGroupFrames", true) and "ROUNDED")
+    or "SQUARE"
   local state = host._msufRGFBlockBorderState
-  if not groupIndicatorHotEnabled then return false end
+  if not groupIndicatorHotEnabled or host._msufRUFForcedStyle == "SQUARE" then
+    if state then state.enabled = false end
+    HideRoundedEdgeStack(host, host._msufRGFBlockBorderEdge, "_msufRGFBlockBorderEdgeStack")
+    return false
+  end
   if enabled ~= true then
     if state then state.enabled = false end
     HideRoundedEdgeStack(host, host._msufRGFBlockBorderEdge, "_msufRGFBlockBorderEdgeStack")
@@ -1447,10 +1541,11 @@ local function ApplySpellIndicatorRoundedEdge(button, frame, target, shown, thic
     return state ~= nil
   end
 
-  local rounded = FrameIsGroup(frame) and groupIndicatorHotEnabled or unitRoundedVisualHotEnabled
+  local rounded = RoundedFrameEnabled(frame)
   if not rounded or not (frame and target) then return false end
   local root = button._msufA3SpellIndicatorEffectRoot
   if not root then return false end
+  button._msufRUFStyleOwner = frame
   if not state then
     state = {}
     button._msufRUFSpellIndicator = state
@@ -1657,10 +1752,10 @@ local function SuppressNativeOutlineNow(f)
 
   local pb = f.targetPowerBar or f.powerBar
   local pbo = pb and pb._msufPowerBorder
-  if RoundedPowerBarsEnabled() and pbo and pbo.Hide then
+  if RoundedPowerBarsEnabled(f) and pbo and pbo.Hide then
     pbo:Hide()
   end
-  if RoundedPowerBarsEnabled() and f._msufDetachedPBOutline and f._msufDetachedPBOutline.Hide then
+  if RoundedPowerBarsEnabled(f) and f._msufDetachedPBOutline and f._msufDetachedPBOutline.Hide then
     f._msufDetachedPBOutline:Hide()
   end
 
@@ -1761,7 +1856,7 @@ local function ApplyGroupBackdrop(f, kind, enabled)
 end
 
 local function RefreshGroupBackdropAlpha(f, kind)
-  if not (f and RoundedGroupFramesEnabled()) then return end
+  if not (f and RoundedFrameEnabled(f)) then return end
   local bg = f._msufRGF_Background
   if not bg then
     return
@@ -1844,7 +1939,7 @@ local function PrepareFrozenDispelBorder(f, owner, thickness)
   for i = 1, ClampEdgeSize(thickness, 1, MAX_HIGHLIGHT_BORDER_THICKNESS) do
     local edge = PixelLayoutRegion((owner._msufHealthVisualRoot or owner):CreateTexture(nil, "OVERLAY"), true)
     SE_SnapOff(edge)
-    SetRoundedEdgeTexture(edge, roundedEdgePath)
+    SetRoundedEdgeTexture(edge, SurfaceEdgePath(f))
     LayoutRoundedEdge(edge, anchor, i, i)
     regions[i] = edge
   end
@@ -1865,12 +1960,12 @@ local function PrepareFrozenDispelOverlayMask(f, region, owner)
   local group = FrameIsGroup(f)
   local anchor
   if group then
-    if not RoundedGroupFramesEnabled() then return false end
-    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and (f.barGroup or f) or nil
+    if not RoundedFrameEnabled(f) then return false end
+    local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and (f.barGroup or f) or nil
     anchor = shared or f.health or f.barGroup or f
   else
-    if not RoundedUnitFramesEnabled() then return false end
-    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and f or nil
+    if not RoundedFrameEnabled(f) then return false end
+    local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and f or nil
     anchor = shared or f.hpBar or f.bg or f
   end
   if not anchor or not CanCreateRoundedRegion(nil) then return false end
@@ -1879,9 +1974,9 @@ local function PrepareFrozenDispelOverlayMask(f, region, owner)
   local mask = owner:CreateMaskTexture(nil, "ARTWORK")
   if not mask then return false end
   SE_SnapOff(mask)
-  mask:SetTexture(roundedMaskPath, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+  mask:SetTexture(SurfaceMaskPath(f), "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
   mask:SetAllPoints(anchor)
-  ApplyRoundedMediaSlice(mask, roundedMaskPath)
+  ApplyRoundedMediaSlice(mask, SurfaceMaskPath(f))
   region:AddMaskTexture(mask)
   return true
 end
@@ -1896,12 +1991,12 @@ local function ApplyDispelOverlayMask(f, region)
   end
   local group = FrameIsGroup(f)
   if group then
-    if not RoundedGroupFramesEnabled() then return false end
-    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and (f.barGroup or f) or nil
+    if not RoundedFrameEnabled(f) then return false end
+    local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and (f.barGroup or f) or nil
     MaskGroupTexture(f, region, shared or f.health or f.barGroup or f)
   else
-    if not RoundedUnitFramesEnabled() then return false end
-    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(f) and f or nil
+    if not RoundedFrameEnabled(f) then return false end
+    local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and f or nil
     MaskTexture(f, region, shared or f.hpBar or f.bg or f)
   end
   return true
@@ -1930,7 +2025,7 @@ local function SuppressGroupSquareBorders(f)
     if border.HookScript and not border._msufRGFHooked then
       border._msufRGFHooked = true
       border:HookScript("OnShow", function(self)
-        if RoundedGroupFramesEnabled() then
+        if RoundedFrameEnabled(self._msufRGFOwner) then
           local owner = self._msufRGFOwner
           local handled = false
           if owner then
@@ -1945,7 +2040,7 @@ local function SuppressGroupSquareBorders(f)
         end
       end)
     end
-    if RoundedGroupFramesEnabled() and border.Hide then
+    if RoundedFrameEnabled(f) and border.Hide then
       f._msufRGF_GlowAnchor = f.barGroup or f
       if SetGroupRoundedEdgeColor(f) then
         border:Hide()
@@ -1955,7 +2050,7 @@ local function SuppressGroupSquareBorders(f)
 end
 
 local function HandleGroupMouseover(f, active)
-  if not (f and groupMouseoverHotEnabled) then return false end
+  if not (f and groupMouseoverHotEnabled and RoundedFrameEnabled(f)) then return false end
   local container = f._msufRGF_HoverContainer
   if not container and not IsCombatLocked() then
     ApplyGroupRoundedHoverEdge(f, true)
@@ -1969,7 +2064,7 @@ end
 
 local function HandleGroupHighlightChanged(border)
   local owner = border and (border._msufRGFOwner or (border.GetParent and border:GetParent() and border:GetParent():GetParent()))
-  if not (owner and RoundedGroupFramesEnabled()) then return false end
+  if not (owner and RoundedFrameEnabled(owner)) then return false end
   owner._msufRGF_GlowAnchor = owner.barGroup or owner
   if SetGroupRoundedEdgeColor(owner) then
     if border.Hide then border:Hide() end
@@ -1992,8 +2087,8 @@ local function ApplyToUnitFrame(f)
     return
   end
 
-  local enabled = RoundedUnitFramesEnabled()
-  local roundPower = RoundedPowerBarsEnabled()
+  local enabled = RoundedFrameEnabled(f)
+  local roundPower = RoundedPowerBarsEnabled(f)
 
   SE_ApplyShellVisuals(f, enabled)
 
@@ -2077,8 +2172,8 @@ ApplyToGroupFrame = function(f, kind)
     return
   end
 
-  local enabled = RoundedGroupFramesEnabled()
-  local roundPower = RoundedPowerBarsEnabled()
+  local enabled = RoundedFrameEnabled(f)
+  local roundPower = RoundedPowerBarsEnabled(f)
   kind = ResolveGroupKind(f, kind)
 
   if not enabled then
@@ -2225,11 +2320,10 @@ local function ApplyAll()
   UpdateRoundedMediaState()
   MSUF.__msufRoundedPending = nil
   local enabled = IsEnabled()
-  unitRoundedVisualHotEnabled = enabled and RoundedUnitFramesEnabled() or false
   groupIndicatorHotEnabled = enabled and RoundedGroupFramesEnabled() or false
   local applyRoundedClassPower = _G.MSUF_ClassPower_ApplyRoundedSurface
   if type(applyRoundedClassPower) == "function" then
-    applyRoundedClassPower(enabled)
+    applyRoundedClassPower(enabled and ReadRoundedBool("roundedFramesEnabled", false))
   end
   if not enabled and not MSUF.__msufRoundedUF_Hooked then
     ExportPublic("MSUF_RoundedUF_Active", nil)
@@ -2244,7 +2338,7 @@ local function ApplyAll()
   UpdateMouseoverHotState(enabled)
   local applyRoundedCastbars = MSUF.RoundedCastbarsApplyAll
   if type(applyRoundedCastbars) == "function" then
-    applyRoundedCastbars(enabled)
+    applyRoundedCastbars(enabled and ReadRoundedBool("roundedFramesEnabled", false))
   end
   local bulkGF = ResolveGF()
   if bulkGF and type(bulkGF.ApplyGroupBorder) == "function" then
@@ -2355,7 +2449,7 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_OnUnitDispelOverlayChanged", function(frame)
     if not frame then return end
     if IsCombatLocked() then DeferApply(); return end
-    if RoundedUnitFramesEnabled() then
+    if RoundedFrameEnabled(frame) then
       ApplyToUnitFrame(frame)
     end
   end)
@@ -2385,9 +2479,9 @@ local function HookOnce()
     return ApplyGroupRoundedIndicator(frame, kind, nil, shown)
   end)
   ExportPublic("MSUF_RoundedUF_OnGroupAuraVisualCreated", function(frame, region)
-    if not (frame and region and RoundedGroupFramesEnabled()) then return false end
+    if not (frame and region and RoundedFrameEnabled(frame)) then return false end
     if IsCombatLocked() then DeferApply(); return false end
-    local shared = RoundedPowerBarsEnabled() and PowerIsEmbedded(frame) and (frame.barGroup or frame) or nil
+    local shared = RoundedPowerBarsEnabled(frame) and PowerIsEmbedded(frame) and (frame.barGroup or frame) or nil
     MaskGroupTexture(frame, region, shared or frame.health or frame.barGroup or frame)
     return true
   end)
@@ -2403,7 +2497,7 @@ local function HookOnce()
   end)
   if SUPPRESS_NATIVE_OUTLINE then
     ExportPublic("MSUF_RoundedUF_OnRareVisualsRefreshed", function(frame)
-      if frame and RoundedUnitFramesEnabled() then
+      if frame and RoundedFrameEnabled(frame) then
         if not IsCombatLocked() then
           SuppressNativeOutlineNow(frame)
           ApplyUnitRoundedEdge(frame, true)

@@ -51,9 +51,9 @@ LEDGER = {
     "records": 3476,
     "columns": 31,
     "schemaOnly": (298, "9022F4DE2CD5FF16DF75619E18FE945022316AC34AA589B6CC6CB284F317D077"),
-    # The Pet Target page adds 148 built controls; the prior 596 non-Pet-Target
-    # ids retain their exact digest. The standalone schema remains unchanged.
-    "indexOnly": (744, "55DDC0AC932B0FDB3709AE7AA6E239DA5ED77D62830551240C8F38D5D678949E"),
+    # The menu now builds twelve frame-bar-shape controls: nine Unit scopes,
+    # Group Layout, the Slanted Bars preset, and its cut direction. The standalone schema stays unchanged.
+    "indexOnly": (756, "05FBE55FFFEA06AA4A97657ED71074780153F9C78E9E3E82AEC10BEA38887537"),
 }
 
 

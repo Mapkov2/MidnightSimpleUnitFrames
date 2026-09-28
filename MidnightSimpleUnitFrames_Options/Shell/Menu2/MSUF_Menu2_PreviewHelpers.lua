@@ -21,6 +21,22 @@ local IsSecretValue = _G.issecretvalue
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
 local ROUNDED_MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
+local SLANTED_MASK_PATHS = {
+    RIGHT_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask.png",
+    RIGHT_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_right_up.png",
+    LEFT_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_left_down.png",
+    LEFT_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_left_up.png",
+    BOTH_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_both_down.png",
+    BOTH_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_both_up.png",
+}
+local SLANTED_EDGE_PATHS = {
+    RIGHT_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge.png",
+    RIGHT_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_right_up.png",
+    LEFT_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_left_down.png",
+    LEFT_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_left_up.png",
+    BOTH_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_both_down.png",
+    BOTH_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_both_up.png",
+}
 local ROUNDED_SLICE_MARGIN = 9.5
 local ROUNDED_MASK_PATHS, ROUNDED_EDGE_PATHS = {}, {}
 for i = 1, 5 do
@@ -48,6 +64,15 @@ function H.ResolveRoundedMedia()
     if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
     return ROUNDED_MASK_PATHS[strength], ROUNDED_EDGE_PATHS[strength], strength
 end
+function H.ResolveFrameBarMedia(style)
+    if style == "SLANTED" then
+        local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+        local direction = bars and bars.slantedBarDirection
+        if not SLANTED_MASK_PATHS[direction] then direction = "RIGHT_DOWN" end
+        return SLANTED_MASK_PATHS[direction], SLANTED_EDGE_PATHS[direction], 0
+    end
+    return H.ResolveRoundedMedia()
+end
 
 --- Mirrors the controller's effective Player Mana ownership in both previews.
 --- Native API fallback exists only for isolated/early preview loads.
@@ -70,8 +95,8 @@ function H.ApplyRoundedMediaSlice(region, strength)
     if region._msufPreviewRoundedSliceStrength == strength then return end
     region._msufPreviewRoundedSliceStrength = strength
     if type(region.SetTextureSliceMargins) == "function" then
-        region:SetTextureSliceMargins(ROUNDED_SLICE_MARGIN, ROUNDED_SLICE_MARGIN,
-            ROUNDED_SLICE_MARGIN, ROUNDED_SLICE_MARGIN)
+        local margin = strength == 0 and 0 or ROUNDED_SLICE_MARGIN
+        region:SetTextureSliceMargins(margin, margin, margin, margin)
     end
     if STRETCHED_SLICE_MODE ~= nil and type(region.SetTextureSliceMode) == "function" then
         region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
