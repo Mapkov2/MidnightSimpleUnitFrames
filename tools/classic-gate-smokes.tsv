@@ -132,6 +132,7 @@ classics	lua	tools/tests/classic_unit_preview_parity_smoke.lua	{root/} {flavor}	
 -	lua	tools/tests/mainline_unit_preview_classic_hunks_smoke.lua	{root/} Mainline	Mainline unit preview Classic hunks smoke failed: Mainline
 -	lua	tools/tests/mainline_unit_preview_classic_hunks_smoke.lua	{root/} Forever	Mainline unit preview Classic hunks smoke failed: Forever
 classics	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.lua	{root/} {flavor}	Classic unit preview texture layer order smoke failed: {flavor}
+-	lua	tools/tests/classic_history_ui_scale_smoke.lua	{root/}	Classic History UI scale smoke failed
 -	lua	tools/tests/classic_unit_menu_runtime_parity_smoke.lua	{root/}	Classic unit menu runtime parity smoke failed
 -	lua	tools/tests/classic_unit_page_client_hunks_smoke.lua	{root/}	Classic unit page client hunks smoke failed
 clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {flavor}	Unit status threat controls smoke failed: {flavor}

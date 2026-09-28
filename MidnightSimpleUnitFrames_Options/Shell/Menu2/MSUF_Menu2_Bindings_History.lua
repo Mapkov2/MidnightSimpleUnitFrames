@@ -534,7 +534,16 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     local profileDB = HistoryProfileDB(snapshot)
     if type(profileDB) ~= "table" then return false end
     historyRestoring = true
-    DeepReplace(M.EnsureDB(), profileDB)
+    local activeDB = M.EnsureDB()
+    local activeGeneral = activeDB and activeDB.general
+    local activeUi = type(activeGeneral) == "table" and activeGeneral.UIScale
+    local restoredGeneral = profileDB.general
+    local restoredUi = type(restoredGeneral) == "table" and restoredGeneral.UIScale
+    local wasEnabled = type(activeUi) == "table" and activeUi.Enabled == true
+    local willEnable = type(restoredUi) == "table" and restoredUi.Enabled == true
+    local scaleChanged = wasEnabled ~= willEnable
+        or (willEnable and tonumber(activeUi.Scale) ~= tonumber(restoredUi.Scale))
+    DeepReplace(activeDB, profileDB)
     RestoreProfileRouting(snapshot)
     local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
     if type(externalAPI) == "table" and type(externalAPI._RestoreHistorySnapshot) == "function"
@@ -544,6 +553,11 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     RestoreHistoryProviders(snapshot, reason, source)
     if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
+    -- Unrelated history steps must leave UIParent alone. The profile-switch
+    -- path restores a captured Blizzard scale without recalculating auto scale.
+    if scaleChanged and type(_G.MSUF_ApplyCurrentProfileGlobalUiScale) == "function" then
+        _G.MSUF_ApplyCurrentProfileGlobalUiScale()
+    end
     if ApplyScopedHistoryRestore(reason, source) then
         FlushApplyServiceNow()
         M.MarkMenuDataDirty(reason or "history")
@@ -555,21 +569,14 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     end
     -- A restored profile snapshot may span UnitFrames, Auras3, ClassPower, GroupFrames, and
     -- Menu2 state, so restore fanout is centralized and explicit.
-    M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
+    M.RequestGeneralApply(reason or "MSUF2_HISTORY", { history = false, preview = true, alpha = true, castbar = true })
     if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
         MSUF.MSUF_RequestGameplayApply()
     elseif MSUF and type(MSUF.MSUF_ApplyGameplayVisuals) == "function" then
         MSUF.MSUF_ApplyGameplayVisuals()
     end
     do
-        local db = M.EnsureDB()
-        local g = db and db.general
-        local ui = type(g) == "table" and type(g.UIScale) == "table" and g.UIScale or nil
-        if ui and ui.Enabled == true and type(_G.MSUF_SetGlobalUiScale) == "function" then
-            _G.MSUF_SetGlobalUiScale(tonumber(ui.Scale) or 1, true)
-        elseif ui and type(_G.MSUF_ResetGlobalUiScale) == "function" then
-            _G.MSUF_ResetGlobalUiScale(true)
-        end
+        local g = activeDB and activeDB.general
         if M.ApplyMenuFrameScale and M.frame then
             M.ApplyMenuFrameScale(M.frame)
         elseif M.GetEffectiveMenuScale and M.frame and M.frame.SetScale and type(g) == "table" then
