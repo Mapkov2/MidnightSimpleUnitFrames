@@ -6374,6 +6374,13 @@ L["Pet XP bar width"] = "Breite der Begleiter-EP-Leiste"
 L["Pet Target"] = "Begleiterziel"
 L["MSUF Pet Target"] = "MSUF Begleiterziel"
 L["Pet Target Name Position"] = "Namensposition des Begleiterziels"
+L["MSUF Factory Reset"] = "MSUF zurücksetzen"
+L["Suite Factory Reset"] = "Suite zurücksetzen"
+L["Fix positions, print help, or reset MSUF or Suite."] = "Positionen reparieren, Hilfe ausgeben oder MSUF bzw. Suite zurücksetzen."
+L["Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept."] = "Löscht nach Bestätigung alle MSUF-Profile und Einstellungen. Suite-Profile bleiben erhalten."
+L["Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact."] = "Löscht nach Bestätigung alle Suite-Profile und Skin-Einstellungen. MSUF-Daten bleiben erhalten."
+L["Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."] = "MSUF auf Werkseinstellungen zurücksetzen?\n\nAlle MSUF-Profile und Einstellungen dieses Accounts werden gelöscht. Suite-Profile bleiben erhalten; das aktive Suite-Profil kann jedoch mit MSUF zu Default wechseln. Die Benutzeroberfläche wird neu geladen."
+L["Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."] = "MSUF Suite auf Werkseinstellungen zurücksetzen?\n\nAlle Suite-Profile und Skin-Einstellungen dieses Accounts werden gelöscht. MSUF-Einstellungen bleiben erhalten. Die Benutzeroberfläche wird neu geladen."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

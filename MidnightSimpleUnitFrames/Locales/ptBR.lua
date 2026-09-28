@@ -5994,6 +5994,14 @@ L["Pet XP bar width"] = "Largura da barra de EXP do ajudante"
 L["Pet Target"] = "Alvo do ajudante"
 L["MSUF Pet Target"] = "MSUF Alvo do ajudante"
 L["Pet Target Name Position"] = "Posição do nome do alvo do ajudante"
+L["MSUF Factory Reset"] = "MSUF Factory Reset"
+L["Suite Factory Reset"] = "Suite Factory Reset"
+L["Fix positions, print help, or reset MSUF or Suite."] = "Fix positions, print help, or reset MSUF or Suite."
+L["Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept."] = "Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept."
+L["Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact."] = "Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact."
+L["Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."] = "Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."
+L["Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."] = "Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

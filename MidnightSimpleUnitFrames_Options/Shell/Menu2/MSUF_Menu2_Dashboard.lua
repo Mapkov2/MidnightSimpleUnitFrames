@@ -193,6 +193,46 @@ local function DirectAction(setter, combatLocked)
     return command
 end
 
+local function LoadedSuiteFactoryReset()
+    local suite = _G.MSUFSuite
+    return type(suite) == "table" and type(suite.Database) == "table"
+        and type(suite.Database.StageFactoryReset) == "function"
+end
+
+local function RunSuiteFactoryReset()
+    if DirectCombatLocked() or not LoadedSuiteFactoryReset() or type(_G.ReloadUI) ~= "function" then return false end
+    local ok = _G.MSUFSuite.Database.StageFactoryReset()
+    if not ok then return false end
+    _G.ReloadUI()
+    return true
+end
+
+local function ShowFactoryResetConfirm(kind)
+    if M.BlockCombatAction and M.BlockCombatAction() then return false end
+    if kind == "suite" and not LoadedSuiteFactoryReset() then return false end
+    if type(_G.ReloadUI) ~= "function" or type(M.InstallStaticPopup) ~= "function"
+        or type(_G.StaticPopup_Show) ~= "function" then return false end
+    local suiteReset = kind == "suite"
+    local key = suiteReset and "MSUF2_SUITE_FACTORY_RESET_CONFIRM" or "MSUF2_FACTORY_RESET_CONFIRM"
+    M.InstallStaticPopup(key, {
+        text = M.Tr(suiteReset
+            and "Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."
+            or "Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."),
+        button1 = _G.YES or M.Tr("Yes"),
+        button2 = _G.NO or M.Tr("No"),
+        OnAccept = function()
+            if M.BlockCombatAction and M.BlockCombatAction() then return end
+            if suiteReset then
+                RunSuiteFactoryReset()
+            elseif type(M.StageFactoryReset) == "function" and M.StageFactoryReset() then
+                _G.ReloadUI()
+            end
+        end,
+    })
+    _G.StaticPopup_Show(key)
+    return true
+end
+
 local DASHBOARD_DIRECT_SPECS = {
     {
         path = "scaling.global_ui.percent", label = "Global UI Scale", kind = "slider", classification = "setting",
@@ -259,6 +299,11 @@ local DASHBOARD_DIRECT_SPECS = {
     { path = "scaling.menu.revert_pending", label = "Revert MSUF Menu Scale", classification = "action", actionKey = "dashboard.menuScale.revertPending",
         command = DirectAction(function() return true end) },
 }
+DASHBOARD_DIRECT_SPECS[#DASHBOARD_DIRECT_SPECS + 1] = {
+    path = "display_recovery.suite_factory_reset", label = "Suite Factory Reset", classification = "action",
+    actionKey = "suite_factory_reset", confirmRequired = true,
+    command = DirectAction(RunSuiteFactoryReset, true),
+}
 for i = 1, #DASHBOARD_DIRECT_SPECS do
     local spec = DASHBOARD_DIRECT_SPECS[i]
     spec.meta = DashboardMeta(spec.path, spec.classification, {
@@ -303,8 +348,11 @@ local function RegisterDashboardDirectControls()
     if type(M.RegisterVirtualRuntimeControl) ~= "function" then return 0 end
     local registered = 0
     for i = 1, #DASHBOARD_DIRECT_SPECS do
-        local id = M.RegisterVirtualRuntimeControl(DASHBOARD_DIRECT_SPECS[i].meta, "dashboard-direct")
-        if id then registered = registered + 1 end
+        local spec = DASHBOARD_DIRECT_SPECS[i]
+        if spec.actionKey ~= "suite_factory_reset" or LoadedSuiteFactoryReset() then
+            local id = M.RegisterVirtualRuntimeControl(spec.meta, "dashboard-direct")
+            if id then registered = registered + 1 end
+        end
     end
     return registered
 end
@@ -935,11 +983,12 @@ function Dashboard.ResolveCardStack(state, featureBlockBottom)
     local layoutW = state.layoutW
     local recoveryW = layoutW
     local recoveryOpen = M.dashboardRecoveryOpen == true
-    --- Three buttons fit one row down to ~392px (Reset + Print Help end at 232, the
-    --- right-aligned Factory Reset starts at width-152); below that the reset drops
-    --- to a second row with its warning text beside it.
-    local recoveryWrap = recoveryW < 420
-    local recoveryH = recoveryOpen and (recoveryWrap and 154 or 122) or 42
+    local hasSuiteReset = LoadedSuiteFactoryReset()
+    -- The reset buttons move together to a second row when the first row
+    -- cannot hold both without colliding with Print Help.
+    local recoveryWrap = recoveryW < (hasSuiteReset and 590 or 420)
+    local recoveryStacked = hasSuiteReset and recoveryW < 352
+    local recoveryH = recoveryOpen and (recoveryStacked and 186 or (recoveryWrap and 154 or 122)) or 42
     local changelogOpen = M.dashboardChangelogOpen == true
     local changelogH = changelogOpen and 420 or 42
     local scalingOpen = M.dashboardScalingOpen == true
@@ -952,7 +1001,8 @@ function Dashboard.ResolveCardStack(state, featureBlockBottom)
     local scalingTop = changelogTop - changelogH - 10
     local recoveryTop = scalingTop - scalingH - 10
     local supportTop = recoveryTop - recoveryH - 10
-    state.recoveryW, state.recoveryOpen, state.recoveryWrap, state.recoveryH = recoveryW, recoveryOpen, recoveryWrap, recoveryH
+    state.recoveryW, state.recoveryOpen, state.recoveryWrap, state.recoveryH, state.hasSuiteReset, state.recoveryStacked =
+        recoveryW, recoveryOpen, recoveryWrap, recoveryH, hasSuiteReset, recoveryStacked
     state.changelogOpen, state.changelogH, state.scalingOpen, state.scalingColumns, state.scalingH =
         changelogOpen, changelogH, scalingOpen, scalingColumns, scalingH
     state.changelogTop, state.scalingTop, state.recoveryTop, state.supportTop = changelogTop, scalingTop, recoveryTop, supportTop
@@ -968,7 +1018,8 @@ function Dashboard.BuildRecoveryCard(state)
         if recoveryW >= 520 then Pill(head, "Factory reset hidden", recoveryW - 124, -11, 110, T.colors.accent2) end
     end, "display_recovery.disclosure")
     if recoveryOpen then
-        W.Text(recovery, "Fix positions, print help, or reset MSUF.", 16, -60, recoveryW - 32, T.colors.muted)
+        W.Text(recovery, state.hasSuiteReset and "Fix positions, print help, or reset MSUF or Suite."
+            or "Fix positions, print help, or reset MSUF.", 16, -60, recoveryW - 32, T.colors.muted)
         local resetPositions = Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
             if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4) end
         end, "primary", "display_recovery.reset_positions")
@@ -982,10 +1033,23 @@ function Dashboard.BuildRecoveryCard(state)
             end
         end, nil, "display_recovery.print_help")
         AddTooltip(printHelp, "Print Help", "Lists every MSUF slash command in chat, diagnostics included.")
-        Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
-            M.StageFactoryReset()
+        local msufX = recoveryWrap and 16 or (recoveryW - (state.hasSuiteReset and 336 or 168))
+        local msufReset = Button(recovery, "MSUF Factory Reset", msufX, factoryY, 156, 22, function()
+            if not ShowFactoryResetConfirm("msuf") and M.ShowStatusFeedback then
+                M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4)
+            end
         end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true })
-        if recoveryWrap then
+        AddTooltip(msufReset, "MSUF Factory Reset", "Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept.")
+        if state.hasSuiteReset then
+            local suiteX = state.recoveryStacked and 16 or (recoveryWrap and 180 or (recoveryW - 168))
+            local suiteY = state.recoveryStacked and -158 or factoryY
+            local suiteReset = Button(recovery, "Suite Factory Reset", suiteX, suiteY, 156, 22, function()
+                if not ShowFactoryResetConfirm("suite") and M.ShowStatusFeedback then
+                    M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4)
+                end
+            end, "danger", "display_recovery.suite_factory_reset", "action", { confirmRequired = true })
+            AddTooltip(suiteReset, "Suite Factory Reset", "Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact.")
+        elseif recoveryWrap then
             W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
         end
     end

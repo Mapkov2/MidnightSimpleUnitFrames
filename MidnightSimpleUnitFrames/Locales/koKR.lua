@@ -6009,6 +6009,14 @@ L["Pet XP bar width"] = "소환수 경험치 바 너비"
 L["Pet Target"] = "소환수 대상"
 L["MSUF Pet Target"] = "MSUF 소환수 대상"
 L["Pet Target Name Position"] = "소환수 대상 이름 위치"
+L["MSUF Factory Reset"] = "MSUF Factory Reset"
+L["Suite Factory Reset"] = "Suite Factory Reset"
+L["Fix positions, print help, or reset MSUF or Suite."] = "Fix positions, print help, or reset MSUF or Suite."
+L["Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept."] = "Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept."
+L["Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact."] = "Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact."
+L["Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."] = "Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."
+L["Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."] = "Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end
