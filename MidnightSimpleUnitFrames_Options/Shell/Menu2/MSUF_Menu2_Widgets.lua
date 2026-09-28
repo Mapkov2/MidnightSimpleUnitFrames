@@ -942,6 +942,17 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         end
         entry.SetOpenImmediate = SetSectionOpenImmediate
         header:SetScript("OnClick", function()
+            local featureSwitch = entry.featureSwitch
+            if featureSwitch
+                and ((featureSwitch.IsMouseOver and featureSwitch:IsMouseOver())
+                    or (entry._msuf2FeatureSwitchLabel and entry._msuf2FeatureSwitchLabel.IsMouseOver
+                        and entry._msuf2FeatureSwitchLabel:IsMouseOver()))
+            then
+                if featureSwitch.IsEnabled and featureSwitch:IsEnabled() then
+                    featureSwitch:Click("LeftButton")
+                end
+                return
+            end
             local nextOpen = not entry.open
             local threshold = tonumber(T.collapseHintClickHideThreshold) or 8
             collapseHintClickState.total = math.min((tonumber(collapseHintClickState.total) or 0) + 1, threshold)
@@ -2697,6 +2708,7 @@ function W.SectionSwitch(section, label, displayLabel)
     end
     button:SetChecked(false)
     entry.featureSwitch = button
+    entry._msuf2FeatureSwitchLabel = state
     entry._msuf2FeatureSwitchReserve = 112
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
     if M.AddTooltip then M.AddTooltip(button, label, nil, { hook = true }) end
