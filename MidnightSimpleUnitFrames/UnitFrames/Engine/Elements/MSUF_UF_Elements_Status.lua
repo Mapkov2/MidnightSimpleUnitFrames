@@ -642,10 +642,11 @@ function Runtime.ApplyForeverLevelBadge(frame, spec, cfg)
     badge:SetSize(size, size)
     badge._msufStatusSize = size
   end
-  -- The number uses the configured status draw sublevel. Keep the medallion
-  -- exactly one step below it inside the same status-layer holder.
-  local sub = ClampLayer(cfg.layer, 7) - 2
-  if sub < 0 then sub = 0 elseif sub > 7 then sub = 7 end
+  -- The number's OVERLAY sublevel is capped at 7. Leave one sublevel for the
+  -- ring and another for the medallion, including imported layer values > 8.
+  local numberSub = ClampLayer(cfg.layer, 7) - 1
+  if numberSub > 7 then numberSub = 7 end
+  local sub = numberSub - 2
   if badge.SetDrawLayer and badge._msufStatusLayer ~= sub then
     badge:SetDrawLayer("OVERLAY", sub)
     badge._msufStatusLayer = sub

@@ -199,6 +199,16 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         statusRuntime.SetForeverLevelBadgeShown(badgeFrame, true)
         assert(badge:IsShown() and ring:IsShown(), flavor .. ": fallback level badge did not follow visible level text")
     end
+    -- Imported profiles may use a high status layer. The native OVERLAY
+    -- sublevel is limited to -8..7, with the number above its badge and rim.
+    badgeFrame.MSUFSpec.status.level.layer = 20
+    statusRuntime.ApplyConfiguredRegions(badgeFrame, badgeFrame.MSUFSpec)
+    assert(badgeFrame.levelBackdrop.drawSublevel == 5 and badgeFrame.levelText.drawSublevel == 7,
+        flavor .. ": high-level badge overlapped its number")
+    if badgeFrame.levelBackdropRing then
+        assert(badgeFrame.levelBackdropRing.drawSublevel == 6,
+            flavor .. ": high-level badge rim exceeded the native draw sublevel")
+    end
     badgeFrame.MSUFSpec.status.level.enabled = false
     statusRuntime.ApplyConfiguredRegions(badgeFrame, badgeFrame.MSUFSpec)
     assert(not badgeFrame.levelBackdrop:IsShown(), flavor .. ": disabled level retained its badge")
