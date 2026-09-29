@@ -1,5 +1,26 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta11 - 2026-09-29
+
+### Highlights
+
+- **Choose Slanted bar shapes across your frames.** Enable Slanted bars under Global > Slanted, then choose where they appear on unit frames, group frames, power bars, castbars, class resources, and mouseover.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_slanted","controlId":"menu2.opt.bars.global.slanted.enabled","settingKey":"bars.slantedBarsEnabled","prepareKind":"","prepareValue":"","query":"enable slanted bars","label":"Enable slanted bars"} -->
+- **Switch between Slanted and Rounded while keeping saved frame styles.** The Rounded master switch restores Rounded when Slanted is off, including after profile imports and in previews.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_rounded","controlId":"menu2.opt.bars.global.rounded.rounded.frames.enabled","settingKey":"bars.roundedFramesEnabled","prepareKind":"","prepareValue":"","query":"rounded frame texture","label":"Rounded frame texture"} -->
+
+### Changes
+
+- Slanted shape controls cover frame scopes, power bars, castbars, class resources, and mouseover, with matching menu previews.
+- Hidden unit frames suspend their event routes until shown again.
+- When installed, MSUF Suite text follows full global font changes.
+
+### Fixes
+
+- Imported Slanted frame styles follow the active Rounded fallback when Slanted is disabled.
+- Status badges and level numbers stay within native overlay sublevel limits for imported high layer values.
+- Menu section switch labels toggle their feature.
+
 ## 6.5-beta10 - 2026-09-27
 
 ### Highlights

@@ -4,7 +4,7 @@
 ## Author: Mapko
 ## Category: MSUF
 ## Version: 6.20 [AllowLoadGameType standard]
-## Version: 6.5-beta10 [ExcludeLoadGameType standard]
+## Version: 6.5-beta11 [ExcludeLoadGameType standard]
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## Dependencies: MidnightSimpleUnitFrames
 ## LoadOnDemand: 1

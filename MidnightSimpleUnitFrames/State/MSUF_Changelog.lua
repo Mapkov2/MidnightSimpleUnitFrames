@@ -8,12 +8,61 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "7674502AB183475BEAC1182F9BE9EC6DE08D291C5374EDE9AF5F4A514AB0BC44",
-    currentVersion = "6.5-beta10",
-    historyFromVersion = "6.5-beta7",
-    previousVersion = "6.5-beta9",
-    rangeLabel = "6.5-beta9 -> 6.5-beta10",
+    sourceSha256 = "C81247EC347FA612DEBADBC6518D63C09345CDBC38AEDAE933E8935A501DD429",
+    currentVersion = "6.5-beta11",
+    historyFromVersion = "6.5-beta8",
+    previousVersion = "6.5-beta10",
+    rangeLabel = "6.5-beta10 -> 6.5-beta11",
     entries = {
+        {
+            version = "6.5-beta11",
+            date = "2026-09-29",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Choose Slanted bar shapes across your frames. Enable Slanted bars under Global > Slanted, then choose where they appear on unit frames, group frames, power bars, castbars, class resources, and mouseover.",
+                            link = {
+                                pageKey = "opt_bars",
+                                query = "enable slanted bars",
+                                label = "Enable slanted bars",
+                                sectionId = "bars_slanted",
+                                controlId = "menu2.opt.bars.global.slanted.enabled",
+                                settingKey = "bars.slantedBarsEnabled",
+                            },
+                        },
+                        {
+                            text = "Switch between Slanted and Rounded while keeping saved frame styles. The Rounded master switch restores Rounded when Slanted is off, including after profile imports and in previews.",
+                            link = {
+                                pageKey = "opt_bars",
+                                query = "rounded frame texture",
+                                label = "Rounded frame texture",
+                                sectionId = "bars_rounded",
+                                controlId = "menu2.opt.bars.global.rounded.rounded.frames.enabled",
+                                settingKey = "bars.roundedFramesEnabled",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Slanted shape controls cover frame scopes, power bars, castbars, class resources, and mouseover, with matching menu previews.",
+                        "Hidden unit frames suspend their event routes until shown again.",
+                        "When installed, MSUF Suite text follows full global font changes.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Imported Slanted frame styles follow the active Rounded fallback when Slanted is disabled.",
+                        "Status badges and level numbers stay within native overlay sublevel limits for imported high layer values.",
+                        "Menu section switch labels toggle their feature.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta10",
             date = "2026-09-27",
@@ -151,62 +200,6 @@ local data = {
                         "WoW Forever's Raid Manager remains visible while opened by gamepad and closes with the panel.",
                         "Missing-health background coloring no longer shows a full reversed health bar at 100% health.",
                         "Hiding Blizzard's TargetFrame also stops the Forever ComboFrame from updating its hidden display.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta7",
-            date = "2026-09-21",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Give the level text a round badge with a gold rim. Enable Round level badge under Status > Level; its position, size and layer follow the existing level controls, with native artwork or a bundled fallback for older clients.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "round level badge",
-                                label = "Round Level Badge",
-                                sectionId = "status_icons",
-                                controlId = "menu2.uf_player.unit.status.level.forever_badge",
-                                settingKey = "player.levelIndicatorForeverBadge",
-                                prepareKind = "unitStatus",
-                                prepareValue = "level",
-                            },
-                        },
-                        {
-                            text = "Add Blizzard's bottom-right gold connector to a Blizzard-style portrait. The new Portrait > Border option is reflected in the live frame and menu preview.",
-                            link = {
-                                pageKey = "uf_player",
-                                query = "bottom-right gold connector",
-                                label = "Bottom-right gold connector",
-                                sectionId = "portrait",
-                                controlId = "menu2.uf_player.unit.portrait.portraitblizzardcorner",
-                                settingKey = "player.portraitBlizzardCorner",
-                                prepareKind = "unitPortraitTab",
-                                prepareValue = "border",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Export and import individual unitframes. Profiles > Import & Export now offers Selected unitframes, with a separate multi-selection for Player, Target, Target of Target, Pet, Focus, Focus Target, Boss and Arena where supported by the client.",
-                        "Selected-frame strings carry each included frame's own settings, aura configuration and castbar. Imports update only those frames in the current profile or a new profile, preserving other frames and shared settings. Settings inherited from a shared appearance continue to use the receiving profile's appearance.",
-                        "Empty selections and imports containing unsupported frames or settings outside their selected frames are rejected. Existing full-profile and category exports retain their previous behavior.",
-                        "Texture-layer profiles can use native Blizzard atlases. Runtime rendering and menu previews preserve the atlas crop and fall back to the ordinary texture source if the atlas is unavailable.",
-                        "Portrait profiles that already use complete Blizzard frame artwork can suppress the duplicate standalone portrait rim while retaining the corner connector.",
-                        "Leader, assistant and combat indicators use the matching native artwork when available, with texture fallbacks on older clients. The status and portrait previews follow the same artwork choices.",
-                        "Section Copy To includes the new portrait connector, standalone-ring choice, level badge and texture-layer atlas settings.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Turning off the level indicator also hides the fallback badge ring; a leftover gold circle no longer remains behind.",
-                        "Selected-frame aura imports avoid full-profile aura resets, and default repair runs on a private copy before committing the selected settings.",
                     },
                 },
             },
