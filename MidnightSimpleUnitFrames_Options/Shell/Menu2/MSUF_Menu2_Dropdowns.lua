@@ -388,6 +388,14 @@ local function EnsureDropdownFrame()
     if dropdownFrame.SetFrameLevel then dropdownFrame:SetFrameLevel((M.MENU_POPUP_FRAME_LEVEL or 120) + 20) end
     dropdownFrame:SetToplevel(true)
     dropdownFrame:EnableMouse(true)
+    dropdownFrame:EnableKeyboard(true)
+    if dropdownFrame.SetPropagateKeyboardInput then dropdownFrame:SetPropagateKeyboardInput(true) end
+    dropdownFrame:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" and dropdownOwner then
+            CloseDropdown({ immediate = true })
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
+        elseif self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
     if dropdownFrame.SetClampedToScreen then dropdownFrame:SetClampedToScreen(true) end
     if T.ApplyMaterial then
         T.ApplyMaterial(dropdownFrame, "popup")
@@ -1048,6 +1056,7 @@ local function OpenDropdown(owner, valuesTable)
         dropdownRows[i]:Hide()
     end
     dropdownOwner = owner
+    if dropdownFrame.SetPropagateKeyboardInput then dropdownFrame:SetPropagateKeyboardInput(true) end
     SetDropdownOwnerMouseWheel(owner, true)
     ShowDropdownFocus(owner)
     if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end

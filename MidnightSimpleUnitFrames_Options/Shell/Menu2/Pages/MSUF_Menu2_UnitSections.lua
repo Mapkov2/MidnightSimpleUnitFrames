@@ -1825,6 +1825,7 @@ local function BuildUnitPage(info)
                 return refresh
             end,
         })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchoring", height = 220 })
         if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
             -- This workspace owns nested Buff/Debuff/Custom sections and previews;
             -- the lazy one-section proxy would stack those sections into one body.
@@ -1845,7 +1846,6 @@ local function BuildUnitPage(info)
         end
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 210 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchoring", height = 220 })
         AttachUnitSectionUX(ctx, info.unit)
         M.TrackRefresh(ctx, function()
             ApplyUnitFrameEnabledGate(ctx, info.unit)

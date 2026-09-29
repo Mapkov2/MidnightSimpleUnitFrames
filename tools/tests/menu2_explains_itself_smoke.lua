@@ -341,4 +341,73 @@ Check(targetButton._msuf2Label:GetText():sub(-2) ~= " *", "the marker stays afte
 Check(Has(Hover(targetButton), "Follows shared settings"), "a following scope does not say so on hover")
 Check(sharedButton._msuf2ScopeText == nil, "the Shared chip carries an override marker")
 
-print(string.format("menu2_explains_itself_smoke: ok (%s: disabled reasons, gate precedence, help tooltips, Custom badge, scope chips)", flavor))
+-- 8. Shared field editing and compact presentation --------------------------
+do
+    local form = env.CreateFrame("Frame", nil, env.UIParent)
+    form._msuf2Width = 400
+    local number = W.Slider(form, "Size", 0, 100, 1, 300)
+    W.MoveWidget(number, form, 16, -20, 300, "CENTER")
+    Check(number._msuf2TitleJustify == "LEFT", "legacy placement centered a field label")
+    local edit = number.editBox
+    local function Fire(widget, event)
+        local handler = assert(widget:GetScript(event), event)
+        handler(widget)
+    end
+    function edit:ClearFocus() Fire(self, "OnEditFocusLost") end
+    number:SetValue(12)
+    edit:SetText("12")
+    Fire(edit, "OnEditFocusGained")
+    edit:SetText("42")
+    Fire(edit, "OnEditFocusLost")
+    Check(number:GetValue() == 42, "leaving a numeric field lost its draft")
+    Fire(edit, "OnEditFocusGained")
+    edit:SetText("99")
+    Fire(edit, "OnEscapePressed")
+    Check(number:GetValue() == 42, "Escape saved a numeric draft")
+    Fire(edit, "OnEditFocusGained")
+    edit:SetText("invalid")
+    Fire(edit, "OnEditFocusLost")
+    Check(number:GetValue() == 42 and edit:GetText() == "42", "invalid input lost the stored value")
+    Fire(edit, "OnEditFocusGained")
+    edit:SetText("66")
+    number:SetValue(27)
+    Fire(edit, "OnEditFocusLost")
+    Check(number:GetValue() == 27, "pending input overwrote an external update")
+
+    local focus = edit
+    env.GetCurrentKeyBoardFocus = function() return focus end
+    function edit:ClearFocus() focus = nil; Fire(self, "OnEditFocusLost") end
+    Fire(edit, "OnEditFocusGained")
+    edit:SetText("61")
+    local scopeButton = M.Theme.Button(form, "Target", 100, 24)
+    scopeButton:SetScript("OnClick", function()
+        Check(number:GetValue() == 61 and focus == nil, "scope changed before the old field committed")
+    end)
+    Fire(scopeButton, "OnClick")
+
+    local input = W.TextInput(form, "Name", 300)
+    local saved, commits = "Original", 0
+    input._msuf2CommitOnBlur = true
+    input:SetOnValueCommitted(function(value) saved, commits = value, commits + 1 end)
+    function input:ClearFocus() Fire(self, "OnEditFocusLost") end
+    input:SetText(saved)
+    Fire(input, "OnEditFocusGained")
+    input:SetText("Cancelled")
+    Fire(input, "OnEscapePressed")
+    Check(saved == "Original" and commits == 0 and input:GetText() == "Original", "Escape saved a text draft")
+    Fire(input, "OnEditFocusGained")
+    input:SetText("Saved")
+    Fire(input, "OnEnterPressed")
+    Check(saved == "Saved" and commits == 1, "Enter and blur saved text twice")
+
+    local description = W.Description(form, "Full explanation", 16, -80, 300, "Help")
+    Check(description.maxLines == 2 and description._msuf2HelpTarget, "supporting help lost its full explanation")
+    Check(Has(Hover(description._msuf2HelpTarget), "Full explanation"), "compact help has no full tooltip")
+    M._msuf2FixedPreviewExpandedPreference = nil
+    Check(not M.ShouldExpandFixedPreview(), "fresh menus expanded the preview")
+    M.SetFixedPreviewExpandedPreference(true)
+    Check(M.ShouldExpandFixedPreview(), "explicit preview expansion was forgotten")
+    M.SetFixedPreviewExpandedPreference(false)
+end
+
+print(string.format("menu2_explains_itself_smoke: ok (%s: disabled reasons, help, Custom badge, scope chips, field editing, compact preview)", flavor))

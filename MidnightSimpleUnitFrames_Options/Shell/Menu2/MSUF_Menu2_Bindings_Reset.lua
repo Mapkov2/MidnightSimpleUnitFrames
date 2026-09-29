@@ -391,7 +391,6 @@ local PAGE_RESET_HANDLERS = {
     modules = ResetModulesPage,
 }
 local function FinishPageResetApply(pageKey)
-    M.SetFixedPreviewExpandedPreference(true)
     M.ApplyLocaleSelection(M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     if M.ApplyMenuFrameScale and M.frame then M.ApplyMenuFrameScale(M.frame) end
     if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then

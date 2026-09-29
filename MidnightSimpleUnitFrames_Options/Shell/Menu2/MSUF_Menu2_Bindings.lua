@@ -205,7 +205,7 @@ function M.StageFactoryReset()
     local fn = _G.MSUF_DoFullReset
     if type(fn) ~= "function" then return false end
     fn({ skipReload = true })
-    M.SetFixedPreviewExpandedPreference(true)
+    M.SetFixedPreviewExpandedPreference(false)
     return true
 end
 local function BlockCombatAndRefresh(ctx)

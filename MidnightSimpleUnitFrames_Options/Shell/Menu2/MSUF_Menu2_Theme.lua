@@ -914,9 +914,8 @@ function M.ShowFocusVeil(owner, variant, opts)
         return nil
     end
     local overlay = EnsureFocusVeilFrame()
-    if T.ApplyMaterial and variant == "dropdown" then
-        T.ApplyMaterial(overlay, "focus")
-    elseif T.ApplyFocusVeil then
+    -- The veil only carries translucent textures; the focus material adds an opaque panel.
+    if T.ApplyFocusVeil then
         T.ApplyFocusVeil(overlay, variant)
     end
     overlay:ClearAllPoints()
@@ -2699,6 +2698,15 @@ local function ButtonSetEnabled(self, enabled)
     end
     ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
 end
+-- Finalize the old field before a button changes the active page, bar or scope.
+-- Search boxes and inputs that require an explicit Enter are left alone.
+function T.CommitFocusedInput()
+    local focus = _G.GetCurrentKeyBoardFocus and _G.GetCurrentKeyBoardFocus()
+    if focus and (focus._msuf2CommitOnPointer == true
+        or (focus._msuf2ControlKind == "textinput" and focus._msuf2CommitOnBlur == true)) then
+        focus:ClearFocus()
+    end
+end
 local function ButtonClickProxy(self, ...)
     if not self._msuf2AllowCombatClick then
         local blocked = false
@@ -2715,6 +2723,7 @@ local function ButtonClickProxy(self, ...)
         if blocked then return end
     end
     local handler = self._msuf2OnClickHandler
+    T.CommitFocusedInput()
     if handler then return handler(self, ...) end
 end
 local function ButtonSetScript(self, scriptType, handler)
@@ -2726,6 +2735,7 @@ local function ButtonSetScript(self, scriptType, handler)
     return rawSetScript(self, scriptType, handler)
 end
 local BUTTON_STYLE_HOOKS = {
+    OnMouseDown = T.CommitFocusedInput,
     OnEnter = function(self) self._msuf2Hover = true; ButtonVisual(self, self._msuf2Active, true) end,
     OnLeave = function(self) self._msuf2Hover = nil; ButtonVisual(self, self._msuf2Active, false) end,
     OnEnable = ButtonRefreshVisual,

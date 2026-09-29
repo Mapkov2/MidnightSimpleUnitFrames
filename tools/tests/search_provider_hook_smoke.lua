@@ -253,5 +253,147 @@ local finalCache = api.GetSearchProviderCache()
 Check(finalCache == nil or (#finalCache.records == 0 and next(finalCache.pages) == nil),
     "the provider cache kept rows of a removed provider")
 
+---------------------------------------------------------------------------
+-- 9. Module availability covers cached, static, FAQ and already-built rows
+---------------------------------------------------------------------------
+Check(type(M.RegisterSearchAvailability) == "function" and type(M.InvalidateSearchProvider) == "function",
+    "search availability or invalidation API is missing")
+Check(M.RegisterSearchAvailability(nil, function() end) == false
+    and M.RegisterSearchAvailability("lab", true) == false
+    and M.InvalidateSearchProvider("unknown") == false,
+    "availability APIs accepted invalid arguments")
+local enabled, availabilityCalls, collections = true, 0, 0
+local detail = { pageKey = PAGE, kind = "slider", label = "Qzx Available Detail",
+    settingKey = "labsuite.lab.size", sectionId = "zz_provider_lab_frame", suiteModule = "lab" }
+M.RegisterSearchProvider("lab", function()
+    collections = collections + 1
+    return {
+        detail,
+        { pageKey = PAGE, kind = "toggle", label = "Qzx Enable Lab", settingKey = "labsuite.lab.enabled" },
+        { pageKey = PAGE, kind = "faq", label = "Qzx availability question", help = "Open the detail." },
+    }
+end)
+M.RegisterSearchAvailability("lab", function(pageKey, settingKey, rec)
+    availabilityCalls = availabilityCalls + 1
+    -- Built-in static, page and FAQ records use the same availability contract.
+    if pageKey == "classpower" then return enabled end
+    if pageKey ~= PAGE or rec.kind == "page" or settingKey == "labsuite.lab.enabled" then return true end
+    if rec.provided then
+        Check(rec.providerRow == detail and rec.sectionId == detail.sectionId,
+            "provider ownership metadata was lost")
+    end
+    return enabled
+end)
+Check(collections == 0 and availabilityCalls == 0, "registering availability eagerly built the index")
+Check(Find(api.SearchPages("qzx available detail"), function(rec) return rec.label == detail.label end),
+    "enabled provider detail was hidden")
+local counted = availabilityCalls
+api.SearchPages("qzx enable lab")
+Check(collections == 1 and availabilityCalls == counted, "unchanged searches reran module checks or collection")
+
+-- A visited page replaces the provider detail with a live widget.
+M.RegisterSearchWidget(widget, { pageKey = PAGE, kind = "slider", label = detail.label,
+    settingKey = detail.settingKey, sectionId = detail.sectionId,
+    classification = "setting", controlId = "menu2.zz_provider_lab.suite.lab.size",
+    controlPath = "zz_provider_lab/suite/lab/size" })
+local liveDetail = Check(Find(api.SearchPages("qzx available detail"), function(rec)
+    return rec.label == detail.label and not rec.provided
+end), "live detail did not replace the provider")
+Check(liveDetail.sectionId == detail.sectionId and liveDetail.exactTarget.sectionId == detail.sectionId
+    and liveDetail.controlId == "menu2.zz_provider_lab.suite.lab.size"
+    and liveDetail.controlPath == "zz_provider_lab/suite/lab/size",
+    "live detail lost authoritative ownership metadata")
+local sectionParent, actionWidget = world.env.CreateFrame("Frame"), world.env.CreateFrame("Button")
+actionWidget:SetParent(sectionParent)
+M.RegisterSearchWidget(actionWidget, { pageKey = PAGE, kind = "button", label = "Qzx Lab Action",
+    classification = "action", actionKey = "labsuite.lab.action",
+    controlId = "menu2.zz_provider_lab.suite.lab.action" })
+-- Builders attach this marker after their construction-time registrations.
+sectionParent._msuf2CollapsibleEntry = { sectionId = detail.sectionId }
+local liveAction = Check(Find(api.GetSearchRecords(), function(rec) return rec.label == "Qzx Lab Action" end),
+    "live action missing")
+Check(liveAction.sectionId == detail.sectionId and liveAction.actionKey == "labsuite.lab.action"
+    and liveAction.controlId == "menu2.zz_provider_lab.suite.lab.action",
+    "live action lost its exact accordion or action identity")
+enabled = false
+Check(M.InvalidateSearchProvider("lab") == true, "module changes could not invalidate the provider")
+local records = api.GetSearchRecords()
+local pageFound, switchFound = false, false
+for _, rec in ipairs(records) do
+    Check(rec.key ~= "classpower", "disabled built-in static/page/FAQ record leaked")
+    if rec.key == PAGE then
+        if rec.kind == "page" then pageFound = true
+        elseif rec.exactTarget and rec.exactTarget.settingKey == "labsuite.lab.enabled" then switchFound = true
+        else error("disabled provider/live/FAQ detail leaked: " .. tostring(rec.label)) end
+    end
+end
+Check(pageFound and switchFound, "disabled module lost its page or enable switch")
+Check(collections == 2, "module change did not refresh the cached provider exactly once")
+M.UnregisterSearchWidget(widget)
+M.UnregisterSearchWidget(actionWidget)
+Check(not Find(api.SearchPages("qzx available detail"), function(rec) return rec.label == detail.label end),
+    "disabled provider detail returned after its live widget was removed")
+enabled = true
+M.InvalidateSearchProvider("lab")
+Check(Find(api.SearchPages("qzx available detail"), function(rec) return rec.label == detail.label end),
+    "re-enabled module detail did not return")
+
+-- Pages removed by a companion/client change cannot leave stale search targets.
+local labPage = M.pages[PAGE]
+M.pages[PAGE] = nil
+api.MarkSearchIndexDirty()
+for _, rec in ipairs(api.GetSearchRecords()) do
+    Check(rec.key ~= PAGE, "unregistered page left a stale result")
+end
+M.pages[PAGE] = labPage
+M.RegisterSearchAvailability("lab", nil)
+M.RegisterSearchProvider("lab", nil)
+
+---------------------------------------------------------------------------
+-- 10. Provider actions route by exact control ID and only navigate
+---------------------------------------------------------------------------
+local actionId = "menu2.zz_provider_lab.suite.lab.action"
+M.RegisterSearchProvider("actions", function()
+    return {
+        { pageKey = PAGE, kind = "button", label = "Qzx Provider Action", controlId = actionId,
+            sectionId = detail.sectionId },
+        { pageKey = PAGE, kind = "button", label = "Qzx Invalid Action", controlId = "invalid id" },
+    }
+end)
+local providerAction = Check(Find(api.SearchPages("qzx provider action"), function(rec)
+    return rec.label == "Qzx Provider Action"
+end), "provider action missing")
+Check(providerAction.exactTarget and providerAction.exactTarget.controlId == actionId
+    and providerAction.exactTarget.settingKey == nil and providerAction.command == nil
+    and providerAction.searchIdentity:match("^id\031"),
+    "provider action did not retain its exact navigation target")
+Check(api.GetSearchProviderCache().skipped == 1, "an invalid control ID silently fell back to text navigation")
+local clicks = 0
+actionWidget:SetScript("OnClick", function() clicks = clicks + 1 end)
+M.RegisterSearchWidget(actionWidget, { pageKey = PAGE, kind = "button", label = "Qzx Built Action",
+    classification = "action", actionKey = "labsuite.lab.action", controlId = actionId })
+local actionCount = 0
+for _, rec in ipairs(api.GetSearchRecords()) do
+    if rec.exactTarget and rec.exactTarget.controlId == actionId then
+        actionCount = actionCount + 1
+        Check(not rec.provided and rec.label == "Qzx Built Action",
+            "provider action did not deduplicate against its exact live ID")
+    end
+end
+Check(actionCount == 1, "exact action target appeared " .. actionCount .. " times")
+local oldSelect, oldEntry, oldActive = M.SelectPage, M.cache[PAGE], M.activeKey
+local wrapper = world.env.CreateFrame("Frame")
+sectionParent:SetParent(wrapper)
+M.cache[PAGE] = { wrapper = wrapper, sections = { [detail.sectionId] = sectionParent } }
+M.SelectPage = function(key) M.activeKey = key; return true end
+local opened, anchored, exact = api.OpenSearchTarget(PAGE, "qzx provider action", providerAction.label,
+    nil, {}, providerAction.exactTarget)
+Check(opened and anchored and exact and clicks == 0,
+    "opening an action result failed exact navigation or executed the action")
+M.SelectPage, M.cache[PAGE], M.activeKey = oldSelect, oldEntry, oldActive
+M.UnregisterSearchWidget(actionWidget)
+M.RegisterSearchProvider("actions", nil)
+
 print("search_provider_hook_smoke: ok (" .. VALID .. " rows, " .. MALFORMED .. " malformed skipped; lazy, "
-    .. "cached across rebuilds, recollected on language change; live control wins; raising provider isolated)")
+    .. "cached across rebuilds, recollected on language change; live control wins; raising provider isolated; "
+    .. "availability filters all sources, toggles invalidate, enable switch remains)")

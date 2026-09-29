@@ -358,6 +358,13 @@ local function InstallClientFacts(target)
     end
     _G.C_AddOns = _G.C_AddOns or {}
     _G.C_AddOns.GetAddOnMetadata = function(addonName, field) return _G.GetAddOnMetadata(addonName, field) end
+    -- Blizzard_CooldownViewer ships in live (standard) and forever (camelot).
+    -- Supply both halves of the real HostsCooldownManager probe so the cold
+    -- index includes the Class Resource anchor that those clients can build.
+    _G.C_AddOns.DoesAddOnExist = function(addonName)
+        return metadata[addonName] ~= nil or addonName == "Blizzard_CooldownViewer" and suffix == "Mainline"
+    end
+    _G.C_CooldownViewer = suffix == "Mainline" and {} or nil
     -- The X-MSUF-Client tag is the authoritative Classic placement route and has to
     -- agree with the project global above, or Initialize.lua would report a mismatch.
     local tag = Trim(metadata.MidnightSimpleUnitFrames["X-MSUF-Client"] or "")

@@ -1073,11 +1073,9 @@ function PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
         fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
         if subtitle and subtitle ~= "" then
-            local sub = T.Font(section, "GameFontDisableSmall", Tr(subtitle), T.colors.muted)
-            SetSearchText(sub, subtitle)
+            local sub = W.Description(section, subtitle, 16, -38, self.width - 32, title)
+            sub:ClearAllPoints()
             sub:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -8)
-            sub:SetWidth(self.width - 28)
-            sub:SetJustifyH("LEFT")
             section.subtitle = sub
         end
         self.y = self.y - (height or 78) - 12
@@ -1210,10 +1208,8 @@ local function CardResolve(v)
     return v
 end
 
---- Title-justify each widget kind expects from MoveWidget, matching the hand-written
---- PlaceDropdown ("LEFT") / PlaceSlider ("CENTER") conventions so converted cards keep
---- their exact label alignment.
-local CARD_MOVE_JUSTIFY = { slider = "CENTER", dropdown = "LEFT", segment = "LEFT", textinput = "LEFT" }
+--- Keep field labels aligned to the same reading edge across every control kind.
+local CARD_MOVE_JUSTIFY = { slider = "LEFT", dropdown = "LEFT", segment = "LEFT", textinput = "LEFT" }
 
 --- Create + bind one control row, placing it at (x, y) inside the card via the SAME
 --- MoveWidget call the hand-written pages use. Returns the widget, or nil for
@@ -1233,6 +1229,7 @@ local function BuildCardControl(ctx, card, row, x, y, width)
     elseif kind == "slider" then
         widget = W.Slider(card, CardResolve(row.label), row.min or 0, row.max or 100, row.step or 1, row.width or width)
         if row.format and widget.SetValueFormatter then widget:SetValueFormatter(row.format) end
+        if row.valueBoxWidth and widget.SetValueBoxWidth then widget:SetValueBoxWidth(row.valueBoxWidth) end
         local metadata = {}
         for key, value in pairs(row) do metadata[key] = value end
         metadata.step = row.step or 1
@@ -2194,6 +2191,7 @@ end
 local function ClickCheckButton(button, mouseButton)
     if not button then return end
     if button.IsEnabled and not button:IsEnabled() then return end
+    T.CommitFocusedInput()
     local nextValue
     if button.SetChecked and button.GetChecked then
         nextValue = not (button:GetChecked() and true or false)
@@ -2317,7 +2315,7 @@ local TOGGLE_CONTROL_HOOKS = {
     end,
     OnEnter = function(self) self._msuf2ToggleHovered = true; RefreshToggleControl(self, true, self._msuf2TogglePressed) end,
     OnLeave = function(self) self._msuf2ToggleHovered = nil; self._msuf2TogglePressed = nil; RefreshToggleControl(self) end,
-    OnMouseDown = function(self) self._msuf2TogglePressed = true; RefreshToggleControl(self, self._msuf2ToggleHovered, true) end,
+    OnMouseDown = function(self) T.CommitFocusedInput(); self._msuf2TogglePressed = true; RefreshToggleControl(self, self._msuf2ToggleHovered, true) end,
     OnMouseUp = function(self) self._msuf2TogglePressed = nil; RefreshToggleControl(self, self._msuf2ToggleHovered) end,
     OnClick = function(self) RefreshToggleControl(self, self._msuf2ToggleHovered) end,
     OnEnable = function(self) RefreshToggleControl(self, self._msuf2ToggleHovered) end,
@@ -2449,7 +2447,7 @@ end
 local SWITCH_CONTROL_HOOKS = {
     OnEnter = function(self) self._msuf2SwitchHovered = true; RefreshSwitchVisual(self, true) end,
     OnLeave = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
-    OnMouseDown = function(self) self._msuf2SwitchPressed = true; RefreshSwitchVisual(self) end,
+    OnMouseDown = function(self) T.CommitFocusedInput(); self._msuf2SwitchPressed = true; RefreshSwitchVisual(self) end,
     OnMouseUp = function(self) self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
     OnClick = RefreshSwitchVisual,
     OnEnable = RefreshSwitchVisual,
@@ -2623,6 +2621,40 @@ function W.Text(parent, text, x, y, width, color)
     fs:SetJustifyH("LEFT")
     return fs
 end
+-- Keep supporting copy compact while retaining the complete explanation at
+-- its own hit target. Status, warnings and instructions still use W.Text.
+function W.Description(parent, text, x, y, width, title)
+    local fs = W.Text(parent, text, x, y, width)
+    fs:SetWordWrap(true)
+    fs:SetMaxLines(2)
+    if M.AddTooltip and text and text ~= "" then
+        local help = PixelLayoutRegion(CreateFrame("Button", nil, parent))
+        help:SetAllPoints(fs)
+        help._msuf2SkipHistoryCheckpoint = true
+        M.AddTooltip(help, title or "Help", text)
+        help:SetScript("OnClick", function(self)
+            local show = self:GetScript("OnEnter")
+            if show then show(self) end
+        end)
+        fs._msuf2HelpTarget = help
+    end
+    return fs
+end
+
+function W.SetCollapsibleSummary(section, text)
+    local entry = section and section._msuf2CollapsibleEntry
+    if not (entry and entry.header) then return end
+    local summary = entry._msuf2UXSummary
+    if not summary then
+        summary = T.Font(entry.header, "GameFontHighlightSmall", "", T.colors.muted, "supporting")
+        summary:SetJustifyH("LEFT")
+        summary:SetWordWrap(false)
+        summary:SetMaxLines(1)
+        entry._msuf2UXSummary = summary
+    end
+    summary:SetText(text or "")
+    if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
+end
 function W.ControlCard(parent, title, subtitle, x, y, width, height)
     if not parent then return nil end
     width = width or 360
@@ -2657,12 +2689,7 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     heading:SetJustifyH("LEFT")
     card.title = heading
     if subtitle and subtitle ~= "" then
-        local sub = T.Font(card, "GameFontDisableSmall", Tr(subtitle), T.colors.muted)
-        SetSearchText(sub, subtitle)
-        sub:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -40)
-        sub:SetWidth(max(24, width - 32))
-        sub:SetJustifyH("LEFT")
-        if sub.SetWordWrap then sub:SetWordWrap(true) end
+        local sub = W.Description(card, subtitle, 16, -40, max(24, width - 32), title)
         card.subtitle = sub
     end
     return card
@@ -3289,6 +3316,7 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     x = x or 0
     y = y or 0
     local kind = widget._msuf2ControlKind
+    if kind == "slider" then titleJustify = "LEFT" end
     widget._msuf2ContextLayoutParent = parent
     widget._msuf2ContextLayoutX = x
     widget._msuf2ContextLayoutY = y
@@ -3565,14 +3593,13 @@ end
 local FIXED_PREVIEW_MAX_HEIGHT = 180
 W.FIXED_PREVIEW_MAX_HEIGHT = FIXED_PREVIEW_MAX_HEIGHT
 
--- Full/Max is the presentation default for a fresh session and after resets.
--- This remains deliberately profile-independent: only an explicit Compact
--- action overrides it for the current UI session.
+-- Start with a compact reference so settings remain in view. An explicit
+-- Expand action carries across pages for the rest of the UI session.
 function M.SetFixedPreviewExpandedPreference(expanded)
     M._msuf2FixedPreviewExpandedPreference = expanded ~= false
 end
 function M.ShouldExpandFixedPreview()
-    return M._msuf2FixedPreviewExpandedPreference ~= false
+    return M._msuf2FixedPreviewExpandedPreference == true
 end
 
 function W.FixedPreviewSection(ctx, builder, spec)
@@ -4280,6 +4307,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(edit, slider)
     else edit._msuf2ControlPartOf = slider end
     slider.editBox = edit
+    edit._msuf2CommitOnPointer = true
     local plus = StepButton("+")
     slider.minusButton = minus
     slider.plusButton = plus
@@ -4375,24 +4403,41 @@ function W.Slider(section, label, minVal, maxVal, step, width)
             UpdateFill()
         end
     end)
-    edit:SetScript("OnEnterPressed", function(self)
+    local function CommitEdit(self)
         local text = self:GetText()
+        if text == self._msuf2EditStartText or (slider.IsEnabled and not slider:IsEnabled()) then return end
+        if self._msuf2EditStartValue ~= nil and slider:GetValue() ~= self._msuf2EditStartValue then return end
         local v
         if type(slider._msuf2ValueParser) == "function" then
             v = tonumber(slider._msuf2ValueParser(text, slider))
         end
         if v == nil then v = tonumber(text) end
         if v ~= nil then slider:SetValue(v) end
+        self._msuf2EditStartText = text
+    end
+    edit:SetScript("OnEnterPressed", function(self)
+        CommitEdit(self)
         self:ClearFocus()
     end)
     edit:SetScript("OnEscapePressed", function(self)
+        self._msuf2CancelCommit = true
         self:SetText(FormatValue(slider:GetValue()))
         self:ClearFocus()
+        self._msuf2CancelCommit = nil
     end)
-    edit:SetScript("OnEditFocusGained", function() slider._msuf2Editing = true end)
+    edit:SetScript("OnEditFocusGained", function(self)
+        slider._msuf2Editing = true
+        self._msuf2EditStartText = self:GetText()
+        self._msuf2EditStartValue = slider:GetValue()
+        if self.HighlightText then self:HighlightText() end
+    end)
     edit:SetScript("OnEditFocusLost", function(self)
+        if slider._msuf2Editing and not self._msuf2CancelCommit then CommitEdit(self) end
         slider._msuf2Editing = nil
+        self._msuf2EditStartText = nil
+        self._msuf2EditStartValue = nil
         self:SetText(FormatValue(slider:GetValue()))
+        if self.HighlightText then self:HighlightText(0, 0) end
     end)
     local function ClampToSlider(value)
         local minV, maxV = slider:GetMinMaxValues()
@@ -4462,6 +4507,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider:SetScript("OnMouseDown", function(_, button)
         if button and button ~= "LeftButton" then return end
         if slider.IsEnabled and not slider:IsEnabled() then return end
+        T.CommitFocusedInput()
         if type(slider._msuf2BeginSliderHistory) == "function" then slider:_msuf2BeginSliderHistory() end
         slider._msuf2SliderActive = true
         if type(slider._msuf2InteractionStart) == "function" then
@@ -4570,13 +4616,24 @@ function W.SegmentTabs(ctx, parent, opts)
     M.TrackRefresh(ctx, RefreshTabs)
     return segment, RefreshTabs, CurrentTab, SetTab
 end
-local function TextInputEscape(self) self:ClearFocus() end
+local function TextInputEscape(self)
+    self._msuf2SkipBlurCommit = true
+    if self._msuf2EditStartText ~= nil then self:SetText(self._msuf2EditStartText) end
+    self:ClearFocus()
+    self._msuf2SkipBlurCommit = nil
+end
 local function TextInputEnter(self)
+    self._msuf2SkipBlurCommit = true
     if self._msuf2OnCommit then self._msuf2OnCommit(self:GetText() or "") end
     self:ClearFocus()
+    self._msuf2SkipBlurCommit = nil
 end
 local function TextInputBlur(self)
-    if self._msuf2CommitOnBlur and self._msuf2OnCommit then self._msuf2OnCommit(self:GetText() or "") end
+    if self._msuf2CommitOnBlur and not self._msuf2SkipBlurCommit and self._msuf2OnCommit
+        and self:GetText() ~= self._msuf2EditStartText then
+        self._msuf2OnCommit(self:GetText() or "")
+    end
+    self._msuf2EditStartText = nil
 end
 local function TextInputSetOnValueCommitted(self, fn) self._msuf2OnCommit = fn end
 
@@ -4601,6 +4658,7 @@ function W.TextInput(section, label, width)
     edit.SetOnValueCommitted = TextInputSetOnValueCommitted
     edit:SetScript("OnEscapePressed", TextInputEscape)
     edit:SetScript("OnEnterPressed", TextInputEnter)
+    edit:SetScript("OnEditFocusGained", function(self) self._msuf2EditStartText = self:GetText() end)
     edit:SetScript("OnEditFocusLost", TextInputBlur)
     return edit
 end

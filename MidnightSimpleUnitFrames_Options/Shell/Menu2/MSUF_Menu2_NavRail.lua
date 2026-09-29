@@ -529,7 +529,7 @@ local function BuildNavRail(parent)
     local search = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     search:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -40)
     search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -40)
-    search:SetHeight(20)
+    search:SetHeight(28)
     search:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 1) + 20)
     search:EnableMouse(true)
     search:SetAutoFocus(false)
@@ -766,7 +766,7 @@ local function BuildNavRail(parent)
         if searchPalette then searchPalette:Hide() end
     end)
     local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, parent))
-    listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -68)
+    listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -76)
     listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -NAV_SCROLL_GUTTER, 8)
     local list = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
     list:SetSize(NAV_W - NAV_SCROLL_GUTTER, 1)
@@ -785,7 +785,7 @@ local function BuildNavRail(parent)
             -- right so the title keeps its alignment above the page rows.
             local row = PixelLayoutRegion(CreateFrame("Button", nil, list))
             row:SetSize(NavItemWidth(0) - 2, 18)
-            local title = T.Font(row, "GameFontNormalSmall", string.upper(M.Tr(item.title)), T.colors.navHeaderText or T.colors.muted)
+            local title = T.Font(row, "GameFontNormalSmall", M.Tr(item.title), T.colors.navHeaderText or T.colors.muted)
             T.StyleFontString(title, T.colors.navHeaderText or T.colors.muted, NAV_TEXT_BUMP)
             title:SetJustifyH("LEFT")
             title:SetSize(NavItemWidth(0) - 20, 18)
@@ -810,7 +810,7 @@ local function BuildNavRail(parent)
         elseif item.header then
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
-            local btn = T.Button(list, string.upper(M.Tr(item.header)), NavItemWidth(0), NAV_BUTTON_H)
+            local btn = T.Button(list, M.Tr(item.header), NavItemWidth(0), NAV_BUTTON_H)
             btn._msuf2NavHeader = true
             btn._msuf2NavHeaderId = id
             btn._msuf2RawLabel = item.header

@@ -1521,7 +1521,7 @@ local function BuildWindowChrome(state)
     M.RefreshPageHistoryNav()
     local sbProfile = StatusText("LEFT", status, "LEFT", 24, 15)
     local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
-    local sbCombat = StatusText("LEFT", sbEdit, "RIGHT", 16, 0)
+    local sbCombat = StatusText("LEFT", sbProfile, "RIGHT", 16, 0)
     local sbVersion = StatusText("RIGHT", status, "RIGHT", -16, 15, "RIGHT", 0.50)
     local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -16, 15, "RIGHT", 0)
     sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 15)
@@ -1690,15 +1690,14 @@ local function InstallWindowStatusRuntime(state)
     local RefreshSeeNewFeaturesBadge = M.RefreshSeeNewFeaturesBadge
     function f:RefreshStatus()
         local profile = tostring(_G.MSUF_ActiveProfile or "Default")
-        local profileText = "|cff4a90d9" .. L_PROFILE .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r"
+        local profileText = L_PROFILE .. " " .. profile
         SetCachedText(status, "_msuf2ProfileText", sbProfile, profileText)
-        local editText = IsEditModeActive()
-            and ("|cff4ade80" .. L_EDIT_ON .. "|r  |cff3a4a66\194\183|r")
-            or ("|cff5a6a88" .. L_EDIT_OFF .. "|r  |cff3a4a66\194\183|r")
-        SetCachedText(status, "_msuf2EditText", sbEdit, editText)
+        -- The Edit Mode button already owns its current state. Reserve status
+        -- emphasis for a condition that actually limits the user's next action.
+        SetCachedText(status, "_msuf2EditText", sbEdit, "")
         local inCombat = _G.InCombatLockdown and _G.InCombatLockdown()
         local combatText = inCombat and ("|cffef4444" .. L_IN_COMBAT .. "|r")
-            or ("|cff22c55e" .. L_OUT_OF_COMBAT .. "|r")
+            or ""
         SetCachedText(status, "_msuf2CombatText", sbCombat, combatText)
         local version = GetAddonVersion()
         local versionText = type(version) == "string" and version ~= ""

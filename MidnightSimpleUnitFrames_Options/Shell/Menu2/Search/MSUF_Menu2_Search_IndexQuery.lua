@@ -64,6 +64,7 @@ local SEARCH_STATE = {
     -- records, built on first use and dropped with the locale caches.
     providers = {},
     providerCache = nil,
+    availability = {},
 }
 M.searchRegistry = SEARCH_STATE.registry
 
@@ -1053,6 +1054,7 @@ function M.RegisterSearchWidget(widget, meta)
         and previous.identityLabel == (meta.identityLabel or widget._msuf2SearchText or rawLabel)
         and previous.identityKey == meta.identityKey
         and previous.controlPath == meta.controlPath
+        and previous.sectionId == meta.sectionId
         and previous.classification == (meta.classification or meta.controlType)
         and previous.ephemeral == meta.ephemeral
         and previous.settingKey == meta.settingKey
@@ -1086,6 +1088,7 @@ function M.RegisterSearchWidget(widget, meta)
         identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
         identityKey = meta.identityKey,
         controlPath = meta.controlPath,
+        sectionId = meta.sectionId,
         classification = meta.classification or meta.controlType,
         ephemeral = meta.ephemeral,
         settingKey = meta.settingKey,
@@ -1274,6 +1277,16 @@ BuildRegistrySearchRecord = function(entry)
     AddSearchText(extra, entry.help)
     local rec = AddSearchRecord(nil, nil, info, entry.label, entry.anchor, entry.kind or "control", extra)
     if rec then
+        rec.controlId, rec.controlPath, rec.actionKey = entry.controlId, entry.controlPath, entry.actionKey
+        rec.sectionId = entry.sectionId
+        -- Unbound headings and section actions still have an exact accordion
+        -- owner. Its marker is set after construction-time search registration.
+        local parent = entry.widget
+        while parent and not rec.sectionId do
+            local section = parent._msuf2CollapsibleEntry
+            rec.sectionId = parent._msuf2SectionId or (section and section.sectionId)
+            parent = parent.GetParent and parent:GetParent() or nil
+        end
         local controlId = tostring(entry.controlId or "")
         local controlPath = tostring(entry.controlPath or "")
         local settingKey = tostring(entry.settingKey or "")
@@ -1292,10 +1305,12 @@ BuildRegistrySearchRecord = function(entry)
                 "display", entry.pageKey, rec.kind or "", rec.labelNorm or "", rec.hint or "")
         end
         rec.answer = entry.help
-        if type(entry.settingKey) == "string" and entry.settingKey ~= "" then
+        if controlId ~= "" or settingKey ~= "" then
             rec.exactTarget = {
                 pageKey = entry.pageKey,
                 settingKey = entry.settingKey,
+                controlId = entry.controlId,
+                sectionId = rec.sectionId,
                 identityKey = entry.identityKey,
                 controlPath = entry.controlPath,
                 label = entry.label,
@@ -1326,7 +1341,7 @@ BuildRegistrySearchRecord = function(entry)
                     help = entry.help,
                     command = command,
                 }, "search-command")
-                if controlId then entry.controlId = controlId end
+                if controlId then entry.controlId, rec.controlId = controlId, controlId end
             end
         end
     end
@@ -1423,6 +1438,7 @@ end
 ---   keywords    extra search words: a list of strings or one "a|b|c" string
 ---   help        searchable text, shown as the result's answer
 ---   settingKey  exact target: the control registered with this setting key
+---   controlId   exact runtime control ID; also locates actions without running them
 ---   sectionId   accordion (b:CollapsibleSection id) opened on the way there
 ---   anchorText  on-page text to scroll to when there is no exact control
 --- A page row adds its keywords to the page's own record, help becomes the
@@ -1464,6 +1480,11 @@ function SearchProviders.Record(row, info)
     if not (label and IsSearchableDisplayText(label)) then return nil end
     local kind = SearchProviders.KINDS[row.kind or "control"] and (row.kind or "control") or nil
     if not kind then return nil end
+    local controlId = row.controlId
+    if controlId ~= nil and (type(controlId) ~= "string" or #controlId < 3 or #controlId > 160
+        or not controlId:match("^[%w_%.:/%-]+$")) then return nil end
+    local settingKey = SearchProviders.Text(row.settingKey)
+    local sectionId = SearchProviders.Text(row.sectionId)
     local help = SearchProviders.Text(row.help, SearchProviders.HELP_MAX_LEN)
     local anchorText = SearchProviders.Text(row.anchorText)
     if kind == "faq" then
@@ -1472,6 +1493,13 @@ function SearchProviders.Record(row, info)
         local rec = AddSearchRecord(nil, nil, info, label, nil, "faq", extra)
         if rec then
             rec.answer, rec.anchorFallback, rec.priority, rec.faq = help, anchorText or label, 0, true
+            rec.providerRow = row
+            rec.sectionId, rec.controlId = sectionId, controlId
+            if controlId or settingKey then
+                rec.exactTarget = { pageKey = info.key, controlId = controlId, settingKey = settingKey,
+                    sectionId = sectionId, label = label }
+            end
+            if sectionId then rec.route = { accordion = { [info.key .. ":" .. sectionId] = true } } end
         end
         return rec
     end
@@ -1493,18 +1521,19 @@ function SearchProviders.Record(row, info)
     if #haystackText > SEARCH_CONTROL_HAYSTACK_MAX_LEN then
         haystackText = haystackText:sub(1, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
     end
-    local settingKey = SearchProviders.Text(row.settingKey)
-    local sectionId = SearchProviders.Text(row.sectionId)
     local rec = {
         key = info.key, label = label, kind = kind, hint = hint, title = info.title, group = info.group,
         labelNorm = labelNorm, titleNorm = "", groupNorm = NormalizeSearchText(info.group),
         hintNorm = NormalizeSearchText(hint), haystack = NormalizeSearchText(haystackText),
         tokenLimit = SEARCH_CONTROL_MAX_TOKENS, answer = help, provided = true,
         anchorFallback = anchorText or label,
+        providerRow = row, sectionId = sectionId, controlId = controlId,
     }
-    rec.searchIdentity = CatalogSearchIdentity("provided", info.key, settingKey or kind, labelNorm, hint)
-    if settingKey then
-        rec.exactTarget = { pageKey = info.key, settingKey = settingKey, sectionId = sectionId, label = label }
+    rec.searchIdentity = controlId and CatalogSearchIdentity("id", info.key, controlId)
+        or CatalogSearchIdentity("provided", info.key, settingKey or kind, labelNorm, hint)
+    if controlId or settingKey then
+        rec.exactTarget = { pageKey = info.key, controlId = controlId, settingKey = settingKey,
+            sectionId = sectionId, label = label }
     end
     if sectionId then rec.route = { accordion = { [info.key .. ":" .. sectionId] = true } } end
     return rec
@@ -1572,7 +1601,7 @@ function SearchProviders.Collect(pageInfoByKey)
 end
 
 --- Provider records join after the static rows. A live widget registered for the
---- same setting (or, without one, the same kind and label) on the same page wins:
+--- exact control ID, same setting, or otherwise same kind and label on the page wins:
 --- it carries the real anchor and command, exactly like static rows.
 function SearchProviders.Append(records, cache)
     local list = cache.records
@@ -1583,6 +1612,9 @@ function SearchProviders.Append(records, cache)
         for i = 1, #(ids or EMPTY_SEARCH_RECORDS) do
             local entry = SEARCH_STATE.registry[ids[i]]
             if entry then
+                if type(entry.controlId) == "string" and entry.controlId ~= "" then
+                    live[pageKey .. "\031id\031" .. entry.controlId] = true
+                end
                 if type(entry.settingKey) == "string" and entry.settingKey ~= "" then
                     live[pageKey .. "\031" .. entry.settingKey] = true
                 end
@@ -1593,7 +1625,8 @@ function SearchProviders.Append(records, cache)
     for i = 1, #list do
         local rec = list[i]
         local target = rec.exactTarget
-        local liveKey = target and (rec.key .. "\031" .. target.settingKey)
+        local liveKey = target and target.controlId and (rec.key .. "\031id\031" .. target.controlId)
+            or target and target.settingKey and (rec.key .. "\031" .. target.settingKey)
             or (rec.key .. "\031" .. rec.kind .. "\031" .. rec.labelNorm)
         if not live[liveKey] then
             rec.order = #records + 1
@@ -1611,6 +1644,49 @@ function M.RegisterSearchProvider(name, collect)
     SEARCH_STATE.providerCache = nil
     MarkSearchIndexDirty()
     return true
+end
+
+--- Availability applies to every record source, including widgets on pages that
+--- have already been visited. Predicates run only when rebuilding the index;
+--- providers invalidate after module/configuration changes, never from a ticker.
+--- The record retains providerRow for companion-specific ownership metadata.
+function M.RegisterSearchAvailability(name, isAvailable)
+    if type(name) ~= "string" or name == "" then return false end
+    if isAvailable ~= nil and type(isAvailable) ~= "function" then return false end
+    SEARCH_STATE.availability[name] = isAvailable
+    MarkSearchIndexDirty()
+    return true
+end
+
+function M.InvalidateSearchProvider(name)
+    if name ~= nil and (type(name) ~= "string" or not SEARCH_STATE.providers[name]) then return false end
+    SEARCH_STATE.providerCache = nil
+    MarkSearchIndexDirty()
+    return true
+end
+
+function SearchProviders.FilterAvailable(records)
+    local write = 0
+    for read = 1, #records do
+        local rec = records[read]
+        local available = rec.easterEgg or (M.pages and M.pages[rec.key]) ~= nil
+        if available and not rec.easterEgg then
+            local target = rec.exactTarget
+            local settingKey = target and target.settingKey
+            for _, isAvailable in pairs(SEARCH_STATE.availability) do
+                if isAvailable(rec.key, settingKey, rec) == false then
+                    available = false
+                    break
+                end
+            end
+        end
+        if available then
+            write = write + 1
+            rec.order = write
+            records[write] = rec
+        end
+    end
+    for i = #records, write + 1, -1 do records[i] = nil end
 end
 
 local SEARCH_FAQ = SearchData.BuildFAQ and SearchData.BuildFAQ({
@@ -1701,6 +1777,7 @@ local function BuildSearchRecords()
         end
     end
 
+    SearchProviders.FilterAvailable(records)
     return records
 end
 
