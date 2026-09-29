@@ -115,9 +115,10 @@ function TextSection.PrepareSlotState(state, unit)
         focus = "Voidcaller",
         boss = "Boss Preview",
         pet = "Companion",
+        pettarget = "Hunted Foe",
     }
     local function RaidGroupNameAllowed(unitKey)
-        return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focustarget" or unitKey == "focus"
+        return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focustarget" or unitKey == "pettarget" or unitKey == "focus"
     end
     local function RaidGroupNamePreviewValue()
         local style = ReadText(unit, "raidGroupNameStyle", "PAREN")
@@ -353,11 +354,11 @@ function TextSection.BuildHeaderBadges(state, unit)
             CurrentTextTab(),
             ReadBool(unit, "showName", true),
             ReadBool(unit, "showHP", true),
-            ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget"))
+            ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget" and unit ~= "pettarget"))
         )
     end
     local function PowerTextDefault()
-        return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget")
+        return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget" and unit ~= "pettarget")
     end
     local function PowerTextShown()
         return ReadBool(unit, "showPowerText", PowerTextDefault())

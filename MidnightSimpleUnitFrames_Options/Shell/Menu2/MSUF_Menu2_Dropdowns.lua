@@ -938,6 +938,12 @@ local function OpenDropdown(owner, valuesTable)
     dropdownClosing = nil
     dropdownClosingOwner = nil
     dropdownFrame._msuf2CloseToken = (dropdownFrame._msuf2CloseToken or 0) + 1
+    -- The popup is parented to UIParent, while its owner is inside the scaled
+    -- options window. Match their coordinate spaces before measuring edges.
+    local menu = M.frame
+    if menu and menu.GetScale and dropdownFrame.SetScale then
+        dropdownFrame:SetScale(menu:GetScale())
+    end
     local hasIcons, hasStatusbarPreviews, hasBarPreviews = false, false, false
     for i = 1, #valuesTable do
         if DropdownItemBarPreview(valuesTable[i]) then

@@ -64,7 +64,7 @@ Apply.pendingGroups = pendingGroups
 Apply.pendingGroupReason = pendingGroupReason
 
 local APPLY_FLUSH_DELAY = 0.04
-local UNIT_KEYS = KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
+local UNIT_KEYS = KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss")
 local UNIT_AURA_SCOPES = KeySet("player", "target", "focus", "boss")
 local CASTBAR_UNITS = KeySet("player", "target", "focus", "boss")
 

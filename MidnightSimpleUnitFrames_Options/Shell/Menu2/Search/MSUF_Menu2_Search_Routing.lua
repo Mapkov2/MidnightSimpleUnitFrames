@@ -19,6 +19,7 @@ local C = Search._RoutingContext or {}
 
 M = C.M or M
 local NormalizeSearchText = C.NormalizeSearchText
+local ExpandMythicPlusQuery = C.ExpandMythicPlusQuery
 local BuildSearchQueryClauses = C.BuildSearchQueryClauses
 local BuildSearchTokenList = C.BuildSearchTokenList
 local SearchEditDistanceWithin = C.SearchEditDistanceWithin
@@ -492,6 +493,7 @@ local function SearchTermRows(text)
 end
 
 local GROUP_SCOPE_TERMS = SearchTermRows [[
+party=mythic plus|myhtic plus|keystone|schluesselstein|schlüsselstein|dungeon
 mythicraid=mythic raid|mythicraid|mythic
 raid=raid|raids
 party=party|group|groups
@@ -507,6 +509,8 @@ player=player frame|player unit|player font|player text|player health|player pow
 target=target frame|target unit|target font|target text|target health|target power|target bar|target bars
 focus=focus frame|focus unit|focus font|focus text|focus health|focus power|focus bar|focus bars
 pet=pet frame|pet unit|pet font|pet text|pet health|pet power|pet bar|pet bars
+pettarget=pet target|pettarget|pet target frame|pet target font|pet target text
+pettarget=pet target|pettarget|pet target frame|pet target font|pet target text
 boss=boss frame|boss frames|boss unit|boss units|boss font|boss text|boss health|boss power|boss bar|boss bars
 ]]
 
@@ -682,6 +686,8 @@ local SEARCH_UNIT_BY_PAGE = {
     uf_focustarget = "focustarget",
     uf_focus = "focus",
     uf_pet = "pet",
+    uf_pettarget = "pettarget",
+    uf_pettarget = "pettarget",
     uf_boss = "boss",
 }
 
@@ -1018,7 +1024,9 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
     end
 end
 local function SearchRouteForTarget(pageKey, query, fallback)
-    local normalized = NormalizeSearchText((query or "") .. " " .. (fallback or ""))
+    local routeText = (query or "") .. " " .. (fallback or "")
+    if ExpandMythicPlusQuery then routeText = ExpandMythicPlusQuery(routeText) end
+    local normalized = NormalizeSearchText(routeText)
     if normalized == "" then return nil end
     if pageKey == "home" then
         return SearchFirstMatch(normalized, DASHBOARD_ROUTE_TERMS)

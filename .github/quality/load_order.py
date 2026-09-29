@@ -53,7 +53,6 @@ contracts = {
     "M.AuraCatalogToken": menu + "MSUF_Menu2_ControlCatalog.lua",
     "M.GroupAuraSettingKeys": menu + "MSUF_Menu2_ControlCatalog.lua",
     "M.TrimText": menu + "MSUF_Menu2_Support.lua",
-    "M.PlayerDisplayName": menu + "MSUF_Menu2_Support.lua",
     "W.SetTileVisual": menu + "MSUF_Menu2_Widgets.lua",
     "W.ToggleBadge": menu + "MSUF_Menu2_Widgets.lua",
     "W.ThemedControlCard": menu + "MSUF_Menu2_Widgets.lua",

@@ -13,7 +13,7 @@ NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
 LONG = re.compile(r"\[(=*)\[")
 NUMBER = re.compile(r"\d{1,3}")
 
-# Only native input-validation boundaries may reject invalid assets/data.
+# Only explicit input-validation and external-provider boundaries may reject errors.
 # Match the entire statement once per file: no generic dispatcher or alias.
 REJECTION_BOUNDARIES = {
     "MidnightSimpleUnitFrames/State/MSUF_Defaults.lua": {
@@ -24,6 +24,9 @@ REJECTION_BOUNDARIES = {
     },
     "MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua": {
         "local ok, accepted = pcall(SetFontChecked, MSUF_FontPathProbe, path, size, flags)",
+    },
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua": {
+        "local ok, rows = pcall(entry.collect)",
     },
 }
 
@@ -103,7 +106,7 @@ def main():
                 failures.append(f"{path.relative_to(ROOT).as_posix()}:{line}: {token}")
     if failures:
         raise SystemExit("Forbidden runtime call boundary:\n" + "\n".join(failures))
-    print(f"PASS direct error paths: {count} owned Lua files; only explicit asset/codec rejection boundaries")
+    print(f"PASS direct error paths: {count} owned Lua files; only explicit asset/codec/provider rejection boundaries")
 
 
 if __name__ == "__main__":

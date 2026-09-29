@@ -619,9 +619,7 @@ DefineActionPolicies([[assistant_nomatch_clear]], {
 })
 
 DefineActionPolicies([[
-first_load.personalize first_load.import_profile first_load.use_defaults
-first_load.whats_new first_load.not_now first_load.full_settings
-guided_setup guided_setup_step restart_upgrade_highlight_tour
+restart_upgrade_highlight_tour
 ]], {
     mutability = "savedState",
     readOnly = false,
@@ -631,8 +629,8 @@ guided_setup guided_setup_step restart_upgrade_highlight_tour
     transactionAdapter = "onboardingFirstLoad",
     transactionAdapterMode = "capturedOwnerState",
     transactionAdapterReady = true,
-    transactionAdapterContract = "Capture and restore first-load, guided-tour, and upgrade-highlight SavedVariables plus session deferral flags while preserving lifecycle table identity.",
-    statePath = "MSUF_GlobalDB.global.firstLoad6, MSUF_GlobalDB.global.guidedTour6, and MSUF_GlobalDB.global.upgradeHighlights",
+    transactionAdapterContract = "Capture and restore upgrade-highlight SavedVariables while preserving lifecycle table identity.",
+    statePath = "MSUF_GlobalDB.global.upgradeHighlights",
     rollbackStrategy = "transactionAdapter",
 })
 

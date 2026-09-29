@@ -778,7 +778,7 @@ local function SetAllPortraitRGB(prefix, r, g, b)
     local db = DB()
     db.general = db.general or {}
     db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, g, b
-    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
+    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss" }) do
         db[key] = db[key] or {}
         db[key][prefix .. "R"], db[key][prefix .. "G"], db[key][prefix .. "B"] = r, g, b
     end
@@ -796,7 +796,7 @@ function M._SetAllTextureLayerRGB(prefix, r, g, b)
     local db = DB()
     db.general = db.general or {}
     db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, g, b
-    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
+    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss" }) do
         db[key] = db[key] or {}
         db[key][prefix .. "R"], db[key][prefix .. "G"], db[key][prefix .. "B"] = r, g, b
     end
@@ -994,7 +994,7 @@ M._levelDifficultyColor = {
     { "levelColorTrivial", "Trivial", 0.50, 0.50, 0.50, "level_difficulty.trivial" },
 }
 M._statusTextColor = {
-    units = ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|boss=Boss Frames",
+    units = ValueTextPairs "player=Player|target=Target|focus=Focus|targettarget=Target of Target|focustarget=Focus Target|pet=Pet|pettarget=Pet Target|boss=Boss Frames",
     indicators = ValueTextPairs "levelIndicator=Level Text|raceIndicator=Race Text|classTextIndicator=Class Text|raidGroupName=Raid Group|statusText=Dead / Offline Text|statusGhostText=Ghost Text|statusAFKText=AFK Text|statusDNDText=DND Text",
     unitKeys = {},
     prefixKeys = {},
@@ -1996,6 +1996,23 @@ local function PendingColorFocusCategory(ctx)
 end
 
 local function BuildColors(ctx)
+    local suiteColors = _G.MSUFSuite and _G.MSUFSuite.Options
+    if suiteColors and type(suiteColors.BuildColorsCategory) == "function"
+        and not COLOR_CATEGORY_BUILDERS.suite then
+        COLOR_PAINTER_CATEGORIES[#COLOR_PAINTER_CATEGORIES + 1] = {
+            key = "suite", title = "UI Suite", shortTitle = "Suite",
+            subtitle = "Minimap, action bars, damage meter and skin colors.",
+            pickerNote = "Suite modules and their shared skin palette.",
+        }
+        COLOR_CATEGORY_ORDER[#COLOR_CATEGORY_ORDER + 1] = "suite"
+        COLOR_CATEGORY_SECTIONS.suite = {
+            "colors_suite_minimap", "colors_suite_actionbars", "colors_suite_damageMeter", "colors_suite_skin",
+        }
+        for _, sectionId in ipairs(COLOR_CATEGORY_SECTIONS.suite) do COLOR_SECTION_CATEGORY[sectionId] = "suite" end
+        COLOR_CATEGORY_BUILDERS.suite = function(colorCtx, inner)
+            suiteColors.BuildColorsCategory(colorCtx, inner)
+        end
+    end
     if ctx and ctx.wrapper then ctx.wrapper._msuf2SuppressContextColorShortcuts = true end
     local b, CH = W.PageBuilder(ctx), COLOR_HELPERS
     -- Painter callbacks from a previous build of this page must never fire

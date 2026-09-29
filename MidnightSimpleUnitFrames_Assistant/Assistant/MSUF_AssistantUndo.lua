@@ -318,10 +318,7 @@ local function RestoreNoMatchState(state)
 end
 
 local function CaptureOnboardingState()
-    local state = {
-        firstLoadDeferred = CaptureField(MSUF and MSUF.FirstLoad6, "deferredThisSession"),
-        guidedTourSession = CaptureField(MSUF and MSUF.GuidedTour6, "session"),
-    }
+    local state = {}
     local globalDB = rawget(_G, "MSUF_GlobalDB")
     if type(globalDB) ~= "table" then
         state.level, state.root = "root", CapturePublicValue("MSUF_GlobalDB")
@@ -332,8 +329,6 @@ local function CaptureOnboardingState()
         return state
     end
     state.level = "fields"
-    state.firstLoad6 = CaptureField(globalDB.global, "firstLoad6")
-    state.guidedTour6 = CaptureField(globalDB.global, "guidedTour6")
     state.upgradeHighlights = CaptureField(globalDB.global, "upgradeHighlights")
     return state
 end
@@ -350,16 +345,8 @@ local function RestoreOwnedTableField(container, key, fieldState)
 end
 
 local function RestoreOnboardingState(state)
-    if type(state) ~= "table" or type(state.firstLoadDeferred) ~= "table"
-        or type(state.guidedTourSession) ~= "table"
-    then
+    if type(state) ~= "table" then
         return false, "invalid onboarding snapshot"
-    end
-    if type(MSUF and MSUF.FirstLoad6) == "table" then
-        RestoreField(MSUF.FirstLoad6, "deferredThisSession", state.firstLoadDeferred)
-    end
-    if type(MSUF and MSUF.GuidedTour6) == "table" then
-        RestoreField(MSUF.GuidedTour6, "session", state.guidedTourSession)
     end
     if state.level == "root" then return RestorePublicValue("MSUF_GlobalDB", state.root) end
     local globalDB = rawget(_G, "MSUF_GlobalDB")
@@ -367,9 +354,7 @@ local function RestoreOnboardingState(state)
     if state.level == "global" then return RestoreOwnedTableField(globalDB, "global", state.value) end
     if state.level ~= "fields" then return false, "unsupported onboarding snapshot" end
     if type(globalDB.global) ~= "table" then globalDB.global = {} end
-    local restored = RestoreOwnedTableField(globalDB.global, "firstLoad6", state.firstLoad6)
-        and RestoreOwnedTableField(globalDB.global, "guidedTour6", state.guidedTour6)
-        and RestoreOwnedTableField(globalDB.global, "upgradeHighlights", state.upgradeHighlights)
+    local restored = RestoreOwnedTableField(globalDB.global, "upgradeHighlights", state.upgradeHighlights)
     if restored and M and type(M.InvalidatePage) == "function" then pcall(M.InvalidatePage, "home") end
     return restored
 end
@@ -417,14 +402,6 @@ local ACTION_TRANSACTION_ADAPTERS = {
     onboardingFirstLoad = {
         mode = "capturedOwnerState",
         actionKeys = {
-            ["first_load.personalize"] = true,
-            ["first_load.import_profile"] = true,
-            ["first_load.use_defaults"] = true,
-            ["first_load.whats_new"] = true,
-            ["first_load.not_now"] = true,
-            ["first_load.full_settings"] = true,
-            guided_setup = true,
-            guided_setup_step = true,
             restart_upgrade_highlight_tour = true,
         },
     },

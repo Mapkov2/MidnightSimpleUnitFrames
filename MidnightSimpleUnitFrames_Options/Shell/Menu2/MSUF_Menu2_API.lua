@@ -11,7 +11,7 @@ local MenuRuntime = M.MenuRuntime or {}
 -- M.Format is installed by MSUF_Menu2_Theme.lua. This file is also loaded by
 -- audits and by Assistant entry points that run before the theme exists, so
 -- route through a fallback instead of indexing a nil.
-local Fmt = M.Format
+local Fmt = type(M.Format) == "function" and M.Format or string.format
 
 local ExportPublic = MSUF.ExportPublic
 
@@ -360,18 +360,10 @@ RegisterMenuCommand({
     aliases = { "guide", "setup" },
     group = "general",
     usage = "/msuf tour",
-    help = "Start or resume the guided setup.",
+    help = "Open the MSUF Suite installation.",
     run = function()
-        if M.BlockCombatAction and M.BlockCombatAction() then return end
-        local tour = MSUF and MSUF.GuidedTour6
-        local active = type(tour) == "table" and type(tour.IsActive) == "function" and tour:IsActive()
-        if active and type(M.ResumeGuidedTour) == "function" then
-            M.ResumeGuidedTour()
-        elseif type(M.StartGuidedTour) == "function" then
-            M.StartGuidedTour({ source = "slash" })
-        else
-            M.Open("home")
-        end
+        local suite = _G.MSUFSuite
+        if suite and suite.Installer then suite.Installer.Open() else M.Open("home") end
     end,
 })
 
@@ -402,62 +394,6 @@ RegisterMenuCommand({
         else
             print("|cffffd700MSUF:|r Version test helper is not loaded.")
         end
-    end,
-})
-
-RegisterMenuCommand({
-    name = "firstload",
-    group = "diagnostics",
-    dev = true,
-    usage = "/msuf firstload [fresh/upgrade/status]",
-    help = "Replay the first-start flow or the upgrade highlights.",
-    run = function(rest)
-        local msg = rest:lower()
-        local firstLoad = MSUF and MSUF.FirstLoad6
-        if type(firstLoad) ~= "table" or type(firstLoad.Reset) ~= "function" then
-            print("|cff00b7ebMSUF|r: First-load module is not loaded.")
-            return
-        end
-        local arg = msg:match("^(%S+)") or ""
-        if arg == "status" then
-            local shows = type(firstLoad.ShouldShowDashboard) == "function" and firstLoad:ShouldShowDashboard()
-            local state = type(firstLoad.GetState) == "function" and firstLoad:GetState() or {}
-            local detection = type(firstLoad.GetDetection) == "function" and firstLoad:GetDetection() or {}
-            print(string.format("|cff00b7ebMSUF|r first-load: status=%s step=%s install=%s shows=%s reason=%s profile=%s legacy=%s schema=%s rawDB=%s rawProfiles=%s",
-                tostring(state.status), tostring(state.step), tostring(state.installKind),
-                tostring(shows), tostring(detection.reason), tostring(detection.existingProfile),
-                tostring(detection.legacyProfile), tostring(detection.profileSchema or "none"),
-                tostring(detection.rawDB), tostring(detection.rawProfiles)))
-            local highlights = MSUF and MSUF.UpgradeHighlights
-            if type(highlights) == "table" and type(highlights.GetDebugSummary) == "function" then
-                local releaseKey, status, index, count = highlights:GetDebugSummary()
-                print(string.format("|cff00b7ebMSUF|r upgrade-highlights: release=%s status=%s index=%s count=%s shows=%s",
-                    tostring(releaseKey), tostring(status), tostring(index), tostring(count),
-                    tostring(type(highlights.ShouldShow) == "function" and highlights:ShouldShow() or false)))
-            end
-            return
-        end
-        if arg ~= "" and arg ~= "fresh" and arg ~= "upgrade" then
-            print("|cff00b7ebMSUF|r: Usage: /msuf firstload [fresh|upgrade|status]")
-            return
-        end
-        if M.BlockCombatAction and M.BlockCombatAction() then return end
-        -- A clean preview also needs the guided tour parked, otherwise an
-        -- active tour would take over the next menu open.
-        local tour = MSUF and MSUF.GuidedTour6
-        if type(tour) == "table" and type(tour.Reset) == "function" then tour:Reset() end
-        firstLoad:Reset(arg ~= "" and arg or nil)
-        local highlights = MSUF and MSUF.UpgradeHighlights
-        if type(highlights) == "table" then
-            if firstLoad:GetInstallKind() == "fresh" and type(highlights.BaselineKnownReleases) == "function" then
-                highlights:BaselineKnownReleases()
-            elseif type(highlights.ResetCurrent) == "function" then
-                highlights:ResetCurrent()
-            end
-        end
-        if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
-        M.Open("home")
-        print(Fmt("|cff00b7ebMSUF|r: First-start preview re-armed (%s). Guided-tour progress was reset.", tostring(firstLoad:GetInstallKind())))
     end,
 })
 
@@ -501,12 +437,3 @@ then
     SlashCmdList["MSUFOPTIONS"] = optionsSlashHandler
 end
 MSUF.OptionsLODMSUFOptionsStub = nil
-
--- Stable integration points for Edit Mode and external launchers. Resolve the
--- controller at click time because it is loaded after all Menu2 pages.
-ExportPublic("MSUF_StartGuidedTour", function(opts)
-    return type(M.StartGuidedTour) == "function" and M.StartGuidedTour(opts)
-end)
-ExportPublic("MSUF_ResumeGuidedTour", function()
-    return type(M.ResumeGuidedTour) == "function" and M.ResumeGuidedTour()
-end)

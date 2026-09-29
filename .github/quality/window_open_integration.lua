@@ -66,7 +66,7 @@ _G.SlashCmdList = {}
 for _, file in ipairs({
  "Kernel/MSUF_Require", "Kernel/MSUF_Libs", "Locales/MSUF_Localization",
  "Kernel/MSUF_Util", "State/MSUF_StateHelpers", "State/MSUF_Defaults",
- "Shell/UI/MSUF_Style", "State/MSUF_FirstLoad", "State/MSUF_GuidedTour",
+ "Shell/UI/MSUF_Style", "State/MSUF_ProfilePolicy",
  "State/MSUF_ProfileCodec", "State/MSUF_ProfileRuntime", "State/MSUF_Profiles",
  "GroupFrames/MSUF_GroupFrames_DB", "GroupFrames/MSUF_GroupFrames_DB_Migrations",
 }) do load("MidnightSimpleUnitFrames/" .. file .. ".lua") end
@@ -79,7 +79,6 @@ for file in xml:gmatch('<Script file="([^"]+)"') do
 end
 load(base .. "Preview/MSUF_Menu2_ClassPowerPreview_Lifecycle.lua")
 load(base .. "Pages/MSUF_Menu2_GroupPreview.lua")
-load(base .. "MSUF_Menu2_GuidedTour.lua")
 local M = ns.MSUF2
 local marker = {}
 local ok, failure

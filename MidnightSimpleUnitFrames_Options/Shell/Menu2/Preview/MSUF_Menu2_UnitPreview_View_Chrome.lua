@@ -210,7 +210,7 @@ end
 --- listener for the whole fight (only the single re-arm signal stays), and
 --- the driver exists only while a preview box is in use.
 local LIVE_STATE_UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION" }
-local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", pet = "pet" }
+local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", pet = "pet", pettarget = "pettarget" }
 local SyncUnitPreviewLiveState
 local function UnitPreviewLiveStateEvent(driver, event)
     local box = driver._msufLiveStateBox

@@ -23,6 +23,7 @@ Data.KEYWORDS = {
     uf_focus = UnitKeywords("focus", "focus", " focus kick interrupt"),
     uf_boss = "unit frame unitframe boss frames bossframe bossframes frame basics enable disable hide show width height scale size health power portrait text castbar boss range fade range check distance check out of range transparency alpha auras buffs debuffs preview anchoring anchor boss layout copy to edit mode move drag position x offset y offset color name hp power " .. UF_STATUS .. " boss level anchor level position level layer",
     uf_pet = UnitKeywords("pet", "pet"),
+    uf_pettarget = UnitKeywords("pet target pettarget", "pet target"),
     gf_layout = "group frames groupframes party raid mythic raid layout health text resource power bar name hp text font size text slot delimiter hide percent sign hide percent symbol show power tank healer damage smooth fill range fade range check distance check out of range offline alpha growth direction sorting role order frame scaling scale transparency opacity anchoring anchor position move drag preview show hide player solo enable disable disabled turn off off hide group frames turn off group frames disable group frames hide group frames turn off raid frames disable raid frames hide raid frames raid frames off turn off party frames disable party frames hide party frames party frames off ausschalten deaktivieren ausblenden width height spacing columns rows sorting role group number visibility",
     gf_bars = "group frames groupframes party raid dispel overlay overlay style overlay priority health bar tint any debuff dispel type debuff stripe stripe edge stripe height stripe opacity effects",
     gf_auras = "group frames groupframes party raid auras buffs debuffs filters blacklist whitelist hidden aura spell id spell indicators tracked spells placed spell icons anchor position x offset y offset icon size max buffs max debuffs spacing layer growth per row hots healer buffs raid debuffs boss debuffs custom spells slots preview frame highlight",
@@ -41,6 +42,15 @@ Data.KEYWORDS = {
     modules = "modules style skins optional modules compatibility portrait decoration minimap compartment addon compartment",
     profiles = "profiles profile management spec profiles specialization auto switch create copy delete reset import export wago active profile share string profile string backup restore",
 }
+
+-- Mythic+ dungeons use the Party scope. Put the common activity terms on each
+-- group workspace so a second word such as "auras" or "indicators" narrows to
+-- the right page instead of the separate Mythic Raid settings.
+local MYTHIC_PLUS_KEYWORDS = "mythic plus myhtic plus mythic dungeon mplus keystone schluesselstein schlüsselstein dungeon"
+for _, pageKey in ipairs({ "gf_layout", "gf_bars", "gf_auras", "gf_indicators", "gf_priority" }) do
+    Data.KEYWORDS[pageKey] = Data.KEYWORDS[pageKey] .. " " .. MYTHIC_PLUS_KEYWORDS
+end
+Data.KEYWORDS.gf_layout = Data.KEYWORDS.gf_layout .. " bars health bars power bars party bars dungeon bars"
 
 for _, row in ipairs({
     "DISPEL_DEBUFF_KEYWORDS|MSUF2_SEARCH_DISPEL_DEBUFF_KEYWORDS",

@@ -32,8 +32,6 @@ local ScheduleSearchInputQuery = SearchBridge.ScheduleSearchInputQuery
 local RunSearchInputQuery = SearchBridge.RunSearchInputQuery
 local OpenSearchTarget = SearchBridge.OpenSearchTarget
 local BumpSearchInputSerial = SearchBridge.BumpSearchInputSerial
-local ShouldUseAssistantForQuery = SearchBridge.ShouldUseAssistantForQuery
-local SubmitAssistantQuery = SearchBridge.SubmitAssistantQuery
 local function IsAdvancedNavHidden()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
@@ -159,7 +157,7 @@ function M.SetSearchIntroSeen(seen)
     if seen and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
     return true
 end
-local function CreateNavButton(parent, key, label, indent)
+local function CreateNavButton(parent, key, label, indent, availability)
     local btn = T.Button(parent, M.Tr(label), NavItemWidth(indent), NAV_BUTTON_H)
     if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontHighlight then
         btn._msuf2Label:SetFontObject(_G.GameFontHighlight)
@@ -175,10 +173,20 @@ local function CreateNavButton(parent, key, label, indent)
     btn._msuf2NavIndent = indent or 0
     btn._msuf2NavPillVisualWidth = NavPillVisualWidth(parent)
     btn._msuf2RawLabel = label
+    btn._msuf2NavAvailability = availability
     T.AttachNavIcon(btn, key, (indent or 0) > 0, NavIconsEnabled())
     M.navButtons[key] = btn
     if btn.RefreshVisual then btn.RefreshVisual(btn) end
     return btn
+end
+function M.RefreshNavAvailability()
+    for _, btn in pairs(M.navButtons or {}) do
+        local available = btn._msuf2NavAvailability
+        if type(available) == "function" then
+            local ok = available()
+            btn:SetAlpha(ok and 1 or 0.4)
+        end
+    end
 end
 function M.RefreshNavIconVisibility()
     local buttons = M.navButtons
@@ -542,18 +550,18 @@ local function BuildNavRail(parent)
         intro:SetFrameLevel(search:GetFrameLevel() + 6)
         intro:EnableMouse(true)
         intro:Hide()
-        local title = T.Font(intro, "GameFontNormalSmall", "Search or ask MSUF", T.colors.text)
+        local title = T.Font(intro, "GameFontNormalSmall", "Search MSUF settings", T.colors.text)
         T.StyleFontString(title, T.colors.text, NAV_TEXT_BUMP)
         title:SetPoint("TOPLEFT", intro, "TOPLEFT", 12, -12)
         title:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -28, -12)
         title:SetJustifyH("LEFT")
-        local body = T.Font(intro, "GameFontDisableSmall", "Try \"raid auras\" or ask \"can you make my text bigger?\"", T.colors.muted)
+        local body = T.Font(intro, "GameFontDisableSmall", "Try \"raid auras\" or \"castbar size\".", T.colors.muted)
         T.StyleFontString(body, T.colors.muted, NAV_TEXT_BUMP)
         body:SetPoint("TOPLEFT", intro, "TOPLEFT", 12, -32)
         body:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -12, -32)
         body:SetWordWrap(true)
         body:SetJustifyH("LEFT")
-        local foot = T.Font(intro, "GameFontDisableSmall", "Matches appear while you type. Enter opens one or asks MSUF.", T.colors.dim)
+        local foot = T.Font(intro, "GameFontDisableSmall", "Matches appear while you type. Enter opens the selected setting.", T.colors.dim)
         T.StyleFontString(foot, T.colors.dim, NAV_TEXT_BUMP)
         foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 12, 12)
         foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -12, 12)
@@ -596,7 +604,7 @@ local function BuildNavRail(parent)
         UpdateSearchPlaceholder(self)
         local query = TrimText(self:GetText() or "")
         if query == "" then
-            ShowSearchIntro()
+            if not (searchPalette and searchPalette:Refresh("", false)) then ShowSearchIntro() end
         elseif searchPalette then
             SchedulePaletteQuery(self, query)
         end
@@ -621,9 +629,11 @@ local function BuildNavRail(parent)
         HideSearchIntro()
         local query = TrimText(self:GetText() or "")
         if query == "" then
+            if searchPalette and searchPalette:OpenSelected("") then return end
             self:ClearFocus()
             return
         end
+        if type(M.RecordNavSearchQuery) == "function" then M.RecordNavSearchQuery(query) end
         BumpSearchInputSerial()
         RunSearchInputQuery(query, false)
         local results = M.searchResults or {}
@@ -639,13 +649,6 @@ local function BuildNavRail(parent)
                 OpenSearchTarget(first.key, query, first.anchorFallback or first.label or first.title,
                     first.anchor, first.route, first.exactTarget)
             end
-        elseif ShouldUseAssistantForQuery(query, results) and SubmitAssistantQuery(query) then
-            self._msuf2SearchInternal = true
-            self:SetText("")
-            self._msuf2SearchInternal = nil
-            RunSearchInputQuery("", false)
-            if searchPalette then searchPalette:Hide() end
-            self:ClearFocus()
         else
             if searchPalette then searchPalette:Hide() end
             RunSearchInputQuery(query, true)
@@ -678,7 +681,9 @@ local function BuildNavRail(parent)
         BumpSearchInputSerial()
         RunSearchInputQuery("", true)
         clear:Hide()
+        local hadFocus = search.HasFocus and search:HasFocus()
         search:SetFocus()
+        if hadFocus and searchPalette then searchPalette:Refresh("", false) end
         return true
     end
     clear:SetScript("OnClick", ClearSearchInput)
@@ -764,7 +769,7 @@ local function BuildNavRail(parent)
             created[#created + 1] = { kind = "header", id = id, button = btn }
         elseif item.key then
             local indent = item.group and NAV_ITEM_INDENT or 0
-            local btn = CreateNavButton(list, item.key, item.label, indent)
+            local btn = CreateNavButton(list, item.key, item.label, indent, item.availability)
             if item.group then M.navGroupForKey[item.key] = item.group end
             created[#created + 1] = { kind = "page", group = item.group, button = btn }
             if item.key == "profiles" then created[#created + 1] = { kind = "history", frame = CreateHistoryControls(list) } end
@@ -815,6 +820,7 @@ local function BuildNavRail(parent)
         M.RefreshHistoryControls()
     end
     parent:_msuf2NavReflow()
+    M.RefreshNavAvailability()
 end
 M.BuildNavRail = BuildNavRail
 function M.RefreshAdvancedNavVisibility()

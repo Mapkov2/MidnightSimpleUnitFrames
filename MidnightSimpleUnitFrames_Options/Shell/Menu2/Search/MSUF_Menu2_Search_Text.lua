@@ -54,8 +54,8 @@ end
 local function SearchPlaceholderText()
     -- The placeholder is translated through Menu2, but always has an English fallback so the
     -- search box remains useful when locale data loads late.
-    local text = M.Tr("Ask MSUF anything...")
-    if type(text) ~= "string" or text == "" then text = "Ask MSUF anything..." end
+    local text = M.Tr("Search settings...")
+    if type(text) ~= "string" or text == "" then text = "Search settings..." end
     return text
 end
 local function SearchBoxHasText(searchBox)
@@ -125,6 +125,18 @@ local function NormalizeSearchText(text)
         normalizedTextCacheCount = normalizedTextCacheCount + 1
     end
     return text
+end
+
+-- Keep the plus sign meaningful in search queries without changing the baked
+-- normalization of labels or setting keys. M+ is the common dungeon shorthand;
+-- Mythic+ must not collapse to the separate Mythic Raid scope.
+local function ExpandMythicPlusQuery(query)
+    return (tostring(query or ""):gsub("%f[%a]([%a]+)(%s*)%+", function(word, spacing)
+        local lower = word:lower()
+        if lower == "m" then return "mythic plus" end
+        if lower == "mythic" or lower == "myhtic" then return word .. " plus" end
+        return word .. spacing .. "+"
+    end))
 end
 
 local DISPLAY_TEXT_CACHE_LIMIT = 4096
@@ -409,6 +421,7 @@ Text.SearchBoxHasText = SearchBoxHasText
 Text.RefreshSearchPlaceholder = RefreshSearchPlaceholder
 Text.UpdateSearchPlaceholder = UpdateSearchPlaceholder
 Text.NormalizeSearchText = NormalizeSearchText
+Text.ExpandMythicPlusQuery = ExpandMythicPlusQuery
 Text.DisplaySearchText = DisplaySearchText
 Text.IsSearchLocaleKey = IsSearchLocaleKey
 Text.SearchEffectiveLocale = SearchEffectiveLocale

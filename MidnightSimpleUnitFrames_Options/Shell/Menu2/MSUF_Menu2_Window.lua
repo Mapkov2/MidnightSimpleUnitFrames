@@ -650,7 +650,6 @@ RebuildActivePageForResize = function(frame, options)
         })
     end
     ApplyScrollMetrics()
-    M.RefreshGuidedTourChrome("WINDOW_RESIZE")
 end
 IsEditModeActive = M.IsMSUFEditModeActive
 local IsEditModeCombatLocked = M.IsEditModeCombatLocked
@@ -672,7 +671,6 @@ local function RefreshDashboardEditModeButton()
             if btn.SetActive then btn:SetActive(active) end
         end
     end
-    M.RefreshGuidedTourChrome("EDIT_MODE_STATUS")
 end
 local editModeUIHooked = false
 local function EnsureEditModeUIHook()
@@ -1714,7 +1712,6 @@ local function InstallWindowLifecycle(state)
         local activeEntry = M.activeKey and M.cache and M.cache[M.activeKey]
         M.SetActivePageHeader(activeEntry)
         if activeEntry then QueueVisiblePageLayoutSettle(M.activeKey, activeEntry) end
-        M.RefreshGuidedTourChrome("WINDOW_SHOW")
         M.ResumePinnedPreviews("WINDOW_SHOW")
         M.ResumeClassPowerPreview("WINDOW_SHOW", M.activeKey)
         M.ResumeGFNativePreviews("WINDOW_SHOW", M.activeKey)
@@ -1988,7 +1985,6 @@ local function BuildWindowScrollHost(state)
     pageHeaderHost:SetScript("OnMouseWheel", function(_, delta)
         ForwardMenuScrollWheel(delta)
     end)
-    M.InstallGuidedTourChrome(f, status, host, scroll)
 end
 
 -- An explicit Expand must produce a real full canvas even when the user is at
@@ -2091,20 +2087,6 @@ function M.Open(pageKey)
     -- the visible page from the current MSUF_DB instead of reusing stale UI.
     M.MarkMenuDataDirty("menu-open")
     f:Show()
-    -- An unqualified open resumes an active guided setup before considering the
-    -- one-time welcome. Explicit deep links always keep their requested page.
-    if pageKey == nil then
-        local guided = MSUF and MSUF.GuidedTour6
-        if guided and type(guided.IsActive) == "function" and guided:IsActive() then
-            local current = type(M.GetGuidedTourCurrentPage) == "function" and M.GetGuidedTourCurrentPage() or nil
-            pageKey = current or "guided_setup"
-        else
-            local firstLoad = MSUF and MSUF.FirstLoad6
-            if firstLoad and type(firstLoad.ShouldShowDashboard) == "function" and firstLoad:ShouldShowDashboard() then
-                pageKey = "home"
-            end
-        end
-    end
     M.SelectPage(pageKey or M.sessionLastPage or "home")
     return true
 end

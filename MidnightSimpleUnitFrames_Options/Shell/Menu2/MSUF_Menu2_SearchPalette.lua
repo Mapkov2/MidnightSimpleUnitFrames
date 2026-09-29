@@ -1,6 +1,6 @@
---- Lazy in-place search suggestions for the Menu2 navigation rail.
+--- Lazy in-place search suggestions and recent keyword queries for the Menu2 navigation rail.
 ---
---- The palette is presentation-only. Query/index ownership stays in Search_IndexQuery,
+--- Query/index ownership stays in Search_IndexQuery,
 --- and exact navigation stays in Search_Routing through the late-bound SearchBridge.
 local _, MSUF = ...
 MSUF = MSUF or {}
@@ -9,6 +9,7 @@ MSUF.MSUF2 = M
 
 local T = M.Theme
 local MAX_VISIBLE_RESULTS = 6
+local MAX_RECENT_SEARCHES = 6
 local PALETTE_W = 432
 local ROW_H = 42
 local HEADER_H = 28
@@ -31,6 +32,43 @@ local KIND_LABELS = {
 local TrimText = M.TrimText
 
 local Tr = M.Tr
+
+local function SearchCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function RecentSearches()
+    if type(M.GetPersistentMenuStateTable) == "function" then
+        return M.GetPersistentMenuStateTable("searchHistory")
+    end
+    M.searchHistory = type(M.searchHistory) == "table" and M.searchHistory or {}
+    return M.searchHistory
+end
+
+local function RecordSearch(query)
+    query = TrimText(query)
+    if #query < 2 or #query > 120 or SearchCombatLocked() then return end
+    local normalize = M.Search and M.Search.Text and M.Search.Text.NormalizeSearchText
+    local expand = M.Search and M.Search.Text and M.Search.Text.ExpandMythicPlusQuery
+    local function QueryKey(value)
+        if type(expand) == "function" then value = expand(value) end
+        return type(normalize) == "function" and normalize(value) or value:lower()
+    end
+    local normalized = QueryKey(query)
+    if #normalized < 2 then return end
+    local history = RecentSearches()
+    for i = #history, 1, -1 do
+        local previous = history[i]
+        if type(previous) ~= "string"
+            or QueryKey(previous) == normalized then
+            table.remove(history, i)
+        end
+    end
+    table.insert(history, 1, query)
+    while #history > MAX_RECENT_SEARCHES do table.remove(history) end
+end
+M.RecordNavSearchQuery = RecordSearch
 
 local function ShortText(text, limit)
     text = TrimText(text)
@@ -130,6 +168,20 @@ local function CreatePaletteController(parent, searchBox)
         if type(rec) ~= "table" then return false end
         self:Hide()
         if self.searchBox and self.searchBox.ClearFocus then self.searchBox:ClearFocus() end
+        if rec.recentQuery then
+            local recentQuery = rec.recentQuery
+            if self.searchBox and self.searchBox.SetText then
+                self.searchBox._msuf2SearchInternal = true
+                self.searchBox:SetText(recentQuery)
+                self.searchBox._msuf2SearchInternal = nil
+            end
+            local bridge = SearchBridge()
+            if type(bridge.BumpSearchInputSerial) == "function" then bridge.BumpSearchInputSerial() end
+            if type(bridge.RunSearchInputQuery) == "function" then bridge.RunSearchInputQuery(recentQuery, true) end
+            RecordSearch(recentQuery)
+            return true
+        end
+        RecordSearch(query)
         if rec.noOpen then return true end
         local bridge = SearchBridge()
         if type(bridge.OpenSearchTarget) ~= "function" then return false end
@@ -246,11 +298,21 @@ local function CreatePaletteController(parent, searchBox)
         moreResults:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
         moreResults:SetScript("OnClick", function()
             local query = TrimText(searchBox:GetText() or "")
+            RecordSearch(query)
             self:Hide()
             if searchBox.ClearFocus then searchBox:ClearFocus() end
             local bridge = SearchBridge()
             if type(bridge.BumpSearchInputSerial) == "function" then bridge.BumpSearchInputSerial() end
             if type(bridge.RunSearchInputQuery) == "function" then bridge.RunSearchInputQuery(query, true) end
+        end)
+
+        local clearHistory = T.Button(palette, Tr("Clear recent searches"), PALETTE_W - PANEL_PAD * 2, 24)
+        clearHistory:SetPoint("BOTTOMLEFT", palette, "BOTTOMLEFT", PANEL_PAD, 7)
+        clearHistory:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
+        clearHistory:SetScript("OnClick", function()
+            local history = RecentSearches()
+            for i = #history, 1, -1 do history[i] = nil end
+            self:Hide()
         end)
 
         local ask = T.Button(palette, Tr("Ask MSUF"), 118, 24)
@@ -277,7 +339,9 @@ local function CreatePaletteController(parent, searchBox)
 
         self.frame = palette
         self.status = status
+        self.heading = heading
         self.moreResults = moreResults
+        self.clearHistory = clearHistory
         self.ask = ask
         self.clickOff = clickOff
         return palette
@@ -285,7 +349,12 @@ local function CreatePaletteController(parent, searchBox)
 
     function controller:Refresh(query, pending)
         query = TrimText(query)
-        if not QueryReady(query) then
+        if SearchCombatLocked() then
+            self:Hide()
+            return false
+        end
+        local historyMode = query == "" and #RecentSearches() > 0
+        if not historyMode and not QueryReady(query) then
             self:Hide()
             return false
         end
@@ -293,8 +362,19 @@ local function CreatePaletteController(parent, searchBox)
         local palette = EnsurePalette(self)
         M.searchPaletteActive = true
         local results = type(M.searchResults) == "table" and M.searchResults or {}
-        if M.searchResultsQuery ~= query then results = {} end
-        pending = pending == true or M.searchResultsPending == true
+        if historyMode then
+            results = {}
+            local history = RecentSearches()
+            for i = 1, math.min(#history, MAX_VISIBLE_RESULTS) do
+                if type(history[i]) == "string" then
+                    results[#results + 1] = { recentQuery = history[i], label = history[i], kind = "recent" }
+                end
+            end
+        elseif M.searchResultsQuery ~= query then
+            results = {}
+        end
+        pending = not historyMode and (pending == true or M.searchResultsPending == true)
+        self.heading:SetText(Tr(historyMode and "Recent searches" or "Best matches"))
 
         self.visibleResults = {}
         for i = 1, MAX_VISIBLE_RESULTS do
@@ -304,9 +384,9 @@ local function CreatePaletteController(parent, searchBox)
             if rec then
                 self.visibleResults[i] = rec
                 row._msuf2PaletteLabel:SetText(ShortText(rec.label or rec.title, 50))
-                local kind = KIND_LABELS[rec.kind or ""] or rec.kind or ""
+                local kind = rec.recentQuery and "Recent" or KIND_LABELS[rec.kind or ""] or rec.kind or ""
                 row._msuf2PaletteKind:SetText(kind ~= "" and Tr(kind) or "")
-                row._msuf2PaletteBreadcrumb:SetText(ShortText(ResultBreadcrumb(rec), 72))
+                row._msuf2PaletteBreadcrumb:SetText(rec.recentQuery and Tr("Search again") or ShortText(ResultBreadcrumb(rec), 72))
                 row:Show()
             else
                 row:Hide()
@@ -327,9 +407,10 @@ local function CreatePaletteController(parent, searchBox)
         local bridge = SearchBridge()
         local canAsk = not pending and type(bridge.ShouldUseAssistantForQuery) == "function"
             and bridge.ShouldUseAssistantForQuery(query, results)
-        local showMore = not pending
+        local showMore = not historyMode and not pending
         self.moreResults:SetShown(showMore)
-        self.ask:SetShown(canAsk)
+        self.ask:SetShown(not historyMode and canAsk)
+        self.clearHistory:SetShown(historyMode)
         if showMore then
             self.moreResults:SetText(Tr("More"))
             self.moreResults:ClearAllPoints()

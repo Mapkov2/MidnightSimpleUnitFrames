@@ -36,7 +36,7 @@ local refreshQueued = false
 local refreshTimer
 local MENU_REFRESH_DELAY = 0.04
 local C_Timer = M.MenuTimer or _G.C_Timer
-local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
+local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss")
 M.UNIT_KEYS = UNIT_KEYS
 local TEXT_SLOT_SIDES = { "Left", "Center", "Right" }
 local TEXT_SLOT_SIDE_SET = { Left = true, Center = true, Right = true }

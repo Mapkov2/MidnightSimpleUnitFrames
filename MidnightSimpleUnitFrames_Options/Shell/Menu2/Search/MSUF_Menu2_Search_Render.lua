@@ -19,6 +19,7 @@ local T = C.T
 local TrimText = C.TrimText
 local SearchCombatLocked = C.SearchCombatLocked
 local NormalizeSearchText = C.NormalizeSearchText
+local NormalizeSearchQueryText = C.NormalizeSearchQueryText or NormalizeSearchText
 local MIN_SEARCH_QUERY_LEN = C.MIN_SEARCH_QUERY_LEN or 2
 local SearchPages = C.SearchPages
 local SEARCH_STATE = C.SEARCH_STATE or {}
@@ -41,7 +42,7 @@ local function BuildSearchPage(ctx)
     local width = ctx.width
     local query = TrimText(M.searchQuery or "")
     local combatLocked = SearchCombatLocked() and true or false
-    local queryReady = not combatLocked and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    local queryReady = not combatLocked and #NormalizeSearchQueryText(query) >= MIN_SEARCH_QUERY_LEN
     local results = M.searchResults or {}
     if M.searchResultsQuery ~= query and not M.searchResultsPending then
         results = combatLocked and {} or SearchPages(query)
@@ -49,8 +50,8 @@ local function BuildSearchPage(ctx)
         M.searchResultsQuery = query
     end
     local b = W.PageBuilder(ctx)
-    b:Header("Smart Search", query ~= "" and M.Format("Results for \"%s\"", query)
-        or "Type a setting or ask MSUF in your own words.", 78)
+    b:Header("Search", query ~= "" and M.Format("Results for \"%s\"", query)
+        or "Type a setting or keyword.", 78)
     local maxVisible = SEARCH_VISIBLE_RESULTS
     local visible = math.min(#results, maxVisible)
     local hasExpandedResult = false
@@ -80,9 +81,9 @@ local function BuildSearchPage(ctx)
         W.Text(sec, M.Format("Searching for \"%s\"...", query), 14, -44, width - 28, T.colors.muted)
     elseif #results == 0 then
         W.Text(sec, M.Format("No exact setting found for \"%s\".", query), 14, -44, width - 28, T.colors.muted)
-        W.Text(sec, SEARCH_STATE.indexing and "Still indexing menu pages..." or "Ask MSUF below and it will guide you to the right option.", 14, -70, width - 28, T.colors.dim)
+        W.Text(sec, SEARCH_STATE.indexing and "Still indexing menu pages..." or "Try another keyword, or ask MSUF below for help.", 14, -70, width - 28, T.colors.dim)
     else
-        W.Text(sec, M.Format("Best %d match(es). Open one or ask MSUF for a guided answer.", visible), 14, -44, width - 28, T.colors.muted)
+        W.Text(sec, M.Format("Best %d match(es). Open one to jump to its setting.", visible), 14, -44, width - 28, T.colors.muted)
         if SEARCH_STATE.indexing then
             W.Text(sec, "Indexing more menu pages in the background.", 14, -62, width - 28, T.colors.dim)
         end
@@ -147,7 +148,12 @@ local function BuildSearchPage(ctx)
         local assistantLabel = #results == 0 and "Ask MSUF for help" or "Ask MSUF about this"
         local ask = T.Button(sec, assistantLabel, math.min(220, width - 28), 26)
         ask:SetPoint("BOTTOMLEFT", sec, "BOTTOMLEFT", 14, 12)
-        ask:SetScript("OnClick", function() OpenSearchResults(query) end)
+        ask:SetScript("OnClick", function()
+            local bridge = M.SearchBridge
+            if bridge and type(bridge.SubmitAssistantQuery) == "function" then
+                bridge.SubmitAssistantQuery(query)
+            end
+        end)
         if type(M.RegisterMenuChromeControl) == "function" then
             M.RegisterMenuChromeControl(ask, "search.ask-assistant", "Ask MSUF about the current search", "ephemeral", {
                 historyMode = "none",
@@ -155,7 +161,7 @@ local function BuildSearchPage(ctx)
             })
         end
     end
-    local quick = b:Section("Support Search Examples", 206)
+    local quick = b:Section("Search Examples", 206)
     local shortcutDispel = "dispel border overlay any debuff"
     local shortcutStripe = "where is debuff stripe"
     local shortcutHighlights = "highlight priority dispel aggro target"

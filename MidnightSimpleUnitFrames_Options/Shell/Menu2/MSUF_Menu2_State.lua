@@ -14,7 +14,7 @@ local MENU_STATE_TABLE_FIELDS = M.WordList [[
     accordionState navHeaderState unitTextTabSelection unitTextSlotSelection unitPortraitTabSelection
     unitStatusSelection unitStatusTabSelection gfTextTabSelection gfTextSlotSelection
     gfStatusIconTabSelection gfSpellMultiSpecSelection gfSpellIndicatorSelection
-    collapseHintClickState
+    collapseHintClickState searchHistory
 ]]
 local MENU_STATE_SCALAR_DEFAULTS = {
     gfScope = "party",

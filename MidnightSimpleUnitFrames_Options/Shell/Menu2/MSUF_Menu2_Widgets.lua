@@ -94,22 +94,66 @@ local function SetAccordionHighlightSide(regions, side, color)
     side:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
     for i = 1, #regions do regions[i]:SetVertexColor(color[1], color[2], color[3], color[4] or 1) end
 end
+local function AccordionLinearize(value)
+    if value <= 0.03928 then return value / 12.92 end
+    return ((value + 0.055) / 1.055) ^ 2.4
+end
+local function AccordionLuminance(r, g, b)
+    return 0.2126 * AccordionLinearize(r) + 0.7152 * AccordionLinearize(g)
+        + 0.0722 * AccordionLinearize(b)
+end
+local function AccordionContrastAt(r, g, b, alpha, tone, backdrop, textLuminance)
+    local opacity = 1 - alpha
+    local surfaceLuminance = AccordionLuminance(
+        r * tone * alpha + backdrop[1] * opacity,
+        g * tone * alpha + backdrop[2] * opacity,
+        b * tone * alpha + backdrop[3] * opacity)
+    local light, dark = max(textLuminance, surfaceLuminance), min(textLuminance, surfaceLuminance)
+    return (light + 0.05) / (dark + 0.05)
+end
+-- Keep the authored blue gradient, but deepen pale accent colors until the
+-- near-white title remains readable on the translucent open header.
+local function AccordionReadableTone(r, g, b, alpha, backdrop, textLuminance)
+    if AccordionContrastAt(r, g, b, alpha, 1, backdrop, textLuminance) >= 5.5 then return 1 end
+    local low, high = 0, 1
+    for _ = 1, 8 do
+        local middle = (low + high) * 0.5
+        if AccordionContrastAt(r, g, b, alpha, middle, backdrop, textLuminance) >= 5.5 then
+            low = middle
+        else
+            high = middle
+        end
+    end
+    return low
+end
 local function AccordionOpenHighlightSetColors(self, fromColor, toColor)
     local fr, fg, fb, fa = fromColor[1], fromColor[2], fromColor[3], fromColor[4] or 1
     local tr, tg, tb, ta = toColor[1], toColor[2], toColor[3], toColor[4] or 1
+    local backdrop = ThemeColor("panel2", { 0.055, 0.098, 0.161, 1 })
+    local title = ThemeColor("text", { 0.933, 0.957, 1, 1 })
+    local textLuminance = AccordionLuminance(title[1], title[2], title[3])
+    local fromTone = AccordionReadableTone(fr, fg, fb, fa, backdrop, textLuminance)
+    local toTone = AccordionReadableTone(tr, tg, tb, ta, backdrop, textLuminance)
+    fr, fg, fb = fr * fromTone, fg * fromTone, fb * fromTone
+    tr, tg, tb = tr * toTone, tg * toTone, tb * toTone
     if self._msuf2FromR == fr and self._msuf2FromG == fg and self._msuf2FromB == fb and self._msuf2FromA == fa
         and self._msuf2ToR == tr and self._msuf2ToG == tg and self._msuf2ToB == tb and self._msuf2ToA == ta then
         return
     end
     self._msuf2FromR, self._msuf2FromG, self._msuf2FromB, self._msuf2FromA = fr, fg, fb, fa
     self._msuf2ToR, self._msuf2ToG, self._msuf2ToB, self._msuf2ToA = tr, tg, tb, ta
+    local safeFrom = self._msuf2SafeFromColor or {}
+    local safeTo = self._msuf2SafeToColor or {}
+    self._msuf2SafeFromColor, self._msuf2SafeToColor = safeFrom, safeTo
+    safeFrom[1], safeFrom[2], safeFrom[3], safeFrom[4] = fr, fg, fb, fa
+    safeTo[1], safeTo[2], safeTo[3], safeTo[4] = tr, tg, tb, ta
     if T.ApplyTextureGradient then
-        T.ApplyTextureGradient(self.middle, "HORIZONTAL", fromColor, toColor, false)
+        T.ApplyTextureGradient(self.middle, "HORIZONTAL", safeFrom, safeTo, false)
     else
         self.middle:SetColorTexture(tr, tg, tb, ta)
     end
-    SetAccordionHighlightSide(self.leftCorners, self.left, fromColor)
-    SetAccordionHighlightSide(self.rightCorners, self.right, toColor)
+    SetAccordionHighlightSide(self.leftCorners, self.left, safeFrom)
+    SetAccordionHighlightSide(self.rightCorners, self.right, safeTo)
 end
 local function CreateAccordionOpenHighlight(header, fromColor, toColor)
     local regions = CreateAccordionRoundedRegions(header, "BACKGROUND", 1)
@@ -195,7 +239,7 @@ local function ResolveFocusValue(value)
     if type(value) == "function" then return value() end
     return value
 end
-local UNIT_FOCUS_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss"
+local UNIT_FOCUS_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet pettarget boss"
 local GROUP_FOCUS_KIND = {
     gf_party = "party",
     gf_raid = "raid",
@@ -2796,6 +2840,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
             y = y - rowStep
         end
         local btn = T.Button(section, Tr(item.text or item.label or item.value or ""), width, buttonH)
+        btn._msuf2SegmentChoice = true
         -- The logical ScopeOverrideBar owns search/catalog identity and values.
         -- Child buttons are implementation details; registering both creates
         -- duplicate/unknown controls for one selection.

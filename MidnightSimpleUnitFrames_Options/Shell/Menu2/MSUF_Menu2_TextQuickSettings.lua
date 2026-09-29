@@ -20,7 +20,7 @@ local GROUP_PREVIEW_CLASS = { gf_party = "DEATHKNIGHT", gf_raid = "HUNTER" }
 local GROUP_PREVIEW_POWER = { gf_party = "RUNIC_POWER", gf_raid = "FOCUS" }
 local SCOPE_LABELS = {
     shared = "Shared", player = "Player", target = "Target", targettarget = "Target of Target",
-    focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss",
+    focustarget = "Focus Target", focus = "Focus", pet = "Pet", pettarget = "Pet Target", boss = "Boss",
     gf_party = "Party", gf_raid = "Raid",
 }
 

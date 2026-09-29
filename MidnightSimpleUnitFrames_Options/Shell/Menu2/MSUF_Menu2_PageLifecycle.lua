@@ -386,7 +386,6 @@ function M.SelectPage(key)
         M.RequestGFPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
         if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
-        M.GuidedTourOnPageSelected(key)
         M.RefreshLayerOverviewContext()
         return true
     end
@@ -444,7 +443,6 @@ function M.SelectPage(key)
     M.RequestBossPagePreviewForKey(key)
     M.RequestGFPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
-    M.GuidedTourOnPageSelected(key)
     -- A spec-version invalidation may have occurred inside this SelectPage.
     -- The local restore decision already owns that transition, so do not leave
     -- a second one-shot intent behind for an unrelated later navigation.

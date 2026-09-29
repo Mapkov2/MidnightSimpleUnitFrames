@@ -11,14 +11,23 @@ function M.AssignNamedValues(target, names, ...)
     for name in names:gmatch("%S+") do i = i + 1; target[name] = select(i, ...) end
 end
 function M.Tr(text) return text end
-local msuf = { MSUF2 = M }
+function M.Translate(text) return text end
+function M.FindPageEntry() return nil end
+function M.ExportPublic(key, value) _G[key] = value end
+local msuf = { MSUF2 = M, ExportPublic = M.ExportPublic, Translate = M.Translate }
 local savedMSUFDB = _G.MSUF_DB
+local savedSetFontChecked = _G.MSUF_SetFontChecked
+_G.MSUF_SetFontChecked = function(fs, font, size, flags)
+    fs:SetFont(font, size, flags)
+    return true
+end
 _G.MSUF_DB = { general = {} }
 local savedEnabled = NS.DB.enabled
 NS.DB.enabled = true
 local createFrame = CreateFrame
 CreateFrame = function(...)
     local frame = createFrame(...)
+    if not frame.SetToplevel then function frame:SetToplevel() end end
     function frame:HookScript(script, callback)
         local previous = self:GetScript(script)
         self:SetScript(script, function(...)
@@ -39,6 +48,13 @@ local earlyClose = msuf.UI.CloseButton(earlyHost)
 check(NS.WindowActionSkin.GetKind(earlyClose) == "close" and not earlyClose._label:IsShown(),
     "pre-Menu2 close button missed the skin or retained a duplicate text X")
 local earlyInput = new_frame("EditBox", "MSUFEarlyInput", earlyHost)
+function earlyInput:HookScript(script, callback)
+    local previous = self:GetScript(script)
+    self:SetScript(script, function(...)
+        if previous then previous(...) end
+        callback(...)
+    end)
+end
 msuf.UI.EditBox(earlyInput)
 check(NS.Registry.GetSurface(earlyInput) and NS.Registry.GetSurface(earlyInput).spec.role == "input",
     "pre-Menu2 input did not opt into the shared skin")
@@ -58,6 +74,14 @@ semantic:Show()
 T.ApplySurface(frame, "shell")
 check(NS.Registry.GetSurface(frame) and not stock:IsShown() and semantic:IsShown(),
     "MSUF shell did not opt into MapkoSkin or hid semantic child content")
+M.frame = frame
+frame.host = child
+local focusVeil = M.ShowFocusVeil(child, "dropdown", { referenceFrame = frame })
+check(focusVeil and focusVeil._msuf2FocusDim and focusVeil._msuf2FocusDim:IsShown()
+    and not NS.Registry.GetSurface(focusVeil),
+    "dropdown focus veil became an opaque skinned surface over the page")
+M.ResetFocusVeil("dropdown")
+M.frame = nil
 local button = T.Button(parent, "Native label", 120, 24)
 local onClick = function() end
 button:SetScript("OnClick", onClick)
@@ -66,6 +90,30 @@ button:SetActive(true)
 local surface = NS.Registry.GetSurface(button)
 check(surface and surface.active and button:GetText() == "Native label" and not button._msuf2Fill.L:IsShown(),
     "MSUF button lost label/selection or paints both renderers")
+local nav = T.Button(parent, "Skinning", 160, 24)
+nav._msuf2NavItem = true
+nav:RefreshVisual()
+nav:SetActive(true)
+local navSurface = NS.Registry.GetSurface(nav)
+check(navSurface and navSurface.active and navSurface.spec.role == "navigation"
+    and navSurface.spec.activeRole == "button"
+    and nav._msuf2SkinnedSelectionCue
+    and nav._msuf2SkinnedSelectionCue.wash:IsShown()
+    and nav._msuf2SkinnedSelectionCue.line:IsShown(),
+    "MSUF selected navigation lost its quiet selection cue")
+local segment = T.Button(parent, "Debuffs", 96, 24)
+segment._msuf2SegmentChoice = true
+segment:SetActive(true)
+local cue = segment._msuf2SkinnedSelectionCue
+check(cue and cue.wash:IsShown() and cue.line:IsShown(),
+    "active aura-type segment has no selection cue under Skin")
+local segmentTextures = #segment.textures
+segment:SetActive(false)
+check(not cue.wash:IsShown() and not cue.line:IsShown(),
+    "inactive aura-type segment retained the selection cue")
+segment:SetActive(true)
+check(#segment.textures == segmentTextures and cue.wash:IsShown(),
+    "aura-type segment allocated a second cue on repaint")
 local allocations = #button.textures
 for i = 1, 100 do
     provider.Button(button, true, i % 2 == 0, button.RefreshVisual)
@@ -92,6 +140,8 @@ check(not provider.IsActive() and stock:IsShown() and semantic:IsShown()
     and not NS.Registry.GetSurface(frame).visible and button._msuf2Fill.L:IsShown()
     and button:GetScript("OnClick") == clickProxy and close._msuf2CloseLineA:IsShown(),
     "disabling MapkoSkin did not restore native MSUF chrome and behavior")
+check(not cue.wash:IsShown() and not cue.line:IsShown(),
+    "native menu retained the Skin-only selection cue")
 check(next(MSUF_DB.general) == nil, "MSUF integration wrote profile preferences")
 check(earlyClose._label:IsShown() and earlyClose:GetText() == "x",
     "pre-Menu2 text X did not restore after master disable")
@@ -136,4 +186,5 @@ for _, entry in ipairs(api:GetRegisteredAddons()) do
 end
 NS.DB.enabled = savedEnabled
 _G.MSUF_DB = savedMSUFDB
+_G.MSUF_SetFontChecked = savedSetFontChecked
 CreateFrame = createFrame

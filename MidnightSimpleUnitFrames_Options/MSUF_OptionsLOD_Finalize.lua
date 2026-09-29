@@ -20,7 +20,6 @@ local requiredFunctions = {
     "ResumePinnedPreviews",
     "ReleaseGFNativePreviews",
     "ReleasePinnedPreviews",
-    "GuidedTourOnPageSelected",
     "OpenExactSettingControl",
     "OpenExactColorSettingPicker",
     "OpenExactCatalogControl",

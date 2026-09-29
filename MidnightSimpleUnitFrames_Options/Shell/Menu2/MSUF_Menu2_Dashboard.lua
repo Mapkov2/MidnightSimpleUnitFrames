@@ -192,6 +192,46 @@ local function DirectAction(setter, combatLocked)
     return command
 end
 
+local function LoadedSuiteFactoryReset()
+    local suite = _G.MSUFSuite
+    return type(suite) == "table" and type(suite.Database) == "table"
+        and type(suite.Database.StageFactoryReset) == "function"
+end
+
+local function RunSuiteFactoryReset()
+    if DirectCombatLocked() or not LoadedSuiteFactoryReset() or type(_G.ReloadUI) ~= "function" then return false end
+    local ok = _G.MSUFSuite.Database.StageFactoryReset()
+    if not ok then return false end
+    _G.ReloadUI()
+    return true
+end
+
+local function ShowFactoryResetConfirm(kind)
+    if M.BlockCombatAction and M.BlockCombatAction() then return false end
+    if kind == "suite" and not LoadedSuiteFactoryReset() then return false end
+    if type(_G.ReloadUI) ~= "function" or type(M.InstallStaticPopup) ~= "function"
+        or type(_G.StaticPopup_Show) ~= "function" then return false end
+    local suiteReset = kind == "suite"
+    local key = suiteReset and "MSUF2_SUITE_FACTORY_RESET_CONFIRM" or "MSUF2_FACTORY_RESET_CONFIRM"
+    M.InstallStaticPopup(key, {
+        text = M.Tr(suiteReset
+            and "Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."
+            or "Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."),
+        button1 = _G.YES or M.Tr("Yes"),
+        button2 = _G.NO or M.Tr("No"),
+        OnAccept = function()
+            if M.BlockCombatAction and M.BlockCombatAction() then return end
+            if suiteReset then
+                RunSuiteFactoryReset()
+            elseif type(M.StageFactoryReset) == "function" and M.StageFactoryReset() then
+                _G.ReloadUI()
+            end
+        end,
+    })
+    _G.StaticPopup_Show(key)
+    return true
+end
+
 local DASHBOARD_DIRECT_SPECS = {
     {
         path = "scaling.global_ui.percent", label = "Global UI Scale", kind = "slider", classification = "setting",
@@ -258,6 +298,11 @@ local DASHBOARD_DIRECT_SPECS = {
     { path = "scaling.menu.revert_pending", label = "Revert MSUF Menu Scale", classification = "action", actionKey = "dashboard.menuScale.revertPending",
         command = DirectAction(function() return true end) },
 }
+DASHBOARD_DIRECT_SPECS[#DASHBOARD_DIRECT_SPECS + 1] = {
+    path = "display_recovery.suite_factory_reset", label = "Suite Factory Reset", classification = "action",
+    actionKey = "suite_factory_reset", confirmRequired = true,
+    command = DirectAction(RunSuiteFactoryReset, true),
+}
 for i = 1, #DASHBOARD_DIRECT_SPECS do
     local spec = DASHBOARD_DIRECT_SPECS[i]
     spec.meta = DashboardMeta(spec.path, spec.classification, {
@@ -302,8 +347,11 @@ local function RegisterDashboardDirectControls()
     if type(M.RegisterVirtualRuntimeControl) ~= "function" then return 0 end
     local registered = 0
     for i = 1, #DASHBOARD_DIRECT_SPECS do
-        local id = M.RegisterVirtualRuntimeControl(DASHBOARD_DIRECT_SPECS[i].meta, "dashboard-direct")
-        if id then registered = registered + 1 end
+        local spec = DASHBOARD_DIRECT_SPECS[i]
+        if spec.actionKey ~= "suite_factory_reset" or LoadedSuiteFactoryReset() then
+            local id = M.RegisterVirtualRuntimeControl(spec.meta, "dashboard-direct")
+            if id then registered = registered + 1 end
+        end
     end
     return registered
 end
@@ -543,27 +591,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         PaintHeader(open)
     end)
     RefreshOpenState()
-end
-local function StartGuidedSetupFromDashboard(restart)
-    if type(M.StartGuidedTour) ~= "function" then return false end
-    return M.StartGuidedTour({ source = "dashboard", restart = restart == true, mode = "quick" })
-end
--- Setup stays available after onboarding, but a stray click on the completed
--- card should not drop the user back into the walkthrough. Only the restart
--- path asks; resuming an active tour and the very first run stay one click.
-local function ConfirmGuidedSetupRestart()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show and type(M.InstallStaticPopup) == "function") then
-        return StartGuidedSetupFromDashboard(true)
-    end
-    M.InstallStaticPopup("MSUF2_GUIDED_SETUP_RESTART_CONFIRM", {
-        text = "%s",
-        button1 = _G.YES or "Yes",
-        button2 = _G.NO or "No",
-        OnAccept = function() StartGuidedSetupFromDashboard(true) end,
-    })
-    _G.StaticPopup_Show("MSUF2_GUIDED_SETUP_RESTART_CONFIRM",
-        M.Tr("Run the guided setup again? The walkthrough starts over at the first step."))
-    return true
 end
 -- The home page is assembled by Dashboard.Build from one stage per card. Stages
 -- share one per-build `state` table (helpers, geometry, disclosure flags) and run
@@ -808,76 +835,19 @@ function Dashboard.PrepareActionHelpers(state)
     state.SetSliderValueSafe, state.HideSliderValueBox, state.EnablePercentWheel, state.PixelScale, state.GlobalState, state.RunMSUFSlashCommand =
         SetSliderValueSafe, HideSliderValueBox, EnablePercentWheel, PixelScale, GlobalState, RunMSUFSlashCommand
 end
-function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
-    local root, x0, mainW, Card, Kicker, Button, AddTooltip = state.root, state.x0, state.mainW, state.Card, state.Kicker, state.Button, state.AddTooltip
-    local iconDir, CopyWagoLink = state.iconDir, state.CopyWagoLink
-    -- Setup remains available after onboarding. Quick Setup is the default;
-    -- the first route screen still offers the complete learning tour.
-    -- launcher deliberately compact; the persistent progress bar itself lives
-    -- in the window chrome while the tour is active.
-    local tour = MSUF and MSUF.GuidedTour6
-    local tourState = type(tour) == "table" and type(tour.GetState) == "function" and tour:GetState() or nil
-    local tourActive = type(tourState) == "table" and tourState.status == "active"
-    local tourCompleted = type(tourState) == "table" and tourState.status == "completed"
-    local firstLoad = MSUF and MSUF.FirstLoad6
-    local highlightGuidedSetup = type(firstLoad) == "table"
-        and type(firstLoad.ShouldHighlightGuidedSetup) == "function"
-        and firstLoad:ShouldHighlightGuidedSetup()
-    local launcherNarrow = mainW < 520
-    -- The Wago button rides along with the setup action: narrow stacks it below,
-    -- wide seats it left of the action, so both reserve room in the same card.
-    local launcherH = launcherNarrow and 162 or 78
-    local launcher = Card(root, "", x0, mainTop, mainW, launcherH, T.colors.panel2, T.colors.borderSoft)
-    Kicker(launcher, tourActive and "GUIDED SETUP IN PROGRESS" or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"), 16, -14)
-    local launcherTitle = tourActive and "Continue your MSUF setup"
-        or (tourCompleted and "Review or run setup again" or "Get the essentials right in a few minutes")
-    local title = T.Font(launcher, "GameFontNormal", M.Tr(launcherTitle), T.colors.text)
+function Dashboard.BuildSuiteInstallationLauncher(state, mainTop)
+    local suite = _G.MSUFSuite
+    if not (suite and suite.Installer and type(suite.Installer.Open) == "function") then return 0 end
+    local de = type(_G.GetLocale) == "function" and _G.GetLocale() == "deDE"
+    local root, x0, mainW = state.root, state.x0, state.mainW
+    local launcher = state.Card(root, "", x0, mainTop, mainW, 78, T.colors.panel2, T.colors.borderSoft)
+    state.Kicker(launcher, "MSUF SUITE", 16, -14)
+    local title = T.Font(launcher, "GameFontNormal", de and "Suite-Installation" or "Suite installation", T.colors.text)
     title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -36)
-    title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 388)))
-    title:SetJustifyH("LEFT")
-    if tourActive then
-        local current, total
-        if type(M.GetGuidedTourStageProgress) == "function" then current, total = M.GetGuidedTourStageProgress() end
-        total = max(1, tonumber(total) or tonumber(M.guidedTourStageCount) or 1)
-        current = min(total, max(1, tonumber(current) or 1))
-        local step = T.Font(launcher, "GameFontDisableSmall", M.Format("Step %d of %d", current, total), T.colors.muted)
-        step:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, launcherNarrow and -72 or -56)
-    end
-    local actionText = tourActive and "Resume setup" or (tourCompleted and "Run setup again" or "Start Quick Setup")
-    local actionX = launcherNarrow and 16 or (mainW - 196)
-    local actionY = launcherNarrow and -92 or -27
-    local actionW = launcherNarrow and min(196, mainW - 32) or 180
-    local action = Button(launcher, actionText, actionX, actionY, actionW, 30, function()
-        if M.BlockCombatAction and M.BlockCombatAction() then return end
-        if tourActive and type(M.ResumeGuidedTour) == "function" then
-            M.ResumeGuidedTour()
-        elseif tourCompleted then
-            ConfirmGuidedSetupRestart()
-        else
-            StartGuidedSetupFromDashboard(false)
-        end
-    end, highlightGuidedSetup and "success" or "primary", "guided_setup.start_or_resume", "action", { actionKey = "guided_setup" })
-    T.AttachNavIcon(action, "home", false, true)
-    local wagoW = launcherNarrow and actionW or 150
-    local wago = Button(launcher, "Wago Profiles",
-        launcherNarrow and actionX or (mainW - 354),
-        launcherNarrow and -126 or -27,
-        wagoW, 30, CopyWagoLink, nil, "guided_setup.browse_wago_profiles", "action",
-        { actionKey = "copy_wago_profiles_link",
-          keywords = { "Browse Wago profiles", "Wago profile imports" },
-          help = "Opens a copyable link to the MSUF profile imports on Wago." })
-    local wagoIcon = wago:CreateTexture(nil, "ARTWORK", nil, 3)
-    wagoIcon:SetTexture(iconDir .. "Wago.png")
-    wagoIcon:SetSize(22, 22)
-    wagoIcon:SetPoint("LEFT", wago, "LEFT", 8, 0)
-    if wago._msuf2Label then
-        wago._msuf2Label:ClearAllPoints()
-        wago._msuf2Label:SetPoint("LEFT", wagoIcon, "RIGHT", 6, 0)
-        wago._msuf2Label:SetPoint("RIGHT", wago, "RIGHT", -10, 0)
-        wago._msuf2Label:SetJustifyH("CENTER")
-    end
-    AddTooltip(wago, "Wago Profiles", "Browse Wago profiles")
-    return launcherH
+    title:SetWidth(max(120, mainW - 216))
+    state.Button(launcher, de and "Installation öffnen" or "Open installation", mainW - 196, -27, 180, 30,
+        function() suite.Installer.Open() end, "primary", "suite.install.open", "action")
+    return 78
 end
 function Dashboard.BuildAssistantHero(state, mainTop)
     local root, x0, mainW, Card, ApplyDashboardHeroGradient = state.root, state.x0, state.mainW, state.Card, state.ApplyDashboardHeroGradient
@@ -934,11 +904,12 @@ function Dashboard.ResolveCardStack(state, featureBlockBottom)
     local layoutW = state.layoutW
     local recoveryW = layoutW
     local recoveryOpen = M.dashboardRecoveryOpen == true
-    --- Three buttons fit one row down to ~392px (Reset + Print Help end at 232, the
-    --- right-aligned Factory Reset starts at width-152); below that the reset drops
-    --- to a second row with its warning text beside it.
-    local recoveryWrap = recoveryW < 420
-    local recoveryH = recoveryOpen and (recoveryWrap and 154 or 122) or 42
+    local hasSuiteReset = LoadedSuiteFactoryReset()
+    -- The reset buttons move together to a second row when the first row
+    -- cannot hold both without colliding with Print Help.
+    local recoveryWrap = recoveryW < (hasSuiteReset and 590 or 420)
+    local recoveryStacked = hasSuiteReset and recoveryW < 352
+    local recoveryH = recoveryOpen and (recoveryStacked and 186 or (recoveryWrap and 154 or 122)) or 42
     local changelogOpen = M.dashboardChangelogOpen == true
     local changelogH = changelogOpen and 420 or 42
     local scalingOpen = M.dashboardScalingOpen == true
@@ -951,7 +922,8 @@ function Dashboard.ResolveCardStack(state, featureBlockBottom)
     local scalingTop = changelogTop - changelogH - 10
     local recoveryTop = scalingTop - scalingH - 10
     local supportTop = recoveryTop - recoveryH - 10
-    state.recoveryW, state.recoveryOpen, state.recoveryWrap, state.recoveryH = recoveryW, recoveryOpen, recoveryWrap, recoveryH
+    state.recoveryW, state.recoveryOpen, state.recoveryWrap, state.recoveryH, state.hasSuiteReset, state.recoveryStacked =
+        recoveryW, recoveryOpen, recoveryWrap, recoveryH, hasSuiteReset, recoveryStacked
     state.changelogOpen, state.changelogH, state.scalingOpen, state.scalingColumns, state.scalingH =
         changelogOpen, changelogH, scalingOpen, scalingColumns, scalingH
     state.changelogTop, state.scalingTop, state.recoveryTop, state.supportTop = changelogTop, scalingTop, recoveryTop, supportTop
@@ -967,7 +939,8 @@ function Dashboard.BuildRecoveryCard(state)
         if recoveryW >= 520 then Pill(head, "Factory reset hidden", recoveryW - 124, -11, 110, T.colors.accent2) end
     end, "display_recovery.disclosure")
     if recoveryOpen then
-        W.Text(recovery, "Fix positions, print help, or reset MSUF.", 16, -60, recoveryW - 32, T.colors.muted)
+        W.Text(recovery, state.hasSuiteReset and "Fix positions, print help, or reset MSUF or Suite."
+            or "Fix positions, print help, or reset MSUF.", 16, -60, recoveryW - 32, T.colors.muted)
         local resetPositions = Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
             if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4) end
         end, "primary", "display_recovery.reset_positions")
@@ -981,10 +954,23 @@ function Dashboard.BuildRecoveryCard(state)
             end
         end, nil, "display_recovery.print_help")
         AddTooltip(printHelp, "Print Help", "Lists every MSUF slash command in chat, diagnostics included.")
-        Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
-            M.StageFactoryReset()
+        local msufX = recoveryWrap and 16 or (recoveryW - (state.hasSuiteReset and 336 or 168))
+        local msufReset = Button(recovery, "MSUF Factory Reset", msufX, factoryY, 156, 22, function()
+            if not ShowFactoryResetConfirm("msuf") and M.ShowStatusFeedback then
+                M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4)
+            end
         end, "danger", "display_recovery.factory_reset_all", "action", { confirmRequired = true })
-        if recoveryWrap then
+        AddTooltip(msufReset, "MSUF Factory Reset", "Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept.")
+        if state.hasSuiteReset then
+            local suiteX = state.recoveryStacked and 16 or (recoveryWrap and 180 or (recoveryW - 168))
+            local suiteY = state.recoveryStacked and -158 or factoryY
+            local suiteReset = Button(recovery, "Suite Factory Reset", suiteX, suiteY, 156, 22, function()
+                if not ShowFactoryResetConfirm("suite") and M.ShowStatusFeedback then
+                    M.ShowStatusFeedback(M.Tr("Reset unavailable"), "danger", 1.4)
+                end
+            end, "danger", "display_recovery.suite_factory_reset", "action", { confirmRequired = true })
+            AddTooltip(suiteReset, "Suite Factory Reset", "Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact.")
+        elseif recoveryWrap then
             W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
         end
     end
@@ -1330,9 +1316,6 @@ function Dashboard.Build(ctx)
     if type(M.BuildUpgradeHighlightDashboardScene) == "function" and M.BuildUpgradeHighlightDashboardScene(ctx) == true then
         return
     end
-    if type(M.BuildFirstLoadDashboardScene) == "function" and M.BuildFirstLoadDashboardScene(ctx) == true then
-        return
-    end
     -- BuildPageEntry clears the page catalog immediately before invoking us.
     -- Restore the frame-free contracts first; conditional real widgets below
     -- then promote only the controls whose disclosures are currently open.
@@ -1349,9 +1332,9 @@ function Dashboard.Build(ctx)
     M.TrackRefresh(ctx, state.RefreshDashboardEditModeButtonSafe)
     local mainTop = y0
 
-    local launcherH = Dashboard.BuildGuidedSetupLauncher(state, mainTop)
+    local launcherH = Dashboard.BuildSuiteInstallationLauncher(state, mainTop)
 
-    mainTop = mainTop - launcherH - 10
+    if launcherH > 0 then mainTop = mainTop - launcherH - 10 end
     local heroH = Dashboard.BuildAssistantHero(state, mainTop)
     local featureBlockBottom = mainTop - heroH
     Dashboard.PrepareDisclosure(state)

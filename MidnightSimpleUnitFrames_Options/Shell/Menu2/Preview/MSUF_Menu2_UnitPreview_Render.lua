@@ -2990,7 +2990,7 @@ function Stage.RenderPortrait(st)
         elseif bStyle == "CLASS_COLOR" then
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, cr, cg, cb, 1)
         elseif bStyle == "REACTION" then
-            local hostile = (key == "target" or key == "boss" or key == "focus" or key == "focustarget")
+            local hostile = (key == "target" or key == "boss" or key == "focus" or key == "focustarget" or key == "pettarget")
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, hostile and 1 or 0.1, hostile and 0.2 or 0.85, 0.1, 1)
         else
             R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, 1, 1, 1, 1)

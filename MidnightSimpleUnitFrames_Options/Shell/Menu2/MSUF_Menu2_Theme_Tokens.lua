@@ -170,6 +170,7 @@ uf_focustarget 2 0
 uf_focus 2 0
 uf_boss 6 2
 uf_pet 6 0
+uf_pettarget 2 0
 opt_bars 7 0
 opt_fonts 0 1
 auras3 3 1
@@ -194,7 +195,7 @@ profiles 5 2
 ]]
 T.navIconColors = NavIconColors [[
 home=0.231,0.510,0.965
-uf_player uf_target uf_targettarget uf_focustarget uf_focus uf_boss uf_pet=0.231,0.510,0.965
+uf_player uf_target uf_targettarget uf_focustarget uf_focus uf_boss uf_pet uf_pettarget=0.231,0.510,0.965
 opt_bars opt_fonts auras3 auras3_buffs auras3_debuffs auras3_custom auras3_styling auras3_filters opt_castbar opt_misc opt_colors=0.659,0.706,0.780
 classpower=0.659,0.706,0.780
 gameplay=0.659,0.706,0.780

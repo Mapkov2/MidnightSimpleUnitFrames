@@ -2,7 +2,9 @@
 -- Exercise the real compiler, Core event router, LoadConditions, and alpha
 -- writer together. Native curve output is opaque to addon code in this mock.
 local base = "MidnightSimpleUnitFrames/"
-local MSUF = { UF = {} }
+local MSUF = { UF = {}, ExportPublic = function(name, value) _G[name] = value end }
+wipe = function(t) for key in pairs(t) do t[key] = nil end return t end
+GetTime = function() return 10 end
 local combat, target, hp = false, false, 1
 local unitHP, identityRevision, unitCurveCalls = {}, {}, {}
 local curveCalls, curveCreates, healthCalls, secureWrites = 0, 0, 0, 0
@@ -100,6 +102,20 @@ Load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
 Load("UnitFrames/Engine/MSUF_UF_Shared.lua")
 Load("UnitFrames/Engine/MSUF_UF_Config.lua")
 local UF = MSUF.UF
+local oldUIParent = UIParent
+UIParent = { GetHeight = function() return 900 end }
+local legacyPosition = { offsetX = -876, offsetY = 548, screenPositionHeight = 1440 }
+UF.Config.AdaptScreenPosition(legacyPosition)
+assert(legacyPosition.offsetX == -876 and legacyPosition.offsetY == 548
+  and legacyPosition.screenPositionHeight == 1440,
+  "older MSUF profile position was rewritten by Suite screen adaptation")
+local factoryPosition = { offsetX = -400, offsetY = 200,
+  screenPositionHeight = 1440, screenPositionMode = "relativeHeight" }
+UF.Config.AdaptScreenPosition(factoryPosition)
+assert(factoryPosition.offsetX == -250 and factoryPosition.offsetY == 125
+  and factoryPosition.screenPositionHeight == 900,
+  "factory profile did not adapt to the new UI height")
+UIParent = oldUIParent
 -- Reach the real cold compiler without mocking unrelated bar/layout settings.
 local function Upvalue(fn, wanted)
   for i = 1, 100 do

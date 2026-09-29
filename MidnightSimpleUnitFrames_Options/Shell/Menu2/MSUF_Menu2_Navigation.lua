@@ -61,6 +61,7 @@ M.navPrimaryForKey = {
     uf_boss = "uf_player",
     uf_focus = "uf_player",
     uf_pet = "uf_player",
+    uf_pettarget = "uf_player",
     uf_targettarget = "uf_player",
     uf_focustarget = "uf_player",
     gf_layout = "gf_layout",
@@ -94,6 +95,7 @@ M.navSubpageLabels = {
     uf_focustarget = "Focus Target",
     uf_focus = "Focus",
     uf_pet = "Pet",
+    uf_pettarget = "Pet Target",
     uf_boss = "Boss",
     gf_layout = "Layout",
     gf_bars = "Dispel Overlay",
@@ -126,7 +128,6 @@ end
 
 local AUXILIARY_PAGE_LABELS = {
     changelog = "See New Features",
-    guided_setup = "Guided Setup",
     search = "Search",
 }
 
@@ -142,7 +143,6 @@ end
 function M.GetMenuBreadcrumb(pageKey)
     pageKey = tostring(pageKey or "")
     if pageKey == "" or pageKey == "menu_chrome" then return "MSUF menu" end
-    if pageKey == "guided_setup" then return "Dashboard > Guided Setup" end
     if pageKey == "search" then return "MSUF menu > Search" end
     if pageKey == "changelog" then return "MSUF menu > See New Features" end
 
@@ -181,6 +181,7 @@ uf_focustarget=focustarget|focus_target|focustargettarget|ft
 uf_focus=focus
 uf_boss=boss
 uf_pet=pet
+uf_pettarget=pettarget|pet_target
 opt_bars=bars|appearance|appearances|look|looks|style|globalstyle|global_style
 opt_fonts=fonts
 auras3_styling=aura|auras|aura_style|aurastyle|aura_styling|aurastyling|aura_appearance|auraappearance

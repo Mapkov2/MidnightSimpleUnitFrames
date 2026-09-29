@@ -144,14 +144,14 @@ local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
     end
     return false
 end
-local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet", "all" }
-local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, all = 38 }
-local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", boss = "Boss", all = "All" }
-local UNIT_TAB_ORDER = { "player", "target", "boss", "focus", "pet", "targettarget", "focustarget" }
-local UNIT_TAB_LABELS = { boss = "Boss Frames", targettarget = "Target's Target", focustarget = "Focus Target" }
-local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", targettarget = "ToT", focustarget = "FT" }
-local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, focus = 58, pet = 46, targettarget = 108, focustarget = 98 }
-local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, focus = 50, pet = 40, targettarget = 42, focustarget = 36 }
+local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet", "pettarget", "all" }
+local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, pettarget = 40, all = 38 }
+local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", pettarget = "PT", boss = "Boss", all = "All" }
+local UNIT_TAB_ORDER = { "player", "target", "boss", "focus", "pet", "pettarget", "targettarget", "focustarget" }
+local UNIT_TAB_LABELS = { boss = "Boss Frames", targettarget = "Target's Target", focustarget = "Focus Target", pettarget = "Pet Target" }
+local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", targettarget = "ToT", focustarget = "FT", pettarget = "PT" }
+local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, focus = 58, pet = 46, targettarget = 108, focustarget = 98, pettarget = 90 }
+local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, focus = 50, pet = 40, targettarget = 42, focustarget = 36, pettarget = 36 }
 local UNIT_PAGE_FOR_UNIT = {}
 for pageKey, pageInfo in pairs(UNIT_PAGES or {}) do
     if pageInfo and pageInfo.unit then UNIT_PAGE_FOR_UNIT[pageInfo.unit] = pageKey end

@@ -286,6 +286,8 @@ function Object:SetPoint(...)
 end
 local units, groups, module = {}, {}, nil
 local disabledStartup = arg and arg[1] == '--startup-disabled'
+local profileSwitchStartup = arg and arg[1] == '--startup-profile-switch'
+local profileSwitchOff = arg and arg[1] == '--startup-profile-switch-off'
 UF.ForEachFrame = function(fn) for _, f in ipairs(units) do fn(f) end end
 MSUF.GF.ForEachFrame = function(fn) for _, f in ipairs(groups) do fn(f, f.unit, 'party') end end
 MSUF.GF.GetConf = function() return {} end
@@ -293,7 +295,7 @@ MSUF.GF.GetBarOutlineThickness = function() return 2 end
 MSUF.MSUF_RegisterModule = function(_, value) module = value end
 _G.MSUF_DB = {
  general = {highlightStyle='BORDER', highlightThickness=4},
- bars = {roundedFramesEnabled=not disabledStartup, roundedUnitFrames=true, roundedGroupFrames=true,
+ bars = {roundedFramesEnabled=not (disabledStartup or profileSwitchStartup), roundedUnitFrames=true, roundedGroupFrames=true,
  roundedMouseover=true, roundedPowerBars=false, barOutlineThickness=2},
 }
 local function AssertRounded(f, color, shown)
@@ -332,7 +334,8 @@ local function NewStartupFrame(unit, kind)
  return f
 end
 local startupFrames = {
- NewStartupFrame('target'), NewStartupFrame('party1','party'),
+ NewStartupFrame('target'), NewStartupFrame('pet'), NewStartupFrame('pettarget'),
+ NewStartupFrame('party1','party'),
 }
 assert(loadfile(arg and arg[2] or 'MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua'))('MidnightSimpleUnitFrames',MSUF)
 MSUF.__msufRoundedEventFrame:Fire('ADDON_LOADED','MidnightSimpleUnitFrames')
@@ -341,23 +344,46 @@ Check(module ~= nil, 'rounded module was not registered')
 startupFrames[#startupFrames+1] = NewStartupFrame('focus')
 startupFrames[#startupFrames+1] = NewStartupFrame('raid1','raid')
 if disabledStartup then
- Check(not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_LOGIN
+ Check(MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_LOGIN
   and not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_REGEN_ENABLED,
-  'disabled rounded startup armed runtime events')
+  'disabled rounded startup lost its one-shot profile check')
  Check(_G.MSUF_RoundedUF_OnBorderVisualChanged == nil and _G.MSUF_RoundedUF_Active == nil,
   'disabled rounded startup published active callbacks')
  Check(#deferredCallbacks == 0, 'disabled rounded startup queued work')
+ MSUF.__msufRoundedEventFrame:Fire('PLAYER_LOGIN')
+ Check(#deferredCallbacks == 1 and not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_LOGIN,
+  'disabled rounded startup did not detach after its login check')
+ deferredCallbacks[1]()
+ Check(not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_REGEN_ENABLED,
+  'disabled rounded login retained a combat event')
  for _, f in ipairs(startupFrames) do
   Check(f._msufRoundedBorderEdge == nil, 'disabled rounded startup allocated outline art')
  end
  _G.MSUF_DB.bars.roundedFramesEnabled = true
  _G.MSUF_ApplyRoundedUnitframes()
 else
+ if profileSwitchStartup then
+  Check(MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_LOGIN,
+   'previous character disabled rounding and skipped the next login check')
+  Check(_G.MSUF_RoundedUF_OnBorderVisualChanged == nil,
+   'previous character unexpectedly activated rounded callbacks')
+  _G.MSUF_DB.bars.roundedFramesEnabled = true
+ elseif profileSwitchOff then
+  _G.MSUF_DB.bars.roundedFramesEnabled = false
+ end
  MSUF.__msufRoundedEventFrame:Fire('PLAYER_LOGIN')
  Check(#deferredCallbacks == 1, 'enabled rounded startup did not queue one cold login apply')
  Check(not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_LOGIN,
   'rounded startup retained its one-shot login event')
  for i=1,#deferredCallbacks do deferredCallbacks[i]() end
+ if profileSwitchOff then
+  Check(_G.MSUF_RoundedUF_OnBorderVisualChanged == nil and _G.MSUF_RoundedUF_Active == nil,
+   'enabled-to-disabled character login retained rounded callbacks')
+  Check(not MSUF.__msufRoundedEventFrame.genericEvents.PLAYER_REGEN_ENABLED,
+   'enabled-to-disabled character login retained a combat event')
+  _G.MSUF_DB.bars.roundedFramesEnabled = true
+  _G.MSUF_ApplyRoundedUnitframes()
+ end
 end
 for _, f in ipairs(startupFrames) do
  AssertRounded(f,{0,0,0},true)
@@ -394,7 +420,7 @@ _G.MSUF_SetDispelBorderTestMode(false,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{0,0,0},true) end
 _G.MSUF_SetPurgeBorderTestMode(true,'shared')
 for _, f in ipairs(startupFrames) do
- AssertRounded(f,f._msufGFKind and {0,0,0} or {1,0.85,0},true)
+ AssertRounded(f,(f._msufGFKind or f.unit == "pet") and {0,0,0} or {1,0.85,0},true)
 end
 _G.MSUF_SetPurgeBorderTestMode(false,'shared')
 for _, f in ipairs(startupFrames) do AssertRounded(f,{0,0,0},true) end
@@ -503,4 +529,4 @@ for _, f in ipairs(startupFrames) do
   inCombat=false
  end
 end
-print('PASS rounded border highlights: '..(disabledStartup and 'disabled startup and public enable' or 'login-only')..' unit/group threat and Bars test lifecycle; '..tested..' unit/group/layer/overlay cases; thickness 1/4/16/23/30; shared highlight colors, threat transitions, combat prewarm/fallback, mouseover and disable/enable')
+print('PASS rounded border highlights: '..(disabledStartup and 'disabled startup and public enable' or profileSwitchStartup and 'disabled-to-enabled character login' or profileSwitchOff and 'enabled-to-disabled character login' or 'login-only')..' unit/group threat and Bars test lifecycle; '..tested..' unit/group/layer/overlay cases; thickness 1/4/16/23/30; shared highlight colors, threat transitions, combat prewarm/fallback, mouseover and disable/enable')

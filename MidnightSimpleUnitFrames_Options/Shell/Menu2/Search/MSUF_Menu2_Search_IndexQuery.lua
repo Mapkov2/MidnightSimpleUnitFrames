@@ -26,6 +26,10 @@ local ContentWidth, ContentHeight, TrimText, ShortLabel = SearchText.ContentWidt
 local SearchPlaceholderText, SearchBoxHasText = SearchText.SearchPlaceholderText, SearchText.SearchBoxHasText
 local RefreshSearchPlaceholder, UpdateSearchPlaceholder = SearchText.RefreshSearchPlaceholder, SearchText.UpdateSearchPlaceholder
 local NormalizeSearchText, DisplaySearchText = SearchText.NormalizeSearchText, SearchText.DisplaySearchText
+local ExpandMythicPlusQuery = SearchText.ExpandMythicPlusQuery
+local function NormalizeSearchQueryText(query)
+    return NormalizeSearchText(ExpandMythicPlusQuery and ExpandMythicPlusQuery(query) or query)
+end
 local SearchEffectiveLocale, SearchDisplayText, AddSearchText = SearchText.SearchEffectiveLocale, SearchText.SearchDisplayText, SearchText.AddSearchText
 local AddRawSearchText, AddToggleQuestionSearchText = SearchText.AddRawSearchText, SearchText.AddToggleQuestionSearchText
 local AddControlQuestionSearchText = SearchText.AddControlQuestionSearchText
@@ -60,6 +64,9 @@ local SEARCH_STATE = {
     registryByPage = {},
     registryRecords = {},
     localeKey = nil,
+    -- Optional addon rows are collected only when search first builds.
+    providers = {},
+    providerCache = nil,
 }
 M.searchRegistry = SEARCH_STATE.registry
 
@@ -72,6 +79,7 @@ local function ClearSearchLocaleCaches()
     SEARCH_STATE.queryClauseCacheNorm = nil
     SEARCH_STATE.queryClauseCacheClauses = nil
     SEARCH_STATE.registryRecords = {}
+    SEARCH_STATE.providerCache = nil
 end
 
 local function EnsureSearchLocaleFresh()
@@ -788,6 +796,13 @@ local function BuildSearchPageInfos()
             AddPageInfo(item.key, item.label, item.group and groupLabels[item.group] or nil)
         end
     end
+    -- These workspaces are reached through the visible Party/Raid Frames page.
+    -- Their static controls are indexed, but without page records a query such
+    -- as "mythic plus auras" has no shared subject to match before visiting it.
+    for _, key in ipairs({ "gf_bars", "gf_auras", "gf_indicators", "gf_priority" }) do
+        local label = M.navSubpageLabels and M.navSubpageLabels[key]
+        AddPageInfo(key, label or key, groupLabels.frames or "Frames")
+    end
     for i = 1, #(M.pageOrder or {}) do
         local key = M.pageOrder[i]
         local spec = M.pages[key]
@@ -1288,6 +1303,213 @@ local function AddStaticIndexSearchRecords(records, covered)
     end
 end
 
+--- Runtime search providers. An optional companion addon owns pages this layer
+--- has no static rows for; it registers one function that returns plain rows
+--- (M.RegisterSearchProvider). The rows become records shaped like the static
+--- index records the first time the index is built after a registration or a
+--- menu language change, and every later rebuild reuses them. No provider, no
+--- work: nothing here runs per query, and the index build skips it entirely.
+---
+--- Row fields; a row with a wrong type or an unknown page is skipped:
+---   pageKey     required, a page registered through M.RegisterPage
+---   kind        "page", "faq", "section", "toggle", "dropdown", "segment",
+---               "slider", "color", "button", "textinput" or "control" (default)
+---   label       required except on page rows: translated display text
+---   section     section title; the breadcrumb is "<nav group> > <page> > <section>"
+---   hint        whole breadcrumb replacing the default
+---   keywords    extra search words: a list of strings or one "a|b|c" string
+---   help        searchable text, shown as the result's answer
+---   settingKey  exact target: the control registered with this setting key
+---   sectionId   accordion (b:CollapsibleSection id) opened on the way there
+---   anchorText  on-page text to scroll to when there is no exact control
+--- A page row adds its keywords to the page's own record, help becomes the
+--- page's answer and hint its breadcrumb. A faq row is a question (label) with
+--- its answer (help) that opens pageKey, ranked like the built-in FAQ.
+--- Page words reach a provider record through its breadcrumb and haystack but
+--- never as a title match, so a query naming a page still ranks that page first.
+local SearchProviders = {
+    KINDS = M.KeySetFromWords "faq section toggle dropdown segment slider color button textinput control",
+    ROW_LIMIT = 4000,
+    KEYWORD_LIMIT = 96,
+    HELP_MAX_LEN = 600,
+}
+
+function SearchProviders.Text(value, maxLen)
+    if type(value) ~= "string" then return nil end
+    value = DisplaySearchText(value)
+    if value == "" or #value > (maxLen or SEARCH_TEXT_MAX_LEN) then return nil end
+    return value
+end
+
+function SearchProviders.Keywords(out, keywords)
+    local count = 0
+    local function Add(keyword)
+        if count < SearchProviders.KEYWORD_LIMIT and type(keyword) == "string" and keyword ~= "" then
+            count = count + 1
+            out[#out + 1] = keyword
+        end
+    end
+    if type(keywords) == "string" then
+        for keyword in keywords:gmatch("[^|]+") do Add(keyword) end
+    elseif type(keywords) == "table" then
+        for i = 1, math.min(#keywords, SearchProviders.KEYWORD_LIMIT) do Add(keywords[i]) end
+    end
+end
+
+function SearchProviders.Record(row, info)
+    local label = SearchProviders.Text(row.label)
+    if not (label and IsSearchableDisplayText(label)) then return nil end
+    local kind = SearchProviders.KINDS[row.kind or "control"] and (row.kind or "control") or nil
+    if not kind then return nil end
+    local help = SearchProviders.Text(row.help, SearchProviders.HELP_MAX_LEN)
+    local anchorText = SearchProviders.Text(row.anchorText)
+    if kind == "faq" then
+        local extra = { help, anchorText }
+        SearchProviders.Keywords(extra, row.keywords)
+        local rec = AddSearchRecord(nil, nil, info, label, nil, "faq", extra)
+        if rec then
+            rec.answer, rec.anchorFallback, rec.priority, rec.faq = help, anchorText or label, 0, true
+        end
+        return rec
+    end
+    local labelNorm = NormalizeSearchText(label)
+    local section = SearchProviders.Text(row.section)
+    local hint = SearchProviders.Text(row.hint)
+    if not hint then
+        hint = info.group ~= "" and (info.group .. " > " .. info.label) or info.title
+        if section and NormalizeSearchText(section) ~= labelNorm then hint = hint .. " > " .. section end
+    end
+    local parts = { label, hint, info.label, info.group, info.title }
+    if kind == "toggle" then AddToggleQuestionSearchText(parts, label) end
+    AddControlQuestionSearchText(parts, label, kind, nil)
+    SearchProviders.Keywords(parts, row.keywords)
+    parts[#parts + 1] = help
+    local haystack = {}
+    for i = 1, #parts do AddSearchText(haystack, parts[i]) end
+    local haystackText = table.concat(haystack, " ")
+    if #haystackText > SEARCH_CONTROL_HAYSTACK_MAX_LEN then
+        haystackText = haystackText:sub(1, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
+    end
+    local settingKey = SearchProviders.Text(row.settingKey)
+    local sectionId = SearchProviders.Text(row.sectionId)
+    local rec = {
+        key = info.key, label = label, kind = kind, hint = hint, title = info.title, group = info.group,
+        labelNorm = labelNorm, titleNorm = "", groupNorm = NormalizeSearchText(info.group),
+        hintNorm = NormalizeSearchText(hint), haystack = NormalizeSearchText(haystackText),
+        tokenLimit = SEARCH_CONTROL_MAX_TOKENS, answer = help, provided = true,
+        anchorFallback = anchorText or label,
+    }
+    rec.searchIdentity = CatalogSearchIdentity("provided", info.key, settingKey or kind, labelNorm, hint)
+    if settingKey then
+        rec.exactTarget = { pageKey = info.key, settingKey = settingKey, sectionId = sectionId, label = label }
+    end
+    if sectionId then rec.route = { accordion = { [info.key .. ":" .. sectionId] = true } } end
+    return rec
+end
+
+function SearchProviders.AddRow(cache, row, pageInfoByKey)
+    if type(row) ~= "table" then return false end
+    local pageKey = row.pageKey
+    if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search"
+        or not (M.pages and M.pages[pageKey])
+        or (M.SupportsUnitPage and M.SupportsUnitPage(pageKey) == false) then
+        return false
+    end
+    if row.kind ~= "page" then
+        local rec = SearchProviders.Record(row, pageInfoByKey[pageKey] or BuildSearchPageInfoForKey(pageKey))
+        if not rec then return false end
+        cache.records[#cache.records + 1] = rec
+        cache.pageKeys[pageKey] = true
+        return true
+    end
+    local page = cache.pages[pageKey]
+    if not page then
+        page = { parts = {} }
+        cache.pages[pageKey] = page
+    end
+    SearchProviders.Keywords(page.parts, row.keywords)
+    local help = SearchProviders.Text(row.help, SearchProviders.HELP_MAX_LEN)
+    local hint = SearchProviders.Text(row.hint)
+    page.parts[#page.parts + 1] = help
+    page.parts[#page.parts + 1] = hint
+    page.answer = page.answer or help
+    page.hint = hint or page.hint
+    return true
+end
+
+--- Calls every provider once and caches the result until a provider changes or
+--- the menu language does. A provider that raised on its last call is skipped
+--- until it registers again, so one broken provider cannot break search.
+function SearchProviders.Collect(pageInfoByKey)
+    local cache = SEARCH_STATE.providerCache
+    if cache then return cache end
+    cache = { pages = {}, records = {}, pageKeys = {}, rows = 0, skipped = 0 }
+    local names = {}
+    for name in pairs(SEARCH_STATE.providers) do names[#names + 1] = name end
+    table.sort(names)
+    for n = 1, #names do
+        local entry = SEARCH_STATE.providers[names[n]]
+        if not entry.failed then
+            entry.failed = true
+            local ok, rows = pcall(entry.collect)
+            entry.failed = not ok
+            if ok and type(rows) == "table" then
+                for i = 1, math.min(#rows, SearchProviders.ROW_LIMIT) do
+                    if SearchProviders.AddRow(cache, rows[i], pageInfoByKey) then
+                        cache.rows = cache.rows + 1
+                    else
+                        cache.skipped = cache.skipped + 1
+                    end
+                end
+            end
+        end
+    end
+    SEARCH_STATE.providerCache = cache
+    return cache
+end
+
+--- Provider records join after the static rows. A live widget registered for the
+--- same setting (or, without one, the same kind and label) on the same page wins:
+--- it carries the real anchor and command, exactly like static rows.
+function SearchProviders.Append(records, cache)
+    local list = cache.records
+    if #list == 0 then return end
+    local live = {}
+    for pageKey in pairs(cache.pageKeys) do
+        local ids = SEARCH_STATE.registryByPage[pageKey]
+        for i = 1, #(ids or EMPTY_SEARCH_RECORDS) do
+            local entry = SEARCH_STATE.registry[ids[i]]
+            if entry then
+                if type(entry.settingKey) == "string" and entry.settingKey ~= "" then
+                    live[pageKey .. "\031" .. entry.settingKey] = true
+                end
+                live[pageKey .. "\031" .. tostring(entry.kind) .. "\031" .. NormalizeSearchText(entry.label)] = true
+            end
+        end
+    end
+    for i = 1, #list do
+        local rec = list[i]
+        local target = rec.exactTarget
+        local liveKey = target and (rec.key .. "\031" .. target.settingKey)
+            or (rec.key .. "\031" .. rec.kind .. "\031" .. rec.labelNorm)
+        if not live[liveKey] then
+            rec.order = #records + 1
+            records[#records + 1] = rec
+        end
+    end
+end
+
+--- Registers, replaces (same name) or with a nil function removes a provider.
+--- The function is not called here; see SearchProviders.Collect.
+function M.RegisterSearchProvider(name, collect)
+    if type(name) ~= "string" or name == "" then return false end
+    if collect ~= nil and type(collect) ~= "function" then return false end
+    SEARCH_STATE.providers[name] = collect and { collect = collect } or nil
+    SEARCH_STATE.providerCache = nil
+    MarkSearchIndexDirty()
+    return true
+end
+
 local SEARCH_FAQ = SearchData.BuildFAQ and SearchData.BuildFAQ({
     SearchKeywordList = SearchKeywordList,
     DASHBOARD_ROUTE_RECOVERY = DASHBOARD_ROUTE_RECOVERY,
@@ -1313,6 +1535,7 @@ local function BuildSearchRecords()
     local pageInfos, pageInfoByKey = BuildSearchPageInfos()
 
     local records, seenRecords = {}, {}
+    local provided = next(SEARCH_STATE.providers) ~= nil and SearchProviders.Collect(pageInfoByKey) or nil
     for i = 1, #pageInfos do
         local info = pageInfos[i]
         local pageParts = {}
@@ -1320,7 +1543,13 @@ local function BuildSearchRecords()
         AddSearchText(pageParts, info.title)
         AddRawSearchText(pageParts, SEARCH_KEYWORDS[info.key])
         AddPageLocalizedSearchKeywords(pageParts, info.key)
-        AddSearchRecord(records, seenRecords, info, info.label or info.title or info.key, nil, "page", pageParts)
+        local extra = provided and provided.pages[info.key]
+        for k = 1, #(extra and extra.parts or EMPTY_SEARCH_RECORDS) do pageParts[#pageParts + 1] = extra.parts[k] end
+        local rec = AddSearchRecord(records, seenRecords, info, info.label or info.title or info.key, nil, "page", pageParts)
+        if rec and extra then
+            rec.answer = extra.answer
+            if extra.hint then rec.hint, rec.hintNorm = extra.hint, NormalizeSearchText(extra.hint) end
+        end
     end
 
     local covered = {}
@@ -1338,6 +1567,7 @@ local function BuildSearchRecords()
     end
 
     AddStaticIndexSearchRecords(records, covered)
+    if provided then SearchProviders.Append(records, provided) end
 
     for i = 1, #SEARCH_FAQ do
         local faq = SEARCH_FAQ[i]
@@ -1379,7 +1609,7 @@ local function RefreshSearchResultsPage()
     -- invalidated and rebuilt the search page. Stop before any of that runs.
     if SearchCombatLocked() then return end
     local query = TrimText(M.searchQuery or "")
-    if query == "" or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then return end
+    if query == "" or #NormalizeSearchQueryText(query) < MIN_SEARCH_QUERY_LEN then return end
     SetSearchResults(SearchPages(query), query)
     if M.InvalidatePage then M.InvalidatePage("search") end
     if M.SelectPage then M.SelectPage("search") end
@@ -1441,6 +1671,7 @@ function SearchPages(query)
         CancelSearchBackgroundIndex()
         return {}
     end
+    if ExpandMythicPlusQuery then query = ExpandMythicPlusQuery(query) end
     -- Raw setting keys ("gf_party.hpTextMode") reach search from exports and
     -- Assistant answers. The baked index is pre-normalized without camelCase
     -- tokens, and the scope prefix names the provider rather than the control,
@@ -1629,7 +1860,7 @@ local function RunSearchInputQuery(query, openPage)
         return
     end
 
-    if #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then
+    if #NormalizeSearchQueryText(query) < MIN_SEARCH_QUERY_LEN then
         SetSearchResults(nil, query)
         if openPage then ShowSearchPageForQuery(query) end
         return
@@ -1647,7 +1878,7 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
 
     M.searchQuery = query
 
-    if query == "" or SearchCombatLocked() or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then
+    if query == "" or SearchCombatLocked() or #NormalizeSearchQueryText(query) < MIN_SEARCH_QUERY_LEN then
         RunSearchInputQuery(query, openPage)
         if type(onComplete) == "function" then onComplete(query) end
         return
@@ -1679,13 +1910,14 @@ end
 
 local function OpenSearchResults(query)
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
-    if SubmitAssistantSearchQuery(query) then return end
+    if type(M.RecordNavSearchQuery) == "function" then M.RecordNavSearchQuery(query) end
     RunSearchInputQuery(query, true)
 end
 
 Search._RoutingContext = {
     M = M,
     NormalizeSearchText = NormalizeSearchText,
+    ExpandMythicPlusQuery = ExpandMythicPlusQuery,
     BuildSearchQueryClauses = BuildSearchQueryClauses,
     BuildSearchTokenList = BuildSearchTokenList,
     SearchEditDistanceWithin = SearchEditDistanceWithin,
@@ -1709,6 +1941,7 @@ Search._RenderContext = {
     TrimText = TrimText,
     SearchCombatLocked = SearchCombatLocked,
     NormalizeSearchText = NormalizeSearchText,
+    NormalizeSearchQueryText = NormalizeSearchQueryText,
     MIN_SEARCH_QUERY_LEN = MIN_SEARCH_QUERY_LEN,
     SearchPages = SearchPages,
     SEARCH_STATE = SEARCH_STATE,
@@ -1738,6 +1971,7 @@ Search._CoreAPI = {
     SearchPages = SearchPages,
     GetSearchRecords = GetSearchRecords,
     GetFAQRecords = function() return SEARCH_FAQ end,
+    GetSearchProviderCache = function() return SEARCH_STATE.providerCache end,
     ShouldUseAssistantForQuery = ShouldUseAssistantForQuery,
     SubmitAssistantSearchQuery = SubmitAssistantSearchQuery,
     SearchPlaceholderText = SearchPlaceholderText,

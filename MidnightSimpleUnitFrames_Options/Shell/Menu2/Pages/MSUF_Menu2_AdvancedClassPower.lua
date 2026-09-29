@@ -478,13 +478,10 @@ local function SetDetachedPowerTextPreset(value)
     player.powerTextMode = value
 end
 local QUICK_SETUP_FLAG = "quickSetupClassBarOffered"
-local QUICK_CP_HEIGHT = 4
-local QUICK_DPB_HEIGHT = 6
 local QUICK_DPB_GAP = 4
-local QUICK_CDM_GAP = 4
 local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_KEYS = {
-    bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerTextMode classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar chunkedPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
+    bars = M.WordList [[showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerTextMode classPowerAnchorToCooldown classPowerCooldownTopAnchor classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode smoothPowerBar chunkedPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill]],
     player = M.WordList [[showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarAnchorMode detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill powerChunkedFill]],
 }
 local quickSetupUndoSnapshot
@@ -515,11 +512,8 @@ end
 local function QuickGetVisibleCDM()
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
         or _G.EssentialCooldownViewer
-    if ecv and ecv.IsShown and ecv:IsShown() and ecv.GetHeight and ecv.GetCenter then
-        local h = ecv:GetHeight()
-        if type(h) == "number" and h > 0 then return ecv end
-    end
-    return nil
+    local usable = _G.MSUF_GetUsableCooldownAnchorSize
+    return type(usable) == "function" and usable(ecv, true) and ecv or nil
 end
 local function QuickPlayerFrame()
     local uf = MSUF and MSUF.UF
@@ -527,43 +521,10 @@ local function QuickPlayerFrame()
     return frame or (uf and uf.frames and uf.frames.player) or _G.MSUF_player
 end
 local function QuickClassPowerVisible() local frame = _G.MSUF_ClassPowerContainer; return frame and frame.IsShown and frame:IsShown() end
-local function QuickCalcCPAboveCDM(ecv)
-    local bars = Bars()
-    local player = M.EnsureDB().player or {}
-    local cpH = tonumber(bars.classPowerHeight) or QUICK_CP_HEIGHT
-    local dpbH = tonumber(player.detachedPowerBarHeight) or QUICK_DPB_HEIGHT
-    local ecvH = (ecv and ecv.GetHeight and ecv:GetHeight()) or 0
-    return {
-        cpOffsetX = 0,
-        cpOffsetY = math.ceil(ecvH + QUICK_CDM_GAP + cpH + QUICK_DPB_GAP + dpbH),
-        anchorCPtoCDM = true,
-    }
-end
-local function QuickCalcDPBAboveCDMNoCP(ecv)
-    local player = M.EnsureDB().player or {}
-    local dpbH = tonumber(player.detachedPowerBarHeight) or QUICK_DPB_HEIGHT
-    local fallback = { dpbOffsetX = 0, dpbOffsetY = -QUICK_DPB_GAP, anchorDPBtoCP = true }
-    local pf = QuickPlayerFrame()
-    if not (pf and pf.GetCenter and pf.GetBottom and pf.GetEffectiveScale
-        and ecv and ecv.GetCenter and ecv.GetTop and ecv.GetEffectiveScale) then
-        return fallback
-    end
-    local pfCenterX = select(1, pf:GetCenter())
-    local pfBottom = pf:GetBottom()
-    local ecvCenterX = select(1, ecv:GetCenter())
-    local ecvTop = ecv:GetTop()
-    if not (pfCenterX and pfBottom and ecvCenterX and ecvTop) then return fallback end
-    local pfScale = pf:GetEffectiveScale() or 1
-    local ecvScale = ecv:GetEffectiveScale() or 1
-    if pfScale <= 0 then pfScale = 1 end
-    if ecvScale <= 0 then ecvScale = 1 end
-    local targetCenterX = ecvCenterX * ecvScale
-    local targetTop = ecvTop * ecvScale + (QUICK_CDM_GAP + dpbH) * pfScale
-    return {
-        dpbOffsetX = floor((targetCenterX - pfCenterX * pfScale) / pfScale + 0.5),
-        dpbOffsetY = floor((targetTop - pfBottom * pfScale) / pfScale + 0.5),
-        anchorDPBtoCP = false,
-    }
+local function QuickCalcCPAboveCDM()
+    -- ClassPower owns the live Essential edge link and reserves space for the
+    -- detached Player Power bar, even when this spec has no visible resource.
+    return { cpOffsetX = 0, cpOffsetY = 0, anchorCPtoCDM = true }
 end
 local function QuickCalcScreenCenter()
     local fallback = { cpOffsetX = 0, cpOffsetY = 0, anchorCPtoCDM = false }
@@ -602,6 +563,7 @@ local function QuickApplyPhase1(offsets)
         classPowerSmoothFill = true, altManaSmoothFill = true,
     })
     bars.classPowerAnchorToCooldown = offsets.anchorCPtoCDM and true or false
+    bars.classPowerCooldownTopAnchor = offsets.anchorCPtoCDM and true or nil
     bars.classPowerOffsetX, bars.classPowerOffsetY = offsets.cpOffsetX, offsets.cpOffsetY
     M.Assign(player, {
         showPowerBar = true,
@@ -618,14 +580,6 @@ local function QuickApplyPhase1(offsets)
         powerSmoothFill = true,
         powerChunkedFill = false,
     })
-end
-local function QuickApplyPhase2NoCP(offsets)
-    local player = M.EnsureDB().player or {}
-    player.detachedPowerBarSyncClassPower = offsets.anchorDPBtoCP and true or false
-    player.detachedPowerBarAnchorToClassPower = offsets.anchorDPBtoCP and true or false
-    player.detachedPowerBarAnchorMode = "CENTER"
-    player.detachedPowerBarOffsetX = offsets.dpbOffsetX
-    player.detachedPowerBarOffsetY = offsets.dpbOffsetY
 end
 local function QuickRefreshAll(reason)
     reason = reason or "ClassPowerQuickSetup"
@@ -682,16 +636,19 @@ local function ExecuteQuickSetup()
     QuickEnsurePopups()
     QuickOffered(true)
     local ecv = QuickGetVisibleCDM()
-    local offsets = ecv and QuickCalcCPAboveCDM(ecv) or QuickCalcScreenCenter()
+    local supportsCooldown = type(_G.MSUF_IsCooldownAnchorSupported) == "function"
+        and _G.MSUF_IsCooldownAnchorSupported()
+    local offsets = (ecv or supportsCooldown) and QuickCalcCPAboveCDM() or QuickCalcScreenCenter()
     quickSetupUndoSnapshot = QuickSnapshot()
     QuickApplyPhase1(offsets)
     ApplyClassPower()
     local popupText
     if ecv and not QuickClassPowerVisible() then
-        QuickApplyPhase2NoCP(QuickCalcDPBAboveCDMNoCP(ecv))
-        popupText = "Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power is positioned above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."
+        popupText = "Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power follows above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."
     elseif ecv then
         popupText = "Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power is detached and\nattached below it.\nUse Edit Mode for fine-tuning."
+    elseif supportsCooldown then
+        popupText = "Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above Essential\nCooldowns when the bar appears.\nUntil then they use the Player\nframe or the saved position."
     else
         popupText = "Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."
     end
@@ -751,13 +708,16 @@ local function ShowQuickSetupTooltip(owner)
     GameTooltip:AddLine(QuickTr("Quick Setup: Detached Class Bar"), 1, 1, 1)
     GameTooltip:AddLine(QuickTr("One-click setup for a ready-to-use class bar:"), .85, .85, .85, true)
     GameTooltip:AddLine(" ")
-    for _, line in ipairs({ "Enables Class Resources", "Positions class bar ABOVE Essential Cooldowns", "Match width: Essential Cooldowns", "Does not change Player power bar" }) do
+    for _, line in ipairs({ "Enables Class Resources", "Positions class bar ABOVE Essential Cooldowns", "Matches width to Essential Cooldowns", "Places Player Power between class bar and Essential" }) do
         GameTooltip:AddLine(QuickTr(line), .7, .7, .7, true)
     end
     local ecv = QuickGetVisibleCDM()
     local classPowerVisible = ecv and QuickClassPowerVisible()
+    local supportsCooldown = type(_G.MSUF_IsCooldownAnchorSupported) == "function"
+        and _G.MSUF_IsCooldownAnchorSupported()
     local status = classPowerVisible and "CDM + Class Power detected"
-        or (ecv and "CDM detected (no class resource for this spec)" or "CDM not visible - will center on screen")
+        or (ecv and "CDM detected (no class resource for this spec)"
+            or (supportsCooldown and "CDM not visible - will follow when available" or "CDM unavailable - will center on screen"))
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(QuickTr(status), classPowerVisible and .3 or .9, classPowerVisible and .9 or (ecv and .8 or .7), .3)
     GameTooltip:AddLine(" ")
@@ -1454,7 +1414,7 @@ function Page:RefreshControlState()
     -- resource text is disabled, so its shared text styling/layer stays usable.
     SetControlsEnabled(self.groups.cpText, cpOn)
     local anyDetached = false
-    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
+    for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss" }) do
         if db[key] and db[key].powerBarDetached then anyDetached = true; break end
     end
     local playerDetached = db.player and db.player.powerBarDetached == true

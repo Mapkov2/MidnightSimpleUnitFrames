@@ -124,6 +124,13 @@ local function ClampAxis(minimum, maximum, screenMinimum, screenMaximum)
   if maximum > screenMaximum then return screenMaximum - maximum end
   return 0
 end
+_G.MSUF_UF_PointFraction = function(point)
+  local fraction = FRACTIONS[point] or FRACTIONS.CENTER
+  return fraction[1], fraction[2]
+end
+_G.MSUF_UF_ClampBoxAxis = function(minimum, maximum, screenSize)
+  return ClampAxis(minimum, maximum, 0, screenSize)
+end
 
 function Frame:GetRect()
   local left, bottom, width, height = self:GetNominalRect()
@@ -270,7 +277,7 @@ local MSUF = {
     _G[name] = value
     return value
   end,
-  UF = {},
+  UF = { IsUnitToken = function(unit) return type(unit) == "string" end },
   BorderStyles = {
     FRAME_BORDER = "border",
     ResolveFrame = function(key)
