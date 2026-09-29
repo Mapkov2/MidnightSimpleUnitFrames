@@ -769,6 +769,24 @@ local function MSUF_Defaults_Stage_SeedBarsTableDefaults(profileDB)
     if profileDB.bars.roundedMouseover == nil then
         profileDB.bars.roundedMouseover = true
     end
+    if profileDB.bars.slantedUnitFrames == nil then
+        profileDB.bars.slantedUnitFrames = true
+    end
+    if profileDB.bars.slantedGroupFrames == nil then
+        profileDB.bars.slantedGroupFrames = true
+    end
+    if profileDB.bars.slantedPowerBars == nil then
+        profileDB.bars.slantedPowerBars = true
+    end
+    if profileDB.bars.slantedMouseover == nil then
+        profileDB.bars.slantedMouseover = true
+    end
+    if profileDB.bars.slantedCastbars == nil then
+        profileDB.bars.slantedCastbars = false
+    end
+    if profileDB.bars.slantedClassResources == nil then
+        profileDB.bars.slantedClassResources = false
+    end
     if profileDB.bars.roundedCornerStrength == nil then
         profileDB.bars.roundedCornerStrength = 3
     end

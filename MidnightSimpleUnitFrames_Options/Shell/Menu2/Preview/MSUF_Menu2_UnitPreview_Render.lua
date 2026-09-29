@@ -618,7 +618,8 @@ local function SetCastbarPreviewRoundedShown(cast, shown)
 end
 local function ApplyCastbarPreviewRounded(cast, g, edgeSize, bgR, bgG, bgB, bgA)
     local bars = EnsureDB().bars
-    local enabled = bars and bars.roundedFramesEnabled == true and bars.roundedCastbars == true
+    local enabled = bars and ((bars.slantedBarsEnabled ~= false and bars.slantedCastbars == true)
+        or (bars.roundedFramesEnabled == true and bars.roundedCastbars == true))
     local surface = LayoutCastbarPreviewSurface(cast)
     local bg = cast._msufCastbarRoundedBg
     if not bg then
@@ -2226,8 +2227,11 @@ function Stage.RenderClassPower(st)
         if cp.bgAlpha < 0 then cp.bgAlpha = 0 elseif cp.bgAlpha > 1 then cp.bgAlpha = 1 end
         cp.shape = NormalizePreviewClassPowerShape(bars.classPowerShape)
         cp.shapeInfo = PREVIEW_CLASS_POWER_SHAPES[cp.shape]
-        cp.rounded = cp.shapeInfo == nil and bars.roundedFramesEnabled == true
-            and bars.roundedClassResources == true
+        cp.style = bars.slantedBarsEnabled ~= false and bars.slantedClassResources == true
+            and "SLANTED" or "ROUNDED"
+        cp.rounded = cp.shapeInfo == nil and (cp.style == "SLANTED"
+            or (bars.roundedFramesEnabled == true and bars.roundedClassResources == true))
+        UNIT_CP_ROUNDED_OPTS.style = cp.style
         if mock.classPower.SetBackdropColor then
             cp.bgr, cp.bgg, cp.bgb = R.CPPreview.ColorOverride("classPowerBgColorOverrides", cp.token)
             mock.classPower:SetBackdropColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0,

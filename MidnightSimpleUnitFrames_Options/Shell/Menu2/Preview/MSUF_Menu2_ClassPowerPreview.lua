@@ -491,8 +491,9 @@ local CP_CLASS_ROUNDED_OPTS = {
     baseEdgeColor = function() return 0, 0, 0, 1 end,
 }
 local function RoundedClassResourcesPreviewEnabled(bars)
-    return bars and bars.roundedFramesEnabled == true
-        and bars.roundedClassResources == true
+    if not bars then return false end
+    if bars.slantedBarsEnabled ~= false and bars.slantedClassResources == true then return true, "SLANTED" end
+    return bars.roundedFramesEnabled == true and bars.roundedClassResources == true, "ROUNDED"
 end
 local function RoundedPowerPreviewEnabled()
     local bars = EnsureDB().bars
@@ -1172,7 +1173,9 @@ local function RenderClassPower(preview, bars, player, spec)
     local shape = (spec and (spec.token == "WHIRLWIND" or spec.token == "SWEEPING_STRIKES"))
         and "BAR" or NormalizeClassShape(bars.classPowerShape)
     local shapeInfo = CP_SHAPES[shape]
-    local roundClassResources = shapeInfo == nil and RoundedClassResourcesPreviewEnabled(bars)
+    local classResourceStyle, selectedStyle = RoundedClassResourcesPreviewEnabled(bars)
+    local roundClassResources = shapeInfo == nil and classResourceStyle
+    CP_CLASS_ROUNDED_OPTS.style = selectedStyle
     local token = CPToken(spec)
     local r, g, b = CPBaseColor(spec, bars, 1, 1, 1)
     local bgr, bgg, bgb = CPBgColor(token)

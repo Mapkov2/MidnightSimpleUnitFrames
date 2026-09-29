@@ -3112,7 +3112,7 @@ function H.ApplyRoundedClassPowerSurface(frame, enabled, fills, backgrounds, cou
         return false
     end
 
-    local maskPath, edgePath, strength = H.ResolveRoundedMedia()
+    local maskPath, edgePath, strength = H.ResolveFrameBarMedia(opts.style)
     outline = H.ClampEdgeSize(outline, 0, opts.maxEdgeSize or 8)
     local fillFirst = type(fills) == "table" and fills[1] or nil
     local fillLast = type(fills) == "table" and count > 1 and fills[count] or nil

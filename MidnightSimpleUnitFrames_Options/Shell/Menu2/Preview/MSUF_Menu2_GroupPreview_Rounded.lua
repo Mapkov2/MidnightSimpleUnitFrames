@@ -23,7 +23,9 @@ function Rounded.Install(deps)
     local HealPredAnchorMode = deps.HealPredAnchorMode
 local function FrameStyle(conf)
     local explicit = conf and conf.frameBarShape
-    if explicit == "SLANTED" or explicit == "ROUNDED" or explicit == "SQUARE" then return explicit end
+    if explicit == "SLANTED" and ReadBarsBool("slantedBarsEnabled", true)
+        and ReadBarsBool("slantedGroupFrames", true) then return "SLANTED" end
+    if explicit == "ROUNDED" or explicit == "SQUARE" then return explicit end
     if ReadBarsBool("roundedFramesEnabled", false)
         and ReadBarsBool("roundedGroupFrames", true) then return "ROUNDED" end
     return "SQUARE"
@@ -31,7 +33,8 @@ end
 local function RoundedPowerEnabled(conf)
     local style = FrameStyle(conf)
     if style == "SQUARE" then return false end
-    if style == "SLANTED" or (conf and conf.frameBarShape == "ROUNDED") then return true end
+    if style == "SLANTED" then return ReadBarsBool("slantedPowerBars", true) end
+    if conf and conf.frameBarShape == "ROUNDED" then return true end
     return ReadBarsBool("roundedPowerBars", true)
 end
 local function SnapOff(region)

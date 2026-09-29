@@ -111,7 +111,9 @@ end
 local function PreviewFrameStyle(key)
     local conf = UnitDB(key)
     local explicit = conf and conf.frameBarShape
-    if explicit == "SLANTED" or explicit == "ROUNDED" or explicit == "SQUARE" then return explicit end
+    if explicit == "SLANTED" and ReadPreviewBarsBool("slantedBarsEnabled", true)
+        and ReadPreviewBarsBool("slantedUnitFrames", true) then return "SLANTED" end
+    if explicit == "ROUNDED" or explicit == "SQUARE" then return explicit end
     if ReadPreviewBarsBool("roundedFramesEnabled", false)
         and ReadPreviewBarsBool("roundedUnitFrames", true) then return "ROUNDED" end
     return "SQUARE"
@@ -119,7 +121,7 @@ end
 local function PreviewRoundedPowerBarsEnabled(key)
     local style = PreviewFrameStyle(key)
     if style == "SQUARE" then return false end
-    if style == "SLANTED" then return true end
+    if style == "SLANTED" then return ReadPreviewBarsBool("slantedPowerBars", true) end
     local conf = UnitDB(key)
     if conf and conf.frameBarShape == "ROUNDED" then return true end
     return ReadPreviewBarsBool("roundedPowerBars", true)

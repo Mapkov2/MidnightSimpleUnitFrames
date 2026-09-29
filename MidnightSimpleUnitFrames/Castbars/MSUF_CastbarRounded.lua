@@ -28,9 +28,16 @@ local function BarsDB()
     return db and db.bars or nil
 end
 
-local function SettingEnabled()
+local function SettingStyle()
     local bars = BarsDB()
-    return bars and bars.roundedFramesEnabled == true and bars.roundedCastbars == true or false
+    if not bars then return nil end
+    if bars.slantedBarsEnabled ~= false and bars.slantedCastbars == true then return "SLANTED" end
+    if bars.roundedFramesEnabled == true and bars.roundedCastbars == true then return "ROUNDED" end
+    return nil
+end
+
+local function SettingEnabled()
+    return SettingStyle() ~= nil
 end
 
 local function CanCreate(existing)
@@ -57,6 +64,9 @@ local function ApplyMediaSlice(region, path)
 end
 
 local function ResolveMedia()
+    if SettingStyle() == "SLANTED" and type(RoundedSurface.ResolveSlantedMedia) == "function" then
+        return RoundedSurface.ResolveSlantedMedia()
+    end
     local fn = RoundedSurface.ResolveMedia
     if type(fn) == "function" then return fn() end
     local bars = BarsDB()

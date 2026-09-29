@@ -76,6 +76,13 @@ local BAR_SETTING_BY_PATH = {
     ["rounded.roundedClassResources"] = "bars.roundedClassResources",
     ["rounded.roundedMouseover"] = "bars.roundedMouseover",
     ["rounded.roundedCornerStrength"] = "bars.roundedCornerStrength",
+    ["slanted.enabled"] = "bars.slantedBarsEnabled",
+    ["slanted.units"] = "bars.slantedUnitFrames",
+    ["slanted.groups"] = "bars.slantedGroupFrames",
+    ["slanted.power"] = "bars.slantedPowerBars",
+    ["slanted.mouseover"] = "bars.slantedMouseover",
+    ["slanted.castbars"] = "bars.slantedCastbars",
+    ["slanted.class_resources"] = "bars.slantedClassResources",
     ["slanted.direction"] = "bars.slantedBarDirection",
     ["power.realtime_text"] = "bars.realtimePowerText",
     ["textures.power_foreground"] = "bars.powerBarTexture",
@@ -477,9 +484,12 @@ end
 local function SetRoundedBool(key, value, requireReload)
     value = value and true or false
     local bars = Bars()
-    if bars[key] == value then return end
+    local switchStyle = key == "roundedFramesEnabled" and value and bars.slantedBarsEnabled ~= false
+    if bars[key] == value and not switchStyle then return end
     bars[key] = value
+    if switchStyle then bars.slantedBarsEnabled = false end
     ApplyRoundedRuntime()
+    if switchStyle and M.RequestRefresh then M.RequestRefresh(nil, "rounded-style-selected") end
     if requireReload then ShowRoundedReloadRequiredPopup() end
 end
 local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, meta)
@@ -1660,8 +1670,26 @@ local function BuildRoundedSection(ctx, b)
     }))
 end
 
+local function SlantedStylesSelected(keys)
+    local db = DB()
+    local function InScope(scope)
+        for _, key in ipairs(scope) do
+            if db[key] and db[key].frameBarShape == "SLANTED" then return true end
+        end
+        return false
+    end
+    if keys then return InScope(keys) end
+    return InScope(SLANTED_PRESET_UNITS) or InScope(SLANTED_PRESET_GROUPS)
+end
+
+local function SlantedSwitchOn()
+    local saved = Bars().slantedBarsEnabled
+    if saved ~= nil then return saved == true end
+    return SlantedStylesSelected()
+end
+
 local function CreateSlantedBarPreview(section, width)
-    local card = W.ControlCard(section, "Slanted bar preview", nil, 30, -150, width - 60, 92)
+    local card = W.ControlCard(section, "Slanted bar preview", nil, 30, -300, width - 60, 92)
     if not card then return end
     local sample = PixelLayoutRegion(CreateFrame("Frame", nil, card))
     local sampleW, sampleH, powerH = min(440, max(240, width - 110)), 43, 8
@@ -1706,27 +1734,59 @@ local function CreateSlantedBarPreview(section, width)
     local value = T.Font(sample, "GameFontHighlightSmall", "382", T.colors.text)
     value:SetPoint("RIGHT", sample, "RIGHT", -12, 4)
     function card:RefreshSlantedPreview()
+        if helpers.ClearMasks then helpers.ClearMasks(sample, "_msuf2SlantedPreviewMasked") end
+        local healthOn = SlantedSwitchOn()
+            and (ReadB("slantedUnitFrames", true) ~= false or ReadB("slantedGroupFrames", true) ~= false)
+        if not healthOn then
+            edge:Hide()
+            return
+        end
+        local powerOn = ReadB("slantedPowerBars", true) ~= false
         local resolve = helpers.ResolveFrameBarMedia
         if type(resolve) ~= "function" then return end
         local maskPath, edgePath = resolve("SLANTED")
         for i = 1, #masked do
             local entry = masked[i]
-            local mask = helpers.EnsureRoundedMask and helpers.EnsureRoundedMask(
-                sample, entry.key, sample, entry.texture, "_msuf2SlantedPreviewMasks", maskPath)
-            if helpers.SetMask then helpers.SetMask(sample, entry.texture, mask, "_msuf2SlantedPreviewMasked") end
+            if powerOn or (entry.key ~= "power" and entry.key ~= "powerBg") then
+                local mask = helpers.EnsureRoundedMask and helpers.EnsureRoundedMask(
+                    sample, entry.key, sample, entry.texture, "_msuf2SlantedPreviewMasks", maskPath)
+                if helpers.SetMask then helpers.SetMask(sample, entry.texture, mask, "_msuf2SlantedPreviewMasked") end
+            end
         end
+        edge:ClearAllPoints()
+        edge:SetPoint("TOPLEFT", sample, "TOPLEFT")
+        edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerOn and 0 or powerH + 2)
         edge:SetTexture(edgePath, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         if helpers.ApplyRoundedMediaSlice then helpers.ApplyRoundedMediaSlice(edge, 0) end
+        edge:Show()
     end
     card:RefreshSlantedPreview()
     return card
 end
 
 local function BuildSlantedSection(ctx, b)
-    local section = b:CollapsibleSection("bars_slanted", "Slanted Bars", 318, true)
+    local section = b:CollapsibleSection("bars_slanted", "Slanted Bars", 480, true)
     local width = (section and section._msuf2Width) or b.width or 720
+    local SyncSlantedControls = M.RefreshProxy()
+    local function ApplySlantedToScope(keys)
+        local db, changed = DB(), false
+        for _, key in ipairs(keys) do
+            db[key] = db[key] or {}
+            if db[key].frameBarShape ~= "SLANTED" then db[key].frameBarShape, changed = "SLANTED", true end
+        end
+        return changed
+    end
+    local function ApplySlantedToAll()
+        local units = ApplySlantedToScope(SLANTED_PRESET_UNITS)
+        return ApplySlantedToScope(SLANTED_PRESET_GROUPS) or units
+    end
+    local function RefreshSlanted(reason)
+        if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
+        SyncSlantedControls()
+        if M.RequestRefresh then M.RequestRefresh(ctx, reason) end
+    end
     W.Text(section,
-        "Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere.",
+        "Choose where slanted edges appear. Turning this off keeps your frame choices.",
         30, -40, width - 60, T.colors.muted)
     local preview = CreateSlantedBarPreview(section, width)
     if preview and type(M.RegisterSearchWidget) == "function" then
@@ -1735,6 +1795,59 @@ local function BuildSlantedSection(ctx, b)
             keywords = { "slanted", "angled", "preview", "vorschau", "schraege" },
             help = "Shows the selected cut on a Health and Power bar sample.",
         })
+    end
+    local enabled = W.SwitchAt(section, "Enable slanted bars", 30, -78, min(340, width - 60))
+    M.BindBoolWidget(ctx, enabled, SlantedSwitchOn,
+        function(value)
+            value = value == true
+            local bars = Bars()
+            local switchStyle = value and bars.roundedFramesEnabled == true
+            if bars.slantedBarsEnabled == value and not switchStyle then return end
+            bars.slantedBarsEnabled = value
+            if switchStyle then bars.roundedFramesEnabled = false end
+            if value and not SlantedStylesSelected() then ApplySlantedToAll() end
+            RefreshSlanted("slanted-bar-enabled")
+        end,
+        Meta("slanted.enabled"))
+    if type(M.RegisterSearchWidget) == "function" then
+        M.RegisterSearchWidget(enabled, {
+            label = "Enable slanted bars", kind = "toggle",
+            keywords = { "slanted", "enable", "disable", "on", "off", "schraege", "einschalten", "ausschalten" },
+            help = "Choose where slanted edges appear. Turning this off keeps your frame choices.",
+        })
+    end
+    local scopeSpecs = {
+        { "units", "Unit frames", "slantedUnitFrames", true, 30, -116, SLANTED_PRESET_UNITS },
+        { "groups", "Group frames", "slantedGroupFrames", true, 30, -154, SLANTED_PRESET_GROUPS },
+        { "class_resources", "Class resources", "slantedClassResources", false, 30, -192 },
+        { "power", "Power bars", "slantedPowerBars", true, 330, -78 },
+        { "mouseover", "Mouseover highlights", "slantedMouseover", true, 330, -116 },
+        { "castbars", "Castbars", "slantedCastbars", false, 330, -154 },
+    }
+    local dependent = {}
+    for _, spec in ipairs(scopeSpecs) do
+        local id, label, key, defaultOn, x, y, keys = unpack(spec)
+        local control = W.ToggleAt(section, label, x, y, 250)
+        M.BindBoolWidget(ctx, control,
+            function()
+                local value = ReadB(key, defaultOn)
+                return defaultOn and value ~= false or value == true
+            end,
+            function(value)
+                value = value == true
+                if Bars()[key] == value then return end
+                Bars()[key] = value
+                if value and keys and not SlantedStylesSelected(keys) then ApplySlantedToScope(keys) end
+                RefreshSlanted("slanted-" .. id)
+            end,
+            Meta("slanted." .. id))
+        if type(M.RegisterSearchWidget) == "function" then
+            M.RegisterSearchWidget(control, {
+                label = label, kind = "toggle",
+                keywords = { "slanted", "angled", id, "schraege", "ein", "aus" },
+            })
+        end
+        dependent[#dependent + 1] = control
     end
     local direction = W.Dropdown(section, "Cut direction", SLANTED_DIRECTION_VALUES, min(340, width - 60))
     M.BindDropdownWidget(ctx, direction,
@@ -1751,7 +1864,7 @@ local function BuildSlantedSection(ctx, b)
             if M.RequestRefresh then M.RequestRefresh(ctx, "slanted-bar-direction") end
         end,
         Meta("slanted.direction"))
-    W.MoveWidget(direction, section, 30, -96, min(340, width - 60), "LEFT")
+    W.MoveWidget(direction, section, 30, -248, min(340, width - 60), "LEFT")
     if type(M.RegisterSearchWidget) == "function" then
         M.RegisterSearchWidget(direction, {
             label = "Cut direction", kind = "dropdown",
@@ -1760,22 +1873,16 @@ local function BuildSlantedSection(ctx, b)
         })
     end
     local preset = W.Button(section, "Apply slanted bars to all frames", 280)
-    W.MoveWidget(preset, section, 30, -264)
+    W.MoveWidget(preset, section, 30, -420)
     preset:SetScript("OnClick", function()
         local function Write()
-            local db = DB()
-            local changed = false
-            for _, key in ipairs(SLANTED_PRESET_UNITS) do
-                db[key] = db[key] or {}
-                if db[key].frameBarShape ~= "SLANTED" then db[key].frameBarShape, changed = "SLANTED", true end
-            end
-            for _, key in ipairs(SLANTED_PRESET_GROUPS) do
-                db[key] = db[key] or {}
-                if db[key].frameBarShape ~= "SLANTED" then db[key].frameBarShape, changed = "SLANTED", true end
-            end
+            local bars = Bars()
+            local changed = ApplySlantedToAll()
+            if bars.slantedBarsEnabled ~= true then bars.slantedBarsEnabled, changed = true, true end
+            if bars.slantedUnitFrames ~= true then bars.slantedUnitFrames, changed = true, true end
+            if bars.slantedGroupFrames ~= true then bars.slantedGroupFrames, changed = true, true end
             if not changed then return false end
-            if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
-            if M.RequestRefresh then M.RequestRefresh(ctx, "slanted-bar-preset") end
+            RefreshSlanted("slanted-bar-preset")
             return true
         end
         if type(M.RunWithHistory) == "function" then
@@ -1792,6 +1899,12 @@ local function BuildSlantedSection(ctx, b)
             help = "Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere.",
         })
     end
+    dependent[#dependent + 1] = direction
+    SyncSlantedControls(M.BindGateGroup(ctx, nil, {
+        { controls = dependent, on = SlantedSwitchOn },
+    }, {
+        also = function() if preview and preview.RefreshSlantedPreview then preview:RefreshSlantedPreview() end end,
+    }))
 end
 
 -- Upgrade-tour playground for the 5.x highlight card. The rounded rework is the
@@ -2199,7 +2312,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
     { sectionId = "bars_absorb", title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
     { sectionId = "bars_outline", title = "Frame Outline", height = 252, build = BuildOutlineSection },
     { sectionId = "bars_rounded", title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
-    { sectionId = "bars_slanted", title = "Slanted Bars", height = 318, defaultOpen = true, build = BuildSlantedSection },
+    { sectionId = "bars_slanted", title = "Slanted Bars", height = 480, defaultOpen = true, build = BuildSlantedSection },
     { sectionId = "bars_highlight", title = "Highlight Borders", height = 764, defaultOpen = true, build = BuildHighlightSection },
     { sectionId = "bars_power", title = "Bar Animation + Text Accuracy", height = 184, build = BuildPowerSection },
 }
