@@ -705,6 +705,40 @@ local function FrameOnShow(frame)
   end
 end
 
+-- Zero-overhead-while-hidden: a hidden frame keeps receiving every registered
+-- event and burns FrameOnEvent's early-return per event. Unregister them all
+-- while hidden so the frame is truly inert; FrameOnShow restores them from the
+-- recorded recipe and reseeds. The events are dropped unread while hidden, so
+-- not receiving them changes nothing but the cost. This covers single frames
+-- too: a 2026-09-28 20-player raid trace measured 58,886 of 68,297 single-frame
+-- events per minute arriving at hidden frames, each dropped after the check.
+-- The diagnostic flag still forces the old behaviour:
+--   MSUF_GF_SuspendHidden == false -> force OFF (A/B baseline via /msufgp)
+local function SuspendHiddenFrameEvents(frame)
+  if HOST_VALUES.MSUF_GF_SuspendHidden == false
+    or frame._msufCoreEventsSuspended == true
+    or not frame._msufEventNames
+    or not frame.UnregisterEvent then
+    return false
+  end
+  local names = frame._msufEventNames
+  for i = 1, #names do
+    frame:UnregisterEvent(names[i])
+  end
+  frame._msufCoreEventsSuspended = true
+  if frame._msufCoreRangeEventConfigured == true then
+    -- A range event skipped while hidden at build has no recipe entry yet;
+    -- FrameOnShow's restore reads it from the recipe.
+    local reg = frame._msufEventReg
+    if not reg then reg = {}; frame._msufEventReg = reg end
+    if reg.UNIT_IN_RANGE_UPDATE == nil then
+      reg.UNIT_IN_RANGE_UPDATE = frame._msufCoreRangeEventUnitless == true
+    end
+    frame._msufCoreRangeEventSuspended = true
+  end
+  return true
+end
+
 local function FrameOnHide(frame)
   frame._msufCoreVisible = false
   frame._msufCoreOnShowFollowupEvent = nil
@@ -713,34 +747,7 @@ local function FrameOnHide(frame)
   if RefreshHealthLifecycleSinkRoutes and frame._msufHealthLifecycleSink then
     RefreshHealthLifecycleSinkRoutes(frame)
   end
-  -- Zero-overhead-while-hidden: a hidden frame whose unit still exists keeps
-  -- receiving every registered UNIT_* event and burns FrameOnEvent's early-
-  -- return per event. Unregister them all while hidden so the frame is truly
-  -- inert (FrameOnShow restores from the recorded recipe and reseeds). Default
-  -- ON for GROUP frames only -- that is the case the user cares about, and a
-  -- hidden group child can legitimately still own a live unit (priority views,
-  -- the transient header-rebind window). Single frames are excluded: a hidden
-  -- single frame's unit is gone (no target/pet/focus), so its unit events never
-  -- fire anyway, and suspending them would only churn register/unregister on
-  -- every target/focus swap. The diagnostic flag overrides both ways:
-  --   MSUF_GF_SuspendHidden == false -> force OFF (A/B baseline via /msufgp)
-  --   MSUF_GF_SuspendHidden == true  -> force ON for every scope (single too)
-  local suspendFlag = HOST_VALUES.MSUF_GF_SuspendHidden
-  if suspendFlag ~= false
-    and (suspendFlag == true or frame._msufCoreScope == "group")
-    and frame._msufCoreEventsSuspended ~= true
-    and frame._msufEventNames
-    and frame.UnregisterEvent then
-    local names = frame._msufEventNames
-    for i = 1, #names do
-      frame:UnregisterEvent(names[i])
-    end
-    frame._msufCoreEventsSuspended = true
-    if frame._msufCoreRangeEventConfigured == true then
-      frame._msufCoreRangeEventSuspended = true
-    end
-    return
-  end
+  if SuspendHiddenFrameEvents(frame) then return end
   -- Blizzard's CompactUnitFrame explicitly unregisters this event while
   -- hidden because every registered unit makes the client perform additional
   -- native range work. Keep the compiled Lua route and restore registration
@@ -2426,6 +2433,9 @@ local function RebuildFrameEvents(frame)
       frame[event] = path
     end
   end
+  -- A frame hidden while its routes are rebuilt (login, profile apply) stays
+  -- inert until its next OnShow, exactly like one that hides later.
+  if frame._msufCoreVisible == false then SuspendHiddenFrameEvents(frame) end
   if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
   -- Compiled routes either capture only the one generic list they need or use
   -- a shared prototype. The event->builder map itself has no runtime reader.
