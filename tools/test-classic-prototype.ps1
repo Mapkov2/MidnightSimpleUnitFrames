@@ -1141,6 +1141,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua",
     "MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua",
     "MidnightSimpleUnitFrames/Game/Forever/ClassPower.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua",
     "MidnightSimpleUnitFrames/State/MSUF_AuraDefaults.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_ForeverFactory.lua",
