@@ -47,22 +47,23 @@ local issecretvalue = _G.issecretvalue
 local UnitExistsPlain = UF.UnitExistsSafe
 
 local SUPPORTED_UNITS = {
-  target = true, targettarget = true, focus = true, focustarget = true, pet = true,
+  target = true, targettarget = true, focus = true, focustarget = true, pet = true, pettarget = true,
   boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
 
 -- Bitmasks let one driver frame know which unit families need target/focus/pet/boss events
 -- without registering a separate expensive event set for every unitframe.
 local RANGE_UNITS = {
-  "target", "targettarget", "focus", "focustarget", "pet",
+  "target", "targettarget", "focus", "focustarget", "pet", "pettarget",
   "boss1", "boss2", "boss3", "boss4", "boss5",
 }
 local RANGE_UNIT_BITS = {
-  target = 1, targettarget = 2, focus = 4, focustarget = 8, pet = 16,
+  target = 1, targettarget = 2, focus = 4, focustarget = 8, pet = 16, pettarget = 1024,
   boss1 = 32, boss2 = 64, boss3 = 128, boss4 = 256, boss5 = 512,
 }
 local TARGET_EVENT_TARGET_BIT = 1
 local TARGET_EVENT_FOCUS_BIT = 2
+local TARGET_EVENT_PET_BIT = 4
 local DRIVER_EVENT_ACTIVE_BIT = 1
 local DRIVER_EVENT_TARGET_BIT = 2
 local DRIVER_EVENT_FOCUS_BIT = 4
@@ -657,7 +658,7 @@ local function UnitNeedsPoll(unit)
     -- UnitInRange itself is currently available.
     if checked then
       return unit == "target" or unit == "focus"
-        or unit == "targettarget" or unit == "focustarget"
+        or unit == "targettarget" or unit == "focustarget" or unit == "pettarget"
     end
     return friendlySpell ~= nil or CanUseInteractDistance()
   end
@@ -936,6 +937,13 @@ local function ScheduleFocusTargetRange()
   return true
 end
 
+local function SchedulePetTargetRange()
+  if not RangeUnitScheduled("pettarget") then return false end
+  EvaluateIfActive("pettarget", false)
+  RebuildPollSet()
+  return true
+end
+
 local function RangeFrameOnShow(self)
   -- HookScript cannot be removed after a frame has used RangeFade. Keep the
   -- permanent hook inert once the element is disabled; otherwise every later
@@ -1195,6 +1203,8 @@ local function DriverOnEvent(source, event, unit, a, b, c)
       ScheduleTargetTargetRange()
     elseif unit == "focus" then
       ScheduleFocusTargetRange()
+    elseif unit == "pet" then
+      SchedulePetTargetRange()
     end
     return
   end
@@ -1202,7 +1212,10 @@ local function DriverOnEvent(source, event, unit, a, b, c)
   MarkPollSetDirty()
 
   if event == "UNIT_PET" then
-    if unit == "player" then EvaluateIfActive("pet", false) end
+    if unit == "player" then
+      EvaluateIfActive("pet", false)
+      EvaluateIfActive("pettarget", false)
+    end
   elseif event == "PLAYER_ENTERING_WORLD"
     or event == "PLAYER_REGEN_DISABLED"
     or event == "PLAYER_REGEN_ENABLED" then
@@ -1282,6 +1295,10 @@ local function BuildDriverUnitLists()
         targetCount = targetCount + 1
         targetEventUnits[targetCount] = "focus"
         targetMask = targetMask + TARGET_EVENT_FOCUS_BIT
+      elseif unit == "pettarget" then
+        targetCount = targetCount + 1
+        targetEventUnits[targetCount] = "pet"
+        targetMask = targetMask + TARGET_EVENT_PET_BIT
       else
         unitCount = unitCount + 1
         unitEventUnits[unitCount] = unit
@@ -1305,7 +1322,7 @@ local function RegisterDriver()
   local targetActive = activeUnits.target == true
   local targetDependent = targetActive or activeUnits.targettarget == true
   local focusDependent = activeUnits.focus == true or activeUnits.focustarget == true
-  local petActive = activeUnits.pet == true
+  local petActive = activeUnits.pet == true or activeUnits.pettarget == true
   local bossActive = activeUnits.boss1 == true
     or activeUnits.boss2 == true
     or activeUnits.boss3 == true

@@ -209,6 +209,9 @@ local wantTargetEvents = false
 local wantFocusEvents = false
 local wantUnitTargetTarget = false
 local wantUnitTargetFocus = false
+local wantUnitTargetPet = false
+local petTargetDriver
+local petTargetEventRegistered = false
 local wantBossEvents = false
 local RefreshUnitTextureLayers
 local RefreshDynamicTextureLayers
@@ -223,6 +226,8 @@ local DYNAMIC_MASK_FIELDS = {
   "_msufTexLayerUnitTargetTargetColorMask",
   "_msufTexLayerUnitTargetFocusMask",
   "_msufTexLayerUnitTargetFocusColorMask",
+  "_msufTexLayerUnitTargetPetMask",
+  "_msufTexLayerUnitTargetPetColorMask",
   "_msufTexLayerBossMask",
   "_msufTexLayerBossColorMask",
 }
@@ -247,7 +252,13 @@ local function DriverOnEvent(_, event, unit)
     elseif unit == "focus" then
       RefreshDynamicTextureLayers("_msufTexLayerUnitTargetFocusMask",
         "_msufTexLayerUnitTargetFocusColorMask")
+    elseif unit == "pet" then
+      RefreshDynamicTextureLayers("_msufTexLayerUnitTargetPetMask",
+        "_msufTexLayerUnitTargetPetColorMask")
     end
+  elseif event == "UNIT_PET" then
+    RefreshDynamicTextureLayers("_msufTexLayerUnitTargetPetMask",
+      "_msufTexLayerUnitTargetPetColorMask")
   elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
     RefreshDynamicTextureLayers("_msufTexLayerBossMask", "_msufTexLayerBossColorMask")
   end
@@ -274,6 +285,21 @@ local function SetDriverUnitEvent(event, wantTarget, wantFocus)
   end
 end
 
+local function SetPetTargetEvent(wanted)
+  if petTargetEventRegistered == (wanted == true) then return end
+  if wanted and not petTargetDriver then
+    petTargetDriver = CreateFrame("Frame")
+    petTargetDriver:SetScript("OnEvent", DriverOnEvent)
+  end
+  if not petTargetDriver then return end
+  petTargetEventRegistered = wanted == true
+  if wanted then
+    petTargetDriver:RegisterUnitEvent("UNIT_TARGET", "pet")
+  else
+    petTargetDriver:UnregisterEvent("UNIT_TARGET")
+  end
+end
+
 local function SetDriverEvent(event, wanted)
   if (driverEvents[event] == true) == (wanted == true) then return end
   if wanted and not driver then
@@ -291,6 +317,8 @@ local function SyncDriverEvents()
   SetDriverEvent("PLAYER_TARGET_CHANGED", wantTargetEvents)
   SetDriverEvent("PLAYER_FOCUS_CHANGED", wantFocusEvents)
   SetDriverUnitEvent("UNIT_TARGET", wantUnitTargetTarget, wantUnitTargetFocus)
+  SetPetTargetEvent(wantUnitTargetPet)
+  SetDriverEvent("UNIT_PET", wantUnitTargetPet)
   SetDriverEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT", wantBossEvents)
 end
 
@@ -303,9 +331,9 @@ end
 -- consume them and never rescan configuration or restamp unrelated slots.
 local function CompileDynamicMasks(frame, unitKey, conf)
   local regenMask, targetMask, focusMask = 0, 0, 0
-  local unitTargetTargetMask, unitTargetFocusMask, bossMask = 0, 0, 0
+  local unitTargetTargetMask, unitTargetFocusMask, unitTargetPetMask, bossMask = 0, 0, 0, 0
   local targetColorMask, focusColorMask = 0, 0
-  local unitTargetTargetColorMask, unitTargetFocusColorMask, bossColorMask = 0, 0, 0
+  local unitTargetTargetColorMask, unitTargetFocusColorMask, unitTargetPetColorMask, bossColorMask = 0, 0, 0, 0
   local healthMask, healthColorMask, healthDirectGradientMask = 0, 0, 0
   local bossUnit = unitKey:match("^boss") ~= nil
   for slot = 1, #SLOT_KEYS do
@@ -366,6 +394,13 @@ local function CompileDynamicMasks(frame, unitKey, conf)
           unitTargetFocusColorMask = AddMaskBit(unitTargetFocusColorMask, bit)
         end
       end
+      if unitKey == "pettarget" and (targetOnly or classColor) then
+        if targetOnly then
+          unitTargetPetMask = AddMaskBit(unitTargetPetMask, bit)
+        else
+          unitTargetPetColorMask = AddMaskBit(unitTargetPetColorMask, bit)
+        end
+      end
       if bossUnit and (targetOnly or classColor) then
         if targetOnly then
           bossMask = AddMaskBit(bossMask, bit)
@@ -386,6 +421,9 @@ local function CompileDynamicMasks(frame, unitKey, conf)
   frame._msufTexLayerUnitTargetFocusMask = unitTargetFocusMask > 0 and unitTargetFocusMask or nil
   frame._msufTexLayerUnitTargetFocusColorMask = unitTargetFocusColorMask > 0
     and unitTargetFocusColorMask or nil
+  frame._msufTexLayerUnitTargetPetMask = unitTargetPetMask > 0 and unitTargetPetMask or nil
+  frame._msufTexLayerUnitTargetPetColorMask = unitTargetPetColorMask > 0
+    and unitTargetPetColorMask or nil
   frame._msufTexLayerBossMask = bossMask > 0 and bossMask or nil
   frame._msufTexLayerBossColorMask = bossColorMask > 0 and bossColorMask or nil
   frame._msufTexLayerHealthMask = healthMask > 0 and healthMask or nil
@@ -397,6 +435,7 @@ local function CompileDynamicMasks(frame, unitKey, conf)
   if focusMask > 0 or focusColorMask > 0 then wantFocusEvents = true end
   if unitTargetTargetMask > 0 or unitTargetTargetColorMask > 0 then wantUnitTargetTarget = true end
   if unitTargetFocusMask > 0 or unitTargetFocusColorMask > 0 then wantUnitTargetFocus = true end
+  if unitTargetPetMask > 0 or unitTargetPetColorMask > 0 then wantUnitTargetPet = true end
   -- Match the previous registration contract: boss lifecycle events exist only
   -- for class-colored boss layers; TARGET visibility is refreshed incidentally
   -- when such a layer is present, just as the former scoped full refresh did.
@@ -1114,7 +1153,7 @@ local function FrameMatchesUnitScope(frame, unit)
 end
 
 local function RecomputeDriverNeeds(frames)
-  wantRegenEvents, wantTargetEvents, wantFocusEvents, wantUnitTargetTarget, wantUnitTargetFocus, wantBossEvents = false, false, false, false, false, false
+  wantRegenEvents, wantTargetEvents, wantFocusEvents, wantUnitTargetTarget, wantUnitTargetFocus, wantUnitTargetPet, wantBossEvents = false, false, false, false, false, false, false
   for i = 1, #DYNAMIC_MASK_FIELDS do
     local field = DYNAMIC_MASK_FIELDS[i]
     local list = dynamicFrameLists[field]

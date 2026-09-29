@@ -235,6 +235,11 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
     if not onlyKey then
         if MSUF and MSUF.MSUF_ApplyGameplayFontFromGlobal then MSUF.MSUF_ApplyGameplayFontFromGlobal() end
         if type(_G.MSCB_ApplyFontsFromMSUF) == "function" then _G.MSCB_ApplyFontsFromMSUF() end
+        -- The optional Suite follows the shared font on full applies,
+        -- including the final cold-start font recovery pass.
+        if type(_G.MSUFSuite_ApplyFontsFromMSUF) == "function" then
+            _G.MSUFSuite_ApplyFontsFromMSUF()
+        end
     end
     if not onlyKey then
         if type(_G.MSUF_FocusKick_ApplyTimeTextFont) == "function" then

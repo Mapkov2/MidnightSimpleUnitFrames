@@ -240,7 +240,7 @@ local function SetTip(widget, text)
     widget:HookScript("OnLeave", function() DockUI.ReleaseTooltip() end)
 end
 
-local UNIT_KEYS = { player = true, target = true, focus = true, focustarget = true, targettarget = true, pet = true, boss = true }
+local UNIT_KEYS = { player = true, target = true, focus = true, focustarget = true, targettarget = true, pet = true, pettarget = true, boss = true }
 
 local GROUP_KEY_TO_KIND = {
     gf_party = "party",
@@ -301,6 +301,7 @@ local LABEL_BY_KEY = {
     focustarget = "Focus Target",
     targettarget = "ToT",
     pet = "Pet",
+    pettarget = "Pet Target",
     boss = "Boss",
     gf_party = "Party Frames",
     gf_raid = "Raid Frames",
@@ -1331,6 +1332,13 @@ local function OpenMenuGuidedTourAtEditMode()
     CleanupLegacyTourFrames()
     guidedTourBridgeRequested = false
 
+    local suite = _G.MSUFSuite
+    if suite and suite.Installer and type(suite.Installer.Open) == "function" then
+        local opened = suite.Installer.Open()
+        guidedTourBridgeRequested = opened == true
+        return opened == true
+    end
+
     local menu = ResolveMenu2()
     local menuOpened = false
     if menu and type(menu.Open) == "function" then
@@ -1341,26 +1349,14 @@ local function OpenMenuGuidedTourAtEditMode()
         menuOpened = result ~= false
     end
 
-    -- Resolve again after opening: lazy menu installation may have populated
-    -- MSUF.MSUF2 during the call above.
-    menu = ResolveMenu2()
-    local openStage = menu and menu.OpenGuidedTourAtStage
-    if type(openStage) == "function" then
-        local result = openStage("edit_mode")
-        if result ~= false then
-            guidedTourBridgeRequested = true
-            return true
-        end
-    end
     return menuOpened
 end
 
 --- The former floating Help reference panel has intentionally been removed.
---- Help now enters the complete, menu-native guided tour above.
+--- Help opens the Suite installer when available, or the MSUF menu.
 
 function HUD.TourStep(idx)
-    -- Legacy callers may still supply an overlay step number.  The menu tour
-    -- owns its own progress and maps this entry to its Edit Mode stage.
+    -- Legacy callers may still supply an overlay step number.
     return OpenMenuGuidedTourAtEditMode()
 end
 

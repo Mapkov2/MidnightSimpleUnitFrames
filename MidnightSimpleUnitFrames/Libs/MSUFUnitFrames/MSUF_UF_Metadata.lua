@@ -244,7 +244,7 @@ local Framework = MSUF.MSUFUnitFrames or MSUF.UFCore
 local HOST_VALUES = UF._hostValues or _G
 
 UF.unitOrder = UF.unitOrder or {
-  "player", "target", "focus", "targettarget", "focustarget", "pet",
+  "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget",
   "boss1", "boss2", "boss3", "boss4", "boss5",
 }
 
@@ -262,6 +262,7 @@ UF.configKeyUnits = UF.configKeyUnits or {
   targetoftarget = { "targettarget" },
   focustarget = { "focustarget" },
   pet = { "pet" },
+  pettarget = { "pettarget" },
   boss = { "boss1", "boss2", "boss3", "boss4", "boss5" },
 }
 UF.singleUnitLists = UF.singleUnitLists or {}
@@ -273,6 +274,7 @@ local BOSS_UNITS = {
 UF.dependentUnitParents = UF.dependentUnitParents or {
   targettarget = "target",
   focustarget = "focus",
+  pettarget = "pet",
 }
 
 function UF.ParentUnitForDependentUnit(unit)

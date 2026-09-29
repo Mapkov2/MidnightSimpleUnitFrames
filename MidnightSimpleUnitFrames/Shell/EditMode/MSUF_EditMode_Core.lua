@@ -318,6 +318,7 @@ Util.UNIT_PAGE_KEYS = Util.UNIT_PAGE_KEYS or {
     focustarget = "uf_focustarget",
     focus = "uf_focus",
     pet = "uf_pet",
+    pettarget = "uf_pettarget",
     boss = "uf_boss",
 }
 Util.UNIT_LABELS = Util.UNIT_LABELS or {
@@ -327,6 +328,7 @@ Util.UNIT_LABELS = Util.UNIT_LABELS or {
     focustarget = "Focus Target",
     focus = "Focus",
     pet = "Pet",
+    pettarget = "Pet Target",
     boss = "Boss",
 }
 function Util.UnitPageKey(unit, fallback)
@@ -365,6 +367,7 @@ function Util.NormalizeFocusKey(key)
     if key == "uf_focustarget" then return "focustarget" end
     if key == "uf_focus" then return "focus" end
     if key == "uf_pet" then return "pet" end
+    if key == "uf_pettarget" then return "pettarget" end
     if key == "uf_boss" then return "boss" end
     if key:match("^boss%d+$") then return "boss" end
     return key

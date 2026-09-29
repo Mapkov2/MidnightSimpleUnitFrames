@@ -3996,6 +3996,10 @@ L["Applies to the entire castbar: bar, icon, all text, effects, and border. All 
 L["Ask MSUF"] = "MSUF fragen"
 L["Bar Background"] = "Leistenhintergrund"
 L["Best matches"] = "Beste Treffer"
+L["Search settings..."] = "Einstellungen suchen..."
+L["Recent searches"] = "Letzte Suchanfragen"
+L["Search again"] = "Erneut suchen"
+L["Clear recent searches"] = "Suchverlauf löschen"
 L["Combat Feedback"] = "Kampf-Feedback"
 L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "Kopiert den gesamten Aura-Arbeitsbereich: Sichtbarkeit, Layout, Blizzard-Filter, Stärkungs-/Schwächungszauber-Blacklists, Benutzerdefiniert 1-3, DoTs auf dem Ziel, Ebene und Vollbild-Effekte."
 L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "Benutzerdefiniert 1-3 und DoTs auf dem Ziel werden pro Frame gespeichert. Symbolstil und Vollbild-Effekte ändern hier nur "
@@ -6251,6 +6255,16 @@ L["Below your level"] = "Unter deiner Stufe"
 L["Trivial"] = "Trivial"
 L["Level Text"] = "Stufentext"
 
+L["Pet Target"] = "Begleiterziel"
+L["MSUF Pet Target"] = "MSUF Begleiterziel"
+L["Pet Target Name Position"] = "Namensposition des Begleiterziels"
+L["MSUF Factory Reset"] = "MSUF zurücksetzen"
+L["Suite Factory Reset"] = "Suite zurücksetzen"
+L["Fix positions, print help, or reset MSUF or Suite."] = "Positionen reparieren, Hilfe ausgeben oder MSUF bzw. Suite zurücksetzen."
+L["Deletes all MSUF profiles and settings after confirmation. Suite profiles are kept."] = "Löscht nach Bestätigung alle MSUF-Profile und Einstellungen. Suite-Profile bleiben erhalten."
+L["Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact."] = "Löscht nach Bestätigung alle Suite-Profile und Skin-Einstellungen. MSUF-Daten bleiben erhalten."
+L["Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."] = "MSUF auf Werkseinstellungen zurücksetzen?\n\nAlle MSUF-Profile und Einstellungen dieses Accounts werden gelöscht. Suite-Profile bleiben erhalten; das aktive Suite-Profil kann jedoch mit MSUF zu Default wechseln. Die Benutzeroberfläche wird neu geladen."
+L["Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."] = "MSUF Suite auf Werkseinstellungen zurücksetzen?\n\nAlle Suite-Profile und Skin-Einstellungen dieses Accounts werden gelöscht. MSUF-Einstellungen bleiben erhalten. Die Benutzeroberfläche wird neu geladen."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

@@ -419,13 +419,45 @@ end
 local function GetDesiredGlobalScaleFromDB()
     local g = EnsureGeneral()
     local ui = EnsureGlobalUiScaleTable(g)
-    if ui and ui.Enabled then return tonumber(ui.Scale) end
+    if ui and ui.Enabled then
+        if g.globalUiScalePreset == "pixel" then
+            ui.Scale = GetPixelPerfectScale()
+            g.globalUiScaleValue = ui.Scale
+        end
+        return tonumber(ui.Scale)
+    end
     return nil
 end
 local function EnsureGlobalUiScaleApplied(silent)
     local want = tonumber(GetDesiredGlobalScaleFromDB())
     if want and want > 0 then SetGlobalUiScale(want, silent) end
 end
+local function ApplyCurrentProfileGlobalUiScale()
+    if IsConfigCombatLocked and IsConfigCombatLocked() then return false end
+    local want = tonumber(GetDesiredGlobalScaleFromDB())
+    if want and want > 0 then
+        local current = GetCurrentGlobalUiScale()
+        if not current or abs(current - want) > 0.0001 then
+            SetGlobalUiScale(want, true)
+        elseif UpdateGlobalScaleEvents then
+            UpdateGlobalScaleEvents()
+        end
+    else
+        -- Profile switches must restore the scale seen before MSUF first
+        -- overlaid UIParent. UIParent_UpdateScale can choose a new automatic
+        -- pixel scale mid-session, producing a jarring jump until /reload.
+        local baseline = blizzardUiParentScale
+        local current = GetCurrentGlobalUiScale()
+        if baseline and current and abs(current - baseline) > 0.0001 then
+            _G.UIParent:SetScale(baseline)
+            ScheduleUnitframeReanchorAfterScale()
+        end
+        lastGlobalUiParentScale = nil
+        if UpdateGlobalScaleEvents then UpdateGlobalScaleEvents() end
+    end
+    return true
+end
+ExportPublic("MSUF_ApplyCurrentProfileGlobalUiScale", ApplyCurrentProfileGlobalUiScale)
 local function ResetStandaloneWindowGeometry(frame, silent)
     local g = EnsureGeneral()
     g.flashFullW = 900

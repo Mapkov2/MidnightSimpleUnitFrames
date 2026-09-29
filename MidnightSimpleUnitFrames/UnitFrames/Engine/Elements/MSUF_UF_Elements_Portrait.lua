@@ -181,6 +181,7 @@ local portraitUnitGeneration = {
   focus = 0,
   targettarget = 0,
   focustarget = 0,
+  pettarget = 0,
 }
 local portraitGenerationEventStamp = {}
 
@@ -217,11 +218,13 @@ local function BumpPortraitGenerationForEvent(event, unit)
     BumpPortraitUnitGeneration("focustarget")
   elseif event == "UNIT_TARGET" then
     BumpPortraitUnitGeneration(unit)
+    if unit == "pet" then BumpPortraitUnitGeneration("pettarget") end
   elseif event == "PORTRAITS_UPDATED" then
     BumpPortraitUnitGeneration("target")
     BumpPortraitUnitGeneration("focus")
     BumpPortraitUnitGeneration("targettarget")
     BumpPortraitUnitGeneration("focustarget")
+    BumpPortraitUnitGeneration("pettarget")
   end
 end
 
@@ -1489,7 +1492,7 @@ function Portrait.GetEvents(frame, spec)
       events = castSpellIcon and PORTRAIT_CLASS_CAST_EVENTS or PORTRAIT_CLASS_EVENTS
     elseif unit == "player" or (spec and spec.key == "player") then
       events = castSpellIcon and PORTRAIT_2D_PLAYER_CAST_EVENTS or PORTRAIT_2D_PLAYER_EVENTS
-    elseif unit == "targettarget" or unit == "focustarget" then
+    elseif unit == "targettarget" or unit == "focustarget" or unit == "pettarget" then
       events = castSpellIcon and PORTRAIT_2D_DEPENDENT_CAST_EVENTS or PORTRAIT_2D_DEPENDENT_EVENTS
     elseif spec and spec.scope == "group" then
       events = castSpellIcon and GROUP_PORTRAIT_2D_CAST_EVENTS or GROUP_PORTRAIT_2D_EVENTS

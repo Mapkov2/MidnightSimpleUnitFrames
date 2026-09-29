@@ -309,7 +309,7 @@ MSUF.UpgradeHighlights = Controller
 -- re-resolving it, the completed/skipped status is written into an orphaned
 -- table while ShouldShow keeps deriving "pending" from that same orphan - the
 -- release tour then reopens on every single menu visit. Mirrors the
--- SyncLiveState in MSUF_FirstLoad.lua, which fixed the identical defect there.
+-- Live SavedVariable roots may be replaced during profile transitions.
 local function SyncLiveState()
     local liveDB = rawget(_G, "MSUF_GlobalDB")
     if type(liveDB) ~= "table" then
@@ -345,11 +345,7 @@ local function NewRecord(status)
 end
 
 local function FirstLoadKind()
-    local firstLoad = MSUF.FirstLoad6
-    if type(firstLoad) == "table" and type(firstLoad.GetInstallKind) == "function" then
-        return firstLoad:GetInstallKind()
-    end
-    return "fresh"
+    return MSUF.ProfilePolicy and MSUF.ProfilePolicy.WasFreshInstall and "fresh" or "upgrade"
 end
 
 local function InitializeKnownReleases()
@@ -399,14 +395,6 @@ local function PendingRelease()
     end
 end
 
-local function FinishFirstLoad(releaseKey, result)
-    local firstLoad = MSUF.FirstLoad6
-    if type(firstLoad) == "table" and type(firstLoad.IsTerminal) == "function"
-        and type(firstLoad.Complete) == "function" and not firstLoad:IsTerminal() then
-        firstLoad:Complete("upgrade_highlights_" .. tostring(releaseKey) .. "_" .. tostring(result))
-    end
-end
-
 function Controller:GetState()
     InitializeKnownReleases()
     return state
@@ -451,7 +439,6 @@ function Controller:Advance(outcome)
         record.index = count
         record.completedAt = Now()
         record.updatedAt = record.completedAt
-        FinishFirstLoad(releaseKey, "completed")
         return true, "completed", releaseKey, highlight
     end
     record.index = index + 1
@@ -500,7 +487,6 @@ function Controller:ConfirmSkip()
     record.returnStatus = nil
     record.pendingSkipCount = nil
     record.updatedAt = record.skippedAt
-    FinishFirstLoad(releaseKey, "skipped")
     return true, releaseKey
 end
 

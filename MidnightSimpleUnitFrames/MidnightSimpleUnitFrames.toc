@@ -2,7 +2,7 @@
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
-## Category: Combat
+## Category: MSUF
 ## Version: 6.21
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
@@ -34,9 +34,8 @@ Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
 Kernel\MSUF_Bootstrap.lua
 Kernel\MSUF_Boundary.lua
 Kernel\MSUF_Require.lua
-State\MSUF_FirstLoad.lua
+State\MSUF_ProfilePolicy.lua
 State\MSUF_UpgradeHighlights.lua
-State\MSUF_GuidedTour.lua
 Kernel\MSUF_Libs.lua
 
 # ---------------------------------------------------------------

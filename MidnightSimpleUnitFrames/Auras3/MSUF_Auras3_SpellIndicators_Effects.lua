@@ -245,11 +245,11 @@ end
 
 local function NameFontString(parentFrame)
     if not parentFrame then return nil end
-    return parentFrame.Name
-        or parentFrame.name
+    return parentFrame.nameText
         or parentFrame.NameText
-        or parentFrame.nameText
         or parentFrame._nameFS
+        or parentFrame.Name
+        or parentFrame.name
 end
 
 local function UnregisterNameOverlay(button)
@@ -288,9 +288,21 @@ end
 local function RegisterNameOverlay(button, parentFrame, root)
     local source = NameFontString(parentFrame)
     if not (button and source and root) then return nil end
+    local clip = button._msufA3SpellIndicatorNameClip
+    if not clip then
+        clip = CreateFrame("Frame", nil, root)
+        if clip.SetClipsChildren then clip:SetClipsChildren(true) end
+        button._msufA3SpellIndicatorNameClip = clip
+    end
+    local clipSource = parentFrame._msufNameInlineClip or root
+    if clip._msufA3NameClipSource ~= clipSource then
+        clip._msufA3NameClipSource = clipSource
+        clip:ClearAllPoints()
+        clip:SetAllPoints(clipSource)
+    end
     local overlay = button._msufA3SpellIndicatorNameOverlay
     if not overlay then
-        overlay = root:CreateFontString(nil, "OVERLAY")
+        overlay = clip:CreateFontString(nil, "OVERLAY")
         button._msufA3SpellIndicatorNameOverlay = overlay
     end
     if overlay._msufA3NameSource ~= source then

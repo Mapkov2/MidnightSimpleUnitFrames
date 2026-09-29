@@ -78,6 +78,7 @@ local MSUF_POWER_BAR_DEFAULTS = {
     targettarget = false,
     focustarget = false,
     pet = true,
+    pettarget = false,
     boss = true,
 }
 local MSUF_POWER_BAR_UNIT_KEYS = {
@@ -87,6 +88,7 @@ local MSUF_POWER_BAR_UNIT_KEYS = {
     targettarget = true,
     focustarget = true,
     pet = true,
+    pettarget = true,
     boss = true,
 }
 

@@ -3627,6 +3627,10 @@ L["Applies to the entire castbar: bar, icon, all text, effects, and border. The 
 L["Ask MSUF"] = "MSUF에 질문"
 L["Bar Background"] = "바 배경"
 L["Best matches"] = "가장 일치하는 항목"
+L["Search settings..."] = "설정 검색..."
+L["Recent searches"] = "최근 검색"
+L["Search again"] = "다시 검색"
+L["Clear recent searches"] = "최근 검색 지우기"
 L["Combat Feedback"] = "전투 피드백"
 L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "오라 작업 공간 전체를 복사합니다: 표시, 배치, Blizzard 필터, 강화/약화 효과 차단 목록, 사용자 지정 1-3, 대상 DoT, 층 및 전체 프레임 효과."
 L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "사용자 지정 1-3과 대상 DoT는 프레임별로 저장됩니다. 여기의 아이콘 스타일과 전체 프레임 효과는 다음 항목만 변경합니다: "
@@ -5887,6 +5891,9 @@ L["Below your level"] = "내 레벨보다 낮음"
 L["Trivial"] = "사소함"
 L["Level Text"] = "레벨 텍스트"
 
+L["Pet Target"] = "소환수 대상"
+L["MSUF Pet Target"] = "MSUF 소환수 대상"
+L["Pet Target Name Position"] = "소환수 대상 이름 위치"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

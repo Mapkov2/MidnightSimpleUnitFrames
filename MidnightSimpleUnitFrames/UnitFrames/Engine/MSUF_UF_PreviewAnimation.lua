@@ -18,7 +18,7 @@ local type, tonumber, tostring = type, tonumber, tostring
 
 local UPDATE_INTERVAL = 1 / 20
 local NO_TARGET_GRACE = 0.35
-local PREVIEW_UNITS = { "target", "focus", "targettarget", "focustarget", "pet" }
+local PREVIEW_UNITS = { "target", "focus", "targettarget", "focustarget", "pet", "pettarget" }
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
 local PREVIEW_NAME_LABELS = {
   player = "Player Name Position",
@@ -27,6 +27,7 @@ local PREVIEW_NAME_LABELS = {
   targettarget = "Target of Target Name Position",
   focustarget = "Focus Target Name Position",
   pet = "Pet Name Position",
+  pettarget = "Pet Target Name Position",
 }
 
 local CoreFrame = MSUF.UF.GetFrame

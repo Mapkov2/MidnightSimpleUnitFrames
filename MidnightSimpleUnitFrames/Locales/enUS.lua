@@ -2361,6 +2361,10 @@ L["Applies to the entire castbar: bar, icon, all text, effects, and border. All 
 L["Ask MSUF"] = "Ask MSUF"
 L["Bar Background"] = "Bar Background"
 L["Best matches"] = "Best matches"
+L["Search settings..."] = "Search settings..."
+L["Recent searches"] = "Recent searches"
+L["Search again"] = "Search again"
+L["Clear recent searches"] = "Clear recent searches"
 L["Combat Feedback"] = "Combat Feedback"
 L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."
 L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "
@@ -4134,6 +4138,9 @@ L["Uses Blizzard's native StatusBar interpolation when an active aura duration i
 L["Vertical offset"] = "Vertical offset"
 L["Warrior - Sweeping Strikes"] = "Warrior - Sweeping Strikes"
 
+L["Pet Target"] = "Pet Target"
+L["MSUF Pet Target"] = "MSUF Pet Target"
+L["Pet Target Name Position"] = "Pet Target Name Position"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

@@ -140,6 +140,11 @@ local function AnchorTopLeftVisual(frame, uiLeft, uiTop)
     return AnchorTopLeft(frame, (uiLeft or 0) / scale, (uiTop or 0) / scale)
 end
 
+local function CenterFrame(frame)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+end
+
 local function ApplyProxyPriority(proxy, owner)
     if not proxy then return end
     local strata = owner and owner.GetFrameStrata and owner:GetFrameStrata() or "DIALOG"
@@ -267,7 +272,9 @@ function EM2.AttachPopupScaleGrip(frame)
         if button == "RightButton" then
             local uiLeft, _, uiTop = FrameRectToUIParent(frame)
             EM2.SetPopupScale(DEFAULT_SCALE)
-            if uiLeft and uiTop then AnchorTopLeftVisual(frame, uiLeft, uiTop) else AnchorTopLeft(frame) end
+            if frame._msufEM2CenterOnShow then CenterFrame(frame)
+            elseif uiLeft and uiTop then AnchorTopLeftVisual(frame, uiLeft, uiTop)
+            else AnchorTopLeft(frame) end
             return
         end
         if button ~= "LeftButton" then return end
@@ -308,7 +315,8 @@ function EM2.AttachPopupScaleGrip(frame)
             --- Apply scale first so AnchorTopLeft/ClampIntoScreen see the new
             --- scale and frame size when pulling the popup back on-screen.
             EM2.SetPopupScale(frame._msufEM2PendingScale or state.startScale or ReadScale())
-            AnchorTopLeftVisual(frame, state.uiLeft, state.uiTop)
+            if frame._msufEM2CenterOnShow then CenterFrame(frame)
+            else AnchorTopLeftVisual(frame, state.uiLeft, state.uiTop) end
             if frame._msufEM2SavePosition then frame._msufEM2SavePosition() end
         end
         frame._msufEM2PendingScale = nil
@@ -323,6 +331,7 @@ function EM2.AttachPopupScaleGrip(frame)
     grip:SetScript("OnHide", function() finish(false) end)
 
     local function SavePosition()
+        if frame._msufEM2CenterOnShow then return end
         local left, top = frame:GetLeft(), frame:GetTop()
         if left and top then WritePopupPos(frame, left, top) end
     end
@@ -338,6 +347,10 @@ function EM2.AttachPopupScaleGrip(frame)
         --- while this one was hidden.
         local function Place()
             if not self:IsShown() then return end
+            if self._msufEM2CenterOnShow then
+                CenterFrame(self)
+                return
+            end
             local left, top = ReadPopupPos(self)
             AnchorTopLeft(self, left, top)
         end

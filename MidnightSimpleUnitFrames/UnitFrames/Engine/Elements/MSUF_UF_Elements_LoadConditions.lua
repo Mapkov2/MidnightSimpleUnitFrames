@@ -46,6 +46,7 @@ local PREVIEW_UNITS = {
   targettarget = true,
   focustarget = true,
   pet = true,
+  pettarget = true,
 }
 local BOSS_PREVIEW_UNITS = {
   boss1 = true,

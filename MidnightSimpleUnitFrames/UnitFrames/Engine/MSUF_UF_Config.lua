@@ -74,6 +74,7 @@ local DEFAULTS = {
   focus = { width = 180, height = 30, x = -260, y = -300, showName = true, showPower = false },
   targettarget = { width = 180, height = 30, x = 220, y = -300, showName = false, showPower = false },
   focustarget = { width = 180, height = 30, x = 260, y = 180, showName = true, showPower = false },
+  pettarget = { width = 180, height = 30, x = -275, y = -290, showName = true, showPower = false },
   pet = { width = 220, height = 30, x = -275, y = -250, showName = true, showPower = true },
   boss = { width = 180, height = 30, x = 500, y = 180, showName = true, showPower = false },
 }
@@ -101,6 +102,7 @@ local RANGE_KEYS = {
   targettarget = true,
   focus = true,
   focustarget = true,
+  pettarget = true,
   pet = true,
   boss = true,
 }
@@ -916,13 +918,13 @@ local function StatusAllowed(key, id)
   if id == "leader" or id == "assist" or id == "combat" or id == "incomingRes" then
     return key == "player" or key == "target"
   elseif id == "pvp" then
-    return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
+    return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "pettarget"
   elseif id == "resting" or id == "stance" then
     return key == "player"
   elseif id == "raidGroup" then
-    return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
+    return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "pettarget" or key == "focus"
   elseif id == "elite" then
-    return key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "boss"
+    return key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "pettarget" or key == "boss"
   end
   return true
 end
@@ -1581,6 +1583,25 @@ local function UnitHealthTextEnabled(conf)
   return enabled ~= false
 end
 
+local function AdaptScreenPosition(conf, anchorFrameName, anchorToUnitframe)
+  -- Factory and newly exported/imported profiles opt in explicitly. Existing
+  -- MSUF profiles and older exports keep their authored offsets instead of
+  -- being rewritten just because they were opened in the Suite.
+  if type(conf) ~= "table" or conf.screenPositionMode ~= "relativeHeight" or anchorToUnitframe then return end
+  if anchorFrameName and anchorFrameName ~= "" and anchorFrameName ~= "UIParent" then return end
+  local height = UIParent and UIParent.GetHeight and UIParent:GetHeight()
+  if type(height) ~= "number" or height < 400 or height > 10000 then return end
+  local previous = tonumber(conf.screenPositionHeight)
+  if previous and previous >= 400 and previous <= 10000 and math.abs(previous - height) > 0.01 then
+    local factor = height / previous
+    for _, field in ipairs({ "offsetX", "offsetY", "x", "y" }) do
+      if type(conf[field]) == "number" then conf[field] = conf[field] * factor end
+    end
+  end
+  conf.screenPositionHeight = height
+end
+Config.AdaptScreenPosition = AdaptScreenPosition
+
 local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   out.unit = unit
   out.key = key
@@ -1589,6 +1610,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   out.height = Number(conf.height or conf.frameHeight, def.height)
   local cooldownViewerAnchor
   out.anchorFrameName, out.anchorToUnitframe, cooldownViewerAnchor = ResolveAnchorSettings(conf, general)
+  AdaptScreenPosition(conf, out.anchorFrameName, out.anchorToUnitframe)
   -- 5.77 stored Utility/Buff viewer positions as CENTER-to-CENTER offsets.
   -- Only EssentialCooldownViewer owns the specialized edge-anchor rules.
   -- Keep this distinction in the cold config compile so legacy coordinates
@@ -2172,6 +2194,30 @@ function Config.Refresh()
   Config.dirty = nil
   return Config.specs
 end
+
+ExportPublic("MSUF_SetCurrentProfileScreenReferenceHeight", function(height)
+  height = tonumber(height)
+  if ConfigInCombat() or not height or height < 400 or height > 10000 then return false end
+  local db = EnsureDB()
+  for i = 1, #UF.unitOrder do
+    local conf = db[UF.ConfigKeyForUnit(UF.unitOrder[i])]
+    if type(conf) == "table" and (conf.offsetX ~= nil or conf.offsetY ~= nil or conf.x ~= nil or conf.y ~= nil) then
+      conf.screenPositionHeight = height
+      conf.screenPositionMode = "relativeHeight"
+    end
+  end
+  for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
+    local conf = db[key]
+    if type(conf) == "table" and (conf.offsetX ~= nil or conf.offsetY ~= nil) then
+      conf.screenPositionHeight = height
+      conf.screenPositionMode = "relativeHeight"
+    end
+  end
+  Config.Refresh()
+  if UF.spawned and UF.Factory and UF.Factory.ForceReanchor then UF.Factory.ForceReanchor() end
+  if MSUF.GF and MSUF.GF.RefreshHeaderLayout then MSUF.GF.RefreshHeaderLayout() end
+  return true
+end)
 
 local function MSUF_GetBossLayoutDelta(index, conf)
   local db = EnsureDB()

@@ -4049,6 +4049,10 @@ L["Applies to the entire castbar: bar, icon, all text, effects, and border. The 
 L["Ask MSUF"] = "Demander à MSUF"
 L["Bar Background"] = "Arrière-plan de barre"
 L["Best matches"] = "Meilleurs résultats"
+L["Search settings..."] = "Rechercher des réglages..."
+L["Recent searches"] = "Recherches récentes"
+L["Search again"] = "Relancer la recherche"
+L["Clear recent searches"] = "Effacer les recherches récentes"
 L["Combat Feedback"] = "Retour de combat"
 L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "Copie tout l’espace de travail des auras : visibilité, disposition, filtres Blizzard, listes noires des améliorations/affaiblissements, Personnalisé 1-3, DoTs sur la cible, strate et effets plein cadre."
 L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "Personnalisé 1-3 et les DoTs sur la cible sont enregistrés par cadre. Ici, le style des icônes et les effets plein cadre ne modifient que "
@@ -5972,6 +5976,9 @@ L["Below your level"] = "En dessous de votre niveau"
 L["Trivial"] = "Trivial"
 L["Level Text"] = "Texte de niveau"
 
+L["Pet Target"] = "Cible du familier"
+L["MSUF Pet Target"] = "MSUF Cible du familier"
+L["Pet Target Name Position"] = "Position du nom de la cible du familier"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

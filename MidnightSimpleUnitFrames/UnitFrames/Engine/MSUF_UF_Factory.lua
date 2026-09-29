@@ -506,6 +506,10 @@ local function ApplyPosition(frame, spec)
     relativePoint = point
   end
 
+  if anchor == UIParent and type(_G.MSUF_Snap) == "function" then
+    x, y = _G.MSUF_Snap(layout, x), _G.MSUF_Snap(layout, y)
+  end
+
   local externalAnchor = not IsMSUFOwnedAnchor(anchor)
   local externalProxy = externalAnchor and EnsureUnitExternalAnchorProxy(requestedAnchor, anchor) or nil
   if externalProxy then anchor = externalProxy end
@@ -1409,7 +1413,7 @@ function Factory.EnsureDeferredDriver()
   return true
 end
 
-local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss" }
 local LATE_GROUP_ANCHOR_KEYS = { "gf_party", "gf_raid", "gf_mythicraid", "gf_priority" }
 local COOLDOWN_WIDTH_MODES = {
   cooldown = "EssentialCooldownViewer",
@@ -2120,6 +2124,10 @@ do
   bossPixelEvents:SetScript("OnEvent", function()
     if type(_G.MSUF_UpdatePixelPerfect) == "function" then
       _G.MSUF_UpdatePixelPerfect()
+    end
+    Factory.ForceReanchor()
+    if MSUF.GF and type(MSUF.GF.RefreshHeaderLayout) == "function" then
+      MSUF.GF.RefreshHeaderLayout()
     end
     RefreshBossPhysicalGeometry()
     if type(UF.RefreshBorders) == "function" then

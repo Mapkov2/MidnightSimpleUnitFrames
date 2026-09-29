@@ -427,7 +427,7 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   if isPlayer then
     if classNames then
       local r, g, b, secretClass = DispatchClassColor(
-        frame, unit, unit == "target" or unit == "targettarget" or unit == "focustarget")
+        frame, unit, unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget")
       return r, g, b, fa, secretClass
     end
   else
@@ -507,7 +507,7 @@ local function InlineTextColor(frame, unit, inline)
   if isPlayer then
     if inline and inline.targetNameClassColor == true then
       local r, g, b, secretClass = DispatchClassColor(
-        frame, unit, unit == "target" or unit == "targettarget" or unit == "focustarget")
+        frame, unit, unit == "target" or unit == "targettarget" or unit == "focustarget" or unit == "pettarget")
       return r, g, b, fa, secretClass
     end
   else

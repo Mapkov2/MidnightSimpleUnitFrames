@@ -45,24 +45,6 @@ local function MSUF_ProfileIO_RunEnsureDB(force, allowPersistedFastPath, tempora
     return true
 end
 
--- Profile imports can enter through Menu2, legacy globals, or the external
--- Wago API. Complete first-load at the shared mutation boundary so every
--- successful path records the same durable lifecycle result.
-function MSUF.ProfileIOCompleteFirstLoadImport()
-    local firstLoad = MSUF and MSUF.FirstLoad6
-    if type(firstLoad) ~= "table" or type(firstLoad.CompleteProfileImport) ~= "function" then
-        return false
-    end
-    local completed = firstLoad.CompleteProfileImport(firstLoad, "import")
-
-    if completed == true then
-        local menu = MSUF and MSUF.MSUF2
-        if type(menu) == "table" and type(menu.InvalidatePage) == "function" then
-            menu.InvalidatePage("home")
-        end
-    end
-    return completed == true
-end
 local ApplyProfileRuntime = MSUF.ProfileRuntime.Apply
 --- Profile lifecycle API. These globals are used by Menu2, assistant actions,
 --- slash handlers, and legacy callers, so the public surface stays global even
@@ -186,6 +168,11 @@ function MSUF_InitProfiles()
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
     local active = char.activeProfile
+    -- Suite starts after MSUF has bound this character. Preserve whether this
+    -- login began without a choice so Suite can apply its installed profile.
+    if _G.MSUF_ProfileWasUnboundAtLogin == nil then
+        _G.MSUF_ProfileWasUnboundAtLogin = type(active) ~= "string" or active == ""
+    end
     if type(active) ~= "string" or active == "" then
         active = nil
     end
@@ -228,6 +215,12 @@ function MSUF_InitProfiles()
         MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_INIT_REBIND", active, MSUF_DB)
     end
  end
+local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
+    local suite = rawget(_G, "MSUFSuite")
+    if type(suite) == "table" and type(suite.OnMSUFProfileLifecycle) == "function" then
+        suite.OnMSUFProfileLifecycle(kind, source, target)
+    end
+end
 function MSUF_CreateProfile(name)
     if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
@@ -250,6 +243,7 @@ function MSUF_CreateProfile(name)
         })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[name])
+    MSUF_ProfileIO_NotifySuiteLifecycle("create", name)
     print("|cff00ff00MSUF:|r Created new profile '"..name.."'.")
     return true
  end
@@ -268,6 +262,10 @@ MSUF_ProfileIO_NotifyAssistantProfileEpochChanged = function(reason, name, db)
         or (type(_G.UnitAffectingCombat) == "function" and _G.UnitAffectingCombat("player") == true)
     then
         return false
+    end
+    local suite = rawget(_G, "MSUFSuite")
+    if type(suite) == "table" and type(suite.OnMSUFProfileChanged) == "function" then
+        suite.OnMSUFProfileChanged(name, reason)
     end
     local assistant = type(MSUF) == "table" and rawget(MSUF, "Assistant") or nil
     local callback = type(assistant) == "table" and rawget(assistant, "OnProfileEpochChanged") or nil
@@ -329,6 +327,7 @@ function MSUF_ResetProfile(name)
         ApplyProfileRuntime("PROFILE_RESET", false)
         MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_RESET", name, MSUF_DB)
     end
+    MSUF_ProfileIO_NotifySuiteLifecycle("reset", name)
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
     return true
  end
@@ -374,6 +373,7 @@ function MSUF_DeleteProfile(name)
     if MSUF_ActiveProfile == name then
         MSUF_SwitchProfile(fallbackName)
     end
+    MSUF_ProfileIO_NotifySuiteLifecycle("delete", name)
     print("|cffffd700MSUF:|r Profile '"..name.."' deleted.")
     return true
  end
@@ -404,6 +404,7 @@ function MSUF_CopyProfile(sourceName, destName)
         })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[destName])
+    MSUF_ProfileIO_NotifySuiteLifecycle("copy", sourceName, destName)
     print("|cff00ff00MSUF:|r Copied '"..sourceName.."' -> '"..destName.."'.")
     return true
 end
@@ -461,6 +462,7 @@ function MSUF_RenameProfile(sourceName, destName)
     if globalMeta.defaultProfileForNewChars == sourceName then
         globalMeta.defaultProfileForNewChars = destName
     end
+    MSUF_ProfileIO_NotifySuiteLifecycle("rename", sourceName, destName)
     if MSUF_ActiveProfile == sourceName then
         MSUF_SwitchProfile(destName)
     end
@@ -944,7 +946,7 @@ local MSUF_PROFILEIO_UNIT_TEXTURE_WARNING_KEYS = {
 }
 
 local MSUF_PROFILEIO_MEDIA_UNIT_SCOPE_KEYS = {
-    "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss",
+    "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss",
 }
 
 local MSUF_PROFILEIO_GROUP_TEXTURE_WARNING_KEYS = {
@@ -1054,7 +1056,7 @@ local function MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
     return profile
 end
 
-local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
+local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss" }
 local MSUF_PROFILEIO_DEPRECATED_UNIT_ALIASES = {
     { canonical = "targettarget", aliases = { "tot", "targetoftarget", "target_of_target" } },
     { canonical = "focustarget", aliases = { "focus_target", "focustargettarget" } },
@@ -1309,13 +1311,13 @@ local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget",
     "focus", "focustarget",
-    "pet", "boss", "boss1", "boss2", "boss3", "boss4", "boss5",
+    "pet", "pettarget", "boss", "boss1", "boss2", "boss3", "boss4",
     "gf_party", "gf_raid", "gf_mythicraid",
 }
 local MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS = {
     "player", "target", "targettarget", "tot", "targetoftarget",
     "focus", "focustarget", "focus_target", "focustargettarget",
-    "pet", "boss", "boss1", "boss2", "boss3", "boss4", "boss5",
+    "pet", "pettarget", "boss", "boss1", "boss2", "boss3", "boss4",
 }
 --- The field helpers, the text/status scope normalizers, the aura layout
 --- normalizer and the split-status migration are shared with
@@ -2185,7 +2187,7 @@ local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     alphaExcludeTextPortrait = false,
     alphaExcludePredictionBars = false,
 }
-local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
+local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss" }
 local function MSUF_IsUnitframeAlphaKey(key)
     return (type(key) == "string") and (MSUF_UNITFRAME_ALPHA_KEYS[key] == true)
 end
@@ -2415,6 +2417,7 @@ local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS = {
     npcColors = true,
     party = true,
     pet = true,
+    pettarget = true,
     player = true,
     shortenNames = true,
     target = true,
@@ -2710,6 +2713,27 @@ ExportPublic("MSUF_Profiles_SetImportBlizzardEditMode", function(value)
     MSUF_ProfileIO_ImportBlizzardEM = value == true
 end)
 
+-- Record the coordinate space on an export copy only. New imports can adapt
+-- once to their UIParent height, while old exports without this explicit mode
+-- keep their authored offsets instead of being silently rewritten.
+local function MSUF_ProfileIO_StampScreenReference(payload)
+    local height = UIParent and UIParent.GetHeight and UIParent:GetHeight()
+    if type(_G.issecretvalue) == "function" and _G.issecretvalue(height) == true then return end
+    if type(height) ~= "number" or height < 400 or height > 10000 then return end
+    local function Stamp(conf)
+        if type(conf) ~= "table" or (conf.offsetX == nil and conf.offsetY == nil
+            and conf.x == nil and conf.y == nil) then return end
+        if conf.screenPositionMode ~= nil and conf.screenPositionMode ~= "relativeHeight" then return end
+        conf.screenPositionHeight = height
+        conf.screenPositionMode = "relativeHeight"
+    end
+    for i = 1, #MSUF_PROFILEIO_UNIT_KEYS do
+        Stamp(payload[MSUF_PROFILEIO_UNIT_KEYS[i]])
+    end
+    for i = 1, 5 do Stamp(payload["boss" .. i]) end
+    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do Stamp(payload[key]) end
+end
+
 local function MSUF_SnapshotForKind(kind)
     MSUF_ProfileIO_EnsureCompleteProfileDB()
     local payload = {}
@@ -2755,6 +2779,9 @@ local function MSUF_SnapshotForKind(kind)
             if type(payload.general) ~= "table" then payload.general = {} end
             payload.general.blizzardEditModeSnapshot = MSUF_DeepCopy(blizzSnapshot)
         end
+    end
+    if kind == "unitframe" or kind == "groupframe" or kind == "groupframes" or kind == "all" then
+        MSUF_ProfileIO_StampScreenReference(payload)
     end
     return {
         addon   = "MSUF",
@@ -3148,7 +3175,6 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     end
     ApplyProfileRuntime("PROFILE_IMPORT", true)
     MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
-    MSUF.ProfileIOCompleteFirstLoadImport()
      return true
 end
 function MSUF_ExportSelectionToString(kind)
@@ -3205,7 +3231,6 @@ local function MSUF_ApplyFullProfileToActiveProfile(tbl)
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
     MSUF_ProfileIO_RunEnsureDB(true)
-    MSUF.ProfileIOCompleteFirstLoadImport()
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
@@ -3369,7 +3394,6 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         end
         MSUF_GlobalDB.profiles[profileKey] = target
         MSUF_ProfileIO_RunEnsureDB(true)
-        MSUF.ProfileIOCompleteFirstLoadImport()
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
@@ -3387,7 +3411,6 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         end
         MSUF_GlobalDB.profiles[profileKey] = existing
         MSUF_ProfileIO_ReportImportWarnings()
-        MSUF.ProfileIOCompleteFirstLoadImport()
         return true
     end
     local stored = {}
@@ -3396,7 +3419,6 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
     end
     MSUF_GlobalDB.profiles[profileKey] = stored
     MSUF_ProfileIO_ReportImportWarnings()
-    MSUF.ProfileIOCompleteFirstLoadImport()
     return true
 end
 function MSUF_ExportExternal(profileKey)
@@ -3425,6 +3447,9 @@ function MSUF_ExportExternal(profileKey)
         profile = profileKey,
         payload = MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload),
     }
+    if profileKey == MSUF_ActiveProfile then
+        MSUF_ProfileIO_StampScreenReference(snap.payload)
+    end
     local exportSnap = MSUF_ProfileIO_MakeWagoSnapshot(snap)
     return true, _G.MSUF_EncodeCompactTableMSUF3(exportSnap)
 end

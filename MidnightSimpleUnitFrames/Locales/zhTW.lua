@@ -3672,6 +3672,10 @@ L["Applies to the entire castbar: bar, icon, all text, effects, and border. The 
 L["Ask MSUF"] = "詢問 MSUF"
 L["Bar Background"] = "條背景"
 L["Best matches"] = "最佳相符項目"
+L["Search settings..."] = "搜尋設定..."
+L["Recent searches"] = "最近搜尋"
+L["Search again"] = "再次搜尋"
+L["Clear recent searches"] = "清除最近搜尋"
 L["Combat Feedback"] = "戰鬥回饋"
 L["Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, Dots on target, Strata, and Full-Frame effects."] = "複製完整的光環工作區：可見性、版面、暴雪過濾器、增益/減益黑名單、自訂 1-3、目標 DoT、層級和全框架效果。"
 L["Custom 1-3 and Dots on target are stored per frame. Icon styling and Full-Frame effects here only change "] = "自訂 1-3 和目標 DoT 依框架儲存。這裡的圖示樣式和全框架效果只會變更 "
@@ -5884,6 +5888,9 @@ L["Below your level"] = "低於你的等級"
 L["Trivial"] = "無威脅"
 L["Level Text"] = "等級文字"
 
+L["Pet Target"] = "寵物目標"
+L["MSUF Pet Target"] = "MSUF 寵物目標"
+L["Pet Target Name Position"] = "寵物目標名稱位置"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

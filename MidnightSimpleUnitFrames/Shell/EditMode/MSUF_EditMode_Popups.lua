@@ -67,7 +67,7 @@ function Popups.Open(key, anchorFrame)
     local pType = cfg and cfg.popupType
 
     if not pType then
-        if key == "player" or key == "target" or key == "focus" or key == "focustarget" or key == "targettarget" or key == "pet" or key:match("^boss%d") then
+        if key == "player" or key == "target" or key == "focus" or key == "focustarget" or key == "targettarget" or key == "pet" or key == "pettarget" or key:match("^boss%d") then
             pType = "unit"
         elseif key:sub(1, 8) == "castbar_" then
             pType = "castbar"
@@ -163,6 +163,7 @@ local UNIT_COPY_TARGETS = {
     { key="focustarget", label="Focus Target" },
     { key="targettarget", label="ToT" },
     { key="pet", label="Pet" },
+    { key="pettarget", label="Pet Target" },
     { key="boss", label="Boss" },
 }
 local San = Quick.San

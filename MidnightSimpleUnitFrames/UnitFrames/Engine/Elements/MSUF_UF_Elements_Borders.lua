@@ -342,7 +342,7 @@ IsBossUnit = UF.IsBossUnit
 
 function IsAggroBorderUnit(frame)
   local unit = frame and frame.MSUFUnitKey
-  if unit == "player" or unit == "target" or unit == "focus" then return true end
+  if unit == "player" or unit == "target" or unit == "focus" or unit == "pet" or unit == "pettarget" then return true end
   return IsBossUnit(unit)
     or (frame and (frame._msufBorderRuntimeGroup == true
       or frame._msufIsGroupFrame == true
@@ -351,7 +351,7 @@ end
 
 local function IsPurgeBorderUnit(frame)
   local unit = frame and frame.MSUFUnitKey
-  return unit == "target" or unit == "focus" or unit == "targettarget"
+  return unit == "target" or unit == "focus" or unit == "targettarget" or unit == "pettarget"
 end
 
 local function TestScopeApplies(frame, scope)
@@ -671,6 +671,10 @@ local function ThreatState(frame)
     if IsNil(status) then
       status = UnitThreatSituation("player")
     end
+  elseif unit == "pet" then
+    -- The pet is the threat actor; querying player against a friendly pet
+    -- cannot report the pet's own aggro.
+    status = UnitThreatSituation("pet")
   else
     status = UnitThreatSituation("player", unit)
   end

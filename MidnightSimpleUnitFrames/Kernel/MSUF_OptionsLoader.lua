@@ -131,8 +131,6 @@ local FORWARDED_GLOBALS = {
     "MSUF_OpenExactSettingControl",
     "MSUF_OpenExactColorSettingPicker",
     "MSUF_OpenExactCatalogControl",
-    "MSUF_StartGuidedTour",
-    "MSUF_ResumeGuidedTour",
 }
 
 if not IsReady() then

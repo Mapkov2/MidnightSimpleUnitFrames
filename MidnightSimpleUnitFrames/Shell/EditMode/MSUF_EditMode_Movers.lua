@@ -49,85 +49,6 @@ local pendingDragMover
 local pendingDragStartX
 local pendingDragStartY
 
-local guidedCueMover
-
-local function GuidedPlacementPending()
-    local tour = MSUF and MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
-    if not (tour and type(tour.GetState) == "function") then return false end
-    local state = tour:GetState()
-    local preferences = state and state.preferences
-    if not (state and state.status == "active" and preferences) then return false end
-    if state.currentStageId == "group_edit_mode" then
-        return preferences.groupEditModeMoved ~= true or preferences.groupEditModePopupOpened ~= true, "gf_party"
-    end
-    local anchor = preferences.unitframeCooldownAnchor
-    return state.currentStageId == "edit_mode"
-        and (anchor == "cooldown" or anchor == "independent")
-        and (preferences.editModeMoved ~= true or preferences.editModePopupOpened ~= true), "player"
-end
-
-local function HideGuidedPlacementCue()
-    local cue = guidedCueMover and guidedCueMover._msufGuidedPlacementCue
-    if cue then cue:Hide() end
-    guidedCueMover = nil
-end
-
-local function EnsureGuidedPlacementCue(mover)
-    local cue = mover and mover._msufGuidedPlacementCue
-    if cue then return cue end
-    cue = CreateFrame("Frame", nil, mover)
-    cue:SetAllPoints(mover)
-    cue:EnableMouse(false)
-    cue:SetFrameLevel((mover:GetFrameLevel() or 1) + 20)
-
-    local function CreateArrow(point, relativePoint, x)
-        local arrow = cue:CreateTexture(nil, "OVERLAY", nil, 7)
-        local usedAtlas = false
-        if arrow.SetAtlas then arrow:SetAtlas("NPE_ArrowRight", false); usedAtlas = true end
-        if not usedAtlas then arrow:SetTexture("Interface\\ChatFrame\\ChatFrameExpandArrow") end
-        arrow:SetSize(28, 28)
-        arrow:SetPoint(point, mover, relativePoint, x, 0)
-        local th = T()
-        arrow:SetVertexColor(th.titleR, th.titleG, th.titleB, 1)
-        return arrow
-    end
-
-    cue._leftArrow = CreateArrow("RIGHT", "LEFT", -10)
-    cue._rightArrow = CreateArrow("LEFT", "RIGHT", 10)
-    if cue._rightArrow.SetRotation then cue._rightArrow:SetRotation(math.pi) end
-    cue._label = cue:CreateFontString(nil, "OVERLAY")
-    cue._label:SetFont(FONT, FontSize("caption"), "OUTLINE")
-    cue._label:SetPoint("BOTTOM", mover, "TOP", 0, 18)
-    cue._label:SetText(Tr("Drag this frame once"))
-    local th = T()
-    cue._label:SetTextColor(th.titleR, th.titleG, th.titleB, 1)
-    mover._msufGuidedPlacementCue = cue
-    return cue
-end
-
-function Movers.RefreshGuidedPlacementCue()
-    HideGuidedPlacementCue()
-    local pending, preferredKey = GuidedPlacementPending()
-    if not (moverParent and moverParent:IsShown() and pending) then return end
-    local target = movers[preferredKey] or movers.player
-    if not (target and target:IsShown()) then
-        for _, mover in pairs(movers) do
-            if mover:IsShown() then target = mover break end
-        end
-    end
-    if not target then return end
-    guidedCueMover = target
-    local cue = EnsureGuidedPlacementCue(target)
-    local tour = MSUF and MSUF.GuidedTour6 or _G.MSUF_GuidedTour6
-    local state = tour and type(tour.GetState) == "function" and tour:GetState() or nil
-    local preferences = state and state.preferences or {}
-    local moved = preferredKey == "gf_party"
-        and preferences.groupEditModeMoved == true
-        or preferredKey ~= "gf_party" and preferences.editModeMoved == true
-    cue._label:SetText(Tr(moved and "Click this frame for its size popup" or "Drag this frame once"))
-    cue:Show()
-end
-
 local function RefreshUFPreview(reason)
     if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
     if U.RefreshUFPreview then U.RefreshUFPreview(reason or "EM2_MOVERS") end
@@ -276,6 +197,7 @@ local UNIT_NAME_POSITION_LABELS = {
     targettarget = "Target of Target Name Position",
     focustarget = "Focus Target Name Position",
     pet = "Pet Name Position",
+    pettarget = "Pet Target Name Position",
 }
 
 local function MoverLabelText(key, cfg)
@@ -455,7 +377,6 @@ local function CreateMover(key, cfg)
         if EM2.Focus and EM2.Focus.SetHover and self:IsMouseOver() then
             EM2.Focus.SetHover(key, nil, nil, { source = "mover", force = true })
         end
-        Movers.RefreshGuidedPlacementCue()
         return moved
     end
 
@@ -510,11 +431,9 @@ function Movers.Show()
         local f = c.getFrame and c.getFrame()
         if f then SyncMoverToFrame(m, f, c); m:Show(); m:UpdateLabelVisibility() else m:Hide() end
     end
-    Movers.RefreshGuidedPlacementCue()
 end
 
 function Movers.Hide()
-    HideGuidedPlacementCue()
     if moverParent then moverParent:Hide() end
     for _, m in pairs(movers) do m:Hide() end
 end
@@ -558,7 +477,6 @@ function Movers.SyncAll()
             end
         end
     end
-    Movers.RefreshGuidedPlacementCue()
 end
 
 --- MSUF_EM2_Elements.lua
@@ -713,6 +631,7 @@ local function RegisterAll()
         { key = "targettarget", label = "Target of Target", order = 40 },
         { key = "focustarget",  label = "Focus Target",     order = 45 },
         { key = "pet",          label = "Pet",              order = 50 },
+        { key = "pettarget",    label = "Pet Target",       order = 55 },
     }
 
     for _, u in ipairs(units) do
@@ -974,7 +893,7 @@ ExportPublic("MSUF_SetMSUFEditModeFromBlizzard", MSUF_SetMSUFEditModeFromBlizzar
 ExportPublic("MSUF_UnitPreviewActive", false)
 ExportPublic("MSUF_PreviewTestMode", false)
 
-local PREVIEW_UNITS = { "target", "focus", "focustarget", "targettarget", "pet" }
+local PREVIEW_UNITS = { "target", "focus", "focustarget", "targettarget", "pet", "pettarget" }
 local CASTBAR_TEST_FUNCS = {
     "MSUF_SetPlayerCastbarTestMode",
     "MSUF_SetTargetCastbarTestMode",
