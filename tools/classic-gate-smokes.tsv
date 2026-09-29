@@ -20,6 +20,7 @@ tokenclients	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	TagOnly{f
 -	lua	tools/tests/forever_combo_frame_hider_smoke.lua	{root}	WoW Forever ComboFrame hider smoke failed
 -	lua	tools/tests/aura_header_container_round_layout_smoke.lua	{root}	Aura header container round-layout smoke failed
 -	lua	tools/tests/mainline_classpower_forever_routing_smoke.lua	{root}	Mainline ClassPower Forever routing smoke failed
+-	lua	.github/quality/forever_swing_timer_settings_smoke.lua	{root}	Forever native Swing Timer settings smoke failed
 -	lua	tools/tests/forever_shell_project_gates_smoke.lua	{root/}	Forever shell project gates smoke failed
 -	lua	tools/tests/forever_castbar_client_data_smoke.lua	{root}	Forever castbar client data smoke failed
 -	lua	tools/tests/forever_aura_data_smoke.lua	{root/}	WoW Forever aura data smoke failed
@@ -27,6 +28,7 @@ tokenclients	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	TagOnly{f
 -	lua	tools/tests/forever_group_header_snippet_smoke.lua	{root}	Forever group header secure snippet smoke failed
 -	lua	tools/tests/forever_raid_manager_gamepad_smoke.lua	{root}	Forever Raid Manager gamepad smoke failed
 -	python	.github/scripts/menu2_search_index_hash_smoke.py		Menu2 search index source-hash contract failed
+-	lua	tools/tests/changelog_dual_source_smoke.lua	{root}	MSUF and Suite changelog source switch failed
 -	python	tools/tests/unresolved_global_reads_smoke.py		Unresolved global read contract failed
 -	lua	tools/tests/nil_global_fix_contracts_smoke.lua	{root}	Nil-global fix contracts smoke failed
 -	python	tools/tests/classic_assistant_control_schema_smoke.py	{root}	Classic Assistant control schema contract failed
@@ -98,6 +100,7 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	.github/scripts/castbar_tint_parity_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/castbar_tint_parity_smoke.lua
 -	lua+driver	tools/aura_big_defensive_filter_smoke.lua		v6.04 parity smoke failed: tools/aura_big_defensive_filter_smoke.lua
 -	lua+driver	tools/aura_group_slot_layer_smoke.lua		v6.04 parity smoke failed: tools/aura_group_slot_layer_smoke.lua
+-	lua+driver	tools/tests/classic_suite_owned_layer_smoke.lua		Suite-owned layer contract failed: classic_suite_owned_layer_smoke.lua
 -	lua+driver	tools/group_preview_roster_handoff_smoke.lua		v6.04 parity smoke failed: tools/group_preview_roster_handoff_smoke.lua
 -	lua+driver	tools/unit_name_anchor_reflow_smoke.lua		v6.04 parity smoke failed: tools/unit_name_anchor_reflow_smoke.lua
 -	lua+driver	tools/tests/classic_unit_availability_smoke.lua		Classic unit/portrait regression failed: classic_unit_availability_smoke.lua
@@ -143,3 +146,10 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
 -	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed
 -	lua	tools/tests/suite_cooldown_anchor_smoke.lua	{root/}	MSUF Suite cooldown anchor smoke failed
+-	lua	tools/tests/menu2_nav_rail_groups_smoke.lua	{root}	Menu2 navigation rail groups smoke failed
+-	lua	.github/scripts/menu2_accordion_contrast_smoke.lua	{root}	Menu2 accordion contrast smoke failed
+-	lua	.github/scripts/menu2_skinned_selection_smoke.lua	{root}	Menu2 skinned selection smoke failed
+-	lua	tools/tests/suite_first_run_handoff_smoke.lua	{root}	Suite first-run hand-off and Dashboard card smoke failed
+-	lua	tools/tests/menu2_wayfinding_paths_smoke.lua	{root}	Menu2 wayfinding paths smoke failed
+-	lua	tools/tests/search_provider_hook_smoke.lua	{root}	Search provider hook smoke failed
+clients	lua	tools/tests/menu2_explains_itself_smoke.lua	{root} {flavor}	Menu2 explains-itself smoke failed: {flavor}

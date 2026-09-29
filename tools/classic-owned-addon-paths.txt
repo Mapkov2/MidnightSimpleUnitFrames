@@ -31,6 +31,7 @@ MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_zhCN
 MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_zhTW.lua
 MidnightSimpleUnitFrames/Game/Forever/Auras/MSUF_Auras3_ForeverData.lua
 MidnightSimpleUnitFrames/Game/Forever/ClassPower.lua
+MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua
 MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua
 MidnightSimpleUnitFrames/Game/Mists/Auras.xml
 MidnightSimpleUnitFrames/Game/Mists/Auras/MSUF_Auras3_DefensiveData.lua

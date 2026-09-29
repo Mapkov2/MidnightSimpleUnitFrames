@@ -43,6 +43,7 @@ local mouseFoci = {}
 -- behind MSUF.Client.Family, read once when the file loads.
 _G.MSUF_NS = {
     Client = { Family = "Classic", IsClassic = true },
+    UF = { IsUnitToken = function(unit) return type(unit) == "string" end },
     GF = {
         GetConf = function(kind) return configs[kind] end,
         GetLiveRaidKind = function() return "raid" end,
@@ -193,20 +194,25 @@ local headerConf = {
 }
 local groups = { 2, 1, 2, 1 }
 local roles = { "HEALER", "DAMAGER", "TANK", "HEALER" }
+local raidNames = { "Member1", "Member2", "Member3", "Member4" }
+local playerRaidIndex
 
 _G.UIParent = headerUIParent
 _G.PetBattleFrameHider = nil
 _G.CreateFrame = function(_, _, parent) return NewHeaderFrame(parent) end
 _G.GetNumGroupMembers = function() return #groups end
 _G.GetNumSubgroupMembers = function() return 0 end
-_G.GetRaidRosterInfo = function(index) return "Member" .. index, nil, groups[index] end
+_G.GetRaidRosterInfo = function(index) return raidNames[index], nil, groups[index] end
 _G.IsInGroup = function() return true end
 _G.IsInRaid = function() return true end
 _G.UnitName = function(unit)
     local index = tonumber(tostring(unit):match("raid(%d+)$"))
-    return index and ("Member" .. index) or "Player"
+    return index and raidNames[index] or "Player"
 end
-_G.UnitGUID = function(unit) return tostring(unit) .. "-guid" end
+_G.UnitGUID = function(unit)
+    if unit == "player" or unit == "raid" .. tostring(playerRaidIndex) then return "player-guid" end
+    return tostring(unit) .. "-guid"
+end
 _G.UnitClass = function() return "Priest", "PRIEST" end
 _G.UnitGroupRolesAssigned = function(unit)
     local index = tonumber(tostring(unit):match("raid(%d+)$"))
@@ -251,6 +257,60 @@ headerConf.preserveRaidGroups = false
 header = assert(GF.SetupHeader("raid", "raid"), "restored Classic raid header did not rebuild")
 assert(header:GetAttribute("_msufSortMode") == "ROLE" and headerConf.sortMode == "ROLE",
     "disabling Preserve raid groups did not restore the saved sort mode")
+
+-- The new option changes only the tie-break within a role. Verify the flat
+-- raid, preserved subgroups, raid-wide preserved blocks, descending direction,
+-- and the existing player-first precedence without involving a protected frame.
+raidNames = { "Zara", "Maya", "Alpha", "Beta" }
+roles = { "HEALER", "HEALER", "TANK", "HEALER" }
+headerConf.sortRolesAcrossRaid = false
+headerConf.sortAlphabeticalWithinRole = false
+header = assert(GF.SetupHeader("raid", "raid"))
+assert(header:GetAttribute("nameList") == "Alpha,Zara,Maya,Beta",
+    "disabled alphabetical option changed the default role order")
+
+headerConf.sortAlphabeticalWithinRole = true
+header = assert(GF.SetupHeader("raid", "raid"))
+assert(header:GetAttribute("nameList") == "Alpha,Beta,Maya,Zara",
+    "flat raid did not alphabetize names within each role")
+
+headerConf.sortDescending = true
+header = assert(GF.SetupHeader("raid", "raid"))
+assert(header:GetAttribute("nameList") == "Zara,Maya,Beta,Alpha",
+    "descending raid role order did not reverse the alphabetized nameList")
+headerConf.sortDescending = false
+
+headerConf.preserveRaidGroups = true
+header = assert(GF.SetupHeader("raid", "raid"))
+secondGroup = assert(GF.raidGroupHeaders and GF.raidGroupHeaders[2])
+assert(header:GetAttribute("nameList") == "Beta,Maya"
+    and secondGroup:GetAttribute("nameList") == "Alpha,Zara",
+    "preserved raid groups did not alphabetize independently within each role")
+
+headerConf.sortRolesAcrossRaid = true
+header = assert(GF.SetupHeader("raid", "raid"))
+assert(header:GetAttribute("_msufSortMode") == "ROLE"
+    and header:GetAttribute("nameList") == "Alpha,Beta,Maya,Zara",
+    "raid-wide role order did not alphabetize before filling preserved blocks")
+
+headerConf.preserveRaidGroups = false
+headerConf.playerFirstInRole = true
+playerRaidIndex = 1
+header = assert(GF.SetupHeader("raid", "raid"))
+assert(header:GetAttribute("nameList") == "Alpha,Zara,Beta,Maya",
+    "player-first precedence was lost within the alphabetized healer role")
+
+playerRaidIndex = nil
+header = assert(GF.SetupHeader("raid", "mythicraid"))
+assert(header:GetAttribute("nameList") == "Alpha,Beta,Maya,Zara",
+    "Mythic Raid did not use the same alphabetical role order")
+
+raidNames[2] = nil
+header = assert(GF.SetupHeader("raid", "raid"))
+assert(header:GetAttribute("nameList") == nil
+    and header:GetAttribute("groupBy") == "ASSIGNEDROLE",
+    "incomplete roster published a filtering nameList instead of native role sorting")
+raidNames[2] = "Maya"
 
 -- The shared Engine file also loads on Mainline, where the secure child must
 -- still carry the native 12.x aura container template.

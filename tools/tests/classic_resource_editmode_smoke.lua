@@ -46,6 +46,17 @@ MSUF_EM2 = {
     Util = {
         Round = function(value) return math.floor(value + 0.5) end,
         IsConfigCombatLocked = function() return false end,
+        BlockConfigCombatLocked = function() return InCombatLockdown() end,
+        RefreshUFPreview = function() end,
+        ApplySettingsForKeySafe = function(unit)
+            if unit == "player" then
+                energy.width = MSUF_DB.player.detachedPowerBarWidth or energy.width
+                energy.height = MSUF_DB.player.detachedPowerBarHeight or energy.height
+                energy:SetPoint("TOP", MSUF_DB.player.detachedPowerBarAnchorToClassPower and combo or player,
+                    "BOTTOM", MSUF_DB.player.detachedPowerBarOffsetX, MSUF_DB.player.detachedPowerBarOffsetY)
+            end
+            return true
+        end,
         FrameRectToUI = function(frame)
             if not frame then return nil end
             return frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
@@ -62,6 +73,8 @@ assert(classCfg.getFrame() == combo and powerCfg.getFrame() == energy,
     "visible Class Resources and detached Player Power must have separate movers")
 assert(classCfg.historyCategory == "classpower" and powerCfg.historyCategory == "power",
     "resource movers must preserve separate undo state")
+assert(classCfg.canNudge == true and powerCfg.canNudge == true,
+    "resource movers must accept Edit Mode arrow-key movement")
 MSUF_DB.player.powerBarDetached = false
 assert(powerCfg.getFrame() == nil, "embedded Player Power must not expose a detached mover")
 MSUF_DB.player.powerBarDetached = true
@@ -154,13 +167,6 @@ local function Box()
     function box:SetText(value) self.text = tostring(value) end
     return box
 end
-MSUF_EM2.Util.ApplySettingsForKeySafe = function(unit)
-    if unit == "player" then
-        energy.width = MSUF_DB.player.detachedPowerBarWidth or energy.width
-        energy.height = MSUF_DB.player.detachedPowerBarHeight or energy.height
-    end
-    return true
-end
 MSUF_EM2.Util.SyncMovers = function() end
 MSUF_EM2.Util.RefreshUFPreview = function() end
 MSUF_ApplyPowerBarEmbedLayout_ForUnitKey = function() return true end
@@ -168,6 +174,7 @@ MSUF_ClassPower_RefreshLayout = function()
     local bars = MSUF_DB.bars
     combo.width = bars.classPowerWidth or combo.width
     combo.height = bars.classPowerHeight or combo.height
+    combo:SetPoint("TOPLEFT", player, "TOPLEFT", bars.classPowerOffsetX, bars.classPowerOffsetY)
     return true
 end
 MSUF_EM2.PopupFactory = { BlockConfigCombatLocked = function() return false end, Tr = function(value) return value end }
@@ -204,6 +211,10 @@ assert(MSUF_DB.bars.classPowerWidth == 300 and MSUF_DB.bars.classPowerWidthMode 
 popup.hBox:SetText("12")
 popup.callbacks.hBox()
 assert(MSUF_DB.bars.classPowerHeight == 12, "Class Resource height edit was not saved")
+popup.yBox:SetText("-35")
+popup.callbacks.yBox()
+assert(MSUF_DB.bars.classPowerOffsetY == -35 and MSUF_DB.bars.classPowerCooldownTopAnchor == true
+    and combo.point[5] == -35, "negative Class Resource Y was not applied")
 MSUF_DB.bars.detachedPowerBarWidthMode = "cooldown"
 assert(popups.Open("power_player") == true, "detached Power quick popup did not open")
 popup.wBox:SetText("220")
@@ -215,9 +226,50 @@ assert(MSUF_DB.player.detachedPowerBarWidth == 220
 popup.hBox:SetText("10")
 popup.callbacks.hBox()
 assert(MSUF_DB.player.detachedPowerBarHeight == 10, "detached Power height edit was not saved")
+popup.yBox:SetText("-20")
+popup.callbacks.yBox()
+assert(MSUF_DB.player.detachedPowerBarOffsetY == -20 and energy.point[5] == -20,
+    "negative detached Power Y was not applied")
 popup.anchorBtn._checked = false
 popup.anchorBtn.callback(false)
 assert(MSUF_DB.player.detachedPowerBarAnchorToClassPower == false,
     "separate Power placement was not saved")
 
-print("classic_resource_editmode_smoke: OK (bound and independent drags, width, height, anchor)")
+local selectedKey
+local historyCommits = 0
+MSUF_EM2.State = {
+    IsActive = function() return true end,
+    GetUnitKey = function() return selectedKey end,
+    SetUnitKey = function(key) selectedKey = key end,
+}
+MSUF_EM2.Undo = {
+    PrepareChange = function(category, key) return { category = category, key = key } end,
+    CommitPrepared = function() historyCommits = historyCommits + 1; return true end,
+}
+MSUF_EM2.Focus = { NotifyPositionChanged = function() end }
+assert(MSUF_EM2.Nudge.Move(0, -1, "classpower") == true
+    and MSUF_DB.bars.classPowerOffsetY == -36 and combo.point[5] == -36,
+    "Class Resource arrow nudge did not move its own Y offset")
+assert(MSUF_DB.player.detachedPowerBarOffsetY == -20,
+    "Class Resource arrow nudge changed detached Power")
+assert(MSUF_EM2.Nudge.Move(0, 1, "power_player") == true
+    and MSUF_DB.player.detachedPowerBarOffsetY == -19 and energy.point[5] == -19,
+    "detached Power arrow nudge did not move its own Y offset")
+assert(MSUF_EM2.Nudge.Move(1, 0, "power_player") == true
+    and MSUF_DB.player.detachedPowerBarOffsetX == 8 and energy.point[4] == 8,
+    "detached Power arrow nudge did not move its own X offset")
+assert(MSUF_DB.bars.classPowerOffsetX == 23 and historyCommits == 3,
+    "resource arrow nudges changed Class Resource X or missed undo history")
+InCombatLockdown = function() return true end
+assert(MSUF_EM2.Nudge.Move(0, 1, "classpower") == false
+    and MSUF_DB.bars.classPowerOffsetY == -36 and historyCommits == 3,
+    "resource arrow nudge changed position or undo history in combat")
+InCombatLockdown = function() return false end
+local refreshClass = MSUF_ClassPower_RefreshLayout
+MSUF_ClassPower_RefreshLayout = function() return false end
+assert(MSUF_EM2.Nudge.Move(0, 1, "classpower") == false
+    and MSUF_DB.bars.classPowerOffsetY == -36 and historyCommits == 3,
+    "failed resource layout apply was saved or added to undo history")
+MSUF_ClassPower_RefreshLayout = refreshClass
+
+print("classic_resource_editmode_smoke: OK (drags, negative Y, arrow nudges, popup, anchor)")

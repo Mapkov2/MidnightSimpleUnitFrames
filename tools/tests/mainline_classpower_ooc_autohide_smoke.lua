@@ -89,10 +89,35 @@ local function Start(spec)
     local ns = {}
     local player = env:CreateFrame("Frame", "MSUF_player", UIParent)
     player.shown = true
-    ns.UF = { GetFrame = function(unit) if unit == "player" then return player end end }
+    player.MSUFUnitKey = "player"
+    ns.UF = {
+        GetFrame = function(unit) if unit == "player" then return player end end,
+        RegisterElement = function(name, element)
+            if name == "Power" then t.powerElement = element end
+        end,
+    }
+    ns.UFBarTextCommon = { UF = ns.UF }
+    ns.UFText = { UF = ns.UF, tonumber = tonumber, floor = math.floor, max = math.max, CreateFrame = CreateFrame }
     ns.ExportPublic = function(name, value) _G[name] = value return value end
     _G.MSUF_NS = ns
     t.ns = ns
+    t.player = player
+
+    -- The actual Power element owns all surfaces. The text layout module owns
+    -- the independent hover overlay, which must not reveal hidden power text.
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua"))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua"))("MidnightSimpleUnitFrames", ns)
+    local bar = env:CreateFrame("StatusBar", nil, player)
+    bar.MSUFPowerBorderHost = env:CreateFrame("Frame", nil, player)
+    local background = player:CreateTexture()
+    local trail = env:CreateFrame("StatusBar", nil, player)
+    local secondTrail = env:CreateFrame("StatusBar", nil, player)
+    trail._msufLossTrailPool = { trail, secondTrail }
+    player.targetPowerBar = bar
+    player.powerBarBG = background
+    player.powerLossTrail = trail
+    player.MSUFPowerTextLayer = env:CreateFrame("Frame", nil, player)
+    t.bar, t.background, t.trail = bar, background, trail
 
     function UnitClass() return "Rogue", "ROGUE" end
     function UnitPowerType() return PT_ENERGY end
@@ -136,6 +161,7 @@ local function Start(spec)
             showAltMana = false,
             playerHPBarEnabled = false,
             classPowerHideOOC = spec.hideOOC == true,
+            classPowerSyncPlayerPowerOOC = spec.syncPower == true,
             classPowerHideWhenEmpty = spec.hideWhenEmpty == true,
         },
     }
@@ -172,6 +198,149 @@ end
 
 local CASES = {}
 local function Case(name, run) CASES[#CASES + 1] = { name = name, run = run } end
+
+local function PowerHidden(t)
+    return t.player._msufClassPowerOocHidden == true
+        and t.bar.alpha == 0
+        and t.background.alpha == 0
+        and t.bar.MSUFPowerBorderHost.alpha == 0
+        and t.trail:GetStatusBarTexture().alpha == 0
+        and t.player.MSUFPowerTextLayer.alpha == 0
+end
+
+Case("opt-in hides all Player Power surfaces out of combat", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    assert(PowerHidden(t), "Player Power surfaces were not hidden with Class Resource")
+    assert(t.trail._msufLossTrailPool[2]:GetStatusBarTexture().alpha == 0,
+        "second loss snapshot was not hidden")
+    return t
+end)
+
+Case("detached Power reapplies while hidden without changing geometry", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    assert(PowerHidden(t), "precondition: Player Power was not hidden")
+    local spec = {
+        key = "player", scope = "unit", texture = "Interface\\Buttons\\WHITE8X8",
+        power = {
+            enabled = true, detached = true, detachedWidth = 90, detachedHeight = 8,
+            detachedX = 7, detachedY = -3, r = 0.2, g = 0.4, b = 0.8, alpha = 1,
+            background = { r = 0, g = 0, b = 0, a = 0.5 },
+        },
+    }
+    t.player.MSUFSpec = spec
+    local overlay = t.player.MSUFPowerTextLayer
+    t.player._msufHoverPower = overlay
+    overlay._msufHoverAlpha = 1
+    overlay.alpha = 1
+    t.powerElement.Apply(t.player, spec)
+    assert(t.bar._msufDetached == true and t.bar.width == 90 and t.bar.height == 8,
+        "detached Power geometry was not applied")
+    assert(PowerHidden(t), "Power.Apply repaint exposed a hidden detached bar or text")
+    local point, relativeTo, relativePoint, x, y = t.bar:GetPoint(1)
+    t.powerElement.Apply(t.player, spec)
+    local p2, r2, rp2, x2, y2 = t.bar:GetPoint(1)
+    assert(p2 == point and r2 == relativeTo and rp2 == relativePoint and x2 == x and y2 == y,
+        "reapply changed detached Power anchor")
+    t.player.mouseOver = true
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    assert(t.bar.alpha == 1 and overlay.alpha == 1,
+        "combat did not reveal detached Player Power and hovered text")
+    return t
+end)
+
+Case("combat entry restores all Player Power surfaces before lockdown", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    assert(PowerHidden(t), "precondition: Player Power was not hidden")
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    assert(t.bar.alpha == 1 and t.background.alpha == 1
+        and t.bar.MSUFPowerBorderHost.alpha == 1
+        and t.trail:GetStatusBarTexture().alpha == 1
+        and t.player.MSUFPowerTextLayer.alpha == 1,
+        "Player Power surfaces did not return on combat entry")
+    t.S.affecting = false
+    Fire(t, "PLAYER_REGEN_ENABLED")
+    assert(PowerHidden(t), "Player Power did not hide again on combat exit")
+    return t
+end)
+
+Case("Edit Mode reveals Player Power and restores OOC rule", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    assert(PowerHidden(t), "precondition: Player Power was not hidden")
+    _G.MSUF_UnitEditModeActive = true
+    t.module.RefreshSettings()
+    assert(t.bar.alpha == 1 and t.player.MSUFPowerTextLayer.alpha == 1,
+        "Edit Mode left Player Power hidden")
+    _G.MSUF_UnitEditModeActive = nil
+    t.module.RefreshSettings()
+    assert(PowerHidden(t), "leaving Edit Mode did not restore OOC hide")
+    return t
+end)
+
+Case("disabling Class Resource restores Player Power", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    assert(PowerHidden(t), "precondition: Player Power was not hidden")
+    MSUF_DB.bars.showClassPower = false
+    t.module.RefreshSettings()
+    assert(t.bar.alpha == 1 and t.player.MSUFPowerTextLayer.alpha == 1,
+        "disabled Class Resource left Player Power hidden")
+    return t
+end)
+
+Case("module shutdown restores Player Power", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    t.module.Disable()
+    assert(t.bar.alpha == 1 and t.player.MSUFPowerTextLayer.alpha == 1,
+        "ClassPower module shutdown left Player Power hidden")
+    return t
+end)
+
+Case("disabling sync restores Player Power without changing Class Resource", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    MSUF_DB.bars.classPowerSyncPlayerPowerOOC = false
+    t.module.RefreshSettings()
+    assert(not PowerHidden(t) and t.bar.alpha == 1,
+        "sync switch off left Player Power hidden")
+    assert(not Shown(t), "sync switch off changed Class Resource visibility")
+    return t
+end)
+
+Case("turning off Class Resource OOC rule restores Player Power", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    MSUF_DB.bars.classPowerHideOOC = false
+    t.module.RefreshSettings()
+    assert(t.bar.alpha == 1 and t.player.MSUFPowerTextLayer.alpha == 1,
+        "OOC rule off left Player Power hidden")
+    assert(Shown(t), "OOC rule off left Class Resource hidden")
+    return t
+end)
+
+Case("lockdown state reveals Player Power", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    t.env.inCombat = true
+    t.module.RefreshSettings()
+    assert(t.bar.alpha == 1 and t.background.alpha == 1,
+        "lockdown state left Player Power hidden")
+    return t
+end)
+
+Case("power text retains mouseover fade when combat reveals it", function()
+    local t = Start({ hideOOC = true, syncPower = true })
+    local overlay = t.player.MSUFPowerTextLayer
+    t.player._msufHoverPower = overlay
+    t.player.mouseOver = false
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    assert(overlay.alpha == 0, "off-hover power text appeared during combat")
+    t.S.affecting = false
+    Fire(t, "PLAYER_REGEN_ENABLED")
+    t.player.mouseOver = true
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    assert(overlay.alpha == 1, "hovered power text did not return during combat")
+    return t
+end)
 
 Case("combat entry shows the hidden bar", function()
     local t = Start({ hideOOC = true })

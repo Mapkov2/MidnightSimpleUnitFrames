@@ -91,6 +91,8 @@ menu = {
     end,
     AddTooltip = function() end,
     Format = string.format,
+    -- Help texts name menu places through the navigation module's path builder.
+    NavPath = function(pageKey, subLabel) return tostring(pageKey) .. (subLabel and (" > " .. subLabel) or "") end,
     RegisterPage = function() end,
     SetMenuStateValue = function(key, value) menu[key] = value end,
     TrackRefresh = function(_, refresh)

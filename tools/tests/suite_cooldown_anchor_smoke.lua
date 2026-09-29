@@ -604,6 +604,11 @@ Case("class power: the Mainline bar sits above the Essential row", function()
     MSUF_DB.bars.classPowerCooldownTopAnchor = true
     Relayout(t)
     ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, 9, "Suite with offsets")
+    MSUF_DB.bars.classPowerOffsetY = -5
+    Relayout(t)
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, -1, "Suite with negative Y offset")
+    MSUF_DB.bars.classPowerOffsetY = 5
+    Relayout(t)
     -- Combat-edge restore from the screen cache keeps the BOTTOM edge.
     t.container._msufPositionInitialized = nil
     t.container._msufHardLockPoint = nil
@@ -627,6 +632,20 @@ Case("class power: the Mainline bar sits above the Essential row", function()
     t.anchor.shown = true
     Relayout(t)
     ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 3, 9, "Suite shown again")
+    t.module.Disable()
+    t.module.Shutdown()
+end)
+
+Case("class power: attached Power Y leaves the Class Resource anchor in place", function()
+    local t = StartClassPower(SUITE_ID)
+    MSUF_DB.player = { showPowerBar = true, powerBarDetached = true,
+        detachedPowerBarAnchorToClassPower = true, detachedPowerBarHeight = 6,
+        detachedPowerBarOffsetY = -4 }
+    Relayout(t)
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 14, "attached Power default")
+    MSUF_DB.player.detachedPowerBarOffsetY = -20
+    Relayout(t)
+    ExpectPoint(t, "BOTTOM", t.anchor, "TOP", 0, 14, "attached Power moved down")
     t.module.Disable()
     t.module.Shutdown()
 end)

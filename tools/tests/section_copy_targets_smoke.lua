@@ -280,7 +280,37 @@ Check(captured and captured.targetOff, "Group: the ::: popup gets no targetOff")
 Check(#captured.targets == 2 and captured.targets[1].value == "party" and captured.targets[2].value == "raid",
     "Group: the ::: targets must be the page's scopes")
 Check(captured.targetOff("raid") == true and captured.targetOff("party") == false, "Group: targetOff must follow the scope's enabled switch")
+Check(captured.sections.sorting.fields:find("sortAlphabeticalWithinRole", 1, true) ~= nil,
+    "Group: section copy must include the alphabetical role setting")
 groupEnabled.raid = nil
 Check(captured.targetOff("raid") == true, "Group: a scope without an enabled value is off, as its page shows it")
+
+-- Copy To uses a separate category allowlist from the ::: section popup.
+-- Execute its real copy path to verify the setting travels only with Basics.
+local copySource = "local WL, GF_INDICATOR_COPY_FIELDS, GF_COPY_EXCLUDE, GF_SHARED_COLOR_KEYS, Conf, QueueGF, QueueGFDirtyMask, GroupCopyDirtyMask, RefreshGFPreview, DeepCopy, GF = ...\n"
+    .. Slice(group, "local GF_COPY_CATEGORIES = {", "local function DeepCopy(", "Group Copy To")
+    .. Slice(group, "local function CopyGroupSettings(", "local function RefreshContext(", "Group Copy To")
+    .. "\nreturn CopyGroupSettings"
+local groupConfigs = {
+    raid = { sortMode = "ROLE", sortRolesAcrossRaid = true, sortAlphabeticalWithinRole = true },
+    mythicraid = { sortMode = "INDEX", sortRolesAcrossRaid = false, sortAlphabeticalWithinRole = false },
+}
+local function Words(value)
+    local out = {}
+    for word in value:gmatch("%S+") do out[#out + 1] = word end
+    return out
+end
+local copyGroup = assert(loadstring(copySource, "@MSUF_Menu2_Group_CopyTo.lua"))(
+    Words, {}, {}, {}, function(kind) return groupConfigs[kind] end,
+    noop, noop, noop, noop, function(value) return value end, function() return nil end)
+Check(copyGroup("raid", "mythicraid", { general = true }) == true,
+    "Group Copy To: Basics copy failed")
+Check(groupConfigs.mythicraid.sortMode == "ROLE" and groupConfigs.mythicraid.sortRolesAcrossRaid == true
+    and groupConfigs.mythicraid.sortAlphabeticalWithinRole == true,
+    "Group Copy To: Basics did not carry the full role sort configuration")
+groupConfigs.mythicraid.sortAlphabeticalWithinRole = false
+Check(copyGroup("raid", "mythicraid", { health = true }) == true
+    and groupConfigs.mythicraid.sortAlphabeticalWithinRole == false,
+    "Group Copy To: another category unexpectedly copied role alphabetization")
 
 print("section_copy_targets_smoke: ok (popup, " .. #CLIENTS .. " clients, group)")

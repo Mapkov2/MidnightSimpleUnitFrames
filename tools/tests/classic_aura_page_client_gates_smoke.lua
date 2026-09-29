@@ -245,6 +245,8 @@ M = setmetatable({
         return set
     end,
     Format = string.format, Tr = function(text) return text end,
+    -- Help texts name menu places through the navigation module's path builder.
+    NavPath = function(pageKey, subLabel) return tostring(pageKey) .. (subLabel and (" > " .. subLabel) or "") end,
     Assign = function(target, values) for k, v in pairs(values) do target[k] = v end return target end,
     AppendValues = function(list, ...) for i = 1, select("#", ...) do list[#list + 1] = (select(i, ...)) end return list end,
     AccessibleNumber = function(value, fallback) return tonumber(value) or tonumber(fallback) or 0 end,
