@@ -171,7 +171,7 @@ end
 local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, arena = 50, pet = 38, pettarget = 40, all = 38 }
 local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", pettarget = "PT", boss = "Boss", arena = "Arena", all = "All" }
 local UNIT_TAB_ORDER = { "player", "target", "boss", "arena", "focus", "pet", "pettarget", "targettarget", "focustarget" }
-local UNIT_TAB_LABELS = { boss = "Boss Frames", arena = "Arena Frames", targettarget = "Target's Target", focustarget = "Focus Target", pettarget = "Pet Target" }
+local UNIT_TAB_LABELS = { boss = "Boss Frames", arena = "Arena Frames", targettarget = "Target of Target", focustarget = "Focus Target", pettarget = "Pet Target" }
 local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", arena = "Arena", targettarget = "ToT", focustarget = "FT", pettarget = "PT" }
 local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, arena = 96, focus = 58, pet = 46, targettarget = 108, focustarget = 98, pettarget = 90 }
 local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, arena = 56, focus = 50, pet = 40, targettarget = 42, focustarget = 36, pettarget = 36 }
@@ -277,11 +277,23 @@ local function UnitFrameEnabled(unit)
     return ReadBool(unit, "enabled", true)
         and (unit ~= "focustarget" or ReadBool("focus", "enabled", true))
 end
+-- Hover reason for every control a turned-off frame locks (the notice wording).
+function UP.FrameDisabledReason(unit)
+    if unit == "focustarget" and not ReadBool("focus", "enabled", true) then
+        return M.Tr("Focus Target follows the Focus frame. Enable Focus to show it.")
+    end
+    return M.Format("%s frame is disabled and will not appear.", UnitTopLabel(unit))
+        .. "\n" .. M.Format("Turn on \"%s\" to change this.", M.Tr("Enable"))
+end
 local function ApplyUnitFrameEnabledGate(ctx, unit)
     local wrapper = ctx and ctx.wrapper
     if not wrapper then return end
     local enabled = UnitFrameEnabled(unit)
     local gateKey = "unitFrameEnabled:" .. tostring(unit)
+    local gateReasons = W._msuf2GateReasons
+    if W.SetGateDisabledReason and not (gateReasons and gateReasons[gateKey]) then
+        W.SetGateDisabledReason(gateKey, function() return UP.FrameDisabledReason(unit) end)
+    end
     if ControlGates.ApplySections then
         ControlGates.ApplySections(ctx, gateKey, enabled, {
             alwaysEnabledFlag = "_msuf2UnitFrameGateAlwaysEnabled",
@@ -717,6 +729,11 @@ local function BuildTopActions(ctx, builder, unit, label)
         onPopupCreated = function(popup)
             popup._msuf2GuidedNoScroll = true
             if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, popup, "Copy Player settings", "unit_copy_popup") end
+            -- The one-row target strip keeps ToT/FT/PT compact; hover names the frame in full.
+            for _, key in ipairs({ "targettarget", "focustarget", "pettarget" }) do
+                local chip = popup._targetBtns and popup._targetBtns[key]
+                if chip and M.AddTooltip then M.AddTooltip(chip, UnitTopLabel(key), nil, { hook = true }) end
+            end
         end,
         onRun = function(api, popup)
             -- Copy popup buttons deliberately bypass the generic combat-click
@@ -997,7 +1014,7 @@ local function BuildBasics(ctx, builder, unit, label)
         end,
         SettingMeta(ctx, "basics.frame_bar_shape", unit, "frameBarShape"))
     if M.AddTooltip then
-        M.AddTooltip(barShape, "Frame bar shape", "Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars.", { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.", M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local petPlayerClassColor
     if unit == "pet" then
@@ -1050,6 +1067,9 @@ local function BuildBasics(ctx, builder, unit, label)
     end)
     notice:Hide()
     local basicsDependentControls = { smooth, chunked, colorMode, fillDir, barShape }
+    if W.SetControlsDisabledReason then
+        W.SetControlsDisabledReason(basicsDependentControls, function() return UP.FrameDisabledReason(unit) end)
+    end
     local function RefreshBasicsEnabled()
         local ownOn = ReadBool(unit, "enabled", true)
         local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)

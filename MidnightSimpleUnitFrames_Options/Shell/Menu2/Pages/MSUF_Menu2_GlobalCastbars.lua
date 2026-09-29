@@ -70,6 +70,19 @@ local function BuildBehaviorSection(S, secBuilder)
             "Spell-specific channel tick markers",
             "Shows tick separators on the Player castbar while channeling.\n\nSupported spells use their actual tick count, including supported talent and channel-duration changes. Unsupported channels keep five evenly spaced fallback lines. Custom channel tick settings override the automatic layout.\n\nThe markers are event-driven and add no recurring channel polling.",
             { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
+        local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
+        M.AddTooltip(behaviorControls.castbarInterruptShake, "Shake on interrupt",
+            "Jolts a castbar sideways when the cast it shows is interrupted, so kicks are easy to notice. Applies to every castbar.", tip)
+        M.AddTooltip(behaviorControls.castbarShakeStrength, "Shake strength",
+            "How far the bar jolts, in pixels. 0 turns the shake off even while Shake on interrupt is enabled.", tip)
+        M.AddTooltip(behaviorControls.castbarInterruptFeedbackDuration, "Interrupt display duration (sec)",
+            "How long an interrupted cast stays visible with the interrupt message before the bar hides. 0 hides it immediately.", tip)
+        M.AddTooltip(behaviorControls.castbarUnifiedDirection, "Always use fill direction for all casts",
+            "Makes channeled spells fill up like normal casts. Off keeps the classic look where a channel starts full and drains.", tip)
+        M.AddTooltip(behaviorControls.castbarFillDirection, "Castbar fill direction",
+            "Which way the bar grows during a cast, on every castbar. Channels drain the other way unless Always use fill direction for all casts is on.", tip)
+        M.AddTooltip(behaviorControls.castbarOpositeDirectionTarget, "Use opposite fill direction for target",
+            "Flips the fill direction on the Target castbar only, so it can mirror your Player castbar when the two frames face each other.", tip)
     end
 end
 local function BuildFilterSection(S, secBuilder)
@@ -110,6 +123,15 @@ local function BuildGCDSection(S, secBuilder)
             "Show GCD bar for instant casts",
             "Runs a short castbar for the global cooldown whenever an instant spell triggers it.\n\nThe fill and time text are driven natively by the client from the real (haste-scaled) GCD duration - no per-frame addon work while the bar runs. A real cast, channel or empower always takes priority.",
             { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
+        local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
+        M.AddTooltip(gcdControls.showGCDBarTime, "GCD bar: show time text",
+            "Shows the remaining global cooldown in the Player castbar time text while the GCD bar runs.", tip)
+        M.AddTooltip(gcdControls.showGCDBarSpell, "GCD bar: show spell name + icon",
+            "Writes the instant spell's name on the GCD bar and shows its icon. Off leaves the spell text blank.", tip)
+    end
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        W.SetControlsDisabledReason({ gcdControls.showGCDBarTime, gcdControls.showGCDBarSpell },
+            W.TurnOnReason("Show GCD bar for instant casts", function() return ReadGBool("showGCDBar", false) end))
     end
     syncGCD = function()
         SetControlsEnabled({ gcdControls.showGCDBarTime, gcdControls.showGCDBarSpell }, ReadGBool("showGCDBar", false))
@@ -132,7 +154,7 @@ local function BuildTexturesSection(S, secBuilder)
         if applyQueued ~= true then ApplyCastbarTextures(reason) end
         RequestCastPreviewRefresh()
     end
-    BuildCastControlSpecs(textures, {
+    local textureControls = BuildCastControlSpecs(textures, {
         { "dropdown", "Castbar texture", texLeftX, -42, 300, function() return TextureValues(nil) end, "castbarTexture", "Blizzard", "MSUF2_CASTBAR_TEXTURE", ApplyTexturesAndPreview },
         { "dropdown", "Castbar background texture", texLeftX, -96, 300, function() return TextureValues(nil) end, "castbarBackgroundTexture", "Blizzard", "MSUF2_CASTBAR_BG_TEXTURE", ApplyTexturesAndPreview, {
             getValue = function()
@@ -145,6 +167,17 @@ local function BuildTexturesSection(S, secBuilder)
         { "toggle", "Show spark (leading edge highlight)", texRightX, -144, 360, "castbarShowSpark", false, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview },
         { "toggle", "Spark extends beyond bar", texRightX, -168, 360, "castbarSparkOverflow", true, "MSUF2_CASTBAR_SPARK_OVERFLOW", ApplyTexturesAndPreview },
     }, "textures")
+    if M.AddTooltip and textureControls then
+        local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
+        M.AddTooltip(textureControls.castbarOutlineThickness, "Outline thickness",
+            "Width of the border around each castbar, in pixels; 0 removes it. The Interrupt Ready border style colors this border, so keep it above 0 for that style.", tip)
+        M.AddTooltip(textureControls.castbarShowGlow, "Show castbar glow effect",
+            "Gradually brightens the bar toward white as a cast nears its end, so the last moment of a cast is easy to spot.", tip)
+        M.AddTooltip(textureControls.castbarShowLatency, "Show latency indicator",
+            "Shades the end of the Player castbar by your latency or spell queue window, whichever is larger, to help time your next spell. Player castbar only.", tip)
+        M.AddTooltip(textureControls.castbarSparkOverflow, "Spark extends beyond bar",
+            "Lets the spark stick out above and below the bar at about twice its height. Only matters while the spark is shown.", tip)
+    end
 end
 local function BuildEmpoweredSection(S, secBuilder)
     local ctx, BuildCastControlSpecs, ApplyCastbarsIfNeeded, ShowEmpoweredPreview = S.ctx, S.BuildCastControlSpecs, S.ApplyCastbarsIfNeeded, S.ShowEmpoweredPreview
@@ -161,6 +194,10 @@ local function BuildEmpoweredSection(S, secBuilder)
         { "slider", "Stage blink time (sec)", empoweredRightX, -42, 320, 0.05, 1.00, 0.01, "empowerStageBlinkTime", 0.25, "MSUF2_CASTBAR_EMPOWER_TIME", ApplyEmpoweredPreview, { precise = true } },
     }, "empowered")
     local blinkControls = { empoweredControls.empowerStageBlinkTime }
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        W.SetControlsDisabledReason(blinkControls,
+            W.TurnOnReason("Add stage blink (Empowered casts)", function() return ReadGBool("empowerStageBlink", true) end))
+    end
     syncEmpowered = function() SetControlsEnabled(blinkControls, ReadGBool("empowerStageBlink", true)) end
     M.TrackRefresh(ctx, syncEmpowered)
 end
@@ -197,6 +234,18 @@ local function BuildNameShorteningSection(S, secBuilder)
         { "slider", "Reserved space", textRightX, -96, 320, 0, 30, 1, "castbarSpellNameReservedSpace", 8, "MSUF2_CASTBAR_NAME_RESERVED", ApplyAndRefresh },
     }, "name_shortening")
     local nameShorteningControls = { textControls.castbarSpellNameMaxLen, textControls.castbarSpellNameReservedSpace }
+    if M.AddTooltip then
+        local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
+        M.AddTooltip(textControls.shorten, "Spell name shortening",
+            "Cuts long spell names on every castbar to Max name length and marks the cut with '...'. Reserved space applies only while this is on.", tip)
+        M.AddTooltip(textControls.castbarSpellNameMaxLen, "Max name length",
+            "Spell names longer than this many characters are cut and end in '...'. Names are also trimmed to fit the free bar width, so narrow bars may show fewer.", tip)
+        M.AddTooltip(textControls.castbarSpellNameReservedSpace, "Reserved space",
+            "Keeps this many extra pixels free next to the spell name, on top of the room kept for the cast time, so long names stay clear of the timer.", tip)
+    end
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        W.SetControlsDisabledReason(nameShorteningControls, W.TurnOnReason("Spell name shortening", NameShorteningEnabled))
+    end
     syncNameShortening = function() SetControlsEnabled(nameShorteningControls, NameShorteningEnabled()) end
     M.TrackRefresh(ctx, syncNameShortening)
 end
@@ -290,6 +339,10 @@ local function BuildFocusKickSection(S, secBuilder)
     end)
     RegisterControl(resetFocus, Meta("focus_kick.reset_position", "action"), "Reset Position", "button")
     local focusKickControls = { focusControls.preview, focusControls.show_castbar, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        W.SetControlsDisabledReason(focusKickControls,
+            W.TurnOnReason("Focus interrupt tracker", function() return ReadGBool("enableFocusKickIcon", false) end))
+    end
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
     M.TrackRefresh(ctx, syncFocusKick)
 end

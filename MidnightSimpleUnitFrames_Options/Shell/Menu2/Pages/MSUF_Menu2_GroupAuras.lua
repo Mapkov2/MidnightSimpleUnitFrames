@@ -248,7 +248,7 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width, layout)
             "Opens the global Aura icon theme: border, shadow, colors, lane padding and native Player weapon enchants. This GroupFrame's individual Style stays here.",
             { hook = true, titleAsLine = true })
     end
-    W.Text(section, "Ordering and individual Style are edited here. Global icon theme: Appearance > Auras.",
+    W.Text(section, M.Format("Ordering and individual Style are edited here. Global icon theme: %s.", M.NavPath("auras3_styling")),
         16, layout.footerY - 8, sectionW - 198, MUTED)
 end
 local function NativeAuraKey(groupKey)

@@ -278,7 +278,7 @@ local function BuildGFGeneralSection(ctx, b)
         ControlMeta(ctx, "basics.frame_bar_shape"))
     msufControls[#msufControls + 1] = barShape
     if M.AddTooltip then
-        M.AddTooltip(barShape, "Frame bar shape", "Choose the Health and Power shape for this frame. Use shared style follows Appearance > Bars.", { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.", M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
     end
     W.DividerAt(general, -326, generalLeftX, 32)
     W.LabelAt(general, "Offline Members", generalLeftX, -344, generalLeftW, "GameFontNormalSmall", T.colors.accent)
@@ -476,7 +476,7 @@ local function BuildGFGeometrySection(ctx, b)
 end
 
 local function BuildGFSortingSection(ctx, b)
-    local sorting = b:CollapsibleSection("sorting", "Sorting", 254, false)
+    local sorting = b:CollapsibleSection("sorting", "Sorting", 280, false)
     local sortingW = sorting._msuf2Width or b.width or 720
     local sortingGap = 16
     local sortingLeftX = 20
@@ -484,7 +484,7 @@ local function BuildGFSortingSection(ctx, b)
     local sortingLeftW = floor((sortingInnerW - sortingGap) * 0.52)
     local sortingRightX = sortingLeftX + sortingLeftW + sortingGap
     local sortingRightW = sortingInnerW - sortingLeftW - sortingGap
-    local sortCard = W.ControlCard(sorting, "Sort mode", nil, sortingLeftX, -38, sortingLeftW, 192)
+    local sortCard = W.ControlCard(sorting, "Sort mode", nil, sortingLeftX, -38, sortingLeftW, 218)
     local roleCard = W.ControlCard(sorting, "Role Priority", "Drag rows with mouse to reorder.", sortingRightX, -38, sortingRightW, 192)
     local sortMode = W.Dropdown(sortCard, "Sort Mode", SORT_MODES, min(260, sortingLeftW - 32))
     W.MoveWidget(sortMode, sortCard, 16, -28, min(260, sortingLeftW - 32), "LEFT")
@@ -548,6 +548,14 @@ local function BuildGFSortingSection(ctx, b)
             "Orders tanks, healers, and damage dealers across the whole raid instead of within each raid group. Raid and Mythic Raid only: applies to By Role together with Preserve raid groups, and to Group + Role.",
             { hook = true, labelHit = true })
     end
+    local alphabeticalInRole = BindScopeToggle(ctx,
+        W.ToggleAt(sortCard, "Alphabetize names within roles", 16, -176, sortingLeftW - 32),
+        "sortAlphabeticalWithinRole", false, "rebuild")
+    if M.AddTooltip then
+        M.AddTooltip(alphabeticalInRole, "Alphabetize names within roles",
+            "Sorts names alphabetically after role priority. Works within each raid group or across the entire raid, according to the role sorting options above. Raid and Mythic Raid only.",
+            { hook = true, labelHit = true })
+    end
     local roleRows = BuildRoleOrderRows(ctx, roleCard, {
         x = 16,
         y = -66,
@@ -563,6 +571,7 @@ local function BuildGFSortingSection(ctx, b)
         SetOptionEnabled(playerFirst, enabled)
         local raidWideEligible = CurrentScope() ~= "party" and (enabled or currentMode == "GROUP_ROLE")
         SetOptionEnabled(raidWideRoles, raidWideEligible)
+        SetOptionEnabled(alphabeticalInRole, raidWideEligible)
         if roleRows then
             if roleRows.Refresh then roleRows.Refresh() end
             if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(enabled) end
@@ -573,6 +582,9 @@ local function BuildGFSortingSection(ctx, b)
         }
         if raidWideEligible and Bool(CurrentScope(), "sortRolesAcrossRaid", false) then
             badges[#badges + 1] = { text = "Raid-wide roles", kind = "accent" }
+        end
+        if raidWideEligible and Bool(CurrentScope(), "sortAlphabeticalWithinRole", false) then
+            badges[#badges + 1] = { text = "Alphabetical names", kind = "accent" }
         end
         SetSectionBadgesAndStatus(sorting, badges)
     end

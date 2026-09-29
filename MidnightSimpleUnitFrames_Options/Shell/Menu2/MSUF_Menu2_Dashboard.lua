@@ -233,6 +233,32 @@ local function ShowFactoryResetConfirm(kind)
     return true
 end
 
+--- Read-only view of the optional MSUF Suite: nil when the Suite is absent,
+--- predates GetOverview or answers with anything but a table. Callers treat nil
+--- as "not installed" and never promote the Suite then.
+function M.GetSuiteOverview()
+    local suite = _G.MSUFSuite
+    local getOverview = type(suite) == "table" and suite.GetOverview or nil
+    if type(getOverview) ~= "function" then return nil end
+    local overview = getOverview()
+    return type(overview) == "table" and overview or nil
+end
+
+--- The Suite names its own module page; offer it only once this menu has the
+--- page registered, so a stale key never lands the player on the Dashboard.
+function M.GetSuiteModulesPageKey(overview)
+    local pageKey = type(overview) == "table" and overview.pageKey or nil
+    if type(pageKey) ~= "string" or pageKey == "" then return nil end
+    return type(M.pages) == "table" and M.pages[pageKey] ~= nil and pageKey or nil
+end
+
+--- "MSUF Suite v1.2" when the Suite reports a version, "MSUF Suite" otherwise.
+function M.FormatSuiteTitle(overview)
+    local version = type(overview) == "table" and overview.version or nil
+    if type(version) ~= "string" or version == "" then return M.Tr("MSUF Suite") end
+    return M.Format("MSUF Suite %s", version:match("^%d") and ("v" .. version) or version)
+end
+
 local DASHBOARD_DIRECT_SPECS = {
     {
         path = "scaling.global_ui.percent", label = "Global UI Scale", kind = "slider", classification = "setting",
@@ -947,6 +973,81 @@ function Dashboard.BuildAssistantHero(state, mainTop)
     end
     return heroH
 end
+--- Compact MSUF Suite card between the Assistant hero and the collapsed cards.
+--- It is built only while the Suite reports an overview, so nothing is promoted
+--- when the Suite is not installed. Returns its height, 0 when there is no card.
+function Dashboard.BuildSuiteCard(state, ctx, top)
+    local overview = M.GetSuiteOverview()
+    if not overview then return 0 end
+    local root, x0, mainW, Card, Kicker, Button, AddTooltip = state.root, state.x0, state.mainW, state.Card, state.Kicker, state.Button, state.AddTooltip
+    local pageKey = M.GetSuiteModulesPageKey(overview)
+    local needsSetup = overview.needsSetup == true
+    local openW, setupW, gap = 170, 130, 10
+    local both = pageKey ~= nil and needsSetup
+    local rowW = (pageKey and openW or 0) + (needsSetup and setupW or 0) + (both and gap or 0)
+    local textW = mainW - 32 - (rowW > 0 and (rowW + 16) or 0)
+    -- Wide cards seat the buttons right of the text; narrow ones move them
+    -- below it, one per line when the pair does not fit side by side.
+    local stacked = rowW > 0 and textW < 240
+    local column = stacked and both and rowW > mainW - 32
+    if stacked then textW = mainW - 32 end
+    textW = max(120, textW)
+    local card = Card(root, "", x0, top, mainW, 100, T.colors.panel2, T.colors.borderSoft)
+    Kicker(card, "MSUF SUITE", 16, -14)
+    local title = T.Font(card, "GameFontNormal", "", T.colors.text)
+    title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -34)
+    title:SetWidth(textW)
+    title:SetJustifyH("LEFT")
+    local status = T.Font(card, "GameFontHighlightSmall", "", T.colors.ok or T.colors.accent)
+    status:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -56)
+    status:SetWidth(textW)
+    status:SetJustifyH("LEFT")
+    local about = W.Text(card, "Optional modules beyond unit frames: action bars, bags, chat, minimap and more.", 16, -74, textW, T.colors.muted)
+    if about.SetWordWrap then about:SetWordWrap(true) end
+    local aboutH = max(12, (about.GetStringHeight and about:GetStringHeight()) or 0)
+    local textBottom = 74 + aboutH
+    local buttonY = stacked and -(textBottom + 12) or -34
+    local cardH = max(100, stacked and (textBottom + 12 + (column and 62 or 28) + 14) or (textBottom + 16))
+    card:SetHeight(cardH)
+    local openX = (not stacked) and (mainW - 16 - openW) or ((both and not column) and (16 + setupW + gap) or 16)
+    local openY = column and (buttonY - 34) or buttonY
+    local setup
+    if needsSetup then
+        setup = Button(card, "Set up Suite", stacked and 16 or (mainW - 16 - rowW), buttonY, setupW, 28, function()
+            if M.BlockCombatAction and M.BlockCombatAction() then return end
+            local suite = _G.MSUFSuite
+            local installer = type(suite) == "table" and suite.Installer or nil
+            local open = type(installer) == "table" and installer.Open or nil
+            -- The setup window shares the menu's strata below its content, so
+            -- the menu steps aside once the Suite confirms the window opened.
+            if type(open) == "function" and open() == true then
+                if type(M.HideSlashMenuAndMinibar) == "function" then M.HideSlashMenuAndMinibar(M.frame) end
+            elseif M.ShowStatusFeedback then
+                M.ShowStatusFeedback(M.Tr("Suite setup unavailable"), "danger", 1.4)
+            end
+        end, "primary", "suite.setup", "ephemeral",
+            { help = "Opens the MSUF Suite setup: profile, modules and UI scaling." })
+        AddTooltip(setup, "Set up Suite", "Opens the MSUF Suite setup: profile, modules and UI scaling.")
+    end
+    if pageKey then
+        local open = Button(card, "Open Suite Modules", openX, openY, openW, 28, function()
+            if M.BlockCombatAction and M.BlockCombatAction() then return end
+            M.SelectPage(pageKey)
+        end, (not needsSetup) and "primary" or nil, "suite.open_modules", "navigation",
+            { navigationKey = pageKey, help = "Shows the Suite page that switches each optional module on or off." })
+        AddTooltip(open, "Open Suite Modules", "Shows the Suite page that switches each optional module on or off.")
+    end
+    local function Refresh()
+        local live = M.GetSuiteOverview() or overview
+        title:SetText(M.FormatSuiteTitle(live))
+        local total, enabled = tonumber(live.total), tonumber(live.enabled)
+        status:SetText((total and enabled) and M.Format("%d of %d modules on", floor(enabled), floor(total)) or "")
+        if setup then setup:SetShown(live.needsSetup == true) end
+    end
+    Refresh()
+    M.TrackRefresh(ctx, Refresh)
+    return cardH
+end
 function Dashboard.PrepareDisclosure(state)
     local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills, semanticPath)
         local head = PixelLayoutRegion(CreateFrame("Button", nil, parent))
@@ -1422,6 +1523,8 @@ function Dashboard.Build(ctx)
     mainTop = mainTop - launcherH - 10
     local heroH = Dashboard.BuildAssistantHero(state, mainTop)
     local featureBlockBottom = mainTop - heroH
+    local suiteH = Dashboard.BuildSuiteCard(state, ctx, featureBlockBottom - 10)
+    if suiteH > 0 then featureBlockBottom = featureBlockBottom - 10 - suiteH end
     Dashboard.PrepareDisclosure(state)
     Dashboard.ResolveCardStack(state, featureBlockBottom)
     Dashboard.BuildRecoveryCard(state)

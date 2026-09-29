@@ -224,6 +224,11 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
                 RefreshTextControlState()
             end,
             FixedSettingMeta("text." .. kind .. ".mouseover", key))
+        if M.AddTooltip then
+            M.AddTooltip(control, "Only show on mouseover",
+                "Keeps this text hidden until your mouse is over the unit frame. Name, HP and power text each have their own switch.",
+                { hook = true, labelHit = true })
+        end
         local function FadeSlider(label, suffix, offset)
             local settingKey = key .. suffix
             local slider = W.Slider(card, label, 0, 2, 0.05, rightW - 58)
@@ -234,6 +239,12 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
                 function() return ReadNumber(unit, settingKey, 0) end,
                 function(v) SetNumber(unit, settingKey, v, "MSUF2_TEXT_MOUSEOVER_FADE", { text = true, preview = true }) end,
                 0, meta)
+            if M.AddTooltip then
+                M.AddTooltip(slider, label, suffix == "FadeIn"
+                    and "How long the text takes to fully appear once your mouse enters the unit frame. 0 shows it instantly."
+                    or "How long the text takes to fully fade away after your mouse leaves the unit frame. 0 hides it instantly.",
+                    { hook = true })
+            end
             return slider
         end
         mouseoverFadeControls[kind] = {
@@ -499,6 +510,12 @@ function TextSection.BuildNameTab(state, ctx, unit)
             RefreshTextHeader()
         end,
         FixedSettingMeta("text.name.anchor", "nameTextAnchor"))
+    if M.AddTooltip then
+        M.AddTooltip(showNameText, "Show Name",
+            "Turns this frame's name text on or off. Its anchor, size and color stay saved while it is off.", { hook = true })
+        M.AddTooltip(nameAnchor, "Anchor",
+            "Where the name is pinned on the frame and how it aligns. Dragging it in Preview offsets it from this point.", { hook = true })
+    end
     local nameAppearance = TextCard(nameTab, "Appearance", nil, rightX, -4, rightW, 150)
     local nameMouseover = MouseoverControl(nameTab, "name", "nameTextMouseover", -172)
     local nameSize = W.Slider(nameAppearance, "Size", 6, 48, 1, 260)
@@ -752,6 +769,26 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
+    if M.AddTooltip then
+        local tip, toggleTip = { hook = true }, { hook = true, labelHit = true, labelHitWhenDisabled = true }
+        M.AddTooltip(controls.show, cfg.showLabel, kind == "hp"
+            and "Turns every HP text slot on this frame on or off. The health bar is not affected, and your slot setup is kept."
+            or "Turns every power text slot on this frame on or off. The power bar is not affected, and your slot setup is kept.", tip)
+        for _, button in ipairs(controls.slot and controls.slot.buttons or {}) do
+            M.AddTooltip(button, "Text slots", "Each text has three slots: left, center and right. The slot picked here is the one the value, Hide % sign and slot size settings edit.", tip)
+        end
+        for _, button in ipairs(controls.absorb and controls.absorb.buttons or {}) do
+            M.AddTooltip(button, "Absorb", "Adds the unit's absorb shield amount after this slot's HP value, with or without a shield icon. Shown only while a shield is active.", tip)
+        end
+        M.AddTooltip(controls.mode, cfg.valueLabel or "Value", "What the selected slot shows. None leaves the slot empty; choices with several values are joined by the Delimiter.", tip)
+        M.AddTooltip(controls.hidePercent, "Hide % sign", "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value includes a percent.", toggleTip)
+        M.AddTooltip(controls.separator, "Delimiter", "Symbol placed between values that share one slot, like Current and Percent. Used by all slots of this text.", tip)
+        M.AddTooltip(controls.reverse, "Reverse order", "Mirrors the HP text: left and right slots swap sides and multi-value choices flip, so Current / Percent becomes Percent / Current.", toggleTip)
+        M.AddTooltip(controls.decimals, "Decimal percent", "Shows HP percent with one decimal (63.4% instead of 63%) in every HP slot that shows a percent.", toggleTip)
+        M.AddTooltip(controls.fullValueShort, "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot shows a number.", toggleTip)
+        M.AddTooltip(controls.moveTogether, "Move text as one group", "On: dragging this text in Preview moves all its slots together. Off: each visible slot gets its own handle so you can place it separately.", toggleTip)
+        M.AddTooltip(controls.slotSize, "Selected slot size", "Font size of the slot picked in Text slots only. Slots you never resize keep the normal text size.", tip)
+    end
     return controls
 end
 function TextSection.BuildValueTextTabs(state, ctx, unit)
@@ -860,6 +897,12 @@ function TextSection.BuildAdvancedTab(state, ctx, unit)
     local advNameLayer = BindAdvancedLayer("Name layer", -76, "nameTextLayer", 5, "MSUF2_NAME_TEXT_LAYER_ADV")
     local advHpLayer = BindAdvancedLayer("HP layer", -136, "hpTextLayer", 5, "MSUF2_HP_TEXT_LAYER_ADV")
     local advPowerLayer = BindAdvancedLayer("Power text layer", -196, "powerTextLayer", 2, "MSUF2_POWER_TEXT_LAYER_ADV")
+    if M.AddTooltip then
+        local layerTip = "Higher numbers draw this text in front. Portrait, aura and status icon layers use the same 0-30 scale; set it above whatever covers the text."
+        M.AddTooltip(advNameLayer, "Name layer", layerTip, { hook = true })
+        M.AddTooltip(advHpLayer, "HP layer", layerTip, { hook = true })
+        M.AddTooltip(advPowerLayer, "Power text layer", layerTip, { hook = true })
+    end
     state.advNameLayer, state.advHpLayer, state.advPowerLayer = advNameLayer, advHpLayer, advPowerLayer
 end
 function TextSection.BindRefreshState(state, ctx, unit)
@@ -883,6 +926,24 @@ function TextSection.BindRefreshState(state, ctx, unit)
     powerTextControls[#powerTextControls + 1] = powerControls.mouseover
     if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end
     if hpControls.fullValueShort then hpTextControls[#hpTextControls + 1] = hpControls.fullValueShort end
+    -- Hover reasons for the controls a Show switch or the mouseover toggle
+    -- locks; each returns nothing while its switch is on.
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        local function On(key, default) return function() return ReadBool(unit, key, default) end end
+        local nameReason = W.TurnOnReason("Show Name", On("showName", true))
+        local hpReason = W.TurnOnReason("Show HP Text", On("showHP", true))
+        local powerReason = W.TurnOnReason("Show Power Text", PowerTextShown)
+        local function FadeReason(textReason, key)
+            local fadeReason = W.TurnOnReason("Only show on mouseover", On(key, false))
+            return function(control) return textReason(control) or fadeReason(control) end
+        end
+        W.SetControlsDisabledReason(nameTextControls, nameReason)
+        W.SetControlsDisabledReason(hpTextControls, hpReason)
+        W.SetControlsDisabledReason(powerTextControls, powerReason)
+        W.SetControlsDisabledReason(mouseoverFadeControls.name, FadeReason(nameReason, "nameTextMouseover"))
+        W.SetControlsDisabledReason(mouseoverFadeControls.hp, FadeReason(hpReason, "hpTextMouseover"))
+        W.SetControlsDisabledReason(mouseoverFadeControls.power, FadeReason(powerReason, "powerTextMouseover"))
+    end
     RefreshTextControlState = RefreshTextControlState(function()
         local tab = CurrentTextTab()
         RefreshTextTabs()

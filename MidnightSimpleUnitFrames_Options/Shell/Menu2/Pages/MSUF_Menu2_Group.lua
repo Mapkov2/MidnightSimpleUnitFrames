@@ -485,7 +485,7 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
+    { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
     { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
     { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]], prefix = WL [[dispelSymbol]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY]] },
@@ -719,7 +719,7 @@ local function AttachGroupSectionUX(ctx)
         dispelSymbol = { prefixes = "dispelSymbol" },
         dstripe = { prefixes = "debuffStripe" },
         layout_advanced = { fields = "width height spacing growth unitsPerColumn maxColumns", summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
-        sorting = { fields = "sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid autoTanks preserveRaidGroups", summary = function(c) return Word(c.sortMode, "GROUP") .. (c.playerFirstInRole and (" / " .. M.Tr("Player first")) or "") end },
+        sorting = { fields = "sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole autoTanks preserveRaidGroups", summary = function(c) return Word(c.sortMode, "GROUP") .. (c.playerFirstInRole and (" / " .. M.Tr("Player first")) or "") end },
         scaling = { prefixes = "frameScale", fields = "scaleAt10 scaleAt20 scaleAt25 scaleOver25" },
         anchor = { fields = "anchorToFrame anchorPoint x y", noCopy = true },
         auras = { summary = function(c)
@@ -1356,7 +1356,7 @@ function GroupPage.BuildPortrait(ctx, builder)
     end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return Conf(kind) end, {
         { enable = { portraitEnable } },
-        { controls = activeControls, on = Active },
+        { controls = activeControls, on = Active, reason = W.TurnOnReason and W.TurnOnReason("Portrait") },
         { controls = side, on = function(conf) return Placed(conf, "ATTACHED") end },
         { controls = { detachedPoint, detachedTo }, on = function(conf) return Placed(conf, "DETACHED") end },
         { controls = overlayAlign, on = function(conf) return Placed(conf, "OVERLAY") end },
@@ -1753,6 +1753,12 @@ ApplyScopeEnabledGate = function(ctx)
     if not wrapper then return end
     local gateKey = "groupFrameEnabled"
     local enabled = Bool(CurrentScope(), "enabled", false)
+    -- Hover reason for every control the turned-off scope locks.
+    if W.SetGateDisabledReason and not (W._msuf2GateReasons and W._msuf2GateReasons[gateKey]) then
+        W.SetGateDisabledReason(gateKey, function()
+            return M.Tr("Frame disabled") .. "\n" .. M.Format("Turn on \"%s\" to change this.", M.Tr("Enable"))
+        end)
+    end
     if ControlGates.ApplySections then
         ControlGates.ApplySections(ctx, gateKey, enabled, { alwaysEnabledFlag = "_msuf2GroupFrameGateAlwaysEnabled" })
         return

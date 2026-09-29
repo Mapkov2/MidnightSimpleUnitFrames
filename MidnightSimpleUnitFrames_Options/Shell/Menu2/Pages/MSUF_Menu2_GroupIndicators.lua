@@ -257,7 +257,7 @@ local function BuildIndicatorsSection(ctx, b)
         M.AppendValues(list, control); return control
     end
     local highlightCard = W.ControlCard(indicators, "Target Highlight",
-        "Configure target highlighting in Appearance > Miscellaneous > Frame Highlights.",
+        M.Format("Configure target highlighting in %s.", M.NavPath("opt_misc", "Frame Highlights")),
         leftX, -38, innerW, 92)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(highlightCard, { "group.target" }, {
@@ -282,7 +282,7 @@ local function BuildIndicatorsSection(ctx, b)
     openHighlights:SetPoint("TOPRIGHT", highlightCard, "TOPRIGHT", -16, -56)
     T.CenterButtonLabel(openHighlights)
     if M.AddTooltip then
-        M.AddTooltip(openHighlights, "Open Highlights", "Appearance > Miscellaneous > Frame Highlights", { hook = true })
+        M.AddTooltip(openHighlights, "Open Highlights", M.NavPath("opt_misc", "Frame Highlights"), { hook = true })
     end
     openHighlights:SetScript("OnClick", OpenFrameHighlights)
     RegisterControl(openHighlights, ctx, "navigation.frame_highlights", "Open Highlights", "button", "navigation", { navigationKey = "opt_misc" })
@@ -331,7 +331,7 @@ local function BuildIndicatorsSection(ctx, b)
     if focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     local focusControls = {}
     AddScopeSlider(focusControls, focusCard, "Border Thickness", 1, 6, 1, rightW, "hlFocusSize", 2, "visual", -88)
-    local focusColorHint = W.Text(focusCard, "Focus color is in Appearance > Colors > Group Frame Colors.", 16, -142, rightW - 32, T.colors.muted)
+    local focusColorHint = W.Text(focusCard, M.Format("Focus color is in %s.", M.NavPath("opt_colors", "Party & Raid Frames")), 16, -142, rightW - 32, T.colors.muted)
     if focusColorHint.SetWordWrap then focusColorHint:SetWordWrap(true) end
     local groupBorderCard = W.ControlCard(indicators, "Group Border", nil, leftX, -486, leftW, 202)
     if W.AttachContextColorReferences then
@@ -347,7 +347,7 @@ local function BuildIndicatorsSection(ctx, b)
     local groupBorderControls = {}
     AddScopeSlider(groupBorderControls, groupBorderCard, "Border Thickness", 1, 12, 1, leftW, "groupBorderSize", 1, "visual", -66)
     AddScopeSlider(groupBorderControls, groupBorderCard, "Padding", 0, 40, 1, leftW, "groupBorderPadding", 2, "visual", -116)
-    local groupBorderColorHint = W.Text(groupBorderCard, "Border color and opacity are in Appearance > Colors > Group Frame Colors.", 16, -168, leftW - 32, T.colors.muted)
+    local groupBorderColorHint = W.Text(groupBorderCard, M.Format("Border color and opacity are in %s.", M.NavPath("opt_colors", "Party & Raid Frames")), 16, -168, leftW - 32, T.colors.muted)
     if groupBorderColorHint.SetWordWrap then groupBorderColorHint:SetWordWrap(true) end
     local function RefreshIndicatorsState()
         local groupNumberEnabled = Bool(CurrentScope(), "showGroupNumber", false)
@@ -1693,7 +1693,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         VT("BOTTOM", "Bottom", "TOP", "Top"), "durationBarPosition", "BOTTOM")
     local durationDirection = BindChoice("Fill Mode", rightX + halfRight + 12, -674, halfRight,
         VT("REMAINING", "Remaining", "ELAPSED", "Elapsed"), "durationBarDirection", "REMAINING")
-    W.Text(section, Tr("Shape, border and shadow: Appearance > Auras > Buffs. All controls here remain Group-scope aware."),
+    W.Text(section, M.Format("Shape, border and shadow: %s. All controls here remain Group-scope aware.", M.NavPath("auras3_buffs")),
         leftX, -814, innerW, T.colors.muted)
 
     if M.AddTooltip then
@@ -1736,7 +1736,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         spellSetCard = W.ControlCard(spells, Tr("Choose Spells"), nil, siLeftX - 14, -38, siLeftW + 28, 404)
         W.ControlCard(spells, Tr("Edit Spell"), nil, siRightX - 14, -38, siRightW + 28, 404)
         placedIndicatorCard = W.ControlCard(spells, Tr("Show on Frame"), nil, siLeftX - 14, -456, siLeftW + 28, 560)
-        frameHighlightCard = W.ControlCard(spells, Tr("Highlight Health Bar"), nil, siRightX - 14, -456, siRightW + 28, 468)
+        frameHighlightCard = W.ControlCard(spells, Tr("Highlight Health Bar"), nil, siRightX - 14, -456, siRightW + 28, 360)
     end
     local RefreshSpellIndicatorState = M.RefreshProxy()
     local function RequestSpellControlRefresh(reason)
@@ -2056,7 +2056,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             RefreshPage()
         end)
     local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -546)
-    local placedSize = BindPlacedSlider("Size", 6, 48, 1, "size", 18, -600)
+    local placedSize = BindPlacedSlider("Size", 1, 48, 1, "size", 18, -600)
     local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -654)
     local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -708)
     local placedIconEffect = BindPlacedDropdown("Icon Effect", ICON_EFFECT_TYPES, "iconEffect", "none", -762, RefreshSpellIndicatorState)
@@ -2072,8 +2072,40 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         "Timer X", -100, 100, 1, "barTimerX", 0, -896)
     local placedBarTimerY = BindConfigSlider(PlacedConfig, siLeftX + timerSliderW + timerGap, timerSliderW,
         "Timer Y", -100, 100, 1, "barTimerY", 0, -896)
+    local placedColorRelevant = false
+    local colorShortcuts = {}
+    colorShortcuts.placed = W.AttachContextColorShortcut(placedIndicatorCard, {
+        title = Tr("Selected Spell Color"),
+        note = Tr("The selected spell color is shared by its bar, square, and icon glow."),
+        tooltipTitle = Tr("Selected Spell Color"),
+        tooltipText = Tr("The selected spell color is shared by its bar, square, and icon glow."),
+        scopeTag = function() return CurrentScope() .. ": " .. tostring(CurrentSpellAura(CurrentScope()) or "") end,
+        historySource = "menu:group-spell-indicator-color",
+        isRelevant = function() return placedColorRelevant end,
+        getTargets = function()
+            local kind = CurrentScope()
+            return {{
+                label = Tr("Selected Spell Color"),
+                getRGB = function()
+                    local cfg = CurrentSpellConfig(kind, false)
+                    local color = cfg and type(cfg.color) == "table" and cfg.color or CurrentAuraColor(kind)
+                    return color[1] or 1, color[2] or 1, color[3] or 1
+                end,
+                setRGB = function(r, g, bcol)
+                    local cfg = CurrentSpellConfig(kind, true)
+                    if cfg then
+                        local alpha = type(cfg.color) == "table" and cfg.color[4] or 1
+                        cfg.color = { r, g, bcol, alpha }
+                        QueueSpellIndicators(kind)
+                    end
+                end,
+            }}
+        end,
+    })
+    RegisterControl(colorShortcuts.placed, ctx, "spell.selected.color", "Selected Spell Color", "button", "action")
     local function RefreshPlacedControlVisibility(placed)
         local iconSelected, barSelected, barTimerSelected = ResolvePlacedSpellIndicatorControlVisibility(placed)
+        if placedSize._msuf2Title then placedSize._msuf2Title:SetText(Tr(barSelected and "Height" or "Size")) end
         W.SetControlShown(placedIconEffect, iconSelected)
         W.SetControlShown(placedBarSmoothFill, barSelected)
         W.SetControlShown(placedBarShowTimer, barSelected)
@@ -2105,28 +2137,35 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             frame.strata = frame.strata or "AUTO"
         end,
         RefreshSpellIndicatorState)
-    local frameColor = W.Color(spells, Tr("Color"))
-    frameColor._msuf2ColorLabel = Tr("Health bar highlight")
-    frameColor._msuf2ContextColorCardOverride = frameHighlightCard
-    M.BindColor(ctx, frameColor,
-        function()
-            local frame = FrameEffectConfig(CurrentScope(), false)
-            local c = frame and frame.color
-            if c then return c[1] or 1, c[2] or 1, c[3] or 1 end
-            c = CurrentAuraColor(CurrentScope())
-            return c[1] or 1, c[2] or 1, c[3] or 1
+    local frameColorRelevant = false
+    colorShortcuts.frame = W.AttachContextColorShortcut(frameHighlightCard, {
+        title = Tr("Health bar highlight"),
+        tooltipTitle = Tr("Health bar highlight"),
+        scopeTag = function() return CurrentScope() .. ": " .. tostring(CurrentSpellAura(CurrentScope()) or "") end,
+        historySource = "menu:group-spell-frame-color",
+        isRelevant = function() return frameColorRelevant end,
+        getTargets = function()
+            local kind = CurrentScope()
+            return {{
+                label = Tr("Health bar highlight"),
+                getRGB = function()
+                    local frame = FrameEffectConfig(kind, false)
+                    local color = frame and frame.color or CurrentAuraColor(kind)
+                    return color[1] or 1, color[2] or 1, color[3] or 1
+                end,
+                setRGB = function(r, g, bcol)
+                    local frame = FrameEffectConfig(kind, true)
+                    if frame then
+                        local alpha = (frame.color and frame.color[4]) or frame.alpha or 0.8
+                        frame.color = { r, g, bcol, alpha }
+                    end
+                    QueueSpellIndicators(kind)
+                end,
+            }}
         end,
-        function(r, g, bcol)
-            local frame = FrameEffectConfig(CurrentScope(), true)
-            if frame then
-                local a = (frame.color and frame.color[4]) or frame.alpha or 0.8
-                frame.color = { r, g, bcol, a }
-            end
-            QueueSpellIndicators(CurrentScope())
-        end,
-        ControlMeta(ctx, "spell.frame.color"))
-    W.MoveWidget(frameColor, spells, siRightX, -544, siRightW)
-    local framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -598)
+    })
+    RegisterControl(colorShortcuts.frame, ctx, "spell.frame.color", "Health bar highlight color", "button", "action")
+    local framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -544)
     local frameAlpha = W.Slider(spells, Tr("Tint Alpha"), 5, 100, 5, siRightW)
     M.BindNumberWidget(ctx, frameAlpha,
         function()
@@ -2143,9 +2182,9 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(CurrentScope())
         end,
         25, StepMeta(ctx, "spell.frame.alpha", 5))
-    W.MoveWidget(frameAlpha, spells, siRightX, -652, siRightW, "LEFT")
-    local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -706)
-    local frameLayer = BindFrameSlider("Effect Layer (0-30)", 0, 30, 1, "layer", 0, -760)
+    W.MoveWidget(frameAlpha, spells, siRightX, -598, siRightW, "LEFT")
+    local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -652)
+    local frameLayer = BindFrameSlider("Effect Layer (0-30)", 0, 30, 1, "layer", 0, -706)
     local spellGridLayoutRows
     local function RefreshSpellGridLayout(rows)
         rows = max(3, tonumber(rows) or 3)
@@ -2218,12 +2257,16 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetOptionEnabled(customSpellIDs, customSpell)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedGrowth)
         SetOptionEnabled(placedBarWidth, barRelevant)
+        placedColorRelevant = placedEnabled and true or false
+        if colorShortcuts.placed then colorShortcuts.placed:_msuf2RefreshContextColorVisibility() end
         SetOptionEnabled(placedIconEffect, cdRelevant)
         SetManyEnabled(barRelevant, placedBarSmoothFill, placedBarShowTimer)
         SetManyEnabled(barRelevant and barTimerSelected,
             placedBarTimerAnchor, placedBarTimerX, placedBarTimerY)
         SetOptionEnabled(frameType, hasSpell)
-        SetManyEnabled(hasFrame, frameColor, framePriority, frameAlpha, frameThickness, frameLayer)
+        frameColorRelevant = hasFrame and true or false
+        if colorShortcuts.frame then colorShortcuts.frame:_msuf2RefreshContextColorVisibility() end
+        SetManyEnabled(hasFrame, framePriority, frameAlpha, frameThickness, frameLayer)
         local badges = {
             OnOffBadge(indicatorsOn, "Enabled", "Disabled"),
         }

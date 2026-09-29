@@ -17,7 +17,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             ]])
 
         return Data.FAQRows({
-            { l = "Why can I not change something in combat?", a = "WoW blocks some protected frame changes in combat. Leave combat, then apply layout, anchoring, enable/disable, profile, or protected-frame changes.", p = "opt_misc", t = "Opens: Appearance > Miscellaneous", x = "combat lockdown protected frames settings in combat out of combat", k = "combat lockdown|cannot change in combat|can't change in combat|protected frame|blocked in combat|in combat settings|combat error|leave combat|why can't i move in combat", y = 50 },
+            { l = "Why can I not change something in combat?", a = "WoW blocks some protected frame changes in combat. Leave combat, then apply layout, anchoring, enable/disable, profile, or protected-frame changes.", p = "opt_misc", t = "Opens: General > Miscellaneous", x = "combat lockdown protected frames settings in combat out of combat", k = "combat lockdown|cannot change in combat|can't change in combat|protected frame|blocked in combat|in combat settings|combat error|leave combat|why can't i move in combat", y = 50 },
         },
         {
             {
@@ -62,10 +62,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where do I make names shorter?",
-                a = "Open Appearance > Fonts > Name Shortening for unit names. Castbar spell name shortening is in" ..
-                    " Appearance > Cast Bars > Name Shortening.",
+                a = "Open Style > Fonts > Name Shortening for unit names. Castbar spell name shortening is in" ..
+                    " Frames > Cast Bars > Name Shortening.",
                 p = "opt_fonts",
-                t = "Opens: Appearance > Fonts > Name Shortening",
+                t = "Opens: Style > Fonts > Name Shortening",
                 x = "Name Shortening names too long max name length castbar spell name shortening",
                 k = SearchKeywordList(
                     "name too long|names too long|shorten names|name shortening|long names|cut names|truncate names",
@@ -75,11 +75,11 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Why are group names still shortened when name shortening is off?",
-                a = "Appearance > Fonts has Shared settings plus per-scope font overrides. If Party or Raid uses" ..
+                a = "Style > Fonts has Shared settings plus per-scope font overrides. If Party or Raid uses" ..
                     " custom font settings, its Name Shortening can stay enabled even when Shared is off. Select" ..
                     " Party/Raid in Fonts or reset the font override.",
                 p = "opt_fonts",
-                t = "Opens: Appearance > Fonts > Name Shortening / scope override",
+                t = "Opens: Style > Fonts > Name Shortening / scope override",
                 x = "Name Shortening Use custom settings for this scope Overrides Party Raid group frame name" ..
                     " truncation font override shared changes",
                 k = SearchKeywordList(
@@ -171,7 +171,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I make my own buffs or debuffs bigger?",
-                a = "Open the affected UnitFrame > Auras for icon size, placement, and filters. Use Appearance >" ..
+                a = "Open the affected UnitFrame > Auras for icon size, placement, and filters. Use Frames >" ..
                     " Auras for scope-aware text and cooldown styling.",
                 p = "uf_target",
                 t = "Opens: Target > Auras",
@@ -200,7 +200,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "How do I add a specific boss debuff to the blacklist?",
                 a = "Open Boss Frames > Auras > Debuffs. SpellID blacklist entries, Blizzard filters, placement," ..
-                    " and preview live together there; styling remains under Appearance > Auras.",
+                    " and preview live together there; styling remains under Frames > Auras.",
                 p = "uf_boss",
                 t = "Opens: Boss Frames > Auras",
                 x = "Filters Blacklist buffs debuffs boss debuffs spell id raid debuffs",
@@ -218,7 +218,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "How do I move or resize target, focus, or boss castbars?",
                 a = "Use MSUF Edit Mode to drag supported castbars. Per-unit castbar enable/icon/text options are on" ..
-                    " each unit page; shared castbar style is in Appearance > Cast Bars.",
+                    " each unit page; shared castbar style is in Frames > Cast Bars.",
                 p = "home",
                 t = "Opens: Dashboard > MSUF Edit Mode",
                 x = "MSUF Edit Mode move castbars target castbar focus castbar boss castbar player castbar resize",
@@ -232,9 +232,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "How do I stop castbars covering party or raid frames?",
                 a = "MSUF group frames do not use per-player castbars over the health frame. For MSUF castbar" ..
-                    " positioning, use MSUF Edit Mode and Appearance > Cast Bars.",
+                    " positioning, use MSUF Edit Mode and Frames > Cast Bars.",
                 p = "opt_castbar",
-                t = "Opens: Appearance > Cast Bars",
+                t = "Opens: Frames > Cast Bars",
                 x = "Castbar position edit mode group frames party raid castbars over health",
                 k = SearchKeywordList(
                     "party castbar covering health|raid castbar over frame|castbar covers party frame",
@@ -286,10 +286,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I hide realm names or shorten player names?",
-                a = "Open Appearance > Fonts > Name Shortening. It controls name shortening globally; unit text" ..
+                a = "Open Style > Fonts > Name Shortening. It controls name shortening globally; unit text" ..
                     " placement is on each unit page > Text.",
                 p = "opt_fonts",
-                t = "Opens: Appearance > Fonts > Name Shortening",
+                t = "Opens: Style > Fonts > Name Shortening",
                 x = "Name Shortening realm names short names player names font text",
                 k = SearchKeywordList(
                     "hide realm names|remove realm names|short names|shorten player names|names too long",
@@ -299,9 +299,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I get class-colored health bars or names?",
-                a = "Open Appearance > Colors for class bar colors, unitframe colors, and Group Frame Colors.",
+                a = "Open Style > Colors for class bar colors, unitframe colors, and Group Frame Colors.",
                 p = "opt_colors",
-                t = "Opens: Appearance > Colors > Class Bar Colors",
+                t = "Opens: Style > Colors > Class Bar Colors",
                 x = "Class Bar Colors Unitframe Colors Group Health Colors class colored names health bars",
                 k = SearchKeywordList(
                     "class colored health|class colored names|class color names|class color health bars",

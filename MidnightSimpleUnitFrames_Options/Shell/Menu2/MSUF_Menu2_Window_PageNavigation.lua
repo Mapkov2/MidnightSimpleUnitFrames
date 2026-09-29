@@ -22,15 +22,35 @@ local function HideAllCachedPages()
         if entry.wrapper and entry.wrapper.Hide then entry.wrapper:Hide() end
     end
 end
+-- The window title is the rail breadcrumb (group > page > workspace tab), so
+-- it names the page exactly as the rail and search results do. Each part is
+-- translated on its own; the separator stays.
+local function BreadcrumbTitle(key)
+    local crumb = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(key) or nil
+    if type(crumb) ~= "string" or crumb == "" then return nil end
+    local parts = {}
+    for part in (crumb .. " > "):gmatch("(.-) > ") do parts[#parts + 1] = M.Tr(part) end
+    return table.concat(parts, " > ")
+end
+-- Theme font strings translate on SetText; the title is translated already and
+-- the joined breadcrumb is no locale key, so it goes through the raw setter.
+local function SetTranslatedText(fs, text)
+    local raw = fs._msuf2RawSetText
+    if raw then return raw(fs, text) end
+    return fs:SetText(text)
+end
 local function SetTitle(key)
     local frame = M.frame
     if not frame then return end
-    local spec = M.pages[key]
-    local title = (MSUF.Client and MSUF.Client.IsForever == true) and "MSUF (Forever Version)"
-        or (spec and spec.title) or "MSUF"
+    local title = (MSUF.Client and MSUF.Client.IsForever == true) and M.Tr("MSUF (Forever Version)")
+        or BreadcrumbTitle(key) or "MSUF"
     if frame._msuf2TitleKey ~= title then
         frame._msuf2TitleKey = title
-        frame.title:SetText(M.Tr(title))
+        SetTranslatedText(frame.title, title)
+        -- The minimized bar copies the title when it opens; keep it current
+        -- when a page changes behind it.
+        local bar = M.minimizedBar
+        if frame._msuf2Minimized and bar and bar.title then SetTranslatedText(bar.title, title) end
     end
     if frame.subtitle and frame._msuf2SubtitleText ~= "" then
         frame._msuf2SubtitleText = ""
@@ -40,12 +60,16 @@ local function SetTitle(key)
 end
 local function UpdateNav(key)
     if not M.navButtons then return end
-    local group = M.navGroupForKey and M.navGroupForKey[key]
-    if group and M.navHeaderState and M.navHeaderState[group] == false then
+    local activeNavKey = (M.navPrimaryForKey and M.navPrimaryForKey[key]) or key
+    -- Landing inside a folded group opens it so the active row shows. The group
+    -- is looked up by the rail key (workspace tabs such as uf_target have no
+    -- row of their own); an in-place rebuild of the same page keeps a group the
+    -- reader folded on purpose.
+    local group = M.navGroupForKey and M.navGroupForKey[activeNavKey]
+    if group and activeNavKey ~= M._msuf2NavActiveKey and M.navHeaderState and M.navHeaderState[group] == false then
         M.navHeaderState[group] = true
         if M.nav and M.nav._msuf2NavReflow then M.nav:_msuf2NavReflow() end
     end
-    local activeNavKey = (M.navPrimaryForKey and M.navPrimaryForKey[key]) or key
     local localeKey = CurrentMenuLocaleKey()
     local labelsDirty = M._msuf2NavLocaleKey ~= localeKey
     M._msuf2NavLocaleKey = localeKey

@@ -16,6 +16,55 @@ local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2
 local C_Timer = M.MenuTimer
 local MenuRuntime = M.MenuRuntime
+local IS_FOREVER = MSUF.Client and MSUF.Client.IsForever == true
+
+-- Forever's Gamepad style navigates named windows through Blizzard's frame
+-- controls manager. Register only after a page has finished creating its
+-- controls: SmartNavigation rescans an active window on every child CreateFrame.
+local function ForeverPadUI()
+    if not IS_FOREVER then return false end
+    local input = _G.InputUtil
+    return input and type(input.IsGamepadUIEnabled) == "function" and input.IsGamepadUIEnabled() == true
+end
+
+local function ForeverPadManager()
+    if not ForeverPadUI() then return nil end
+    local mode = _G.GamepadMode
+    return mode and mode.FrameControlsManager or nil
+end
+
+local padNavigationHold = 0
+local function RemoveForeverPadNavigation(frame)
+    if not (frame and frame._msuf2ForeverPadRegistered) then return end
+    frame._msuf2ForeverPadRegistered = nil
+    local mode = _G.GamepadMode
+    local manager = mode and mode.FrameControlsManager
+    if manager then manager:FrameHidden(frame) end
+end
+
+local function SuspendForeverPadNavigation(frame)
+    padNavigationHold = padNavigationHold + 1
+    RemoveForeverPadNavigation(frame)
+end
+
+local function ResumeForeverPadNavigation(frame)
+    if padNavigationHold > 0 then padNavigationHold = padNavigationHold - 1 end
+    if padNavigationHold > 0 then return end
+    if not (frame and frame:IsShown()) or frame._msuf2ForeverPadRegistered then return end
+    local manager = ForeverPadManager()
+    if not manager then return end
+    frame._msuf2ForeverPadRegistered = manager:FrameShown(frame) == true
+end
+
+local function RaiseForeverPadCursor()
+    if not IS_FOREVER or ForeverPadUI() then return end
+    if type(_G.CanAutoSetGamePadCursorControl) == "function"
+        and type(_G.SetGamePadCursorControl) == "function"
+        and _G.CanAutoSetGamePadCursorControl(true)
+    then
+        _G.SetGamePadCursorControl(true)
+    end
+end
 local L_PROFILE, L_EDIT_ON, L_EDIT_OFF, L_EDIT_MODE_ON, L_EDIT_MODE_OFF, L_EDIT_MODE_OFF_COMBAT, L_IN_COMBAT, L_OUT_OF_COMBAT
 local function RefreshLocaleCache()
     L_PROFILE = M.Tr("Profile:")
@@ -1733,6 +1782,7 @@ local function InstallWindowLifecycle(state)
         M.UpdateMenuCombatListener()
     end)
     f:SetScript("OnHide", function()
+        RemoveForeverPadNavigation(f)
         M.ClearPendingFixedPreviewExpansion()
         M.SetActivePageHeader(nil)
         M.HideLayerOverview()
@@ -2108,6 +2158,7 @@ function M.Open(pageKey)
         end
     end
     M.SelectPage(pageKey or M.sessionLastPage or "home")
+    RaiseForeverPadCursor()
     return true
 end
 function M.Toggle(pageKey)
@@ -2126,4 +2177,28 @@ function M.Toggle(pageKey)
         M.Open(pageKey)
     end
     return true
+end
+
+if IS_FOREVER then
+    M.SuspendForeverPadNavigation = function() SuspendForeverPadNavigation(M.frame) end
+    M.ResumeForeverPadNavigation = function() ResumeForeverPadNavigation(M.frame) end
+    local SelectPage = M.SelectPage
+    function M.SelectPage(...)
+        local frame = M.frame
+        SuspendForeverPadNavigation(frame)
+        local selected = SelectPage(...)
+        ResumeForeverPadNavigation(frame)
+        return selected
+    end
+
+    -- Search and external page readers may build a hidden page directly.
+    -- They also need a single rescan after construction, not one per widget.
+    local BuildPageEntry = M.BuildPageEntry
+    function M.BuildPageEntry(...)
+        local frame = M.frame
+        SuspendForeverPadNavigation(frame)
+        local entry = BuildPageEntry(...)
+        ResumeForeverPadNavigation(frame)
+        return entry
+    end
 end

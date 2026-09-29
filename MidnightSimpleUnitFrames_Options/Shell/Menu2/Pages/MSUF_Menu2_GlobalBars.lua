@@ -870,7 +870,7 @@ local function BuildScopeSection(ctx, b)
     local function RefreshBarsPage(reason)
         M.RequestRefresh(ctx, reason)
     end
-    GP.BuildScopeOverrideSection(ctx, b, {
+    local scopeUI = GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
         selectorMeta = Meta("scope.selector", "ephemeral"),
         selectorOptionMeta = function(value) return Meta("scope.selector.option." .. tostring(value), "ephemeral") end,
@@ -918,6 +918,13 @@ local function BuildScopeSection(ctx, b)
             end
         end,
     })
+    if M.AddTooltip and scopeUI then
+        M.AddTooltip(scopeUI.override, "Use custom settings for this scope",
+            "Gives this unit or group its own gradient, absorb, outline and highlight settings instead of following Shared. Turning it off keeps your custom values.",
+            { hook = true, labelHit = true })
+        M.AddTooltip(scopeUI.reset, "Reset",
+            "Turns off custom settings on every unit and group scope at once, so all frames follow Shared again. Their custom values stay saved.", { hook = true })
+    end
 end
 
 local function BuildTextureSection(ctx, b)
@@ -1043,6 +1050,9 @@ local function BuildTextureSection(ctx, b)
                 SyncGradientControls()
             end)
             RegisterControl(btn, Meta("gradient." .. kind .. ".direction." .. tostring(value), "action"), text, "button")
+            if M.AddTooltip then
+                M.AddTooltip(btn, nil, "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.", { hook = true })
+            end
             directionButtons[kind][value] = btn
         end
         local centerX = (padW - padButtonW) * 0.5
@@ -1058,6 +1068,32 @@ local function BuildTextureSection(ctx, b)
     BuildDirectionPad("power", powerY - 2)
     local textureControls = { barTexture, bgTexture }
     local gradientControls = { hpGradient, powerGradient }
+    if M.AddTooltip then
+        local tip = { hook = true, labelHit = true }
+        M.AddTooltip(hpGradient, "Health gradient", "Adds a shade over the filled part of health bars that darkens toward the arrows you pick. The strength slider sets how dark it gets.", tip)
+        M.AddTooltip(powerGradient, "Power gradient", "Adds the same fading shade to power bars, with its own direction arrows and strength.", tip)
+        M.AddTooltip(hpStrength, "Health strength", "How dark the health bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.", tip)
+        M.AddTooltip(powerStrength, "Power strength", "How dark the power bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.", tip)
+    end
+    -- Hover reasons: a unit or group scope without its own settings locks this
+    -- card, and each strength slider and arrow pad waits for its gradient.
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        local scopeReason = W.TurnOnReason("Use custom settings for this scope", ScopedControls)
+        W.SetControlsDisabledReason(textureControls, function(control)
+            if TextureControlsActive() then return nil end
+            if GroupScope() then return scopeReason(control) end
+            return M.Tr("Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.")
+        end)
+        W.SetControlsDisabledReason(gradientControls, scopeReason)
+        local hpReason = W.TurnOnReason("Health gradient", function() return GradientScopeGet("enableGradient", false) == true end)
+        local powerReason = W.TurnOnReason("Power gradient", function() return GradientScopeGet("enablePowerGradient", false) == true end)
+        local function HealthReason(control) return scopeReason(control) or hpReason(control) end
+        local function PowerReason(control) return scopeReason(control) or powerReason(control) end
+        W.SetControlDisabledReason(hpStrength, HealthReason)
+        W.SetControlDisabledReason(powerStrength, PowerReason)
+        W.SetControlsDisabledReason(directionButtons.health, HealthReason)
+        W.SetControlsDisabledReason(directionButtons.power, PowerReason)
+    end
     M.TrackRefresh(ctx, SyncGradientControls(function()
         local hpDirections = CurrentGradientDirectionsForScope("health")
         local powerDirections = CurrentGradientDirectionsForScope("power")
@@ -1448,6 +1484,32 @@ local function BuildAbsorbSection(ctx, b)
     local positiveOptions = { positiveAnchor, positiveHeight, positiveOffset, positiveTexture, positiveOpacity, overAbsorb, fullStripe }
     local negativeOptions = { negativeAnchor, negativeHeight, negativeOffset, negativeTexture, negativeOpacity }
     local healOptions = { healAnchor, healHeight, healOffset, healTexture, healOpacity, healAllHealers }
+    if M.AddTooltip then
+        local tip = { hook = true, labelHit = true }
+        local testTip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat."
+        M.AddTooltip(positiveEnabled, "Show positive absorbs", "Draws absorb shields on the unit, such as Power Word: Shield, as an overlay on the health bar.", tip)
+        M.AddTooltip(overAbsorb, "Over-absorb overlay", "Adds a shield glow at the end of the health bar when absorbs plus incoming heals cover all of the missing health.", tip)
+        M.AddTooltip(fullStripe, "Full-health absorb stripe", "Shows a shield glow at the end of the health bar while the unit is at full health and still has an absorb shield.", tip)
+        M.AddTooltip(negativeEnabled, "Show negative heal absorbs", "Shows heal absorbs, effects that soak up incoming healing before health can rise, as a bar over current health.", tip)
+        M.AddTooltip(healEnabled, "Show heal prediction", "Shows incoming heals as a bar on the health bar before they land. Only your own heals count unless Include healing from others is on.", tip)
+        M.AddTooltip(healAllHealers, "Include healing from others", "Counts incoming heals from every healer, not only your own. Useful on group frames when several healers are active.", tip)
+        M.AddTooltip(positiveTest, "Test prediction bars", testTip, tip)
+        M.AddTooltip(negativeTest, "Test prediction bars", testTip, tip)
+        M.AddTooltip(healTest, "Test prediction bars", testTip, tip)
+    end
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        local scopeReason = W.TurnOnReason("Use custom settings for this scope", ScopedControls)
+        local function Chain(label, isOn)
+            local own = W.TurnOnReason(label, isOn)
+            return function(control) return scopeReason(control) or own(control) end
+        end
+        W.SetControlsDisabledReason({ positiveEnabled, negativeEnabled, healEnabled }, scopeReason)
+        W.SetControlsDisabledReason(positiveOptions, Chain("Show positive absorbs", function() return BarScopeGet("enableAbsorbBar", true) ~= false end))
+        W.SetControlsDisabledReason(negativeOptions, Chain("Show negative heal absorbs", function() return BarScopeGet("healAbsorbEnabled", true) ~= false end))
+        W.SetControlsDisabledReason(healOptions, Chain("Show heal prediction", function()
+            return BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true
+        end))
+    end
     M.TrackRefresh(ctx, SyncControls(function()
         local scopedActive = ScopedControls()
         SetControlEnabled(positiveEnabled, scopedActive)
@@ -1549,13 +1611,20 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         Meta("outline.color"))
+    if M.AddTooltip then
+        M.AddTooltip(outlineSlider, "Bar outline thickness", "Width in pixels of the normal frame outline; 0 hides it. Aggro, dispel and other highlight borders use their own thickness.", { hook = true })
+        M.AddTooltip(outlineLayer, "Frame outline layer (0-30)", "Draw order on the shared 0-30 layer scale. Raise it to draw the outline above text, icons or auras on a lower layer.", { hook = true })
+    end
+    local turnOn, turnOff = W.TurnOnReason, W.TurnOffReason
+    local scopeReason = turnOn and turnOn("Use custom settings for this scope", ScopedControls)
+    local roundedReason = turnOff and turnOff("Rounded frame texture", function() return ReadB("roundedFramesEnabled", false) ~= true end)
     M.BindGateGroup(ctx, nil, {
-        { controls = { outlineSlider, outlineLayer }, on = ScopedControls },
+        { controls = { outlineSlider, outlineLayer }, on = ScopedControls, reason = scopeReason },
         -- Rounded frames replace the square edges with the tinted rounded edge
         -- stack, so a texture pick would be a silent no-op there; disable it.
         { controls = { outlineTexture }, on = function()
             return ScopedControls() and ReadB("roundedFramesEnabled", false) ~= true
-        end },
+        end, reason = scopeReason and function(control) return scopeReason(control) or roundedReason(control) end },
     })
 end
 
@@ -1664,7 +1733,8 @@ local function BuildRoundedSection(ctx, b)
         "Shows a small preview of the rounded frame texture style.", "preview")
     local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.classResources, roundedControls.power, roundedControls.mouseover, roundedControls.castbars, roundingSlider }
     SyncRoundedControls(M.BindGateGroup(ctx, nil, {
-        { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end },
+        { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end,
+            reason = W.TurnOnReason and W.TurnOnReason("Rounded frame texture") },
     }, {
         also = function() if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end end,
     }))
@@ -1901,7 +1971,7 @@ local function BuildSlantedSection(ctx, b)
     end
     dependent[#dependent + 1] = direction
     SyncSlantedControls(M.BindGateGroup(ctx, nil, {
-        { controls = dependent, on = SlantedSwitchOn },
+        { controls = dependent, on = SlantedSwitchOn, reason = W.TurnOnReason and W.TurnOnReason("Enable slanted bars") },
     }, {
         also = function() if preview and preview.RefreshSlantedPreview then preview:RefreshSlantedPreview() end end,
     }))
@@ -2152,6 +2222,28 @@ local function BuildHighlightSection(ctx, b)
     local bossTargetTest = bossSupported and BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true, "highlight.preview.boss_target")
     local scopedBorderControls = { highlight, aggro, dispelBorder, purge }
     local dispelBorderControls = { dispelTrigger, dispelShowOn, dispelTest }
+    if M.AddTooltip then
+        local tip = { hook = true }
+        M.AddTooltip(aggro, "Aggro border", "Shows the aggro color on the border when the unit has threat: your frame while you hold aggro, enemies attacking you, and group members with high threat.", tip)
+        M.AddTooltip(dispelBorder, "Dispel border", "Colors the border by debuff type while the unit has a debuff that Dispel border detects. Changing it asks for a UI reload.", tip)
+        M.AddTooltip(purge, "Purge border", "Colors the border while the unit has a buff you can purge or spellsteal. Only Target and Focus frames support it.", tip)
+        M.AddTooltip(bossTarget, "Boss target border", "Highlights the Boss frame of the boss you are targeting. It is shared by all boss frames, so it changes only on the Shared scope.", tip)
+    end
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        W.SetControlsDisabledReason(dispelBorderControls, W.TurnOnReason("Dispel border", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end))
+        W.SetControlDisabledReason(aggroTest, W.TurnOnReason("Aggro border", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end))
+        local purgeReason = W.TurnOnReason("Purge border", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end)
+        W.SetControlDisabledReason(purgeTest, function(control) return PurgeScopeSupported() and purgeReason(control) or nil end)
+        if bossTarget then
+            local bossOnReason = W.TurnOnReason("Boss target border", BossTargetBorderOn)
+            local function BossReason(control)
+                if not SharedScope() then return M.Tr("Boss target border is a shared boss-frame setting.") end
+                return control == bossTargetTest and bossOnReason(control) or nil
+            end
+            W.SetControlDisabledReason(bossTarget, BossReason)
+            W.SetControlDisabledReason(bossTargetTest, BossReason)
+        end
+    end
     local function ClearBorderTestIfDisabled(flagName, setterName, enabled)
         local fn = _G[setterName]
         if _G[flagName] and not enabled and type(fn) == "function" then fn(false) end
@@ -2198,6 +2290,9 @@ local function BuildHighlightSection(ctx, b)
             if RefreshPriorityRows then RefreshPriorityRows() end
         end,
         Meta("highlight.priority.enabled"))
+    if M.AddTooltip then
+        M.AddTooltip(prio, "Custom highlight priority", "When several highlight borders show at once, the highest one in the list wins. Turn this on to reorder the list by dragging.", { hook = true })
+    end
     local rowMax = 4
     local prioContainer, prioRows, prioCount
     local function SavePriorityRows()
@@ -2282,6 +2377,12 @@ local function BuildPowerSection(ctx, b)
             })
         end,
         Meta("power.realtime_text"))
+    if M.AddTooltip then
+        local tip = { hook = true, labelHit = true, labelHitWhenDisabled = true }
+        M.AddTooltip(smoothPower, "Smooth power bar", "Power bars glide to new values instead of jumping; turns off Chunked power loss. Set per unit: pick a unit scope with a power bar, such as Player or Target.", tip)
+        M.AddTooltip(chunkedPower, "Chunked power loss", "Spent power drops at once while the spent part briefly stays highlighted, then fades; turns off Smooth power bar. Set per unit, like Smooth power bar.", tip)
+        M.AddTooltip(realtimePower, "Realtime power text", "Updates the Player power text on every power tick instead of the regular update rate. Only the Player frame uses it; set it on the Shared scope.", tip)
+    end
     M.BindGateGroup(ctx, nil, {
         { controls = { smoothPower, chunkedPower }, on = function() return CurrentPowerBarScopeUnit() ~= nil end },
         { controls = realtimePower, on = SharedScope },

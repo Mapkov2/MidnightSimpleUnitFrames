@@ -148,17 +148,13 @@ function M.GetMenuPageLabel(pageKey)
     return M.navSubpageLabels[pageKey] or HumanizePageKey(pageKey)
 end
 
-function M.GetMenuBreadcrumb(pageKey)
-    pageKey = tostring(pageKey or "")
-    if pageKey == "" or pageKey == "menu_chrome" then return "MSUF menu" end
-    if pageKey == "guided_setup" then return "Dashboard > Guided Setup" end
-    if pageKey == "search" then return "MSUF menu > Search" end
-    if pageKey == "changelog" then return "MSUF menu > See New Features" end
-
+-- English "Group > Page[ > Tab]" parts of a page, read from the rail data above;
+-- nil when the page is not reachable from the rail.
+local function NavPathParts(pageKey)
     local groups, pages = NavigationIndex()
     local primaryKey = (M.navPrimaryForKey and M.navPrimaryForKey[pageKey]) or pageKey
     local primary = pages[primaryKey]
-    if not primary then return M.GetMenuPageLabel(pageKey) end
+    if not primary then return nil end
 
     local parts = {}
     if primary.group and groups[primary.group] then parts[#parts + 1] = groups[primary.group] end
@@ -167,6 +163,33 @@ function M.GetMenuBreadcrumb(pageKey)
         local secondary = M.navSubpageLabels[pageKey] or M.GetMenuPageLabel(pageKey)
         if secondary ~= "" and secondary ~= parts[#parts] then parts[#parts + 1] = secondary end
     end
+    return parts
+end
+
+function M.GetMenuBreadcrumb(pageKey)
+    pageKey = tostring(pageKey or "")
+    if pageKey == "" or pageKey == "menu_chrome" then return "MSUF menu" end
+    if pageKey == "guided_setup" then return "Dashboard > Guided Setup" end
+    if pageKey == "search" then return "MSUF menu > Search" end
+    if pageKey == "changelog" then return "MSUF menu > See New Features" end
+
+    local parts = NavPathParts(pageKey)
+    if not parts then return M.GetMenuPageLabel(pageKey) end
+    return table.concat(parts, " > ")
+end
+
+--- Translated menu path for help texts, e.g. NavPath("auras3_styling") gives
+--- "Frames > Auras" and NavPath("opt_colors", "Party & Raid Frames") gives
+--- "Style > Colors > Party & Raid Frames". Every part is translated on its own,
+--- exactly as the rail and the page show it, so a help text built from this
+--- names the place the player sees even after the rail changes. A page the
+--- rail cannot reach falls back to its page label.
+function M.NavPath(pageKey, subLabel)
+    local Tr = type(M.Tr) == "function" and M.Tr or tostring
+    pageKey = tostring(pageKey or "")
+    local parts = NavPathParts(pageKey) or { M.GetMenuPageLabel(pageKey) }
+    if type(subLabel) == "string" and subLabel ~= "" then parts[#parts + 1] = subLabel end
+    for i = 1, #parts do parts[i] = Tr(parts[i]) end
     return table.concat(parts, " > ")
 end
 local function AliasRows(rows)

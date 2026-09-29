@@ -40,10 +40,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change bar textures, gradients, or outlines?",
-                a = "Open Appearance > Bars. Textures & Gradient controls shared bar textures; Frame Outline and" ..
+                a = "Open Frames > Bars. Textures & Gradient controls shared bar textures; Frame Outline and" ..
                     " Highlight Borders control borders.",
                 p = "opt_bars",
-                t = "Opens: Appearance > Bars > Textures & Gradient",
+                t = "Opens: Frames > Bars > Textures & Gradient",
                 x = "Textures & Gradient Frame Outline Highlight Borders texture gradient outline border",
                 k = SearchKeywordList(
                     "bar texture|health texture|power texture|change texture|gradient|outline|border|bar border",
@@ -53,11 +53,11 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I enable or disable rounded frames?",
-                a = "Open Appearance > Bars > Rounded Texture. Use the master toggle for all rounded frame" ..
+                a = "Open Frames > Bars > Rounded Texture. Use the master toggle for all rounded frame" ..
                     " textures, or the separate toggles for unit frames, group frames, power bars, and mouseover" ..
                     " highlights.",
                 p = "opt_bars",
-                t = "Opens: Appearance > Bars > Rounded Texture",
+                t = "Opens: Frames > Bars > Rounded Texture",
                 x = "Rounded Texture Rounded frame texture Unit frames Group frames Power bars Mouseover highlights" ..
                     " rounded frames round corners",
                 k = SearchKeywordList(
@@ -113,10 +113,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change health, power, or class colors?",
-                a = "Open Appearance > Colors. Bar Colors and Power Bar Colors control HP/power colors; Class Bar" ..
+                a = "Open Style > Colors. Bar Colors and Power Bar Colors control HP/power colors; Class Bar" ..
                     " Colors controls class overrides.",
                 p = "opt_colors",
-                t = "Opens: Appearance > Colors > Bar Colors",
+                t = "Opens: Style > Colors > Bar & Prediction Colors",
                 x = "Bar Colors Power Bar Colors Class Bar Colors health hp power class color",
                 k = SearchKeywordList(
                     "health color|hp color|power color|mana color|class color|bar color|reaction color|npc color",
@@ -126,10 +126,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change colors?",
-                a = "Most shared colors are in Appearance > Colors. Bar texture and border style controls are in" ..
-                    " Appearance > Bars.",
+                a = "Most shared colors are in Style > Colors. Bar texture and border style controls are in" ..
+                    " Frames > Bars.",
                 p = "opt_colors",
-                t = "Opens: Appearance > Colors",
+                t = "Opens: Style > Colors",
                 x = "Colors Bar Background Tint Bar Colors Unitframe Colors Class Bar Colors",
                 k = SearchKeywordList(
                     "colors|colours|farbe|farben|class color|reaction color|bar color|background color",
@@ -139,10 +139,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change fonts and text?",
-                a = "Appearance > Fonts controls shared font settings. Unit pages contain per-unit name, health," ..
+                a = "Style > Fonts controls shared font settings. Unit pages contain per-unit name, health," ..
                     " and power text position and pattern settings.",
                 p = "opt_fonts",
-                t = "Opens: Appearance > Fonts",
+                t = "Opens: Style > Fonts",
                 x = "Global Font Text Style Name & Power Colors Name Shortening font size outline shadow",
                 k = SearchKeywordList(
                     "font|fonts|text|schrift|name text|hp text|health text|power text|text size|font size|outline",
@@ -219,9 +219,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "How do I configure buffs and debuffs?", "Open the affected UnitFrame > Auras for visibility, layout, filters, and blacklists. Use Appearance > Auras for scope-aware cooldown, stack, duration-bar, and icon styling.", "uf_target", "Opens: Target > Auras", "Auras Buffs Debuffs Filters Blacklist Style buffs debuffs", SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "buff|buffs|debuff|debuffs|auras|aura|cooldown|filter|only my buffs|only my debuffs|hide buffs|show debuffs|aura size|aura position"), 120, },
+            { "How do I configure buffs and debuffs?", "Open the affected UnitFrame > Auras for visibility, layout, filters, and blacklists. Use Frames > Auras for scope-aware cooldown, stack, duration-bar, and icon styling.", "uf_target", "Opens: Target > Auras", "Auras Buffs Debuffs Filters Blacklist Style buffs debuffs", SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "buff|buffs|debuff|debuffs|auras|aura|cooldown|filter|only my buffs|only my debuffs|hide buffs|show debuffs|aura size|aura position"), 120, },
             { "Can MSUF hide debuffs with a blacklist?", "Open the affected UnitFrame > Auras > Debuffs and use its frame-specific SpellID blacklist. Group exclusions live directly in Frames > Party/Raid Frames > Auras > Debuffs.", "uf_target", "Opens: Target > Auras", "Filters Blacklist spell id category blacklist black list ignore list hide debuffs hide buffs hidden proc BL ElvUI Emlui", SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "debuff blacklist|debuff black list|aura blacklist|aura black list|buff blacklist|buff black list|blacklist debuffs|black list debuffs|midnight simple unit frame|midnight simple unit frames|midnight simple unitframe|midnight simple unitframes|MSUF unitframe|MSUF unit frames|hide specific debuff|hide specific debuffs|hide a debuff|icon for debuff|hide debuff proc|hide proc|hidden proc|proc hidden|BL hidden proc|BL debuff|top right BL|top right screenshot|ElvUI debuff blacklist|ElvUI blacklist|Emlui debuff blacklist|can MSUF do same|ignore debuffs|ignore aura|ignore list|global ignore list|debuff ausblenden|debuff verstecken|aura ignorieren|schwaechungszauber ausblenden"), 960, },
-            { "How do I configure group buffs or debuffs?", "Open Frames > Party/Raid Frames > Auras for Buff/Debuff filters, lists, visibility, and layout. For text, cooldowns, stacks, and duration bars use Appearance > Auras and select Party or Raid scope.", "gf_auras", "Opens: Frames > Party/Raid Frames > Auras", "Buffs Debuffs Style Filters Group Frames Auras", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, "raid buffs|raid debuffs|party buffs|party debuffs|group auras|group buffs|group debuffs|group cooldown swipe"), 210, },
+            { "How do I configure group buffs or debuffs?", "Open Frames > Party/Raid Frames > Auras for Buff/Debuff filters, lists, visibility, and layout. For text, cooldowns, stacks, and duration bars use Frames > Auras and select Party or Raid scope.", "gf_auras", "Opens: Frames > Party/Raid Frames > Auras", "Buffs Debuffs Style Filters Group Frames Auras", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, "raid buffs|raid debuffs|party buffs|party debuffs|group auras|group buffs|group debuffs|group cooldown swipe"), 210, },
             { "How do I add or change status icons and indicators?", "Unit frame status icons are on each unit page. Group Spell Indicators are in Frames > Party/Raid Frames > Auras; group status and corner indicators are in Frames > Party/Raid Frames > Status & Indicators.", "gf_indicators", "Opens: Frames > Party/Raid Frames > Status & Indicators", "Status Indicators Status Icons Corner Indicators role icon dispel aggro raid marker", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS, "status icons|status and indicators|indicator|indicators|corner indicator|raid marker|role icon|leader icon|ready check|aggro icon|threat icon|focus glow"), 190, },
             { "How do Priority Frames work?", "Priority Frames duplicate automatic tanks and manually pinned current group members into a stable extra strip without removing them from the normal Party or Raid frames. In a party they inherit Party Frames; in a raid they inherit the active Raid or Mythic Raid frames. They work in parties, raids, and Mythic raids, inherit the active group-frame click-cast behavior, and require the matching base group frames to be enabled.", "gf_priority", "Opens: Frames > Party/Raid Frames > Priority", "Priority Frames overview purpose pinned players automatic tanks extra party raid frames important players", SearchKeywordList("priority frames|priority group frames|what are priority frames|what are pinned frames|party priority frames|dungeon priority frames|extra party frames|extra raid frames|pinned party members|pinned raid frames|tank frames|important players|priority strip"), 300, },
             { "How do I pin or unpin a player in Priority Frames?", "While grouped, set the hover hotkey on Frames > Party/Raid Frames > Priority. Hover an MSUF Party, Raid, or Priority frame and press the Priority Frames hotkey to pin or unpin that player. Players cannot be added by typing a name or while outside the current group; a saved absent pin waits and reappears when that player rejoins.", "gf_priority", "Opens: Frames > Party/Raid Frames > Priority", "Priority Frames pinning hover hotkey keybind add remove unpin player by name offline current group", SearchKeywordList("pin player|unpin player|manual pin|pinned player|priority hotkey|priority keybind|hover hotkey|add priority frame|remove priority frame|pin by name|offline pin|saved pin"), 330, },
@@ -244,7 +244,7 @@ if type(Data.RegisterFAQProvider) == "function" then
                 a = "Some layout changes rebuild frames, while visual changes apply instantly. If needed, close and" ..
                     " reopen the menu or reload after large profile/import changes.",
                 p = "opt_misc",
-                t = "Opens: Appearance > Miscellaneous",
+                t = "Opens: General > Miscellaneous",
                 x = "refresh reload apply not updating settings",
                 k = SearchKeywordList(
                     "not updating|does not update|refresh|reload|apply|changes not showing|aktualisiert nicht",
@@ -266,9 +266,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where is the minimap icon setting?",
-                a = "Open Appearance > Miscellaneous > Blizzard Frames and use Show MSUF minimap icon.",
+                a = "Open General > Miscellaneous > Blizzard Frames and use Show MSUF minimap icon.",
                 p = "opt_misc",
-                t = "Opens: Appearance > Miscellaneous > Blizzard Frames",
+                t = "Opens: General > Miscellaneous > Blizzard Frames",
                 x = "Blizzard Frames Show MSUF minimap icon minimap button addon compartment",
                 k = SearchKeywordList(
                     "minimap|minimap icon|minimap button|hide minimap icon|show minimap icon|addon compartment",
@@ -278,9 +278,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where are target sound settings?",
-                a = "Open Appearance > Miscellaneous > Blizzard Frames and use Play sound on Target/Target Lost.",
+                a = "Open General > Miscellaneous > Blizzard Frames and use Play sound on Target/Target Lost.",
                 p = "opt_misc",
-                t = "Opens: Appearance > Miscellaneous > Blizzard Frames",
+                t = "Opens: General > Miscellaneous > Blizzard Frames",
                 x = "Blizzard Frames Play sound on Target Target Lost target sounds",
                 k = SearchKeywordList(
                     "target sound|target sounds|target lost sound|play sound|sound on target|sound target lost",
@@ -290,9 +290,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where are menu snap or menu behavior settings?",
-                a = "Open Appearance > Miscellaneous > Menu behavior for edge snap and related menu behavior.",
+                a = "Open General > Miscellaneous > Menu behavior for edge snap and related menu behavior.",
                 p = "opt_misc",
-                t = "Opens: Appearance > Miscellaneous > Menu behavior",
+                t = "Opens: General > Miscellaneous > Menu behavior",
                 x = "Menu behavior edge snap windows snap menu resize ui scale menu scale",
                 k = SearchKeywordList(
                     "menu snap|edge snap|window snap|menu behavior|menu resize|menu scale|ui scale|menu too big",
@@ -302,10 +302,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where is Miscellaneous?",
-                a = "Open Appearance > Miscellaneous for language, menu behavior, startup notices, tooltips," ..
+                a = "Open General > Miscellaneous for language, menu behavior, startup notices, tooltips," ..
                     " Blizzard frames, minimap icon, and sounds.",
                 p = "opt_misc",
-                t = "Opens: Appearance > Miscellaneous",
+                t = "Opens: General > Miscellaneous",
                 x = "Miscellaneous misc global style language menu behavior startup notices tooltips blizzard frames" ..
                     " minimap sounds",
                 k = SearchKeywordList(

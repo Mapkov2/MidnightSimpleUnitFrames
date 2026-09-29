@@ -95,22 +95,66 @@ local function SetAccordionHighlightSide(regions, side, color)
     side:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
     for i = 1, #regions do regions[i]:SetVertexColor(color[1], color[2], color[3], color[4] or 1) end
 end
+local function AccordionLinearize(value)
+    if value <= 0.03928 then return value / 12.92 end
+    return ((value + 0.055) / 1.055) ^ 2.4
+end
+local function AccordionLuminance(r, g, b)
+    return 0.2126 * AccordionLinearize(r) + 0.7152 * AccordionLinearize(g)
+        + 0.0722 * AccordionLinearize(b)
+end
+local function AccordionContrastAt(r, g, b, alpha, tone, backdrop, textLuminance)
+    local opacity = 1 - alpha
+    local surfaceLuminance = AccordionLuminance(
+        r * tone * alpha + backdrop[1] * opacity,
+        g * tone * alpha + backdrop[2] * opacity,
+        b * tone * alpha + backdrop[3] * opacity)
+    local light, dark = max(textLuminance, surfaceLuminance), min(textLuminance, surfaceLuminance)
+    return (light + 0.05) / (dark + 0.05)
+end
+-- Keep the authored blue gradient, but deepen pale accent colors until the
+-- near-white title remains readable on the translucent open header.
+local function AccordionReadableTone(r, g, b, alpha, backdrop, textLuminance)
+    if AccordionContrastAt(r, g, b, alpha, 1, backdrop, textLuminance) >= 5.5 then return 1 end
+    local low, high = 0, 1
+    for _ = 1, 8 do
+        local middle = (low + high) * 0.5
+        if AccordionContrastAt(r, g, b, alpha, middle, backdrop, textLuminance) >= 5.5 then
+            low = middle
+        else
+            high = middle
+        end
+    end
+    return low
+end
 local function AccordionOpenHighlightSetColors(self, fromColor, toColor)
     local fr, fg, fb, fa = fromColor[1], fromColor[2], fromColor[3], fromColor[4] or 1
     local tr, tg, tb, ta = toColor[1], toColor[2], toColor[3], toColor[4] or 1
+    local backdrop = ThemeColor("panel2", { 0.055, 0.098, 0.161, 1 })
+    local title = ThemeColor("text", { 0.933, 0.957, 1, 1 })
+    local textLuminance = AccordionLuminance(title[1], title[2], title[3])
+    local fromTone = AccordionReadableTone(fr, fg, fb, fa, backdrop, textLuminance)
+    local toTone = AccordionReadableTone(tr, tg, tb, ta, backdrop, textLuminance)
+    fr, fg, fb = fr * fromTone, fg * fromTone, fb * fromTone
+    tr, tg, tb = tr * toTone, tg * toTone, tb * toTone
     if self._msuf2FromR == fr and self._msuf2FromG == fg and self._msuf2FromB == fb and self._msuf2FromA == fa
         and self._msuf2ToR == tr and self._msuf2ToG == tg and self._msuf2ToB == tb and self._msuf2ToA == ta then
         return
     end
     self._msuf2FromR, self._msuf2FromG, self._msuf2FromB, self._msuf2FromA = fr, fg, fb, fa
     self._msuf2ToR, self._msuf2ToG, self._msuf2ToB, self._msuf2ToA = tr, tg, tb, ta
+    local safeFrom = self._msuf2SafeFromColor or {}
+    local safeTo = self._msuf2SafeToColor or {}
+    self._msuf2SafeFromColor, self._msuf2SafeToColor = safeFrom, safeTo
+    safeFrom[1], safeFrom[2], safeFrom[3], safeFrom[4] = fr, fg, fb, fa
+    safeTo[1], safeTo[2], safeTo[3], safeTo[4] = tr, tg, tb, ta
     if T.ApplyTextureGradient then
-        T.ApplyTextureGradient(self.middle, "HORIZONTAL", fromColor, toColor, false)
+        T.ApplyTextureGradient(self.middle, "HORIZONTAL", safeFrom, safeTo, false)
     else
         self.middle:SetColorTexture(tr, tg, tb, ta)
     end
-    SetAccordionHighlightSide(self.leftCorners, self.left, fromColor)
-    SetAccordionHighlightSide(self.rightCorners, self.right, toColor)
+    SetAccordionHighlightSide(self.leftCorners, self.left, safeFrom)
+    SetAccordionHighlightSide(self.rightCorners, self.right, safeTo)
 end
 local function CreateAccordionOpenHighlight(header, fromColor, toColor)
     local regions = CreateAccordionRoundedRegions(header, "BACKGROUND", 1)
@@ -583,6 +627,20 @@ function PageBuilderStages.RefreshCollapsibleHeaderLayout(entry, header, hint, l
             entry._msuf2SectionActions:SetPoint("RIGHT", header, "RIGHT", -10 - (tonumber(entry._msuf2ColorSwatchReserve) or 0), 0)
         end
         local right = 16 + swatchReserve + actions
+        local custom = entry._msuf2CustomBadge
+        if custom then
+            -- The Custom marker sits left of the switch and actions; a narrow
+            -- header drops it before the title loses its last 150px.
+            local customW = (custom.GetWidth and custom:GetWidth()) or 0
+            if entry._msuf2CustomBadgeWanted == true and headerW - right - customW - 8 >= 150 then
+                custom:ClearAllPoints()
+                custom:SetPoint("RIGHT", header, "RIGHT", -right, 0)
+                custom:Show()
+                right = right + customW + 8
+            else
+                custom:Hide()
+            end
+        end
         local left = math.max(180, math.min(330, math.floor(headerW * 0.34)))
         local room = headerW - left - right
         local summary = entry._msuf2UXSummary
@@ -1573,6 +1631,48 @@ function W.SetCollapsibleBadges(section, specs)
         end
     end
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
+end
+--- "Custom" text marker for a section whose settings differ from what Reset
+--- section restores. It has its own slot because summary headers hide the
+--- page badge row. The owner decides at build/refresh time; a state change
+--- relayouts the header once, an unchanged state costs one comparison.
+function W.SetCollapsibleCustomBadge(section, shown)
+    local entry = section and section._msuf2CollapsibleEntry
+    local header = entry and entry.header
+    if not header then return end
+    shown = shown and true or false
+    local badge = entry._msuf2CustomBadge
+    if not badge then
+        if not shown then return end
+        RefreshBadgeAccentBorder()
+        local style = COLLAPSIBLE_BADGE_STYLES.accent
+        badge = PixelLayoutRegion(CreateFrame("Frame", nil, header))
+        badge:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 2)
+        badge:SetSize(CollapsibleBadgeWidth("Custom"), 20)
+        local fill, edge = T.CreateSuperellipseLayers(badge, "_msuf2HeaderBadge", 1, "ARTWORK", "OVERLAY")
+        if fill then
+            if T.SetFillGradient then T.SetFillGradient(fill, style.bg, 0.12, -0.18)
+            else fill:SetVertexColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4] or 1) end
+        end
+        if edge then edge:SetVertexColor(style.border[1], style.border[2], style.border[3], style.border[4] or 1) end
+        badge.text = T.Font(badge, "GameFontDisableSmall", Tr("Custom"), T.colors.text)
+        badge.text:SetPoint("CENTER", badge, "CENTER", 0, 0)
+        badge.text:SetTextColor(style.text[1], style.text[2], style.text[3], style.text[4] or 1)
+        if badge.text.SetWordWrap then badge.text:SetWordWrap(false) end
+        -- Hover explains the marker; a click still opens or closes the section.
+        badge:EnableMouse(true)
+        badge:SetScript("OnMouseUp", function(_, button)
+            if button == "LeftButton" and header.Click then header:Click() end
+        end)
+        if M.AddTooltip then
+            M.AddTooltip(badge, "Custom", "Some settings in this section differ from their defaults. Reset section restores them.", { hook = true })
+        end
+        badge:Hide()
+        entry._msuf2CustomBadge = badge
+    end
+    if entry._msuf2CustomBadgeWanted == shown then return end
+    entry._msuf2CustomBadgeWanted = shown
+    if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() else badge:SetShown(shown) end
 end
 
 -- A deliberately quiet, card-local entry point for related colors. Target
@@ -2815,6 +2915,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
             y = y - rowStep
         end
         local btn = T.Button(section, Tr(item.text or item.label or item.value or ""), width, buttonH)
+        btn._msuf2SegmentChoice = true
         -- The logical ScopeOverrideBar owns search/catalog identity and values.
         -- Child buttons are implementation details; registering both creates
         -- duplicate/unknown controls for one selection.
@@ -2826,6 +2927,12 @@ function W.ScopeOverrideBar(ctx, section, opts)
         T.CenterButtonLabel(btn)
         if btn.RefreshVisual then btn:RefreshVisual() end
         btn:SetScript("OnClick", function() bar:SetValue(item.value) end)
+        -- Scope bars that know per-scope overrides mark a departing scope with
+        -- a " *" text cue (not color alone) and say so on hover.
+        if type(opts.hasOverride) == "function" and item.value ~= "shared" then
+            btn._msuf2ScopeText = Tr(item.text or item.label or item.value or "")
+            if M.AddTooltip then M.AddTooltip(btn, item.text or item.label or item.value, W.ScopeOverrideTooltipBody, { hook = true }) end
+        end
         bar.buttons[i] = btn
         x = x + width + gap
     end
@@ -2856,10 +2963,17 @@ function W.ScopeOverrideBar(ctx, section, opts)
                 btn._msuf2Override = nextOverride
                 btn:SetActive(active)
             end
+            if btn._msuf2ScopeText and btn._msuf2ScopeOverride ~= override then
+                btn._msuf2ScopeOverride = override
+                if btn._msuf2Label then btn._msuf2Label:SetText(override and (btn._msuf2ScopeText .. " *") or btn._msuf2ScopeText) end
+            end
         end
     end
     M.TrackRefresh(ctx, function() bar:Refresh() end)
     return bar
+end
+function W.ScopeOverrideTooltipBody(button)
+    return button and button._msuf2ScopeOverride and "Has its own settings" or "Follows shared settings"
 end
 function W.SetControlShown(control, shown)
     if not control then return end
@@ -2890,7 +3004,10 @@ function W.SetControlShown(control, shown)
 end
 local function SetEnabledState(frame, enabled)
     if not frame then return end
-    local mouseEnabled = enabled and not frame._msuf2UseProxyMouse
+    -- A control wired with a disabled reason keeps the mouse while disabled:
+    -- the reason tooltip is how the user learns what unlocks it. Its click
+    -- handlers stay inert because the control itself is disabled.
+    local mouseEnabled = (enabled or frame._msuf2DisabledReasonWired == true) and not frame._msuf2UseProxyMouse
     if frame._msuf2EnabledStateApplied == enabled
         and frame._msuf2MouseEnabledStateApplied == mouseEnabled
         and (not frame.IsEnabled or ((frame:IsEnabled() and true or false) == enabled))
@@ -2946,6 +3063,7 @@ local function ApplyEnabledVisuals(control, enabled)
     if control._msuf2RefreshSwitchVisual then control:_msuf2RefreshSwitchVisual() end
     if control._msuf2RefreshToggleFeedback then control:_msuf2RefreshToggleFeedback() end
     local labelMouseEnabled = enabled or control._msuf2KeepLabelHitMouseWhenDisabled == true
+        or control._msuf2DisabledReasonWired == true
     if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse and control._msuf2LabelHit._msuf2MouseEnabledStateApplied ~= labelMouseEnabled then
         control._msuf2LabelHit._msuf2MouseEnabledStateApplied = labelMouseEnabled
         control._msuf2LabelHit:EnableMouse(labelMouseEnabled)
@@ -3016,6 +3134,8 @@ function W.SetControlGateEnabled(control, gateKey, enabled)
         if control.IsEnabled then current = control:IsEnabled() and true or false end
         control._msuf2DesiredEnabled = current
     end
+    local gateReasons = W._msuf2GateReasons
+    if disabled and gateReasons and gateReasons[gateKey] ~= nil then W.WireDisabledReason(control) end
     ApplyControlEnabled(control)
 end
 function W.ClearControlGate(control, gateKey, deferApply)
@@ -3030,6 +3150,116 @@ end
 function W.SetControlsEnabled(controls, enabled)
     for i = 1, #(controls or {}) do
         W.SetControlEnabled(controls[i], enabled)
+    end
+end
+--- Disabled reasons: a control that a toggle or gate greys out says why on
+--- hover. The reason is a string or a function(control) returning one (nil
+--- when it does not apply) and is only shown while the control is disabled.
+--- A gate (W.SetControlGateEnabled) blocks it: while a gate holds the control
+--- only that gate's registered reason can show, so a frame-level lock never
+--- points at a toggle the user cannot reach. Wiring happens once per control
+--- at build time; hovering resolves the text, nothing runs per frame.
+function W.WireDisabledReason(control)
+    if not control or control._msuf2DisabledReasonWired then return end
+    -- Text inputs keep their mouse off while disabled so they cannot take focus.
+    if control.GetObjectType and control:GetObjectType() == "EditBox" then return end
+    control._msuf2DisabledReasonWired = true
+    -- Disabled buttons swallow OnEnter/OnLeave unless asked to keep them.
+    if control.SetMotionScriptsWhileDisabled then control:SetMotionScriptsWhileDisabled(true) end
+    if control.HookScript then
+        control:HookScript("OnEnter", W.ShowDisabledReason)
+        control:HookScript("OnLeave", W.HideDisabledReason)
+    end
+    local hit = control._msuf2LabelHit
+    if hit and hit ~= control and hit.HookScript then
+        hit._msuf2ReasonOwner = control
+        hit:HookScript("OnEnter", W.ShowDisabledReason)
+        hit:HookScript("OnLeave", W.HideDisabledReason)
+    end
+    -- An already disabled control regains the mouse for its reason tooltip.
+    if control._msuf2AppliedEnabled == false then
+        control._msuf2AppliedEnabled = nil
+        ApplyControlEnabled(control)
+    end
+end
+function W.SetControlDisabledReason(control, reason)
+    if not control then return end
+    if reason == "" then reason = nil end
+    control._msuf2DisabledReason = reason
+    if reason ~= nil then W.WireDisabledReason(control) end
+end
+function W.SetControlsDisabledReason(controls, reason)
+    if type(controls) ~= "table" then return end
+    if controls.GetObjectType then return W.SetControlDisabledReason(controls, reason) end
+    for _, control in pairs(controls) do
+        if type(control) == "table" then W.SetControlDisabledReason(control, reason) end
+    end
+end
+--- Reason for every control a named gate disables (for example the whole page
+--- of a turned-off frame). Register before the gate is applied.
+function W.SetGateDisabledReason(gateKey, reason)
+    if gateKey == nil then return end
+    local reasons = W._msuf2GateReasons
+    if not reasons then
+        reasons = {}
+        W._msuf2GateReasons = reasons
+    end
+    if reason == "" then reason = nil end
+    reasons[tostring(gateKey)] = reason
+end
+function W.DisabledReasonText(control)
+    if not control or control._msuf2AppliedEnabled ~= false then return nil end
+    local reason
+    if HasDisableGate(control) then
+        local reasons = W._msuf2GateReasons
+        if not reasons then return nil end
+        for key, disabled in pairs(control._msuf2DisableGates) do
+            if disabled and reasons[key] ~= nil then
+                reason = reasons[key]
+                break
+            end
+        end
+    else
+        reason = control._msuf2DisabledReason
+    end
+    if type(reason) == "function" then reason = reason(control) end
+    if type(reason) ~= "string" or reason == "" then return nil end
+    return reason
+end
+function W.ShowDisabledReason(self)
+    -- A page tooltip on this frame appends the reason itself (M.AddTooltip).
+    if not self or self._msuf2TooltipTarget then return end
+    local control = self._msuf2ReasonOwner or self
+    local text = W.DisabledReasonText(control)
+    local tip = _G.GameTooltip
+    if not (text and tip) then return end
+    if not (tip.IsOwned and tip:IsOwned(self) and tip:IsShown()) then
+        tip:SetOwner(self, "ANCHOR_RIGHT")
+        local title = control._msuf2Title or control._msuf2Label
+        local titleText = title and title.GetText and title:GetText()
+        if titleText and titleText ~= "" then tip:SetText(titleText, 1, 1, 1) end
+    end
+    tip:AddLine(text, 1, 0.82, 0.35, true)
+    tip:Show()
+end
+function W.HideDisabledReason(self)
+    if not self or self._msuf2TooltipTarget then return end
+    local tip = _G.GameTooltip
+    if tip and tip.IsOwned and tip:IsOwned(self) then tip:Hide() end
+end
+--- Standard wording for a dependent control: 'Turn on "<label>" to change
+--- this.' `isOn` (optional) returns true while the toggle is on; then the
+--- reason does not apply and the caller's other gates speak instead.
+function W.TurnOnReason(label, isOn)
+    return function()
+        if isOn and isOn() then return nil end
+        return M.Format("Turn on \"%s\" to change this.", Tr(label or ""))
+    end
+end
+function W.TurnOffReason(label, isOff)
+    return function()
+        if isOff and isOff() then return nil end
+        return M.Format("Turn off \"%s\" to change this.", Tr(label or ""))
     end
 end
 local function ClampPlacedControlWidth(widget, parent, x)

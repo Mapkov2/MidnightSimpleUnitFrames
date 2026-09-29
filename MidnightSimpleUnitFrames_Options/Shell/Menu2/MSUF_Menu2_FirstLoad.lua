@@ -35,6 +35,13 @@ local function ShouldShow(firstLoad)
     return ok and shown == true
 end
 
+--- Menu-side view of MSUF.FirstLoad6:IsFirstRunPending(): true while MSUF's own
+--- first run is unresolved on this client. The lifecycle hands off to the Suite.
+function M.IsFirstRunPending()
+    local ok, pending = CallLifecycle(Lifecycle(), "IsFirstRunPending")
+    return ok and pending == true
+end
+
 local function FirstLoadState(firstLoad)
     local ok, state = CallLifecycle(firstLoad, "GetState")
     return ok and type(state) == "table" and state or {}

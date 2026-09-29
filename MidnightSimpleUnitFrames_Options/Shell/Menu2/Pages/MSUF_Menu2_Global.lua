@@ -523,7 +523,12 @@ local function MenuFontKeySet(value)
     G().menuFontKey = FontSelectionValue(value) or ""
 end
 local TextureValues = M.StatusBarTextureItems
-local GLOBAL_SCOPE_VALUES = (M.FilterSupportedUnitValues or function(values) return values end)(VTP "shared=Shared|player=Player|target=Target|targettarget=ToT|focustarget=Focus Target|focus=Focus|pet=Pet|pettarget=Pet Target|boss=Boss|arena=Arena|gf_party=Party|gf_raid=Raid")
+local GLOBAL_SCOPE_VALUES = (M.FilterSupportedUnitValues or function(values) return values end)(VTP "shared=Shared|player=Player|target=Target|targettarget=Target of Target|focustarget=Focus Target|focus=Focus|pet=Pet|pettarget=Pet Target|boss=Boss|arena=Arena|gf_party=Party|gf_raid=Raid")
+-- The strip wraps to more rows, so it can show the full name the unit tabs use;
+-- the bar's built-in chip for this key is only wide enough for "ToT".
+for _, item in ipairs(GLOBAL_SCOPE_VALUES) do
+    if item.value == "targettarget" then item.width = 108 end
+end
 local function CurrentPowerBarScopeUnit()
     local key = CurrentBarsScope()
     return POWER_BAR_SCOPE_UNITS[key] and key or nil

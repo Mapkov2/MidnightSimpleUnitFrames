@@ -154,6 +154,17 @@ function M.SetNavHeaderOpen(section, open)
     return true, (open and M.Format("Opened %s navigation section.", sectionName)
         or M.Format("Closed %s navigation section.", sectionName)), open, id, label
 end
+-- Group titles fold the pages below them. The state rides the persisted
+-- navHeaderState table (MSUF_Menu2_State.lua) under the group id; unset is open.
+function M.SetNavGroupOpen(id, open)
+    if id == nil or id == "" then return false end
+    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+    M.navHeaderState = type(M.navHeaderState) == "table" and M.navHeaderState or {}
+    if open == nil then open = M.navHeaderState[id] == false end
+    M.navHeaderState[id] = open and true or false
+    ReflowNavRail()
+    return true, M.navHeaderState[id]
+end
 function M.SetSearchIntroSeen(seen)
     seen = seen and true or false
     M.SetMenuStateValue("searchIntroSeen", seen)
@@ -182,14 +193,50 @@ local function CreateNavButton(parent, key, label, indent, availability)
     if btn.RefreshVisual then btn.RefreshVisual(btn) end
     return btn
 end
+-- Availability answers ok, reason, hide. A dimmed row keeps its reason for a
+-- tooltip and shows an "Off" badge, so the state is not carried by alpha alone.
+-- A hidden row (its addon is not installed) leaves the rail but stays in
+-- M.navButtons, so SelectPage, search and aliases still reach its page.
+local function NavOffTooltipTitle(btn) return btn._msuf2RawLabel end
+local function NavOffTooltipBody(btn) return btn._msuf2NavOffReason or "Unavailable" end
+local function NavOffTooltipEnabled(btn) return btn._msuf2NavOff == true end
+local function ApplyNavAvailabilityVisual(btn)
+    local off = btn._msuf2NavOff == true
+    btn:SetAlpha(off and 0.4 or 1)
+    local badge = btn._msuf2NavOffBadge
+    if off and not badge then
+        badge = T.Font(btn, "GameFontDisableSmall", "", T.colors.dim)
+        badge:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
+        badge:SetJustifyH("RIGHT")
+        btn._msuf2NavOffBadge = badge
+        M.AddTooltip(btn, NavOffTooltipTitle, NavOffTooltipBody, { hook = true, enabled = NavOffTooltipEnabled })
+    end
+    if not badge then return end
+    badge:SetText("Off")
+    badge:SetShown(off)
+    local width = off and badge.GetStringWidth and tonumber(badge:GetStringWidth()) or 0
+    if off and width <= 0 then width = 24 end
+    -- Icon layout re-anchors the label; only its right edge moves here, so a
+    -- long label ends before the badge instead of running under it.
+    if btn._msuf2Label then btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", off and -(floor(width + 0.5) + 12) or -8, 0) end
+end
 function M.RefreshNavAvailability()
+    local relayout = false
     for _, btn in pairs(M.navButtons or {}) do
         local available = btn._msuf2NavAvailability
         if type(available) == "function" then
-            local ok = available()
-            btn:SetAlpha(ok and 1 or 0.4)
+            local ok, reason, hide = available()
+            local off = not ok
+            hide = off and hide == true
+            if (btn._msuf2NavHidden == true) ~= hide then relayout = true end
+            btn._msuf2NavOff = off
+            btn._msuf2NavOffReason = off and type(reason) == "string" and reason ~= "" and reason or nil
+            btn._msuf2NavHidden = hide
+            ApplyNavAvailabilityVisual(btn)
         end
     end
+    if relayout then ReflowNavRail() end
+    return relayout
 end
 function M.RefreshNavIconVisibility()
     local buttons = M.navButtons
@@ -198,6 +245,7 @@ function M.RefreshNavIconVisibility()
     for key, btn in pairs(buttons) do
         if btn and btn._msuf2NavItem then
             T.AttachNavIcon(btn, key, (btn._msuf2NavIndent or 0) > 0, visible)
+            if btn._msuf2NavOffBadge then ApplyNavAvailabilityVisual(btn) end
         end
     end
 end
@@ -212,6 +260,16 @@ local function ApplyNavHeaderVisual(btn, open)
         end
     end
     if btn.RefreshVisual then btn:RefreshVisual() end
+end
+local function NavTitleHover(row, hover)
+    local c = hover and (T.colors.navHeaderHover or T.colors.text) or (T.colors.navHeaderText or T.colors.muted)
+    T.StyleFontString(row._msuf2NavTitleText, c, NAV_TEXT_BUMP)
+end
+local function NavTitleOnEnter(row) NavTitleHover(row, true) end
+local function NavTitleOnLeave(row) NavTitleHover(row, false) end
+local function NavTitleOnClick(row) M.SetNavGroupOpen(row._msuf2NavTitleId, nil) end
+local function NavTitleTooltip(row)
+    return M.navHeaderState and M.navHeaderState[row._msuf2NavTitleId] == false and "Expand" or "Collapse"
 end
 local function AttachHistoryTooltip(btn, getTitle, getText)
     if not btn then return end
@@ -723,15 +781,32 @@ local function BuildNavRail(parent)
         if item.title then
             local id = item.id or item.title
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = true end
-            local title = T.Font(list, "GameFontNormalSmall", string.upper(M.Tr(item.title)), T.colors.navHeaderText or T.colors.muted)
+            -- The title row is the group's fold toggle; the caret sits on the
+            -- right so the title keeps its alignment above the page rows.
+            local row = PixelLayoutRegion(CreateFrame("Button", nil, list))
+            row:SetSize(NavItemWidth(0) - 2, 18)
+            local title = T.Font(row, "GameFontNormalSmall", string.upper(M.Tr(item.title)), T.colors.navHeaderText or T.colors.muted)
             T.StyleFontString(title, T.colors.navHeaderText or T.colors.muted, NAV_TEXT_BUMP)
             title:SetJustifyH("LEFT")
-            title:SetSize(NavItemWidth(0), 18)
+            title:SetSize(NavItemWidth(0) - 20, 18)
+            title:SetPoint("LEFT", row, "LEFT", 0, 0)
             title._msuf2NavTitle = true
             title._msuf2NavTitleId = id
             title._msuf2RawLabel = item.title
+            local caret = PixelLayoutRegion(row:CreateTexture(nil, "OVERLAY"))
+            caret:SetSize(10, 10)
+            caret:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+            caret:SetTexture(T.media.collapseArrow)
+            row._msuf2NavArrow = caret
+            row._msuf2NavTitleText = title
+            row._msuf2NavTitleId = id
+            row:SetScript("OnClick", NavTitleOnClick)
+            row:SetScript("OnEnter", NavTitleOnEnter)
+            row:SetScript("OnLeave", NavTitleOnLeave)
+            M.AddTooltip(row, NavTitleTooltip, nil, { hook = true })
+            ApplyNavHeaderVisual(row, M.navHeaderState[id] ~= false)
             M.navTitles[id] = title
-            created[#created + 1] = { kind = "title", id = id, frame = title }
+            created[#created + 1] = { kind = "title", id = id, frame = row }
         elseif item.header then
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
@@ -781,14 +856,16 @@ local function BuildNavRail(parent)
             if item.key == "profiles" then created[#created + 1] = { kind = "history", frame = CreateHistoryControls(list) } end
         end
     end
-    -- A group title without pages stays hidden (Combat and Interface without the Suite).
+    -- A group title without visible pages stays hidden: Combat and Interface
+    -- without the Suite, or a group whose Suite addons are not installed.
     local groupHasPages = {}
-    for i = 1, #created do
-        local item = created[i]
-        if item.kind == "page" and item.group then groupHasPages[item.group] = true end
-    end
     function parent:_msuf2NavReflow()
         M.RefreshNavIconVisibility()
+        for group in pairs(groupHasPages) do groupHasPages[group] = nil end
+        for i = 1, #created do
+            local item = created[i]
+            if item.kind == "page" and item.group and not item.button._msuf2NavHidden then groupHasPages[item.group] = true end
+        end
         local y = -4
         local advancedHidden = IsAdvancedNavHidden()
         for i = 1, #created do
@@ -805,6 +882,7 @@ local function BuildNavRail(parent)
                 frame:ClearAllPoints()
                 if y < -4 then y = y - 8 else y = y - 4 end
                 frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + 2, y)
+                ApplyNavHeaderVisual(frame, M.navHeaderState[item.id] ~= false)
                 y = y - 20
             elseif item.kind == "header" then
                 btn:Show()
@@ -818,6 +896,8 @@ local function BuildNavRail(parent)
                 frame:ClearAllPoints()
                 frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
                 y = y - 66
+            elseif item.kind == "page" and btn._msuf2NavHidden then
+                btn:Hide()
             elseif not item.group or M.navHeaderState[item.group] ~= false then
                 btn:Show()
                 btn:ClearAllPoints()

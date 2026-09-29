@@ -27,6 +27,53 @@ function Shared.SectionFieldKeys(spec, conf, defaults)
     return keys
 end
 
+-- "Custom" header marker: a section is custom when one of its fields holds a
+-- value other than the one Reset section restores. A field the defaults do not
+-- carry, or one the profile leaves unset, never counts, so a fresh profile shows
+-- no marker. Keys and defaults are cached per section and scope; a refresh then
+-- costs one comparison per field and nothing runs per frame.
+function Shared.SameSettingValue(a, b, depth)
+    if a == b then return true end
+    local ta, tb = type(a), type(b)
+    if ta == "number" and tb == "number" then return math.abs(a - b) < 1e-6 end
+    if ta ~= "table" or tb ~= "table" or depth > 4 then return false end
+    for key, value in pairs(a) do
+        if not Shared.SameSettingValue(value, b[key], depth + 1) then return false end
+    end
+    for key in pairs(b) do
+        if a[key] == nil then return false end
+    end
+    return true
+end
+function Shared.CachedSectionDefaults(opts, scope)
+    local cache = opts._msuf2SectionDefaultsCache
+    if not cache then
+        cache = {}
+        opts._msuf2SectionDefaultsCache = cache
+    end
+    local defaults = cache[scope]
+    if defaults == nil then
+        defaults = type(opts.defaults) == "function" and opts.defaults(scope) or false
+        if type(defaults) ~= "table" then defaults = false end
+        cache[scope] = defaults
+    end
+    return defaults or nil
+end
+function Shared.SectionIsCustom(spec, conf, defaults, cache)
+    if type(conf) ~= "table" or type(defaults) ~= "table" then return false end
+    local keys = cache.keys
+    if not keys or cache.conf ~= conf or cache.defaults ~= defaults then
+        keys = Shared.SectionFieldKeys(spec, conf, defaults)
+        cache.keys, cache.conf, cache.defaults = keys, conf, defaults
+    end
+    for i = 1, #keys do
+        local key = keys[i]
+        local default, value = defaults[key], conf[key]
+        if default ~= nil and value ~= nil and not Shared.SameSettingValue(value, default, 0) then return true end
+    end
+    return false
+end
+
 -- opts.targets lists only frames this client can show. A target the page
 -- reports as turned off (opts.targetOff) stays listed, so the player sees why
 -- it cannot be picked: danger tint, "Frame disabled", not selectable.
@@ -50,9 +97,17 @@ function Shared.AttachSectionUX(ctx, opts)
             entry._msuf2UXSummary = summary
             local popup, popupSource
             local function Close() if popup then popup:Hide() end end
+            -- Hidden (search-index) builds are never shown and are rebuilt
+            -- before display, so they skip the defaults snapshot entirely.
+            local customCache = (spec.fields or spec.prefixes) and W.SetCollapsibleCustomBadge
+                and not ctx.entry.hiddenBuild and {} or nil
             local function Refresh()
                 local scope = opts.scope()
                 summary:SetText(spec.summary and spec.summary(opts.conf(scope), scope) or "")
+                if customCache then
+                    W.SetCollapsibleCustomBadge(section, Shared.SectionIsCustom(spec, opts.conf(scope),
+                        Shared.CachedSectionDefaults(opts, scope), customCache))
+                end
                 if entry._msuf2SectionActions then
                     W.SetControlEnabled(entry._msuf2SectionActions, not entry.featureSwitch or entry.featureSwitch:IsEnabled())
                 end

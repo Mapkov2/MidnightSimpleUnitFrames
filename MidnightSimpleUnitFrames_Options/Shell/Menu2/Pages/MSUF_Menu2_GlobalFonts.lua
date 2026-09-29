@@ -432,7 +432,7 @@ local function BuildFonts(ctx)
     local function RefreshFontsPage(reason)
         M.RequestRefresh(ctx, reason)
     end
-    GP.BuildScopeOverrideSection(ctx, b, {
+    local scopeUI = GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
         selectorMeta = Meta("scope.selector", "ephemeral"),
         selectorOptionMeta = function(value) return Meta("scope.selector.option." .. tostring(value), "ephemeral") end,
@@ -485,9 +485,27 @@ local function BuildFonts(ctx)
             end
         end,
     })
+    if M.AddTooltip and scopeUI then
+        M.AddTooltip(scopeUI.override, "Use custom settings for this scope",
+            "Gives this scope its own text style, colors and name shortening, so Shared changes stop reaching it. The font family always stays shared.",
+            { hook = true, labelHit = true })
+        M.AddTooltip(scopeUI.reset, "Reset",
+            "Turns off custom font settings on every unit and group scope at once, so they all follow Shared again.", { hook = true })
+    end
     local font = b:CollapsibleSection("fonts_global_font", "Global Font", 146, true)
     local RefreshFontPreview
     local fontDrop = W.Dropdown(font, "Font (SharedMedia)", function() return FontValues(false) end, 340)
+    if M.AddTooltip then
+        M.AddTooltip(fontDrop, "Font (SharedMedia)",
+            "The typeface for all unit and group frame text; every scope shares it. Fonts other addons register through SharedMedia also appear here.",
+            { hook = true })
+    end
+    if W.SetControlDisabledReason then
+        W.SetControlDisabledReason(fontDrop, function()
+            if CurrentFontScope() == "shared" then return nil end
+            return M.Tr("Font family is global and can be changed in Shared scope.")
+        end)
+    end
     local fontScopeInfo = W.Text(font, "Font family is global and can be changed in Shared scope.", 374, -42, ctx.width - 402, T.colors.muted)
     if fontScopeInfo.SetShown then fontScopeInfo:SetShown(CurrentFontScope() ~= "shared") end
     local preview = W.Text(font, "AaBbCc 12345 - Midnight Simple Unit Frames", 14, -82, ctx.width - 56, T.colors.text)
@@ -660,6 +678,11 @@ local function BuildFonts(ctx)
         controls.scopeNotice = W.Text(parent, "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted)
         if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
         if controls.scopeNotice.SetHeight then controls.scopeNotice:SetHeight(44) end
+        if M.AddControlTooltip then
+            M.AddControlTooltip(controls.side, "Truncation style", "Chooses which side of a long name is cut. Keep end drops the front, which helps when many names start the same way.", { hook = true })
+            M.AddControlTooltip(controls.chars, "Max name length", "About how many letters of a name stay visible before it is cut. Names with wide letters may show a little less.", { hook = true })
+            M.AddControlTooltip(controls.noEllipsis, "No Ellipsis (truncate without ..)", "Shortened names end at the cut without the .. marker. Only names that are actually too long are affected.", { hook = true, labelHit = true })
+        end
         return controls
     end
     local colors = b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 280, true)
@@ -676,6 +699,26 @@ local function BuildFonts(ctx)
         })
     end
     local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor, powerColor }
+    if M.AddControlTooltip then
+        local tip = { hook = true }
+        M.AddControlTooltip(outline, "Outline", "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.", tip)
+        M.AddControlTooltip(shadow, "Text shadow", "Adds a black drop shadow below and to the right of the text so it stands out from the bar. Unavailable while Slug rendering is active.", tip)
+        M.AddControlTooltip(baseline, "Baseline", "Shifts name, health and power text up (+) or down (-) by up to 4 px on top of their own offsets. Handy when a font sits too high or low.", tip)
+        M.AddControlTooltip(nameColor, "Player Name Color", "Class Color tints player character names only; NPC names follow NPC / Boss Name Color. Custom Color gives every name one color.", tip)
+        M.AddControlTooltip(npcColor, "NPC / Boss Name Color", "Colors names of non-player units. NPC / Reaction uses hostile, neutral and friendly colors; Class Color uses the NPC's class and falls back to reaction.", tip)
+        M.AddControlTooltip(healthColor, "HP Text Color", "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
+    end
+    -- Hover reasons: a scope without its own settings locks this page; the
+    -- shadow sliders also wait for Text shadow (Slug is explained on hover).
+    local fontScopeReason = W.TurnOnReason and W.TurnOnReason("Use custom settings for this scope", CurrentFontScopeCanEdit)
+    if fontScopeReason and W.SetControlsDisabledReason then
+        W.SetControlsDisabledReason(scopedFontControls, fontScopeReason)
+        W.SetControlDisabledReason(npcColor, fontScopeReason)
+        local shadowReason = W.TurnOnReason("Text shadow", function() return FontScopeGet("textBackdrop", true) == true end)
+        W.SetControlsDisabledReason({ shadowOpacity, shadowDistance }, function(control)
+            return fontScopeReason(control) or (FontRenderingMode() ~= "SLUG" and shadowReason(control)) or nil
+        end)
+    end
     RefreshScopedFontControls = RefreshScopedFontControls(function()
         local scopeKey = CurrentFontScope()
         local canEdit = CurrentFontScopeCanEdit()
@@ -744,6 +787,18 @@ local function BuildFonts(ctx)
             function(v) return tostring(floor((tonumber(v) or 6) + 0.5)) end)
         shorten, side, chars, noEllipsis = controls.shorten, controls.side, controls.chars, controls.noEllipsis
         local scopeNotice, gfNameShorteningControls = controls.scopeNotice, { side, chars, noEllipsis }
+        if fontScopeReason and W.SetControlsDisabledReason then
+            local shortenReason = W.TurnOnReason("Shorten group names", function()
+                if GFNameUsesLocalScope() then
+                    return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
+                end
+                return SharedNameShorteningEnabled()
+            end)
+            W.SetControlDisabledReason(shorten, fontScopeReason)
+            W.SetControlsDisabledReason(gfNameShorteningControls, function(control)
+                return fontScopeReason(control) or shortenReason(control)
+            end)
+        end
         local function RefreshGFNameShorteningControls()
             local canEdit = CurrentFontScopeCanEdit()
             local enabled
@@ -822,6 +877,13 @@ local function BuildFonts(ctx)
                 ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
             end)
         shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice; nameShorteningControls = { side, chars }
+        if fontScopeReason and W.SetControlsDisabledReason then
+            local shortenReason = W.TurnOnReason(nameScope == "shared" and "Shorten names" or "Shorten unit names", NameShorteningEnabled)
+            W.SetControlsDisabledReason({ shorten, noEllipsis }, fontScopeReason)
+            W.SetControlsDisabledReason(nameShorteningControls, function(control)
+                return fontScopeReason(control) or shortenReason(control)
+            end)
+        end
         M.TrackRefresh(ctx, RefreshNameShorteningControls)
     end
     ctx:SetContentHeight(math.abs(b.y) + 42)

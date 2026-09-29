@@ -3,6 +3,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local IS_FOREVER = MSUF.Client and MSUF.Client.IsForever == true
 local T = M.Theme
 local W = M.Widgets or {}
 M.Widgets = W
@@ -30,6 +31,20 @@ end
 local dropdownFrame, dropdownScroll, dropdownChild, dropdownOwner, dropdownSlider
 local dropdownClosing, dropdownClosingOwner
 local dropdownRows = {}
+local function ForeverDropdownManager()
+    if not IS_FOREVER then return nil end
+    local input = _G.InputUtil
+    if not (input and type(input.IsGamepadUIEnabled) == "function" and input.IsGamepadUIEnabled()) then return nil end
+    local mode = _G.GamepadMode
+    return mode and mode.FrameControlsManager or nil
+end
+
+local function ReleaseForeverDropdown()
+    if not (dropdownFrame and dropdownFrame._msuf2ForeverPadRegistered) then return end
+    dropdownFrame._msuf2ForeverPadRegistered = nil
+    local mode = _G.GamepadMode
+    if mode and mode.FrameControlsManager then mode.FrameControlsManager:FrameHidden(dropdownFrame) end
+end
 -- One popup instance is reused for all dropdowns. This keeps strata/focus behavior predictable
 -- and avoids leaking row frames as pages are rebuilt.
 local DROPDOWN_ROW_H = 24
@@ -437,6 +452,7 @@ local function EnsureDropdownFrame()
     dropdownFrame:EnableMouseWheel(true)
     dropdownFrame:SetScript("OnMouseWheel", function(_, delta) DropdownWheel(delta) end)
     dropdownFrame:SetScript("OnHide", function()
+        ReleaseForeverDropdown()
         StopDropdownSmoothScroll()
         HideDropdownFocus(true)
         SetDropdownOwnerMouseWheel(dropdownOwner or dropdownClosingOwner, false)
@@ -446,6 +462,9 @@ local function EnsureDropdownFrame()
         if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end
         if dropdownFrame.SetAlpha then dropdownFrame:SetAlpha(1) end
     end)
+    if IS_FOREVER then
+        dropdownFrame.SmartNavigationCloseHandler = function() CloseDropdown(true); return true end
+    end
     dropdownFrame:SetScript("OnUpdate", function(self, elapsed)
         if not dropdownOwner then return end
         self._msuf2PositionElapsed = (self._msuf2PositionElapsed or 0) + (elapsed or 0)
@@ -1038,6 +1057,10 @@ local function OpenDropdown(owner, valuesTable)
     PositionDropdown(owner)
     SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * rowHeight) or 0)
     PlayMotion(dropdownFrame, "dropdownIn", { fromAlpha = 0 })
+    local manager = ForeverDropdownManager()
+    if manager and not dropdownFrame._msuf2ForeverPadRegistered then
+        dropdownFrame._msuf2ForeverPadRegistered = manager:FrameShown(dropdownFrame) == true
+    end
 end
 function W.OpenDropdown(owner, values, currentValue, onSelect)
     if not owner then return false end

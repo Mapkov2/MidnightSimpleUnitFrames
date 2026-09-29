@@ -27,6 +27,15 @@ local function ChangelogData()
     end
 end
 
+-- The optional Suite owns its release history and exposes it from its core addon.
+local function SuiteChangelogData()
+    local suite = _G.MSUFSuite
+    local data = type(suite) == "table" and suite.Changelog or nil
+    if type(data) == "table" and type(data.entries) == "table" and type(data.entries[1]) == "table" then
+        return data
+    end
+end
+
 local function BulletParts(value)
     if type(value) == "table" then
         return tostring(value.text or ""), type(value.link) == "table" and value.link or nil
@@ -72,7 +81,9 @@ local function RebuildKeepingScroll()
 end
 
 local function BuildFullChangelog(ctx)
-    local data = ChangelogData()
+    local suiteData = SuiteChangelogData()
+    local source = M.changelogSource == "suite" and suiteData and "suite" or "msuf"
+    local data = source == "suite" and suiteData or ChangelogData()
     local root = ctx.wrapper
     local width = max(320, tonumber(ctx.width) or 760)
     local contentWidth = max(280, width - 36)
@@ -125,8 +136,28 @@ local function BuildFullChangelog(ctx)
     end
 
     AddText(Tr("See New Features"), "GameFontNormalHuge", T.colors.title or T.colors.text, 18, contentWidth, 8, "title")
-    AddText(Tr("Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu."),
-        "GameFontHighlightSmall", T.colors.muted, 18, contentWidth, 18, "body")
+    if suiteData then
+        local tabWidth = math.min(164, math.floor((contentWidth - 8) / 2))
+        for index, tab in ipairs({ { key = "msuf", label = "MSUF" }, { key = "suite", label = "MSUF Suite" } }) do
+            local tabKey = tab.key
+            local button = T.Button(root, tab.label, tabWidth, 30)
+            button:SetPoint("TOPLEFT", root, "TOPLEFT", 18 + (index - 1) * (tabWidth + 8), y)
+            if T.CenterButtonLabel then T.CenterButtonLabel(button) end
+            if source == tabKey and T.SkinPrimaryButton then T.SkinPrimaryButton(button) end
+            button:SetScript("OnClick", function()
+                if type(M.BlockCombatAction) == "function" and M.BlockCombatAction() then return end
+                if M.changelogSource == tabKey then return end
+                M.changelogSource = tabKey
+                RebuildKeepingScroll()
+                if type(M.MarkChangelogSeen) == "function" then M.MarkChangelogSeen(tabKey) end
+            end)
+        end
+        y = y - 42
+    end
+    if source == "msuf" then
+        AddText(Tr("Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu."),
+            "GameFontHighlightSmall", T.colors.muted, 18, contentWidth, 18, "body")
+    end
 
     if not data then
         AddText(Tr("No release notes bundled with this build."), "GameFontHighlight", T.colors.muted, 18, contentWidth, 10, "body")
@@ -135,13 +166,14 @@ local function BuildFullChangelog(ctx)
     end
 
     local entries = data.entries
-    local selectedVersion = tostring(M.changelogSelectedVersion or data.currentVersion or entries[1].version or "")
+    local selectedField = source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"
+    local selectedVersion = tostring(M[selectedField] or data.currentVersion or entries[1].version or "")
     local selectedFound = false
     for i = 1, #entries do
         if tostring(entries[i].version or "") == selectedVersion then selectedFound = true; break end
     end
     if not selectedFound then selectedVersion = tostring(entries[1].version or "") end
-    M.changelogSelectedVersion = selectedVersion
+    M[selectedField] = selectedVersion
 
     for entryIndex = 1, #entries do
         local entry = entries[entryIndex]
@@ -156,8 +188,8 @@ local function BuildFullChangelog(ctx)
             if T.CenterButtonLabel then T.CenterButtonLabel(header) end
             if selected and T.SkinPrimaryButton then T.SkinPrimaryButton(header) end
             header:SetScript("OnClick", function()
-                if M.changelogSelectedVersion == targetVersion then return end
-                M.changelogSelectedVersion = targetVersion
+                if M[selectedField] == targetVersion then return end
+                M[selectedField] = targetVersion
                 RebuildKeepingScroll()
             end)
             if type(M.RegisterSearchWidget) == "function" then
@@ -182,7 +214,8 @@ local function BuildFullChangelog(ctx)
                     local section = entry.sections[sectionIndex]
                     if type(section) == "table" and type(section.bullets) == "table" and #section.bullets > 0 then
                         local isHighlights = tostring(section.title or ""):lower() == "highlights"
-                        AddText(Tr(section.title or ""), "GameFontNormal", isHighlights and T.colors.accent or T.colors.accent2,
+                        local sectionTitle = source == "suite" and section.title == "Changes" and "Changelog" or section.title
+                        AddText(Tr(sectionTitle or ""), "GameFontNormal", isHighlights and T.colors.accent or T.colors.accent2,
                             34, contentWidth - 32, 8, "section")
                         for bulletIndex = 1, #section.bullets do
                             local text, link = BulletParts(section.bullets[bulletIndex])
@@ -208,8 +241,9 @@ local function BuildFullChangelog(ctx)
     ctx:SetContentHeight(math.abs(y) + 36)
 end
 
-local function CurrentChangelogVersion()
-    local data = ChangelogData()
+local function CurrentChangelogVersion(source)
+    local data
+    if source == "suite" then data = SuiteChangelogData() else data = ChangelogData() end
     if type(data) ~= "table" then return "" end
     local version = tostring(data.currentVersion or "")
     if version ~= "" then return version end
@@ -237,28 +271,49 @@ end
 --- True while the bundled release has never been opened through the toolbar.
 --- Drives the Blizzard NEW badge on the See New Features button.
 function M.HasUnseenChangelog()
-    local version = CurrentChangelogVersion()
-    if version == "" then return false end
     local store = SeenStore(false)
-    return tostring(store and store.seenChangelogVersion or "") ~= version
+    local msuf = CurrentChangelogVersion("msuf")
+    local suite = CurrentChangelogVersion("suite")
+    return (msuf ~= "" and tostring(store and store.seenChangelogVersion or "") ~= msuf)
+        or (suite ~= "" and tostring(store and store.seenSuiteChangelogVersion or "") ~= suite)
 end
 
-function M.MarkChangelogSeen()
-    local version = CurrentChangelogVersion()
+local function HasUnseenSource(source)
+    local version = CurrentChangelogVersion(source)
+    if version == "" then return false end
+    local store = SeenStore(false)
+    local field = source == "suite" and "seenSuiteChangelogVersion" or "seenChangelogVersion"
+    return tostring(store and store[field] or "") ~= version
+end
+
+function M.MarkChangelogSeen(source)
+    source = source == "suite" and "suite" or "msuf"
+    local version = CurrentChangelogVersion(source)
     if version == "" then return false end
     local store = SeenStore(true)
     if type(store) ~= "table" then return false end
-    if tostring(store.seenChangelogVersion or "") == version then return false end
-    store.seenChangelogVersion = version
+    local field = source == "suite" and "seenSuiteChangelogVersion" or "seenChangelogVersion"
+    if tostring(store[field] or "") == version then return false end
+    store[field] = version
     if type(M.RefreshSeeNewFeaturesBadge) == "function" then M.RefreshSeeNewFeaturesBadge() end
     return true
 end
 
 function M.OpenSeeNewFeatures()
-    local data = ChangelogData()
-    if data and data.currentVersion then M.changelogSelectedVersion = tostring(data.currentVersion) end
-    M.MarkChangelogSeen()
-    if type(M.SelectPage) == "function" then return M.SelectPage("changelog") end
+    if type(M.BlockCombatAction) == "function" and M.BlockCombatAction() then return false end
+    local source = HasUnseenSource("msuf") and "msuf"
+        or HasUnseenSource("suite") and "suite"
+        or (M.changelogSource == "suite" and SuiteChangelogData() and "suite") or "msuf"
+    M.changelogSource = source
+    local data = source == "suite" and SuiteChangelogData() or ChangelogData()
+    if data and data.currentVersion then
+        M[source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"] = tostring(data.currentVersion)
+    end
+    if type(M.InvalidatePage) == "function" then M.InvalidatePage("changelog") end
+    if type(M.SelectPage) == "function" and M.SelectPage("changelog") then
+        M.MarkChangelogSeen(source)
+        return true
+    end
     return false
 end
 

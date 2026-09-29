@@ -2471,13 +2471,41 @@ local function SetNavActiveFX(btn, active, hover)
     SetSuperellipsePartsShown(fx.sheenFill, true)
     SetSuperellipsePartsShown(fx.sheenEdge, false)
 end
+local function SetSkinnedSelectionCue(btn, active)
+    local cue = btn._msuf2SkinnedSelectionCue
+    if not active then
+        if cue then cue.wash:Hide(); cue.line:Hide() end
+        return
+    end
+    if not cue then
+        local wash = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 7))
+        wash:SetTexture("Interface\\Buttons\\WHITE8X8")
+        wash:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -2)
+        wash:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
+        local line = PixelLayoutRegion(btn:CreateTexture(nil, "OVERLAY", nil, 2))
+        line:SetTexture("Interface\\Buttons\\WHITE8X8")
+        line:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -5)
+        line:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 2, 5)
+        line:SetWidth(3)
+        cue = { wash = wash, line = line }
+        btn._msuf2SkinnedSelectionCue = cue
+    end
+    local accent = T.colors.accent
+    cue.wash:SetColorTexture(accent[1], accent[2], accent[3], 0.22)
+    cue.line:SetColorTexture(accent[1], accent[2], accent[3], 0.94)
+    cue.wash:Show()
+    cue.line:Show()
+end
 local function ButtonVisual(btn, active, hover)
     if MenuSkin and MenuSkin.Button(btn, active, hover, ButtonVisual) then
         HideNavPillArt(btn)
         SetNavActiveFX(btn, false)
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
+        SetSkinnedSelectionCue(btn,
+            active and (btn._msuf2NavItem or btn._msuf2SegmentChoice))
         return
     end
+    SetSkinnedSelectionCue(btn, false)
     local c = T.colors
     local fill = btn._msuf2Fill
     local edge = btn._msuf2Edge

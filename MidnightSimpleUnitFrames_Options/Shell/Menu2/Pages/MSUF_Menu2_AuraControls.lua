@@ -113,7 +113,8 @@ end
 
 local function AddAuraTooltipHelp(widget)
     return AddTooltip(widget, "Aura tooltip",
-        "Controls this aura lane independently. Always / Out of Combat / Modifier / Never under Appearance > Miscellaneous affect only unit and group frames. Auras only reuse the selected Blizzard/MSUF look and cursor placement.")
+        M.Format("Controls this aura lane independently. Always / Out of Combat / Modifier / Never under %s affect only unit and group frames. Auras only reuse the selected Blizzard/MSUF look and cursor placement.",
+            M.NavPath("opt_misc", "Unitframe tooltips")))
 end
 
 local function ActionButton(parent, label, width, role)

@@ -2440,13 +2440,13 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     RegisterAuraControl(ctx, openStyle, "Global Aura Appearance", "button", "unit-workspace.open-aura-style", "navigation", "auras3_styling")
     AddTooltip(openStyle, "Global Aura Appearance",
         "Opens the global Aura icon appearance: shape, border, shadow, colors and native Player weapon enchants. This frame's container Style stays here.")
-    local workspaceHint = W.Text(top,
-        "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Auras.",
-        16, footerY - 8, sectionW - 198, T.colors.muted)
+    local workspaceHintText = M.Format("Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: %s.",
+        M.NavPath("auras3_styling"))
+    local workspaceHint = W.Text(top, workspaceHintText, 16, footerY - 8, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
         workspaceHint:SetText(normalLane and UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit)
             and UNIT_AURA_DISPEL_WARNING
-            or "Aura Options, Ordering and Aura Style belong to this UnitFrame. Global icon appearance: Appearance > Auras.")
+            or workspaceHintText)
     end)
 
     if normalLane then
@@ -2471,7 +2471,7 @@ end
 
 local function BuildMovedAuraPage(ctx)
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Aura Controls moved to Frames", "Layout, filters, lists and every container-specific Style live in each frame. Appearance > Auras owns only the global icon theme.", 96)
+    b:GlobalStyleHeader("Aura Controls moved to Frames", "Layout, filters, lists and every container-specific Style live in each frame. Frames > Auras owns only the global icon theme.", 96)
     local section = b:Section("Open a Frame", 190)
     local w = section._msuf2Width or b.width or 720
     local pages = {

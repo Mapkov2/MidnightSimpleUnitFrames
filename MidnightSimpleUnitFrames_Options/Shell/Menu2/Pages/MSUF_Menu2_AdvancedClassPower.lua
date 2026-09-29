@@ -118,6 +118,7 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["style.text.textX"] = "bars.classPowerTextOffsetX",
     ["style.text.textY"] = "bars.classPowerTextOffsetY",
     ["visibility.out_of_combat"] = "bars.classPowerHideOOC",
+    ["visibility.sync_player_power_ooc"] = "bars.classPowerSyncPlayerPowerOOC",
     ["visibility.when_empty"] = "bars.classPowerHideWhenEmpty",
     ["visibility.when_full"] = "bars.classPowerHideWhenFull",
 }
@@ -1140,16 +1141,25 @@ function Page:BuildClassStyle()
 end
 
 function Page:BuildClassVisibility()
-    local section = self.b:CollapsibleSection("classpower_visibility", "Auto-Hide", 216, false)
+    local section = self.b:CollapsibleSection("classpower_visibility", "Auto-Hide", 248, false)
     local width = min(560, (section._msuf2Width or self.width) - 28)
-    W.ControlCard(section, "Auto-Hide Rules", nil, 14, -54, width, 142)
+    W.ControlCard(section, "Auto-Hide Rules", nil, 14, -54, width, 174)
+    local applyRefresh = self:WithRefresh(ApplyClassPower)
     for i, spec in ipairs({
         { "Hide out of combat", "classPowerHideOOC", "out_of_combat" },
         { "Hide when full", "classPowerHideWhenFull", "when_full" },
         { "Hide when empty", "classPowerHideWhenEmpty", "when_empty" },
     }) do
-        self:Add("cp", SwitchAt(self.ctx, section, spec[1], 32, -54 - i * 32, width - 48, Bars, spec[2], false, ApplyClassPower, Meta("visibility." .. spec[3])))
+        self:Add("cp", SwitchAt(self.ctx, section, spec[1], 32, -54 - i * 32, width - 48, Bars, spec[2], false, applyRefresh, Meta("visibility." .. spec[3])))
     end
+    self.cp.syncPlayerPowerOOC = SwitchAt(self.ctx, section, "Hide player power with Class Resource",
+        32, -182, width - 48, Bars, "classPowerSyncPlayerPowerOOC", false,
+        applyRefresh, Meta("visibility.sync_player_power_ooc"))
+    self:Add("cp", self.cp.syncPlayerPowerOOC)
+    AddTooltip(self.cp.syncPlayerPowerOOC, "Hide player power with Class Resource",
+        "When Hide out of combat is enabled, hide the Player Power bar and its text with Class Resource. Player Power returns in combat. Edit Mode keeps them visible.")
+    SetControlEnabled(self.cp.syncPlayerPowerOOC,
+        BoolValue(Bars(), "showClassPower", true) and BoolValue(Bars(), "classPowerHideOOC", false))
 end
 
 local function DetachedPowerSectionHeight(width)
@@ -1494,10 +1504,100 @@ function Page:BuildAlternativeMana()
     self:AddNamed("altMana", fields, "widthMode width height x y"); self:Add("altMana", smooth)
 end
 
+function Page:BuildForeverSwingTimers()
+    local swing = MSUF.SwingTimer
+    if not (MSUF.Client and MSUF.Client.IsForever and swing) then return end
+    local section = self.b:CollapsibleSection("classpower_swing_timers", "Swing Timers (Forever)", 722, false)
+    local cardW = min(620, (section._msuf2Width or self.width) - 28)
+    local controlW = min(360, cardW - 64)
+    W.ControlCard(section, "Blizzard Swing Timers",
+        "Main Hand, Off Hand and Ranged use Blizzard's native swing events and Edit Mode layout.", 14, -38, cardW, 120)
+    W.ControlCard(section, "Selected Timer",
+        "Each timer has its own visibility, size, text and position in the active Blizzard layout.", 14, -180, cardW, 490)
+
+    local hand = M.classPowerSwingTimerHand or "main"
+    local handValues = VT("main", "Main Hand", "off", "Off Hand", "ranged", "Ranged")
+    local function SelectedHand() return hand end
+    local function NativeMeta(path, classification)
+        return Meta("swing_timer." .. path, classification or "setting", {
+            assistantDisposition = classification == "navigation" and nil or "dynamic",
+            assistantDispositionReason = classification == "navigation" and nil
+                or "The selected hand writes the native Blizzard Edit Mode layout, not an MSUF SavedVariable.",
+        })
+    end
+    local enabled = W.Toggle(section, "Show Swing Timers")
+    M.BindBoolWidget(self.ctx, enabled, swing.GetEnabled, swing.SetEnabled,
+        Meta("swing_timer.enabled", "setting", { settingKey = "cvar.showSwingTimer" }))
+    MoveWidget(enabled, section, 32, -100, controlW, "LEFT")
+
+    local selector = W.Dropdown(section, "Timer", handValues, controlW)
+    M.BindDropdownWidget(self.ctx, selector, SelectedHand, function(value)
+        if value ~= "main" and value ~= "off" and value ~= "ranged" then return end
+        hand = value
+        M.classPowerSwingTimerHand = value
+        M.Refresh(self.ctx)
+    end, Meta("swing_timer.selected_hand", "ephemeral"))
+    MoveWidget(selector, section, 32, -238, controlW, "LEFT")
+
+    local visibilityEnum = _G.Enum and _G.Enum.EditModeSwingTimerVisibility or {}
+    local visibilityValues = VT(
+        visibilityEnum.Always or 0, "Always",
+        visibilityEnum.InCombat or 1, "In combat",
+        visibilityEnum.Hidden or 2, "Hidden")
+    local visibility = W.Dropdown(section, "Visibility", visibilityValues, controlW)
+    M.BindDropdownWidget(self.ctx, visibility,
+        function() return swing.Get(hand, "visibility") end,
+        function(value) swing.Set(hand, "visibility", value) end,
+        NativeMeta("visibility"))
+    MoveWidget(visibility, section, 32, -292, controlW, "LEFT")
+    local controls = { enabled, selector, visibility }
+
+    local numeric = {
+        { "width", "Width", 213, 852, 1, 426, -348 },
+        { "height", "Height", 15, 60, 1, 30, -402 },
+        { "scale", "Scale %", 50, 200, 10, 100, -456 },
+        { "opacity", "Opacity %", 50, 100, 1, 100, -510 },
+    }
+    for i = 1, #numeric do
+        local spec = numeric[i]
+        local slider = W.Slider(section, spec[2], spec[3], spec[4], spec[5], controlW)
+        M.BindNumberWidget(self.ctx, slider,
+            function() return swing.Get(hand, spec[1]) end,
+            function(value) swing.Set(hand, spec[1], value) end,
+            spec[6], NativeMeta(spec[1]))
+        MoveWidget(slider, section, 32, spec[7], controlW, "LEFT")
+        controls[#controls + 1] = slider
+    end
+    for i, spec in ipairs({ { "title", "Show bar title", -560 }, { "time", "Show remaining time", -594 } }) do
+        local toggle = W.Toggle(section, spec[2])
+        M.BindBoolWidget(self.ctx, toggle,
+            function() return swing.Get(hand, spec[1]) == 1 end,
+            function(value) swing.Set(hand, spec[1], value) end,
+            NativeMeta(spec[1]))
+        MoveWidget(toggle, section, 32, spec[3], controlW, "LEFT")
+        controls[#controls + 1] = toggle
+    end
+    local edit = T.Button(section, "Move in Blizzard Edit Mode", min(290, controlW), 30)
+    edit:SetPoint("TOPLEFT", section, "TOPLEFT", 32, -634)
+    edit:SetScript("OnClick", function() swing.OpenEditMode(hand) end)
+    RegisterControl(edit, NativeMeta("edit_mode", "navigation"), "Move in Blizzard Edit Mode", "button")
+    AddTooltip(edit, "Blizzard Edit Mode",
+        "Opens the selected timer in Blizzard Edit Mode for dragging and precise placement. Enable Swing Timers above to preview them there.")
+    controls[#controls + 1] = edit
+    self.swingTimerControls = controls
+end
+
 function Page:RefreshControlState()
     local bars, db = Bars(), M.EnsureDB()
+    if self.swingTimerControls then
+        SetControlsEnabled(self.swingTimerControls,
+            MSUF.SwingTimer and MSUF.SwingTimer.IsAvailable and MSUF.SwingTimer.IsAvailable())
+    end
     local cpOn = BoolValue(bars, "showClassPower", true)
     SetControlsEnabled(self.groups.cp, cpOn)
+    if self.cp.syncPlayerPowerOOC then
+        SetControlEnabled(self.cp.syncPlayerPowerOOC, cpOn and BoolValue(bars, "classPowerHideOOC", false))
+    end
     if self.ironfurHashes then SetControlEnabled(self.ironfurHashes, cpOn and BoolValue(bars, "showGuardianIronfur", false)) end
     SetControlEnabled(self.cp.width, cpOn and (bars.classPowerWidthMode or "player") == "custom")
     local classBar = NormalizeClassPowerShape(bars.classPowerShape) == "BAR"
@@ -1560,6 +1660,28 @@ function Page:RefreshControlState()
     SetControlsEnabled(self.groups.altMana, altManaOn)
     SetControlEnabled(self.altManaWidth, altManaOn and (bars.altManaWidthMode or "player") == "custom")
     SetControlEnabled(self.altToggle, true); SetControlEnabled(self.cpEnable, true)
+    -- Hover reasons for the three master switches. Lazy sections add controls
+    -- to these groups later, so each refresh re-points them (a field write).
+    if W.SetControlsDisabledReason and W.TurnOnReason then
+        local reasons = self._msuf2DisabledReasons
+        if not reasons then
+            local cpReason = W.TurnOnReason("Class Resource", function() return BoolValue(Bars(), "showClassPower", true) end)
+            local oocReason = W.TurnOnReason("Hide out of combat", function() return BoolValue(Bars(), "classPowerHideOOC", false) end)
+            reasons = {
+                cp = cpReason,
+                hp = W.TurnOnReason("Second Player HP bar", function() return BoolValue(Bars(), "playerHPBarEnabled", false) end),
+                altMana = W.TurnOnReason("Show mana bar (dual resource)", function() return BoolValue(Bars(), "showAltMana", false) end),
+                syncPower = function(control) return cpReason(control) or oocReason(control) end,
+            }
+            self._msuf2DisabledReasons = reasons
+        end
+        W.SetControlsDisabledReason(self.groups.cp, reasons.cp)
+        if self.cp.syncPlayerPowerOOC and W.SetControlDisabledReason then
+            W.SetControlDisabledReason(self.cp.syncPlayerPowerOOC, reasons.syncPower)
+        end
+        W.SetControlsDisabledReason(self.groups.hp, reasons.hp)
+        W.SetControlsDisabledReason(self.groups.altMana, reasons.altMana)
+    end
 end
 
 -- Collapsed sections build only their shell on the visible cold path; content
@@ -1598,10 +1720,13 @@ function Page:Build()
     self:BuildClassLayout()
     self:LazySection("classpower_behavior", "Behavior", 282, Page.BuildClassBehavior)
     self:LazySection("classpower_visuals", "Appearance", 430, Page.BuildClassStyle)
-    self:LazySection("classpower_visibility", "Auto-Hide", 216, Page.BuildClassVisibility)
+    self:LazySection("classpower_visibility", "Auto-Hide", 248, Page.BuildClassVisibility)
     self:LazySection("classpower_detached_power", "Player Power", function() return DetachedPowerSectionHeight(self.width) end, Page.BuildDetachedPower)
     self:LazySection("classpower_player_hp", "Extra Health Bar", function() return self.width < 680 and 980 or 700 end, Page.BuildPlayerHP)
     self:LazySection("classpower_alt_mana", "Alternative Mana", 476, Page.BuildAlternativeMana)
+    if MSUF.Client and MSUF.Client.IsForever then
+        self:LazySection("classpower_swing_timers", "Swing Timers (Forever)", 722, Page.BuildForeverSwingTimers)
+    end
     -- All callbacks share one late-bound state refresh instead of capturing every control.
     self.refresh = self.refresh(function() self:RefreshControlState() end)
     M.RefreshClassPowerDetachedState = self.refresh

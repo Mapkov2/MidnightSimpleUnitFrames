@@ -3323,6 +3323,33 @@ local function BuildFinalReviewPage(ctx, T, W)
         end)
         RegisterGuidedPageButton(button, "restore_start", "Restore starting setup", "Restores the active profile values captured before guided setup began after a second confirmation.")
     end
+
+    -- The optional MSUF Suite gets one line and a way in, offered only while the
+    -- Suite reports an overview and this menu has its module page registered.
+    local suiteOverview = type(M.GetSuiteOverview) == "function" and type(M.FormatSuiteTitle) == "function"
+        and type(M.GetSuiteModulesPageKey) == "function" and M.GetSuiteOverview() or nil
+    local suitePage = suiteOverview and M.GetSuiteModulesPageKey(suiteOverview) or nil
+    if suitePage then
+        local suite = b:Section("", 92)
+        if suite.title then suite.title:SetText("") end
+        local suiteTitle = T.Font(suite, "GameFontNormal", M.FormatSuiteTitle(suiteOverview), T.colors.text)
+        suiteTitle:SetPoint("TOPLEFT", suite, "TOPLEFT", 16, -20)
+        suiteTitle:SetWidth(max(120, b.width - 260))
+        suiteTitle:SetJustifyH("LEFT")
+        local suiteCopy = T.Font(suite, "GameFontDisableSmall",
+            Tr("Optional modules beyond unit frames: action bars, bags, chat, minimap and more."), T.colors.muted)
+        suiteCopy:SetPoint("TOPLEFT", suiteTitle, "BOTTOMLEFT", 0, -8)
+        SetWrapped(suiteCopy, max(120, b.width - 260))
+        local suiteButton = T.Button(suite, Tr("Open Suite Modules"), min(220, max(170, floor(b.width * 0.32))), 28)
+        suiteButton:SetPoint("RIGHT", suite, "RIGHT", -16, 0)
+        suiteButton._msuf2SkipHistoryCheckpoint = true
+        if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(suiteButton) end
+        suiteButton:SetScript("OnClick", function()
+            if BlockedByCombat() or type(M.SelectPage) ~= "function" then return end
+            M.SelectPage(suitePage)
+        end)
+        RegisterGuidedPageButton(suiteButton, "open_suite_modules", "Open Suite Modules", "Shows the Suite page that switches each optional module on or off.")
+    end
     return math.abs(b.y) + 34
 end
 

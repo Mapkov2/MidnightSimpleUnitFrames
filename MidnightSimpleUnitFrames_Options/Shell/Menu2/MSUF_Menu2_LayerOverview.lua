@@ -229,6 +229,7 @@ local function AddLayerRow(target, descriptor)
         layer = Layer(descriptor.value, descriptor.default),
         enabled = descriptor.enabled ~= false,
         inherited = descriptor.inherited == true,
+        automatic = descriptor.automatic == true,
         settingKey = descriptor.settingKey,
         edit = descriptor.edit,
     }
@@ -861,6 +862,12 @@ end
 function Overview.SetLayerValue(row, value)
     if type(row) ~= "table" or type(row.edit) ~= "table" then return false end
     if type(M.BlockCombatAction) == "function" and M.BlockCombatAction() then return false end
+    if row.edit.kind == "external" and type(row.edit.set) == "function" then
+        if type(value) == "string" and value:lower() == "auto" then value = -1 end
+        value = tonumber(value)
+        if not value or value < -1 or value > 30 or value ~= floor(value) then return false end
+        return row.edit.set(row.edit, value) == true
+    end
     value = Layer(value, row.layer)
     local edit = row.edit
     local reason = "MSUF2_LAYER_OVERVIEW_EDIT"
@@ -1080,6 +1087,14 @@ local AREA_ORDER = {
     bars = { "Global Bars", "Class Resources", "Group Bars", "Unit Frames", "Group Frames" },
 }
 
+local SUITE_AREA_BY_PAGE = {
+    suite_cooldownManager = "Suite Cooldown Manager",
+    suite_actionbars = "Suite Action Bars",
+    suite_dataTexts = "Suite DataTexts",
+    suite_damageMeter = "Suite Damage Meter",
+    suite_qualityOfLife = "Suite Quality of Life",
+}
+
 local function CurrentLayerContext()
     local key = tostring(M.activeKey or "")
     local unit = key:match("^uf_(.+)$")
@@ -1111,6 +1126,8 @@ local function CurrentLayerContext()
     if key == "opt_bars" then
         return { key = key, label = "Bars", areas = { ["Global Bars"] = true, ["Class Resources"] = true, ["Group Bars"] = true }, order = AREA_ORDER.bars }
     end
+    local area = SUITE_AREA_BY_PAGE[key]
+    if area then return { key = key, label = area, areas = { [area] = true }, order = { area } } end
     return { key = key, label = "Current menu", all = true, order = {} }
 end
 
@@ -1186,7 +1203,7 @@ local function AcquireVisualRow(popup, index)
     end)
     edit:SetScript("OnEscapePressed", function(self)
         local data = self._ownerRow and self._ownerRow._data
-        self:SetText(data and tostring(data.layer) or "")
+        self:SetText(data and (data.automatic and "Auto" or tostring(data.layer)) or "")
         self:ClearFocus()
     end)
     row._valueEdit = edit
@@ -1329,11 +1346,13 @@ local function ConfigureDataRow(row, data, y, width, alternate, strataMode)
         end
         row._valueEdit:Hide()
     else
-        row._value:SetText(tostring(data.layer))
+        row._value:SetText(data.automatic and "Auto" or tostring(data.layer))
         if data.edit then
             row._value:Hide()
             row._valueEdit._ownerRow = row
-            row._valueEdit:SetText(tostring(data.layer))
+            row._valueEdit:SetNumeric(not data.automatic and data.edit.kind ~= "external")
+            row._valueEdit:SetMaxLetters(data.edit.kind == "external" and 4 or 2)
+            row._valueEdit:SetText(data.automatic and "Auto" or tostring(data.layer))
             if row._valueEdit.SetTextColor then
                 local c = Color("success", { 0.30, 1.00, 0.62, 1 })
                 row._valueEdit:SetTextColor(c[1], c[2], c[3], data.enabled and 1 or 0.62)

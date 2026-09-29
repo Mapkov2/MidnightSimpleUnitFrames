@@ -24,10 +24,10 @@ if type(Data.RegisterFAQProvider) == "function" then
         {
             {
                 l = "How do I change language or translations?",
-                a = "Open Appearance > Miscellaneous > Language. Translation coverage can also be checked with the" ..
+                a = "Open General > Miscellaneous > Language. Translation coverage can also be checked with the" ..
                     " /msuf locale command.",
                 p = "opt_misc",
-                t = "Opens: Appearance > Miscellaneous > Language",
+                t = "Opens: General > Miscellaneous > Language",
                 x = "Language locale localization translation deDE ruRU frFR esES",
                 k = SearchKeywordList(
                     "language|locale|translation|translations|localization|localisation|sprache|deutsch|english",
@@ -37,10 +37,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change unitframe or group frame tooltips?",
-                a = "Open Appearance > Miscellaneous > Unitframe tooltips to control tooltip source, anchor," ..
+                a = "Open General > Miscellaneous > Unitframe tooltips to control tooltip source, anchor," ..
                     " visibility mode, and modifier key for MSUF unit and group frames.",
                 p = "opt_misc",
-                t = "Opens: Appearance > Miscellaneous > Unitframe tooltips",
+                t = "Opens: General > Miscellaneous > Unitframe tooltips",
                 x = "Unitframe tooltips group frame tooltips tooltip mouseover modifier hide tooltip show tooltip",
                 k = SearchKeywordList(
                     "tooltip|tooltips|unit tooltip|group tooltip|group frame tooltip|mouseover tooltip|hide tooltip",
@@ -145,7 +145,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "Why is my castbar not showing?",
                 a = "Open the unit page > Castbar to enable that unit's castbar. Shared castbar visuals are in" ..
-                    " Appearance > Cast Bars.",
+                    " Frames > Cast Bars.",
                 p = "uf_player",
                 t = "Opens: Player > Castbar",
                 x = "Castbar Enable player target focus boss pet show interrupt icon text",
@@ -158,10 +158,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where do I change castbar spell names or long cast text?",
-                a = "Open Appearance > Cast Bars > Name Shortening for castbar spell name shortening, max length," ..
+                a = "Open Frames > Cast Bars > Name Shortening for castbar spell name shortening, max length," ..
                     " and reserved space.",
                 p = "opt_castbar",
-                t = "Opens: Appearance > Cast Bars > Name Shortening",
+                t = "Opens: Frames > Cast Bars > Name Shortening",
                 x = "Name Shortening spell name max name length reserved space castbar",
                 k = SearchKeywordList(
                     "cast name too long|spell name too long|castbar text too long|shorten castbar name",
@@ -217,7 +217,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "How do I turn off player buffs only?",
                 a = "Open Player > Auras, then turn off Buffs for the player frame. Scope-aware text and cooldown" ..
-                    " styling remains under Appearance > Auras.",
+                    " styling remains under Frames > Auras.",
                 p = "uf_player",
                 t = "Opens: Player > Auras",
                 x = "Player Auras Buffs Debuffs hide player buffs only",
@@ -240,10 +240,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where do I change aura cooldown text?",
-                a = "Open Appearance > Auras for scope-aware cooldown text, stack text, swipe, and duration-bar" ..
+                a = "Open Frames > Auras for scope-aware cooldown text, stack text, swipe, and duration-bar" ..
                     " styling. Timer colors remain under Colors > Auras.",
                 p = "auras3_styling",
-                t = "Opens: Appearance > Auras",
+                t = "Opens: Frames > Auras",
                 x = "Style Cooldown Timer Text cooldown text size stack count Colors Auras timer colors safe warning urgent pandemic",
                 k = SearchKeywordList(
                     "aura cooldown text|aura cooldown text too small|aura timer too small|buff timer|debuff timer",
@@ -253,7 +253,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "Where do I change group health text or resource bars?", "Open Frames > Party/Raid Frames > Layout. Text, Resource Bar, and Range Fade are arranged beside Frame Basics and Transparency. Dispel Overlay and Debuff Stripe are on the Dispel Overlay page. Heal prediction is in Appearance > Bars > Absorb Display.", "gf_layout", "Opens: Frames > Party/Raid Frames > Layout", "Health Text Resource Bar Text Layout Group Dispel Overlay group range check raid range check party range check", SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, "group health text|raid health text|party health text|group resource bar|group power bar|raid power bar|party power bar|heal prediction|incoming heals|dispel overlay|debuff stripe|group range fade|group range check|raid range check|party range check|raid out of range|party out of range|range check raid frames"), 180, },
+            { "Where do I change group health text or resource bars?", "Open Frames > Party/Raid Frames > Layout. Text, Resource Bar, and Range Fade are arranged beside Frame Basics and Transparency. Dispel Overlay and Debuff Stripe are on the Dispel Overlay page. Heal prediction is in Frames > Bars > Absorb Display.", "gf_layout", "Opens: Frames > Party/Raid Frames > Layout", "Health Text Resource Bar Text Layout Group Dispel Overlay group range check raid range check party range check", SearchKeywordList(SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS, "group health text|raid health text|party health text|group resource bar|group power bar|raid power bar|party power bar|heal prediction|incoming heals|dispel overlay|debuff stripe|group range fade|group range check|raid range check|party range check|raid out of range|party out of range|range check raid frames"), 180, },
         },
         {
             {
@@ -274,10 +274,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where are absorb bars or heal prediction?",
-                a = "Absorb styling and heal prediction are in Appearance > Bars > Absorb Display. Use the Party" ..
+                a = "Absorb styling and heal prediction are in Frames > Bars > Absorb Display. Use the Party" ..
                     " or Raid scope there for group incoming heals.",
                 p = "opt_bars",
-                t = "Opens: Appearance > Bars > Absorb Display",
+                t = "Opens: Frames > Bars > Absorb Display",
                 x = "Absorb Display Heal Prediction incoming heals absorb health group frames",
                 k = SearchKeywordList(
                     "absorb|absorbs|absorb bar|absorb texture|heal prediction|incoming heals|healing prediction",
@@ -287,7 +287,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "Where do I change aggro, threat, dispel, or raid markers?", "Use Appearance > Bars for highlight borders and Frames > Party/Raid Frames > Status & Indicators for role, threat, dispel, corner, and raid-marker indicators. Spell Indicators are in Frames > Party/Raid Frames > Auras.", "gf_indicators", "Opens: Frames > Party/Raid Frames > Status & Indicators", "Status Indicators Status Icons Corner Indicators aggro threat dispel role icon raid marker", SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "aggro|threat|aggro border|threat border|status and indicators|dispel indicator|magic indicator|curse indicator|poison indicator|disease indicator|raid marker|role icon|ready check|leader icon"), 220, },
+            { "Where do I change aggro, threat, dispel, or raid markers?", "Use Frames > Bars for highlight borders and Frames > Party/Raid Frames > Status & Indicators for role, threat, dispel, corner, and raid-marker indicators. Spell Indicators are in Frames > Party/Raid Frames > Auras.", "gf_indicators", "Opens: Frames > Party/Raid Frames > Status & Indicators", "Status Indicators Status Icons Corner Indicators aggro threat dispel role icon raid marker", SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "aggro|threat|aggro border|threat border|status and indicators|dispel indicator|magic indicator|curse indicator|poison indicator|disease indicator|raid marker|role icon|ready check|leader icon"), 220, },
         },
         {
             {

@@ -171,9 +171,28 @@ local function AddTooltip(widget, title, body, opts)
     local titleColor = opts.titleColor or { 1, 1, 1 }
     local bodyColor = opts.bodyColor or { 0.80, 0.86, 1.00 }
     local function ResolveText(value, ownerFrame) return type(value) == "function" and value(ownerFrame) or value end
+    -- The first explicit tooltip claims the widget, so the search layer's
+    -- automatic help tooltip never doubles it; an automatic one yields to a
+    -- later explicit call (its handler then stays silent).
+    if opts.autoHelp then
+        widget._msuf2TooltipWired = widget._msuf2TooltipWired or "auto"
+    else
+        widget._msuf2TooltipWired = "manual"
+    end
     local function ShowTooltip(self)
         if not _G.GameTooltip then return end
-        if opts.enabled and not opts.enabled(self) then return end
+        -- A disabled control explains why; the reason rides on this tooltip.
+        local Widgets = M.Widgets
+        local reason = Widgets and Widgets.DisabledReasonText and Widgets.DisabledReasonText(widget)
+        if opts.enabled and not opts.enabled(self) then
+            if not reason then return end
+            _G.GameTooltip:SetOwner(self, owner)
+            local resolved = ResolveText(title, self)
+            if resolved and resolved ~= "" then _G.GameTooltip:SetText(Tr(resolved), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1) end
+            _G.GameTooltip:AddLine(reason, 1, 0.82, 0.35, true)
+            _G.GameTooltip:Show()
+            return
+        end
         local resolvedTitle = ResolveText(title, self)
         local resolvedBody = ResolveText(body, self)
         _G.GameTooltip:SetOwner(self, owner)
@@ -185,12 +204,14 @@ local function AddTooltip(widget, title, body, opts)
             end
         end
         if resolvedBody and resolvedBody ~= "" then _G.GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86, bodyColor[3] or 1.00, true) end
+        if reason then _G.GameTooltip:AddLine(reason, 1, 0.82, 0.35, true) end
         _G.GameTooltip:Show()
     end
     local function HideTooltip()
         if _G.GameTooltip then _G.GameTooltip:Hide() end
     end
     local function Wire(target)
+        target._msuf2TooltipTarget = true
         if opts.hook and target.HookScript then
             target:HookScript("OnEnter", ShowTooltip)
             target:HookScript("OnLeave", HideTooltip)
@@ -214,6 +235,16 @@ local function AddTooltip(widget, title, body, opts)
 end
 ExportPublic("MSUF_AddTooltip", _G.MSUF_AddTooltip or AddTooltip)
 M.AddTooltip = M.AddTooltip or AddTooltip
+--- AddTooltip for any control kind: a segment's option buttons sit on top of
+--- its holder and catch the mouse, so they carry the same tooltip.
+function M.AddControlTooltip(control, title, body, opts)
+    if not control then return control end
+    AddTooltip(control, title, body, opts)
+    if control._msuf2ControlKind == "segment" and type(control.buttons) == "table" then
+        for i = 1, #control.buttons do AddTooltip(control.buttons[i], title, body, opts) end
+    end
+    return control
+end
 local PREVIEW_NUDGE_DIRECTIONS = { { "LEFT", -1, 0 }, { "RIGHT", 1, 0 }, { "UP", 0, 1 }, { "DOWN", 0, -1 } }
 local PREVIEW_NUDGE_BINDING_PREFIXES = { "", "SHIFT-", "CTRL-", "CTRL-SHIFT-", "SHIFT-CTRL-" }
 
@@ -708,6 +739,10 @@ end
 ---   enable    = widget | {widgets} -- the master toggle itself; enabled by `enableOn` (default: always on)
 ---   enableOn  = fn(cfg) -> bool    -- optional gate for `enable` (e.g. hasTotemFrame)
 ---   when      = fn(cfg) -> bool    -- optional: skip this entry entirely when false (control left untouched)
+---   reason    = string | fn(control) -> string|nil
+---                                  -- optional: hover text telling why `controls` are disabled.
+---                                  -- Wired only while this entry holds them off; when several
+---                                  -- entries disable one control, the first (most general) wins.
 --- }
 --- opts.also:    extra fn run at the end of every refresh (e.g. a preview repaint).
 --- opts.override: fn(cfg, setEnabled) run last, for page-specific final adjustments
@@ -729,6 +764,28 @@ function M.BindGateGroup(ctx, source, entries, opts)
             W.SetControlEnabled(target, enabled)
         end
     end
+    -- One reusable scratch map (control -> reason or false) per group, filled
+    -- during a refresh and applied once at its end: no per-refresh tables.
+    local pendingReasons
+    for i = 1, #entries do
+        if entries[i].reason ~= nil then pendingReasons = {}; break end
+    end
+    local function noteReason(control, reason)
+        if not control then return end
+        local current = pendingReasons[control]
+        if reason then
+            if not current then pendingReasons[control] = reason end
+        elseif current == nil then
+            pendingReasons[control] = false
+        end
+    end
+    local function noteReasons(target, reason)
+        if type(target) == "table" and target[1] ~= nil and not target.GetObjectType then
+            for i = 1, #target do noteReason(target[i], reason) end
+        else
+            noteReason(target, reason)
+        end
+    end
     local function refresh()
         local cfg
         if source then cfg = source() end
@@ -736,10 +793,20 @@ function M.BindGateGroup(ctx, source, entries, opts)
             local e = entries[i]
             if (not e.when) or e.when(cfg) then
                 if e.enable then setEnabled(e.enable, not e.enableOn or not not e.enableOn(cfg)) end
-                if e.controls then setEnabled(e.controls, e.on and (e.on(cfg) and true or false) or false) end
+                if e.controls then
+                    local on = e.on and (e.on(cfg) and true or false) or false
+                    setEnabled(e.controls, on)
+                    if e.reason ~= nil then noteReasons(e.controls, (not on) and e.reason or false) end
+                end
             end
         end
         if opts.override then opts.override(cfg, setEnabled) end
+        if pendingReasons and W.SetControlDisabledReason then
+            for control, reason in pairs(pendingReasons) do
+                W.SetControlDisabledReason(control, reason or nil)
+                pendingReasons[control] = nil
+            end
+        end
         if opts.also then opts.also() end
     end
     if opts.noTrack then return refresh end

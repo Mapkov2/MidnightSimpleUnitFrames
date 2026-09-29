@@ -928,7 +928,7 @@ local function BuildAuraAndPortraitColors(ctx, b, CH, part)
             end,
             120, 44, Meta("auras.dispel." .. spec.path .. ".color"))
     end
-    W.Text(auras, "Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in Appearance > Auras, scoped by Aura type.", 24, -786, w - 48, T.colors.muted)
+    W.Text(auras, M.Format("Timer and Dispel colors are shared by live unit/group auras and every preview. Icon border and shadow colors live in %s, scoped by Aura type.", M.NavPath("auras3_styling")), 24, -786, w - 48, T.colors.muted)
     CH.ButtonAt(auras, "Reset aura colors", 24, -838, 150, ResetAuraColorSettings, "auras.reset")
     M.TrackRefresh(ctx, RefreshColorSamples)
     end

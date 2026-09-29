@@ -435,7 +435,7 @@ local function BuildPortrait(ctx, builder, unit)
     end
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { enable = { portraitEnable } },
-        { controls = portraitActiveControls, on = PortraitActive },
+        { controls = portraitActiveControls, on = PortraitActive, reason = W.TurnOnReason and W.TurnOnReason("Portrait") },
         -- The Left/Right segment only steers the attached layout; detached and
         -- overlay portraits take their position from the Placement card instead.
         { controls = portrait, on = function(conf) return PortraitPlacementIs(conf, "ATTACHED") end },
@@ -871,9 +871,14 @@ local function BuildPower(ctx, builder, unit)
     local function DetachedOn() return PowerOn() and ReadBool(unit, "powerBarDetached", false) end
     local function OrbSelected() return isPlayer and NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape) == "ORB" end
     local function ClassManaged() return isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) and true or false end
+    -- While Class Resources owns the Player power bar the section notice
+    -- explains the lock, so these hover reasons stay silent then.
+    local turnOn = W.TurnOnReason or function() return nil end
     RefreshPowerEnabled = RefreshPowerEnabled(M.BindGateGroup(ctx, nil, {
-        { enable = { show }, controls = powerControls, on = PowerOn },
-        { controls = detachedControls, on = DetachedOn },
+        { enable = { show }, controls = powerControls, on = PowerOn,
+            reason = turnOn("Show power bar", function() return PowerOn() or ClassManaged() end) },
+        { controls = detachedControls, on = DetachedOn,
+            reason = turnOn("Detach from frame", function() return DetachedOn() or ClassManaged() end) },
         { controls = { attachedPowerHeight, embedPower }, on = function() return PowerOn() and not DetachedOn() end },
         { controls = borderSize, on = function() return PowerOn() and ReadPowerBorderEnabled() end },
         -- Detached width/height/sync exist only when a detached card was built; the `when`
@@ -1518,10 +1523,17 @@ local function BuildCastbar(ctx, builder, unit)
     })
     local castbarFeatureToggles = { time, interrupt, icon, text, targetNameToggle }
     local function MsufOn() return ReadCastbarBackend() == "MSUF" end
+    -- Hover reason for the locked castbar controls: the section notice wording.
+    local function BackendReason()
+        local backend = ReadCastbarBackend()
+        if backend == "MSUF" then return nil end
+        if backend == "HIDE" then return M.Format("%s castbar is off. Turn it on to use the MSUF castbar.", UnitTopLabel(unit)) end
+        return M.Format("%s castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.", UnitTopLabel(unit))
+    end
     RefreshCastbarEnabled = RefreshCastbarEnabled(M.BindGateGroup(ctx, nil, {
-        { enable = { enabled }, controls = castbarFeatureToggles, on = MsufOn },
-        { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end },
-        { controls = allCastbarControls, on = MsufOn },
+        { enable = { enabled }, controls = castbarFeatureToggles, on = MsufOn, reason = BackendReason },
+        { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end, reason = BackendReason },
+        { controls = allCastbarControls, on = MsufOn, reason = BackendReason },
         { controls = manualWidth, on = function() return MsufOn() and ReadWidthSource() == "manual" end },
         { controls = iconControls, on = function() return MsufOn() and ReadGeneralBool(fields.icon, true) end },
         { controls = spellControls, on = function() return MsufOn() and ReadGeneralBool(fields.text, true) end },

@@ -177,6 +177,8 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         meta.values = values or control.values
         meta.keywords = StatusSearchKeywords(extraKeywords)
         meta.help = help or "Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."
+        -- The section-wide fallback is search text, not a per-control hover tooltip.
+        if not help then meta.helpTooltip = false end
         if type(assistantContract) == "table" then
             for key, value in pairs(assistantContract) do meta[key] = value end
         end
