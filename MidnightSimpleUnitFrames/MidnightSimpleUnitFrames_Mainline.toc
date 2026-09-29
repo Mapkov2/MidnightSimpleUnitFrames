@@ -108,6 +108,7 @@ State\MSUF_ProfileIO.lua
 Runtime\MSUF_SlashCommands.lua
 Runtime\MSUF_UnitTooltips.lua
 Runtime\MSUF_BlizzEditModeBridge.lua
+Game\Forever\SwingTimer.lua
 Libs\MSUFUnitFrames\MSUFUnitFrames.xml
 UnitFrames\Engine\MSUF_UF_Shared.lua
 UnitFrames\Engine\MSUF_UF_Config.lua

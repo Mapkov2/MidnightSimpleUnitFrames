@@ -8,6 +8,17 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enUS")) or (MSUF.L or {})
 
+-- Spell bar and group layout options.
+L["When Hide out of combat is enabled, hide the Player Power bar and its text with Class Resource. Player Power returns in combat. Edit Mode keeps them visible."] = "When Hide out of combat is enabled, hide the Player Power bar and its text with Class Resource. Player Power returns in combat. Edit Mode keeps them visible."
+
+-- Spell bar and group layout options.
+L["Selected Spell Color"] = "Selected Spell Color"
+L["The selected spell color is shared by its bar, square, and icon glow."] = "The selected spell color is shared by its bar, square, and icon glow."
+L["Alphabetize names within roles"] = "Alphabetize names within roles"
+L["Sorts names alphabetically after role priority. Works within each raid group or across the entire raid, according to the role sorting options above. Raid and Mythic Raid only."] = "Sorts names alphabetically after role priority. Works within each raid group or across the entire raid, according to the role sorting options above. Raid and Mythic Raid only."
+L["Alphabetical names"] = "Alphabetical names"
+L["Hide player power with Class Resource"] = "Hide player power with Class Resource"
+
 -- Frame bar shape controls.
 L["Selects which side and corner of slanted Health and Power bars is cut."] = "Selects which side and corner of slanted Health and Power bars is cut."
 L["Shows the selected cut on a Health and Power bar sample."] = "Shows the selected cut on a Health and Power bar sample."

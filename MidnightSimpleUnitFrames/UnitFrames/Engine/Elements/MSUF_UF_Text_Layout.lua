@@ -1160,7 +1160,9 @@ end
 local function TextMouseEnter(frame)
   if frame._msufHoverName then SetTextHoverAlpha(frame._msufHoverName, 1) end
   if frame._msufHoverHealth then SetTextHoverAlpha(frame._msufHoverHealth, 1) end
-  if frame._msufHoverPower then SetTextHoverAlpha(frame._msufHoverPower, 1) end
+  if frame._msufHoverPower and frame._msufClassPowerOocHidden ~= true then
+    SetTextHoverAlpha(frame._msufHoverPower, 1)
+  end
 end
 
 local function TextMouseLeave(frame)
@@ -1180,7 +1182,9 @@ local function TextMouseShow(frame)
   local alpha = frame:IsMouseOver() and 1 or 0
   if frame._msufHoverName then SetTextHoverAlpha(frame._msufHoverName, alpha, true) end
   if frame._msufHoverHealth then SetTextHoverAlpha(frame._msufHoverHealth, alpha, true) end
-  if frame._msufHoverPower then SetTextHoverAlpha(frame._msufHoverPower, alpha, true) end
+  if frame._msufHoverPower and frame._msufClassPowerOocHidden ~= true then
+    SetTextHoverAlpha(frame._msufHoverPower, alpha, true)
+  end
 end
 
 local function ApplyTextMouseover(frame, text)
@@ -1220,6 +1224,25 @@ local function ApplyTextMouseover(frame, text)
   end
 end
 
+-- The Power element gates its bar separately; this text overlay also carries
+-- mouseover fade, so restore that configured fade target when combat reveals it.
+function Text.SyncPlayerPowerOocHidden(frame, hidden)
+  local overlay = frame and frame.MSUFPowerTextLayer
+  if not overlay then return end
+  if hidden then
+    if overlay._msufClassPowerOocTextHidden ~= true
+      or overlay._msufHoverAlpha ~= 0
+      or overlay._msufHoverFading then
+      overlay._msufClassPowerOocTextHidden = true
+      SetTextHoverAlpha(overlay, 0, true)
+    end
+  elseif overlay._msufClassPowerOocTextHidden == true then
+    overlay._msufClassPowerOocTextHidden = nil
+    local hover = frame._msufHoverPower == overlay
+    SetTextHoverAlpha(overlay, hover and (frame:IsMouseOver() and 1 or 0) or 1, true)
+  end
+end
+
 function Text.Apply(frame, spec)
   local text = spec and spec.text or {}
   local powerEbonMight = frame._msufPowerEbonMight == true
@@ -1231,6 +1254,9 @@ function Text.Apply(frame, spec)
   sinksChanged = EnsureNameAnchorProxy(frame, spec) or sinksChanged
   -- Run before layout cache returns: toggling hover does not require relayout.
   ApplyTextMouseover(frame, text)
+  if frame._msufClassPowerOocHidden == true then
+    Text.SyncPlayerPowerOocHidden(frame, true)
+  end
   local layoutRevision = spec and spec._msufTextLayoutRevision
   if frame._msufGFPreviewDetached ~= true
     and not sinksChanged

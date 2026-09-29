@@ -845,6 +845,7 @@ local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlo
   end
 
   local priority = (mode == "ROLE" or mode == "GROUP_ROLE") and RolePriority(conf) or nil
+  local alphabeticalInRole = conf.sortAlphabeticalWithinRole == true
   local function SortBefore(a, b)
     if mode == "NAME" and a.name ~= b.name then
       return a.name < b.name
@@ -852,6 +853,7 @@ local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlo
       local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
       if ar ~= br then return ar < br end
       if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
+      if alphabeticalInRole and a.name ~= b.name then return a.name < b.name end
     elseif mode == "GROUP" or mode == "GROUP_ROLE" then
       local ag, bg = a.group or 0, b.group or 0
       if ag ~= bg then return ag < bg end
@@ -859,6 +861,7 @@ local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlo
         local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
         if ar ~= br then return ar < br end
         if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
+        if alphabeticalInRole and a.name ~= b.name then return a.name < b.name end
       end
     end
     return (a.index or 0) < (b.index or 0)

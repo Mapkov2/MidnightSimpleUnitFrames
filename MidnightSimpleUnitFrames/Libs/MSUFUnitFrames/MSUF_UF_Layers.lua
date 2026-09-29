@@ -99,6 +99,29 @@ function Layers.ElementLevel(layer, fallback, detail)
     + Layers.ClampDetail(detail)
 end
 
+-- Suite-owned UIParent surfaces can opt into the same absolute layer slots.
+-- A negative/nil value leaves their original level intact. Remember the
+-- original only when first overridden, so returning to Auto is reversible.
+local originalSurfaceLevels = setmetatable({}, { __mode = "k" })
+function Layers.ApplyOwnedSurface(frame, layer, detail)
+  if not (frame and frame.GetFrameLevel and frame.SetFrameLevel) then return false end
+  local wanted
+  if type(layer) == "number" and layer >= 0 then
+    local current = frame:GetFrameLevel()
+    if type(current) ~= "number" then return false end
+    if originalSurfaceLevels[frame] == nil then originalSurfaceLevels[frame] = current end
+    wanted = Layers.ElementLevel(layer, 0, detail)
+    if current ~= wanted then frame:SetFrameLevel(wanted); return true end
+  else
+    wanted = originalSurfaceLevels[frame]
+    if wanted == nil then return false end
+    originalSurfaceLevels[frame] = nil
+    if frame:GetFrameLevel() ~= wanted then frame:SetFrameLevel(wanted) end
+    return true
+  end
+  return false
+end
+
 -- Layer 0 is the portrait's documented behind-health placement. Health bars
 -- use their frame-local level, below the universal foreground scale; reserve
 -- one extra level for the portrait rim so it also stays behind the bar.

@@ -789,7 +789,7 @@ end
 local function RegisterResourceMovers()
     Reg.Register({
         key = "classpower", label = "Class Resources", order = 101,
-        popupType = "resource", resourceKind = "classpower", canNudge = false,
+        popupType = "resource", resourceKind = "classpower", canNudge = true,
         historyCategory = "classpower", historyKey = "bars",
         subframeOffsetXKey = "classPowerOffsetX", subframeOffsetYKey = "classPowerOffsetY",
         getFrame = GetClassResourceFrame,
@@ -802,7 +802,7 @@ local function RegisterResourceMovers()
         Reg.Register({
             key = "power_" .. unit, label = "Detached power bar", order = 102,
             popupType = "resource", resourceKind = "power", resourceUnit = unit,
-            canNudge = false, historyCategory = "power", historyKey = unit,
+            canNudge = true, historyCategory = "power", historyKey = unit,
             subframeOffsetXKey = "detachedPowerBarOffsetX",
             subframeOffsetYKey = "detachedPowerBarOffsetY",
             getFrame = function() return GetDetachedPowerFrame(unit) end,

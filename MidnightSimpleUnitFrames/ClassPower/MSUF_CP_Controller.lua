@@ -699,12 +699,31 @@ local CP_RefreshTexture
 --- Zero overhead when all three are disabled (early-out on first check).
 local _autoHideActive = false  --- true if any auto-hide option is enabled
 
+-- Only combat, Edit Mode and Class Resource lifecycle changes can flip this
+-- flag. The Power element owns the visual surfaces; it never reads power values
+-- or adds an event/ticker for this preference.
+local function CP_SyncPlayerPowerOOC(hidden)
+    hidden = hidden == true
+    local frame = CoreUnitFrame("player") or _G.MSUF_player
+    if not frame then return end
+    if CP._playerPowerOocHidden == hidden and CP._playerPowerOocFrame == frame then return end
+    local sync = MSUF.UF and MSUF.UF.SetPlayerPowerClassResourceHidden
+    if type(sync) ~= "function" then return end
+    CP._playerPowerOocHidden = hidden
+    CP._playerPowerOocFrame = frame
+    sync(frame, hidden)
+end
+
 local function CP_CheckAutoHide(cur, maxP)
-    if not _autoHideActive or not CP.visible then return end
-    if not CP.container then return end
+    if not CP.visible or not CP.container then return end
+    if not _autoHideActive then
+        if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
+        return
+    end
 
     if _G.MSUF_UnitEditModeActive == true then
         CP.container:SetAlpha(1)
+        if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
         return
     end
 
@@ -715,9 +734,12 @@ local function CP_CheckAutoHide(cur, maxP)
     --- UnitAffectingCombat("player"). Modes with no later power event, such as
     --- the Warrior Whirlwind bar, never get a second chance to show.
     if b.classPowerHideOOC and not (InCombatLockdown() or (UnitAffectingCombat and UnitAffectingCombat("player"))) then
+        if b.classPowerSyncPlayerPowerOOC then CP_SyncPlayerPowerOOC(true)
+        elseif CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
         CP.container:SetAlpha(0)
         return
     end
+    if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
 
     --- Full: hide when all resources are at max
     if b.classPowerHideWhenFull and NotSecret(cur) and NotSecret(maxP) then
@@ -1542,6 +1564,7 @@ end
 --- The Aug exit (state -> sensor -> Power) has already run in ApplyAugLifecycle,
 --- so the sensor teardown here is unconditional.
 function Refresh.HideClassPower(playerFrame, cpHeight)
+    if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
     CP.SetEbonSensorActive(false)
     if CP.ironfur and CP.ironfur.SetActive then CP.ironfur.SetActive(false) end
     CP.visual = nil
@@ -2636,6 +2659,7 @@ if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
         if not (CP.visible and CP.container) then return end
         if active == true then
             CP.container:SetAlpha(1)
+            if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
         else
             CP_RunActiveUpdate(CP.powerType, CP.currentMax)
         end
@@ -2690,6 +2714,7 @@ ExportPublic("MSUF_SmoothPowerBar_Apply", CP.SmoothPowerBarApply)
 --- once on PLAYER_REGEN_ENABLED. Clear every Player-power ownership flag before
 --- the refresh so no class-resource identity survives module shutdown.
 function CP.DisableNow()
+    if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
     CPConfig.RefreshConfig()
     CP.augLifecycleRetryPending = false
     CP.augLifecycleDisablePending = false

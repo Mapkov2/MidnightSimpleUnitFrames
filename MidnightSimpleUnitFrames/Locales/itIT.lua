@@ -12,6 +12,39 @@ if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("itIT")) or (MSUF.L or {})
 
+-- Spell bar and group layout options.
+L["When Hide out of combat is enabled, hide the Player Power bar and its text with Class Resource. Player Power returns in combat. Edit Mode keeps them visible."] = "Quando Nascondi fuori dal combattimento è attivo, nasconde la barra della risorsa del giocatore e il suo testo insieme alla risorsa di classe. La risorsa del giocatore riappare in combattimento. La modalità Modifica mantiene visibili la barra e il testo."
+
+-- Spell bar and group layout options.
+L["Height"] = "Altezza"
+L["Size"] = "Dimensione"
+L["Selected Spell Color"] = "Colore dell'incantesimo selezionato"
+L["The selected spell color is shared by its bar, square, and icon glow."] = "Il colore dell'incantesimo selezionato si applica alla barra, al quadrato e al bagliore dell'icona."
+L["Alphabetize names within roles"] = "Ordina alfabeticamente i nomi all'interno dei ruoli"
+L["Sorts names alphabetically after role priority. Works within each raid group or across the entire raid, according to the role sorting options above. Raid and Mythic Raid only."] = "Ordina alfabeticamente i nomi dopo la priorità dei ruoli. Si applica a ogni gruppo dell'incursione o all'intera incursione, in base alle opzioni di ordinamento dei ruoli qui sopra. Solo Incursione e Incursione Mitica."
+L["Alphabetical names"] = "Nomi in ordine alfabetico"
+L["Hide player power with Class Resource"] = "Nascondi la risorsa del giocatore con la risorsa di classe"
+
+-- WoW Forever native Swing Timer controls.
+L["Swing Timers (Forever)"] = "Swing Timers (Forever)"
+L["Blizzard Swing Timers"] = "Blizzard Swing Timers"
+L["Main Hand, Off Hand and Ranged use Blizzard's native swing events and Edit Mode layout."] = "Main Hand, Off Hand and Ranged use Blizzard's native swing events and Edit Mode layout."
+L["Selected Timer"] = "Selected Timer"
+L["Each timer has its own visibility, size, text and position in the active Blizzard layout."] = "Each timer has its own visibility, size, text and position in the active Blizzard layout."
+L["Show Swing Timers"] = "Show Swing Timers"
+L["Timer"] = "Timer"
+L["Main Hand"] = "Main Hand"
+L["Off Hand"] = "Off Hand"
+L["Ranged"] = "Ranged"
+L["In combat"] = "In combat"
+L["Scale %"] = "Scale %"
+L["Opacity %"] = "Opacity %"
+L["Show bar title"] = "Show bar title"
+L["Show remaining time"] = "Show remaining time"
+L["Move in Blizzard Edit Mode"] = "Move in Blizzard Edit Mode"
+L["Blizzard Edit Mode"] = "Blizzard Edit Mode"
+L["Opens the selected timer in Blizzard Edit Mode for dragging and precise placement. Enable Swing Timers above to preview them there."] = "Opens the selected timer in Blizzard Edit Mode for dragging and precise placement. Enable Swing Timers above to preview them there."
+
 -- Frame bar shape controls.
 L["Selects which side and corner of slanted Health and Power bars is cut."] = "Selects which side and corner of slanted Health and Power bars is cut."
 L["Shows the selected cut on a Health and Power bar sample."] = "Shows the selected cut on a Health and Power bar sample."

@@ -206,6 +206,63 @@ local function SetRegionShown(region, shown)
   if shown then region:Show() else region:Hide() end
 end
 
+-- This alpha lane is independent of configured fill/text alpha and never
+-- changes Power's enabled state or the Player frame. Bar children (shape edge,
+-- gradients and rounded separator) inherit it. Background, modern border and
+-- loss trails are siblings, so each receives the same gate.
+local function SetClassResourceOocAlpha(region, hidden)
+  if not region then return end
+  if hidden then
+    if region._msufClassResourceOocHidden ~= true then
+      region:SetAlpha(0)
+      region._msufClassResourceOocHidden = true
+    end
+  elseif region._msufClassResourceOocHidden == true then
+    region:SetAlpha(1)
+    region._msufClassResourceOocHidden = nil
+  end
+end
+
+local function SetClassResourceOocTrail(snapshot, hidden)
+  if not snapshot then return end
+  if snapshot._msufClassResourceOocHidden ~= (hidden or nil) then
+    local animation = snapshot._msufLossAnimation
+    if animation then animation:Stop() end
+    snapshot._msufLossAnimating = nil
+    snapshot:Hide()
+    snapshot._msufClassResourceOocHidden = hidden or nil
+  end
+  -- ChunkedSetValue may start another snapshot while hidden. Its StatusBar
+  -- frame alpha is animated back to 1, but this texture gate stays at zero.
+  local texture = snapshot.GetStatusBarTexture and snapshot:GetStatusBarTexture()
+  SetClassResourceOocAlpha(texture, hidden)
+end
+
+function Power.SetClassResourceOocHidden(frame, hidden)
+  if not frame then return end
+  hidden = hidden == true
+  if not hidden and frame._msufClassPowerOocHidden ~= true then return end
+  frame._msufClassPowerOocHidden = hidden or nil
+  local bar = frame.targetPowerBar
+  SetClassResourceOocAlpha(bar, hidden)
+  SetClassResourceOocAlpha(frame.powerBarBG, hidden)
+  SetClassResourceOocAlpha(bar and bar.MSUFPowerBorderHost, hidden)
+  local trail = frame.powerLossTrail
+  if trail then
+    local pool = trail._msufLossTrailPool
+    if pool then
+      for i = 1, #pool do SetClassResourceOocTrail(pool[i], hidden) end
+    else
+      SetClassResourceOocTrail(trail, hidden)
+    end
+  end
+  local text = MSUF.UFText
+  if text and text.SyncPlayerPowerOocHidden then
+    text.SyncPlayerPowerOocHidden(frame, hidden)
+  end
+end
+UF.SetPlayerPowerClassResourceHidden = Power.SetClassResourceOocHidden
+
 local function HidePowerBorderEdges(bar)
   local edges = bar and bar.MSUFPowerBorderEdges
   if edges then
@@ -927,6 +984,9 @@ function Power.Apply(frame, spec)
     _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
   end
   NotifyRoundedPowerBorder(frame, enabled)
+  if spec and spec.key == "player" then
+    Power.SetClassResourceOocHidden(frame, frame._msufClassPowerOocHidden == true)
+  end
 end
 
 local function UpdatePercent(frame, event, unit, animate)

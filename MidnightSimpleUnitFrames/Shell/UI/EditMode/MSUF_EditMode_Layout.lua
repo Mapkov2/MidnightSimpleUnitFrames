@@ -998,6 +998,47 @@ local function NudgeCastbar(unit, ndx, ndy)
     return true
 end
 
+local function NudgeResource(cfg, ndx, ndy)
+    if not (cfg and cfg.canNudge == true and cfg.popupType == "resource"
+        and type(cfg.getConf) == "function" and type(cfg.getFrame) == "function"
+        and type(cfg.commitSubframePosition) == "function") then return false end
+    if not cfg.getFrame() then return false end
+    local conf = cfg.getConf()
+    local xKey, yKey = cfg.subframeOffsetXKey, cfg.subframeOffsetYKey
+    if type(conf) ~= "table" or type(xKey) ~= "string" or type(yKey) ~= "string" then return false end
+    local currentX = tonumber(conf[xKey]) or 0
+    local currentY = tonumber(conf[yKey]) or (cfg.resourceKind == "power" and -4 or 0)
+    local nextX, nextY = RoundNudgeOffset(currentX + ndx), RoundNudgeOffset(currentY + ndy)
+    if not IsFiniteNudgeNumber(nextX) or not IsFiniteNudgeNumber(nextY)
+        or abs(nextX) > 3000 or abs(nextY) > 3000
+        or (nextX == currentX and nextY == currentY) then return false end
+
+    local undo = EM2.Undo
+    if not (undo and type(undo.PrepareChange) == "function"
+        and type(undo.CommitPrepared) == "function") then return false end
+    local snapshot = undo.PrepareChange(cfg.historyCategory, cfg.historyKey)
+    if type(snapshot) ~= "table" then return false end
+    local previousX, previousY = conf[xKey], conf[yKey]
+    local previousTopAnchor = conf.classPowerCooldownTopAnchor
+    conf[xKey], conf[yKey] = nextX, nextY
+    if cfg.resourceKind == "classpower" and nextY ~= currentY then
+        conf.classPowerCooldownTopAnchor = true
+    end
+    if cfg.commitSubframePosition() ~= true
+        or tonumber(conf[xKey]) ~= nextX or tonumber(conf[yKey]) ~= nextY
+        or undo.CommitPrepared(snapshot) ~= true then
+        conf[xKey], conf[yKey] = previousX, previousY
+        if cfg.resourceKind == "classpower" then conf.classPowerCooldownTopAnchor = previousTopAnchor end
+        cfg.commitSubframePosition()
+        return false
+    end
+    if EM2.ResourcePopup and EM2.ResourcePopup.Sync then EM2.ResourcePopup.Sync() end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(cfg.key, true) end
+    RefreshUFPreview("EM2_RESOURCE_NUDGE", cfg.resourceUnit or "player")
+    return true
+end
+
 local function NudgeTarget(dx, dy, exactDelta)
     if not EM2.State or not EM2.State.IsActive() then return false end
     if BlockConfigCombatLocked() then return false end
@@ -1012,6 +1053,9 @@ local function NudgeTarget(dx, dy, exactDelta)
         local external = EM2.ExternalElements
         return external and type(external.Nudge) == "function"
             and external.Nudge(selectedKey, ndx, ndy) == true or false
+    end
+    if selectedCfg and selectedCfg.popupType == "resource" then
+        return NudgeResource(selectedCfg, ndx, ndy)
     end
 
     local previewTarget = GetPreviewNudgeTarget()
@@ -1589,6 +1633,9 @@ local function ApplySubframeDragPosition(d, centerX, centerY, uiScale)
     local dy = nextY - (d.lastSubframeY or d.subframeStartY or 0)
     if not TryApplyFramePoint(d.bar, point, anchor, relativePoint, (x or 0) + dx, (y or 0) + dy) then return false end
     d.conf[xKey], d.conf[yKey] = nextX, nextY
+    if d.cfg.resourceKind == "classpower" and dy ~= 0 then
+        d.conf.classPowerCooldownTopAnchor = true
+    end
     d.lastSubframeX, d.lastSubframeY = nextX, nextY
     return true
 end

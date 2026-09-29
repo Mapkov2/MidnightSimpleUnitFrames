@@ -369,16 +369,63 @@ function FirstLoad:ShouldHighlightGuidedSetup()
     return not (type(tourState) == "table" and tourState.status == "completed")
 end
 
+-- MSUF's own first run still owns the screen: the one-time welcome would show,
+-- or the Quick Setup it started is still running (it resumes after a reload).
+-- Unlike ShouldShowDashboard this never writes, because Transition asks it in
+-- the middle of a change. Clients without onboarding scenes never report it.
+local function FirstRunPending()
+    if FirstLoad.deferredThisSession then return false end
+    if not ClientShowsOnboarding()
+        and state.installReason ~= "debug_forced_fresh"
+        and state.installReason ~= "debug_forced_upgrade" then
+        return false
+    end
+    return state.status == "pending" or (state.status == "active" and state.step == "guided_tour")
+end
+
+--- The optional MSUF Suite reads this at login and holds its own installer
+--- while it is true; SettleSuiteHandOff below calls the installer afterwards.
+function FirstLoad:IsFirstRunPending()
+    SyncLiveState()
+    return FirstRunPending() or self.suiteHandOffOwed == true
+end
+
+local function ShowSuiteInstaller()
+    local suite = rawget(_G, "MSUFSuite")
+    local installer = type(suite) == "table" and suite.Installer or nil
+    local maybeShow = type(installer) == "table" and installer.MaybeShow or nil
+    if type(maybeShow) == "function" then maybeShow() end
+end
+
+-- Leaving the pending first run (completed, dismissed, later) hands off to the
+-- Suite installer once per session, one frame later so a Suite error cannot
+-- abort the MSUF action that got here. Another active step, the profile import
+-- route, keeps the hand-off owed until that route completes.
+local function SettleSuiteHandOff()
+    if FirstRunPending() or state.status == "active" or state.status == "pending" then
+        FirstLoad.suiteHandOffOwed = true
+        return
+    end
+    FirstLoad.suiteHandOffOwed = nil
+    if FirstLoad.suiteHandedOff then return end
+    FirstLoad.suiteHandedOff = true
+    local timer = _G.C_Timer
+    local after = type(timer) == "table" and timer.After or nil
+    if type(after) == "function" then after(0, ShowSuiteInstaller) else ShowSuiteInstaller() end
+end
+
 local function Transition(status, step)
     SyncLiveState()
     if not VALID_STATUS[status] then
         return false
     end
+    local suiteWaits = FirstLoad.suiteHandOffOwed == true or FirstRunPending()
     state.status = status
     if type(step) == "string" and step ~= "" then
         state.step = step
     end
     state.updatedAt = Now()
+    if suiteWaits then SettleSuiteHandOff() end
     return true
 end
 
@@ -449,5 +496,6 @@ function FirstLoad:Reset(installKind)
     globalDB.global.firstLoad6 = state
     globalDB.global.firstLoad6ProfileImported = nil
     self.deferredThisSession = false
+    self.suiteHandOffOwed, self.suiteHandedOff = nil, nil
     return true
 end

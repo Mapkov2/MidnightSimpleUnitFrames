@@ -60,9 +60,9 @@ local DATA = {
                     icon = "auras3_styling",
                     pageKey = "auras3_styling",
                     title = "Aura settings in the right place",
-                    summary = "Setup and individual styling now live in the matching Unitframe and Party/Raid menus. Appearance > Auras holds the expanded shared styles.",
+                    summary = "Setup and individual styling now live in the matching Unitframe and Party/Raid menus. Frames > Auras holds the expanded shared styles.",
                     impact = "Configure each frame in context, then use Auras for shared icon shapes, borders, shadows, colors and spacing.",
-                    missed = "per-frame Aura controls and expanded shared styling in Appearance > Auras",
+                    missed = "per-frame Aura controls and expanded shared styling in Frames > Auras",
                     action = "Open shared Aura styles",
                 },
                 {

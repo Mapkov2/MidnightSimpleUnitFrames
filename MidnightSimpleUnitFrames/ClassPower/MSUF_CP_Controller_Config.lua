@@ -238,6 +238,7 @@ builders.CONTROLLER_CONFIG = function(E)
 
         --- Auto-hide: visibility conditions
         if b.classPowerHideOOC       == nil then b.classPowerHideOOC       = false end
+        if b.classPowerSyncPlayerPowerOOC == nil then b.classPowerSyncPlayerPowerOOC = false end
         if b.classPowerHideWhenFull  == nil then b.classPowerHideWhenFull  = false end
         if b.classPowerHideWhenEmpty == nil then b.classPowerHideWhenEmpty = false end
 

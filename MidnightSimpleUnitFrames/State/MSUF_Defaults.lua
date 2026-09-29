@@ -737,6 +737,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         --- Raid/Mythic-only sorting toggle, seeded on every group scope like the
         --- GroupFrames PARTY_DEFAULTS so the factory snapshot carries it explicitly.
         SetDefault(db[key], "sortRolesAcrossRaid", false)
+        SetDefault(db[key], "sortAlphabeticalWithinRole", false)
     end
     --- Older exports may omit screen positions; in that case provide stable
     --- center anchors without touching positions included by the compact export.

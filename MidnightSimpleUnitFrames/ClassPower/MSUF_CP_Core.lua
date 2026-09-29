@@ -45,12 +45,14 @@ local function CP_AboveCooldownGap(frame, container, bars, classHeight)
         local powerHeight = tostring(player.detachedPowerBarShape or ""):upper() == "ORB"
             and (tonumber(player.detachedPowerOrbSize) or 54)
             or (tonumber(player.detachedPowerBarHeight) or 6)
-        local powerY = tonumber(player.detachedPowerBarOffsetY) or -4
-        gap = gap + math_max(0, powerHeight - powerY)
+        -- Reserve the default attached-power footprint. Its editable Y offset
+        -- must move the power bar relative to Class Resources, not move the
+        -- Class Resource anchor in the opposite direction.
+        gap = gap + math_max(0, powerHeight + 4)
     end
 
     local offsetY = tonumber(bars.classPowerOffsetY) or 0
-    if bars.classPowerCooldownTopAnchor == true then return gap + math_max(0, offsetY) end
+    if bars.classPowerCooldownTopAnchor == true then return gap + offsetY end
 
     local getSize = _G.MSUF_GetUsableCooldownAnchorSize
     local viewerHeight

@@ -610,6 +610,7 @@ local PARTY_DEFAULTS = {
     --- Raid/Mythic only: order roles across the entire raid instead of within
     --- each raid group (preserved blocks fill from the raid-wide role order).
     sortRolesAcrossRaid = false,
+    sortAlphabeticalWithinRole = false,
 }
 
 local RAID_DEFAULTS = {}

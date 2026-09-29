@@ -702,6 +702,11 @@ local function ApplyResource()
         _G.MSUF_EM_UndoBeforeChange(cfg.historyCategory, cfg.historyKey)
     end
     conf[xKey], conf[yKey], conf[heightKey] = x, y, height
+    if kind == "classpower" and y ~= oldY then
+        -- An explicit Edit Mode Y value uses the current cooldown-top offset,
+        -- even if the legacy layout has not yet performed its one-time conversion.
+        conf.classPowerCooldownTopAnchor = true
+    end
     if widthChanged then
         conf[widthKey] = width
         if kind == "classpower" then
