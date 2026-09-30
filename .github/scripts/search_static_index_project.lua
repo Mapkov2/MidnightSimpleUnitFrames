@@ -49,6 +49,8 @@ local CLIENT_MATRIX_PATH = "tools/classic-client-matrix.tsv"
 local CLIENT_INIT_PATH = "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"
 local ASSISTANT_ROOT = "MidnightSimpleUnitFrames_Assistant"
 local SCHEMA_FILE_PATTERN = "MSUF_AssistantControlSchema_Data[^/]*%.lua$"
+collectgarbage("setpause", 100)
+collectgarbage("setstepmul", 400)
 local HARNESS_PATH = "tools/assistant_v1_catalog_crosswalk.lua"
 -- The crosswalk continues into Graphify-backed release gates that need an ignored
 -- local build artifact. Everything this generator needs is already in place by then.
@@ -407,6 +409,12 @@ local function InstallClientFacts(target)
         Fail(target .. ": the client model placed this build as " .. tostring(client.Flavor)
             .. (client.IsForever and " (WoW Forever)" or ""))
     end
+    if isForever then
+        namespace.MSUF_RegisterModule = namespace.MSUF_RegisterModule or function() end
+        _G.GetCVarBool = _G.GetCVarBool or function() return false end
+        assert(loadfile("MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua"))("MidnightSimpleUnitFrames", namespace)
+    end
+    _G.C_Timer.NewTimer = _G.C_Timer.NewTimer or _G.C_Timer.After
     return client
 end
 

@@ -884,3 +884,33 @@ in `tools/pixel-layout-exclusions.json`, so new unrounded preview/widget paths f
 the gate. Lua strings (including secure snippets) are not treated as constructors.
 Reference: Blizzard `upstream/ptr2` and `upstream/forever`, SharedXML `PixelUtil.lua`
 and `Backdrop.lua`. Offline checks do not prove final in-game rendering or taint.
+
+### Forever Swing Timers
+
+Game/Forever/SwingTimer.lua registers the independent SwingTimers module.
+The Combat > Swing Timers page stores per-hand visibility, layout, textures,
+colors and typography in MSUF_DB.swingTimers. Main Hand and Off Hand are enabled
+together by default; Ranged is optional. The former native master switch is
+migrated once. Enabling takes ownership of all three Blizzard bars and temporarily
+disables showSwingTimer; disabling or logging out restores its prior value.
+Native Edit Mode layouts are never rewritten. Preview mode supports dragging and
+is cleared on menu close or combat entry. Profile application refreshes the module.
+A one-shot PLAYER_ENTERING_WORLD handler applies saved module enablement after
+login/reload; initial profile binding does not run the profile-change fanout. It
+reuses the runtime driver and leaves no event subscription when disabled.
+Each hand supports bar-plus-timer or number-only display, four spatial fill
+directions, and independent fill-up/drain progression. Colors live exclusively in
+the hand's three-dot menu. Texture selections store the same asset shown in the
+shared media preview, including unregistered built-in choices. A lazy static bar
+previews textures without inheriting a live duration driver. Number-only display
+keeps the native text binding and hides the bar, background, border and title.
+
+PLAYER_SWING and weapon/combat events follow upstream/forever
+Blizzard_SwingTimer/Blizzard_SwingTimer.lua. StatusBar:SetTimerDuration and duration
+text bindings follow Blizzard_AuraContainer/Blizzard_CustomAuraButton.lua. Vertical
+status bars follow Blizzard_UIWidgets/Blizzard_UIWidgetTemplateFillUpFrames.xml
+and Blizzard_OverrideActionBar/OverrideActionBar.xml on the same branch. No Lua
+OnUpdate, polling or Combat Log parser is used. The dedicated Swing Timer smoke
+checks ownership, concurrent hands, duration delivery, equipment, profile changes,
+real media-choice paths, preview isolation, number-only display and fill direction.
+Offline tests do not establish live visuals, taint safety or measured performance.

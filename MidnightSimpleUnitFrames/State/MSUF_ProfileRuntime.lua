@@ -136,6 +136,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     local coordinatedApplyMask = metadata and metadata.coordinatedApplyMask
     _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, reason, coordinatedApplyMask)
     _G.MSUF_ApplyModules()
+    if MSUF.SwingTimer then MSUF.SwingTimer.Apply() end
     _G.MSUF_GF_RebuildAll()
     _G.MSUF_ClassPower_Apply({ full = true, cdm = true })
     _G.MSUF_ApplyPowerBarEmbedLayout_All()

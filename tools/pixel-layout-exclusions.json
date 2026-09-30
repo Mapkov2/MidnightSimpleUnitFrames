@@ -496,5 +496,11 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented event/dispatch driver"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 2,
+    "reason": "Unparented Swing Timer event driver, created by startup or enable and reused by both"
   }
 ]

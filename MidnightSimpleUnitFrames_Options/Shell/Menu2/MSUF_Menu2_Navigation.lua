@@ -59,6 +59,14 @@ P|gameplay|Gameplay|general
 P|opt_misc|Miscellaneous|general
 P|profiles|Profiles|general
 ]]
+if MSUF.Client and MSUF.Client.IsForever then
+    for i, item in ipairs(M.navItems) do
+        if item.id == "combat" then
+            table.insert(M.navItems, i + 1, { key = "swingtimers", label = "Swing Timers (Forever)", group = "combat" })
+            break
+        end
+    end
+end
 M.navPrimaryForKey = {
     home = "home",
     uf_player = "uf_player",

@@ -55,6 +55,15 @@ Data.KEYWORDS = {
     profiles = "profiles profile management spec profiles specialization auto switch create copy delete reset import export wago active profile share string profile string backup restore",
 }
 
+-- Mythic+ dungeons use the Party scope. Put the common activity terms on each
+-- group workspace so a second word such as "auras" or "indicators" narrows to
+-- the right page instead of the separate Mythic Raid settings.
+local MYTHIC_PLUS_KEYWORDS = "mythic plus myhtic plus mythic dungeon mplus keystone schluesselstein schlüsselstein dungeon"
+for _, pageKey in ipairs({ "gf_layout", "gf_bars", "gf_auras", "gf_indicators", "gf_priority" }) do
+    Data.KEYWORDS[pageKey] = Data.KEYWORDS[pageKey] .. " " .. MYTHIC_PLUS_KEYWORDS
+end
+Data.KEYWORDS.gf_layout = Data.KEYWORDS.gf_layout .. " bars health bars power bars party bars dungeon bars"
+
 for _, row in ipairs({
     "DISPEL_DEBUFF_KEYWORDS|MSUF2_SEARCH_DISPEL_DEBUFF_KEYWORDS",
     "HIGHLIGHT_BORDER_KEYWORDS|MSUF2_SEARCH_HIGHLIGHT_BORDER_KEYWORDS",

@@ -68,6 +68,7 @@ local function ApplyScopedFontFollowers(scope, skipCastbars, skipClassPower, ski
     local a3 = MSUF and MSUF.MSUF_Auras3
     if skipAuras ~= true and a3 and type(a3.ApplyFontsFromGlobal) == "function" then a3.ApplyFontsFromGlobal() end
     if skipClassPower ~= true and _G.MSUF_ClassPower_ApplyFonts then _G.MSUF_ClassPower_ApplyFonts() end
+    if MSUF.SwingTimer then MSUF.SwingTimer.ApplyFonts() end
 end
 
 --- Font changes affect many elements. Defer the UF dirty commit so global font

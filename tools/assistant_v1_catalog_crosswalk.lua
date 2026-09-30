@@ -121,7 +121,7 @@ do
     local patched = setmetatable({}, { __mode = "k" })
     local regionMinMaxValues = setmetatable({}, { __mode = "k" })
     local absentDataMember = {
-        Instructions = true, Left = true, Middle = true, Right = true,
+        Instructions = true, Left = true, Middle = true, Mid = true, Right = true,
         Text = true, Low = true, High = true,
     }
     local function PatchRegion(region)

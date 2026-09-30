@@ -6412,6 +6412,42 @@ L["Deletes all MSUF profiles and settings after confirmation. Suite profiles are
 L["Deletes all Suite profiles and skin settings after confirmation. MSUF data stays intact."] = "Löscht nach Bestätigung alle Suite-Profile und Skin-Einstellungen. MSUF-Daten bleiben erhalten."
 L["Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."] = "MSUF auf Werkseinstellungen zurücksetzen?\n\nAlle MSUF-Profile und Einstellungen dieses Accounts werden gelöscht. Suite-Profile bleiben erhalten; das aktive Suite-Profil kann jedoch mit MSUF zu Default wechseln. Die Benutzeroberfläche wird neu geladen."
 L["Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."] = "MSUF Suite auf Werkseinstellungen zurücksetzen?\n\nAlle Suite-Profile und Skin-Einstellungen dieses Accounts werden gelöscht. MSUF-Einstellungen bleiben erhalten. Die Benutzeroberfläche wird neu geladen."
+L["Cuts the Health and Power bar edges. Choose frames in Basics or apply this shape everywhere."] = "Schneidet die Kanten der Lebens- und Ressourcenleisten ab. Wähle Frames unter Grundlagen oder wende die Form überall an."
+L["Hiding offline members in Basics takes precedence over this."] = "Das Ausblenden von Offline-Mitgliedern unter Grundlagen hat Vorrang."
+
+L["Click to open settings. Move resources in Edit Mode."] = "Klicken öffnet Einstellungen. Ressourcen im Edit Mode verschieben."
+
+-- Forever Swing Timer module.
+L["Swing Timer colors"] = "Swing-Timer-Farben"
+L["Bar texture"] = "Balkentextur"
+L["Bar and timer"] = "Balken und Timer"
+L["Number only"] = "Nur Zahl"
+L["Timer progression"] = "Timer-Verlauf"
+L["Fill up"] = "Auffüllen"
+L["Drain"] = "Leeren"
+L["Timer font"] = "Timer-Schriftart"
+L["Timer text alignment"] = "Ausrichtung des Timertexts"
+L["Timer text X offset"] = "Timertext X-Versatz"
+L["Timer text Y offset"] = "Timertext Y-Versatz"
+L["Use Preview and drag Swing Timers to see textures without attacking."] = "Mit der Swing-Timer-Vorschau sind Texturen auch ohne Angriff sichtbar."
+L["Center"] = "Mitte"
+L["Display mode"] = "Anzeigemodus"
+L["Enable Swing Timer module"] = "Swing-Timer-Modul aktivieren"
+L["Preview and drag Swing Timers"] = "Swing-Timer anzeigen und verschieben"
+L["Replaces all Blizzard swing bars while enabled, even when only one hand is selected. Disabling restores Blizzard's previous visibility."] = "Blendet im aktiven Zustand alle Blizzard-Swing-Balken aus, auch wenn nur eine Hand ausgewählt ist. Beim Deaktivieren wird die vorherige Blizzard-Anzeige wiederhergestellt."
+L["Enable the module, then drag the selected bars outside combat. Main Hand and Off Hand can be shown together. Positions are saved in this MSUF profile."] = "Aktiviere das Modul und verschiebe die ausgewählten Balken außerhalb des Kampfes. Waffenhand und Schildhand können gleichzeitig angezeigt werden. Positionen werden in diesem MSUF-Profil gespeichert."
+L["Elapsed time"] = "Verstrichene Zeit"
+L["Remaining time"] = "Verbleibende Zeit"
+L["Fill direction"] = "Füllrichtung"
+L["Reverse fill"] = "Füllrichtung umkehren"
+L["Bar color"] = "Balkenfarbe"
+L["Border color"] = "Randfarbe"
+L["Font"] = "Schriftart"
+L["Font size"] = "Schriftgröße"
+L["Font outline"] = "Schriftkontur"
+L["None"] = "Keine"
+L["Thick outline"] = "Dicke Kontur"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end
