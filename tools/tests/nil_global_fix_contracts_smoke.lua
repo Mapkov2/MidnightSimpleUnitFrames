@@ -279,11 +279,10 @@ Check(Interaction.Store({ _store = "player" }).tag == "player"
     "the exported store reader does not answer the handle's own store")
 local previewSource = Slice.Read(OPTIONS .. "Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua")
     :gsub("\r\n", "\n")
-Check(previewSource:find("local StoreForHandle = Interaction.Store", 1, true) ~= nil,
-    "MSUF_Menu2_ClassPowerPreview.lua must bind StoreForHandle from the interaction module; "
-        .. "it used to read a nil global and Preview.NudgeHandle raised on every call")
-Check(previewSource:find("local store = StoreForHandle(handle)", 1, true) ~= nil,
-    "Preview.NudgeHandle no longer reads the handle's store before it moves anything")
+Check(previewSource:find("local ReadHandle = Interaction.Read", 1, true) ~= nil,
+    "Class Resources preview must bind its offset reader from the interaction module")
+Check(Interaction.Write == nil and Interaction.Apply == nil,
+    "the display-only preview must not publish its retired movement writers")
 
 ---------------------------------------------------------------------------
 -- 7. Font registry: the preview font object uses the published helper.

@@ -90,22 +90,7 @@ local function MSUF_Defaults_TryDecodeCompactString(str)
     elseif rem == 3 then
         cleaned = cleaned .. "="
     end
-    -- MSUF3/4 is deflate(CBOR). Forever's DeserializeCBOR raises
-    -- "attempted to deserialize an unknown cbor value" on the compressed
-    -- bytes (the factory blob starts 0xEC). Blizzard's own readers inflate
-    -- first; never offer the compressed blob to CBOR.
-    local blob = E.DecodeBase64(cleaned)
-    if type(blob) ~= "string" then return nil end
-    local payload = blob
-    if type(E.DecompressString) == "function" then
-        local method = (_G.Enum and _G.Enum.CompressionMethod and _G.Enum.CompressionMethod.Deflate) or nil
-        local inflated = method ~= nil and E.DecompressString(blob, method) or E.DecompressString(blob)
-        if type(inflated) == "string" and inflated ~= "" then
-            payload = inflated
-        end
-    end
-    local tbl = E.DeserializeCBOR(payload)
-    return type(tbl) == "table" and tbl or nil
+    return MSUF.TryDecodeFactoryPayload(E, cleaned)
 end
 local function MSUF_Defaults_WipeInPlace(t)
     if not t then  return end

@@ -1248,7 +1248,6 @@ local function EnsureBlizzardPortraitRing(holder)
   end
   -- Match the portrait mask's bounds without independently rounding the rim.
   ring = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 2), true)
-  if ring.SetRoundLayoutToNearestPixel then ring:SetRoundLayoutToNearestPixel(false) end
   ring:SetSnapToPixelGrid(false)
   ring:SetTexelSnappingBias(0)
   holder.blizzRing = ring
@@ -1261,7 +1260,6 @@ local function EnsureBlizzardPortraitCorner(holder)
   local border = holder.border
   if not (border and border.CreateTexture) then return nil end
   corner = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 3), true)
-  if corner.SetRoundLayoutToNearestPixel then corner:SetRoundLayoutToNearestPixel(false) end
   corner:SetSnapToPixelGrid(false)
   corner:SetTexelSnappingBias(0)
   holder.blizzCorner = corner
@@ -1494,7 +1492,6 @@ function Portrait.PaintClassification(holder, enabled, classification, width, he
   if not dragon then
     local border = renderParent or holder.border or holder
     dragon = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 3), true)
-    if dragon.SetRoundLayoutToNearestPixel then dragon:SetRoundLayoutToNearestPixel(false) end
     dragon:SetSnapToPixelGrid(false)
     dragon:SetTexelSnappingBias(0)
     holder.blizzElite = dragon

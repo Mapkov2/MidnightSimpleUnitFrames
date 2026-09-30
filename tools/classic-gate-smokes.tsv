@@ -25,6 +25,8 @@ tokenclients	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	TagOnly{f
 -	lua	tools/tests/forever_castbar_client_data_smoke.lua	{root}	Forever castbar client data smoke failed
 -	lua	tools/tests/forever_aura_data_smoke.lua	{root/}	WoW Forever aura data smoke failed
 -	lua	tools/tests/forever_group_frames_smoke.lua	{root}	Forever group frames smoke failed
+-	lua	tools/tests/group_spell_selection_smoke.lua	{root}	Group spell selection smoke failed
+-	lua	tools/tests/main_bugfix_backports_smoke.lua	{root}	Main bugfix backports smoke failed
 -	lua	tools/tests/forever_group_header_snippet_smoke.lua	{root}	Forever group header secure snippet smoke failed
 -	lua	tools/tests/forever_raid_manager_gamepad_smoke.lua	{root}	Forever Raid Manager gamepad smoke failed
 -	python	.github/scripts/menu2_search_index_hash_smoke.py		Menu2 search index source-hash contract failed

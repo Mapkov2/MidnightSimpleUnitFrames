@@ -11,6 +11,16 @@ BANNED = {
     # coroutine.resume/wrap capture errors exactly like pcall does.
     "coroutine",
 }
+# Exact native input-rejection sites in the designated boundary module only.
+# Each statement is allowed once; generic wrappers and aliases remain forbidden.
+REJECTION_BOUNDARIES = {
+    "MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua": {
+        "local ok, value = pcall(encoding.DeserializeCBOR, payload)",
+        "local decoded, blob = pcall(encoding.DecodeBase64, cleaned)",
+        "inflated, payload = pcall(encoding.DecompressString, blob, method)",
+        "inflated, payload = pcall(encoding.DecompressString, blob)",
+    },
+}
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
 LONG = re.compile(r"\[(=*)\[")
 NUMBER = re.compile(r"\d{1,3}")
@@ -81,13 +91,19 @@ def main():
     for path in owned_files():
         count += 1
         source = path.read_text(encoding="utf-8-sig")
+        allowed = set(REJECTION_BOUNDARIES.get(path.relative_to(ROOT).as_posix(), ()))
         for token, offset in tokens(source):
             if token in BANNED:
+                end = source.find("\n", offset)
+                statement = source[source.rfind("\n", 0, offset) + 1:end if end >= 0 else len(source)].strip()
+                if token == "pcall" and statement in allowed:
+                    allowed.remove(statement)
+                    continue
                 line = source.count("\n", 0, offset) + 1
                 failures.append(f"{path.relative_to(ROOT).as_posix()}:{line}: {token}")
     if failures:
         raise SystemExit("Forbidden runtime call boundary:\n" + "\n".join(failures))
-    print(f"PASS direct error paths: {count} owned Lua/XML files; no protected-call names or aliases")
+    print(f"PASS direct error paths: {count} owned Lua/XML files; only reviewed native codec rejection sites; no protected-call aliases")
 
 
 if __name__ == "__main__":

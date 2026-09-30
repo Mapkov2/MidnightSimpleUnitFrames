@@ -46,14 +46,6 @@ local function ResolvePlacedSpellIndicatorControlVisibility(placed)
     local barSelected = placedType == "bar"
     return iconSelected, barSelected, barSelected and placed.barShowTimer == true
 end
-SetCurrentSpellAura = function(kind, auraName)
-    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-    M.gfSpellIndicatorSelection[kind] = auraName or ""
-end
-ClearCurrentSpellAura = function(kind)
-    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-    M.gfSpellIndicatorSelection[kind] = nil
-end
 local function IconPackValues()
     -- Style options come from the group runtime when available, with a small fallback for
     -- early load or test contexts where the runtime has not registered styles yet.

@@ -115,8 +115,9 @@ local function NormalizeSearchText(text)
     -- Keep the common dungeon shorthand searchable as words on both queries
     -- and live companion controls (whose labels say "Mythic+").
     if text:find("+", 1, true) then
-        text = text:gsub("%f[%w]mythic%+", "mythic plus ")
-        text = text:gsub("%f[%w]m%+", "mythic plus ")
+        text = text:gsub("%f[%w]myhtic%s*%+", "mythic plus ")
+        text = text:gsub("%f[%w]mythic%s*%+", "mythic plus ")
+        text = text:gsub("%f[%w]m%s*%+", "mythic plus ")
     end
     text = text:gsub("[\001-\031\127]", " ")
     --- Preserve non-ASCII letters so native localized FAQ keywords can match.
