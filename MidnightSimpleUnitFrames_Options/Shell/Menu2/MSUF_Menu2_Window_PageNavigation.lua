@@ -128,6 +128,9 @@ local function RunRefreshers(entry, opts)
         if type(fn) == "function" then fn() end
     end
     entry._msuf2RefreshRevision = revision
+    -- Frame Basics and profile/history changes also change the rail's state.
+    -- Reuse the existing menu refresh; no polling or runtime listener needed.
+    if M.RefreshNavAvailability then M.RefreshNavAvailability() end
     return true
 end
 local PAGE_HISTORY_LIMIT = 30

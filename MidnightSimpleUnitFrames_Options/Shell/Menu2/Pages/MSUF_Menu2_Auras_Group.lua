@@ -409,7 +409,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
         refreshMiniPreview = AurasPage.BuildAuraStylePreviewWorkbench(ctx, b, scope, lane)
     end
 
-    local frameBasics = b:CollapsibleSection(baseId .. "_frame_basics", "Frame Basics", lane == "debuff" and 194 or 146, true)
+    local frameBasics = b:CollapsibleSection(baseId .. "_frame_basics", "Basics", lane == "debuff" and 194 or 146, true)
     local basicsWidth = BodyWidth(frameBasics)
     local basicsGap = 10
     local basicsCol = max(180, floor((basicsWidth - 48 - basicsGap) / 2))

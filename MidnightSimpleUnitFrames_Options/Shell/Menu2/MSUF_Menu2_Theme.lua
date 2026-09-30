@@ -16,6 +16,7 @@ T.fontSizes = (SharedUI and SharedUI.fontSizes) or T.fontSizes or {
 function T.FontSize(role, fallback)
     -- Menu-only readability floor; gameplay fonts keep their own sizing.
     if role == "micro" then return 11 end
+    if role == "navigation" then return 14 end
     if role == "caption" or role == "supporting" then return 12 end
     if SharedUI and type(SharedUI.FontSize) == "function" then return SharedUI.FontSize(role, fallback) end
     return T.fontSizes[role] or tonumber(fallback) or T.fontSizes.body
@@ -354,7 +355,7 @@ local function ResolveMenuFontPath(size, flags, role)
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then path = resolveSafe(path, size, flags, key) end
     if SharedUI and type(SharedUI.ResolveRoleFontPath) == "function" then
-        path = SharedUI.ResolveRoleFontPath(path, role)
+        path = SharedUI.ResolveRoleFontPath(path, role == "navigation" and "card" or role)
     end
     if type(path) ~= "string" or path == "" then path = nil end
     menuFontCache[cacheKey] = path or NO_MENU_FONT
@@ -377,19 +378,13 @@ local function FontPathMatches(expected, actual)
     expected, actual = NormalizeAppliedFontPath(expected), NormalizeAppliedFontPath(actual)
     return expected ~= nil and actual ~= nil and expected == actual
 end
-local function FontHasRenderableText(fs)
-    if not (fs and fs.GetText and fs.GetStringWidth) then return true end
-    local text = fs:GetText()
-    if type(text) ~= "string" or not text:find("%S") then return true end
-    local width = fs:GetStringWidth()
-    return type(width) ~= "number" or width > 0
-end
 local function FontApplicationMatches(fs, expectedFont, expectedSize, expectedFlags)
     local actualFont, actualSize, actualFlags = fs:GetFont()
     if not FontPathMatches(expectedFont, actualFont) then return false end
     if type(actualSize) == "number" and math.abs(actualSize - expectedSize) > 0.01 then return false end
     if tostring(actualFlags or "") ~= tostring(expectedFlags or "") then return false end
-    return FontHasRenderableText(fs)
+    -- Hidden FontStrings may have zero glyph width despite a ready font tuple.
+    return true
 end
 local function TryApplyStyledFont(fs, font, size, flags)
     if type(font) ~= "string" or font == "" then return false end
@@ -405,7 +400,8 @@ local function ApplyStyledFont(fs, force)
     local bump = tonumber(fs._msuf2FontBump) or T.fontBump or 0
     local nextSize = role and T.FontSize(role)
         or T.NormalizeFontSize((tonumber(orig.size) or tonumber(size) or T.FontSize("body")) + bump)
-    local nextFlags = orig.flags or flags or ""
+    -- Menu text sits on its own surface; inherited outlines blur small labels.
+    local nextFlags = ""
     local menuFont = ResolveMenuFontPath(nextSize, nextFlags, role)
     local nextFont = menuFont or orig.font or font
     local fontKey = tostring(nextFont or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "")
@@ -467,13 +463,13 @@ function T.StyleFontString(fs, color, bump, role)
         fs._msuf2TextColorR, fs._msuf2TextColorG, fs._msuf2TextColorB, fs._msuf2TextColorA = cr, cg, cb, ca
         fs:SetTextColor(cr, cg, cb, ca)
     end
-    if fs.SetShadowColor and fs._msuf2ShadowColorKey ~= "0:0:0:0.35" then
-        fs._msuf2ShadowColorKey = "0:0:0:0.35"
-        fs:SetShadowColor(0, 0, 0, 0.35)
+    if fs.SetShadowColor and fs._msuf2ShadowColorKey ~= "0:0:0:0" then
+        fs._msuf2ShadowColorKey = "0:0:0:0"
+        fs:SetShadowColor(0, 0, 0, 0)
     end
-    if fs.SetShadowOffset and fs._msuf2ShadowOffsetKey ~= "1:-1" then
-        fs._msuf2ShadowOffsetKey = "1:-1"
-        fs:SetShadowOffset(1, -1)
+    if fs.SetShadowOffset and fs._msuf2ShadowOffsetKey ~= "0:0" then
+        fs._msuf2ShadowOffsetKey = "0:0"
+        fs:SetShadowOffset(0, 0)
     end
     if fs.GetFont and fs.SetFont then
         fs._msuf2FontBump = tonumber(bump) or T.fontBump or 0
@@ -1615,98 +1611,17 @@ function T.ApplyMenuAtmosphere(frame, host, nav)
     if logo.SetBlendMode then logo:SetBlendMode("ADD") end
     if nav then CreateAtmosphereTexture(nav, "BORDER", 1, T.media.bgSmooth, { 0.06, 0.08, 0.18, 0.085 }, 3, { 0, 0, 1, 0, 0, 1, 1, 1 }) end
 end
+local NAV_ICON_SIZE, NAV_ICON_LEFT, NAV_ICON_GAP = 20, 10, 8
 local function LayoutNavButtonLabel(btn, isChild, hasIcon)
     if not (btn and btn._msuf2Label) then return end
     btn._msuf2Label:ClearAllPoints()
-    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", hasIcon and 28 or 12, 0)
+    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", hasIcon and (NAV_ICON_LEFT + NAV_ICON_SIZE + NAV_ICON_GAP) or 12, 0)
     btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
 end
-local NAV_ICON_SIZE = 17
-local NAV_GLYPH_PATHS = {
-    -- Layered droplet from the selected Colors concept.
-    opt_colors = {
-        { { 0, 7 }, { -2, 4 }, { -5, 0 }, { -5, -3 }, { -3, -6 }, { 0, -7 }, { 3, -6 }, { 5, -3 }, { 5, 0 }, { 2, 4 }, { 0, 7 } },
-        { { -2, -3 }, { -1, -4 }, { 1, -4 }, { 3, -2 } },
-    },
-    -- Three compact resource pips from the selected Class Resources concept.
-    classpower = {
-        { { -5, 6 }, { -6.5, 5 }, { -6.5, -5 }, { -5, -6 }, { -3.5, -5 }, { -3.5, 5 }, { -5, 6 } },
-        { { 0, 6 }, { -1.5, 5 }, { -1.5, -5 }, { 0, -6 }, { 1.5, -5 }, { 1.5, 5 }, { 0, 6 } },
-        { { 5, 6 }, { 3.5, 5 }, { 3.5, -5 }, { 5, -6 }, { 6.5, -5 }, { 6.5, 5 }, { 5, 6 } },
-        { { -5, -2 }, { -5, -4 } },
-        { { 0, -1 }, { 0, -4 } },
-        { { 5, 0 }, { 5, -4 } },
-    },
-    -- Crosshair and sword from the selected Gameplay concept.
-    gameplay = {
-        { { -2, 6 }, { 1, 5 }, { 2, 2 }, { 1, -1 }, { -2, -2 }, { -5, -1 }, { -6, 2 }, { -5, 5 }, { -2, 6 } },
-        { { -2, 8 }, { -2, 5 } },
-        { { -2, -2 }, { -2, -5 } },
-        { { -8, 2 }, { -5, 2 } },
-        { { 1, 2 }, { 4, 2 } },
-        { { 0, -6 }, { 6, 0 } },
-        { { 4.5, 1.5 }, { 6, 0 }, { 4.5, -1.5 } },
-        { { 0, -3.5 }, { 2.5, -6 } },
-        { { -1, -7 }, { 1, -5 } },
-    },
-}
-local NAV_GLYPH_TEXT = { opt_fonts = "Aa" }
-local function AddNavGlyphPath(holder, parts, points)
-    if not (holder and holder.CreateLine and type(points) == "table") then return end
-    for i = 2, #points do
-        local from, to = points[i - 1], points[i]
-        local line = PixelLayoutRegion(holder:CreateLine(nil, "ARTWORK", nil, 3))
-        line:SetThickness(1.25)
-        line:SetStartPoint("CENTER", holder, from[1], from[2])
-        line:SetEndPoint("CENTER", holder, to[1], to[2])
-        line:SetColorTexture(1, 1, 1, 1)
-        parts[#parts + 1] = { region = line, kind = "line" }
-    end
-end
-local function CreateProceduralNavIcon(btn, navKey)
-    local paths, text = NAV_GLYPH_PATHS[navKey], NAV_GLYPH_TEXT[navKey]
-    if not (paths or text) then return nil end
-    local holder = PixelLayoutRegion(CreateFrame("Frame", nil, btn))
-    holder:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
-    holder._msuf2GlyphParts = {}
-    if paths then
-        for i = 1, #paths do AddNavGlyphPath(holder, holder._msuf2GlyphParts, paths[i]) end
-    end
-    if text then
-        local label = PixelLayoutRegion(holder:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall"))
-        local font, _, flags = label:GetFont()
-        label:SetFont(font, T.FontSize("micro"), flags or "")
-        label:SetPoint("CENTER", holder, "CENTER", 0, -0.5)
-        label:SetJustifyH("CENTER")
-        label:SetText(text)
-        holder._msuf2GlyphParts[#holder._msuf2GlyphParts + 1] = { region = label, kind = "font" }
-    end
-    if navKey == "gameplay" then
-        local dot = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK", nil, 4))
-        dot:SetSize(1.75, 1.75)
-        dot:SetPoint("CENTER", holder, "CENTER", -2, 2)
-        dot:SetColorTexture(1, 1, 1, 1)
-        holder._msuf2GlyphParts[#holder._msuf2GlyphParts + 1] = { region = dot, kind = "texture" }
-    end
-    return holder
-end
 local function PaintNavIcon(btn, r, g, b, a)
     local icon = btn and btn._msuf2NavIcon
-    if not icon then return end
-    local parts = icon._msuf2GlyphParts
-    if type(parts) == "table" then
-        for i = 1, #parts do
-            local part = parts[i]
-            if part.kind == "font" and part.region.SetTextColor then
-                part.region:SetTextColor(r, g, b, a)
-            elseif part.region.SetColorTexture then
-                part.region:SetColorTexture(r, g, b, a)
-            end
-        end
-    elseif icon.SetVertexColor then
-        icon:SetVertexColor(r, g, b, a)
-    end
+    if icon then icon:SetVertexColor(r, g, b, a) end
 end
 function T.SetNavIconVisible(btn, visible)
     if not btn then return end
@@ -1736,19 +1651,14 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     end
     local icon = btn._msuf2NavIcon
     if not icon then
-        icon = CreateProceduralNavIcon(btn, navKey)
-        if not icon then
-            icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 3))
-            icon:SetTexture(T.media.navIcons)
-        end
-        icon:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
-        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 12, 0)
+        icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 3))
+        SmoothTexture(icon)
+        icon:SetTexture(T.media.navIcons)
         btn._msuf2NavIcon = icon
-    else
-        icon:ClearAllPoints()
-        icon:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
-        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 12, 0)
     end
+    icon:ClearAllPoints()
+    icon:SetSize(NAV_ICON_SIZE, NAV_ICON_SIZE)
+    icon:SetPoint("LEFT", btn, "LEFT", NAV_ICON_LEFT, 0)
     local col, row = grid[1], grid[2]
     if icon.SetTexCoord then icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8) end
     btn._msuf2NavIconColor = color
@@ -2042,16 +1952,20 @@ function T.Panel(parent, name, bg, border)
 end
 local EDIT_BOX_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 }, { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 }, { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 } }
 local EDIT_BOX_NATIVE_SUFFIXES = WL "Left Right Middle Mid"
+local function HideNativeEditBoxArt(editBox)
+    local name = editBox.GetName and editBox:GetName()
+    for _, suffix in ipairs(EDIT_BOX_NATIVE_SUFFIXES) do
+        local tex = editBox[suffix] or (name and _G[name .. suffix])
+        if tex then
+            if tex.SetAlpha then tex:SetAlpha(0) end
+            if tex.Hide then tex:Hide() end
+        end
+    end
+end
 function T.SkinEditBox(editBox)
     if not editBox or editBox._msuf2EditSkinned then return editBox end
     editBox._msuf2EditSkinned = true
-    local name = editBox.GetName and editBox:GetName() or nil
-    if name then
-        for _, suffix in ipairs(EDIT_BOX_NATIVE_SUFFIXES) do
-            local tex = _G[name .. suffix]
-            if tex and tex.SetAlpha then tex:SetAlpha(0) end
-        end
-    end
+    HideNativeEditBoxArt(editBox)
     local fontString = editBox.GetFontString and editBox:GetFontString() or nil
     if editBox.GetRegions then
         local regions = { editBox:GetRegions() }
@@ -2083,6 +1997,7 @@ function T.SkinEditBox(editBox)
         editBox._msuf2EditEdges = edges
     end
     local function PaintEditBox(self, focused)
+        HideNativeEditBoxArt(self)
         if MenuSkin and MenuSkin.Surface(self, "input", PaintEditBox, focused, nil, 7) then return end
         local enabled = not (self.IsEnabled and not self:IsEnabled())
         local alpha = enabled and 1 or 0.60

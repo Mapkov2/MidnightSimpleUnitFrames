@@ -1088,14 +1088,14 @@ local function BuildGFRangeFadeSection(ctx, b)
     -- a segment overlapping the offline toggle.
     W.MoveWidget(rangeMode, rangeEffectCard, 16, -70, rangeModeW, "LEFT")
     local offlineFadeToggle = BindScopeToggle(ctx, W.ToggleAt(rangeEffectCard, "Fade offline members", 16, -122, rangeLeftWidth - 32), "offlineFadeEnabled", false, "visual")
-    local offlineHint = W.Text(rangeEffectCard, "Hiding offline members in Frame Basics takes precedence over this.", 16, -154, rangeLeftWidth - 32, T.colors.muted)
+    local offlineHint = W.Text(rangeEffectCard, "Hiding offline members in Basics takes precedence over this.", 16, -154, rangeLeftWidth - 32, T.colors.muted)
     if offlineHint and offlineHint.SetWordWrap then offlineHint:SetWordWrap(true) end
     local rangeControls = {
         rangeMode,
         BindRangeAlphaSlider("rangeFadeAlpha", "Out of range", 0.4, -70),
     }
     -- Offline opacity is independent of range fade: it drives the fade state and
-    -- doubles as the transition value while the Frame Basics hide delay runs.
+    -- doubles as the transition value while the Basics hide delay runs.
     local offlineAlphaSlider = BindRangeAlphaSlider("offlineAlpha", "Offline", 0.5, -124)
     local function RefreshRangeState()
         local enabled = Bool(CurrentScope(), "rangeFadeEnabled", false)

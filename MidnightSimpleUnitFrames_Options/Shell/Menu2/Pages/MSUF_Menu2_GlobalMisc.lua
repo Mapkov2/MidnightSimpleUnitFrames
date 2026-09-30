@@ -633,7 +633,7 @@ local function BuildMisc(ctx)
             { hook = true })
     end
     --- Blizzard frame ownership is per unit ("Force Blizzard frame on" in each
-    --- unit's Frame Basics), so this section only carries the remaining
+    --- unit's Basics), so this section only carries the remaining
     --- Blizzard-adjacent chrome toggles.
     local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 170, false)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,

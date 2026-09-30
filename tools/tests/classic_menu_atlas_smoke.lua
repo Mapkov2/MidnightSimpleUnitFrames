@@ -70,6 +70,41 @@ if classic then
         end
     end
 end
+-- Verify the runtime asset, not just its token: dimensions, alpha and each
+-- core/Suite cell must survive packaging with transparent cell boundaries.
+;(function()
+    assert(T.navIconAtlasVersion == 2 and T.media.navIcons:match("msuf_nav_icons_hd$"))
+    local relative = T.media.navIcons:gsub("^Interface\\AddOns\\", ""):gsub("\\", "/")
+    local file = assert(io.open(root .. "/" .. relative .. ".tga", "rb"))
+    local data = file:read("*a")
+    file:close()
+    local width = data:byte(13) + 256 * data:byte(14)
+    local height = data:byte(15) + 256 * data:byte(16)
+    assert(data:byte(3) == 2 and width == 1024 and height == 1024
+        and data:byte(17) == 32 and data:byte(18) == 40 and #data == 18 + width * height * 4,
+        "HD navigation TGA format or resolution changed")
+    local function Cell(col, row)
+        local count, smooth = 0, 0
+        for y = 0, 127 do
+            for x = 0, 127 do
+                local alpha = data:byte(18 + ((row * 128 + y) * width + col * 128 + x) * 4 + 4)
+                if alpha > 0 then
+                    count = count + 1
+                    if alpha < 255 then smooth = smooth + 1 end
+                    assert(x > 0 and x < 127 and y > 0 and y < 127, "icon bleeds into an adjacent cell")
+                end
+            end
+        end
+        assert(count > 250 and smooth > 0, "empty or jagged navigation icon")
+    end
+    local seen = {}
+    for _, cell in pairs(T.navIconGrid) do
+        local id = cell[1] .. ":" .. cell[2]
+        if not seen[id] then Cell(cell[1], cell[2]); seen[id] = true end
+    end
+    for col = 0, 7 do Cell(col, 3) end
+    for col = 0, 3 do Cell(col, 4) end
+end)()
 local shell = CreateFrame("Frame")
 shell:SetSize(1060, 740)
 local heading = T.Font(shell, "GameFontNormal", "Frame Basics", T.colors.text, "accordion")

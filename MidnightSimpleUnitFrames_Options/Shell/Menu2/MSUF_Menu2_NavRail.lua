@@ -21,7 +21,8 @@ local NAV_BUTTON_H = 24
 local NAV_BUTTON_STEP = 28
 local NAV_ITEM_X = 8
 local NAV_ITEM_RIGHT_PAD = 8
-local NAV_ITEM_INDENT = 12
+-- Group headings already provide hierarchy; peer destinations share one column.
+local NAV_ITEM_INDENT = 0
 local NAV_SCROLL_GUTTER = 8
 local NAV_PILL_REFERENCE_LABEL = "Status & Indicators"
 local NAV_PILL_MIN_W = 152
@@ -64,6 +65,7 @@ local function NavPillVisualWidth(parent)
             probe:Hide()
             parent._msuf2NavPillWidthProbe = probe
         end
+        T.StyleFontString(probe, T.colors.text, 0, "navigation")
         probe:SetText(M.Tr(NAV_PILL_REFERENCE_LABEL))
         local textWidth = probe.GetStringWidth and probe:GetStringWidth()
         if textWidth and textWidth > 0 then width = floor(textWidth + 24 + 0.5) end
@@ -171,12 +173,20 @@ function M.SetSearchIntroSeen(seen)
     if seen and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
     return true
 end
+local function NavTooltipTitle(btn) return btn._msuf2RawLabel end
+local function NavTooltipBody(btn)
+    if btn._msuf2NavOff then return btn._msuf2NavOffReason or "Unavailable" end
+end
+local function NavTooltipEnabled(btn)
+    local label = btn._msuf2Label
+    return btn._msuf2NavOff == true or (label and label.IsTruncated and label:IsTruncated())
+end
 local function CreateNavButton(parent, key, label, indent, availability)
     local btn = T.Button(parent, M.Tr(label), NavItemWidth(indent), NAV_BUTTON_H)
     if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontHighlight then
         btn._msuf2Label:SetFontObject(_G.GameFontHighlight)
     end
-    T.StyleFontString(btn._msuf2Label, T.colors.text, NAV_TEXT_BUMP)
+    T.StyleFontString(btn._msuf2Label, T.colors.text, 0, "navigation")
     btn:SetScript("OnClick", function() M.SelectPage(ResolveNavClickTarget(key)) end)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(btn, "navigation." .. tostring(key), label, "navigation",
@@ -188,6 +198,7 @@ local function CreateNavButton(parent, key, label, indent, availability)
     btn._msuf2NavPillVisualWidth = NavPillVisualWidth(parent)
     btn._msuf2RawLabel = label
     btn._msuf2NavAvailability = availability
+    M.AddTooltip(btn, NavTooltipTitle, NavTooltipBody, { hook = true, enabled = NavTooltipEnabled })
     T.AttachNavIcon(btn, key, (indent or 0) > 0, NavIconsEnabled())
     M.navButtons[key] = btn
     if btn.RefreshVisual then btn.RefreshVisual(btn) end
@@ -197,9 +208,6 @@ end
 -- tooltip and shows an "Off" badge, so the state is not carried by alpha alone.
 -- A hidden row (its addon is not installed) leaves the rail but stays in
 -- M.navButtons, so SelectPage, search and aliases still reach its page.
-local function NavOffTooltipTitle(btn) return btn._msuf2RawLabel end
-local function NavOffTooltipBody(btn) return btn._msuf2NavOffReason or "Unavailable" end
-local function NavOffTooltipEnabled(btn) return btn._msuf2NavOff == true end
 local function ApplyNavAvailabilityVisual(btn)
     local off = btn._msuf2NavOff == true
     btn:SetAlpha(off and 0.4 or 1)
@@ -209,7 +217,6 @@ local function ApplyNavAvailabilityVisual(btn)
         badge:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
         badge:SetJustifyH("RIGHT")
         btn._msuf2NavOffBadge = badge
-        M.AddTooltip(btn, NavOffTooltipTitle, NavOffTooltipBody, { hook = true, enabled = NavOffTooltipEnabled })
     end
     if not badge then return end
     badge:SetText("Off")
@@ -526,7 +533,10 @@ local function BuildNavRail(parent)
     parent._msuf2BrandIconFrame = brandIconFrame
     parent._msuf2BrandIcon = brandIcon
     parent._msuf2BrandTitle = brand
-    local search = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
+    -- The visual template supplies a bright native search atlas that covers the
+    -- dark MSUF input surface. Keep its keyboard scripts without its artwork.
+    local search = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxScriptTemplate"))
+    search:SetFontObject(_G.ChatFontNormal or _G.GameFontHighlightSmall)
     search:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -40)
     search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -40)
     search:SetHeight(28)

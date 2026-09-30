@@ -1966,7 +1966,7 @@ local function BuildSlantedSection(ctx, b)
         M.RegisterSearchWidget(preset, {
             label = "Apply slanted bars to all frames", kind = "button",
             keywords = { "slanted bars", "slanted preset", "angled health bar", "schraege leiste", "schraege balken" },
-            help = "Cuts the Health and Power bar edges. Choose frames in Frame Basics or apply this shape everywhere.",
+            help = "Cuts the Health and Power bar edges. Choose frames in Basics or apply this shape everywhere.",
         })
     end
     dependent[#dependent + 1] = direction

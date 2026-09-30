@@ -28,6 +28,13 @@ local function Boot(flavor, locale)
     Add("GetScrollChild", function(self) return self.scrollChild end)
     Add("SetVerticalScroll", function(self, offset) self.verticalScroll = offset end)
     Add("GetVerticalScroll", function(self) return self.verticalScroll or 0 end)
+    -- Native templates supply a font; the generic offline frame stubs do not.
+    local createFontString = methods.CreateFontString
+    methods.CreateFontString = function(self, ...)
+        local label = createFontString(self, ...)
+        label:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+        return label
+    end
     local env = world.env
     local tip = { lines = {} }
     env.GameTooltip = {
@@ -87,6 +94,28 @@ local function RailFlavor(flavor)
     M.BuildNavRail(parent)
     local buttons = M.navButtons
 
+    -- Real root and child rows use the HD atlas with a readable label gap.
+    for _, key in ipairs({ "home", "uf_player", "opt_fonts", "opt_colors", "classpower", "gameplay" }) do
+        local button = assert(buttons[key])
+        local icon, label = assert(button._msuf2NavIcon), button._msuf2Label
+        assert(icon:GetTexture() == M.Theme.media.navIcons and not icon._msuf2GlyphParts,
+            flavor .. ": " .. key .. " bypasses the shared HD artwork")
+        assert(icon:GetWidth() == 20 and icon:GetHeight() == 20, "navigation icon size")
+        assert(Last(label, "LEFT").x - Last(icon, "LEFT").x - icon:GetWidth() >= 8,
+            flavor .. ": " .. key .. " text overlaps its icon")
+        local _, size, flags = label:GetFont()
+        assert(size == 14 and flags == "", flavor .. ": " .. key .. " navigation font: " .. tostring(size) .. "/" .. tostring(flags) .. "/" .. tostring(label._msuf2FontRole))
+        assert(label.shadowColor[4] == 0 and label.shadowOffset[1] == 0 and label.shadowOffset[2] == 0,
+            "navigation label has a blurred shadow")
+        local count = #button.regions
+        M.Theme.AttachNavIcon(button, key, button._msuf2NavIconIsChild, true)
+        assert(#button.regions == count and button._msuf2NavIcon == icon, "refresh allocates another icon")
+        M.Theme.SetNavIconVisible(button, false)
+        assert(not icon:IsShown() and Last(label, "LEFT").x == 12, "hidden icons leave a blank column")
+        M.Theme.SetNavIconVisible(button, true)
+        assert(icon:IsShown() and Last(label, "LEFT").x == 38, "restored icons lost label spacing")
+    end
+
     -- Dimmed: reason tooltip plus a non-color "Off" cue that the label stops short of.
     local dimmed = assert(buttons.smoke_dimmed, flavor .. ": dimmed row missing")
     assert(dimmed:IsShown() and dimmed:GetAlpha() == 0.4, flavor .. ": switched-off module is not dimmed")
@@ -108,6 +137,23 @@ local function RailFlavor(flavor)
     assert(Hover(dimmed, tip) == nil, flavor .. ": available row still explains itself")
     M.RefreshNavIconVisibility()
     assert(dimmed:GetAlpha() == 1, flavor .. ": icon refresh changed an available row")
+
+    -- Changing Frame Basics (including undo/profile refresh) repaints the
+    -- rail in the same refresh pass, without selecting another page.
+    local refreshEntry = { refreshers = { function() suite.dimOk = false end } }
+    M.RunEntryRefreshers(refreshEntry, { force = true })
+    assert(dimmed:GetAlpha() == 0.4 and badge:IsShown(), flavor .. ": page refresh left the rail active")
+    refreshEntry.refreshers[1] = function() suite.dimOk = true end
+    M.RunEntryRefreshers(refreshEntry, { force = true })
+    assert(dimmed:GetAlpha() == 1 and not badge:IsShown(), flavor .. ": page refresh left the rail grey")
+
+    -- A clipped translated/custom-font label remains fully readable on hover.
+    local oldTruncated = world.widgets.Methods.IsTruncated
+    world.widgets.Methods.IsTruncated = function() return true end
+    assert(Hover(buttons.home, tip) == "Dashboard", "clipped navigation label has no full title")
+    world.widgets.Methods.IsTruncated = function() return false end
+    assert(Hover(buttons.home, tip) == nil, "fitting label adds a redundant tooltip")
+    world.widgets.Methods.IsTruncated = oldTruncated
 
     -- Hidden: out of the rail, its now-empty group title too, and the gap closes.
     local hidden = assert(buttons.smoke_hidden, flavor .. ": hidden row must stay in M.navButtons")

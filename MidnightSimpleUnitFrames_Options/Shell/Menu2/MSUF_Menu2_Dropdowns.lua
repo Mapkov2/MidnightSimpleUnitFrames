@@ -66,7 +66,7 @@ local DROPDOWN_SMOOTH_SCROLL_SPEED = 14
 local DROPDOWN_SMOOTH_SCROLL_MAX_ELAPSED = 0.050
 local DROPDOWN_SMOOTH_SCROLL_EPSILON = 0.45
 local dropdownActiveRowHeight = DROPDOWN_ROW_H
-local CloseDropdown, HideDropdownItemTooltip
+local CloseDropdown, HideDropdownItemTooltip, FocusDropdownRow, DropdownKeyDown
 local IsDescendantOf
 local PixelBarTexture = T.PixelBarTexture
 local function PaintDropdownScrollbar(hover)
@@ -336,6 +336,7 @@ function CloseDropdown(opts)
     local immediate = opts == true or (type(opts) == "table" and opts.immediate == true)
     if dropdownClosing and not dropdownOwner and not immediate then return end
     if HideDropdownItemTooltip then HideDropdownItemTooltip() end
+    if FocusDropdownRow then FocusDropdownRow(nil) end
     local owner = dropdownOwner or dropdownClosingOwner
     dropdownClosing = true
     dropdownClosingOwner = owner
@@ -390,12 +391,7 @@ local function EnsureDropdownFrame()
     dropdownFrame:EnableMouse(true)
     dropdownFrame:EnableKeyboard(true)
     if dropdownFrame.SetPropagateKeyboardInput then dropdownFrame:SetPropagateKeyboardInput(true) end
-    dropdownFrame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" and dropdownOwner then
-            CloseDropdown({ immediate = true })
-            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
-        elseif self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
-    end)
+    dropdownFrame:SetScript("OnKeyDown", function(self, key) DropdownKeyDown(self, key) end)
     if dropdownFrame.SetClampedToScreen then dropdownFrame:SetClampedToScreen(true) end
     if T.ApplyMaterial then
         T.ApplyMaterial(dropdownFrame, "popup")
@@ -586,7 +582,7 @@ local function DropdownItemDisabled(item)
     local disabled = item.disabled
     if type(disabled) == "function" then
         local resolved = disabled(item)
-        disabled = resolved or true
+        disabled = resolved ~= false
     end
     if disabled ~= nil then return disabled and true or false end
     local enabled = item.enabled
@@ -895,11 +891,62 @@ local function AddDropdownChoiceAssets(frame, borderLeft, borderAlpha)
     texturePreview:Hide()
     frame._msuf2TexturePreview = texturePreview
 end
+-- Keyboard focus is separate from the saved selection. Moving through a list
+-- never writes a setting; Enter uses the same guarded action as a mouse click.
+FocusDropdownRow = function(index, scroll)
+    local previous = dropdownFrame and dropdownRows[dropdownFrame._msuf2KeyboardIndex or 0]
+    if previous then previous._msuf2KeyboardCue:Hide() end
+    if not dropdownFrame then return end
+    local row = index and dropdownRows[index]
+    if not row or row._msuf2DropdownDisabled or not row:IsShown() then index, row = nil, nil end
+    dropdownFrame._msuf2KeyboardIndex = index
+    if not row then return end
+    row._msuf2KeyboardCue:Show()
+    if scroll then
+        local top = (index - 1) * dropdownActiveRowHeight
+        local offset = dropdownScroll:GetVerticalScroll() or 0
+        local visible = dropdownFrame:GetHeight() - 4
+        if top < offset then SetDropdownScroll(top)
+        elseif top + dropdownActiveRowHeight > offset + visible then
+            SetDropdownScroll(top + dropdownActiveRowHeight - visible)
+        end
+        HideDropdownItemTooltip()
+        ShowDropdownItemTooltip(row)
+    end
+end
+DropdownKeyDown = function(self, key)
+    local handled = dropdownOwner and (key == "ESCAPE" or key == "UP" or key == "DOWN"
+        or key == "HOME" or key == "END" or key == "ENTER" or key == "SPACE")
+    if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(not handled) end
+    if not handled then return end
+    if key == "ESCAPE" then CloseDropdown({ immediate = true }); return end
+    if key == "ENTER" or key == "SPACE" then
+        local row = dropdownRows[self._msuf2KeyboardIndex or 0]
+        if row then row:GetScript("OnClick")(row) end
+        return
+    end
+    local count = self._msuf2RowCount or 0
+    local step = (key == "UP" or key == "END") and -1 or 1
+    local index = self._msuf2KeyboardIndex or (step == 1 and 0 or count + 1)
+    if key == "HOME" then index = 0 elseif key == "END" then index = count + 1 end
+    index = index + step
+    while index >= 1 and index <= count do
+        local row = dropdownRows[index]
+        if row and not row._msuf2DropdownDisabled then FocusDropdownRow(index, true); return end
+        index = index + step
+    end
+end
 local function DropdownRow(index)
     local row = dropdownRows[index]
     if row then return row end
     row = PixelLayoutRegion(CreateFrame("Button", nil, dropdownChild))
     row:SetHeight(DROPDOWN_ROW_H)
+    row._msuf2Index = index
+    local cue = PixelLayoutRegion(row:CreateTexture(nil, "BORDER"))
+    cue:SetAllPoints()
+    cue:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.18)
+    cue:Hide()
+    row._msuf2KeyboardCue = cue
     row:EnableMouse(true)
     row:RegisterForClicks("AnyUp")
     local hover = PixelLayoutRegion(row:CreateTexture(nil, "HIGHLIGHT"))
@@ -927,7 +974,10 @@ local function DropdownRow(index)
     if text.SetNonSpaceWrap then text:SetNonSpaceWrap(false) end
     StoreDropdownDefaultFont(text)
     row._msuf2Text = text
-    row:SetScript("OnEnter", ShowDropdownItemTooltip)
+    row:SetScript("OnEnter", function(self)
+        FocusDropdownRow(self._msuf2Index)
+        ShowDropdownItemTooltip(self)
+    end)
     row:SetScript("OnLeave", function(self) HideDropdownItemTooltip(self) end)
     row:SetScript("OnClick", function(self)
         if self._msuf2DropdownDisabled then return end
@@ -1009,6 +1059,7 @@ local function OpenDropdown(owner, valuesTable)
         PaintDropdownScrollbar(dropdownSlider._msuf2Hover)
     end
     local selectedIndex = 1
+    dropdownFrame._msuf2RowCount = #valuesTable
     for i = 1, #valuesTable do
         local item = valuesTable[i]
         local row = DropdownRow(i)
@@ -1024,6 +1075,7 @@ local function OpenDropdown(owner, valuesTable)
         row._msuf2Value = value
         row._msuf2Item = item
         row._msuf2DropdownDisabled = disabled
+        row._msuf2KeyboardCue:Hide()
         row:SetHeight(rowHeight)
         row._msuf2Selected:SetHeight(rowHeight - 4)
         if row.SetAlpha then row:SetAlpha(isHeader and 1 or (disabled and 0.62 or 1)) end
@@ -1065,6 +1117,7 @@ local function OpenDropdown(owner, valuesTable)
     dropdownFrame._msuf2AnchorKey = nil
     PositionDropdown(owner)
     SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * rowHeight) or 0)
+    FocusDropdownRow(selectedIndex)
     PlayMotion(dropdownFrame, "dropdownIn", { fromAlpha = 0 })
     local manager = ForeverDropdownManager()
     if manager and not dropdownFrame._msuf2ForeverPadRegistered then

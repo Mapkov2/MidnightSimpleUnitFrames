@@ -330,7 +330,7 @@ end
 
 -- 1. Target Buff Style: lane Full-Frame Effect and the native stealable note.
 BuildUnit("target", "buff", "style")
-assert(Has(sections, "Frame Basics") and switches["Mark Stealable Buffs"],
+assert(Has(sections, "Basics") and switches["Mark Stealable Buffs"],
     flavor .. ": the target Buff Style lost its Frame Basics or stealable switch")
 assert(Has(sections, "Full-Frame Effect") == not IS_CLASSIC, flavor .. (IS_CLASSIC
     and ": Classic builds the lane Full-Frame Effect that no Classic runtime renders"

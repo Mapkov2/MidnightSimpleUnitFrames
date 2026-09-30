@@ -1017,7 +1017,7 @@ local function BuildCustomAppearanceTool(C)
         end
 
         local harmfulContainer = isTargetDots or tostring(item.auraType or "BUFF"):upper() == "DEBUFF"
-        local frameBasics = b:CollapsibleSection(CustomStyleSectionId(index, "frame_basics"), "Frame Basics", 220, true)
+        local frameBasics = b:CollapsibleSection(CustomStyleSectionId(index, "frame_basics"), "Basics", 220, true)
         local frameBasicsWidth = frameBasics._msuf2Width or b.width or 720
         local frameBasicsGap = 10
         local frameBasicsCol = max(180, floor((frameBasicsWidth - 48 - frameBasicsGap) / 2))

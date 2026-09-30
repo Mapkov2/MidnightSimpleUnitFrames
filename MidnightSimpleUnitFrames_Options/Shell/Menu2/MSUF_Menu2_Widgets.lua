@@ -2281,25 +2281,6 @@ local function SuppressNativeCheckChrome(self)
         HideNativeCheckTexture(self[getter] and self[getter](self))
     end
 end
-local function ApplyControlCardChrome(card)
-    if not (card and card.CreateTexture) or card._msuf2ControlCardChrome then return end
-    card._msuf2ControlCardChrome = true
-    local top = PixelLayoutRegion(card:CreateTexture(nil, "ARTWORK", nil, 4))
-    top:SetTexture("Interface\\Buttons\\WHITE8X8")
-    top:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -2)
-    top:SetPoint("TOPRIGHT", card, "TOPRIGHT", -8, -2)
-    top:SetHeight(1)
-    top:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.050)
-    card._msuf2CardTopLine = top
-    local depth = PixelLayoutRegion(card:CreateTexture(nil, "BORDER", nil, 4))
-    depth:SetTexture("Interface\\Buttons\\WHITE8X8")
-    depth:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 8, 2)
-    depth:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -8, 2)
-    depth:SetHeight(1)
-    depth:SetColorTexture(0, 0, 0, 0.14)
-    card._msuf2CardDepthLine = depth
-end
-
 --- Toggle visuals are custom-built to avoid Blizzard template art leaking into
 --- Menu2 styling. State changes are still driven by CheckButton semantics.
 local function RefreshToggleControl(button, hover, down)
@@ -2621,21 +2602,31 @@ function W.Text(parent, text, x, y, width, color)
     fs:SetJustifyH("LEFT")
     return fs
 end
--- Keep supporting copy compact while retaining the complete explanation at
--- its own hit target. Status, warnings and instructions still use W.Text.
-function W.Description(parent, text, x, y, width, title)
-    local fs = W.Text(parent, text, x, y, width)
+-- Long supporting copy has a visible help button. Warnings and instructions
+-- keep their full text through W.Text.
+W.DescriptionDetails = true
+function W.Description(parent, text, x, y, width, title, details)
+    local fs = W.Text(parent, text, x, y, max(24, (width or 300) - 30))
     fs:SetWordWrap(true)
     fs:SetMaxLines(2)
     if M.AddTooltip and text and text ~= "" then
         local help = PixelLayoutRegion(CreateFrame("Button", nil, parent))
-        help:SetAllPoints(fs)
+        help:SetSize(24, 24)
+        local glyph = T.Font(help, "GameFontHighlight", "?", T.colors.text, "body")
+        glyph:SetPoint("CENTER", help, "CENTER", 0, 0)
+        help:SetPoint("TOPLEFT", fs, "TOPRIGHT", 6, 4)
         help._msuf2SkipHistoryCheckpoint = true
-        M.AddTooltip(help, title or "Help", text)
+        M.AddTooltip(help, title or "Help", details or text)
         help:SetScript("OnClick", function(self)
             local show = self:GetScript("OnEnter")
             if show then show(self) end
         end)
+        local function RefreshHelp()
+            help:SetShown(details ~= nil or not fs.IsTruncated or fs:IsTruncated())
+        end
+        parent:HookScript("OnShow", RefreshHelp)
+        parent:HookScript("OnSizeChanged", RefreshHelp)
+        RefreshHelp()
         fs._msuf2HelpTarget = help
     end
     return fs
@@ -2663,8 +2654,7 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     local cardBg = { cardBase[1], cardBase[2], cardBase[3], 0.86 }
     local cardBorder = T.colors.cardBorder or T.colors.borderSoft
     local card = T.Panel(parent, nil, cardBg, cardBorder)
-    T.ApplySurface(card, { bg = cardBg, border = cardBorder, glass = "card" })
-    ApplyControlCardChrome(card)
+    T.ApplySurface(card, { bg = cardBg, border = cardBorder, plastic = false })
     SetSearchTitle(card, title)
     RegisterSearchObject(card, title, "section")
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
@@ -2704,8 +2694,7 @@ function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     local cardBg = bg or { cardBase[1], cardBase[2], cardBase[3], 0.86 }
     local cardBorder = border or T.colors.cardBorder or T.colors.borderSoft
     local card = T.Panel(parent, nil, cardBg, cardBorder)
-    T.ApplySurface(card, { bg = cardBg, border = cardBorder, glass = "card" })
-    ApplyControlCardChrome(card)
+    T.ApplySurface(card, { bg = cardBg, border = cardBorder, plastic = false })
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     card:SetSize(width, height)
     PlaceBackdropFrameBehindControls(card, parent)
@@ -3079,6 +3068,7 @@ local function HasDisableGate(control)
 end
 local function ApplyEnabledVisuals(control, enabled)
     SetEnabledState(control, enabled)
+    if control._msuf2DisabledReasonProxy then control._msuf2DisabledReasonProxy:SetShown(not enabled) end
     if control.SetAlpha and control._msuf2EnabledAlphaState ~= enabled then
         control._msuf2EnabledAlphaState = enabled
         -- Labels already receive the disabled text token. Fading their parent
@@ -3187,9 +3177,23 @@ end
 --- points at a toggle the user cannot reach. Wiring happens once per control
 --- at build time; hovering resolves the text, nothing runs per frame.
 function W.WireDisabledReason(control)
-    if not control or control._msuf2DisabledReasonWired then return end
-    -- Text inputs keep their mouse off while disabled so they cannot take focus.
-    if control.GetObjectType and control:GetObjectType() == "EditBox" then return end
+    if not control or control._msuf2DisabledReasonWired or control._msuf2DisabledReasonProxy then return end
+    -- A disabled input must not take focus. A hover-only cover explains why,
+    -- and disappears as soon as editing is enabled again.
+    if control.GetObjectType and control:GetObjectType() == "EditBox" then
+        local proxy = PixelLayoutRegion(CreateFrame("Frame", nil, control))
+        proxy:SetAllPoints(control)
+        proxy:SetFrameLevel(control:GetFrameLevel() + 2)
+        proxy:EnableMouse(true)
+        proxy._msuf2ReasonOwner = control
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(proxy, control) end
+        proxy:SetScript("OnEnter", W.ShowDisabledReason)
+        proxy:SetScript("OnLeave", W.HideDisabledReason)
+        proxy:SetScript("OnHide", W.HideDisabledReason)
+        proxy:SetShown(control._msuf2AppliedEnabled == false)
+        control._msuf2DisabledReasonProxy = proxy
+        return
+    end
     control._msuf2DisabledReasonWired = true
     -- Disabled buttons swallow OnEnter/OnLeave unless asked to keep them.
     if control.SetMotionScriptsWhileDisabled then control:SetMotionScriptsWhileDisabled(true) end

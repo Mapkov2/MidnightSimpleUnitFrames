@@ -630,7 +630,7 @@ local function BuildUnitStyleFrameBasics(S)
     local stealableStyleControl
     if not appearanceGlobalsOnly then
         local stealableLane = lane == "buff" and unit ~= "player"
-        frameBasics = b:CollapsibleSection(baseId .. "_frame_basics", "Frame Basics", stealableLane and 228 or 194, true)
+        frameBasics = b:CollapsibleSection(baseId .. "_frame_basics", "Basics", stealableLane and 228 or 194, true)
         local basicsWidth = BodyWidth(frameBasics)
         local basicsGap = 10
         local basicsCol = max(180, floor((basicsWidth - 48 - basicsGap) / 2))

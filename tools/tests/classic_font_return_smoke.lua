@@ -45,6 +45,32 @@ assert(fs.path == regular and fs.size == 13 and fs.flags == "")
 fs:SetFont(regular, 10, "")
 ns.MSUF2.Theme.StyleFontString(fs, {0.4, 0.4, 0.4, 1}, 1)
 assert(fs.path == regular and fs.size == 11 and fs._msuf2AppliedFontKey, "menu font styling aborted")
+-- Menu styling keeps the selected face, removes inherited effects, and
+-- leaves gameplay's separate outline/font owner intact.
+;(function()
+    local custom = "Interface\\AddOns\\CustomFont\\Readable.ttf"
+    local label = {
+        path = custom, size = 12, flags = "OUTLINE,MONOCHROME",
+        GetFont = fs.GetFont, SetFont = fs.SetFont,
+        SetShadowColor = function(self, r, g, b, a) self.shadowAlpha = a end,
+        SetShadowOffset = function(self, x, y) self.shadowX, self.shadowY = x, y end,
+    }
+    local selected = MSUF_DB.general.menuFontKey
+    MSUF_DB.general.menuFontKey = custom
+    ns.MSUF2.Theme.StyleFontString(label, {1, 1, 1, 1}, 0, "navigation")
+    assert(label.path == custom and label.size == 14 and label.flags == "", "custom menu font was replaced")
+    assert(label.shadowAlpha == 0 and label.shadowX == 0 and label.shadowY == 0, "menu shadow remains")
+    -- Empty selection retains the native locale-compatible font family.
+    MSUF_DB.general.menuFontKey = ""
+    local localized = { path = "Fonts\\FRIZQT___CYR.TTF", size = 12, flags = "OUTLINE",
+        GetFont = fs.GetFont, SetFont = fs.SetFont }
+    ns.MSUF2.Theme.StyleFontString(localized, {1, 1, 1, 1}, 0, "navigation")
+    assert(localized.path == "Fonts\\FRIZQT___CYR.TTF" and localized.size == 14 and localized.flags == "")
+    MSUF_DB.general.menuFontKey = selected
+    local gameplay = { GetFont = fs.GetFont, SetFont = fs.SetFont }
+    assert(MSUF_ApplyResolvedFont(gameplay, path, 14, "OUTLINE,SLUG"))
+    assert(gameplay.flags == "OUTLINE,SLUG", "menu font policy leaked into gameplay")
+end)()
 -- The reported regression: false plus stale/missing readback is pending, not
 -- an exception. Do not replace the requested face or stamp a ready cache.
 for _, actual in ipairs({ {"Fonts\\ARIALN.TTF", 14}, {path, 19}, {} }) do
@@ -74,10 +100,8 @@ ns.MSUF2.Theme.StyleFontString(coldUI, {0.4, 0.4, 0.4, 1}, 1)
 assert(coldUI.request[1] == regular and coldUI.request[2] == 11)
 assert(coldUI._msuf2AppliedFontKey == nil, "pending menu font was cached as ready")
 coldUI.GetFont = function(self) return unpack(self.request) end
--- Matching tuple alone still must not cache zero glyph metrics as ready.
-ns.MSUF2.Theme.StyleFontString(coldUI, {0.4, 0.4, 0.4, 1}, 1)
-assert(coldUI._msuf2AppliedFontKey == nil)
-coldUI.GetStringWidth = function() return 28 end
+-- Hidden strings have no glyph metrics yet; the matching tuple is ready.
+coldUI.GetStringWidth = function() error("font readiness queried hidden glyph metrics") end
 ns.MSUF2.Theme.StyleFontString(coldUI, {0.4, 0.4, 0.4, 1}, 1)
 assert(coldUI._msuf2AppliedFontKey ~= nil)
 -- No protected call in production: retain the exact native error object.

@@ -27,7 +27,7 @@ T.media = T.media or {
     bgSmooth = ADDON_PATH .. "Media\\Bars\\Smoothv2.tga",
     bgCharcoal = ADDON_PATH .. "Media\\Bars\\Charcoal.tga",
     logo = ADDON_PATH .. "Media\\MSUF_MinimapIcon.tga",
-    navIcons = ADDON_PATH .. "Media\\msuf_nav_icons",
+    navIcons = ADDON_PATH .. "Media\\msuf_nav_icons_hd",
     navPillIdle = ADDON_PATH .. "Media\\Menu2\\msuf2_nav_idle.png",
     navPillHover = ADDON_PATH .. "Media\\Menu2\\msuf2_nav_hover.png",
     navPillActive = ADDON_PATH .. "Media\\Menu2\\msuf2_nav_active.png",
@@ -161,6 +161,8 @@ local function GlassVariants(rows)
     end
     return out
 end
+-- Version 2 adds distinct Suite symbols in rows 3 and 4 (128 px per cell).
+T.navIconAtlasVersion = 2
 T.navIconGrid = NavIconGrid [[
 home 0 0
 uf_player 1 0

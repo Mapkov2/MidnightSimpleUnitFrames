@@ -181,7 +181,7 @@ local function RefreshFrameBasicsProviderHeader(section)
     return provider, usesMSUF, offlineHidden
 end
 local function BuildGFGeneralSection(ctx, b)
-    local general = b:CollapsibleSection("general", "Frame Basics", 520, false)
+    local general = b:CollapsibleSection("general", "Basics", 520, false)
     PrepareFrameEnable(ctx, general)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
@@ -747,7 +747,7 @@ local function BuildGFScalingSection(ctx, b)
 end
 
 local function BuildGFAnchorSection(ctx, b)
-    local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
+    local anchor = b:CollapsibleSection("anchor", "Position", 220, false)
     local anchorW = anchor._msuf2Width or b.width or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -825,7 +825,7 @@ end
 
 local GROUP_LAYOUT_SECTION_SPECS = {
     {
-        sectionId = "general", title = "Frame Basics", height = 520, build = BuildGFGeneralSection,
+        sectionId = "general", title = "Basics", height = 520, build = BuildGFGeneralSection,
         prepareShell = function(ctx, section)
             PrepareFrameEnable(ctx, section)
             local function RefreshProviderHeader() RefreshFrameBasicsProviderHeader(section) end
@@ -862,7 +862,7 @@ local GROUP_LAYOUT_SECTION_SPECS = {
     { sectionId = "layout_advanced", title = "Geometry", height = 448, build = BuildGFGeometrySection },
     { sectionId = "sorting", title = "Sorting", height = 236, build = BuildGFSortingSection },
     { sectionId = "scaling", title = "Frame Scaling", height = 380, build = BuildGFScalingSection },
-    { sectionId = "anchor", title = "Anchoring", height = 220, build = BuildGFAnchorSection },
+    { sectionId = "anchor", title = "Position", height = 220, build = BuildGFAnchorSection },
 }
 
 local function BuildGFLayout(ctx)

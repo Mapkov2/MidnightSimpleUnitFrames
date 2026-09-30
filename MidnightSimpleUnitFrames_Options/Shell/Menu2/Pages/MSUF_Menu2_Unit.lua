@@ -354,7 +354,7 @@ local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
 local ARENA_SLOTS = IS_CLASSIC_FAMILY and tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3
 for arenaIndex = 4, ARENA_SLOTS do AURA_ARENA_RUNTIME_UNITS[#AURA_ARENA_RUNTIME_UNITS + 1] = "arena" .. arenaIndex end
 local UF_COPY_CATEGORIES = {
-    { key = "basics",       label = "Frame Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
+    { key = "basics",       label = "Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
     { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, plus this unit's font overrides: font, outline, shadow, text color and name shortening." },
     { key = "portrait",     label = "Portrait",         default = true },
     { key = "power",        label = "Power Bar",        default = true },
@@ -362,7 +362,7 @@ local UF_COPY_CATEGORIES = {
     { key = "aurastyle",    label = "Aura Style",       default = true, description = "Copies this UnitFrame's Buff, Debuff, Custom Aura, Player Defensive and Dots on Target presentation, including text, swipe, icon zoom, duration bars, Pandemic and Full-Frame effects. Aura Options and the global Appearance theme remain unchanged." },
     { key = "castbar",      label = "Castbar",          default = true },
     { key = "status",       label = "Status Icons",     default = true },
-    { key = "load",         label = "Load Conditions",  default = true },
+    { key = "load",         label = "Visibility",  default = true },
     { key = "transparency", label = "Transparency",     default = true },
     { key = "texlayer",     label = "Texture Layer",    default = true },
     { key = "layout",       label = "Frame Size",       default = false, description = "Copies the frame width and height only. Position and anchoring never travel with a copy; place frames in MSUF Edit Mode." },

@@ -1504,7 +1504,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
     local leftW = max(240, min(370, floor((innerW - gap) * 0.46)))
     local rightX = leftX + leftW + gap
     local rightW = max(240, min(390, innerW - leftW - gap))
-    W.ControlCard(section, Tr("Frame Basics"), nil, leftX - 14, -38, leftW + 28, 322)
+    W.ControlCard(section, Tr("Basics"), nil, leftX - 14, -38, leftW + 28, 322)
     W.ControlCard(section, Tr("Cooldown Text"), nil, rightX - 14, -38, rightW + 28, 430)
     W.ControlCard(section, Tr("Stack Count"), nil, leftX - 14, -376, leftW + 28, 296)
     W.ControlCard(section, Tr("Duration Bar"), nil, rightX - 14, -484, rightW + 28, 312)

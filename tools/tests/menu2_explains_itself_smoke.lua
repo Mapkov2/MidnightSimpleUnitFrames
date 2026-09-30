@@ -227,6 +227,14 @@ local edit = NewControl("textinput", "EditBox")
 W.SetControlDisabledReason(edit, "Edit reason")
 W.SetControlEnabled(edit, false)
 Check(edit._msuf2DisabledReasonWired ~= true and edit:IsMouseEnabled() ~= true, "a disabled text input kept the mouse")
+local editReason = assert(edit._msuf2DisabledReasonProxy, "disabled input lost its hover explanation")
+Check(editReason:IsShown() and Has(Hover(editReason), "Edit reason"), "disabled input does not explain its prerequisite")
+W.SetControlEnabled(edit, true)
+Check(not editReason:IsShown() and edit:IsMouseEnabled(), "help cover blocked an enabled input")
+W.SetControlDisabledReason(edit, "Updated reason")
+W.SetControlEnabled(edit, false)
+Check(edit._msuf2DisabledReasonProxy == editReason and Has(Hover(editReason), "Updated reason"), "input help was duplicated or stale")
+
 
 -- 4. Toggle label hit frame ---------------------------------------------------
 local card = env.CreateFrame("Frame", nil, env.UIParent)
@@ -400,7 +408,19 @@ do
     Fire(input, "OnEnterPressed")
     Check(saved == "Saved" and commits == 1, "Enter and blur saved text twice")
 
+    local oldTruncated = Methods.IsTruncated
+    local truncated = false
+    Methods.IsTruncated = function() return truncated end
     local description = W.Description(form, "Full explanation", 16, -80, 300, "Help")
+    Check(not description._msuf2HelpTarget:IsShown(), "short help adds an unnecessary button")
+    truncated = true
+    Fire(form, "OnSizeChanged")
+    Check(description._msuf2HelpTarget:IsShown(), "truncated help has no visible help button")
+    Check(description._msuf2HelpTarget:GetWidth() >= 24, "help target is too small")
+    truncated = false
+    Fire(form, "OnSizeChanged")
+    Check(not description._msuf2HelpTarget:IsShown(), "help button stays when the explanation fits")
+    Methods.IsTruncated = oldTruncated
     Check(description.maxLines == 2 and description._msuf2HelpTarget, "supporting help lost its full explanation")
     Check(Has(Hover(description._msuf2HelpTarget), "Full explanation"), "compact help has no full tooltip")
     M._msuf2FixedPreviewExpandedPreference = nil
@@ -409,5 +429,100 @@ do
     Check(M.ShouldExpandFixedPreview(), "explicit preview expansion was forgotten")
     M.SetFixedPreviewExpandedPreference(false)
 end
+
+-- 9. Full detail help survives layout, without repeating it in the form.
+;(function()
+    local form = env.CreateFrame("Frame", nil, env.UIParent)
+    local old = Methods.IsTruncated
+    Methods.IsTruncated = function() return false end
+    local description = W.Description(form, "Short summary", 16, -10, 300, "Help", "Complete instructions")
+    Check(description:GetText() == "Short summary", "detail help repeats the full paragraph")
+    form:GetScript("OnSizeChanged")(form)
+    Check(description._msuf2HelpTarget:IsShown(), "detail help disappears when the summary fits")
+    Check(Has(Hover(description._msuf2HelpTarget), "Complete instructions"), "full instructions were lost")
+    Methods.IsTruncated = old
+end)()
+
+-- 10. Keyboard movement never commits a value; disabled choices are skipped.
+;(function()
+    for name, method in pairs({
+        SetToplevel = function() end, EnableKeyboard = function() end,
+        SetPropagateKeyboardInput = Store("propagateKeyboard"),
+        SetScrollChild = Store("scrollChild"), GetScrollChild = Fetch("scrollChild"),
+        SetVerticalScroll = Store("verticalScroll"), GetVerticalScroll = Fetch("verticalScroll"),
+    }) do if Methods[name] == nil then Methods[name] = method end end
+    local form = env.CreateFrame("Frame", nil, env.UIParent)
+    form:SetSize(400, 500)
+    local chosen, commits, disabled = 2, 0, false
+    local values = {
+        { text = "Heading", header = true },
+        { text = "First", value = 2 },
+        { text = "Unavailable", value = 3, disabled = true },
+        { text = "Dynamic", value = 4, disabled = function() return disabled end },
+    }
+    for i = 5, 30 do values[i] = { text = tostring(i), value = i } end
+    local owner = W.Dropdown(form, "Choice", values, 240)
+    owner:SetValue(chosen)
+    owner:SetPoint("TOPLEFT", form, "TOPLEFT", 20, -30)
+    owner.left, owner.bottom = 20, 450
+    local function Named(name)
+        for _, frame in ipairs(world.widgets.frames) do
+            if frame:GetName() == name then return frame end
+        end
+        error("missing native frame: " .. name)
+    end
+    local function Open()
+        W.OpenDropdown(owner, values, chosen, function(value) chosen, commits = value, commits + 1 end)
+        return Named("MSUF2NativeDropdownList")
+    end
+    local popup = Open()
+    local function Key(key) popup:GetScript("OnKeyDown")(popup, key) end
+    Key("DOWN")
+    Check(popup._msuf2KeyboardIndex == 4 and chosen == 2 and commits == 0,
+        "arrows committed or failed to skip a disabled item")
+    Key("END")
+    Check(popup._msuf2KeyboardIndex == 30 and Named("MSUF2NativeDropdownScroll"):GetVerticalScroll() > 0,
+        "keyboard focus moved outside the visible list")
+    Key("HOME")
+    Check(popup._msuf2KeyboardIndex == 2, "Home selected a category heading")
+    Key("DOWN")
+    Key("ENTER")
+    Check(chosen == 4 and commits == 1 and popup.propagateKeyboard == false, "Enter did not commit once")
+    disabled = true
+    Open()
+    Key("HOME")
+    Key("DOWN")
+    Check(popup._msuf2KeyboardIndex == 5, "dynamic disabled callback was not re-evaluated")
+    Key("ESCAPE")
+    Check(chosen == 4 and commits == 1 and not popup:IsShown(), "Escape changed the value or left the list open")
+    disabled = false
+    Open()
+    Key("A")
+    Check(popup.propagateKeyboard == true, "unhandled key was swallowed")
+    Key("ESCAPE")
+end)()
+
+-- 11. Closing the menu cancels delayed work, including a callback already
+-- dequeued by the client; reopening only permits the new generation to run.
+;(function()
+    local runtime = M.MenuRuntime
+    runtime:Quiesce("smoke-start")
+    runtime:Resume("smoke-open")
+    local ran = 0
+    local old = runtime:Schedule(0.2, function() ran = ran + 1 end, "smoke-old")
+    Check(old and runtime:PendingTaskCount() == 1, "menu task did not register")
+    runtime:Quiesce("menu-hide")
+    Check(not runtime.active and runtime:PendingTaskCount() == 0 and old.timer:IsCancelled(),
+        "closing the menu left delayed work queued")
+    old.timer.callback()
+    Check(ran == 0, "a cancelled callback executed after menu hide")
+    runtime:Resume("menu-show")
+    local fresh = runtime:Schedule(0.2, function() ran = ran + 1 end, "smoke-fresh")
+    old.timer.callback()
+    fresh.timer.callback()
+    Check(ran == 1 and runtime:PendingTaskCount() == 0,
+        "reopening revived old work or lost the new task")
+    runtime:Quiesce("smoke-end")
+end)()
 
 print(string.format("menu2_explains_itself_smoke: ok (%s: disabled reasons, help, Custom badge, scope chips, field editing, compact preview)", flavor))

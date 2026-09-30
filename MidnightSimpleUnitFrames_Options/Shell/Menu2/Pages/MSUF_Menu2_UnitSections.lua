@@ -832,7 +832,7 @@ local function AttachBasicsHeaderStatus(sec, unit)
             and (unit ~= "focustarget" or ReadBool("focus", "enabled", true))
         local color = enabled and EnabledHeaderColor() or WARNING_HEADER_BG
         W.SetCollapsibleHeaderBaseTone(entry, color, color[4])
-        entry.label:SetText(M.Tr("Frame Basics") .. (enabled and "" or (" - " .. M.Tr("Frame disabled"))))
+        entry.label:SetText(M.Tr("Basics") .. (enabled and "" or (" - " .. M.Tr("Frame disabled"))))
     end
     Refresh()
     return Refresh
@@ -843,7 +843,7 @@ local function BuildBasics(ctx, builder, unit, label)
     -- Leave a full footer gutter below the disabled-frame notice. The next
     -- accordion header is created later and can otherwise cover the notice's
     -- lower edge at some UI scales.
-    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 320, true)
+    local sec = builder:CollapsibleSection("frame_basics", "Basics", 320, true)
     if W.AttachContextColorReferences then
         local function EffectiveHealthMode()
             return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or GlobalHealthColorMode()
@@ -1089,7 +1089,7 @@ local function BuildBasics(ctx, builder, unit, label)
     M.TrackRefresh(ctx, RefreshBasicsEnabled)
 end
 local function BuildLayout(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("anchoring", "Anchoring", 306, false)
+    local sec = builder:CollapsibleSection("anchoring", "Position", 306, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -1416,7 +1416,7 @@ local function BuildStatus(ctx, builder, unit)
     end
 end
 local function BuildLoadConditions(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("load_conditions", "Load Conditions", 210, false)
+    local sec = builder:CollapsibleSection("load_conditions", "Visibility", 210, false)
     local colW = math.floor(((ctx.width or 720) - 42) / 3)
     for i = 1, #LOAD_CONDITIONS do
         local spec = LOAD_CONDITIONS[i]
@@ -1810,7 +1810,7 @@ local function BuildUnitPage(info)
             return BuildBasics(lazyCtx, lazyBuilder, lazyUnit, info.label)
         end, {
             sectionId = "frame_basics",
-            title = "Frame Basics",
+            title = "Basics",
             height = 216,
             prepareShell = function(lazyCtx, sec, lazyUnit)
                 PrepareBasicsSwitch(lazyCtx, sec, lazyUnit)
@@ -1825,7 +1825,7 @@ local function BuildUnitPage(info)
                 return refresh
             end,
         })
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchoring", height = 220 })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Position", height = 220 })
         if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
             -- This workspace owns nested Buff/Debuff/Custom sections and previews;
             -- the lazy one-section proxy would stack those sections into one body.
@@ -1844,7 +1844,7 @@ local function BuildUnitPage(info)
         if info.unit == "arena" then
             BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildArenaLayout, { sectionId = "arena_layout", title = "Arena Layout", height = 160 })
         end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 210 })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Visibility", height = 210 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end
         AttachUnitSectionUX(ctx, info.unit)
         M.TrackRefresh(ctx, function()

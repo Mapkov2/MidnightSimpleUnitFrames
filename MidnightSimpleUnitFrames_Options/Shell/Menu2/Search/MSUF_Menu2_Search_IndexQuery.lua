@@ -1389,11 +1389,12 @@ local function StaticRowsWithoutClientSupport()
         end
     end
     local supportsSetting = client and client.SupportsClassResourceSetting
-    if type(supportsSetting) == "function" then
+    if type(supportsSetting) == "function" or not (client and client.IsForever) then
         local records = Search.StaticIndex.GetRecords()
         for i = 1, #records do
             local rec = records[i]
-            if not supportsSetting(rec.exactTarget and rec.exactTarget.settingKey) then
+            if (rec.key == "swingtimers" and not (client and client.IsForever))
+                or (type(supportsSetting) == "function" and not supportsSetting(rec.exactTarget and rec.exactTarget.settingKey)) then
                 staticRowsWithoutClientSupport[rec.searchIdentity] = true
             end
         end

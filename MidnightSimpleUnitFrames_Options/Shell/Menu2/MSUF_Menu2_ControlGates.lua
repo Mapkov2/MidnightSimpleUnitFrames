@@ -66,7 +66,7 @@ function Gates.ApplySections(ctx, gateKey, enabled, opts)
             local primary = id == "frame_basics" or id == "general"
             entry.header:SetAlpha((enabled or primary) and 1 or 0.48)
             if primary and entry.label then
-                local title = M.Tr("Frame Basics")
+                local title = M.Tr("Basics")
                 if not enabled then title = title .. " - " .. M.Tr("Frame disabled") end
                 entry.label:SetText(title)
                 local color = enabled and M.Theme.colors.text or M.Theme.colors.disabled
