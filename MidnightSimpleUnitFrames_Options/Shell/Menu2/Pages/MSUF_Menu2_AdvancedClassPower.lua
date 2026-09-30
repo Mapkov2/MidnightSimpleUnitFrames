@@ -1504,95 +1504,8 @@ function Page:BuildAlternativeMana()
     self:AddNamed("altMana", fields, "widthMode width height x y"); self:Add("altMana", smooth)
 end
 
-function Page:BuildForeverSwingTimers()
-    local swing = MSUF.SwingTimer
-    if not (MSUF.Client and MSUF.Client.IsForever and swing) then return end
-    local section = self.b:CollapsibleSection("classpower_swing_timers", "Swing Timers (Forever)", 722, false)
-    local cardW = min(620, (section._msuf2Width or self.width) - 28)
-    local controlW = min(360, cardW - 64)
-    W.ControlCard(section, "Blizzard Swing Timers",
-        "Main Hand, Off Hand and Ranged use Blizzard's native swing events and Edit Mode layout.", 14, -38, cardW, 120)
-    W.ControlCard(section, "Selected Timer",
-        "Each timer has its own visibility, size, text and position in the active Blizzard layout.", 14, -180, cardW, 490)
-
-    local hand = M.classPowerSwingTimerHand or "main"
-    local handValues = VT("main", "Main Hand", "off", "Off Hand", "ranged", "Ranged")
-    local function SelectedHand() return hand end
-    local function NativeMeta(path, classification)
-        return Meta("swing_timer." .. path, classification or "setting", {
-            assistantDisposition = classification == "navigation" and nil or "dynamic",
-            assistantDispositionReason = classification == "navigation" and nil
-                or "The selected hand writes the native Blizzard Edit Mode layout, not an MSUF SavedVariable.",
-        })
-    end
-    local enabled = W.Toggle(section, "Show Swing Timers")
-    M.BindBoolWidget(self.ctx, enabled, swing.GetEnabled, swing.SetEnabled,
-        Meta("swing_timer.enabled", "setting", { settingKey = "cvar.showSwingTimer" }))
-    MoveWidget(enabled, section, 32, -100, controlW, "LEFT")
-
-    local selector = W.Dropdown(section, "Timer", handValues, controlW)
-    M.BindDropdownWidget(self.ctx, selector, SelectedHand, function(value)
-        if value ~= "main" and value ~= "off" and value ~= "ranged" then return end
-        hand = value
-        M.classPowerSwingTimerHand = value
-        M.Refresh(self.ctx)
-    end, Meta("swing_timer.selected_hand", "ephemeral"))
-    MoveWidget(selector, section, 32, -238, controlW, "LEFT")
-
-    local visibilityEnum = _G.Enum and _G.Enum.EditModeSwingTimerVisibility or {}
-    local visibilityValues = VT(
-        visibilityEnum.Always or 0, "Always",
-        visibilityEnum.InCombat or 1, "In combat",
-        visibilityEnum.Hidden or 2, "Hidden")
-    local visibility = W.Dropdown(section, "Visibility", visibilityValues, controlW)
-    M.BindDropdownWidget(self.ctx, visibility,
-        function() return swing.Get(hand, "visibility") end,
-        function(value) swing.Set(hand, "visibility", value) end,
-        NativeMeta("visibility"))
-    MoveWidget(visibility, section, 32, -292, controlW, "LEFT")
-    local controls = { enabled, selector, visibility }
-
-    local numeric = {
-        { "width", "Width", 213, 852, 1, 426, -348 },
-        { "height", "Height", 15, 60, 1, 30, -402 },
-        { "scale", "Scale %", 50, 200, 10, 100, -456 },
-        { "opacity", "Opacity %", 50, 100, 1, 100, -510 },
-    }
-    for i = 1, #numeric do
-        local spec = numeric[i]
-        local slider = W.Slider(section, spec[2], spec[3], spec[4], spec[5], controlW)
-        M.BindNumberWidget(self.ctx, slider,
-            function() return swing.Get(hand, spec[1]) end,
-            function(value) swing.Set(hand, spec[1], value) end,
-            spec[6], NativeMeta(spec[1]))
-        MoveWidget(slider, section, 32, spec[7], controlW, "LEFT")
-        controls[#controls + 1] = slider
-    end
-    for i, spec in ipairs({ { "title", "Show bar title", -560 }, { "time", "Show remaining time", -594 } }) do
-        local toggle = W.Toggle(section, spec[2])
-        M.BindBoolWidget(self.ctx, toggle,
-            function() return swing.Get(hand, spec[1]) == 1 end,
-            function(value) swing.Set(hand, spec[1], value) end,
-            NativeMeta(spec[1]))
-        MoveWidget(toggle, section, 32, spec[3], controlW, "LEFT")
-        controls[#controls + 1] = toggle
-    end
-    local edit = T.Button(section, "Move in Blizzard Edit Mode", min(290, controlW), 30)
-    edit:SetPoint("TOPLEFT", section, "TOPLEFT", 32, -634)
-    edit:SetScript("OnClick", function() swing.OpenEditMode(hand) end)
-    RegisterControl(edit, NativeMeta("edit_mode", "navigation"), "Move in Blizzard Edit Mode", "button")
-    AddTooltip(edit, "Blizzard Edit Mode",
-        "Opens the selected timer in Blizzard Edit Mode for dragging and precise placement. Enable Swing Timers above to preview them there.")
-    controls[#controls + 1] = edit
-    self.swingTimerControls = controls
-end
-
 function Page:RefreshControlState()
     local bars, db = Bars(), M.EnsureDB()
-    if self.swingTimerControls then
-        SetControlsEnabled(self.swingTimerControls,
-            MSUF.SwingTimer and MSUF.SwingTimer.IsAvailable and MSUF.SwingTimer.IsAvailable())
-    end
     local cpOn = BoolValue(bars, "showClassPower", true)
     SetControlsEnabled(self.groups.cp, cpOn)
     if self.cp.syncPlayerPowerOOC then
@@ -1724,9 +1637,6 @@ function Page:Build()
     self:LazySection("classpower_detached_power", "Player Power", function() return DetachedPowerSectionHeight(self.width) end, Page.BuildDetachedPower)
     self:LazySection("classpower_player_hp", "Extra Health Bar", function() return self.width < 680 and 980 or 700 end, Page.BuildPlayerHP)
     self:LazySection("classpower_alt_mana", "Alternative Mana", 476, Page.BuildAlternativeMana)
-    if MSUF.Client and MSUF.Client.IsForever then
-        self:LazySection("classpower_swing_timers", "Swing Timers (Forever)", 722, Page.BuildForeverSwingTimers)
-    end
     -- All callbacks share one late-bound state refresh instead of capturing every control.
     self.refresh = self.refresh(function() self:RefreshControlState() end)
     M.RefreshClassPowerDetachedState = self.refresh

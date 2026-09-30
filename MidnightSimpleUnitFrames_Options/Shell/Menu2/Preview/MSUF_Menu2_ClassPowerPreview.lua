@@ -1,8 +1,8 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Class Resources preview module.
 --- Menu-only composition for ClassPower, detached Player Power, and the
---- optional Class Resources Player HP bar. Runtime refresh remains outside the
---- drag loop; drag writes saved offsets and repaints only this preview.
+--- optional Class Resources Player HP bar. Edit Mode owns movement; this
+--- surface only displays the configured layout and opens element settings.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
@@ -21,8 +21,6 @@ local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local PreviewCore = MSUF.UFPreviewCore or {}
 local Helpers = M.PreviewHelpers or {}
 local PlayerManaSourceActive = Helpers.PlayerManaSourceActive or M.Fallbacks.False
-local ZoomPan = Preview.ZoomPan or {}
-Preview.ZoomPan = ZoomPan
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- animation driver's OnUpdate disabled.
 local ONUPDATE_MODE_DISABLED = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.Disabled) or 0
@@ -85,27 +83,8 @@ local function SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
         box.summary:SetText(TR("Shown here: ") .. table.concat(parts, " + "))
     end
 end
-if Helpers.InstallZoomPan and not ZoomPan._msufCPPreviewInstalled then
-    ZoomPan._msufCPPreviewInstalled = true
-    Helpers.InstallZoomPan(ZoomPan, {
-        configureTableOnly = true,
-        readoutField = "zoomReadout",
-        fitButtonTextPath = { "zoomFitButton", "fs" },
-        panPrefix = "_msufCPPreview",
-        hintField = "hint",
-        updateHintKey = "UpdateHandleHint",
-        defaultReason = "CLASSPOWER_PREVIEW_ZOOM",
-        stepReason = "CLASSPOWER_PREVIEW_ZOOM_STEP",
-        themeButton = true,
-        buttonTextureKey = "WHITE8",
-        buttonFontField = "fs",
-        refresh = function(box, reason)
-            if box and box.Refresh then box:Refresh(reason or "CLASSPOWER_PREVIEW_ZOOM") end
-        end,
-    })
-end
 local CP_PREVIEW_LAYERS = {
-    { key = "guides", label = "Guides", color = { 0.42, 0.72, 1.00 }, tooltip = "Mover handles and selected borders." },
+    { key = "guides", label = "Guides", color = { 0.42, 0.72, 1.00 }, tooltip = "Click to open settings. Move resources in Edit Mode." },
     { key = "border", label = "Border", color = PREVIEW_BORDER_COLOR, tooltip = "Actual HP, Power and Class Resource outlines." },
     { key = "reference", label = "Reference", color = { 0.60, 0.66, 0.78 }, tooltip = "Player frame reference used for relative layout." },
     { key = "class", label = "Resource", color = { 0.30, 0.78, 0.55 }, tooltip = "Class resource bar or pips." },
@@ -532,13 +511,7 @@ local function SetRoundedPowerPreview(frame, enabled, outline)
     return true
 end
 local Interaction = M.ClassPowerPreviewInteraction
-local CallApply = Interaction.Apply
 local ReadHandle = Interaction.Read
-local WriteHandle = Interaction.Write
---- The handle's SavedVariables table. Preview.NudgeHandle asks for it before
---- it moves anything; it owns no copy of the rule, so bind the one the
---- interaction file uses for every read and write.
-local StoreForHandle = Interaction.Store
 local OpenClassPowerHandleSettings = Interaction.OpenSettings
 local function RefreshHandleVisuals(preview)
     if not (preview and preview.handles) then return end
@@ -571,220 +544,29 @@ local function RefreshHandleVisuals(preview)
             preview.hint:SetText(string.format("%s   x: %d   y: %d",
                 TR(selected._label or selected._key or "Element"), Round(x or 0), Round(y or 0)))
         else
-            preview.hint:SetText(TR("Drag handles to move."))
+            preview.hint:SetText(TR("Click to open settings. Move resources in Edit Mode."))
         end
-    end
-end
--- Shared preview-keyboard helpers keep ClassPower and Unit preview nudging in
--- lockstep while the DB write/apply behavior remains local to this module.
-local IsTextInputFocused = Helpers.IsTextInputFocused
-local NudgeStep = Helpers.NudgeStep
-local function CanNudgeHandle(handle)
-    local preview = handle and handle._preview
-    return handle ~= nil
-        and preview ~= nil
-        and handle._msufPlaced == true
-        and LayerOn(preview, handle._layerKey or handle._key)
-end
-local function ShouldSkipDuplicateNudge(preview, dx, dy)
-    return Helpers.ShouldSkipDuplicateNudge and Helpers.ShouldSkipDuplicateNudge(preview, dx, dy, {
-        sigKey = "_msufCPPreviewLastNudgeSig",
-        atKey = "_msufCPPreviewLastNudgeAt",
-    }) or false
-end
-local function NudgeSelectedHandle(preview, dx, dy)
-    local handle = preview and preview.selectedHandle
-    if not CanNudgeHandle(handle) or IsTextInputFocused() then return false end
-    local step = NudgeStep()
-    local ndx, ndy = (tonumber(dx) or 0) * step, (tonumber(dy) or 0) * step
-    if ShouldSkipDuplicateNudge(preview, ndx, ndy) then return true end
-    local x, y = ReadHandle(handle)
-    WriteHandle(handle, x + ndx, y + ndy, false)
-    return true
-end
-local function FocusPreviewKeyboardTarget(preview, handle, defer)
-    if Helpers.FocusKeyboardTarget then return Helpers.FocusKeyboardTarget(preview, handle, defer, { selectedField = "selectedHandle" }) end
-end
-local function OnCPPreviewArrowNudge(active, dx, dy)
-    if NudgeSelectedHandle(active, dx, dy) then FocusPreviewKeyboardTarget(active, active and active.selectedHandle, true) end
-end
-local CP_PREVIEW_ARROW_BINDINGS = { ownerName = "MSUF_CPPreview_NudgeOwner", activeName = "MSUF_CPPreview_ActiveNudgeBox", buttonPrefix = "MSUF_CPPreview_Nudge", onClick = OnCPPreviewArrowNudge }
-local function SetArrowBindings(preview, enabled)
-    return M.SetPreviewArrowBindings(preview, enabled, CP_PREVIEW_ARROW_BINDINGS)
-end
-local function RegisterPreviewNudgeTarget(preview)
-    if Helpers.RegisterEditModeNudgeTarget then
-        Helpers.RegisterEditModeNudgeTarget(preview, {
-            targetField = "_msufCPPreviewNudgeTarget",
-            selectedField = "selectedHandle",
-            canNudge = CanNudgeHandle,
-            nudgeDelta = function(active, dx, dy)
-                local handle = active and active.selectedHandle
-                if not CanNudgeHandle(handle) then return false end
-                local ndx, ndy = tonumber(dx) or 0, tonumber(dy) or 0
-                if ShouldSkipDuplicateNudge(active, ndx, ndy) then return true end
-                local x, y = ReadHandle(handle)
-                WriteHandle(handle, x + ndx, y + ndy, false)
-                return true
-            end,
-        })
     end
 end
 local function SelectHandle(handle)
     local preview = handle and handle._preview
     if not preview then return end
     preview.selectedHandle = handle
-    FocusPreviewKeyboardTarget(preview, handle, true)
-    SetArrowBindings(preview, true)
-    RegisterPreviewNudgeTarget(preview)
-    RefreshHandleVisuals(preview)
-end
-local ExactPreviewDelta = MSUF.MSUF2.PreviewHelpers.ExactPreviewDelta
-local function FindClassPowerPreviewHandle(preview, handleKey)
-    if not (preview and type(handleKey) == "string" and handleKey ~= "") then return nil end
-    for i = 1, #(preview.handles or {}) do
-        local handle = preview.handles[i]
-        if handle and handle._key == handleKey then return handle end
-    end
-    return nil
-end
-local function RestoreClassPowerPreviewSelection(preview, previous)
-    if previous and previous._preview == preview then
-        SelectHandle(previous)
-        return
-    end
-    preview.selectedHandle = nil
-    SetArrowBindings(preview, false)
-    FocusPreviewKeyboardTarget(preview, nil, false)
     RefreshHandleVisuals(preview)
 end
 
---- Move one explicitly named handle on the visible Class Resources preview.
---- Exact DB readback is mandatory and a mismatch is rolled back. This API does
---- not inspect Edit Mode's selected mover or its shared preview nudge target.
-function Preview.NudgeHandle(handleKey, dx, dy)
-    if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false, "combat-locked" end
-    if type(handleKey) ~= "string" or handleKey == "" then return false, "handle-required" end
-    dx, dy = ExactPreviewDelta(dx), ExactPreviewDelta(dy)
-    if dx == nil or dy == nil then return false, "invalid-delta" end
-    local preview = Preview.active
-    if not (preview and preview.IsShown and preview:IsShown() and (not preview.IsVisible or preview:IsVisible())) then return false, "preview-not-visible" end
-    local handle = FindClassPowerPreviewHandle(preview, handleKey)
-    if not handle then return false, "unknown-handle" end
-    if handle._dragging == true or (preview.dragFrame and preview.dragFrame._handle) then return false, "handle-busy" end
-    if not CanNudgeHandle(handle) or (handle.IsShown and not handle:IsShown()) then return false, "handle-not-visible" end
-    local store = StoreForHandle(handle)
-    if not (store and handle._xKey and handle._yKey) then return false, "handle-not-readable" end
-    local beforeX, beforeY = ReadHandle(handle)
-    if tonumber(beforeX) == nil or tonumber(beforeY) == nil then return false, "handle-not-readable" end
-    beforeX, beforeY = tonumber(beforeX), tonumber(beforeY)
-    local expectedX, expectedY = Round(beforeX + dx), Round(beforeY + dy)
-    local previous = preview.selectedHandle
-    SelectHandle(handle)
-    if preview.selectedHandle ~= handle then
-        RestoreClassPowerPreviewSelection(preview, previous)
-        return false, "selection-failed"
-    end
-    if expectedX == beforeX and expectedY == beforeY then return true, beforeX, beforeY, beforeX, beforeY end
+-- Keep published commands fail-closed for callers holding the old preview API.
+-- Moving resources belongs to the Edit Mode movers, including while this page is open.
+function Preview.NudgeHandle()
+    return false, "edit-mode-required"
+end
+function Preview.Pan()
+    return false, "preview-auto-fit"
+end
+ExportPublic("MSUF_ClassPowerPreview_NudgeHandle", Preview.NudgeHandle)
+ExportPublic("MSUF_ClassPowerPreview_Pan", Preview.Pan)
 
-    local outcome
-    local function Mutate()
-        WriteHandle(handle, expectedX, expectedY, false)
-        local afterX, afterY = ReadHandle(handle)
-        afterX, afterY = tonumber(afterX), tonumber(afterY)
-        if afterX == expectedX and afterY == expectedY then
-            outcome = { true, beforeX, beforeY, afterX, afterY }
-            return true
-        end
-        WriteHandle(handle, beforeX, beforeY, false)
-        local restoredX, restoredY = ReadHandle(handle)
-        local rolledBack = tonumber(restoredX) == beforeX and tonumber(restoredY) == beforeY
-        local reason = not rolledBack and "rollback-failed" or "readback-mismatch"
-        outcome = { false, reason }
-        return false
-    end
-    local capturing = type(M.IsHistoryCapturing) == "function" and M.IsHistoryCapturing()
-    if type(M.CaptureHistory) == "function" and not capturing then
-        M.CaptureHistory("Nudge: " .. tostring(handle._label or handleKey),
-            "classPowerPreview:" .. handleKey .. ":exact-nudge", Mutate)
-    else
-        Mutate()
-        if outcome and outcome[1] and type(M.CheckpointHistory) == "function" then
-            M.CheckpointHistory("Nudge: " .. tostring(handle._label or handleKey),
-                "classPowerPreview:" .. handleKey .. ":exact-nudge")
-        end
-    end
-    if not (outcome and outcome[1]) then RestoreClassPowerPreviewSelection(preview, previous) end
-    if outcome and outcome[1] then return true, outcome[2], outcome[3], outcome[4], outcome[5] end
-    return false, (outcome and outcome[2]) or "write-failed"
-end
-function Preview.Pan(dx, dy)
-    if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false, "combat-locked" end
-    dx, dy = ExactPreviewDelta(dx), ExactPreviewDelta(dy)
-    if dx == nil or dy == nil then return false, "invalid-delta" end
-    local preview = Preview.active
-    if not (preview and preview.IsShown and preview:IsShown() and (not preview.IsVisible or preview:IsVisible())) then return false, "preview-not-visible" end
-    if (preview.canvas and preview.canvas._msufCPPreviewPanning) or (preview.dragFrame and preview.dragFrame._handle) then return false, "preview-busy" end
-    if type(ZoomPan.NudgePan) ~= "function" then return false, "pan-api-unavailable" end
-    return ZoomPan.NudgePan(preview, dx, dy)
-end
-ExportPublic("MSUF_ClassPowerPreview_NudgeHandle", function(handleKey, dx, dy)
-    return Preview.NudgeHandle(handleKey, dx, dy)
-end)
-ExportPublic("MSUF_ClassPowerPreview_Pan", function(dx, dy)
-    return Preview.Pan(dx, dy)
-end)
-local function HandleKeyDown(handle, key)
-    if Helpers.ArrowKeyDown then
-        return Helpers.ArrowKeyDown(handle, key, {
-            selectedField = "selectedHandle",
-            nudge = NudgeSelectedHandle,
-        })
-    end
-end
-local function BeginHistory(handle)
-    if M.BeginHistoryTransaction then return M.BeginHistoryTransaction("Move: " .. tostring(handle and handle._label or "Class Resources preview"), "classPowerPreview:" .. tostring(handle and handle._key or "handle")) end
-    return false
-end
-local function CommitHistory(handle)
-    if handle and handle._historyTx and M.CommitHistoryTransaction then
-        handle._historyTx = nil
-        return M.CommitHistoryTransaction()
-    end
-    if handle then handle._historyTx = nil end
-    return false
-end
-local function StopHandleDrag(handle, button, skipApply, allowOpenSettings)
-    if button and button ~= "LeftButton" then return end
-    if not (handle and handle._dragging) then return end
-    local preview = handle._preview
-    local didMove = handle._didDragMove == true
-    if didMove and Helpers.NotePreviewElementMoved then Helpers.NotePreviewElementMoved() end
-    local openSettingsOnRelease = allowOpenSettings == true
-        and button == "LeftButton"
-        and not didMove
-    handle._dragging = nil
-    handle._didDragMove = nil
-    if preview then
-        preview._dragFrozenScale = nil
-        preview._dragFrozenBaseOffsetX = nil
-        preview._dragFrozenBaseOffsetY = nil
-    end
-    if preview and preview.dragFrame and preview.dragFrame._handle == handle then
-        preview.dragFrame:SetScript("OnUpdate", nil)
-        preview.dragFrame._handle = nil
-        preview.dragFrame:Hide()
-    end
-    RequestClassPowerPreviewRefresh(preview, "CLASSPOWER_PREVIEW_DRAG_END")
-    if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_DRAG_END") end
-    CommitHistory(handle)
-    RefreshHandleVisuals(preview)
-    FocusPreviewKeyboardTarget(preview, handle, true)
-    if openSettingsOnRelease then OpenClassPowerHandleSettings(handle) end
-end
-
---- Drag handles are preview controls, not runtime frames. They carry the DB
---- keys they edit so drag/nudge/history code can stay generic.
+--- Selection handles open settings without changing saved resource positions.
 local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, label, color, applyKind, layerKey, interactionPriority)
     local h = PixelLayoutRegion(CreateFrame("Button", nil, PreviewParent(preview), "BackdropTemplate"))
     h:SetSize(24, 20)
@@ -797,11 +579,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         and PreviewCore.InteractionFrameLevel(PreviewParent(preview), interactionPriority))
         or ((preview.canvas:GetFrameLevel() or 0) + 140 + interactionPriority))
     h:EnableMouse(true)
-    if Helpers.BindPreviewWheel then Helpers.BindPreviewWheel(h, preview) end
-    h:EnableKeyboard(true)
-    if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(true) end
-    if h.RegisterForClicks then h:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp") end
-    if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
+    if h.RegisterForClicks then h:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     h._preview, h._key, h._store = preview, key, store
     h._xKey, h._yKey = xKey, yKey
     h._defaultX, h._defaultY = defaultX, defaultY
@@ -815,7 +593,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         if showTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR(label), 1, 1, 1)
-            GameTooltip:AddLine(TR("Drag to move. Arrow keys nudge."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(TR("Click to open settings. Move resources in Edit Mode."), 0.82, 0.82, 0.82, true)
             GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
             GameTooltip:Show()
         end
@@ -840,31 +618,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
             return
         end
         SelectHandle(self)
-    end)
-    h:SetScript("OnKeyDown", HandleKeyDown)
-    h:SetScript("OnMouseDown", function(self, button)
-        if button ~= "LeftButton" then return end
-        if self._dragging then return end
-        SelectHandle(self)
-        if Helpers.ShowPreviewMoveCue then Helpers.ShowPreviewMoveCue(preview, self) end
-        self._didDragMove = nil
-        self._dragging = true
-        self._startX, self._startY = ReadHandle(self)
-        self._lastX, self._lastY = nil, nil
-        self._cursorX, self._cursorY = GetCursorPosition()
-        preview._dragFrozenScale = tonumber(preview._mockScale) or tonumber(preview._mockAutoScale) or 1
-        preview._dragFrozenBaseOffsetX = tonumber(preview._mockBaseOffsetX) or 0
-        preview._dragFrozenBaseOffsetY = tonumber(preview._mockBaseOffsetY) or 0
-        self._historyTx = BeginHistory(self)
-        preview.dragFrame._handle = self
-        preview.dragFrame:SetScript("OnUpdate", preview.dragUpdate)
-        preview.dragFrame:Show()
-    end)
-    h:SetScript("OnMouseUp", function(self, button) StopHandleDrag(self, button, false, true) end)
-    h:SetScript("OnDragStart", function(self) self:GetScript("OnMouseDown")(self, "LeftButton") end)
-    h:SetScript("OnDragStop", function(self) StopHandleDrag(self, "LeftButton", false, false) end)
-    h:SetScript("OnHide", function(self)
-        StopHandleDrag(self, nil, true, false)
+        OpenClassPowerHandleSettings(self)
     end)
     h._msuf2CommandAction = {
         kind = "button",
@@ -880,7 +634,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         end,
     }
     RegisterPreviewControl(preview._catalogCtx, h, "handle." .. tostring(key), label or key, "button", "ephemeral", {
-        help = "Moves this Class Resources preview element and opens its quick actions.",
+        help = "Selects this Class Resources preview element and opens its settings. Movement is handled in Edit Mode.",
     })
     if Helpers.EnsurePreviewHandleGear then
         local gear = Helpers.EnsurePreviewHandleGear(h, {
@@ -1984,6 +1738,15 @@ local function ResolvePreviewFit(preview, classFrame, ebonFrame, powerFrame, hpF
     if Wanted("class") then AddPreviewRegionBounds(preview, ebonFrame, bounds) end
     if Wanted("power") then AddPreviewRegionBounds(preview, powerFrame, bounds) end
     if Wanted("hp") then AddPreviewRegionBounds(preview, hpFrame, bounds) end
+    for i = 1, #(preview.handles or {}) do
+        local handle = preview.handles[i]
+        local key = handle._layerKey or handle._key
+        local parentKey = key == "classText" and "class"
+            or key == "powerText" and "power" or key == "hpText" and "hp"
+        if parentKey and handle._msufPlaced == true and Wanted(parentKey) and Wanted(key) then
+            AddPreviewRegionBounds(preview, handle, bounds)
+        end
+    end
     if not bounds.found then return 1, 0, 0 end
 
     local pad = 20
@@ -1991,8 +1754,7 @@ local function ResolvePreviewFit(preview, classFrame, ebonFrame, powerFrame, hpF
     local contentH = max(1, (bounds.maxY - bounds.minY) + pad * 2)
     local canvasW = max(1, tonumber(preview.canvasW) or tonumber(preview.canvas:GetWidth()) or 1)
     local canvasH = max(1, tonumber(preview.canvasH) or tonumber(preview.canvas:GetHeight()) or 1)
-    local autoScale = min(1, (canvasW - 24) / contentW, (canvasH - 24) / contentH)
-    if autoScale < 0.05 then autoScale = 0.05 end
+    local autoScale = min(1, max(1, canvasW - 24) / contentW, max(1, canvasH - 24) / contentH)
     local centerX = (bounds.minX + bounds.maxX) * 0.5
     local centerY = (bounds.minY + bounds.maxY) * 0.5
     return autoScale, -centerX, -centerY
@@ -2000,32 +1762,16 @@ end
 
 local function ApplyPreviewZoom(preview, classFrame, ebonFrame, powerFrame, hpFrame)
     if not (preview and preview.stage) then return end
-    local autoScale, centerX, centerY = ResolvePreviewFit(preview, classFrame, ebonFrame, powerFrame, hpFrame)
-    if ZoomPan.ResolveDefaultLock then ZoomPan.ResolveDefaultLock(preview, autoScale) end
-    local manualScale = tonumber(preview._manualZoom)
-    local frozenScale = tonumber(preview._dragFrozenScale)
-    local scale = manualScale or frozenScale or autoScale
-    if (manualScale or frozenScale) and ZoomPan.Clamp then scale = ZoomPan.Clamp(scale) end
-    preview._mockAutoScale = autoScale
+    local scale, centerX, centerY = ResolvePreviewFit(preview, classFrame, ebonFrame, powerFrame, hpFrame)
+    preview._mockAutoScale = scale
     preview._mockScale = scale
     preview._mockEffectiveScale = scale
-    if preview._dragFrozenBaseOffsetX ~= nil then
-        preview._mockBaseOffsetX = preview._dragFrozenBaseOffsetX
-        preview._mockBaseOffsetY = preview._dragFrozenBaseOffsetY
-    else
-        preview._mockBaseOffsetX = centerX * scale
-        preview._mockBaseOffsetY = centerY * scale
-    end
+    preview._mockBaseOffsetX = centerX * scale
+    preview._mockBaseOffsetY = centerY * scale
     if preview.stage.SetScale then preview.stage:SetScale(scale) end
-    if ZoomPan.UpdateControls then ZoomPan.UpdateControls(preview) end
-    if ZoomPan.ApplyPan then
-        ZoomPan.ApplyPan(preview)
-    else
-        preview.stage:ClearAllPoints()
-        preview.stage:SetPoint("CENTER", preview.canvas, "CENTER",
-            (tonumber(preview._mockBaseOffsetX) or 0) + (tonumber(preview._zoomPanX) or 0),
-            (tonumber(preview._mockBaseOffsetY) or 0) + (tonumber(preview._zoomPanY) or 0))
-    end
+    preview.stage:ClearAllPoints()
+    preview.stage:SetPoint("CENTER", preview.canvas, "CENTER",
+        preview._mockBaseOffsetX, preview._mockBaseOffsetY)
 end
 local function ApplyPreviewBorder(preview)
     if not (preview and preview.canvas and preview.canvas.SetBackdropBorderColor) then return end
@@ -2081,10 +1827,8 @@ local function ApplyLayerVisibility(preview)
         local handle = preview.handles[i]
         SetShownSafe(handle, guidesOn and handle._msufPlaced == true and LayerOn(preview, handle._layerKey or handle._key))
     end
-    if preview.selectedHandle and not CanNudgeHandle(preview.selectedHandle) then
+    if preview.selectedHandle and not preview.selectedHandle:IsShown() then
         preview.selectedHandle = nil
-        SetArrowBindings(preview, false)
-        FocusPreviewKeyboardTarget(preview, nil, false)
     end
     ApplyPreviewBorder(preview)
 end
@@ -2258,25 +2002,6 @@ local function CreateAnimateButton(preview)
     RefreshAnimateButton(preview)
     return btn
 end
-local function DragUpdate(frame)
-    local handle = frame and frame._handle
-    if not (handle and handle._dragging) then return end
-    if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
-        StopHandleDrag(handle, "LeftButton", false, true)
-        return
-    end
-    local cx, cy = GetCursorPosition()
-    if not (cx and cy) then return end
-    local scale = handle.GetEffectiveScale and handle:GetEffectiveScale() or 1
-    if scale <= 0 then scale = 1 end
-    local nextX = Round((handle._startX or 0) + ((cx - (handle._cursorX or cx)) / scale))
-    local nextY = Round((handle._startY or 0) + ((cy - (handle._cursorY or cy)) / scale))
-    if nextX ~= handle._startX or nextY ~= handle._startY then handle._didDragMove = true end
-    if handle._lastX == nextX and handle._lastY == nextY then return end
-    handle._lastX, handle._lastY = nextX, nextY
-    WriteHandle(handle, nextX, nextY, true)
-end
-
 local function EnsureClassPowerLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
     local btn = T.Button(box, TR("Layers") .. " v", 76, 20)
@@ -2320,7 +2045,6 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     if box._msuf2PinnedFloating == true then compact = false end
     local boxWidth = max(1, tonumber(box.GetWidth and box:GetWidth()) or 1)
     local resolvedSideW = min(104, max(72, boxWidth - 252))
-    if Helpers.SwitchCompactZoomMode then Helpers.SwitchCompactZoomMode(box, compact, 1.50) end
     local canvas, sidebar = box.canvas, box.sidebar
     if compact then
         if box.title then box.title:Hide() end
@@ -2403,16 +2127,10 @@ function Preview.Create(ctx, builder)
     box._msuf2ExpandedCanvasW, box._msuf2ExpandedCanvasH = box.canvasW, box.canvasH
     box.playerW, box.playerH = min(275, max(190, box.canvasW - 160)), 38
     box.handles = {}
-    if box.EnableKeyboard then box:EnableKeyboard(true) end
-    if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
-    box:SetScript("OnKeyDown", HandleKeyDown)
-    RegisterPreviewControl(ctx, box, "keyboard.nudge_surface", "Class Resources preview keyboard controls", "canvas", "ephemeral", {
-        help = "Receives arrow-key nudges for the selected preview handle.",
-    })
     local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), chrome.title or T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     box.title = title
-    local hint = T.Font(box, "GameFontDisableSmall", TR("Drag handles to move."), T.colors.muted)
+    local hint = T.Font(box, "GameFontDisableSmall", TR("Click to open settings. Move resources in Edit Mode."), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     hint:SetPoint("RIGHT", box, "RIGHT", -12, 0)
     hint:SetJustifyH("LEFT")
@@ -2425,90 +2143,24 @@ function Preview.Create(ctx, builder)
     box._canvasBorderColor = chrome.canvasBorder or T.colors.borderSoft
     if box.canvas.SetClipsChildren then box.canvas:SetClipsChildren(true) end
     box.canvas:EnableMouse(true)
-    box.canvas:EnableMouseWheel(true)
-    if box.canvas.SetPropagateMouseWheel then box.canvas:SetPropagateMouseWheel(false) end
     box.stage = PixelLayoutRegion(CreateFrame("Frame", nil, box.canvas))
     box.stage:SetSize(box.canvasW, box.canvasH)
     box.stage:SetPoint("CENTER", box.canvas, "CENTER", 0, 0)
     box.mock = box.stage
-    if ZoomPan.Configure then ZoomPan.Configure({ T = T, TR = TR, WHITE8 = WHITE8 }) end
-    if Helpers.BuildZoomBar then
-        Helpers.BuildZoomBar(box, box.canvas, {
-            texture = WHITE8,
-            T = T,
-            themeReadout = true,
-            CreateZoomButton = ZoomPan.CreateButton,
-            Tr = TR,
-            StepZoom = ZoomPan.Step,
-            SetZoom = ZoomPan.SetZoom,
-            StartPan = ZoomPan.Start,
-            StopPan = ZoomPan.Stop,
-            fitReason = "CLASSPOWER_PREVIEW_ZOOM_FIT",
-            oneReason = "CLASSPOWER_PREVIEW_ZOOM_1TO1",
-            lockButton = true,
-            defaultLocked = true,
-            lockReason = "CLASSPOWER_PREVIEW_ZOOM_LOCK",
-            unlockReason = "CLASSPOWER_PREVIEW_ZOOM_UNLOCK",
-        })
-        box._msuf2ZoomCommand = box._msuf2ZoomCommand
-            or (Helpers.BuildZoomCommand and Helpers.BuildZoomCommand(box, ZoomPan, "CLASSPOWER_PREVIEW_ASSISTANT_ZOOM"))
-        RegisterPreviewControl(ctx, box.zoomBar, "zoom.surface", "Class Resources Preview Zoom", "slider", "ephemeral", {
-            help = "Sets the Class Resources preview zoom percentage; Fit and 1:1 remain available as exact actions.",
-            command = box._msuf2ZoomCommand,
-        })
-        local zoomControls = {
-            { "zoomOutButton", "zoom.out", "Zoom out" },
-            { "zoomFitButton", "zoom.fit", "Fit preview" },
-            { "zoomOneButton", "zoom.one_to_one", "Pixel preview" },
-            { "zoomInButton", "zoom.in", "Zoom in" },
-            { "zoomHelpButton", "zoom.help", "Preview controls help" },
-            { "zoomLockButton", "zoom.lock", "Lock preview zoom" },
-        }
-        for i = 1, #zoomControls do
-            local info = zoomControls[i]
-            RegisterPreviewControl(ctx, box[info[1]], info[2], info[3], "button", "ephemeral")
-        end
-    end
-    if Helpers.EnsurePreviewControlsHint then
-        local controlsHint = Helpers.EnsurePreviewControlsHint(box, box.canvas, { M = M, T = T, Tr = TR })
-        RegisterPreviewControl(ctx, controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
-    end
     box._animationEnabled = General().classPowerPreviewAnimate == true
     CreateAnimateButton(box)
-    box.canvas:SetScript("OnMouseDown", function(self, button)
-        if ZoomPan.Start and ZoomPan.Start(self, box, button, true) then return end
+    box.canvas:SetScript("OnMouseDown", function()
         box.selectedHandle = nil
-        SetArrowBindings(box, false)
-        FocusPreviewKeyboardTarget(box, nil, false)
         RefreshHandleVisuals(box)
     end)
-    box.canvas:SetScript("OnMouseUp", function(self)
-        if ZoomPan.Stop then ZoomPan.Stop(self) end
-    end)
-    box._msuf2PanCommand = box._msuf2PanCommand or (Helpers.BuildPanCommand and Helpers.BuildPanCommand(
-        box, ZoomPan,
-        function(dx, dy) return Preview.Pan(dx, dy) end,
-        { previewSurface = "class-power" }
-    ))
     RegisterPreviewControl(ctx, box.canvas, "canvas", "Class Resources preview canvas", "canvas", "ephemeral", {
-        help = "Selects preview handles and pans this exact canvas by an explicit X/Y delta.",
-        command = box._msuf2PanCommand,
+        help = "Shows the resource layout fitted to the preview. Movement is handled in Edit Mode.",
     })
     CreateLayerSidebar(box, sideW)
     box.noResource = T.Font(box.canvas, "GameFontDisableSmall", TR("Class resource is disabled for this preview resource."), T.colors.muted)
     box.noResource:SetPoint("CENTER", box.canvas, "CENTER", 0, 28)
     box.noResource:Hide()
     CreatePlayerReference(box)
-    box.dragFrame = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent or box.canvas), true)
-    box.dragFrame:SetAllPoints(UIParent or box.canvas)
-    if box.dragFrame.SetFrameStrata then box.dragFrame:SetFrameStrata("TOOLTIP") end
-    box.dragFrame:EnableMouse(true)
-    if Helpers.BindPreviewWheel then Helpers.BindPreviewWheel(box.dragFrame, box) end
-    box.dragFrame:SetScript("OnMouseUp", function(self, button)
-        StopHandleDrag(self._handle, button, false, true)
-    end)
-    box.dragFrame:Hide()
-    box.dragUpdate = DragUpdate
     box.handleClass = MakeHandle(box, "classPower", "bars", "classPowerOffsetX", "classPowerOffsetY", 0, 0, "Class resource bar", { 0.30, 0.78, 0.55 }, "class", "class", 0)
     box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text", { 0.30, 0.78, 0.55 }, "classText", "classText", 2)
     box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar", { 0.95, 0.72, 0.18 }, "power", "power", 0)
@@ -2582,25 +2234,7 @@ function Preview.Create(ctx, builder)
     end
     function box:ReleasePreviewInteraction()
         self.selectedHandle = nil
-        SetArrowBindings(self, false)
-        FocusPreviewKeyboardTarget(self, nil, false)
         RefreshHandleVisuals(self)
-        if self._msufCPPreviewNudgeTarget
-            and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufCPPreviewNudgeTarget
-            and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function"
-        then
-            _G.MSUF_EM2_SetPreviewNudgeTarget(nil)
-        end
-        if Helpers.ReleaseKeyboardCapture then
-            Helpers.ReleaseKeyboardCapture(self)
-        elseif self.SetPropagateKeyboardInput then
-            self:SetPropagateKeyboardInput(true)
-        end
-        if self.dragFrame then
-            self.dragFrame:SetScript("OnUpdate", nil)
-            self.dragFrame._handle = nil
-            self.dragFrame:Hide()
-        end
     end
     local function ActivateVisiblePreview()
         if box.IsShown and box:IsShown() and box:_msufCPPreviewHostShown() then ActivateClassPowerSurface(box) end
@@ -2615,18 +2249,7 @@ function Preview.Create(ctx, builder)
         box._msufCPRefreshQueued = nil
         box._msufCPRefreshReason = nil
         StopAnimationDriver(box)
-        SetArrowBindings(box, false)
-        if box._msufCPPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == box._msufCPPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
-        if Helpers.ReleaseKeyboardCapture then
-            Helpers.ReleaseKeyboardCapture(box)
-        elseif box.SetPropagateKeyboardInput then
-            box:SetPropagateKeyboardInput(true)
-        end
-        if box.dragFrame then
-            box.dragFrame:SetScript("OnUpdate", nil)
-            box.dragFrame._handle = nil
-            box.dragFrame:Hide()
-        end
+        box:ReleasePreviewInteraction()
         if Preview.active == box then Preview.active = nil end
         ActivateClassPowerSurface(nil)
     end)

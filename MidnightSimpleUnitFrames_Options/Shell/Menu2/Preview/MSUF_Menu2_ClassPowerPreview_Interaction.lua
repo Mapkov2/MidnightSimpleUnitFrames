@@ -1,32 +1,12 @@
---- Owns preview offset writes, runtime apply requests and exact settings routes.
+--- Reads preview offsets and opens exact settings routes. Edit Mode owns movement.
 local _, MSUF = ...
 local M = MSUF.MSUF2
 
-local RequestClassPowerPreviewRefresh = M.ClassPowerStackPreview.RequestRefresh
 local floor = math.floor
 local function Round(value)
     return floor((tonumber(value) or 0) + 0.5)
 end
 
-local function CallApply(handle, reason)
-    local kind = handle and handle._applyKind
-    local moveOnly = reason == "CLASSPOWER_PREVIEW_MOVE" and kind ~= "powerText"
-    if not moveOnly then
-        if kind == "class" or kind == "classText" then
-            _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, playerHP = true, syncNow = false })
-            _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true)
-        elseif kind == "power" or kind == "powerText" then
-            if kind == "powerText" then _G.MSUF_ForceTextLayoutForUnitKey("player") end
-            _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true)
-            _G.MSUF_ClassPower_Apply({ playerHP = true })
-        elseif kind == "hp" or kind == "hpText" then
-            _G.MSUF_ClassPower_Apply({ playerHP = true })
-        end
-    end
-    M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE", {
-        preview = true, applyAll = false, notify = false, history = false,
-    })
-end
 local function StoreForHandle(handle)
     if not handle then return nil end
     local db = M.EnsureDB()
@@ -41,21 +21,6 @@ local function ReadHandle(handle)
     return x, y
 end
 
---- Handle writes update the same SavedVariables offsets used by runtime
---- ClassPower, but only repaint this preview unless the caller asks to apply.
-local function WriteHandle(handle, x, y, skipApply)
-    local store = StoreForHandle(handle)
-    if not (store and handle and handle._xKey and handle._yKey) then return end
-    store[handle._xKey] = Round(x)
-    store[handle._yKey] = Round(y)
-    if handle._applyKind == "powerText" and type(M.SyncDirectTextOffsets) == "function" then
-        M.SyncDirectTextOffsets(store, handle._xKey)
-        M.SyncDirectTextOffsets(store, handle._yKey)
-    end
-    if type(M.RefreshVisibleSliders) == "function" then M.RefreshVisibleSliders("CLASSPOWER_PREVIEW_MOVE") end
-    RequestClassPowerPreviewRefresh(handle._preview, "CLASSPOWER_PREVIEW_DRAG")
-    if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_MOVE") end
-end
 local function ClassPowerRouteForHandle(handle)
     local kind = handle and (handle._applyKind or handle._layerKey or handle._key) or "class"
     local section, state, tab = "classpower_display"
@@ -81,7 +46,7 @@ local function OpenClassPowerHandleSettings(handle)
 end
 
 M.ClassPowerPreviewInteraction = {
-    Round = Round, Apply = CallApply, Read = ReadHandle, Write = WriteHandle,
+    Round = Round, Read = ReadHandle,
     Store = StoreForHandle,
     OpenSettings = OpenClassPowerHandleSettings,
 }

@@ -272,4 +272,102 @@ assert(MSUF_EM2.Nudge.Move(0, 1, "classpower") == false
     "failed resource layout apply was saved or added to undo history")
 MSUF_ClassPower_RefreshLayout = refreshClass
 
-print("classic_resource_editmode_smoke: OK (drags, negative Y, arrow nudges, popup, anchor)")
+-- The menu preview is display-only; the Edit Mode movement assertions above
+-- remain authoritative even while this preview is selected.
+do
+    local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+    local previewPath = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_ClassPowerPreview.lua"
+    local file = assert(io.open(previewPath, "rb"))
+    local source = file:read("*a")
+    file:close()
+    for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
+        local world = World.New(root, flavor):Boot()
+        local failure = world:FirstFailure()
+        assert(not failure, flavor .. ": " .. tostring(failure and failure.message))
+        local env, ns = world.env, world.core
+        local M = ns.MSUF2
+        env.MSUF_EnsureDB(true)
+        M.activeKey = "classpower"
+        M.GetClassPowerPreviewSpec = function() return M.ClassPowerPreviewSpecs.rogue_combo end
+        local chunk = assert(loadstring(source .. "\nreturn { fit = ResolvePreviewFit, apply = ApplyPreviewZoom }", "@preview-fit-test"))
+        setfenv(chunk, env)
+        local geometry = chunk("MidnightSimpleUnitFrames_Options", ns)
+        local parent = env.CreateFrame("Frame", nil, env.UIParent)
+        parent:SetSize(800, 400)
+        M.Widgets.FixedPreviewSection = function()
+            return env.CreateFrame("Frame", nil, parent), env.CreateFrame("Frame", nil, parent)
+        end
+        M.Widgets.AttachPinnedPreview = nil
+        M.Widgets.AttachFixedPreviewExpander = nil
+        local ctx = { key = "classpower", width = 800, entry = {}, wrapper = parent }
+        assert(M.ClassPowerStackPreview.Create(ctx, { width = 800 }))
+        local box = assert(ctx.entry.classPowerPreview)
+        box:Refresh()
+        assert(box._msufCPPreviewAnim.classFrame and box._msufCPPreviewAnim.classFrame:IsShown(),
+            flavor .. ": enabled class resource is missing from the menu preview")
+        assert(not box.dragFrame and not box.zoomBar and not box:GetScript("OnKeyDown"),
+            flavor .. ": preview still captures movement or manual camera input")
+        assert(not box.canvas:GetScript("OnMouseWheel"), "preview wheel still changes the camera")
+        assert(not box._msufCPPreviewNudgeTarget, "preview takes over Edit Mode arrow movement")
+        local beforeX, beforeY = env.MSUF_DB.bars.classPowerOffsetX, env.MSUF_DB.bars.classPowerOffsetY
+        local route
+        M.SelectPage = function(key) route = key; return true end
+        for _, handle in ipairs(box.handles) do
+            assert(not handle:GetScript("OnDragStart") and not handle:GetScript("OnMouseDown")
+                and not handle:GetScript("OnKeyDown"), "preview handle can still move saved offsets")
+            handle:GetScript("OnClick")(handle, "LeftButton")
+            assert(route == "classpower" and env.MSUF_EM2_MenuFocusRequest.sectionId,
+                "click no longer opens the exact resource settings")
+            box:Refresh()
+        end
+        for _, active in ipairs({ false, true }) do
+            env.MSUF_UnitEditModeActive = active
+            local ok, reason = env.MSUF_ClassPowerPreview_NudgeHandle("classPower", 20, -30)
+            assert(ok == false and reason == "edit-mode-required", "retired nudge API still writes")
+            ok, reason = env.MSUF_ClassPowerPreview_Pan(99999, -99999)
+            assert(ok == false and reason == "preview-auto-fit", "retired pan API can lose the resource")
+        end
+        assert(env.MSUF_DB.bars.classPowerOffsetX == beforeX and env.MSUF_DB.bars.classPowerOffsetY == beforeY,
+            "preview interaction changed a saved resource position")
+
+        -- Use explicit local rectangles so the assertion measures containment,
+        -- independently of the permissive frame-stub anchor implementation.
+        local function Region(x, y, w, h, layer)
+            return { _layerKey = layer, _msufPlaced = true,
+                IsShown = function() return true end,
+                GetCenter = function() return x, y end,
+                GetWidth = function() return w end, GetHeight = function() return h end }
+        end
+        local stage = env.CreateFrame("Frame")
+        stage.GetCenter = function() return 0, 0 end
+        local reference = Region(-300, 70, 270, 38)
+        local resource = Region(2200, -1300, 400, 14)
+        local power = Region(2200, -1320, 400, 8)
+        local hp = Region(-500, 900, 270, 16)
+        local text = Region(3600, -2400, 110, 20, "classText")
+        local preview = { stage = stage, canvas = box.canvas, playerRef = reference,
+            handles = { text }, layerVisibility = {},
+            _manualZoom = 1.5, _zoomPanX = 99999, _zoomPanY = -99999,
+            _dragFrozenScale = 2, _dragFrozenBaseOffsetX = 9999 }
+        for _, size in ipairs({ { 760, 112 }, { 628, 288 }, { 320, 96 } }) do
+            preview.canvasW, preview.canvasH = size[1], size[2]
+            geometry.apply(preview, resource, nil, power, hp)
+            local scale = preview._mockScale
+            assert(scale > 0 and scale <= 1, "invalid fitted scale")
+            for _, region in ipairs({ reference, resource, power, hp, text }) do
+                local x, y = region:GetCenter()
+                x = x * scale + preview._mockBaseOffsetX
+                y = y * scale + preview._mockBaseOffsetY
+                assert(math.abs(x) + region:GetWidth() * scale / 2 <= size[1] / 2,
+                    flavor .. ": preview clips a visible resource/text horizontally")
+                assert(math.abs(y) + region:GetHeight() * scale / 2 <= size[2] / 2,
+                    flavor .. ": preview clips a visible resource/text vertically")
+            end
+        end
+        local scaleWithText = preview._mockScale
+        preview.layerVisibility.classText = false
+        geometry.apply(preview, resource, nil, power, hp)
+        assert(preview._mockScale > scaleWithText, "hidden text still shrinks the resource preview")
+    end
+end
+print("classic_resource_editmode_smoke: OK (Edit Mode movement, display-only menu, auto-fit bars/text on five clients)")
