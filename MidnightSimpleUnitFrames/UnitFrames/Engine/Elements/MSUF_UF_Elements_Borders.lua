@@ -1106,4 +1106,8 @@ local function RefreshUnitDispelFrame(frame)
 end
 
 ExportPublic("MSUF_RefreshUnitDispelOverlays", RefreshUnitDispelFrame)
+--- Deprecated compatibility alias of MSUF_RefreshUnitDispelOverlays.
 ExportPublic("MSUF_RefreshUnitDispelOverlay", RefreshUnitDispelFrame)
+MSUF.Compat = MSUF.Compat or {}
+MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
+MSUF.Compat.DeprecatedAliases.MSUF_RefreshUnitDispelOverlay = "MSUF_RefreshUnitDispelOverlays"

@@ -103,10 +103,6 @@ local function _ApplyTexCached(sb, tex)
         sb._msufTexture = tex
         sb._msufAlphaStatusTextureObject = nil
         sb._msufGFStatusBarTextureWidget = nil
-        local applyAlpha = (MSUF.Bars and MSUF.Bars._ApplyOverlayTextureAlpha) or _G.MSUF_ApplyOverlayTextureAlpha
-        if type(applyAlpha) == "function" then
-            applyAlpha(sb)
-        end
         return true
     end
     return false
@@ -126,10 +122,13 @@ local function _Iter_ApplyAllBarTex(f)
     local pbTex = (spec and spec.power and spec.power.texture) or (spec and spec.texture) or hpTex
     -- ROUND/CRYSTAL/ORB use fixed fill art owned by the Power element. A global
     -- statusbar refresh must not replace that art with the rectangular bar media.
+    local powerTextureChanged = false
     if not (f.targetPowerBar and f.targetPowerBar._msufPowerShapeActive == true) then
-        _ApplyTexCached(f.targetPowerBar, pbTex)
+        powerTextureChanged = _ApplyTexCached(f.targetPowerBar, pbTex)
     end
-    if healthTextureChanged then
+    -- A swapped fill drops the Alpha element's cached texture object above;
+    -- re-run the frame's alpha so the new fill gets its opacity now.
+    if healthTextureChanged or powerTextureChanged then
         local UF = MSUF and MSUF.UF
         if UF and type(UF.ApplyAlphaFrame) == "function" then
             UF.ApplyAlphaFrame(f, "MSUF_FORCE_UPDATE")
@@ -202,7 +201,15 @@ MSUF.MSUF_UpdateAbsorbBarTextures = UpdateAbsorbBarTextures
 ExportPublic("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)
 MSUF.MSUF_UpdateAllBarTextures = UpdateAllBarTextures
 ExportPublic("MSUF_UpdateAllBarTextures", UpdateAllBarTextures)
-ExportPublic("UpdateAllBarTextures", UpdateAllBarTextures)
+--- Deprecated compatibility alias: the unprefixed global predates the MSUF_
+--- prefix and may still be called by user scripts. MSUF itself never reads it;
+--- it is only claimed while no other addon owns that name.
+if rawget(_G, "UpdateAllBarTextures") == nil then
+    ExportPublic("UpdateAllBarTextures", UpdateAllBarTextures)
+end
+MSUF.Compat = MSUF.Compat or {}
+MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
+MSUF.Compat.DeprecatedAliases.UpdateAllBarTextures = "MSUF_UpdateAllBarTextures_Immediate"
 
 local function DetachedPowerBarRefreshTextures()
     -- The detached Player bar has no dedicated texture keys anymore; the
@@ -214,18 +221,36 @@ MSUF.MSUF_DetachedPowerBar_RefreshTextures = DetachedPowerBarRefreshTextures
 ExportPublic("MSUF_DetachedPowerBar_RefreshTextures", DetachedPowerBarRefreshTextures)
 
 if not _G.MSUF_UpdateAllBarTextures_Immediate then
-    ExportPublic("MSUF_UpdateAllBarTextures_Immediate", _G.MSUF_UpdateAllBarTextures)
+    ExportPublic("MSUF_UpdateAllBarTextures_Immediate", UpdateAllBarTextures)
+    --- A unit scope marks its frames dirty for the next UF apply commit. A
+    --- global or group scope has no dirty-frame route, so it repaints on the
+    --- next frame instead; a burst of calls collapses into one pass, and a
+    --- global request covers every scoped one.
+    local deferredAll, deferredScopes = false, {}
+    local function FlushDeferredBarTextures()
+        if deferredAll then
+            deferredAll = false
+            for scope in pairs(deferredScopes) do deferredScopes[scope] = nil end
+            UpdateAllBarTextures(nil)
+            return
+        end
+        for scope in pairs(deferredScopes) do
+            deferredScopes[scope] = nil
+            UpdateAllBarTextures(scope)
+        end
+    end
+    local ScheduleOnce = MSUF.Scheduler.ScheduleOnce
     ExportPublic("MSUF_UpdateAllBarTextures", function(scope)
-        local st = _G.MSUF_ApplyCommitState
-        if st then st.bars = true end
         local UF = MSUF and MSUF.UF
         local normalized = NormalizeScope(scope)
         if normalized and not GroupKindsForScope(normalized) and UF and type(UF.MarkDirty) == "function" then
             UF.MarkDirty(normalized)
+            ScheduleApplyCommit()
+            return
         end
-        ScheduleApplyCommit()
+        if normalized then deferredScopes[normalized] = true else deferredAll = true end
+        ScheduleOnce("MSUF_BAR_TEXTURES_DEFERRED", FlushDeferredBarTextures)
     end)
-    _G.UpdateAllBarTextures = _G.UpdateAllBarTextures or _G.MSUF_UpdateAllBarTextures
 end
 
 if MSUF then

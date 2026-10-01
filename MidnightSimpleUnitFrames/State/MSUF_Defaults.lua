@@ -463,7 +463,12 @@ local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
         sharedTranslator = MSUF.MSUF_ProfileIO_TranslateProfileToCurrent
     end
     if type(sharedTranslator) == "function" then
-        local _, translated = sharedTranslator(db, { source = "defaults", markProfile = true })
+        --- This pass only sees stored and factory profiles; imports run the
+        --- untrusted pass on their payload first. Without the trust flag it wiped
+        --- the dispel migration stamp and forced showNavigationIcons back on.
+        local _, translated = sharedTranslator(db, {
+            source = "defaults", markProfile = true, trustProfileMetadata = true,
+        })
         changed = translated == true or changed
         if db.auras ~= nil then
             db.auras = nil
@@ -2254,8 +2259,7 @@ end
 
 local function MSUF_Defaults_MigrateDispelPriorityProfiles()
     local changed = false
-    if not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects
-        and type(MSUF_GlobalDB) == "table"
+    if type(MSUF_GlobalDB) == "table"
         and type(MSUF_GlobalDB.profiles) == "table" then
         for _, profile in pairs(MSUF_GlobalDB.profiles) do
             changed = MSUF_Defaults_MigrateDispelPriorityProfile(profile) or changed
@@ -2286,8 +2290,7 @@ end
 
 local function MSUF_Defaults_MigrateGroupTooltipProfiles()
     local changed = false
-    if not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects
-        and type(MSUF_GlobalDB) == "table"
+    if type(MSUF_GlobalDB) == "table"
         and type(MSUF_GlobalDB.profiles) == "table" then
         for _, profile in pairs(MSUF_GlobalDB.profiles) do
             changed = MSUF_Defaults_MigrateGroupTooltipProfile(profile) or changed
@@ -2304,8 +2307,7 @@ end
 --- them, and an owner is repaired or kept by its own shape.
 local function MSUF_Defaults_RepairSparseFactoryAuraOwnerProfiles()
     local changed = false
-    if not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects
-        and type(MSUF_GlobalDB) == "table"
+    if type(MSUF_GlobalDB) == "table"
         and type(MSUF_GlobalDB.profiles) == "table" then
         for _, profile in pairs(MSUF_GlobalDB.profiles) do
             changed = MSUF_Defaults_RepairSparseFactoryAuraOwners(profile) or changed

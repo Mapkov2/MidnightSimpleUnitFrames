@@ -549,6 +549,7 @@ UF.ClaimBlizzardCastbarOwnership = ClaimBlizzardCastbarOwnership
 UF.GetBlizzardCastbarOwner = GetBlizzardCastbarOwner
 
 -- Blizzard_BuffFrame is a non-LoD Blizzard addon on 12.1, so its frames exist
--- before MSUF loads. Apply once at file load; profile/toggle changes call this
--- bridge explicitly. There is deliberately no late-load watcher or polling.
-ApplyBlizzardAuraVisibility()
+-- before MSUF loads, but the saved choice does not: SavedVariables arrive after
+-- every file has run. DisableBlizzardFrames applies it at the first spawn and on
+-- every profile apply; toggle changes call ApplyBlizzardAuraVisibility directly.
+-- There is deliberately no late-load watcher or polling.

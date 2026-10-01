@@ -27,8 +27,10 @@ local function Read(relative)
   return (text:gsub("\r\n", "\n"))
 end
 
-local runtime = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
-  .. "\n" .. Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua")
+local runtime = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua")
+for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
+  runtime = runtime .. "\n" .. Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_" .. module .. ".lua")
+end
 local visuals = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua")
 local unitConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua")
 local groupConfig = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua")
@@ -94,12 +96,12 @@ Check(directBranch, "the direct-visual branch is no longer recognisable")
 --- The direct branch hands the host to the unit-walk symbol helper (symbols
 --- reach it only for a lane with a native PLAYER scan), which must hide the
 --- host whenever the symbol is off.
-Check(directBranch:find("A3._UpdateClassicDirectDispelSymbols(frame, visual, unit)", 1, true),
+Check(directBranch:find("UpdateDirectDispelSymbols(frame, visual, unit)", 1, true),
   "the direct-visual branch no longer owns the dispel symbol host")
-local directSymbols = runtime:match("\nA3%._UpdateClassicDirectDispelSymbols = function%(frame, visual, unit%)\n(.-)\nend\n")
+local directSymbols = runtime:match("\nlocal function UpdateDirectDispelSymbols%(frame, visual, unit%)\n(.-)\nend\n")
 Check(directSymbols and directSymbols:find("HideDispelSymbols", 1, true),
   "the direct-visual branch leaves a stale dispel symbol on the frame")
-Check(body:find("A3._UpdateClassicDispelSymbols(frame, lane, visual, unit)", 1, true),
+Check(body:find("UpdateDispelSymbols(frame, lane, visual, unit)", 1, true),
   "the lane path no longer updates dispel symbols")
 
 --- 4. Cross-file contract: every renderer entry point the runtime calls has to

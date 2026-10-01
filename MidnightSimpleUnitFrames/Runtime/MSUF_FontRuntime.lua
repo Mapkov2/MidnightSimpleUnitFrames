@@ -71,11 +71,6 @@ local function ApplyScopedFontFollowers(scope, skipCastbars, skipClassPower, ski
     if MSUF.SwingTimer then MSUF.SwingTimer.ApplyFonts() end
 end
 
---- Font changes affect many elements. Defer the UF dirty commit so global font
---- and per-frame text relayout happen once after a settings burst.
-
-local ScheduleApplyCommit = _G.MSUF_UF_ScheduleApplyCommit
-
 local _MSUF_MatchesApplication = MSUF.Require("MSUF_FontApplicationMatches", "Runtime/MSUF_FontRuntime.lua")
 local _MSUF_SetFontCheckedFn = MSUF.Require("MSUF_SetFontChecked", "Runtime/MSUF_FontRuntime.lua")
 
@@ -337,29 +332,15 @@ ExportPublic("MSUF_UpdateAllFonts", UpdateAllFonts)
 
 if not _G.MSUF_UpdateAllFonts_Immediate then
     ExportPublic("MSUF_UpdateAllFonts_Immediate", _G.MSUF_UpdateAllFonts)
+    --- In combat the request becomes one forced recovery after combat;
+    --- otherwise it applies at once.
     ExportPublic("MSUF_UpdateAllFonts", function(onlyKey)
-        local st = _G.MSUF_ApplyCommitState
-        if not st then
-            if _MSUF_FontCombatLocked() then
-                _fontSettle.forceNext = true
-                _MSUF_DeferFontRecoveryAfterCombat(true)
-                return false
-            end
-            return UpdateAllFonts(onlyKey)
+        if _MSUF_FontCombatLocked() then
+            _fontSettle.forceNext = true
+            _MSUF_DeferFontRecoveryAfterCombat(true)
+            return false
         end
-        st.fonts = true
-        if onlyKey then
-            if st.fontKey == nil then
-                st.fontKey = onlyKey
-            elseif st.fontKey == false then
-                --- already a full refresh queued
-            elseif st.fontKey ~= onlyKey then
-                st.fontKey = false
-            end
-        else
-            st.fontKey = false
-        end
-        ScheduleApplyCommit()
+        return UpdateAllFonts(onlyKey)
     end)
 end
 

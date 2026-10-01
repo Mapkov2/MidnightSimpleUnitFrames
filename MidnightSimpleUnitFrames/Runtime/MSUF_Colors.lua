@@ -34,7 +34,7 @@ local tonumber              = tonumber
 local pairs                 = pairs
 local next                  = next
 local CreateFrame           = _G.CreateFrame
-local RunNextFrame          = _G.MSUF_RunNextFrame or _G.MSUF_Core_RunNextFrame
+local RunNextFrame          = _G.MSUF_RunNextFrame
 local COLOR_PUSH_DELAY      = 0.04
 
 ---

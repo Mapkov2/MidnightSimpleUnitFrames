@@ -150,10 +150,7 @@ local function EnsureAltDragWatcher(key, frame, enabledKey, lockKey, clickThroug
     if enabled == true then f:RegisterEvent("MODIFIER_STATE_CHANGED") end
 end
 
-local function SyncGameplayPanel(method)
-    local panel = _G.MSUF_GameplayPanel
-    local fn = panel and panel[method]
-    if fn then fn(panel) end
+local function SyncGameplayPanel()
     -- Menu2 replaced the legacy gameplay panel, so mover drags/nudges must repaint the visible
     -- X/Y offset sliders through the Menu2 sync path (same one Edit Mode position drags use).
     local m2 = _G.MSUF2
@@ -452,7 +449,7 @@ local function GameplayFontApplied(fs, path, size, flags)
     if actualSize and actualSize ~= size then return false end
     if (actualFlags or "") ~= (flags or "") then return false end
     if actual == path then return true end
-    local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
+    local matches = _G.MSUF_FontPathEquals
     if type(matches) == "function" then return matches(path, actual) == true end
     return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(path or ""):gsub("/", "\\"):lower()
 end
@@ -570,7 +567,7 @@ EnsureCombatStateText = function()
                 self:SetPoint("CENTER", UIParent, "CENTER", db.combatStateOffsetX, db.combatStateOffsetY)
                 self._msufAppliedPositionX = db.combatStateOffsetX
                 self._msufAppliedPositionY = db.combatStateOffsetY
-                SyncGameplayPanel("MSUF_SyncCombatStateOffsetSliders")
+                SyncGameplayPanel()
                 CheckpointHistory("Combat enter/leave position", "gameplay:combatState:position")
                 return true
             end,
@@ -598,7 +595,7 @@ EnsureCombatStateText = function()
             self._msufAppliedPositionX = tonumber(db.combatStateOffsetX) or 0
             self._msufAppliedPositionY = tonumber(db.combatStateOffsetY) or 80
 
-            SyncGameplayPanel("MSUF_SyncCombatStateOffsetSliders")
+            SyncGameplayPanel()
             SelectNudgeFrame(self, true)
             CommitHistory(self)
         end)
@@ -881,7 +878,7 @@ local function CreateCombatTimerFrame()
             db.combatOffsetY = Clamp(RoundInt((tonumber(db.combatOffsetY) or 0) + (dy or 0)), -800, 800)
             ApplyCombatTimerAnchor(db)
             TickCombatTimer()
-            SyncGameplayPanel("MSUF_SyncCombatTimerOffsetSliders")
+            SyncGameplayPanel()
             ApplyLockState()
             CheckpointHistory("Combat timer position", "gameplay:combatTimer:position")
             return true
@@ -913,7 +910,7 @@ local function CreateCombatTimerFrame()
         self._msufAppliedPositionX = tonumber(db.combatOffsetX) or 0
         self._msufAppliedPositionY = tonumber(db.combatOffsetY) or 0
 
-        SyncGameplayPanel("MSUF_SyncCombatTimerOffsetSliders")
+        SyncGameplayPanel()
 
         SelectNudgeFrame(self, true)
         ApplyLockState()

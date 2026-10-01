@@ -1,18 +1,21 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Shell/UI/MSUF_EditPopupUI.lua - shared Edit Mode popup UI helpers.
 --- Defines popup styling and the quick popup controls used by Edit Mode.
-local function InstallEditPopupUI(addonName, MSUF)
-    local EM2 = _G.MSUF_EM2
-    if not EM2 then return nil end
-    if type(EM2.PopupFactory) == "table" and type(EM2.QuickPopup) == "table" then return EM2.PopupFactory end
-    local ExportPublic = type(MSUF) == "table" and MSUF.ExportPublic or nil
-    local function PublishCompat(name, value)
-        if type(ExportPublic) == "function" then
-            return ExportPublic(name, value)
-        end
-        _G[name] = value
-        return value
+--- Loads before the Edit Mode manifest: it needs only the EM2 table, which
+--- it creates when Core has not yet (Core reuses an existing one), and calls
+--- every other Edit Mode module lazily.
+local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic
+local function PublishCompat(name, value)
+    if type(ExportPublic) == "function" then
+        return ExportPublic(name, value)
     end
+    _G[name] = value
+    return value
+end
+local EM2 = _G.MSUF_EM2
+if type(EM2) ~= "table" then EM2 = PublishCompat("MSUF_EM2", {}) end
 local Factory = {}
 EM2.PopupFactory = Factory
 
@@ -20,7 +23,6 @@ local floor = math.floor
 local W8 = "Interface/Buttons/WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
-local U = EM2.Util or {}
 
 local C = {
     --- Match MSUF_THEME: bg=0.03/0.05/0.12, edge=0.10/0.20/0.45
@@ -49,7 +51,7 @@ local C = {
 local BOX_H    = 24
 local STEP_W   = 20
 
-local Tr = U.Tr
+local Tr = MSUF.Translate or tostring
 
 local function FontSize(role)
     local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
@@ -442,7 +444,48 @@ function Quick.Box(parent, width, opts)
     return b
 end
 
+--- Every stepper box, for DiscardFocusedEdits. Weak keys: a popup that is
+--- never built again does not keep its boxes alive.
+local stepperBoxes = setmetatable({}, { __mode = "k" })
+local discardingEdits = false
+
+--- A box holds an edit when its text differs from the last value the popup
+--- showed through SetBoxText. A box the popup never synced holds none.
+function Quick.IsBoxEdited(box)
+    local shown = box and box._msufShownText
+    return shown ~= nil and box:GetText() ~= shown
+end
+
+function Quick.HasEditedBox(...)
+    for i = 1, select("#", ...) do
+        if Quick.IsBoxEdited((select(i, ...))) then return true end
+    end
+    return false
+end
+
+--- Drops half-typed text instead of committing it: clears focus with the
+--- commit muted. Clearing focus fires OnEditFocusLost, and so does hiding a
+--- popup with a focused box, which would apply the text. Cancel All and the
+--- combat exit call this before they restore or close anything: the text
+--- would land on the restored profile, or be applied at combat start without
+--- an undo entry. The popup's next Sync replaces the dropped text.
+function Quick.DiscardFocusedEdits()
+    discardingEdits = true
+    for box in pairs(stepperBoxes) do
+        if box.HasFocus and box:HasFocus() then box:ClearFocus() end
+    end
+    discardingEdits = false
+end
+
 function Quick.WireStepper(minus, box, plus, cb)
+    stepperBoxes[box] = true
+    --- Enter and focus loss commit typed text only: a blur on an unchanged
+    --- box must not open an undo entry. Enter clears focus first, so the
+    --- second check also keeps it from committing the same text twice. A box
+    --- no popup syncs keeps committing on every blur.
+    local function commitTyped()
+        if cb and not discardingEdits and (box._msufShownText == nil or Quick.IsBoxEdited(box)) then cb() end
+    end
     local function commit(delta)
         --- A control with a fixed native step (box._msufStep, e.g. Blizzard
         --- Edit Mode sliders) must move by MULTIPLES of that step, or the
@@ -461,9 +504,9 @@ function Quick.WireStepper(minus, box, plus, cb)
     end
     minus:SetScript("OnClick", function() commit(-1) end)
     plus:SetScript("OnClick", function() commit(1) end)
-    box:SetScript("OnEnterPressed", function(s) s:ClearFocus(); if cb then cb() end end)
+    box:SetScript("OnEnterPressed", function(s) s:ClearFocus(); commitTyped() end)
     box:SetScript("OnEscapePressed", function(s) s:ClearFocus() end)
-    box:SetScript("OnEditFocusLost", function() if cb then cb() end end)
+    box:SetScript("OnEditFocusLost", commitTyped)
 end
 
 function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2, opts)
@@ -596,7 +639,9 @@ end
 function Quick.SetBoxText(box, value)
     if not (box and box.SetText) then return end
     if box.HasFocus and box:HasFocus() then return end
-    box:SetText(tostring(value or 0))
+    local text = tostring(value or 0)
+    box:SetText(text)
+    box._msufShownText = text
 end
 
 function Quick.OpenPage(pageKey, owner)
@@ -928,22 +973,10 @@ function Quick.AddFooterControls(pf, opts)
     return undoBtn, redoBtn
 end
 
-    Factory.Colors = C
-    Factory.RefreshPalette = RefreshPalette
-    Factory.FontString = FS
-    Factory.WhiteTexture = W8
-    Factory.Tr = Tr
-    Factory.BlockConfigCombatLocked = BlockConfigCombatLocked
-    Factory.RefreshUFPreview = RefreshUFPreview
-    return Factory
-end
-
-do
-    local ns = _G.MSUF_NS or _G.MSUF
-    local export = type(ns) == "table" and ns.ExportPublic or nil
-    if type(export) == "function" then
-        export("MSUF_InstallEditPopupUI", InstallEditPopupUI)
-    else
-        _G["MSUF_InstallEditPopupUI"] = InstallEditPopupUI
-    end
-end
+Factory.Colors = C
+Factory.RefreshPalette = RefreshPalette
+Factory.FontString = FS
+Factory.WhiteTexture = W8
+Factory.Tr = Tr
+Factory.BlockConfigCombatLocked = BlockConfigCombatLocked
+Factory.RefreshUFPreview = RefreshUFPreview

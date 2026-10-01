@@ -1558,7 +1558,7 @@ function Portrait.PaintClassification(holder, enabled, classification, width, he
     dragon._msufDragonWidth, dragon._msufDragonHeight = width, height
     dragon._msufDragonLayoutAtlas = style.atlas
   end
-  Details.StyleDragon(dragon, p, unit, atlasInfo)
+  Details.StyleDragon(dragon, p, unit)
   SetShown(dragon, true)
 end
 

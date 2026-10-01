@@ -97,7 +97,8 @@ end
 
 local function DetectInstallEvidence()
     local profiles = type(rawGlobalDB) == "table" and rawGlobalDB.profiles or nil
-    local chars = type(rawGlobalDB) == "table" and rawGlobalDB.chars or nil
+    --- Character bindings live in MSUF_GlobalDB.char (State/MSUF_Profiles.lua).
+    local chars = type(rawGlobalDB) == "table" and rawGlobalDB.char or nil
     local profile = TableHasEntries(rawProfileDB) and rawProfileDB or FirstProfile(profiles)
     local schema = tonumber(type(profile) == "table" and profile._msufProfileSchema)
     local hasProfile = type(profile) == "table"

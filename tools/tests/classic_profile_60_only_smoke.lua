@@ -114,6 +114,8 @@ namespace.ProfileRuntime = { Apply = function() end }
 
 MSUF_DB = currentProfile
 MSUF_ActiveProfile = "Current"
+local normalizePath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"
+assert(loadstring(MSUF_Auras3TestLoader.ReadSource(normalizePath), "@" .. normalizePath))("MidnightSimpleUnitFrames", namespace)
 local profilesPath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
 local profilesChunk = assert(loadstring(MSUF_Auras3TestLoader.ReadSource(profilesPath), "@" .. profilesPath))
 profilesChunk("MidnightSimpleUnitFrames", namespace)

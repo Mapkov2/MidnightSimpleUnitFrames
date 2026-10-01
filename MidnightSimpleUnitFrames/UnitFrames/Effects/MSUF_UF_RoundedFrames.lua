@@ -346,12 +346,13 @@ local function RoundedEdgeLayoutPad(thickness, fallback)
   return pad
 end
 
+--- The compiled spec carries the frame's own outline thickness: the unit
+--- override (hlOverride + barOutlineThickness, MSUF_UF_Config
+--- CompileUnitBorder) or the group scope (Group_Config CompileBorderSpec).
+--- The global bars value is only the fallback for a frame without a spec.
 local function ResolveUnitOutlineThickness(f)
-  local get = _G.MSUF_GetDesiredBarBorderThicknessAndStamp
-  local thickness
-  if type(get) == "function" then
-    thickness = select(1, get(f))
-  end
+  local border = f and f.MSUFSpec and f.MSUFSpec.border
+  local thickness = border and border.thickness
   if thickness == nil then
     local bars = BarsDB()
     thickness = bars and bars.barOutlineThickness or 1

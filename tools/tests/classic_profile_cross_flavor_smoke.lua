@@ -273,6 +273,8 @@ namespace.ProfileRuntime = {
 -- Stub: group-frame config cache owner (UnitFrames engine) is not loaded.
 MSUF_GF_InvalidateConfCache = function() end
 
+local normalizePath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"
+assert(loadstring(MSUF_Auras3TestLoader.ReadSource(normalizePath), "@" .. normalizePath))("MidnightSimpleUnitFrames", namespace)
 local profilesPath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
 local profilesChunk = assert(loadstring(MSUF_Auras3TestLoader.ReadSource(profilesPath), "@" .. profilesPath))
 profilesChunk("MidnightSimpleUnitFrames", namespace)

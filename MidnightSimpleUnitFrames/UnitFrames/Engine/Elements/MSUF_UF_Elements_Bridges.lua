@@ -84,8 +84,6 @@ local function HideMSUFCastbar(unit)
   if unit == "player" then
     HideFrame(_G.MSUF_PlayerCastBar)
     HideFrame(_G.MSUF_PlayerCastbar)
-    HideFrame(_G.MSUF_PlayerCastBarFrame)
-    HideFrame(_G.MSUF_PlayerCastbarFrame)
   elseif unit == "target" then
     HideFrame(_G.MSUF_TargetCastbar)
     HideFrame(_G.MSUF_TargetCastBar)

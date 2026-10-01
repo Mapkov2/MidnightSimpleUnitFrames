@@ -304,11 +304,11 @@ local function HidePermanentDB(arena1Value, arena5Value)
 end
 HidePermanentDB(true, false)
 for _, scope in ipairs({ "arena", "arena1", "arena4", "arena5" }) do
-    Check(A3._ClassicReadBlacklistHidePermanent(scope, "debuff") == true,
+    Check(A3._ClassicCompile.ReadBlacklistHidePermanent(scope, "debuff") == true,
         "Hide Permanent for " .. scope .. " does not read through arena1")
 end
 HidePermanentDB(false, true)
-Check(A3._ClassicReadBlacklistHidePermanent("arena5", "debuff") == false,
+Check(A3._ClassicCompile.ReadBlacklistHidePermanent("arena5", "debuff") == false,
     "Hide Permanent for arena5 read its own lane instead of arena1")
 
 Check(A3.ResolveUnitFrameConfig("arena5").enabled == true, "arena5 Aura lanes are not enabled by showArena")
@@ -326,7 +326,7 @@ local function MenuCompatWith(slots)
     local namespace, menuA3 = NewAuraNamespace()
     local auras = { shared = { blacklist = { spells = {} } }, perUnit = {} }
     menuA3.EnsureDB = function() return auras, auras.shared end
-    menuA3._ClassicReadBlacklistHidePermanent = function() return false end
+    menuA3._ClassicCompile = { ReadBlacklistHidePermanent = function() return false end }
     menuA3.MenuModel = { WriteBlacklistHidePermanent = function() return true end }
     LoadAura(namespace, "MSUF_Auras3_Menu_Compat.lua")
     Check(menuA3.__classicAuraMenuCompatLoaded == true, "Classic Aura menu compat did not load")
@@ -350,38 +350,41 @@ end
 
 -- (9) Runtime identity events ----------------------------------------------
 
-local unitFrames = Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
+-- The unit-frame aura backend, all six files in their Auras.xml order.
+local unitFrames = ""
+for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
+    unitFrames = unitFrames .. Read("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_" .. module .. ".lua") .. "\n"
+end
 local _, requestLoops = unitFrames:gsub('for i = 1, math_max%(3, tonumber%(_G%.MSUF_MAX_ARENA_FRAMES%) or 3%) do\n%s*didWork = ApplyRuntimeUnit%("arena" %.%. i%)', "")
 Check(requestLoops == 2, "RequestUnitNow arena loops do not follow MSUF_MAX_ARENA_FRAMES")
 Check(not unitFrames:find('for i = 1, 3 do\n%s*didWork = ApplyRuntimeUnit%("arena"'),
     "a RequestUnitNow arena loop is still fixed at three")
 
--- Reason: this run is plain assignments, not a declaration, so it keeps
--- explicit markers; the shared slicer makes a miss fatal and names the file.
-local identityBlock = Slice.Block(unitFrames,
-    "A3._ClassicTargetIdentityAuraEvents = A3._ClassicTargetIdentityAuraEvents",
-    "A3._ClassicIdentityAuraEvent = A3._ClassicIdentityAuraEvent or {",
-    "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
-Check(identityBlock:find("for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do", 1, true),
-    "identity event loop marker for arena4..N is missing")
-local runIdentity = assert(loadstring("local A3 = ...\n" .. identityBlock))
+-- The element builds its event lists once at load from the client's arena
+-- slot count; the builder takes the count, so both client shapes run here.
+Check(unitFrames:find("local EVENTS = BuildAuraEvents(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)", 1, true),
+    "the identity event lists no longer follow MSUF_MAX_ARENA_FRAMES")
+local buildEvents = assert(loadstring(Slice.Function(unitFrames, "local function BuildAuraEvents",
+    "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua") .. "\nreturn BuildAuraEvents"))()
 
-_G.MSUF_MAX_ARENA_FRAMES = 5
-local sentinel = { "SENTINEL" }
-local fake = { _ClassicIdentityAuraEventsByUnit = { arena4 = sentinel } }
-runIdentity(fake)
-Check(fake._ClassicIdentityAuraEventsByUnit.arena4 == sentinel, "identity loop overwrote an existing arena4 entry")
-Check(fake._ClassicIdentityAuraEventsByUnit.arena5 == fake._ClassicArenaIdentityAuraEvents,
+local events = buildEvents(5)
+local arenaEvents, arenaCombat = events.identityByUnit.arena1, events.identityCombatByUnit.arena1
+Check(arenaEvents and arenaEvents[1] == "ARENA_OPPONENT_UPDATE" and #arenaEvents == 1,
+    "arena1 lacks the arena identity events")
+Check(events.identityByUnit.arena4 == arenaEvents and events.identityByUnit.arena5 == arenaEvents,
     "arena5 lacks the arena identity events")
-Check(fake._ClassicIdentityCombatAuraEventsByUnit.arena4 == fake._ClassicArenaIdentityCombatAuraEvents
-    and fake._ClassicIdentityCombatAuraEventsByUnit.arena5 == fake._ClassicArenaIdentityCombatAuraEvents,
+Check(events.identityCombatByUnit.arena4 == arenaCombat and events.identityCombatByUnit.arena5 == arenaCombat
+    and arenaCombat[3] == "ARENA_OPPONENT_UPDATE",
     "arena4/5 lack the arena combat identity events")
-Check(fake._ClassicIdentityAuraEventsByUnit.arena6 == nil, "identity events reached arena6")
+Check(events.identityByUnit.arena6 == nil, "identity events reached arena6")
+Check(events.identity.ARENA_OPPONENT_UPDATE == true and events.identity.PLAYER_TARGET_CHANGED == true,
+    "the identity reset events are incomplete")
 
-_G.MSUF_MAX_ARENA_FRAMES = 3
-fake = {}
-runIdentity(fake)
-Check(fake._ClassicIdentityAuraEventsByUnit.arena3 ~= nil and fake._ClassicIdentityAuraEventsByUnit.arena4 == nil,
+events = buildEvents(3)
+Check(events.identityByUnit.arena3 ~= nil and events.identityByUnit.arena4 == nil,
     "identity events reached arena4 at three slots")
+events = buildEvents(0)
+Check(events.identityByUnit.arena3 ~= nil and events.identityByUnit.arena1 ~= nil,
+    "arena1..3 lost their identity events on a client without arena")
 
 print("PASS Classic arena five-slot Auras: seeded arena4/5 owners, idempotent and count-gated; compile, menu and identity fan-out")

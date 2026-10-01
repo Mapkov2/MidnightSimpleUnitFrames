@@ -37,9 +37,13 @@ local function Scalar(value)
     return kind == "boolean" or (kind == "string" and #value <= 8192)
         or (kind == "number" and value == value and value > -math.huge and value < math.huge)
 end
+-- Numeric keys are list indexes and spell IDs (aura lists, spell indicators).
+-- Spell IDs pass 1,000,000 on current clients, so the bound is the signed
+-- 32-bit range the client's IDs live in.
+local MAX_NUMERIC_KEY = 2147483647
 local function Key(value)
     return (type(value) == "string" and #value > 0 and #value <= 128)
-        or (type(value) == "number" and value >= 1 and value <= 1000000 and value == math.floor(value))
+        or (type(value) == "number" and value >= 1 and value <= MAX_NUMERIC_KEY and value == math.floor(value))
 end
 
 function F.Path(path)

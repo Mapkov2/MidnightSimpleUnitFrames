@@ -146,7 +146,7 @@ local function OpenMSUFOptions()
     end
 
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        _G.MSUF_OpenStandaloneOptionsWindow()
+        MSUF.OpenOptionsFromLauncher()
         return
     end
     if type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then

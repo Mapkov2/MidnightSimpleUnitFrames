@@ -436,7 +436,11 @@ do
     ExportPublic("MSUF_NormalizeFontFlags", MSUF_NormalizeFontFlags)
     ExportPublic("MSUF_NormalizeFontPath", MSUF_NormalizeFontPath)
     ExportPublic("MSUF_FontPathEquals", MSUF_FontPathEquals)
+    --- Deprecated compatibility alias of MSUF_FontPathEquals.
     ExportPublic("MSUF_FontPathMatches", MSUF_FontPathEquals)
+    MSUF.Compat = MSUF.Compat or {}
+    MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
+    MSUF.Compat.DeprecatedAliases.MSUF_FontPathMatches = "MSUF_FontPathEquals"
     ExportPublic("MSUF_FontLooksLikeBundledExpressway", MSUF_FontLooksLikeBundledExpressway)
     ExportPublic("MSUF_ResolveFontKeyPath", MSUF_ResolveFontKeyPath)
     ExportPublic("MSUF_ResolveFontPath", MSUF_ResolveFontPath)
@@ -610,11 +614,9 @@ local function SnapshotLSMMediaCounts(LSM)
     _MSUF_LSMMediaCounts.msuf_statusicon = CountLSMMediaType(LSM, "msuf_statusicon")
 end
 
+--- Menu2 lists LibSharedMedia fonts live when a font dropdown opens, so a newly
+--- registered font needs no choice-list rebuild here.
 local function RefreshFontMedia(key, forceApply, registeredPath)
-    if type(_G.MSUF_RebuildFontChoices) == "function" then
-        _G.MSUF_RebuildFontChoices()
-    end
-
     local needsFontRefresh = forceApply == true
     if not needsFontRefresh and key ~= nil then
         local normalizeFontKey = _G.MSUF_NormalizeFontKey

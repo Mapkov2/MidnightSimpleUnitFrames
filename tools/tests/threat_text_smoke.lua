@@ -1346,18 +1346,18 @@ do
 
     local page = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua")
     for _, contract in ipairs({
-        '            or value == "levelText" or value == "threatText"\n',
+        '        or value == "levelText" or value == "threatText"\n',
         '                    if spec and spec.value == "threatText" and Bool(CurrentScope(), "threatTextColorCurve", true)\n'
             .. '                        and M._threatCurveColorReferences and #M._threatCurveColorReferences > 0 then\n'
             .. '                        return M._threatCurveColorReferences\n',
         '    if MSUF.Client and MSUF.Client.SupportsThreatText == true then\n'
             .. '        threatColorCurve = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Color by threat", 16, -106, siconLeftW - 32), "threatTextColorCurve", true, "visual")\n',
         '            conf.threatTextColorCurve = gf and gf.GetDefault and gf.GetDefault(kind, "threatTextColorCurve") or nil\n',
-        '                W.SetControlShown(threatColorCurve, isThreatText)\n',
+        '            W.SetControlShown(threatColorCurve, isThreatText)\n',
         '        threatBackground = BindScopeToggle(ctx, W.ToggleAt(selectedCard, "Background", 16, -136, siconLeftW - 32), "threatTextBackground", false, "visual")\n',
         '            conf.threatTextBackground = gf and gf.GetDefault and gf.GetDefault(kind, "threatTextBackground")\n',
-        '                W.SetControlShown(threatBackground, isThreatText)\n',
-        '            SetOptionEnabled(threatBackground, isThreatText and enabled)\n',
+        '            W.SetControlShown(threatBackground, isThreatText)\n',
+        '        SetOptionEnabled(threatBackground, isThreatText and enabled)\n',
         'yellow at half, pink at 100% when you have aggro.',
     }) do
         Check(page:find(contract, 1, true), "Group Status & Indicators lost a threat contract: " .. contract:gsub("\n", " "):sub(1, 90))

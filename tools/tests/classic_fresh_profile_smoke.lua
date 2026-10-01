@@ -81,6 +81,7 @@ MSUF_TryDecodeCompactString = function()
 end
 ns.ProfileRuntime = { Apply = function() end }
 MSUF_GF_InvalidateConfCache = function() end
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))("MidnightSimpleUnitFrames", ns)
 
 ---------------------------------------------------------------------------

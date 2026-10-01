@@ -566,11 +566,17 @@ ExportPublic("MSUF_RefreshAllPowerTextColors", UF.RefreshPowerTextColors)
 ExportPublic("MSUF_ForceTextLayoutForUnitKey", UF.RefreshTextLayout)
 ExportPublic("MSUF_RefreshAllUnitAlphas", UF.RefreshAlphas)
 ExportPublic("MSUF_ApplyBarOutlineThickness_All", UF.RefreshBorders)
+--- Deprecated compatibility alias of MSUF_ApplyBarOutlineThickness_All.
 ExportPublic("MSUF_ApplyPowerBarBorder_All", UF.RefreshBorders)
 ExportPublic("MSUF_ApplyReverseFillBars", UF.RefreshHealthLayout)
 ExportPublic("MSUF_RefreshPredictionBars", UF.RefreshPredictionBars)
 ExportPublic("MSUF_RefreshTempMaxHealth", UF.RefreshTempMaxHealth)
+--- Deprecated compatibility alias of MSUF_RefreshAllUnitAlphas.
 ExportPublic("MSUF_ApplyAllAlpha", UF.RefreshAlphas)
+MSUF.Compat = MSUF.Compat or {}
+MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
+MSUF.Compat.DeprecatedAliases.MSUF_ApplyAllAlpha = "MSUF_RefreshAllUnitAlphas"
+MSUF.Compat.DeprecatedAliases.MSUF_ApplyPowerBarBorder_All = "MSUF_ApplyBarOutlineThickness_All"
 ExportPublic("MSUF_ApplyPowerBarEmbedLayout_All", UF.RefreshPowerLayout)
 ExportPublic("MSUF_ApplyPowerBarEmbedLayout", UF.RefreshPowerLayoutForFrame)
 ExportPublic("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", UF.RefreshPowerLayout)

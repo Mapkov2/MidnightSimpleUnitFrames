@@ -5,6 +5,20 @@ local F = NS.ProfileFields
 assert(F.Path({"player","width"}))
 assert(not F.Path({"profileVariants","entries"}))
 assert(not F.Path({"general","_runtimeCache"}))
+-- Spell IDs above one million are valid keys (quality finding C4.6).
+assert(F.Path({"auras3","shared","spellBlacklist",1214091}),"a spell ID above 1e6 is not a valid path key")
+assert(F.Path({"gf_party","spellIndicators",2147483647}),"the largest 32-bit spell ID is not a valid path key")
+assert(not F.Path({"gf_party","spellIndicators",2147483648}),"a key beyond the 32-bit ID range is accepted")
+assert(not F.Path({"gf_party","spellIndicators",0}) and not F.Path({"gf_party","spellIndicators",1.5}))
+do
+    local spellBefore={auras3={shared={spellBlacklist={}}}}
+    local spellAfter=F.Copy(spellBefore)
+    spellAfter.auras3.shared.spellBlacklist[1214091]=true
+    local spellPatch=assert(F.Diff(spellBefore,spellAfter),"a spell ID above 1e6 broke the diff")
+    assert(#spellPatch==1 and spellPatch[1].path[4]==1214091,"the spell ID edit was not recorded")
+    local copied,valid=F.Copy(spellAfter)
+    assert(valid and copied.auras3.shared.spellBlacklist[1214091]==true,"a spell ID above 1e6 broke the copy")
+end
 local before = {player={width=120,showPower=true,alpha=1,list={[1]="A",["1"]="B"}},general={darkMode=false,_cache=1}}
 local after = F.Copy(before)
 after.player.width=0;after.player.showPower=false;after.player.alpha=nil

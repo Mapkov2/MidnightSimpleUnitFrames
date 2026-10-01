@@ -161,9 +161,10 @@ end)
 
 -- 7. Arena hot paths: no table per call, no re-anchor per lifecycle event.
 Contract("arena hot paths", function()
-    local castbars = Read(CORE .. "Castbars/MSUF_ArenaCastbars.lua")
-    local body = FunctionBody(castbars, "local function ClearArenaCastbarFontAttempt(frame)", "ClearArenaCastbarFontAttempt")
-    assert(not body:find("{", 1, true), "ClearArenaCastbarFontAttempt allocates a table per call")
+    -- Boss and arena castbars share the pool module (MSUF_CastbarPools.lua).
+    local castbars = Read(CORE .. "Castbars/MSUF_CastbarPools.lua")
+    local body = FunctionBody(castbars, "local function ClearFontAttempt(frame)", "ClearFontAttempt")
+    assert(not body:find("{", 1, true), "the pool castbar font clear allocates a table per call")
     local trinkets = Read(CORE .. "Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua")
     local position = FunctionBody(trinkets, "local function PositionHolder(holder, index)", "PositionHolder")
     assert(position:find("holder._msufTrinketAnchor ~= frame", 1, true),

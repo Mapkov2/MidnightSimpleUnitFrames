@@ -31,9 +31,6 @@ if LSM and not G.MSUF_LSM_CallbacksRegistered and not G.MSUF_LSM_FontCallbackReg
     G.MSUF_LSM_FontCallbackRegistered = true
     LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
         if mediatype ~= "font" then return end
-        if G.MSUF_RebuildFontChoices then
-            G.MSUF_RebuildFontChoices()
-        end
         local g = G.MSUF_DB and G.MSUF_DB.general
         local normalizeFontKey = G.MSUF_NormalizeFontKey
         local registeredKey = normalizeFontKey(key)
@@ -551,7 +548,12 @@ function G.MSUF_GetInternalFontPathByKey(key)
     end
     return nil
 end
-G.GetInternalFontPathByKey = G.GetInternalFontPathByKey or G.MSUF_GetInternalFontPathByKey
+--- Deprecated compatibility alias: the unprefixed name predates the MSUF_
+--- prefix; it is only claimed while no other addon owns it.
+G.GetInternalFontPathByKey = rawget(G, "GetInternalFontPathByKey") or G.MSUF_GetInternalFontPathByKey
+MSUF.Compat = MSUF.Compat or {}
+MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
+MSUF.Compat.DeprecatedAliases.GetInternalFontPathByKey = "MSUF_GetInternalFontPathByKey"
 
 local function MSUF_IsInternalFontKey(key)
     return MSUF_FontKeyIsInternal(key)

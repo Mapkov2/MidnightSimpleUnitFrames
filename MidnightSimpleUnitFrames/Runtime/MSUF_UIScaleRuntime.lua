@@ -495,12 +495,7 @@ end
 ExportPublic("MSUF_ApplyMsufScale", ApplyMsufScale)
 ExportPublic("MSUF_GetSavedMsufScale", GetSavedMsufScale)
 ExportPublic("MSUF_SetScalingDisabled", SetScalingDisabled)
-if type(_G.MSUF_SetGlobalUiScale_GATED) == "function" then
-    ExportPublic("MSUF_SetGlobalUiScale_RAW", SetGlobalUiScale)
-    ExportPublic("MSUF_SetGlobalUiScale", _G.MSUF_SetGlobalUiScale_GATED)
-else
-    ExportPublic("MSUF_SetGlobalUiScale", SetGlobalUiScale)
-end
+ExportPublic("MSUF_SetGlobalUiScale", SetGlobalUiScale)
 ExportPublic("MSUF_ResetGlobalUiScale", ResetGlobalUiScale)
 ExportPublic("MSUF_RestoreBlizzardUiScale", RestoreBlizzardUiScale)
 ExportPublic("MSUF_ResetStandaloneWindowGeometry", ResetStandaloneWindowGeometry)

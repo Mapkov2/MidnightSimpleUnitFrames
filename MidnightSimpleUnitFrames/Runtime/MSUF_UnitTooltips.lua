@@ -351,17 +351,11 @@ local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
     local nameLine = MSUF_UnitInfo_DisplayName(unit, fallbackName)
     if MSUF_UnitInfo_IsSecret(nameLine) then return nameLine end
     if isPlayer then
-        --- Secret-safe (12.0): UnitIsAFK/UnitIsDND may return secret booleans;
-        --- direct boolean test in `if` would hard-error. Guard via issecretvalue.
-        local getAway = _G.MSUF_GetCachedAwayStatus
-        if getAway then
-            local away = getAway(unit, true, true, false)
-            if not MSUF_UnitInfo_IsSecret(away) and (away == 1 or away == 3) then
-                nameLine = nameLine .. " <AFK>"
-            elseif not MSUF_UnitInfo_IsSecret(away) and away == 2 then
-                nameLine = nameLine .. " <DND>"
-            end
-        elseif UnitIsAFK then
+        --- Secret-safe (12.0): UnitIsAFK/UnitIsDND may return secret booleans
+        --- (chat messaging lockdown); direct boolean test in `if` would
+        --- hard-error. Guard via issecretvalue. A hover is a cold path, so the
+        --- flags are read directly (the cached away provider of 5.x is gone).
+        if UnitIsAFK then
             local afk = UnitIsAFK(unit)
             if MSUF_UnitInfo_PlainBoolean(afk) == true then
                 nameLine = nameLine .. " <AFK>"

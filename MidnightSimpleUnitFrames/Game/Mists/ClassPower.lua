@@ -13,6 +13,9 @@ local PT = K.PT or {}
 local NativeUnitPowerDisplayMod = _G.UnitPowerDisplayMod
 --- Blizzard Mists ShardBar.lua: MAX_POWER_PER_EMBER = 10 raw power per ember.
 local EMBER_POWER_SCALE = 10
+--- Blizzard_FrameXMLBase/Classic/Constants.lua WARLOCK_BURNING_EMBERS: Mists
+--- ShardBar.lua shows the ember bar only while this spell is known.
+local BURNING_EMBERS_SPELL = 108647
 
 local Provider = {
     Flavor = "Mists",
@@ -56,7 +59,9 @@ function Provider.Resolve(env)
         return true, PT.HolyPower, MODE.SEGMENTED, false
     elseif class == "WARLOCK" then
         if spec == 2 then return true, PT.DemonicFury, MODE.CONTINUOUS, false end
-        if spec == 3 then return true, PT.BurningEmbers, MODE.FRACTIONAL, false end
+        if spec == 3 and env.isPlayerSpell(BURNING_EMBERS_SPELL) then
+            return true, PT.BurningEmbers, MODE.FRACTIONAL, false
+        end
         if spec == 1 and env.isPlayerSpell(74434) then
             return true, PT.SoulShards, MODE.SEGMENTED, false
         end
@@ -120,6 +125,24 @@ elseif playerClass == "DEATHKNIGHT" then
     Provider.BlizzardFrames = {
         { name = "RuneFrame", restore = function(frame) frame:Show() end },
     }
+    --- Mists runes carry a type: Blizzard_UnitFrame/Classic/RuneFrame_Shared.lua
+    --- reads GetRuneType(rune) and colours by runeColors, Cata/RuneFrame.lua
+    --- repaints on RUNE_TYPE_UPDATE(runeIndex). A Death rune replaces a Blood,
+    --- Frost or Unholy one. Indexed by rune type: 1 Blood, 2 Frost, 3 Unholy,
+    --- 4 Death.
+    local getRuneType = _G.GetRuneType
+    if type(getRuneType) == "function" then
+        Provider.RuneTypes = {
+            Get = getRuneType,
+            event = "RUNE_TYPE_UPDATE",
+            colors = {
+                { 1, 0, 0 },
+                { 0, 1, 1 },
+                { 0, 0.5, 0 },
+                { 0.8, 0.1, 1 },
+            },
+        }
+    end
 elseif playerClass == "PALADIN" then
     Provider.BlizzardFrames = {
         { name = "PaladinPowerBar", restore = function(frame) frame:Show(); RestoreShown(frame, "Update") end },
@@ -128,9 +151,10 @@ elseif playerClass == "WARLOCK" then
     Provider.BlizzardFrames = {
         { name = "WarlockPowerFrame", restore = function(frame) RestoreShown(frame, "SetUpCurrentPower") end },
     }
-    --- Affliction shards require a known spell (74434). Blizzard Mists
-    --- ShardBar.lua:80-90 re-checks on SPELLS_CHANGED; the controller binds it
-    --- as a structural event and rebuilds only when the route really changed.
+    --- Affliction shards (74434) and Destruction embers (108647) require a
+    --- known spell. Blizzard Mists ShardBar.lua re-checks on SPELLS_CHANGED;
+    --- the controller binds it as a structural event and rebuilds only when the
+    --- route really changed.
     Provider.StructuralEvents = { "SPELLS_CHANGED" }
 elseif playerClass == "MONK" then
     Provider.BlizzardFrames = {

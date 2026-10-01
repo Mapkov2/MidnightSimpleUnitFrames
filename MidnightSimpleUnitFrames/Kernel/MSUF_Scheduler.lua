@@ -223,7 +223,11 @@ local ExportPublic = MSUF.ExportPublic
 ExportPublic("MSUF_Scheduler", Scheduler)
 ExportPublic("MSUF_RunNextFrame", Scheduler.RunNextFrame)
 ExportPublic("MSUF_ScheduleOnce", Scheduler.ScheduleOnce)
+--- Deprecated compatibility alias of MSUF_RunNextFrame, kept for external callers.
 ExportPublic("MSUF_Core_RunNextFrame", Scheduler.RunNextFrame)
+MSUF.Compat = MSUF.Compat or {}
+MSUF.Compat.DeprecatedAliases = MSUF.Compat.DeprecatedAliases or {}
+MSUF.Compat.DeprecatedAliases.MSUF_Core_RunNextFrame = "MSUF_RunNextFrame"
 
 ExportPublic("MSUF_ScheduleAfter", Scheduler.ScheduleAfter)
 ExportPublic("MSUF_CancelScheduled", Scheduler.CancelScheduled)

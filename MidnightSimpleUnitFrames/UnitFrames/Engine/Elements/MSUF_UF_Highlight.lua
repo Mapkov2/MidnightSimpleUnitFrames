@@ -320,18 +320,13 @@ local function HighlightDebug()
     .. " style=" .. tostring(cfgStyle)
     .. " size=" .. tostring(cfgSize)
     .. " roundedOwns=" .. tostring(roundedUnitMouseover ~= nil))
-  local f = _G.MSUF_target
-  if not f then
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-      f = uf.GetFrame("target")
-    end
-    local list = not f and uf and uf.frameList
-    if not f and type(list) == "table" then
-      for i = 1, #list do
-        -- Engine frames carry MSUFUnitKey, not .unit.
-        if list[i] and list[i].MSUFUnitKey == "target" then f = list[i] break end
-      end
+  local uf = MSUF and MSUF.UF
+  local f = uf and uf.GetFrame("target")
+  local list = not f and uf and uf.frameList
+  if not f and type(list) == "table" then
+    for i = 1, #list do
+      -- Engine frames carry MSUFUnitKey, not .unit.
+      if list[i] and list[i].MSUFUnitKey == "target" then f = list[i] break end
     end
   end
   if not f then p("MSUF Highlight: no target frame found (target something first)"); return end

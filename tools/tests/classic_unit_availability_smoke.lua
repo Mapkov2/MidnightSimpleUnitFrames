@@ -94,13 +94,19 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     local mythic = assert(loadstring("local MSUF = ...; local function IsInGroup() return true end; local function IsInRaid() return true end; local function GetRaidDifficultyID() return 16 end; return function() "..body.." end"))(ns)
     assert(mythic() == retail, flavor .. " must not route into a Mythic raid profile")
 
+    -- Boss and arena castbars are descriptors of one pool module; its gate is
+    -- the descriptor's client fact plus the profile switch.
+    _G.MSUF_EventBus_Register = function() return true end
+    _G.MSUF_EventBus_Unregister = function() end
     for _, unit in ipairs({"Boss", "Arena"}) do
-        local s = read(core .. "Castbars/MSUF_" .. unit .. "Castbars.lua")
-        local fn = assert(s:match("local function " .. unit .. "CastbarsEnabled%(%)(.-)\nend"))
         _G.MSUF_DB = {general={enableBossCastbar=true,enableArenaCastbar=true}}
-        local enabled = assert(loadstring("local MSUF, EnsureDB = ...; return function() " .. fn .. " end"))(ns, function() end)
-        assert(enabled() == (unit == "Boss" and boss or unit == "Arena" and arena), flavor .. " castbar gate")
+        local poolNS = { Client = ns.Client, ExportPublic = function(name, value) _G[name] = value return value end }
+        assert(loadfile(core .. "Castbars/MSUF_CastbarPools.lua"))("MSUF", poolNS)
+        assert(loadfile(core .. "Castbars/MSUF_" .. unit .. "Castbars.lua"))("MSUF", poolNS)
+        local pool = assert(poolNS.Castbars.Pools.kinds[unit:lower()], flavor .. " " .. unit .. " pool missing")
+        assert(pool.Enabled() == (unit == "Boss" and boss or unit == "Arena" and arena), flavor .. " castbar gate")
     end
+    _G.MSUF_EventBus_Register, _G.MSUF_EventBus_Unregister = nil, nil
     local s = read(options .. "Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua")
     local fn = assert(s:match("local function AddStaticIndexSearchRecords%(records, covered%)(.-)\nend"))
     local search = {StaticIndex={GetRecords=function() return {

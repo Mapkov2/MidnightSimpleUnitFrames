@@ -3,7 +3,7 @@
 -- is reverted:
 --   1. Mists trinkets subscribe COMBAT_LOG_EVENT_UNFILTERED only inside an arena
 --      instance; TBC and Midnight never subscribe it.
---   2. Arena castbars skip the anchor pass on cast start until the castbar visual
+--   2. Arena castbars (MSUF_CastbarPools.lua) skip the anchor pass on cast start until the castbar visual
 --      revision moves, and every geometry owner re-validates the stamp.
 --   3. Arena castbars fall back to a private frame when the EventBus refuses a
 --      lifecycle subscription.
@@ -12,6 +12,8 @@
 local repo = assert(arg and arg[1], "usage: arena_quality_contracts_smoke.lua <repoRoot>"):gsub("\\", "/")
 local CORE = repo .. "/MidnightSimpleUnitFrames/"
 local TRINKETS = CORE .. "Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"
+-- The arena descriptor is built by the shared pool module, which loads first.
+local POOLS = CORE .. "Castbars/MSUF_CastbarPools.lua"
 local CASTBARS = CORE .. "Castbars/MSUF_ArenaCastbars.lua"
 
 local LOG_EVENT = "COMBAT_LOG_EVENT_UNFILTERED"
@@ -409,7 +411,9 @@ local function LoadArenaCastbars(options)
         return frame
     end
 
-    assert(loadfile(CASTBARS))("MidnightSimpleUnitFrames", Namespace(options.client))
+    local namespace = Namespace(options.client)
+    assert(loadfile(POOLS))("MidnightSimpleUnitFrames", namespace)
+    assert(loadfile(CASTBARS))("MidnightSimpleUnitFrames", namespace)
     return W
 end
 
@@ -420,7 +424,7 @@ Contract("arena castbar anchor validation stamp", function()
     assert(type(pool) == "table" and #pool == 3, "the arena castbar pool was not built")
     assert(W.anchorPasses == 3 and W.layoutPasses == 3, "pool creation must anchor and lay out each bar once")
     local frame = pool[1]
-    assert(frame._msufArenaAnchorValidationRev == 7, "pool creation did not stamp the validated visual revision")
+    assert(frame._msufPoolAnchorValidationRev == 7, "pool creation did not stamp the validated visual revision")
 
     -- Common case: the cast start compares and leaves the geometry alone.
     for _ = 1, 100 do
@@ -441,7 +445,7 @@ Contract("arena castbar anchor validation stamp", function()
         "a moved visual revision must validate the anchor once on the next cast")
     assert(frame.point[1] == "TOPLEFT" and frame.point[2] == unitFrame,
         "the revalidation did not anchor to the arena unit frame")
-    assert(frame._msufArenaAnchorValidationRev == 8 and frame:PrepareForCast() == false and W.anchorPasses == 4,
+    assert(frame._msufPoolAnchorValidationRev == 8 and frame:PrepareForCast() == false and W.anchorPasses == 4,
         "the revalidation did not re-stamp the bar")
 
     -- A size change found by that validation still rebuilds the inner layout.
@@ -451,11 +455,11 @@ Contract("arena castbar anchor validation stamp", function()
 
     -- Every geometry owner converges on the anchor pass and re-stamps.
     local function Stale()
-        for index = 1, #pool do pool[index]._msufArenaAnchorValidationRev = -1 end
+        for index = 1, #pool do pool[index]._msufPoolAnchorValidationRev = -1 end
     end
     local function AssertStamped(owner)
         for index = 1, #pool do
-            assert(pool[index]._msufArenaAnchorValidationRev == 9, owner .. " did not re-validate arena castbar " .. index)
+            assert(pool[index]._msufPoolAnchorValidationRev == 9, owner .. " did not re-validate arena castbar " .. index)
         end
     end
     Stale()

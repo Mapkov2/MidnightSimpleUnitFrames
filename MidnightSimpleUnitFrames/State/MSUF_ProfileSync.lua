@@ -143,11 +143,11 @@ local function Excluded(path,group,source,target)
 end
 -- Walk leaves even when a whole source table was inserted/deleted. Copying that
 -- parent wholesale would bypass excluded descendants in the receiving profile.
--- A leaf that is new inside a table the baseline already had is a fill (late
--- defaults add keys that way); a leaf inside a newly inserted table is an edit.
+-- Every changed leaf is an edit, a first value for an unset (nil) key included:
+-- late default fills are absorbed into the baseline (see FillLazyDefaults).
 local function Changes(before,after)
     local out,path,count={}, {},0
-    local function Visit(a,b,depth,inBase)
+    local function Visit(a,b,depth)
         count=count+1
         if count>65536 or depth>12 then return false end
         if a==b then return true end
@@ -159,14 +159,14 @@ local function Changes(before,after)
             for key in pairs(keys) do
                 path[depth+1]=key
                 if not (type(key)=="string" and key:match("^_")) then
-                    if not Visit(a and a[key],b and b[key],depth+1,type(a)=="table") then return false end
+                    if not Visit(a and a[key],b and b[key],depth+1) then return false end
                 end
                 path[depth+1]=nil
             end
         elseif F.Path(path) and not F.Equal(a,b) then
             local value,valid=F.Copy(b)
             if not valid then return false end
-            out[#out+1]={path=F.Copy(path),value=value,remove=b==nil,fill=a==nil and inBase}
+            out[#out+1]={path=F.Copy(path),value=value,remove=b==nil}
         end
         return true
     end
@@ -182,11 +182,24 @@ local function Changes(before,after)
     if not Visit(before.general,after.general,1) then return nil,"sync exceeds field limits" end
     return out
 end
+-- The defaults, gameplay, group-frame and aura ensures add missing keys the
+-- first time a module reads its settings (review F9). They run on the active
+-- profile before its baseline is taken, so such a fill never reaches the
+-- members as an edit and a member's own value survives it.
+local function FillLazyDefaults()
+    if type(MSUF_DB)~="table" then return end
+    if MSUF.MSUF_EnsureDB then MSUF.MSUF_EnsureDB() end
+    if MSUF.MSUF_EnsureGameplayDefaults then MSUF.MSUF_EnsureGameplayDefaults() end
+    if MSUF.GF and MSUF.GF.EnsureDB then MSUF.GF.EnsureDB() end
+    if MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.EnsureDB then MSUF.MSUF_Auras3.EnsureDB() end
+end
 function S.Activate(force)
     local name=MSUF_ActiveProfile
     if force or name~=activeName or not baseline then
         activeName=name
-        baseline=next(Groups()) and V.BaseSnapshot(MSUF_DB,true) or nil
+        local enabled=next(Groups())~=nil
+        if enabled then FillLazyDefaults() end
+        baseline=enabled and V.BaseSnapshot(MSUF_DB,true) or nil
     end
 end
 -- A reset or import replaces the active profile on purpose; it stays in that
@@ -209,10 +222,7 @@ function S.Flush(full)
                 local target=profiles[name]
                 if name~=MSUF_ActiveProfile and type(target)=="table" then
                     for _,field in ipairs(changes) do
-                        -- A fill (see Changes) fills a member's gap but never
-                        -- replaces a value the member already has.
-                        if group.modules[S.Owner(field.path)] and not Excluded(field.path,group,source,target)
-                            and not (field.fill and F.Read(target,field.path)~=nil) then
+                        if group.modules[S.Owner(field.path)] and not Excluded(field.path,group,source,target) then
                             F.Write(target,field.path,F.Copy(field.value))
                         end
                     end

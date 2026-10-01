@@ -116,13 +116,46 @@ local function MSUF_SyncCurrentBindingsIntoGlobalStore()
     end
 end
 
-local keybindOptionsOpenPending = false
-local function MSUF_OpenLoadedOptionsFromKeybind()
-    keybindOptionsOpenPending = false
-    local open = _G.MSUF_OpenStandaloneOptionsWindow
-    if type(open) == "function" then
-        open()
+local optionsOpenPending = false
+local optionsOpenPage
+local function OpenLoadedOptionsFromLauncher()
+    optionsOpenPending = false
+    local pageKey = optionsOpenPage
+    optionsOpenPage = nil
+    -- Combat can start between the demand load and the next-frame open.
+    if _G.InCombatLockdown() then
+        local showLock = _G.MSUF_ShowConfigCombatLockMessage
+        if type(showLock) == "function" then showLock() end
+        return false
     end
+    local open = _G.MSUF_OpenStandaloneOptionsWindow
+    if type(open) == "function" then return open(pageKey) end
+    return false
+end
+
+-- Game Menu and keybind share one cold-open boundary. Loading Options and
+-- building its skinned window must not consume the same script time budget.
+-- Blizzard_FrameXML/Mainline/AlertFrames.lua (upstream/forever) also uses
+-- C_Timer.After(0, ...) for work deferred until the first rendered frame.
+function MSUF.OpenOptionsFromLauncher(pageKey)
+    optionsOpenPage = pageKey
+    if optionsOpenPending then return true end
+    local isLoaded = _G.MSUF_IsOptionsLoaded
+    local ensureLoaded = _G.MSUF_EnsureOptionsLoaded
+    if type(isLoaded) == "function" and isLoaded() ~= true
+        and type(ensureLoaded) == "function" then
+        if ensureLoaded("MSUF_OpenStandaloneOptionsWindow") ~= true then
+            optionsOpenPage = nil
+            return false
+        end
+        local timer = _G.C_Timer
+        if timer and type(timer.After) == "function" then
+            optionsOpenPending = true
+            timer.After(0, OpenLoadedOptionsFromLauncher)
+            return true
+        end
+    end
+    return OpenLoadedOptionsFromLauncher()
 end
 
 function MSUF_Keybind_ToggleOptions()
@@ -135,35 +168,20 @@ function MSUF_Keybind_ToggleOptions()
                 win:Hide()
             end
         else
-            if keybindOptionsOpenPending then return end
-            local isLoaded = _G.MSUF_IsOptionsLoaded
-            local ensureLoaded = _G.MSUF_EnsureOptionsLoaded
-            if type(isLoaded) == "function" and isLoaded() ~= true
-                and type(ensureLoaded) == "function" then
-                if ensureLoaded("MSUF_OpenStandaloneOptionsWindow") ~= true then return end
-                local timer = _G.C_Timer
-                if timer and type(timer.After) == "function" then
-                    keybindOptionsOpenPending = true
-                    timer.After(0, MSUF_OpenLoadedOptionsFromKeybind)
-                    return
-                end
-            end
-            MSUF_OpenLoadedOptionsFromKeybind()
+            MSUF.OpenOptionsFromLauncher()
         end
     end
 end
 
+--- Shell/EditMode (every core TOC) publishes the entry point after this file
+--- loads, so it is resolved when the key is pressed.
 function MSUF_Keybind_ToggleEditMode()
-    if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
-        local st = _G.MSUF_EditState
-        local nextActive = true
-        if st and st.active ~= nil then
-            nextActive = not st.active
-        end
-        _G.MSUF_SetMSUFEditModeDirect(nextActive, nil)
-    elseif type(_G.MSUF_ToggleEditMode) == "function" then
-        _G.MSUF_ToggleEditMode()
+    local st = _G.MSUF_EditState
+    local nextActive = true
+    if st and st.active ~= nil then
+        nextActive = not st.active
     end
+    MSUF.Require("MSUF_SetMSUFEditModeDirect", "Kernel/MSUF_Keybinds.lua")(nextActive, nil)
 end
 
 local function MSUF_SaveCurrentBindings()

@@ -268,12 +268,11 @@ function D.DragonParent(holder, p, renderParent)
     return layer
 end
 
-function D.StyleDragon(dragon, p, unit, atlasInfo)
+function D.StyleDragon(dragon, p, unit)
     local flip = p and p.dragonFlip == true
     if dragon._msufDragonFlip ~= flip then
-        local left, right = atlasInfo.leftTexCoord or 0, atlasInfo.rightTexCoord or 1
-        dragon:SetTexCoord(flip and right or left, flip and left or right,
-            atlasInfo.topTexCoord or 0, atlasInfo.bottomTexCoord or 1)
+        -- SetAtlas owns the sheet crop; mirror its normalized local UVs.
+        dragon:SetTexCoord(flip and 1 or 0, flip and 0 or 1, 0, 1)
         dragon._msufDragonFlip = flip
     end
     local r, g, b = 1, 1, 1

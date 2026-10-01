@@ -283,6 +283,7 @@ function T.Font(parent, _, text)
     fonts[#fonts + 1] = fs
     return fs
 end
+function T.SetTranslatedText(fs, text) fs._text = text end
 function T.Button(parent, text)
     local button = Fake("button", text, parent)
     buttons[#buttons + 1] = button

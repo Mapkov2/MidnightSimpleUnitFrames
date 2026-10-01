@@ -144,7 +144,7 @@ MSUF_DB = MSUF_GlobalDB.profiles.Default
 MSUF_ActiveProfile = "Default"
 
 -- Profiles -----------------------------------------------------------------------
-manifest.LoadSelected(repo, spec.toc, namespace, { "State/MSUF_Profiles.lua" })
+manifest.LoadSelected(repo, spec.toc, namespace, { "State/MSUF_ProfileNormalize.lua", "State/MSUF_Profiles.lua" })
 Check(type(MSUF_GetPlayerSpecID) == "function", "MSUF_GetPlayerSpecID missing")
 local eventFrame = MSUF_SpecProfileEventFrame
 Check(type(eventFrame) == "table" and type(eventFrame.onEvent) == "function", "spec profile event frame missing")

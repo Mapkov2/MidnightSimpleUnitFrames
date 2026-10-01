@@ -108,6 +108,7 @@ MSUF_TryDecodeCompactString = function(str)
 end
 ns.ProfileRuntime = { Apply = function() end }
 MSUF_GF_InvalidateConfCache = function() end
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))("MidnightSimpleUnitFrames", ns)
 
 local function AssertFactory(db, label)
@@ -183,7 +184,9 @@ Check(second.general._msufFactoryProfileApplied == true and second.player.width 
 AssertFactory(second, "new profile")
 
 -- Exercise the real group normalization and layout metrics, not just raw DB keys.
-assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"))("MidnightSimpleUnitFrames", ns)
+for _, part in ipairs({ "", "_Geometry", "_Text", "_Textures" }) do
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB" .. part .. ".lua"))("MidnightSimpleUnitFrames", ns)
+end
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Migrations.lua"))("MidnightSimpleUnitFrames", ns)
 MSUF_DB = second
 ns.GF.EnsureDB()
